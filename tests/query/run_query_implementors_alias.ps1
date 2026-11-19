@@ -52,7 +52,7 @@ $db = Join-Path $WorkDir 'impl.sqlite'
 
 function Run([string[]]$ArgList) {
   $o = Join-Path $WorkDir 'o.txt'; $e = Join-Path $WorkDir 'e.txt'
-  $p = Start-Process -FilePath $exePath -ArgumentList $ArgList -NoNewWindow -Wait -PassThru -RedirectStandardOutput $o -RedirectStandardError $e
+  $p = Start-Process -FilePath $exePath -ArgumentList $ArgList -NoNewWindow -Wait -PassThru -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   return @{ Code = $p.ExitCode; Out = ((Get-Content -LiteralPath $o -Raw -ErrorAction SilentlyContinue) + '').Trim() }
 }
 

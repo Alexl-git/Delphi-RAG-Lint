@@ -76,14 +76,15 @@ type
     /// is not public surface and is skipped. Never raises.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
-    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindUndocumented, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Lint.DocRules.IsDocumentableKind, Format, SameText, Trim</para>
+    /// <para>Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.FindUndocumented, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Lint.DocRules.DeclIsOverride, DRagLint.Lint.DocRules.DfmBoundHandlers, DRagLint.Lint.DocRules.IsAccessorOfDocumentedProperty, DRagLint.Lint.DocRules.IsDocumentableKind, DRagLint.Lint.DocRules.IsRoutineKind, DRagLint.V152.DOCPOL.Support.MethodImplHasCode, Format, LowerCase, SameText, Trim</para>
     /// <para>Returns: nil; Findings.ToArray</para>
     /// <para>Pure</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 50 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindUndocumented"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
-    /// <seealso cref="DRagLint.Lint.DocRules.IsDocumentableKind"/>
-    /// <seealso cref="DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift"/>
-    /// <seealso cref="DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc"/>
+    /// <seealso cref="DRagLint.Lint.DocRules.DeclIsOverride"/>
+    /// <seealso cref="DRagLint.Lint.DocRules.DfmBoundHandlers"/>
+    /// <seealso cref="DRagLint.Lint.DocRules.IsAccessorOfDocumentedProperty"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function RunMissingDoc(const AStore: ISymbolStore; AFileId: Int64 = 0): TArray<TLintFinding>;
@@ -113,8 +114,9 @@ type
     /// Its other kinds are still reported.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
-    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.TDocumenter.ExistingDocForSymbol, DRagLint.Doc.Drift.TDocDrift.Analyze/4, DRagLint.Doc.Drift.TDocDrift.FactsBuildTicks, DRagLint.Doc.Facts.DocFactsBuildProfile, DRagLint.Lint.DocRules.DocumentedPublicDecls, DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift.Tick, Flush, Format, GetEnvironmentVariable, Writeln</para>
+    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.TDocumenter.ExistingDocForSymbol, DRagLint.Doc.Drift.TDocDrift.Analyze/4, DRagLint.Doc.Drift.TDocDrift.FactsBuildTicks, DRagLint.Doc.Facts.DocFactsBuildProfile, DRagLint.Doc.Facts.ResetSourceFilesRead, DRagLint.Lint.DocRules.DocumentedPublicDecls, DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift.SkipCalleeFacts, DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift.Tick (+7 more)</para>
     /// <para>Returns: nil; Findings.ToArray</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 192 lines (full implementation)</para>
     /// <para>Catches: Exception (empty)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.ExistingDocForSymbol"/>
@@ -176,15 +178,15 @@ type
     /// Never raises; per-symbol failures are swallowed.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
-    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.TDocumenter.BuildForSymbol, DRagLint.Doc.Document.TDocumenter.ExistingDocForSymbol, DRagLint.Doc.Drift.TDocDrift.Analyze/4, DRagLint.Lint.DocRules.DocumentedPublicDecls, DRagLint.Lint.DocRules.IsDocDriftFamily, DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift.ReportTrace, Format, GetEnvironmentVariable, LowerCase, Writeln</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.TDocumenter.BuildForSymbol, DRagLint.Doc.Document.TDocumenter.ExistingDocForSymbol, DRagLint.Doc.Drift.TDocDrift.Analyze/4, DRagLint.Doc.Facts.ResetSourceFilesRead, DRagLint.Lint.DocRules.DocumentedPublicDecls, DRagLint.Lint.DocRules.IsDocDriftFamily, DRagLint.Lint.DocRules.StaleCalleeReads, DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift.ReportTrace, Format, GetEnvironmentVariable, LowerCase, Writeln</para>
     /// <para>Returns: nil; Edits.ToArray</para>
-    /// <para>Complexity: 13 (cyclomatic, outer body), 134 lines (full implementation)</para>
+    /// <para>Complexity: 14 (cyclomatic, outer body), 148 lines (full implementation)</para>
     /// <para>Catches: Exception (swallowed)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildForSymbol"/>
     /// <seealso cref="DRagLint.Doc.Document.TDocumenter.ExistingDocForSymbol"/>
     /// <seealso cref="DRagLint.Doc.Drift.TDocDrift.Analyze"/>
-    /// <seealso cref="DRagLint.Lint.DocRules.DocumentedPublicDecls"/>
+    /// <seealso cref="DRagLint.Doc.Facts.ResetSourceFilesRead"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function FixEditsForDocDrift(const AStore: ISymbolStore;
@@ -267,7 +269,7 @@ uses
   System.Math,        { Min -- the stale-callee note }
   { DRagLint.Doc.Facts is in the INTERFACE uses -- TDocFactsRenderOptions appears
     in the signatures below, and it also supplies DocFactsBuildProfile here. }
-  System.Classes, System.StrUtils, System.IOUtils,
+  System.Classes, System.IOUtils,
   DRagLint.Doc.Drift, DRagLint.Doc.Document,
   DRagLint.Index.Freshness, { ChangedFilePaths -- see StaleCalleeReads }
   DRagLint.V152.DOCPOL.Support; { MethodImplHasCode -- v1.52 B2 bound-handler policy }

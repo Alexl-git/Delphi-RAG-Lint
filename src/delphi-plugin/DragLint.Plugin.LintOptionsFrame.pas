@@ -85,7 +85,7 @@ type
   /// the result back to the active project's drag-lint-lint.json.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DragLint.Plugin.LintOptionsFrame.CreateEmbeddedLintOptions (DragLint.Plugin.LintOptionsFrame.pas)</para>
+  /// <para>Used by: declaration (DragLint.Plugin.LintOptionsFrame.pas) ?, DragLint.Plugin.LintOptionsFrame.CreateEmbeddedLintOptions (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TOverridesDialog.Create (DragLint.Plugin.LintOptionsFrame.pas) ?</para>
   /// <para>Used in units: DragLint.Plugin.LintOptionsFrame</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -146,13 +146,13 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.Create (DragLint.Plugin.LintOptionsFrame.pas)</para>
-    /// <para>Calls: WideChar</para>
-    /// <para>Reads: FPanelTop, FBtnSave, FBtnReload, FCboProfile, FLblProfile, FLblCounts, FPanelSearch, FLblSearchIcon (+3 more)   Writes: FPanelTop, FBtnSave, FBtnReload, FCboProfile, FLblProfile, FLblCounts, FPanelSearch, FLblSearchIcon (+3 more)</para>
+    /// <para>Calls: DragLint.Plugin.PlugUiCore.OverridesButtonCaption, WideChar</para>
+    /// <para>Reads: FPanelTop, FBtnSave, FBtnReload, FCboProfile, FLblProfile, FLblCounts, FPanelSearch, FLblSearchIcon (+6 more)   Writes: FPanelTop, FBtnSave, FBtnReload, FCboProfile, FLblProfile, FLblCounts, FPanelSearch, FLblSearchIcon (+6 more)</para>
+    /// <seealso cref="DragLint.Plugin.PlugUiCore.OverridesButtonCaption"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ApplyPreset"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnReloadClick"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnSaveClick"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.CatHeaderClick"/>
-    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.CfgPath"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure BuildControls;
@@ -160,7 +160,8 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BuildControls (DragLint.Plugin.LintOptionsFrame.pas)</para>
-    /// <para>Calls: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ReloadCatalogAndConfig</para>
+    /// <para>Calls: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ReloadCatalogAndConfig, MessageDlg</para>
+    /// <para>Reads: FDirty   Writes: FDirty</para>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ReloadCatalogAndConfig"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ApplyPreset"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnSaveClick"/>
@@ -183,14 +184,40 @@ type
     /// </remarks>
     procedure BtnSaveClick    (Sender: TObject);
     { B-OWN2: any editable control (auto-fix box, param editor, preset) marks the page unsaved. }
+    /// <summary><!-- drag-lint:auto sum -->B-OWN2: any editable control (auto-fix box,
+    /// param editor, preset) marks the page unsaved.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ControlChanged (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.NamingFieldChanged (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.PresetSelected (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Calls: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.UpdateCountsLabel</para>
+    /// <para>Reads: FHasData   Writes: FDirty</para>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.UpdateCountsLabel"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ApplyPreset"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnReloadClick"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnSaveClick"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BuildControls"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure MarkDirty;
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalogCore (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Calls: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.MarkDirty</para>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.MarkDirty"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ApplyPreset"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnReloadClick"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnSaveClick"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BuildControls"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure ControlChanged(Sender: TObject);
     /// <summary><!-- drag-lint:auto sum -->---- category header OnClick: toggle all rule
     /// boxes in the group ----</summary>
     /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalog (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RuleChecked (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalogCore (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RuleChecked (DragLint.Plugin.LintOptionsFrame.pas)</para>
     /// <para>Calls: TCatTag, TCheckBox, TObject</para>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ApplyPreset"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnReloadClick"/>
@@ -205,14 +232,15 @@ type
     /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalog (DragLint.Plugin.LintOptionsFrame.pas)</para>
-    /// <para>Calls: DragLint.Plugin.LintOptionsFrame.RecomputeCatTriState, TCheckBox, TObject</para>
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalogCore (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Calls: DragLint.Plugin.LintOptionsFrame.RecomputeCatTriState, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.UpdateCountsLabel, TCheckBox, TObject, TRuleTag</para>
+    /// <para>Reads: FHasData, FPending   Writes: FDirty</para>
     /// <para>UI thread only -- touches Prnt</para>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.RecomputeCatTriState"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.UpdateCountsLabel"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ApplyPreset"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnReloadClick"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnSaveClick"/>
-    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BuildControls"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure RuleChecked     (Sender: TObject);
@@ -224,13 +252,13 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BuildControls (DragLint.Plugin.LintOptionsFrame.pas)</para>
-    /// <para>Calls: DRagLint.Lint.Config.TLintConfig.Load, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.CfgPath, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ReloadCatalogAndConfig, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalog, SameText, Trim</para>
-    /// <para>Reads: FCboProfile, FHasData, FCatalogJSON, FProfile   Writes: FProfile, FCfg</para>
+    /// <para>Calls: DRagLint.Lint.Config.TLintConfig.Load, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.CfgPath, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ReloadCatalogAndConfig, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalog, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.UpdateOverridesButton, SameText, Trim</para>
+    /// <para>Reads: FCboProfile, FHasData, FCatalogJSON, FProfile, FPending   Writes: FProfile, FCfg</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.Load"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.CfgPath"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ReloadCatalogAndConfig"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalog"/>
-    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ApplyPreset"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.UpdateOverridesButton"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure ProfileSelected (Sender: TObject);
@@ -238,22 +266,57 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BuildControls (DragLint.Plugin.LintOptionsFrame.pas)</para>
-    /// <para>Calls: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalog, Trim</para>
-    /// <para>Reads: FEdtSearch, FHasData, FCatalogJSON   Writes: FSearch</para>
-    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalog"/>
+    /// <para>Reads: FBtnSearchClear, FEdtSearch, FSearchTimer</para>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ApplyPreset"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnReloadClick"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnSaveClick"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BuildControls"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.CatHeaderClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    procedure SearchChanged   (Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BuildControls (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Calls: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ShowOverridesDialog</para>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ShowOverridesDialog"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ApplyPreset"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnReloadClick"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnSaveClick"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BuildControls"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure SearchChanged   (Sender: TObject);
     procedure OverridesClick  (Sender: TObject);
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ProfileSelected (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.Save (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ShowCatalog (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TOverridesDialog.RevertClick (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Calls: DragLint.Plugin.PlugUiCore.OverridesButtonCaption</para>
+    /// <para>Reads: FBtnOverrides, FCfg</para>
+    /// <seealso cref="DragLint.Plugin.PlugUiCore.OverridesButtonCaption"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ApplyPreset"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnReloadClick"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnSaveClick"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BuildControls"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure UpdateOverridesButton;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.OverridesClick (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Calls: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.CfgPath, DragLint.Plugin.LintOptionsFrame.TOverridesDialog.Create, ShowMessage</para>
+    /// <para>UI thread only -- touches Dlg</para>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.CfgPath"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TOverridesDialog.Create"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ApplyPreset"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnReloadClick"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnSaveClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure ShowOverridesDialog;
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalog (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ShowCatalog (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalogCore (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ShowCatalog (DragLint.Plugin.LintOptionsFrame.pas)</para>
     /// <para>Reads: FScroll</para>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ApplyPreset"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnReloadClick"/>
@@ -268,10 +331,26 @@ type
     /// <param name="AJSON"><!-- drag-lint:auto type -->const string</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ProfileSelected (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.SearchChanged (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ShowCatalog (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ProfileSelected (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.SearchTimerTick (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ShowCatalog (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TOverridesDialog.RevertClick (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Calls: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalogCore</para>
+    /// <para>Reads: FScroll   Writes: FRenderCount, FCursorInRender</para>
+    /// <para>UI thread only -- touches Screen</para>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalogCore"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ApplyPreset"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnReloadClick"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnSaveClick"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BuildControls"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    procedure RenderCatalog(const AJSON: string);
+    /// <summary>The unwrapped refill; RenderCatalog adds the wait cursor and the redraw/align lock.</summary>
+    /// <param name="AJSON"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalog (DragLint.Plugin.LintOptionsFrame.pas)</para>
     /// <para>Calls: DRagLint.Lint.Config.TLintConfig.IsAutoFixOff, DRagLint.Lint.Config.TLintConfig.ShouldKeep, DRagLint.Lint.Config.TLintConfig.ThresholdFor, DragLint.Plugin.LintOptionsFrame.IsNamingIntParam, DragLint.Plugin.LintOptionsFrame.LoadParamInitText, DragLint.Plugin.LintOptionsFrame.ParseCatalog, DragLint.Plugin.LintOptionsFrame.RecomputeCatTriState, DragLint.Plugin.LintOptionsFrame.RuleMatchesSearch, DragLint.Plugin.LintOptionsFrame.TCatTag.CreateForCat, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ClearBody (+9 more)</para>
-    /// <para>Complexity: 15 (cyclomatic, outer body), 357 lines (full implementation)</para>
-    /// <para>Reads: FAutoFixCBs, FNamingEditors, FScroll, FLblCounts, FSearch, FLblPreset, FCboPreset, FBtnSavePreset (+2 more)   Writes: FCatalogJSON, FAutoFixCBs, FNamingEditors, FLblPreset, FCboPreset, FBtnSavePreset, FBtnDeletePreset, FHasData</para>
+    /// <para>Complexity: 16 (cyclomatic, outer body), 363 lines (full implementation)</para>
+    /// <para>Reads: FAutoFixCBs, FNamingEditors, FScroll, FLblCounts, FSearch, FLblPreset, FCboPreset, FBtnSavePreset (+3 more)   Writes: FCatalogJSON, FAutoFixCBs, FNamingEditors, FLblPreset, FCboPreset, FBtnSavePreset, FBtnDeletePreset, FHasData (+1 more)</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.IsAutoFixOff"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.ShouldKeep"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.ThresholdFor"/>
@@ -279,20 +358,43 @@ type
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.LoadParamInitText"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure RenderCatalog(const AJSON: string);
-    /// <summary>The unwrapped refill; RenderCatalog adds the wait cursor and the redraw/align lock.</summary>
     procedure RenderCatalogCore(const AJSON: string);
     /// <summary>Debounce timer: applies the search text once typing has paused.</summary>
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BuildControls (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Calls: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalog, DragLint.Plugin.PlugUiCore.SearchRefillNeeded, Trim</para>
+    /// <para>Reads: FSearchTimer, FSearch, FEdtSearch, FHasData, FCatalogJSON   Writes: FSearch</para>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalog"/>
+    /// <seealso cref="DragLint.Plugin.PlugUiCore.SearchRefillNeeded"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ApplyPreset"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnReloadClick"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnSaveClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure SearchTimerTick(Sender: TObject);
     /// <summary>(x) button: empties the search box (the refill is debounced like typing).</summary>
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BuildControls (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Reads: FEdtSearch</para>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ApplyPreset"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnReloadClick"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnSaveClick"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BuildControls"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.CatHeaderClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure SearchClearClick(Sender: TObject);
     /// <param name="AExitCode"><!-- drag-lint:auto type -->Integer</param>
     /// <param name="AOutput"><!-- drag-lint:auto type -->const string</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ReloadCatalogAndConfig (DragLint.Plugin.LintOptionsFrame.pas)</para>
-    /// <para>Calls: DRagLint.Lint.Config.TLintConfig.Load, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.CfgPath, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ClearBody, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ReloadProfileList, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalog, Format</para>
-    /// <para>Reads: FScroll, FLblCounts, FProfile   Writes: FCfg</para>
+    /// <para>Calls: DRagLint.Lint.Config.TLintConfig.Load, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.CfgPath, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ClearBody, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ReloadProfileList, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalog, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.UpdateOverridesButton, Format</para>
+    /// <para>Reads: FScroll, FLblCounts, FProfile, FPending   Writes: FCfg</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.Load"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.CfgPath"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ClearBody"/>
@@ -303,10 +405,10 @@ type
     procedure ShowCatalog(AExitCode: Integer; const AOutput: string);
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalog (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.Save (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.MarkDirty (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalogCore (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RuleChecked (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.Save (DragLint.Plugin.LintOptionsFrame.pas)</para>
     /// <para>Calls: DragLint.Plugin.LintOptionsFrame.ParseCatalog, Format, TCheckBox, TGroupBox, TObject</para>
-    /// <para>Complexity: 11 (cyclomatic, outer body), 53 lines (full implementation)</para>
-    /// <para>Reads: FHasData, FCatalogJSON, FLblCounts, FScroll</para>
+    /// <para>Complexity: 14 (cyclomatic, outer body), 58 lines (full implementation)</para>
+    /// <para>Reads: FHasData, FCatalogJSON, FLblCounts, FBtnSave, FScroll, FDirty</para>
     /// <para>UI thread only -- touches C</para>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.ParseCatalog"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ApplyPreset"/>
@@ -321,28 +423,28 @@ type
     /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalog (DragLint.Plugin.LintOptionsFrame.pas)</para>
-    /// <para>Calls: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ApplyPreset, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.CustomIndex, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.UpdatePresetButtons</para>
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalogCore (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Calls: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ApplyPreset, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.CustomIndex, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.MarkDirty, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.UpdatePresetButtons</para>
     /// <para>Reads: FCboPreset</para>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ApplyPreset"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.CustomIndex"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.MarkDirty"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.UpdatePresetButtons"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnReloadClick"/>
-    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnSaveClick"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure PresetSelected    (Sender: TObject);
     /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalog (DragLint.Plugin.LintOptionsFrame.pas)</para>
-    /// <para>Calls: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.DetectAndSetPreset, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.UpdatePresetButtons</para>
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalogCore (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Calls: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.DetectAndSetPreset, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.MarkDirty, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.UpdatePresetButtons</para>
     /// <para>Reads: FApplyingPreset</para>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.DetectAndSetPreset"/>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.MarkDirty"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.UpdatePresetButtons"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ApplyPreset"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnReloadClick"/>
-    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnSaveClick"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure NamingFieldChanged(Sender: TObject);
@@ -363,7 +465,7 @@ type
     procedure ApplyPreset       (AKind: Integer);
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.NamingFieldChanged (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalog (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.NamingFieldChanged (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalogCore (DragLint.Plugin.LintOptionsFrame.pas)</para>
     /// <para>Calls: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.CustomIndex</para>
     /// <para>Complexity: 15 (cyclomatic, outer body), 64 lines (full implementation)</para>
     /// <para>Reads: FCboPreset, FNamingEditors, FSavedPresets</para>
@@ -377,7 +479,7 @@ type
     procedure DetectAndSetPreset;
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.DeletePresetClick (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalog (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.SavePresetClick (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.DeletePresetClick (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalogCore (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.SavePresetClick (DragLint.Plugin.LintOptionsFrame.pas)</para>
     /// <para>Calls: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ReadNamingPresets</para>
     /// <para>Reads: FCboPreset, FSavedPresets   Writes: FSavedPresets</para>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ReadNamingPresets"/>
@@ -390,7 +492,7 @@ type
     procedure RebuildPresetCombo;
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.DeletePresetClick (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.NamingFieldChanged (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.PresetSelected (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalog (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.SavePresetClick (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.DeletePresetClick (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.NamingFieldChanged (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.PresetSelected (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalogCore (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.SavePresetClick (DragLint.Plugin.LintOptionsFrame.pas)</para>
     /// <para>Calls: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.IsSavedPresetSelected</para>
     /// <para>Reads: FBtnDeletePreset, FCboPreset</para>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.IsSavedPresetSelected"/>
@@ -404,7 +506,7 @@ type
     /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalog (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalogCore (DragLint.Plugin.LintOptionsFrame.pas)</para>
     /// <para>Calls: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RebuildPresetCombo, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.UpdatePresetButtons, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.WriteNamingPreset, InputQuery, SameText, ShowMessage, Trim</para>
     /// <para>Complexity: 10 (cyclomatic, outer body), 35 lines (full implementation)</para>
     /// <para>Reads: FCboPreset, FNamingEditors</para>
@@ -419,7 +521,7 @@ type
     /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalog (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RenderCatalogCore (DragLint.Plugin.LintOptionsFrame.pas)</para>
     /// <para>Calls: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.CustomIndex, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.DeleteNamingPreset, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.IsSavedPresetSelected, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.RebuildPresetCombo, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.UpdatePresetButtons, Format, MessageDlg</para>
     /// <para>Reads: FCboPreset</para>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.CustomIndex"/>
@@ -465,7 +567,7 @@ type
     /// IncludeTrailingPathDelimiter(ProjDir) + 'drag-lint-lint.json'.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.DeleteNamingPreset (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ProfileSelected (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ReadNamingPresets (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ReloadCatalogAndConfig (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ReloadProfileList (DragLint.Plugin.LintOptionsFrame.pas) (+3 more)</para>
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.DeleteNamingPreset (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ProfileSelected (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ReadNamingPresets (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ReloadCatalogAndConfig (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ReloadProfileList (DragLint.Plugin.LintOptionsFrame.pas) (+5 more)</para>
     /// <para>Calls: DragLint.Plugin.LintOptionsFrame.GetActiveProjDir, IncludeTrailingPathDelimiter</para>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.GetActiveProjDir"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ApplyPreset"/>
@@ -501,7 +603,7 @@ type
     /// <para>Called from: DragLint.Plugin.LintOptionsFrame.CreateEmbeddedLintOptions (DragLint.Plugin.LintOptionsFrame.pas)</para>
     /// <para>Calls: CreateNew, DRagLint.Lint.Config.TLintConfig.Load, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BuildControls</para>
     /// <para>constructor</para>
-    /// <para>Writes: FCatalogJSON, FRun, FHasData, FProfile, FCfg, FAutoFixCBs, FNamingEditors, FApplyingPreset</para>
+    /// <para>Writes: FCatalogJSON, FRun, FHasData, FDirty, FProfile, FCfg, FAutoFixCBs, FPending (+2 more)</para>
     /// <para>Directives: override</para>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.Load"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BuildControls"/>
@@ -515,13 +617,15 @@ type
     /// which are owned by the form / their parent group boxes).</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Reads: FRun, FAutoFixCBs, FNamingEditors</para>
+    /// <para>Calls: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.Save, MessageDlg, OutputDebugString, PChar</para>
+    /// <para>Reads: FDirty, FHasData, FRun, FAutoFixCBs, FNamingEditors, FPending</para>
+    /// <para>Catches: Exception (swallowed)</para>
     /// <para>Directives: override</para>
+    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.Save"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ApplyPreset"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnReloadClick"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnSaveClick"/>
     /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BuildControls"/>
-    /// <seealso cref="DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.CatHeaderClick"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     destructor Destroy; override;
@@ -550,15 +654,15 @@ type
     /// the active project's drag-lint-lint.json.</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DragLint.Plugin.Editor.InsertCompletionAtCursor (DragLint.Plugin.Editor.pas) ?, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnSaveClick (DragLint.Plugin.LintOptionsFrame.pas)</para>
-    /// <para>Calls: DRagLint.Lint.Config.TLintConfig.SetAutoFixOff, DRagLint.Lint.ConfigWriter.TLintConfigWriter.SaveToFile, DRagLint.Lint.ConfigWriter.TLintConfigWriter.SaveToProfile, DRagLint.Lint.ConfigWriter.TLintConfigWriter.SetRuleDisabled, DRagLint.Lint.ConfigWriter.TLintConfigWriter.SetRuleEnabled, DRagLint.Lint.ConfigWriter.TLintConfigWriter.SetThreshold, DragLint.Plugin.LintOptionsFrame.IsNamingIntParam, DragLint.Plugin.LintOptionsFrame.IsNamingStringParam, DragLint.Plugin.LintOptionsFrame.SetNamingString, DragLint.Plugin.LintOptionsFrame.SplitCommaTrimmed (+11 more)</para>
-    /// <para>Complexity: 22 (cyclomatic, outer body), 99 lines (full implementation)</para>
-    /// <para>Reads: FHasData, FCfg, FScroll, FAutoFixCBs, FCboProfile   Writes: FProfile</para>
+    /// <para>Called from: DragLint.Plugin.Editor.InsertCompletionAtCursor (DragLint.Plugin.Editor.pas) ?, DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BtnSaveClick (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.Destroy (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Calls: DRagLint.Lint.Config.TLintConfig.FindRuleOverride, DRagLint.Lint.Config.TLintConfig.Load, DRagLint.Lint.Config.TLintConfig.SetAutoFixOff, DRagLint.Lint.ConfigWriter.TLintConfigWriter.RevertRuleOverride, DRagLint.Lint.ConfigWriter.TLintConfigWriter.SaveToFile, DRagLint.Lint.ConfigWriter.TLintConfigWriter.SaveToProfile, DRagLint.Lint.ConfigWriter.TLintConfigWriter.SetRuleDisabled, DRagLint.Lint.ConfigWriter.TLintConfigWriter.SetRuleEnabled, DRagLint.Lint.ConfigWriter.TLintConfigWriter.SetThreshold, DragLint.Plugin.LintOptionsFrame.IsNamingIntParam (+16 more)</para>
+    /// <para>Complexity: 29 (cyclomatic, outer body), 122 lines (full implementation)</para>
+    /// <para>Reads: FHasData, FCfg, FCatalogJSON, FPending, FScroll, FAutoFixCBs, FCboProfile, FProfile   Writes: FProfile, FCfg, FDirty</para>
+    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.FindRuleOverride"/>
+    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.Load"/>
     /// <seealso cref="DRagLint.Lint.Config.TLintConfig.SetAutoFixOff"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.RevertRuleOverride"/>
     /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.SaveToFile"/>
-    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.SaveToProfile"/>
-    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.SetRuleDisabled"/>
-    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.SetRuleEnabled"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure Save;
@@ -660,6 +764,7 @@ uses
   , ToolsAPI
 
   , DragLint.Plugin.Settings
+  , DragLint.Plugin.UnsavedPolicy
   , DRagLint.Lint.ConfigWriter
   , DragLint.Plugin.ExeResolver
   , DragLint.Plugin.PlugUiCore  { SEARCH_DEBOUNCE_MS, SearchRefillNeeded }
@@ -1307,15 +1412,11 @@ destructor TLintOptionsFrame.Destroy;
 begin
   { Only holds references to VCL-owned checkboxes/edits; free the maps, not
     the controls themselves (owned by Self / their parent GroupBox). }
-  { B-OWN2: no Cancel is possible while the frame is being destroyed, so ask Yes/No. }
-  if FDirty and FHasData then
-  try
-    if MessageDlg('Lint Options has unsaved changes. Save them now?',
-         mtConfirmation, [mbYes, mbNo], 0) = mrYes then Save;
-  except
-    on E: Exception do
-      OutputDebugString(PChar('drag-lint LintOptions teardown: ' + E.Message)); // dl:ok outputdebugstring@67d3 -- teardown cannot raise or prompt; the debugger channel is the only safe sink
-  end;
+  { N5 (1.51.2): the dock frame is destroyed while the IDE tears down. 1.51.1 asked
+    and saved here; the dialog came late and Save hit freed IDE services (5-6 error
+    boxes). At teardown: no UI, no save -- discard and log one line. }
+  if DecideUnsaved(FDirty, FHasData, upTeardown) = uaDiscard then
+    OutputDebugString(PChar(UnsavedDiscardLogLine('Lint Options')));  // dl:ok outputdebugstring@7c48 -- teardown cannot prompt or write files; the debugger channel is the only safe sink
   FRun.Free;  { abandons the run in flight: its answer never reaches a dead frame }
   FAutoFixCBs.Free;
   FNamingEditors.Free;
@@ -2797,7 +2898,7 @@ end;
 
 procedure TLintOptionsFrame.BtnReloadClick(Sender: TObject);
 begin
-  if FDirty and (MessageDlg('Discard the unsaved changes and reload?',
+  if (DecideUnsaved(FDirty, FHasData, upInteractive) = uaAsk) and (MessageDlg('Discard the unsaved changes and reload?',
        mtConfirmation, [mbYes, mbNo], 0) <> mrYes) then Exit;
   FDirty:= False;
   ReloadCatalogAndConfig;

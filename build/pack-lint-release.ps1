@@ -90,6 +90,16 @@ if ($swErr) { Write-Host "drag-lint-switch BUILD FAILED:"; $swErr | Select-Objec
 if ($LASTEXITCODE -ne 0) { Write-Host "PACK STOPPED: could not stage drag-lint-switch.exe into third_party\dll-win64"; exit 1 }
 Write-Host "drag-lint-switch: built Win64"
 
+# Field repository editor (1.52 TTD): dl-field-repo.exe (DevExpress cxGrid, the default)
+# and dl-field-repo-std.exe (TDBGrid fallback). Win64 only; gated like ConvRulesEditor.
+foreach ($frBat in '_build_field_repo_local.bat','_build_field_repo_std_local.bat') {
+  $frOut = cmd /c "`"$(Join-Path $repo "build\$frBat")`"" 2>&1
+  if (($LASTEXITCODE -ne 0) -or -not ($frOut | Select-String -SimpleMatch "BUILD_EXITCODE=0" -Quiet)) {
+    Write-Host "$frBat BUILD FAILED:"; $frOut | Select-Object -Last 15; exit 1
+  }
+}
+Write-Host "dl-field-repo + dl-field-repo-std: built Win64"
+
 }  # end -SkipBuild
 
 $rel = "C:\TEMP\rel-$Version"
@@ -161,6 +171,8 @@ foreach ($plat in 'win64','win32') {
   if ($plat -eq 'win64') {
     Copy-Item (Join-Path $repo "src\tools\convrules-editor\ConvRulesEditor.exe") $stg
     Copy-Item (Join-Path $repo "third_party\dll-win64\drag-lint-switch.exe") $stg
+    Copy-Item (Join-Path $repo "src\tools\field-repo\dl-field-repo.exe") $stg
+    Copy-Item (Join-Path $repo "src\tools\field-repo\dl-field-repo-std.exe") $stg
     # The manual documents a GUI, so it ships only where the GUI does -- a manual
     # for an exe that is not in the archive is worse than no manual.
     Copy-Item (Join-Path $repo "docs\converter\convrules-editor-manual.md") (Join-Path $stg "docs\converter")
@@ -180,13 +192,13 @@ foreach ($plat in 'win64','win32') {
     try { $names = @($zf.Entries | ForEach-Object { $_.FullName.Replace('\','/') }) }
     finally { $zf.Dispose() }
     $root = "drag-lint-v$Version-$plat"
-    foreach ($need in 'drag-lint.exe','ConvRulesEditor.exe','drag-lint-switch.exe','sqlite3.dll') {
+    foreach ($need in 'drag-lint.exe','ConvRulesEditor.exe','drag-lint-switch.exe','sqlite3.dll','dl-field-repo.exe','dl-field-repo-std.exe') {
       if ($names -notcontains "$root/$need") {
         Write-Host "PACK FAILED: $z does not contain $root/$need" -ForegroundColor Red
         exit 1
       }
     }
-    Write-Host "  verified: win64 zip holds drag-lint.exe, ConvRulesEditor.exe and drag-lint-switch.exe"
+    Write-Host "  verified: win64 zip holds drag-lint.exe, ConvRulesEditor.exe, drag-lint-switch.exe, dl-field-repo.exe and dl-field-repo-std.exe"
   }
   $zips += $z
 }

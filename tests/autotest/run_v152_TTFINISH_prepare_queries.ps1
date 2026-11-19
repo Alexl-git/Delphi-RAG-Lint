@@ -19,6 +19,9 @@ param(
 )
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Continue'
 $script:Pass = 0
@@ -73,7 +76,7 @@ Check 'plan: dfm diff' ($r.Out.Contains("--- a/uLoad.dfm") -and $r.Out.Contains(
 Check 'plan: pas diff' ($r.Out.Contains("--- a/uLoad.pas") -and $r.Out.Contains("-    qryFOLDERSID: TIntegerField;") -and $r.Out.Contains("+    ZZZSA1: TFDSchemaAdapter;") -and $r.Out.Contains("+{")) $r.Out
 Check 'plan: nothing written' ((Hash $w) -eq $h)
 $r = Run @('repo', 'gen-param-array', '--in', "$w\uLoad.pas", '--prepare-queries', '--plan', '--json')
-$j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
+$j = $null; try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'plan --json: prepare object' (($null -ne $j) -and ($j.units[0].prepare.queries[0] -eq 'qryFOLDERS') -and (@($j.units[0].prepare.removed_fields).Count -eq 2)) $r.Out
 
 # apply
@@ -101,3 +104,4 @@ Check 'rollback: both files byte-identical' ((Hash $w) -eq $h)
 Write-Host ("Summary: pass={0} fail={1}" -f $script:Pass, $script:Fail)
 if ($script:Fail -gt 0) { exit 1 }
 exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

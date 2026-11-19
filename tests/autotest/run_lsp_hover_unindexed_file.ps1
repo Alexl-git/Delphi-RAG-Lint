@@ -251,7 +251,7 @@ function Invoke-Hover([string]$File, [int]$Line0, [int]$Char0) {
   $raw = [System.IO.File]::ReadAllText($outF)
   $script:LastRaw = $raw
   foreach ($m in [regex]::Matches($raw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $m.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $m.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 2) { if ($null -eq $o.result) { return '' } else { return [string]$o.result.contents.value } }
   }
   return '<NO REPLY>'
@@ -283,7 +283,7 @@ function Invoke-Req([string]$File, [string]$Method, $Extra, [int]$Line0, [int]$C
   $raw = [System.IO.File]::ReadAllText($outF)
   $script:LastRaw = $raw
   foreach ($m in [regex]::Matches($raw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $m.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $m.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 2) { return $o.result }
   }
   return $null

@@ -85,7 +85,7 @@ function Get-VariantPlan([hashtable]$V, [string]$Tag) {
   try {
     $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
       -ArgumentList @('cycles', '--db', ('"' + $db + '"'), '--plan', '--library-db', ('"' + $Lib + '"')) `
-      -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "plan-$Tag.err")
+      -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "plan-$Tag.err"); $null = $p.Handle
   } finally {
     $env:DRAGLINT_TEST_DUMP_PLAN = $null
   }

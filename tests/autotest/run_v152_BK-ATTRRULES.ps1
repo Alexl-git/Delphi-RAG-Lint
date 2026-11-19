@@ -21,7 +21,7 @@ function Get-Findings([string[]]$ArgList) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $exe @ArgList 2>$null }
   $text = ($raw -join "`n").Trim()
   if ($text -eq '') { return @() }
-  try { $j = $text | ConvertFrom-Json } catch { return @() }
+  try { $j = $text | ConvertFrom-Json | ForEach-Object { $_ } } catch { return @() }
   if ($null -eq $j) { return @() }
   return @($j)
 }
@@ -50,31 +50,31 @@ try {
   # ---- 1. debug-display-placeholder ----
   $rule = 'debug-display-placeholder'
   $cat = (& { $ErrorActionPreference = 'Continue'; & $exe rules --json 2>$null }) -join "`n"
-  $row = @(($cat | ConvertFrom-Json).rules | Where-Object { $_.id -eq $rule })
+  $row = @(($cat | ConvertFrom-Json | ForEach-Object { $_ }).rules | Where-Object { $_.id -eq $rule })
   Assert "$rule is a catalog row" ($row.Count -eq 1)
   Assert "$rule is OFF by default" (($row.Count -eq 1) -and (-not $row[0].default_enabled))
   $disp = Join-Path $tmp 'UDisplay.pas'
   $m = Markers $disp
   Assert "fixture carries (+) and (-) markers" (($m.plus.Count -ge 3) -and ($m.minus.Count -ge 3))
   # positive-control: debug-display-placeholder
-  $one = Get-Findings @('lint', $disp, '--db', $db, '--rule', $rule, '--json')
-  $g = Lines-Of $one $rule 'UDisplay.pas'
+  $one = @(Get-Findings @('lint', $disp, '--db', $db, '--rule', $rule, '--json'))
+  $g = @(Lines-Of $one $rule 'UDisplay.pas')
   foreach ($l in $m.plus)  { Assert "lint: $rule fires at line $l (got: $($g -join ','))" ($g -contains $l) }
   foreach ($l in $m.minus) { Assert "lint: $rule silent at line $l" (-not ($g -contains $l)) }
   $msg = @($one | Where-Object { $_.rule -eq $rule -and $_.message -match '\{Nmae\}' -and $_.message -match 'TTypo' })
   Assert "message names the placeholder and the type" ($msg.Count -eq 1)
-  $all = Get-Findings @('lint-all', '--db', $db, '--rule', $rule, '--json')
-  $ga = Lines-Of $all $rule 'UDisplay.pas'
+  $all = @(Get-Findings @('lint-all', '--db', $db, '--rule', $rule, '--json'))
+  $ga = @(Lines-Of $all $rule 'UDisplay.pas')
   Assert "lint-all reports the same lines ($($ga -join ','))" ((@($ga | Sort-Object) -join ',') -eq (@($g | Sort-Object) -join ','))
-  $def = Get-Findings @('lint', $disp, '--db', $db, '--json')
+  $def = @(Get-Findings @('lint', $disp, '--db', $db, '--json'))
   Assert "default OFF: no $rule finding without --rule" (@($def | Where-Object { $_.rule -eq $rule }).Count -eq 0)
-  $dis = Get-Findings @('lint', $disp, '--db', $db, '--rule', $rule, '--disable', $rule, '--json')
+  $dis = @(Get-Findings @('lint', $disp, '--db', $db, '--rule', $rule, '--disable', $rule, '--json'))
   Assert "control: --disable $rule silences it" (@($dis | Where-Object { $_.rule -eq $rule }).Count -eq 0)
 
   # ---- 2. member-could-be-private on the attributes fact ----
   $rule = 'member-could-be-private'
-  $f = Get-Findings @('lint-all', '--db', $db, '--rule', $rule, '--json')
-  $pm = Markers (Join-Path $tmp 'UPriv.pas'); $pg = Lines-Of $f $rule 'UPriv.pas'
+  $f = @(Get-Findings @('lint-all', '--db', $db, '--rule', $rule, '--json'))
+  $pm = Markers (Join-Path $tmp 'UPriv.pas'); $pg = @(Lines-Of $f $rule 'UPriv.pas')
   foreach ($l in $pm.plus)  { Assert "UPriv: $rule fires at line $l (got: $($pg -join ','))" ($pg -contains $l) }
   foreach ($l in $pm.minus) { Assert "UPriv: $rule silent at attributed line $l" (-not ($pg -contains $l)) }
 } finally {

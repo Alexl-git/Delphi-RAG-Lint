@@ -13,6 +13,12 @@ uses
 
 type
   /// <summary>The flags of one `extract-interface` run.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.ExtractInterface.pas) ?, DRagLint.CLI.DoExtractInterface (DRagLint.CLI.pas), DRagLint.Refactor.ExtractInterface.RunExtractInterface (DRagLint.Refactor.ExtractInterface.pas) ?, DRagLint.Refactor.ExtractInterface.TIfacePlanner.Create (DRagLint.Refactor.ExtractInterface.pas) ?</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Refactor.ExtractInterface</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TExtractInterfaceOptions = record
     /// <summary>--class: the class's name or qualified name.</summary>
     ClassRef: string;
@@ -53,7 +59,8 @@ type
 /// <param name="pOpts">The flags.</param>
 /// <returns>0: plan (a refusal included, named in it), or applied and built. 1: --apply refused or a gate refused, the project is
 /// unchanged. 2: bad flags, no such class, an ambiguous class, or a rollback that failed.</returns>
-/// <remarks>A member counts as used when a reference from outside the class resolves to it, or names it through a receiver
+/// <remarks>
+/// A member counts as used when a reference from outside the class resolves to it, or names it through a receiver
 /// typed as the class or a descendant; a reference in the class or an implicit-Self one in a descendant does not. Left out, the
 /// run carrying on: field, not-public, class-member, generic-method, class-scope-name, field-backed-property,
 /// property-specifier, no-such-member. Refused whole, in this order: include-file, stale-file, outside-roots, class-helper,
@@ -70,7 +77,19 @@ type
 /// in this order: param-not-class, include-file, stale-file, outside-roots, var-param, param-group, virtual-method,
 /// overloaded, no-body, no-iinterface / unresolved-ancestor / lifetime-refcounted / lifetime-unknown, not-implemented,
 /// interface-ambiguous, method-resolution, reimplemented, use-not-interface, header-shape. --retype-consumer with
-/// --members or --reparent-interfaced is exit 2: one step per run.</remarks>
+/// --members or --reparent-interfaced is exit 2: one step per run.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoExtractInterface (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.Refactor.CompileGate.GateMessageReport, DRagLint.Refactor.ExtractInterface.PrintJson, DRagLint.Refactor.ExtractInterface.PrintText, DRagLint.Refactor.ExtractInterface.RunExtractInterface.Fail, DRagLint.Refactor.ExtractInterface.TIfacePlanner.Create, DRagLint.Refactor.ExtractInterface.TIfacePlanner.Run, DRagLint.Refactor.VerbShape.ApplyOneFileThroughScratch, DRagLint.Report.CyclePlan.EncodeSource, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection, Format, ReportVerbError, Writeln</para>
+/// <para>Returns: Fail(CVerb + ' --retype-consumer is a step of its own: extract (and reparent) first, re-index, then retype'); CExitOk; CExitRefused; if Gate.RollbackFailed then CExitError</para>
+/// <para>Complexity: 17 (cyclomatic, outer body), 48 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Refactor.CompileGate.GateMessageReport"/>
+/// <seealso cref="DRagLint.Refactor.ExtractInterface.PrintJson"/>
+/// <seealso cref="DRagLint.Refactor.ExtractInterface.PrintText"/>
+/// <seealso cref="DRagLint.Refactor.ExtractInterface.RunExtractInterface.Fail"/>
+/// <seealso cref="DRagLint.Refactor.ExtractInterface.TIfacePlanner.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunExtractInterface(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;
   const pOpts: TExtractInterfaceOptions): Integer;
 

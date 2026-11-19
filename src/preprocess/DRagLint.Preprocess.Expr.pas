@@ -51,10 +51,21 @@ uses
 
 type
   /// <summary>What a partially-evaluated sub-expression holds.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Preprocess.Expr.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPPValueKind = (pvkBool, pvkInt, pvkReal, pvkStr);
 
   /// <summary>One compile-time value: a Boolean, an integer, a real or a
   /// string. Kind says which field is meaningful.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.LookupInUnit (DRagLint.Index.PPUnitSource.pas), DRagLint.Preprocess.Decls.TPPDeclScanner.FinishConst (DRagLint.Preprocess.Decls.pas), DRagLint.Preprocess.Decls.TPPDeclScanner.HandleDecl (DRagLint.Preprocess.Decls.pas), DRagLint.Preprocess.Decls.TPPDeclScanner.Token (DRagLint.Preprocess.Decls.pas), DRagLint.Preprocess.Expr.BoolVal (DRagLint.Preprocess.Expr.pas) (+27 more)</para>
+  /// <para>Used in units: DRagLint.Index.PPUnitSource, DRagLint.Preprocess, DRagLint.Preprocess.Decls, DRagLint.Preprocess.Expr</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPPValue = record
     Kind: TPPValueKind;
     Bool: Boolean;
@@ -64,7 +75,8 @@ type
   end;
 
   /// <summary>How the caller's symbol table answers a name.</summary>
-  /// <remarks>pnkUnknown: not declared anywhere the lookup can see.
+  /// <remarks>
+  /// pnkUnknown: not declared anywhere the lookup can see.
   /// pnkDeclared: declared, but not a true constant with a computable value
   /// (a type, a variable, a typed constant, a constant whose expression we
   /// cannot evaluate). pnkConst: a true constant; its value is returned.
@@ -74,12 +86,24 @@ type
   /// pnkNoEvidence (YADF6, 1.43): a miss with NOBODY to ask -- no library DB and
   /// the newest target -- so "not found" proves nothing. DECLARED reads it True
   /// (a feature test names what the current compiler usually has) and reports the
-  /// assumption; as a bare name in an expression it is simply unresolved.</remarks>
+  /// assumption; as a bare name in an expression it is simply unresolved.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Index.PPUnitSource.pas), declaration (DRagLint.Preprocess.Decls.pas), declaration (DRagLint.Preprocess.Expr.pas), DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.EvalInUnit (DRagLint.Index.PPUnitSource.pas), DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.LookupInUnit (DRagLint.Index.PPUnitSource.pas) (+3 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPPNameKind = (pnkUnknown, pnkDeclared, pnkConst, pnkTypedConst, pnkNoEvidence);
 
   /// <summary>The name lookup an IF expression consults for an identifier.</summary>
-  /// <remarks>AName keeps its source spelling and may be dotted
-  /// (Unit.Name). AValue is only meaningful when pnkConst is returned.</remarks>
+  /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+  /// <param name="AValue"><!-- drag-lint:auto type -->out TPPValue</param>
+  /// <returns><!-- drag-lint:auto type -->TPPNameKind</returns>
+  /// <remarks>
+  /// AName keeps its source spelling and may be dotted
+  /// (Unit.Name). AValue is only meaningful when pnkConst is returned.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Preprocess.Expr.pas), DRagLint.Preprocess.Expr.EvalPPExprScoped/5 (DRagLint.Preprocess.Expr.pas), DRagLint.Preprocess.Expr.EvalPPExprScoped/6 (DRagLint.Preprocess.Expr.pas), DRagLint.Preprocess.Expr.TPPExprParser.Init (DRagLint.Preprocess.Expr.pas), DRagLint.Preprocess.Expr.TryEvalPPConst (DRagLint.Preprocess.Expr.pas) (+2 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPPNameLookup = reference to function(const AName: string; out AValue: TPPValue): TPPNameKind;
 
 /// <summary>Evaluates a Delphi compile-time IF expression to a boolean with no
@@ -92,7 +116,15 @@ type
 /// <returns>True/False. A number result is True iff non-zero; a boolean result
 /// is returned as-is. ANY parse error, exception or unresolved name returns
 /// False (conservative).</returns>
-/// <remarks>Pure; thread-safe.</remarks>
+/// <remarks>
+/// Pure; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoDumpPpEval (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Preprocess.Expr.EvalPPExprScoped/5</para>
+/// <para>Returns: EvalPPExprScoped(AExpr, ADefines, ANumeric, nil, Unresolved)</para>
+/// <seealso cref="DRagLint.Preprocess.Expr.EvalPPExprScoped"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function EvalPPExpr(const AExpr: string; const ADefines: TDictionary<string,Boolean>; const ANumeric: TDictionary<string,Integer>): Boolean;
 
 /// <summary>Lane INC3: evaluates an IF expression against a symbol table.</summary>
@@ -105,7 +137,17 @@ function EvalPPExpr(const AExpr: string; const ADefines: TDictionary<string,Bool
 /// header), in first-seen order, without duplicates; empty when none.</param>
 /// <returns>The expression's truth value; False when anything is unresolved
 /// or the expression does not parse.</returns>
-/// <remarks>Pure apart from ALookup; thread-safe when ALookup is.</remarks>
+/// <remarks>
+/// Pure apart from ALookup; thread-safe when ALookup is.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Preprocess.Expr.EvalPPExpr (DRagLint.Preprocess.Expr.pas), DRagLint.Preprocess.PreprocessInto.EvalIf (DRagLint.Preprocess.pas)</para>
+/// <para>Calls: DRagLint.Preprocess.Expr.EvalPPExprScoped/6</para>
+/// <para>Returns: EvalPPExprScoped(AExpr, ADefines, ANumeric, ALookup, AUnresolved, Assumed)</para>
+/// <para>Overload 1 of 2</para>
+/// <para>Directives: overload</para>
+/// <seealso cref="DRagLint.Preprocess.Expr.EvalPPExprScoped"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function EvalPPExprScoped(const AExpr: string; const ADefines: TDictionary<string,Boolean>;
   const ANumeric: TDictionary<string,Integer>; const ALookup: TPPNameLookup;
   out AUnresolved: TArray<string>): Boolean; overload;
@@ -120,7 +162,21 @@ function EvalPPExprScoped(const AExpr: string; const ADefines: TDictionary<strin
 /// <param name="AAssumed">The DECLARED names ALookup answered pnkNoEvidence for,
 /// in first-seen order, without duplicates; empty when none.</param>
 /// <returns>The expression's truth value, as the other overload.</returns>
-/// <remarks>Pure apart from ALookup; thread-safe when ALookup is.</remarks>
+/// <remarks>
+/// Pure apart from ALookup; thread-safe when ALookup is.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Preprocess.Expr.EvalPPExprScoped/5 (DRagLint.Preprocess.Expr.pas), DRagLint.Preprocess.PreprocessInto.EvalIf (DRagLint.Preprocess.pas)</para>
+/// <para>Calls: Default, DRagLint.Preprocess.Expr.TPPExprParser.Eval, DRagLint.Preprocess.Expr.TPPExprParser.Init, DRagLint.Preprocess.Expr.Truthy</para>
+/// <para>Returns: Truthy(Parser.Eval); False</para>
+/// <para>Overload 2 of 2</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Mutates: AUnresolved (out), AAssumed (out)</para>
+/// <para>Directives: overload</para>
+/// <seealso cref="DRagLint.Preprocess.Expr.TPPExprParser.Eval"/>
+/// <seealso cref="DRagLint.Preprocess.Expr.TPPExprParser.Init"/>
+/// <seealso cref="DRagLint.Preprocess.Expr.Truthy"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function EvalPPExprScoped(const AExpr: string; const ADefines: TDictionary<string,Boolean>;
   const ANumeric: TDictionary<string,Integer>; const ALookup: TPPNameLookup;
   out AUnresolved, AAssumed: TArray<string>): Boolean; overload;
@@ -134,6 +190,18 @@ function EvalPPExprScoped(const AExpr: string; const ADefines: TDictionary<strin
 /// <param name="AValue">The value when the result is True.</param>
 /// <returns>True when the whole text parsed and every name resolved to a
 /// constant value; False otherwise (a set, a float function, a typed constant...).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.EvalInUnit (DRagLint.Index.PPUnitSource.pas), DRagLint.Preprocess.PreprocessWithSites (DRagLint.Preprocess.pas)</para>
+/// <para>Calls: Default, DRagLint.Preprocess.Expr.TPPExprParser.AtEnd, DRagLint.Preprocess.Expr.TPPExprParser.Eval, DRagLint.Preprocess.Expr.TPPExprParser.Init</para>
+/// <para>Returns: Parser.AtEnd and (Length(Parser.Unresolved) = 0); False</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Mutates: AValue (out)</para>
+/// <seealso cref="DRagLint.Preprocess.Expr.TPPExprParser.AtEnd"/>
+/// <seealso cref="DRagLint.Preprocess.Expr.TPPExprParser.Eval"/>
+/// <seealso cref="DRagLint.Preprocess.Expr.TPPExprParser.Init"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TryEvalPPConst(const AExpr: string; const ADefines: TDictionary<string,Boolean>;
   const ANumeric: TDictionary<string,Integer>; const ALookup: TPPNameLookup;
   out AValue: TPPValue): Boolean;

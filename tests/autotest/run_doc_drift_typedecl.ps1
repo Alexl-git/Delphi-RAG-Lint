@@ -123,7 +123,7 @@ function Get-Findings([string]$QName) {
   foreach ($line in $lines) {
     $line = "$line".Trim()
     if ($line -eq '') { continue }
-    try { $objs += ($line | ConvertFrom-Json) } catch { }
+    try { $objs += ($line | ConvertFrom-Json | ForEach-Object { $_ }) } catch { }
   }
   return @{ Ec = $ec; Findings = $objs; Raw = ($lines -join "`n") }
 }

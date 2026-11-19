@@ -181,7 +181,7 @@ out_noedge = [r[0] for r in c.execute("""
 print(json.dumps({"edges": out, "noedge": out_noedge}))
 c.close()
 '@ | Set-Content $py -Encoding ascii
-$res = (& python $py $db) -join "`n" | ConvertFrom-Json
+$res = (& python $py $db) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 $edges = @($res.edges)
 
 function Edge($fromArity, $callee) {

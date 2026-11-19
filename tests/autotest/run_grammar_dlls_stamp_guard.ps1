@@ -33,7 +33,7 @@ try {
   [IO.File]::WriteAllText("$fx\U.pas", "unit U;`r`ninterface`r`nprocedure P;`r`nimplementation`r`nprocedure P;`r`nbegin`r`nend;`r`nend.`r`n")
   [IO.File]::WriteAllText("$fx\U.dfm", "object F: TForm`r`n  Caption = 'x'`r`nend`r`n")
   $db = Join-Path $tmp 'fx.sqlite'
-  function Info($exe) { (& { $ErrorActionPreference = 'Continue'; & $exe info --json --db $db 2>$null } | Out-String | ConvertFrom-Json).indexes[0] }
+  function Info($exe) { (& { $ErrorActionPreference = 'Continue'; & $exe info --json --db $db 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }).indexes[0] }
 
   & { $ErrorActionPreference = 'Continue'; & $A index $fx --db $db *> $null }
   $ia = Info $A

@@ -94,11 +94,11 @@ Write-Host 'schema --format json' -ForegroundColor Cyan
 $jsonStdout = Join-Path $WorkDir 'schema.json.out'
 $jsonStderr = Join-Path $WorkDir 'schema.json.err'
 $pj = Start-Process -FilePath $Exe -ArgumentList @('schema', '--db', $db, '--format', 'json') -NoNewWindow -Wait -PassThru `
-  -RedirectStandardOutput $jsonStdout -RedirectStandardError $jsonStderr
+  -RedirectStandardOutput $jsonStdout -RedirectStandardError $jsonStderr; $null = $pj.Handle
 $jsonOut = Get-Content $jsonStdout -Raw
 $parsed = $null
 $parseOk = $true
-try { $parsed = $jsonOut | ConvertFrom-Json } catch { $parseOk = $false }
+try { $parsed = $jsonOut | ConvertFrom-Json | ForEach-Object { $_ } } catch { $parseOk = $false }
 Check '--format json: output parses as JSON' $parseOk $jsonOut
 
 if ($parseOk) {
@@ -129,7 +129,7 @@ if ($parseOk) {
 Write-Host ''
 Write-Host 'schema (text, default format)' -ForegroundColor Cyan
 $p = Start-Process -FilePath $Exe -ArgumentList @('schema', '--db', $db) -NoNewWindow -Wait -PassThru `
-  -RedirectStandardOutput (Join-Path $WorkDir 'text.out') -RedirectStandardError (Join-Path $WorkDir 'text.err')
+  -RedirectStandardOutput (Join-Path $WorkDir 'text.out') -RedirectStandardError (Join-Path $WorkDir 'text.err'); $null = $p.Handle
 $textOut = Get-Content (Join-Path $WorkDir 'text.out') -Raw
 Check 'text mode: exit code 0' ($p.ExitCode -eq 0) "exit=$($p.ExitCode)"
 Check 'text mode: prints schema_version line' ($textOut -match 'schema_version:\s*\d+') $textOut

@@ -31,7 +31,7 @@ uses
 /// own completion list never asks that.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.CompletionForm.KindWord (DragLint.Plugin.CompletionForm.pas)</para>
-/// <para>Returns: 'method'; 'function'; 'constructor'; 'field'; 'variable'; 'class'</para>
+/// <para>Returns: 'method'; 'function'; 'constructor'; 'field'; 'variable'; 'class'; 'interface'; 'unit'; 'property'; 'enum'; 'const'; 'record'; ''</para>
 /// <para>Complexity: 13 (cyclomatic, outer body), 18 lines (full implementation)</para>
 /// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->

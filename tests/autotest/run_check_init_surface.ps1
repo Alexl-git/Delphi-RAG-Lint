@@ -25,6 +25,9 @@ param(
 )
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
@@ -84,7 +87,7 @@ Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 function Run-Verb([string[]]$VerbArgs) {
   $errFile = Join-Path $WorkDir 'stderr.txt'
-  $out = & { $ErrorActionPreference = 'Continue'; & $Exe check-init @VerbArgs 2> $errFile }
+  $out = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe check-init @VerbArgs 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   return [pscustomobject]@{ Exit = $LASTEXITCODE; Out = (@($out) -join "`n"); Err = ((Get-Content $errFile -Raw) + '') }
 }
 
@@ -127,7 +130,7 @@ function Test-Keys($Doc, [string[]]$Want) {
 }
 $r = Run-Verb @('HbCfg.GCount', '--db', $db, '--json')
 $doc = $null
-try { $doc = $r.Out | ConvertFrom-Json } catch { $doc = $null }
+try { $doc = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $doc = $null }
 Check 'answer: exit is 0 or 1, never 2' (($r.Exit -eq 0) -or ($r.Exit -eq 1)) "exit=$($r.Exit) err=[$($r.Err.Trim())]"
 Check 'answer: stdout is one JSON document' ($null -ne $doc)
 Check 'answer: every top-level key of spec 2.1' (Test-Keys $doc $keys) "have=$(@($doc.PSObject.Properties.Name) -join ',')"
@@ -151,7 +154,7 @@ $closed = @('unordered-root', 'escaped-routine', 'writer-conditional', 'writer-l
   'unreliable-order', 'multi-program', 'writer-on-thread', 'cfg-skipped', 'budget', 'index-incomplete',
   'relied-on-handler-order', 'receiver-unproven', 'guarded-test', 'unknown-callee')
 $atDoc = $null
-try { $atDoc = $raw.Out | ConvertFrom-Json } catch { $atDoc = $null }
+try { $atDoc = $raw.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $atDoc = $null }
 Check '--at: answer is JSON, exit 0 or 1' (($null -ne $atDoc) -and (($raw.Exit -eq 0) -or ($raw.Exit -eq 1))) "exit=$($raw.Exit)"
 function Test-AtUse($Doc, [int]$Line, [int]$Col) {
   $u = @($Doc.uses | Where-Object { ($_.line -eq $Line) -and ($_.col -eq $Col) })
@@ -164,7 +167,7 @@ $bad = @($codes | Where-Object { $_ -and ($closed -cnotcontains $_) })
 Check '--at: every reason code is in the closed list' ((($codes.Count -gt 0) -or ($atDoc.verdict -eq 'SET')) -and ($bad.Count -eq 0)) "codes=$($codes -join ',') bad=$($bad -join ',')"
 $noCol = Run-Verb @('HbCfg.GCount', '--at', "${unitPath}:14", '--db', $db, '--json')
 $noColDoc = $null
-try { $noColDoc = $noCol.Out | ConvertFrom-Json } catch { $noColDoc = $null }
+try { $noColDoc = $noCol.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $noColDoc = $null }
 # 1.52 INT (HBSOLVER wired): a line-only --at judges the one use on that line, at its real column (12).
 Check '--at file:line (no col) is accepted' (($noCol.Exit -ne 2) -and (Test-AtUse $noColDoc 14 12)) "exit=$($noCol.Exit) err=[$($noCol.Err.Trim())]"
 $atOnly = Run-Verb @('--at', "${unitPath}:14:12", '--db', $db, '--json')
@@ -181,7 +184,7 @@ $te = Run-Verb @('HbCfg.GCount', '--db', $db, '--explain')
 Check 'text --explain: adds the roots line' ($te.Out -cmatch '(?m)^roots: ') "out=[$($te.Out)]"
 $tf = Run-Verb @('HbCfg.GCount', '--db', $db, '--format', 'json')
 $tfDoc = $null
-try { $tfDoc = $tf.Out | ConvertFrom-Json } catch { $tfDoc = $null }
+try { $tfDoc = $tf.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $tfDoc = $null }
 Check '--format json equals --json' (Test-Keys $tfDoc $keys)
 
 # E. controls (each must FAIL the check it guards)
@@ -198,3 +201,4 @@ exit 0
   Write-Host "FATAL: $($_.Exception.Message)" -ForegroundColor Red
   exit 2
 }
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

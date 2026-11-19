@@ -18,6 +18,9 @@ param(
 )
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -29,7 +32,7 @@ if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -Foreground
 $Exe = (Resolve-Path $Exe).Path
 $Repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $Fixture = Join-Path $Repo 'tests\fixtures\refactor\unwith'
-function Last-Json($o) { return ($o | Where-Object { $_ -like '{*' } | Select-Object -Last 1) | ConvertFrom-Json }
+function Last-Json($o) { return ($o | Where-Object { $_ -like '{*' } | Select-Object -Last 1) | ConvertFrom-Json | ForEach-Object { $_ } }
 
 [IO.Directory]::CreateDirectory("$WorkDir\gen") | Out-Null
 Copy-Item "$Fixture\*" $WorkDir -Recurse -Force
@@ -77,3 +80,4 @@ Check '(a) it prints the unwith summary, equal to `unwith --plan`' (($LSum.Count
 if ($script:Failed) { Write-Host 'run_v152_UNWITH_rows: FAILED' -ForegroundColor Red; exit 1 }
 Write-Host 'run_v152_UNWITH_rows: all passed'
 exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

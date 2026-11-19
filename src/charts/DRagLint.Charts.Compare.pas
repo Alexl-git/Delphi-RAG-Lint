@@ -37,7 +37,7 @@ type
   /// csOldIndex: the same question answered from the index copy OldDb (S4a).
   /// csTwoFiles: OldPath against NewPath, nothing is rerun.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Charts.Compare.pas), DRagLint.Charts.Render.SourceKind (DRagLint.Charts.Render.pas), DRagLint.CLI.CompareChooseSource (DRagLint.CLI.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Charts.Compare.pas), DRagLint.Charts.Render.SourceKind (DRagLint.Charts.Render.pas), DRagLint.CLI.Compare.CompareChooseSource (DRagLint.CLI.Compare.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCompareSource = (csFile, csRemarks, csAutoSnapshot, csOldIndex, csTwoFiles);
@@ -45,8 +45,8 @@ type
   /// <summary>What to compare and how.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Charts.Compare.pas) ?, DRagLint.Charts.Compare.SnapshotDirFor (DRagLint.Charts.Compare.pas) ?, DRagLint.Charts.Compare.ValidateRequest (DRagLint.Charts.Compare.pas) ?, DRagLint.CLI.CompareRefuse (DRagLint.CLI.pas), DRagLint.CLI.DoCompare (DRagLint.CLI.pas) (+12 more)</para>
-  /// <para>Used in units: DRagLint.Charts.Compare, DRagLint.CLI</para>
+  /// <para>Used by: declaration (DRagLint.Charts.Compare.pas) ?, DRagLint.Charts.Compare.SnapshotDirFor (DRagLint.Charts.Compare.pas) ?, DRagLint.Charts.Compare.ValidateRequest (DRagLint.Charts.Compare.pas) ?, DRagLint.CLI.Compare.CompareRefuse (DRagLint.CLI.Compare.pas), DRagLint.CLI.Compare.DoCompare (DRagLint.CLI.Compare.pas) (+12 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Compare, DRagLint.CLI.Compare</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCompareRequest = record
@@ -107,8 +107,8 @@ type
   /// On exit 2 or 3 only Message, Warnings and what was loaded before the refusal
   /// are set; Edits and Hunks are empty.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Charts.Compare.pas) ?, DRagLint.Charts.Compare.AddWarning (DRagLint.Charts.Compare.pas) ?, DRagLint.Charts.Compare.Refuse (DRagLint.Charts.Compare.pas) ?, DRagLint.Charts.Compare.RunCompare (DRagLint.Charts.Compare.pas), DRagLint.CLI.CompareRefuse (DRagLint.CLI.pas) (+40 more)</para>
-  /// <para>Used in units: DRagLint.Charts.Compare, DRagLint.Charts.Render, DRagLint.CLI</para>
+  /// <para>Used by: declaration (DRagLint.Charts.Compare.pas) ?, DRagLint.Charts.Compare.AddWarning (DRagLint.Charts.Compare.pas) ?, DRagLint.Charts.Compare.Refuse (DRagLint.Charts.Compare.pas) ?, DRagLint.Charts.Compare.RunCompare (DRagLint.Charts.Compare.pas), DRagLint.CLI.Compare.CompareRefuse (DRagLint.CLI.Compare.pas) (+40 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Compare, DRagLint.Charts.Render, DRagLint.CLI.Compare</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCompareResult = record
@@ -178,7 +178,7 @@ type
 /// of the result intact. Calls the producer from the calling thread; not thread-safe for
 /// two calls that update the same unit.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoCompare (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.Compare.DoCompare (DRagLint.CLI.Compare.pas)</para>
 /// <para>Calls: Default, DRagLint.Charts.Compare.ApplySideEffects, DRagLint.Charts.Compare.DiffSides, DRagLint.Charts.Compare.LoadNewSide, DRagLint.Charts.Compare.LoadOldSide, DRagLint.Charts.Compare.ValidateRequest</para>
 /// <para>Returns: R</para>
 /// <seealso cref="DRagLint.Charts.Compare.ApplySideEffects"/>

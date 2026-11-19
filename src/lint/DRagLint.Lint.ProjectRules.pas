@@ -21,7 +21,6 @@ uses
   , System.Generics.Collections
   , System.Generics.Defaults
   , TreeSitter
-  , TreeSitterLib
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   , DRagLint.Index.Glob
@@ -85,16 +84,16 @@ type
     /// per-file rules contribute findings for that file only.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas) ?</para>
-    /// <para>Calls: AWholeGraph, ChangeFileExt, CollectFrom, CollectWholeGraphRule, CompareDottedVersions, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds (+73 more)</para>
+    /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), DRagLint.CLI.RunCommand (DRagLint.CLI.pas) ?</para>
+    /// <para>Calls: AddExport, AWholeGraph, ChangeFileExt, CollectFrom, CollectWholeGraphRule, CompareDottedVersions, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName (+76 more)</para>
     /// <para>Returns: TDictionary&lt;string, Boolean&gt;.Create; Flags &lt;&gt; 0; InfoIn(AStore, Found); InfoIn(ALibraryStore, Found); nil; Findings.ToArray</para>
-    /// <para>Complexity: 143 (cyclomatic, outer body), 1115 lines (full implementation)</para>
+    /// <para>Complexity: 148 (cyclomatic, outer body), 1143 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetReferencedNamesLower"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Run(const AStore: ISymbolStore; const ARuleId: string = '';
@@ -118,7 +117,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.ComputeRuleCacheEntry (DRagLint.CLI.pas), DRagLint.CLI.WholeGraphProvider (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.Run.WholeGraph (DRagLint.Lint.ProjectRules.pas) ?</para>
     /// <para>Calls: DRagLint.Lint.EnumOrdinalPersisted.CollectEnumOrdinalPersisted, DRagLint.Lint.ProjectRules.CollectCircularUses, DRagLint.Lint.ProjectRules.CollectDfmEventHandlerMissing, DRagLint.Lint.ProjectRules.CollectDuplicateGlobalDecls, DRagLint.Lint.ProjectRules.CollectEnumHelperSeparateUnits, DRagLint.Lint.ProjectRules.CollectRepeatedTypeSwitch, SameText</para>
-    /// <para>Returns: nil; CollectCircularUses(AStore); CollectDuplicateGlobalDecls(AStore, ALibraryStore); CollectEnumHelperSeparateUnits(AStore); CollectRepeatedTypeSwitch(AStore); CollectEnumOrdinalPersisted(AStore)</para>
+    /// <para>Returns: nil; CollectCircularUses(AStore); CollectDuplicateGlobalDecls(AStore, ALibraryStore); CollectEnumHelperSeparateUnits(AStore); CollectRepeatedTypeSwitch(AStore); CollectEnumOrdinalPersisted(AStore); CollectDfmEventHandlerMissing(AStore, ALibraryStore)</para>
     /// <seealso cref="DRagLint.Lint.EnumOrdinalPersisted.CollectEnumOrdinalPersisted"/>
     /// <seealso cref="DRagLint.Lint.ProjectRules.CollectCircularUses"/>
     /// <seealso cref="DRagLint.Lint.ProjectRules.CollectDfmEventHandlerMissing"/>
@@ -163,7 +162,7 @@ type
   /// belong in a report section, never in Finding.Message -- a finding line is a
   /// single parsed record and a newline in it corrupts every consumer.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Lint.ProjectRules.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.CollectCircularUses (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.CollectCircularUsesDetailed (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.CollectCircularUsesDetailed.StrongConnect (DRagLint.Lint.ProjectRules.pas) (+1 more)</para>
+  /// <para>Used by: declaration (DRagLint.Lint.ProjectRules.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.CollectCircularUses (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.CollectCircularUsesDetailed (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.CollectCircularUsesDetailed.StrongConnect (DRagLint.Lint.ProjectRules.pas) (+2 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.ProjectRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -189,7 +188,7 @@ type
 /// Runs ONE Tarjan pass over the unit graph and is the single
 /// implementation; the finding-only view is a projection of this. Never raises.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.CollectCircularUses (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.CollectCycleParticipants (DRagLint.Lint.ProjectRules.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.CollectCircularUses (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.CollectCycleEdgeInIncludeRule (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.CollectCycleParticipants (DRagLint.Lint.ProjectRules.pas)</para>
 /// <para>Calls: BareUsesBinding, ChangeFileExt, Copy, CouplingLines, CycleFixPointer, CycleUsesLine, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath (+13 more)</para>
 /// <para>Returns: nil; Findings.ToArray</para>
 /// <para>Complexity: 15 (cyclomatic, outer body), 425 lines (full implementation)</para>

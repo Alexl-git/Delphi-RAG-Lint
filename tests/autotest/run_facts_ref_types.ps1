@@ -113,7 +113,7 @@ end.
 '@
 
 function Rows([string]$Sql) {
-  $j = (& $Exe sql --query $Sql --db $db --json) | Out-String | ConvertFrom-Json
+  $j = (& $Exe sql --query $Sql --db $db --json) | Out-String | ConvertFrom-Json | ForEach-Object { $_ }
   return , @($j.rows)
 }
 function Scalar([string]$Sql) { return (Rows $Sql)[0][0] }
@@ -173,7 +173,7 @@ try {
   $pos = "${pas}:${lResult}:${col}"
   $t = (& $Exe typeat $pos --db $db) | Out-String
   Check 'typeat prints the stored static type' ($t -match 'StaticType:\s+TypeFx\.TThing \(via ctor\)') $t.Trim().Replace("`r`n", ' / ')
-  $j = (& $Exe typeat $pos --format json --db $db) | Out-String | ConvertFrom-Json
+  $j = (& $Exe typeat $pos --format json --db $db) | Out-String | ConvertFrom-Json | ForEach-Object { $_ }
   Check 'typeat --format json carries it' (($j.static_type -eq 'TypeFx.TThing') -and ($j.static_type_via -eq 'ctor')) "$($j.static_type) $($j.static_type_via)"
   Check 'typeat --format json keeps its old fields' ($j.resolved -eq 'TypeFx.TBase.Create') "$($j.resolved)"
 

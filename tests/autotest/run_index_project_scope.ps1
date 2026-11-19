@@ -307,7 +307,7 @@ print(json.dumps(rows))
 c.close()
 '@ | Set-Content $py -Encoding ascii
 
-$indexed = @((& python $py $db) -join "`n" | ConvertFrom-Json)
+$indexed = @(((& python $py $db) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 Write-Host ("  indexed {0} file(s)" -f $indexed.Count)
 
 $stray = @($indexed | Where-Object { $_ -notlike "$proj*" })

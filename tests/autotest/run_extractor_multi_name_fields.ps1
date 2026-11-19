@@ -77,7 +77,7 @@ end.
     $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query "SELECT name FROM symbols" --json 2>$null } | Out-String
   } finally { Pop-Location }
   $names = @()
-  try { $names = @((($j | ConvertFrom-Json).rows) | ForEach-Object { [string]$_[0] }) } catch {}
+  try { $names = @((($j | ConvertFrom-Json | ForEach-Object { $_ }).rows) | ForEach-Object { [string]$_[0] }) } catch {}
   Write-Host ("  symbols: {0}" -f (($names | Sort-Object -Unique) -join ','))
   function Has([string]$n) { return [bool]($names | Where-Object { $_ -ceq $n }) }
   foreach ($first in 'A', 'Message', 'FX', 'CA', 'GOne', 'LOne', 'P1') {

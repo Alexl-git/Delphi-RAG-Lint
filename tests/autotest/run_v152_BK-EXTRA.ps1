@@ -36,7 +36,7 @@ function Check($n, $ok, $d = '') {
 function W($p, $t) { [IO.File]::WriteAllText($p, (($t -replace "`r`n", "`n") -replace "`n", "`r`n"), [Text.Encoding]::ASCII) }
 function Sql($db, $q) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --query $q 2>$null }
-  $doc = ($raw -join "`n") | ConvertFrom-Json
+  $doc = ($raw -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }
   $cols = @($doc.columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
   $out = foreach ($r in @($doc.rows)) {
     $h = [ordered]@{}

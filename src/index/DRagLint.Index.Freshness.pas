@@ -83,8 +83,8 @@ type
   /// <summary>What one freshness sweep found.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Charts.AskVerb.ProbeDb (DRagLint.Charts.AskVerb.pas) ?, DRagLint.Charts.AskVerb.TAskRun.CheckFreshness (DRagLint.Charts.AskVerb.pas) ?, DRagLint.Charts.Producer.Delphi.Freshness (DRagLint.Charts.Producer.Delphi.pas) ?, DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas), DRagLint.Index.Freshness.ProbeIndexFreshness (DRagLint.Index.Freshness.pas) (+5 more)</para>
-  /// <para>Used in units: DRagLint.Charts.AskVerb, DRagLint.Charts.Producer.Delphi, DRagLint.CLI, DRagLint.Index.Freshness, DRagLint.MCP.Server</para>
+  /// <para>Used by: DRagLint.Charts.AskVerb.ProbeDb (DRagLint.Charts.AskVerb.pas) ?, DRagLint.Charts.AskVerb.TAskRun.CheckFreshness (DRagLint.Charts.AskVerb.pas) ?, DRagLint.Charts.Producer.Delphi.Freshness (DRagLint.Charts.Producer.Delphi.pas) ?, DRagLint.CLI.Common.AddStalenessPairs (DRagLint.CLI.Common.pas), DRagLint.Index.Freshness.ProbeIndexFreshness (DRagLint.Index.Freshness.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.Charts.AskVerb, DRagLint.Charts.Producer.Delphi, DRagLint.CLI.Common, DRagLint.Index.Freshness, DRagLint.MCP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TFreshnessReport = record
@@ -115,7 +115,7 @@ type
 /// counts as Missing, on the principle that a freshness check must not be able
 /// to break the command it is advising.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.AskVerb.ProbeDb (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Compare.IndexFactFor (DRagLint.Charts.Compare.pas), DRagLint.Charts.Producer.Delphi.Freshness (DRagLint.Charts.Producer.Delphi.pas), DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas), DRagLint.CLI.NoteIndexFreshnessOnce (DRagLint.CLI.pas) (+4 more)</para>
+/// <para>Called from: DRagLint.Charts.AskVerb.ProbeDb (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Compare.IndexFactFor (DRagLint.Charts.Compare.pas), DRagLint.Charts.Producer.Delphi.Freshness (DRagLint.Charts.Producer.Delphi.pas), DRagLint.CLI.Common.AddStalenessPairs (DRagLint.CLI.Common.pas), DRagLint.CLI.Common.NoteIndexFreshnessOnce (DRagLint.CLI.Common.pas) (+4 more)</para>
 /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileStamps, DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue, DRagLint.Index.Freshness.StampState</para>
 /// <para>Returns: Default(TFreshnessReport)</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileStamps"/>
@@ -139,7 +139,7 @@ function ProbeIndexFreshness(const AStore: ISymbolStore;
 /// nobody reads. The verdict is still fvUnknown in the record for any caller
 /// that wants to render it; only this convenience line stays quiet.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.NoteIndexFreshnessOnce (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.NoteFor (DRagLint.MCP.Server.pas)</para>
+/// <para>Called from: DRagLint.CLI.Common.NoteIndexFreshnessOnce (DRagLint.CLI.Common.pas), DRagLint.MCP.Server.TMCPServer.NoteFor (DRagLint.MCP.Server.pas)</para>
 /// <para>Calls: Format</para>
 /// <para>Returns: ''</para>
 /// <para>Touches: file system</para>
@@ -162,7 +162,7 @@ function FreshnessNote(const AReport: TFreshnessReport; const ADbPath: string): 
 /// fresh checks GetMetaValue(INDEXED_AT_KEY) itself, as RefreshOwner does.</para>
 /// <para>One query plus one stat per row. Store errors propagate.</para>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.CountStaleFilesWithoutCallEdges (DRagLint.CLI.pas), DRagLint.Refactor.MultiProjectRename.StaleEvidence (DRagLint.Refactor.MultiProjectRename.pas)</para>
+/// <para>Called from: DRagLint.CLI.CountStaleFilesWithoutCallEdges (DRagLint.CLI.pas), DRagLint.CLI.StaleFactSources (DRagLint.CLI.pas), DRagLint.Doc.Batch.DocFilesDisagreeingWithSource (DRagLint.Doc.Batch.pas), DRagLint.Lint.DocRules.StaleCalleeReads (DRagLint.Lint.DocRules.pas), DRagLint.Refactor.MultiProjectRename.StaleEvidence (DRagLint.Refactor.MultiProjectRename.pas)</para>
 /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetAllFileStamps, DRagLint.Index.Freshness.StampState</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileStamps"/>
 /// <seealso cref="DRagLint.Index.Freshness.StampState"/>

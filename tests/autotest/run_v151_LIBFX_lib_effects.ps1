@@ -42,13 +42,13 @@ function Check([bool]$ok, [string]$what) {
 }
 function Parse-Findings([string[]]$Raw) {
   $txt = ($Raw -join "`n"); $b = $txt.IndexOf('[')
-  $out = @(); if ($b -ge 0) { try { $out = @($txt.Substring($b) | ConvertFrom-Json) } catch { $out = @() } }
+  $out = @(); if ($b -ge 0) { try { $out = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $out = @() } }
   return ,@($out)
 }
 # sql --json rows are POSITIONAL arrays: map rows[i][k] onto columns[k].name.
 function Get-Summaries([string]$Db) {
   $q = 'select s.qualified_name, f.effect_summary from symbols s join symbol_facts f on f.symbol_id = s.id'
-  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --query $q --db $Db --json 2>$null }) -join "`n" | ConvertFrom-Json
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --query $q --db $Db --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
   $map = @{}
   foreach ($r in $j.rows) { $map[[string]$r[0]] = [string]$r[1] }
   return $map

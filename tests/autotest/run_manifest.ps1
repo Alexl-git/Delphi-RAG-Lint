@@ -40,7 +40,7 @@ if (Test-Path $sdb) { Remove-Item -Force $sdb }
 $proc = Start-Process -FilePath $Exe `
     -ArgumentList @('index', $stress, '--db', $sdb, '--use-ignore') `
     -NoNewWindow -PassThru -RedirectStandardOutput "$env:TEMP\draglint_stress_$PID.out" `
-    -RedirectStandardError "$env:TEMP\draglint_stress_$PID.err"
+    -RedirectStandardError "$env:TEMP\draglint_stress_$PID.err"; $null = $proc.Handle
 $done = $proc.WaitForExit(30000)   # 30s hard cap; pathological behaviour would blow this
 if (-not $done) {
     try { $proc.Kill() } catch {}

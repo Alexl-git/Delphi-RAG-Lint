@@ -20,7 +20,7 @@ try {
   # risky rule -> risky:true (preview JSON)
   $t = CopyFixture 'off_by_one.pas'
   $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $t --fix --fix-line 14 --fix-rule off-by-one-count --json 2>$null } | Out-String
-  $arr = $null; try { $arr = ($raw | ConvertFrom-Json) } catch { $arr = $null }
+  $arr = $null; try { $arr = ($raw | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $arr = $null }
   if ($null -ne $arr -and $arr -isnot [System.Array]) { $arr = @($arr) }
   $o = $arr | Where-Object { $_.rule -eq 'off-by-one-count' } | Select-Object -First 1
   Check 'off-by-one-count finding present' ($null -ne $o)
@@ -32,7 +32,7 @@ try {
   # non-risky rule -> risky:false
   $t2 = CopyFixture 'redundant_not_not.pas'
   $raw2 = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $t2 --fix --fix-line 12 --fix-rule redundant-not-not --json 2>$null } | Out-String
-  $arr2 = $null; try { $arr2 = ($raw2 | ConvertFrom-Json) } catch { $arr2 = $null }
+  $arr2 = $null; try { $arr2 = ($raw2 | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $arr2 = $null }
   if ($null -ne $arr2 -and $arr2 -isnot [System.Array]) { $arr2 = @($arr2) }
   $n = $arr2 | Where-Object { $_.rule -eq 'redundant-not-not' } | Select-Object -First 1
   Check 'redundant-not-not risky=false' ($null -ne $n -and $n.risky -eq $false)

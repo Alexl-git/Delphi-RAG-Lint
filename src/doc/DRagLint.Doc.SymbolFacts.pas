@@ -578,7 +578,9 @@ type
 /// never be answered from rows its previous pass read.</summary>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas)</para>
+/// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas), DRagLint.Doc.Batch.ReleaseDocParseCaches (DRagLint.Doc.Batch.pas)</para>
+/// <para>Calls: DRagLint.Doc.SymbolFacts.ResetProcsForFileCache</para>
+/// <seealso cref="DRagLint.Doc.SymbolFacts.ResetProcsForFileCache"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure ResetSymbolFactsFileCaches;

@@ -34,6 +34,10 @@ $Reported = @(
   'run_heavy_initialization.ps1'  # v151 INT: names drag-lint.json only to explain why its control passes --library-db none -- it no longer depends on the manifest
   'run_installed_layout_v2_guard.ps1'         # own manifest-less engine copy; watches the real exe dir
   'run_installed_layout_v2_phase2_guard.ps1'  # own manifest-less engine copies; watches the real exe dir
+  # 152 DDFIX review: the phrase names something other than the engine's manifest, or the guard builds its own engine copies.
+  'run_v152_BK-GATE.ps1'       # 'no manifest/DB knows' is about PROJECT membership, not the exe-side drag-lint.json
+  'run_v152_BK-TAILS-LSP.ps1'  # runs from its scratch dir so no CWD .drag-lint.json is walked; never reads the exe-side manifest
+  'run_v152_BK-TOOLING2B.ps1'  # New-Engine copies exe + rules and writes each copy's OWN drag-lint.json (already hermetic)
 )
 
 $phrase = '(?i)\b(no|without|absent)\b[^\r\n]{0,30}(drag-lint\.json|manifest)'

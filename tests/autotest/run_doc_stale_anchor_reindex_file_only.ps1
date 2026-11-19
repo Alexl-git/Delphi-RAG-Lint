@@ -102,20 +102,20 @@ function IndexedFiles {
   $dump = Join-Path $scratch 'files.json'
   $q = RunEngine @('sql','--db',$db,'--query','SELECT path FROM files ORDER BY path','--json','--output',$dump)
   if ($q.Code -ne 0) { throw "sql failed: $($q.Text)" }
-  $j = Get-Content $dump -Raw | ConvertFrom-Json
+  $j = Get-Content $dump -Raw | ConvertFrom-Json | ForEach-Object { $_ }
   return @($j.rows | ForEach-Object { [IO.Path]::GetFileName([string]$_[0]) })
 }
 function ScanType {
   $dump = Join-Path $scratch 'meta.json'
   $q = RunEngine @('sql','--db',$db,'--query',"SELECT value FROM schema_meta WHERE key = 'scan_type'",'--json','--output',$dump)
   if ($q.Code -ne 0) { throw "sql failed: $($q.Text)" }
-  $j = Get-Content $dump -Raw | ConvertFrom-Json
+  $j = Get-Content $dump -Raw | ConvertFrom-Json | ForEach-Object { $_ }
   return [string]$j.rows[0][0]
 }
 
 $ix = RunEngine @('index','--project',$dpr,'--db',$db)
 if ($ix.Code -ne 0) { throw "fixture index failed: $($ix.Text)" }
-$before = IndexedFiles
+$before = @(IndexedFiles)
 
 $p1 = RunEngine @('document','--unit',$app,'--db',$db)
 Check 'P1 fresh index: exit 0, an edit rendered' (($p1.Code -eq 0) -and ($p1.Text -match 'insert after line')) "exit $($p1.Code)"
@@ -144,7 +144,7 @@ $r1 = RunEngine @('document','--unit',$app,'--db',$db,'--apply','--no-backup')
 Check 'R1 stale own file, no --project: exit 0, applied' (($r1.Code -eq 0) -and ($r1.Text -match 'applied')) "exit $($r1.Code)"
 Check 'R2 the D-2 reindex-and-retry ran' ($r1.Text -match 'reindexing and retrying once') ($r1.Text.Trim() -split "`n" | Select-Object -Last 2)
 Check 'R2 the reindex did not fail' (-not ($r1.Text -match 'reindex FAILED'))
-$after = IndexedFiles
+$after = @(IndexedFiles)
 Check 'R3 same 3 files indexed' (($after.Count -eq 3) -and (($after -join ',') -eq ($before -join ','))) ($after -join ',')
 Check 'R3 Loose.pas not indexed' (-not ($after -contains 'Loose.pas'))
 Check 'R3 scan_type still project' ((ScanType) -eq 'project')

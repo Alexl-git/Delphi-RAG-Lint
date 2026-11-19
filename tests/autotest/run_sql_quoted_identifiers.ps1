@@ -32,6 +32,9 @@
 param([string]$Exe = '')
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 
 $ErrorActionPreference = 'Continue'
@@ -77,10 +80,10 @@ try {
   Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
   $q = "select c.qualified_name, coalesce(c.signature,'') from symbols c join symbols t on t.id = c.parent_id where c.kind = 'sql_column' and t.kind = 'sql_table'"
-  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n" | ConvertFrom-Json
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
   $cols = @{}
   foreach ($row in $j.rows) { $cols[[string]$row[0]] = [string]$row[1] }
-  $tj = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "select name from symbols where kind = 'sql_table'" --json 2>$null }) -join "`n" | ConvertFrom-Json
+  $tj = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "select name from symbols where kind = 'sql_table'" --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
   $tables = @($tj.rows | ForEach-Object { [string]$_[0] })
 
   function HasCol($qn, $sig) {
@@ -111,3 +114,4 @@ try {
 } finally { Pop-Location }
 
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally { Remove-WorkDir $work -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

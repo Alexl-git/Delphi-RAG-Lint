@@ -173,7 +173,7 @@ Push-Location C:\TEMP
 Check 'V library index built' (Test-Path $libDb) $libDb
 & { $ErrorActionPreference = 'Continue'; & $exePath index --project (Join-Path $app 'App.dpr') --db $appDb --library-db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V app index built' (Test-Path $appDb) $appDb
-$j = & $exePath sql --db $appDb --json --limit 2000 --query "SELECT '' p, f.path, r.receiver_text, r.name_text, coalesce(r.external_target,'') FROM refs r JOIN files f ON f.id = r.file_id WHERE r.kind = 'call' AND r.receiver_text <> ''" | Out-String | ConvertFrom-Json
+$j = & $exePath sql --db $appDb --json --limit 2000 --query "SELECT '' p, f.path, r.receiver_text, r.name_text, coalesce(r.external_target,'') FROM refs r JOIN files f ON f.id = r.file_id WHERE r.kind = 'call' AND r.receiver_text <> ''" | Out-String | ConvertFrom-Json | ForEach-Object { $_ }
 Pop-Location
 
 $rows = foreach ($r in $j.rows) { [pscustomobject]@{ File=[IO.Path]::GetFileNameWithoutExtension([string]$r[1]); Rcv=[string]$r[2]; Name=[string]$r[3]; Ext=[string]$r[4] } }

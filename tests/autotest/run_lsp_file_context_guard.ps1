@@ -125,7 +125,7 @@ function Read-Frames([string]$Out) {
     $start = $i + $m.Index + $m.Length
     $len = [int]$m.Groups[1].Value
     if ($start + $len -gt $Out.Length) { break }
-    $res += ($Out.Substring($start, $len) | ConvertFrom-Json)
+    $res += ($Out.Substring($start, $len) | ConvertFrom-Json | ForEach-Object { $_ })
     $i = $start + $len
   }
   return $res
@@ -177,7 +177,7 @@ Write-Host 'DPLAT: a .dproj without the $(Platform) marker' -ForegroundColor Cya
 # 149 LX: a marker-less project is what the index makes of it (manifest default, else a3 Win32),
 # not 'Win64 if targeted'. Read the default the engine will read, so the expectation follows it.
 $ManDef = ''
-try { $ManDef = [string]((Get-Content (Join-Path (Split-Path $Exe) 'drag-lint.json') -Raw | ConvertFrom-Json).settings.defaultPlatform) } catch { }
+try { $ManDef = [string]((Get-Content (Join-Path (Split-Path $Exe) 'drag-lint.json') -Raw | ConvertFrom-Json | ForEach-Object { $_ }).settings.defaultPlatform) } catch { }
 $A3 = if ($ManDef) { $ManDef } else { 'Win32' }
 foreach ($t in @(@('Both', $A3), @('Only32', $A3), @('Tp3', $A3), @('Tp1', $A3), @('Marked', 'Win32'), @('Marked64', 'Win64'))) {
   $f = "$WorkDir\plat\$($t[0])\u$($t[0]).pas"

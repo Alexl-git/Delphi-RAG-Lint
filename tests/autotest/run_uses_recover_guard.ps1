@@ -59,7 +59,7 @@ Write-Host '-- 1: full run (--library-db + --map)' -ForegroundColor Cyan
 $r = Run @('uses-recover', '--db', $ProjDb, '--hpp-dir', $Hpp, '--library-db', $LibDb, '--map', $Map, '--json')
 Check '1 exit 0' ($r.Code -eq 0) "exit $($r.Code)"
 $j = $null
-try { $j = $r.Out | ConvertFrom-Json } catch { }
+try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check '1 json parses' ($null -ne $j)
 if ($j) {
   $units = @($j.units)
@@ -86,14 +86,14 @@ if ($j) {
 Write-Host '-- 2: positive control, no --library-db' -ForegroundColor Cyan
 $r = Run @('uses-recover', '--db', $ProjDb, '--hpp-dir', $Hpp, '--map', $Map, '--json')
 $j2 = $null
-try { $j2 = $r.Out | ConvertFrom-Json } catch { }
+try { $j2 = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 $rtl = if ($j2) { @($j2.units) | Where-Object unit -eq 'FixRtl' }
 Check '2 FixRtl turns sourceless without the library DB' ($rtl -and $rtl.reach -eq 'header') ($r.Out.Trim())
 
 Write-Host '-- 3: positive control, no --map' -ForegroundColor Cyan
 $r = Run @('uses-recover', '--db', $ProjDb, '--hpp-dir', $Hpp, '--library-db', $LibDb, '--json')
 $j3 = $null
-try { $j3 = $r.Out | ConvertFrom-Json } catch { }
+try { $j3 = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 $a3 = if ($j3) { @($j3.units) | Where-Object unit -eq 'FixLibA' }
 Check '3 in_map is null without --map' ($a3 -and $null -eq $a3.in_map) ($r.Out.Trim())
 Check '3 map_only is empty without --map' ($j3 -and @($j3.map_only).Count -eq 0)

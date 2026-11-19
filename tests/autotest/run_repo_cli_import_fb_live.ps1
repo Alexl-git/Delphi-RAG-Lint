@@ -35,12 +35,12 @@ $Work = Join-Path ([IO.Path]::GetTempPath()) ('dl-repo-live-' + [guid]::NewGuid(
 [IO.Directory]::CreateDirectory($Work) | Out-Null
 function Run([string[]]$a) {
   $errFile = Join-Path $Work ('err-' + [guid]::NewGuid().ToString('N') + '.txt')
-  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2> $errFile }) -join "`n"
+  $out = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe @a 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }) -join "`n"
   $code = $LASTEXITCODE
   $err = if (Test-Path $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
   [pscustomobject]@{ Code = $code; Out = $out; Err = $err }
 }
-function Tables($repo) { $r = Run @('repo', 'info', '--json', '--repo', $repo); if ($r.Code -ne 0) { return $null }; ($r.Out | ConvertFrom-Json).tables }
+function Tables($repo) { $r = Run @('repo', 'info', '--json', '--repo', $repo); if ($r.Code -ne 0) { return $null }; ($r.Out | ConvertFrom-Json | ForEach-Object { $_ }).tables }
 $repo = Join-Path $Work 'imp.dlrepo'
 $cn = $env:DL_TEST_FB_CONNECTION
 $r = Run @('repo', 'import-fb', '--connection', $cn, '--repo', $repo)

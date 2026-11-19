@@ -493,7 +493,7 @@ function Get-Tree([string]$QName) {
     $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe proptree --qname $QName --format json --db $db --no-write-back 2>$null }) -join "`n"
   } finally { Pop-Location }
   if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
-  return ($raw | ConvertFrom-Json)
+  return ($raw | ConvertFrom-Json | ForEach-Object { $_ })
 }
 
 # --- Sanity: the fixture really does present an UNRESOLVED 'TAmb9' edge, i.e. -----
@@ -550,7 +550,7 @@ $outC = Join-Path $WorkDir 'cyc.json'
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 $pC = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir `
       -ArgumentList @('proptree','--qname','Cyc9.TCycHub','--format','json','--db',$db,'--no-write-back') `
-      -RedirectStandardOutput $outC -RedirectStandardError "$outC.err" -NoNewWindow -PassThru
+      -RedirectStandardOutput $outC -RedirectStandardError "$outC.err" -NoNewWindow -PassThru; $null = $pC.Handle
 $finC = $pC.WaitForExit(60000)
 $sw.Stop()
 if (-not $finC) { try { $pC.Kill() } catch {} }
@@ -560,7 +560,7 @@ Check "branching cycle: exits 0 (no stack overflow)" ($finC -and $pC.ExitCode -e
 $tC = $null
 if ($finC -and (Test-Path $outC)) {
   $rawC = Get-Content $outC -Raw
-  if (-not [string]::IsNullOrWhiteSpace($rawC)) { $tC = $rawC | ConvertFrom-Json }
+  if (-not [string]::IsNullOrWhiteSpace($rawC)) { $tC = $rawC | ConvertFrom-Json | ForEach-Object { $_ } }
 }
 Check "branching cycle: root_type='TCycHub'" ($null -ne $tC -and $tC.root_type -eq 'TCycHub') "root_type=$($tC.root_type)"
 $selfMarks = @(@($tC.properties) | Where-Object { $_.path -eq 'SelfMark' })

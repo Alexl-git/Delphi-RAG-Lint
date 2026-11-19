@@ -108,7 +108,7 @@ try {
   # matching the byte-exact-capture convention used by run_include_modes.ps1.
   function Q([string]$s) { return '"' + $s + '"' }
   $line = ((Q $exePath) + ' preprocess-file --file ' + (Q $rawTarget) + ' --include-mode defines-only --define win64 --define mswindows > ' + (Q $ppTarget))
-  $p = Start-Process cmd.exe -ArgumentList '/c', ('"' + $line + '"') -NoNewWindow -Wait -PassThru
+  $p = Start-Process cmd.exe -ArgumentList '/c', ('"' + $line + '"') -NoNewWindow -Wait -PassThru; $null = $p.Handle
   Check 'preprocess-file: exited 0' ($p.ExitCode -eq 0)
 
   $rawBytes = [System.IO.File]::ReadAllBytes($rawTarget)

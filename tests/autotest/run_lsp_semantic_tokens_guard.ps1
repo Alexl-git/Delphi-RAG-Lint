@@ -120,7 +120,7 @@ Start-Process $Exe -ArgumentList @('lsp', '--db', $db) -WorkingDirectory $WorkDi
   -RedirectStandardError (Join-Path $WorkDir 'err.txt') -NoNewWindow -Wait | Out-Null
 $init = $null; $res = @{}; $err = @{}
 foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-  try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+  try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
   if ($o.id -eq 1) { $init = $o.result }
   if ($o.id -gt 10) {
     if ($null -ne $o.error) { $err[[int]$o.id] = $o.error } else { $res[[int]$o.id] = $o.result }
@@ -216,7 +216,7 @@ Start-Process $Exe -ArgumentList @('lsp', '--db', $bigDb) -WorkingDirectory $Wor
 $sw.Stop()
 $bigData = 0
 foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($bigOut), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-  try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+  try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
   if ($o.id -eq 11 -and $null -ne $o.result) { $bigData = @($o.result.data).Count }
 }
 Check 'CONTROL: the 20k-line request returns tokens' ($bigData -gt 0) "data=$bigData"

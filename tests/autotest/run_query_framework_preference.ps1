@@ -261,14 +261,14 @@ function QNames([string[]]$Dbs) {
   $script:LastExit = $LASTEXITCODE
   $json = ($raw | Where-Object { -not $_.TrimStart().StartsWith('(') }) -join "`n"
   if (-not $json.Trim()) { return @() }
-  return @(($json | ConvertFrom-Json) | ForEach-Object { $_.qualified_name })
+  return @(($json | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_.qualified_name })
 }
 
 # --- POSITIVE CONTROL: no project context, so the tie is reported as it always was. --
 Write-Host ''
 Write-Host 'POSITIVE CONTROL -- library alone: every row, in the SQL order' -ForegroundColor Cyan
 
-$bare = QNames @($libDb)
+$bare = @(QNames @($libDb))
 Check 'precondition: the library fixture declares TEdit three times' ($bare.Count -eq 3) `
   "rows=$($bare.Count) [$($bare -join ', ')] -- fewer and the whole suite is vacuous"
 Check 'ASSERT: with NO project context the FMX row is still first (ORDER BY qualified_name)' `
@@ -280,7 +280,7 @@ Check 'control: the bare lookup exits 0' ($script:LastExit -eq 0) "exit=$script:
 Write-Host ''
 Write-Host 'a VCL project in the scan set' -ForegroundColor Cyan
 
-$vcl = QNames @($libDb, $vclDb)
+$vcl = @(QNames @($libDb, $vclDb))
 Check 'ASSERT: Vcl.StdCtrls.TEdit is first' ($vcl[0] -eq 'Vcl.StdCtrls.TEdit') "order=[$($vcl -join ', ')]"
 Check 'ASSERT: FMX.Edit.TEdit is LAST -- the rejected framework, not merely not-first' `
   ($vcl[-1] -eq 'FMX.Edit.TEdit') "order=[$($vcl -join ', ')]"
@@ -296,7 +296,7 @@ Check 'control: nothing was FILTERED -- still three rows' ($vcl.Count -eq 3) "ro
 Write-Host ''
 Write-Host 'an FMX project in the scan set -- same library index, opposite answer' -ForegroundColor Cyan
 
-$fmx = QNames @($libDb, $fmxDb)
+$fmx = @(QNames @($libDb, $fmxDb))
 Check 'ASSERT: FMX.Edit.TEdit is first' ($fmx[0] -eq 'FMX.Edit.TEdit') "order=[$($fmx -join ', ')]"
 Check 'ASSERT: Vcl.StdCtrls.TEdit is LAST' ($fmx[-1] -eq 'Vcl.StdCtrls.TEdit') "order=[$($fmx -join ', ')]"
 Check 'ASSERT: shared ground stays in the MIDDLE here too' ($fmx[1] -eq 'Shared.Common.TEdit') "order=[$($fmx -join ', ')]"
@@ -308,7 +308,7 @@ Check 'ASSERT: the two project cases disagree, so the project is what decided' `
 Write-Host ''
 Write-Host 'a project that writes both frameworks equally -- a tie is not an answer' -ForegroundColor Cyan
 
-$both = QNames @($libDb, $bothDb)
+$both = @(QNames @($libDb, $bothDb))
 Check 'ASSERT: a tied project leaves the order exactly as the no-context case' `
   (($both -join '|') -eq ($bare -join '|')) `
   "tied=[$($both -join ', ')] bare=[$($bare -join ', ')]"
@@ -319,7 +319,7 @@ Check 'ASSERT: a tied project leaves the order exactly as the no-context case' `
 Write-Host ''
 Write-Host 'two project indexes at once -- ambiguous, so no preference' -ForegroundColor Cyan
 
-$amb = QNames @($libDb, $vclDb, $fmxDb)
+$amb = @(QNames @($libDb, $vclDb, $fmxDb))
 Check 'ASSERT: two candidate projects leave the order untouched' `
   (($amb -join '|') -eq ($bare -join '|')) `
   "ambiguous=[$($amb -join ', ')] bare=[$($bare -join ', ')]"
@@ -332,7 +332,7 @@ Write-Host 'controls' -ForegroundColor Cyan
 $one = @(& { $ErrorActionPreference = 'Continue'; & $Exe query --name TVclThing --db $libDb --db $vclDb --json --quiet 2>&1 | ForEach-Object { "$_" } }) |
          ForEach-Object { "$_" } | Where-Object { -not $_.TrimStart().StartsWith('(') }
 $oneExit = $LASTEXITCODE
-$oneRows = @(($one -join "`n" | ConvertFrom-Json))
+$oneRows = @(($one -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }))
 Check 'control: a single-match name is unaffected and still exits 0' `
   (($oneExit -eq 0) -and ($oneRows.Count -eq 1) -and ($oneRows[0].qualified_name -eq 'VclApp.TVclThing')) `
   "exit=$oneExit rows=$($oneRows.Count)"

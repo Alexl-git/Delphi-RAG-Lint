@@ -470,8 +470,8 @@ try {
   $aout = @(& { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only ModeSection --jobs 1 2>&1 | ForEach-Object { "$_" } })
   $arc  = $LASTEXITCODE
   Check '7a. a plain index --all exits 0' ($arc -eq 0) "exit=$arc"
-  Check '7a. NO warning when the mode was merely defaulted' ((WarnLines $aout).Count -eq 0) `
-    "a warning on every run is a warning nobody reads (matched=$((WarnLines $aout).Count))"
+  Check '7a. NO warning when the mode was merely defaulted' ((@(WarnLines $aout)).Count -eq 0) `
+    "a warning on every run is a warning nobody reads (matched=$((@(WarnLines $aout)).Count))"
   $asnap = Snap $sectionDb
   Check '7a. it built a correct index' `
     ((HasContent $asnap) -and ($asnap -like '*app.dpr*') -and ($asnap -like '*formunit.dfm*')) (Leaves $asnap)
@@ -484,8 +484,8 @@ try {
   $bout2 = @(& { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only ModeSection --jobs 1 --recompile 2>&1 | ForEach-Object { "$_" } })
   $brc2  = $LASTEXITCODE
   Check '7b. index --all --recompile exits 0' ($brc2 -eq 0) "exit=$brc2"
-  Check '7b. NO warning -- the flag now does what it says' ((WarnLines $bout2).Count -eq 0) `
-    "matched=$((WarnLines $bout2).Count); $(($bout2 | Where-Object { $_.ToString() -like '*--recompile*' } | Select-Object -First 1) -join '')"
+  Check '7b. NO warning -- the flag now does what it says' ((@(WarnLines $bout2)).Count -eq 0) `
+    "matched=$((@(WarnLines $bout2)).Count); $(($bout2 | Where-Object { $_.ToString() -like '*--recompile*' } | Select-Object -First 1) -join '')"
   Check '7b. --recompile did NOT recreate the section DB' ((Sentinel $sectionDb 'get') -eq 'survives-a-rebuild') `
     "sentinel=$(Sentinel $sectionDb 'get') -- a deleted-and-recreated .sqlite loses it, and drops the handle the IDE plugin holds"
   Check '7b. and the content is unchanged' ((Snap $sectionDb) -eq $asnap) (Leaves (Snap $sectionDb))

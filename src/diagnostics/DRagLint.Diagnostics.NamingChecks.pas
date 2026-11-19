@@ -30,7 +30,6 @@ uses
   , System.Classes
   , System.Generics.Collections
   , TreeSitter
-  , TreeSitterLib
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   , DRagLint.Diagnostics.ParseCache
@@ -78,7 +77,7 @@ type
     /// base name (case-insensitive); program/library roots are skipped.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: ChangeFileExt, CharInSet, ClassifyClassOrigin, Copy, Default, Delete, DRagLint.Diagnostics.NamingChecks.ConfusableFindings, DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, EmitAt (+38 more)</para>
+    /// <para>Calls: ChangeFileExt, CharInSet, ClassifyClassOrigin, Copy, Default, Delete, DRagLint.Diagnostics.NamingChecks.ConfusableFindings, DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, EmitAt (+40 more)</para>
     /// <para>Returns: nil; Deduped.ToArray</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Diagnostics.NamingChecks.ConfusableFindings"/>

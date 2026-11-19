@@ -27,7 +27,7 @@ try {
   Copy-Item -LiteralPath $DbPath -Destination $dbCopy
   $sw = [Diagnostics.Stopwatch]::StartNew()
   $proc = Start-Process -FilePath $Exe -ArgumentList @('lint', $srcCopy, '--rule', 'tls-verification-disabled', '--db', $dbCopy) `
-    -PassThru -NoNewWindow -RedirectStandardOutput "$work\o.txt" -RedirectStandardError "$work\e.txt"
+    -PassThru -NoNewWindow -RedirectStandardOutput "$work\o.txt" -RedirectStandardError "$work\e.txt"; $null = $proc.Handle
   $done = $proc.WaitForExit([int]($MaxSeconds * 1000) + 20000)
   $sw.Stop()
   if (-not $done) { $proc.Kill(); $proc.WaitForExit(10000) | Out-Null }

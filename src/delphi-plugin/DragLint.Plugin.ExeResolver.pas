@@ -86,7 +86,7 @@ function ResolveEngine(out pExe: string): Boolean;
 /// this or <see cref="EngineExeOrEmpty"/>, never DragLintExe directly
 /// (guard: tests\plugin\run_draglintexe_guarded.ps1).
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.ExeResolver.EngineExeOrEmpty (DragLint.Plugin.ExeResolver.pas), DragLint.Plugin.Reports.OfferReindex (DragLint.Plugin.Reports.pas), DragLint.Plugin.UsagesForm.TUsagesEmbedCtl.RunFor (DragLint.Plugin.UsagesForm.pas)</para>
+/// <para>Called from: DragLint.Plugin.Bookmarks.Engine (DragLint.Plugin.Bookmarks.pas), DragLint.Plugin.Cmd.FieldRepo.InvokeMemTableFromCsv (DragLint.Plugin.Cmd.FieldRepo.pas), DragLint.Plugin.Cmd.FieldRepo.ResolveContext (DragLint.Plugin.Cmd.FieldRepo.pas), DragLint.Plugin.Cmd.FindUsagesScope.FindUsagesIn (DragLint.Plugin.Cmd.FindUsagesScope.pas), DragLint.Plugin.ConvertLaunch.FindEditor (DragLint.Plugin.ConvertLaunch.pas) (+3 more)</para>
 /// <para>Calls: DragLint.Plugin.ExeResolver.ResolveEngine</para>
 /// <para>Returns: ResolveEngine(pExe)</para>
 /// <para>Mutates: pExe (out)</para>
@@ -101,7 +101,7 @@ function RequireEngine(out pExe: string): Boolean;
 /// as "engine not found" and not spawn.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.Diagnose.DiagVersions (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.RefreshEngineInfo (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Editor.DLExe (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.DLExe64 (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas) (+12 more)</para>
+/// <para>Called from: DragLint.Plugin.Cmd.CheckInit.InvokeCheckInit (DragLint.Plugin.Cmd.CheckInit.pas), DragLint.Plugin.Cmd.DisableRule.InvokeDisableRule (DragLint.Plugin.Cmd.DisableRule.pas), DragLint.Plugin.Cmd.ExtractConst.InvokeExtractConst (DragLint.Plugin.Cmd.ExtractConst.pas), DragLint.Plugin.Cmd.FixMarker.InvokeFixMarker (DragLint.Plugin.Cmd.FixMarker.pas), DragLint.Plugin.Diagnose.DiagVersions (DragLint.Plugin.Diagnose.pas) (+16 more)</para>
 /// <para>Calls: DragLint.Plugin.ExeResolver.RequireEngine</para>
 /// <seealso cref="DragLint.Plugin.ExeResolver.RequireEngine"/>
 /// <!-- drag-lint:auto END -->

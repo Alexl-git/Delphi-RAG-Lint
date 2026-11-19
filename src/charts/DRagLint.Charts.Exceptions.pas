@@ -659,7 +659,7 @@ function FindHandlerBlock(const pBlocks: TTryBlocks; pPos: Int64; out pBlock: TT
 /// <para>Called from: DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.CallerVerdict (DRagLint.Charts.Q.ExceptionPaths.pas)</para>
 /// <para>Calls: Copy, DRagLint.Charts.Exceptions.ExceptionSourceRowsIn, Integer, Max, SameText</para>
 /// <para>Returns: False; True</para>
-/// <para>Complexity: 11 (cyclomatic, outer body), 31 lines (full implementation)</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 31 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Charts.Exceptions.ExceptionSourceRowsIn"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

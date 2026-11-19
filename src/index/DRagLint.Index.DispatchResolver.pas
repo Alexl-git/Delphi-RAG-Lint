@@ -35,6 +35,12 @@ const
 
 type
   /// <summary>One dispatch_edges row.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Index.DispatchResolver.pas), DRagLint.Index.DispatchResolver.TDispatchResolver.AddEdge (DRagLint.Index.DispatchResolver.pas), DRagLint.Index.DispatchResolver.TDispatchResolver.Create (DRagLint.Index.DispatchResolver.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveDispatch (DRagLint.Storage.SQLite.pas)</para>
+  /// <para>Used in units: DRagLint.Index.DispatchResolver, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDispatchEdge = record
     BaseId    : Int64;
     ImplId    : Int64;
@@ -43,6 +49,12 @@ type
   end;
 
   /// <summary>One classref_args row.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Index.DispatchResolver.pas), DRagLint.Index.DispatchResolver.TDispatchResolver.Create (DRagLint.Index.DispatchResolver.pas), DRagLint.Index.DispatchResolver.TDispatchResolver.ResolveClassRefArgs (DRagLint.Index.DispatchResolver.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveDispatch (DRagLint.Storage.SQLite.pas)</para>
+  /// <para>Used in units: DRagLint.Index.DispatchResolver, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TClassRefArg = record
     RefId     : Int64;
     ArgIndex  : Integer;
@@ -52,6 +64,12 @@ type
   end;
 
   /// <summary>Rows written and every decline, by reason, for the ResolveLog line.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Index.DispatchResolver.pas) ?, DRagLint.Index.DispatchResolver.TDispatchResolver.Run (DRagLint.Index.DispatchResolver.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveDispatch (DRagLint.Storage.SQLite.pas) ?</para>
+  /// <para>Used in units: DRagLint.Index.DispatchResolver, DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDispatchCounters = record
     Overrides   : Integer; // dispatch_edges rows of kind override
     Implements  : Integer; // dispatch_edges rows of kind implements
@@ -67,11 +85,28 @@ type
   end;
 
   /// <summary>Builds dispatch_edges and classref_args in memory from one index.</summary>
-  /// <remarks>Maps are built once per Run. Not thread-safe. Owns nothing it
-  /// is given; AConn and AStore must outlive the instance.</remarks>
+  /// <remarks>
+  /// Maps are built once per Run. Not thread-safe. Owns nothing it
+  /// is given; AConn and AStore must outlive the instance.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveDispatch (DRagLint.Storage.SQLite.pas)</para>
+  /// <para>Used in units: DRagLint.Storage.SQLite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDispatchResolver = class  // dl:ok high-response@cc6c -- the response set is the FireDAC/dictionary calls of three passes sharing one set of maps; splitting would rebuild the maps per pass
   strict private
     type
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Used by: declaration (DRagLint.Index.DispatchResolver.pas), DRagLint.Index.DispatchResolver.TDispatchResolver.CollectByName (DRagLint.Index.DispatchResolver.pas), DRagLint.Index.DispatchResolver.TDispatchResolver.Create (DRagLint.Index.DispatchResolver.pas), DRagLint.Index.DispatchResolver.TDispatchResolver.LoadTypes (DRagLint.Index.DispatchResolver.pas), DRagLint.Index.DispatchResolver.TDispatchResolver.ResolveOverrides (DRagLint.Index.DispatchResolver.pas) (+1 more)</para>
+      /// <para>Used in units: DRagLint.Index.DispatchResolver</para>
+      /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddClause"/>
+      /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddEdge"/>
+      /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ArityMatches"/>
+      /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClassByName"/>
+      /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClauseTarget"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       TMeth = record
         Id       : Int64;
         Name     : string; // lower-case
@@ -81,12 +116,39 @@ type
       end;
       { A method-resolution clause `procedure IJob.Execute = RunJob;` of one
         class (METHRES-DISPATCH). All three names lower-case and bare. }
+      /// <summary><!-- drag-lint:auto sum -->A method-resolution clause `procedure
+      /// IJob.Execute = RunJob;` of one class (METHRES-DISPATCH). All three names
+      /// lower-case and bare.</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Used by: declaration (DRagLint.Index.DispatchResolver.pas), DRagLint.Index.DispatchResolver.TDispatchResolver.AddClause (DRagLint.Index.DispatchResolver.pas), DRagLint.Index.DispatchResolver.TDispatchResolver.ClauseTarget (DRagLint.Index.DispatchResolver.pas), DRagLint.Index.DispatchResolver.TDispatchResolver.Create (DRagLint.Index.DispatchResolver.pas)</para>
+      /// <para>Used in units: DRagLint.Index.DispatchResolver</para>
+      /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddClause"/>
+      /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddEdge"/>
+      /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ArityMatches"/>
+      /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClassByName"/>
+      /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClauseTarget"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       TClause = record
         IntfName: string;
         MethName: string;
         Target  : string;
       end;
       { A delegating property's `implements` name (lower-case, bare) and its id. }
+      /// <summary><!-- drag-lint:auto sum -->A delegating property's `implements` name
+      /// (lower-case, bare) and its id.</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Used by: declaration (DRagLint.Index.DispatchResolver.pas), DRagLint.Index.DispatchResolver.TDispatchResolver.Create (DRagLint.Index.DispatchResolver.pas), DRagLint.Index.DispatchResolver.TDispatchResolver.DelegatedInterfaces (DRagLint.Index.DispatchResolver.pas), DRagLint.Index.DispatchResolver.TDispatchResolver.LoadDelegates (DRagLint.Index.DispatchResolver.pas)</para>
+      /// <para>Used in units: DRagLint.Index.DispatchResolver</para>
+      /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddClause"/>
+      /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddEdge"/>
+      /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ArityMatches"/>
+      /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClassByName"/>
+      /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClauseTarget"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       TDelegate = record
         IntfName: string;
         PropId  : Int64;
@@ -110,21 +172,264 @@ type
       FArgs       : TList<TClassRefArg>;
       FEdgeKeys   : TDictionary<string, Boolean>;
       FCounters   : TDispatchCounters;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.DispatchResolver.TDispatchResolver.Run (DRagLint.Index.DispatchResolver.pas)</para>
+    /// <para>Calls: ContainsText, DRagLint.Index.DispatchResolver.TDispatchResolver.AddClause, Int64, LowerCase, Trim</para>
+    /// <para>Complexity: 16 (cyclomatic, outer body), 98 lines (full implementation)</para>
+    /// <para>SQL: reads SYMBOLS, TYPE_ANCESTORS</para>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddClause"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddEdge"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ArityMatches"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClassByName"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClauseTarget"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure LoadTypes;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.DispatchResolver.TDispatchResolver.Run (DRagLint.Index.DispatchResolver.pas)</para>
+    /// <para>SQL: reads UNIT_USES</para>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddClause"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddEdge"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ArityMatches"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClassByName"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClauseTarget"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure LoadUses;
+    /// <param name="ABaseSig"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AImplSig"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: not (BKnown and IKnown) or
+    /// ((BMin = IMin) and (BMax = IMax)).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.DispatchResolver.TDispatchResolver.CollectByName (DRagLint.Index.DispatchResolver.pas), DRagLint.Index.DispatchResolver.TDispatchResolver.ResolveOverrides (DRagLint.Index.DispatchResolver.pas)</para>
+    /// <para>Calls: DRagLint.Index.CallResolver.SignatureArityRange, Trim</para>
+    /// <seealso cref="DRagLint.Index.CallResolver.SignatureArityRange"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddClause"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddEdge"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClassByName"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClauseTarget"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function  ArityMatches(const ABaseSig, AImplSig: string): Boolean;
+    /// <param name="ABaseSig"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AHits"><!-- drag-lint:auto type -->TList&lt;Int64&gt;</param>
+    /// <param name="AHitSigs"><!-- drag-lint:auto type -->TList&lt;string&gt;</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.DispatchResolver.TDispatchResolver.ResolveImplements (DRagLint.Index.DispatchResolver.pas)</para>
+    /// <para>Calls: DRagLint.Index.CallResolver.ParamTypeKey</para>
+    /// <seealso cref="DRagLint.Index.CallResolver.ParamTypeKey"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddClause"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddEdge"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ArityMatches"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClassByName"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure NarrowByParamTypes(const ABaseSig: string; AHits: TList<Int64>; AHitSigs: TList<string>);
+    /// <param name="ABase"><!-- drag-lint:auto type -->Int64</param>
+    /// <param name="AImpl"><!-- drag-lint:auto type -->Int64</param>
+    /// <param name="AKind"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AConf"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.DispatchResolver.TDispatchResolver.DelegatedInterfaces (DRagLint.Index.DispatchResolver.pas), DRagLint.Index.DispatchResolver.TDispatchResolver.ResolveImplements (DRagLint.Index.DispatchResolver.pas), DRagLint.Index.DispatchResolver.TDispatchResolver.ResolveOverrides (DRagLint.Index.DispatchResolver.pas)</para>
+    /// <para>Calls: IntToStr</para>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddClause"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ArityMatches"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClassByName"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClauseTarget"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.CollectByName"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure AddEdge(ABase, AImpl: Int64; const AKind, AConf: string);
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.DispatchResolver.TDispatchResolver.Run (DRagLint.Index.DispatchResolver.pas)</para>
+    /// <para>Calls: DRagLint.Index.DispatchResolver.TDispatchResolver.AddEdge, DRagLint.Index.DispatchResolver.TDispatchResolver.ArityMatches</para>
+    /// <para>Complexity: 13 (cyclomatic, outer body), 48 lines (full implementation)</para>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddEdge"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ArityMatches"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddClause"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClassByName"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClauseTarget"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure ResolveOverrides;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.DispatchResolver.TDispatchResolver.Run (DRagLint.Index.DispatchResolver.pas)</para>
+    /// <para>Calls: DRagLint.Index.DispatchResolver.TDispatchResolver.AddEdge, DRagLint.Index.DispatchResolver.TDispatchResolver.ClauseTarget, DRagLint.Index.DispatchResolver.TDispatchResolver.CollectByName, DRagLint.Index.DispatchResolver.TDispatchResolver.DelegatedInterfaces, DRagLint.Index.DispatchResolver.TDispatchResolver.NarrowByParamTypes</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 76 lines (full implementation)</para>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddEdge"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClauseTarget"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.CollectByName"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.DelegatedInterfaces"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.NarrowByParamTypes"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure ResolveImplements;
+    /// <summary><!-- drag-lint:auto sum -->METHRES-DISPATCH: ADottedName is the clause
+    /// row's lower-cased name (`ijob.execute`, `ifoo&lt;t&gt;.bar`, `unit.ijob.execute`),
+    /// ASig its signature (`= RunJob`). Records (ijob, execute, runjob) for AClassId.</summary>
+    /// <param name="AClassId"><!-- drag-lint:auto type -->Int64</param>
+    /// <param name="ADottedName"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ASig"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.DispatchResolver.TDispatchResolver.LoadTypes (DRagLint.Index.DispatchResolver.pas)</para>
+    /// <para>Calls: Copy, DRagLint.Index.DispatchResolver.LastSegment, LastDelimiter, LowerCase, Trim</para>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.LastSegment"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddEdge"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ArityMatches"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClassByName"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClauseTarget"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure AddClause(AClassId: Int64; const ADottedName, ASig: string);
+    /// <summary><!-- drag-lint:auto sum -->D2: every property whose directives read
+    /// `implements IA,IB`, by class.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.DispatchResolver.TDispatchResolver.Run (DRagLint.Index.DispatchResolver.pas)</para>
+    /// <para>Calls: Copy, DRagLint.Index.DispatchResolver.LastSegment, LowerCase, Trim</para>
+    /// <para>SQL: reads SYMBOLS</para>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.LastSegment"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddClause"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddEdge"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ArityMatches"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClassByName"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure LoadDelegates;
+    /// <summary><!-- drag-lint:auto sum -->D2: writes one `delegates` edge per (listed
+    /// interface, delegating property) of AClassId and returns the interfaces those
+    /// cover, closed over interface ancestry. A name the class does not LIST is ignored
+    /// (no edge, nothing covered). The caller owns the result.</summary>
+    /// <param name="AClassId"><!-- drag-lint:auto type -->Int64</param>
+    /// <param name="ADirect"><!-- drag-lint:auto type -->const TList&lt;Int64&gt;</param>
+    /// <returns><!-- drag-lint:auto -->TDictionary&lt;Int64, Boolean&gt; -- Observed:
+    /// TDictionary&lt;Int64, Boolean&gt;.Create.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.DispatchResolver.TDispatchResolver.ResolveImplements (DRagLint.Index.DispatchResolver.pas)</para>
+    /// <para>Calls: DRagLint.Index.DispatchResolver.TDispatchResolver.AddEdge</para>
+    /// <para>Owns returned: new (caller owns)</para>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddEdge"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddClause"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ArityMatches"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClassByName"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClauseTarget"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function  DelegatedInterfaces(AClassId: Int64; const ADirect: TList<Int64>): TDictionary<Int64, Boolean>;
+    /// <summary><!-- drag-lint:auto sum -->Does class AClassId itself (not an ancestor)
+    /// remap AIntfId's AMethName?</summary>
+    /// <param name="AClassId"><!-- drag-lint:auto type -->Int64</param>
+    /// <param name="AIntfId"><!-- drag-lint:auto type -->Int64</param>
+    /// <param name="AMethName"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ATarget"><!-- drag-lint:auto type -->out string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.DispatchResolver.TDispatchResolver.ResolveImplements (DRagLint.Index.DispatchResolver.pas)</para>
+    /// <para>Mutates: ATarget (out)</para>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddClause"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddEdge"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ArityMatches"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClassByName"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.CollectByName"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function  ClauseTarget(AClassId, AIntfId: Int64; const AMethName: string; out ATarget: string): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->The nearest methods named AName (lower-case)
+    /// with ASig's arity on the class chain starting at AFromClass; stops at the first
+    /// class that declares one.</summary>
+    /// <param name="AFromClass"><!-- drag-lint:auto type -->Int64</param>
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ASig"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AHits"><!-- drag-lint:auto type -->TList&lt;Int64&gt;</param>
+    /// <param name="AHitSigs"><!-- drag-lint:auto type -->TList&lt;string&gt;</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.DispatchResolver.TDispatchResolver.ResolveImplements (DRagLint.Index.DispatchResolver.pas)</para>
+    /// <para>Calls: DRagLint.Index.DispatchResolver.TDispatchResolver.ArityMatches</para>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ArityMatches"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddClause"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddEdge"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClassByName"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClauseTarget"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CollectByName(AFromClass: Int64; const AName, ASig: string; AHits: TList<Int64>; AHitSigs: TList<string>);
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.DispatchResolver.TDispatchResolver.Run (DRagLint.Index.DispatchResolver.pas)</para>
+    /// <para>Calls: DRagLint.Analysis.Purity.LexCallArguments, DRagLint.Index.DispatchResolver.IsBareName, DRagLint.Index.DispatchResolver.LastSegment, DRagLint.Index.DispatchResolver.TDispatchResolver.ClassByName, DRagLint.Index.DispatchResolver.TDispatchResolver.IsClassRefTypeName, DRagLint.Index.DispatchResolver.TDispatchResolver.LinesOf</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 111 lines (full implementation)</para>
+    /// <para>SQL: reads CALL_EDGES, REFS, SYMBOLS</para>
+    /// <seealso cref="DRagLint.Analysis.Purity.LexCallArguments"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.IsBareName"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.LastSegment"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClassByName"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.IsClassRefTypeName"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure ResolveClassRefArgs;
+    /// <param name="ATypeText"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ACache"><!-- drag-lint:auto type -->TDictionary&lt;string, Boolean&gt;</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; not Q.IsEmpty; True.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.DispatchResolver.TDispatchResolver.ResolveClassRefArgs (DRagLint.Index.DispatchResolver.pas)</para>
+    /// <para>Calls: DRagLint.Index.DispatchResolver.IsBareName, DRagLint.Index.DispatchResolver.LastSegment, LowerCase, StartsText, Trim</para>
+    /// <para>SQL: reads SYMBOLS</para>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.IsBareName"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.LastSegment"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddClause"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddEdge"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ArityMatches"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function  IsClassRefTypeName(const ATypeText: string; ACache: TDictionary<string, Boolean>): Boolean;
+    /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
+    /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: [];
+    /// SL.ToStringArray.</returns>
+    /// <exception cref="EFileNotFoundException"><!-- drag-lint:auto exc -->via DRagLint.Core.FileTime.FileMTimeUnix: Cannot read the last-write time of %s</exception>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.DispatchResolver.TDispatchResolver.ResolveClassRefArgs (DRagLint.Index.DispatchResolver.pas)</para>
+    /// <para>Calls: DRagLint.Core.FileTime.FileMTimeUnix, DRagLint.Core.Interfaces.ISymbolStore.FileIsUpToDate, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath</para>
+    /// <para>Catches: EFOpenError (swallowed); EInOutError (swallowed)</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="DRagLint.Core.FileTime.FileMTimeUnix"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FileIsUpToDate"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddClause"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddEdge"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function  LinesOf(AFileId: Int64): TArray<string>;
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ASiteFile"><!-- drag-lint:auto type -->Int64</param>
+    /// <param name="AConf"><!-- drag-lint:auto type -->out string</param>
+    /// <returns><!-- drag-lint:auto -->Int64 -- Observed: 0; InScope[0]; Ids[0]; if
+    /// InScope.Count &gt; 0 then InScope[0].</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.DispatchResolver.TDispatchResolver.ResolveClassRefArgs (DRagLint.Index.DispatchResolver.pas)</para>
+    /// <para>Complexity: 11 (cyclomatic, outer body), 49 lines (full implementation)</para>
+    /// <para>SQL: reads SYMBOLS</para>
+    /// <para>Mutates: AConf (out)</para>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddClause"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddEdge"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ArityMatches"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClauseTarget"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.CollectByName"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function  ClassByName(const AName: string; ASiteFile: Int64; out AConf: string): Int64;
   public
     /// <summary>Prepares a resolver over one index.</summary>
@@ -132,11 +437,33 @@ type
     /// <param name="AConn">An open connection to the same database; only SELECTs run on it.</param>
     /// <param name="AExtraStores">Library stores consulted ONLY to recognise a library
     /// `class of` type (Vcl.Forms.TFormClass) as a parameter type; may be nil.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveDispatch (DRagLint.Storage.SQLite.pas)</para>
+    /// <para>constructor</para>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddClause"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddEdge"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ArityMatches"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClassByName"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClauseTarget"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(const AStore: ISymbolStore; AConn: TFDConnection; const AExtraStores: TArray<ISymbolStore>);
     /// <summary>Frees the maps and the row lists.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddClause"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.AddEdge"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ArityMatches"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClassByName"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ClauseTarget"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>Computes every row. Call once.</summary>
-    /// <remarks>Overrides: each `override` method -> the nearest class-chain
+    /// <remarks>
+    /// Overrides: each `override` method -> the nearest class-chain
     /// ancestor's virtual of that name and arity. Implements: each interface a
     /// class LISTS (transitively through interface ancestors) -> the nearest
     /// method of that name and arity on the class's chain; subclasses are
@@ -155,7 +482,17 @@ type
     /// `implements IJob`) writes one `delegates` edge IJob -&gt; that property for
     /// each named interface the class lists; that interface and its ancestors
     /// then get no by-name `implements` edges on this class. ClassRefArgs: a bare
-    /// class name passed to a parameter whose type is a class reference.</remarks>
+    /// class name passed to a parameter whose type is a class reference.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas) ?, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveDispatch (DRagLint.Storage.SQLite.pas)</para>
+    /// <para>Calls: Default, DRagLint.Index.DispatchResolver.TDispatchResolver.LoadDelegates, DRagLint.Index.DispatchResolver.TDispatchResolver.LoadTypes, DRagLint.Index.DispatchResolver.TDispatchResolver.LoadUses, DRagLint.Index.DispatchResolver.TDispatchResolver.ResolveClassRefArgs, DRagLint.Index.DispatchResolver.TDispatchResolver.ResolveImplements, DRagLint.Index.DispatchResolver.TDispatchResolver.ResolveOverrides</para>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.LoadDelegates"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.LoadTypes"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.LoadUses"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ResolveClassRefArgs"/>
+    /// <seealso cref="DRagLint.Index.DispatchResolver.TDispatchResolver.ResolveImplements"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Run;
     /// <summary>dispatch_edges rows, unique on (BaseId, ImplId).</summary>
     property Edges: TList<TDispatchEdge> read FEdges;

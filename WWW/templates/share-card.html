@@ -1,0 +1,127 @@
+<!-- Source of assets/share/default.png (the site-wide share card, 1200x630).
+     Render: msedge --headless --hide-scrollbars --window-size=1200,630 --virtual-time-budget=3000
+             --screenshot=<out.png> file:///<this file>
+     Colours and fonts are the site's (assets/style.css). -->
+<style>
+@font-face{font-family:"Plex Serif";src:url('../assets/fonts/IBMPlexSerif-SemiBold.woff2') format('woff2')}
+@font-face{font-family:"Plex Sans";src:url('../assets/fonts/IBMPlexSans-Regular.woff2') format('woff2')}
+@font-face{font-family:"Plex Sans";font-weight:600;src:url('../assets/fonts/IBMPlexSans-SemiBold.woff2') format('woff2')}
+@font-face{font-family:"Plex Mono";src:url('../assets/fonts/IBMPlexMono-Regular.woff2') format('woff2')}
+@font-face{font-family:"Plex Mono";font-weight:500;src:url('../assets/fonts/IBMPlexMono-Medium.woff2') format('woff2')}
+html,body{margin:0;padding:0;background:#141C24}
+svg{display:block}
+</style>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F4F7FA"/><stop offset=".45" stop-color="#C9D2DB"/><stop offset="1" stop-color="#7F8C99"/>
+    </linearGradient>
+    <linearGradient id="frame" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4A74B8"/><stop offset="1" stop-color="#22406E"/>
+    </linearGradient>
+    <linearGradient id="thimble" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#E6ECF1"/><stop offset=".5" stop-color="#AEB9C4"/><stop offset="1" stop-color="#6E7B88"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000" flood-opacity=".45"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="630" fill="#141C24"/>
+  <!-- brand stripe: lexer / AST / tree-sitter -->
+  <rect x="0" y="0" width="18" height="630" fill="#9A6B0F"/>
+  <rect x="18" y="0" width="18" height="630" fill="#9E3535"/>
+  <rect x="36" y="0" width="18" height="630" fill="#176E5F"/>
+
+  <!-- left: words -->
+  <text x="110" y="200" font-family="Plex Serif" font-size="58" fill="#EFF2F5">Delphi-RAG-Lint</text>
+  <rect x="112" y="226" width="130" height="5" fill="#4A74B8"/>
+  <text font-family="Plex Sans" font-size="28" fill="#C3CCD5">
+    <tspan x="110" y="290">Index, query and lint Delphi code,</tspan>
+    <tspan x="110" y="328">plus a schema repository -</tspan>
+    <tspan x="110" y="366">CLI and IDE.</tspan>
+  </text>
+  <text x="110" y="436" font-family="Plex Sans" font-size="21" fill="#8C99A6">
+    <tspan font-weight="600" fill="#D8DFE6">DL</tspan> drag-lint  <tspan fill="#5C6976">&#183;</tspan>  <tspan font-weight="600" fill="#D8DFE6">YADF</tspan> formatter
+  </text>
+  <text x="110" y="560" font-family="Plex Sans" font-size="22" fill="#8C99A6">www.delphi-rag-lint.com</text>
+  <text x="110" y="592" font-family="Plex Sans" font-size="18" fill="#6E7B88">by HTR Micronite</text>
+
+  <!-- back card -->
+  <g transform="rotate(5 880 290)" filter="url(#shadow)">
+    <rect x="628" y="128" width="520" height="320" rx="6" fill="#DCE3EA"/>
+  </g>
+
+  <!-- front index card -->
+  <g filter="url(#shadow)">
+    <rect x="610" y="112" width="530" height="340" rx="6" fill="#F7F9FB"/>
+  </g>
+  <text x="636" y="152" font-family="Plex Sans" font-size="17" letter-spacing="1.5" fill="#5C6976">INDEX  &#183;  Orders.pas</text>
+  <text x="1116" y="152" text-anchor="end" font-family="Plex Mono" font-size="16" fill="#9E3535">#0412</text>
+  <rect x="610" y="168" width="530" height="2.5" fill="#9E3535"/>
+  <g fill="#C9D6E3">
+    <rect x="610" y="222" width="530" height="1.5"/>
+    <rect x="610" y="268" width="530" height="1.5"/>
+    <rect x="610" y="314" width="530" height="1.5"/>
+    <rect x="610" y="360" width="530" height="1.5"/>
+    <rect x="610" y="406" width="530" height="1.5"/>
+  </g>
+  <!-- the measured token -->
+  <rect x="668" y="283" width="100" height="30" rx="3" fill="#F3EADA" stroke="#9A6B0F" stroke-width="1.5"/>
+  <g font-family="Plex Mono" font-size="26" fill="#141C24">
+    <text x="640" y="214"><tspan fill="#2B4C82" font-weight="500">unit</tspan> Orders;</text>
+    <text x="640" y="260" fill="#2B4C82" font-weight="500">type</text>
+    <text x="640" y="306" xml:space="preserve">  TOrder = <tspan fill="#2B4C82" font-weight="500">class</tspan>(TEntity)</text>
+  </g>
+  <text x="1116" y="396" text-anchor="end" font-family="Plex Mono" font-size="16" fill="#5C6976">refs 12  &#183;  callers 3</text>
+  <text x="1116" y="436" text-anchor="end" font-family="Plex Mono" font-size="16" fill="#5C6976">fixable 2</text>
+
+  <!-- micrometer -->
+  <g filter="url(#shadow)">
+    <!-- C frame -->
+    <path d="M 618 296 L 618 478 Q 618 548 688 548 L 776 548 Q 846 548 846 478 L 846 322"
+          fill="none" stroke="url(#frame)" stroke-width="44" stroke-linejoin="round"/>
+    <!-- anvil block + anvil -->
+    <rect x="594" y="270" width="48" height="56" rx="6" fill="url(#frame)"/>
+    <rect x="642" y="288" width="26" height="18" fill="url(#steel)"/>
+    <!-- spindle -->
+    <rect x="768" y="288" width="60" height="18" fill="url(#steel)"/>
+    <!-- sleeve -->
+    <rect x="824" y="276" width="150" height="42" rx="3" fill="url(#steel)"/>
+    <rect x="824" y="296" width="150" height="1.6" fill="#3A4753"/>
+    <g fill="#3A4753">
+      <rect x="836" y="283" width="1.6" height="13"/><rect x="848" y="289" width="1.6" height="7"/>
+      <rect x="860" y="289" width="1.6" height="7"/><rect x="872" y="289" width="1.6" height="7"/>
+      <rect x="884" y="289" width="1.6" height="7"/><rect x="896" y="283" width="1.6" height="13"/>
+      <rect x="908" y="289" width="1.6" height="7"/><rect x="920" y="289" width="1.6" height="7"/>
+      <rect x="932" y="289" width="1.6" height="7"/><rect x="944" y="289" width="1.6" height="7"/>
+      <rect x="956" y="283" width="1.6" height="13"/>
+      <rect x="842" y="297" width="1.6" height="7"/><rect x="866" y="297" width="1.6" height="7"/>
+      <rect x="890" y="297" width="1.6" height="7"/><rect x="914" y="297" width="1.6" height="7"/>
+      <rect x="938" y="297" width="1.6" height="7"/><rect x="962" y="297" width="1.6" height="7"/>
+    </g>
+    <!-- thimble -->
+    <path d="M 966 268 L 1062 268 L 1062 326 L 966 326 L 958 318 L 958 276 Z" fill="url(#thimble)"/>
+    <g fill="#3A4753">
+      <rect x="962" y="282" width="10" height="1.4"/><rect x="962" y="290" width="6" height="1.4"/>
+      <rect x="962" y="297" width="12" height="1.6"/><rect x="962" y="304" width="6" height="1.4"/>
+      <rect x="962" y="311" width="10" height="1.4"/>
+    </g>
+    <g fill="#6E7B88">
+      <rect x="1000" y="268" width="2" height="58"/><rect x="1008" y="268" width="2" height="58"/>
+      <rect x="1016" y="268" width="2" height="58"/><rect x="1024" y="268" width="2" height="58"/>
+      <rect x="1032" y="268" width="2" height="58"/><rect x="1040" y="268" width="2" height="58"/>
+      <rect x="1048" y="268" width="2" height="58"/>
+    </g>
+    <!-- ratchet -->
+    <rect x="1062" y="281" width="44" height="32" rx="5" fill="url(#thimble)"/>
+    <!-- engraving on the frame -->
+    <text x="732" y="554" text-anchor="middle" font-family="Plex Sans" font-weight="600" font-size="15" letter-spacing="4" fill="#DCE5F0">MICRONITE</text>
+  </g>
+
+  <!-- reading -->
+  <g font-family="Plex Mono" font-size="17">
+    <rect x="874" y="216" width="162" height="34" rx="4" fill="#141C24"/>
+    <text x="955" y="239" text-anchor="middle" fill="#7FE0C6">TOrder 6.000</text>
+  </g>
+</svg>

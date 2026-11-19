@@ -141,6 +141,8 @@ Source: "{#RepoRoot}\docs\wiki\Wiki-Blocks-Authoring.md"; DestDir: "{app}\docs";
 ; ---- optional tools ---------------------------------------------------------
 Source: "{#EngineDir}\drag-lint-open.exe"; DestDir: "{app}\bin"; Components: core; Flags: ignoreversion
 Source: "{#EngineDir}\ConvRulesEditor.exe";  DestDir: "{app}\bin"; Components: convrules; Flags: ignoreversion
+Source: "{#RepoRoot}\src\tools\field-repo\dl-field-repo.exe";     DestDir: "{app}\bin"; Components: core; Flags: ignoreversion
+Source: "{#RepoRoot}\src\tools\field-repo\dl-field-repo-std.exe"; DestDir: "{app}\bin"; Components: core; Flags: ignoreversion
 Source: "{#EngineDir}\drag_lint_graph.exe";  DestDir: "{app}\bin"; Components: graph; Flags: ignoreversion
 Source: "{#GraphvizBin}\dot.exe";  DestDir: "{app}\bin\graphviz\bin"; Components: graphviz; Flags: ignoreversion
 Source: "{#GraphvizBin}\*.dll";    DestDir: "{app}\bin\graphviz\bin"; Components: graphviz; Flags: ignoreversion

@@ -20,6 +20,13 @@ uses
 /// <param name="AName">The member name.</param>
 /// <param name="AValue">Out: the value, 0 when absent or not a number.</param>
 /// <returns>True when the member is a number.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Feature.CallHierarchy.Prepare (DRagLint.LSP.Feature.CallHierarchy.pas), DRagLint.LSP.Feature.DocumentHighlight.TLspDocumentHighlightFeature.Handle (DRagLint.LSP.Feature.DocumentHighlight.pas), DRagLint.LSP.Feature.TypeDefinition.TLspTypeDefinitionFeature.Handle (DRagLint.LSP.Feature.TypeDefinition.pas), DRagLint.LSP.Feature.TypeHierarchy.Prepare (DRagLint.LSP.Feature.TypeHierarchy.pas), DRagLint.LSP.HierarchyUtil.FindItemSymbol (DRagLint.LSP.HierarchyUtil.pas)</para>
+/// <para>Returns: V is TJSONNumber</para>
+/// <para>Mutates: AValue (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HierIntField(const AObj: TJSONObject; const AName: string; out AValue: Integer): Boolean;
 
 /// <summary>Builds the LSP item (name, kind, uri, range, selectionRange, data) for a symbol.</summary>
@@ -27,6 +34,19 @@ function HierIntField(const AObj: TJSONObject; const AName: string; out AValue: 
 /// <param name="AStore">The store that holds ASym.</param>
 /// <param name="ASym">The symbol; StartLine must be &gt; 0.</param>
 /// <returns>A new object owned by the caller; nil when the symbol has no usable file or position.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Feature.CallHierarchy.NodesToJson (DRagLint.LSP.Feature.CallHierarchy.pas), DRagLint.LSP.Feature.CallHierarchy.Prepare (DRagLint.LSP.Feature.CallHierarchy.pas), DRagLint.LSP.Feature.TypeDefinition.LocationOf (DRagLint.LSP.Feature.TypeDefinition.pas), DRagLint.LSP.Feature.TypeHierarchy.AddItem (DRagLint.LSP.Feature.TypeHierarchy.pas), DRagLint.LSP.Feature.TypeHierarchy.Prepare (DRagLint.LSP.Feature.TypeHierarchy.pas)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.LSP.Context.ILspServerContext.FileToUri, DRagLint.LSP.HierarchyUtil.HierRange, DRagLint.LSP.HierarchyUtil.LspKindOf, DRagLint.LSP.HierarchyUtil.NameCol</para>
+/// <para>Returns: nil; TJSONObject.Create</para>
+/// <para>Catches: Exception (re-raise); Exception (swallowed)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines"/>
+/// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileToUri"/>
+/// <seealso cref="DRagLint.LSP.HierarchyUtil.HierRange"/>
+/// <seealso cref="DRagLint.LSP.HierarchyUtil.LspKindOf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildHierarchyItem(const ACtx: ILspServerContext; const AStore: ISymbolStore; const ASym: TSymbol): TJSONObject;
 
 /// <summary>Finds the symbol a hierarchy item stands for.</summary>
@@ -35,6 +55,20 @@ function BuildHierarchyItem(const ACtx: ILspServerContext; const AStore: ISymbol
 /// <param name="ASym">Out: the symbol.</param>
 /// <param name="AStore">Out: its store.</param>
 /// <returns>False when no store holds a symbol of that id, name and file.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Feature.CallHierarchy.TLspCallHierarchyFeature.Handle (DRagLint.LSP.Feature.CallHierarchy.pas), DRagLint.LSP.Feature.TypeHierarchy.TLspTypeHierarchyFeature.Handle (DRagLint.LSP.Feature.TypeHierarchy.pas)</para>
+/// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.LSP.Context.ILspServerContext.Stores, DRagLint.LSP.Context.ILspServerContext.StoresForFile, DRagLint.LSP.HierarchyUtil.HierIntField, SameText</para>
+/// <para>Returns: False; True</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 25 lines (full implementation)</para>
+/// <para>Mutates: ASym (out), AStore (out)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
+/// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Stores"/>
+/// <seealso cref="DRagLint.LSP.Context.ILspServerContext.StoresForFile"/>
+/// <seealso cref="DRagLint.LSP.HierarchyUtil.HierIntField"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindItemSymbol(const ACtx: ILspServerContext; const AItem: TJSONObject; out ASym: TSymbol; out AStore: ISymbolStore): Boolean;
 
 /// <summary>Builds a LSP Range from 0-based coordinates.</summary>
@@ -43,6 +77,13 @@ function FindItemSymbol(const ACtx: ILspServerContext; const AItem: TJSONObject;
 /// <param name="AELine">End line.</param>
 /// <param name="AECol">End character.</param>
 /// <returns>A new object owned by the caller.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Feature.CallHierarchy.AddSite (DRagLint.LSP.Feature.CallHierarchy.pas), DRagLint.LSP.HierarchyUtil.BuildHierarchyItem (DRagLint.LSP.HierarchyUtil.pas)</para>
+/// <para>Returns: TJSONObject.Create</para>
+/// <para>Catches: Exception (re-raise)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HierRange(ASLine, ASCol, AELine, AECol: Integer): TJSONObject;
 
 implementation

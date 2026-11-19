@@ -116,7 +116,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Core.GhostText.TGhostTextServer.AcceptLoop (DRagLint.Core.GhostText.pas)</para>
       /// <para>Calls: Copy, DRagLint.Core.GhostText.HttpResponse, DRagLint.Core.GhostText.JsonQuote, DRagLint.Core.GhostText.JsonStringMember, DRagLint.Core.GhostText.SendAll, FProvider, LowerCase, Move, Pos, RawByteString (+6 more)</para>
-      /// <para>Complexity: 15 (cyclomatic, outer body), 108 lines (full implementation)</para>
+      /// <para>Complexity: 16 (cyclomatic, outer body), 108 lines (full implementation)</para>
       /// <para>Reads: FProvider</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <seealso cref="DRagLint.Core.GhostText.HttpResponse"/>

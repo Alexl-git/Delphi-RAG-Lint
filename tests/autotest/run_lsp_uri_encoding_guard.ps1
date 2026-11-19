@@ -40,7 +40,7 @@ function ClientUri([string]$path, [string]$style) {
 function EditKeys([string]$outF, [int]$id) {
   $keys = @()
   foreach ($mm in [regex]::Matches([IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json -AsHashtable } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json -AsHashtable | ForEach-Object { $_ } } catch { continue }
     if ($o.ContainsKey('id') -and $o['id'] -eq $id -and $o['result']) {
       foreach ($a in $o['result']) { if ($a['edit'] -and $a['edit']['changes']) { $keys += @($a['edit']['changes'].Keys) } }
     }
@@ -91,7 +91,7 @@ function RunUsesCase([string]$dirName, [string]$style) {
   & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $j = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file --db $db --json --rule unused-unit-in-uses 2>$null }
   $ErrorActionPreference = $ea
-  $diags = @(@(($j -join "`n") | ConvertFrom-Json) | Where-Object { $_.rule -eq 'unused-unit-in-uses' } | ForEach-Object {
+  $diags = @(@((($j -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) | Where-Object { $_.rule -eq 'unused-unit-in-uses' } | ForEach-Object {
     @{ range = @{ start = @{ line = $_.start_line - 1; character = $_.start_col - 1 }; end = @{ line = $_.end_line - 1; character = $_.end_col - 1 } }
        severity = 2; source = 'drag-lint'; code = $_.rule; message = $_.message } })
   $uri = ClientUri $file $style

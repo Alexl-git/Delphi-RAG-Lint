@@ -48,7 +48,7 @@ foreach ($dcc in 'dcc32', 'dcc64') {
   ) -join "`r`n")
   [IO.File]::WriteAllText($bat, $body, [Text.Encoding]::ASCII)
   $null = Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $log `
-            -RedirectStandardError "$log.err" -NoNewWindow -Wait -PassThru
+            -RedirectStandardError "$log.err" -NoNewWindow -Wait -PassThru; $null = $null.Handle
   $text = Get-Content $log -Raw -ErrorAction SilentlyContinue
   $ok = ($text -match 'BUILD_EXITCODE=0') -and ($text -notmatch 'Error:')
   Check "ReportProgressTests builds ($dcc)" $ok ((($text -split "`r?`n") | Select-String 'Error|Fatal' | Select-Object -First 4) -join ' | ')

@@ -22,7 +22,7 @@ Copy-Item $fixture $target -Force
 Push-Location $scratch
 try {
   $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $target --fix --json --apply 2>$null } | Out-String
-  $arr = $null; try { $arr = ($raw | ConvertFrom-Json) } catch { $arr = $null }
+  $arr = $null; try { $arr = ($raw | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $arr = $null }
   if ($null -ne $arr -and $arr -isnot [System.Array]) { $arr = @($arr) }
 
   $sa = $arr | Where-Object { $_.rule -eq 'self-assignment' } | Select-Object -First 1

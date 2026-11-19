@@ -22,6 +22,9 @@
   Exit 0 = PASS, 1 = FAIL, 2 = could not run (harness did not compile).
 #>
 param([string]$Exe = "third_party\dll-win64\drag-lint.exe")
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 Set-Location $repo
@@ -69,9 +72,9 @@ function Hb([string]$Fx, [string]$Target, [string]$At = '') {
   $a = @($dbs[$Fx], $(if ($Target) { $Target } else { '-' }))
   if ($At) { $a += $At }
   $errFile = Join-Path $work 'err.txt'
-  $o = & { $ErrorActionPreference = 'Continue'; & $harness @a 2>$errFile }
+  $o = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $harness @a 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   $r = [pscustomobject]@{ Exit = $LASTEXITCODE; Json = $null; Err = (Get-Content $errFile -Raw) }
-  if ($r.Exit -eq 0) { $r.Json = (($o -join "`n") | ConvertFrom-Json) }
+  if ($r.Exit -eq 0) { $r.Json = (($o -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }) }
   return $r
 }
 function WriterRows($J) {
@@ -93,7 +96,7 @@ Write-Host "  $raw"
 try {
   # ---- events-global: how, assign-nil twins, guarded twins, callers, fired_by ----
   $r = Hb 'events-global' 'evgData.GCache'
-  $w = WriterRows $r.Json; $u = UseRows $r.Json
+  $w = @(WriterRows $r.Json); $u = @(UseRows $r.Json)
   Check 'GCache: target is a unit-variable with zero value nil' (($r.Json.target.kind -eq 'unit-variable') -and ($r.Json.target.zero_value -eq 'nil') -and ($r.Json.target.line -eq 25))
   Check 'GCache: writers = create-into (callers CallA, CallB) + := nil + FreeAndNil (assign-nil, do not count)' (Same $w @(
     'evgData.pas:47:3|evgData.SetUp|create-into|true|true||2|evgData.CallA,evgData.CallB',
@@ -104,46 +107,46 @@ try {
     'evgData.pas:76:5|evgData.UseIt|')) (GotText $u)
 
   $r = Hb 'events-global' 'evgData.GCount'
-  $w = WriterRows $r.Json
+  $w = @(WriterRows $r.Json)
   Check 'GCount: assign counts; DFM-bound handler names BOTH bindings in fired_by, callers 0' (Same $w @(
     'evgData.pas:48:3|evgData.SetUp|assign|true|true||2|evgData.CallA,evgData.CallB',
     'evgMain.pas:28:3|evgMain.TMainForm.btnGoClick|assign|true|true|MainForm.btnGo.OnClick, MainForm.btnAgain.OnClick|0|')) (GotText $w)
   Check 'GCount (assign-nil twin): verdict not NEVER-SET, no blocker' (($r.Json.verdict -eq 'MAY-BE-UNSET') -and (@($r.Json.reasons).Count -eq 0))
 
   $r = Hb 'events-global' 'evgData.GPtr'
-  $w = WriterRows $r.Json; $u = UseRows $r.Json
+  $w = @(WriterRows $r.Json); $u = @(UseRows $r.Json)
   Check 'GPtr := nil: assign-nil, does not count' (Same $w @('evgData.pas:64:3|evgData.Reset|assign-nil|true|false||0|')) (GotText $w)
   Check 'GPtr: only nil writes -> not NEVER-SET, blocker nil-write-only' (($r.Json.verdict -eq 'MAY-BE-UNSET') -and ((@($r.Json.reasons) -join ',') -eq 'nil-write-only'))
   Check 'GPtr <> nil is a guarded-test use' (Same $u @('evgData.pas:77:6|evgData.UseIt|guarded-test')) (GotText $u)
 
   $r = Hb 'events-global' 'evgData.GProc'
-  $w = WriterRows $r.Json; $u = UseRows $r.Json
+  $w = @(WriterRows $r.Json); $u = @(UseRows $r.Json)
   Check 'GProc :=<newline> nil (procedural, right side on the next line): assign-nil' (Same $w @('evgData.pas:66:3|evgData.Reset|assign-nil|true|false||0|')) (GotText $w)
   Check 'GProc = nil is a guarded-test use' (Same $u @('evgData.pas:81:6|evgData.UseIt|guarded-test')) (GotText $u)
 
   $r = Hb 'events-global' 'evgData.GIntf'
-  $w = WriterRows $r.Json
+  $w = @(WriterRows $r.Json)
   Check 'GIntf (interface): := nil in Reset and in FormCreate (fired_by MainForm.OnCreate), neither counts' (Same $w @(
     'evgData.pas:65:3|evgData.Reset|assign-nil|true|false||0|',
     'evgMain.pas:34:3|evgMain.TMainForm.FormCreate|assign-nil|true|false|MainForm.OnCreate|0|')) (GotText $w)
 
   $r = Hb 'events-global' 'evgMain.MainForm'
-  $w = WriterRows $r.Json
+  $w = @(WriterRows $r.Json)
   Check 'MainForm: Application.CreateForm(.., MainForm) in the program block is a var-arg writer' (Same $w @('evGlobal.dpr:15:37|evGlobal|var-arg|true|true||0|')) (GotText $w)
 
   $r = Hb 'events-global' 'evgData.GNever'
-  Check 'GNever: no writer -> NEVER-SET, no blocker, its read is a use' (($r.Json.verdict -eq 'NEVER-SET') -and (@($r.Json.writers).Count -eq 0) -and (Same (UseRows $r.Json) @('evgData.pas:78:19|evgData.UseIt|')))
+  Check 'GNever: no writer -> NEVER-SET, no blocker, its read is a use' (($r.Json.verdict -eq 'NEVER-SET') -and (@($r.Json.writers).Count -eq 0) -and (Same (@(UseRows $r.Json)) @('evgData.pas:78:19|evgData.UseIt|')))
 
   $r = Hb 'events-global' 'TEvgCfg.CInstances'
-  Check 'TEvgCfg.CInstances is a class-var, written in Init' (($r.Json.target.kind -eq 'class-var') -and (Same (WriterRows $r.Json) @('evgData.pas:89:3|evgData.TEvgCfg.Init|assign|true|true||0|')))
+  Check 'TEvgCfg.CInstances is a class-var, written in Init' (($r.Json.target.kind -eq 'class-var') -and (Same (@(WriterRows $r.Json)) @('evgData.pas:89:3|evgData.TEvgCfg.Init|assign|true|true||0|')))
   $r = Hb 'events-global' 'evgData.TEvgCfg.FName'
-  Check 'TEvgCfg.FName is an instance-field with zero value '''', written in Init' (($r.Json.target.kind -eq 'instance-field') -and ($r.Json.target.zero_value -eq "''") -and (Same (WriterRows $r.Json) @('evgData.pas:88:3|evgData.TEvgCfg.Init|assign|true|true||0|')))
+  Check 'TEvgCfg.FName is an instance-field with zero value '''', written in Init' (($r.Json.target.kind -eq 'instance-field') -and ($r.Json.target.zero_value -eq "''") -and (Same (@(WriterRows $r.Json)) @('evgData.pas:88:3|evgData.TEvgCfg.Init|assign|true|true||0|')))
 
   # ---- usage errors: exit 2 with a one-line reason / the candidates ----
   $r = Hb 'events-global' 'GAmb'
   Check 'bare GAmb: exit 2, ambiguous, both candidates printed' (($r.Exit -eq 2) -and ($r.Err -match 'ambiguous target "GAmb"') -and ($r.Err -match 'candidate: evgData\.GAmb') -and ($r.Err -match 'candidate: evgOther\.GAmb')) $r.Err
   $r = Hb 'events-global' 'evgOther.GAmb'
-  Check 'qualified evgOther.GAmb resolves (control): initialization writer' (($r.Exit -eq 0) -and (Same (WriterRows $r.Json) @('evgOther.pas:13:3|evgOther.initialization|assign|true|true||0|')))
+  Check 'qualified evgOther.GAmb resolves (control): initialization writer' (($r.Exit -eq 0) -and (Same (@(WriterRows $r.Json)) @('evgOther.pas:13:3|evgOther.initialization|assign|true|true||0|')))
   foreach ($case in @(@('evgData.UseIt.L', 'is a local variable'), @('TEvgCfg.Name', 'is a property'), @('TEvgRec.RVal', 'is a record field'),
                       @('cEvgTyped', 'is a constant'), @('NoSuchVar', 'unknown target "NoSuchVar"'))) {
     $r = Hb 'events-global' $case[0]
@@ -152,9 +155,9 @@ try {
 
   # ---- --at ----
   $r = Hb 'events-global' '' 'evgData.pas:76:5'
-  Check '--at on a use: target GCache, the ONE use judged' (($r.Exit -eq 0) -and ($r.Json.target.qname -eq 'evgData.GCache') -and (Same (UseRows $r.Json) @('evgData.pas:76:5|evgData.UseIt|')))
+  Check '--at on a use: target GCache, the ONE use judged' (($r.Exit -eq 0) -and ($r.Json.target.qname -eq 'evgData.GCache') -and (Same (@(UseRows $r.Json)) @('evgData.pas:76:5|evgData.UseIt|')))
   $r = Hb 'events-global' '' 'evgData.pas:76'
-  Check '--at file:line with one variable on the line resolves without a column' (($r.Exit -eq 0) -and (Same (UseRows $r.Json) @('evgData.pas:76:5|evgData.UseIt|')))
+  Check '--at file:line with one variable on the line resolves without a column' (($r.Exit -eq 0) -and (Same (@(UseRows $r.Json)) @('evgData.pas:76:5|evgData.UseIt|')))
   $r = Hb 'events-global' '' 'evgData.pas:25:3'
   Check '--at on the declaration: every use is judged' (($r.Exit -eq 0) -and (@($r.Json.uses).Count -eq 2))
   $r = Hb 'events-global' '' 'evgData.pas:78'
@@ -170,33 +173,33 @@ try {
                       @('GInc', 'evaData.pas:48:7|evaData.Run|var-arg|true|true||1|evArgs'),
                       @('GDpr', 'evArgs.dpr:11:8|evArgs|var-arg|true|true||0|'))) {
     $r = Hb 'events-args' $case[0]
-    $w = WriterRows $r.Json
+    $w = @(WriterRows $r.Json)
     Check ("{0}: one counting argument writer" -f $case[0]) (Same $w @($case[1])) (GotText $w)
     Check ("{0}: the argument is no use" -f $case[0]) (@($r.Json.uses).Count -eq 0)
   }
   $r = Hb 'events-args' 'GFillTwice'
-  Check 'GFillTwice: two var-arg rows, one per call' (Same (WriterRows $r.Json) @(
-    'evaData.pas:46:8|evaData.Run|var-arg|true|true||1|evArgs', 'evaData.pas:47:8|evaData.Run|var-arg|true|true||1|evArgs')) (GotText (WriterRows $r.Json))
+  Check 'GFillTwice: two var-arg rows, one per call' (Same (@(WriterRows $r.Json)) @(
+    'evaData.pas:46:8|evaData.Run|var-arg|true|true||1|evArgs', 'evaData.pas:47:8|evaData.Run|var-arg|true|true||1|evArgs')) (GotText (@(WriterRows $r.Json)))
   $r = Hb 'events-args' 'GConst'
   Check 'GConst (control): const and value arguments write nothing -> NEVER-SET, two uses' (($r.Json.verdict -eq 'NEVER-SET') -and (@($r.Json.writers).Count -eq 0) -and
-    (Same (UseRows $r.Json) @('evaData.pas:44:8|evaData.Run|', 'evaData.pas:45:9|evaData.Run|')))
+    (Same (@(UseRows $r.Json)) @('evaData.pas:44:8|evaData.Run|', 'evaData.pas:45:9|evaData.Run|')))
 
   # ---- events-softwriters: soft writers, the NEVER-SET twin, published ----
   $r = Hb 'events-softwriters' 'GPlain'
   Check 'GPlain: NEVER-SET, no blocker' (($r.Json.verdict -eq 'NEVER-SET') -and (@($r.Json.reasons).Count -eq 0) -and (@($r.Json.writers).Count -eq 0))
   $r = Hb 'events-softwriters' 'GPlainTwin'
   Check 'GPlainTwin (+ Poke(@GPlainTwin)): address-of soft writer, MAY-BE-UNSET, blocker soft-writer' (($r.Json.verdict -eq 'MAY-BE-UNSET') -and
-    ((@($r.Json.reasons) -join ',') -eq 'soft-writer') -and (Same (WriterRows $r.Json) @('evsData.pas:34:9|evsData.Touch|address-of|false|false||0|'))) (GotText (WriterRows $r.Json))
+    ((@($r.Json.reasons) -join ',') -eq 'soft-writer') -and (Same (@(WriterRows $r.Json)) @('evsData.pas:34:9|evsData.Touch|address-of|false|false||0|'))) (GotText (@(WriterRows $r.Json)))
   $r = Hb 'events-softwriters' 'GWith'
-  Check 'GWith: the unresolved write inside `with` is with-opaque, soft' (Same (WriterRows $r.Json) @('evsData.pas:32:5|evsData.Touch|with-opaque|false|false||0|')) (GotText (WriterRows $r.Json))
+  Check 'GWith: the unresolved write inside `with` is with-opaque, soft' (Same (@(WriterRows $r.Json)) @('evsData.pas:32:5|evsData.Touch|with-opaque|false|false||0|')) (GotText (@(WriterRows $r.Json)))
   $r = Hb 'events-softwriters' 'GAbs'
   Check 'GAbs: GAlias := 4 (GAlias absolute GAbs) is a soft writer; the absolute clause is no use' (($r.Json.verdict -eq 'MAY-BE-UNSET') -and
-    (Same (WriterRows $r.Json) @('evsData.pas:33:3|evsData.Touch|address-of|false|false||0|')) -and (Same (UseRows $r.Json) @('evsData.pas:35:42|evsData.Touch|'))) (GotText (WriterRows $r.Json))
+    (Same (@(WriterRows $r.Json)) @('evsData.pas:33:3|evsData.Touch|address-of|false|false||0|')) -and (Same (@(UseRows $r.Json)) @('evsData.pas:35:42|evsData.Touch|'))) (GotText (@(WriterRows $r.Json)))
   $r = Hb 'events-softwriters' 'GAlias'
   Check 'GAlias: an absolute overlay itself (limits absolute-overlay)' (@($r.Json.limits) -contains 'absolute-overlay')
   $r = Hb 'events-softwriters' 'TSoftForm.edtName'
-  Check 'edtName: DFM component -> dfm-stream writer (counts), published, zero nil' ((Same (WriterRows $r.Json) @(
-    'evsForm.dfm:7:3|evsForm.TSoftForm (DFM streaming of SoftForm)|dfm-stream|true|true||0|')) -and (@($r.Json.limits) -contains 'published') -and ($r.Json.target.zero_value -eq 'nil')) (GotText (WriterRows $r.Json))
+  Check 'edtName: DFM component -> dfm-stream writer (counts), published, zero nil' ((Same (@(WriterRows $r.Json)) @(
+    'evsForm.dfm:7:3|evsForm.TSoftForm (DFM streaming of SoftForm)|dfm-stream|true|true||0|')) -and (@($r.Json.limits) -contains 'published') -and ($r.Json.target.zero_value -eq 'nil')) (GotText (@(WriterRows $r.Json)))
   $r = Hb 'events-softwriters' 'TSoftForm.FCount'
   Check 'FCount (published control): private field, not streamed -> NEVER-SET, not published' (($r.Json.verdict -eq 'NEVER-SET') -and -not (@($r.Json.limits) -contains 'published'))
 
@@ -204,7 +207,7 @@ try {
   $ruleSet = @(); $hbSet = @()
   foreach ($fx in @('events-global', 'events-args', 'events-softwriters')) {
     $vars = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $dbs[$fx] --query "SELECT s.qualified_name AS q FROM symbols s JOIN symbols p ON p.id = s.parent_id WHERE s.kind = 'var' AND p.kind = 'unit' ORDER BY 1" --json 2>$null }) -join "`n"
-    $vj = $vars.Substring($vars.IndexOf('{')) | ConvertFrom-Json
+    $vj = $vars.Substring($vars.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ }
     foreach ($row in $vj.rows) {
       $q = [string]$row[0]
       $r = Hb $fx $q
@@ -212,7 +215,7 @@ try {
     }
     foreach ($pas in (Get-ChildItem (Join-Path $src $fx) -Filter *.pas)) {
       $lj = (& { $ErrorActionPreference = 'Continue'; & $exePath lint $pas.FullName --db $dbs[$fx] --rule read-never-assigned --json 2>$null }) -join "`n"
-      foreach ($f in @($lj | ConvertFrom-Json)) {
+      foreach ($f in @(($lj | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })) {
         if ($f.message -match 'Global variable (\w+) is read') { $ruleSet += ('{0}.{1}' -f $pas.BaseName, $Matches[1]) }
       }
     }
@@ -232,3 +235,4 @@ finally {
 }
 if ($script:fail -gt 0) { exit 1 }
 exit 0
+} finally { Remove-WorkDir $work -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

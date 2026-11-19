@@ -44,7 +44,7 @@ interface
 procedure StartHoverTracker;
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.Editor.UnregisterDragLintMenu (DragLint.Plugin.Editor.pas), initialization/finalization (DragLint.Plugin.HoverTracker.pas)</para>
+/// <para>Called from: DragLint.Plugin.Editor.UnregisterDragLintMenu (DragLint.Plugin.Editor.pas), DragLint.Plugin.HoverTracker.finalization (DragLint.Plugin.HoverTracker.pas)</para>
 /// <para>Calls: FreeAndNil</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

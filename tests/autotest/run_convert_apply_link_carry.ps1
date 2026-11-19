@@ -238,7 +238,7 @@ Write-Host ''
 Write-Host '=== 2. json: a carried leaf is machine-distinguishable ===' -ForegroundColor Cyan
 $j = Invoke-Apply @('--format', 'json')
 $doc = $null
-try { $doc = $j.Raw | ConvertFrom-Json } catch { }
+try { $doc = $j.Raw | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'json parses' ($null -ne $doc) "raw=$($j.Raw)"
 if ($null -ne $doc) {
   $carried = @($doc.items | Where-Object { $_.kind -eq 'sub-leaf-carried' })
@@ -271,7 +271,7 @@ end
 # and the identity gate then correctly carries nothing -- TreesDescribeThisBlock).
 $rr = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-reemit --from OldUnit.TOldBtn --to NewUnit.TNewBtn --rules $rulesPath --from-block $blockPath --db $db 2>$null }) -join "`n"
 $rdoc = $null
-try { $rdoc = $rr | ConvertFrom-Json } catch { }
+try { $rdoc = $rr | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'convert-reemit json parses' ($null -ne $rdoc) "raw=$rr"
 if ($null -ne $rdoc) {
   $c = @($rdoc.report.carried | Where-Object { $null -ne $_ })

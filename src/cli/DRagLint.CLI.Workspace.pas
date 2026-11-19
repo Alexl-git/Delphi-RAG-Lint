@@ -13,6 +13,22 @@ uses
 /// <summary>drag-lint workspace index|status|add [--config PATH]: index each project of the workspace config into the shared DB, list its projects and file counts, or append a project entry.</summary>
 /// <param name="AArgs">SubCommand index|status|add, --config, the project file for add.</param>
 /// <returns>0 on success, nonzero on a usage or I/O error.</returns>
+/// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.Workspace.Config.TWorkspaceConfigIO.LoadFromFile: Invalid JSON in workspace config: %s</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: AnsiString, BoolToStr, CloseHandle, CreatePipe, CreateProcessW, Default, DRagLint.CLI.Workspace.DoWorkspace.CreatePipes, DRagLint.CLI.Workspace.DoWorkspace.SpawnSync, DRagLint.Storage.FileMembership.ConnectReadOnly, DRagLint.Workspace.Config.TWorkspaceConfigIO.FindWorkspaceRoot (+16 more)</para>
+/// <para>Returns: 0; 2; 1</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 178 lines (full implementation)</para>
+/// <para>SQL: reads FILES</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Workspace.DoWorkspace.CreatePipes"/>
+/// <seealso cref="DRagLint.CLI.Workspace.DoWorkspace.SpawnSync"/>
+/// <seealso cref="DRagLint.Storage.FileMembership.ConnectReadOnly"/>
+/// <seealso cref="DRagLint.Workspace.Config.TWorkspaceConfigIO.FindWorkspaceRoot"/>
+/// <seealso cref="DRagLint.Workspace.Config.TWorkspaceConfigIO.LoadFromFile"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoWorkspace(const AArgs: TArgs): Integer;
 
 /// <summary>Implements the forms-csv CLI command: generates a navigation-map CSV
@@ -22,6 +38,20 @@ function DoWorkspace(const AArgs: TArgs): Integer;
 /// the first resolved path is primary (drives enumeration), the rest widen the
 /// caller-search scope so cross-DB launch chains (e.g. CLIENT -> COMMON) are
 /// not misreported as dead.</summary>
+/// <param name="AArgs"><!-- drag-lint:auto type -->const TArgs</param>
+/// <returns><!-- drag-lint:auto -->Integer -- Observed: 0.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Common.ExplicitDbsExist, DRagLint.CLI.ConsumerDbs.ResolveConsumerDbs, DRagLint.Core.OutputEncoding.WriteOutputFile, DRagLint.FormsMap.GenerateFormsCsv/3, Write, Writeln</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.ExplicitDbsExist"/>
+/// <seealso cref="DRagLint.CLI.ConsumerDbs.ResolveConsumerDbs"/>
+/// <seealso cref="DRagLint.Core.OutputEncoding.WriteOutputFile"/>
+/// <seealso cref="DRagLint.FormsMap.GenerateFormsCsv"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoFormsCsv(const AArgs: TArgs): Integer;
 
 /// <summary>menu-tree: the menu tree a project BUILDS IN CODE, read statically
@@ -30,6 +60,20 @@ function DoFormsCsv(const AArgs: TArgs): Integer;
 /// <returns>0 when it ran; 2 usage / setup (no --db, project not in the db,
 /// unknown --root); 3 stale index (a file it must read changed since it was
 /// indexed -- refused, never answered from); 1 any other error.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Common.ExplicitDbsExist, DRagLint.Core.CliError.WriteCliError, DRagLint.Core.OutputEncoding.WriteOutputFile, DRagLint.MenuTree.Dfm.AddDfmRoots, DRagLint.MenuTree.TMenuTree.ToJson, DRagLint.MenuTree.TMenuTree.ToPaths, DRagLint.MenuTree.TMenuTree.ToText, DRagLint.MenuTree.TMenuWalker.Create, DRagLint.MenuTree.TMenuWalker.Walk, LowerCase, Write, Writeln</para>
+/// <para>Returns: 2; EXIT_STALE_INDEX; 1; 0</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 66 lines (full implementation)</para>
+/// <para>Catches: EMenuTreeSetup (swallowed); EMenuTreeStale (swallowed); Exception (swallowed)</para>
+/// <seealso cref="DRagLint.CLI.Common.ExplicitDbsExist"/>
+/// <seealso cref="DRagLint.Core.CliError.WriteCliError"/>
+/// <seealso cref="DRagLint.Core.OutputEncoding.WriteOutputFile"/>
+/// <seealso cref="DRagLint.MenuTree.Dfm.AddDfmRoots"/>
+/// <seealso cref="DRagLint.MenuTree.TMenuTree.ToJson"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoMenuTree(const AArgs: TArgs): Integer;
 
 /// <summary>menu-drift: the code-built menu tree (menu-tree) against the
@@ -38,6 +82,21 @@ function DoMenuTree(const AArgs: TArgs): Integer;
 /// <param name="AArgs">--project, --db (required), --registry &lt;features dir&gt; (required), --with-dfm, --format text|json, --output.</param>
 /// <returns>0 no drift; 1 drift; 2 usage / setup (no --db / --registry,
 /// project not in the db, unreadable registry); 3 stale index (refused).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Common.ExplicitDbsExist, DRagLint.Core.CliError.WriteCliError, DRagLint.Core.OutputEncoding.WriteOutputFile, DRagLint.MenuDrift.ComputeMenuDrift, DRagLint.MenuDrift.TMenuDriftReport.HasDrift, DRagLint.MenuDrift.TMenuDriftReport.ToJson, DRagLint.MenuDrift.TMenuDriftReport.ToText, DRagLint.MenuDrift.TMenuRegistry.Create, DRagLint.MenuDrift.TMenuRegistry.HasAppMenus, DRagLint.MenuDrift.TMenuRegistry.LoadFromDir (+8 more)</para>
+/// <para>Returns: 2; EXIT_STALE_INDEX; 1; if Rep.HasDrift then 1</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 88 lines (full implementation)</para>
+/// <para>Catches: EMenuDriftSetup (swallowed); EMenuTreeSetup (swallowed); EMenuTreeStale (swallowed); Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.ExplicitDbsExist"/>
+/// <seealso cref="DRagLint.Core.CliError.WriteCliError"/>
+/// <seealso cref="DRagLint.Core.OutputEncoding.WriteOutputFile"/>
+/// <seealso cref="DRagLint.MenuDrift.ComputeMenuDrift"/>
+/// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.HasDrift"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoMenuDrift(const AArgs: TArgs): Integer;
 
 implementation

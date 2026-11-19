@@ -233,7 +233,7 @@ function ApplyRun([string]$Dir, [string]$Db, [string]$Castlib, [string[]]$Extra)
   try { $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'GlyphForm.pas' --rules $rules --castlib $Castlib --db $Db --db $dbA --db $dbB @Extra 2>&1 | ForEach-Object { "$_" } }) -join "`n"; $ec = $LASTEXITCODE }
   finally { Pop-Location }
   $line = ($raw -split "`n" | Where-Object { $_.TrimStart().StartsWith('{') } | Select-Object -First 1)
-  $j = $null; if ($line) { try { $j = $line | ConvertFrom-Json } catch { } }
+  $j = $null; if ($line) { try { $j = $line | ConvertFrom-Json | ForEach-Object { $_ } } catch { } }
   return @{ Raw = $raw; J = $j; Exit = $ec }
 }
 

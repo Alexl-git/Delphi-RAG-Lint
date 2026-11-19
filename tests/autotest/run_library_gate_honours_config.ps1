@@ -51,7 +51,7 @@ try {
   function Q([string]$Db,[string]$Query) {
     $raw = (& { $ErrorActionPreference = 'Continue'; & $exe sql --db $Db --json --limit 5000 --query $Query 2>$null }) -join "`n"
     $b = $raw.IndexOf('{'); if ($b -lt 0) { return ,@() }
-    return ,@(($raw.Substring($b) | ConvertFrom-Json).rows)
+    return ,@(($raw.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }).rows)
   }
   $extCount = 'select count(*) from refs where external_target is not null and external_target <> '''''
   $projOn = Join-Path $out 'projon.sqlite'; $libDb = Join-Path $out 'library-Win64.sqlite'

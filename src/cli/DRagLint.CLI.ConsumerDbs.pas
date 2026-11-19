@@ -16,13 +16,32 @@ uses
 /// <param name="AManifest">Parsed manifest providing section include paths.</param>
 /// <param name="ACwd">Current working directory; used for longest-prefix match.</param>
 /// <returns>'Win32', 'Win64', or '' when no .dproj or Platform element is found.</returns>
-/// <remarks>Performs a top-directory-first search, then recursive if none found
-/// at the top level.  Not thread-safe; call from the main thread only.</remarks>
+/// <remarks>
+/// Performs a top-directory-first search, then recursive if none found
+/// at the top level. Not thread-safe; call from the main thread only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ConsumerDbs.ReadPlatformFor (DRagLint.CLI.ConsumerDbs.pas), DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DRagLint.CLI.LoadManifestNameToDb (DRagLint.CLI.pas), DRagLint.CLI.ResolveReadDbsForFileWith (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.ConsumerDbs.PlatformFromDprojFile, IncludeTrailingPathDelimiter, SameText</para>
+/// <para>Returns: ''; PlatformFromDprojFile(DprojFile)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.ConsumerDbs.PlatformFromDprojFile"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DetectPlatformFromDproj(const AManifest: TIndexManifest; const ACwd: string): string;
 
 /// <summary>Reads the active platform of ONE .dproj: its <c>&lt;Platform Condition=...&gt;</c> element.</summary>
 /// <param name="ADproj">Path of the .dproj; an unreadable or platform-less file yields ''.</param>
 /// <returns>'Win32', 'Win64', or '' when the file names neither.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ConsumerDbs.DetectPlatformFromDproj (DRagLint.CLI.ConsumerDbs.pas), DRagLint.CLI.SectionLibraryPlatform (DRagLint.CLI.pas)</para>
+/// <para>Calls: Pos</para>
+/// <para>Returns: ''; Xml.Substring(P1, P2 - P1 - 1).Trim</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PlatformFromDprojFile(const ADproj: string): string;
 
 /// <summary>Loads the manifest a --project run reads: the walk starts at the project's
@@ -31,6 +50,16 @@ function PlatformFromDprojFile(const ADproj: string): string;
 /// <param name="AEngineDir">The engine exe folder (the engine-level manifest location).</param>
 /// <param name="AProjectPath">The --project argument, or ''.</param>
 /// <returns>The loaded manifest; never nil-like, an empty manifest when none is found.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ConsumerDbs.ResolveConsumerDbs (DRagLint.CLI.ConsumerDbs.pas), DRagLint.CLI.ResolveCompileCheckDb (DRagLint.CLI.pas), DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Common.ResolveOwnProjectDb, DRagLint.CLI.ConsumerDbs.ManifestStartDir, DRagLint.Index.Manifest.TManifestIO.Load</para>
+/// <para>Returns: TManifestIO.Load(AEngineDir, ManifestStartDir(AProjectPath)); TManifestIO.Load(AEngineDir, GetCurrentDir)</para>
+/// <seealso cref="DRagLint.CLI.Common.ResolveOwnProjectDb"/>
+/// <seealso cref="DRagLint.CLI.ConsumerDbs.ManifestStartDir"/>
+/// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LoadManifestForProject(const AEngineDir, AProjectPath: string): TIndexManifest;
 
 /// <summary>The platform a read command works in: --platform, else the platform of the
@@ -39,16 +68,52 @@ function LoadManifestForProject(const AEngineDir, AProjectPath: string): TIndexM
 /// <param name="ACheckPlatform">--platform, or ''.</param>
 /// <param name="AProjectPath">--project, or ''.</param>
 /// <returns>The platform name; '' only when the manifest names no default either.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ConsumerDbs.ResolveConsumerDbs (DRagLint.CLI.ConsumerDbs.pas), DRagLint.CLI.ResolveLibraryDbs (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.ConsumerDbs.DetectPlatformFromDproj, ExtractFilePath</para>
+/// <para>Returns: ACheckPlatform; DetectPlatformFromDproj(AManifest, ExtractFilePath(TPath.GetFullPath(AProjectPath))); ''; DetectPlatformFromDproj(AManifest, GetCurrentDir); AManifest.Settings.DefaultPlatform</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.ConsumerDbs.DetectPlatformFromDproj"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReadPlatformFor(const AManifest: TIndexManifest; const ACheckPlatform, AProjectPath: string): string;
 
 /// <summary>Builds the missing project index AProjDb of AArgs.ProjectPath once, under a create lock (first use); never in lsp / serve or with --no-create.</summary>
 /// <param name="AArgs">The run's arguments (ProjectPath, NoCreate, Command).</param>
 /// <param name="AProjDb">The project index the manifest names.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ConsumerDbs.ResolveConsumerDbs (DRagLint.CLI.ConsumerDbs.pas), DRagLint.CLI.UsagesDbForFile (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Common.ReindexOwnerProject, DRagLint.CLI.ConsumerDbs.EngineIsDeployedForCreate, DRagLint.CLI.ConsumerDbs.NoteOnce, DRagLint.CLI.ConsumerDbs.TryAcquireCreateLock, ExpandFileName, Flush, Format, Writeln</para>
+/// <para>Complexity: 13 (cyclomatic, outer body), 29 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.ReindexOwnerProject"/>
+/// <seealso cref="DRagLint.CLI.ConsumerDbs.EngineIsDeployedForCreate"/>
+/// <seealso cref="DRagLint.CLI.ConsumerDbs.NoteOnce"/>
+/// <seealso cref="DRagLint.CLI.ConsumerDbs.TryAcquireCreateLock"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure AutoCreateMissingProjectDb(const AArgs: TArgs; const AProjDb: string);
 
 /// <summary>The databases a consumer verb reads: the explicit --db list unchanged, else the manifest selection for the run's platform and project.</summary>
 /// <param name="AArgs">The run's arguments.</param>
 /// <returns>The databases, in reading order.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CallGraph.DoButterfly (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.CallGraph.DoReverseCallTree (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.Convert.DoConvertReemit (DRagLint.CLI.Convert.pas), DRagLint.CLI.Convert.DoConvertScaffold (DRagLint.CLI.Convert.pas), DRagLint.CLI.Convert.DoConvertValidate (DRagLint.CLI.Convert.pas) (+24 more)</para>
+/// <para>Calls: DRagLint.CLI.Common.IsLibrarySectionDb, DRagLint.CLI.Common.LibrarySectionDbs, DRagLint.CLI.Common.ResolveOwnProjectDb, DRagLint.CLI.ConsumerDbs.AutoCreateMissingProjectDb, DRagLint.CLI.ConsumerDbs.LoadManifestForProject, DRagLint.CLI.ConsumerDbs.NoteOnce, DRagLint.CLI.ConsumerDbs.ReadPlatformFor, DRagLint.Index.DbSelect.TDbSelect.Resolve, DRagLint.Index.Manifest.OrderDbsByMembership, DRagLint.Project.Resolver.TProjectResolver.Create (+6 more)</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 132 lines (full implementation)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.IsLibrarySectionDb"/>
+/// <seealso cref="DRagLint.CLI.Common.LibrarySectionDbs"/>
+/// <seealso cref="DRagLint.CLI.Common.ResolveOwnProjectDb"/>
+/// <seealso cref="DRagLint.CLI.ConsumerDbs.AutoCreateMissingProjectDb"/>
+/// <seealso cref="DRagLint.CLI.ConsumerDbs.LoadManifestForProject"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>;
 
 implementation

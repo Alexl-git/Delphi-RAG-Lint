@@ -13,6 +13,19 @@ uses
 /// <summary>drag-lint uses-report: the transitive uses closure of the indexed units as CSV (source_unit, used_unit, depth, first_section, via_chain, external).</summary>
 /// <param name="AArgs">--db, --depth, --include-external and the output options.</param>
 /// <returns>0 on success; nonzero on a usage error or a missing index.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: CharInSet, ComputeStem, Copy, CsvEscape, Delete, DRagLint.CLI.Common.ExplicitDbsExist, DRagLint.CLI.UsesReport.DoUsesReport.EmitCsvHeader, DRagLint.CLI.UsesReport.DoUsesReport.IsSourceCandidate, DRagLint.CLI.UsesReport.DoUsesReport.LoadFilesAndEdges, DRagLint.CLI.UsesReport.DoUsesReport.OpenStores (+17 more)</para>
+/// <para>Returns: 0; 2</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 350 lines (full implementation)</para>
+/// <seealso cref="DRagLint.CLI.Common.ExplicitDbsExist"/>
+/// <seealso cref="DRagLint.CLI.UsesReport.DoUsesReport.EmitCsvHeader"/>
+/// <seealso cref="DRagLint.CLI.UsesReport.DoUsesReport.IsSourceCandidate"/>
+/// <seealso cref="DRagLint.CLI.UsesReport.DoUsesReport.LoadFilesAndEdges"/>
+/// <seealso cref="DRagLint.CLI.UsesReport.DoUsesReport.OpenStores"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoUsesReport(const AArgs: TArgs): Integer;
 
 /// <summary>drag-lint deps-report: third-party dependency rollup over the index
@@ -23,6 +36,19 @@ function DoUsesReport(const AArgs: TArgs): Integer;
 /// borrows them into BuildDepsReport, and frees them afterward. A stale
 /// explicit --db refuses the run (exit 2); a stale manifest-resolved one is
 /// skipped. Never migrates -- a report is a read.</summary>
+/// <param name="AArgs"><!-- drag-lint:auto type -->const TArgs</param>
+/// <returns><!-- drag-lint:auto -->Integer -- Observed: 0.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: AddStalenessPairs, CsvEscape, DepsGroupStr, DRagLint.CLI.Common.ExplicitDbsExist, DRagLint.CLI.UsesReport.DoDepsReport.OpenStores, DRagLint.CLI.UsesReport.DoDepsReport.RenderCsv, DRagLint.CLI.UsesReport.DoDepsReport.RenderJson, DRagLint.CLI.UsesReport.DoDepsReport.RenderText, DRagLint.Core.OutputEncoding.WriteOutputFile, DRagLint.Report.Deps.BuildDepsReport (+10 more)</para>
+/// <seealso cref="DRagLint.CLI.Common.ExplicitDbsExist"/>
+/// <seealso cref="DRagLint.CLI.UsesReport.DoDepsReport.OpenStores"/>
+/// <seealso cref="DRagLint.CLI.UsesReport.DoDepsReport.RenderCsv"/>
+/// <seealso cref="DRagLint.CLI.UsesReport.DoDepsReport.RenderJson"/>
+/// <seealso cref="DRagLint.CLI.UsesReport.DoDepsReport.RenderText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoDepsReport(const AArgs: TArgs): Integer;
 
 implementation
@@ -150,6 +176,7 @@ var
     StemToGlobal:= TDictionary<string, Integer>.Create;
     Edges   := TDictionary<Integer, TArray<TUsesEdge>>.Create;
     PerStore:= TDictionary<Integer, TList <TUsesEdge>>.Create;
+    try
 
     { Step 1: gather every file across every store, build stem -> global index. }
     for StoreIdx:= 0 to High(Stores) do
@@ -238,8 +265,10 @@ var
     end; // try
 
     for Kv in PerStore do Edges.AddOrSetValue(Kv.Key, Kv.Value.ToArray);
-    for Kv in PerStore do Kv.Value.Free;
-    PerStore.Free;
+    finally
+      for Kv in PerStore do Kv.Value.Free;
+      PerStore.Free;
+    end; // try
   end; // procedure
 
   procedure EmitCsvHeader;

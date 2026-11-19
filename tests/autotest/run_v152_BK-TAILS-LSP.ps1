@@ -48,7 +48,7 @@ function Put([string]$rel, [string]$text) {
 function Json([string]$text) {
   $s0 = $text.IndexOf('{'); $e0 = $text.LastIndexOf('}')
   if ($s0 -lt 0 -or $e0 -le $s0) { return $null }
-  try { return $text.Substring($s0, $e0 - $s0 + 1) | ConvertFrom-Json } catch { return $null }
+  try { return $text.Substring($s0, $e0 - $s0 + 1) | ConvertFrom-Json | ForEach-Object { $_ } } catch { return $null }
 }
 function Frame($obj) {
   $j = ($obj | ConvertTo-Json -Depth 12 -Compress)
@@ -179,7 +179,7 @@ end.
   Start-Process $exePath -ArgumentList @('lsp', '--db', $dbOne, '--db', $dbLib) -WorkingDirectory $scratch -RedirectStandardInput $inF -RedirectStandardOutput $outF -RedirectStandardError (Join-Path $scratch 'lsp.err') -NoNewWindow -Wait | Out-Null
   $res = @{}
   foreach ($mm in [regex]::Matches([IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $r = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $r = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($null -ne $r.id) { $res[[int]$r.id] = $r }
   }
   $refUris = @(@($res[2].result) | ForEach-Object { [string]$_.uri })

@@ -23,11 +23,23 @@ interface
 /// <param name="pRulesDir">--rules-dir value, '' = the engine's default rules folder.</param>
 /// <param name="pJson">--json (or --format json).</param>
 /// <returns>Process exit code: 0 known id, 2 unknown id or usage error.</returns>
-/// <remarks>Read-only; needs no index. Text mode prints the sections Rule, Meaning,
+/// <remarks>
+/// Read-only; needs no index. Text mode prints the sections Rule, Meaning,
 /// Why it matters, Bad, Good, Default, Fixable, Suppress on stdout; `--json` prints
 /// ONE object with the same facts. An unknown id prints the nearest ids (stderr in
 /// text mode; `error` + `nearest` in the JSON object) and returns 2, as does an
-/// empty id.</remarks>
+/// empty id.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Explain.GatherFacts, DRagLint.CLI.Explain.PrintJson, DRagLint.CLI.Explain.PrintText, DRagLint.CLI.Explain.ReportUnknown, DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog, SameText, Trim, Writeln</para>
+/// <para>Returns: EXIT_UNKNOWN; 0; ReportUnknown(Catalog, Trim(pRuleId), pJson)</para>
+/// <seealso cref="DRagLint.CLI.Explain.GatherFacts"/>
+/// <seealso cref="DRagLint.CLI.Explain.PrintJson"/>
+/// <seealso cref="DRagLint.CLI.Explain.PrintText"/>
+/// <seealso cref="DRagLint.CLI.Explain.ReportUnknown"/>
+/// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunExplain(const pRuleId, pRulesDir: string; pJson: Boolean): Integer;
 
 implementation

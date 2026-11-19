@@ -1,0 +1,15 @@
+# 1.52.1 SLZ-RULE2: witness-flag guards proven by the pairing -- conjunct, early exit, or-disjunct, compound if (self-LoopZero 16 FPs, e.g. Indexer.pas:1493, SQLite.pas:21057, AstChecks.pas:4315, Manifest.pas:1751)
+!used-before-assignment 31
+!used-before-assignment 44
+!used-before-assignment 59
+!used-before-assignment 60
+!used-before-assignment 90
+!used-before-assignment 91
+!used-before-assignment 92
+# controls: uninitialised flag, stray True site, non-diverting then, flag passed by var, wrong polarity, out param read first
+used-before-assignment 106
+used-before-assignment 118
+used-before-assignment 130
+used-before-assignment 142
+used-before-assignment 153
+used-before-assignment 158

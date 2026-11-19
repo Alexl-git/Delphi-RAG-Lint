@@ -58,7 +58,7 @@ type
 /// The single source of truth for `rules --json`.fixable, the
 /// `--fix --json` row's `fixable` and what the fix verbs attempt.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.CLI.Explain.GatherFacts (DRagLint.CLI.Explain.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
 /// <para>Calls: DRagLint.Lint.Autofix.Fixers, DRagLint.Lint.Autofix.IsLegacyFixRule, DRagLint.Lint.RuleCatalog.IsSidecarFixRule</para>
 /// <para>Returns: IsLegacyFixRule(ARuleId) or Fixers.ContainsKey(ARuleId) or IsSidecarFixRule(ARuleId, Risky)</para>
 /// <seealso cref="DRagLint.Lint.Autofix.Fixers"/>
@@ -123,7 +123,7 @@ function IsSingleFixOnlyRule(const ARuleId: string): Boolean;
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
 /// <para>Calls: ContainsText, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits, DRagLint.Lint.Autofix.BuildAutofixEdits.AddReplaceEdit, DRagLint.Lint.Autofix.BuildAutofixEdits.LinesFor, DRagLint.Lint.Autofix.DeclTypeOf, DRagLint.Lint.Autofix.EnsureImplUses, DRagLint.Lint.Autofix.Fixers, DRagLint.Lint.Autofix.FixOwnerKey (+13 more)</para>
-/// <para>Complexity: 159 (cyclomatic, outer body), 501 lines (full implementation)</para>
+/// <para>Complexity: 161 (cyclomatic, outer body), 501 lines (full implementation)</para>
 /// <para>Mutates: AFixableCount (out)</para>
 /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
 /// <seealso cref="DRagLint.Lint.Autofix.BuildAutofixEdits.AddReplaceEdit"/>
@@ -212,7 +212,7 @@ function FixOwnerKey(const AFinding: TLintFinding): string;
 /// registered fixer. Call it from a fixer unit's RegisterFixers, which this
 /// unit's initialization runs; not thread-safe after start-up.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Diagnostics.BoundsNilChecks.initialization (DRagLint.Diagnostics.BoundsNilChecks.pas), DRagLint.Diagnostics.OwnershipChecks.initialization (DRagLint.Diagnostics.OwnershipChecks.pas), DRagLint.Diagnostics.ParityExtChecks.initialization (DRagLint.Diagnostics.ParityExtChecks.pas), DRagLint.Fix.Decl.initialization (DRagLint.Fix.Decl.pas), DRagLint.Fix.DeclParity.initialization (DRagLint.Fix.DeclParity.pas) (+6 more)</para>
+/// <para>Called from: DRagLint.Diagnostics.BoundsNilChecks.initialization (DRagLint.Diagnostics.BoundsNilChecks.pas), DRagLint.Diagnostics.OwnershipChecks.initialization (DRagLint.Diagnostics.OwnershipChecks.pas), DRagLint.Diagnostics.ParityExtChecks.initialization (DRagLint.Diagnostics.ParityExtChecks.pas), DRagLint.Fix.Decl.initialization (DRagLint.Fix.Decl.pas), DRagLint.Fix.DeclParity.initialization (DRagLint.Fix.DeclParity.pas) (+9 more)</para>
 /// <para>Calls: Default, DRagLint.Lint.Autofix.Fixers</para>
 /// <seealso cref="DRagLint.Lint.Autofix.Fixers"/>
 /// <!-- drag-lint:auto END -->
@@ -228,7 +228,7 @@ procedure RegisterFixer(const ARuleId: string; const AFixer: TFindingFixer; ARis
 /// Same contract as RegisterFixer; called once per file that has a
 /// finding of the rule.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Fix.Expr.initialization (DRagLint.Fix.Expr.pas), DRagLint.Fix.ProjectWide.initialization (DRagLint.Fix.ProjectWide.pas), DRagLint.Fix.Stmt.initialization (DRagLint.Fix.Stmt.pas), DRagLint.Fix.Store.initialization (DRagLint.Fix.Store.pas), DRagLint.Lint.MissingUses.initialization (DRagLint.Lint.MissingUses.pas)</para>
+/// <para>Called from: DRagLint.Diagnostics.BoundsNilChecks.initialization (DRagLint.Diagnostics.BoundsNilChecks.pas), DRagLint.Fix.Expr.initialization (DRagLint.Fix.Expr.pas), DRagLint.Fix.ProjectWide.initialization (DRagLint.Fix.ProjectWide.pas), DRagLint.Fix.Stmt.initialization (DRagLint.Fix.Stmt.pas), DRagLint.Fix.Store.initialization (DRagLint.Fix.Store.pas) (+2 more)</para>
 /// <para>Calls: Default, DRagLint.Lint.Autofix.Fixers</para>
 /// <seealso cref="DRagLint.Lint.Autofix.Fixers"/>
 /// <!-- drag-lint:auto END -->
@@ -242,12 +242,23 @@ procedure RegisterFileFixer(const ARuleId: string; const AFixer: TFileFixer; ARi
 /// IDE's Fix it); a batch `--fix` without it (fix-all in a unit / project) withholds it
 /// and says so. `rules --json` reports it as fix_manual_only. Call it from a fixer unit's
 /// initialization; not thread-safe after start-up.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Diagnostics.BoundsNilChecks.initialization (DRagLint.Diagnostics.BoundsNilChecks.pas), DRagLint.Fix.V152.XCONST.RegisterXConstFixers (DRagLint.Fix.V152.XCONST.pas)</para>
+/// <para>Calls: MatchText</para>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure MarkFixManualOnly(const ARuleId: string);
 
 /// <summary>True when ARuleId's fix was marked with MarkFixManualOnly.</summary>
 /// <param name="ARuleId">The rule id; compared case-insensitively.</param>
 /// <returns>False for an unknown id.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.CLI.Explain.GatherFacts (DRagLint.CLI.Explain.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+/// <para>Calls: MatchText</para>
+/// <para>Returns: MatchText(ARuleId, GManualOnlyFixes)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsFixManualOnly(const ARuleId: string): Boolean;
 
 /// <summary>How many findings the LAST BuildAutofixEdits left unfixed because
@@ -292,7 +303,7 @@ procedure SetAutofixStore(const AStore: ISymbolStore);
 /// <returns>The current fix run's store; nil outside a --db run.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Fix.Store.FixClassNameCompare (DRagLint.Fix.Store.pas), DRagLint.Fix.Store.FixEmptyProcedureBody (DRagLint.Fix.Store.pas)</para>
+/// <para>Called from: DRagLint.Fix.Store.FixClassNameCompare (DRagLint.Fix.Store.pas), DRagLint.Fix.Store.FixEmptyProcedureBody (DRagLint.Fix.Store.pas), DRagLint.Fix.V151.Legacy.FixLocalShadowsField (DRagLint.Fix.V151.Legacy.pas), DRagLint.Fix.V151.Legacy.FixWith (DRagLint.Fix.V151.Legacy.pas), DRagLint.Fix.V152.PTW.FixParamTooWide (DRagLint.Fix.V152.PTW.pas)</para>
 /// <para>Returns: GFixStore</para>
 /// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->
@@ -373,7 +384,7 @@ function BuildImplUsesEdit(const APath, AUnit: string; ALines: TStrings; out AEd
 /// <returns>True when an edit was built.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Diagnostics.OwnershipChecks.FixFieldDestructor (DRagLint.Diagnostics.OwnershipChecks.pas), DRagLint.Fix.Expr.FixFloatEqualityFile (DRagLint.Fix.Expr.pas), DRagLint.Fix.Store.FixClassNameCompare (DRagLint.Fix.Store.pas), DRagLint.Lint.Autofix.BuildAutofixEdits (DRagLint.Lint.Autofix.pas)</para>
+/// <para>Called from: DRagLint.Diagnostics.BoundsNilChecks.FixIndexPossiblyOutOfRange (DRagLint.Diagnostics.BoundsNilChecks.pas), DRagLint.Diagnostics.OwnershipChecks.FixFieldDestructor (DRagLint.Diagnostics.OwnershipChecks.pas), DRagLint.Fix.Expr.FixFloatEqualityFile (DRagLint.Fix.Expr.pas), DRagLint.Fix.Store.FixClassNameCompare (DRagLint.Fix.Store.pas), DRagLint.Fix.V151.TYP.FixFreeWithoutNil (DRagLint.Fix.V151.TYP.pas) (+1 more)</para>
 /// <para>Calls: Copy, Default, DRagLint.Lint.Autofix.BuildImplUsesEdit, LowerCase, Trim</para>
 /// <para>Returns: False; BuildImplUsesEdit(APath, AUnit, ALines, AEdit)</para>
 /// <para>Mutates: AEdit (out)</para>

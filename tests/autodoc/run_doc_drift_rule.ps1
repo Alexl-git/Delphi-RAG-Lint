@@ -82,7 +82,7 @@ function Get-Findings($raw) {
   $arrStart = $raw.IndexOf('[')
   $arrEnd   = $raw.LastIndexOf(']')
   if ($arrStart -ge 0 -and $arrEnd -gt $arrStart) {
-    return @(ConvertFrom-Json ($raw.Substring($arrStart, $arrEnd - $arrStart + 1)))
+    return @((ConvertFrom-Json ($raw.Substring($arrStart, $arrEnd - $arrStart + 1)) | ForEach-Object { $_ }) | ForEach-Object { $_ })
   }
   return @()
 }
@@ -91,7 +91,7 @@ function Get-Findings($raw) {
 function Get-Drift($qname) {
   $out = & { $ErrorActionPreference = 'Continue'; & $exePath doc-drift --qname $qname --db $db --json 2>$null }
   $rows = @()
-  foreach ($ln in $out) { $t = $ln.Trim(); if ($t.StartsWith('{')) { $rows += ($t | ConvertFrom-Json) } }
+  foreach ($ln in $out) { $t = $ln.Trim(); if ($t.StartsWith('{')) { $rows += ($t | ConvertFrom-Json | ForEach-Object { $_ }) } }
   return ,$rows
 }
 
@@ -101,7 +101,7 @@ try {
 
   # ---- Part A: report-all --------------------------------------------------
   $rawA = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --json 2>$null }) -join "`n"
-  $findings = Get-Findings $rawA
+  $findings = @(Get-Findings $rawA)
   $drift = @($findings | Where-Object { $_.rule -eq 'doc-drift' })
   Check 'lint-all emits at least one doc-drift finding' ($drift.Count -ge 1)
 
@@ -138,7 +138,8 @@ try {
   $beforeFSpan  = GetSpanThroughF $beforeFLines
 
   # ---- Part B: fix the safe subset -----------------------------------------
-  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --apply --no-backup 2>$null } | Out-Null
+  # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --apply --no-compile-gate --no-backup 2>$null } | Out-Null
   $afterFix = Get-Content -Raw $target
   $afterFLines = [IO.File]::ReadAllLines($target)
   $afterFSpan  = GetSpanThroughF $afterFLines
@@ -163,7 +164,8 @@ try {
 
   # ---- Part C: idempotency -------------------------------------------------
   $before2 = Get-Content -Raw $target
-  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --apply --no-backup 2>$null } | Out-Null
+  # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --apply --no-compile-gate --no-backup 2>$null } | Out-Null
   $after2 = Get-Content -Raw $target
   Check '2nd --fix is byte-identical (idempotent)' ($before2 -eq $after2)
 

@@ -135,7 +135,7 @@ Remove-Item -Recurse -Force $A
 function Json([string]$s) {
   $a = $s.IndexOf('{'); $b = $s.LastIndexOf('}')
   if ($a -lt 0 -or $b -le $a) { return $null }
-  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json) } catch { return $null }
+  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 
 $py = 'C:\Python314\python.exe'
@@ -144,7 +144,7 @@ if (-not (Test-Path $py)) {
 } else {
   $old = Join-Path $WorkDir 'old.sqlite'
   Copy-Item $db $old
-  & $py -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute(""UPDATE schema_meta SET value='r=1.11.0-alpha;schema=23' WHERE key='resolver_fingerprint'""); c.commit(); c.close()" $old
+  & $py -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('UPDATE schema_meta SET value=? WHERE key=?', ('r=1.11.0-alpha;schema=23', 'resolver_fingerprint')); c.commit(); c.close()" $old
   $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (Join-Path $B 'MovedDM.pas') --rules (Join-Path $WorkDir 'mv.rules') --db $old --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"; $code = $LASTEXITCODE
   $j = Json $o
   Check 'M1 moved tree, r=1.11 DB that stores OTHER paths: REFUSED (exit 1), the reason names that DB' `

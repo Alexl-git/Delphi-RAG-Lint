@@ -72,15 +72,15 @@ type
       /// <exception cref="ETreeSitterException"><!-- drag-lint:auto exc -->via TreeSitter.TTSParser.SetLanguage: Failed to set parser language to 0x%p</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ChangeFileExt, Default, DRagLint.Parser.Delphi13.CollectParseErrors, DRagLint.Parser.Delphi13.HarvestStringLiterals, DRagLint.Parser.Delphi13.TWalkState.Create, DRagLint.Parser.Delphi13.Walk, DRagLint.Preprocess.Types.NormalizeLoneCR, ExtractFileName, Integer, Move, TreeSitter.TTSNodeHelper.HasError, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, TreeSitter.TTSParser.SetLanguage, TreeSitter.TTSTree.RootNode</para>
+      /// <para>Calls: ChangeFileExt, Default, DRagLint.Parser.Delphi13.CollectParseErrors, DRagLint.Parser.Delphi13.HarvestAttributes, DRagLint.Parser.Delphi13.HarvestStringLiterals, DRagLint.Parser.Delphi13.TWalkState.Create, DRagLint.Parser.Delphi13.Walk, DRagLint.Preprocess.Types.NormalizeLoneCR, ExtractFileName, Integer (+6 more)</para>
       /// <para>Implements: DRagLint.Core.Interfaces.IParser.Parse</para>
       /// <para>Reads: FLanguage, EmitUsageRefs</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Parser.Delphi13.CollectParseErrors"/>
+      /// <seealso cref="DRagLint.Parser.Delphi13.HarvestAttributes"/>
       /// <seealso cref="DRagLint.Parser.Delphi13.HarvestStringLiterals"/>
       /// <seealso cref="DRagLint.Parser.Delphi13.TWalkState.Create"/>
       /// <seealso cref="DRagLint.Parser.Delphi13.Walk"/>
-      /// <seealso cref="DRagLint.Preprocess.Types.NormalizeLoneCR"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function Parse(const ASource: TBytes; const AFilePath: string): TParseResult;
@@ -89,7 +89,7 @@ type
 /// <returns><!-- drag-lint:auto type -->PTSLanguage</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoInfo (DRagLint.CLI.pas), DRagLint.Lint.Linter.TLinter.Create (DRagLint.Lint.Linter.pas), DRagLint.LSP.SyntaxTree.ParseDelphiUtf8 (DRagLint.LSP.SyntaxTree.pas), DRagLint.Parser.Delphi13.TDelphi13Parser.Create (DRagLint.Parser.Delphi13.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoInfo (DRagLint.CLI.pas), DRagLint.Lint.Linter.TLinter.Create (DRagLint.Lint.Linter.pas), DRagLint.LSP.SyntaxTree.ParseDelphiUtf8 (DRagLint.LSP.SyntaxTree.pas), DRagLint.Parser.Delphi13.TDelphi13Parser.Create (DRagLint.Parser.Delphi13.pas), DRagLint.V151.DFMA.Support.LoadPasSummary (DRagLint.V151.DFMA.Support.pas)</para>
 /// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

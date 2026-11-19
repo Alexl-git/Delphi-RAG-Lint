@@ -32,7 +32,7 @@ procedure ShowDragLintGraph; { open / focus the dockable graph window }
 procedure RegisterDragLintGraphDockable; { register at startup so the IDE restores a saved docked instance }
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.Editor.UnregisterDragLintMenu (DragLint.Plugin.Editor.pas), initialization/finalization (DragLint.Plugin.GraphWindow.pas)</para>
+/// <para>Called from: DragLint.Plugin.Editor.UnregisterDragLintMenu (DragLint.Plugin.Editor.pas), DragLint.Plugin.GraphWindow.finalization (DragLint.Plugin.GraphWindow.pas)</para>
 /// <para>Calls: FreeAndNil, Supports</para>
 /// <para>Catches: Exception (empty)</para>
 /// <!-- drag-lint:auto END -->

@@ -43,14 +43,14 @@ try {
     # expected N = refs with external_target inside Go, counted straight from the DB
     $q = 'select r.name_text from refs r join symbols s on s.id = r.enclosing_symbol_id where s.qualified_name = ''xt_app.Go'' and r.kind = ''call'' and r.external_target is not null and r.external_target <> '''''
     $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $appx --json --limit 500 --query $q 2>$null }) -join "`n"
-    $rows = @((($raw.Substring($raw.IndexOf('{')) | ConvertFrom-Json).rows))
+    $rows = @((($raw.Substring($raw.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ }).rows))
     $n = $rows.Count
     Check 'fixture precondition: Go has 6 external_target refs (plan C3)' ($n -eq 6) "got $n"
 
     $md = (& { $ErrorActionPreference = 'Continue'; & $exePath context --task 'modify Go' --db $appx 2>&1 | ForEach-Object { "$_" } }) -join "`n"
     Check 'appx: markdown has the Library calls line with N' ($md -match "(?m)^Library calls: $n \(top: [^)]+\)\s*$") ($md -split "`n" | Select-String 'Library calls' | Out-String)
     $js = (& { $ErrorActionPreference = 'Continue'; & $exePath context --task 'modify Go' --db $appx --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
-    $o  = $js.Substring($js.IndexOf('{')) | ConvertFrom-Json
+    $o  = $js.Substring($js.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ }
     Check 'appx: json carries library_calls.count' ($o.library_calls.count -eq $n) "got $($o.library_calls.count)"
     Check 'appx: json library_calls.top is a non-empty list' (@($o.library_calls.top).Count -ge 1)
 
@@ -58,7 +58,7 @@ try {
     Check 'app (no library): the line is ABSENT' ($md2 -notmatch 'Library calls')
     Check 'app CONTROL: the bundle still resolved Go' ($md2 -match '(?i)\bGo\b')
     $js2 = (& { $ErrorActionPreference = 'Continue'; & $exePath context --task 'modify Go' --db $app --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
-    $o2  = $js2.Substring($js2.IndexOf('{')) | ConvertFrom-Json
+    $o2  = $js2.Substring($js2.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ }
     Check 'app (no library): json has no library_calls key' ($null -eq $o2.PSObject.Properties['library_calls'])
     # --- RSV-R2 (#8): the opt-in oracle. `app` carries NO stored external_target; with
     #     --library-db the receivers typed by name are bound against the library now.
@@ -71,15 +71,15 @@ try {
     $mo = (& { $ErrorActionPreference = 'Continue'; & $exePath context --task 'modify Go' --db $app --library-db $libDb 2>&1 | ForEach-Object { "$_" } }) -join "`n"
     Check 'R2 app + --library-db: the Library calls line counts the oracle hits' ($mo -match "(?m)^Library calls: $nOr \(top: [^)]+\)\s*$") ($mo -split "`n" | Select-String 'Library calls' | Out-String)
     $jo = (& { $ErrorActionPreference = 'Continue'; & $exePath context --task 'modify Go' --db $app --library-db $libDb --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
-    $oo = $jo.Substring($jo.IndexOf('{')) | ConvertFrom-Json
+    $oo = $jo.Substring($jo.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ }
     Check 'R2 app + --library-db: json library_calls.count' ($oo.library_calls.count -eq $nOr) "got $($oo.library_calls.count)"
     Check 'R2 app + --library-db: json library_calls.via is oracle' ($oo.library_calls.via -eq 'oracle') "got $($oo.library_calls.via)"
     Check 'R2 appx (stored external_target): json via is stored' ($o.library_calls.via -eq 'stored') "got $($o.library_calls.via)"
     $jx = (& { $ErrorActionPreference = 'Continue'; & $exePath context --task 'modify Go' --db $appx --library-db $libDb --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
-    $ox = $jx.Substring($jx.IndexOf('{')) | ConvertFrom-Json
+    $ox = $jx.Substring($jx.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ }
     Check 'R2 appx + --library-db: stored refs are not double counted' ($ox.library_calls.count -eq $n) "got $($ox.library_calls.count)"
     $jn = (& { $ErrorActionPreference = 'Continue'; & $exePath context --task 'modify Go' --db $app --library-db none --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
-    $on = $jn.Substring($jn.IndexOf('{')) | ConvertFrom-Json
+    $on = $jn.Substring($jn.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ }
     Check 'R2 --library-db none: no oracle, no library_calls key' ($null -eq $on.PSObject.Properties['library_calls'])
     # --- E-CONTEXT-LIBCALLS (1.46): the oracle count is the DEFAULT. With no --library-db the
     #     library comes from the engine's manifest (its library section, for the platform the
@@ -97,7 +97,7 @@ try {
     }
     function CtxJson([string[]]$Extra) {
       $s = (& { $ErrorActionPreference = 'Continue'; & $eng context --task 'modify Go' --db $app --format json @Extra 2>$null }) -join "`n"
-      return $s.Substring($s.IndexOf('{')) | ConvertFrom-Json
+      return $s.Substring($s.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ }
     }
     Set-Manifest '{"name":"Library","db":"lib-{platform}.sqlite","source":"registry-libraries","platforms":["Win32","Win64"]}'
     $d1 = CtxJson @('--platform','Win64')

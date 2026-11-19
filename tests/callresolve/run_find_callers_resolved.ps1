@@ -61,7 +61,7 @@ try {
   # --- WITH --resolved --json: grouped-by-target precision proof. ---
   $jsonOut = & { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name Run --resolved --json --db $db 2>$null } | Out-String
   Check '--resolved --json: parses as JSON array' ($null -ne $jsonOut -and $jsonOut.Trim().StartsWith('['))
-  $rows = $jsonOut | ConvertFrom-Json
+  $rows = $jsonOut | ConvertFrom-Json | ForEach-Object { $_ }
   Check '--resolved --json: at least 4 resolved callers (Field/Param/Local/Self+bare)' ($rows.Count -ge 4)
 
   function CallersOf($target) { @($rows | Where-Object { $_.target_qname -eq $target }) }

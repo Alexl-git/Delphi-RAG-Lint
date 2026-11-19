@@ -50,7 +50,7 @@ function Edge([string]$file, [int]$line, [string]$name) {
        "WHERE f.path LIKE '%\$file' AND r.start_line=$line AND r.name_text='$name' AND r.kind='call'"
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query $q --json --limit 50 2>$null }
   if ($LASTEXITCODE -ne 0) { return '<sql failed>' }
-  $j = ($raw | Where-Object { $_ -notmatch '^\(loaded' }) -join "`n" | ConvertFrom-Json
+  $j = ($raw | Where-Object { $_ -notmatch '^\(loaded' }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
   $rows = @($j.rows)
   if ($rows.Count -ne 1) { return "<$($rows.Count) refs>" }
   return ('{0}|{1}' -f $rows[0][0], $rows[0][1])

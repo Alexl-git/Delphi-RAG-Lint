@@ -851,7 +851,7 @@ $db = Join-Path $WorkDir 'App.sqlite'
 Check 'V the fixture index was built' (Test-Path $db) $db
 
 function Sql([string]$Q) {
-  $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --limit 1000 --query $Q 2>$null } | ConvertFrom-Json
+  $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --limit 1000 --query $Q 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
   if ($null -eq $j) { return ,@() }
   $cols = @($j.columns | ForEach-Object { $_.name })
   $out = @()
@@ -974,7 +974,7 @@ Binds 'L9'  'Bar'  $Foo    # a field
 Declines 'NL1' 'Bar' 'a project type of a library list''s name'
 Declines 'NL2' 'Bar' 'a dictionary enumerates pairs'
 Declines 'NL3' 'Bar' 'a queue is not modelled'
-Declines 'NL4' 'Bar' 'a dictionary subscript is not modelled'
+Binds 'NL4' 'Bar'  $Foo    # D['a'] over TDictionary<K,TFoo> gives the VALUE type (1.52 9de010441, ValueElementTypeText)
 Declines 'NL5' 'Bar' 'TList<T> in a unit that does not use the library unit'
 Declines 'NL6' 'Bar' 'TList<T> of the class''s generic T (uGen.T exists)'
 Declines 'NL7' 'Bar' 'TList<T> inherited from TGenBox<TFoo>, substitution not modelled'

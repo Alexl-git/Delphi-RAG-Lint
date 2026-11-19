@@ -108,14 +108,14 @@ function QName([string]$Name, [switch]$CaseSensitive) {
   $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" } | Where-Object { $_ -notmatch 'loaded defaults' }
   $txt = ($raw -join "`n").Trim()
   if (-not $txt.StartsWith('[')) { return @() }
-  return @($txt | ConvertFrom-Json)
+  return @(($txt | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 function QQName([string]$Q) {
   $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query --qname $Q --db $db --json 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" } |
            Where-Object { $_ -notmatch 'loaded defaults' }
   $txt = ($raw -join "`n").Trim()
   if (-not $txt.StartsWith('[')) { return @() }
-  return @($txt | ConvertFrom-Json)
+  return @(($txt | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 
 # --- DE-VACUATOR: the name is stored in exactly ONE spelling ------------------
@@ -132,12 +132,12 @@ Check 'exactly one symbols row carries it' ($rowCount -eq '1') "rows=$rowCount"
 # --- 1. --name is case-insensitive BY DEFAULT ---------------------------------
 Write-Host ''
 Write-Host '1 -- --name matches in any case, and returns the SAME row' -ForegroundColor Cyan
-$baseline = QName 'TFDRdbmsDataSet'
+$baseline = @(QName 'TFDRdbmsDataSet')
 Check 'the exact spelling finds it' ($baseline.Count -eq 1) "rows=$($baseline.Count)"
 $baseId = if ($baseline.Count -eq 1) { $baseline[0].id } else { -1 }
 
 foreach ($variant in 'TFDRDBMSDataSet', 'tfdrdbmsdataset', 'TFDRDBMSDATASET', 'tFdRdBmSdAtAsEt') {
-  $rows = QName $variant
+  $rows = @(QName $variant)
   Check "'$variant' finds it" ($rows.Count -eq 1) "rows=$($rows.Count)"
   if ($rows.Count -eq 1) {
     Check "'$variant' returns the SAME row (id $baseId)" ($rows[0].id -eq $baseId) "id=$($rows[0].id)"
@@ -146,15 +146,15 @@ foreach ($variant in 'TFDRDBMSDataSet', 'tfdrdbmsdataset', 'TFDRDBMSDATASET', 't
 }
 
 # The reporter's own case, verbatim from INBOX 2.10.
-$reported = QName 'TFDRDBMSDataSet'
+$reported = @(QName 'TFDRDBMSDataSet')
 Check "INBOX 2.10's exact reported query no longer returns []" ($reported.Count -eq 1) "rows=$($reported.Count)"
 
 # --- 2. --qname is case-insensitive too ---------------------------------------
 Write-Host ''
 Write-Host '2 -- --qname matches in any case' -ForegroundColor Cyan
-Check '--qname exact spelling'  ((QQName 'CaseKit.TFDRdbmsDataSet').Count -eq 1)
-Check '--qname wrong-case type' ((QQName 'CaseKit.TFDRDBMSDATASET').Count -eq 1)
-Check '--qname wrong-case unit' ((QQName 'casekit.TFDRdbmsDataSet').Count -eq 1)
+Check '--qname exact spelling'  ((@(QQName 'CaseKit.TFDRdbmsDataSet')).Count -eq 1)
+Check '--qname wrong-case type' ((@(QQName 'CaseKit.TFDRDBMSDATASET')).Count -eq 1)
+Check '--qname wrong-case unit' ((@(QQName 'casekit.TFDRdbmsDataSet')).Count -eq 1)
 
 # --- 3. --case-sensitive restores byte-exact matching -------------------------
 # A wrong-case spelling must NOT come back as an exact hit. It may still come back
@@ -163,12 +163,12 @@ Check '--qname wrong-case unit' ((QQName 'casekit.TFDRdbmsDataSet').Count -eq 1)
 # row count. Asserting "0 rows" would be asserting the fallback away.
 Write-Host ''
 Write-Host '3 -- --case-sensitive is byte-exact' -ForegroundColor Cyan
-$csExact = QName 'TFDRdbmsDataSet' -CaseSensitive
+$csExact = @(QName 'TFDRdbmsDataSet' -CaseSensitive)
 Check '--case-sensitive: the exact spelling still matches EXACTLY' `
   (($csExact.Count -eq 1) -and ($csExact[0].match_kind -eq 'exact')) `
   "rows=$($csExact.Count) match_kind=$($csExact[0].match_kind)"
 
-$csWrong = QName 'TFDRDBMSDataSet' -CaseSensitive
+$csWrong = @(QName 'TFDRDBMSDataSet' -CaseSensitive)
 $wrongIsExact = ($csWrong.Count -gt 0) -and ($csWrong[0].match_kind -eq 'exact')
 Check '--case-sensitive: a wrong-case spelling is NOT an exact match' (-not $wrongIsExact) `
   "rows=$($csWrong.Count) match_kind=$(if ($csWrong.Count) { $csWrong[0].match_kind } else { '<none>' })"
@@ -207,7 +207,7 @@ Check 'precondition: the DB holds BOTH spellings as distinct rows' ($stored -eq 
 $sibRaw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query --name 'TSibling' --db $sibDb --json 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" } |
             Where-Object { $_ -notmatch 'loaded defaults' }
 $sibTxt = ($sibRaw -join "`n").Trim()
-$sib = if ($sibTxt.StartsWith('[')) { @($sibTxt | ConvertFrom-Json) } else { @() }
+$sib = @(if ($sibTxt.StartsWith('[')) { @(($sibTxt | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } else { @() })
 Check 'asking for TSibling returns ONLY TSibling, not its lowercase sibling' `
   (($sib.Count -eq 1) -and ($sib[0].name -ceq 'TSibling')) `
   "rows=$($sib.Count) names=$(($sib | ForEach-Object { $_.name }) -join ',')"
@@ -228,7 +228,7 @@ if ($csWrong.Count -gt 0) {
 # A name far enough away that even the fuzzy fallback declines -- proves an
 # absent symbol still reads as absent, and that check 3 is not passing merely
 # because everything returns something.
-$absent = QName 'ZzqxwvUnrelated'
+$absent = @(QName 'ZzqxwvUnrelated')
 Check 'a genuinely absent name returns no rows at all' ($absent.Count -eq 0) "rows=$($absent.Count)"
 
 # --- 5. the NOCASE indexes exist AND are used --------------------------------

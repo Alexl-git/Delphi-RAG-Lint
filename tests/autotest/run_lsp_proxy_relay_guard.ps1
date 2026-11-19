@@ -150,7 +150,7 @@ $batBody = (@(
 
 $null = Start-Process cmd.exe -ArgumentList "/c", "`"$batPath`"" `
           -RedirectStandardOutput $logPath -RedirectStandardError "$logPath.err" `
-          -NoNewWindow -Wait -PassThru
+          -NoNewWindow -Wait -PassThru; $null = $null.Handle
 $log     = Get-Content $logPath -Raw -ErrorAction SilentlyContinue
 $buildOk = ($log -match 'BUILD_EXITCODE=0') -and ($log -notmatch 'Error:')
 Check 'LspStubServer.dpr builds (Win64)' $buildOk `

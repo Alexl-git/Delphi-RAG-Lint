@@ -50,18 +50,18 @@ function InfoJson([string[]]$Dbs) {
 function Verdicts($r) {
   $i = $r.Out.IndexOf('{"schema"')
   if ($i -lt 0) { return @() }
-  try { return @(($r.Out.Substring($i) | ConvertFrom-Json).indexes) } catch { return @() }
+  try { return @(($r.Out.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }).indexes) } catch { return @() }
 }
 
 Write-Host 'B. CONTROL: a missing --db alone' -ForegroundColor Cyan
 $b = InfoJson @($missing)
-$bv = Verdicts $b
+$bv = @(Verdicts $b)
 Check 'B1 one index, verdict missing' (($bv.Count -eq 1) -and ($bv[0].verdict -eq 'missing')) "exit=$($b.Code)"
 
 Write-Host ''
 Write-Host 'A. garbage + missing in one call' -ForegroundColor Cyan
 $a = InfoJson @($garbage, $missing)
-$av = Verdicts $a
+$av = @(Verdicts $a)
 Check 'A1 no FATAL, exit 0' ((-not ($a.Out -match 'FATAL')) -and ($a.Code -eq 0)) "exit=$($a.Code)"
 Check 'A2 both indexes reported' ($av.Count -eq 2) "n=$($av.Count)"
 $g = $av | Where-Object { $_.path -eq $garbage }

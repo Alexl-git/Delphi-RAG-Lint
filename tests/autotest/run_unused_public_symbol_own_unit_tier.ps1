@@ -34,7 +34,7 @@ try {
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule unused-public-symbol --format json 2>$null }
   $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
-  $f = @(); if ($b -ge 0) { try { $f = @($txt.Substring($b) | ConvertFrom-Json) } catch { $f = @() } }
+  $f = @(); if ($b -ge 0) { try { $f = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $f = @() } }
   $f | ForEach-Object { Write-Host ("  [{0}] {1}:{2} {3}" -f $_.severity, $_.file_path, $_.start_line, $_.message) -ForegroundColor DarkGray }
   $only  = @($f | Where-Object { $_.message -match '\bOnlyInternal\b' })
   $used  = @($f | Where-Object { $_.message -match '\bUsedElsewhere\b' })

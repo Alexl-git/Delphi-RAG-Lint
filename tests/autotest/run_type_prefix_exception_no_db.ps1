@@ -105,7 +105,7 @@ function About($hits, [string]$name) { return ,@($hits | Where-Object { $_ -matc
 
 Write-Host ''
 Write-Host '=== no --db ===' -ForegroundColor Cyan
-$h = Findings @()
+$h = @(Findings @())
 $h | ForEach-Object { Write-Host $_ -ForegroundColor DarkGray }
 $excFp = @(foreach ($n in 'EFooError','EBarError','EAbortLike','EQual') { About $h $n | ForEach-Object { $_ } })
 Check '1. exception classes with an E name: no finding' ($excFp.Count -eq 0) ($excFp -join ' | ')
@@ -121,7 +121,7 @@ Write-Host ''
 Write-Host '=== with --db (CONTROL) ===' -ForegroundColor Cyan
 $db = Join-Path $work 'e.sqlite'
 & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $dir 'Exc.dpr') --db $db *> $null }
-$hd = Findings @('--db', $db)
+$hd = @(Findings @('--db', $db))
 $hd | ForEach-Object { Write-Host $_ -ForegroundColor DarkGray }
 $excDb = @(foreach ($n in 'EFooError','EBarError','EAbortLike','EQual') { About $hd $n | ForEach-Object { $_ } })
 $badDb = About $hd 'BadExc'

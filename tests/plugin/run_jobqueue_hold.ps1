@@ -61,6 +61,11 @@ param(
 )
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot '..\autotest\lib\WorkDirCleanup.ps1')
+# the test program reuses ONE fixed folder (TPath.GetTempPath, i.e. TMP first); remove it only when this run created it
+$script:HoldPreexisted = @(Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) -Directory -Filter 'drag-lint-jobqueue-hold' -ErrorAction SilentlyContinue).Count -gt 0
+try {
 if (-not $Dpr) { $Dpr = "$PSScriptRoot\..\JobQueueHoldTests.dpr" }
 try {
 $ErrorActionPreference = 'Stop'
@@ -93,7 +98,7 @@ $lines = @(
 $buildLog = Join-Path $WorkDir 'build.log'
 $p = Start-Process cmd.exe -ArgumentList "/c","`"$bat`"" `
        -RedirectStandardOutput $buildLog -RedirectStandardError "$buildLog.err" `
-       -NoNewWindow -Wait -PassThru
+       -NoNewWindow -Wait -PassThru; $null = $p.Handle
 $buildOut = Get-Content $buildLog -Raw
 if ($buildOut -notmatch 'BUILD_EXITCODE=0') {
   Write-Host 'FATAL: compile failed' -ForegroundColor Red
@@ -125,4 +130,12 @@ exit 0
 } finally {
   # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
   foreach ($d23 in @("$env:TEMP\drag-lint-jobqueue-hold-build-$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
+}
+} finally {
+  Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1')
+  # the test program's own fixed scratch: TPath.GetTempPath\drag-lint-jobqueue-hold (JobQueueHoldTests.dpr)
+  # removed only when this run created it (see $script:HoldPreexisted)
+  Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) -Directory -Filter 'drag-lint-jobqueue-hold' -ErrorAction SilentlyContinue |
+    Where-Object { -not $script:HoldPreexisted } |
+    ForEach-Object { Remove-WorkDir $_.FullName -Keep:($env:DL_KEEP_WORKDIR -eq '1') }
 }

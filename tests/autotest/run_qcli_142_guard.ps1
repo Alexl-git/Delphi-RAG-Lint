@@ -130,7 +130,7 @@ try {
 
 # 4 USAGES-DOUBLE-COUNT
 $r = Run @('usages', '--name', 'Feed', '--db', $db, '--json')
-$j = $r.Out | ConvertFrom-Json
+$j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ }
 $all = @($j.calls) + @($j.reads)
 $sites = @($all | ForEach-Object { "$($_.line):$($_.col)" })
 Check '4 four H.Feed(..) call sites are four usages, not eight' ($all.Count -eq 4) "calls=$(@($j.calls).Count) reads=$(@($j.reads).Count)"
@@ -138,7 +138,7 @@ Check '4 no position is listed twice' ($sites.Count -eq @($sites | Sort-Object -
 $lnTwo = LineOf 'H.Feed(3); H.Feed(4);'
 Check "4 POSITIVE CONTROL two calls on one line (line $lnTwo) stay two usages" (@($sites | Where-Object { $_ -like "$lnTwo`:*" }).Count -eq 2) ($sites -join ',')
 $r = Run @('usages', '--name', 'Raw', '--db', $db, '--json')
-$j = $r.Out | ConvertFrom-Json
+$j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ }
 Check '4 POSITIVE CONTROL a plain property read still counts' ((@($j.reads).Count + @($j.calls).Count) -ge 1) ($r.Out -replace "`n", ' ')
 $lnOne = LineOf '  H.Feed(1);'
 $r = Run @('sql', '--query', "SELECT kind FROM refs WHERE name_text='Feed' AND start_line=$lnOne", '--db', $db, '--json')

@@ -40,7 +40,7 @@ type
   /// form ('&amp;&amp;' -> '&amp;') is what paths show. Ident is the foreign
   /// identifier of an external root, empty otherwise.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.MenuTree.Dfm.CloneNode (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.Dfm.TDfmRootBuilder.AddLinks (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.Dfm.TDfmRootBuilder.DoForm (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.Dfm.TDfmRootBuilder.NodeForItem (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.TMenuTree.AddRoot (DRagLint.MenuTree.pas) (+34 more)</para>
+  /// <para>Used by: DRagLint.MenuTree.Dfm.CloneNode (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.Dfm.TDfmRootBuilder.AddLinks (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.Dfm.TDfmRootBuilder.DoForm (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.Dfm.TDfmRootBuilder.NodeForItem (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.TMenuTree.AddRoot (DRagLint.MenuTree.pas) (+35 more)</para>
   /// <para>Used in units: DRagLint.FormsMap, DRagLint.MenuDrift, DRagLint.MenuTree, DRagLint.MenuTree.Dfm</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -140,7 +140,7 @@ type
     /// <returns><!-- drag-lint:auto -->TMenuNode -- Observed: pChild.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.MenuTree.Dfm.CloneNode (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.Dfm.TDfmRootBuilder.AddLinks (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.Dfm.TDfmRootBuilder.Graft (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.TWalkCore.GraftFieldRoots (DRagLint.MenuTree.pas), DRagLint.MenuTree.TWalkCore.Parenting (DRagLint.MenuTree.pas) (+1 more)</para>
+    /// <para>Called from: DRagLint.MenuTree.Dfm.CloneNode (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.Dfm.TDfmRootBuilder.AddLinks (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.Dfm.TDfmRootBuilder.Graft (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.TWalkCore.GraftFieldRoots (DRagLint.MenuTree.pas), DRagLint.MenuTree.TWalkCore.Parenting (DRagLint.MenuTree.pas) (+2 more)</para>
     /// <para>Calls: DRagLint.MenuTree.TMenuNode.AttachTo</para>
     /// <para>Reads: FChildren</para>
     /// <para>Owns returned: borrowed</para>
@@ -175,7 +175,7 @@ type
     /// FChildren.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.FormsMap.GraftCodeBar (DRagLint.FormsMap.pas), DRagLint.FormsMap.GraftCodeMenu (DRagLint.FormsMap.pas), DRagLint.MenuDrift.CollectContainers (DRagLint.MenuDrift.pas), DRagLint.MenuDrift.CollectStructural (DRagLint.MenuDrift.pas), DRagLint.MenuTree.Dfm.CloneNode (DRagLint.MenuTree.Dfm.pas) (+8 more)</para>
+    /// <para>Called from: DRagLint.FormsMap.GraftCodeBar (DRagLint.FormsMap.pas), DRagLint.FormsMap.GraftCodeMenu (DRagLint.FormsMap.pas), DRagLint.MenuDrift.CollectContainers (DRagLint.MenuDrift.pas), DRagLint.MenuDrift.CollectStructural (DRagLint.MenuDrift.pas), DRagLint.MenuTree.Dfm.CloneNode (DRagLint.MenuTree.Dfm.pas) (+9 more)</para>
     /// <para>Reads: FChildren</para>
     /// <para>Owns returned: borrowed</para>
     /// <para>Effect-free (proven)</para>
@@ -221,7 +221,7 @@ type
     /// <returns><!-- drag-lint:auto -->string -- Observed: MenuCaptionKey(Caption).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.MenuDrift.CollectStructural (DRagLint.MenuDrift.pas), DRagLint.MenuTree.NodeJson (DRagLint.MenuTree.pas)</para>
+    /// <para>Called from: DRagLint.MenuDrift.CollectStructural (DRagLint.MenuDrift.pas), DRagLint.MenuTree.NodeJson (DRagLint.MenuTree.pas), DRagLint.MenuTree.TWalkCore.PruneTableNodes (DRagLint.MenuTree.pas)</para>
     /// <para>Calls: DRagLint.MenuTree.MenuCaptionKey</para>
     /// <seealso cref="DRagLint.MenuTree.MenuCaptionKey"/>
     /// <seealso cref="DRagLint.MenuTree.TMenuNode.AddChild"/>
@@ -277,8 +277,8 @@ type
   /// Owns every node.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.FormsMap.pas) ?, DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas) ?, DRagLint.CLI.DoMenuTree (DRagLint.CLI.pas) ?, DRagLint.FormsMap.LoadCodeMenus (DRagLint.FormsMap.pas) ?, DRagLint.MenuTree.TWalkCore.Walk (DRagLint.MenuTree.pas) (+8 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.FormsMap, DRagLint.MenuDrift, DRagLint.MenuTree, DRagLint.MenuTree.Dfm</para>
+  /// <para>Used by: declaration (DRagLint.FormsMap.pas) ?, DRagLint.CLI.Workspace.DoMenuDrift (DRagLint.CLI.Workspace.pas) ?, DRagLint.CLI.Workspace.DoMenuTree (DRagLint.CLI.Workspace.pas) ?, DRagLint.FormsMap.LoadCodeMenus (DRagLint.FormsMap.pas) ?, DRagLint.MenuTree.TWalkCore.Walk (DRagLint.MenuTree.pas) (+8 more)</para>
+  /// <para>Used in units: DRagLint.CLI.Workspace, DRagLint.FormsMap, DRagLint.MenuDrift, DRagLint.MenuTree, DRagLint.MenuTree.Dfm</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TMenuTree = class
@@ -468,7 +468,7 @@ type
     /// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoMenuTree (DRagLint.CLI.pas)</para>
+    /// <para>Called from: DRagLint.CLI.Workspace.DoMenuTree (DRagLint.CLI.Workspace.pas)</para>
     /// <para>Calls: DRagLint.MenuTree.MenuConfidenceName, DRagLint.MenuTree.TMenuTree.Leaves, SameText</para>
     /// <seealso cref="DRagLint.MenuTree.MenuConfidenceName"/>
     /// <seealso cref="DRagLint.MenuTree.TMenuTree.Leaves"/>
@@ -482,7 +482,7 @@ type
     /// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoMenuTree (DRagLint.CLI.pas)</para>
+    /// <para>Called from: DRagLint.CLI.Workspace.DoMenuTree (DRagLint.CLI.Workspace.pas)</para>
     /// <para>Calls: DRagLint.MenuTree.TMenuTree.ToText.Emit, MenuConfidenceName, MenuKindName, StringOfChar</para>
     /// <para>Reads: FRoots, FExternal, FNotes</para>
     /// <seealso cref="DRagLint.MenuTree.TMenuTree.ToText.Emit"/>
@@ -500,7 +500,7 @@ type
     /// <returns><!-- drag-lint:auto -->string -- Observed: O.Format(2).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoMenuTree (DRagLint.CLI.pas)</para>
+    /// <para>Called from: DRagLint.CLI.Workspace.DoMenuTree (DRagLint.CLI.Workspace.pas)</para>
     /// <para>Calls: DateToISO8601, DRagLint.MenuTree.NodeJson</para>
     /// <para>Reads: FRoots, FExternal, FNotes</para>
     /// <seealso cref="DRagLint.MenuTree.NodeJson"/>
@@ -517,8 +517,8 @@ type
   /// (the CLI maps it to exit 3). The message carries the reindex command.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas) ?, DRagLint.CLI.DoMenuTree (DRagLint.CLI.pas) ?, DRagLint.MenuTree.Dfm.TDfmRootBuilder.DoForm (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.TWalkCore.LoadFile (DRagLint.MenuTree.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.MenuTree, DRagLint.MenuTree.Dfm</para>
+  /// <para>Used by: DRagLint.CLI.Workspace.DoMenuDrift (DRagLint.CLI.Workspace.pas) ?, DRagLint.CLI.Workspace.DoMenuTree (DRagLint.CLI.Workspace.pas) ?, DRagLint.MenuTree.Dfm.TDfmRootBuilder.DoForm (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.TWalkCore.LoadFile (DRagLint.MenuTree.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.Workspace, DRagLint.MenuTree, DRagLint.MenuTree.Dfm</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   EMenuTreeStale = class(Exception);
@@ -527,8 +527,8 @@ type
   /// --root names no routine (the CLI maps it to exit 2).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas) ?, DRagLint.CLI.DoMenuTree (DRagLint.CLI.pas) ?, DRagLint.MenuTree.TMenuWalker.Create (DRagLint.MenuTree.pas), DRagLint.MenuTree.TWalkCore.Create (DRagLint.MenuTree.pas), DRagLint.MenuTree.TWalkCore.Walk (DRagLint.MenuTree.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.MenuTree</para>
+  /// <para>Used by: DRagLint.CLI.Workspace.DoMenuDrift (DRagLint.CLI.Workspace.pas) ?, DRagLint.CLI.Workspace.DoMenuTree (DRagLint.CLI.Workspace.pas) ?, DRagLint.MenuTree.TMenuWalker.Create (DRagLint.MenuTree.pas), DRagLint.MenuTree.TWalkCore.Create (DRagLint.MenuTree.pas), DRagLint.MenuTree.TWalkCore.Walk (DRagLint.MenuTree.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.Workspace, DRagLint.MenuTree</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   EMenuTreeSetup = class(Exception);
@@ -540,8 +540,8 @@ type
   /// Read-only on the DB. Not thread-safe. Files are parsed at most
   /// once per walker.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas), DRagLint.CLI.DoMenuTree (DRagLint.CLI.pas), DRagLint.FormsMap.LoadCodeMenus (DRagLint.FormsMap.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.FormsMap</para>
+  /// <para>Used by: DRagLint.CLI.Workspace.DoMenuDrift (DRagLint.CLI.Workspace.pas), DRagLint.CLI.Workspace.DoMenuTree (DRagLint.CLI.Workspace.pas), DRagLint.FormsMap.LoadCodeMenus (DRagLint.FormsMap.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.Workspace, DRagLint.FormsMap</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TMenuWalker = class
@@ -554,7 +554,7 @@ type
     /// <exception cref="EMenuTreeSetup">pDbs is empty, or no indexed file lies under the project's folder.</exception>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas), DRagLint.CLI.DoMenuTree (DRagLint.CLI.pas), DRagLint.FormsMap.LoadCodeMenus (DRagLint.FormsMap.pas)</para>
+    /// <para>Called from: DRagLint.CLI.Workspace.DoMenuDrift (DRagLint.CLI.Workspace.pas), DRagLint.CLI.Workspace.DoMenuTree (DRagLint.CLI.Workspace.pas), DRagLint.FormsMap.LoadCodeMenus (DRagLint.FormsMap.pas)</para>
     /// <para>Calls: DRagLint.MenuTree.TWalkCore.Create</para>
     /// <para>constructor</para>
     /// <para>Writes: FImpl</para>
@@ -582,7 +582,7 @@ type
     /// <exception cref="EMenuTreeSetup">pRootQName names no routine with a body.</exception>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas), DRagLint.CLI.DoMenuTree (DRagLint.CLI.pas), DRagLint.FormsMap.LoadCodeMenus (DRagLint.FormsMap.pas)</para>
+    /// <para>Called from: DRagLint.CLI.Workspace.DoMenuDrift (DRagLint.CLI.Workspace.pas), DRagLint.CLI.Workspace.DoMenuTree (DRagLint.CLI.Workspace.pas), DRagLint.FormsMap.LoadCodeMenus (DRagLint.FormsMap.pas)</para>
     /// <para>Calls: DRagLint.MenuTree.TWalkCore.Walk, TWalkCore</para>
     /// <para>Reads: FImpl</para>
     /// <seealso cref="DRagLint.MenuTree.TWalkCore.Walk"/>

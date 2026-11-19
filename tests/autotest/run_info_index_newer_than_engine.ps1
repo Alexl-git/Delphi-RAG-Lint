@@ -81,7 +81,7 @@ function IndexRow {
   $j = (& { $ErrorActionPreference = 'Continue'; & $exePath info --json --db $db 2>$null }) -join "`n"
   $i = $j.IndexOf('{')
   if ($i -lt 0) { return $null }
-  try { return ($j.Substring($i) | ConvertFrom-Json).indexes[0] } catch { return $null }
+  try { return ($j.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }).indexes[0] } catch { return $null }
 }
 function Plant([string]$Key, [string]$Value) {
   & python $py $db "UPDATE schema_meta SET value='$Value' WHERE key='$Key'" | Out-Null

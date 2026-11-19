@@ -182,7 +182,7 @@ end.
   Check '8 hover md: Used in:' ($md -match 'Used in: [^\n]*uCons\.TConsumer\.Go \(uCons\.pas\) \[rw\]') $md
   $js = (& { $ErrorActionPreference = 'Continue'; & $exePath hover --qname uProv.TProvider.Value --format json --db $db 2>$null }) -join "`n"
   $facts = @()
-  try { $facts = @(($js | ConvertFrom-Json).facts) } catch { }
+  try { $facts = @(($js | ConvertFrom-Json | ForEach-Object { $_ }).facts) } catch { }
   Check '9 hover json: facts[] Used in:' (@($facts | Where-Object { ([string]$_).StartsWith('Used in: ') -and ([string]$_).Contains('[rw]') }).Count -eq 1) $js
 
   & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $fP --db $db --apply --no-backup *> (Join-Path $scratch 'doc1.log') }

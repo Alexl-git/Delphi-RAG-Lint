@@ -24,10 +24,24 @@ interface
 /// <param name="pMaxSeconds">--max-seconds S as typed ('' = absent = HB_DEFAULT_MAX_SECONDS): a number &gt;= 0,
 /// decimals allowed (invariant '.'); 0 = no wall-clock cap. Anything else is a usage error.</param>
 /// <returns>Process exit code: 0 all SET, 1 some MAY-BE-UNSET or NEVER-SET, 2 usage or other error.</returns>
-/// <remarks>Read-only. Every error goes to stderr with exit 2 and NOTHING on stdout, so a --json
+/// <remarks>
+/// Read-only. Every error goes to stderr with exit 2 and NOTHING on stdout, so a --json
 /// consumer never parses a half document. Usage errors: neither QName nor --at; a malformed --at;
 /// a bad --max-routines or --max-seconds; no DB; a DB that does not exist or whose schema is too old to read; an
-/// unknown / ambiguous target or a --at that names another variable (EHbUsage from the engine).</remarks>
+/// unknown / ambiguous target or a --at that names another variable (EHbUsage from the engine).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.CLI.CheckInit.DbUsable, DRagLint.CLI.CheckInit.UsageError, DRagLint.Query.HappensBefore.CheckInit, DRagLint.Query.HappensBefore.Render.HbAnswerJson, DRagLint.Query.HappensBefore.Render.HbExitCode, DRagLint.Query.HappensBefore.Render.WriteHbAnswer, DRagLint.Query.HappensBefore.Types.HbParseAt, Flush, Format, IntToStr, TryStrToFloat, Writeln</para>
+/// <para>Returns: UsageError('needs a target: &lt;QName&gt; (e.g. UnitA.GCache, UnitA.TFoo.FBar) or --at &lt;file&gt;:&lt;line&gt;[:&lt;col&gt;]'); UsageError(Format('--at must be &lt;file&gt;:&lt;line&gt;[:&lt;col&gt;] with line and col &gt;= 1, got "%s"', [pAt])); UsageError('--max-routines needs a whole number &gt;= 0 (0 = the default budget)'); 2; HbExitCode(Answer)</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 42 lines (full implementation)</para>
+/// <para>Catches: EHbUsage (swallowed)</para>
+/// <seealso cref="DRagLint.CLI.CheckInit.DbUsable"/>
+/// <seealso cref="DRagLint.CLI.CheckInit.UsageError"/>
+/// <seealso cref="DRagLint.Query.HappensBefore.CheckInit"/>
+/// <seealso cref="DRagLint.Query.HappensBefore.Render.HbAnswerJson"/>
+/// <seealso cref="DRagLint.Query.HappensBefore.Render.HbExitCode"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunCheckInit(const pTarget, pAt, pDbPath, pProject: string; pJson, pExplain: Boolean;
   pMaxRoutines: Integer; const pMaxSeconds: string): Integer;
 

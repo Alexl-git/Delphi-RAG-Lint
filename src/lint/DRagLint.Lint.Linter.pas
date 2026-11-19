@@ -6,7 +6,6 @@ uses
   System.SysUtils
   , System.Classes
   , System.IOUtils
-  , System.StrUtils
   , System.Math
   , System.Types
   , System.Generics.Collections
@@ -96,12 +95,11 @@ type
       /// <summary><!-- drag-lint:auto sum -->True when a run narrowed to FOnlyRuleId
       /// wants ARuleId computed.</summary>
       /// <param name="ARuleId"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: (FOnlyRuleId = '') or
-      /// SameText(FOnlyRuleId, ARuleId).</returns>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas)</para>
-      /// <para>Calls: SameText</para>
+      /// <para>Calls: SameText, Trim</para>
       /// <para>Reads: FOnlyRuleId</para>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.CheckFileImpl"/>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.Create"/>
@@ -118,30 +116,31 @@ type
       /// stage 3, not this.</summary>
       /// <param name="ANode"><!-- drag-lint:auto type -->const TTSNode</param>
       /// <param name="ASource"><!-- drag-lint:auto type -->const TBytes</param>
-      /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AColSource">1.52 BK-TAILS-ENG: the bytes before preprocessing (same length as ASource); the site column is counted on them, so it matches the raise-bare-exception finding's column.</param>
+      /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.HarvestExceptions (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.HarvestFile (DRagLint.Lint.Linter.pas)</para>
-      /// <para>Calls: DRagLint.Lint.Linter.NodeText, DRagLint.Lint.Linter.NormalizeExcMessage, DRagLint.Lint.Linter.TLinter.HarvestExceptions, DRagLint.Lint.Linter.TLinter.HarvestExceptions.FirstLiteralString, DRagLint.Lint.Linter.UnquotePascalString, Integer, SameText, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.StartPoint</para>
+      /// <para>Calls: DRagLint.Core.Encoding.Utf8ByteColToCharCol, DRagLint.Lint.Linter.NodeText, DRagLint.Lint.Linter.NormalizeExcMessage, DRagLint.Lint.Linter.TLinter.HarvestExceptions, DRagLint.Lint.Linter.TLinter.HarvestExceptions.FirstLiteralString, DRagLint.Lint.Linter.UnquotePascalString, Integer, SameText, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.StartByte, TreeSitter.TTSNodeHelper.StartPoint</para>
       /// <para>Complexity: 11 (cyclomatic, outer body), 62 lines (full implementation)</para>
       /// <para>Reads: FExcSites, FExcCand   Writes: FExcSites, FExcCand</para>
       /// <para>Recursive</para>
+      /// <seealso cref="DRagLint.Core.Encoding.Utf8ByteColToCharCol"/>
       /// <seealso cref="DRagLint.Lint.Linter.NodeText"/>
       /// <seealso cref="DRagLint.Lint.Linter.NormalizeExcMessage"/>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.HarvestExceptions.FirstLiteralString"/>
       /// <seealso cref="DRagLint.Lint.Linter.UnquotePascalString"/>
-      /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HarvestExceptions(const ANode: TTSNode; const ASource, AColSource: TBytes; const AFilePath: string);
       /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto type -->TArray&lt;TLintFinding&gt;</returns>
+      /// <exception cref="ETreeSitterException"><!-- drag-lint:auto exc -->via TreeSitter.TTSParser.SetLanguage: Failed to set parser language to 0x%p</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Lint.Linter.TLinter.LintFile (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.LintFolder (DRagLint.Lint.Linter.pas)</para>
-      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.Lint.Linter.CheckDfmCredentials, DRagLint.Lint.Linter.CollectDfmParseErrors, DRagLint.Lint.Linter.EmptyBranchIsCommented, DRagLint.Lint.Linter.TLinter.HarvestExceptions, DRagLint.Lint.Linter.TLinter.Wants, DRagLint.Lint.Linter.tree_sitter_dfm, DRagLint.Lint.Linter.WalkForFieldByNameInLoop, DRagLint.Lint.QueryRules.TQueryRule.Run (+9 more)</para>
-      /// <para>Complexity: 26 (cyclomatic, outer body), 137 lines (full implementation)</para>
+      /// <para>Calls: Default, DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.Lint.Linter.CheckDfmCredentials, DRagLint.Lint.Linter.CollectDfmParseErrors, DRagLint.Lint.Linter.EmptyBranchIsCommented, DRagLint.Lint.Linter.IsBinaryFormBytes, DRagLint.Lint.Linter.TLinter.HarvestExceptions, DRagLint.Lint.Linter.TLinter.Wants, DRagLint.Lint.Linter.tree_sitter_dfm (+11 more)</para>
+      /// <para>Complexity: 29 (cyclomatic, outer body), 161 lines (full implementation)</para>
       /// <para>Reads: FOnlyRuleId, FExcUnit, FQueryRules, FLanguage</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>

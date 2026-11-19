@@ -25,7 +25,7 @@ type
   /// <summary>The `cycles --fix` flags, as DoCycles parsed them.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.BaselineCompile (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.ReindexTargetProblem (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.TamperAllowed (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.DoCycles (DRagLint.CLI.pas) (+33 more)</para>
+  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.BaselineCompile (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.ReindexTargetProblem (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.TamperAllowed (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.DoCycles (DRagLint.CLI.pas) (+35 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.CycleFix</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -286,7 +286,7 @@ function ApplyTestBreak(const pView: TCyclePlanView; pMode: Integer): TCyclePlan
 /// copy could never fire. TOwnRoots.IsOurs lets an empty path through, so an empty touched
 /// path is refused explicitly.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.CycleFix.RunCycleFixGroups (DRagLint.CLI.CycleFix.pas)</para>
+/// <para>Called from: DRagLint.CLI.CycleFix.RunCycleFixGroups (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RunHubSurfaceFix (DRagLint.CLI.CycleFix.pas)</para>
 /// <para>Calls: DRagLint.CLI.CycleFix.MakeRefusal, DRagLint.Project.OwnRoots.TOwnRoots.IsOurs</para>
 /// <para>Returns: L.ToArray</para>
 /// <seealso cref="DRagLint.CLI.CycleFix.MakeRefusal"/>
@@ -299,7 +299,7 @@ function MechanisabilityGate(const pView: TCyclePlanView; const pOwn: TOwnRoots)
 /// <returns>The directory name with a trailing path delimiter; nothing is created.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.CycleFix.RunCycleFixGroups (DRagLint.CLI.CycleFix.pas)</para>
+/// <para>Called from: DRagLint.CLI.CycleFix.RunCycleFixGroups (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RunHubSurfaceFix (DRagLint.CLI.CycleFix.pas)</para>
 /// <para>Calls: DRagLint.Refactor.CompileGate.FreshScratchName</para>
 /// <para>Returns: GShadowPick</para>
 /// <seealso cref="DRagLint.Refactor.CompileGate.FreshScratchName"/>
@@ -346,6 +346,7 @@ function ToTextEdits(const pView: TCyclePlanView): TArray<TTextEdit>;
 /// <para>Called from: DRagLint.CLI.CycleFix.StageFor (DRagLint.CLI.CycleFix.pas)</para>
 /// <para>Calls: DRagLint.CLI.CycleFix.AnchorRefusal, DRagLint.CLI.CycleFix.ApplyTestTamper, DRagLint.CLI.CycleFix.CheckAnchors, DRagLint.CLI.CycleFix.CheckInsertedText, DRagLint.CLI.CycleFix.EscapeInsertedText, DRagLint.CLI.CycleFix.HasNonAscii, DRagLint.CLI.CycleFix.NetLineChange, DRagLint.CLI.CycleFix.ShadowPathOf, DRagLint.CLI.CycleFix.ToTextEdits, DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyToText (+6 more)</para>
 /// <para>Returns: Refs.ToArray</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 79 lines (full implementation)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.CLI.CycleFix.AnchorRefusal"/>
 /// <seealso cref="DRagLint.CLI.CycleFix.ApplyTestTamper"/>
@@ -402,14 +403,14 @@ function TamperAllowed(const pOpts: TCycleFixOptions): Boolean;
 /// answered when the run ends, with its own result.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas)</para>
-/// <para>Calls: DRagLint.CLI.CycleFix.CycleFixPlatform, DRagLint.CLI.CycleFix.DeleteDefaultScratch, DRagLint.CLI.CycleFix.ReportCancelledBeforeWrite, DRagLint.CLI.CycleFix.RerunAfterReindex, DRagLint.CLI.CycleFix.RunAllSelected, DRagLint.CLI.CycleFix.RunCycleFixGroups, DRagLint.CLI.CycleFix.StartStandDownChannel, DRagLint.Core.ControlChannel.TControlChannel.StandDownComplete, ExpandFileName, SameText</para>
-/// <para>Returns: CExitError; if SameText(Opts.Part, CPartAll) then RunAllSelected(Opts, pSccs, pGraph); CExitRefused</para>
+/// <para>Calls: DRagLint.CLI.CycleFix.CycleFixPlatform, DRagLint.CLI.CycleFix.DeleteDefaultScratch, DRagLint.CLI.CycleFix.R3DefaultGroup, DRagLint.CLI.CycleFix.ReportCancelledBeforeWrite, DRagLint.CLI.CycleFix.RerunAfterReindex, DRagLint.CLI.CycleFix.RunAllSelected, DRagLint.CLI.CycleFix.RunCycleFixGroups, DRagLint.CLI.CycleFix.RunHubSurfaceFix, DRagLint.CLI.CycleFix.StartStandDownChannel, DRagLint.Core.ControlChannel.TControlChannel.StandDownComplete, ExpandFileName, SameText</para>
+/// <para>Returns: CExitError; if Opts.HubSurface then RunHubSurfaceFix(Opts, pStore, pSccs, pGraph, pLibStore); CExitRefused</para>
 /// <para>Catches: ECycleFixCancelled (swallowed)</para>
 /// <seealso cref="DRagLint.CLI.CycleFix.CycleFixPlatform"/>
 /// <seealso cref="DRagLint.CLI.CycleFix.DeleteDefaultScratch"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.R3DefaultGroup"/>
 /// <seealso cref="DRagLint.CLI.CycleFix.ReportCancelledBeforeWrite"/>
 /// <seealso cref="DRagLint.CLI.CycleFix.RerunAfterReindex"/>
-/// <seealso cref="DRagLint.CLI.CycleFix.RunAllSelected"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function RunCycleFix(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
@@ -443,8 +444,17 @@ procedure ReportCycleFixError(const pOpts: TCycleFixOptions; const pMessage: str
 /// <param name="pUnitStem">The --unit stem, any case; '' = none.</param>
 /// <returns>The 1-based group R3 breaks; 0 = none (a group it does not plan, one it plans but cannot break, an
 /// unknown --cycle / --unit): the caller keeps the planner, byte for byte what --no-hub-surface prints.</returns>
-/// <remarks>Plans R3 per group (HubSurfaceRewrite) until one breaks; reads the sources, writes nothing. Shared by
-/// `cycles --fix` (RunCycleFix) and `cycles --plan --apply` (DoCycles), so both take the same group.</remarks>
+/// <remarks>
+/// Plans R3 per group (HubSurfaceRewrite) until one breaks; reads the sources, writes nothing. Shared by
+/// `cycles --fix` (RunCycleFix) and `cycles --plan --apply` (DoCycles), so both take the same group.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.RunCycleFix (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoCycles (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Report.CycleHubSurface.HubSurfaceRewrite, IndexStr, LowerCase</para>
+/// <para>Returns: 0</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 13 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Report.CycleHubSurface.HubSurfaceRewrite"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function R3DefaultGroup(const pStore, pLibStore: ISymbolStore; const pSccs: TList<TArray<string>>;
   const pGraph: TCycleGraph; pCycleIndex: Integer; const pUnitStem: string): Integer;
 
@@ -459,6 +469,13 @@ function R3DefaultGroup(const pStore, pLibStore: ISymbolStore; const pSccs: TLis
 /// break, `available` false). False = the 1.52 default: only a group R3 predicts to break; any other group keeps
 /// the planner's object, byte for byte what --no-hub-surface prints.</param>
 /// <returns>The hook; the fix object it hands out is owned by the caller.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Report.CycleHubSurface.HubSurfaceFixJson, FreeAndNil</para>
+/// <seealso cref="DRagLint.Report.CycleHubSurface.HubSurfaceFixJson"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HubSurfaceFixHook(const pStore, pLibStore: ISymbolStore; const pSccs: TList<TArray<string>>;
   const pGraph: TCycleGraph; const pDbPath: string; pAsked: Boolean): TCycleFixHook;
 
@@ -2821,8 +2838,10 @@ begin
   GProgressDb := ExpandFileName(Opts.Db);
   try
     try
-      if RerunAfterReindex(Opts, pStore, Result) then Exit;
       try
+        { v152 DDFIX5: inside the finally -- the A1 re-index writes reindex-before.log / rerun.out into the
+          gate's _build scratch, and an Exit before DeleteDefaultScratch left that dir behind on every run }
+        if RerunAfterReindex(Opts, pStore, Result) then Exit;
         Result:= if Opts.HubSurface then RunHubSurfaceFix(Opts, pStore, pSccs, pGraph, pLibStore)
                  else if SameText(Opts.Part, CPartAll) then RunAllSelected(Opts, pSccs, pGraph)
                  else RunCycleFixGroups(Opts, pStore, pSccs, pGraph, pLibStore);

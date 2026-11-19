@@ -64,7 +64,7 @@ function Lines([string]$File, [string]$Cfg, [string]$Rule) {
   try { $Out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $File --config $Cfg --json 2>$null } } finally { Pop-Location }
   $Txt = ($Out -join "`n")
   if ($Txt.Trim() -eq '') { return ,@() }
-  return ,@(@($Txt | ConvertFrom-Json) | Where-Object { [string]$_.rule -eq $Rule } | ForEach-Object { [int]$_.start_line })
+  return ,@(@(($Txt | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) | Where-Object { [string]$_.rule -eq $Rule } | ForEach-Object { [int]$_.start_line })
 }
 function Dl([string[]]$A) {
   Push-Location $Work
@@ -111,7 +111,7 @@ try {
   $C = Dl @('rules', 'disable', '--rule', $R, '--scope', 'unit', '--in', $FxA, '--reason', 'unit probe')
   Check 'unit: disable exits 0' ($C -eq 0) "exit $C out: $LastOut"
   Check 'unit: config stays 7-bit ASCII + CRLF' (IsAsciiCrlf $CfgA) ''
-  $J = Get-Content $CfgA -Raw | ConvertFrom-Json
+  $J = Get-Content $CfgA -Raw | ConvertFrom-Json | ForEach-Object { $_ }
   $E = $J.rule_overrides.$R
   Check 'unit: entry lists FxA in exclude_units' (@($E.exclude_units) -contains 'FxA') ($J | ConvertTo-Json -Depth 5 -Compress)
   Check 'unit: entry stores reason and date' (($E.reason -eq 'unit probe') -and ($E.date -eq $Today)) ''
@@ -122,7 +122,7 @@ try {
   Check 'unit: twin R in FxB still fires' ((Lines $FxB $CfgA $R).Count -eq 2) ''
   $C = Dl @('rules', 'enable', '--rule', $R, '--scope', 'unit', '--in', $FxA)
   Check 'unit: enable exits 0' ($C -eq 0) "exit $C out: $LastOut"
-  $J = Get-Content $CfgA -Raw | ConvertFrom-Json
+  $J = Get-Content $CfgA -Raw | ConvertFrom-Json | ForEach-Object { $_ }
   Check 'unit: enable removes the emptied entry' ($null -eq $J.rule_overrides) ($J | ConvertTo-Json -Depth 5 -Compress)
   Check 'unit: "disabled" still preserved' (@($J.disabled) -contains 'magic-literal') ''
   Check 'unit: R in FxA fires again' ((Lines $FxA $CfgA $R).Count -eq 2) ''
@@ -130,10 +130,10 @@ try {
   # --- project scope (config beside --project) ---
   $C = Dl @('rules', 'disable', '--rule', $R, '--scope', 'project', '--project', $Dproj, '--reason', 'project probe', '--json')
   Check 'project: disable exits 0' ($C -eq 0) "exit $C out: $LastOut"
-  $JOut = $null; try { $JOut = $LastOut | ConvertFrom-Json } catch { }
+  $JOut = $null; try { $JOut = $LastOut | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   Check 'project: --json answer names rule, scope and config' (($null -ne $JOut) -and ($JOut.rule -eq $R) -and ($JOut.scope -eq 'project') -and ([string]$JOut.config -like '*drag-lint-lint.json')) "out: $LastOut"
   Check 'project: config stays 7-bit ASCII + CRLF' (IsAsciiCrlf $CfgA) ''
-  $J = Get-Content $CfgA -Raw | ConvertFrom-Json
+  $J = Get-Content $CfgA -Raw | ConvertFrom-Json | ForEach-Object { $_ }
   $E = $J.rule_overrides.$R
   Check 'project: entry says enabled=false with reason and date' (($E.enabled -eq $false) -and ($E.reason -eq 'project probe') -and ($E.date -eq $Today)) ''
   Check 'project: R gone in FxA' ((Lines $FxA $CfgA $R).Count -eq 0) ''
@@ -143,12 +143,12 @@ try {
   $C = Dl @('rules', 'enable', '--rule', $R, '--scope', 'project', '--project', $Dproj)
   Check 'project: enable exits 0' ($C -eq 0) "exit $C out: $LastOut"
   Check 'project: R fires again in FxA and FxB' (((Lines $FxA $CfgA $R).Count -eq 2) -and ((Lines $FxB $CfgA $R).Count -eq 2)) ''
-  $J = Get-Content $CfgA -Raw | ConvertFrom-Json
+  $J = Get-Content $CfgA -Raw | ConvertFrom-Json | ForEach-Object { $_ }
   Check 'project: enable leaves no override behind' ($null -eq $J.rule_overrides) ''
   Check 'project: "disabled" still preserved' (@($J.disabled) -contains 'magic-literal') ''
   # a rule the Lint Options dock wrote into "disabled" is re-enabled too
   $C = Dl @('rules', 'enable', '--rule', 'magic-literal', '--scope', 'project', '--project', $Dproj)
-  Check 'project: enable clears the rule from "disabled"' (($C -eq 0) -and -not (@((Get-Content $CfgA -Raw | ConvertFrom-Json).disabled) -contains 'magic-literal')) "exit $C"
+  Check 'project: enable clears the rule from "disabled"' (($C -eq 0) -and -not (@((Get-Content $CfgA -Raw | ConvertFrom-Json | ForEach-Object { $_ }).disabled) -contains 'magic-literal')) "exit $C"
   $C = Dl @('rules', 'enable', '--rule', $R, '--scope', 'project', '--project', $Dproj)
   Check 'project: enable with nothing to undo -> exit 1' ($C -eq 1) "exit $C"
 
@@ -158,7 +158,7 @@ try {
   Check 'usage: line scope without --line -> 2' ((Dl @('rules', 'disable', '--rule', $R, '--scope', 'line', '--in', $FxA, '--reason', 'x')) -eq 2) ''
   Check 'usage: unknown rule -> 2' ((Dl @('rules', 'disable', '--rule', 'no-such-rule-xyz', '--scope', 'project', '--project', $Dproj, '--reason', 'x')) -eq 2) ''
   Check 'usage: disable without --reason -> 2' ((Dl @('rules', 'disable', '--rule', $R, '--scope', 'project', '--project', $Dproj)) -eq 2) ''
-  Check 'usage: refused calls wrote nothing' ($null -eq (Get-Content $CfgA -Raw | ConvertFrom-Json).rule_overrides) ''
+  Check 'usage: refused calls wrote nothing' ($null -eq (Get-Content $CfgA -Raw | ConvertFrom-Json | ForEach-Object { $_ }).rule_overrides) ''
 }
 catch { $Fail++; Write-Host "  FAIL  exception: $($_.Exception.Message)" }
 finally { try { [IO.Directory]::Delete($Work, $true) } catch { } }

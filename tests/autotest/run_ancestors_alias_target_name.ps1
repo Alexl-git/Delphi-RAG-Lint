@@ -164,13 +164,13 @@ function Descends([string]$Name, [string]$Of) {
   $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query ancestors --name $Name --of $Of --json --db $db 2>$null }) | ForEach-Object { "$_" }
   $json = JsonFrom $raw
   if (-not $json) { return $null }
-  return [bool](($json | ConvertFrom-Json).is_descendant)
+  return [bool](($json | ConvertFrom-Json | ForEach-Object { $_ }).is_descendant)
 }
 function AncestorRows([string]$Name) {
   $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query ancestors --name $Name --json --db $db 2>$null }) | ForEach-Object { "$_" }
   $json = JsonFrom $raw
   if (-not $json) { return @() }
-  return @(($json | ConvertFrom-Json).ancestors)
+  return @(($json | ConvertFrom-Json | ForEach-Object { $_ }).ancestors)
 }
 
 # --- precondition: the alias edge IS indexed, so this is a query-side gap -------
@@ -196,7 +196,7 @@ Write-Host 'CASE B -- the OTHER direction: the alias name as WRITTEN still answe
 $bHop = Descends 'TAliasChild' 'TAliasHop'
 Check 'CASE B: TAliasChild --of TAliasHop STAYS True (the written alias name)' ($bHop -eq $true) `
   "is_descendant=$bHop -- False means the fix OVERWROTE Name instead of adding the target"
-$rows = AncestorRows 'TAliasChild'
+$rows = @(AncestorRows 'TAliasChild')
 $names = @($rows | ForEach-Object { $_.name })
 Check 'CASE B: the ancestor list still CONTAINS the name TAliasHop' ($names -contains 'TAliasHop') "got: [$($names -join ', ')]"
 

@@ -28,6 +28,9 @@ param(
 )
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -104,14 +107,14 @@ try {
   }
 
   # c1
-  $o = Chain 'RootsOrder.dpr'
+  $o = @(Chain 'RootsOrder.dpr')
   $want = 'initialization of OrdC;initialization of OrdB;initialization of OrdA;initialization of OrdD;program block of RootsOrder.dpr'
   Check (($o[4] -eq $want) -and ($o[2] -eq '0')) "c1 roots-order chain C,B,A,D + program block, reliable (got '$($o -join '|')')"
 
   # c2: second engine call -- the order init-order-hazard walks
   $lj = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rule init-order-hazard --json 2>$null }) -join "`n"
   Write-Host "  lint raw: $($lj.Substring(0, [Math]::Min(600, $lj.Length)))"
-  $lint = @($lj | ConvertFrom-Json)
+  $lint = @(($lj | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   function Hazard([string]$File, [string]$Later, [string]$Earlier) {
     foreach ($f in @($lint | Where-Object { [IO.Path]::GetFileName([string]$_.file_path) -eq $File })) {
       $m = [regex]::Match([string]$f.message, 'but (\w+) initializes after (\w+) in (\S+):')
@@ -128,7 +131,7 @@ try {
   Check (($lint.Count -ge 2) -and ($dRows.Count -eq 0)) "c2 CONTROL: no hazard row for OrdD (rows: $($lint.Count), OrdD: $($dRows.Count))"
 
   # c3
-  $c = Chain 'RootsCond.dpr'
+  $c = @(Chain 'RootsCond.dpr')
   Check (($c[2] -eq '1') -and ($c[3] -like 'CndX.pas:*')) "c3 roots-conditional chain is unreliable at CndX.pas (got '$($c -join '|')')"
 
   # c4
@@ -149,3 +152,4 @@ finally {
 if ($script:fail) { Write-Host 'RESULT: FAIL'; exit 1 }
 Write-Host 'RESULT: PASS'
 exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

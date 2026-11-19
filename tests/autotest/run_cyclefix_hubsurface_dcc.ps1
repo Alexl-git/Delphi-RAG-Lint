@@ -256,9 +256,9 @@ try {
     $jd = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe cycles --causes --format json --no-hub-surface --db $P0.Db --library-db none 2>$null } | Out-String)
     $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe cycles --format json --hub-surface --db $P0.Db --library-db none *> $null }; $badCode = $LASTEXITCODE
   } finally { Pop-Location }
-  $fx = $null; try { $fx = ($js | ConvertFrom-Json)[0].fix } catch { }
+  $fx = $null; try { $fx = ($js | ConvertFrom-Json | ForEach-Object { $_ })[0].fix } catch { }
   Check 'q3 --causes --format json --hub-surface: the fix object is R3''s (part r3, available, 3 cut edges, its commands)   (RED on 1.48.0: exit 2)' (($jsCode -eq 0) -and ($null -ne $fx) -and ($fx.part -eq 'r3') -and ($fx.recipe -eq 'hub-surface') -and ($fx.available -eq $true) -and (@($fx.edges).Count -eq 3) -and ($fx.apply -match '--hub-surface .*--cycle 1 --apply$')) "exit=$jsCode $js"
-  $fd = $null; try { $fd = ($jd | ConvertFrom-Json)[0].fix } catch { }
+  $fd = $null; try { $fd = ($jd | ConvertFrom-Json | ForEach-Object { $_ })[0].fix } catch { }
   Check 'q4 control: without --hub-surface the fix object is the planner''s (default unchanged)' (($null -ne $fd) -and ($fd.part -ne 'r3') -and ($fd.dry_run -match '--fix')) $jd
   Check 'q5 --format json --hub-surface without --causes: exit 2' ($badCode -eq 2) "exit=$badCode"
   Write-Host '== d: the 1.51 default -- the dry run asks R3 first without the switch (phase P6, lane v151 I10)' -ForegroundColor Cyan

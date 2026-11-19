@@ -50,7 +50,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 function Parse-Findings([string[]]$Raw) {
   $txt = ($Raw -join "`n"); $b = $txt.IndexOf('[')
-  $out = @(); if ($b -ge 0) { try { $out = @($txt.Substring($b) | ConvertFrom-Json) } catch { $out = @() } }
+  $out = @(); if ($b -ge 0) { try { $out = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $out = @() } }
   if ($null -eq $out) { $out = @() }
   return ,@($out)
 }
@@ -73,23 +73,23 @@ $controls = @('CONTROL-CROSSUNIT', 'CONTROL-SELFWRITE', 'CONTROL-HARDCAST', 'CON
 
 # RUN 1 -- --rule names it (on any default)
 $all = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json --rule $Rule 2>$null })
-$a = Of $all
+$a = @(Of $all)
 $a | ForEach-Object { Write-Host ("    {0}:{1} {2}" -f (Split-Path $_.file_path -Leaf), $_.start_line, $_.message) }
 Check 'run 1: exactly 5 findings' ($a.Count -eq 5) "count=$($a.Count)"
 # positive-control: read-never-assigned
-foreach ($t in $triggers) { $l = LineOf $t; Check "$t fires" ((At $a $l).Count -eq 1) "line=$l" }
+foreach ($t in $triggers) { $l = LineOf $t; Check "$t fires" ((@(At $a $l)).Count -eq 1) "line=$l" }
 $msg = @(At $a (LineOf 'TRIGGER-GLOBAL'))
 Check 'message names the global' ($msg.Count -eq 1 -and $msg[0].message -like '*GLimit*')
-foreach ($c in $controls) { $l = LineOf $c; Check "$c stays silent" ((At $a $l).Count -eq 0) "line=$l" }
+foreach ($c in $controls) { $l = LineOf $c; Check "$c stays silent" ((@(At $a $l)).Count -eq 0) "line=$l" }
 
 # RUN 1b -- ON by default: plain lint-all reports the same 3
-$def = Of (Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json 2>$null }))
+$def = @(Of (Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json 2>$null })))
 Check 'run 1b ON by default: plain lint-all gives the same 5' ($def.Count -eq 5) "count=$($def.Count)"
 
 # RUN 2 -- --disable turns it off
 $r2 = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json --disable $Rule 2>$null })
 Check 'run 2 is not vacuous (lint-all returned findings)' ($r2.Count -gt 0) "total=$($r2.Count)"
-Check 'run 2 --disable: no finding of the rule' ((Of $r2).Count -eq 0)
+Check 'run 2 --disable: no finding of the rule' ((@(Of $r2)).Count -eq 0)
 
 # RUN 3 -- positive controls: each exempting write becomes a read
 $sd = Join-Path $scratch 'src\uRnaDecl.pas'; $su = Join-Path $scratch 'src\uRnaUse.pas'
@@ -108,9 +108,9 @@ foreach ($e in $edits) {
 [IO.File]::WriteAllText($sd, $td, [Text.Encoding]::ASCII)
 [IO.File]::WriteAllText($su, $tu, [Text.Encoding]::ASCII)
 & { $ErrorActionPreference = 'Continue'; & $exePath index (Join-Path $scratch 'src') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
-$c3 = Of (Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json --rule $Rule 2>$null }))
+$c3 = @(Of (Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json --rule $Rule 2>$null })))
 Check 'run 3: 5 triggers + 5 positive controls' ($c3.Count -eq 10) "count=$($c3.Count)"
-foreach ($e in $edits) { $l = LineOf $e[3]; Check "run 3 $($e[3]) fires once its write is gone" ((At $c3 $l).Count -eq 1) "line=$l" }
+foreach ($e in $edits) { $l = LineOf $e[3]; Check "run 3 $($e[3]) fires once its write is gone" ((@(At $c3 $l)).Count -eq 1) "line=$l" }
 }
 finally {
   if (Test-Path $scratch) { try { [System.IO.Directory]::Delete($scratch, $true) } catch { } }

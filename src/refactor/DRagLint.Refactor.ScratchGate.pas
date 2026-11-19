@@ -24,10 +24,25 @@ const
 /// <param name="pReq">The rewrite. LogDir is the scratch: the mirror lives in it, it must not exist or may be empty.</param>
 /// <returns>The gate's outcome; Refusal is one of the CScratch* kinds when the mirror refused, in which case nothing in the
 /// tree was written and Detail names the first dcc line.</returns>
-/// <remarks>The mirror is the project's folder plus every folder holding an indexed file, source and resource extensions only,
+/// <exception cref="EInOutError"><!-- drag-lint:auto exc -->via DRagLint.Refactor.CompileGate.ApplyGated: nothing staged for %s</exception>
+/// <remarks>
+/// The mirror is the project's folder plus every folder holding an indexed file, source and resource extensions only,
 /// under their common ancestor. Output folders are forced into the scratch on the msbuild line, so an absolute output path
 /// in the project cannot overwrite its real exe. A unit reached by an absolute search path builds from the original: that is
-/// why ApplyGated still follows. Never raises for a build or copy failure. Not thread-safe (the gate's globals).</remarks>
+/// why ApplyGated still follows. Never raises for a build or copy failure. Not thread-safe (the gate's globals).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Refactor.VerbShape.ApplyOneFileThroughScratch (DRagLint.Refactor.VerbShape.pas)</para>
+/// <para>Calls: Copy, Default, DRagLint.Refactor.CompileGate.ApplyGated, DRagLint.Refactor.CompileGate.CompilerAvailable, DRagLint.Refactor.ScratchGate.BuildMirror, DRagLint.Refactor.ScratchGate.FoldersToMirror, DRagLint.Refactor.ScratchGate.MirrorProject, ExpandFileName, Format, IncludeTrailingPathDelimiter</para>
+/// <para>Returns: Default(TGateOutcome); ApplyGated(pReq)</para>
+/// <para>Catches: ECompileGateCancelled (swallowed); Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Refactor.CompileGate.ApplyGated"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.CompilerAvailable"/>
+/// <seealso cref="DRagLint.Refactor.ScratchGate.BuildMirror"/>
+/// <seealso cref="DRagLint.Refactor.ScratchGate.FoldersToMirror"/>
+/// <seealso cref="DRagLint.Refactor.ScratchGate.MirrorProject"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ApplyThroughScratch(pConn: TFDConnection; const pReq: TGateRequest): TGateOutcome;
 
 implementation

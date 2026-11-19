@@ -62,7 +62,7 @@ try {
     if ($Json) { $a += '--json' }
     $o = "$WorkDir\o.txt"; $e = "$WorkDir\e.txt"
     $p = Start-Process -FilePath $Exe -ArgumentList $a -NoNewWindow -Wait -PassThru -WorkingDirectory $WorkDir `
-           -RedirectStandardOutput $o -RedirectStandardError $e
+           -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
     [pscustomobject]@{
       Exit = $p.ExitCode
       Out  = ([IO.File]::ReadAllText($o)).Trim()
@@ -88,7 +88,7 @@ try {
 
   $d = Invoke-In $covered -Json
   $dArr = @()
-  try { $dArr = @($d.Out | ConvertFrom-Json) } catch { $dArr = @() }
+  try { $dArr = @(($d.Out | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $dArr = @() }
   Check 'D: covered --json -- one DB' (($dArr.Count -eq 1) -and ($dArr[0] -like '*App.sqlite')) "stdout='$($d.Out)'"
   Check 'D: covered --json -- no NOTE' ($d.Err -notmatch 'NOTE: no index covers') "stderr='$($d.Err)'"
   # E/F (X-10): the config itself names the root, but the index was never built.

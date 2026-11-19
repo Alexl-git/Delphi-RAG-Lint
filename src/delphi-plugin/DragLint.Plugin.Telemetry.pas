@@ -15,7 +15,7 @@ interface
 /// <param name="AMsg"><!-- drag-lint:auto type -->const string</param>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: initialization/finalization (DragLint.Plugin.AboutForm.pas), initialization/finalization (DragLint.Plugin.CliAsync.pas), initialization/finalization (DragLint.Plugin.DockForm.pas), initialization/finalization (DragLint.Plugin.EditViewNotifier.pas), initialization/finalization (DragLint.Plugin.LiveDiagnostics.pas) (+96 more)</para>
+/// <para>Called from: DragLint.Plugin.About.finalization (DragLint.Plugin.About.pas), DragLint.Plugin.AboutForm.finalization (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AutoComplete.TAutoCompleter.OnTick (DragLint.Plugin.AutoComplete.pas), DragLint.Plugin.Bookmarks.InvokeBookmarksRestore (DragLint.Plugin.Bookmarks.pas), DragLint.Plugin.Bookmarks.InvokeBookmarksStrip (DragLint.Plugin.Bookmarks.pas) (+106 more)</para>
 /// <para>Calls: DragLint.Plugin.Telemetry.EnsureLock, DragLint.Plugin.Telemetry.TelemetryLogPath, FormatDateTime</para>
 /// <para>Catches: Exception (empty)</para>
 /// <para>Touches: file system</para>

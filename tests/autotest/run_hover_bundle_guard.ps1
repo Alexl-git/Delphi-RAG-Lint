@@ -209,7 +209,7 @@ $hoverMd = '<no-hover>'
 $bundle  = $null
 $bundleErr = ''
 foreach ($m in [regex]::Matches($raw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-  try { $o = $m.Value.Trim() | ConvertFrom-Json } catch { continue }
+  try { $o = $m.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
   if ($o.id -eq 2 -and $null -ne $o.result) { $hoverMd = [string]$o.result.contents.value }
   if ($o.id -eq 3) {
     if ($null -ne $o.result) { $bundle = $o.result }
@@ -237,7 +237,7 @@ Check 'bundle.qname resolved to the method' ($bundle.qname -match 'TWorker\.Appl
 $cliHoverRaw = & { $ErrorActionPreference = 'Continue'; & $Exe hover --qname $bundle.qname --db $Db --format json 2>$null } | Out-String
 $cliHover = $null
 $mObj = [regex]::Match($cliHoverRaw, '\{.*\}', 'Singleline')
-if ($mObj.Success) { try { $cliHover = $mObj.Value | ConvertFrom-Json } catch { $cliHover = $null } }
+if ($mObj.Success) { try { $cliHover = $mObj.Value | ConvertFrom-Json | ForEach-Object { $_ } } catch { $cliHover = $null } }
 Check 'CLI hover --format json parsed' ($null -ne $cliHover)
 
 if ($null -ne $cliHover) {
@@ -256,9 +256,9 @@ function CliResolved([string]$name) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name $name --resolved --json --db $Db 2>$null } | Out-String
   $m = [regex]::Match($raw, '\[.*\]', 'Singleline')
   if (-not $m.Success) { return @() }
-  try { return @($m.Value | ConvertFrom-Json) } catch { return @() }
+  try { return @(($m.Value | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { return @() }
 }
-$cliRes = CliResolved 'ApplyDelta'
+$cliRes = @(CliResolved 'ApplyDelta')
 $bunRes = @($bundle.resolvedCallers)
 Check 'resolvedCallers count matches find-callers --resolved' ($cliRes.Count -eq $bunRes.Count) `
   "cli=$($cliRes.Count) bundle=$($bunRes.Count)"
@@ -332,7 +332,7 @@ function BundleAt([int]$line0, [int]$col0) {
     -NoNewWindow -Wait | Out-Null
   $r = [System.IO.File]::ReadAllText($outF)
   foreach ($mm in [regex]::Matches($r, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 7 -and $null -ne $o.result) { return $o.result }
   }
   return $null

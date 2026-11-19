@@ -47,6 +47,9 @@
 param([string]$Exe = '')
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot '..\autotest\lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 
 $ErrorActionPreference = 'Continue'
@@ -129,7 +132,7 @@ end.
 function Get-Drift($qname) {
   $out = & { $ErrorActionPreference = 'Continue'; & $exePath doc-drift --qname $qname --db $db --json 2>$null }
   $rows = @()
-  foreach ($ln in $out) { $t = "$ln".Trim(); if ($t.StartsWith('{')) { $rows += ($t | ConvertFrom-Json) } }
+  foreach ($ln in $out) { $t = "$ln".Trim(); if ($t.StartsWith('{')) { $rows += ($t | ConvertFrom-Json | ForEach-Object { $_ }) } }
   return ,$rows
 }
 function Messages($rows) { return @($rows | ForEach-Object { $_.detail }) }
@@ -152,22 +155,22 @@ try {
   $ctor = Get-Drift 'ctorbody.TThing.Create'
   Check 'FIX 1: constructor draws NO "no <returns> tag" finding' `
     ((Messages $ctor | Where-Object { $_ -like '*no <returns> tag*' }).Count -eq 0) `
-    ((Messages $ctor) -join ' | ')
+    ((@(Messages $ctor)) -join ' | ')
 
   $iface0 = Get-Drift 'ctorbody.IThing.ClearAll'
   Check 'FIX 2: interface method draws NO "body never raises it" finding' `
     ((Messages $iface0 | Where-Object { $_ -like '*never raises it*' }).Count -eq 0) `
-    ((Messages $iface0) -join ' | ')
+    ((@(Messages $iface0)) -join ' | ')
 
   $named0 = Get-Drift 'ctorbody.TThing.Named'
   Check 'CONTROL: a real function with no <returns> is STILL reported' `
     ((Messages $named0 | Where-Object { $_ -like '*no <returns> tag*' }).Count -ge 1) `
-    ((Messages $named0) -join ' | ')
+    ((@(Messages $named0)) -join ' | ')
 
   $bogus0 = Get-Drift 'ctorbody.TThing.Bogus'
   Check 'CONTROL: a routine WITH a body that never raises its documented cref is STILL reported' `
     ((Messages $bogus0 | Where-Object { $_ -like '*ENeverRaised*' }).Count -ge 1) `
-    ((Messages $bogus0) -join ' | ')
+    ((@(Messages $bogus0)) -join ' | ')
 
   # =========================================================================
   # PHASE 2 -- the engine's own output, and the constructor marker it writes.
@@ -228,10 +231,11 @@ try {
   $ctor2 = Get-Drift 'ctorbody.TThing.Create'
   Check 'constructor is still clean after a second apply' `
     ((Messages $ctor2 | Where-Object { $_ -like '*no <returns> tag*' }).Count -eq 0) `
-    ((Messages $ctor2) -join ' | ')
+    ((@(Messages $ctor2)) -join ' | ')
 
   Check 'every emitted /// line is 7-bit ASCII' `
     (@([IO.File]::ReadAllLines($src) | Where-Object { $_ -match '^\s*///' -and ($_.ToCharArray() | Where-Object { [int]$_ -gt 126 }) }).Count -eq 0)
 } finally { Pop-Location }
 
 if($script:Failed){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally { Remove-WorkDir $scratch -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

@@ -26,6 +26,15 @@ uses
 /// <param name="ARaw">The file bytes as read from disk; a binary .dfm is the
 /// caller's business (this does not test for one).</param>
 /// <returns>The lines.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromFile (DRagLint.FormsMap.Dfm.pas), DRagLint.Parser.DFM.TDFMParser.Parse (DRagLint.Parser.DFM.pas), DRagLint.V151.DFMA.Support.LoadDfm (DRagLint.V151.DFMA.Support.pas)</para>
+/// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Parser.DfmNav.DfmNavTextLines</para>
+/// <para>Returns: DfmNavTextLines(TEncoding.UTF8.GetString(EnsureUtf8Bytes(ARaw)))</para>
+/// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
+/// <seealso cref="DRagLint.Parser.DfmNav.DfmNavTextLines"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DfmNavLinesFromBytes(const ARaw: TBytes): TArray<string>;
 
 /// <summary>Scans the lines of a text .dfm into navigation-tree rows.</summary>
@@ -35,10 +44,20 @@ function DfmNavLinesFromBytes(const ARaw: TBytes): TArray<string>;
 /// <param name="AProps">Out: the IsDfmNavProp properties of those nodes, in
 /// .dfm order. A '(...)' list, a '{...}' blob and an empty '&lt;&gt;' collection are
 /// never values; '&lt;' opens a collection whose items carry its name.</param>
-/// <remarks>A header's class is its first space-separated word after ':'
+/// <remarks>
+/// A header's class is its first space-separated word after ':'
 /// (`inherited X: TY [2]` gives TY); a header without ':' has the whole rest as
 /// its class and an empty name. An `end` (or `end&gt;`) closes the innermost open
-/// node. A property outside any node is dropped.</remarks>
+/// node. A property outside any node is dropped.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromLines (DRagLint.FormsMap.Dfm.pas), DRagLint.Parser.DFM.TDFMParser.Parse (DRagLint.Parser.DFM.pas)</para>
+/// <para>Calls: Copy, Default, DRagLint.Parser.DfmNav.IsDfmNavProp, DRagLint.Parser.DfmNav.ReadNavValue, Pos, SameText, StartsText, Trim</para>
+/// <para>Complexity: 20 (cyclomatic, outer body), 89 lines (full implementation)</para>
+/// <para>Mutates: ANodes (out), AProps (out)</para>
+/// <seealso cref="DRagLint.Parser.DfmNav.IsDfmNavProp"/>
+/// <seealso cref="DRagLint.Parser.DfmNav.ReadNavValue"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ScanDfmNav(const ALines: TArray<string>; out ANodes: TArray<TDfmNavNodeRow>;
   out AProps: TArray<TDfmNavPropRow>);
 

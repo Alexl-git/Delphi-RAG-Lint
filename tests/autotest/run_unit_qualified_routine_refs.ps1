@@ -100,7 +100,7 @@ for nm in ('Hooked','Passed','Valued','NeverUsed'):
 c.close()
 print(json.dumps(out))
 '@ | Set-Content $py -Encoding ascii
-$refs = (& { $ErrorActionPreference = 'Continue'; & python $py $db 2>$null } | Out-String | ConvertFrom-Json)
+$refs = (& { $ErrorActionPreference = 'Continue'; & python $py $db 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ })
 
 # 1-3 -- THE FIX. Each is a different expression position.
 Check '1 an assignment rhs records a ref (GHook := Alpha.Beta.Tools.Hooked)' `

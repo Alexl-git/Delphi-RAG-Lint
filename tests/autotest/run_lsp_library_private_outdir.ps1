@@ -82,12 +82,12 @@ function Run-Case([string]$Tag, [string]$Engine) {
   $inF = "$WorkDir\$Tag-in.txt"; $outF = "$WorkDir\$Tag-out.txt"; $errF = "$WorkDir\$Tag-err.txt"
   [IO.File]::WriteAllText($inF, $msgs, (New-Object Text.ASCIIEncoding))
   $p = Start-Process $Engine -ArgumentList @('lsp', '--db', $projDb) -WorkingDirectory $WorkDir -RedirectStandardInput $inF `
-    -RedirectStandardOutput $outF -RedirectStandardError $errF -NoNewWindow -PassThru
+    -RedirectStandardOutput $outF -RedirectStandardError $errF -NoNewWindow -PassThru; $null = $p.Handle
   if (-not $p.WaitForExit(120000)) { try { $p.Kill() } catch { }; throw "lsp $Tag timed out" }
   $raw = [IO.File]::ReadAllText($outF)
   $hover = ''; $notice = ''
   foreach ($m in [regex]::Matches($raw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $m.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $m.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 2 -and $null -ne $o.result) { $hover = [string]$o.result.contents.value }
     if ($o.method -eq 'draglint/context') { $notice += [string]$o.params.notice + ' ' }
   }

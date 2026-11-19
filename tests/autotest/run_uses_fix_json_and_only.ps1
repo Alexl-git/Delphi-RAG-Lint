@@ -182,18 +182,34 @@ Write-Host '== uses-fix --format json / --only ==' -ForegroundColor Cyan
 & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' (Test-Path $db) $db
 
+function Invoke-Eng([string[]]$EngArgs) {
+  # Run the engine as a real process with stdout and stderr each redirected to a FILE, then read the
+  # file after WaitForExit. The pipeline form (`& exe 2>$null | Out-String`) was seen to hand back an
+  # EMPTY stdout once under -Jobs 4 (battery 1.52); a file read after the exit cannot lose output.
+  $so = Join-Path $scratch ('eng_out_{0}.txt' -f [Guid]::NewGuid().ToString('N'))
+  $se = Join-Path $scratch ('eng_err_{0}.txt' -f [Guid]::NewGuid().ToString('N'))
+  # uses-fix shadow-compiles in a FIXED %TEMP%\draglint_usesfix dir (engine, not fixable from here):
+  # two parallel copies collide on uMain.pas (EFCreateError). A private TEMP per runner removes it.
+  $myTmp = Join-Path $scratch 'tmp'; [void][IO.Directory]::CreateDirectory($myTmp)
+  $env:TEMP = $myTmp; $env:TMP = $myTmp
+  $q = ($EngArgs | ForEach-Object { '"' + ($_ -replace '"', '\"') + '"' }) -join ' '
+  $p = Start-Process -FilePath $exePath -ArgumentList $q -NoNewWindow -PassThru -RedirectStandardOutput $so -RedirectStandardError $se
+  $null = $p.Handle
+  $null = $p.WaitForExit()
+  $txt = [IO.File]::ReadAllText($so)
+  if ($txt.Trim() -eq '') { Write-Host ("  [DIAG] empty stdout, exit={0}, stderr=[{1}]" -f $p.ExitCode, ([IO.File]::ReadAllText($se).Trim())) -ForegroundColor Yellow }
+  [IO.File]::Delete($so); [IO.File]::Delete($se)
+  return $txt
+}
 function RunJson([string[]]$ExtraArgs) {
   $a = @('uses-fix', $unit, '--project', $proj, '--db', $db, '--remove-unused', '--format', 'json') + $ExtraArgs
-  # Under -Jobs N the engine was seen (1.40 guard lane, 1 run in 6 concurrent copies) to answer
-  # NOTHING on stdout for one call, turning 4 later checks red. An answer always carries a JSON
-  # object (1a asserts it), so "no object" is retried up to twice; the retry is announced, and
-  # the checks on the content are untouched. A call that never answers still fails 1a.
-  for ($try = 1; $try -le 3; $try++) {
-    $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath @a 2>$null } | Out-String)
+  # One attempt, no retry: Invoke-Eng reads the child's stdout from a file after exit.
+  for ($try = 1; $try -le 1; $try++) {
+    $raw = Invoke-Eng $a
     # The engine prints a defaults banner on some paths; take the JSON object only.
     $i = $raw.IndexOf('{')
     if ($i -ge 0) {
-      try { $doc = ($raw.Substring($i) | ConvertFrom-Json); if ($try -gt 1) { Write-Host "  [NOTE] engine answered only on attempt $try (load flake)" -ForegroundColor Yellow }; return $doc } catch { }
+      try { $doc = ($raw.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }); if ($try -gt 1) { Write-Host "  [NOTE] engine answered only on attempt $try (load flake)" -ForegroundColor Yellow }; return $doc } catch { }
     }
     Start-Sleep -Milliseconds 500
   }
@@ -264,9 +280,9 @@ Check '4b and every real candidate is deselected' `
 # 5 -- A JSON CALLER GETS A DOCUMENT IN EVERY OUTCOME. uKeepMe has a clean uses
 #      clause, so this is the "nothing to change" path.
 # ---------------------------------------------------------------------------
-$clean = (& { $ErrorActionPreference = 'Continue'; & $exePath uses-fix (Join-Path $src 'uKeepMe.pas') --project $proj --db $db --format json 2>$null } | Out-String)
+$clean = Invoke-Eng @('uses-fix', (Join-Path $src 'uKeepMe.pas'), '--project', $proj, '--db', $db, '--format', 'json')
 $ci = $clean.IndexOf('{')
-$cleanJson = if ($ci -ge 0) { try { $clean.Substring($ci) | ConvertFrom-Json } catch { $null } } else { $null }
+$cleanJson = if ($ci -ge 0) { try { $clean.Substring($ci) | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null } } else { $null }
 Check '5 "nothing to change" still emits JSON' `
   (($null -ne $cleanJson) -and ($cleanJson.schema -eq 'uses-fix/1')) `
   'an empty stdout makes "nothing to do" indistinguishable from a crash'
@@ -278,9 +294,9 @@ Check '5 "nothing to change" still emits JSON' `
 #      file had been rewritten. uKeepMe has a clean uses clause.
 # ---------------------------------------------------------------------------
 $keep = Join-Path $src 'uKeepMe.pas'
-$rawA = (& { $ErrorActionPreference = 'Continue'; & $exePath uses-fix $keep --project $proj --db $db --apply --format json 2>$null } | Out-String)
+$rawA = Invoke-Eng @('uses-fix', $keep, '--project', $proj, '--db', $db, '--apply', '--format', 'json')
 $ai = $rawA.IndexOf('{')
-$applyJson = if ($ai -ge 0) { try { $rawA.Substring($ai) | ConvertFrom-Json } catch { $null } } else { $null }
+$applyJson = if ($ai -ge 0) { try { $rawA.Substring($ai) | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null } } else { $null }
 Check '7a --apply with nothing to change still emits JSON' ($null -ne $applyJson) 'no document'
 Check '7b and reports applied=false, because nothing was written' `
   ($applyJson.applied -eq $false) "applied=$($applyJson.applied)"
@@ -303,7 +319,7 @@ Check '8 the counts object carries deselected' `
 #      Silence there makes a mistyped command look like an answer.
 # ---------------------------------------------------------------------------
 $sweepErr = Join-Path $scratch 'sweep.err'
-& { $ErrorActionPreference = 'Continue'; & $exePath uses-fix --project $proj --db $db --only uMoveMe --format json 2>$sweepErr } | Out-Null
+& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($sweepErr); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath uses-fix --project $proj --db $db --only uMoveMe --format json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-Null
 $sweepNote = if (Test-Path $sweepErr) { Get-Content $sweepErr -Raw } else { '' }
 Check '9a the sweep says --only does not apply to it' `
   ($sweepNote -match '--only applies to') "stderr was:`n$sweepNote"
@@ -313,7 +329,7 @@ Check '9b and says the same of --format json' `
 # ---------------------------------------------------------------------------
 # 6 -- TEXT MODE IS UNCHANGED. The IDE and humans still use it.
 # ---------------------------------------------------------------------------
-$txt = (& { $ErrorActionPreference = 'Continue'; & $exePath uses-fix $unit --project $proj --db $db --remove-unused 2>$null } | Out-String)
+$txt = Invoke-Eng @('uses-fix', $unit, '--project', $proj, '--db', $db, '--remove-unused')
 Check '6a text mode prints no JSON' ($txt -notmatch '"schema"') 'text callers must not suddenly get a document'
 Check '6b text mode still names the candidates' `
   (($txt -match 'uMoveMe') -and ($txt -match 'uDropMe')) `

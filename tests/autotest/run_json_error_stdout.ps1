@@ -30,7 +30,7 @@ function Check($n, $ok, $d = '') {
 }
 function Test-StdoutJsonOrEmpty([string]$text) {
   if ([string]::IsNullOrWhiteSpace($text)) { return $true }
-  try { $null = $text | ConvertFrom-Json -ErrorAction Stop; return $true } catch { return $false }
+  try { $null = $text | ConvertFrom-Json -ErrorAction Stop | ForEach-Object { $_ }; return $true } catch { return $false }
 }
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 if (-not (Test-Path $DbPath)) { Write-Host "FATAL: db not found: $DbPath" -ForegroundColor Red; exit 2 }
@@ -65,7 +65,7 @@ foreach ($k in $fmtCases.Keys) {
   $out = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null }) -join "`n"
   Check "${k}: stdout empty or JSON" (Test-StdoutJsonOrEmpty $out) "stdout=[$out]"
   $errFile = [IO.Path]::GetTempFileName()
-  $null = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2> $errFile }
+  $null = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe @a 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   $err = (Get-Content -LiteralPath $errFile) -join "`n"
   [IO.File]::Delete($errFile)
   Check "control: ${k} still SAYS it on stderr" ($err -match 'not found|No symbol matched|No slice returned') "stderr=[$err]"
@@ -111,7 +111,7 @@ foreach ($c in $rem) {
   $out = (& { $ErrorActionPreference = 'Continue'; & $Exe @all 2>$null }) -join "`n"
   Check "$($c.n) $($c.j -join ' '): stdout empty or JSON" (Test-StdoutJsonOrEmpty $out) "stdout=[$out]"
   $errFile = [IO.Path]::GetTempFileName()
-  $null = & { $ErrorActionPreference = 'Continue'; & $Exe @all 2> $errFile }
+  $null = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe @all 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   $err = (Get-Content -LiteralPath $errFile) -join "`n"
   [IO.File]::Delete($errFile)
   Check "$($c.n): the diagnostic is still SAID, on stderr" ($err -match [regex]::Escape($c.m)) "stderr=[$err]"

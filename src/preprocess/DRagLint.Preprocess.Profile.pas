@@ -55,7 +55,7 @@ function KnownPlatforms: TArray<string>;
 /// 5, which has no such constant but defines VER130).</param>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.ApplyPreprocessCompilerVersion (DRagLint.CLI.pas), DRagLint.CLI.ApplySectionCompilerVersion (DRagLint.CLI.pas), DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.ApplyPreprocessCompilerVersion (DRagLint.CLI.pas), DRagLint.CLI.ApplySectionCompilerVersion (DRagLint.CLI.pas), DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure SetTargetCompilerVersion(AVersion: Integer);
@@ -78,7 +78,7 @@ function TargetCompilerVersion: Integer;
 /// <returns>The CompilerVersion, or 0 when the folder name is not a BDS number.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.ApplySectionCompilerVersion (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.Project.TargetStudio.BdsKeyOfCompilerVersion (DRagLint.Project.TargetStudio.pas)</para>
+/// <para>Called from: DRagLint.CLI.ApplySectionCompilerVersion (DRagLint.CLI.pas), DRagLint.CLI.RunCommand (DRagLint.CLI.pas), DRagLint.Project.TargetStudio.BdsKeyOfCompilerVersion (DRagLint.Project.TargetStudio.pas)</para>
 /// <para>Calls: Copy, ExcludeTrailingPathDelimiter, ExtractFileName, InRange, Pos, Trim, TryStrToInt</para>
 /// <para>Returns: 0; Bds + BDS_COMPILER_OFFSET; Bds</para>
 /// <!-- drag-lint:auto END -->

@@ -19,6 +19,9 @@ param(
 )
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'; $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -42,7 +45,7 @@ function Index([string]$exe, [string]$db) {
 function Sql([string]$db, [string]$q) {
   Push-Location $WorkDir
   try { $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query $q --json 2>$null } | Out-String } finally { Pop-Location }
-  try { $o = $j | ConvertFrom-Json } catch { $o = $null }
+  try { $o = $j | ConvertFrom-Json | ForEach-Object { $_ } } catch { $o = $null }
   if ($null -eq $o -or $null -eq $o.columns) { return ,@() }
   $names = @($o.columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
   $rows = @()
@@ -52,7 +55,7 @@ function Sql([string]$db, [string]$q) {
 function HasColumns([string]$db) {
   Push-Location $WorkDir
   try { $j = & { $ErrorActionPreference = 'Continue'; & $Exe schema --db $db --format json 2>$null } | Out-String } finally { Pop-Location }
-  $t = ($j | ConvertFrom-Json).tables | Where-Object { $_.name -eq 'unit_uses' }
+  $t = ($j | ConvertFrom-Json | ForEach-Object { $_ }).tables | Where-Object { $_.name -eq 'unit_uses' }
   return @($t.columns | Where-Object { $_.name -in @('origin_path', 'include_line') }).Count
 }
 
@@ -86,3 +89,4 @@ if ($OldExe -ne '') {
 
 if ($script:Failed) { Write-Host 'run_unit_uses_origin_columns: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'run_unit_uses_origin_columns: PASS' -ForegroundColor Green; exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

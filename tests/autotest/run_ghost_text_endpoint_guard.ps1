@@ -107,7 +107,7 @@ $batBody = (@(
   'echo BUILD_EXITCODE=%ERRORLEVEL%'
 ) -join "`r`n")
 [System.IO.File]::WriteAllText($batPath, $batBody, [System.Text.Encoding]::ASCII)
-$null = Start-Process cmd.exe -ArgumentList "/c","`"$batPath`"" -RedirectStandardOutput $logPath -RedirectStandardError "$logPath.err" -NoNewWindow -Wait -PassThru
+$null = Start-Process cmd.exe -ArgumentList "/c","`"$batPath`"" -RedirectStandardOutput $logPath -RedirectStandardError "$logPath.err" -NoNewWindow -Wait -PassThru; $null = $null.Handle
 $blog = Get-Content $logPath -Raw -ErrorAction SilentlyContinue
 Check 'GhostTextHarness.dpr builds (Win64)' `
   (($blog -match 'BUILD_EXITCODE=0') -and (Test-Path $harness)) `
@@ -123,7 +123,7 @@ $procs = @()
 function Start-Harness([int]$port, [string]$mode, [string]$enabled) {
   $p = Start-Process $harness `
         -ArgumentList '--port',"$port",'--seconds','25','--mode',$mode,'--enabled',$enabled `
-        -PassThru -NoNewWindow -RedirectStandardOutput "$WorkDir\h_$port.log"
+        -PassThru -NoNewWindow -RedirectStandardOutput "$WorkDir\h_$port.log"; $null = $p.Handle
   $script:procs += $p
   return $p
 }
@@ -154,7 +154,7 @@ try {
   Write-Host 'CASE B: B3.2 POST /api/generate answers in Ollama shape' -ForegroundColor Cyan
   $r = Post-Json "http://127.0.0.1:$port/api/generate" '{"model":"drag-lint","prompt":"begin W.TSampleWorker."}'
   Check 'HTTP 200' ($r.Ok -and $r.Status -eq 200) "status=$($r.Status) $($r.Err)"
-  $j = $null; try { $j = $r.Body | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $r.Body | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   Check 'B3.2 the body is valid JSON' ($null -ne $j) $r.Body
   Check 'B3.2 it carries a `response` member (Ollama shape)' `
     (($null -ne $j) -and ($null -ne $j.response)) $r.Body
@@ -169,7 +169,7 @@ try {
   Write-Host 'CASE C: B3.3 POST /v1/completions answers in OpenAI shape' -ForegroundColor Cyan
   $r2 = Post-Json "http://127.0.0.1:$port/v1/completions" '{"prompt":"begin W.TSampleWorker."}'
   Check 'HTTP 200' ($r2.Ok -and $r2.Status -eq 200) "status=$($r2.Status) $($r2.Err)"
-  $j2 = $null; try { $j2 = $r2.Body | ConvertFrom-Json } catch { }
+  $j2 = $null; try { $j2 = $r2.Body | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   Check 'B3.3 the body is valid JSON' ($null -ne $j2) $r2.Body
   Check 'B3.3 it carries choices[0].text (OpenAI shape)' `
     (($null -ne $j2) -and ($null -ne $j2.choices) -and ($j2.choices.Count -ge 1) -and ($null -ne $j2.choices[0].text)) $r2.Body
@@ -185,7 +185,7 @@ try {
       '{"not-even-a-prompt":123}',
       'this is not json')) {
     $rn = Post-Json "http://127.0.0.1:$port/api/generate" $nonsense
-    $jn = $null; try { $jn = $rn.Body | ConvertFrom-Json } catch { }
+    $jn = $null; try { $jn = $rn.Body | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
     $short = if ($nonsense.Length -gt 34) { $nonsense.Substring(0,34) + '...' } else { $nonsense }
     Check "B3.4 empty completion for: $short" `
       (($rn.Ok) -and ($rn.Status -eq 200) -and ($null -ne $jn) -and ($jn.response -eq '')) `
@@ -230,7 +230,7 @@ try {
   $sPort = Get-FreePort
   $sLog  = "$WorkDir\stop_$sPort.log"
   $sp = Start-Process $harness -ArgumentList '--port',"$sPort",'--seconds','2','--mode','empty','--enabled','1' `
-         -PassThru -NoNewWindow -RedirectStandardOutput $sLog
+         -PassThru -NoNewWindow -RedirectStandardOutput $sLog; $null = $sp.Handle
   $script:procs += $sp
   $exited = $sp.WaitForExit(20000)
   Check 'the harness process exits (Stop did not hang)' $exited `
@@ -261,7 +261,7 @@ try {
   $hPort = Get-FreePort
   $hLog  = "$WorkDir\stop_mid_$hPort.log"
   $hp = Start-Process $harness -ArgumentList '--port',"$hPort",'--seconds','4','--mode','empty','--enabled','1' `
-         -PassThru -NoNewWindow -RedirectStandardOutput $hLog
+         -PassThru -NoNewWindow -RedirectStandardOutput $hLog; $null = $hp.Handle
   $script:procs += $hp
   $null = Wait-Listening $hPort 8000
   # Connect and send a PARTIAL request -- no blank line, so ServeOne stays in recv.

@@ -54,7 +54,7 @@ try {
   $findings = @()
   if ($arrStart -ge 0 -and $arrEnd -gt $arrStart) {
     $jsonText = $raw.Substring($arrStart, $arrEnd - $arrStart + 1)
-    $findings = @(ConvertFrom-Json $jsonText)
+    $findings = @((ConvertFrom-Json $jsonText | ForEach-Object { $_ }) | ForEach-Object { $_ })
   }
 
   $missingDoc = @($findings | Where-Object { $_.rule -eq 'missing-doc' })
@@ -87,7 +87,7 @@ try {
   $bareRaw = ($bareOut -join "`n")
   $bS = $bareRaw.IndexOf('['); $bE = $bareRaw.LastIndexOf(']')
   $bareFindings = @()
-  if ($bS -ge 0 -and $bE -gt $bS) { $bareFindings = @(ConvertFrom-Json $bareRaw.Substring($bS, $bE - $bS + 1)) }
+  if ($bS -ge 0 -and $bE -gt $bS) { $bareFindings = @((ConvertFrom-Json $bareRaw.Substring($bS, $bE - $bS + 1) | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   $bareMissing = @($bareFindings | Where-Object { $_.rule -eq 'missing-doc' })
   Check 'BARE lint-all (no config/disable) yields ZERO missing-doc findings (OFF by default at runtime)' ($bareMissing.Count -eq 0)
   # ...and doc-drift is unaffected (stays ON) -- sanity that we only disabled missing-doc.

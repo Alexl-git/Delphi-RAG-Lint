@@ -34,6 +34,9 @@ $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 Set-Location $repo
 $exePath = (Resolve-Path $Exe).Path
+# Hermetic: a machine drag-lint.json beside the exe makes lint-project scope the rule to the manifest's
+# sections, so this scratch project (in none) answers [] while lint-all answers 3 -- same on 1.51.2.
+. "$PSScriptRoot\lib\HermeticEngine.ps1"; $exePath = Get-HermeticEngine $exePath
 $Rule    = 'parameter-type-too-wide'
 $fx      = Join-Path $repo 'tests\lint\parameter-type-too-wide.project'
 $scratch = Join-Path ([IO.Path]::GetTempPath()) "draglint_v152ptw_$PID"
@@ -49,7 +52,7 @@ function Skip([string]$Name, [string]$Why) { $script:skip++; Write-Host "[SKIP] 
 # lint --json / lint-all --json print a bare array of findings (start_line, file_path, rule, severity).
 function Parse-Findings([string[]]$Raw) {
   $txt = ($Raw -join "`n"); $b = $txt.IndexOf('[')
-  $out = @(); if ($b -ge 0) { try { $out = @($txt.Substring($b) | ConvertFrom-Json) } catch { $out = @() } }
+  $out = @(); if ($b -ge 0) { try { $out = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $out = @() } }
   return ,@($out)
 }
 function RuleHits([string]$Verb, [string]$Db, [string[]]$Extra) {
@@ -123,8 +126,8 @@ try {
   # A6: catalog row
   $rj = (& { $ErrorActionPreference = 'Continue'; & $exePath rules --json 2>$null } | Out-String)
   $row = $null
-  try { $row = @(($rj | ConvertFrom-Json).rules | Where-Object { $_.id -eq $Rule }) | Select-Object -First 1 } catch { $row = $null }
-  if ($null -eq $row) { try { $row = @(($rj | ConvertFrom-Json) | Where-Object { $_.id -eq $Rule }) | Select-Object -First 1 } catch { $row = $null } }
+  try { $row = @(($rj | ConvertFrom-Json | ForEach-Object { $_ }).rules | Where-Object { $_.id -eq $Rule }) | Select-Object -First 1 } catch { $row = $null }
+  if ($null -eq $row) { try { $row = @(($rj | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $_.id -eq $Rule }) | Select-Object -First 1 } catch { $row = $null } }
   Check 'A6 rules --json has the row' ($null -ne $row) ''
   if ($null -ne $row) {
     Write-Host ("  row: " + ($row | ConvertTo-Json -Compress -Depth 3))

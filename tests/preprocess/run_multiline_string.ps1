@@ -31,6 +31,9 @@
 param([string]$Exe = '')
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot '..\autotest\lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 
 $ErrorActionPreference = 'Continue'
@@ -137,11 +140,12 @@ try {
 
   & { $ErrorActionPreference = 'Continue'; & $exePath index $work --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
-  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "select coalesce(impl_start_line, 0) from symbols where name = 'After' and kind = 'function'" --json 2>$null }) -join "`n" | ConvertFrom-Json
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "select coalesce(impl_start_line, 0) from symbols where name = 'After' and kind = 'function'" --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
   $lines = @($j.rows | ForEach-Object { [int]$_[0] })
   Check 'After (the routine behind the {$IFDEF}-bearing literal) has its body at line 36' ($lines -contains 36) ("impl_start_line: " + ($lines -join ','))
-  $lit = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "select text from string_literals where text like '%html lang%'" --json 2>$null }) -join "`n" | ConvertFrom-Json
+  $lit = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "select text from string_literals where text like '%html lang%'" --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
   Check 'the Page literal text is harvested (content kept)' ($lit.row_count -ge 1) "rows=$($lit.row_count)"
 } finally { Pop-Location }
 
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally { Remove-WorkDir $work -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

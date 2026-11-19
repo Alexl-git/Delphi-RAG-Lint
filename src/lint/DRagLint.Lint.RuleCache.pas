@@ -134,8 +134,8 @@ type
   /// %LOCALAPPDATA%\drag-lint\cache. DRAGLINT_RULE_CACHE=0 turns the cache off for
   /// readers and writers alike.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.AcquireIndexLock (DRagLint.CLI.pas), DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), DRagLint.CLI.ResolveRuleCacheEntry (DRagLint.CLI.pas), DRagLint.CLI.WarmRuleCache (DRagLint.CLI.pas), DRagLint.CLI.WarmRuleCacheAfterIndex (DRagLint.CLI.pas)</para>
-  /// <para>Used in units: DRagLint.CLI</para>
+  /// <para>Used by: DRagLint.CLI.Common.AcquireIndexLock (DRagLint.CLI.Common.pas), DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), DRagLint.CLI.ResolveRuleCacheEntry (DRagLint.CLI.pas), DRagLint.CLI.WarmRuleCache (DRagLint.CLI.pas), DRagLint.CLI.WarmRuleCacheAfterIndex (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.Common</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRuleCache = class
@@ -225,7 +225,7 @@ type
     /// WriteAllText and the rename, leaving rules-&lt;hash&gt;.json.tmp-&lt;pid&gt;. A file whose pid is still a live process
     /// is left alone (a running writer owns it); so is this process's own. Never raises.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.AcquireIndexLock (DRagLint.CLI.pas), DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas)</para>
+    /// <para>Called from: DRagLint.CLI.Common.AcquireIndexLock (DRagLint.CLI.Common.pas), DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas)</para>
     /// <para>Calls: Cardinal, CloseHandle, Copy, DeleteFile, DRagLint.Lint.RuleCache.TRuleCache.PathFor, ExtractFileDir, ExtractFileName, OpenProcess, PChar, StrToIntDef</para>
     /// <para>Catches: Exception (swallowed)</para>
     /// <para>Touches: file system</para>

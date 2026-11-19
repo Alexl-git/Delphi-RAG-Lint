@@ -40,8 +40,8 @@ type
   /// exempted captions.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.MenuDrift.pas) ?, DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas), DRagLint.MenuDrift.AddEntrySurfaces (DRagLint.MenuDrift.pas) ?, DRagLint.MenuDrift.ComputeMenuDrift (DRagLint.MenuDrift.pas) ?</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.MenuDrift</para>
+  /// <para>Used by: declaration (DRagLint.MenuDrift.pas) ?, DRagLint.CLI.Workspace.DoMenuDrift (DRagLint.CLI.Workspace.pas), DRagLint.MenuDrift.AddEntrySurfaces (DRagLint.MenuDrift.pas) ?, DRagLint.MenuDrift.ComputeMenuDrift (DRagLint.MenuDrift.pas) ?</para>
+  /// <para>Used in units: DRagLint.CLI.Workspace, DRagLint.MenuDrift</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TMenuRegistry = class
@@ -52,7 +52,7 @@ type
     /// <summary><!-- drag-lint:auto sum -->---- TMenuRegistry ----</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas)</para>
+    /// <para>Called from: DRagLint.CLI.Workspace.DoMenuDrift (DRagLint.CLI.Workspace.pas)</para>
     /// <para>constructor</para>
     /// <para>Writes: FSurfaces, FExempt</para>
     /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.AddSurface"/>
@@ -81,7 +81,7 @@ type
     /// <exception cref="EMenuDriftSetup">pDir\entries is missing or an entry is not valid JSON.</exception>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas)</para>
+    /// <para>Called from: DRagLint.CLI.Workspace.DoMenuDrift (DRagLint.CLI.Workspace.pas)</para>
     /// <para>Calls: DRagLint.MenuDrift.AddEntrySurfaces, DRagLint.MenuDrift.TMenuRegistry.LoadFamilies, TJSONObject</para>
     /// <para>Reads: FExempt</para>
     /// <para>Touches: file system</para>
@@ -115,7 +115,7 @@ type
     /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas)</para>
+    /// <para>Called from: DRagLint.CLI.Workspace.DoMenuDrift (DRagLint.CLI.Workspace.pas)</para>
     /// <para>Reads: FSurfaces</para>
     /// <para>Effect-free (proven)</para>
     /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.AddSurface"/>
@@ -193,8 +193,8 @@ type
   /// <summary>The drift report (spec 7/8). Owns its lists.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.MenuDrift.pas) ?, DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas) ?, DRagLint.MenuDrift.ComputeMenuDrift (DRagLint.MenuDrift.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.MenuDrift</para>
+  /// <para>Used by: declaration (DRagLint.MenuDrift.pas) ?, DRagLint.CLI.Workspace.DoMenuDrift (DRagLint.CLI.Workspace.pas) ?, DRagLint.MenuDrift.ComputeMenuDrift (DRagLint.MenuDrift.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.Workspace, DRagLint.MenuDrift</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TMenuDriftReport = class
@@ -239,7 +239,7 @@ type
     /// (FMoved.Count &gt; 0) or (FUnregistered.Count &gt; 0).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas)</para>
+    /// <para>Called from: DRagLint.CLI.Workspace.DoMenuDrift (DRagLint.CLI.Workspace.pas)</para>
     /// <para>Reads: FMissing, FMoved, FUnregistered</para>
     /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.Create"/>
     /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.Destroy"/>
@@ -268,7 +268,7 @@ type
     /// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas)</para>
+    /// <para>Called from: DRagLint.CLI.Workspace.DoMenuDrift (DRagLint.CLI.Workspace.pas)</para>
     /// <para>Calls: DRagLint.MenuDrift.TMenuDriftReport.SummaryLine</para>
     /// <para>Reads: FMissing, FMoved, FUnregistered, FNotes</para>
     /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.SummaryLine"/>
@@ -283,7 +283,7 @@ type
     /// <returns><!-- drag-lint:auto -->string -- Observed: O.Format(2).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas)</para>
+    /// <para>Called from: DRagLint.CLI.Workspace.DoMenuDrift (DRagLint.CLI.Workspace.pas)</para>
     /// <para>Reads: FMissing, FMoved, FUnregistered, FNotes</para>
     /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.Create"/>
     /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.Destroy"/>
@@ -298,8 +298,8 @@ type
   /// <summary>Raised when the registry cannot be read (the CLI maps it to exit 2).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas) ?, DRagLint.MenuDrift.TMenuRegistry.LoadFromDir (DRagLint.MenuDrift.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.MenuDrift</para>
+  /// <para>Used by: DRagLint.CLI.Workspace.DoMenuDrift (DRagLint.CLI.Workspace.pas) ?, DRagLint.MenuDrift.TMenuRegistry.LoadFromDir (DRagLint.MenuDrift.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.Workspace, DRagLint.MenuDrift</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   EMenuDriftSetup = class(Exception);
@@ -313,10 +313,10 @@ type
 /// never reported missing (the dynamic item may be it; its note says so).
 /// Order inside a submenu is not compared.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.Workspace.DoMenuDrift (DRagLint.CLI.Workspace.pas)</para>
 /// <para>Calls: DRagLint.MenuDrift.CaptionMatch, DRagLint.MenuDrift.CollectContainers, DRagLint.MenuDrift.CollectStructural, DRagLint.MenuDrift.CommonPrefix, DRagLint.MenuDrift.JsonText, DRagLint.MenuDrift.LeafKey, DRagLint.MenuDrift.MenuFormPathKey, DRagLint.MenuDrift.ParentKey, DRagLint.MenuDrift.TMenuDriftReport.Create, DRagLint.MenuTree.MenuCaptionKey (+7 more)</para>
 /// <para>Returns: TMenuDriftReport.Create</para>
-/// <para>Complexity: 25 (cyclomatic, outer body), 133 lines (full implementation)</para>
+/// <para>Complexity: 26 (cyclomatic, outer body), 133 lines (full implementation)</para>
 /// <para>Owns returned: new (caller owns)</para>
 /// <seealso cref="DRagLint.MenuDrift.CaptionMatch"/>
 /// <seealso cref="DRagLint.MenuDrift.CollectContainers"/>
@@ -348,7 +348,6 @@ implementation
 uses
   System.IOUtils
   , System.JSON
-  , System.RegularExpressions
   ;
 
 const

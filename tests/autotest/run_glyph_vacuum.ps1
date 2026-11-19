@@ -623,7 +623,7 @@ $txtU = "object FrmU: TFrmU`r`n  Caption = 'U$e9'`r`n  object $nameU`: TabcToggl
 [IO.File]::WriteAllBytes((Join-Path $srcU 'FrmU.dfm'), ([byte[]](0xFF,0xFE) + [Text.Encoding]::Unicode.GetBytes($txtU)))
 $oU = & { $ErrorActionPreference = 'Continue'; & $Exe glyph-vacuum --root $srcU --out $outU 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'E1 utf16 dfm: walk completes, skipped=0' ($LASTEXITCODE -eq 0 -and $oU -match 'skipped=0') $oU
-$rowsU = if (Test-Path (Join-Path $outU 'instances.tsv')) { @(Import-Csv (Join-Path $outU 'instances.tsv') -Delimiter "`t" -Encoding UTF8) } else { @() }
+$rowsU = @(if (Test-Path (Join-Path $outU 'instances.tsv')) { @(Import-Csv (Join-Path $outU 'instances.tsv') -Delimiter "`t" -Encoding UTF8) } else { @() })
 Write-Host "--- raw E1 object_path ---"; $rowsU | ForEach-Object { Write-Host ("[{0}] [{1}]" -f $_.object_path,$_.component_name) }
 Check 'E1 utf16 dfm: the file is parsed, its object row present' (@($rowsU | Where-Object { $_.object_path -ceq $nameU }).Count -eq 1) ($rowsU | ForEach-Object { $_.object_path })
 # ---- exit codes ------------------------------------------------------------------

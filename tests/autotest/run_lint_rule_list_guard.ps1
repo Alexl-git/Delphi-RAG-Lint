@@ -20,7 +20,7 @@ function Check($n, $ok, $d) {
   Write-Host ("[{0}] {1}" -f (@('FAIL', 'PASS')[[int][bool]$ok]), $n)
   if (-not $ok) { if ($d) { Write-Host "      $d" }; $script:fail = $true }
 }
-function Ids($a) { @(($a | Out-String | ConvertFrom-Json) | % { $_.rule } | Sort-Object -Unique) -join ',' }
+function Ids($a) { @(($a | Out-String | ConvertFrom-Json | ForEach-Object { $_ }) | % { $_.rule } | Sort-Object -Unique) -join ',' }
 try {
   $exe = (Resolve-Path $Exe).Path; $rules = (Resolve-Path $RulesDir).Path
   $src = Join-Path $WorkDir 'src'; [void](New-Item -ItemType Directory -Path $src -Force)

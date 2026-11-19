@@ -74,7 +74,7 @@ function Get-Plan([hashtable]$C, [string]$Tag) {
   $o = Join-Path $WorkDir "plan-$Tag.out"
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
     -ArgumentList @('cycles', '--db', ('"' + $C.Db + '"'), '--plan', '--library-db', ('"' + $Stub + '"')) `
-    -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "plan-$Tag.err")
+    -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "plan-$Tag.err"); $null = $p.Handle
   return @{ Exit = $p.ExitCode; Text = [IO.File]::ReadAllText($o) }
 }
 

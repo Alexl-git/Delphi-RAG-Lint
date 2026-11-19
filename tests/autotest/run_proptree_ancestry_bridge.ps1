@@ -351,7 +351,7 @@ function Get-Tree([string]$Database, [string]$QName) {
   try {
     $raw = (& $Exe proptree --qname $QName --format json --db $Database) -join "`n"
   } finally { Pop-Location }
-  return ($raw | ConvertFrom-Json)
+  return ($raw | ConvertFrom-Json | ForEach-Object { $_ })
 }
 
 # Same, but with explicit extra CLI arguments -- used by the write-back probes,
@@ -362,7 +362,7 @@ function Get-TreeArgs([string]$Database, [string]$QName, [string[]]$Extra) {
     $raw = (& $Exe proptree --qname $QName --format json --db $Database @Extra) -join "`n"
   } finally { Pop-Location }
   if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
-  return ($raw | ConvertFrom-Json)
+  return ($raw | ConvertFrom-Json | ForEach-Object { $_ })
 }
 
 # --- 1. Read-only resolution: Align must resolve to TAlign (was 'unknown'). ------

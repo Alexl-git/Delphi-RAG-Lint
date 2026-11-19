@@ -301,7 +301,7 @@ try {
   $rc  = $LASTEXITCODE
   Check 'index --project exits 0' ($rc -eq 0) "exit=$rc; $(($out | Select-Object -Last 2) -join ' | ')"
 
-  $indexed = @((& python $py $db) -join "`n" | ConvertFrom-Json)
+  $indexed = @(((& python $py $db) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Write-Host ("  indexed {0} file(s): {1}" -f $indexed.Count,
     (($indexed | ForEach-Object { Split-Path $_ -Leaf }) -join ', '))
 
@@ -335,7 +335,7 @@ try {
     (@($gout | Where-Object { $t = $_.ToString(); ($t -like '*ERROR*') -and ($t -like '*Empty.dproj*') }).Count -ge 1) `
     "output: $(($gout | Select-Object -Last 3) -join ' | ')"
 
-  $gfiles = @((& python $py $edb) -join "`n" | ConvertFrom-Json)
+  $gfiles = @(((& python $py $edb) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Check 'the guarded run wrote ZERO files rows' ($gfiles.Count -eq 0) `
     ("count=" + $gfiles.Count + "; e.g. " + (($gfiles | Select-Object -First 3) -join ' | '))
 
@@ -365,7 +365,7 @@ try {
   Check 'index --all (smClosure section) exits 0' ($mrc -eq 0) `
     "exit=$mrc; $(($mout | Select-Object -Last 2) -join ' | ')"
 
-  $mfiles = @((& python $py (Join-Path $scratch "out\$mdb")) -join "`n" | ConvertFrom-Json)
+  $mfiles = @(((& python $py (Join-Path $scratch "out\$mdb")) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Write-Host ("  section indexed {0} file(s): {1}" -f $mfiles.Count,
     (($mfiles | ForEach-Object { Split-Path $_ -Leaf }) -join ', '))
   function HasM([string]$Leaf) { return @($mfiles | Where-Object { $_ -like "*\$Leaf" }).Count -ge 1 }
@@ -427,12 +427,12 @@ try {
     (($missing | Select-Object -First 1) -join '')
 
   # (a) THE ONE THAT MATTERS: the healthy section still built, after the dead one
-  $hfiles = @((& python $py (Join-Path $scratch 'out2\healthy.sqlite')) -join "`n" | ConvertFrom-Json)
+  $hfiles = @(((& python $py (Join-Path $scratch 'out2\healthy.sqlite')) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Write-Host ("  healthy section indexed {0} file(s)" -f $hfiles.Count)
   Check 'the HEALTHY section still indexed its files' ($hfiles.Count -eq $mfiles.Count) `
     "healthy=$($hfiles.Count) vs expected=$($mfiles.Count) -- one bad section must not starve the others"
 
-  $dfiles = @((& python $py (Join-Path $scratch 'out2\dead.sqlite')) -join "`n" | ConvertFrom-Json)
+  $dfiles = @(((& python $py (Join-Path $scratch 'out2\dead.sqlite')) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Check 'the dead section wrote no source rows' ($dfiles.Count -eq 0) `
     ("count=" + $dfiles.Count + "; e.g. " + (($dfiles | Select-Object -First 3) -join ' | '))
 
@@ -455,7 +455,7 @@ try {
   Check 'a single-file program (library uses only) exits 0' ($src -eq 0) `
     "exit=$src; $(($sout | Select-Object -Last 2) -join ' | ')"
 
-  $sfiles = @((& python $py $sdb) -join "`n" | ConvertFrom-Json)
+  $sfiles = @(((& python $py $sdb) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Write-Host ("  solo indexed {0} file(s): {1}" -f $sfiles.Count,
     (($sfiles | ForEach-Object { Split-Path $_ -Leaf }) -join ', '))
   Check 'Solo.dpr IS in the index' `
@@ -471,7 +471,7 @@ try {
   Check 'the .dproj shape of a single-file program exits 0' ($s2rc -eq 0) `
     "exit=$s2rc; $(($s2out | Select-Object -Last 2) -join ' | ')"
 
-  $s2files = @((& python $py $sdb2) -join "`n" | ConvertFrom-Json)
+  $s2files = @(((& python $py $sdb2) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Check 'Solo.dpr IS in the index when reached via Solo.dproj' `
     (@($s2files | Where-Object { $_ -like '*\Solo.dpr' }).Count -ge 1) `
     ("count=" + $s2files.Count)
@@ -496,7 +496,7 @@ try {
   Check 'a manifest section over a single-file program exits 0' ($3rc -eq 0) `
     "exit=$3rc; $(($3out | Select-Object -Last 2) -join ' | ')"
 
-  $3files = @((& python $py (Join-Path $scratch 'out3\solo.sqlite')) -join "`n" | ConvertFrom-Json)
+  $3files = @(((& python $py (Join-Path $scratch 'out3\solo.sqlite')) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Check 'section: Solo.dpr IS in the index' `
     (@($3files | Where-Object { $_ -like '*\Solo.dpr' }).Count -ge 1) `
     ("count=" + $3files.Count)

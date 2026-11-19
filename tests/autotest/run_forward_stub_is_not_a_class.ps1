@@ -53,7 +53,7 @@ function WriteAnsi($path, $text) {
 function ParseJsonArray([string]$raw) {
   $end = $raw.LastIndexOf(']')
   if ($end -lt 0) { return @() }
-  return @($raw.Substring(0, $end + 1) | ConvertFrom-Json)
+  return @(($raw.Substring(0, $end + 1) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
@@ -238,7 +238,7 @@ function Get-HoverValue([string]$Db, [string]$File, [int]$Line0, [int]$Char0) {
     -RedirectStandardInput $inF -RedirectStandardOutput $outF -RedirectStandardError $errF -NoNewWindow -Wait | Out-Null
   $raw = [System.IO.File]::ReadAllText($outF)
   foreach ($m in [regex]::Matches($raw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $m.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $m.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 2) { if ($null -eq $o.result) { return '' }; return [string]$o.result.contents.value }
   }
   return '<no-reply>'
@@ -249,14 +249,14 @@ try {
   Write-Host ''
   Write-Host 'CASE B: hover renders the REAL declaration' -ForegroundColor Cyan
   $hj = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname fwstub.TFoo --db $db --format json 2>$null } | Out-String)
-  $ho = $null; try { $ho = $hj.Trim() | ConvertFrom-Json } catch {}
+  $ho = $null; try { $ho = $hj.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
   Check 'S4: hover --qname fwstub.TFoo answered JSON' ($null -ne $ho) "got: [$($hj.Substring(0, [Math]::Min(120, $hj.Length)))]"
   if ($ho) {
     Check 'S4: def_line is the REAL declaration, not the stub' ($ho.def_line -eq $realLine) "def_line=$($ho.def_line) real=$realLine stub=$stubLine"
     Check 'S4: kind class' ($ho.kind -eq 'class')
   }
   $hji = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname fwstub.IFoo --db $db --format json 2>$null } | Out-String)
-  $hoi = $null; try { $hoi = $hji.Trim() | ConvertFrom-Json } catch {}
+  $hoi = $null; try { $hoi = $hji.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
   Check 'S7: hover --qname fwstub.IFoo def_line is the real interface' (($null -ne $hoi) -and ($hoi.def_line -eq $iRealLine)) "def_line=$($hoi.def_line)"
 
   $fixFile = Join-Path $srcDir 'fwstub.pas'
@@ -350,7 +350,7 @@ function Get-CompletionLabels([string]$Db, [string]$File, [int]$Line0, [int]$Cha
     -RedirectStandardInput $inF -RedirectStandardOutput $outF -RedirectStandardError $errF -NoNewWindow -Wait | Out-Null
   $raw = [System.IO.File]::ReadAllText($outF)
   foreach ($m in [regex]::Matches($raw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $m.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $m.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 2) {
       if ($null -eq $o.result) { return @() }
       $items = if ($null -ne $o.result.items) { $o.result.items } else { $o.result }

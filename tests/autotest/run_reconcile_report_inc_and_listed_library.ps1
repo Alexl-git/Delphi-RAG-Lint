@@ -65,7 +65,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail='') {
   if (-not $Ok) { $script:Failed = $true; if ($Detail) { Write-Host "      $Detail" -ForegroundColor DarkGray } }
 }
 $raw = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$proj\App.dproj" --json --config $cfg 2>$null } | Out-String
-$doc = $null; try { $doc = $raw | ConvertFrom-Json } catch { }
+$doc = $null; try { $doc = $raw | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check '0 --json parses' ($null -ne $doc) $raw
 $inc = @($doc.missing | Where-Object { $_.file -like '*Defs.inc' })
 $own = @($doc.missing | Where-Object { $_.unit -eq 'uOwn' })

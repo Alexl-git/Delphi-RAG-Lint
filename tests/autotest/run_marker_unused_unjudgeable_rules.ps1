@@ -83,9 +83,9 @@ $pasB = Join-Path $WorkDir 'uDupB.pas'
 & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db *> $null }
 Check 'fixture indexed' ($LASTEXITCODE -eq 0) ''
 
-function LintAll { ((& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db 2>$err } | Out-String) -replace "`r`n", "`n") }
+function LintAll { ((& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($err); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String) -replace "`r`n", "`n") }
 function LintFile([string]$P, [switch]$NoDb) {
-  $o = if ($NoDb) { & { $ErrorActionPreference = 'Continue'; & $Exe lint $P 2>$err } } else { & { $ErrorActionPreference = 'Continue'; & $Exe lint $P --db $db 2>$err } }
+  $o = if ($NoDb) { & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($err); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe lint $P 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } } else { & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($err); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe lint $P --db $db 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } }
   (($o | Out-String) -replace "`r`n", "`n")
 }
 function Relevant([string]$Out) { (($Out -split "`n" | Where-Object { $_ -match 'review-marker|duplicate-code:|self-assignment:|unused-public-symbol:' }) -join ' || ') }

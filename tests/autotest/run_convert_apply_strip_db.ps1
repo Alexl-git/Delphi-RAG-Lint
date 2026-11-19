@@ -65,11 +65,11 @@ function CastAccepts([string]$text, [string]$name) {
   if (-not $a.Success) { return @() }
   return @($a.Groups[1].Value -split '\s*,\s*')
 }
-$stripAcc = CastAccepts $shippedText 'StripDB'
+$stripAcc = @(CastAccepts $shippedText 'StripDB')
 Check 'S0b StripDB accepts TFileName (string alias)' ($stripAcc -contains 'TFileName') ('accepts: ' + ($stripAcc -join ','))
 Check 'S0b control: StripDB still accepts string' ($stripAcc -contains 'string') ('accepts: ' + ($stripAcc -join ','))
 Check 'S0b control: StripDB does not accept an unrelated type (TStrings)' (-not ($stripAcc -contains 'TStrings')) ''
-Check 'S0b control: the parser finds a different cast (non-vacuous)' ((CastAccepts $shippedText 'StripDB').Count -gt 0 -and $shippedText -match '(?m)^cast (?!StripDB)\w+') ''
+Check 'S0b control: the parser finds a different cast (non-vacuous)' ((@(CastAccepts $shippedText 'StripDB')).Count -gt 0 -and $shippedText -match '(?m)^cast (?!StripDB)\w+') ''
 
 function Fixture([string]$Dir, [string]$Link, [string]$ExtraLine = '') {
   New-Item -ItemType Directory $Dir -Force | Out-Null
@@ -165,7 +165,7 @@ function Run([string]$Dir, [string[]]$Extra = @(), [string]$Castlib = $ShippedCa
   $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $code = $LASTEXITCODE
   $j = $null
-  if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {} }
+  if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {} }
   return [pscustomobject]@{ Code = $code; Out = $o; J = $j }
 }
 function Items($r, [string]$Kind) { if ($null -eq $r.J) { return @() }; return @($r.J.items | Where-Object { $_.kind -eq $Kind }) }
@@ -186,14 +186,14 @@ $pasIt = Items $r 'value-cast-applied' | Where-Object { $_.file -like '*.pas' }
 Check 'P1 .pas literal assignments rewritten: lines 27 (MET1.db), 31 (Q.Db), 32 (O''''Neil.db) -- and nothing else' `
   ((((@($pasIt | ForEach-Object { $_.line }) | Sort-Object) -join ',') -eq '27,31,32') -and
    (@($pasIt | Where-Object { $_.line -eq 32 -and $_.value -eq "'O''Neil'" -and $_.old_value -eq "'O''Neil.db'" }).Count -eq 1)) (Show $pasIt)
-$chk = Items $r 'value-cast-check'
+$chk = @(Items $r 'value-cast-check')
 Check 'P2 the concatenation (line 28) and the read (line 29) are warnings naming their line, no edit' `
   (($chk.Count -eq 2) -and (@($chk | Where-Object { $_.line -eq 28 -and $_.text -match 'value cast StripDB: non-literal assignment, check by hand' }).Count -eq 1) -and
    (@($chk | Where-Object { $_.line -eq 29 -and $_.text -match 'value cast StripDB: read of TableName, check by hand' }).Count -eq 1) -and
    (@($chk | Where-Object { $_.field -ne 'warnings' }).Count -eq 0)) (Show $chk)
 Check 'P3 a literal with no .db (line 30, A.dbf): no edit, no item' `
   ((@($r.J.items | Where-Object { $_.line -eq 30 -and $_.file -like '*.pas' }).Count -eq 0)) (Show ($r.J.items | Where-Object { $_.file -like '*.pas' }))
-Check 'R1 the CLASS-cast refusal does not fire for a value cast: no cast-not-applied' (@(Items $r 'cast-not-applied').Count -eq 0) (Show (Items $r 'cast-not-applied'))
+Check 'R1 the CLASS-cast refusal does not fire for a value cast: no cast-not-applied' (@(Items $r 'cast-not-applied').Count -eq 0) (Show (@(Items $r 'cast-not-applied')))
 $pu = @($r.J.pas_uses | Where-Object { $_.member -eq 'TableName' })
 Check 'U1 pas_uses: TableName covered by the StripDB link is mapped, for every instance it is used on' `
   (($pu.Count -ge 1) -and (@($pu | Where-Object { $_.status -ne 'mapped' }).Count -eq 0)) (Show $pu)
@@ -310,7 +310,7 @@ W $edge 's.rules' "#convert TOldTable -> TNewTable`n#link TableName <- TableName
 & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $edge 'P.dpr') --db (Join-Path $edge 'fx.sqlite') 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $eo = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (Join-Path $edge 'EForm.pas') --rules (Join-Path $edge 's.rules') --db (Join-Path $edge 'fx.sqlite') --castlib $ShippedCastlib --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 $er = [pscustomobject]@{ Code = $LASTEXITCODE; Out = $eo; J = $null }
-try { $er.J = $eo.Substring($eo.IndexOf('{')) | ConvertFrom-Json } catch {}
+try { $er.J = $eo.Substring($eo.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 $ePas = @(Items $er 'value-cast-applied' | Where-Object { $_.file -like '*.pas' })
 $eChk = @(Items $er 'value-cast-check' | Where-Object { $_.file -like '*.pas' })
 function LineSet($xs) { return ((@($xs | ForEach-Object { $_.line }) | Sort-Object) -join ',') }
@@ -361,7 +361,7 @@ Check 'B1 identical .dfm bytes and identical .pas bytes (apart from the extra li
 
 # ---- capability -------------------------------------------------------------
 $info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n"
-$ij = $null; try { $ij = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json } catch {}
+$ij = $null; try { $ij = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'K info --json: capabilities.value_cast_strip_db is true' (($null -ne $ij) -and ($ij.capabilities.value_cast_strip_db -eq $true)) ''
 
 Write-Host ''

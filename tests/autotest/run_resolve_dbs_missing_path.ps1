@@ -56,7 +56,7 @@ try {
   function Invoke-Rd([string[]]$A) {
     $o = "$WorkDir\o.txt"; $e = "$WorkDir\e.txt"
     $p = Start-Process -FilePath $Exe -ArgumentList $A -NoNewWindow -Wait -PassThru -WorkingDirectory $WorkDir `
-           -RedirectStandardOutput $o -RedirectStandardError $e
+           -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
     [pscustomobject]@{
       Exit = $p.ExitCode
       Out  = @(([IO.File]::ReadAllText($o)) -split "`r?`n" | Where-Object { $_ -ne '' })

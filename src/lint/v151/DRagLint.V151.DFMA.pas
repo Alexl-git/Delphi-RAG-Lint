@@ -31,17 +31,35 @@ const
 
 type
   /// <summary>Checker entry points of v151 lane DFMA; every method is called by TV151Dispatch.</summary>
-  /// <remarks>Stateless; class methods only. A method that has nothing to check returns nil.
+  /// <remarks>
+  /// Stateless; class methods only. A method that has nothing to check returns nil.
   /// Every rule reads the unit through the shared parse cache and its sibling .dfm as text;
   /// a binary .dfm, a unit that does not declare the form file's root class, or a lookup that
   /// cannot be answered keeps the rule silent. The index (Store / LibStore) only widens what
-  /// can be answered: ancestor chains, unit files of other modules, the project's .dpr.</remarks>
+  /// can be answered: ancestor chains, unit files of other modules, the project's .dpr.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.V151.Dispatch.BuildLanes (DRagLint.V151.Dispatch.pas)</para>
+  /// <para>Used in units: DRagLint.V151.Dispatch</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TV151DFMARules = class
   public
     /// <summary>Declares every rule id this lane may emit: the nine form rules and the host
     /// id unit-missing-from-uses (form-file side).</summary>
     /// <param name="ADecls">List to append to; owned by the caller.</param>
-    /// <remarks>Called ONCE at start-up (unit initialization of DRagLint.V151.Dispatch); must not touch files or stores.</remarks>
+    /// <remarks>
+    /// Called ONCE at start-up (unit initialization of DRagLint.V151.Dispatch); must not touch files or stores.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.Dispatch.BuildLanes (DRagLint.V151.Dispatch.pas)</para>
+    /// <para>Calls: DRagLint.V151.Api.V151Host, DRagLint.V151.Api.V151Rule</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.Api.V151Host"/>
+    /// <seealso cref="DRagLint.V151.Api.V151Rule"/>
+    /// <seealso cref="DRagLint.V151.DFMA.TV151DFMARules.CheckDfm"/>
+    /// <seealso cref="DRagLint.V151.DFMA.TV151DFMARules.CheckFile"/>
+    /// <seealso cref="DRagLint.V151.DFMA.TV151DFMARules.CheckProject"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure Catalog(const ADecls: TList<TV151RuleDecl>); static;
     /// <summary>Per-file checks that need the .dpr or other units:
     /// form-autocreate-and-manual (a global form variable the .dpr creates with
@@ -51,6 +69,20 @@ type
     /// foreign-form-control-access (Form2.Edit1 through another unit's global form variable).</summary>
     /// <param name="ACtx">The file being linted; Store / LibStore may be nil.</param>
     /// <returns>Findings; nil when none.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.Dispatch.BuildLanes (DRagLint.V151.Dispatch.pas)</para>
+    /// <para>Calls: DRagLint.V151.Api.TV151FileCtx.Wants, DRagLint.V151.DFMA.CheckAccessBeforeCreate, DRagLint.V151.DFMA.CheckAutocreateAndManual, DRagLint.V151.DFMA.CheckForeignFormAccess, DRagLint.V151.DFMA.Support.FindDprFor, DRagLint.V151.DFMA.Support.LoadPas, SameText</para>
+    /// <para>Complexity: 11 (cyclomatic, outer body), 17 lines (full implementation)</para>
+    /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.Api.TV151FileCtx.Wants"/>
+    /// <seealso cref="DRagLint.V151.DFMA.CheckAccessBeforeCreate"/>
+    /// <seealso cref="DRagLint.V151.DFMA.CheckAutocreateAndManual"/>
+    /// <seealso cref="DRagLint.V151.DFMA.CheckForeignFormAccess"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.FindDprFor"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>; static;
     /// <summary>Checks of the unit against its sibling form file: form-field-without-object,
     /// form-object-without-field, form-field-type-mismatch, form-resource-missing,
@@ -58,16 +90,53 @@ type
     /// side of unit-missing-from-uses.</summary>
     /// <param name="ACtx">The file being linted; ACtx.DfmPath is not empty when this is called.</param>
     /// <returns>Findings (FilePath is the .dfm for findings about a form object or property); nil when none.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.Dispatch.BuildLanes (DRagLint.V151.Dispatch.pas)</para>
+    /// <para>Calls: DRagLint.V151.Api.TV151FileCtx.Wants, DRagLint.V151.DFMA.CheckDfmReferenceUnits, DRagLint.V151.DFMA.CheckFieldsWithoutObject, DRagLint.V151.DFMA.CheckFieldTypes, DRagLint.V151.DFMA.CheckHandlerWithoutInherited, DRagLint.V151.DFMA.CheckObjectsWithoutField, DRagLint.V151.DFMA.CheckResourceMissing, DRagLint.V151.DFMA.CheckSelfFree, DRagLint.V151.DFMA.RootClassIndex, DRagLint.V151.DFMA.Support.LoadDfm, DRagLint.V151.DFMA.Support.LoadPas, DRagLint.V151.DFMA.Support.TDfmDoc.IsEmpty</para>
+    /// <para>Complexity: 18 (cyclomatic, outer body), 20 lines (full implementation)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.Api.TV151FileCtx.Wants"/>
+    /// <seealso cref="DRagLint.V151.DFMA.CheckDfmReferenceUnits"/>
+    /// <seealso cref="DRagLint.V151.DFMA.CheckFieldsWithoutObject"/>
+    /// <seealso cref="DRagLint.V151.DFMA.CheckFieldTypes"/>
+    /// <seealso cref="DRagLint.V151.DFMA.CheckHandlerWithoutInherited"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>; static;
     /// <summary>Nothing to check on raw bytes in this lane.</summary>
     /// <param name="ACtx">The file being linted.</param>
     /// <param name="AFilePath">The file the bytes come from (ACtx.Path or ACtx.DfmPath).</param>
     /// <param name="ABytes">The file content exactly as on disk.</param>
     /// <returns>nil.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.Dispatch.BuildLanes (DRagLint.V151.Dispatch.pas)</para>
+    /// <para>Returns: nil</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.DFMA.TV151DFMARules.Catalog"/>
+    /// <seealso cref="DRagLint.V151.DFMA.TV151DFMARules.CheckDfm"/>
+    /// <seealso cref="DRagLint.V151.DFMA.TV151DFMARules.CheckFile"/>
+    /// <seealso cref="DRagLint.V151.DFMA.TV151DFMARules.CheckProject"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>; static;
     /// <summary>Nothing project-wide in this lane: every rule runs per file in lint and lint-all alike.</summary>
     /// <param name="ACtx">The project; Store is not nil.</param>
     /// <returns>nil.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.Dispatch.BuildLanes (DRagLint.V151.Dispatch.pas)</para>
+    /// <para>Returns: nil</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.DFMA.TV151DFMARules.Catalog"/>
+    /// <seealso cref="DRagLint.V151.DFMA.TV151DFMARules.CheckDfm"/>
+    /// <seealso cref="DRagLint.V151.DFMA.TV151DFMARules.CheckFile"/>
+    /// <seealso cref="DRagLint.V151.DFMA.TV151DFMARules.CheckRawBytes"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>; static;
   end;
 

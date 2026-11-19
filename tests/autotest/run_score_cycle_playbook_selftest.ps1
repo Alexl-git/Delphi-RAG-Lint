@@ -63,7 +63,7 @@ $raw = & { $ErrorActionPreference = 'Continue'; pwsh -NoProfile -File $scorer -O
          -Report $report -Project 'CircularDemo.dproj' -Exe $exePath -Json 2>$null } | Out-String
 $rc = $LASTEXITCODE
 $j = $null
-try { $j = $raw | ConvertFrom-Json } catch { $j = $null }
+try { $j = $raw | ConvertFrom-Json | ForEach-Object { $_ } } catch { $j = $null }
 Check 'V the scorer emitted JSON' ($null -ne $j) $raw
 Check "T0 overall verdict FAIL, exit 1 (got $rc)" (($rc -eq 1) -and ($null -ne $j) -and (-not $j.pass)) ''
 Check 'T1 1-CYCLE FAILS on the untouched tree (interface coupling remains)' (($null -ne $j) -and (-not $j.'1-CYCLE'.pass)) $j.'1-CYCLE'.actual

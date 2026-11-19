@@ -19,7 +19,7 @@ try {
   # applied=false, preview=true.
   Copy-Item $fixture $target -Force
   $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $target --fix --fix-line 12 --fix-rule redundant-not-not --json 2>$null } | Out-String
-  $arr = $null; try { $arr = ($raw | ConvertFrom-Json) } catch { $arr = $null }
+  $arr = $null; try { $arr = ($raw | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $arr = $null }
   if ($null -ne $arr -and $arr -isnot [System.Array]) { $arr = @($arr) }
   $t = $arr | Where-Object { $_.rule -eq 'redundant-not-not' } | Select-Object -First 1
   Check 'preview: finding present'  ($null -ne $t)
@@ -32,7 +32,7 @@ try {
   # APPLY: a fixable finding that DID produce an edit reports applied=true.
   Copy-Item $fixture $target -Force
   $raw2 = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $target --fix --fix-line 12 --fix-rule redundant-not-not --json --apply 2>$null } | Out-String
-  $arr2 = $null; try { $arr2 = ($raw2 | ConvertFrom-Json) } catch { $arr2 = $null }
+  $arr2 = $null; try { $arr2 = ($raw2 | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $arr2 = $null }
   if ($null -ne $arr2 -and $arr2 -isnot [System.Array]) { $arr2 = @($arr2) }
   $t2 = $arr2 | Where-Object { $_.rule -eq 'redundant-not-not' } | Select-Object -First 1
   if ($null -ne $t2) {
@@ -49,7 +49,7 @@ try {
   $target3 = Join-Path $scratch 'gating.pas'
   Copy-Item (Join-Path $PSScriptRoot 'fixtures\gating\gating.pas') $target3 -Force
   $raw3 = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $target3 --fix --fix-line 12 --json --apply 2>$null } | Out-String
-  $arr3 = $null; try { $arr3 = ($raw3 | ConvertFrom-Json) } catch { $arr3 = $null }
+  $arr3 = $null; try { $arr3 = ($raw3 | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $arr3 = $null }
   if ($null -ne $arr3 -and $arr3 -isnot [System.Array]) { $arr3 = @($arr3) }
   $t3 = $arr3 | Where-Object { $_.rule -eq 'used-before-assignment' } | Select-Object -First 1
   Check 'no-edit: non-fixable finding present' ($null -ne $t3)
@@ -70,7 +70,7 @@ try {
   [IO.File]::WriteAllText($dtor, $dtorTxt, [Text.Encoding]::ASCII)
   Check 'off-line: fixture has no System.SysUtils' (-not $dtorTxt.Contains('System.SysUtils'))
   $raw4 = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $dtor --fix --fix-rule field-created-not-freed --json --apply --no-backup 2>$null } | Out-String
-  $arr4 = $null; try { $arr4 = @($raw4 | ConvertFrom-Json) } catch { $arr4 = $null }
+  $arr4 = $null; try { $arr4 = @(($raw4 | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $arr4 = $null }
   $t4 = $arr4 | Where-Object { $_.rule -eq 'field-created-not-freed' } | Select-Object -First 1
   Check 'off-line: finding present' ($null -ne $t4)
   $after = [IO.File]::ReadAllText($dtor)
@@ -88,7 +88,7 @@ try {
     Copy-Item $fx.FullName $tgt -Force
     $before = [IO.File]::ReadAllText($tgt)
     $rawX = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $tgt --fix --fix-rule $id --json --apply --no-backup 2>$null } | Out-String
-    $arrX = $null; try { $arrX = @($rawX | ConvertFrom-Json) } catch { $arrX = $null }
+    $arrX = $null; try { $arrX = @(($rawX | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $arrX = $null }
     $appX = @($arrX | Where-Object { $_.rule -eq $id -and $_.applied -eq $true })
     Check "off-line ${id}: applied=true and the file changed" (($appX.Count -ge 1) -and ([IO.File]::ReadAllText($tgt) -ne $before))
   }

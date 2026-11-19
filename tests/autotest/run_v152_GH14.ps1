@@ -94,7 +94,7 @@ try {
 
   $j = (& { $ErrorActionPreference = 'Continue'; & $exe impact --qname Shapes.TCircle.Draw --depth 1 --format json --db $db 2>$null } | Out-String)
   $ok = $false
-  try { $p = $j | ConvertFrom-Json; $ok = ($p.levels[0].callers -eq 2 -and $p.levels[0].units -eq 2) } catch { }
+  try { $p = $j | ConvertFrom-Json | ForEach-Object { $_ }; $ok = ($p.levels[0].callers -eq 2 -and $p.levels[0].units -eq 2) } catch { }
   Check 'json levels[0] = 2 callers / 2 units' $ok $j.Trim()
 
   $fc = (& { $ErrorActionPreference = 'Continue'; & $exe query find-callers --name TCircle.Draw --resolved --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String)
@@ -106,7 +106,7 @@ try {
   # 1.52 follow-up: usages --width wide bound at a call site walks the same resolved callers
   $u = (& { $ErrorActionPreference = 'Continue'; & $exe usages --name Draw --in (Join-Path $fx 'Painter.pas') --line 6 --col 46 --width wide --depth 1 --format json --db $db 2>$null } | Out-String)
   $ok = $false
-  try { $pu = $u | ConvertFrom-Json; $ok = ($pu.bound -match 'TCircle\.Draw' -and @($pu.impact)[0].callers -eq 2) } catch { }
+  try { $pu = $u | ConvertFrom-Json | ForEach-Object { $_ }; $ok = ($pu.bound -match 'TCircle\.Draw' -and @($pu.impact)[0].callers -eq 2) } catch { }
   Check 'usages --width wide at TCircle.Draw: impact depth 1 = 2 callers' $ok ($u.Trim())
 
   $o = (& { $ErrorActionPreference = 'Continue'; & $exe impact --qname Shapes.TCircle.Draw --depth 2 --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String); $rc = $LASTEXITCODE

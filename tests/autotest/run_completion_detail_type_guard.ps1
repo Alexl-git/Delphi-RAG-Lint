@@ -135,7 +135,7 @@ Start-Process $Exe -ArgumentList @('lsp', '--db', $Db) -WorkingDirectory $WorkDi
 
 $items = @()
 foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-  try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+  try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
   if ($o.id -eq 2 -and $null -ne $o.result) { $items = @($o.result.items) }
 }
 Check 'the member completion answered' ($items.Count -gt 0) "count=$($items.Count)"

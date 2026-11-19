@@ -20,6 +20,9 @@ param(
 )
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Continue'
 $script:Pass = 0
@@ -89,7 +92,7 @@ Check 'plan: nothing written (hash check)' ((Hash $w) -eq $before)
 # json (project mode, plan): the excluded unit is reported
 $r = Run @('repo', 'gen-param-array', '--project', "$w\PaDemo.dproj", '--all', '--plan', '--json')
 $j = $null
-try { $j = $r.Out | ConvertFrom-Json } catch { }
+try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'json: parses, mode plan' (($null -ne $j) -and $j.mode -eq 'plan') $r.Out
 $uf = @($j.units | Where-Object { $_.unit -eq 'uFolders' })
 $ut = @($j.units | Where-Object { $_.unit -eq 'uTestHelper' })
@@ -147,3 +150,4 @@ Write-Host "Summary: pass=$($script:Pass) fail=$($script:Fail)"
 if ($script:Fail -gt 0) { Write-Host 'GENPAIMPL CLI: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'GENPAIMPL CLI: PASS' -ForegroundColor Green
 exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

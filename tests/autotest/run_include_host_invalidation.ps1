@@ -17,6 +17,9 @@ param(
 )
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'; $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -39,7 +42,7 @@ function Index([string]$tag) {
 function IncRows() {
   Push-Location $WorkDir
   try { $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query "SELECT u.unit_name FROM unit_uses u JOIN files f ON f.id = u.file_id WHERE f.path LIKE '%IncB.pas' AND u.origin_path IS NOT NULL" --json 2>$null } | Out-String } finally { Pop-Location }
-  try { return ,@((($j | ConvertFrom-Json).rows) | ForEach-Object { $_[0] }) } catch { return ,@() }
+  try { return ,@((($j | ConvertFrom-Json | ForEach-Object { $_ }).rows) | ForEach-Object { $_[0] }) } catch { return ,@() }
 }
 
 $null = Index 'first'
@@ -62,3 +65,4 @@ Check 'b: exactly two files re-parsed (the .inc and its host IncB.pas)' ($log2 -
 
 if ($script:Failed) { Write-Host 'run_include_host_invalidation: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'run_include_host_invalidation: PASS' -ForegroundColor Green; exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

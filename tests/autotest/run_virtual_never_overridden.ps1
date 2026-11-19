@@ -36,7 +36,7 @@ try {
   # --- fix
   $pas = Join-Path $fx 'uV.pas'
   $want = Join-Path $PSScriptRoot "..\lint-project\$rule\expected\uV.fixed.pas"
-  $fixArgs = @('--config', $cfg, '--fix', '--fix-rule', $rule, '--apply', '--no-backup')
+  $fixArgs = @('--config', $cfg, '--fix', '--fix-rule', $rule, '--apply', '--no-backup', '--no-compile-gate')   # BK-GATE B23: loose-folder fixture, no project to gate on
   & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule $rule @fixArgs 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'fix: result is byte-identical to expected\uV.fixed.pas' (Test-G8BytesEqual $pas $want)
   $before = [IO.File]::ReadAllBytes($pas)

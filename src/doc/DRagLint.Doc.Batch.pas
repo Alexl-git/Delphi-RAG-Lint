@@ -39,7 +39,7 @@ type
   /// doc-source tasks and are inert here.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Batch.pas) ?, DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas) ? (+4 more)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Batch.pas) ?, DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.Doc.Batch.DocumentOneUnit (DRagLint.Doc.Batch.pas) ? (+5 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -162,7 +162,7 @@ type
   /// DocCount is how many of them contributed at least one edit.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas) ?, DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas) ?, DRagLint.CLI.ReportDocBatch (DRagLint.CLI.pas) ?, DRagLint.Doc.Batch.AggregateOverFiles (DRagLint.Doc.Batch.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas) (+4 more)</para>
+  /// <para>Used by: DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas) ?, DRagLint.CLI.ReportDocBatch (DRagLint.CLI.pas) ?, DRagLint.Doc.Batch.AggregateOverFiles (DRagLint.Doc.Batch.pas), DRagLint.Doc.Batch.DocumentOneUnit (DRagLint.Doc.Batch.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas) (+5 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -191,8 +191,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.Doc.Batch.AggregateOverFiles (DRagLint.Doc.Batch.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch</para>
+  /// <para>Used by: DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocBatch = class
@@ -223,16 +223,15 @@ type
     /// caller applies the edits to the very files whose trees the pass cached,
     /// and an in-process reindex must parse the edited text, not the cached one.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.Doc.Batch.AggregateOverFiles (DRagLint.Doc.Batch.pas)</para>
-    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Doc.Batch.HasManagedBlock, DRagLint.Doc.Batch.IsDocumentableKind, DRagLint.Doc.Batch.IsTrivialAccessor, DRagLint.Doc.Document.TDocumenter.BuildForSymbol, DRagLint.Doc.Strip.TDocStripper.StripFile, Format, SameText, Writeln</para>
-    /// <para>Returns: Default(TDocBatchResult)</para>
-    /// <para>Complexity: 15 (cyclomatic, outer body), 131 lines (full implementation)</para>
+    /// <para>Called from: DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas)</para>
+    /// <para>Calls: Default, DRagLint.Doc.Batch.DocumentOneUnit, DRagLint.Doc.Batch.ReleaseDocParseCaches, DRagLint.Project.OwnRoots.TOwnRoots.IsOurs, DRagLint.Project.OwnRoots.TOwnRoots.Load, ExpandFileName, Format, Writeln</para>
+    /// <para>Returns: Default(TDocBatchResult); DocumentOneUnit(AStore, AUnitFile, AOptions)</para>
     /// <para>Pure</para>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
-    /// <seealso cref="DRagLint.Doc.Batch.HasManagedBlock"/>
-    /// <seealso cref="DRagLint.Doc.Batch.IsDocumentableKind"/>
-    /// <seealso cref="DRagLint.Doc.Batch.IsTrivialAccessor"/>
-    /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildForSymbol"/>
+    /// <seealso cref="DRagLint.Doc.Batch.DocumentOneUnit"/>
+    /// <seealso cref="DRagLint.Doc.Batch.ReleaseDocParseCaches"/>
+    /// <seealso cref="DRagLint.Project.OwnRoots.TOwnRoots.IsOurs"/>
+    /// <seealso cref="DRagLint.Project.OwnRoots.TOwnRoots.Load"/>
+    /// <seealso cref="DRagLint.Doc.Batch.TDocBatch.DocumentAll"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function DocumentUnit(const AStore: ISymbolStore; const AUnitFile: string;
@@ -254,8 +253,7 @@ type
     /// Not thread-safe; call from the owning thread only.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas)</para>
-    /// <para>Calls: DRagLint.Doc.Batch.AggregateOverFiles, DRagLint.Doc.Batch.FilterToOwnRoots, DRagLint.Index.Closure.TClosureResolver.Create, DRagLint.Index.Closure.TClosureResolver.Resolve, DRagLint.Project.Resolver.TProjectResolver.MembershipLibraryRoots, DRagLint.Project.TargetStudio.ResolveTargetStudio, DRagLint.Project.TargetStudio.TTargetStudio.OpenResolver</para>
-    /// <para>Returns: AggregateOverFiles(AStore, FilterToOwnRoots(CR.Files, AProjectFile, AOptions), AOptions)</para>
+    /// <para>Calls: DRagLint.Doc.Batch.AggregateOverFiles, DRagLint.Doc.Batch.FilterToOwnRoots, DRagLint.Index.Closure.TClosureResolver.Create, DRagLint.Index.Closure.TClosureResolver.Resolve, DRagLint.Project.Resolver.TProjectResolver.MembershipLibraryRoots, DRagLint.Project.TargetStudio.ResolveTargetStudio, DRagLint.Project.TargetStudio.TTargetStudio.OpenResolver, ExpandFileName, ExtractFilePath</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.Batch.AggregateOverFiles"/>
     /// <seealso cref="DRagLint.Doc.Batch.FilterToOwnRoots"/>
@@ -282,14 +280,14 @@ type
     /// Not thread-safe; call from the owning thread only.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Batch.AggregateOverFiles</para>
-    /// <para>Returns: AggregateOverFiles(AStore, Paths.ToArray, AOptions)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Batch.AggregateOverFiles, DRagLint.Doc.Batch.FilterToOwnRoots</para>
+    /// <para>Returns: AggregateOverFiles(AStore, FilterToOwnRoots(Paths.ToArray, AOptions.OwnAnchorDir, AOptions), AOptions)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Batch.AggregateOverFiles"/>
+    /// <seealso cref="DRagLint.Doc.Batch.FilterToOwnRoots"/>
     /// <seealso cref="DRagLint.Doc.Batch.TDocBatch.DocumentProject"/>
-    /// <seealso cref="DRagLint.Doc.Batch.TDocBatch.DocumentUnit"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function DocumentAll(const AStore: ISymbolStore;
@@ -304,8 +302,18 @@ type
 /// <returns>Paths (as given) where an interface-section symbol's stored name is not
 /// on its stored start line. Files whose stamp already changed are NOT returned:
 /// the stale-fact refusal and the stale-anchor retry own that case.</returns>
-/// <remarks>Read-only. A same-size edit with the mtime put back (tampering, a
-/// restore, a sync tool) is the case this exists for. Caller rescans and warns.</remarks>
+/// <remarks>
+/// Read-only. A same-size edit with the mtime put back (tampering, a
+/// restore, a sync tool) is the case this exists for. Caller rescans and warns.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RescanTamperedFacts (DRagLint.CLI.pas)</para>
+/// <para>Calls: ContainsText, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Index.Freshness.ChangedFilePaths, ExpandFileName, SameText</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 29 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
+/// <seealso cref="DRagLint.Index.Freshness.ChangedFilePaths"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DocFilesDisagreeingWithSource(const AStore: ISymbolStore;
   const AFiles: TArray<string>): TArray<string>;
 

@@ -47,52 +47,52 @@ function RunLint([string]$CfgJson, [string]$Sleep, [string]$NoBudget) {
   $txt = ($out -join "`n").Trim()
   if ($txt -eq '') { return @() }
   # lint --json is a bare array; rule id is "rule", line is "start_line"
-  return @($txt | ConvertFrom-Json)
+  return @(($txt | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 function Rules($F) { return @($F | ForEach-Object { $_.rule }) }
 
 try {
   # B1
-  $b1 = RunLint '{}' '' ''
+  $b1 = @(RunLint '{}' '' '')
   Write-Host ('raw B1: ' + (($b1 | ForEach-Object { "$($_.rule)@$($_.start_line)" }) -join ', '))
-  Check ((Rules $b1) -contains 'weak-cipher') 'B1 baseline has weak-cipher'
-  Check ((Rules $b1) -contains 'writeln-in-gui-app') 'B1 baseline has writeln-in-gui-app'
-  Check (-not ((Rules $b1) -contains 'rule-skipped-budget')) 'B1 baseline has no rule-skipped-budget note'
+  Check ((@(Rules $b1)) -contains 'weak-cipher') 'B1 baseline has weak-cipher'
+  Check ((@(Rules $b1)) -contains 'writeln-in-gui-app') 'B1 baseline has writeln-in-gui-app'
+  Check (-not ((@(Rules $b1)) -contains 'rule-skipped-budget')) 'B1 baseline has no rule-skipped-budget note'
 
   # B2
-  $b2 = RunLint '{ "rule_time_budget_ms": 300 }' 'writeln-in-gui-app=900' ''
+  $b2 = @(RunLint '{ "rule_time_budget_ms": 300 }' 'writeln-in-gui-app=900' '')
   Write-Host ('raw B2: ' + (($b2 | ForEach-Object { "$($_.rule)@$($_.start_line): $($_.message)" }) -join ' | '))
   $notes = @($b2 | Where-Object { $_.rule -eq 'rule-skipped-budget' })
   # positive-control: rule-skipped-budget
   Check ($notes.Count -eq 1) "B2 exactly one rule-skipped-budget note (got $($notes.Count))"
   Check (($notes.Count -ge 1) -and ($notes[0].message -match 'writeln-in-gui-app') -and ($notes[0].message -match '300 ms')) 'B2 note names the rule and the budget'
   Check (($notes.Count -ge 1) -and ($notes[0].severity -eq 'info')) 'B2 note severity is info'
-  Check (-not ((Rules $b2) -contains 'writeln-in-gui-app')) 'B2 overrunning rule is skipped for the file'
-  Check ((Rules $b2) -contains 'weak-cipher') 'B2 positive control: the other rule of the same lane still reports'
+  Check (-not ((@(Rules $b2)) -contains 'writeln-in-gui-app')) 'B2 overrunning rule is skipped for the file'
+  Check ((@(Rules $b2)) -contains 'weak-cipher') 'B2 positive control: the other rule of the same lane still reports'
 
   # B3
-  $b3 = RunLint '{ "rule_time_budget_ms": 0 }' 'writeln-in-gui-app=900' ''
-  Check ((Rules $b3) -contains 'writeln-in-gui-app') 'B3 budget 0 = off: writeln-in-gui-app reported'
-  Check (-not ((Rules $b3) -contains 'rule-skipped-budget')) 'B3 budget 0 = off: no note'
+  $b3 = @(RunLint '{ "rule_time_budget_ms": 0 }' 'writeln-in-gui-app=900' '')
+  Check ((@(Rules $b3)) -contains 'writeln-in-gui-app') 'B3 budget 0 = off: writeln-in-gui-app reported'
+  Check (-not ((@(Rules $b3)) -contains 'rule-skipped-budget')) 'B3 budget 0 = off: no note'
 
   # B4
-  $b4 = RunLint '{ "rule_time_budget_ms": 300 }' 'writeln-in-gui-app=900' '1'
-  Check ((Rules $b4) -contains 'writeln-in-gui-app') 'B4 DRAGLINT_NO_BUDGET=1: writeln-in-gui-app reported'
-  Check (-not ((Rules $b4) -contains 'rule-skipped-budget')) 'B4 DRAGLINT_NO_BUDGET=1: no note'
+  $b4 = @(RunLint '{ "rule_time_budget_ms": 300 }' 'writeln-in-gui-app=900' '1')
+  Check ((@(Rules $b4)) -contains 'writeln-in-gui-app') 'B4 DRAGLINT_NO_BUDGET=1: writeln-in-gui-app reported'
+  Check (-not ((@(Rules $b4)) -contains 'rule-skipped-budget')) 'B4 DRAGLINT_NO_BUDGET=1: no note'
 
   # B5
-  $b5 = RunLint '{}' 'writeln-in-gui-app=100' ''
-  Check ((Rules $b5) -contains 'writeln-in-gui-app') 'B5 under the default budget: writeln-in-gui-app reported'
-  Check (-not ((Rules $b5) -contains 'rule-skipped-budget')) 'B5 under the default budget: no note'
+  $b5 = @(RunLint '{}' 'writeln-in-gui-app=100' '')
+  Check ((@(Rules $b5)) -contains 'writeln-in-gui-app') 'B5 under the default budget: writeln-in-gui-app reported'
+  Check (-not ((@(Rules $b5)) -contains 'rule-skipped-budget')) 'B5 under the default budget: no note'
 
   # B7: the CLI switch --no-budget (same effect as DRAGLINT_NO_BUDGET)
   $cfg7 = Join-Path $work 'cfg7.json'
   [IO.File]::WriteAllText($cfg7, '{ "rule_time_budget_ms": 300 }', [Text.Encoding]::ASCII)
   $env:DRAGLINT_TEST_RULE_SLEEP_MS = 'writeln-in-gui-app=900'
-  try { $b7 = @(((& { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture --config $cfg7 --no-budget --json 2>$null }) -join "`n") | ConvertFrom-Json) }
+  try { $b7 = @((((& { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture --config $cfg7 --no-budget --json 2>$null }) -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   finally { Remove-Item Env:\DRAGLINT_TEST_RULE_SLEEP_MS -ErrorAction SilentlyContinue }
-  Check ((Rules $b7) -contains 'writeln-in-gui-app') 'B7 --no-budget: writeln-in-gui-app reported'
-  Check (-not ((Rules $b7) -contains 'rule-skipped-budget')) 'B7 --no-budget: no note'
+  Check ((@(Rules $b7)) -contains 'writeln-in-gui-app') 'B7 --no-budget: writeln-in-gui-app reported'
+  Check (-not ((@(Rules $b7)) -contains 'rule-skipped-budget')) 'B7 --no-budget: no note'
 
   # B8: lint-all names the skipped rules once in its summary (stderr note line); the default budget applies
   $fdir = Join-Path $work 'fx'
@@ -109,7 +109,7 @@ try {
   Check (@($b8err | Where-Object { $_ -match '\[rule-skipped-budget\]|rule-skipped-budget' -and $_ -match 'BudgetFixture' }).Count -ge 1) 'B8 lint-all also reports the per-file note'
 
   # B6
-  $cat = (& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null }) | ConvertFrom-Json
+  $cat = (& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null }) | ConvertFrom-Json | ForEach-Object { $_ }
   $row = @($cat.rules | Where-Object { $_.id -eq 'rule-skipped-budget' })
   Check ($row.Count -eq 1) 'B6 rules --json lists rule-skipped-budget'
   Check (($row.Count -eq 1) -and $row[0].default_severity -eq 'info' -and $row[0].category -eq 'other' -and $row[0].default_enabled) 'B6 rule-skipped-budget is info / other / on'
@@ -121,7 +121,7 @@ try {
   $cfg0 = Join-Path $work 'cfg0.json'
   [IO.File]::WriteAllText($cfg0, '{}', [Text.Encoding]::ASCII)
   $tout = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $tfx --config $cfg0 --json 2>$null }) -join "`n"
-  $got = @(($tout | ConvertFrom-Json) | Where-Object { $_.rule -match '^(stringlist-|dictionary-get)' } | ForEach-Object { "$($_.rule)@$($_.start_line)" })
+  $got = @(($tout | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $_.rule -match '^(stringlist-|dictionary-get)' } | ForEach-Object { "$($_.rule)@$($_.start_line)" })
   Write-Host ('raw T1: ' + ($got -join ', '))
   Check (($got -join ',') -eq 'stringlist-objects-leak@40,stringlist-unsorted@41,stringlist-unsorted@53,stringlist-unsorted@54') 'T1 TScan fixture findings unchanged (4, pinned from the pre-change engine)'
 

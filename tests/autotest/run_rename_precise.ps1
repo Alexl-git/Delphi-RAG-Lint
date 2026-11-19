@@ -43,7 +43,7 @@ function Get-SrcHash([string]$Dir) {
 function Build-Lab([string]$Root) {
   $bat = "$Root.bld.bat"
   [IO.File]::WriteAllText($bat, "@echo off`r`ncall `"$RsVars`"`r`ncd /D `"$Root`"`r`nmsbuild /t:Build /p:Config=Debug /p:Platform=Win64 /v:minimal PrecRen.dproj`r`nexit /b %ERRORLEVEL%`r`n", $Ascii)
-  $p = Start-Process cmd.exe -ArgumentList "/c `"$bat`"" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$Root.bld.log" -RedirectStandardError "$Root.bld.err"
+  $p = Start-Process cmd.exe -ArgumentList "/c `"$bat`"" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$Root.bld.log" -RedirectStandardError "$Root.bld.err"; $null = $p.Handle
   return ($p.ExitCode -eq 0)
 }
 function Stdout-Of([string]$Root) {
@@ -65,7 +65,7 @@ function New-Lab {
 function Plan($P, [string]$Q, [string]$To, [string]$Lib = $script:Lib) {
   Push-Location $WorkDir
   try { $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe rename --kind symbol --name $Q --to $To --db $P.Db --library-db $Lib --plan --json 2>$null } | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
-  $j = $null; try { $j = $o | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $o | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   return @{ Exit = $c; Json = $j; Out = $o; Kinds = @($j.refusals | ForEach-Object { $_.kind }) }
 }
 function Apply($P, [string]$Q, [string]$To, [string[]]$Extra = @(), [string]$Lib = $script:Lib) {
@@ -114,7 +114,7 @@ $script:Expected = Stdout-Of $base.Root
 Check 'fixture runs and prints' ($script:Expected -match 'TKid\.Run' -and $script:Expected -match '300')
 
 Write-Host 'ref_receivers: a whole pass and an incremental one agree' -ForegroundColor Cyan
-function Rcv-Count($P) { $j = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $P.Db --query 'select count(*) from ref_receivers' --json 2>$null } | Out-String | ConvertFrom-Json); return [int]$j.rows[0][0] }
+function Rcv-Count($P) { $j = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $P.Db --query 'select count(*) from ref_receivers' --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }); return [int]$j.rows[0][0] }
 $rp = New-Lab
 $before = Rcv-Count $rp
 Check 'rcv the join writes rows' ($before -gt 0) "rows=$before"

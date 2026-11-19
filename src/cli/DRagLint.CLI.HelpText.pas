@@ -213,11 +213,11 @@ begin
   Writeln('                               every owning project) included, is ON by default; only "autofix_off": [...] in drag-lint-lint.json withholds one;');
   Writeln('                               with it the run still prints "rename-local: <N>" (stderr) for the single-project renames.');
   Writeln('                               This is what the IDE Structure form''s right-click Fix it / Fix all in unit run.');
-  Writeln('  drag-lint allow <file>       --fix-line <L> --fix-rule <id> [--apply] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>]   (record a dl:ok review of ONE finding; dry-run without --apply; the lint options decide which findings the line has)');
+  Writeln('  drag-lint allow <file>       --fix-line <L> --fix-rule <id> [--apply] [--reason "<text>"] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>]   (record a dl:ok review of ONE finding; dry-run without --apply; --reason replaces the marker''s reason, e.g. "REVIEWED <yyyy-mm-dd> <why>" -- without it a re-hash of a stale marker drops its REVIEWED stamp; the lint options decide which findings the line has)');
   Writeln('  drag-lint shared-unit        --in <file.pas> [--add-project <name>] [--apply] [--json]   (read/extend the dl:shared marker; dry-run without --apply)');
   Writeln('  drag-lint lint-project --db <file.sqlite> [--library-db <lib.sqlite>|none] [--profile <name>] [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value|unused-global|help] [--layers <f.json>] [--json] [--output <f>]');
-  Writeln('  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output|--report <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget]');
-  Writeln('                               --output <file> (alias --report): the text report goes to the file (default lint-report-YYYYMMDD.txt beside --project, else beside the DB); with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).');
+  Writeln('  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget]');
+  Writeln('                               --output <file>: the text report goes to the file (default lint-report-YYYYMMDD.txt beside --project, else beside the DB); with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).');
   Writeln('                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)');
   Writeln('                               --rule <id>[,<id>...]: RUN and report ONLY those rules (1.51.1: a comma list narrows execution and derives no --shared-db peers, as one id does); naming an OFF-by-default rule opts it in');
   Writeln('                               for the run (no --enable needed) -- the same contract as lint and lint-project.');
@@ -337,7 +337,7 @@ begin
   Writeln('  drag-lint ide-release [--seconds N] [--resume] [--status] [--json]   (writes a hold sentinel: a running Delphi IDE plugin will not respawn drag-lint.exe while it lasts and stops its LSP child on the next request that wants it, so the engine binary can be rebuilt while the IDE stays open; default 120s, --resume clears it early. Frees nothing by itself -- build\stage-engine.ps1 kills the running holder and retries. The plugin job queue also DEFERS its heavy jobs for the duration rather than starting them)');
   Writeln('  drag-lint sql --query "SELECT ..." | --in <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>]   (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 (none with --output unless --limit is given; --limit 0 = every row; JSON says truncated + total_rows) and time cap 10000 ms; ask `schema --format json` for the columns)');
   Writeln('  drag-lint wiki --term "<phrase>" | --list | --check [--json] [--db <file.sqlite>]   (dl:wiki CONCEPT topics written in doc comments: --term routes a human word or alias ("the scheduler") to the owning symbol, --list prints every topic, --check resolves every SeeCode entry and exits 1 on drift. Authoring format: docs\wiki\Wiki-Blocks-Authoring.md)');
-  Writeln('  drag-lint explain <rule-id> [--json] [--rules-dir <dir>]   (what one lint rule means, why it matters, bad / good example, default, fixable, and how to suppress it; an unknown id lists the nearest ids and exits 2)');
+  Writeln('  drag-lint explain <rule-id> [--json|--format json] [--rules-dir <dir>]   (what one lint rule means, why it matters, bad / good example, default, fixable, and how to suppress it; an unknown id lists the nearest ids and exits 2)');
   Writeln('  drag-lint info [--json] [--db <file.sqlite>]...      (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only; the text form prints extractor:, resolver: and grammar dlls: (size:sha256-16 per DLL) lines as --json does -- 1.51.0 printed only the ABI line)');
   Writeln('                               each --db adds an `indexes` entry (--json): stored fingerprints, indexer_stale / resolver_stale, a verdict');
   Writeln('                               (current | resolve-owed | library-resolve-owed | reparse-owed | index-newer | missing | unreadable) and the remedy. Keyed lookups, no COUNT.');
@@ -352,12 +352,12 @@ begin
   Writeln('      (--qname and --kind symbol refuse, exit 2, and name the file(s) when the old name is used as an identifier in an .inc file: the index records no identifier references inside {$I} included text)');
   Writeln('      (an event handler rename also rewrites its text .dfm binding, OnClick = Name; a binary .dfm that holds the name refuses, exit 2, naming the file; other binary or unindexed .dfm files are reported as not rewritten, never skipped silently)');
   Writeln('  drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PATH]');
-  Writeln('  drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--no-backup|--migrate-pure] [--db PATH]   - generate/repair a managed DocInsight comment');
-  Writeln('  drag-lint document --unit <file.pas> [--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]         - document every public decl in the unit (facts-only; ONE --unit per run: a second, different --unit is exit 2)');
+  Writeln('  drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--format json|--no-backup|--migrate-pure] [--db PATH]   - generate/repair a managed DocInsight comment');
+  Writeln('  drag-lint document --unit <file.pas> [--apply|--json|--no-backup|--include-accessors|--document-third-party|--migrate-pure] [--db PATH]         - document every public decl in the unit (facts-only; ONE --unit per run: a second, different --unit is exit 2)');
   Writeln('  drag-lint document --project <p.dpr|.dproj> [--stubs|--apply|--json|--no-backup|--include-accessors|--reindex|--document-third-party|--migrate-pure] [--db PATH]  - document every public decl the project OWNS (--reindex brackets with index: self-freshens so hover/LSP are correct immediately after)');
   Writeln('                                 scope: the compile closure restricted to the project''s own roots (_D-RAG\drag-lint-project.json, same declaration lint-all reads).');
   Writeln('                                 Vendored roots are named and skipped; --document-third-party writes to them too.');
-  Writeln('  drag-lint document-all [--profile <name>] [--stubs|--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]               - document every public decl in every indexed unit (no project scope)');
+  Writeln('  drag-lint document-all [--profile <name>] [--stubs|--apply|--json|--format json|--no-backup|--include-accessors|--document-third-party|--migrate-pure] [--db PATH]               - document every public decl in every indexed unit (no project scope)');
   Writeln('     batch modes (--unit/--project/document-all) default facts-only: an empty tag is never written, <param> never gets a skeleton, and <summary> appears only when harvested from a nearby // comment; add --stubs to keep a fresh comment that has no facts block');
   Writeln('     batch modes also skip TRIVIAL Get*/Set* property accessors (impl body <= docs.accessor_trivial_max_lines, default 2) by default; add --include-accessors to document them too');
   Writeln('  drag-lint document --unit <file.pas> --strip [--apply|--no-backup] [--db PATH]   - REMOVE drag-lint-generated doc tags/blocks (marker-keyed; hand-written docs untouched)');
@@ -500,7 +500,7 @@ begin
   Writeln('  drag-lint manifest where [--manifest <path>] [--json]   (read-only: which drag-lint.json, log folder and library folder this engine resolves, and each lookup rung. Order: explicit DRAGLINT_MANIFEST / --manifest, then with DRAGLINT_LAYOUT=v2 the file in %APPDATA%\drag-lint, then beside the exe. Creates, moves and renames nothing)');
   Writeln('  drag-lint manifest migrate [--apply] [--dry-run] [--json]   (one-time, installed layout v2 phase 2: without --apply (or with --dry-run, which overrides --apply) plans and touches nothing; with --apply and DRAGLINT_LAYOUT=v2 writes %APPDATA%\drag-lint\drag-lint.json with outDir and relative includes made absolute, so every DB stays put, then RENAMES the exe-side file to drag-lint.json.migrated-<date>. Never deletes, never overwrites. Exit 0 done / would / nothing to do, 2 refused, 1 failed)');
   Writeln('  drag-lint repo init           (--repo <file> | --project <project file>)   (create an empty field repository; exit 1 when the file exists)');
-  Writeln('  drag-lint repo info           (--repo <file> | --project <project file>) [--json]   (path, schema version, rows per table, DL_META keys; exit 1 when not a repository)');
+  Writeln('  drag-lint repo info           (--repo <file> | --project <project file>) [--json|--format json]   (path, schema version, rows per table, DL_META keys; exit 1 when not a repository)');
   Writeln('  drag-lint repo import-fb      --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--replace]   (copy the FIB$ registry tables; read-only on Firebird; --replace writes a before-import text backup first; exit 1 failure, 2 schema drift)');
   Writeln('  drag-lint repo seed-fb        --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--dry-run]   (fill an EMPTY repository from the Firebird schema; read-only on Firebird)');
   Writeln('  drag-lint repo refresh-schema --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--dry-run]   (re-read the Firebird schema into a filled repository, keep hand-edited columns, mark vanished columns; --dry-run prints the diff only)');
@@ -518,7 +518,7 @@ begin
   Writeln('       see wiki page: bookmarks');
   Writeln('  drag-lint bookmarks-strip --in <file.pas|dir> --output <sidecar.json> [--name <code>] [--apply] [--json|--format json] (removes the dl:bk comment anchors and records them in a sidecar for bookmarks-restore; dry run without --apply; never overwrites a sidecar; exit 3 = none)');
   Writeln('       see wiki page: bookmarks');
-  Writeln('  drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> [--json] [--explain] [--max-routines N] [--max-seconds S]');
+  Writeln('  drag-lint check-init <QName>|--qname <QName> [--at <file>:<line>[:<col>]] --db <db> [--json|--format json] [--explain] [--max-routines N] [--max-seconds S]');
   Writeln('       see wiki page: check-init');
   Writeln('  drag-lint convert-apply --unit <F.pas> [--unit <G.pas> ...] --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--no-reconcile-uses] [--no-reindex] [--old-platform-db <file> ...] [--format json|--json] (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on ' +
     'instead of parsed out of prose, plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count; the book''s UNIT rules act on the unit too: #unuse Old removes it, #use New adds it to the implementation uses when absent ' +
@@ -582,7 +582,7 @@ begin
   Writeln('       see wiki page: rule-time-budget');
   Writeln('  drag-lint lint <unit.pas> --db <db> --rule parameter-type-too-wide --fix --fix-rule parameter-type-too-wide [--fix-line <n>] --apply --project <X.dproj> [--compile-gate | --no-compile-gate] [--library-db <lib>] [--no-backup]');
   Writeln('       see wiki page: v152-ptw');
-  Writeln('  drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output|--report <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget] [--no-stand-down]');
+  Writeln('  drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget] [--no-stand-down]');
   Writeln('       ^ A second --db is the library slot, not another project: to judge a dl:ok on a dl:shared unit use --shared-db.');
   Writeln('       ^ `--library-db <lib>` names the library slot too and wins over a second --db and the manifest; a missing file refuses (exit 2), `none` means no library. Without a library, a type whose ancestry lives there stays unknown and the type-aware rules stay silent on it.');
   Writeln('       ^ lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all.');
@@ -619,7 +619,7 @@ begin
   Writeln('       ^ The default RESTRICTS: a hit outside N hops is dropped, not demoted; --near-boost keeps it.');
   Writeln('       ^ A hop is one resolved call edge, callers and callees; --hops 4 is refused (use impact --depth).');
   Writeln('       see wiki page: query-text-near');
-  Writeln('  drag-lint rules disable|enable --rule <id> --scope line|unit|project [--in <F> --line <N>] --reason "<text>" [--project <.dproj>] [--config <drag-lint-lint.json>] [--json]   (line = a dl:ok marker on the line; unit / project = rule_overrides in the project lint config, with reason and date; enable undoes one disable)');
+  Writeln('  drag-lint rules disable|enable --rule <id> --scope line|unit|project [--in <F> --line <N>] --reason "<text>" [--project <.dproj>] [--config <drag-lint-lint.json>] [--json|--format json]   (line = a dl:ok marker on the line; unit / project = rule_overrides in the project lint config, with reason and date; enable undoes one disable)');
   Writeln('       see wiki page: v152-disable-rule');
   Writeln('  drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]');
   Writeln('       see wiki page: Find-Usages-context');
@@ -634,7 +634,7 @@ begin
   Writeln('  --force-reparse        also: --no-skip');
   Writeln('  --help                 also: -h, -?');
   Writeln('  --in                   also: --file');
-  Writeln('  --output               also: --out');
+  Writeln('  --output               also: --out, --report');
   Writeln('  --scan-libraries-win   also: --scan-libraries');
   Writeln('');
 end;
@@ -879,7 +879,7 @@ begin
   end;
   if pVerb = 'allow' then
   begin
-    Writeln('  drag-lint allow <file>       --fix-line <L> --fix-rule <id> [--apply] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>]   (record a dl:ok review of ONE finding; dry-run without --apply; the lint options decide which findings the line has)');
+    Writeln('  drag-lint allow <file>       --fix-line <L> --fix-rule <id> [--apply] [--reason "<text>"] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>]   (record a dl:ok review of ONE finding; dry-run without --apply; --reason replaces the marker''s reason, e.g. "REVIEWED <yyyy-mm-dd> <why>" -- without it a re-hash of a stale marker drops its REVIEWED stamp; the lint options decide which findings the line has)');
     Exit;
   end;
   if pVerb = 'shared-unit' then
@@ -894,8 +894,8 @@ begin
   end;
   if pVerb = 'lint-all' then
   begin
-    Writeln('  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output|--report <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget]');
-    Writeln('                               --output <file> (alias --report): the text report goes to the file (default lint-report-YYYYMMDD.txt beside --project, else beside the DB); with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).');
+    Writeln('  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget]');
+    Writeln('                               --output <file>: the text report goes to the file (default lint-report-YYYYMMDD.txt beside --project, else beside the DB); with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).');
     Writeln('                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)');
     Writeln('                               --rule <id>[,<id>...]: RUN and report ONLY those rules (1.51.1: a comma list narrows execution and derives no --shared-db peers, as one id does); naming an OFF-by-default rule opts it in');
     Writeln('                               for the run (no --enable needed) -- the same contract as lint and lint-project.');
@@ -1136,7 +1136,7 @@ begin
   end;
   if pVerb = 'explain' then
   begin
-    Writeln('  drag-lint explain <rule-id> [--json] [--rules-dir <dir>]   (what one lint rule means, why it matters, bad / good example, default, fixable, and how to suppress it; an unknown id lists the nearest ids and exits 2)');
+    Writeln('  drag-lint explain <rule-id> [--json|--format json] [--rules-dir <dir>]   (what one lint rule means, why it matters, bad / good example, default, fixable, and how to suppress it; an unknown id lists the nearest ids and exits 2)');
     Exit;
   end;
   if pVerb = 'info' then
@@ -1175,8 +1175,8 @@ begin
   end;
   if pVerb = 'document' then
   begin
-    Writeln('  drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--no-backup|--migrate-pure] [--db PATH]   - generate/repair a managed DocInsight comment');
-    Writeln('  drag-lint document --unit <file.pas> [--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]         - document every public decl in the unit (facts-only; ONE --unit per run: a second, different --unit is exit 2)');
+    Writeln('  drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--format json|--no-backup|--migrate-pure] [--db PATH]   - generate/repair a managed DocInsight comment');
+    Writeln('  drag-lint document --unit <file.pas> [--apply|--json|--no-backup|--include-accessors|--document-third-party|--migrate-pure] [--db PATH]         - document every public decl in the unit (facts-only; ONE --unit per run: a second, different --unit is exit 2)');
     Writeln('  drag-lint document --project <p.dpr|.dproj> [--stubs|--apply|--json|--no-backup|--include-accessors|--reindex|--document-third-party|--migrate-pure] [--db PATH]  - document every public decl the project OWNS (--reindex brackets with index: self-freshens so hover/LSP are correct immediately after)');
     Writeln('                                 scope: the compile closure restricted to the project''s own roots (_D-RAG\drag-lint-project.json, same declaration lint-all reads).');
     Writeln('                                 Vendored roots are named and skipped; --document-third-party writes to them too.');
@@ -1184,7 +1184,7 @@ begin
   end;
   if pVerb = 'document-all' then
   begin
-    Writeln('  drag-lint document-all [--profile <name>] [--stubs|--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]               - document every public decl in every indexed unit (no project scope)');
+    Writeln('  drag-lint document-all [--profile <name>] [--stubs|--apply|--json|--format json|--no-backup|--include-accessors|--document-third-party|--migrate-pure] [--db PATH]               - document every public decl in every indexed unit (no project scope)');
     Writeln('     batch modes (--unit/--project/document-all) default facts-only: an empty tag is never written, <param> never gets a skeleton, and <summary> appears only when harvested from a nearby // comment; add --stubs to keep a fresh comment that has no facts block');
     Writeln('     batch modes also skip TRIVIAL Get*/Set* property accessors (impl body <= docs.accessor_trivial_max_lines, default 2) by default; add --include-accessors to document them too');
     Writeln('  drag-lint document --unit <file.pas> --strip [--apply|--no-backup] [--db PATH]   - REMOVE drag-lint-generated doc tags/blocks (marker-keyed; hand-written docs untouched)');
@@ -1531,7 +1531,7 @@ begin
   if pVerb = 'repo' then
   begin
     Writeln('  drag-lint repo init           (--repo <file> | --project <project file>)   (create an empty field repository; exit 1 when the file exists)');
-    Writeln('  drag-lint repo info           (--repo <file> | --project <project file>) [--json]   (path, schema version, rows per table, DL_META keys; exit 1 when not a repository)');
+    Writeln('  drag-lint repo info           (--repo <file> | --project <project file>) [--json|--format json]   (path, schema version, rows per table, DL_META keys; exit 1 when not a repository)');
     Writeln('  drag-lint repo import-fb      --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--replace]   (copy the FIB$ registry tables; read-only on Firebird; --replace writes a before-import text backup first; exit 1 failure, 2 schema drift)');
     Writeln('  drag-lint repo seed-fb        --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--dry-run]   (fill an EMPTY repository from the Firebird schema; read-only on Firebird)');
     Writeln('  drag-lint repo refresh-schema --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--dry-run]   (re-read the Firebird schema into a filled repository, keep hand-edited columns, mark vanished columns; --dry-run prints the diff only)');

@@ -74,7 +74,7 @@ function Read-Frames([string]$Out) {
     $start = $i + $m.Index + $m.Length
     $len = [int]$m.Groups[1].Value
     if ($start + $len -gt $Out.Length) { break }
-    $res += ($Out.Substring($start, $len) | ConvertFrom-Json)
+    $res += ($Out.Substring($start, $len) | ConvertFrom-Json | ForEach-Object { $_ })
     $i = $start + $len
   }
   return $res

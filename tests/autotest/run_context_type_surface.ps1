@@ -59,7 +59,7 @@ $errFile = Join-Path $WorkDir 'stderr.txt'
 
 # A FOLDER target builds a Library-shaped DB, which is what a scratch fixture
 # wants. Never point a folder target at a project DB -- it widens it, stickily.
-& { $ErrorActionPreference = 'Continue'; & $Exe index $fixDir --db $db 2>$errFile } | Out-Null
+& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe index $fixDir --db $db 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-Null
 if ($LASTEXITCODE -ne 0) {
   $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }
   Write-Host "FATAL: indexing the fixture failed ($LASTEXITCODE)" -ForegroundColor Red
@@ -69,7 +69,7 @@ if ($LASTEXITCODE -ne 0) {
 
 # Returns the bundle split into its markdown sections, keyed by heading.
 function Sections([string]$Task) {
-  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe context --task $Task --db $db --format markdown 2>$errFile }) -join "`n"
+  $out = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe context --task $Task --db $db --format markdown 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }) -join "`n"
   $map = @{}
   $cur = '<preamble>'
   foreach ($ln in ($out -split "`r?`n")) {

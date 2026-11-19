@@ -345,7 +345,7 @@ function Test-IsRealVerb([string]$Verb) {
   $e = $o + '.err'
   $p = Start-Process -FilePath $script:Exe -ArgumentList $Verb -WorkingDirectory $script:probeDir `
          -PassThru -WindowStyle Hidden `
-         -RedirectStandardInput $script:probeIn -RedirectStandardOutput $o -RedirectStandardError $e
+         -RedirectStandardInput $script:probeIn -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   # 60 s, not 20: under a loaded box (17 lanes) a cold start of a real verb exceeded 20 s and the kill
   # left no 'unknown command' text, which misclassified a fake token as a REAL verb. A genuinely
   # hung probe is still killed; only the allowance grew.
@@ -408,7 +408,7 @@ Write-Host '-- check 2: rule counts' -ForegroundColor Cyan
 
 $total = 0; $fixable = 0; $defaultOn = 0
 try {
-  $cat       = (& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null } | Out-String) | ConvertFrom-Json
+  $cat       = (& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null } | Out-String) | ConvertFrom-Json | ForEach-Object { $_ }
   $total     = [int]$cat.summary.total
   $fixable   = @($cat.rules | Where-Object { $_.fixable }).Count
   $defaultOn = @($cat.rules | Where-Object { $_.default_enabled }).Count
@@ -1361,7 +1361,7 @@ foreach ($k in $FlagUndocumentedOnPurpose.Keys) {
 $aliasJson = Join-Path $Repo 'features\flag-aliases.json'
 $aliasSet = @()
 if (Test-Path -LiteralPath $aliasJson) {
-  $aliasSet = @((Get-Content -LiteralPath $aliasJson -Raw | ConvertFrom-Json).aliases | ForEach-Object { @($_.aliases) })
+  $aliasSet = @((Get-Content -LiteralPath $aliasJson -Raw | ConvertFrom-Json | ForEach-Object { $_ }).aliases | ForEach-Object { @($_.aliases) })
 }
 Check 'F1y the alias table is read (else the next check is vacuous)' ($aliasSet.Count -gt 0) "($($aliasSet.Count) alias(es)) $aliasJson"
 $exAlias = @($FlagUndocumentedOnPurpose.Keys | Where-Object { $aliasSet -contains $_ })

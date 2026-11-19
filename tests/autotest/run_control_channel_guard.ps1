@@ -187,7 +187,7 @@ function Invoke-Verb([string[]]$ArgList, [string]$Tag) {
   $o = Join-Path $script:WorkDir "$Tag-verb-out.txt"; $er = Join-Path $script:WorkDir "$Tag-verb-err.txt"
   $inF = Join-Path $script:WorkDir 'empty-stdin.txt'; if (-not (Test-Path $inF)) { [System.IO.File]::WriteAllText($inF, '') }
   $p = Start-Process -FilePath $script:Exe -ArgumentList $ArgList -WorkingDirectory $script:WorkDir -PassThru -NoNewWindow `
-         -RedirectStandardInput $inF -RedirectStandardOutput $o -RedirectStandardError $er
+         -RedirectStandardInput $inF -RedirectStandardOutput $o -RedirectStandardError $er; $null = $p.Handle
   $pid0 = $p.Id
   if (-not $p.WaitForExit(120000)) { try { $p.Kill($true) } catch { }; $p.WaitForExit() }
   return @{ Pid = $pid0; Exit = $p.ExitCode; Out = [System.IO.File]::ReadAllText($o); Err = [System.IO.File]::ReadAllText($er) }
@@ -294,7 +294,7 @@ $A = Start-Lsp $c1 'A'
 Check 'L1 engine A answered initialize over stdio (it is SERVING, not merely started)' $A.Init ("pid " + $A.P.Id)
 $leafA = PipeLeafOf $A 5000
 Check 'L2 engine A announced its control pipe on stderr' ($leafA -ne '') (($leafA) + ' | ' + ((ErrText $A) -split "`r?`n" | Select-Object -First 3) -join ' / ')
-Check 'L3 the announced pipe is enumerable in \\.\pipe (it is LISTENING)' (($leafA -ne '') -and ((PipesInNamespace) -contains $leafA)) ''
+Check 'L3 the announced pipe is enumerable in \\.\pipe (it is LISTENING)' (($leafA -ne '') -and ((@(PipesInNamespace)) -contains $leafA)) ''
 $expectedLeaf = "drag-lint-ctl-$mySid-s$mySession-p$($A.P.Id)"
 Check 'N1 pipe name = drag-lint-ctl-<this SID>-s<this session>-p<pid>' ($leafA -eq $expectedLeaf) "expected $expectedLeaf got $leafA"
 $sddlA = ''
@@ -351,7 +351,7 @@ $Bsrv = Start-Engine @('serve', '--db', $c2) 'Bserve'
 Start-Sleep -Milliseconds 1500
 Check 'G0 the serve engine is running (fixture alive)' (-not $Bsrv.P.HasExited) ("pid " + $Bsrv.P.Id)
 $leafB = "drag-lint-ctl-$mySid-s$mySession-p$($Bsrv.P.Id)"
-Check 'G1 no control pipe exists for the serve engine' (-not ((PipesInNamespace) -contains $leafB)) $leafB
+Check 'G1 no control pipe exists for the serve engine' (-not ((@(PipesInNamespace)) -contains $leafB)) $leafB
 
 # ---- D: --dry-run lists and changes nothing ----------------------------------
 Write-Host ''
@@ -394,7 +394,7 @@ Check 'S7 audit line on the engine''s stderr names the ASKING pid (the verb''s p
 $auditAfter = if (Test-Path $auditFile) { @(Get-Content -LiteralPath $auditFile).Count } else { 0 }
 $auditTail = if (Test-Path $auditFile) { @(Get-Content -LiteralPath $auditFile | Select-Object -Last 3) -join ' / ' } else { '' }
 Check 'S8 the audit file gained a line naming engine A' (($auditAfter -gt $auditBefore) -and ($auditTail -match ('\b' + $A.P.Id + '\b'))) $auditTail
-Check 'S9 the pipe is gone with the process' (-not ((PipesInNamespace) -contains $leafA)) ''
+Check 'S9 the pipe is gone with the process' (-not ((@(PipesInNamespace)) -contains $leafA)) ''
 Check 'S10 the serve engine was left alone by --db' (-not $Bsrv.P.HasExited) ''
 
 # ---- B: a busy engine refuses, says why, and is unchanged --------------------
@@ -569,7 +569,7 @@ $w3db = Join-Path $WorkDir 'w3.sqlite'
 $W3 = Start-Engine @('index', $bigDir, '--db', $w3db) 'W3' @{ DRAGLINT_TEST_INDEX_FILE_DELAY_MS = '20' }
 # the engine's stdout/stderr pipes must be drained or a 64 KB pipe stalls it mid-run (that, not a stand-down, made this read 40 of 60)
 Check 'W-P1 an unasked index completes, exit 0, every file present' ((WaitUntil { Pump $W3; $W3.P.HasExited } 120000 { EngineProgress $W3 }) -and ($W3.P.ExitCode -eq 0) -and ((FilesIn $w3db) -eq $nBig)) ("files=" + (FilesIn $w3db))
-Check 'W-P2 the pipe is gone with the process' (-not ((PipesInNamespace) -contains $leafW1)) ''
+Check 'W-P2 the pipe is gone with the process' (-not ((@(PipesInNamespace)) -contains $leafW1)) ''
 
 # ---- ST (DEC-13 owner addition): the stager asks through the channel first, kills last ----
 Write-Host ''

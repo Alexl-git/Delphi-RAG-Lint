@@ -17,7 +17,7 @@ uses
 /// <param name="AMsg"><!-- drag-lint:auto type -->const string</param>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.Diagnose.DiagConnections (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.DiagIndexes (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.EngineInfoJson (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.IndexVerdicts (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.RefreshEngineInfo (DragLint.Plugin.Diagnose.pas) (+25 more)</para>
+/// <para>Called from: DragLint.Plugin.Diagnose.DiagConnections (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.DiagIndexes (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.EngineInfoJson (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.IndexVerdicts (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.RefreshEngineInfo (DragLint.Plugin.Diagnose.pas) (+27 more)</para>
 /// <para>Calls: AnsiString, DragLint.Plugin.LspClient.GetPluginLogPath, FileExists, Format, FormatDateTime</para>
 /// <para>Catches: Exception (empty)</para>
 /// <seealso cref="DragLint.Plugin.LspClient.GetPluginLogPath"/>
@@ -47,7 +47,7 @@ type
   /// <summary>How an asynchronous request ended.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DragLint.Plugin.Editor.DoCompletion (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeGoToDefinition (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeSignatureHelp (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.RequestHoverBundleAsync (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.RequestHoverTextAsync (DragLint.Plugin.Editor.pas) (+5 more)</para>
+  /// <para>Used by: DragLint.Plugin.Editor.DoCompletion (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeGoToDefinition (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeSignatureHelp (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.RequestHoverBundleAsync (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.RequestHoverTextAsync (DragLint.Plugin.Editor.pas) (+7 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDLLspReplyStatus = (
@@ -110,8 +110,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DragLint.Plugin.Editor.pas) ?, DragLint.Plugin.Diagnose.DiagConnections (DragLint.Plugin.Diagnose.pas) ?, DragLint.Plugin.Editor.CurrentLspClient (DragLint.Plugin.Editor.pas) ?, DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.SyncLiveBufferToLsp (DragLint.Plugin.Editor.pas) ? (+14 more)</para>
-  /// <para>Used in units: DragLint.Plugin.Diagnose, DragLint.Plugin.Editor, DragLint.Plugin.HoverTracker, DragLint.Plugin.LspClient</para>
+  /// <para>Used by: declaration (DragLint.Plugin.Editor.pas) ?, DragLint.Plugin.Diagnose.DiagConnections (DragLint.Plugin.Diagnose.pas) ?, DragLint.Plugin.Editor.CurrentLspClient (DragLint.Plugin.Editor.pas) ?, DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.SyncLiveBufferToLsp (DragLint.Plugin.Editor.pas) ? (+18 more)</para>
+  /// <para>Used in units: DragLint.Plugin.Diagnose, DragLint.Plugin.Editor, DragLint.Plugin.HoverTracker, DragLint.Plugin.LspClient, DragLint.Plugin.UsagesForm</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDragLintLspClient = class
@@ -389,9 +389,9 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DragLint.Plugin.About.StartBackgroundSelfInfoFetch (DragLint.Plugin.About.pas) ?, DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.RunCompileDiagnoseAsync (DragLint.Plugin.Editor.pas) ?, DragLint.Plugin.Editor.RunFullCompileSweepAsync (DragLint.Plugin.Editor.pas) ?, DragLint.Plugin.LspClient.TDragLintLspClient.Start/1 (DragLint.Plugin.LspClient.pas) (+4 more)</para>
-      /// <para>Calls: BoolToStr, CloseHandle, CreatePipe, CreateProcessW, DRagLint.Core.JobObject.AssignToDragLintJob, DragLint.Plugin.LspClient.DebugLog, DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes, FileExists, Format, IntToStr, Move, PChar, SetHandleInformation, ZeroMemory</para>
+      /// <para>Calls: BoolToStr, CloseHandle, Copy, CreatePipe, CreateProcessW, DRagLint.Core.JobObject.AssignToDragLintJob, DragLint.Plugin.LspClient.DebugLog, DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes, FileExists, Format, IntToStr, Move, PChar, SetHandleInformation, ZeroMemory</para>
       /// <para>Overload 2 of 2</para>
-      /// <para>Reads: FLock, FProcessHandle   Writes: FState, FLastError, FStartedAt, FProcessHandle, FProcessId, FBeatSeen, FBeatSeq, FBeatText (+1 more)</para>
+      /// <para>Reads: FLock, FProcessHandle   Writes: FState, FLastError, FStartedAt, FDbPaths, FProcessHandle, FProcessId, FBeatSeen, FBeatSeq (+2 more)</para>
       /// <para>Directives: overload</para>
       /// <seealso cref="DRagLint.Core.JobObject.AssignToDragLintJob"/>
       /// <seealso cref="DragLint.Plugin.LspClient.DebugLog"/>
@@ -514,7 +514,7 @@ type
       /// <remarks>
       /// Never blocks and never waits on the engine.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DragLint.Plugin.Editor.DoCompletion (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeGoToDefinition (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeSignatureHelp (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.LspCallerCounts (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.RequestHoverBundleAsync (DragLint.Plugin.Editor.pas) (+2 more)</para>
+      /// <para>Called from: DragLint.Plugin.Editor.DoCompletion (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeGoToDefinition (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeSignatureHelp (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.LspCallerCounts (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.RequestHoverBundleAsync (DragLint.Plugin.Editor.pas) (+3 more)</para>
       /// <para>Calls: DragLint.Plugin.LspClient.IDLReplyFlag.GetDone, DragLint.Plugin.LspClient.OutstandingNow, DragLint.Plugin.LspClient.TDragLintLspClient.SendRequestFrame, TDLFlagHolder, UInt64</para>
       /// <para>Returns: 0; Id</para>
       /// <para>Reads: FWriter, FLock, FNextId, FFlags, FAsync, FOutstanding   Writes: FNextId</para>
@@ -533,7 +533,7 @@ type
       /// <remarks>
       /// Main thread. Never blocks.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DragLint.Plugin.HoverTracker.TDragLintHoverHelper.CancelInflight (DragLint.Plugin.HoverTracker.pas)</para>
+      /// <para>Called from: DragLint.Plugin.HoverTracker.TDragLintHoverHelper.CancelInflight (DragLint.Plugin.HoverTracker.pas), DragLint.Plugin.UsagesForm.TDragLintUsagesForm.CancelLspQuery (DragLint.Plugin.UsagesForm.pas)</para>
       /// <para>Calls: DragLint.Plugin.LspClient.IDLReplyFlag.SetCancelled, DragLint.Plugin.LspClient.TDragLintLspClient.Notify, TDLFlagHolder</para>
       /// <para>Reads: FLock, FFlags, FAsync</para>
       /// <seealso cref="DragLint.Plugin.LspClient.IDLReplyFlag.SetCancelled"/>
@@ -552,7 +552,7 @@ type
       /// notification with the same key (didChange per document).</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DragLint.Plugin.Editor.BroadcastDidSaveForAffectedFiles (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeDiagnostics (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeRunAstChecks (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.SyncLiveBufferToLsp (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.TriggerDiagnosticsOnSave (DragLint.Plugin.Editor.pas) (+1 more)</para>
+      /// <para>Called from: DragLint.Plugin.Editor.BroadcastDidSaveForAffectedFiles (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeDiagnostics (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeRunAstChecks (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.SyncLiveBufferToLsp (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.TriggerDiagnosticsOnSave (DragLint.Plugin.Editor.pas) (+2 more)</para>
       /// <para>Calls: DragLint.Plugin.LspClient.TDragLintLspClient.WriteFramedMessage</para>
       /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.WriteFramedMessage"/>
       /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
@@ -672,7 +672,7 @@ type
       /// distinguishes "we think we are connected" from "the child actually
       /// died", which FState alone cannot.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DragLint.Plugin.Diagnose.DiagConnections (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.UpdateLspStatusIndicator (DragLint.Plugin.Editor.pas), DragLint.Plugin.LspClient.TDragLintLspClient.StateText (DragLint.Plugin.LspClient.pas)</para>
+      /// <para>Called from: DragLint.Plugin.Diagnose.DiagConnections (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.UpdateLspStatusIndicator (DragLint.Plugin.Editor.pas), DragLint.Plugin.LspClient.TDragLintLspClient.StateText (DragLint.Plugin.LspClient.pas), DragLint.Plugin.UsagesForm.TDragLintUsagesForm.LspWatchTick (DragLint.Plugin.UsagesForm.pas) (+1 more)</para>
       /// <para>Calls: WaitForSingleObject</para>
       /// <para>Returns: False; WaitForSingleObject(FProcessHandle, 0) = WAIT_TIMEOUT</para>
       /// <para>Reads: FPipeBroken, FProcessHandle</para>

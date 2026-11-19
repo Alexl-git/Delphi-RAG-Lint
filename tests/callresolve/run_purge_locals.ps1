@@ -48,7 +48,7 @@ Copy-Item $fixture $target -Force
 function KindCount([string]$name, [string]$k) {
   $j = & { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --json --db $db 2>$null } | Out-String
   if ([string]::IsNullOrWhiteSpace($j)) { return 0 }
-  $rows = $j | ConvertFrom-Json
+  $rows = $j | ConvertFrom-Json | ForEach-Object { $_ }
   return @($rows | Where-Object { $_.kind -eq $k }).Count
 }
 
@@ -142,7 +142,7 @@ try {
   & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $jdb 2>$null } | Out-Null
   $jsonOut = & { $ErrorActionPreference = 'Continue'; & $exePath purge-locals --db $jdb --json 2>$null } | Out-String
   Check '--json: parses as an object'          ($jsonOut.Trim().StartsWith('{'))
-  $jo = $jsonOut | ConvertFrom-Json
+  $jo = $jsonOut | ConvertFrom-Json | ForEach-Object { $_ }
   Check '--json: removed >= 2'                 ([int]$jo.removed -ge 2)
   Check '--json: has size_before/size_after'   (($null -ne $jo.size_before) -and ($null -ne $jo.size_after))
 } finally { Pop-Location }

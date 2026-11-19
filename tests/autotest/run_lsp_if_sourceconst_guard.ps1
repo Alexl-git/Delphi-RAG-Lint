@@ -84,7 +84,7 @@ function Read-Frames([string]$Out) {
     $start = $i + $m.Index + $m.Length
     $len = [int]$m.Groups[1].Value
     if ($start + $len -gt $Out.Length) { break }
-    $res += ($Out.Substring($start, $len) | ConvertFrom-Json)
+    $res += ($Out.Substring($start, $len) | ConvertFrom-Json | ForEach-Object { $_ })
     $i = $start + $len
   }
   return $res
@@ -114,7 +114,7 @@ function LspLines([string]$PasFile, [string]$Rule) {
 function CliLines([string]$PasFile, [string]$Rule, [string[]]$Extra = @()) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $PasFile --json --db (Join-Path (Split-Path $PasFile) 'fx.sqlite') @Extra 2>$null }) -join "`n"
   $arr = @()
-  if ($raw.Trim()) { $arr = @($raw | ConvertFrom-Json) }
+  if ($raw.Trim()) { $arr = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   return ,@($arr | Where-Object { $_.rule -eq $Rule } | ForEach-Object { [int]$_.start_line })
 }
 

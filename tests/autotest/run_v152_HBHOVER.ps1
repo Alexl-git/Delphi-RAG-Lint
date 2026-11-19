@@ -63,12 +63,12 @@ foreach ($fx in 'solve-callchain', 'solve-unknown') {
 
 function HoverJson($qn, $db) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname $qn --db $db --format json 2>$null }) -join "`n"
-  try { return ($raw | ConvertFrom-Json) } catch { Write-Host "    raw hover: $raw"; return $null }
+  try { return ($raw | ConvertFrom-Json | ForEach-Object { $_ }) } catch { Write-Host "    raw hover: $raw"; return $null }
 }
 function HoverText($qn, $db, $fmt) { return ((& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname $qn --db $db --format $fmt 2>$null }) -join "`n") }
 function CheckInitJson($qn, $db) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe check-init $qn --db $db --json 2>$null }) -join "`n"
-  try { return ($raw | ConvertFrom-Json) } catch { Write-Host "    raw check-init: $raw"; return $null }
+  try { return ($raw | ConvertFrom-Json | ForEach-Object { $_ }) } catch { Write-Host "    raw check-init: $raw"; return $null }
 }
 function Has($obj, $name) { return ($null -ne $obj) -and ($obj.PSObject.Properties.Name -contains $name) }
 function WritersText($arr) { if ($null -eq $arr -or @($arr).Count -eq 0) { return '[]' }; return (ConvertTo-Json -InputObject @($arr) -Compress -Depth 8) }

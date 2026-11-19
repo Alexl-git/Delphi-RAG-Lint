@@ -138,7 +138,7 @@ procedure RegisterSaveNotifierForModule(const AModule: IOTAModule);
 /// access -- e.g., File &gt; Exit &gt; AllowSave -- AVs in @IntfCopy.</summary>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.Wizard.TDragLintWizard.Destroyed (DragLint.Plugin.Wizard.pas), initialization/finalization (DragLint.Plugin.SaveNotifier.pas)</para>
+/// <para>Called from: DragLint.Plugin.SaveNotifier.finalization (DragLint.Plugin.SaveNotifier.pas), DragLint.Plugin.Wizard.TDragLintWizard.Destroyed (DragLint.Plugin.Wizard.pas)</para>
 /// <para>Catches: Exception (empty)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

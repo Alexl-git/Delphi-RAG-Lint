@@ -591,7 +591,7 @@ Check 'V the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db
 $q = "select f.path, r.symbol_id, s.qualified_name from refs r join files f on f.id = r.file_id " +
      "left join symbols s on s.id = r.symbol_id where r.name_text = 'btnX' and f.path like '%.pas'"
 $sq = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query $q --json 2>$null }) -join "`n"
-$sj = try { $sq | ConvertFrom-Json } catch { $null }
+$sj = try { $sq | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
 function BoundOf([string]$Unit) {
   if ($null -eq $sj) { return '<no sql>' }
   foreach ($row in @($sj.rows)) { if ((Split-Path $row[0] -Leaf) -eq "$Unit.pas") { return "$($row[1])|$($row[2])" } }
@@ -613,7 +613,7 @@ function Run([string[]]$Units, [string[]]$Extra = @()) {
 function Json([string]$s) {
   $a = $s.IndexOf('{'); $b = $s.LastIndexOf('}')
   if ($a -lt 0 -or $b -le $a) { return $null }
-  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json) } catch { return $null }
+  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function LineOf([string]$File, [string]$Needle) {
   $ls = [IO.File]::ReadAllLines((P $File))
@@ -639,18 +639,18 @@ $j = Json $r.Out
 Check 'A1 AncForm dry run: exit 0, ok, not refused, btnX and btnY converted' `
   (($r.Code -eq 0) -and ($null -ne $j) -and $j.ok -and ($j.refused -eq $false) -and (@($j.converted).Count -eq 2)) $r.Out
 Check 'A2 descendants[] holds exactly Desc1/btnX, Grand/btnX, CodeOnly/btnX, YForm/btnY' `
-  (($null -ne $j) -and (@($j.descendants).Count -eq 4) -and ((Desc $j 'Desc1' 'btnX').Count -eq 1) -and `
-   ((Desc $j 'Grand' 'btnX').Count -eq 1) -and ((Desc $j 'CodeOnly' 'btnX').Count -eq 1) -and ((Desc $j 'YForm' 'btnY').Count -eq 1)) `
+  (($null -ne $j) -and (@($j.descendants).Count -eq 4) -and ((@(Desc $j 'Desc1' 'btnX')).Count -eq 1) -and `
+   ((@(Desc $j 'Grand' 'btnX')).Count -eq 1) -and ((@(Desc $j 'CodeOnly' 'btnX')).Count -eq 1) -and ((@(Desc $j 'YForm' 'btnY')).Count -eq 1)) `
   ($j.descendants | ConvertTo-Json -Compress)
 $keys = if ($j -and @($j.descendants).Count -gt 0) { (@($j.descendants)[0].PSObject.Properties.Name) -join ',' } else { '' }
 Check 'A3 each descendants[] object has exactly the keys unit,name,type,line,reason' ($keys -eq 'unit,name,type,line,reason') $keys
-$d = Desc $j 'Desc1' 'btnX'
+$d = @(Desc $j 'Desc1' 'btnX')
 Check 'A4 (1) Desc1 re-opens btnX in its .dfm: type TSrcA, line = its inherited block, reason dfm' `
   (($d.Count -eq 1) -and ($d[0].type -eq 'TSrcA') -and ($d[0].line -eq $d1X) -and ($d[0].reason -eq 'dfm')) ($d | ConvertTo-Json -Compress)
-$d = Desc $j 'Grand' 'btnX'
+$d = @(Desc $j 'Grand' 'btnX')
 Check 'A5 (2) grandchild Grand (two levels): .dfm line, reason both (it also uses btnX in code)' `
   (($d.Count -eq 1) -and ($d[0].line -eq $grX) -and ($d[0].reason -eq 'both')) ($d | ConvertTo-Json -Compress)
-$d = Desc $j 'CodeOnly' 'btnX'
+$d = @(Desc $j 'CodeOnly' 'btnX')
 Check 'A6 (3) CodeOnly uses btnX in code only: line = first code reference, reason code' `
   (($d.Count -eq 1) -and ($d[0].line -eq $coX) -and ($d[0].reason -eq 'code')) ($d | ConvertTo-Json -Compress)
 Check 'A7 (5) Other re-opens a DIFFERENT component (pnl): not reported' `
@@ -687,13 +687,13 @@ Check 'C1 --only btnX: exit 0, YForm/btnY EXCLUDED, the three btnX descendants k
 $r = Run @('AncForm.pas') @('--only', 'btnY', '--format', 'json')
 $j = Json $r.Out
 Check 'C2 --only btnY: only YForm/btnY, at its .dfm line' `
-  (($r.Code -eq 0) -and ($null -ne $j) -and (@($j.descendants).Count -eq 1) -and ((Desc $j 'YForm' 'btnY').Count -eq 1) -and `
-   ((Desc $j 'YForm' 'btnY')[0].line -eq $yfY)) ($j.descendants | ConvertTo-Json -Compress)
+  (($r.Code -eq 0) -and ($null -ne $j) -and (@($j.descendants).Count -eq 1) -and ((@(Desc $j 'YForm' 'btnY')).Count -eq 1) -and `
+   ((@(Desc $j 'YForm' 'btnY'))[0].line -eq $yfY)) ($j.descendants | ConvertTo-Json -Compress)
 
 # ---- (4) an inline frame ----------------------------------------------------
 $r = Run @('FrameA.pas') @('--format', 'json')
 $j = Json $r.Out
-$d = if ($j) { Desc $j 'HostForm' 'fx' } else { @() }
+$d = @(if ($j) { Desc $j 'HostForm' 'fx' } else { @() })
 Check 'D1 FrameA: HostForm hosts it inline and re-opens fx -- reported, its .dfm line, reason dfm' `
   (($r.Code -eq 0) -and ($d.Count -eq 1) -and ($d[0].line -eq $hoX) -and ($d[0].reason -eq 'dfm') -and (@($j.descendants).Count -eq 1)) $r.Out
 Check 'D2 its warning line names the frame .dfm line' `
@@ -712,7 +712,7 @@ Check 'E2 Lonely text mode: no descendant line' (($r.Code -eq 0) -and -not ($r.O
 # ---- batch: each unit carries its own descendants[] -------------------------
 $r = Run @('AncForm.pas', 'FrameA.pas', 'Lonely.pas') @('--format', 'json')
 $j = Json $r.Out
-$u = if ($j) { @($j.units) } else { @() }
+$u = @(if ($j) { @($j.units) } else { @() })
 Check 'F1 batch: apply-batch/1, three units, descendants[] per unit = 4 / 1 / 0' `
   (($r.Code -eq 0) -and ($null -ne $j) -and ($j.schema -eq 'apply-batch/1') -and ($u.Count -eq 3) -and `
    (@($u[0].descendants).Count -eq 4) -and (@($u[1].descendants).Count -eq 1) -and (@($u[1].descendants)[0].unit -eq 'HostForm') -and `

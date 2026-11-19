@@ -7,7 +7,7 @@ group: refactoring
 order: 50001
 since: 0.54.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.52.0-alpha
 ---
 
 # allow
@@ -27,6 +27,7 @@ Full flag list: [allow in the CLI reference](../cli.md#allow).
 | `--fix-line` | `<L>` |  |  |
 | `--fix-rule` | `<id>` |  |  |
 | `--apply` |  |  |  |
+| `--reason` | `<text>` |  |  |
 | `--rules-dir` | `<dir>` |  |  |
 | `--config` | `<file>` |  |  |
 | `--profile` | `<name>` |  |  |
@@ -50,12 +51,27 @@ exception rather than something you intend to change.
 ### Running it from the CLI
 
 ```text
-drag-lint allow <file> --fix-line <L> --fix-rule <id> [--apply]
+drag-lint allow <file> --fix-line <L> --fix-rule <id> [--apply] [--reason "<text>"]
 ```
 
 `--fix-line` and `--fix-rule` identify the exact finding to allow. Per the
 usage banner, this is a dry run without `--apply`: "record a dl:ok review of
 ONE finding; dry-run without --apply".
+
+### Re-stamping a review (`--reason`, 1.52)
+
+A marker's reason can carry a `REVIEWED <yyyy-mm-dd>` stamp (checked by
+`review-marker-reason-unreviewed`). When `allow` re-hashes a STALE marker it keeps
+the reason but drops that stamp and says so: a re-hash is not a re-review. After
+you have re-read the code, pass the new reason and its stamp:
+
+```text
+drag-lint allow Unit1.pas --fix-line 42 --fix-rule unused-private-member --apply --reason "REVIEWED 2026-11-18 kept for the RTTI streamer"
+```
+
+`--reason` REPLACES the marker's reason (it also re-stamps a marker whose hash is
+still current); running it again with the same text changes nothing. A marker that `allow`
+moves off a wrapped statement's continuation line keeps its reason, minus the stamp.
 
 ### What it needs
 

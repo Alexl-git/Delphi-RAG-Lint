@@ -45,7 +45,7 @@ try {
   $newDb = "$WorkDir\proj\_D-RAG\App.sqlite"
   $p = Start-Process -FilePath $Exe -ArgumentList @('index', '--project', "$WorkDir\proj\App.dpr", '--db', $oldDb) `
          -NoNewWindow -Wait -PassThru -WorkingDirectory $WorkDir `
-         -RedirectStandardOutput "$WorkDir\idx.out" -RedirectStandardError "$WorkDir\idx.err"
+         -RedirectStandardOutput "$WorkDir\idx.out" -RedirectStandardError "$WorkDir\idx.err"; $null = $p.Handle
   Check 'fixture: the DB to migrate was built' (($p.ExitCode -eq 0) -and (Test-Path -LiteralPath $oldDb)) "exit=$($p.ExitCode)"
 
   $esc = $WorkDir -replace '\\', '\\'
@@ -57,10 +57,10 @@ try {
 
   $p = Start-Process -FilePath $Exe -ArgumentList @('migrate-dbs', '--config', $cfg, '--apply') `
          -NoNewWindow -Wait -PassThru -WorkingDirectory $WorkDir `
-         -RedirectStandardOutput "$WorkDir\mig.out" -RedirectStandardError "$WorkDir\mig.err"
+         -RedirectStandardOutput "$WorkDir\mig.out" -RedirectStandardError "$WorkDir\mig.err"; $null = $p.Handle
   $migOut = ([IO.File]::ReadAllText("$WorkDir\mig.out")).Trim() -replace '\s+', ' '
   $text = [IO.File]::ReadAllText($cfg)
-  $j = $text | ConvertFrom-Json
+  $j = $text | ConvertFrom-Json | ForEach-Object { $_ }
   $sec = @($j.indexes.sections | Where-Object { $_.name -eq 'App' })
 
   Check 'P: migrate-dbs --apply exit 0' ($p.ExitCode -eq 0) "exit=$($p.ExitCode) out='$migOut'"

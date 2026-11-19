@@ -50,7 +50,7 @@ Copy-Item $fixture $target -Force
 # collisions across routines. --json prints a JSON array of matched symbols.
 function LocalByQName([string]$name, [string]$qname) {
   $j = & { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --db $db --json 2>$null } | Out-String
-  $arr = $null; try { $arr = ($j | ConvertFrom-Json) } catch { $arr = $null }
+  $arr = $null; try { $arr = ($j | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $arr = $null }
   if ($null -eq $arr) { return $null }
   foreach ($s in @($arr)) { if ($s.kind -eq 'local_var' -and $s.qualified_name -eq $qname) { return $s } }
   return $null
@@ -62,7 +62,7 @@ function LocalByQName([string]$name, [string]$qname) {
 # rows exist, each carrying its own overload's Signature.
 function LocalsByQName([string]$name, [string]$qname) {
   $j = & { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --db $db --json 2>$null } | Out-String
-  $arr = $null; try { $arr = ($j | ConvertFrom-Json) } catch { $arr = $null }
+  $arr = $null; try { $arr = ($j | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $arr = $null }
   if ($null -eq $arr) { return @() }
   return @($arr | Where-Object { $_.kind -eq 'local_var' -and $_.qualified_name -eq $qname })
 }
@@ -88,7 +88,7 @@ try {
 
   # --- OVERLOAD: two Combine(...) overloads, each with its own Tmp local, same
   # qualified_name -- must attribute to the RIGHT overload (by Signature). ---
-  $combineTmps = LocalsByQName 'Tmp' 'locals.TWorker.Combine.Tmp'
+  $combineTmps = @(LocalsByQName 'Tmp' 'locals.TWorker.Combine.Tmp')
   Check 'both Combine overloads emit their own Tmp (2 rows, same qname)' `
     ($combineTmps.Count -eq 2)
   $tmpInt    = @($combineTmps | Where-Object { $_.signature -match '^\s*Integer\s*$' })

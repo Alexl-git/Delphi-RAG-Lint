@@ -183,7 +183,7 @@ Write-Host 'CASE B: --parent-pid client exits -> relay exits -> child gone' -For
 Reset-Stubs
 # A throwaway stand-in for the IDE. The relay is NOT its child -- --parent-pid
 # watches a pid, which is what the plugin passes and what must be honoured.
-$fakeClient = Start-Process pwsh -ArgumentList '-NoProfile','-Command','Start-Sleep -Seconds 120' -PassThru -WindowStyle Hidden
+$fakeClient = Start-Process pwsh -ArgumentList '-NoProfile','-Command','Start-Sleep -Seconds 120' -PassThru -WindowStyle Hidden; $null = $fakeClient.Handle
 $b = Start-Relay @('--parent-pid', "$($fakeClient.Id)") -Linger
 Check 'the child was spawned' ($null -ne $b.ChildPid) "child pid: $($b.ChildPid)"
 if ($b.ChildPid) {

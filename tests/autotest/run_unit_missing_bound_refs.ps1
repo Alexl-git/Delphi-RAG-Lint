@@ -20,6 +20,10 @@ param(
   [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-missingbound-$PID"
 )
+# H01-AUTOWRAP (v152 DDFIX-4, DDFIX5 pattern): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+$H01Root = $WorkDir
+try {
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
@@ -193,7 +197,7 @@ function LintOf([string]$unit) {
 function BoundCount([string]$unit, [string]$name) {
   # sql --json rows are POSITIONAL arrays
   $q = "select count(*) from refs r join files f on f.id=r.file_id where f.path like '%$unit' and r.name_text='$name' and r.symbol_id>0"
-  $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query $q --json 2>&1 | ForEach-Object { "$_" } } | Out-String | ConvertFrom-Json
+  $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query $q --json 2>&1 | ForEach-Object { "$_" } } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }
   [int]$j.rows[0][0]
 }
 Push-Location C:\TEMP
@@ -236,9 +240,10 @@ try {
   Check 'the same file fires for the base type' (@($member | Where-Object { $_ -match "'TDeclKlass' is declared in unit uDecl" }).Count -ge 1) ($member -join ' | ')
 
   Write-Host 'FIX' -ForegroundColor Cyan
-  & { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $srcDir 'uGone.pas') --db $db --rule unit-missing-from-uses --fix --apply --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $srcDir 'uGone.pas') --db $db --rule unit-missing-from-uses --fix --apply --no-compile-gate --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $txt = [IO.File]::ReadAllText((Join-Path $srcDir 'uGone.pas'))
   Check '--fix puts the unit back in the implementation clause' ($txt -match '(?s)implementation.*uses\s+uDecl;') ($txt -replace "`r`n", '\n')
 } finally { Pop-Location }
 if ($script:Failed) { Write-Host 'RESULT: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'RESULT: PASS' -ForegroundColor Green; exit 0
+} finally { Remove-WorkDir $H01Root -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

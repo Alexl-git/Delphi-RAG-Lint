@@ -204,7 +204,7 @@ c.close()
 
 function Read-Db([string]$Db) {
   if (-not (Test-Path $Db)) { return $null }
-  return ((& python $qpy $Db) -join "`n" | ConvertFrom-Json)
+  return ((& python $qpy $Db) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ })
 }
 function HasLeaf($Rows, [string]$Leaf) { return @($Rows | Where-Object { $_ -like "*\$Leaf" }).Count -ge 1 }
 

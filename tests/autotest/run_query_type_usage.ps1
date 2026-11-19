@@ -117,7 +117,7 @@ $names = 'TUsedInDecl,TUsedInCreate,TUsedAsAncestor,TNeverUsed,TOnlyInComment,TO
 # this honest if a human line ever DOES land in the JSON.
 $json  = & { $ErrorActionPreference = 'Continue'; & $Exe query type-usage --in $probe --names $names --db $db --json 2>$null } | Out-String
 $rows  = $null
-try { $rows = $json | ConvertFrom-Json } catch {}
+try { $rows = $json | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'JSON output parses' ($null -ne $rows) (($json -split "`r?`n" | Select-Object -First 1))
 Check 'stdout is the JSON document and nothing else' ($json.TrimStart().StartsWith('['))
 if ($null -eq $rows) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
@@ -165,7 +165,7 @@ Check 'missing --in exits 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
 $nf = Join-Path $WorkDir 'names.txt'
 Write-Ascii $nf "# comment lines and blanks are skipped`r`n`r`nTUsedInDecl`r`nTNeverUsed`r`n"
 $jf = & { $ErrorActionPreference = 'Continue'; & $Exe query type-usage --in $probe --names-file $nf --db $db --json 2>$null } | Out-String
-$rf = $null; try { $rf = $jf | ConvertFrom-Json } catch {}
+$rf = $null; try { $rf = $jf | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check '--names-file is read (and # / blank lines skipped)' `
   (($null -ne $rf) -and ($rf.Count -eq 2) -and (($rf | Where-Object { $_.name -eq 'TUsedInDecl' }).referenced -eq $true)) `
   ("rows: {0}" -f $(if ($rf) { $rf.Count } else { 'none' }))

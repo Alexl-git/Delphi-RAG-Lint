@@ -72,7 +72,7 @@ c.commit(); c.close()
   function Q([string]$Db,[string]$Query) {
     $raw = (& { $ErrorActionPreference = 'Continue'; & $exe sql --db $Db --json --limit 5000 --query $Query 2>$null }) -join "`n"
     $b = $raw.IndexOf('{'); if ($b -lt 0) { return ,@() }
-    return ,@(($raw.Substring($b) | ConvertFrom-Json).rows)
+    return ,@(($raw.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }).rows)
   }
   function Fresh([string]$Mode) {
     foreach ($f in $libDb,"$libDb-wal","$libDb-shm",$projDb,"$projDb-wal","$projDb-shm") { if (Test-Path $f) { [IO.File]::Delete($f) } }
@@ -127,7 +127,7 @@ c.commit(); c.close()
     $env:DRAGLINT_LIBRARY_POLL_MS = '1000'
     $log = Join-Path $root 'wait.log'
     $p = Start-Process -FilePath $exe -ArgumentList 'index','--project',(Join-Path $app 'App.dpr'),'--wait-library','1' `
-         -RedirectStandardOutput $log -RedirectStandardError (Join-Path $root 'wait.err') -PassThru -NoNewWindow
+         -RedirectStandardOutput $log -RedirectStandardError (Join-Path $root 'wait.err') -PassThru -NoNewWindow; $null = $p.Handle
     # wait until the run is actually polling, let it poll a few times, THEN finish the "rebuild"
     $until = (Get-Date).AddSeconds(900)
     while (((Get-Content $log -Raw -ErrorAction SilentlyContinue) -notmatch 'library: waiting') -and ((Get-Date) -lt $until)) { Start-Sleep -Milliseconds 200 }

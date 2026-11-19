@@ -58,7 +58,7 @@ function Check([string]$name, [bool]$ok) {
 # returns_owner per method, as 'GetLocal=borrowed;GetThing=borrowed;GetWidget=' (sorted).
 function StoredFacts() {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --query "select s.name, coalesce(f.returns_owner,'') from symbols s join symbol_facts f on f.symbol_id=s.id where s.qualified_name like 'A_User.TUser.Get%' order by s.name" --db $db --json 2>$null }) -join "`n"
-  $obj = $raw.Substring($raw.IndexOf('{')) | ConvertFrom-Json
+  $obj = $raw.Substring($raw.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ }
   $parts = @()
   foreach ($r in $obj.rows) { $parts += ('{0}={1}' -f $r[0], $r[1]) }
   return ($parts -join ';')
@@ -108,7 +108,7 @@ Check 'POSITIVE CONTROL: GetLocal (non-T/I class, same unit) borrowed in both' (
 
 $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath lint $user --db $db --rule doc-drift --project-rules --json 2>$null }) -join "`n"
 $arr = @()
-if ($raw.IndexOf('[') -ge 0) { $arr = @($raw.Substring($raw.IndexOf('[')) | ConvertFrom-Json) }
+if ($raw.IndexOf('[') -ge 0) { $arr = @(($raw.Substring($raw.IndexOf('[')) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
 Check "doc-drift after incremental reindex is 0 (got $($arr.Count))" ($arr.Count -eq 0)
 
 $dry = (& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $user --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"

@@ -16,6 +16,9 @@ param(
 )
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false; $script:Passed = 0
@@ -44,13 +47,13 @@ function RunAll([string]$Cfg) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null }) -join "`n"
   $s = $raw.IndexOf('['); $e = $raw.LastIndexOf(']')
   if ($s -lt 0 -or $e -le $s) { return @() }
-  return @(ConvertFrom-Json $raw.Substring($s, $e - $s + 1))
+  return @((ConvertFrom-Json $raw.Substring($s, $e - $s + 1) | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 function Has($fs, $rule, $file, $line) { @($fs | Where-Object { $_.rule -eq $rule -and $_.file_path -like "*$file" -and $_.start_line -eq $line }).Count -gt 0 }
 
 & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
-$on  = RunAll $cfgOn
-$off = RunAll ''
+$on  = @(RunAll $cfgOn)
+$off = @(RunAll '')
 Write-Host ("  raw: {0} findings (on), {1} (default)" -f $on.Count, $off.Count)
 Write-Host ("  rules seen (on): " + ((@($on | ForEach-Object { $_.rule }) | Sort-Object -Unique) -join ', '))
 
@@ -74,3 +77,4 @@ Check 'p5 placeholder is not reported as malformed' (-not (Has $on 'doc-malforme
 
 Write-Host ("`nv152 DOCPOL: {0} passed, {1}" -f $script:Passed, $(if ($script:Failed) { 'FAILED' } else { 'ALL GREEN' }))
 if ($script:Failed) { exit 1 }
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

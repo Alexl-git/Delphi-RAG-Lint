@@ -117,8 +117,8 @@ print(json.dumps(rows))
 c.close()
 '@ | Set-Content $pySyms -Encoding ascii
 
-function Get-Files { @((& python $pyFiles $db) -join "`n" | ConvertFrom-Json) }
-function Get-Syms  { @((& python $pySyms  $db) -join "`n" | ConvertFrom-Json) }
+function Get-Files { @(((& python $pyFiles $db) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
+function Get-Syms  { @(((& python $pySyms  $db) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
 function HasLeaf([string[]]$Rows, [string]$Leaf) { return @($Rows | Where-Object { $_ -like "*\$Leaf" }).Count -ge 1 }
 
 # ---------------------------------------------------------------------------

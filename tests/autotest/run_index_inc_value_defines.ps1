@@ -27,6 +27,9 @@ param(
 )
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'; $script:Failed = $false; $script:Passed = 0; $script:FailedN = 0
 function Check($n, $ok, $d = '') {
@@ -56,7 +59,7 @@ function Index([string]$p, [string]$db, [string]$tag, [string[]]$extra = @()) {
 function Col0([string]$db, [string]$q) {
   Push-Location $WorkDir
   try { $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query $q --json 2>$null } | Out-String } finally { Pop-Location }
-  try { return ,@((($j | ConvertFrom-Json).rows) | ForEach-Object { [string]$_[0] }) } catch { return ,@() }
+  try { return ,@((($j | ConvertFrom-Json | ForEach-Object { $_ }).rows) | ForEach-Object { [string]$_[0] }) } catch { return ,@() }
 }
 function IncLeaves([string]$db) {
   return ,@((Col0 $db "SELECT path FROM files WHERE path LIKE '%.inc'") | ForEach-Object { [IO.Path]::GetFileName($_) } | Sort-Object)
@@ -123,3 +126,4 @@ Check 'delphilsp -$R+: ROn.inc indexed' (Has $incL 'ROn.inc')
   Write-Host ("RESULT: {0} passed, {1} failed" -f $script:Passed, $script:FailedN)
 }
 if ($script:Failed) { exit 1 } else { exit 0 }
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

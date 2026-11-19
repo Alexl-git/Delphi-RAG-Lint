@@ -169,6 +169,7 @@ type
     /// Equal keys are NOT kept in input order (see the unit header): that is the
     /// point. Pure; allocates nothing beyond the call stack.
     /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.MemberAccess.GroupRoutines (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.Consumers.SortedText (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.ReadByName (DRagLint.Charts.Q.Consumers.pas) (+26 more)</para>
     /// <para>Calls: DRagLint.Charts.PsSort.TPsSort.IntroSort, DRagLint.Charts.PsSort.TPsSort.Log2Floor</para>
     /// <para>Mutates: pItems (var)</para>
     /// <para>Directives: static</para>

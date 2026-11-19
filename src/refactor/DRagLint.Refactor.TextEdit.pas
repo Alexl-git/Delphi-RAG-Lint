@@ -47,8 +47,8 @@ type
   /// is dropped and counted skipped; the overlap check treats Line..EndLine as a
   /// delete range, so it can never interleave with a delete or another replace.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ApplyDocEditsGuarded (DRagLint.CLI.pas), DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.CycleFix.ToTextEdits.Make (DRagLint.CLI.CycleFix.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.FoldGlyphOutcome (DRagLint.Convert.Apply.pas) (+200 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.CycleFix, DRagLint.Convert.Apply, DRagLint.Convert.UnitRules, DRagLint.Diagnostics.AstChecks, DRagLint.Diagnostics.BoundsNilChecks, DRagLint.Diagnostics.OwnershipChecks, DRagLint.Diagnostics.ParityExtChecks, DRagLint.Doc.Batch, DRagLint.Doc.Document (+22 more)</para>
+  /// <para>Used by: DRagLint.CLI.ApplyDocEditsGuarded (DRagLint.CLI.pas), DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.CycleFix.ToTextEdits.Make (DRagLint.CLI.CycleFix.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.FoldGlyphOutcome (DRagLint.Convert.Apply.pas) (+223 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.ConvertApply, DRagLint.CLI.CycleFix, DRagLint.Convert.Apply, DRagLint.Convert.UnitRules, DRagLint.Diagnostics.AstChecks, DRagLint.Diagnostics.BoundsNilChecks, DRagLint.Diagnostics.OwnershipChecks, DRagLint.Diagnostics.ParityExtChecks, DRagLint.Doc.Batch (+29 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TTextEdit = record
@@ -79,8 +79,8 @@ type
   /// no line break at all) it is CRLF, the historical output. Encoding is an
   /// RTL standard singleton -- never owned, never freed.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ApplyEditsGated (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.EncodingGuardReason (DRagLint.CLI.pas), DRagLint.Convert.Apply.DecodeUnitBytes (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ReadUnitText (DRagLint.Convert.Apply.pas) (+25 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.Backup, DRagLint.Convert.GlyphVacuum, DRagLint.Fix.ProjectWide, DRagLint.Fix.Store, DRagLint.LSP.Feature.Rename, DRagLint.Refactor.Rename, DRagLint.Refactor.RenameProof, DRagLint.Refactor.TextEdit, DRagLint.Refactor.Unwith</para>
+  /// <para>Used by: DRagLint.CLI.ApplyEditsGated (DRagLint.CLI.pas), DRagLint.CLI.ConvertApply.EncodingGuardReason (DRagLint.CLI.ConvertApply.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.RepoParamArray.AnalyseUnit (DRagLint.CLI.RepoParamArray.pas), DRagLint.CLI.RuleScope.RunLineScope (DRagLint.CLI.RuleScope.pas) (+29 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.ConvertApply, DRagLint.CLI.RepoParamArray, DRagLint.CLI.RuleScope, DRagLint.Convert.Apply, DRagLint.Convert.Backup, DRagLint.Convert.GlyphVacuum, DRagLint.Fix.ProjectWide, DRagLint.Fix.Store, DRagLint.LSP.Feature.Rename (+6 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TTextFileFormat = record
@@ -93,7 +93,7 @@ type
     /// <returns>The format to hand to Encode when the text is written back.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.EncodingGuardReason (DRagLint.CLI.pas), DRagLint.Convert.Apply.DecodeUnitBytes (DRagLint.Convert.Apply.pas), DRagLint.Convert.Backup.PrependConvertComment (DRagLint.Convert.Backup.pas), DRagLint.Convert.GlyphVacuum.HarvestFile (DRagLint.Convert.GlyphVacuum.pas) (+5 more)</para>
+    /// <para>Called from: DRagLint.CLI.ConvertApply.EncodingGuardReason (DRagLint.CLI.ConvertApply.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.RuleScope.RunLineScope (DRagLint.CLI.RuleScope.pas), DRagLint.Convert.Apply.DecodeUnitBytes (DRagLint.Convert.Apply.pas), DRagLint.Convert.Backup.PrependConvertComment (DRagLint.Convert.Backup.pas) (+6 more)</para>
     /// <para>Calls: Copy, DRagLint.Core.Encoding.IsValidUtf8, DRagLint.Refactor.TextEdit.HasHighByte, DRagLint.Refactor.TextEdit.TTextFileFormat.LineBreakOf</para>
     /// <para>Mutates: AText (out)</para>
     /// <para>Directives: static</para>
@@ -113,7 +113,7 @@ type
     /// <returns>The file's format; ANSI + CRLF when the file is missing.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.ApplyEditsGated (DRagLint.CLI.pas), DRagLint.Convert.Apply.ReadUnitText (DRagLint.Convert.Apply.pas), DRagLint.Fix.ProjectWide.FixUsesMovable (DRagLint.Fix.ProjectWide.pas), DRagLint.Fix.Store.FixClassNameCompare (DRagLint.Fix.Store.pas), DRagLint.Fix.Store.FixUnusedUnits (DRagLint.Fix.Store.pas) (+13 more)</para>
+    /// <para>Called from: DRagLint.CLI.ApplyEditsGated (DRagLint.CLI.pas), DRagLint.CLI.RepoParamArray.AnalyseUnit (DRagLint.CLI.RepoParamArray.pas), DRagLint.Convert.Apply.ReadUnitText (DRagLint.Convert.Apply.pas), DRagLint.Fix.ProjectWide.FixUsesMovable (DRagLint.Fix.ProjectWide.pas), DRagLint.Fix.Store.FixClassNameCompare (DRagLint.Fix.Store.pas) (+15 more)</para>
     /// <para>Calls: DRagLint.Refactor.TextEdit.TTextFileFormat.Decode</para>
     /// <para>Returns: Decode(Bytes, AText)</para>
     /// <para>Touches: file system</para>
@@ -147,7 +147,7 @@ type
     /// <returns>Preamble + Encoding.GetBytes(AText).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.ApplyEditsGated (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.Convert.Backup.PrependConvertComment (DRagLint.Convert.Backup.pas), DRagLint.Refactor.RenameProof.ApplyRenameGated (DRagLint.Refactor.RenameProof.pas), DRagLint.Refactor.TextEdit.TTextEditApplier.Apply/3 (DRagLint.Refactor.TextEdit.pas) (+2 more)</para>
+    /// <para>Called from: DRagLint.CLI.ApplyEditsGated (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.RepoParamArray.AnalyseUnit (DRagLint.CLI.RepoParamArray.pas), DRagLint.CLI.RuleScope.RunLineScope (DRagLint.CLI.RuleScope.pas), DRagLint.Convert.Backup.PrependConvertComment (DRagLint.Convert.Backup.pas) (+4 more)</para>
     /// <para>Returns: Preamble + Encoding.GetBytes(AText)</para>
     /// <para>Reads: Preamble, Encoding</para>
     /// <seealso cref="DRagLint.Refactor.TextEdit.TTextFileFormat.Decode"/>
@@ -160,8 +160,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ApplyDocEditsGuarded (DRagLint.CLI.pas), DRagLint.CLI.ApplyEditsGated (DRagLint.CLI.pas), DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoConvertApply.PerformApplyWrites (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply.RunUnit (DRagLint.CLI.pas) (+17 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.CycleFix, DRagLint.Convert.Apply, DRagLint.LSP.UsesOnSave, DRagLint.Refactor.ExtractMethod, DRagLint.Refactor.Rename, DRagLint.Refactor.RenameProof</para>
+  /// <para>Used by: DRagLint.CLI.ApplyDocEditsGuarded (DRagLint.CLI.pas), DRagLint.CLI.ApplyEditsGated (DRagLint.CLI.pas), DRagLint.CLI.ConvertApply.DoConvertApply.PerformApplyWrites (DRagLint.CLI.ConvertApply.pas), DRagLint.CLI.ConvertApply.DoConvertApply.RunUnit (DRagLint.CLI.ConvertApply.pas), DRagLint.CLI.ConvertApply.EncodingGuardReason (DRagLint.CLI.ConvertApply.pas) (+17 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.ConvertApply, DRagLint.CLI.CycleFix, DRagLint.Convert.Apply, DRagLint.LSP.UsesOnSave, DRagLint.Refactor.ExtractMethod, DRagLint.Refactor.Rename, DRagLint.Refactor.RenameProof</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TTextEditApplier = class
@@ -229,7 +229,7 @@ type
     /// Pure. convert-apply re-indexes this text to reconcile the
     /// converted unit's uses clauses before anything is written.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.ApplyEditsGated (DRagLint.CLI.pas), DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.EncodingGuardReason (DRagLint.CLI.pas), DRagLint.Convert.Apply.ReconcileUnitUses (DRagLint.Convert.Apply.pas), DRagLint.LSP.UsesOnSave.TUsesOnSave.RemoveUnusedEntries (DRagLint.LSP.UsesOnSave.pas) (+1 more)</para>
+    /// <para>Called from: DRagLint.CLI.ApplyEditsGated (DRagLint.CLI.pas), DRagLint.CLI.ConvertApply.EncodingGuardReason (DRagLint.CLI.ConvertApply.pas), DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.Convert.Apply.ReconcileUnitUses (DRagLint.Convert.Apply.pas), DRagLint.LSP.UsesOnSave.TUsesOnSave.RemoveUnusedEntries (DRagLint.LSP.UsesOnSave.pas) (+1 more)</para>
     /// <para>Calls: DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyGroup, SameText</para>
     /// <para>Returns: ApplyGroup(AFilePath, AContent, Group, True, Skipped, Applied)</para>
     /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyGroup"/>
@@ -259,7 +259,7 @@ type
     /// write path re-serializes through a TStringList (one line-break style for the whole file),
     /// so an unconditional rewrite would modify a file that no edit had changed.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoConvertApply.PerformApplyWrites (DRagLint.CLI.pas), DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.DoExtractMethod (DRagLint.CLI.pas) (+4 more)</para>
+    /// <para>Called from: DRagLint.CLI.ConvertApply.DoConvertApply.PerformApplyWrites (DRagLint.CLI.ConvertApply.pas), DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.DoExtractMethod (DRagLint.CLI.pas) (+4 more)</para>
     /// <para>Calls: DRagLint.Refactor.TextEdit.TTextEditApplier.Apply/3</para>
     /// <para>Overload 1 of 2</para>
     /// <para>Directives: overload</para>
@@ -311,7 +311,7 @@ type
     /// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoConvertApply.RunUnit (DRagLint.CLI.pas), DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.DoFindUnit (DRagLint.CLI.pas) (+5 more)</para>
+    /// <para>Called from: DRagLint.CLI.ConvertApply.DoConvertApply.RunUnit (DRagLint.CLI.ConvertApply.pas), DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.DoFindUnit (DRagLint.CLI.pas) (+5 more)</para>
     /// <para>Calls: Format</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.Apply"/>
@@ -336,7 +336,7 @@ type
     /// skipped one by one by design. Files are grouped case-insensitively,
     /// as Apply groups them (Ruling 13; run_rename_owners_harness.ps1 P6). Pure.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.RefuseUnapplicablePlan (DRagLint.CLI.pas)</para>
+    /// <para>Called from: DRagLint.CLI.ConvertApply.RefuseUnapplicablePlan (DRagLint.CLI.ConvertApply.pas), DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas)</para>
     /// <para>Calls: DRagLint.Refactor.TextEdit.DeletesOverlap, Format</para>
     /// <para>Returns: ''; Format('refused %d edit(s) to %s -- overlapping delete ranges (an engine defect)', [FileMap[P].Count, P])</para>
     /// <seealso cref="DRagLint.Refactor.TextEdit.DeletesOverlap"/>
@@ -519,8 +519,8 @@ type
   /// Code is the Unicode code point, Text its string form, Line the 1-based line of its
   /// first occurrence in the text as it would be written.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.pas), DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas), DRagLint.CLI.EncodingGuardReason (DRagLint.CLI.pas)</para>
-  /// <para>Used in units: DRagLint.CLI</para>
+  /// <para>Used by: declaration (DRagLint.CLI.ConvertApplyJson.pas), DRagLint.CLI.ConvertApply.EncodingGuardReason (DRagLint.CLI.ConvertApply.pas), DRagLint.CLI.ConvertApplyJson.EmitApplyJson (DRagLint.CLI.ConvertApplyJson.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.ConvertApply, DRagLint.CLI.ConvertApplyJson</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TEncodingMisfit = record
@@ -534,7 +534,7 @@ type
 /// <returns>One of ansi | utf8 | utf8-bom | utf16-bom.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.EncodingGuardReason (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.ConvertApply.EncodingGuardReason (DRagLint.CLI.ConvertApply.pas)</para>
 /// <para>Returns: 'ansi'; if Length(AFmt.Preamble) &gt; 0 then 'utf8-bom'; 'utf16-bom'</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -547,7 +547,7 @@ function TextFileEncodingName(const AFmt: TTextFileFormat): string;
 /// round trip through TEncoding.ANSI (the active code page).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.EncodingGuardReason (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.ConvertApply.EncodingGuardReason (DRagLint.CLI.ConvertApply.pas)</para>
 /// <para>Calls: Copy, DRagLint.Refactor.TextEdit.CodePointAt, DRagLint.Refactor.TextEdit.EncodingHolds</para>
 /// <para>Returns: nil; Seen.ToArray</para>
 /// <seealso cref="DRagLint.Refactor.TextEdit.CodePointAt"/>
@@ -562,7 +562,7 @@ function UnfitCodePoints(const AFmt: TTextFileFormat; const AValues: TArray<stri
 /// <returns>The line, or 0 when the text does not hold it.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.EncodingGuardReason (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.ConvertApply.EncodingGuardReason (DRagLint.CLI.ConvertApply.pas)</para>
 /// <para>Calls: Pos</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -576,7 +576,7 @@ function FirstLineOfCodePoint(const AText: string; ACode: Integer): Integer;
 /// unit); AText unchanged when nothing needs it. Characters outside literals are never touched.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.EncodingGuardReason (DRagLint.CLI.pas), DRagLint.Refactor.TextEdit.EscapeUnfitForPascal.FlushCode (DRagLint.Refactor.TextEdit.pas)</para>
+/// <para>Called from: DRagLint.CLI.ConvertApply.EncodingGuardReason (DRagLint.CLI.ConvertApply.pas), DRagLint.Refactor.TextEdit.EscapeUnfitForPascal.FlushCode (DRagLint.Refactor.TextEdit.pas)</para>
 /// <para>Calls: Copy, DRagLint.Refactor.TextEdit.CodePointAt, DRagLint.Refactor.TextEdit.EncodingHolds, DRagLint.Refactor.TextEdit.EscapeUnfitForDfm.CloseOut, DRagLint.Refactor.TextEdit.EscapeUnfitForDfm.OpenOut</para>
 /// <para>Returns: SB.ToString</para>
 /// <para>Complexity: 12 (cyclomatic, outer body), 86 lines (full implementation)</para>
@@ -604,7 +604,7 @@ function EscapeUnfitForDfm(const AText: string; AEnc: TEncoding): string;
 /// <para>Called from: DRagLint.CLI.CycleFix.CheckInsertedText (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.EscapeInsertedText (DRagLint.CLI.CycleFix.pas)</para>
 /// <para>Calls: CharInSet, Copy, DRagLint.Refactor.TextEdit.EscapeUnfitForPascal.FlushCode, EscapeUnfitForDfm, PosEx</para>
 /// <para>Returns: SB.ToString</para>
-/// <para>Complexity: 19 (cyclomatic, outer body), 66 lines (full implementation)</para>
+/// <para>Complexity: 21 (cyclomatic, outer body), 66 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Refactor.TextEdit.EscapeUnfitForPascal.FlushCode"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -615,7 +615,7 @@ function EscapeUnfitForPascal(const AText: string; AEnc: TEncoding): string;
 /// <returns>True for a binary form file; such a file has no text encoding.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoConvertApply.PerformApplyWrites (DRagLint.CLI.pas), DRagLint.CLI.EncodingGuardReason (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.ConvertApply.DoConvertApply.PerformApplyWrites (DRagLint.CLI.ConvertApply.pas), DRagLint.CLI.ConvertApply.EncodingGuardReason (DRagLint.CLI.ConvertApply.pas)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function IsBinaryDfmFile(const ABytes: TBytes): Boolean;
@@ -625,7 +625,7 @@ function IsBinaryDfmFile(const ABytes: TBytes): Boolean;
 /// <returns>BOM + the decoded text as UTF-8; the line breaks are kept as read.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoConvertApply.PerformApplyWrites (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.ConvertApply.DoConvertApply.PerformApplyWrites (DRagLint.CLI.ConvertApply.pas)</para>
 /// <para>Calls: DRagLint.Refactor.TextEdit.TTextFileFormat.Decode</para>
 /// <para>Returns: TEncoding.UTF8.GetPreamble + TEncoding.UTF8.GetBytes(Text)</para>
 /// <seealso cref="DRagLint.Refactor.TextEdit.TTextFileFormat.Decode"/>

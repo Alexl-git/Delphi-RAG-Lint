@@ -140,7 +140,7 @@ function Resolve-Project([string]$ProjPath, [switch]$Json) {
   $a = @('resolve-dbs', '--project', $ProjPath, '--config', $cfg)
   if ($Json) { $a += '--json' }
   $p = Start-Process -FilePath $Exe -ArgumentList $a -NoNewWindow -Wait -PassThru `
-         -RedirectStandardOutput $out -RedirectStandardError $err
+         -RedirectStandardOutput $out -RedirectStandardError $err; $null = $p.Handle
   # Cast to [string]: Get-Content -Raw yields $null for an EMPTY file, and an
   # empty stdout is exactly what the refusal cases produce. Left uncast, the
   # -like comparisons below return an empty array rather than a Boolean and the
@@ -202,7 +202,7 @@ function Resolve-Read([string]$EditorFile, [string]$ProjPath) {
   $a = @('resolve-dbs', '--in', $EditorFile, '--config', $cfg)
   if ($ProjPath) { $a += @('--project', $ProjPath) }
   $p = Start-Process -FilePath $Exe -ArgumentList $a -NoNewWindow -Wait -PassThru `
-         -RedirectStandardOutput $out -RedirectStandardError $err
+         -RedirectStandardOutput $out -RedirectStandardError $err; $null = $p.Handle
   $lines = @(Get-Content -LiteralPath $out -ErrorAction SilentlyContinue |
              Where-Object { $_.Trim() -ne '' })
   [pscustomobject]@{ Exit = $p.ExitCode; Lines = $lines }
@@ -322,7 +322,7 @@ function Resolve-Mem([string]$EditorFile, [string]$ProjPath, [string]$Cfg) {
   $a = @('resolve-dbs', '--in', $EditorFile, '--config', $Cfg)
   if ($ProjPath) { $a += @('--project', $ProjPath) }
   $p = Start-Process -FilePath $Exe -ArgumentList $a -NoNewWindow -Wait -PassThru `
-         -RedirectStandardOutput $out -RedirectStandardError $err
+         -RedirectStandardOutput $out -RedirectStandardError $err; $null = $p.Handle
   ,@(Get-Content -LiteralPath $out -ErrorAction SilentlyContinue |
      Where-Object { $_.Trim() -ne '' })
 }
@@ -435,7 +435,7 @@ c.close()
 # --- 6: --json carries the section name ------------------------------------
 $j = Resolve-Project (Join-Path $shared 'Alpha.dproj') -Json
 $obj = $null
-try { $obj = $j.Stdout | ConvertFrom-Json } catch { }
+try { $obj = $j.Stdout | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check '--json emits an object with section + db' `
   (($null -ne $obj) -and ($obj.section -eq 'Alpha') -and ($obj.db -like '*Alpha.sqlite')) $j.Stdout.Trim()
 

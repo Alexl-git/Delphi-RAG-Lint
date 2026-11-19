@@ -88,7 +88,7 @@ function UniqueExceptionClassName(const ABase: string; const ATaken: TArray<stri
 implementation
 
 uses
-  System.SysUtils, System.Classes, System.Character, System.StrUtils;
+  System.SysUtils, System.Classes;
 
 const
   { Dropped from the KEY as well -- these are the shipped NormalizeExcMessage

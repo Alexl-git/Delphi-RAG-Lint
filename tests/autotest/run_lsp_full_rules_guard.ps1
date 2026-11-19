@@ -27,6 +27,9 @@ param(
 )
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 if (-not $OffBaseline) { $OffBaseline = "$PSScriptRoot\fixtures\lsp\c1-off-baseline.txt" }
 try {
@@ -90,7 +93,7 @@ function RunLsp([string]$Engine, [string]$PasFile, [string[]]$Flags, [string]$Ta
   [IO.File]::WriteAllText($in, ($msgs -join ''), (New-Object Text.UTF8Encoding($false)))
   $a = @('lsp') + $Flags
   $p = Start-Process $Engine -ArgumentList $a -WorkingDirectory $WorkDir `
-         -RedirectStandardInput $in -RedirectStandardOutput $so -RedirectStandardError $se -NoNewWindow -Wait -PassThru
+         -RedirectStandardInput $in -RedirectStandardOutput $so -RedirectStandardError $se -NoNewWindow -Wait -PassThru; $null = $p.Handle
   $out = if (Test-Path $so) { [IO.File]::ReadAllText($so) } else { '' }
   $err = if (Test-Path $se) { [IO.File]::ReadAllText($se) } else { '' }
   $codes = @([regex]::Matches($out, '"code":"([a-z0-9\-]+)"') | ForEach-Object { $_.Groups[1].Value })
@@ -325,3 +328,4 @@ if ($CaptureOffBaseline) {
 } catch { Write-Host "FATAL: $_" -ForegroundColor Red; exit 2 }
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green; exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

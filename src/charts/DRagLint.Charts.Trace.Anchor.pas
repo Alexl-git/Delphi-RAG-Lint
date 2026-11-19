@@ -316,7 +316,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.ResolveInto (DRagLint.Charts.Trace.Anchor.pas)</para>
     /// <para>Calls: Default, DRagLint.Charts.Chain.ControlDataSourceSql, DRagLint.Charts.Chain.TChainWalker.DataSourceChain, DRagLint.Charts.Chain.TChainWalker.RePointChain, DRagLint.Charts.Chain.TChainWalker.RePointPick, DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Charts.Index.TChartsIndex.SqlText, DRagLint.Charts.Trace.Anchor.DataSetOfChain, DRagLint.Charts.Trace.Anchor.HopGrade, DRagLint.Charts.Trace.Anchor.RePointVerb (+9 more)</para>
-    /// <para>Complexity: 16 (cyclomatic, outer body), 134 lines (full implementation)</para>
+    /// <para>Complexity: 22 (cyclomatic, outer body), 134 lines (full implementation)</para>
     /// <para>SQL: reads FILES, STRING_LITERALS, SYMBOLS</para>
     /// <seealso cref="DRagLint.Charts.Chain.ControlDataSourceSql"/>
     /// <seealso cref="DRagLint.Charts.Chain.TChainWalker.DataSourceChain"/>
@@ -368,7 +368,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.ResolveTraceAnchor (DRagLint.Charts.Trace.Anchor.pas)</para>
     /// <para>Calls: Copy, DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Charts.Index.TChartsIndex.SqlText, DRagLint.Charts.Sql.TSqlTableSet.Table, DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromColumn, DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl, DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromFieldVar, DRagLint.Charts.Trace.Shim.TraceAnchorText, Format, IntToStr, Trim, UpperCase</para>
-    /// <para>Complexity: 10 (cyclomatic, outer body), 52 lines (full implementation)</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 52 lines (full implementation)</para>
     /// <para>SQL: reads FILES, SYMBOLS</para>
     /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
     /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlText"/>
@@ -389,7 +389,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl (DRagLint.Charts.Trace.Anchor.pas)</para>
     /// <para>Calls: Default, DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Charts.Index.TChartsIndex.SqlText, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Trace.Anchor.ChainVerb, DRagLint.Charts.Trace.Anchor.DataSetOfRow, DRagLint.Charts.Trace.Anchor.HopGrade, DRagLint.Charts.Trace.Anchor.LastSegment, DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.CompleteAnchorFromDataSet, DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.PropertyReadField (+7 more)</para>
-    /// <para>Complexity: 17 (cyclomatic, outer body), 85 lines (full implementation)</para>
+    /// <para>Complexity: 20 (cyclomatic, outer body), 85 lines (full implementation)</para>
     /// <para>SQL: reads FILES, SYMBOLS</para>
     /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
     /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlText"/>

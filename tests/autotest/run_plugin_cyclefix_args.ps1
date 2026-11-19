@@ -61,7 +61,7 @@ try {
   ) -join "`r`n")
   [IO.File]::WriteAllText($batPath, $batBody, [Text.Encoding]::ASCII)
   $null = Start-Process cmd.exe -ArgumentList '/c', "`"$batPath`"" `
-            -RedirectStandardOutput $logPath -RedirectStandardError "$logPath.err" -NoNewWindow -Wait -PassThru
+            -RedirectStandardOutput $logPath -RedirectStandardError "$logPath.err" -NoNewWindow -Wait -PassThru; $null = $null.Handle
   $log = Get-Content $logPath -Raw -ErrorAction SilentlyContinue
   $buildOk = ($log -match 'BUILD_EXITCODE=0') -and ($log -notmatch 'Error:')
   Check 'CycleFixArgsHarness.dpr builds (Win64)' $buildOk (($log -split "`r?`n" | Select-Object -Last 4) -join ' | ')

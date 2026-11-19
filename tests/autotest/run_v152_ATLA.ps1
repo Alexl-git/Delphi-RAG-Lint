@@ -35,14 +35,14 @@ function Lint([string]$file, [string]$cfg) {
   $txt = ($raw -join "`n").Trim()
   if ($txt -eq '') { return }
   # lint --json is a bare array: return its ITEMS so callers' Where-Object sees findings, not one array
-  return ($txt | ConvertFrom-Json)
+  return ($txt | ConvertFrom-Json | ForEach-Object { $_ })
 }
 function WriteAscii([string]$path, [string]$text) {
   [IO.File]::WriteAllText($path, ($text -replace "`r?`n", "`r`n"), [Text.Encoding]::ASCII)
 }
 function Manifest([string[]]$globs) {
   $src = Join-Path $exeDir "drag-lint.json"
-  $obj = if (Test-Path $src) { Get-Content $src -Raw | ConvertFrom-Json } else { [pscustomobject]@{} }
+  $obj = if (Test-Path $src) { Get-Content $src -Raw | ConvertFrom-Json | ForEach-Object { $_ } } else { [pscustomobject]@{} }
   $obj | Add-Member -NotePropertyName contractUnits -NotePropertyValue $globs -Force
   $p = Join-Path $work ("manifest-" + [Guid]::NewGuid().ToString("N").Substring(0, 6) + ".json")
   WriteAscii $p ($obj | ConvertTo-Json -Depth 20)
@@ -50,7 +50,7 @@ function Manifest([string[]]$globs) {
 }
 
 # 1. catalog
-$rules = & { $ErrorActionPreference = 'Continue'; & $exePath rules --json 2>$null } | ConvertFrom-Json
+$rules = & { $ErrorActionPreference = 'Continue'; & $exePath rules --json 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
 if ($rules.rules) { $rules = $rules.rules }
 $byId = @{}; foreach ($r in $rules) { $byId[$r.id] = $r }
 Check ($byId.ContainsKey('reserved-word-identifier') -and $byId['reserved-word-identifier'].default_enabled) 'catalog: reserved-word-identifier is ON'

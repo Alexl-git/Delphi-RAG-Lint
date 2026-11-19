@@ -161,7 +161,7 @@ c.close()
 
 function Get-Refs([string]$Name, [string]$Kind) {
   $raw = (python $py $db $Name $Kind) -join "`n"
-  return ($raw | ConvertFrom-Json)
+  return ($raw | ConvertFrom-Json | ForEach-Object { $_ })
 }
 
 Write-Host ''

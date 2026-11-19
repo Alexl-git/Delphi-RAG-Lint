@@ -53,6 +53,7 @@ $need = @(
   "$YadfDir\Win32\Release\EXE\YADFOT.bpl", "$YadfDir\Win64\Release\EXE\YADFOT.bpl", "$YadfDir\LICENSE",
   "$repo\installer\drag-lint.starter.json", "$repo\installer\drag-lint.starter-v2.json", "$repo\charts\report-pairs.example.json",
   "$EngineDir\drag-lint-open.exe",
+  "$repo\src\tools\field-repo\dl-field-repo.exe", "$repo\src\tools\field-repo\dl-field-repo-std.exe",
   "$repo\installer\licenses\drag-lint-LICENSE.txt", "$repo\installer\licenses\graphviz-EPL-2.0.txt"
 )
 $missing = @($need | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) })

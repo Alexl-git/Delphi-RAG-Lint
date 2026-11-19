@@ -50,6 +50,9 @@ const
   EXIT_BLOCKED   = 2;
   EXIT_FAILED    = 3;
 
+  DWORD_HEX_DIGITS = 8;     { a REG_DWORD exported as dword:xxxxxxxx }
+  LSP_TIMEOUT_MS   = 15000; { the IDE's per-request timeout for our entry }
+
 type
   TAction = (acStatus, acOn, acOff, acKillOrphans);
   TTarget = (tgBoth, tgDelphi, tgVSCode);
@@ -209,16 +212,15 @@ var
   function HexSz(const AText: string): string;
   var
     Bytes: TBytes;
+    Parts: TArray<string>;
     K    : Integer;
   begin
     { REG_SZ is stored NUL-terminated; regedit's hex(1) includes the terminator. }
     Bytes:= TEncoding.Unicode.GetBytes(AText + #0);
-    Result:= '';
+    SetLength(Parts, Length(Bytes));
     for K:= 0 to High(Bytes) do
-    begin
-      if Result <> '' then Result:= Result + ',';
-      Result:= Result + LowerCase(IntToHex(Bytes[K], 2));
-    end;
+      Parts[K]:= LowerCase(IntToHex(Bytes[K], 2));
+    Result:= string.Join(',', Parts);
   end;
 
 begin
@@ -237,7 +239,7 @@ begin
     for I:= 0 to Vals.Count - 1 do
       case R.GetDataType(Vals[I]) of
         rdInteger:
-          SL.Add(Format('"%s"=dword:%s', [Vals[I], LowerCase(IntToHex(R.ReadInteger(Vals[I]), 8))]));
+          SL.Add(Format('"%s"=dword:%s', [Vals[I], LowerCase(IntToHex(R.ReadInteger(Vals[I]), DWORD_HEX_DIGITS))]));
         rdString, rdExpandString:
           SL.Add(Format('"%s"=hex(1):%s', [Vals[I], HexSz(R.ReadString(Vals[I]))]));
       end;
@@ -370,7 +372,7 @@ var
   V: TJSONValue;
 begin
   V:= ARoot.GetValue('servers');
-  if V is TJSONObject then Result:= TJSONObject(V) else Result:= nil;
+  Result:= if V is TJSONObject then TJSONObject(V) else nil;
 end;
 
 { Newest mcp.json.draglint-*.bak beside AMcpPath (names sort chronologically). }
@@ -588,9 +590,21 @@ begin
       else if A = '--on'           then Action:= acOn
       else if A = '--off'          then Action:= acOff
       else if A = '--kill-orphans' then Action:= acKillOrphans
-      else if (A = '--exe') and (I < ParamCount) then begin Inc(I); ExePath  := ParamStr(I); end
-      else if (A = '--params') and (I < ParamCount) then begin Inc(I); Params   := ParamStr(I); end
-      else if (A = '--backup-dir') and (I < ParamCount) then begin Inc(I); BackupDir:= ParamStr(I); end
+      else if (A = '--exe') and (I < ParamCount) then
+      begin
+        Inc(I);
+        ExePath:= ParamStr(I);
+      end
+      else if (A = '--params') and (I < ParamCount) then
+      begin
+        Inc(I);
+        Params:= ParamStr(I);
+      end
+      else if (A = '--backup-dir') and (I < ParamCount) then
+      begin
+        Inc(I);
+        BackupDir:= ParamStr(I);
+      end
       else if (A = '--workspace') and (I < ParamCount) then
       begin
         Inc(I);
@@ -603,9 +617,22 @@ begin
       end
       else if A = '--assume-host-running' then GAssumeRunning:= True
       else if A = '--assume-host-stopped' then GAssumeStopped:= True
-      else if (A = '--reg-root') and (I < ParamCount) then begin Inc(I); GRegLspRoot:= ParamStr(I); end
-      else if (A = '--help') or (A = '-h') or (A = '/?') then begin Banner; Halt(EXIT_OK); end
-      else begin Writeln('ERROR: unknown argument: ' + ParamStr(I)); Banner; Halt(EXIT_FAILED); end;
+      else if (A = '--reg-root') and (I < ParamCount) then
+      begin
+        Inc(I);
+        GRegLspRoot:= ParamStr(I);
+      end
+      else if (A = '--help') or (A = '-h') or (A = '/?') then
+      begin
+        Banner;
+        Halt(EXIT_OK);
+      end
+      else
+      begin
+        Writeln('ERROR: unknown argument: ' + ParamStr(I));
+        Banner;
+        Halt(EXIT_FAILED);
+      end;
       Inc(I);
     end;
 
@@ -633,8 +660,16 @@ begin
         begin
           ReportHosts;
           Writeln('');
-          if Target in [tgBoth, tgDelphi] then begin ReportDelphi; Writeln(''); end;
-          if Target in [tgBoth, tgVSCode] then begin ReportVSCode; Writeln(''); end;
+          if Target in [tgBoth, tgDelphi] then
+          begin
+            ReportDelphi;
+            Writeln('');
+          end;
+          if Target in [tgBoth, tgVSCode] then
+          begin
+            ReportVSCode;
+            Writeln('');
+          end;
           Halt(EXIT_OK);
         end;
 
@@ -727,7 +762,7 @@ begin
             plain LSP; fatal for the merge proxy, which is selected BY a
             parameter -- the IDE would have got a server that never enters proxy
             mode, and it would have read as the proxy failing. }
-          if not CreateEntry(ExePath, Params, 'pascal', 15000) then
+          if not CreateEntry(ExePath, Params, 'pascal', LSP_TIMEOUT_MS) then
           begin
             Writeln('ERROR: could not write the registry entry');
             Halt(EXIT_FAILED);

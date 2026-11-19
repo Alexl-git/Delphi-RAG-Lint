@@ -72,20 +72,13 @@ const
 /// would exit 0 exits 3 (FATAL EInOutError on stderr) when its stdout pipe was
 /// closed by the reader before the end, even if no write reported the failure;
 /// lsp and serve excepted (stdout is their transport).</summary>
-/// <returns><!-- drag-lint:auto -->Integer -- Observed: 0; 2; DoIndexAll(Args);
-/// DoIndex(Args); DoWarmRuleCache(Args); DoQuery (Args).</returns>
+/// <returns><!-- drag-lint:auto -->Integer -- Observed: RunCommand(Command); EXIT_FATAL.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas) ?, main block (drag-lint.dpr)</para>
-/// <para>Calls: AssignFile, Default, DRagLint.Charts.AskVerb.RunAskVerbFromCommandLine, DRagLint.CLI.ApplyManifestSwitch, DRagLint.CLI.ApplyPreprocessCompilerVersion, DRagLint.CLI.Bookmarks.RunBookmarksRestore, DRagLint.CLI.Bookmarks.RunBookmarksStrip, DRagLint.CLI.ConfigureLspLint, DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls (+162 more)</para>
-/// <para>Complexity: 170 (cyclomatic, outer body), 509 lines (full implementation)</para>
-/// <para>Catches: Exception (empty); Exception (swallowed)</para>
-/// <para>Touches: file system</para>
-/// <seealso cref="DRagLint.Charts.AskVerb.RunAskVerbFromCommandLine"/>
-/// <seealso cref="DRagLint.CLI.ApplyManifestSwitch"/>
-/// <seealso cref="DRagLint.CLI.ApplyPreprocessCompilerVersion"/>
-/// <seealso cref="DRagLint.CLI.Bookmarks.RunBookmarksRestore"/>
-/// <seealso cref="DRagLint.CLI.Bookmarks.RunBookmarksStrip"/>
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas) ?, main block (drag-lint.dpr)</para>
+/// <para>Calls: DRagLint.CLI.RunCommand, DRagLint.CLI.StdoutReaderGone, MatchText, Writeln</para>
+/// <seealso cref="DRagLint.CLI.RunCommand"/>
+/// <seealso cref="DRagLint.CLI.StdoutReaderGone"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function Run: Integer;
@@ -322,7 +315,7 @@ const
   /// tests\autotest\run_help_env_table.ps1: every quoted 'DRAGLINT_*' literal
   /// under src\ must be a Name here and --help must print every Name. A new
   /// variable is added HERE in the same change, or that guard fails.</remarks>
-  ENV_VARS_HELP: array[0..87] of TEnvVarHelp = (
+  ENV_VARS_HELP: array[0..93] of TEnvVarHelp = (
     (Name: 'DRAGLINT_BUSY_TIMEOUT_MS';                Purpose: 'writer busy timeout in ms (overrides the built-in default; a non-negative integer)'),
     (Name: 'DRAGLINT_CHARTS_ALLOW_LIVE_DB';           Purpose: 'charts: lets CloneDb accept a non-clone (live) database'),
     (Name: 'DRAGLINT_CHARTS_DIR';                     Purpose: 'charts: folder of the charts scripts'),
@@ -344,6 +337,9 @@ const
     (Name: 'DRAGLINT_FIXDOC_TRACE';                   Purpose: 'traces doc-drift fix edits on stderr'),
     (Name: 'DRAGLINT_FULLRULES_CHILD_EXE';            Purpose: 'test hook: the LSP full-rules child exe'),
     (Name: 'DRAGLINT_GATE_TEST_BREAK';                Purpose: 'test hook: breaks the compile gate'),
+    (Name: 'DRAGLINT_HOVER_SETBY_MAX_ROUTINES';        Purpose: 'hover Set by: routine (CFG) budget, a whole number >= 1 (overrides the built-in HOVER_SETBY_MAX_ROUTINES)'),
+    (Name: 'DRAGLINT_HOVER_SETBY_MAX_SECONDS';         Purpose: 'hover Set by: wall-clock cap in seconds, a number > 0 (overrides the built-in HOVER_SETBY_MAX_SECONDS)'),
+    (Name: 'DRAGLINT_HOVER_TIMING';                    Purpose: 'LSP: 1 writes one ''hover-timing <section> <ms>'' line per hover section to stderr'),
     (Name: 'DRAGLINT_INDEX_TEST_FAIL_FILE';           Purpose: 'test hook: index fails on the named file'),
     (Name: 'DRAGLINT_LAYOUT';                         Purpose: 'installed-layout switch (unset = the default layout)'),
     (Name: 'DRAGLINT_LIBRARY_EFFECTS';                Purpose: 'purity stage: 0 = no library effect summaries for the run; a path = that library DB (measurements); unset = the first opening external_stores library'),
@@ -359,6 +355,7 @@ const
     (Name: 'DRAGLINT_MERGE_TEST_EMPTY_REPLACEMENT';   Purpose: 'test hook: merge gets an empty replacement'),
     (Name: 'DRAGLINT_MERGE_TEST_FASTPATH';            Purpose: 'test hook: merge fast path'),
     (Name: 'DRAGLINT_NO_AUTOCREATE';                  Purpose: '1 = a query verb never builds a missing project index on first use'),
+    (Name: 'DRAGLINT_NO_BUDGET';                       Purpose: 'lint: any value other than 0 turns the per-rule time budget off for the process (as --no-budget)'),
     (Name: 'DRAGLINT_NO_CLOSURE_CACHE';               Purpose: 'any value makes index --project walk the compile closure cold: no stored unit scan is read or written (A/B)'),
     (Name: 'DRAGLINT_NO_FILE_FACTS';                  Purpose: 'forces the text read of a .dfm instead of the stored file facts'),
     (Name: 'DRAGLINT_NO_SCOPED_PURITY';               Purpose: 'any value makes the purity stage re-derive every routine, also after a scoped resolve pass (A/B)'),
@@ -390,6 +387,7 @@ const
     (Name: 'DRAGLINT_TEST_FAIL_ROLLBACK';             Purpose: 'test hook: fails the rollback'),
     (Name: 'DRAGLINT_TEST_FAIL_WRITE_AT';             Purpose: 'test hook: fails a write at the named step'),
     (Name: 'DRAGLINT_TEST_HANG_STORE_CLOSE_MS';       Purpose: 'test hook: hangs the store close'),
+    (Name: 'DRAGLINT_TEST_HOVER_SLOW_MS';              Purpose: 'test hook: ms of cancellable artificial work in the slow section of a full LSP hover'),
     (Name: 'DRAGLINT_TEST_INDEX_FILE_DELAY_MS';       Purpose: 'test hook: delay per indexed file'),
     (Name: 'DRAGLINT_TEST_LINT_FILE_DELAY_MS';        Purpose: 'test hook: delay per linted file'),
     (Name: 'DRAGLINT_TEST_METRIC_ALGO_BUMP';          Purpose: 'test hook: bumps the routine-metric marker hash version'),
@@ -397,6 +395,7 @@ const
     (Name: 'DRAGLINT_TEST_CLOSURE_CACHE_NO_INCLUDES'; Purpose: 'test hook: a stored closure scan is validated by the unit stamp only, not its include files (an unsound key)'),
     (Name: 'DRAGLINT_TEST_PURITY_SEEDS_ONLY';         Purpose: 'test hook: 1 = a scoped purity run does not follow its seeds to their callers (an unsound scope)'),
     (Name: 'DRAGLINT_TEST_RESOLVE_DELAY_MS';          Purpose: 'test hook: delay in the resolve pass'),
+    (Name: 'DRAGLINT_TEST_RULE_SLEEP_MS';              Purpose: 'test hook: ''<rule-id>=<ms>'' sleeps that long the first time a lane asks for the rule in a file'),
     (Name: 'DRAGLINT_TEST_SCRATCH_PID';               Purpose: 'test hook: scratch-folder owner pid'),
     (Name: 'DRAGLINT_TEST_STORE_CLOSE_GRACE_MS';      Purpose: 'test hook: store-close grace period'),
     (Name: 'DRAGLINT_TEST_SCOPE_NO_NAMES';            Purpose: 'test hook: the scoped resolve pass re-resolves the changed files only (a wrong scope)'),
@@ -1679,7 +1678,12 @@ begin
     end
     else if A = '--replace' then Result.Replace:= True
     else if A = '--prepare-queries' then // repo gen-param-array: DRagLint.CLI.RepoParamArray reads it from ParamStr
-    else if ((A = '--dfm') or (A = '--table') or (A = '--step-size') or (A = '--progress-form')) and (i < ParamCount) then Inc(i) // repo gen-param-array: DRagLint.CLI.RepoParamArray reads the value from ParamStr
+    { repo gen-param-array: DRagLint.CLI.RepoParamArray reads these values from ParamStr. One branch per flag: they are
+      four different options, and an OR-group reads as an alias group to run_flag_verb_map.ps1 (features\flag-aliases.json). }
+    else if (A = '--dfm') and (i < ParamCount) then Inc(i)
+    else if (A = '--table') and (i < ParamCount) then Inc(i)
+    else if (A = '--step-size') and (i < ParamCount) then Inc(i)
+    else if (A = '--progress-form') and (i < ParamCount) then Inc(i)
     else if (A = '--scope') and (i < ParamCount) then
     begin
       Inc(i);
@@ -1794,8 +1798,10 @@ begin
       Result.PathFromConfig:= False;
     end
     { 1.52 TTGEN: repo gen-orm / update-orm / gen-dataservice read these values with ParamStr (CLI.Repo) }
-    else if (Result.Command = 'repo') and ((A = '--code-dir') or (A = '--server-dir') or (A = '--client-dir')) and (i < ParamCount) then Inc(i)
-    else if (Result.Command = 'repo') and ((A = '--table') or (A = '--save-form')) and (i < ParamCount) then Inc(i)
+    else if (Result.Command = 'repo') and (A = '--code-dir') and (i < ParamCount) then Inc(i)
+    else if (Result.Command = 'repo') and (A = '--server-dir') and (i < ParamCount) then Inc(i)
+    else if (Result.Command = 'repo') and (A = '--client-dir') and (i < ParamCount) then Inc(i)
+    else if (Result.Command = 'repo') and (A = '--save-form') and (i < ParamCount) then Inc(i) { --table: the gen-param-array branch above already consumes it }
     else raise Exception.Create(UNKNOWN_ARG_PREFIX + A);
     Inc(i);
   end; // while
@@ -3182,12 +3188,12 @@ end;
 
 procedure Stage(const AIndent, ALabel: string; AProc: TProc);
 var
-  T0  : TDateTime;
+  T0  : TStopwatch;
   Beat: TStageHeartbeat;
 begin
   Writeln(Format('%sstage: %s -- started %s', [AIndent, ALabel, FormatDateTime('hh:nn:ss', NowLocal)]));
   Flush(Output);
-  T0  := Now;
+  T0  := TStopwatch.StartNew;
   BeatStep(ALabel); { a stage without counters must not show the previous stage's step and N }
   Beat:= TStageHeartbeat.Create(AIndent, ALabel);
   try
@@ -3196,7 +3202,7 @@ begin
     Beat.StopAndWait;
     Beat.Free;
   end;
-  Writeln(Format('%sstage: %s -- done in %.1fs', [AIndent, ALabel, (Now - T0) * SecsPerDay]));
+  Writeln(Format('%sstage: %s -- done in %.1fs', [AIndent, ALabel, T0.Elapsed.TotalSeconds]));
   Flush(Output);
 end;
 
@@ -3884,7 +3890,7 @@ var
   F              : string                                    ;
   W              : string                                    ;
   ExDir          : string                                    ;
-  T0             : TDateTime                                 ;
+  T0             : TStopwatch                                ;
   Elapsed        : Double                                    ;
   ProjectFile    : string                                    ;
   ExcludePatterns: TArray<string>                            ;
@@ -3910,7 +3916,7 @@ begin
   var DbDir:= ExtractFilePath(AItem.DbPath);
   if (DbDir <> '') and (not TDirectory.Exists(DbDir)) then TDirectory.CreateDirectory(DbDir);
 
-  T0:= Now;
+  T0:= TStopwatch.StartNew;
   try
     if not AcquireIndexLock(AItem.DbPath) then Exit(False); { #17: another run owns this database }
     Store:= TSQLiteSymbolStore.Create(AItem.DbPath);
@@ -4321,7 +4327,7 @@ begin
       index, so it is announced too: it is the last thing between the operator
       and the section summary, and an unannounced pause there reads exactly like
       the hang this instrumentation exists to rule out. }
-    Elapsed:= (Now - T0) * 86400;
+    Elapsed:= T0.Elapsed.TotalSeconds;
 
     var PlatSuffix:= '';
     if AItem.Platform <> '' then PlatSuffix:= ' [' + AItem.Platform + ']';
@@ -6043,7 +6049,7 @@ var
   Store    : ISymbolStore                              ;
   Indexer  : IIndexer                                  ;
   Parser   : IParser                                   ;
-  StartTime: TDateTime                                 ;
+  StartTime: TStopwatch                                ;
   Elapsed  : Double                                    ;
   Resolver : DRagLint.Project.Resolver.TProjectResolver;
   Folders  : TArray<string>                            ;
@@ -6693,7 +6699,7 @@ begin
       if WatchIdle(Interval) then Break;
       Continue;
     end;
-    StartTime:= Now;
+    StartTime:= TStopwatch.StartNew;
     { Indexer.ParsedFiles is CUMULATIVE over the indexer's life, and --watch keeps
       one indexer: measured against 0, every idle tick after the first "parsed"
       files and ran the whole-database calls pass (run_watch_scope_reset W4). }
@@ -7075,7 +7081,7 @@ begin
       break, so without this the connection stays open indefinitely and a copy
       of the .sqlite alone is empty of everything this run just did. }
     Store.Checkpoint;
-    Elapsed:= (Now - StartTime) * 86400;
+    Elapsed:= StartTime.Elapsed.TotalSeconds;
     { F1 (deep review 2026-10-25): a file whose store phase raised was rolled
       back and keeps its OLD rows. It used to be one stdout line among the
       progress and an exit 0; now the Done line counts it and the run exits 1
@@ -7124,11 +7130,11 @@ var
   DParser: TDelphi13Parser;
   F      : string         ;
   Ex     : string         ;
-  T0     : TDateTime      ;
+  T0     : TStopwatch     ;
 begin
   Writeln('');
   Writeln('=== Dictionary: ', ADbPath, '  (deep=', BoolToStr(ADeep, True), ') ===');
-  T0:= Now;
+  T0:= TStopwatch.StartNew;
   Store:= TSQLiteSymbolStore.Create(ADbPath);
   Store.Migrate;
   { Each library/project ROOT is walked RECURSIVELY (soAllDirectories), so a
@@ -7180,7 +7186,7 @@ begin
     Writeln('  stage: purity -- skipped, calls did not run and every routine already carries a verdict.');
   { xj-5: concept-search table; incremental, backfills from existing rows (no re-parse). }
   Stage('  ', 'search', procedure begin Store.BuildSymbolSearch; end);
-  AElapsedSec:= (Now - T0) * 86400;
+  AElapsedSec:= T0.Elapsed.TotalSeconds;
   Writeln(Format('  Done. Files: %d, Symbols: %d, Refs: %d  [%.1fs]', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, AElapsedSec]));
   Result:= True;
 end; // function
@@ -9737,7 +9743,6 @@ begin
     yields a list, and answering from the first entry would print an empty
     outline that looks exactly like a file with no symbols. }
   var RoOk : Boolean;
-  var UsedDb: string:= '';
   Store:= nil;
   SetLength(Syms, 0);
   for var Db in Dbs do
@@ -9751,7 +9756,7 @@ begin
       Continue;
     end;
     Syms:= Store.FindSymbolsByFile(AArgs.InFile);
-    if Length(Syms) > 0 then begin UsedDb:= Db; Break; end;
+    if Length(Syms) > 0 then Break;
     Store:= nil;
   end;
 
@@ -9761,7 +9766,6 @@ begin
     ReportNotFoundFor((AArgs.AsJson or SameText(AArgs.Format, 'json')), System.SysUtils.Format('       Tried %d database(s). Index the file, or pass --db <file.sqlite>.', [Length(Dbs)]));
     Exit(2);
   end;
-  if UsedDb = '' then UsedDb:= Dbs[0];
 
   { C2.5: a forward stub (`TFoo = class;`) STAYS in the outline -- this is the
     file-structure view and the stub is a line in the file -- but it is tagged
@@ -13716,7 +13720,16 @@ begin
     var Root: TJSONObject:= TJSONObject.Create;
     try
       { 1.52 DISRULE H2: disabled_by = 'project' or 'unit:<u1,u2>' from the config's rule_overrides }
-      var RCfg: TLintConfig:= LoadLintConfig(AArgs);
+      { Only the config's LOCATION matters to rule_overrides; --profile / --disable / --enable / --stand-in-for change the
+        enabled set, which this listing does not show, so they are not passed (run_flag_verb_map.ps1 would credit them to rules). }
+      var RArgs: TArgs:= Default(TArgs);
+      RArgs.ConfigPath:= AArgs.ConfigPath;
+      RArgs.ProjectPath:= AArgs.ProjectPath;
+      RArgs.DbPath:= AArgs.DbPath;
+      RArgs.InFile:= AArgs.InFile;
+      RArgs.Path:= AArgs.Path;
+      RArgs.RulesDir:= AArgs.RulesDir;
+      var RCfg: TLintConfig:= LoadLintConfig(RArgs);
       var Arr: TJSONArray:= TJSONArray.Create;
       for R in Cat do
       begin
@@ -22751,7 +22764,10 @@ begin
     'mtime=' + FloatToStrF(Double(E.OrigMtime), ffGeneral, 17, 0, TFormatSettings.Invariant) + sLineBreak;
     if E.HaveFT then JournalText:= JournalText + 'ft=' + IntToStr(FileTimeToI64(E.OrigFT)) + sLineBreak;
     TFile.WriteAllText(E.Journal, JournalText);
-  except end;
+  except
+    on Ex: Exception do
+      Writeln(ErrOutput, 'ghost-check: WARNING: could not write the recovery journal ', E.Journal, ' (', Ex.Message, '); ghost-recover cannot undo this overlay after a crash.');
+  end;
   TFile.WriteAllBytes(E.RealPath, E.BufBytes);
   try TFile.SetLastWriteTime(E.RealPath, Now); except end;
   { Capture the timestamp our write actually left behind, and record it in the
@@ -22990,7 +23006,12 @@ begin
             plugin already filters these, but ghost-check is a public verb and
             another caller may not. }
           if BytesSame(E.BufBytes, E.OrigBytes) then Continue;
-          try TFile.WriteAllBytes(TPath.Combine(ShadowDir, ExtractFileName(E.RealPath)), E.BufBytes); except end;
+          try
+            TFile.WriteAllBytes(TPath.Combine(ShadowDir, ExtractFileName(E.RealPath)), E.BufBytes);
+          except
+            on Ex: Exception do
+              Writeln(ErrOutput, 'ghost-check: WARNING: could not write the shadow copy of ', E.RealPath, ' (', Ex.Message, '); the compile may run on a stale file.');
+          end;
         end;
         for i:= 0 to Entries.Count - 1 do
         begin
@@ -23145,7 +23166,15 @@ begin
       try
         { keep the crash-time content so nothing is ever lost }
         CrashBuf:= TPath.Combine(DragDir, ExtractFileName(UnitPath) + '.crash-buffer');
-        try TFile.Copy(UnitPath, CrashBuf, True); except end;
+        try
+          TFile.Copy(UnitPath, CrashBuf, True);
+        except
+          on Ex: Exception do
+          begin
+            Writeln(ErrOutput, 'ghost-recover: WARNING: could not keep the crash-time content of ', UnitPath, ' at ', CrashBuf, ' (', Ex.Message, '); NOT restoring the original so nothing is lost.');
+            Continue;
+          end;
+        end;
         { restore the saved original + mtime (prefer the exact FILETIME) }
         TFile.Copy(OrigBak, UnitPath, True);
         if (FtStr <> '') and TryStrToInt64(FtStr, FtVal) then
@@ -26145,11 +26174,16 @@ begin
       if SameText(M.RuleId, AArgs.FixRule) and (Trim(M.Reason) <> '') then
       begin
         SupReason := TReviewMarkers.WithoutReviewStamp(M.Reason);
-        SupStamped:= (Pos('REVIEWED', M.Reason) > 0) and (Pos('REVIEWED', SupReason) = 0);
+        SupStamped:= M.Reason.Contains('REVIEWED') and not SupReason.Contains('REVIEWED');
         Break;
       end;
 
-  NewLine:= TReviewMarkers.InsertInto(OldLine, AArgs.FixRule, SupReason, WinHash);
+  { 1.52 INT14: `--reason "<text>"` REPLACES the entry's reason, stamp included:
+    the operator passing it is the re-review that L3 asks for. Without it the
+    L3 default stands (a re-hash drops the stamp, the note below says so). }
+  var Restamp: Boolean:= Trim(AArgs.Reason) <> '';
+  NewLine:= TReviewMarkers.InsertInto(OldLine, AArgs.FixRule,
+    (if Restamp then Trim(AArgs.Reason) else SupReason), WinHash, Restamp);
   if (NewLine = OldLine) and (SupLine = 0) then
   begin
     { Already reviewed and the hash still matches -- nothing to write, and the
@@ -26197,7 +26231,7 @@ begin
   { L3: InsertInto drops a `REVIEWED <date>` stamp when it RE-HASHES a stale
     marker, because a re-hash is not a re-review. Say so, or the operator never
     learns the stamp has to be re-written after actually re-reading the code. }
-  if SupStamped or ((Pos('REVIEWED', OldLine) > 0) and (Pos('REVIEWED', NewLine) = 0)) then
+  if (not Restamp) and (SupStamped or (OldLine.Contains('REVIEWED') and not NewLine.Contains('REVIEWED'))) then
     Writeln(Format('note: %s:%d -- the marker was re-hashed to changed code, so its REVIEWED stamp was dropped ' +
       '(a re-hash is not a re-review). Re-stamp the reason once you have re-read the code.',
       [AArgs.Target, AArgs.FixLine]));

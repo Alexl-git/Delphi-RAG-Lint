@@ -32,16 +32,16 @@ try {
     return @(@('00001_a.dfm', $aErr, 'C:\c\a.dfm'), @('00002_b.dfm', 0, 'C:\c\b.dfm'), @('00003_FormAnsi.dfm', $fxErr, $fxA), @('00004_FormUtf8.dfm', 0, $fxB))
   }
   WriteTsv "$scratch\A.tsv" $A
-  WriteTsv "$scratch\B.tsv" (MakeB 0 0)
+  WriteTsv "$scratch\B.tsv" (@(MakeB 0 0))
   $null = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $cmp -A "$scratch\A.tsv" -B "$scratch\B.tsv" 2>&1 | ForEach-Object { "$_" } }
   Check 'B13 clean pair (B fixes b + both fixtures) passes' ($LASTEXITCODE -eq 0)
-  WriteTsv "$scratch\Breg.tsv" (MakeB 4 0)
+  WriteTsv "$scratch\Breg.tsv" (@(MakeB 4 0))
   $null = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $cmp -A "$scratch\A.tsv" -B "$scratch\Breg.tsv" 2>&1 | ForEach-Object { "$_" } }
   Check 'B13 CONTROL a regression in B is rejected' ($LASTEXITCODE -ne 0)
-  WriteTsv "$scratch\Bfx.tsv" (MakeB 0 1)
+  WriteTsv "$scratch\Bfx.tsv" (@(MakeB 0 1))
   $null = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $cmp -A "$scratch\A.tsv" -B "$scratch\Bfx.tsv" 2>&1 | ForEach-Object { "$_" } }
   Check 'B13 CONTROL a fixture that still fails in B is rejected' ($LASTEXITCODE -ne 0)
-  WriteTsv "$scratch\Bshort.tsv" ((MakeB 0 0) | Select-Object -First 3)
+  WriteTsv "$scratch\Bshort.tsv" ((@(MakeB 0 0)) | Select-Object -First 3)
   $null = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $cmp -A "$scratch\A.tsv" -B "$scratch\Bshort.tsv" 2>&1 | ForEach-Object { "$_" } }
   Check 'B13 CONTROL a short run (different file set) is rejected' ($LASTEXITCODE -ne 0)
 
@@ -69,6 +69,11 @@ try {
   $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'run_check_init_handlers.ps1'), [ref]$null, [ref]$null)
   $pe  = $ast.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'Exe' }
   $def = if ($pe.DefaultValue) { $pe.DefaultValue.Extent.Text } else { '' }
+  # PS5RUNNERS (c92bfb2b5) moved script-path defaults into the body: `if (-not $Exe) { $Exe = ... }` counts too.
+  if ($def -eq '' -or $def -eq "''") {
+    $bm = [regex]::Match($ast.Extent.Text, '(?m)^\s*if\s*\(\s*-not\s+\$Exe\s*\)\s*\{\s*\$Exe\s*=\s*(.+?)\s*\}\s*$')
+    if ($bm.Success) { $def = $bm.Groups[1].Value }
+  }
   Check 'B46 run_check_init_handlers -Exe has a non-empty default' (($def -ne '') -and ($def -ne "''")) "default=[$def]"
 
   # ---- B28 ----------------------------------------------------------------------------------------

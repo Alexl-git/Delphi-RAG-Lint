@@ -109,7 +109,7 @@ function CalledFromRange([string[]]$Lines) {
 }
 # The LOGICAL `Called from:` fact: its physical lines, prefix stripped, joined by one blank.
 function CalledFromLogical([string[]]$Lines) {
-  $r = CalledFromRange $Lines
+  $r = @(CalledFromRange $Lines)
   if ($r[1] -lt 0) { return '' }
   $parts = @($Lines[$r[0]])
   for ($k = $r[0] + 1; $k -le $r[1]; $k++) { $parts += ($Lines[$k] -replace '^\s*///\s?', '') }
@@ -120,7 +120,7 @@ function EntryCount([string]$Logical) {
   return @($Matches[1] -split ', ' | Where-Object { $_.Trim() -ne '' }).Count
 }
 function DriftFindings([string]$Json) {
-  try { return ,@(ConvertFrom-Json $Json | Where-Object { $_.rule -eq 'doc-drift' }) } catch { return $null }
+  try { return ,@(ConvertFrom-Json $Json | ForEach-Object { $_ } | Where-Object { $_.rule -eq 'doc-drift' }) } catch { return $null }
 }
 
 # --- fixture ------------------------------------------------------------------
@@ -157,7 +157,7 @@ $n = EntryCount $logical
 Check "E1: POSITIVE CONTROL -- the folded Called from list holds $CALLERS entries" ($n -eq $CALLERS) "$n entries"
 Check "E1: POSITIVE CONTROL -- the logical list is longer than $DCC_SAFE characters" ($logical.Length -gt $DCC_SAFE) "$($logical.Length) chars"
 Check "E1: every line of Shared.pas is <= $FACT_MAX characters" ((MaxLineLen $shared) -le $FACT_MAX) "max $(MaxLineLen $shared)"
-$rg = CalledFromRange $lines
+$rg = @(CalledFromRange $lines)
 Check 'E1: the list is written over more than one line' (($rg[1] -gt $rg[0]) -and ($rg[0] -ge 0)) "lines $($rg[0])..$($rg[1])"
 
 # ------------------------------------------------------------------ E2 --------
@@ -186,7 +186,7 @@ Check 'E4: a second document --apply is a no-op' ((Get-FileHash $shared).Hash -e
 # ------------------------------------------------------------------ E3 --------
 # The shape 1.20.4 wrote: the same content, one physical line.
 $lines = [IO.File]::ReadAllLines($shared)
-$rg = CalledFromRange $lines
+$rg = @(CalledFromRange $lines)
 if ($rg[1] -gt $rg[0]) {
   $one  = CalledFromLogical $lines
   $long = @()
@@ -199,7 +199,8 @@ Check "E3: setup -- the stored list is ONE line over $DCC_SAFE characters" ((Max
 $null = Run @('index', '--project', $dpr, '--db', $db)
 $fs = DriftFindings (RunJson @('lint', $shared, '--db', $db, '--rule', 'doc-drift', '--project-rules', '--json'))
 Check 'E3: lint --rule doc-drift reports the over-long stored line' (($null -ne $fs) -and ($fs.Count -ge 1)) ("{0} finding(s): {1}" -f @($fs).Count, ((@($fs) | ForEach-Object { $_.message }) -join ' | '))
-$r = Run @('lint', '--file', $shared, '--db', $db, '--project-rules', '--fix', '--fix-rule', 'doc-drift', '--apply', '--no-backup')
+# 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+$r = Run @('lint', '--file', $shared, '--db', $db, '--project-rules', '--fix', '--fix-rule', 'doc-drift', '--apply', '--no-compile-gate', '--no-backup')
 Check "E3: --fix rewrites it so every line is <= $FACT_MAX" ((MaxLineLen $shared) -le $FACT_MAX) "max $(MaxLineLen $shared); $(LastLine $r.Out)"
 Check "E3: the rewritten list still holds $CALLERS entries" ((EntryCount (CalledFromLogical ([IO.File]::ReadAllLines($shared)))) -eq $CALLERS) ''
 $null = Run @('index', '--project', $dpr, '--db', $db)
@@ -212,7 +213,7 @@ Check 'E3: a second lint --rule doc-drift reports 0' (($null -ne $fs) -and ($fs.
 # Exactly DOC_FACT_MAX_COLS is current; one more character is drift.
 function PadLine1([int]$Width) {
   $ls = [IO.File]::ReadAllLines($shared)
-  $rg = CalledFromRange $ls
+  $rg = @(CalledFromRange $ls)
   $l1 = $ls[$rg[0]] -replace ',\s+', ', '
   $at = $l1.IndexOf(', ') + 2
   $ls[$rg[0]] = $l1.Substring(0, $at) + (' ' * ($Width - $l1.Length)) + $l1.Substring($at)

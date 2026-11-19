@@ -1,16 +1,18 @@
 # Runner for lane EXPLAIN (1.52): `drag-lint explain <rule-id>` and multi-word `query --concept`.
 #
-# Usage: run_v152_EXPLAIN.ps1 -Exe <drag-lint.exe> [-DbPath <project.sqlite>] [-RulesDir <rules folder>]
+# Usage: run_v152_EXPLAIN.ps1 [-Exe <drag-lint.exe>] [-DbPath <project.sqlite>] [-RulesDir <rules folder>]
 #   -DbPath       a project index; enables the --concept block (skipped, and said so, without it)
 #   -RulesDir defaults to <repo>\rules (so the wiki table rows under <repo>\docs\wiki are found)
 #
 # Every negative assertion has a positive control (its known-good twin runs first or beside it).
 param(
-  [Parameter(Mandatory = $true)][string]$Exe,
+  [string]$Exe = '',
   [string]$DbPath = "",
   [string]$RulesDir = ""
 )
 $ErrorActionPreference = "Stop"
+# The battery passes no arguments: default to the repo's deployed-layout engine like every other runner.
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 if ($RulesDir -eq "") { $RulesDir = Join-Path $repo "rules" }
 $fail = 0
@@ -20,7 +22,7 @@ function Assert($name, $cond) {
 # Runs the exe; returns exit code + stdout + stderr (separate files so neither stream is lost).
 function Run([string[]]$argv) {
   $o = [IO.Path]::GetTempFileName(); $e = [IO.Path]::GetTempFileName()
-  $p = Start-Process -FilePath $Exe -ArgumentList @($argv | ForEach-Object { if ($_ -match "\s") { '"' + $_ + '"' } else { $_ } }) -NoNewWindow -Wait -PassThru -RedirectStandardOutput $o -RedirectStandardError $e
+  $p = Start-Process -FilePath $Exe -ArgumentList @($argv | ForEach-Object { if ($_ -match "\s") { '"' + $_ + '"' } else { $_ } }) -NoNewWindow -Wait -PassThru -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   $r = [pscustomobject]@{ Code = $p.ExitCode; Out = [IO.File]::ReadAllText($o); Err = [IO.File]::ReadAllText($e) }
   [IO.File]::Delete($o); [IO.File]::Delete($e)
   $r
@@ -52,7 +54,7 @@ Assert "positive control: a known id prints no 'Nearest ids'" ($r.Err -notmatch 
 # 4. --json valid; positive control: the object carries the id and the suppress marker
 $j = Run @("explain", "tls-verification-disabled", "--json", "--rules-dir", $RulesDir)
 $obj = $null
-try { $obj = $j.Out | ConvertFrom-Json } catch { $obj = $null }
+try { $obj = $j.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $obj = $null }
 Assert "--json is one valid JSON object" ($null -ne $obj)
 if ($null -ne $obj) {
   Assert "--json id" ($obj.id -eq "tls-verification-disabled")
@@ -60,7 +62,7 @@ if ($null -ne $obj) {
 }
 $ju = Run @("explain", "bare-excpt", "--json", "--rules-dir", $RulesDir)
 $uobj = $null
-try { $uobj = $ju.Out | ConvertFrom-Json } catch { $uobj = $null }
+try { $uobj = $ju.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $uobj = $null }
 Assert "unknown id --json exits 2 with valid JSON listing nearest" (($ju.Code -eq 2) -and ($null -ne $uobj) -and (@($uobj.nearest) -contains "bare-except"))
 
 # 5. no id: usage, exit 2
@@ -72,10 +74,10 @@ if ($DbPath -eq "") {
   Write-Host "SKIP  --concept block (no -DbPath)"
 } else {
   $c1 = Run @("query", "--concept", "rule catalog", "--db", $DbPath, "--json", "--limit", "5")
-  $c1o = $null; try { $c1o = $c1.Out | ConvertFrom-Json } catch { $c1o = $null }
+  $c1o = $null; try { $c1o = $c1.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $c1o = $null }
   Assert "positive control: a two-word concept whose words both occur returns rows (count $($c1o.count))" (($c1.Code -eq 0) -and ($c1o.count -ge 1))
   $c2 = Run @("query", "--concept", "rule catalog zzqxjunk", "--db", $DbPath, "--json", "--limit", "5")
-  $c2o = $null; try { $c2o = $c2.Out | ConvertFrom-Json } catch { $c2o = $null }
+  $c2o = $null; try { $c2o = $c2.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $c2o = $null }
   Write-Host "RAW (concept with one unknown word): code $($c2.Code), first 200 chars: $($c2.Out.Substring(0, [Math]::Min(200, $c2.Out.Length)))"
   Assert "two real words + one word the index lacks still returns ranked rows (count $($c2o.count), code $($c2.Code))" (($c2.Code -eq 0) -and ($c2o.count -ge 1))
   if ($c2o.count -ge 2) {

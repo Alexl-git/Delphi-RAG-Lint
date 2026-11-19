@@ -72,32 +72,32 @@ try {
   # X1: no --project, the unit's project does not build -> the gate refuses, nothing written
   $P = New-Fx 'x1' -Dirty
   $before = Tree-Hash $P.Dir
-  $r = Run (Em $P)
+  $r = Run (@(Em $P))
   Write-Host ('  raw X1: exit {0}: {1}' -f $r.Code, (($r.Out.Trim() -split "`r?`n" | Select-Object -First 3) -join ' | '))
   Check 'X1 no --project, dirty project: exit 1, REFUSED (dirty-baseline), nothing written' (($r.Code -eq 1) -and ($r.Out -match 'REFUSED \(dirty-baseline\)') -and ((Tree-Hash $P.Dir) -ceq $before)) "exit $($r.Code); $($r.Out)"
   # X2: no --project, clean project -> gated write kept, the note names the project
   $P = New-Fx 'x2'
-  $r = Run (Em $P)
+  $r = Run (@(Em $P))
   Check 'X2 no --project, clean project: exit 0, extracted, .BCK backup, note names NarrowParam.dproj' (($r.Code -eq 0) -and ([IO.File]::ReadAllText($P.Basic) -match 'procedure Extracted') -and (@(Get-ChildItem $P.Dir -Filter 'Basic.pas.BCK*').Count -ge 1) -and ($r.Out -match 'compile gate of NarrowParam\.dproj')) "exit $($r.Code); $($r.Out)"
   # X3: the extracted method's name is already declared -> after-build error -> rolled back
   $P = New-Fx 'x3' -Clash
   $before = Tree-Hash $P.Dir
-  $r = Run (Em $P)
+  $r = Run (@(Em $P))
   Check 'X3 the fix breaks the build (E2004 in build 2): exit 1, rolled back, the source is byte-identical' (($r.Code -eq 1) -and ($r.Out -match 'E2004') -and ([IO.File]::ReadAllText($P.Basic) -notmatch 'procedure Extracted') -and ((Tree-Hash $P.Dir) -ceq $before)) "exit $($r.Code); $($r.Out)"
   # X4: no project names the unit -> REFUSED (no-project), exit 2, nothing written
   $P = New-Fx 'x4'
   Hide-Project $P
   $before = Tree-Hash $P.Dir
-  $r = Run (Em $P)
+  $r = Run (@(Em $P))
   Check 'X4 no project builds the unit: exit 2, REFUSED (no-project), nothing written' (($r.Code -eq 2) -and ($r.Out -match 'REFUSED \(no-project\)') -and ($r.Out -match '--no-compile-gate') -and ((Tree-Hash $P.Dir) -ceq $before)) "exit $($r.Code); $($r.Out)"
   # X5: control -- --no-compile-gate writes unbuilt where X4 refused (a fresh copy: X4 must not depend on X5)
   $P = New-Fx 'x5'
   Hide-Project $P
-  $r = Run ((Em $P) + '--no-compile-gate')
+  $r = Run ((@(Em $P)) + '--no-compile-gate')
   Check 'X5 control: --no-compile-gate writes unbuilt (exit 0, extracted)' (($r.Code -eq 0) -and ([IO.File]::ReadAllText($P.Basic) -match 'procedure Extracted')) "exit $($r.Code); $($r.Out)"
   # X6: control -- an explicit --project is still the gate (dirty -> refused)
   $P = New-Fx 'x6' -Dirty
-  $r = Run ((Em $P) + @('--project', $P.Proj))
+  $r = Run ((@(Em $P)) + @('--project', $P.Proj))
   Check 'X6 control: explicit --project, dirty: exit 1, REFUSED (dirty-baseline)' (($r.Code -eq 1) -and ($r.Out -match 'REFUSED \(dirty-baseline\)')) "exit $($r.Code); $($r.Out)"
 
   Write-Host 'create-enum-helper'
@@ -105,29 +105,29 @@ try {
   # E1: --db at <dir>\_D-RAG\NarrowParam.sqlite only, dirty project -> gated by the DB's project, refused
   $P = New-Fx 'e1' -Dirty -DragDb
   $before = Tree-Hash $P.Dir
-  $r = Run (Eh $P)
+  $r = Run (@(Eh $P))
   Write-Host ('  raw E1: exit {0}: {1}' -f $r.Code, (($r.Out.Trim() -split "`r?`n" | Select-Object -First 3) -join ' | '))
   Check 'E1 --db only (the DB''s project), dirty: exit 1, REFUSED (dirty-baseline), nothing written' (($r.Code -eq 1) -and ($r.Out -match 'REFUSED \(dirty-baseline\)') -and ((Tree-Hash $P.Dir) -ceq $before)) "exit $($r.Code); $($r.Out)"
   # E2: clean project, DB not under _D-RAG -> the project that names the unit gates it; written
   $P = New-Fx 'e2'
   $before = Tree-Hash $P.Dir
-  $r = Run (Eh $P)
+  $r = Run (@(Eh $P))
   Check 'E2 no --project, clean: exit 0, helper written, note names NarrowParam.dproj' (($r.Code -eq 0) -and ((Tree-Hash $P.Dir) -cne $before) -and ([IO.File]::ReadAllText($P.Basic) -match 'record helper for TColor') -and ($r.Out -match 'compile gate of NarrowParam\.dproj')) "exit $($r.Code); $($r.Out)"
   # E3: TColorHelper already declared -> the helper breaks the build -> rolled back
   $P = New-Fx 'e3' -Clash
   $before = Tree-Hash $P.Dir
-  $r = Run (Eh $P)
+  $r = Run (@(Eh $P))
   Check 'E3 the fix breaks the build (E2004 in build 2): exit 1, rolled back, the source is byte-identical' (($r.Code -eq 1) -and ($r.Out -match 'E2004') -and ((Tree-Hash $P.Dir) -ceq $before)) "exit $($r.Code); $($r.Out)"
   # E5: no project names the unit -> REFUSED (no-project), exit 2, nothing written
   $P = New-Fx 'e5'
   Hide-Project $P
   $before = Tree-Hash $P.Dir
-  $r = Run (Eh $P)
+  $r = Run (@(Eh $P))
   Check 'E5 no project builds the unit: exit 2, REFUSED (no-project), nothing written' (($r.Code -eq 2) -and ($r.Out -match 'REFUSED \(no-project\)') -and ((Tree-Hash $P.Dir) -ceq $before)) "exit $($r.Code); $($r.Out)"
   # E4: control -- --no-compile-gate writes unbuilt where E5 refused (a fresh copy)
   $P = New-Fx 'e4'
   Hide-Project $P
-  $r = Run ((Eh $P) + '--no-compile-gate')
+  $r = Run ((@(Eh $P)) + '--no-compile-gate')
   Check 'E4 control: --no-compile-gate writes unbuilt (exit 0, helper written)' (($r.Code -eq 0) -and ([IO.File]::ReadAllText($P.Basic) -match 'record helper for TColor')) "exit $($r.Code); $($r.Out)"
 }
 finally {

@@ -36,7 +36,7 @@ function Get-Plan([string]$Db, [string]$Tag) {
   $o = Join-Path $WorkDir "plan-$Tag.out"; $e = Join-Path $WorkDir "plan-$Tag.err"
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
     -ArgumentList @('cycles', '--db', ('"' + $Db + '"'), '--edges', '--causes', '--plan', '--format', 'text', '--library-db', 'none') `
-    -RedirectStandardOutput $o -RedirectStandardError $e
+    -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   return @{ Exit = $p.ExitCode; Out = [IO.File]::ReadAllText($o); Err = [IO.File]::ReadAllText($e); File = $o }
 }
 

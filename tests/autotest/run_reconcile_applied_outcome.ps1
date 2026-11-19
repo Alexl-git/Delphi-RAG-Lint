@@ -92,7 +92,7 @@ function FreshCopy {
 # corrupted document fails the check that wanted a field rather than throwing
 # somewhere unrelated.
 function AsJson([string]$Text) {
-  try { return ($Text | ConvertFrom-Json) } catch { return $null }
+  try { return ($Text | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 
 # Key presence, not value truthiness. `$o.nosuch` is $null and so is a key
@@ -165,7 +165,7 @@ Check '2c dry run omits backups/edited; apply carries them' `
 
 # THE PATHS MUST BE REAL. A field naming a .bak that is not on disk is worse
 # than no field: it is what a revert button would offer.
-$bakPaths   = PathList $app.backups
+$bakPaths   = @(PathList $app.backups)
 $bakAllExist = $true
 foreach ($b in $bakPaths) { if (-not (Test-Path $b)) { $bakAllExist = $false } }
 Check '2d apply: every reported backup path exists on disk' `

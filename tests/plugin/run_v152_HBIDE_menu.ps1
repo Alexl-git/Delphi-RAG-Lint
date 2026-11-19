@@ -25,6 +25,9 @@
 [CmdletBinding()]
 param([string]$WorkDir = "$env:TEMP\drag-lint-v152-hbide-$PID",
       [string]$Engine = '')   # optional: a 1.52 engine exe for the live leg (5.)
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot '..\autotest\lib\WorkDirCleanup.ps1')
+try {
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path "$PSScriptRoot\..\..").Path
 $plug = Join-Path $repo 'src\delphi-plugin'
@@ -168,8 +171,8 @@ begin
     end;
 
     { command line for a caret position }
-    lGot:= CheckInitCommandLine('C:\x y\drag-lint.exe', 'C:\p q\UnitB.pas', 'C:\d b\App.sqlite', 14, 12);
-    Expect(lGot, '"C:\x y\drag-lint.exe" check-init --at "C:\p q\UnitB.pas:14:12" --db "C:\d b\App.sqlite" --json', 'command line');
+    lGot:= CheckInitCommandLine('C:\x y\drag-lint.exe', 'C:\p q\UnitB.pas', 'C:\d b\App.sqlite', 14, 12);  // # exe-freshness: absent (a fake path the command line only quotes)
+    Expect(lGot, '"C:\x y\drag-lint.exe" check-init --at "C:\p q\UnitB.pas:14:12" --db "C:\d b\App.sqlite" --json', 'command line');  // # exe-freshness: absent (a fake path the command line only quotes)
 
     { MAY-BE-UNSET: use, witness hops, writers, limits }
     lGot:= Render(CheckInitMessages(Load('may.json'), 1));
@@ -220,7 +223,7 @@ $lines = @('@echo off', ('call "{0}"' -f $rs), ('cd /d "{0}"' -f $WorkDir),
   ('dcc64 -B -NSSystem;Winapi;Vcl -E"{0}" -N0"{0}\dcu" CheckInitMenuCheck.dpr' -f $WorkDir), 'echo BUILD_EXITCODE=%ERRORLEVEL%')
 [IO.File]::WriteAllText($bat, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 $buildLog = Join-Path $WorkDir 'build.log'
-$null = Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $buildLog -NoNewWindow -Wait -PassThru
+$null = Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $buildLog -NoNewWindow -Wait -PassThru; $null = $null.Handle
 $buildOut = [IO.File]::ReadAllText($buildLog)
 if ($buildOut -notmatch 'BUILD_EXITCODE=0') {
   Write-Host 'FAIL: headless check did not compile' -ForegroundColor Red
@@ -234,7 +237,7 @@ if ($rc -ne 0) { Bad "headless check exit $rc" }
 if ($out -notmatch '(\d+) passed, 0 failed') { Bad 'no pass/fail summary from the headless check' }
 
 # ---- registry entry: FULL ide-menu path + editor right-click caption ----
-$entry = Get-Content (Join-Path $repo 'features\entries\check-init.json') -Raw | ConvertFrom-Json
+$entry = Get-Content (Join-Path $repo 'features\entries\check-init.json') -Raw | ConvertFrom-Json | ForEach-Object { $_ }
 $menu = @($entry.surfaces | Where-Object type -eq 'ide-menu' | ForEach-Object { $_.path })
 $ctx  = @($entry.surfaces | Where-Object { ($_.type -eq 'ide-context') -and ($_.host -eq 'Editor') } | ForEach-Object { $_.caption })
 if ($menu -contains "drag-lint > Analyze > $caption") { Ok 'entry: ide-menu path' } else { Bad "entry lacks ide-menu path 'drag-lint > Analyze > $caption' (has: $($menu -join '; '))" }
@@ -266,3 +269,4 @@ if ($Engine) {
 if ($fail) { Write-Host "FAIL ($fail)" -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green
 exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

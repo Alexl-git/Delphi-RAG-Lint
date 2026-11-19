@@ -142,7 +142,7 @@ function LspSession([string[]]$Extra) {
     if (-not $mm.Success) { break }
     $start = $i + $mm.Index + $mm.Length; $len = [int]$mm.Groups[1].Value
     if ($start + $len -gt $out.Length) { break }
-    $o = $out.Substring($start, $len) | ConvertFrom-Json
+    $o = $out.Substring($start, $len) | ConvertFrom-Json | ForEach-Object { $_ }
     if ($null -ne $o.id -and [int]$o.id -gt 10) { $res[[int]$o.id] = $o.result; if ($null -ne $o.error) { $res[[int]$o.id + 100] = $o.error.message } }
     $i = $start + $len
   }

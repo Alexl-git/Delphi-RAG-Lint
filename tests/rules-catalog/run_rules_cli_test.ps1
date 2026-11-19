@@ -10,7 +10,7 @@ function Assert($name, $cond) {
 }
 
 # --json
-$json = & { $ErrorActionPreference = 'Continue'; & $exe rules --json --rules-dir rules 2>$null } | ConvertFrom-Json
+$json = & { $ErrorActionPreference = 'Continue'; & $exe rules --json --rules-dir rules 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
 Assert "json has rules array" ($null -ne $json.rules)
 Assert "json rule count >= 100" ($json.rules.Count -ge 100)
 $tmp = $json.rules | Where-Object { $_.id -eq 'too-many-parameters' }
@@ -36,7 +36,7 @@ $catDir = Join-Path ([IO.Path]::GetTempPath()) ("dl-cat-sidecar-$PID")
 try {
   [IO.File]::WriteAllText((Join-Path $catDir 'zz-with-category.json'), '{"id":"zz-with-category","severity":"hint","message":"m","category":"modernize"}')
   [IO.File]::WriteAllText((Join-Path $catDir 'zz-no-category.json'), '{"id":"zz-no-category","severity":"hint","message":"m"}')
-  $cj = & { $ErrorActionPreference = 'Continue'; & $exe rules --json --rules-dir $catDir 2>$null } | ConvertFrom-Json
+  $cj = & { $ErrorActionPreference = 'Continue'; & $exe rules --json --rules-dir $catDir 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
   $withCat = $cj.rules | Where-Object { $_.id -eq 'zz-with-category' }
   $noCat = $cj.rules | Where-Object { $_.id -eq 'zz-no-category' }
   Assert "sidecar category key is honoured (modernize)" ($null -ne $withCat -and $withCat.category -eq 'modernize')
@@ -50,7 +50,7 @@ $fixDir = Join-Path ([IO.Path]::GetTempPath()) ("dl-fix-sidecar-$PID")
 try {
   [IO.File]::WriteAllText((Join-Path $fixDir 'zz-with-fix.json'), '{"id":"zz-with-fix","severity":"hint","message":"m","fix":{"replace":"{x}"}}')
   [IO.File]::WriteAllText((Join-Path $fixDir 'zz-without-fix.json'), '{"id":"zz-without-fix","severity":"hint","message":"m"}')
-  $fj = & { $ErrorActionPreference = 'Continue'; & $exe rules --json --rules-dir $fixDir 2>$null } | ConvertFrom-Json
+  $fj = & { $ErrorActionPreference = 'Continue'; & $exe rules --json --rules-dir $fixDir 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
   $withFix = $fj.rules | Where-Object { $_.id -eq 'zz-with-fix' }
   $noFix = $fj.rules | Where-Object { $_.id -eq 'zz-without-fix' }
   Assert "sidecar fix key makes the rule fixable" ($null -ne $withFix -and $withFix.fixable -eq $true)

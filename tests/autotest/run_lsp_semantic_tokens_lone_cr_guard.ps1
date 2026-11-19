@@ -78,7 +78,7 @@ function LspTokens([string]$File, [string]$Db) {
     if (-not $mm.Success) { break }
     $start = $i + $mm.Index + $mm.Length; $len = [int]$mm.Groups[1].Value
     if ($start + $len -gt $out.Length) { break }
-    $o = $out.Substring($start, $len) | ConvertFrom-Json
+    $o = $out.Substring($start, $len) | ConvertFrom-Json | ForEach-Object { $_ }
     if ($null -ne $o.id -and [int]$o.id -eq 11) { return $o.result }
     $i = $start + $len
   }

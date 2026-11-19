@@ -22,6 +22,9 @@ param(
 )
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'; $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -57,7 +60,7 @@ $t = Run @('uses-fix', $hm, '--project', $proj, '--db', $db, '--platform', 'win6
 Check 'a: skipped: line names Leaf, the include line 2 and the {$I} at HostM.pas:9' ($t.Out.Contains('skipped: Leaf -- used from include HostM.Intf.inc:2 ({$I} at HostM.pas:9); uses-fix edits only the unit''s own uses clause.')) ($t.Out.Trim() -replace "`r?`n", ' | ')
 Check 'a: no MOVED line' ($t.Out -notmatch 'MOVED') ''
 $j = Run @('uses-fix', $hm, '--project', $proj, '--db', $db, '--platform', 'win64', '--format', 'json')
-$o = $null; try { $o = ($j.Out.Substring($j.Out.IndexOf('{')) | ConvertFrom-Json) } catch { }
+$o = $null; try { $o = ($j.Out.Substring($j.Out.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { }
 Check 'a: JSON skipped_include has Leaf' (($null -ne $o) -and (@($o.skipped_include | Where-Object { $_.unit -eq 'Leaf' -and $_.include_line -eq 2 -and $_.host_line -eq 9 }).Count -eq 1)) ''
 Check 'a: JSON skipped_include_count 2 (Leaf and System.SysUtils, both in the include)' (($null -ne $o) -and ($o.skipped_include_count -eq 2)) "got $($o.skipped_include_count)"
 $b1 = Hash $hm; $b2 = Hash $hmi
@@ -75,9 +78,10 @@ Check 'c: CONTROL: find-unit --in HostN.pas computes an edit (exit 0)' ($f2.Rc -
 $e1 = Run @('create-enum-helper', '--qname', 'HostE.TColorE', '--tostring', 'rtti', '--json', '--db', $db)
 Check 'd: create-enum-helper rtti -> uses_in_include' ($e1.Out -match 'uses_in_include') ($e1.Out.Trim() -replace "`r?`n", ' | ')
 $e2 = Run @('create-enum-helper', '--qname', 'HostE.TColorE', '--tostring', 'case', '--json', '--db', $db)
-$eo = $null; try { $eo = ($e2.Out.Substring($e2.Out.IndexOf('{')) | ConvertFrom-Json) } catch { }
+$eo = $null; try { $eo = ($e2.Out.Substring($e2.Out.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { }
 Check 'd: CONTROL: --tostring case builds' ($e2.Out -match '"built"') ($e2.Out.Substring(0, [Math]::Min(300, $e2.Out.Length)) -replace "`r?`n", ' ')
 Check 'd: CONTROL: no edit lands on or before the {$I} line 13 in the implementation' (-not ($e2.Out -match '"line"\s*:\s*1[0-3]\b')) ''
 
 if ($script:Failed) { Write-Host 'run_uses_fix_include_skip: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'run_uses_fix_include_skip: PASS' -ForegroundColor Green; exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

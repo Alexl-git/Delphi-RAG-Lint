@@ -129,7 +129,7 @@ function LspOpenStub([string]$Db, [string]$Tag) {
   $env:DRAGLINT_FULLRULES_CHILD_EXE = $stubExe; $env:STUB_MODE = 'slowemit'; $env:STUB_SLEEP_MS = "$StubSleepMs"; $env:STUB_JSON_FILE = $emitF
   try {
     $p = Start-Process $exePath -ArgumentList @('lsp', '--db', ('"' + $Db + '"'), '--full-rules') -WorkingDirectory $WorkDir `
-           -RedirectStandardInput $in -RedirectStandardOutput $so -RedirectStandardError $se -NoNewWindow -Wait -PassThru
+           -RedirectStandardInput $in -RedirectStandardOutput $so -RedirectStandardError $se -NoNewWindow -Wait -PassThru; $null = $p.Handle
   } finally {
     Remove-Item Env:DRAGLINT_FULLRULES_CHILD_EXE, Env:STUB_MODE, Env:STUB_SLEEP_MS, Env:STUB_JSON_FILE -ErrorAction SilentlyContinue
   }

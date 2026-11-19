@@ -53,7 +53,7 @@ if (Test-Path $Exe) {
     & { $ErrorActionPreference = 'Continue'; & $Exe index $fix --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
     $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query 'SELECT count(*) FROM file_includes' --json 2>$null }
     $n = -1
-    if ($LASTEXITCODE -eq 0) { $n = [int](($raw -join "`n") | ConvertFrom-Json).rows[0][0] }
+    if ($LASTEXITCODE -eq 0) { $n = [int](($raw -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }).rows[0][0] }
     Check 'K4 index still fills file_includes' ($n -gt 0) "rows=$n"
   }
   finally { if (Test-Path $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) } }

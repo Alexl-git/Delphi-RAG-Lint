@@ -136,7 +136,7 @@ function ExcBodiesInFile([string]$FileText, [string]$DeclName) {
   for ($k = $lines.Count - 1; $k -ge 0; $k--) {
     if ($lines[$k] -match '^\s*///') { $blk.Insert(0, $lines[$k]) } else { break }
   }
-  return (ExcBodies ($blk -join "`r`n"))
+  return (@(ExcBodies ($blk -join "`r`n")))
 }
 # Every exception tag body, flattened, for one rendered declaration.
 function ExcBodies([string]$Doc) {
@@ -159,15 +159,15 @@ try {
   Write-Host ''
   Write-Host 'PHASE 1: rendering' -ForegroundColor Cyan
 
-  $delegates = ExcBodies (DocFor 'transitive_writer.NoDocDelegates')
-  $helper    = ExcBodies (DocFor 'transitive_writer.HelperRaise')
-  $ownAndVia = ExcBodies (DocFor 'transitive_writer.NoDocOwnAndVia')
-  $twoHops   = ExcBodies (DocFor 'transitive_writer.NoDocTwoHops')
-  $rtlOnly   = ExcBodies (DocFor 'transitive_writer.NoDocRtlOnly')
-  $recursive = ExcBodies (DocFor 'transitive_writer.NoDocRecursive')
-  $multi     = ExcBodies (DocFor 'transitive_writer.NoDocMulti')
-  $twoVia    = ExcBodies (DocFor 'transitive_writer.NoDocTwoVia')
-  $fanOut    = ExcBodies (DocFor 'transitive_writer.NoDocFanOut')
+  $delegates = @(ExcBodies (DocFor 'transitive_writer.NoDocDelegates'))
+  $helper    = @(ExcBodies (DocFor 'transitive_writer.HelperRaise'))
+  $ownAndVia = @(ExcBodies (DocFor 'transitive_writer.NoDocOwnAndVia'))
+  $twoHops   = @(ExcBodies (DocFor 'transitive_writer.NoDocTwoHops'))
+  $rtlOnly   = @(ExcBodies (DocFor 'transitive_writer.NoDocRtlOnly'))
+  $recursive = @(ExcBodies (DocFor 'transitive_writer.NoDocRecursive'))
+  $multi     = @(ExcBodies (DocFor 'transitive_writer.NoDocMulti'))
+  $twoVia    = @(ExcBodies (DocFor 'transitive_writer.NoDocTwoVia'))
+  $fanOut    = @(ExcBodies (DocFor 'transitive_writer.NoDocFanOut'))
 
   # 1 -- THE FIX.
   Check '1 NoDocDelegates gets an EBoom tag attributed to its callee' `
@@ -276,7 +276,7 @@ try {
     'an engine-owned attribution that survives its evidence is doc rot'
   # POSITIVE CONTROL for 10a: the own half must SURVIVE the same reap, or 10a
   # passes for a writer that simply deleted everything.
-  $ownAfter = ExcBodiesInFile $reaped 'procedure NoDocOwnAndVia'
+  $ownAfter = @(ExcBodiesInFile $reaped 'procedure NoDocOwnAndVia')
   Check '10b NoDocOwnAndVia keeps its OWN message through the reap' `
     ($ownAfter.Count -eq 1 -and $ownAfter[0].Body -eq 'mine') `
     ("got: " + (($ownAfter | ForEach-Object { "$($_.Cls)='$($_.Body)'" }) -join ' | '))

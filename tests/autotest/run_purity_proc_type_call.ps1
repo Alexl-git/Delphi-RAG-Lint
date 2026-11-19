@@ -185,7 +185,7 @@ $db = Join-Path $WorkDir 'App.sqlite'
 & { $ErrorActionPreference = 'Continue'; & $exePath index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the fixture index was built' (Test-Path $db) $db
 
-$j = & { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --query "SELECT s.name, f.effect_free, f.effect_summary, f.effect_witness FROM symbols s JOIN symbol_facts f ON f.symbol_id = s.id WHERE s.name IN ('CallTProc','CallTFunc','CallMethodPtr','CallParam','CallDirect','PureAdd','AssignOnly','BareProc','BareFunc','BareMethod','BareGlobal','BareMember','CompareOnly')" 2>$null } | ConvertFrom-Json
+$j = & { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --query "SELECT s.name, f.effect_free, f.effect_summary, f.effect_witness FROM symbols s JOIN symbol_facts f ON f.symbol_id = s.id WHERE s.name IN ('CallTProc','CallTFunc','CallMethodPtr','CallParam','CallDirect','PureAdd','AssignOnly','BareProc','BareFunc','BareMethod','BareGlobal','BareMember','CompareOnly')" 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
 $rows = @{}
 foreach ($r in $j.rows) { $rows[[string]$r[0]] = [pscustomobject]@{ Free = $r[1]; Sum = [string]$r[2]; Why = [string]$r[3] } }
 Check 'V all thirteen routines carry a purity verdict' ($rows.Count -eq 13) ($rows.Keys -join ', ')

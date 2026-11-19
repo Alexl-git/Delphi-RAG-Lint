@@ -499,7 +499,7 @@ function Get-MarkerType([string]$Database, [string]$QName) {
   try {
     $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe proptree --qname $QName --format json --db $Database --no-write-back 2>$null }) -join "`n"
   } finally { Pop-Location }
-  $tree = $raw | ConvertFrom-Json
+  $tree = $raw | ConvertFrom-Json | ForEach-Object { $_ }
   $prop = @($tree.properties) | Where-Object { $_.path -eq 'Marker' } | Select-Object -First 1
   if ($null -eq $prop) { return $null }
   return $prop.type

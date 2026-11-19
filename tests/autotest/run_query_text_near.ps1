@@ -101,19 +101,19 @@ $db = Join-Path $dir 'fx.sqlite'
 & { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 Write-Host 'Positive control' -ForegroundColor Cyan
-$r = Tags @()
+$r = @(Tags @())
 Check 'no --near: all 6 rows' (Same $r @('Seed','A','B','C','D','U')) ($r -join ',')
 
 Write-Host 'Hop restriction' -ForegroundColor Cyan
-$r = Tags @('--near', 'nearx.Seed', '--hops', '1')
+$r = @(Tags @('--near', 'nearx.Seed', '--hops', '1'))
 Check '--hops 1: Seed + A' (Same $r @('Seed','A')) ($r -join ',')
-$r = Tags @('--near', 'nearx.Seed', '--hops', '2')
+$r = @(Tags @('--near', 'nearx.Seed', '--hops', '2'))
 Check '--hops 2: Seed, A, B' (Same $r @('Seed','A','B')) ($r -join ',')
-$r = Tags @('--near', 'nearx.Seed', '--hops', '3')
+$r = @(Tags @('--near', 'nearx.Seed', '--hops', '3'))
 Check '--hops 3: Seed, A, B, D' (Same $r @('Seed','A','B','D')) ($r -join ',')
-$r = Tags @('--near', 'nearx.Seed')
+$r = @(Tags @('--near', 'nearx.Seed'))
 Check 'default hops is 2' (Same $r @('Seed','A','B')) ($r -join ',')
-$r = Tags @('--near', 'nearx.D', '--hops', '1')
+$r = @(Tags @('--near', 'nearx.D', '--hops', '1'))
 Check 'callees direction too: seed D --hops 1 = D + B' (Same $r @('D','B')) ($r -join ',')
 
 Write-Host 'Refusals' -ForegroundColor Cyan
@@ -125,9 +125,9 @@ Check '--near Missing exits 2' ($LASTEXITCODE -eq 2) "exit=$LASTEXITCODE"
 Check '--near Missing names the symbol' (($out -join ' ') -match 'nearx\.Missing') ($out -join ' | ')
 
 Write-Host 'Uses edges and boost' -ForegroundColor Cyan
-$r = Tags @('--near', 'nearx.Seed', '--hops', '1', '--hops-uses')
+$r = @(Tags @('--near', 'nearx.Seed', '--hops', '1', '--hops-uses'))
 Check '--hops-uses adds U' (($r -contains 'U') -and ($r -contains 'Seed') -and ($r -contains 'A') -and ($r -notcontains 'C')) ($r -join ',')
-$r = Tags @('--near', 'nearx.Seed', '--hops', '1', '--near-boost')
+$r = @(Tags @('--near', 'nearx.Seed', '--hops', '1', '--near-boost'))
 Check '--near-boost keeps all 6' (Same $r @('Seed','A','B','C','D','U')) ($r -join ',')
 Check '--near-boost puts Seed, A first' ((@(@($r)[0..1]) | Sort-Object) -join ',' -eq 'A,Seed') ($r -join ',')
 $out = & { $ErrorActionPreference = 'Continue'; & $Exe query --text xjphrase --kind literal --near nearx.Seed --hops 1 --near-boost --db $db 2>$null }

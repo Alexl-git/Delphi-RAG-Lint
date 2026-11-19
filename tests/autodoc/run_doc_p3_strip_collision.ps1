@@ -270,7 +270,7 @@ Check 'B: re-index before strip exits 0' ($LASTEXITCODE -eq 0)
 # instead -- it cannot rot.)
 $whichFirstOut = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name Widget --db $dbB --json 2>$null }) -join "`n"
 Check 'B: query --name Widget (pre-strip ordering probe) exits 0' ($LASTEXITCODE -eq 0)
-$whichFirst = @($whichFirstOut | ConvertFrom-Json)
+$whichFirst = @(($whichFirstOut | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 Check 'B FIXTURE: the ordering probe returned at least one row with a non-empty file property' `
   (($whichFirst.Count -ge 1) -and (-not [string]::IsNullOrEmpty($whichFirst[0].file))) $whichFirstOut
 $firstFile = $whichFirst[0].file
@@ -327,7 +327,7 @@ if ($strippedIsX) {
 # to strip, so SkippedCount/SkippedFiles are computed the same either way.
 $stripOutBJson = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname dup.Widget --db $dbB --strip --apply --json 2>$null }) -join "`n"
 Check 'B: the JSON-mode re-check of the same strip exits 0' ($LASTEXITCODE -eq 0)
-$stripJsonB = $stripOutBJson | ConvertFrom-Json
+$stripJsonB = $stripOutBJson | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'B IMPORTANT: --json also reports skippedCount:1' ($stripJsonB.skippedCount -eq 1) $stripOutBJson
 if ($strippedIsX) {
   Check 'B IMPORTANT: --json skippedFiles names the OTHER file (Y)' `

@@ -45,7 +45,7 @@ procedure RegisterDragLintAbout;
 /// entries cannot be removed via the OTA API; that is fine, they are
 /// startup-only and vanish with the IDE process.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.Wizard.TDragLintWizard.Destroyed (DragLint.Plugin.Wizard.pas), initialization/finalization (DragLint.Plugin.About.pas)</para>
+/// <para>Called from: DragLint.Plugin.About.finalization (DragLint.Plugin.About.pas), DragLint.Plugin.Wizard.TDragLintWizard.Destroyed (DragLint.Plugin.Wizard.pas)</para>
 /// <para>Calls: FreeAndNil, Supports</para>
 /// <para>Catches: Exception (empty)</para>
 /// <!-- drag-lint:auto END -->

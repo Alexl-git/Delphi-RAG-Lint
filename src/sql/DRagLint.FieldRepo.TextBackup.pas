@@ -21,6 +21,12 @@ type
   /// <summary>Raised when a backup text is malformed. LineNo is the 1-based line of the
   /// defect (the line after the last one for a truncated file; 0 when no line applies) and
   /// the message starts with 'line &lt;n&gt;: '.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.Repo.RunRepoVerb (DRagLint.CLI.Repo.pas) ?, DRagLint.FieldRepo.TextBackup.RestoreRepository (DRagLint.FieldRepo.TextBackup.pas), DRagLint.FieldRepo.TextBackup.TBackupParser.Fail (DRagLint.FieldRepo.TextBackup.pas), DRagLint.FieldRepo.TextBackup.UnescapeRepoValue (DRagLint.FieldRepo.TextBackup.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.Repo, DRagLint.FieldRepo.TextBackup</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   ERepoBackupFormatError = class(ERepoError)
   private
     FLineNo: Integer;
@@ -28,6 +34,14 @@ type
     /// <summary>Creates the error and prefixes the message with the line number.</summary>
     /// <param name="pLineNo">1-based line of the defect.</param>
     /// <param name="pMessage">What is wrong.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FieldRepo.TextBackup.RestoreRepository (DRagLint.FieldRepo.TextBackup.pas), DRagLint.FieldRepo.TextBackup.TBackupParser.Fail (DRagLint.FieldRepo.TextBackup.pas), DRagLint.FieldRepo.TextBackup.UnescapeRepoValue (DRagLint.FieldRepo.TextBackup.pas)</para>
+    /// <para>Calls: Create, IntToStr</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FLineNo</para>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor CreateAt(pLineNo: Integer; const pMessage: string);
     /// <summary>1-based line of the defect.</summary>
     property LineNo: Integer read FLineNo;
@@ -39,6 +53,14 @@ type
 /// <param name="pValue">The raw value (one line; LF is escaped too).</param>
 /// <param name="pInHeader">True for a primary-key value in a record header.</param>
 /// <returns>Pure 7-bit printable ASCII text.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.FieldRepo.TextBackup.AddTextLines (DRagLint.FieldRepo.TextBackup.pas), DRagLint.FieldRepo.TextBackup.KeyPart (DRagLint.FieldRepo.TextBackup.pas), DRagLint.FieldRepo.TextBackup.ScalarText (DRagLint.FieldRepo.TextBackup.pas)</para>
+/// <para>Calls: DRagLint.FieldRepo.TextBackup.NeedsUnicodeEscape, IntToHex</para>
+/// <para>Returns: vSb.ToString</para>
+/// <seealso cref="DRagLint.FieldRepo.TextBackup.NeedsUnicodeEscape"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function EscapeRepoValue(const pValue: string; pInHeader: Boolean): string;
 
 /// <summary>Reverses EscapeRepoValue.</summary>
@@ -46,12 +68,29 @@ function EscapeRepoValue(const pValue: string; pInHeader: Boolean): string;
 /// <returns>The raw value.</returns>
 /// <exception cref="ERepoBackupFormatError">A bad escape or a character outside
 /// 0x20..0x7E (LineNo = 0).</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: DRagLint.FieldRepo.TextBackup.ERepoBackupFormatError.CreateAt, DRagLint.FieldRepo.TextBackup.TryUnescape</para>
+/// <seealso cref="DRagLint.FieldRepo.TextBackup.ERepoBackupFormatError.CreateAt"/>
+/// <seealso cref="DRagLint.FieldRepo.TextBackup.TryUnescape"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UnescapeRepoValue(const pText: string): string;
 
 /// <summary>Renders the repository as backup text lines (no line terminators).</summary>
 /// <param name="pConnection">Open repository connection; read only.</param>
 /// <param name="pLines">Receives the lines; cleared first.</param>
-/// <remarks>Deterministic: the same rows always give the same lines.</remarks>
+/// <remarks>
+/// Deterministic: the same rows always give the same lines.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.FieldRepo.TextBackup.BackupRepository (DRagLint.FieldRepo.TextBackup.pas)</para>
+/// <para>Calls: DRagLint.FieldRepo.Schema.QuoteRepoIdent, DRagLint.FieldRepo.Schema.RepoTables, DRagLint.FieldRepo.TextBackup.AddRecord, DRagLint.FieldRepo.TextBackup.OrderByClause, IntToStr</para>
+/// <seealso cref="DRagLint.FieldRepo.Schema.QuoteRepoIdent"/>
+/// <seealso cref="DRagLint.FieldRepo.Schema.RepoTables"/>
+/// <seealso cref="DRagLint.FieldRepo.TextBackup.AddRecord"/>
+/// <seealso cref="DRagLint.FieldRepo.TextBackup.OrderByClause"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure BackupRepositoryToStrings(pConnection: TFDConnection; pLines: TStrings);
 
 /// <summary>Writes the backup text to a file: ASCII bytes, CRLF, no BOM, through
@@ -59,6 +98,14 @@ procedure BackupRepositoryToStrings(pConnection: TFDConnection; pLines: TStrings
 /// <param name="pConnection">Open repository connection; read only.</param>
 /// <param name="pFileName">Target file; replaced when it exists.</param>
 /// <exception cref="ERepoError">A character above 0x7F survived escaping (a bug).</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Repo.RepoBackup (DRagLint.CLI.Repo.pas), DRagLint.CLI.Repo.RepoImportFb (DRagLint.CLI.Repo.pas)</para>
+/// <para>Calls: Byte, DRagLint.FieldRepo.TextBackup.BackupRepositoryToStrings</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.FieldRepo.TextBackup.BackupRepositoryToStrings"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure BackupRepository(pConnection: TFDConnection; const pFileName: string);
 
 /// <summary>Parses and validates the lines, then replaces every row of the repository in
@@ -68,6 +115,18 @@ procedure BackupRepository(pConnection: TFDConnection; const pFileName: string);
 /// <param name="pReplace">Must be True when the repository already holds rows.</param>
 /// <exception cref="ERepoBackupFormatError">The text is malformed; nothing was changed.</exception>
 /// <exception cref="ERepoError">The repository is not empty and pReplace is False.</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.FieldRepo.TextBackup.RestoreRepository (DRagLint.FieldRepo.TextBackup.pas)</para>
+/// <para>Calls: DRagLint.FieldRepo.Schema.RepoIsEmpty, DRagLint.FieldRepo.TextBackup.InsertRows, DRagLint.FieldRepo.TextBackup.TBackupParser.Create, DRagLint.FieldRepo.TextBackup.TBackupParser.Parse</para>
+/// <para>Catches: Exception (re-raise)</para>
+/// <para>Transaction: starts, commits, rolls back</para>
+/// <seealso cref="DRagLint.FieldRepo.Schema.RepoIsEmpty"/>
+/// <seealso cref="DRagLint.FieldRepo.TextBackup.InsertRows"/>
+/// <seealso cref="DRagLint.FieldRepo.TextBackup.TBackupParser.Create"/>
+/// <seealso cref="DRagLint.FieldRepo.TextBackup.TBackupParser.Parse"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RestoreRepositoryFromStrings(pConnection: TFDConnection; pLines: TStrings;
   pReplace: Boolean);
 
@@ -78,6 +137,15 @@ procedure RestoreRepositoryFromStrings(pConnection: TFDConnection; pLines: TStri
 /// <param name="pReplace">Must be True when the repository already holds rows.</param>
 /// <exception cref="ERepoBackupFormatError">The file is malformed; nothing was changed.</exception>
 /// <exception cref="ERepoError">The repository is not empty and pReplace is False.</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Repo.RepoRestore (DRagLint.CLI.Repo.pas)</para>
+/// <para>Calls: Copy, DRagLint.FieldRepo.TextBackup.ERepoBackupFormatError.CreateAt, DRagLint.FieldRepo.TextBackup.RestoreRepositoryFromStrings, IntToHex, PosEx</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.FieldRepo.TextBackup.ERepoBackupFormatError.CreateAt"/>
+/// <seealso cref="DRagLint.FieldRepo.TextBackup.RestoreRepositoryFromStrings"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RestoreRepository(pConnection: TFDConnection; const pFileName: string;
   pReplace: Boolean);
 

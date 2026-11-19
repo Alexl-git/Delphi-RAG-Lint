@@ -98,6 +98,12 @@ const
 
 type
   /// <summary>One bare identifier of a with body and what the plan does to it.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.Unwith.pas) ?, DRagLint.CLI.Unwith.RunUnwith.JsonOf (DRagLint.CLI.Unwith.pas) ?, DRagLint.CLI.Unwith.RunUnwith.PrintSite (DRagLint.CLI.Unwith.pas) ?, DRagLint.Refactor.Unwith.TAnalyzer.VisitBody (DRagLint.Refactor.Unwith.pas) ?, DRagLint.Refactor.Unwith.TAnalyzer.VisitBody.Classify (DRagLint.Refactor.Unwith.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.CLI.Unwith, DRagLint.Refactor.Unwith</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUnwithBinding = record
     /// <summary>1-based line in the current file.</summary>
     Line: Integer;
@@ -113,6 +119,12 @@ type
   end;
 
   /// <summary>The verdict on one with statement.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.Unwith.RunUnwith (DRagLint.CLI.Unwith.pas) ?, DRagLint.CLI.Unwith.RunUnwith.JsonOf (DRagLint.CLI.Unwith.pas) ?, DRagLint.CLI.Unwith.RunUnwith.PrintSite (DRagLint.CLI.Unwith.pas) ?, DRagLint.Refactor.Unwith.TAnalyzer.AnalyzeSite (DRagLint.Refactor.Unwith.pas), DRagLint.Refactor.Unwith.TAnalyzer.Run.RefuseAll (DRagLint.Refactor.Unwith.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.CLI.Unwith, DRagLint.Refactor.Unwith</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUnwithSite = record
     /// <summary>1-based line of `with`.</summary>
     Line: Integer;
@@ -131,6 +143,12 @@ type
   end;
 
   /// <summary>One ref of a rewritten body with its position after the rewrite and what it bound to before.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.Unwith.pas) ?, DRagLint.Refactor.Unwith.TAnalyzer.AddBodySplices (DRagLint.Refactor.Unwith.pas), DRagLint.Refactor.Unwith.TAnalyzer.AnalyzeSite (DRagLint.Refactor.Unwith.pas), DRagLint.Refactor.Unwith.TAnalyzer.Create (DRagLint.Refactor.Unwith.pas) ?, DRagLint.Refactor.Unwith.TAnalyzer.Render (DRagLint.Refactor.Unwith.pas) ? (+1 more)</para>
+  /// <para>Used in units: DRagLint.Refactor.Unwith</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUnwithProofPoint = record
     /// <summary>Line before.</summary>
     OldLine: Integer;
@@ -151,6 +169,12 @@ type
   end;
 
   /// <summary>The verdicts on one file and, when any is a candidate, the rewritten bytes.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.Unwith.pas) ?, DRagLint.CLI.Unwith.RunUnwith (DRagLint.CLI.Unwith.pas) ?, DRagLint.CLI.Unwith.RunUnwith.JsonOf (DRagLint.CLI.Unwith.pas) ?, DRagLint.Fix.V151.Legacy.FixWith (DRagLint.Fix.V151.Legacy.pas) ?, DRagLint.Refactor.Unwith.TAnalyzer.Run (DRagLint.Refactor.Unwith.pas) (+4 more)</para>
+  /// <para>Used in units: DRagLint.CLI.Unwith, DRagLint.Fix.V151.Legacy, DRagLint.Refactor.Unwith</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUnwithFilePlan = record
     /// <summary>The file.</summary>
     FilePath: string;
@@ -166,6 +190,12 @@ type
   end;
 
   /// <summary>What UnwithApply needs besides the plans.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.Unwith.pas) ?, DRagLint.CLI.Unwith.RunUnwith (DRagLint.CLI.Unwith.pas), DRagLint.Refactor.Unwith.UnwithApply (DRagLint.Refactor.Unwith.pas) ?</para>
+  /// <para>Used in units: DRagLint.CLI.Unwith, DRagLint.Refactor.Unwith</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUnwithApplyOptions = record
     /// <summary>The .dproj the gate builds and the after-proof indexes.</summary>
     Project: string;
@@ -178,6 +208,12 @@ type
   end;
 
   /// <summary>What UnwithApply did.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.Unwith.pas) ?, DRagLint.CLI.Unwith.RunUnwith (DRagLint.CLI.Unwith.pas), DRagLint.CLI.Unwith.RunUnwith.JsonOf (DRagLint.CLI.Unwith.pas) ?, DRagLint.Refactor.Unwith.UnwithApply (DRagLint.Refactor.Unwith.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.Unwith, DRagLint.Refactor.Unwith</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUnwithApplyResult = record
     /// <summary>True when the files are written, the project builds and every proof point held.</summary>
     Applied: Boolean;
@@ -201,18 +237,43 @@ type
 /// <param name="pFile">The file, absolute.</param>
 /// <param name="pLine">Only the with on this line; 0 = all.</param>
 /// <returns>The verdicts and, when any site is a candidate, the rewritten bytes. Writes nothing.</returns>
-/// <remarks>Sound only with a complete member closure and a stable target; every doubt is a named refusal, never a guess.
+/// <remarks>
+/// Sound only with a complete member closure and a stable target; every doubt is a named refusal, never a guess.
 /// A nested with is decided innermost-first: the outer one refuses (inner-with-first) until the next index.
-/// Parses through TAstParseCache: the caller sets its preprocess profile.</remarks>
+/// Parses through TAstParseCache: the caller sets its preprocess profile.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Unwith.RunUnwith (DRagLint.CLI.Unwith.pas), DRagLint.Fix.V151.Legacy.FixWith (DRagLint.Fix.V151.Legacy.pas)</para>
+/// <para>Calls: DRagLint.Refactor.Unwith.TAnalyzer.Create, DRagLint.Refactor.Unwith.TAnalyzer.Run</para>
+/// <para>Returns: A.Run(pLine)</para>
+/// <seealso cref="DRagLint.Refactor.Unwith.TAnalyzer.Create"/>
+/// <seealso cref="DRagLint.Refactor.Unwith.TAnalyzer.Run"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UnwithPlanFile(const pStore, pLib: ISymbolStore; const pFile: string; pLine: Integer = 0): TUnwithFilePlan;
 
 /// <summary>Writes the candidates of pPlans through the shared compile gate, then proves every binding unchanged.</summary>
 /// <param name="pPlans">The plans; a plan with no NewBytes is skipped.</param>
 /// <param name="pOpts">Project, platform, DB.</param>
 /// <returns>What happened. Not Applied = every file is back byte-identical (unless RollbackFailed).</returns>
-/// <remarks>Order: ApplyGated (baseline build, write under backups, after build); then a child `index --project` into a
+/// <exception cref="EInOutError"><!-- drag-lint:auto exc -->via DRagLint.Refactor.CompileGate.ApplyGated: nothing staged for %s</exception>
+/// <remarks>
+/// Order: ApplyGated (baseline build, write under backups, after build); then a child `index --project` into a
 /// copy of the DB under the gate's scratch; then each proof point is compared; any difference rolls back and refuses
-/// rebind-after, which a compile gate alone can never see. The real DB is not written: reindex after a good apply.</remarks>
+/// rebind-after, which a compile gate alone can never see. The real DB is not written: reindex after a good apply.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Unwith.RunUnwith (DRagLint.CLI.Unwith.pas)</para>
+/// <para>Calls: ContainsText, Copy, Default, DRagLint.Refactor.CompileGate.ApplyGated, DRagLint.Refactor.CompileGate.FreshScratchName, DRagLint.Refactor.CompileGate.RollBack, DRagLint.Refactor.CompileGate.RunBounded, DRagLint.Refactor.Unwith.CopyDbFor, DRagLint.Refactor.Unwith.DropUnwithLogs, DRagLint.Refactor.Unwith.UnwithApply.Compare (+10 more)</para>
+/// <para>Returns: Default(TUnwithApplyResult)</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 115 lines (full implementation)</para>
+/// <para>Catches: ECompileGateCancelled (swallowed); Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Refactor.CompileGate.ApplyGated"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.FreshScratchName"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.RollBack"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.RunBounded"/>
+/// <seealso cref="DRagLint.Refactor.Unwith.CopyDbFor"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UnwithApply(const pPlans: TArray<TUnwithFilePlan>; const pOpts: TUnwithApplyOptions): TUnwithApplyResult;
 
 implementation
@@ -1584,8 +1645,7 @@ begin
   try
     if TDirectory.Exists(pDir) then TDirectory.Delete(pDir, True);  // dl:ok taint-path-traversal@b8f1 -- a fresh scratch dir; only its PID part can come from the environment, a test seam
   except  // dl:ok try-except-swallowed@a59f -- leftovers in the scratch root are harmless; see the remarks
-    on E: EInOutError do ;  // dl:ok empty-on-handler@8192 -- the log folder is left behind, harmless; see the remarks
-    on E: EDirectoryNotFoundException do ;  // dl:ok empty-on-handler@431d -- the log folder is left behind, harmless; see the remarks
+    on E: EInOutError do ;  // dl:ok empty-on-handler@8192 -- the log folder is left behind, harmless; see the remarks (EInOutError includes EDirectoryNotFoundException)
   end;
 end;
 

@@ -19,7 +19,7 @@ Ask it before adding an Assigned guard or reordering initialization: it names th
 ## How to run it
 
 ```text
-drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> [--json] [--explain] [--max-routines N] [--max-seconds S]
+drag-lint check-init <QName>|--qname <QName> [--at <file>:<line>[:<col>]] --db <db> [--json|--format json] [--explain] [--max-routines N] [--max-seconds S]
 ```
 
 Example:

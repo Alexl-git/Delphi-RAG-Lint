@@ -84,7 +84,7 @@ if (-not $p.WaitForExit(60000)) { $p.Kill($true); Write-Host 'FATAL: server did 
 $out = $outTask.Result
 $ctx = @{}
 foreach ($mm in [regex]::Matches($out, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-  try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+  try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
   if ($o.method -eq 'draglint/context') { $k = [string]$o.params.uri; if (-not $ctx.ContainsKey($k)) { $ctx[$k] = @() }; $ctx[$k] += ,$o.params }
 }
 function Ctx($f, $i) { $l = $ctx[(Uri $f)]; if ($l -and $l.Count -gt $i) { return $l[$i] } else { return $null } }

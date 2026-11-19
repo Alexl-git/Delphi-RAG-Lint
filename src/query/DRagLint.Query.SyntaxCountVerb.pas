@@ -17,7 +17,7 @@ interface
 /// index; --in adds paths. Each file is parsed at the call; the count is of
 /// the text as written (no $IFDEF evaluation) and is never capped.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
 /// <para>Calls: DRagLint.CLI.HelpText.WriteVerbHelp, DRagLint.Core.CliError.CommandLineWantsJson, DRagLint.Core.CliError.WriteCliError, DRagLint.Query.SyntaxCount.CountSyntaxFeatures, DRagLint.Query.SyntaxCount.TryParseSyntaxFeatures, DRagLint.Query.SyntaxCountVerb.CollectFiles, DRagLint.Query.SyntaxCountVerb.ParseSyntaxCountArgs, DRagLint.Query.SyntaxCountVerb.Usage, DRagLint.Query.SyntaxCountVerb.WriteReport, Format, ParamStr</para>
 /// <para>Returns: CExitUnknownFlag; Usage(LError, CommandLineWantsJson); CExitOk; Usage('give --db &lt;file.sqlite&gt; and/or --in &lt;path&gt;', LOpts.AsJson); Usage(LError, LOpts.AsJson)</para>
 /// <seealso cref="DRagLint.CLI.HelpText.WriteVerbHelp"/>

@@ -126,7 +126,7 @@ function ReadFrameT {
   $len = [int]([regex]::Match($hdr, 'Content-Length:\s*(\d+)').Groups[1].Value)
   $body = New-Object byte[] $len
   for ($i = 0; $i -lt $len; $i++) { $body[$i] = ReadByteT }
-  return ([System.Text.Encoding]::UTF8.GetString($body) | ConvertFrom-Json)
+  return ([System.Text.Encoding]::UTF8.GetString($body) | ConvertFrom-Json | ForEach-Object { $_ })
 }
 function Start-Lsp([string[]]$LspArgs) {
   $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -174,12 +174,12 @@ function Stop-Lsp {
 }
 function CliLines([string]$File, [string[]]$Extra = @()) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $File --json --db $Db @Extra 2>$null }) -join "`n"
-  $arr = @(); if ($raw.Trim()) { $arr = @($raw | ConvertFrom-Json) }
+  $arr = @(); if ($raw.Trim()) { $arr = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   return ,@($arr | Where-Object { $_.rule -eq 'parser-error' } | ForEach-Object { [int]$_.start_line })
 }
 function WithLines { param($File)
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $File --json --db $Db 2>$null }) -join "`n"
-  $arr = @(); if ($raw.Trim()) { $arr = @($raw | ConvertFrom-Json) }
+  $arr = @(); if ($raw.Trim()) { $arr = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   return ,@($arr | Where-Object { $_.rule -eq 'with-statement' } | ForEach-Object { [int]$_.start_line })
 }
 

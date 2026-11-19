@@ -1,0 +1,196 @@
+<!--article
+title: What Tree-sitter Is, and Why Delphi Needs a Preprocessor in Front of It
+date: 2026-11-01
+slug: what-tree-sitter-is
+summary: Tree-sitter turns a grammar file into a fast, error-tolerant parser that any language can call, and for Delphi it reaches every file only when a preprocessor resolves the conditional compilation first.
+-->
+
+<div class="wrap">
+
+<header class="masthead">
+  <span class="eyebrow">Delphi tooling &middot; parsing</span>
+  <h1>What Tree-sitter Is, and Why Delphi Needs a Preprocessor in Front of It</h1>
+  <p class="standfirst">Tree-sitter turns a grammar file into a fast, error-tolerant parser that any language can call, and for Delphi it reaches every file only when a preprocessor resolves the conditional compilation first. This article explains what tree-sitter is, how drag-lint uses it, how you can use it from your own tools, and why no grammar on its own can read all Delphi source.</p>
+  <div class="byline">
+    <span>Delphi 13 Florence &middot; RAD Studio 37.0</span>
+    <span>As of 2026-11-03, tree-sitter-delphi13 1.4.2 (figures measured on 1.4.0)</span>
+  </div>
+</header>
+
+<p>Micronite, the quality and production-control software we build for manufacturers, is the Delphi code base drag-lint first had to read in full, and &ldquo;can the parser read <em>all</em> of it?&rdquo; was the first question we had to answer with a number. (<a href="https://www.htrmicronite.com">Micronite</a> is still the code base every grammar change is measured against.) Our earlier article, <a href="https://www.delphi-rag-lint.com/articles/three-ways-to-read-delphi/">Three Ways to Read Delphi</a>, compared tree-sitter with a raw lexer and with DelphiAST. This one looks at tree-sitter itself.</p>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">01 &mdash; The idea</span>
+    <h2>A parser generator, a runtime, and a tree</h2>
+  </div>
+  <p>Tree-sitter started at GitHub as the parsing engine for the Atom editor. Today Neovim, Helix, Zed and Emacs use it, and GitHub uses it for syntax highlighting and code navigation. It has three parts:</p>
+  <ul>
+    <li><strong>A generator.</strong> You describe the language in <code>grammar.js</code>, a JavaScript file of rules such as <code>seq</code>, <code>choice</code>, <code>repeat</code> and <code>prec</code>. The <code>tree-sitter generate</code> command turns it into <code>parser.c</code>: plain C tables for an LR parser, with GLR fallback where the grammar is ambiguous. GLR means that when the parser cannot decide between two readings, it keeps both alive until one of them fails.</li>
+    <li><strong>An external scanner.</strong> Some tokens cannot be described with rules alone, because recognising them depends on context. For those you write a small C file, <code>scanner.c</code>, and the generated parser calls it whenever it expects one of these tokens.</li>
+    <li><strong>A runtime.</strong> A small C library (<code>tree-sitter.dll</code> on Windows) runs the tables. It has a plain C API, so anything that can call a C function can use it: Rust, Node, Python, a browser through WebAssembly, and Delphi.</li>
+  </ul>
+  <p>The output is a <em>concrete</em> syntax tree. Every token is a node, and every node knows its exact byte range and its row and column in the source. Here is a record whose first field is named <code>Platform</code>, a directive word, which is legal Delphi:</p>
+  <pre class="lex"><code>type
+  TProjectContext = record Platform, Config: string; end;</code></pre>
+  <p>And the tree tree-sitter-delphi13 1.4.0 builds for the type declaration (taken from the grammar's test corpus):</p>
+  <pre class="ts"><code>(declType
+  (identifier)
+  (kEq)
+  (type
+    (declClass
+      (kRecord)
+      (declField
+        (identifier)
+        (identifier)
+        (type
+          (declString
+            (kString))))
+      (kEnd))))</code></pre>
+  <p>The tree prints only node kinds. Behind each <code>(identifier)</code> is the byte range of <code>Platform</code> or <code>Config</code>, so a tool can always go back to the exact source text.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">02 &mdash; Three properties</span>
+    <h2>What makes it different from a hand-written parser</h2>
+  </div>
+  <h3>It does not give up</h3>
+  <p>When the input does not match the grammar, tree-sitter wraps the smallest region it can in an <code>ERROR</code> node, or inserts a zero-width <code>MISSING</code> node where it expected a token, and carries on. A unit with one construct the grammar does not know still yields every declaration outside that construct. For an indexer this decides everything. A parser that raises on the first surprise loses the whole unit, and usually nobody notices.</p>
+  <h3>It re-parses only what changed</h3>
+  <p>After an edit, you tell the runtime which bytes changed (<code>ts_tree_edit</code>) and parse again with the old tree. The parser reuses every subtree the edit did not touch. This is why editors can re-parse on every keystroke, even in large units.</p>
+  <h3>It has a query language</h3>
+  <p>Instead of walking the tree by hand, you can write patterns in an S-expression syntax and capture the nodes that match. This pattern captures every field name in every record or class, including the second name in <code>Platform, Config</code>:</p>
+  <pre class="ts"><code>(declField (identifier) @field.name)</code></pre>
+  <p>Editors get their syntax colouring, code folding, outline and indentation from files of such patterns: <code>highlights.scm</code>, <code>folds.scm</code>, <code>outline.scm</code>, <code>indents.scm</code>. tree-sitter-delphi13 ships these files for both of its grammars, plus <code>tags.scm</code> for symbol indexers.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">03 &mdash; The Delphi grammar</span>
+    <h2>Where Delphi needed the external scanner</h2>
+  </div>
+  <p>Most of Delphi fits ordinary grammar rules. The places where it does not are where the scanner comes in. Three examples from tree-sitter-delphi13:</p>
+  <ul>
+    <li><strong>Directive words as names.</strong> <code>platform</code>, <code>message</code>, <code>index</code>, <code>name</code>, <code>default</code>, <code>read</code>, <code>absolute</code> and 62 other directive words are not reserved, so <code>Message: string</code> is a valid field. Since 1.4.0 the scanner offers such a word as a name only in a position where a name is expected, and only when the next character makes it one (<code>:</code> or <code>,</code> in a declaration, <code>=</code> in a constant or type). Everywhere else it is still a directive.</li>
+    <li><strong>Multi-line strings</strong> (Delphi 12 and later). An odd number of quotes, three or more, at the end of a line opens the string. The first line that starts with the same run of quotes closes it. Counting quotes across lines is beyond grammar rules, but it is a few dozen lines of C.</li>
+    <li><strong>Conditional compilation.</strong> The scanner reads through <code>{$IFDEF}</code> blocks. The <code>THEN</code> branch flows to the parser as ordinary tokens. The <code>{$ELSE}</code> branch is swallowed as one opaque token, and the directives themselves are treated like comments. We call this <em>THEN-wins</em>. It is the best a grammar can do on its own, and section 05 shows where it runs out.</li>
+  </ul>
+  <p>The project publishes two grammars from the same source. <code>tree-sitter-delphi13</code> is the full grammar with THEN-wins, for hosts that cannot run anything before the parser. <code>tree-sitter-delphi13-pure</code> has no directive handling at all. It expects text that a preprocessor has already resolved.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">04 &mdash; Inside drag-lint</span>
+    <h2>From file on disk to index rows</h2>
+  </div>
+  <p>drag-lint is written in Delphi, and it loads tree-sitter as DLLs. Its <code>third_party\dll-win64</code> folder holds <code>tree-sitter.dll</code> (the runtime), <code>tree-sitter-delphi13.dll</code> (the Delphi grammar) and <code>tree-sitter-dfm.dll</code> (a separate grammar for form files). A thin Object Pascal wrapper, <code>TTSParser</code>, calls the C API. Parsing a unit is three steps:</p>
+
+  <div class="pipe">
+    <div class="prow ts">
+      <span class="plabel">drag-lint</span>
+      <div class="pflow">
+        <span class="box">.pas bytes</span>
+        <span class="arrow">&rarr;</span>
+        <span class="box stage">Delphi preprocessor</span>
+        <span class="arrow">&rarr;</span>
+        <span class="box stage">tree-sitter-delphi13.dll</span>
+        <span class="arrow">&rarr;</span>
+        <span class="box out">tree &rarr; SQLite index</span>
+      </div>
+    </div>
+  </div>
+  <p class="cap">The indexer and the linter run the same preprocessing step, and it never changes the length of the text, so a finding's line and column always point where the editor does.</p>
+
+  <p><strong>Preprocess.</strong> drag-lint's preprocessor, the <code>DRagLint.Preprocess</code> units, evaluates <code>{$DEFINE}</code>, <code>{$IFDEF}</code>, <code>{$IF}</code> expressions and <code>{$ELSEIF}</code> against a define profile chosen for each file. It follows <code>{$I}</code> includes for the defines they set. Then it does one unusual thing: it <em>blanks</em> every inactive branch to spaces instead of deleting it. The output is exactly as long as the input, and every byte that survives sits at its original offset. This is how drag-lint avoids the source-map problem that <a href="https://www.delphi-rag-lint.com/articles/three-ways-to-read-delphi/">Three Ways to Read Delphi</a> warned about: there is nothing to map back.</p>
+  <p><strong>Parse.</strong> <code>TTSParser</code> parses the blanked text, with <code>Language</code> set to <code>tree_sitter_delphi13</code>. The parser never sees an inactive branch, so THEN-wins has nothing left to guess.</p>
+  <p><strong>Extract.</strong> The indexer walks the tree and writes units, types, routines, fields, calls and uses edges into the project's SQLite database. Every question you ask drag-lint is answered from that database.</p>
+  <p>If preprocessing throws, drag-lint does not drop the file. It parses the raw bytes instead and keeps the findings. In our code, a file that silently disappears from the index counts as a worse failure than a noisy one.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">05 &mdash; The hard limit</span>
+    <h2>Why no grammar can read all Delphi</h2>
+  </div>
+  <p>A grammar describes one language. A Delphi file with conditional compilation is not one program. It is a family of programs, one for each set of defines, and the compiler builds only one of them. Which one depends on facts that are not in the file:</p>
+  <ul>
+    <li>the defines from the project options and the target platform (<code>WIN64</code>, <code>CPUX64</code>, <code>DEBUG</code>, ...);</li>
+    <li>the defines that an <code>{$I}</code> include file sets, which can steer every branch after it;</li>
+    <li>the values that <code>{$IF CompilerVersion &gt;= 36}</code> or <code>{$IF Declared(TFoo)}</code> evaluate to.</li>
+  </ul>
+  <p>And the directives can cut the source anywhere, not only between declarations:</p>
+  <pre class="lex"><code>{$IFDEF CPUX64}
+procedure Fill(var Dest; Count: NativeInt; Value: Byte);
+asm
+  { x64 assembler }
+end;
+{$ELSE}
+{$IFDEF CPUX86}
+procedure Fill(var Dest; Count: NativeInt; Value: Byte);
+asm
+  { x86 assembler, different registers }
+end;
+{$ELSE}
+procedure Fill(var Dest; Count: NativeInt; Value: Byte);
+begin
+  FillChar(Dest, Count, Value);
+end;
+{$ENDIF}
+{$ENDIF}</code></pre>
+  <p class="cap">An illustration of a common RTL pattern, a three-way choice: two assembler bodies and one Pascal body. Each branch is valid only for its own target.</p>
+  <p>This example parses under THEN-wins, because the first branch happens to be complete on its own. The real failures come when it is not: a <code>THEN</code> branch that opens a <code>begin</code> which only the <code>ELSE</code> branch closes, or a branch written for an older compiler that is no longer valid Delphi 13, or an <code>{$IF}</code> whose winning branch is the second one. A grammar that cannot evaluate the condition can only guess. THEN-wins is a good guess, but it is still a guess.</p>
+  <p>We also tried the other route: teaching the grammar to accept directives as tokens in expression and statement positions. The project's design notes record seven separate attempts. Each one cost between 100 and 3,000 files on the full corpus, because the GLR parser explores too many alternatives once a directive can appear anywhere.</p>
+  <p>The way out is to change the input, not the grammar. Give the preprocessor the define profile, let it evaluate the conditions the way the compiler does, and hand the grammar the one program the compiler would actually build. Then the grammar parses ordinary Delphi, which is something a grammar <em>can</em> do completely. That evaluation step is what a preprocessor is, so the conclusion is not a matter of taste. Reading every file correctly means knowing which branch is live, and only a preprocessor knows that.</p>
+
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">RAD Studio 37.0 source tree, 2,217 readable files</th>
+          <th scope="col">Files parsed without error</th>
+          <th scope="col">Rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Full grammar alone (THEN-wins, raw source)</th>
+          <td><span class="num">2,183</span></td>
+          <td><span class="num">98.47%</span></td>
+        </tr>
+        <tr>
+          <th scope="row">Preprocessor &rarr; pure grammar</th>
+          <td><span class="num">2,217</span></td>
+          <td><span class="num">100.000%</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p>The two rows use the same grammar rules. The only difference is the preprocessor, and it parses all 34 files that the grammar alone fails on. Grammar fixes do not move that gap. Version 1.4.0 fixed every directive-word-name failure in a 1,506-case test set (122 failing files down to 0) and added multi-line strings. On the RAD Studio tree, the grammar-only figure stayed exactly where it was, and the preprocessor path stayed at 100%. On Micronite's own 786 source files, the grammar alone fails on one. Version 1.4.1 then fixed one more construct, an array-typed last field with no <code>;</code> before <code>end</code>, which let two more RTL units parse with the full grammar (<code>Winapi.ShlObj</code> and <code>FireDAC.Phys.MongoDBCli</code>), with no regressions. Version 1.4.2 only rebuilt the prebuilt binaries from 1.4.1.</p>
+
+  <div class="note">
+    <span class="nlabel">What 100% means</span>
+    <p>All files the compiler would accept under the chosen define profile, after the preprocessor has picked the live branches. A file is not counted as a parser failure if it is not valid Delphi 13, if it targets another compiler, or if it is a deliberately broken test fixture. The other branches of each <code>{$IFDEF}</code> are not parsed in that run. To cover them, run again with a different profile.</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">06 &mdash; Using it yourself</span>
+    <h2>The grammar is not tied to drag-lint</h2>
+  </div>
+  <p>The grammars are MIT-licensed on <a href="https://github.com/Alexl-git/tree-sitter-delphi13">GitHub</a> and published to npm as <code>tree-sitter-delphi13</code> and <code>tree-sitter-delphi13-pure</code>. Each package carries prebuilt native bindings for Windows, Linux and both macOS architectures, a WebAssembly build, and the query files.</p>
+  <ul>
+    <li><strong>From Node:</strong> <code>npm install tree-sitter tree-sitter-delphi13</code>, then <code>parser.setLanguage(require('tree-sitter-delphi13'))</code>.</li>
+    <li><strong>In a browser or a VS Code extension:</strong> load <code>tree-sitter-delphi13.wasm</code> with <code>web-tree-sitter</code>. Hosts like these can run a JavaScript preprocessor in front of the pure grammar (<code>delphi13-preprocessor</code> in the same repository), so they can reach the full 100%.</li>
+    <li><strong>In an editor that loads one grammar:</strong> Neovim, Helix and Zed can load the full grammar and its queries directly. They cannot run a preprocessor, so expect the 98.47% figure there: highlighting and outline still work in every file, but a few files show an <code>ERROR</code> region.</li>
+    <li><strong>From Delphi:</strong> do what drag-lint does. Load <code>tree-sitter.dll</code> and the grammar DLL, call <code>tree_sitter_delphi13</code> to get the language, and drive the C API through a small wrapper.</li>
+  </ul>
+  <p>Whichever host you choose, make the same decision drag-lint made. If you need every file read correctly, put a preprocessor in front of the parser and give it the define profile your project actually builds with. If you can live with a few <code>ERROR</code> regions, the full grammar alone is simpler and needs nothing else.</p>
+</section>
+
+<footer>
+  As of 2026-11-03, tree-sitter-delphi13 1.4.2: the table figures are for 1.4.0 (full and pure grammars), measured file by file on the RAD Studio 37.0 source tree (2,218 files, one unreadable), on a 1,506-case directive-word test set, and on the Micronite source tree (786 files). The drag-lint pipeline is described from its source on 2026-11-01 (<code>DRagLint.Diagnostics.ParseCache</code>, <code>DRagLint.Preprocess</code>). The 1.4.1 file counts come from that release's notes. drag-lint 1.40.0-alpha ships the 1.4.0 grammar; the 1.4.1 fix reaches it in a later release.
+</footer>
+
+</div>

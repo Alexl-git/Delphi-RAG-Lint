@@ -119,9 +119,9 @@ function Get-EmptyBodyLines([string]$Path) {
     ForEach-Object { if ($_.Line -match ':(\d+):\d+\s') { [int]$Matches[1] } })
 }
 
-$lnClean  = Get-EmptyBodyLines $fClean
-$lnLoneCr = Get-EmptyBodyLines $fLoneCr
-$lnWithLf = Get-EmptyBodyLines $fWithLf
+$lnClean  = @(Get-EmptyBodyLines $fClean)
+$lnLoneCr = @(Get-EmptyBodyLines $fLoneCr)
+$lnWithLf = @(Get-EmptyBodyLines $fWithLf)
 
 Write-Host ''
 Write-Host 'The rule fires at all (without this, every line check below is vacuous)' -ForegroundColor Cyan

@@ -23,6 +23,9 @@ param(
 )
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'; $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -45,7 +48,7 @@ function Index([string]$dproj, [string]$db, [string[]]$extra = @()) {
 function Sql([string]$db, [string]$q) {
   Push-Location $WorkDir
   try { $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query $q --json 2>$null } | Out-String } finally { Pop-Location }
-  try { $o = $j | ConvertFrom-Json } catch { $o = $null }
+  try { $o = $j | ConvertFrom-Json | ForEach-Object { $_ } } catch { $o = $null }
   if ($null -eq $o -or $null -eq $o.columns) { return ,@() }
   $names = @($o.columns | ForEach-Object { $_.name })
   $rows = @()
@@ -76,7 +79,7 @@ try {
 } finally { Pop-Location }
 $grp = @($cyc -split "`r?`n" | Where-Object { ($_ -match '\bIncA\b') -and ($_ -match '\bIncB\b') })
 Check 'c: cycles prints a group naming IncA and IncB' ($grp.Count -ge 1) ($cyc.Trim() -replace "`r?`n", ' | ')
-$fs = @(); try { $fs = @($la | ConvertFrom-Json) } catch { }
+$fs = @(); try { $fs = @(($la | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { }
 Check 'c: lint-all circular-uses names IncA and IncB' (@($fs | Where-Object { ($_.message -match '\bIncA\b') -and ($_.message -match '\bIncB\b') }).Count -ge 1) "findings=$($fs.Count)"
 
 $dbN = Join-Path $WorkDir 'incuses-nopp.sqlite'
@@ -97,3 +100,4 @@ Check 'f: inactive {$I} -> no Dead row' (@($h | Where-Object { $_.unit_name -eq 
 
 if ($script:Failed) { Write-Host 'run_include_uses: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'run_include_uses: PASS' -ForegroundColor Green; exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

@@ -23,7 +23,15 @@ uses
 /// <returns>The rows (see ExtractDfmPropertyRowsFromBytes for the row shape);
 /// empty for AText = '' or a .dfm with no object. A row whose ObjectOrdinal is
 /// outside AObjects (a text that does not walk to the same blocks) gets -1.</returns>
-/// <remarks>Pure; one tree-sitter parse of AText per call.</remarks>
+/// <remarks>
+/// Pure; one tree-sitter parse of AText per call.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas)</para>
+/// <para>Calls: DRagLint.Parser.DFM.ExtractDfmPropertyRowsFromBytes</para>
+/// <para>Returns: nil; ExtractDfmPropertyRowsFromBytes(TEncoding.UTF8.GetBytes(AText))</para>
+/// <seealso cref="DRagLint.Parser.DFM.ExtractDfmPropertyRowsFromBytes"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ExtractDfmPropertyRows(const AFilePath, AText: string;
   const AObjects: TArray<TDfmObjectRow>): TArray<TDfmPropertyRow>;
 

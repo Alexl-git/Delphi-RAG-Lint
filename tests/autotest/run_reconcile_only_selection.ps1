@@ -84,7 +84,7 @@ Check '1 baseline: three units are MISSING' `
 # broke for everyone else.
 $plainJson = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$work\App.dpr" --json 2>$null } | Out-String
 $plainOk = $null
-try { $plainOk = $plainJson | ConvertFrom-Json } catch { $plainOk = $null }
+try { $plainOk = $plainJson | ConvertFrom-Json | ForEach-Object { $_ } } catch { $plainOk = $null }
 Check '1b --json WITHOUT --only still works (regression: AV on the common path)' `
   (($LASTEXITCODE -eq 0) -and ($null -ne $plainOk)) `
   "exit=$LASTEXITCODE; got:`n$($plainJson.Substring(0, [Math]::Min(200, $plainJson.Length)))"
@@ -199,7 +199,7 @@ Check '7 --only matches unit names case-insensitively' `
 FreshCopy
 $jsonOut = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$work\App.dpr" --only NoSuchUnitHere --json 2>$null } | Out-String
 $parsed = $null
-try { $parsed = $jsonOut | ConvertFrom-Json } catch { $parsed = $null }
+try { $parsed = $jsonOut | ConvertFrom-Json | ForEach-Object { $_ } } catch { $parsed = $null }
 Check '8a --only with --json still emits parseable JSON' `
   ($null -ne $parsed) `
   "commentary on stdout ahead of the document breaks every machine caller; got:`n$($jsonOut.Substring(0, [Math]::Min(200, $jsonOut.Length)))"
@@ -210,7 +210,7 @@ Check '8b and the unmatched name is IN the document' `
 FreshCopy
 $jsonOk = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$work\App.dpr" --only uHelper --json 2>$null } | Out-String
 $parsedOk = $null
-try { $parsedOk = $jsonOk | ConvertFrom-Json } catch { $parsedOk = $null }
+try { $parsedOk = $jsonOk | ConvertFrom-Json | ForEach-Object { $_ } } catch { $parsedOk = $null }
 # `unmatched` is OMITTED entirely when everything matched, so the document's
 # shape does not change for callers predating the flag. Note @($null).Count is 1
 # in PowerShell, so an absent key must be filtered, not counted -- the first

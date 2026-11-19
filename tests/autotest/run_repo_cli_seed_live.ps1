@@ -36,12 +36,12 @@ $Work = Join-Path ([IO.Path]::GetTempPath()) ('dl-repo-live-' + [guid]::NewGuid(
 [IO.Directory]::CreateDirectory($Work) | Out-Null
 function Run([string[]]$a) {
   $errFile = Join-Path $Work ('err-' + [guid]::NewGuid().ToString('N') + '.txt')
-  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2> $errFile }) -join "`n"
+  $out = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe @a 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }) -join "`n"
   $code = $LASTEXITCODE
   $err = if (Test-Path $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
   [pscustomobject]@{ Code = $code; Out = $out; Err = $err }
 }
-function Tables($repo) { $r = Run @('repo', 'info', '--json', '--repo', $repo); if ($r.Code -ne 0) { return $null }; ($r.Out | ConvertFrom-Json).tables }
+function Tables($repo) { $r = Run @('repo', 'info', '--json', '--repo', $repo); if ($r.Code -ne 0) { return $null }; ($r.Out | ConvertFrom-Json | ForEach-Object { $_ }).tables }
 $repo = Join-Path $Work 'seed.dlrepo'
 $cn = $env:DL_TEST_FB_CONNECTION
 $pw = [regex]::Match($cn, '(?i)Password=([^;]*)').Groups[1].Value
@@ -53,7 +53,7 @@ Write-Host "  raw dry-run output:`n$($r.Out)"
 Check 'S1 seed-fb --dry-run -> exit 0, nothing written' (($r.Code -eq 0) -and ($r.Out -match 'dry run') -and ((Tables $repo).DL_FIELDS_INFO -eq 0)) "exit=$($r.Code) err=$($r.Err.Trim())"
 $r = Rec (Run @('repo', 'seed-fb', '--connection', $cn, '--repo', $repo))
 $t = Tables $repo
-$meta = (Run @('repo', 'info', '--json', '--repo', $repo)).Out | ConvertFrom-Json
+$meta = (Run @('repo', 'info', '--json', '--repo', $repo)).Out | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'S2 seed-fb -> exit 0, fields + datasets filled, source_database set' (($r.Code -eq 0) -and ($t.DL_FIELDS_INFO -gt 0) -and ($t.DL_DATASETS_INFO -gt 0) -and ($meta.meta.source_database)) "exit=$($r.Code) err=$($r.Err.Trim())"
 $r = Rec (Run @('repo', 'seed-fb', '--connection', $cn, '--repo', $repo))
 Check 'S3 seed-fb on a filled repo -> exit 1, counts unchanged' (($r.Code -eq 1) -and ((Tables $repo).DL_FIELDS_INFO -eq $t.DL_FIELDS_INFO)) "exit=$($r.Code)"

@@ -37,7 +37,7 @@ $Repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 function Invoke-Engine([string[]]$Arguments, [string]$Tag) {
   $o = Join-Path $WorkDir "$Tag.out"; $e = Join-Path $WorkDir "$Tag.err"
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
-    -ArgumentList $Arguments -RedirectStandardOutput $o -RedirectStandardError $e
+    -ArgumentList $Arguments -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   return @{ Exit = $p.ExitCode; Out = [IO.File]::ReadAllText($o); Err = [IO.File]::ReadAllText($e) }
 }
 
@@ -87,7 +87,7 @@ try {
 
   $js = Invoke-Engine @('cycles', '--fix', '--project', ('"' + $proj + '"'), '--db', ('"' + $db + '"'), '--no-compile', '--format', 'json') 'fix-json'
   $refs = @()
-  try { $doc1 = $js.Out | ConvertFrom-Json; $refs = @($doc1.cycles | ForEach-Object { $_.refusals } | Where-Object { $_.symbol -eq 'TOrder' }) } catch { }
+  try { $doc1 = $js.Out | ConvertFrom-Json | ForEach-Object { $_ }; $refs = @($doc1.cycles | ForEach-Object { $_.refusals } | Where-Object { $_.symbol -eq 'TOrder' }) } catch { }
   Check 'b0 json has one TOrder refusal' ($refs.Count -eq 1) ''
   if ($refs.Count -eq 1) { Check "b1 json refusal line = $decl" ([int]$refs[0].line -eq $decl) "line=$($refs[0].line)" }
 } finally {

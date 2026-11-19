@@ -207,7 +207,7 @@ Check 'index reported no parse errors' ($idxOut -match '0 errors') ''
 function Resolved([string]$name) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name $name --resolved --json --db $db 2>$null } | Out-String
   if ($raw.Trim() -eq '') { return @() }
-  try { return @(($raw | ConvertFrom-Json)) } catch { return @() }
+  try { return @(($raw | ConvertFrom-Json | ForEach-Object { $_ })) } catch { return @() }
 }
 function Of($rows, [string]$target) { @($rows | Where-Object { $_.target_qname -eq $target }) }
 
@@ -272,7 +272,7 @@ Write-Host '== R1: an OVERLOADED accessor narrows by arity or declines ==' -Fore
 function Sql([string]$q) {
   $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n"
   if ([string]::IsNullOrWhiteSpace($j)) { return ,@() }
-  try { $o = $j | ConvertFrom-Json } catch { return ,@() }
+  try { $o = $j | ConvertFrom-Json | ForEach-Object { $_ } } catch { return ,@() }
   $cols = @($o.columns | ForEach-Object { $_.name })
   $out = @()
   foreach ($r in @($o.rows)) {
@@ -304,7 +304,7 @@ $buf = Join-Path $scratch 'uProv.buf.pas'
 $src = [IO.File]::ReadAllText((Join-Path $scratch 'uProv.pas'))
 [IO.File]::WriteAllText($buf, ($src -replace '(?m)^\s*property Flag: Boolean read GetFlag write FFlag;\r?\n', ''), [Text.Encoding]::ASCII)
 $lt = & { $ErrorActionPreference = 'Continue'; & $exePath lint-tree --unit (Join-Path $scratch 'uProv.pas') --db $db --buffer $buf --baseline $base --format json 2>$null } | Out-String
-$lj = $null; try { $lj = $lt | ConvertFrom-Json } catch { }
+$lj = $null; try { $lj = $lt | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'lint-tree returned JSON' ($null -ne $lj) $lt
 if ($null -ne $lj) {
   $stale = @($lj.findings | Where-Object { $_.rule -eq 'stale-interface-reference' -or $_.message -match 'no longer declares' })

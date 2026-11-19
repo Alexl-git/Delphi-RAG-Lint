@@ -67,18 +67,18 @@ Check 'V the fixture index was built' (Test-Path $db)
 function Apply([string]$Unit, [string]$Rules, [string[]]$Extra = @()) {
   $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @(@('convert-apply', '--unit', (P $Unit), '--rules', (P $Rules), '--db', $db) + $Extra) 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $j = $null
-  if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {} }
+  if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {} }
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o; J = $j }
 }
 function Kinds($j, [string]$k) { if ($null -eq $j) { return @() }; return @($j.items | Where-Object { $_.kind -eq $k }) }
 
 # ---- capability ------------------------------------------------------------
-$info = $null; try { $info = ((& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n") | ConvertFrom-Json } catch {}
+$info = $null; try { $info = ((& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n") | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'K1 info --json capabilities.migrate_members is the JSON literal true' (($null -ne $info) -and ($info.capabilities.migrate_members -is [bool]) -and $info.capabilities.migrate_members)
 
 # ---- rename: dry run JSON -----------------------------------------------------
 $r = Apply 'MigForm.pas' 'rename.rules' @('--format', 'json')
-$ma = Kinds $r.J 'migrate-applied'
+$ma = @(Kinds $r.J 'migrate-applied')
 Check 'R1 rename dry run: exit 0, JSON parsed' (($r.Code -eq 0) -and ($null -ne $r.J)) $r.Out
 Check 'R2 ... 4 migrate-applied items (Click x3 incl. Self. and the non-ASCII line, OnClick x1), field access_sites' `
   (($ma.Count -eq 4) -and (@($ma | Where-Object { $_.field -ne 'access_sites' }).Count -eq 0)) (($ma | ForEach-Object { "$($_.path)@$($_.line)" }) -join ', ')
@@ -86,7 +86,7 @@ Check 'R3 ... each carries instance btnTop, path = old member, value = new membe
   ((@($ma | Where-Object { ($_.instance -eq 'btnTop') -and ((($_.path -eq 'Click') -and ($_.value -eq 'Press')) -or (($_.path -eq 'OnClick') -and ($_.value -eq 'OnPress'))) -and ($_.rule_line -gt 0) }).Count) -eq 4) $r.Out
 $pu = @($r.J.pas_uses | Where-Object { $_.instance -eq 'btnTop' -and ($_.member -eq 'Click' -or $_.member -eq 'OnClick') })
 Check 'R4 ... pas_uses Click and OnClick are status mapped' (($pu.Count -eq 2) -and (@($pu | Where-Object { $_.status -ne 'mapped' }).Count -eq 0)) (($pu | ForEach-Object { "$($_.member)=$($_.status)" }) -join ', ')
-Check 'R5 ... no migrate-check and no deliberate-break' (((Kinds $r.J 'migrate-check').Count -eq 0) -and ((Kinds $r.J 'deliberate-break').Count -eq 0)) $r.Out
+Check 'R5 ... no migrate-check and no deliberate-break' (((@(Kinds $r.J 'migrate-check')).Count -eq 0) -and ((@(Kinds $r.J 'deliberate-break')).Count -eq 0)) $r.Out
 
 # ---- rename: --apply ----------------------------------------------------------
 $r = Apply 'MigForm.pas' 'rename.rules' @('--apply', '--no-backup')
@@ -103,7 +103,7 @@ $h1 = (Get-FileHash (P 'MigForm.pas')).Hash
 [IO.File]::WriteAllBytes((P 'MigForm.dfm'), $dfmOrig['MigForm'])
 Reindex
 $r = Apply 'MigForm.pas' 'rename.rules' @('--format', 'json')
-Check 'I1 second run (rename): no migrate-applied item' ((Kinds $r.J 'migrate-applied').Count -eq 0) $r.Out
+Check 'I1 second run (rename): no migrate-applied item' ((@(Kinds $r.J 'migrate-applied')).Count -eq 0) $r.Out
 $r = Apply 'MigForm.pas' 'rename.rules' @('--apply', '--no-backup')
 $t2 = Text 'MigForm.pas'
 Check 'I2 ... --apply leaves every Press/OnPress site as it was (no double rename)' (([regex]::Matches($t2, '\bPress\b')).Count -eq 3 -and ([regex]::Matches($t2, '\bOnPress\b')).Count -eq 1) $t2
@@ -111,7 +111,7 @@ Check 'I2 ... --apply leaves every Press/OnPress site as it was (no double renam
 # ---- positive control: the same code, a book with no #migrate ---------------
 $r = Apply 'CtlForm.pas' 'control.rules' @('--format', 'json')
 Check 'C1 control dry run: no migrate item of any kind' `
-  (($r.Code -eq 0) -and ((Kinds $r.J 'migrate-applied').Count + (Kinds $r.J 'migrate-check').Count + (Kinds $r.J 'deliberate-break').Count -eq 0)) $r.Out
+  (($r.Code -eq 0) -and ((@(Kinds $r.J 'migrate-applied')).Count + (@(Kinds $r.J 'migrate-check')).Count + (@(Kinds $r.J 'deliberate-break')).Count -eq 0)) $r.Out
 $r = Apply 'CtlForm.pas' 'control.rules' @('--apply', '--no-backup')
 $t = Text 'CtlForm.pas'
 Check 'C2 ... --apply keeps btnTop.Click / Self.btnTop.Click / btnTop.OnClick' `
@@ -119,7 +119,7 @@ Check 'C2 ... --apply keeps btnTop.Click / Self.btnTop.Click / btnTop.OnClick' `
 
 # ---- DL_NONE ------------------------------------------------------------------
 $r = Apply 'DlForm.pas' 'dlnone.rules' @('--format', 'json')
-$db1 = Kinds $r.J 'deliberate-break'
+$db1 = @(Kinds $r.J 'deliberate-break')
 Check 'D1 DL_NONE dry run: 2 deliberate-break items (Count, Hint), field todos, value DL_NONE' `
   (($db1.Count -eq 2) -and (@($db1 | Where-Object { $_.field -ne 'todos' -or $_.value -ne 'DL_NONE' }).Count -eq 0) -and `
    (@($db1 | ForEach-Object { $_.path } | Sort-Object) -join ',') -eq 'Count,Hint') $r.Out
@@ -133,7 +133,7 @@ Check 'D4 ... --apply: N := DL_NONE(btnTop.Count); DL_NONE(btnTop.Hint) := ''h''
 [IO.File]::WriteAllBytes((P 'DlForm.dfm'), $dfmOrig['DlForm'])
 Reindex
 $r = Apply 'DlForm.pas' 'dlnone.rules' @('--format', 'json')
-$db2 = Kinds $r.J 'deliberate-break'
+$db2 = @(Kinds $r.J 'deliberate-break')
 Check 'I4 DL_NONE second run REACHES the marked sites (non-vacuous): 2 deliberate-break items saying already marked' `
   (($db2.Count -eq 2) -and (@($db2 | Where-Object { $_.text -match 'already DL_NONE-marked' }).Count -eq 2)) $r.Out
 $r = Apply 'DlForm.pas' 'dlnone.rules' @('--apply', '--no-backup')
@@ -143,11 +143,11 @@ Check 'I3 DL_NONE second run: no DL_NONE(DL_NONE(...)), exactly 2 markers' `
 
 # ---- with block ----------------------------------------------------------------
 $r = Apply 'WithForm.pas' 'rename.rules' @('--format', 'json')
-$mc = Kinds $r.J 'migrate-check'
+$mc = @(Kinds $r.J 'migrate-check')
 $withLine = 1 + [array]::IndexOf(((Text 'WithForm.pas') -split "`r`n"), '  with btnTop do')
 Check 'W1 with block: a migrate-check warning on the with line, field warnings' `
   ((@($mc | Where-Object { $_.line -eq $withLine -and $_.field -eq 'warnings' -and $_.instance -eq 'btnTop' }).Count) -ge 1) (($mc | ForEach-Object { "$($_.line): $($_.text)" }) -join ' | ')
-Check 'W2 ... the plain site below it is still renamed (1 migrate-applied)' ((Kinds $r.J 'migrate-applied').Count -eq 1) $r.Out
+Check 'W2 ... the plain site below it is still renamed (1 migrate-applied)' ((@(Kinds $r.J 'migrate-applied')).Count -eq 1) $r.Out
 $r = Apply 'WithForm.pas' 'rename.rules' @('--apply', '--no-backup')
 $t = Text 'WithForm.pas'
 Check 'W3 ... --apply leaves the with body Click untouched' (($r.Code -eq 0) -and $t.Contains("  with btnTop do`r`n    Click;`r`n  btnTop.Press;`r`n")) $t

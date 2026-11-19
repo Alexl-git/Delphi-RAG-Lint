@@ -1,0 +1,274 @@
+<!--article
+title: The IDE Formatter Hook in Delphi 13.2
+date: 2026-10-31
+slug: the-ide-formatter-hook
+summary: Delphi 13.2 adds IOTACodeFormatter to the Open Tools API, a way to plug your own formatter into the IDE's Format Source command, and the only documentation is the comments in ToolsAPI.pas.
+-->
+
+<div class="wrap">
+
+<header class="masthead">
+  <span class="eyebrow">Open Tools API &middot; Delphi 13.2</span>
+  <h1>The IDE Formatter Hook in Delphi 13.2</h1>
+  <p class="standfirst">Delphi 13.2 adds <code>IOTACodeFormatter</code> to the Open Tools API, a way to plug your own formatter into the IDE's Format Source command, and the only documentation is the comments in <code>ToolsAPI.pas</code>. This article shows how we used it to make YADF the IDE's own formatter, and how much buffer-handling code it lets a formatter drop.</p>
+  <div class="byline">
+    <span>Delphi 13.2 Florence &middot; RAD Studio 37.0</span>
+    <span>As of 2026-11-03, YADF 1.0.21.0</span>
+  </div>
+</header>
+
+<div class="note">
+  <span class="nlabel">Status</span>
+  <p>The integration described here is in <strong>YADF 1.0.21.0</strong> (released 2026-11-03). It is opt-in and off by default. It compiles and its pure logic is unit-tested, but the live-IDE checklist has not been run yet. Section 07 lists what that checklist still has to confirm.</p>
+</div>
+
+<p>YADF is the Delphi source formatter we wrote because <a href="https://www.htrmicronite.com">Micronite</a>, the quality and production-control software we build for manufacturers, is a large Delphi code base, and we wanted one consistent layout across it. YADF runs as a command-line tool and inside the IDE as the YADFOT package. Until now the IDE side had to edit the editor buffer itself. Delphi 13.2 changes that.</p>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">01 &mdash; What is new</span>
+    <h2>Two interfaces, documented only in the source</h2>
+  </div>
+  <p>The <code>ToolsAPI.pas</code> that ships with 13.2 (<code>source\ToolsAPI\ToolsAPI.pas</code>, file date 2026-09-09) declares two new interfaces. We found no page for them in the product Help or on DocWiki. The XML doc-comments in the unit are the whole specification. Shortened:</p>
+  <pre class="lex"><code>TOTAMarkerOffsets = array of Cardinal;
+
+IOTACodeFormatter = interface
+  ['{F97625D3-1A5F-4FD9-9FA6-1BC8C8762CBB}']
+  function HandleFile(const AFileName: string): Boolean;
+  function FormatSelected(const AModule: IOTAModule; const AContent: UTF8String;
+    ASelectedOffset, ASelectedLen: Integer; var ACursorOffset: Integer;
+    var AFormattedText: UTF8String): Boolean;
+  function FormatFile(const AModule: IOTAModule; const AContent: UTF8String;
+    var ACursorOffset: Integer; var AFormattedText: UTF8String): Boolean;
+  function FormatLine(const AModule: IOTAModule; const AEditorContent: IOTAEditorContent;
+    const AContent: UTF8String; ASelectedOffset, ASelectedLen: Integer;
+    var ACursorOffset: Integer; var AFormattedText: UTF8String): Boolean;
+  function CanFormatLine(const AModule: IOTAModule; const AEdPos: TOTAEditPos;
+    ANumLines: Integer): Boolean;
+  function SupportsOffsetRemapping: Boolean;
+  function CanFormatOnSave: Boolean;
+  function GetConfirmDlg: Boolean;
+  procedure SetConfirmDlg(AValue: Boolean);
+  function GetConfirmDlgHintText: string;
+  property ConfirmDlg: Boolean read GetConfirmDlg write SetConfirmDlg;
+end;
+
+IOTACodeFormatterServices370 = interface
+  ['{68C04644-98D1-4C14-AB7C-2FA8834A670F}']
+  procedure AddFormatter(const AFormatter: IOTACodeFormatter);
+  procedure RemoveFormatter(const AFormatter: IOTACodeFormatter);
+  function CanHandleFile(const AFileName: string): Boolean;
+  function FormatActiveModule: Boolean;
+  procedure AutoFormatLine(AView: IOTAEditView; const AEdPos: TOTAEditPos);
+  function GetStoredOffsetsForFormatter(const AFormatter: IOTACodeFormatter): TOTAMarkerOffsets;
+  procedure SetStoredOffsetsForFormatter(const AFormatter: IOTACodeFormatter;
+    const AOffsets: TOTAMarkerOffsets);
+end;
+
+IOTACodeFormatterServices = interface(IOTACodeFormatterServices370)
+  ['{F3474CD5-6EAB-472C-A6FE-635067C3E485}']
+end;</code></pre>
+  <p>The key point is in the signatures: the IDE <em>gives</em> the formatter the content as a <code>UTF8String</code> and <em>takes back</em> the result in <code>var AFormattedText</code>. The formatter never touches the editor buffer. The IDE applies the text itself.</p>
+  <p>The longest comments in the unit describe the offset-remapping contract. A formatter that returns <code>True</code> from <code>SupportsOffsetRemapping</code> reads the byte offsets of breakpoints, bookmarks and other gutter items with <code>GetStoredOffsetsForFormatter</code>, moves them to match the new text, and hands them back with <code>SetStoredOffsetsForFormatter</code>. If it does not, the comment says the IDE falls back to the original offsets.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">02 &mdash; One package, every IDE</span>
+    <h2>Gate on the declaration, not on the compiler version</h2>
+  </div>
+  <p>YADFOT also builds for IDEs that do not have the new interfaces. <code>VER370</code> is defined in 13.0, 13.1 and 13.2 alike, so it cannot tell them apart. The declaration can. The whole gate is one include file:</p>
+  <pre class="lex"><code>{ YADFOT.CodeFormatter.inc -- include AFTER `uses ToolsAPI` }
+{$IF DECLARED(IOTACodeFormatter) and not DEFINED(YADF_NO_CODEFORMATTER)}
+  {$DEFINE YADF_HAS_CODEFORMATTER}
+{$IFEND}</code></pre>
+  <p><code>DECLARED</code> looks at what is in scope where the include sits, so the include must come after <code>uses ToolsAPI</code>. <code>YADF_NO_CODEFORMATTER</code> lets us force the old-IDE path in a 13.2 build to test it. The unit's public routines are declared unconditionally. On an older IDE they compile to no-ops, and the callers need no <code>{$IF}</code> of their own:</p>
+  <pre class="lex"><code>unit YADFOT.CodeFormatter;
+
+interface
+
+uses
+  ToolsAPI;
+
+{$I YADFOT.CodeFormatter.inc}
+
+function CodeFormatterAvailable: Boolean;
+procedure RegisterYadfCodeFormatter;
+procedure UnregisterYadfCodeFormatter;
+
+implementation
+
+{$IFDEF YADF_HAS_CODEFORMATTER}
+  // ... the real implementation (sections 03 and 04)
+{$ELSE}
+function CodeFormatterAvailable: Boolean;
+begin
+  Result:= False;
+end;
+
+procedure RegisterYadfCodeFormatter;
+begin
+  // Older IDE (no IOTACodeFormatter): nothing to register.
+end;
+
+procedure UnregisterYadfCodeFormatter;
+begin
+  // Older IDE: nothing was registered.
+end;
+{$ENDIF}
+
+end.</code></pre>
+  <p>The Options page shows its &ldquo;Use YADF as the IDE code formatter (restart IDE)&rdquo; check box only when <code>CodeFormatterAvailable</code> is <code>True</code>.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">03 &mdash; Registration</span>
+    <h2>AddFormatter on load, RemoveFormatter before the BPL goes</h2>
+  </div>
+  <p>Registration is a <code>Supports</code> call on <code>BorlandIDEServices</code> and one <code>AddFormatter</code>. The formatter object is reference-counted. A unit-level variable holds our reference, and the IDE holds its own:</p>
+  <pre class="lex"><code>var
+  GFormatter: IOTACodeFormatter = nil;
+
+procedure RegisterYadfCodeFormatter;
+var
+  Svc: IOTACodeFormatterServices;
+begin
+  if GFormatter &lt;&gt; nil then Exit;
+  if not LoadNativeFormatterFlag(ProfilesIniPath) then Exit;  // opt-in switch
+  if not Supports(BorlandIDEServices, IOTACodeFormatterServices, Svc) then Exit;
+  GFormatter:= TYadfCodeFormatter.Create;
+  Svc.AddFormatter(GFormatter);
+end;
+
+procedure UnregisterYadfCodeFormatter;
+var
+  Svc: IOTACodeFormatterServices;
+begin
+  if GFormatter = nil then Exit;
+  if Supports(BorlandIDEServices, IOTACodeFormatterServices, Svc) then
+    try Svc.RemoveFormatter(GFormatter); except end;
+  GFormatter:= nil;
+end;</code></pre>
+  <p>We call <code>RegisterYadfCodeFormatter</code> from the package's <code>Register</code> procedure. We call <code>UnregisterYadfCodeFormatter</code> from the wizard's <code>Destroyed</code> method, which runs before the package's code is unloaded, and again from <code>finalization</code> in case <code>Destroyed</code> never ran. Without it, the IDE would keep an interface whose methods live in a BPL that has been unloaded. Both calls are idempotent. The empty <code>except</code> covers a late IDE shutdown, when the service may already be gone.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">04 &mdash; The formatter</span>
+    <h2>Text in, text out</h2>
+  </div>
+  <p>The whole adapter is a <code>TInterfacedObject</code> that implements <code>IOTACodeFormatter</code>. The method that does the work:</p>
+  <pre class="lex"><code>function TYadfCodeFormatter.FormatFile(const AModule: IOTAModule; const AContent: UTF8String;
+  var ACursorOffset: Integer; var AFormattedText: UTF8String): Boolean;
+var
+  Declined: string;
+  Text    : UTF8String;
+begin
+  Result:= False;
+  try
+    if not FormatUtf8Content(AContent, ResolveFProfileOptions, Text, Declined) then
+    begin
+      ReportProblem('buffer left unchanged -- the content guard declined the result.' +
+        sLineBreak + Declined);
+      Exit;
+    end;
+    ACursorOffset  := RemapCursorOffset(AContent, Text, ACursorOffset);
+    AFormattedText := Text;
+    Result:= True;
+  except
+    on E: Exception do
+      ReportProblem('format failed.' + sLineBreak + E.ClassName + ': ' + E.Message);
+  end;
+end;</code></pre>
+  <p>Returning <code>False</code> means &ldquo;I did not format this&rdquo;, so the IDE keeps the original text. YADF runs a content guard after every format. The guard checks the result against the original and declines when it finds a change that is not just layout. A decline or an exception therefore always ends in <code>False</code>. Partial or damaged text can never reach the editor.</p>
+  <p><code>HandleFile</code> accepts <code>.pas</code>, <code>.dpr</code>, <code>.dpk</code> and <code>.inc</code>. The other members are deliberate refusals:</p>
+  <ul>
+    <li><strong><code>FormatSelected</code></strong> formats only when the selection covers the whole unit (Select All). Otherwise it shows a dialog and returns <code>False</code>. YADF needs the whole unit to work out indentation, and formatting a fragment out of context would shift its lines.</li>
+    <li><strong><code>FormatLine</code> and <code>CanFormatLine</code></strong> return <code>False</code>, so the IDE never asks YADF to format line by line while you type.</li>
+    <li><strong><code>SupportsOffsetRemapping</code></strong> returns <code>False</code>. A full remap of every gutter marker is future work. Until then the IDE falls back to the original offsets.</li>
+    <li><strong><code>CanFormatOnSave</code></strong> returns <code>False</code>. YADF has no format-on-save option of its own.</li>
+  </ul>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">05 &mdash; What it replaced</span>
+    <h2>The code a formatter no longer needs</h2>
+  </div>
+  <p>YADFOT's classic command (Tools menu and Ctrl+Shift+Alt+F) works on every IDE version, so it has to do everything itself. Below are the pieces of <code>YADFOT.Wizard.pas</code> that exist only to get text out of the editor and back in safely.</p>
+  <p><strong>Reading the buffer</strong> in 4 KB chunks through <code>IOTAEditReader</code>, which returns UTF-8 bytes through an <code>AnsiChar</code> pointer:</p>
+  <pre class="lex"><code>Reader:= ASource.CreateReader;
+repeat
+  Got:= Reader.GetText(Pos, @Chunk[0], ChunkSize);
+  if Got &gt; 0 then
+  begin
+    SetLength(Utf8Bytes, CurLen + Got);
+    Move(Chunk[0], Utf8Bytes[CurLen], Got);
+    Inc(CurLen, Got);
+    Inc(Pos   , Got);
+  end;
+until Got &lt; ChunkSize;
+Result:= TEncoding.UTF8.GetString(Utf8Bytes, 0, CurLen);</code></pre>
+  <p><strong>Writing it back</strong> through an undoable writer, so that Ctrl+Z restores the original:</p>
+  <pre class="lex"><code>Writer:= ASource.CreateUndoableWriter;
+Writer.DeleteTo(MaxInt);
+Utf8:= UTF8String(AText);
+Writer.Insert(PAnsiChar(Utf8));</code></pre>
+  <p><strong>Saving and restoring the caret and scroll position</strong>, because replacing the whole buffer moves both to line 1. The saved line is clamped to the new line count.</p>
+  <p><strong>Working around the Form Designer.</strong> This was the expensive one. In a unit with a <code>.dfm</code>, the designer keeps a map of source positions for the form class. Replacing the buffer leaves that map stale, and the next File &gt; Save All raised an access violation inside <code>TVCLRootDesigner.DoSave</code>. So the classic command detects a form unit and takes a completely different route:</p>
+  <pre class="lex"><code>if ModuleHasFormDesigner(Editor) then
+begin
+  // 1. save the module, 2. format the FILE ON DISK,
+  // 3. Module.Refresh(True) so editor and designer reload from clean source.
+  FormatFormUnitViaReload(Editor, FileName, Opts);
+  Exit;
+end;</code></pre>
+  <p>That route costs the user the undo step, which is why YADF writes a <code>.BCK</code> backup first.</p>
+  <p>Add the read-only buffer check, the active-editor lookup, a menu item and a key binding, and the classic command is a few hundred lines of IDE plumbing around one call to the formatting engine.</p>
+  <p>With <code>IOTACodeFormatter</code> none of this is ours to write. The IDE reads the buffer, applies the result, and owns the undo stack and the designer. It also owns the Format Source command and its shortcut. The adapter is one class whose working methods are about thirty lines in total. The rest is plain string code we can test outside the IDE (section 06). The classic command stays for older IDEs and for YADF's second profile, so on 13.2 both paths exist side by side.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">06 &mdash; The testable half</span>
+    <h2>Byte offsets, caret, selection: plain functions</h2>
+  </div>
+  <p>The new interface passes content as <code>UTF8String</code> and positions as byte offsets into it, not as character indexes. So <code>ACursorOffset</code> has to stay a byte offset into the <em>new</em> text, and must never point into the middle of a multi-byte character. We put all of that in <code>YADF.FormatBridge</code>, a unit with no ToolsAPI and no VCL. It compiles in every IDE generation and is tested by a console program (<code>Test\FormatBridgeTest.dpr</code>):</p>
+  <pre class="lex"><code>function FormatUtf8Content(const AContent: UTF8String; const AOpts: TYadfOptions;
+  out AFormatted: UTF8String; out ADeclined: string;
+  AFormat: TYadfFormatFunc = nil): Boolean;   // never raises; False = original bytes back
+function SelectionCoversWholeContent(const AContent: UTF8String;
+  AOffset, ALen: Integer): Boolean;
+function RemapCursorOffset(const AOriginal, AFormatted: UTF8String;
+  AOffset: Integer): Integer;</code></pre>
+  <p><code>RemapCursorOffset</code> finds the caret's line index and byte column in the original, moves to the same line and column in the result (clamped to what exists), then steps back past UTF-8 continuation bytes:</p>
+  <pre class="lex"><code>Result:= S + Col;
+while (Result &gt; S) and (Result &lt; LenB) and
+      ((Byte(AFormatted[Result + 1]) and $C0) = $80) do
+  Dec(Result);</code></pre>
+  <p>Formatting can add or remove lines, so this only keeps the caret on the same line index. It does not track the exact token. That is enough to stop the editor jumping to line 1, and it is the reason we report <code>SupportsOffsetRemapping = False</code> rather than claim more.</p>
+  <p>The <code>AFormat</code> parameter is a test seam. The tests pass in a fake formatter that declines or raises, and check that the original bytes come back unchanged.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">07 &mdash; Limits</span>
+    <h2>What the source comments do not say</h2>
+  </div>
+  <p>The comments in <code>ToolsAPI.pas</code> say what each method is for. They do not answer several questions a formatter author needs answered. These are our working assumptions, and each one is a step in the live-IDE checklist, which has not been run yet:</p>
+  <ul>
+    <li><strong>Offset base.</strong> We assume <code>ASelectedOffset</code> and <code>ACursorOffset</code> are 0-based, like <code>IOTAEditReader.GetText</code>. If they turn out to be 1-based, Select All will not be recognised as a whole-unit selection, and the &ldquo;whole units only&rdquo; dialog will appear instead.</li>
+    <li><strong>Undo.</strong> We expect the IDE to record the whole format as one undo step.</li>
+    <li><strong>Form units.</strong> We expect the IDE's own apply path to keep the Form Designer in sync, so the access violation from section 05 should not happen. This is the claim we most want to confirm.</li>
+    <li><strong>Threading.</strong> We assume calls arrive on the main thread. The YADF engine is not thread-safe.</li>
+    <li><strong>Several formatters.</strong> The services interface takes any number of formatters, but nothing says which one the IDE picks when two of them accept the same file.</li>
+  </ul>
+  <p>To turn it on, check &ldquo;Use YADF as the IDE code formatter (restart IDE)&rdquo; on YADF's options page (it sets <code>[IDE] NativeFormatter=1</code> in <code>%APPDATA%\YADF\profiles.ini</code>) and restart the IDE. Uncheck it and restart to get the IDE's own formatter back.</p>
+</section>
+
+<footer>
+  As of 2026-11-03: interface declarations are quoted from <code>ToolsAPI.pas</code> of RAD Studio 37.0 (Delphi 13.2), file date 2026-09-09, shortened to signatures. YADF code is quoted from release 1.0.21.0 (<code>YADFOT.CodeFormatter.pas</code>, <code>YADFOT.CodeFormatter.inc</code>, <code>YADF.FormatBridge.pas</code>, <code>YADFOT.Wizard.pas</code>), lightly trimmed. The integration shipped in YADF 1.0.21.0. Its live-IDE checklist had not been run when this was written.
+</footer>
+
+</div>

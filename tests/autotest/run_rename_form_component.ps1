@@ -18,6 +18,9 @@ param(
 )
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $env:DRAGLINT_RENAME_TEST_UNGATED = '1' # the plan and bytes here; the load proof below builds on its own
 $ErrorActionPreference = 'Continue'
@@ -244,7 +247,7 @@ function Text-Of([string]$Name) { return [IO.File]::ReadAllText((Join-Path $Src 
 function Index-Fx { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index $Src --db $Db --library-db none --rebuild *> "$Db.log" } }
 function Plan-Symbol([string]$Q, [string]$To) {
   $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe rename --kind symbol --name $Q --to $To --db $Db --library-db none --plan --json 2>$null } | Out-String)
-  $j = $null; try { $j = $o | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $o | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   return @{ Raw = $o; Json = $j; Kinds = @($j.refusals | ForEach-Object { $_.kind }); Dfm = @($j.edits | Where-Object { $_.file -match '\.dfm$' }) }
 }
 function Apply-Symbol([string]$Q, [string]$To) {
@@ -275,7 +278,7 @@ function Load-Proof([string]$Tag) {
   [IO.File]::WriteAllText((Join-Path $dir 'FcLoad.dpr'), (Crlf $LoadDpr), $Ascii)
   $bat = "$dir.bat"
   [IO.File]::WriteAllText($bat, "@echo off`r`ncall `"$RsVars`"`r`ncd /D `"$dir`"`r`ndcc64 -B -Q `"-NSSystem;Winapi;Vcl;Vcl.Imaging;Data`" FcLoad.dpr`r`nexit /b %ERRORLEVEL%`r`n", $Ascii)
-  $p = Start-Process cmd.exe -ArgumentList "/c `"$bat`"" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$dir.log" -RedirectStandardError "$dir.err"
+  $p = Start-Process cmd.exe -ArgumentList "/c `"$bat`"" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$dir.log" -RedirectStandardError "$dir.err"; $null = $p.Handle
   if ($p.ExitCode -ne 0) { return @{ Built = $false; Out = (Get-Content "$dir.log" -Tail 8 | Out-String); Exit = -1 } }
   $o = (& { $ErrorActionPreference = 'Continue'; & (Join-Path $dir 'FcLoad.exe') 2>&1 | ForEach-Object { "$_" } } | Out-String)
   return @{ Built = $true; Out = $o; Exit = $LASTEXITCODE }
@@ -336,7 +339,7 @@ try {
   [IO.File]::WriteAllText((Join-Path $Src 'Stray.dfm'), (Crlf "object Stray: TNobodyKnows`n  object BtnGo: TButton`n  end`nend`n"), $Ascii)
   Index-Fx
   $p = Plan-Symbol 'FcMain.TFcForm.BtnGo' 'BtnRun'
-  $strayIn = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query "select count(*) from files where path like '%Stray.dfm'" --json 2>$null } | Out-String | ConvertFrom-Json).rows[0][0]
+  $strayIn = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query "select count(*) from files where path like '%Stray.dfm'" --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }).rows[0][0]
   if ([int]$strayIn -gt 0) {
     Check 'n4 a form whose root class is not indexed: [dfm-name-unbound]' ($p.Kinds -contains 'dfm-name-unbound') $p.Raw
   } else { Write-Host '  [INFO] n4 an orphan .dfm is not indexed: not reachable' }
@@ -345,3 +348,4 @@ Write-Host ("run_rename_form_component: {0} pass, {1} fail" -f $script:Passed, $
 if ($script:Failed) { Write-Host 'FAILED' -ForegroundColor Red; exit 1 }
 Write-Host 'ALL PASS' -ForegroundColor Green
 exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

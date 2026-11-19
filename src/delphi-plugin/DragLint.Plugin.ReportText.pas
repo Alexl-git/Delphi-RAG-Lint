@@ -47,7 +47,7 @@ type
   /// <summary>One question of `drag-lint ask` as the menu offers it.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DragLint.Plugin.ReportText.pas) ?, DragLint.Plugin.Reports.PromptSecondRoutine (DragLint.Plugin.Reports.pas) ?, DragLint.Plugin.Reports.PromptTarget (DragLint.Plugin.Reports.pas) ?, DragLint.Plugin.ReportText.FindReportQuestion (DragLint.Plugin.ReportText.pas), DragLint.Plugin.ReportText.FormatReportAsDocInsight (DragLint.Plugin.ReportText.pas) ? (+2 more)</para>
+  /// <para>Used by: declaration (DragLint.Plugin.ReportText.pas) ?, DragLint.Plugin.Reports.PromptTarget (DragLint.Plugin.Reports.pas) ?, DragLint.Plugin.ReportText.FindReportQuestion (DragLint.Plugin.ReportText.pas), DragLint.Plugin.ReportText.FormatReportAsDocInsight (DragLint.Plugin.ReportText.pas) ?, DragLint.Plugin.ReportText.ReportClickQuestion (DragLint.Plugin.ReportText.pas) (+3 more)</para>
   /// <para>Used in units: DragLint.Plugin.Reports, DragLint.Plugin.ReportText</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -280,7 +280,7 @@ function QuestionTakesFormControl(const pQuestionId: string): Boolean;
 /// <remarks>
 /// The caret supplies routine A only; the menu prompts for B.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.Reports.InvokeReportQuestion (DragLint.Plugin.Reports.pas)</para>
+/// <para>Called from: DragLint.Plugin.Reports.InvokeReportQuestionAt (DragLint.Plugin.Reports.pas)</para>
 /// <para>Calls: SameText</para>
 /// <para>Returns: SameText(pQuestionId, 'path')</para>
 /// <!-- drag-lint:auto END -->
@@ -299,6 +299,30 @@ function QuestionTakesSecondRoutine(const pQuestionId: string): Boolean;
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function IsValidReportTarget(const pTarget: string): Boolean;
+
+/// <summary>Decides which catalog question a drag-lint &gt; Reports menu click asks.</summary>
+/// <param name="pSender">The click's Sender; only named in pProblem, never
+/// consulted for the question. May be nil.</param>
+/// <param name="pBoundIndex">The REPORT_QUESTIONS index bound to the item's click
+/// handler when the menu was built.</param>
+/// <param name="pQuestion">Receives the catalog entry; a default record when refused.</param>
+/// <param name="pProblem">Why no question is asked; '' when one is.</param>
+/// <returns>True when pBoundIndex names a catalog question.</returns>
+/// <remarks>
+/// 1.51.2 RPT: the click used to read the question from TMenuItem(Sender).Tag
+/// and returned silently when Sender was not a TMenuItem or the Tag was out of
+/// range, so a click in the IDE's main menu did nothing and logged nothing. The
+/// index is now bound to the click handler itself, so neither the Sender's class
+/// nor the item's Tag can change or drop the question.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Reports.InvokeReportQuestionAt (DragLint.Plugin.Reports.pas)</para>
+/// <para>Calls: Default, Format, InRange</para>
+/// <para>Returns: InRange(pBoundIndex, Low(REPORT_QUESTIONS), High(REPORT_QUESTIONS))</para>
+/// <para>Mutates: pProblem (out), pQuestion (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function ReportClickQuestion(pSender: TObject; pBoundIndex: Integer; out pQuestion: TReportQuestion;
+  out pProblem: string): Boolean;
 
 /// <summary>The command line that runs one question through the engine's `ask` verb.</summary>
 /// <param name="pEngine">The drag-lint.exe the plugin uses.</param>
@@ -320,7 +344,7 @@ function IsValidReportTarget(const pTarget: string): Boolean;
 /// Ask-Report.ps1 are needed here: the engine answers every question
 /// in-process (all 26 since the CHARTS port).
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.Reports.InvokeReportQuestion (DragLint.Plugin.Reports.pas)</para>
+/// <para>Called from: DragLint.Plugin.Reports.InvokeReportQuestionAt (DragLint.Plugin.Reports.pas)</para>
 /// <para>Calls: DragLint.Plugin.ReportText.QuoteCmdArg, Format, Trim</para>
 /// <seealso cref="DragLint.Plugin.ReportText.QuoteCmdArg"/>
 /// <!-- drag-lint:auto END -->
@@ -377,6 +401,7 @@ implementation
 
 uses
   System.Classes
+  , System.Math
   , System.StrUtils
   , System.JSON
   , System.RegularExpressions
@@ -501,6 +526,19 @@ end;
 function IsValidReportTarget(const pTarget: string): Boolean;
 begin
   Result:= (Trim(pTarget) <> '') and (Pos('"', pTarget) = 0);
+end;
+
+function ReportClickQuestion(pSender: TObject; pBoundIndex: Integer; out pQuestion: TReportQuestion;
+  out pProblem: string): Boolean;
+begin
+  pProblem:= '';
+  pQuestion:= Default(TReportQuestion);
+  Result:= InRange(pBoundIndex, Low(REPORT_QUESTIONS), High(REPORT_QUESTIONS));
+  if Result then
+    pQuestion:= REPORT_QUESTIONS[pBoundIndex]
+  else
+    pProblem:= Format('menu item bound to question index %d, outside the catalog (0..%d); sender %s.',
+      [pBoundIndex, High(REPORT_QUESTIONS), if pSender = nil then 'nil' else pSender.ClassName]);
 end;
 
 { Quotes one argument for CreateProcess the way CommandLineToArgvW splits it: n backslashes

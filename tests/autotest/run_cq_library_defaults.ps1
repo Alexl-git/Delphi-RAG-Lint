@@ -83,14 +83,14 @@ try {
     $a = @('query', '--name', 'TEdit', '--json', '--quiet'); foreach ($d in $dbs) { $a += @('--db', $d) }
     $raw = (@(& { $ErrorActionPreference = 'Continue'; & $exe @a 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" } | Where-Object { -not $_.TrimStart().StartsWith('(') }) -join "`n"
     if (-not $raw.Trim()) { return @() }
-    return @(($raw | ConvertFrom-Json) | ForEach-Object { $_.qualified_name })
+    return @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_.qualified_name })
   }
-  $plain = TEditOrder @($pairDb)
+  $plain = @(TEditOrder @($pairDb))
   Check 'SANITY A3: both TEdit rows exist' ($plain.Count -ge 2) ($plain -join ',')
-  $ctx = TEditOrder @($vclDb, $pairDb)
+  $ctx = @(TEditOrder @($vclDb, $pairDb))
   Check 'A3  manifest names library-Pair as a library: the VCL project context puts Vcl.StdCtrls.TEdit first' ($ctx.Count -ge 2 -and $ctx[0] -eq 'Vcl.StdCtrls.TEdit') ($ctx -join ',')
   $stray = Join-Path $WorkDir 'library-Stray.sqlite'; Copy-Item $pairDb $stray
-  $ctx2 = TEditOrder @($vclDb, $stray)
+  $ctx2 = @(TEditOrder @($vclDb, $stray))
   Check 'A3b CONTROL: a library-*.sqlite no section names is a project DB: two project DBs give no single context (SQL order, FMX first)' ($ctx2.Count -ge 2 -and $ctx2[0] -eq 'FMX.Edit.TEdit') ($ctx2 -join ',')
 
   # ---- B: redundant-cast default library ----
@@ -103,8 +103,8 @@ try {
   $null = & { $ErrorActionPreference = 'Continue'; & $exe index --project $proj --db $db --library-db $lib 2>&1 | ForEach-Object { "$_" } }; Check 'SANITY B: project indexed' ($LASTEXITCODE -eq 0)
   function Plan($extra) {
     $e = Join-Path $WorkDir 'plan.err'
-    $o = & { $ErrorActionPreference = 'Continue'; & $exe lint --fix --fix-rule redundant-cast --db $db --project $proj --platform win32 --format json @extra 2> $e }
-    $pl = $null; try { $pl = ($o -join "`n") | ConvertFrom-Json } catch { }
+    $o = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($e); [IO.File]::WriteAllText($dlErrFile, ''); & $exe lint --fix --fix-rule redundant-cast --db $db --project $proj --platform win32 --format json @extra 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
+    $pl = $null; try { $pl = ($o -join "`n") | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
     [pscustomobject]@{ Plan = $pl; Err = [string](Get-Content $e -Raw -ErrorAction SilentlyContinue) }
   }
   $dflt = Plan @(); $expl = Plan @('--library-db', $lib); $none = Plan @('--library-db', 'none')

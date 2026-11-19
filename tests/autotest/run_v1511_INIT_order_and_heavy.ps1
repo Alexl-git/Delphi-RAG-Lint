@@ -41,7 +41,7 @@ function Check([bool]$ok, [string]$what) {
 # lint-all --json is a bare array; keep the rows of one rule.
 function Get-Findings([string]$ExePath, [string]$Db, [string]$Rule) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $ExePath lint-all --db $Db --rule $Rule --json 2>$null }) -join "`n"
-  $j = $raw | ConvertFrom-Json
+  $j = $raw | ConvertFrom-Json | ForEach-Object { $_ }
   return ,@($j | Where-Object { $_.rule_id -eq $Rule -or $_.rule -eq $Rule })
 }
 function FileOf($F) { return [IO.Path]::GetFileName([string]$(if ($F.file) { $F.file } else { $F.file_path })) }

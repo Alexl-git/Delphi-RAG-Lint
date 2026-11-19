@@ -262,12 +262,12 @@ function FiredLsp([string]$PasFile, [string]$Db) {
   $in = Join-Path $WorkDir 'lsp-in.txt'; $so = Join-Path $WorkDir 'lsp-out.txt'; $se = Join-Path $WorkDir 'lsp-err.txt'
   [IO.File]::WriteAllText($in, ($msgs -join ''), (New-Object Text.UTF8Encoding($false)))
   $null = Start-Process $Exe -ArgumentList @('lsp', '--db', "`"$Db`"") -WorkingDirectory $WorkDir `
-            -RedirectStandardInput $in -RedirectStandardOutput $so -RedirectStandardError $se -NoNewWindow -Wait -PassThru
+            -RedirectStandardInput $in -RedirectStandardOutput $so -RedirectStandardError $se -NoNewWindow -Wait -PassThru; $null = $null.Handle
   $out = if (Test-Path $so) { [IO.File]::ReadAllText($so) } else { '' }
   $r = @()
   foreach ($body in ($out -split 'Content-Length: \d+\r\n\r\n')) {
     if ($body.Trim() -eq '') { continue }
-    try { $m = $body | ConvertFrom-Json } catch { continue }
+    try { $m = $body | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($m.method -ne 'textDocument/publishDiagnostics') { continue }
     foreach ($d in @($m.params.diagnostics)) { if ($d.code -eq 'concat-in-loop') { $r += ([int]$d.range.start.line + 1) } }
   }

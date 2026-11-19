@@ -55,7 +55,7 @@ try {
   function Q([string]$Db,[string]$Query) {
     $raw = (& { $ErrorActionPreference = 'Continue'; & $exe sql --db $Db --json --limit 5000 --query $Query 2>$null }) -join "`n"
     $b = $raw.IndexOf('{'); if ($b -lt 0) { return ,@() }
-    $j = $raw.Substring($b) | ConvertFrom-Json
+    $j = $raw.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }
     return ,@($j.rows)
   }
   $extCount = 'select count(*) from refs where external_target is not null and external_target <> ''''  '

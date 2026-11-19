@@ -120,7 +120,8 @@ Check 'CONTROL-1 the ghost makes the block stale' ($d.Out -match 'ddFactsBlockSt
 Check 'CONTROL-1 and the repair is offered (this index vouches for the ghost)' ($d.Out -match '\[FIXABLE\]') $d.Out.Trim()
 
 # --- CASE-FIX: lint --fix --apply keeps the Pure line ------------------------
-$r = Run @('lint',$uPure,'--db',$db,'--project-rules','--rule','doc-drift','--fix','--apply')
+# 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+$r = Run @('lint',$uPure,'--db',$db,'--project-rules','--rule','doc-drift','--fix','--apply','--no-compile-gate')
 $blk = BlockAbove $uPure 'procedure Bump;'
 Check 'CASE-FIX the fix RAN: the ghost caller is gone (positive control)' ($blk -notmatch 'NoSuchCaller') $blk
 Check 'CASE-FIX the real caller survived' ($blk -match 'uPure\.UseIt') $blk
@@ -134,7 +135,8 @@ $r = Run @('index','--project',(Join-Path $proj 'Pure.dpr'),'--db',$db)
 $d = Run @('doc-drift','--qname','uPure.Bump','--db',$db)
 Check 'CASE-AGREE checker: the block the fixer wrote is current' ($d.Out -notmatch 'ddFactsBlockStale') $d.Out.Trim()
 $h0 = (Get-FileHash $uPure -Algorithm MD5).Hash
-$null = Run @('lint',$uPure,'--db',$db,'--project-rules','--rule','doc-drift','--fix','--apply')
+# 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+$null = Run @('lint',$uPure,'--db',$db,'--project-rules','--rule','doc-drift','--fix','--apply','--no-compile-gate')
 $h1 = (Get-FileHash $uPure -Algorithm MD5).Hash
 Check 'CASE-AGREE fixer: a second --fix --apply is byte-identical' ($h0 -eq $h1) "$h0 vs $h1"
 

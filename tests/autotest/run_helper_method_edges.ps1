@@ -230,7 +230,7 @@ out['helper_rows'] = c.execute("SELECT COUNT(*) FROM type_helpers").fetchone()[0
 print(json.dumps(out))
 c.close()
 '@ | Set-Content $py -Encoding ascii
-$r = (& python $py $db) -join "`n" | ConvertFrom-Json
+$r = (& python $py $db) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 
 Write-Host 'The index already HAS the helper data' -ForegroundColor Cyan
 Check 'CONTROL: type_helpers is populated' ($r.helper_rows -ge 1) "rows=$($r.helper_rows)  -- so this is a RESOLVER gap, not an extraction one"

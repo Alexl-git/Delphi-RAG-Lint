@@ -24,7 +24,7 @@ type
   /// content.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Strip.pas) ?, DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas) ?, DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas) ?, DRagLint.Doc.Strip.TDocStripper.StripFile (DRagLint.Doc.Strip.pas), DRagLint.Doc.Strip.TDocStripper.StripSymbolRegion (DRagLint.Doc.Strip.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Strip.pas) ?, DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas) ?, DRagLint.Doc.Batch.DocumentOneUnit (DRagLint.Doc.Batch.pas) ?, DRagLint.Doc.Strip.TDocStripper.StripFile (DRagLint.Doc.Strip.pas), DRagLint.Doc.Strip.TDocStripper.StripSymbolRegion (DRagLint.Doc.Strip.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Doc.Strip</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -42,7 +42,7 @@ type
   /// hand-written multi-line &lt;remarks&gt; block is never touched.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas)</para>
+  /// <para>Used by: DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.Doc.Batch.DocumentOneUnit (DRagLint.Doc.Batch.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -95,7 +95,7 @@ type
     /// exist.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas)</para>
+    /// <para>Called from: DRagLint.Doc.Batch.DocumentOneUnit (DRagLint.Doc.Batch.pas)</para>
     /// <para>Calls: Default, DRagLint.Doc.Strip.BuildDeleteEdits, DRagLint.Doc.Strip.IsDocLine, DRagLint.Doc.Strip.StripRegion, DRagLint.Doc.Strip.TryLoadLines</para>
     /// <para>Returns: Default(TStripResult)</para>
     /// <para>Pure</para>
@@ -561,7 +561,7 @@ end;
 // the same file for the actual write (also via TStringList.Text) -- the two
 // must agree, or a computed Line/EndLine would delete the wrong physical
 // lines. Returns False (ALines untouched) when the file does not exist.
-function TryLoadLines(const AFilePath: string; ALines: TStringList): Boolean;
+function TryLoadLines(const AFilePath: string; ALines: TStrings): Boolean;
 var
   Content: string;
 begin

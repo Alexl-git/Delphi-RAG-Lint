@@ -83,7 +83,7 @@ Check 'B0 CONTROL: the .dpr parses to members' ($members.Count -gt 100) "members
 $ctl = Get-Uncovered $dpr @('.')
 Check 'B1 CONTROL: the default root ["."] leaves members uncovered' ($ctl.Count -gt 0) "uncovered=$($ctl.Count) (proves B2 can fail)"
 $roots = @()
-if ($decl) { $roots = @((ConvertFrom-Json $decl).ownRoots) }
+if ($decl) { $roots = @((ConvertFrom-Json $decl | ForEach-Object { $_ }).ownRoots) }
 Check 'B2 HEAD declaration has ownRoots' ($roots.Count -gt 0) ("roots=" + ($roots -join ','))
 if ($roots.Count -gt 0) {
   # ownRoots resolve against the anchor = the folder that holds _D-RAG = the .dpr folder.

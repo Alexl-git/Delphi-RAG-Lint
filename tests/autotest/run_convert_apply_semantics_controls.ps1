@@ -457,7 +457,7 @@ Check 'F4-6 positive control: a malformed ParamData item (Bogus = 1) FAILS the r
 
 # ---- F1 / F6 / F2 on ScopeDM -----------------------------------------------------
 $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'ScopeDM.pas') --rules (P 'scope.rules') --db $db --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
-$j = $null; try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {}
+$j = $null; try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'S0 dry run: apply/1 JSON, ok' (($null -ne $j) -and $j.ok) $o
 $r = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'ScopeDM.pas') --rules (P 'scope.rules') --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'S1 --apply exits 0' ($LASTEXITCODE -eq 0) $r

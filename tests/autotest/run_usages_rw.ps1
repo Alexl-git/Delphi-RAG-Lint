@@ -188,14 +188,14 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path $db)) {
 }
 
 # ---- 1: fixture health
-$health = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "select count(*) n from member_accesses" --json 2>$null }) -join "`n" | ConvertFrom-Json
+$health = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "select count(*) n from member_accesses" --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 if ([int]$health.rows[0][0] -lt 6) { Write-Host "FATAL: fixture has too few member_accesses rows" -ForegroundColor Red; exit 2 }
 Check '1 fixture has the property access rows' $true
 
 function Rw([string]$name) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath usages --name $name --rw --json --db $db 2>$null }) -join "`n"
   $script:rwExit = $LASTEXITCODE
-  try { return ($raw | ConvertFrom-Json) } catch { return $null }
+  try { return ($raw | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 # A row key: <file leaf>:<line>/<via>. The via is part of the contract.
 function Keys($rows) { @($rows | ForEach-Object { '{0}:{1}/{2}' -f (Split-Path $_.path -Leaf), $_.line, $_.via }) | Sort-Object }
@@ -203,7 +203,7 @@ function Same($actual, [string[]]$expected) { (($actual -join ' ') -eq ((@($expe
 function T($doc, [string]$qname) { @($doc.targets | Where-Object { $_.qname -eq $qname })[0] }
 
 # ---- 2: positive control
-$plain = (& { $ErrorActionPreference = 'Continue'; & $exePath usages --name FPlain --json --db $db 2>$null }) -join "`n" | ConvertFrom-Json
+$plain = (& { $ErrorActionPreference = 'Continue'; & $exePath usages --name FPlain --json --db $db 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 Check '2a plain usages keeps its document' (($null -eq $plain.targets) -and ($null -ne $plain.reads)) 'plain document changed'
 $plainLines = @($plain.reads | ForEach-Object { '{0}:{1}' -f (Split-Path $_.file -Leaf), $_.line })
 Check '2b plain FPlain lacks the property site R1 (what --rw adds)' ($plainLines -notcontains "uUser.pas:$R1") "plain reads: $plainLines"

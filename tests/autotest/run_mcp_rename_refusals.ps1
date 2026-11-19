@@ -97,8 +97,8 @@ function Invoke-Rename($fx, [string[]]$Targets) {
     -RedirectStandardInput $req -RedirectStandardOutput $so -RedirectStandardError $se -NoNewWindow -Wait | Out-Null
   $res = @{}
   foreach ($ln in (Get-Content $so)) {
-    try { $o = $ln | ConvertFrom-Json } catch { continue }
-    if ($o.id -ge 2 -and $o.result) { $res[[int]$o.id] = ($o.result.content[0].text | ConvertFrom-Json) }
+    try { $o = $ln | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
+    if ($o.id -ge 2 -and $o.result) { $res[[int]$o.id] = ($o.result.content[0].text | ConvertFrom-Json | ForEach-Object { $_ }) }
   }
   $res
 }

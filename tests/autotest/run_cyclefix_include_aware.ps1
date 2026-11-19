@@ -78,14 +78,14 @@ function Get-Plan($P) {
 function Get-Fix($P) {
   Push-Location $WorkDir
   try { $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe cycles --causes --format json --project $P.Dproj --db $P.Db --library-db none 2>$null } | Out-String) } finally { Pop-Location }
-  try { return @(($o | ConvertFrom-Json))[0].fix } catch { return $null }
+  try { return @(($o | ConvertFrom-Json | ForEach-Object { $_ }))[0].fix } catch { return $null }
 }
 function Run-Apply($P) {
   $a = @('cycles', '--fix', '--build-timeout', '1800', '--rsvars', $RsVars, '--project', $P.Dproj, '--db', $P.Db,
     '--library-db', 'none', '--format', 'json', '--cycle', '1', '--apply')
   Push-Location $WorkDir
   try { $out = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @a 2>$null } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
-  $j = $null; try { $j = $out | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   $k = @()
   foreach ($c in @($j.cycles)) { foreach ($x in @($c.refusals)) { if ($x) { $k += "$($x.kind): $($x.reason)" } } }
   foreach ($x in @($j.refusals)) { if ($x) { $k += "$($x.kind): $($x.reason)" } }

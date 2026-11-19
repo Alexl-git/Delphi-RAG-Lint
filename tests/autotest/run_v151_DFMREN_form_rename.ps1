@@ -53,7 +53,7 @@ function New-Case([string]$Tag, [scriptblock]$Edit = $null) {
 function Rename($C, [string]$QName, [string]$To, [string[]]$Mode) {
   $errFile = Join-Path $Tmp 'stderr.txt'
   $a = @('rename', '--kind', 'symbol', '--name', $QName, '--to', $To, '--db', $C.Db, '--library-db', $Lib) + $Mode
-  $out = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @a 2> $errFile } | Out-String)
+  $out = ($null | & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); $input | & $Exe @a 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
   $code = $LASTEXITCODE
   return @{ Code = $code; Out = $out; Err = [IO.File]::ReadAllText($errFile) }
 }

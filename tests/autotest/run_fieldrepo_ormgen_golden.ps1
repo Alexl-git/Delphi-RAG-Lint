@@ -35,6 +35,9 @@ param([string]$Repo = '',
       [switch]$RequireForm)
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 if (-not $Repo) { $Repo = (Resolve-Path "$PSScriptRoot\..\..").Path }
 $ErrorActionPreference = 'Stop'
 Write-Host '== field repository ORM / DataService generator tests ==' -ForegroundColor Cyan
@@ -125,3 +128,4 @@ if ($RepoFile -eq '' -and [string]::IsNullOrWhiteSpace($Connection)) {
 if ($failed) { exit 1 }
 Write-Host 'ORMGEN: PASS' -ForegroundColor Green
 exit 0
+} finally { Remove-WorkDir $Work -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

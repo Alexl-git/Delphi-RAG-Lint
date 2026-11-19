@@ -14,6 +14,12 @@ uses
 
 type
   /// <summary>Per-table result of an import.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.FieldRepo.FbImport.pas), DRagLint.CLI.Repo.RepoImportFb (DRagLint.CLI.Repo.pas), DRagLint.FieldRepo.FbImport.ImportFromFirebird (DRagLint.FieldRepo.FbImport.pas), DRagLint.FieldRepo.FbImport.ImportOneTable (DRagLint.FieldRepo.FbImport.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.Repo, DRagLint.FieldRepo.FbImport</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRepoImportStat = record
     /// <summary>The DL_ repository table name.</summary>
     TableName: string;
@@ -28,8 +34,16 @@ type
 /// <param name="pTable">The repository table definition.</param>
 /// <param name="pExtra">Source fields the repository table does not have.</param>
 /// <param name="pMissing">Repository columns the source does not have.</param>
-/// <remarks>Names compare case-insensitively. FIB$VERSION is ignored in the source
-/// (owner ruling A4: the version column is not migrated).</remarks>
+/// <remarks>
+/// Names compare case-insensitively. FIB$VERSION is ignored in the source
+/// (owner ruling A4: the version column is not migrated).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.FieldRepo.FbImport.ImportTableFromDataSet (DRagLint.FieldRepo.FbImport.pas)</para>
+/// <para>Calls: DRagLint.FieldRepo.Schema.TRepoTable.FindColumn, SameText</para>
+/// <para>Mutates: pExtra (out), pMissing (out)</para>
+/// <seealso cref="DRagLint.FieldRepo.Schema.TRepoTable.FindColumn"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure CheckSourceColumns(pSource: TDataSet; const pTable: TRepoTable;  // dl:ok unused-public-symbol@4a7c -- public API; callers arrive with lane TTE (repo import-fb)
   out pExtra, pMissing: TArray<string>);
 
@@ -39,8 +53,19 @@ procedure CheckSourceColumns(pSource: TDataSet; const pTable: TRepoTable;  // dl
 /// <param name="pTable">The repository table to fill.</param>
 /// <returns>The number of rows copied.</returns>
 /// <exception cref="ERepoError">Raised, naming the fields, when the source has extra or missing columns; nothing is written.</exception>
-/// <remarks>NULL stays NULL, '' stays '', text is never trimmed. Starts and commits no
-/// transaction: the caller owns it. A duplicate key raises the driver's exception.</remarks>
+/// <remarks>
+/// NULL stays NULL, '' stays '', text is never trimmed. Starts and commits no
+/// transaction: the caller owns it. A duplicate key raises the driver's exception.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.FieldRepo.FbImport.ImportOneTable (DRagLint.FieldRepo.FbImport.pas)</para>
+/// <para>Calls: DRagLint.FieldRepo.FbImport.BindRow, DRagLint.FieldRepo.FbImport.CheckSourceColumns, DRagLint.FieldRepo.FbImport.InsertSql, DRagLint.FieldRepo.FbImport.JoinNames, DRagLint.FieldRepo.FbImport.PrepareParams</para>
+/// <seealso cref="DRagLint.FieldRepo.FbImport.BindRow"/>
+/// <seealso cref="DRagLint.FieldRepo.FbImport.CheckSourceColumns"/>
+/// <seealso cref="DRagLint.FieldRepo.FbImport.InsertSql"/>
+/// <seealso cref="DRagLint.FieldRepo.FbImport.JoinNames"/>
+/// <seealso cref="DRagLint.FieldRepo.FbImport.PrepareParams"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ImportTableFromDataSet(pSource: TDataSet; pTarget: TFDConnection;  // dl:ok unused-public-symbol@7726 -- public API; callers arrive with lane TTE (repo import-fb)
   const pTable: TRepoTable): Integer;
 
@@ -50,9 +75,22 @@ function ImportTableFromDataSet(pSource: TDataSet; pTarget: TFDConnection;  // d
 /// <param name="pReplace">True to delete the existing rows first; False requires an empty repository.</param>
 /// <returns>One stat per data table (DL_FIELDS_INFO, DL_DATASETS_INFO, DL_ENUMVALUES, DL_ERROR_MESSAGES).</returns>
 /// <exception cref="ERepoError">Raised when the repository is not empty and pReplace is False (nothing changed), or on a column mismatch.</exception>
-/// <remarks>One repository transaction; any exception rolls the whole import back. A source
+/// <remarks>
+/// One repository transaction; any exception rolls the whole import back. A source
 /// table missing in RDB$RELATIONS gives SourceRows = -1. DL_META gets source_database
-/// (the Database value only, never the password), imported_at_utc and fb_field_info_version.</remarks>
+/// (the Database value only, never the password), imported_at_utc and fb_field_info_version.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Repo.RepoImportFb (DRagLint.CLI.Repo.pas)</para>
+/// <para>Calls: DateToISO8601, DRagLint.FieldRepo.FbImport.FieldInfoVersion, DRagLint.FieldRepo.FbImport.ImportOneTable, DRagLint.FieldRepo.FbImport.OpenSourceConnection, DRagLint.FieldRepo.Schema.FindRepoTable, DRagLint.FieldRepo.Schema.QuoteRepoIdent, DRagLint.FieldRepo.Schema.RepoIsEmpty, DRagLint.FieldRepo.Schema.SetRepoMeta</para>
+/// <para>Catches: Exception (re-raise)</para>
+/// <para>Transaction: starts, commits, rolls back</para>
+/// <seealso cref="DRagLint.FieldRepo.FbImport.FieldInfoVersion"/>
+/// <seealso cref="DRagLint.FieldRepo.FbImport.ImportOneTable"/>
+/// <seealso cref="DRagLint.FieldRepo.FbImport.OpenSourceConnection"/>
+/// <seealso cref="DRagLint.FieldRepo.Schema.FindRepoTable"/>
+/// <seealso cref="DRagLint.FieldRepo.Schema.QuoteRepoIdent"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ImportFromFirebird(const pConnectionString: string; pTarget: TFDConnection;  // dl:ok unused-public-symbol@2f94 -- public API; callers arrive with lane TTE (repo import-fb)
   pReplace: Boolean): TArray<TRepoImportStat>;
 
@@ -62,6 +100,15 @@ function ImportFromFirebird(const pConnectionString: string; pTarget: TFDConnect
 /// <param name="pDatabase">Receives the Database value only (never the password).</param>
 /// <returns>An OPEN connection; the caller owns Close/Free.</returns>
 /// <exception cref="EFDDBEngineException">The server refuses the connection (the half-made connection is freed).</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Repo.RepoImportFb (DRagLint.CLI.Repo.pas), DRagLint.CLI.Repo.RepoSeed (DRagLint.CLI.Repo.pas), DRagLint.FieldRepo.FbImport.ImportFromFirebird (DRagLint.FieldRepo.FbImport.pas)</para>
+/// <para>Calls: Copy, Pos, Trim</para>
+/// <para>Returns: TFDConnection.Create(nil)</para>
+/// <para>Catches: Exception (re-raise)</para>
+/// <para>Mutates: pDatabase (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function OpenSourceConnection(const pConnectionString: string; out pDatabase: string): TFDConnection;
 
 implementation

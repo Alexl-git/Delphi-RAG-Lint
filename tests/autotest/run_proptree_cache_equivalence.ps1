@@ -75,7 +75,7 @@ function P([string]$n) { return (Join-Path $WorkDir $n) }
 function Json([string]$s) {
   $a = $s.IndexOf('{'); $b = $s.LastIndexOf('}')
   if ($a -lt 0 -or $b -le $a) { return $null }
-  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json) } catch { return $null }
+  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 # One node as a line carrying EVERY key, in key order.
 function NodeLine($n) {
@@ -363,7 +363,7 @@ if (-not $LibDb) {
   $old4 = $null
   if ($OldDumpDir) {
     $f4 = Join-Path $OldDumpDir "$q.d4.json"
-    if (Test-Path $f4) { $old4 = Get-Content -Raw $f4 | ConvertFrom-Json }
+    if (Test-Path $f4) { $old4 = Get-Content -Raw $f4 | ConvertFrom-Json | ForEach-Object { $_ } }
   }
   foreach ($depth in 3, 4) {
     $r = RunPt $Exe $LibDb @('--qname', $q, '--depth', "$depth", '--refs-as-leaves', '--json')
@@ -387,12 +387,12 @@ if (-not $LibDb) {
     }
   }
   if ($OldDumpDir -and (Test-Path (Join-Path $OldDumpDir "$q.d2.json"))) {
-    $old2 = Get-Content -Raw (Join-Path $OldDumpDir "$q.d2.json") | ConvertFrom-Json
+    $old2 = Get-Content -Raw (Join-Path $OldDumpDir "$q.d2.json") | ConvertFrom-Json | ForEach-Object { $_ }
     foreach ($mv in 'public', 'published') {
       $r = RunPt $Exe $LibDb @('--qname', $q, '--depth', '2', '--refs-as-leaves', '--min-visibility', $mv, '--json')
       $nj = Json $r.Out
       $newL = @($nj.properties | ForEach-Object { NodeLine $_ })
-      $ok = if ($mv -eq 'published') { @('published') } else { @('published', 'public') }
+      $ok = @(if ($mv -eq 'published') { @('published') } else { @('published', 'public') })
       $want = @(PrunePrivate @($old2.properties) | Where-Object { ($ok -contains $_.visibility) } | ForEach-Object { NodeLine $_ })
       $d = FirstDiff $want $newL
       Check "d --min-visibility $mv (depth 2) equals the old engine's, minus private ($($want.Count) nodes, $([Math]::Round($r.Sec, 1)) s)" `

@@ -74,7 +74,7 @@ r = c.execute('''SELECT f.ui_affinity FROM symbols s
 if not r: print('<norow>')
 else: print('<null>' if r[0][0] is None else r[0][0])
 "@
-  return ((& { $ErrorActionPreference = 'Continue'; python -c $py 2>&1 | ForEach-Object { "$_" } }) -join ' ').Trim()
+  return ((& { $ErrorActionPreference = 'Continue'; python -c $(if ($PSVersionTable.PSVersion.Major -lt 7) { $py.Replace('"', '\"') } else { $py }) 2>&1 | ForEach-Object { "$_" } }) -join ' ').Trim()
 }
 
 Push-Location C:\TEMP

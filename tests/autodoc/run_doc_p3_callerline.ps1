@@ -155,7 +155,7 @@ function Get-DocBlockAtLine([string[]]$lines, [int]$declLine1) {
 # engine's own query verb (index-first: no second parser, no python).
 function Get-DeclLine([string]$db, [string]$name) {
   $j = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --db $db --json 2>$null }) -join "`n"
-  $o = $null; try { $o = ($j | ConvertFrom-Json) } catch { return 0 }
+  $o = $null; try { $o = ($j | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return 0 }
   if ($null -eq $o) { return 0 }
   foreach ($r in @($o)) { if ($r.section -eq 'interface') { return [int]$r.start_line } }
   return 0
@@ -256,7 +256,7 @@ $edgesA = (& { $ErrorActionPreference = 'Continue'; & $exePath dump-call-edges -
 $parsedA = Parse-CallEdges $edgesA
 Check-EdgeDumpLayout 'A' $parsedA $edgesA
 foreach ($nm in @('MakePoint','SumPoint')) {
-  $eA = Edges-Into $parsedA "callerline.$nm" 'certain'
+  $eA = @(Edges-Into $parsedA "callerline.$nm" 'certain')
   Check "A PRECONDITION: the index holds exactly ONE certain call edge into $nm" ($eA.Count -eq 1) `
     ("edges=" + ($edgesA -replace "`n",' / '))
 }
@@ -382,7 +382,7 @@ $dbB = Join-Path $sb 'b.sqlite'
 $edges = (& { $ErrorActionPreference = 'Continue'; & $exePath dump-call-edges --db $dbB 2>$null }) -join "`n"
 $parsedB = Parse-CallEdges $edges
 Check-EdgeDumpLayout 'B' $parsedB $edges
-$pingEdges = Edges-Into $parsedB 'callerline_mixed.Ping' 'certain'
+$pingEdges = @(Edges-Into $parsedB 'callerline_mixed.Ping' 'certain')
 Check 'B PRECONDITION: the index holds exactly ONE certain call edge into Ping' ($pingEdges.Count -eq 1) `
   ("edges=" + ($edges -replace "`n",' / '))
 

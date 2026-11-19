@@ -34,7 +34,7 @@ uses
 /// disabled IDE leaves the form on its default colours rather than failing.
 /// Main thread only.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.AboutForm.ShowTextReport (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.Create (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.HoverForm.ApplyIdeTheme (DragLint.Plugin.HoverForm.pas), DragLint.Plugin.Reports.TDragLintReportTextForm.CreateReport (DragLint.Plugin.Reports.pas)</para>
+/// <para>Called from: DragLint.Plugin.AboutForm.ShowTextReport (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.Create (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.Editor.RunGraphStage (DragLint.Plugin.Editor.pas), DragLint.Plugin.HoverForm.ApplyIdeTheme (DragLint.Plugin.HoverForm.pas), DragLint.Plugin.Reports.StartReport (DragLint.Plugin.Reports.pas) (+2 more)</para>
 /// <para>Calls: DragLint.Plugin.Theme.AlreadyRegistered, Supports</para>
 /// <para>Catches: Exception (empty)</para>
 /// <para>UI thread only -- touches AForm</para>
@@ -53,7 +53,7 @@ procedure ApplyIdeTheme(AForm: TCustomForm; AFormClass: TCustomFormClass);
 /// loses the themed BACKGROUND and would otherwise paint white under a dark
 /// theme. Main thread only.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.AboutForm.ShowTextReport (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildContent (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.Create (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.DoCopyReport (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.RenderContent.RenderGroup (DragLint.Plugin.AboutForm.pas) (+5 more)</para>
+/// <para>Called from: DragLint.Plugin.AboutForm.ShowTextReport (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildContent (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.Create (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.DoCopyReport (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.RenderContent.RenderGroup (DragLint.Plugin.AboutForm.pas) (+7 more)</para>
 /// <para>Calls: Supports</para>
 /// <para>Returns: ASystemColor; SS.GetSystemColor(ASystemColor)</para>
 /// <para>Catches: Exception (empty)</para>

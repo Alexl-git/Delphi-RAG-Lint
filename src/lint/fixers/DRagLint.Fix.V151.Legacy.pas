@@ -20,7 +20,12 @@ uses
 
 /// <summary>Hands the platform library store to the with-statement fixer (FixWith), for ancestors the project index does not hold (TObject).</summary>
 /// <param name="pLib">The library store; nil = a class target whose ancestor is outside the project is declined (unresolved-ancestor).</param>
-/// <remarks>Set by the fix-all run (lint --fix without --fix-rule) around BuildAutofixEdits and cleared after. Not thread-safe; call from the run thread only. The caller keeps ownership of the store.</remarks>
+/// <remarks>
+/// Set by the fix-all run (lint --fix without --fix-rule) around BuildAutofixEdits and cleared after. Not thread-safe; call from the run thread only. The caller keeps ownership of the store.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure SetFixWithLibrary(const pLib: ISymbolStore);
 
 implementation

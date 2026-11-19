@@ -49,14 +49,14 @@ function Index([string]$proj, [string]$db) {
 function Ask([string[]]$a) {
   $errFile = Join-Path $scratch 'stderr.txt'
   Push-Location $scratch
-  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath usages @a --json 2>$errFile }) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath usages @a --json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }) -join "`n"
   $script:code = $LASTEXITCODE
   Pop-Location
   $script:err = [IO.File]::ReadAllText($errFile)
   $script:raw = $raw
   $script:j = $null
   $start = $raw.IndexOf('{')
-  if ($start -ge 0) { try { $script:j = $raw.Substring($start) | ConvertFrom-Json } catch { $script:j = $null } }
+  if ($start -ge 0) { try { $script:j = $raw.Substring($start) | ConvertFrom-Json | ForEach-Object { $_ } } catch { $script:j = $null } }
 }
 function DeclQ() { if ($null -eq $j) { return '' }; return ((@($j.declarations) | ForEach-Object { $_.qname }) | Sort-Object) -join ',' }
 function Calls() { if ($null -eq $j) { return -1 }; return @($j.calls).Count }
@@ -129,11 +129,11 @@ function Invoke-Serve([string[]]$Requests, [string]$Tag) {
   $all = @('{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}') + $Requests
   [IO.File]::WriteAllText($in, (($all -join "`n") + "`n"), [Text.Encoding]::ASCII)
   $p = Start-Process $exePath -ArgumentList 'serve', '--db', "`"$dbOne`"" -WorkingDirectory $scratch `
-         -RedirectStandardInput $in -RedirectStandardOutput $out -RedirectStandardError (Join-Path $scratch "$Tag.err.txt") -NoNewWindow -PassThru
+         -RedirectStandardInput $in -RedirectStandardOutput $out -RedirectStandardError (Join-Path $scratch "$Tag.err.txt") -NoNewWindow -PassThru; $null = $p.Handle
   if (-not $p.WaitForExit(60000)) { $p.Kill() }
   $replies = @{}
   foreach ($line in (Get-Content $out -ErrorAction SilentlyContinue)) {
-    try { $r = $line | ConvertFrom-Json } catch { continue }
+    try { $r = $line | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($null -ne $r.id) { $replies[[string]$r.id] = $r }
   }
   $replies

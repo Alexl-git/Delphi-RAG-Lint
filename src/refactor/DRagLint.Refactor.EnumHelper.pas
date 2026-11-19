@@ -268,7 +268,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)</para>
     /// <para>Calls: Default, DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate.EmitFromCase</para>
-    /// <para>Returns: Default(TEnumHelperGen); Ord(Self); GetEnumName(TypeInfo(' + EnumName + '), Ord(Self)); ''' + M + '''; ''''; ' + EnumName + '(GetEnumValue(TypeInfo(' + EnumName + '), AValue))</para>
+    /// <para>Returns: Default(TEnumHelperGen); Ord(Self); GetEnumName(TypeInfo(' + EnumName + '), Ord(Self)); ''' + M + '''; ''''; ' + EnumName + '(GetEnumValue(TypeInfo(' + EnumName + '), AValue)); ' + FirstMember + '; ' + AResolve.DescArrayName + '[Self]</para>
     /// <para>Complexity: 21 (cyclomatic, outer body), 174 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <para>Directives: static</para>

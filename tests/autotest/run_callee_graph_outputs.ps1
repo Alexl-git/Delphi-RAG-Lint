@@ -134,7 +134,7 @@ Check '4. callgraph --format dot exits 2 and names reverse-calltree' `
   (($cg.Code -eq 2) -and (($cg.Out + $cg.Err) -match 'reverse-calltree')) "exit=$($cg.Code) out=$($cg.Out.Trim()) err=$($cg.Err.Trim())"
 $cj = Run @('callgraph', '--qname', 'UG.TRoot.Drive', '--direction', 'callees', '--format', 'json', '--db', $db)
 $parsed = $null
-try { $parsed = $cj.Out | ConvertFrom-Json } catch { }
+try { $parsed = $cj.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check '5. callgraph --format json prints JSON naming the root' `
   (($cj.Code -eq 0) -and ($null -ne $parsed) -and ($parsed.qname -eq 'UG.TRoot.Drive')) "exit=$($cj.Code)"
 $cd = Run @('callgraph', '--qname', 'UG.TRoot.Drive', '--direction', 'callees', '--db', $db)

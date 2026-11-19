@@ -40,8 +40,8 @@ Push-Location $work
 try {
   & { $ErrorActionPreference = 'Continue'; & $exe index $fx --db $db *> $null }
   Check 'fixture indexed' ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
-  $wid = (& { $ErrorActionPreference = 'Continue'; & $exe usages --name TThing --width wide --depth 2 --format json --limit 50 --db $db 2>$null } | Out-String) | ConvertFrom-Json
-  $nar = (& { $ErrorActionPreference = 'Continue'; & $exe usages --name TThing --width narrow --format json --limit 50 --db $db 2>$null } | Out-String) | ConvertFrom-Json
+  $wid = (& { $ErrorActionPreference = 'Continue'; & $exe usages --name TThing --width wide --depth 2 --format json --limit 50 --db $db 2>$null } | Out-String) | ConvertFrom-Json | ForEach-Object { $_ }
+  $nar = (& { $ErrorActionPreference = 'Continue'; & $exe usages --name TThing --width narrow --format json --limit 50 --db $db 2>$null } | Out-String) | ConvertFrom-Json | ForEach-Object { $_ }
   $cap = 11 * $N + 5
   $d1 = @($wid.impact | Where-Object { $_.depth -eq 1 })[0].callers
   $d2 = @($wid.impact | Where-Object { $_.depth -eq 2 })

@@ -25,13 +25,27 @@ const
 /// <summary>Reports every unit a program file (.dpr) of the index lists that nothing else reaches.</summary>
 /// <param name="AStore">Project index; nil gives no finding.</param>
 /// <returns>One warning per unreachable unit, anchored on its `unit` line; nil when none.</returns>
-/// <remarks>A candidate is a .pas the .dpr lists in its uses clause, that no other indexed file
+/// <remarks>
+/// A candidate is a .pas the .dpr lists in its uses clause, that no other indexed file
 /// uses, and none of whose symbols the program code references. Exempt: a self-registering unit
 /// (an initialization section, or a container registration in the unit itself) -- but NOT a
 /// form: a unit with an indexed sibling .dfm / .fmx form is exempt only when something opens it,
 /// i.e. the program code names it (covered above) or another .pas names one of its classes in a
 /// string literal (FindClass / GetClass('TName')). A .dpk lists package members by design and is
-/// never a source of candidates. Read-only; stateless.</remarks>
+/// never a source of candidates. Read-only; stateless.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V152.PROJ2.TV152PROJ2Rules.CheckProject (DRagLint.V152.PROJ2.pas)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Core.Interfaces.ISymbolStore.GetUnitScopeEdges, DRagLint.V152.PROJ2.Support.ClassNamedElsewhere, DRagLint.V152.PROJ2.Support.IsExt, DRagLint.V152.PROJ2.Support.LoadPaths, DRagLint.V152.PROJ2.Support.MakeFinding, DRagLint.V152.PROJ2.Support.RegistersInContainer, DRagLint.V152.PROJ2.Support.SiblingFormPath, ExtractFileName</para>
+/// <para>Returns: nil; Findings.ToArray</para>
+/// <para>Complexity: 21 (cyclomatic, outer body), 92 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitScopeEdges"/>
+/// <seealso cref="DRagLint.V152.PROJ2.Support.ClassNamedElsewhere"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindUnitsUsedByNoUnit(const AStore: ISymbolStore): TArray<TLintFinding>;
 
 /// <summary>unit-not-in-dpr for closure units OUTSIDE the walked file list (O05).</summary>
@@ -43,9 +57,23 @@ function FindUnitsUsedByNoUnit(const AStore: ISymbolStore): TArray<TLintFinding>
 /// another indexed file uses and AWalked does not contain, anchored on the project's .dpr (the
 /// --project scope filter drops findings on files outside the project); nil when none, or when the
 /// .dproj has no indexed sibling .dpr (a package: its members are listed by the .dpk).</returns>
-/// <remarks>Delegates the decision to TProjectChecks.CheckUnitsInDpr (same message, same
+/// <remarks>
+/// Delegates the decision to TProjectChecks.CheckUnitsInDpr (same message, same
 /// exemptions) and keeps only findings anchored on those outside files, so nothing is reported
-/// twice. Reads the project files from disk.</remarks>
+/// twice. Reads the project files from disk.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V152.PROJ2.TV152PROJ2Rules.CheckProject (DRagLint.V152.PROJ2.pas)</para>
+/// <para>Calls: ChangeFileExt, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetUnitScopeEdges, DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr, DRagLint.V152.PROJ2.Support.IsExt, DRagLint.V152.PROJ2.Support.LoadPaths, LowerCase</para>
+/// <para>Returns: nil; Kept</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 53 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitScopeEdges"/>
+/// <seealso cref="DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr"/>
+/// <seealso cref="DRagLint.V152.PROJ2.Support.IsExt"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindUnlistedClosureOutsideRoots(const AStore: ISymbolStore; const AProjectPath: string;
   const AWalked: TArray<string>): TArray<TLintFinding>;
 

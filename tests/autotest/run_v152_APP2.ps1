@@ -26,6 +26,9 @@ param(
   [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_v152_app2_$PID"
 )
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 $ErrorActionPreference = 'Stop'
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 if ($Exe -eq '') { $Exe = Join-Path $Root 'src\cli\Win64\Debug\drag-lint.exe' }
@@ -43,7 +46,7 @@ function Get-Findings([string]$Db, [string[]]$Extra) {
   $out = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --json @Extra 2>$null }) -join "`n"
   Write-Host ("  raw[{0}]: {1}" -f (Split-Path $Db -Leaf), $out.Substring(0, [Math]::Min(300, $out.Length)))
   if ($out.Trim() -eq '') { return @() }
-  return @($out | ConvertFrom-Json | Where-Object { $_.rule -eq $Rule })
+  return @($out | ConvertFrom-Json | ForEach-Object { $_ } | Where-Object { $_.rule -eq $Rule })
 }
 
 [void](New-Item -ItemType Directory -Force -Path $WorkDir)
@@ -61,10 +64,10 @@ try {
   $c0 = Join-Path $WorkDir 'Direct.pas'
   [IO.File]::WriteAllText($c0, "program Direct;`r`n`r`n{`$APPTYPE CONSOLE}`r`n`r`nuses Vcl.Dialogs;`r`n`r`nbegin`r`n  ShowMessage('x');`r`nend.`r`n")
   $d = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $c0 --json 2>$null }) -join "`n"
-  $d0 = if ($d.Trim() -eq '') { @() } else { @($d | ConvertFrom-Json | Where-Object { $_.rule -eq $Rule }) }
+  $d0 = @(if ($d.Trim() -eq '') { @() } else { @($d | ConvertFrom-Json | ForEach-Object { $_ } | Where-Object { $_.rule -eq $Rule }) })
   Check 'c0 positive control: per-file rule fires on a direct dialog call' ($d0.Count -ge 1) "raw: $d"
 
-  $fc = Get-Findings $DbC @()
+  $fc = @(Get-Findings $DbC @())
   $prog = @($fc | Where-Object { [IO.Path]::GetFileName([string]$_.file_path) -eq 'ConsoleProg.dpr' })
   $lines = @($prog | ForEach-Object { [int]$_.start_line } | Sort-Object)
   Write-Host ("  console ConsoleProg.dpr lines: " + ($lines -join ','))
@@ -74,10 +77,10 @@ try {
   Check 'c4 console: qualified UDialogs.ShowDone fires'       ($lines -contains 12)
   Check 'c5 console: exactly lines 10,11,12 (UOther.Hello does not leak)' (($lines -join ',') -eq '10,11,12') ("got " + ($lines -join ','))
 
-  $fg = Get-Findings $DbG @()
+  $fg = @(Get-Findings $DbG @())
   Check 'c6 gui: same calls are silent (twin of c2)' (@($fg | Where-Object { [IO.Path]::GetFileName([string]$_.file_path) -eq 'GuiProg.dpr' }).Count -eq 0) ("got " + $fg.Count)
 
-  $fn = Get-Findings $DbC @('--rule', $Rule)
+  $fn = @(Get-Findings $DbC @('--rule', $Rule))
   Check 'c7 --rule reaches the cross-unit findings' (@($fn | Where-Object { [IO.Path]::GetFileName([string]$_.file_path) -eq 'ConsoleProg.dpr' }).Count -eq 3) ("got " + $fn.Count)
 }
 finally { Pop-Location }
@@ -85,3 +88,4 @@ finally { Pop-Location }
 Write-Host ("run_v152_APP2: {0} failure(s)" -f $script:Fail)
 if ($script:Fail -gt 0) { exit 1 }
 exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

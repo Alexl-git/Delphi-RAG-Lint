@@ -26,11 +26,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$BaseRef = '67823450c',
+  # 7833a66b7 = main at 1.51.2-alpha (67823450c + the RPT Reports item factory, merged into 1.52 by INT15)
+  [string]$BaseRef = '7833a66b7',
   [string[]]$EnabledIds = @('field-repository', 'field-repository-02-refresh', 'field-repository-03-orm', 'field-repository-04-dataservice', 'field-repository-05-memtable', 'field-repository-06-paramarray', 'check-init'),   # TTIDE (INT 1.52); 03/04/06 enabled by BK-TTFINISH (B33); check-init enabled by HBIDE
   [int]$ExactCount = 8,   # headless rows: check-init + idx-range + 6 field-repository; ToolsAPI units left out (H5)
   [string]$WorkDir = "$env:TEMP\drag-lint-v152-plugframe-$PID"
 )
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot '..\autotest\lib\WorkDirCleanup.ps1')
+try {
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path "$PSScriptRoot\..\..").Path
 $plug = Join-Path $repo 'src\delphi-plugin'
@@ -196,7 +200,7 @@ $lines = @('@echo off', ('call "{0}"' -f $rs), ('cd /d "{0}"' -f $WorkDir),
   ('dcc64 -B -NSSystem;Winapi;Vcl -E"{0}" -N0"{0}\dcu" Cmd152Check.dpr' -f $WorkDir), 'echo BUILD_EXITCODE=%ERRORLEVEL%')
 [IO.File]::WriteAllText($bat, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 $buildLog = Join-Path $WorkDir 'build.log'
-$null = Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $buildLog -NoNewWindow -Wait -PassThru
+$null = Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $buildLog -NoNewWindow -Wait -PassThru; $null = $null.Handle
 $buildOut = [IO.File]::ReadAllText($buildLog)
 if ($buildOut -notmatch 'BUILD_EXITCODE=0') {
   Write-Host 'FAIL: headless check did not compile' -ForegroundColor Red
@@ -238,3 +242,4 @@ if ($out -notmatch '(\d+) passed, 0 failed') { Bad 'no pass/fail summary from th
 if ($fail) { Write-Host "FAIL ($fail)" -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green
 exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

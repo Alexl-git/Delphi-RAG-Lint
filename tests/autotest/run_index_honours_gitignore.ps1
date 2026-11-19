@@ -90,7 +90,7 @@ print(json.dumps({
 }))
 c.close()
 '@ | Set-Content $py -Encoding ascii
-function Q([string]$Db) { (& python $py $Db) -join "`n" | ConvertFrom-Json }
+function Q([string]$Db) { (& python $py $Db) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ } }
 
 Write-Host 'Default: .gitignore is honoured' -ForegroundColor Cyan
 $db1 = Join-Path $WorkDir 'default.sqlite'

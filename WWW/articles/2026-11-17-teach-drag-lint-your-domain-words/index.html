@@ -1,0 +1,162 @@
+<!--article
+title: Teach drag-lint Your Domain Words
+date: 2026-11-17
+slug: teach-drag-lint-your-domain-words
+summary: Concept search in drag-lint is lexical, so a domain word like characteristic cannot find code that says Ftr, but one doc-comment line or one wiki topic with aliases fixes that, without AI.
+-->
+
+<div class="wrap">
+
+<header class="masthead">
+  <span class="eyebrow">Delphi tooling &middot; concept search</span>
+  <h1>Teach drag-lint Your Domain Words</h1>
+  <p class="standfirst">Concept search in drag-lint is lexical, so a domain word like <em>characteristic</em> cannot find code that spells it <code>Ftr</code>, but one doc-comment line or one wiki topic with aliases fixes that, without AI. The question came from a user on a Delphi 5 code base.</p>
+  <div class="byline">
+    <span>Delphi 13 Florence &middot; RAD Studio 37.0</span>
+    <span>As of 2026-11-17, drag-lint 1.51.2-alpha</span>
+  </div>
+</header>
+
+<p>Old code bases name things in the shorthand of whoever wrote them. <a href="https://www.htrmicronite.com">Micronite</a>, the quality and production-control software we build for manufacturers, has plenty: the business calls something a characteristic, the code says <code>Ftr</code>. A search for the business word finds nothing, and a search for the abbreviation only helps someone who already knows it. This article shows what <code>drag-lint query --concept</code> does with that gap, and the two ways to close it. Every output is from a small demo we built for this article.</p>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">01 &mdash; How concept search ranks</span>
+    <h2>Words, not meaning</h2>
+  </div>
+  <p><code>query --concept "&lt;words&gt;"</code> splits every identifier into words (<code>SaveFtrGridLayout</code> becomes <em>save ftr grid layout</em>) and also searches the <code>///</code> doc-comment text. It ranks symbols that match. There are no embeddings and no model: a word either occurs in the identifier or the comment, or it does not. The last column of each hit says where the match came from: <code>[tokens]</code> (identifier words), <code>[summary]</code> or <code>[remarks]</code> (comment text).</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">02 &mdash; The demo</span>
+    <h2>Three units and a project</h2>
+  </div>
+  <p>A <code>.dpr</code> and <code>.dproj</code> with three units. The relevant declarations:</p>
+  <pre class="lex"><code>unit FtrStore;
+type
+  TFtrStore = class
+    function FtrNameString(pId: Integer): string;
+    procedure SaveFtrGridLayout(const pName: string);
+  end;
+
+unit MscUtil;
+type
+  TMscList = class
+    procedure MscListReload;
+    function MscCount: Integer;
+  end;</code></pre>
+  <p>Indexed into a scratch database with <code>drag-lint index --project Demo.dproj --db demo.sqlite</code> (4 files, 15 symbols).</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">03 &mdash; Before: the miss</span>
+    <h2>The domain word finds nothing</h2>
+  </div>
+  <pre><code>drag-lint query --concept characteristic --db demo.sqlite
+
+concept "characteristic": 0 hit(s) (0 match every word)</code></pre>
+  <p>The abbreviation works, because it is in the identifier:</p>
+  <pre><code>drag-lint query --concept "ftr name" --db demo.sqlite
+
+concept "ftr name": 4 hit(s) (1 match every word)
+  1  3.38  method  FtrStore.TFtrStore.FtrNameString      [tokens]
+  2  0.66  class   FtrStore.TFtrStore                    [tokens]
+  3  0.64  unit    FtrStore                              [tokens]
+  4  0.64  method  FtrStore.TFtrStore.SaveFtrGridLayout  [tokens]</code></pre>
+  <p>Note the multi-word case. <code>"characteristic name"</code> does return a hit, but only because of the word <em>name</em>; the header says <code>(0 match every word)</code>. Read that figure: it tells you the ranking is partial.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">04 &mdash; Remedy one</span>
+    <h2>A /// summary on the key routine</h2>
+  </div>
+  <p>Add one DocInsight line, in the words the business uses:</p>
+  <pre><code>/// &lt;summary&gt;Persists the characteristic grid column layout under a name.&lt;/summary&gt;
+procedure SaveFtrGridLayout(const pName: string);</code></pre>
+  <p>Re-index (incremental, 3 files skipped as up to date) and ask again:</p>
+  <pre><code>drag-lint query --concept characteristic --db demo.sqlite
+
+concept "characteristic": 1 hit(s) (1 match every word)
+  1  1.72  method  FtrStore.TFtrStore.SaveFtrGridLayout  [summary]
+
+drag-lint query --concept "characteristic grid layout" --db demo.sqlite
+
+  1  6.97  method  FtrStore.TFtrStore.SaveFtrGridLayout  [tokens,summary]</code></pre>
+  <p>The tag changed from <code>[tokens]</code> to <code>[tokens,summary]</code>, and the single-word query that returned nothing now returns the routine. The limit is visible too: <code>FtrNameString</code> still does not answer to <em>characteristic</em>, because nobody wrote a summary on it. A summary helps exactly the symbol it sits on.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">05 &mdash; Remedy two</span>
+    <h2>A wiki topic with aliases</h2>
+  </div>
+  <p>When one idea spans several types, write it once as a <code>dl:wiki</code> topic. It lives in a <code>///</code> comment, here above <code>unit FtrStore;</code> (the recommended place for a concept that several types share):</p>
+  <pre class="lex"><code>/// &lt;remarks&gt;
+/// dl:wiki Characteristic
+/// Aliases: characteristic, characteristics, the characteristic list, Ftr
+/// SeeCode: TFtrStore, TFtrStore.FtrNameString, MscUtil.TMscList
+/// Body:
+/// A measured product property. The code abbreviates it Ftr.
+/// &lt;/remarks&gt;
+unit FtrStore;</code></pre>
+  <p>Rules from the authoring guide that bite in practice: <code>///</code> comments only, no blank line between the comment and the declaration, 7-bit ASCII. <code>Aliases</code> are the phrases your team actually says, and matching is case-insensitive. <code>SeeCode</code> entries are checked: an entry that resolves to nothing fails the check. After re-indexing:</p>
+  <pre><code>drag-lint wiki --check --db demo.sqlite
+1 topic(s) checked, 0 problem(s).          (exit 0)
+
+drag-lint wiki --term "the characteristic list" --db demo.sqlite
+== Characteristic ==
+   owner : FtrStore  (unit)
+   source: ...\demo\FtrStore.pas:2
+   aliases: characteristic, characteristics, the characteristic list, Ftr
+   see: TFtrStore  -> ...\FtrStore.pas:13
+   see: TFtrStore.FtrNameString  -> ...\FtrStore.pas:15
+   see: MscUtil.TMscList  -> ...\MscUtil.pas:6
+
+A measured product property. The code abbreviates it Ftr.
+
+1 match(es) of 1 topic(s).</code></pre>
+  <p>The same answer came back for <code>--term characteristic</code> and <code>--term characteristics</code>. The topic also feeds concept search, since its text is part of the unit's remarks:</p>
+  <pre><code>drag-lint query --concept characteristic --db demo.sqlite
+
+  1  1.95  unit    FtrStore                              [summary,remarks]
+  2  1.48  method  FtrStore.TFtrStore.SaveFtrGridLayout  [summary]</code></pre>
+  <p>And <code>drag-lint context --task "modify FtrStore.TFtrStore.FtrNameString"</code> now carries a <code>## Wiki</code> section with the topic, its aliases and the see-code list, even though that routine has no comment of its own.</p>
+  <p>In this run, <code>query --concept</code> points at the owning unit, while <code>wiki --term</code> is the one that lists every participating symbol. Use <code>wiki --term</code> to route a business word to code, and concept search to explore.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">06 &mdash; Workflow</span>
+    <h2>A starter glossary</h2>
+  </div>
+  <ol>
+    <li>List the ten to twenty words your business says that the code abbreviates (characteristic/Ftr, miscellaneous/Msc, and so on).</li>
+    <li>For each, pick the unit where the concept's central type lives and add one <code>dl:wiki</code> block above <code>unit X;</code> with the aliases people say, including the abbreviation.</li>
+    <li>List the participating symbols under <code>SeeCode</code> so the topic goes stale loudly.</li>
+    <li>Re-index, then run <code>drag-lint wiki --check</code> (must exit 0) and <code>drag-lint wiki --term "&lt;alias&gt;"</code> for one alias of each topic. A block in a <code>//</code> comment, or separated from its declaration by a blank line, produces no error: it just does not exist, so ask for it back.</li>
+    <li>Add plain <code>///</code> summaries on the few routines people look for by name.</li>
+  </ol>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">07 &mdash; Limits</span>
+    <h2>Lexical on purpose</h2>
+  </div>
+  <ul>
+    <li><strong>No synonyms by itself.</strong> drag-lint will not guess that <em>characteristic</em> means <code>Ftr</code>. You tell it, once, and the answer is the same every time and checkable by <code>wiki --check</code>. A model-based guess could be wrong in a way you cannot diff.</li>
+    <li><strong>A summary covers one symbol.</strong> A topic covers a concept, but its aliases are only as good as the phrases you thought of.</li>
+    <li><strong>Body prose is not checked.</strong> Only <code>SeeCode</code> entries are resolved.</li>
+    <li><strong>Plural handling was not measured.</strong> We listed <code>characteristics</code> as an alias rather than rely on stemming; we did not test whether concept search stems.</li>
+    <li><strong>Where the authoring guide is.</strong> The guide is <code>docs\wiki\Wiki-Blocks-Authoring.md</code> in the repository and the GitHub wiki. The release zip and installer do not currently include it (a user on a Delphi 5 project found this); it is filed as a defect.</li>
+  </ul>
+</section>
+
+<footer>
+  As of 2026-11-17, all command output above is real output of drag-lint 1.51.2-alpha, run on a three-unit scratch project, with the database path, table headers and timings trimmed and long paths shortened.
+</footer>
+
+</div>

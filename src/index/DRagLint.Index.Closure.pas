@@ -94,8 +94,8 @@ type
   /// <summary>Resolves the compile closure of a Delphi .dpr or .dproj project.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas), DRagLint.CLI.InstallLintIncludeContexts (DRagLint.CLI.pas) (+5 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Index.Reconcile, DRagLint.Project.TargetStudio, DRagLint.Refactor.MultiProjectRename</para>
+  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas), DRagLint.CLI.InstallLintIncludeContexts (DRagLint.CLI.pas) (+6 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Index.Reconcile, DRagLint.Lint.SharedScope, DRagLint.Project.TargetStudio, DRagLint.Refactor.MultiProjectRename</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TClosureResolver = class
@@ -266,7 +266,6 @@ type
       /// <returns><!-- drag-lint:auto -->string -- Observed: ''.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.Resolve.FindTailFileOnce (DRagLint.Index.Closure.pas), DRagLint.Index.Closure.TClosureResolver.Resolve.FindUnitFileOnce (DRagLint.Index.Closure.pas)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractIncludes"/>
@@ -314,6 +313,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)</para>
       /// <para>Calls: Copy, DRagLint.Lint.ProjectChecks.Parse.StripPasCommentsKeepLayout, Pos, SameText</para>
+      /// <para>Complexity: 10 (cyclomatic, outer body), 97 lines (full implementation)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.StripPasCommentsKeepLayout"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
@@ -456,7 +456,7 @@ type
       /// <remarks>
       /// Never raises. lint-all uses it to rebuild an include's host context.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.InstallLintIncludeContexts (DRagLint.CLI.pas)</para>
+      /// <para>Called from: DRagLint.CLI.InstallLintIncludeContexts (DRagLint.CLI.pas), DRagLint.Lint.SharedScope.NoteUnindexedPeer (DRagLint.Lint.SharedScope.pas)</para>
       /// <para>Calls: DRagLint.Index.Closure.TClosureResolver.ParseDprojSearchPaths</para>
       /// <para>Returns: Paths.ToStringArray</para>
       /// <para>Catches: Exception (empty)</para>

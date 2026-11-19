@@ -21,9 +21,21 @@ const
 
 type
   /// <summary>The index holds nothing to draw.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas), DRagLint.CLI.Graph.DoArchDiagram (DRagLint.CLI.Graph.pas) ?</para>
+  /// <para>Used in units: DRagLint.Charts.ArchDiagram, DRagLint.CLI.Graph</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   EArchDiagram = class(Exception);
 
   /// <summary>One unit of a zone.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.ArchDiagram.SortedUnits (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.ArchDiagram.SortedZoneNames (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.ArchDiagram.UnitJson (DRagLint.Charts.ArchDiagram.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.ArchDiagram</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TArchUnit = record
     /// <summary>The unit's qualified name.</summary>
     Name: string;
@@ -36,6 +48,12 @@ type
   end;
 
   /// <summary>One source folder, with its measured place in the drawing.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.ArchDiagram.AppendZone (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.ArchDiagram.BoxHeight (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.ArchDiagram.ZoneJson (DRagLint.Charts.ArchDiagram.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.ArchDiagram</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TArchZone = record
     /// <summary>The folder below the root, as PathZone gives it.</summary>
     Name: string;
@@ -51,9 +69,20 @@ type
 
   /// <summary>What an arrow means. Back: the smaller direction of a pair used both ways. Tangle: inside
   /// a cycle of forward arrows, so both ends share a layer. Forward: everything else.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.ArchDiagram.CountKind (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.ArchDiagram.TLayering.KindOf (DRagLint.Charts.ArchDiagram.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TArchEdgeKind = (aekForward, aekBack, aekTangle);
 
   /// <summary>One `uses` entry behind an arrow: the evidence.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.ArchDiagram</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TArchUsesPair = record
     /// <summary>The using unit.</summary>
     FromUnit: string;
@@ -68,6 +97,12 @@ type
   end;
 
   /// <summary>One arrow: zone FromZone uses zone ToZone, FromZone &lt;&gt; ToZone.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.ArchDiagram.AppendEdge (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.ArchDiagram.EdgeJson (DRagLint.Charts.ArchDiagram.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.ArchDiagram</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TArchEdge = record
     /// <summary>The using zone.</summary>
     FromZone: string;
@@ -86,6 +121,12 @@ type
   end;
 
   /// <summary>The whole diagram. Same DB, same model; nothing in it depends on the clock.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.ArchDiagram.pas) ?, DRagLint.Charts.ArchDiagram.ArchModelJson (DRagLint.Charts.ArchDiagram.pas) ?, DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.ArchDiagram.DiagramSvg (DRagLint.Charts.ArchDiagram.pas) ?, DRagLint.Charts.ArchDiagram.RowsInLayer (DRagLint.Charts.ArchDiagram.pas) ? (+3 more)</para>
+  /// <para>Used in units: DRagLint.Charts.ArchDiagram, DRagLint.CLI.Graph</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TArchModel = record
     /// <summary>The DB's file name, without its folder.</summary>
     DbName: string;
@@ -109,20 +150,53 @@ type
 /// <param name="pDbPath">The index; opened read-only. Must exist: the caller checks.</param>
 /// <returns>The model.</returns>
 /// <exception cref="EArchDiagram">The index holds no unit symbols.</exception>
-/// <remarks>Layer = longest forward path down to a zone that uses nothing, over the strongly connected
-/// components of the forward arrows. Inside a row: two barycentre sweeps, ties by name.</remarks>
+/// <remarks>
+/// Layer = longest forward path down to a zone that uses nothing, over the strongly connected
+/// components of the forward arrows. Inside a row: two barycentre sweeps, ties by name.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Graph.DoArchDiagram (DRagLint.CLI.Graph.pas)</para>
+/// <para>Calls: Default, DRagLint.Charts.ArchDiagram.CommonRootOf, DRagLint.Charts.ArchDiagram.CountOf, DRagLint.Charts.ArchDiagram.DegreeOf, DRagLint.Charts.ArchDiagram.MetaValue, DRagLint.Charts.ArchDiagram.SegmentsFrom, DRagLint.Charts.ArchDiagram.SortedUnits, DRagLint.Charts.ArchDiagram.SortedZoneNames, DRagLint.Charts.ArchDiagram.TLayering.Create, DRagLint.Charts.ArchDiagram.TLayering.IsImplied (+9 more)</para>
+/// <para>Returns: Default(TArchModel)</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 141 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Charts.ArchDiagram.CommonRootOf"/>
+/// <seealso cref="DRagLint.Charts.ArchDiagram.CountOf"/>
+/// <seealso cref="DRagLint.Charts.ArchDiagram.DegreeOf"/>
+/// <seealso cref="DRagLint.Charts.ArchDiagram.MetaValue"/>
+/// <seealso cref="DRagLint.Charts.ArchDiagram.SegmentsFrom"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildArchModel(const pDbPath: string): TArchModel;
 
 /// <summary>The model as JSON, the text the page embeds apart from its `&lt;` escape.</summary>
 /// <param name="pModel">The model.</param>
 /// <returns>A `drag-lint.arch/1` document. Every edge has `from`, `to` and `weight`, the keys of a
 /// `drag-lint.graph/1` edge.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.ArchDiagram.ArchDiagramHtml (DRagLint.Charts.ArchDiagram.pas), DRagLint.CLI.Graph.DoArchDiagram (DRagLint.CLI.Graph.pas)</para>
+/// <para>Calls: DRagLint.Charts.ArchDiagram.EdgeJson, DRagLint.Charts.ArchDiagram.ZoneJson</para>
+/// <para>Returns: Doc.ToJSON</para>
+/// <seealso cref="DRagLint.Charts.ArchDiagram.EdgeJson"/>
+/// <seealso cref="DRagLint.Charts.ArchDiagram.ZoneJson"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ArchModelJson(const pModel: TArchModel): string;
 
 /// <summary>The model as one HTML page: inline CSS, SVG and script, nothing fetched.</summary>
 /// <param name="pModel">The model.</param>
 /// <returns>The page. All model text is HTML-escaped; the embedded JSON writes `&lt;` as <.</returns>
-/// <remarks>Without script the drawing and its tooltips still show; only the click panel needs it.</remarks>
+/// <remarks>
+/// Without script the drawing and its tooltips still show; only the click panel needs it.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Graph.DoArchDiagram (DRagLint.CLI.Graph.pas)</para>
+/// <para>Calls: DRagLint.Charts.ArchDiagram.ArchModelJson, DRagLint.Charts.ArchDiagram.CountKind, DRagLint.Charts.ArchDiagram.DiagramSvg, DRagLint.Charts.ArchDiagram.Esc, DRagLint.Charts.ArchDiagram.KeySample, Format</para>
+/// <seealso cref="DRagLint.Charts.ArchDiagram.ArchModelJson"/>
+/// <seealso cref="DRagLint.Charts.ArchDiagram.CountKind"/>
+/// <seealso cref="DRagLint.Charts.ArchDiagram.DiagramSvg"/>
+/// <seealso cref="DRagLint.Charts.ArchDiagram.Esc"/>
+/// <seealso cref="DRagLint.Charts.ArchDiagram.KeySample"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ArchDiagramHtml(const pModel: TArchModel): string;
 
 implementation

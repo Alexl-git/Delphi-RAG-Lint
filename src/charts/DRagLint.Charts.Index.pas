@@ -30,8 +30,8 @@ type
   /// sql/1 columns and positional rows. PS traps closed: property access is case-insensitive
   /// (SameText lookup); `[string]$null` is '' and `[int]$null` is 0. Immutable once built.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas) ?, DRagLint.Charts.ArchDiagram.CommonRootOf (DRagLint.Charts.ArchDiagram.pas) ?, DRagLint.Charts.Chain.BindingRow (DRagLint.Charts.Chain.pas) ?, DRagLint.Charts.Chain.DataSourceRows (DRagLint.Charts.Chain.pas) ?, DRagLint.Charts.Index.TChartsIndex.Query (DRagLint.Charts.Index.pas) (+65 more)</para>
-  /// <para>Used in units: DRagLint.Charts.ArchDiagram, DRagLint.Charts.Chain, DRagLint.Charts.Index, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.ChangeImpact, DRagLint.Charts.Q.Consumers, DRagLint.Charts.Q.CrossesBoundary, DRagLint.Charts.Q.Cycles, DRagLint.Charts.Q.Hierarchy, DRagLint.Charts.Q.LandsWhere (+7 more)</para>
+  /// <para>Used by: DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas) ?, DRagLint.Charts.ArchDiagram.CommonRootOf (DRagLint.Charts.ArchDiagram.pas) ?, DRagLint.Charts.Chain.BindingRow (DRagLint.Charts.Chain.pas) ?, DRagLint.Charts.Chain.DataSourceRows (DRagLint.Charts.Chain.pas) ?, DRagLint.Charts.Index.TChartsIndex.Query (DRagLint.Charts.Index.pas) (+77 more)</para>
+  /// <para>Used in units: DRagLint.Charts.ArchDiagram, DRagLint.Charts.Chain, DRagLint.Charts.Index, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.ChangeImpact, DRagLint.Charts.Q.Consumers, DRagLint.Charts.Q.CrossesBoundary, DRagLint.Charts.Q.Cycles, DRagLint.Charts.Q.Hierarchy, DRagLint.Charts.Q.LandsWhere (+11 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TIndexRow = class
@@ -43,7 +43,7 @@ type
     /// <returns><!-- drag-lint:auto -->Integer -- Observed: K; -1.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.Index.TIndexRow.Has (DRagLint.Charts.Index.pas), DRagLint.Charts.Index.TIndexRow.S (DRagLint.Charts.Index.pas), DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas) ?</para>
+    /// <para>Called from: DRagLint.Charts.Index.TIndexRow.Has (DRagLint.Charts.Index.pas), DRagLint.Charts.Index.TIndexRow.S (DRagLint.Charts.Index.pas), DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas) ?, DRagLint.Query.HappensBefore.Receiver.ParamMode (DRagLint.Query.HappensBefore.Receiver.pas) ?</para>
     /// <para>Calls: SameText</para>
     /// <para>Reads: FNames</para>
     /// <seealso cref="DRagLint.Charts.Index.TIndexRow.Create"/>
@@ -75,7 +75,7 @@ type
     /// <returns>The value's text; '' for NULL or an absent column.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.ArchDiagram.MetaValue (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.Chain.BareRhsStop (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.BindingRow (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.FieldRows (DRagLint.Charts.Chain.pas) (+123 more)</para>
+    /// <para>Called from: DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.ArchDiagram.MetaValue (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.Chain.BareRhsStop (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.BindingRow (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.FieldRows (DRagLint.Charts.Chain.pas) (+161 more)</para>
     /// <para>Calls: DRagLint.Charts.Index.TIndexRow.IndexOf</para>
     /// <para>Returns: if (K &lt; 0) or FNulls[K] then ''</para>
     /// <para>Reads: FNulls, FValues</para>
@@ -91,7 +91,7 @@ type
     /// <returns>The value; 0 for NULL, an absent column or non-integer text.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.ArchDiagram.CountOf (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.Chain.BareRhsStop (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.BindingRow (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.FieldRows (DRagLint.Charts.Chain.pas) (+93 more)</para>
+    /// <para>Called from: DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.ArchDiagram.CountOf (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.Chain.BareRhsStop (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.BindingRow (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.FieldRows (DRagLint.Charts.Chain.pas) (+122 more)</para>
     /// <para>Calls: DRagLint.Charts.Index.TIndexRow.S, StrToIntDef</para>
     /// <para>Returns: StrToIntDef(S(pCol), 0)</para>
     /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
@@ -187,8 +187,8 @@ type
   /// connection (spec P5: no process is started). Not thread-safe; one owning thread.
   /// Lines the PS wrote with Write-Host ' NOTE: ...' are collected in Notes instead.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.ArchDiagram.MetaValue (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.Chain.AccessorField (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.BareRhsStop (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.DataSourceRows (DRagLint.Charts.Chain.pas) (+125 more)</para>
-  /// <para>Used in units: DRagLint.Charts.ArchDiagram, DRagLint.Charts.Chain, DRagLint.Charts.Columns, DRagLint.Charts.Exceptions, DRagLint.Charts.MemberAccess, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.ChangeImpact, DRagLint.Charts.Q.ClassSurface, DRagLint.Charts.Q.Consumers, DRagLint.Charts.Q.CrossesBoundary (+25 more)</para>
+  /// <para>Used by: DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.ArchDiagram.MetaValue (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.Chain.AccessorField (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.BareRhsStop (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.DataSourceRows (DRagLint.Charts.Chain.pas) (+148 more)</para>
+  /// <para>Used in units: DRagLint.Charts.ArchDiagram, DRagLint.Charts.Chain, DRagLint.Charts.Columns, DRagLint.Charts.Exceptions, DRagLint.Charts.MemberAccess, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.ChangeImpact, DRagLint.Charts.Q.ClassSurface, DRagLint.Charts.Q.Consumers, DRagLint.Charts.Q.CrossesBoundary (+30 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TChartsIndex = class
@@ -202,7 +202,7 @@ type
     /// <remarks>
     /// The store is owned and freed by Destroy. Errors opening it propagate.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.ClassSurface.Emit (DRagLint.Charts.Q.ClassSurface.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.Create (DRagLint.Charts.Q.Consumers.pas) (+22 more)</para>
+    /// <para>Called from: DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.ClassSurface.Emit (DRagLint.Charts.Q.ClassSurface.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.Create (DRagLint.Charts.Q.Consumers.pas) (+23 more)</para>
     /// <para>Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.CreateReadable</para>
     /// <para>constructor</para>
     /// <para>Writes: FNotes, FStore</para>
@@ -236,7 +236,7 @@ type
     /// so nothing is cut. PS trap closed: the unary-comma contract (a 0- or 1-row result must
     /// stay an array) does not exist here -- a list is always a list.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.Chain.AccessorField (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.BareRhsStop (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.DataSourceRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.FieldRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.LoadTableLiterals (DRagLint.Charts.Chain.pas) (+86 more)</para>
+    /// <para>Called from: DRagLint.Charts.Chain.AccessorField (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.BareRhsStop (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.DataSourceRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.FieldRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.LoadTableLiterals (DRagLint.Charts.Chain.pas) (+97 more)</para>
     /// <para>Calls: DRagLint.Charts.Index.TIndexRow.Create, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection</para>
     /// <para>Returns: TObjectList&lt;TIndexRow&gt;.Create(True)</para>
     /// <para>Reads: FStore</para>
@@ -274,7 +274,7 @@ type
     /// <remarks>
     /// Port of ConvertTo-SqlText (Emit-Common.ps1:375).
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.ArchDiagram.MetaValue (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.Chain.AccessorField (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.BareRhsStop (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.DataSourceRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.ModuleDangles (DRagLint.Charts.Chain.pas) (+54 more)</para>
+    /// <para>Called from: DRagLint.Charts.ArchDiagram.MetaValue (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.Chain.AccessorField (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.BareRhsStop (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.DataSourceRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.ModuleDangles (DRagLint.Charts.Chain.pas) (+59 more)</para>
     /// <para>Calls: StringReplace</para>
     /// <para>Returns: StringReplace(pS, '''', '''''', [rfReplaceAll])</para>
     /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.AllRows"/>
@@ -366,7 +366,7 @@ type
     /// <para>Called from: DRagLint.Charts.MemberAccess.CollectMemberAccess (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.ClassSurface.Emit (DRagLint.Charts.Q.ClassSurface.pas), DRagLint.Charts.Q.CrossesBoundary.Emit (DRagLint.Charts.Q.CrossesBoundary.pas), DRagLint.Charts.Q.Effects.Emit (DRagLint.Charts.Q.Effects.pas) (+7 more)</para>
     /// <para>Calls: Default, DRagLint.Charts.Index.AmbiguityText, DRagLint.Charts.Index.HasKind, DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Charts.Index.TChartsIndex.SelectDeclarationRows, DRagLint.Charts.Index.TChartsIndex.SqlText, DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, SameText</para>
     /// <para>Returns: Default(TMemberSelection)</para>
-    /// <para>Complexity: 11 (cyclomatic, outer body), 74 lines (full implementation)</para>
+    /// <para>Complexity: 13 (cyclomatic, outer body), 74 lines (full implementation)</para>
     /// <para>SQL: reads FILES, SYMBOLS</para>
     /// <para>Mutates: pFound (out)</para>
     /// <seealso cref="DRagLint.Charts.Index.AmbiguityText"/>

@@ -1,0 +1,107 @@
+<!--article
+title: Which Routine Raises This Exception
+date: 2026-11-17
+slug: which-routine-raises-this-exception
+summary: To find every place a Delphi project raises or catches one exception type, drag-lint has a verb, exception-facts, that lists one row per raise or handler site.
+-->
+
+<div class="wrap">
+
+<header class="masthead">
+  <span class="eyebrow">Delphi tooling &middot; exceptions</span>
+  <h1>Which Routine Raises This Exception</h1>
+  <p class="standfirst">To find every place a Delphi project raises or catches one exception type, drag-lint has a verb, <code>exception-facts</code>, that lists one row per raise or handler site and says how it knows the type.</p>
+  <div class="byline">
+    <span>Delphi 13 Florence &middot; RAD Studio 37.0</span>
+    <span>As of 2026-11-17, drag-lint 1.51.2-alpha</span>
+  </div>
+</header>
+
+<div class="note">
+  <span class="nlabel">Availability</span>
+  <p>The verb arrived in drag-lint 1.50.0-alpha and is in <strong>drag-lint 1.51.2-alpha</strong>, the current public release. Every output below is real output of 1.51.2-alpha, run on the small fixture in section 01 (file paths shortened). The verb reads facts from the index, so index the project first.</p>
+</div>
+
+<p>Sooner or later someone asks: where does this exception come from, and who deals with it? Before changing <code>EDataError</code> we want every <code>raise</code> of it and every <code>on E: EDataError do</code>. <a href="https://www.htrmicronite.com">Micronite</a>, the quality and production-control software we build for manufacturers, has exception classes that many units raise, so a text search for the class name returns declarations, comments and string literals along with the sites we want.</p>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">01 &mdash; The fixture</span>
+    <h2>Two units that raise, one that catches</h2>
+  </div>
+  <p>Three small units and a project file. <code>Errs</code> declares <code>EDataError</code> and its child <code>EMissingFile</code>. <code>Work.Load</code> raises both; <code>Work.Run</code> calls <code>Load</code>, catches each, and re-raises the first.</p>
+  <pre class="lex"><code>unit Work;
+...
+procedure Load(const pName: string);
+begin
+  if pName = '' then
+    raise EMissingFile.Create('no name');
+  if pName = 'x' then
+    raise EDataError.Create('bad');
+end;
+
+procedure Run;
+begin
+  try
+    Load('a');
+  except
+    on E: EMissingFile do
+      Writeln('missing');
+    on E: EDataError do
+      raise;
+  end;
+end;</code></pre>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">02 &mdash; Steps</span>
+    <h2>Ask by routine, then by type</h2>
+  </div>
+  <p><strong>Step 1.</strong> Index the project.</p>
+  <pre><code>drag-lint index --project P.dproj --db fx.sqlite</code></pre>
+  <pre><code>Done. Files: 3, Symbols: 10, Refs: 22, 0.47s, parse-errors=0</code></pre>
+  <p><strong>Step 2.</strong> Ask what one routine raises and handles. <code>--target</code> takes a qualified routine or its trailing part.</p>
+  <pre><code>drag-lint exception-facts --target Load --db fx.sqlite
+
+  raises       Errs.EMissingFile         bound      Work.Load  (Work.pas:11:11)
+  raises       Errs.EDataError           bound      Work.Load  (Work.pas:13:11)
+2 exception fact(s)</code></pre>
+  <pre><code>drag-lint exception-facts --target Run --db fx.sqlite
+
+  handles      Errs.EMissingFile         bound      Work.Run  (Work.pas:21:11)
+  handles      Errs.EDataError           bound      Work.Run  (Work.pas:23:11)
+  reraises     Errs.EDataError           handler    Work.Run  (Work.pas:24:7)
+3 exception fact(s)</code></pre>
+  <p class="cap">One row per site: the action, the type, how the type is known, the routine and the position.</p>
+  <p><strong>Step 3.</strong> Ask the other way: every site for one type. <code>--name</code> takes a bare or a qualified type name.</p>
+  <pre><code>drag-lint exception-facts --name EDataError --db fx.sqlite
+
+  raises       Errs.EDataError           bound      Work.Load  (Work.pas:13:11)
+  handles      Errs.EDataError           bound      Work.Run  (Work.pas:23:11)
+  reraises     Errs.EDataError           handler    Work.Run  (Work.pas:24:7)
+3 exception fact(s)</code></pre>
+  <p><strong>Step 4.</strong> Read the third column. <code>bound</code> means the resolver bound the site to an indexed type, the strongest answer. <code>handler</code> is the type of the enclosing <code>on ... do</code>, which is how the bare <code>raise;</code> on line 24 gets <code>EDataError</code>. Other values mark weaker answers, down to <code>unknown</code> when nothing tells.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">03 &mdash; How DL does it</span>
+    <h2>Raise and handler sites are indexed facts</h2>
+  </div>
+  <p>The index records each <code>raise</code> and each handler as a row with its routine and position. The resolver then binds the type name to a declared type. That is why the rows above carry <code>Errs.EDataError</code> rather than the spelling, and why a text search for <code>EDataError</code> is not needed. A <code>raise;</code> and a <code>raise E;</code> inside a handler take the handler's type.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">04 &mdash; Limits</span>
+    <h2>What exception-facts does not tell you</h2>
+  </div>
+  <p>The verb lists sites, not paths. It has no ancestry: in step 3 the raise of the child <code>EMissingFile</code> on line 11 is absent from the <code>EDataError</code> answer, and an <code>on E: Exception</code> handler would not be listed under <code>EDataError</code> either, though it catches one. It has no callers: <code>Run</code> re-raises <code>EDataError</code> from its handler, but a routine that lets a callee's exception pass is not listed as raising it. For where an exception ends up through the callers, the verb's help points to <code>ask exception-paths</code>. A <code>raise Make;</code> where <code>Make</code> is a function returning an <code>Exception</code> is listed as <code>raises-expr</code> with no type and <code>unknown</code> in the third column: the type is only known at run time.</p>
+</section>
+
+<footer>
+  <p>Measured on a small fixture, as of 2026-11-17, drag-lint 1.51.2-alpha.</p>
+</footer>
+
+</div>

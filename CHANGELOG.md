@@ -3,7 +3,7 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
-## v1.52.0-alpha -- date TBD
+## v1.52.0-alpha -- 2026-11-19
 
 In integration (lane/v152-int). One re-parse for the whole 1.52 bundle: extractor 1.40.0 -> 1.41.0-alpha,
 resolver 1.28.0 -> 1.29.0-alpha.
@@ -26,12 +26,29 @@ resolver 1.28.0 -> 1.29.0-alpha.
   first expensive phase (program init orders computed once, deadline checks in the field solver, receiver proof and
   use walks): a hover on the drag-lint index took 7-12 s, now 5.3-6.4 s at a 5 s cap, and uses past the deadline say
   'stopped on budget'. `DRAGLINT_PROFILE` prints a `used-in directions` timer line.
+- One-file incremental index is faster (GitHub #18, lane INCR18, owner ruling: in 1.52): the scoped resolve pass keeps
+  local / parameter names out of the changed-name scope (unless the changed file hosts or is an include, or
+  `DRAGLINT_SCOPED_LOCAL_NAMES=1`) and collects the scoped ref ids once. One file on the drag-lint index: call
+  resolution 32.6 -> 4.1 s, wall 68.4 -> 34.6 s; scoped incremental = full reindex, 0 diff rows (`run_v1521_INCR18`).
+  The compile-closure walk (~7 s) and the purity stage (~19 s) still run whole; they are the rest of #18 (1.52.1).
 - GitHub issues (lane GHTRIAGE): #14 `impact` walks RESOLVED callers, so a same-named routine of another class is
   no longer counted, and a qname naming no symbol exits 1; #15 `context` drops DFM bindings of other forms; #16
   source reads honour a UTF-8 BOM (no double-encoded text in declarations and slices); #19 `usages --width wide`
   restricts its transitive-caller CTE to container kinds (was quadratic on large indexes).
 - Hover: the 5 s cap covers the whole card, facts + `Set by` (lane HOVERCACHE): check-init init orders and interface
   answers are cached per index version in LSP / `serve`; on the drag-lint index the hover median is ~4.9 s (was 5.7 s).
+- `ifthen-to-if-expression` no longer fires on an else-if chain (lane SELFLZ; lint-tests 452/452). SELF-LOOPZERO on
+  drag-lint's own projects: main 7465 -> 6409 findings (doc-drift 982 -> 54 after autodoc on 366 units), config
+  236 -> 206, open 13 -> 4, switch 14 -> 0, plugin 2210 -> 1978.
+- Test runners under Windows PowerShell 5.1 (lane PS5STDERR): native stderr redirected under
+  `$ErrorActionPreference='Stop'` is wrapped, piped stdin is forwarded (`$input |`), ConvertFrom-Json arrays are
+  enumerated and `Start-Process -PassThru` caches the handle; guard `run_v152_PS5STDERR` (G/G2/G4/G5 + controls).
+- `allow --reason "<text>"` (INT14, for SELF-LOOPZERO's re-stamps): the text REPLACES the marker's reason, so a
+  reviewer who re-read the code writes `--reason "REVIEWED <yyyy-mm-dd> <why>"` and the stamp survives the re-hash;
+  it also re-stamps a marker whose hash is still current. Without `--reason` a re-hash still drops the stamp (L3).
+- `lint --fix` for `collapsible-if` wrote `end;;` when the inner body was a `begin..end` block (seen on the plugin
+  source by SELF-LOOPZERO): the block capture already ends in `end;`, so an expanded fix ending in `;;` keeps one.
+  Autofix fixture `collapsible-if/begin_end_body`.
 - `allow --apply` on a wrapped statement whose `dl:ok` marker sat on a continuation line (a superseded marker) moved
   the marker to the anchor line with an EMPTY reason, so the reviewer's text vanished silently (INT14 tail). The
   reason now moves with it; its `REVIEWED <date>` stamp is dropped with the same note a stale re-hash prints (a
@@ -304,6 +321,15 @@ default flipped). One re-parse: extractor 1.39.0 -> 1.40.0-alpha, resolver 1.27.
 - B22 (`component-default-mismatch`) verified already fixed; T05: `component-setter-without-invalidate` and
   `component-fixed-pixels` stay OFF (CMP).
 
+### Performance
+- SCM / BATFIX: `exclude_if_preceded_by` reads only the last 512 bytes of the enclosing routine for a pattern ending
+  in `$` (the `large-magic-number` `dispid` exclusion made a 10000-line unit take 74 s to open; now 17 s).
+- TLSPERF: `tls-verification-disabled` scans the handler structurally instead of a backtracking regex, and accepts
+  more disabling forms; new phase-budget runner `run_v1511_lint_phase_budget.ps1` holds every rule phase to a budget.
+- PERF2: `field-free-without-nil` builds one identifier index per scan instead of re-walking every routine body per
+  candidate (was cubic); `dictionary-get-without-check` searches each dictionary name literally and anchors the
+  pattern at each hit (~115 ms per name on a 1.1 MB unit before). Same findings, same order. `lint-all` on a large
+  project: 3183 s vs > 5880 s for 1.51.0 at the same machine load.
 ### CLI
 - B16: `lint-all --rule a,b` runs ONLY the named rules and derives no `--shared-db` peers (YADF copy: 1025.8 s ->
   13.6 s; the "silently []" note was not reproducible -- the time was the peer runs) (CLI).

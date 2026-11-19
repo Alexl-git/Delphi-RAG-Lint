@@ -35,7 +35,7 @@ uses
 /// Nothing is printed to a stream; the CLI sends this to stdout and the ERROR
 /// line to stderr. Reads a chart's two SVG files (never writes); thread-safe.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.CompareEmit (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.Compare.CompareEmit (DRagLint.CLI.Compare.pas)</para>
 /// <para>Calls: DRagLint.Charts.Render.AddBodyLines, DRagLint.Charts.Render.HasBody, DRagLint.Charts.Render.OutputWarnings</para>
 /// <para>Returns: string.Join(CRLF, Lines.ToArray) + CRLF</para>
 /// <seealso cref="DRagLint.Charts.Render.AddBodyLines"/>
@@ -58,7 +58,7 @@ function RenderCompareText(const pR: TCompareResult): string;
 /// Built with TJSONObject, written with ToJSON. The CLI prints it after stderr is
 /// flushed. Reads a chart's two SVG files (never writes); thread-safe.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.CompareEmit (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.Compare.CompareEmit (DRagLint.CLI.Compare.pas)</para>
 /// <para>Calls: DRagLint.Charts.Adapters.FormatName, DRagLint.Charts.Render.CountsObject, DRagLint.Charts.Render.GraphObject, DRagLint.Charts.Render.HunksArray, DRagLint.Charts.Render.NewObject, DRagLint.Charts.Render.OldObject, DRagLint.Charts.Render.OutputWarnings, DRagLint.Charts.Render.StringArray</para>
 /// <para>Returns: Root.ToJSON</para>
 /// <seealso cref="DRagLint.Charts.Adapters.FormatName"/>
@@ -89,7 +89,7 @@ function RenderCompareJson(const pR: TCompareResult): string;
 /// An SVG that cannot be read is left out of the page, not an error. Pure apart from
 /// reading those two files.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.CompareEmit (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.Compare.CompareEmit (DRagLint.CLI.Compare.pas)</para>
 /// <para>Calls: DRagLint.Charts.Render.CompareBodyHtml, DRagLint.Charts.Render.FillTemplate, DRagLint.Charts.Render.LabelOf, DRagLint.Charts.Render.WarningsHtml</para>
 /// <seealso cref="DRagLint.Charts.Render.CompareBodyHtml"/>
 /// <seealso cref="DRagLint.Charts.Render.FillTemplate"/>
@@ -114,7 +114,7 @@ function RenderCompareHtml(const pR: TCompareResult): string;
 /// <remarks>
 /// Pure apart from reading pSvgPath.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.CompareShowPage (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.Compare.CompareShowPage (DRagLint.CLI.Compare.pas)</para>
 /// <para>Calls: DRagLint.Charts.Render.ChartHtml, DRagLint.Charts.Render.CsvTableHtml, DRagLint.Charts.Render.FillTemplate, DRagLint.Charts.Render.GraphRowsHtml, DRagLint.Charts.Render.HtmlEscape, DRagLint.Charts.Render.ReportPreHtml, DRagLint.Charts.Render.SvgMarkup, DRagLint.Charts.Render.WithheldChartHtml</para>
 /// <para>Returns: FillTemplate(pTitle, Head, '', '&lt;h1&gt;' + HtmlEscape(pTitle) + '&lt;/h1&gt;' + CRLF + Body)</para>
 /// <seealso cref="DRagLint.Charts.Render.ChartHtml"/>
@@ -132,7 +132,7 @@ function RenderReportHtml(const pTitle, pText: string; pFormat: TChartsFormat; c
 /// ShellExecute with the verb 'open'; returns at once, the result is not checked
 /// (a missing association shows Windows' own dialog). Never called by a test.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas), DRagLint.CLI.CompareOpenOrReport (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas), DRagLint.CLI.Compare.CompareOpenOrReport (DRagLint.CLI.Compare.pas)</para>
 /// <para>Calls: PChar, ShellExecute</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

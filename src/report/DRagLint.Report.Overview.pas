@@ -38,7 +38,7 @@ const
 /// Never writes to the DB. Output is bounded: at most 6 sections x
 /// AMaxRows rows, plus the first CNamesPerLayer unit names of each layer row.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
 /// <para>Calls: DRagLint.Report.Overview.EmitText, DRagLint.Report.Overview.SectionToJson, DRagLint.Storage.FileMembership.ConnectReadOnly, Writeln</para>
 /// <para>Returns: 2; 0</para>
 /// <para>Touches: file system</para>
@@ -54,7 +54,6 @@ implementation
 uses
   System.SysUtils, System.Classes, System.Generics.Collections, System.IOUtils,
   System.DateUtils, System.Math, System.JSON,
-  Data.DB,
   FireDAC.Comp.Client, FireDAC.Stan.Param,
   DRagLint.Storage.FileMembership;
 

@@ -9,7 +9,7 @@ function Ok($n,$c){ if($c){$script:pass++; Write-Host "PASS  $n"} else {$script:
 
 # 1. SARIF: --format sarif emits parseable SARIF with our rule.
 $sarif = & { $ErrorActionPreference = 'Continue'; & $exe lint $fx --format sarif 2>$null } | Out-String
-$j = $null; try { $j = $sarif | ConvertFrom-Json } catch {}
+$j = $null; try { $j = $sarif | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Ok "sarif parses"            ($j -ne $null)
 Ok "sarif version 2.1.0"     ($j.version -eq '2.1.0')
 Ok "sarif has used-before-assignment" ($sarif -match 'used-before-assignment')
@@ -88,7 +88,7 @@ Copy-Item $fx (Join-Path $scratch6 'pipeline_fixture.pas') -Force
 $db6 = Join-Path $scratch6 'pipeline.sqlite'
 & { $ErrorActionPreference = 'Continue'; & $exe index $scratch6 --db $db6 2>$null } | Out-Null
 $rawJson = & { $ErrorActionPreference = 'Continue'; & $exe lint-all --db $db6 --json 2>$null } | Out-String
-$j6 = $null; try { $j6 = $rawJson | ConvertFrom-Json } catch {}
+$j6 = $null; try { $j6 = $rawJson | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Ok "lint-all --json stdout parses with no preamble" ($j6 -ne $null)
 Ok "lint-all --json stdout starts at the array"     ($rawJson.TrimStart().StartsWith('['))
 Ok "lint-all --json stdout has no scanning banner"  (-not ($rawJson -match 'lint-all: scanning'))

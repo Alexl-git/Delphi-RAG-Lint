@@ -24,8 +24,14 @@ interface
 
 type
   /// <summary>One bookmark found in a source text.</summary>
-  /// <remarks>Kind is 'user' (numbered) or 'dl' (tagged). Code is the number or the
-  /// 6-8 character tag, exactly as written. Hash and Reason are '' when absent.</remarks>
+  /// <remarks>
+  /// Kind is 'user' (numbered) or 'dl' (tagged). Code is the number or the
+  /// 6-8 character tag, exactly as written. Hash and Reason are '' when absent.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.Bookmarks.pas) ?, DRagLint.CLI.DoBookmarks (DRagLint.CLI.pas) ?, DRagLint.Lint.Bookmarks.ParseTail (DRagLint.Lint.Bookmarks.pas), DRagLint.Lint.Bookmarks.TBookmarks.Find (DRagLint.Lint.Bookmarks.pas) ?, DRagLint.Lint.Bookmarks.TBookmarks.Scan (DRagLint.Lint.Bookmarks.pas) ? (+1 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.Bookmarks</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TBookmark = record
     Line  : Integer;
     Offset: Integer; // 1-based index in the scanned text of the // that opens the anchor
@@ -36,11 +42,17 @@ type
   end;
 
   /// <summary>One anchor taken out by TBookmarks.Strip: everything Restore needs to put it back.</summary>
-  /// <remarks>Mode 'trailing': Text (the blanks before the comment plus the comment) was cut
+  /// <remarks>
+  /// Mode 'trailing': Text (the blanks before the comment plus the comment) was cut
   /// from line StrippedLine at character Col, and Anchor is that line as the strip left it.
   /// Mode 'line': Text is the whole removed line WITH its line break, and it went back BEFORE
   /// line StrippedLine, whose text is Anchor -- or at the end of the text when AnchorEof.
-  /// Line is the anchor's line in the ORIGINAL text; Bookmark is what Scan read there.</remarks>
+  /// Line is the anchor's line in the ORIGINAL text; Bookmark is what Scan read there.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.Bookmarks.EditFromJson (DRagLint.CLI.Bookmarks.pas), DRagLint.CLI.Bookmarks.EditToJson (DRagLint.CLI.Bookmarks.pas) ?, DRagLint.CLI.Bookmarks.RunBookmarksRestore (DRagLint.CLI.Bookmarks.pas) ?, DRagLint.CLI.Bookmarks.RunBookmarksStrip (DRagLint.CLI.Bookmarks.pas) ?, DRagLint.Lint.Bookmarks.TBookmarks.Strip (DRagLint.Lint.Bookmarks.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.CLI.Bookmarks, DRagLint.Lint.Bookmarks</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TBookmarkEdit = record
     Line        : Integer;
     StrippedLine: Integer;
@@ -53,6 +65,12 @@ type
   end;
 
   /// <summary>Reads `dl:bk` comment anchors. Pure; no I/O.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.Bookmarks.RunBookmarksRestore (DRagLint.CLI.Bookmarks.pas), DRagLint.CLI.Bookmarks.RunBookmarksStrip (DRagLint.CLI.Bookmarks.pas), DRagLint.CLI.DoBookmarks (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.Bookmarks</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TBookmarks = class
   public
     /// <summary>AText without its bookmark anchors (all, or only those whose code is ACode).</summary>
@@ -60,9 +78,24 @@ type
     /// <param name="ACode">'' strips every anchor; otherwise only the anchors Find(AText, ACode) returns.</param>
     /// <param name="AEdits">One edit per removed anchor, in source order; [] when none.</param>
     /// <returns>The stripped text; equal to AText when AEdits is [].</returns>
-    /// <remarks>A trailing anchor loses the comment and the blanks before it; an anchor alone
+    /// <remarks>
+    /// A trailing anchor loses the comment and the blanks before it; an anchor alone
     /// on its line loses the whole line including its line break. Lines end at #10 (a #13
-    /// before it belongs to the break). Restore(Result, AEdits) returns AText exactly.</remarks>
+    /// before it belongs to the break). Restore(Result, AEdits) returns AText exactly.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.Bookmarks.RunBookmarksStrip (DRagLint.CLI.Bookmarks.pas)</para>
+    /// <para>Calls: CharInSet, Copy, Default, DRagLint.Lint.Bookmarks.IsBlankRun, DRagLint.Lint.Bookmarks.SplitLines, DRagLint.Lint.Bookmarks.TBookmarks.Find, DRagLint.Lint.Bookmarks.TBookmarks.Scan</para>
+    /// <para>Returns: Buf.ToString</para>
+    /// <para>Complexity: 14 (cyclomatic, outer body), 84 lines (full implementation)</para>
+    /// <para>Mutates: AEdits (out)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.Bookmarks.IsBlankRun"/>
+    /// <seealso cref="DRagLint.Lint.Bookmarks.SplitLines"/>
+    /// <seealso cref="DRagLint.Lint.Bookmarks.TBookmarks.Find"/>
+    /// <seealso cref="DRagLint.Lint.Bookmarks.TBookmarks.Scan"/>
+    /// <seealso cref="DRagLint.Lint.Bookmarks.TBookmarks.Restore"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Strip(const AText, ACode: string; out AEdits: TArray<TBookmarkEdit>): string; static;
 
     /// <summary>Puts the anchors a Strip removed back into ACurrent.</summary>
@@ -70,11 +103,25 @@ type
     /// <param name="AEdits">The edits Strip returned, in source order.</param>
     /// <param name="ALines">Per edit, the 1-based line of the anchor in the result; 0 = unplaced.</param>
     /// <returns>The restored text when every edit was placed; ACurrent unchanged otherwise.</returns>
-    /// <remarks>An edit is placed on line StrippedLine when that line still reads Anchor, else on
+    /// <remarks>
+    /// An edit is placed on line StrippedLine when that line still reads Anchor, else on
     /// the ONE line that reads Anchor; no such line, several, or a second trailing anchor on the
     /// same line leave it unplaced. An end-of-text own-line anchor is unplaced when the text no
     /// longer ends with a line break. On the unedited stripped text every edit lands where it
-    /// was, so the result is AText byte for byte.</remarks>
+    /// was, so the result is AText byte for byte.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.Bookmarks.RunBookmarksRestore (DRagLint.CLI.Bookmarks.pas)</para>
+    /// <para>Calls: Copy, DRagLint.Lint.Bookmarks.SplitLines, InRange</para>
+    /// <para>Returns: if AllPlaced then Buf.ToString</para>
+    /// <para>Complexity: 25 (cyclomatic, outer body), 75 lines (full implementation)</para>
+    /// <para>Mutates: ALines (out)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.Bookmarks.SplitLines"/>
+    /// <seealso cref="DRagLint.Lint.Bookmarks.TBookmarks.Find"/>
+    /// <seealso cref="DRagLint.Lint.Bookmarks.TBookmarks.Scan"/>
+    /// <seealso cref="DRagLint.Lint.Bookmarks.TBookmarks.Strip"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Restore(const ACurrent: string; const AEdits: TArray<TBookmarkEdit>;
       out ALines: TArray<Integer>): string; static;
 
@@ -82,7 +129,20 @@ type
     /// <param name="AText">Whole source text; any line ending.</param>
     /// <returns>[] when there is none. A tag that is malformed (a DL tag whose code is
     /// not 6-8 alphanumerics, a user tag whose number is not digits) is skipped.</returns>
-    /// <remarks>Thread-safe: no state.</remarks>
+    /// <remarks>
+    /// Thread-safe: no state.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoBookmarks (DRagLint.CLI.pas), DRagLint.Lint.Bookmarks.TBookmarks.Find (DRagLint.Lint.Bookmarks.pas), DRagLint.Lint.Bookmarks.TBookmarks.Strip (DRagLint.Lint.Bookmarks.pas)</para>
+    /// <para>Calls: CharInSet, Copy, DRagLint.Lint.Bookmarks.ParseTail</para>
+    /// <para>Returns: Found.ToArray</para>
+    /// <para>Complexity: 22 (cyclomatic, outer body), 78 lines (full implementation)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.Bookmarks.ParseTail"/>
+    /// <seealso cref="DRagLint.Lint.Bookmarks.TBookmarks.Find"/>
+    /// <seealso cref="DRagLint.Lint.Bookmarks.TBookmarks.Restore"/>
+    /// <seealso cref="DRagLint.Lint.Bookmarks.TBookmarks.Strip"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Scan(const AText: string): TArray<TBookmark>; static;
 
     /// <summary>The bookmarks of AText whose Code equals ACode (case-insensitive for the
@@ -90,6 +150,17 @@ type
     /// <param name="AText">The source text.</param>
     /// <param name="ACode">The code to look for.</param>
     /// <returns>The matching bookmarks; [] when there is none.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoBookmarks (DRagLint.CLI.pas), DRagLint.Lint.Bookmarks.TBookmarks.Strip (DRagLint.Lint.Bookmarks.pas)</para>
+    /// <para>Calls: DRagLint.Lint.Bookmarks.TBookmarks.Scan, SameText</para>
+    /// <para>Returns: Hits.ToArray</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.Bookmarks.TBookmarks.Scan"/>
+    /// <seealso cref="DRagLint.Lint.Bookmarks.TBookmarks.Restore"/>
+    /// <seealso cref="DRagLint.Lint.Bookmarks.TBookmarks.Strip"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Find(const AText, ACode: string): TArray<TBookmark>; static;
   end;
 

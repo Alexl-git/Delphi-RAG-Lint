@@ -136,7 +136,7 @@ try {
   Check 'index exit 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $Work 'RmUnit.pas') --db $db --json 2>$null }) -join "`n"
   $all = @()
-  try { $all = @($raw | ConvertFrom-Json) } catch { Check 'lint --json parses' $false $raw.Substring(0, [Math]::Min(300, $raw.Length)) }
+  try { $all = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { Check 'lint --json parses' $false $raw.Substring(0, [Math]::Min(300, $raw.Length)) }
   Check 'lint returned findings (non-empty answer)' ($all.Count -gt 0) "count=$($all.Count)"
   function Has($rule, $line) { @($all | Where-Object { $_.rule -eq $rule -and $_.start_line -eq $line }).Count -gt 0 }
 

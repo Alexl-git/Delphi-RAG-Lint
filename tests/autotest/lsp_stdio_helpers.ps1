@@ -31,7 +31,7 @@ function LspSession([string]$Exe, [string]$WorkDir, [string]$Db, [array]$Reqs) {
     -RedirectStandardError (Join-Path $WorkDir 'err.txt') -NoNewWindow -Wait | Out-Null
   $r = @{ init = $null; res = @{}; err = @{} }
   foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 1) { $r.init = $o.result }
     if ($o.id -gt 10) {
       if ($null -ne $o.error) { $r.err[[int]$o.id] = $o.error }

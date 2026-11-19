@@ -43,7 +43,7 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 | Which database covers this file? | `drag-lint resolve-dbs --in <U.pas>` |
 | What is wrong with this file? | `drag-lint lint <U.pas>` |
 | ...with the whole project? | `drag-lint lint-all --db <db>` (`--library-db <lib>|none` names the library; a missing file refuses) |
-| Record that a finding was reviewed | `drag-lint allow <U.pas> --fix-line <L> --fix-rule <id> --apply` |
+| Record that a finding was reviewed | `drag-lint allow <U.pas> --fix-line <L> --fix-rule <id> --apply` (re-stamp after re-reading: add `--reason "REVIEWED <yyyy-mm-dd> <why>"`) |
 | Repair what the linter can repair | `drag-lint lint-all --db <db> --fix` (preview), then `--fix --apply` |
 
 > **A git worktree is a different project, on purpose.** The manifest keys on the
@@ -434,7 +434,7 @@ A verb's usage line names the canonical flag only. Each alias is accepted wherev
 | `--force-reparse` | `--no-skip` | back-compat: the first spelling of the index re-parse switch |
 | `--help` | `-h`, `-?` | convention: the short help tokens every CLI user tries first |
 | `--in` | `--file` | one input-file option (TArgs.InFile); --in is the spelling the ask verb's own parser accepts, so it is the one that works on every verb |
-| `--output` | `--out` | back-compat: owner ruling ENG-6 (2026-09-22/23) -- scripts that use --out keep working |
+| `--output` | `--out`, `--report` | back-compat: owner ruling ENG-6 (2026-09-22/23) -- scripts that use --out keep working; --report (1.52 SMALLS 8611fb1d1) names the lint-all report file |
 | `--scan-libraries-win` | `--scan-libraries` | back-compat: the spelling before --scan-libraries-all existed |
 
 <!-- dl:registry:end flag-aliases -->
@@ -1577,6 +1577,10 @@ except where noted. All are read once per process.
 | `DRAGLINT_MANIFEST` | path | Explicit `drag-lint.json`, honoured in both layouts; `--manifest <path>` sets it for the run and its children. A missing file answers with no sections and never falls through to another manifest. Tests use it to stay away from the real manifest. |
 | `DRAGLINT_LAYOUT` | `v2` | Turns on installed layout v2, phase 1 (default off; any other value is off): manifest lookup adds `%APPDATA%\drag-lint`, the fatal log goes to `%LOCALAPPDATA%\drag-lint\logs`. Moves nothing. Do not set it where the IDE plugin runs yet. |
 | `DRAGLINT_RULE_CACHE_WARM` | `background` / `wait` / `off` | The default of `index --rule-cache-warm` (the flag wins; a bad value exits 2 naming the variable). `background` returns at once and warms in a detached process that keeps the index open until it ends. |
+| `DRAGLINT_NO_BUDGET` | any value but `0` | Turns the per-rule lint time budget off for the whole process, like `--no-budget`. |
+| `DRAGLINT_HOVER_SETBY_MAX_SECONDS` | number > 0 | Wall-clock cap of the hover `Set by` / check-init part (1.52; overrides the built-in default). |
+| `DRAGLINT_HOVER_SETBY_MAX_ROUTINES` | whole number >= 1 | Routine (CFG) budget of the hover `Set by` part (overrides the built-in default). |
+| `DRAGLINT_HOVER_TIMING` | `1` | LSP: one `hover-timing <section> <ms>` line per hover section on stderr -- the measurement behind which sections a deferred hover answers later. |
 
 Schema 25 (1.50) adds two file-fact tables, both additive (absent on a schema 23 / 24 index, where readers fall back to the text): `dfm_properties` -- every property assignment of a text `.dfm`, with `object_ordinal` -> `dfm_objects`, `value_text` / `value_kind` and span; `comment_facts` -- one row per comment of a `.pas` / `.dpr` / `.dpk` / `.inc` / `.pp` / `.lpr` file (directives excluded, strings honoured: kind, text, offsets, `anchor_kind` end-of-line / next-declaration / statement / block, `anchor_symbol_id`). In 1.50 the DocInsight / `dl:ok` / `dl:bk` consumers still scan the text; `run_comment_facts_parity.ps1` proves the table equal to them. Columns: `drag-lint schema` and `docs\wiki\Index-DB-Schema.md`.
 

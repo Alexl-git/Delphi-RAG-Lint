@@ -103,8 +103,8 @@ try {
     $o = Join-Path $WorkDir "dry-$pl.json"
     $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
       -ArgumentList @('cycles', '--db', ('"' + $db + '"'), '--fix', '--project', ('"' + $ed + '"'), '--platform', $pl, '--library-db', 'none', '--format', 'json') `
-      -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "dry-$pl.err")
-    $j = $null; try { $j = [IO.File]::ReadAllText($o) | ConvertFrom-Json } catch { }
+      -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "dry-$pl.err"); $null = $p.Handle
+    $j = $null; try { $j = [IO.File]::ReadAllText($o) | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
     $tag = if ($pl -eq 'win32') { '2' } else { 'pc1' }
     Check "$tag dry run --platform $pl echoes platform=$pl" (($p.ExitCode -eq 0) -and ($null -ne $j) -and ($j.platform -ceq $pl)) "exit=$($p.ExitCode) platform=$($j.platform)"
   }
@@ -114,7 +114,7 @@ try {
   $ap = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
     -ArgumentList @('cycles', '--fix', '--apply', '--no-backup', '--build-timeout', '600', '--cycle', '1', '--platform', 'win32',
       '--project', ('"' + $ed + '"'), '--db', ('"' + $db + '"'), '--library-db', 'none') `
-    -RedirectStandardOutput $ao -RedirectStandardError (Join-Path $WorkDir 'apply.err')
+    -RedirectStandardOutput $ao -RedirectStandardError (Join-Path $WorkDir 'apply.err'); $null = $ap.Handle
   Check '3 cycles --fix --apply --platform win32 exits 0' ($ap.ExitCode -eq 0) ("exit=$($ap.ExitCode) " + ([IO.File]::ReadAllText($ao) -replace "`r?`n", ' | ').Substring(0, [Math]::Min(300, [IO.File]::ReadAllText($ao).Length)))
   $changed = @(Get-ChildItem $edit -File -Filter *.pas | Where-Object { [IO.File]::ReadAllText($_.FullName) -cne [IO.File]::ReadAllText((Join-Path $base $_.Name)) })
   Check '3b the apply really edited source (>= 1 .pas differs from the untouched copy; else step 5 is vacuous)' ($changed.Count -ge 1) ($changed.Name -join ',')

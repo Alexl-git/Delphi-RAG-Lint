@@ -77,7 +77,7 @@ $raw = & { $ErrorActionPreference = 'Continue'; & $Exe check-ast $pas --db $db -
 # first '[' so ConvertFrom-Json sees only JSON (mirrors run_objleak_interproc.ps1).
 $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
 $findings = @()
-if ($b -ge 0) { try { $findings = @(($txt.Substring($b) | ConvertFrom-Json)) } catch { $findings = @() } }
+if ($b -ge 0) { try { $findings = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ })) } catch { $findings = @() } }
 
 $leaks = @($findings | Where-Object { $_.rule -eq 'object-leak' })
 Write-Host 'object-leak findings:'

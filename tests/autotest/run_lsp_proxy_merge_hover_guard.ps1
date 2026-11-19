@@ -154,7 +154,7 @@ function Split-Frames([byte[]]$b) {
 # Kind / Value of result.contents (when it is a MarkupContent object).
 function Reply7([byte[]]$b) {
   foreach ($f in (Split-Frames $b)) {
-    try { $j = $f.Body | ConvertFrom-Json -AsHashtable } catch { continue }
+    try { $j = $f.Body | ConvertFrom-Json -AsHashtable | ForEach-Object { $_ } } catch { continue }
     if ($j -and $j.ContainsKey('id') -and ($j['id'] -eq 7) -and $j.ContainsKey('result')) {
       $r = $j['result']
       $kind = $null; $val = $null
@@ -296,7 +296,7 @@ $e8  = @((Utf8 $r8.Err) -split "\r?\n" | Where-Object { $_ -match 'merge-hover' 
 Check 'two position-less hovers: no merge-hover stderr line' ($e8.Count -eq 0) ("lines=$($e8.Count) err=$(Utf8 $r8.Err)")
 $m8 = Reply7 $r8.Out
 Check 'positive control: the later hover 7 in the same session still merges' ($m8 -and $m8.Value -eq ('THEIRS-MD' + $Sep + $ours)) ("value=$(Show $m8.Value)")
-$n8 = @(Split-Frames $r8.Out | ForEach-Object { try { $_.Body | ConvertFrom-Json -AsHashtable } catch { $null } } |
+$n8 = @(Split-Frames $r8.Out | ForEach-Object { try { $_.Body | ConvertFrom-Json -AsHashtable | ForEach-Object { $_ } } catch { $null } } |
         Where-Object { $_ -and $_.ContainsKey('id') -and ($_['id'] -in 5, 6) -and $_.ContainsKey('result') -and $_['result']['contents']['value'] -eq 'THEIRS-MD' })
 Check 'both position-less hovers got DelphiLSP''s reply, unmerged' ($n8.Count -eq 2) ("n=$($n8.Count)")
 
@@ -309,7 +309,7 @@ foreach ($id in 101..156) {
 }
 $qArgs = @('lsp', '--proxy', '--merge-hover', '--db', $db, '--merge-budget-ms', '4000', '--delphi-lsp', $stub)
 $r9 = Invoke-Raw $Exe $qArgs $many (Script $theirs1)
-$rep9 = @(Split-Frames $r9.Out | ForEach-Object { try { $_.Body | ConvertFrom-Json -AsHashtable } catch { $null } } |
+$rep9 = @(Split-Frames $r9.Out | ForEach-Object { try { $_.Body | ConvertFrom-Json -AsHashtable | ForEach-Object { $_ } } catch { $null } } |
           Where-Object { $_ -and $_.ContainsKey('id') -and ($_['id'] -ge 101) -and $_.ContainsKey('result') })
 $unmerged = @($rep9 | Where-Object { $_['result']['contents']['value'] -eq 'THEIRS-MD' }).Count
 Check 'all 56 hovers answered' ($rep9.Count -eq 56) ("n=$($rep9.Count)")

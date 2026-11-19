@@ -20,9 +20,20 @@ uses
 
 type
   /// <summary>Lexical class of one token.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.Tokenize.Emit (DRagLint.V151.THRA.Support.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TThrTokKind = (ttkIdent, ttkSym, ttkStr, ttkNum);
 
   /// <summary>One token with a 1-based position; Col/EndCol are 1-based, EndCol exclusive.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.Tokenize (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.Tokenize.Emit (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.TThrScan.Tok (DRagLint.V151.THRA.Support.pas)</para>
+  /// <para>Used in units: DRagLint.V151.THRA.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TThrTok = record
     Kind   : TThrTokKind;
     Text   : string;
@@ -34,7 +45,13 @@ type
   end;
 
   /// <summary>One routine implementation found after `implementation`.</summary>
-  /// <remarks>Nested routines are separate entries; their token range lies inside the parent's.</remarks>
+  /// <remarks>
+  /// Nested routines are separate entries; their token range lies inside the parent's.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.THRA.Support.pas) ?, DRagLint.V151.THRA.Support.ThrCheckSynchronizeInDestructor.FindSync (DRagLint.V151.THRA.Support.pas) ?, DRagLint.V151.THRA.Support.TThrScan.Create (DRagLint.V151.THRA.Support.pas) ?, DRagLint.V151.THRA.Support.TThrScan.ParseRoutine (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.TThrScan.Routines (DRagLint.V151.THRA.Support.pas) ? (+2 more)</para>
+  /// <para>Used in units: DRagLint.V151.THRA.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TThrRoutine = record
     Kind    : string;    // procedure | function | constructor | destructor
     OwnerLow: string;    // class name, lowercase; '' for a free or nested routine
@@ -46,12 +63,24 @@ type
   end;
 
   /// <summary>One member routine declared in a class body.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.ThrCheckLoopWithoutTerminated (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.TThrScan.ParseClassDecl (DRagLint.V151.THRA.Support.pas)</para>
+  /// <para>Used in units: DRagLint.V151.THRA.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TThrMethod = record
     NameLow: string;
     Vis    : string;     // private | protected | public | published
   end;
 
   /// <summary>One class, record or interface declaration.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.TThrScan.Create (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.TThrScan.IsThreadClass.Walk (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.TThrScan.ParseClassDecl (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.TThrScan.TryGetClass (DRagLint.V151.THRA.Support.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.V151.THRA.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TThrClass = record
     Name     : string;
     Ancestors: TArray<string>;   // lowercase, last dotted part, generic arguments dropped
@@ -59,7 +88,13 @@ type
   end;
 
   /// <summary>Scans one source text and answers structural questions about it.</summary>
-  /// <remarks>Not thread-safe; one instance per file. Owns nothing but its own lists.</remarks>
+  /// <remarks>
+  /// Not thread-safe; one instance per file. Owns nothing but its own lists.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.THRA.Support.pas) ?, DRagLint.V151.THRA.Support.ThrCheckAnonymousNotStarted (DRagLint.V151.THRA.Support.pas) ?, DRagLint.V151.THRA.Support.ThrCheckSynchronizeInDestructor (DRagLint.V151.THRA.Support.pas) ?, DRagLint.V151.THRA.Support.ThrFinding (DRagLint.V151.THRA.Support.pas) ?, DRagLint.V151.THRA.TV151THRARules.CheckFile (DRagLint.V151.THRA.pas) (+6 more)</para>
+  /// <para>Used in units: DRagLint.V151.THRA, DRagLint.V151.THRA.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TThrScan = class  // dl:ok high-response@6850 -- REVIEWED 2026-11-14 v151 INT: one scanner class holding the per-rule checks of one lane; a split is beyond 1.51
   private
     FToks     : TArray<TThrTok>;
@@ -70,79 +105,393 @@ type
     FImplIdx  : Integer;
     FStore    : ISymbolStore;
     FFileId   : Int64;
+    /// <param name="AIdx"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRA.Support.TThrScan.Parse (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.TThrScan.ParseClassDecl (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.TThrScan.ParseRoutine (DRagLint.V151.THRA.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.THRA.Support.TThrScan.L</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 11 lines (full implementation)</para>
+    /// <para>Reads: FToks</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.L"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Count"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Create"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Destroy"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EnclosingRoutine"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsTypeOpener(AIdx: Integer): Boolean;
+    /// <param name="AIdx"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; (P &lt; 0) or (L(P) =
+    /// ';') or (L(P) = 'implementation') or (L(P) = ']').</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRA.Support.TThrScan.Parse (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.TThrScan.ParseRoutine (DRagLint.V151.THRA.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.THRA.Support.IsRoutineKw, DRagLint.V151.THRA.Support.TThrScan.L</para>
+    /// <para>Reads: FToks</para>
+    /// <seealso cref="DRagLint.V151.THRA.Support.IsRoutineKw"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.L"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Count"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Create"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsRoutineStart(AIdx: Integer): Boolean;
+    /// <param name="AOpener"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->Integer -- Observed: AOpener + 1; J + 1; J.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRA.Support.TThrScan.Parse (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.TThrScan.ParseRoutine (DRagLint.V151.THRA.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.THRA.Support.IsRoutineKw, DRagLint.V151.THRA.Support.TThrScan.IsTypeOpener, DRagLint.V151.THRA.Support.TThrScan.L</para>
+    /// <para>Complexity: 51 (cyclomatic, outer body), 112 lines (full implementation)</para>
+    /// <para>Reads: FToks, FClasses</para>
+    /// <seealso cref="DRagLint.V151.THRA.Support.IsRoutineKw"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.IsTypeOpener"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.L"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Count"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ParseClassDecl(AOpener: Integer): Integer;
+    /// <param name="AKw"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto type -->Integer</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRA.Support.TThrScan.Parse (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.TThrScan.ParseRoutine (DRagLint.V151.THRA.Support.pas)</para>
+    /// <para>Calls: Default, DRagLint.V151.THRA.Support.InArr, DRagLint.V151.THRA.Support.TThrScan.IsRoutineStart, DRagLint.V151.THRA.Support.TThrScan.IsTypeOpener, DRagLint.V151.THRA.Support.TThrScan.L, DRagLint.V151.THRA.Support.TThrScan.MatchEnd, DRagLint.V151.THRA.Support.TThrScan.ParseClassDecl, DRagLint.V151.THRA.Support.TThrScan.ParseRoutine</para>
+    /// <para>Complexity: 35 (cyclomatic, outer body), 90 lines (full implementation)</para>
+    /// <para>Reads: FToks, FRoutines</para>
+    /// <para>Recursive</para>
+    /// <seealso cref="DRagLint.V151.THRA.Support.InArr"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.IsRoutineStart"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.IsTypeOpener"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.L"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.MatchEnd"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ParseRoutine(AKw: Integer): Integer;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRA.Support.TThrScan.Create (DRagLint.V151.THRA.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.THRA.Support.TThrScan.IsRoutineStart, DRagLint.V151.THRA.Support.TThrScan.IsTypeOpener, DRagLint.V151.THRA.Support.TThrScan.ParseClassDecl, DRagLint.V151.THRA.Support.TThrScan.ParseRoutine</para>
+    /// <para>Complexity: 14 (cyclomatic, outer body), 23 lines (full implementation)</para>
+    /// <para>Reads: FToks, FTypeDefs, FImplIdx   Writes: FImplIdx</para>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.IsRoutineStart"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.IsTypeOpener"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.ParseClassDecl"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.ParseRoutine"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Count"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Parse;
+    /// <param name="AIdx"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="ADepth"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; TypeManaged(S,
+    /// RunEnd(S), ADepth + 1).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRA.Support.TThrScan.TypeManaged (DRagLint.V151.THRA.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.THRA.Support.TThrScan.EvalRecord, DRagLint.V151.THRA.Support.TThrScan.L, DRagLint.V151.THRA.Support.TThrScan.RunEnd, DRagLint.V151.THRA.Support.TThrScan.TypeManaged</para>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EvalRecord"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.L"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.RunEnd"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.TypeManaged"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Count"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function EvalTypeDef(AIdx, ADepth: Integer): Boolean;
+    /// <param name="AFirst"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="ADepth"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False;
+    /// ChunkManaged(ChunkStart, K).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRA.Support.TThrScan.EvalTypeDef (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.TThrScan.TypeManaged (DRagLint.V151.THRA.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.THRA.Support.TThrScan.EvalRecord.ChunkManaged, InArr, TypeManaged</para>
+    /// <para>Complexity: 15 (cyclomatic, outer body), 65 lines (full implementation)</para>
+    /// <para>Reads: FToks</para>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EvalRecord.ChunkManaged"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Count"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Create"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Destroy"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EnclosingRoutine"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function EvalRecord(AFirst, ADepth: Integer): Boolean;
   public
     /// <summary>Tokenizes and parses ASource.</summary>
     /// <param name="ASource">The unit text.</param>
     /// <param name="AStore">Project index for class ancestry beyond this file; may be nil.</param>
     /// <param name="AFileId">The file's id in AStore, or 0.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRA.TV151THRARules.CheckFile (DRagLint.V151.THRA.pas)</para>
+    /// <para>Calls: DRagLint.V151.THRA.Support.Tokenize, DRagLint.V151.THRA.Support.TThrScan.Parse</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FRoutines, FClasses, FTypeDefs, FThreadMemo, FStore, FFileId, FToks</para>
+    /// <seealso cref="DRagLint.V151.THRA.Support.Tokenize"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Parse"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Count"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Destroy"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EnclosingRoutine"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(const ASource: string; const AStore: ISymbolStore; AFileId: Int64);
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FThreadMemo, FTypeDefs, FClasses, FRoutines</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Count"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Create"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EnclosingRoutine"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EvalRecord"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EvalTypeDef"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>Number of tokens.</summary>
     /// <returns>Token count.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRA.Support.ThrCheckAnonymousNotStarted (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.ThrCheckLoopWithoutTerminated (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.ThrCheckQueueNilInPackage (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.ThrCheckThreadvarManaged (DRagLint.V151.THRA.Support.pas)</para>
+    /// <para>Returns: Length(FToks)</para>
+    /// <para>Reads: FToks</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Create"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Destroy"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EnclosingRoutine"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EvalRecord"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EvalTypeDef"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Count: Integer;
     /// <summary>The token at AIdx.</summary>
     /// <param name="AIdx">0-based token index; must be in range.</param>
     /// <returns>The token record.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRA.Support.ThrCheckAnonymousNotStarted (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.ThrCheckFreeAndNilOnFreeOnTerminate (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.ThrCheckLoopWithoutTerminated (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.ThrCheckLoopWithoutTerminated.CheckLoops (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.ThrCheckLoopWithoutTerminated.StmtEnd (DRagLint.V151.THRA.Support.pas) (+5 more)</para>
+    /// <para>Returns: FToks[AIdx]</para>
+    /// <para>Reads: FToks</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Count"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Create"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Destroy"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EnclosingRoutine"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EvalRecord"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Tok(AIdx: Integer): TThrTok;
     /// <summary>Lowercase text of the token at AIdx.</summary>
     /// <param name="AIdx">Any integer.</param>
     /// <returns>The lowercase text, or '' when AIdx is out of range.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRA.Support.TThrScan.EvalTypeDef (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.TThrScan.IsRoutineStart (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.TThrScan.IsTypeOpener (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.TThrScan.ParseClassDecl (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.TThrScan.ParseRoutine (DRagLint.V151.THRA.Support.pas) (+12 more)</para>
+    /// <para>Returns: FToks[AIdx].Low</para>
+    /// <para>Reads: FToks</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Count"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Create"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Destroy"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EnclosingRoutine"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EvalRecord"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function L(AIdx: Integer): string;
     /// <summary>All routine implementations, nested ones included.</summary>
     /// <returns>The scanner's own list; do not free.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRA.Support.ThrCheckAnonymousNotStarted (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.ThrCheckFreeAndNilOnFreeOnTerminate (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.ThrCheckLoopWithoutTerminated (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.ThrCheckSynchronizeInDestructor (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.ThrCheckSynchronizeInDestructor.FindSync (DRagLint.V151.THRA.Support.pas) (+1 more)</para>
+    /// <para>Returns: FRoutines</para>
+    /// <para>Reads: FRoutines</para>
+    /// <para>Owns returned: borrowed</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Count"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Create"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Destroy"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EnclosingRoutine"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EvalRecord"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Routines: TList<TThrRoutine>;
     /// <summary>The class declaration named ANameLow, if this file declares it.</summary>
     /// <param name="ANameLow">Lowercase type name.</param>
     /// <param name="AClass">Receives the declaration.</param>
     /// <returns>True when found.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRA.Support.ThrCheckLoopWithoutTerminated (DRagLint.V151.THRA.Support.pas)</para>
+    /// <para>Returns: FClasses.TryGetValue(ANameLow, AClass)</para>
+    /// <para>Reads: FClasses</para>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Count"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Create"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Destroy"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EnclosingRoutine"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EvalRecord"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function TryGetClass(const ANameLow: string; out AClass: TThrClass): Boolean;
     /// <summary>Index of the token that closes the parenthesis opened at AOpen.</summary>
     /// <param name="AOpen">Token index of `(`.</param>
     /// <returns>Index of the matching `)`, or -1.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRA.Support.ThrCheckAnonymousNotStarted (DRagLint.V151.THRA.Support.pas)</para>
+    /// <para>Returns: -1</para>
+    /// <para>Reads: FToks</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Count"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Create"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Destroy"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EnclosingRoutine"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EvalRecord"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function MatchParen(AOpen: Integer): Integer;
     /// <summary>Innermost routine whose body contains token AIdx.</summary>
     /// <param name="AIdx">Token index.</param>
     /// <returns>Index into Routines, or -1.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRA.Support.ThrCheckAnonymousNotStarted (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.ThrCheckLoopWithoutTerminated (DRagLint.V151.THRA.Support.pas)</para>
+    /// <para>Returns: Best</para>
+    /// <para>Reads: FRoutines</para>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Count"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Create"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Destroy"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EvalRecord"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EvalTypeDef"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function EnclosingRoutine(AIdx: Integer): Integer;
     /// <summary>Does ANameLow descend from TThread?</summary>
     /// <param name="ANameLow">Lowercase class name.</param>
     /// <returns>True when the in-file chain reaches TThread, the index says so, or an unresolved ancestor is named *Thread.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRA.Support.ThrCheckLoopWithoutTerminated (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.ThrCheckSynchronizeInDestructor (DRagLint.V151.THRA.Support.pas)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.IsDescendantOf, DRagLint.V151.THRA.Support.TThrScan.IsThreadClass.Walk</para>
+    /// <para>Returns: Walk(ANameLow, 0, Unresolved); FStore.IsDescendantOf(C.Name, 'TThread', FFileId); False; True</para>
+    /// <para>Reads: FThreadMemo, FClasses, FStore, FFileId</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.IsDescendantOf"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.IsThreadClass.Walk"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Count"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Create"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsThreadClass(const ANameLow: string): Boolean;
     /// <summary>Is the type spelled by tokens [AFrom, ATo) managed (never finalized in a threadvar)?</summary>
     /// <param name="AFrom">First token of the type.</param>
     /// <param name="ATo">One past the last token.</param>
     /// <param name="ADepth">Recursion depth, 0 at the caller.</param>
     /// <returns>True for strings, variants, dynamic arrays, interfaces, anonymous methods and records holding one.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRA.Support.ThrCheckThreadvarManaged (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.TThrScan.EvalRecord.ChunkManaged (DRagLint.V151.THRA.Support.pas) ?, DRagLint.V151.THRA.Support.TThrScan.EvalTypeDef (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.TThrScan.TypeManaged (DRagLint.V151.THRA.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.THRA.Support.InArr, DRagLint.V151.THRA.Support.TThrScan.EvalRecord, DRagLint.V151.THRA.Support.TThrScan.EvalTypeDef, DRagLint.V151.THRA.Support.TThrScan.L, DRagLint.V151.THRA.Support.TThrScan.TypeManaged</para>
+    /// <para>Returns: False</para>
+    /// <para>Complexity: 26 (cyclomatic, outer body), 33 lines (full implementation)</para>
+    /// <para>Reads: FToks, FTypeDefs</para>
+    /// <para>Recursive</para>
+    /// <seealso cref="DRagLint.V151.THRA.Support.InArr"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EvalRecord"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EvalTypeDef"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.L"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Count"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function TypeManaged(AFrom, ATo, ADepth: Integer): Boolean;
     /// <summary>End (exclusive) of a type or statement run: the next `;` at nesting depth 0.</summary>
     /// <param name="AFrom">First token.</param>
     /// <returns>Index of the `;` or Count.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRA.Support.ThrCheckThreadvarManaged (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.TThrScan.EvalTypeDef (DRagLint.V151.THRA.Support.pas)</para>
+    /// <para>Returns: K</para>
+    /// <para>Complexity: 11 (cyclomatic, outer body), 17 lines (full implementation)</para>
+    /// <para>Reads: FToks</para>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Count"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Create"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Destroy"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EnclosingRoutine"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EvalRecord"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function RunEnd(AFrom: Integer): Integer;
     /// <summary>Index of the `end` that closes the begin/try/case/asm at ABeg.</summary>
     /// <param name="ABeg">Token index of the opener.</param>
     /// <returns>Index of the closing `end`, or Count - 1.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRA.Support.ThrCheckLoopWithoutTerminated.CheckLoops (DRagLint.V151.THRA.Support.pas), DRagLint.V151.THRA.Support.TThrScan.ParseRoutine (DRagLint.V151.THRA.Support.pas)</para>
+    /// <para>Returns: Length(FToks) - 1</para>
+    /// <para>Reads: FToks</para>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Count"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Create"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Destroy"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EnclosingRoutine"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EvalRecord"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function MatchEnd(ABeg: Integer): Integer;
     /// <summary>Does tokens [AFrom, ATo] contain the lowercase identifier AWord?</summary>
     /// <param name="AFrom">First token.</param>
     /// <param name="ATo">Last token, inclusive.</param>
     /// <param name="AWord">Lowercase identifier.</param>
     /// <returns>True when present.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Returns: False</para>
+    /// <para>Reads: FToks</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Count"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Create"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Destroy"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EnclosingRoutine"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EvalRecord"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function HasWord(AFrom, ATo: Integer; const AWord: string): Boolean;
     /// <summary>Does tokens [AFrom, ATo] contain any identifier of AWords?</summary>
     /// <param name="AFrom">First token.</param>
     /// <param name="ATo">Last token, inclusive.</param>
     /// <param name="AWords">Lowercase identifiers.</param>
     /// <returns>True when one is present.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRA.Support.ThrCheckLoopWithoutTerminated.CheckLoops (DRagLint.V151.THRA.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.THRA.Support.InArr</para>
+    /// <para>Returns: False</para>
+    /// <para>Reads: FToks</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.V151.THRA.Support.InArr"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Count"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Create"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Destroy"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EnclosingRoutine"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function HasAnyWord(AFrom, ATo: Integer; const AWords: array of string): Boolean;
     /// <summary>The unit's index in the declaration order of `uses` names, as one lowercase list.</summary>
     /// <returns>Every identifier between a `uses` keyword and its `;`, lowercase, dotted names joined.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.THRA.Support.UnitIsInPackage (DRagLint.V151.THRA.Support.pas)</para>
+    /// <para>Returns: Res.ToArray</para>
+    /// <para>Complexity: 15 (cyclomatic, outer body), 42 lines (full implementation)</para>
+    /// <para>Reads: FToks</para>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Count"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Create"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Destroy"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EnclosingRoutine"/>
+    /// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EvalRecord"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function UsesNames: TArray<string>;
   end;
 
@@ -151,36 +500,105 @@ type
 /// <param name="AScan">Scan of the file.</param>
 /// <param name="APath">File path.</param>
 /// <param name="AOut">Findings are appended.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.THRA.TV151THRARules.CheckFile (DRagLint.V151.THRA.pas)</para>
+/// <para>Calls: DRagLint.V151.THRA.Support.InArr, DRagLint.V151.THRA.Support.ThrFinding, DRagLint.V151.THRA.Support.TThrScan.Count, DRagLint.V151.THRA.Support.TThrScan.EnclosingRoutine, DRagLint.V151.THRA.Support.TThrScan.L, DRagLint.V151.THRA.Support.TThrScan.MatchParen, DRagLint.V151.THRA.Support.TThrScan.Routines, DRagLint.V151.THRA.Support.TThrScan.Tok, Format</para>
+/// <para>Complexity: 37 (cyclomatic, outer body), 57 lines (full implementation)</para>
+/// <seealso cref="DRagLint.V151.THRA.Support.InArr"/>
+/// <seealso cref="DRagLint.V151.THRA.Support.ThrFinding"/>
+/// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Count"/>
+/// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EnclosingRoutine"/>
+/// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.L"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ThrCheckAnonymousNotStarted(const AScan: TThrScan; const APath: string; const AOut: TList<TLintFinding>);
 
 /// <summary>Synchronize reached from the destructor of a TThread descendant.</summary>
 /// <param name="AScan">Scan of the file.</param>
 /// <param name="APath">File path.</param>
 /// <param name="AOut">Findings are appended.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.THRA.TV151THRARules.CheckFile (DRagLint.V151.THRA.pas)</para>
+/// <para>Calls: DRagLint.V151.THRA.Support.ThrCheckSynchronizeInDestructor.FindSync, DRagLint.V151.THRA.Support.ThrFinding, DRagLint.V151.THRA.Support.TThrScan.IsThreadClass, DRagLint.V151.THRA.Support.TThrScan.Routines, Format</para>
+/// <seealso cref="DRagLint.V151.THRA.Support.ThrCheckSynchronizeInDestructor.FindSync"/>
+/// <seealso cref="DRagLint.V151.THRA.Support.ThrFinding"/>
+/// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.IsThreadClass"/>
+/// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Routines"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ThrCheckSynchronizeInDestructor(const AScan: TThrScan; const APath: string; const AOut: TList<TLintFinding>);
 
 /// <summary>Execute loops that never consult Terminated.</summary>
 /// <param name="AScan">Scan of the file.</param>
 /// <param name="APath">File path.</param>
 /// <param name="AOut">Findings are appended.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.THRA.TV151THRARules.CheckFile (DRagLint.V151.THRA.pas)</para>
+/// <para>Calls: ConstCond, DRagLint.V151.THRA.Support.ThrCheckLoopWithoutTerminated.CheckLoops, DRagLint.V151.THRA.Support.TThrScan.Count, DRagLint.V151.THRA.Support.TThrScan.EnclosingRoutine, DRagLint.V151.THRA.Support.TThrScan.IsThreadClass, DRagLint.V151.THRA.Support.TThrScan.L, DRagLint.V151.THRA.Support.TThrScan.Routines, DRagLint.V151.THRA.Support.TThrScan.Tok, DRagLint.V151.THRA.Support.TThrScan.TryGetClass, StmtEnd, ThrFinding</para>
+/// <para>Complexity: 29 (cyclomatic, outer body), 172 lines (full implementation)</para>
+/// <seealso cref="DRagLint.V151.THRA.Support.ThrCheckLoopWithoutTerminated.CheckLoops"/>
+/// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Count"/>
+/// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.EnclosingRoutine"/>
+/// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.IsThreadClass"/>
+/// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.L"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ThrCheckLoopWithoutTerminated(const AScan: TThrScan; const APath: string; const AOut: TList<TLintFinding>);
 
 /// <summary>A thread member used after Start although FreeOnTerminate is True.</summary>
 /// <param name="AScan">Scan of the file.</param>
 /// <param name="APath">File path.</param>
 /// <param name="AOut">Findings are appended.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.THRA.TV151THRARules.CheckFile (DRagLint.V151.THRA.pas)</para>
+/// <para>Calls: DRagLint.V151.THRA.Support.ThrFinding, DRagLint.V151.THRA.Support.TThrScan.L, DRagLint.V151.THRA.Support.TThrScan.Routines, DRagLint.V151.THRA.Support.TThrScan.Tok, Format</para>
+/// <para>Complexity: 22 (cyclomatic, outer body), 41 lines (full implementation)</para>
+/// <seealso cref="DRagLint.V151.THRA.Support.ThrFinding"/>
+/// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.L"/>
+/// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Routines"/>
+/// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Tok"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ThrCheckUseAfterFreeOnTerminate(const AScan: TThrScan; const APath: string; const AOut: TList<TLintFinding>);
 
 /// <summary>threadvar declarations of a managed type.</summary>
 /// <param name="AScan">Scan of the file.</param>
 /// <param name="APath">File path.</param>
 /// <param name="AOut">Findings are appended.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.THRA.TV151THRARules.CheckFile (DRagLint.V151.THRA.pas)</para>
+/// <para>Calls: DRagLint.V151.THRA.Support.InArr, DRagLint.V151.THRA.Support.ThrFinding, DRagLint.V151.THRA.Support.TThrScan.Count, DRagLint.V151.THRA.Support.TThrScan.L, DRagLint.V151.THRA.Support.TThrScan.RunEnd, DRagLint.V151.THRA.Support.TThrScan.Tok, DRagLint.V151.THRA.Support.TThrScan.TypeManaged, Format</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 47 lines (full implementation)</para>
+/// <seealso cref="DRagLint.V151.THRA.Support.InArr"/>
+/// <seealso cref="DRagLint.V151.THRA.Support.ThrFinding"/>
+/// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Count"/>
+/// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.L"/>
+/// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.RunEnd"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ThrCheckThreadvarManaged(const AScan: TThrScan; const APath: string; const AOut: TList<TLintFinding>);
 
 /// <summary>TThread.Queue(nil, ...) / ForceQueue(nil, ...) in a unit that belongs to a package.</summary>
 /// <param name="AScan">Scan of the file.</param>
 /// <param name="APath">File path.</param>
 /// <param name="AOut">Findings are appended.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.THRA.TV151THRARules.CheckFile (DRagLint.V151.THRA.pas)</para>
+/// <para>Calls: DRagLint.V151.THRA.Support.ThrFinding, DRagLint.V151.THRA.Support.TThrScan.Count, DRagLint.V151.THRA.Support.TThrScan.L, DRagLint.V151.THRA.Support.TThrScan.Tok, DRagLint.V151.THRA.Support.UnitIsInPackage, Format</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 23 lines (full implementation)</para>
+/// <seealso cref="DRagLint.V151.THRA.Support.ThrFinding"/>
+/// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Count"/>
+/// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.L"/>
+/// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Tok"/>
+/// <seealso cref="DRagLint.V151.THRA.Support.UnitIsInPackage"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ThrCheckQueueNilInPackage(const AScan: TThrScan; const APath: string; const AOut: TList<TLintFinding>);
 
 /// <summary>FreeAndNil / DisposeOf on a thread that frees itself (the forms the host rule does not see).</summary>
@@ -188,6 +606,18 @@ procedure ThrCheckQueueNilInPackage(const AScan: TThrScan; const APath: string; 
 /// <param name="APath">File path.</param>
 /// <param name="AHostRuleId">The host rule id the findings are emitted under.</param>
 /// <param name="AOut">Findings are appended.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.THRA.TV151THRARules.CheckFile (DRagLint.V151.THRA.pas)</para>
+/// <para>Calls: DRagLint.V151.THRA.Support.ThrCheckFreeAndNilOnFreeOnTerminate.LocalOfFotClass, DRagLint.V151.THRA.Support.ThrFinding, DRagLint.V151.THRA.Support.TThrScan.L, DRagLint.V151.THRA.Support.TThrScan.Routines, DRagLint.V151.THRA.Support.TThrScan.Tok, Format</para>
+/// <para>Complexity: 41 (cyclomatic, outer body), 85 lines (full implementation)</para>
+/// <seealso cref="DRagLint.V151.THRA.Support.ThrCheckFreeAndNilOnFreeOnTerminate.LocalOfFotClass"/>
+/// <seealso cref="DRagLint.V151.THRA.Support.ThrFinding"/>
+/// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.L"/>
+/// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Routines"/>
+/// <seealso cref="DRagLint.V151.THRA.Support.TThrScan.Tok"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ThrCheckFreeAndNilOnFreeOnTerminate(const AScan: TThrScan; const APath, AHostRuleId: string; const AOut: TList<TLintFinding>);
 
 implementation

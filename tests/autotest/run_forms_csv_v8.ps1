@@ -23,6 +23,9 @@ param(
 )
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 if (-not $FixtureDir) { $FixtureDir = "$PSScriptRoot\..\fixtures\formsmap-v8" }
 try {
@@ -54,7 +57,7 @@ Check 'index fixture exits 0' ($LASTEXITCODE -eq 0)
 # --- menu-tree: the external roots forms-csv consumes ---------------------
 $json = (& { $ErrorActionPreference = 'Continue'; & $Exe menu-tree --project "$fx\Demo8.dproj" --db $db --format json 2>$null }) -join "`n"
 Check 'menu-tree exits 0' ($LASTEXITCODE -eq 0)
-$tree = $json | ConvertFrom-Json
+$tree = $json | ConvertFrom-Json | ForEach-Object { $_ }
 $ext  = @($tree.external)
 Check 'two external roots mnuTools, keyed TClass.mnuTools (one per form, not merged)' ((@($ext | Where-Object { $_.ident -cmatch '^Tfrm(Main|Side)8\.mnuTools$' })).Count -eq 2) "got $($ext.Count): $(($ext | ForEach-Object { "$($_.ident)@$($_.identPath)" }) -join ', ')"
 $mainExt = $ext | Where-Object { $_.identPath -like '*\uMain8.pas' } | Select-Object -First 1
@@ -119,3 +122,4 @@ catch {
     Write-Host "GUARD BROKEN: $($_.Exception.Message)" -ForegroundColor Red
     exit 2
 }
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

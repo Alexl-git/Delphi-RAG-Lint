@@ -21,6 +21,9 @@ param(
 )
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot '..\autotest\lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = $(& "$PSScriptRoot\..\autotest\lib\DefaultEngineExe.ps1") }
 if (-not $SrcDir) { $SrcDir = "$PSScriptRoot\..\..\src\delphi-plugin" }
 $ErrorActionPreference = 'Stop'
@@ -43,7 +46,7 @@ try {
   $db = Join-Path $work 'uq.sqlite'
   & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $name = 'FValue'
-  $cli = (& { $ErrorActionPreference = 'Continue'; & $exePath usages --name $name --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json
+  $cli = (& { $ErrorActionPreference = 'Continue'; & $exePath usages --name $name --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 
   # ---- one real LSP session
   $psi = [Diagnostics.ProcessStartInfo]::new($exePath, "lsp --db `"$db`"")
@@ -104,11 +107,11 @@ try {
     foreach ($k in $buckets) { if (@($a.$k).Count -ne @($b.$k).Count) { $bad += "$k=$(@($a.$k).Count)/$(@($b.$k).Count)" } }
     return ,$bad
   }
-  $res = ($reply | ConvertFrom-Json).result
+  $res = ($reply | ConvertFrom-Json | ForEach-Object { $_ }).result
   $diff = Parity $res $cli
   Check 'parity: each bucket has the row count `usages --json` gives' ($diff.Count -eq 0) ($diff -join ' ')
   Check 'the fixture is not vacuous: FValue has a declaration, a read and a write' ((@($cli.declarations).Count -gt 0) -and (@($cli.reads).Count -gt 0) -and (@($cli.writes).Count -gt 0))
-  $doctored = $reply | ConvertFrom-Json
+  $doctored = $reply | ConvertFrom-Json | ForEach-Object { $_ }
   $doctored.result.reads = @()
   Check 'positive control: the comparer sees a doctored reply' ((Parity $doctored.result $cli).Count -gt 0)
 
@@ -145,3 +148,4 @@ try {
 }
 if ($script:Failed) { Write-Host 'FAILED' -ForegroundColor Red; exit 1 }
 Write-Host 'PASSED' -ForegroundColor Green
+} finally { Remove-WorkDir $work -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

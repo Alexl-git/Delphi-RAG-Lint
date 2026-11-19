@@ -25,6 +25,9 @@ param(
   [Parameter(Mandatory)][string]$Exe,
   [string]$WorkDir = ''
 )
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 if (-not $WorkDir) { $WorkDir = Join-Path $env:TEMP "drag-lint-allow-moved-reason-$PID" }
 $ErrorActionPreference = 'Continue'
 $script:fail = 0; $script:pass = 0
@@ -47,8 +50,8 @@ function New-Fixture([string]$Name, [string]$L1, [string]$L2) {
   [IO.File]::WriteAllText($p, $t, [Text.Encoding]::ASCII)
   return $p
 }
-function Invoke-Allow([string]$Path) {
-  $out = @(& { $ErrorActionPreference = 'Continue'; & $Exe allow $Path --fix-line 20 --fix-rule concat-in-loop --apply 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" })
+function Invoke-Allow([string]$Path, [string[]]$Extra = @()) {
+  $out = @(& { $ErrorActionPreference = 'Continue'; & $Exe allow $Path --fix-line 20 --fix-rule concat-in-loop --apply @Extra 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" })
   return @{ Out = ($out -join "`n"); Lines = [IO.File]::ReadAllLines($Path) }
 }
 function Get-Findings([string]$Path) {
@@ -84,6 +87,35 @@ $p = New-Fixture 'OtherRule' "    S := S + IntToStr(I); // dl:ok other-rule@abcd
 $r = Invoke-Allow $p
 Check 'C2 other rule stamp kept, new rule appended' ($r.Lines[19] -match "other-rule@abcd, concat-in-loop@[0-9a-f]{4} -- $stamp other reason$") $r.Lines[19]
 
+# --- R1: `allow --reason` on a stale marker REPLACES the reason, stamp included ----------------
+$today = 'REVIEWED ' + (Get-Date).ToString('yyyy-MM-dd')
+$p = New-Fixture 'RestampStale' "    S := S + IntToStr(I); // dl:ok concat-in-loop@ffff -- $stamp bounded" ''
+$r = Invoke-Allow $p @('--reason', "$today bounded, re-read after the move")
+Write-Host "  raw R1: $($r.Lines[19])"
+Check 'R1 --reason re-hashes and writes the new reason with its stamp' ($r.Lines[19] -match "concat-in-loop@[0-9a-f]{4} -- $today bounded, re-read after the move$") $r.Lines[19]
+Check 'R1 no stamp-dropped note when --reason re-stamps' ($r.Out -notmatch 'REVIEWED stamp was dropped') $r.Out
+
+# --- R2: `allow --reason` on a CURRENT marker with an old stamp re-stamps it --------------------
+$p = New-Fixture 'RestampCurrent' '    S := S + IntToStr(I);' ''
+$null = Invoke-Allow $p
+$hashed = [IO.File]::ReadAllLines($p)[19]
+$old = 'REVIEWED ' + (Get-Date).AddDays(-400).ToString('yyyy-MM-dd')
+$lines = [IO.File]::ReadAllLines($p); $lines[19] = "$hashed -- $old bounded"
+[IO.File]::WriteAllText($p, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
+$before = @(& { $ErrorActionPreference = 'Continue'; $input | & $Exe lint $p --enable review-marker-reason-unreviewed 2>&1 | ForEach-Object { "$_" } } | Where-Object { $_ -match 'review-marker-reason-unreviewed' })
+Check 'R2 control: the 400-day stamp is reported before the re-stamp' ($before.Count -ge 1) ($before -join ' | ')
+$r = Invoke-Allow $p @('--reason', "$today bounded")
+Write-Host "  raw R2: $($r.Lines[19])"
+Check 'R2 current marker re-stamped (hash kept, reason replaced)' ($r.Lines[19] -eq "$hashed -- $today bounded") $r.Lines[19]
+$after = @(& { $ErrorActionPreference = 'Continue'; $input | & $Exe lint $p --enable review-marker-reason-unreviewed 2>&1 | ForEach-Object { "$_" } } | Where-Object { $_ -match 'review-marker-reason-unreviewed|concat-in-loop|review-marker-stale' })
+Check 'R2 after the re-stamp: no unreviewed, stale or concat finding' ($after.Count -eq 0) ($after -join ' | ')
+
+# --- R3: same reason again is a byte-identical no-op ------------------------------------------
+$snap = [IO.File]::ReadAllText($p)
+$null = Invoke-Allow $p @('--reason', "$today bounded")
+Check 'R3 re-running the same --reason leaves the file byte-identical' ([IO.File]::ReadAllText($p) -eq $snap)
+
 Write-Host "run_v152_INT14_allow_moved_reason: $script:pass pass, $script:fail fail"
 if ($script:fail -gt 0) { Write-Host 'RESULT: FAIL'; exit 1 }
 Write-Host 'RESULT: PASS'; exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

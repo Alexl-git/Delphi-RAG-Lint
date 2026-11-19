@@ -125,7 +125,7 @@ function Run-Rename([string[]]$RenameArgs) {
   Push-Location $dir
   # 150 INT4: --library-db none -- the fixture has no library, and 150 CQ (d48cf1bdc1) prints a stderr
   # 'drag-lint: NOTE: no --library-db given ...' that the case-insensitive note filter below would count.
-  try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe rename @RenameArgs --db $db --library-db none 2>$errFile } } finally { Pop-Location }
+  try { $o = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe rename @RenameArgs --db $db --library-db none 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } } finally { Pop-Location }
   $code = $LASTEXITCODE
   $err = if (Test-Path $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
   [pscustomobject]@{ Exit = $code; Out = ($o -join "`n"); Err = $err }
@@ -144,7 +144,7 @@ foreach ($m in @(
   Check "$($m.N) CONTROL no note for Unit6.dfm (indexed text, rewritten)" (@($n | Where-Object { $_ -match 'Unit6\.dfm' }).Count -eq 0) ($n -join ' | ')
   Check "$($m.N) CONTROL no note for Unit5.dfm (unrelated form)"          (@($n | Where-Object { $_ -match 'Unit5\.dfm' }).Count -eq 0) ($n -join ' | ')
   if ($m.N -eq '--json') {
-    $ed = $null; try { $ed = @($r.Out | ConvertFrom-Json) } catch { }
+    $ed = $null; try { $ed = @(($r.Out | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { }
     Check '--json stdout is still a bare edit array'      ($null -ne $ed -and $ed.Count -gt 0) $r.Out
     Check '--json rewrites Unit6.dfm (indexed descendant)' (@($ed | Where-Object { $_.file -like '*Unit6.dfm' }).Count -eq 1)
   }

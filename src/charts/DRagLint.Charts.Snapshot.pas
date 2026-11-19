@@ -27,7 +27,7 @@ const
 /// A missing, malformed or empty declaration falls back to the default; it
 /// never raises. Does not create the folder. Pure apart from reading the JSON.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Compare.SnapshotDirFor (DRagLint.Charts.Compare.pas), DRagLint.CLI.CompareIsSnapshotOnly (DRagLint.CLI.pas), DRagLint.CLI.CompareTakeSnapshot (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.Charts.Compare.SnapshotDirFor (DRagLint.Charts.Compare.pas), DRagLint.CLI.Compare.CompareIsSnapshotOnly (DRagLint.CLI.Compare.pas), DRagLint.CLI.Compare.CompareTakeSnapshot (DRagLint.CLI.Compare.pas)</para>
 /// <para>Calls: DRagLint.Charts.Snapshot.ReadReportsDirKey, DRagLint.Project.OwnRoots.AnchorDirForDb, ExcludeTrailingPathDelimiter, ExpandFileName, ExtractFileDir, StringReplace</para>
 /// <para>Returns: TPath.Combine(Anchor, DEFAULT_DIR)</para>
 /// <para>Touches: file system</para>
@@ -43,7 +43,7 @@ function ResolveSnapshotDir(const pProjectFile, pDbPath: string): string;
 /// ('A -> B' gives 'A_-__B').</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Snapshot.NamePrefix (DRagLint.Charts.Snapshot.pas), DRagLint.CLI.CompareHtmlPath (DRagLint.CLI.pas), DRagLint.CLI.CompareShowPage (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.Charts.Snapshot.NamePrefix (DRagLint.Charts.Snapshot.pas), DRagLint.CLI.Compare.CompareHtmlPath (DRagLint.CLI.Compare.pas), DRagLint.CLI.Compare.CompareShowPage (DRagLint.CLI.Compare.pas)</para>
 /// <para>Calls: CharInSet</para>
 /// <para>Returns: string.Create(Chars)</para>
 /// <para>Owns returned: new (caller owns)</para>
@@ -86,7 +86,7 @@ function SnapshotFileName(const pQuestion, pTarget: string; pWhen: TDateTime;
 /// Written as UTF-8 without BOM with CRLF line ends. A second snapshot of the
 /// same question and target in the same minute replaces the first. Creates the folder. For pAuto, returns False (pPath '') when the 20-snapshot retention immediately removed the new file because 20 newer ones exist; the file is then gone.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Compare.ApplySideEffects (DRagLint.Charts.Compare.pas), DRagLint.CLI.CompareTakeSnapshot (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.Charts.Compare.ApplySideEffects (DRagLint.Charts.Compare.pas), DRagLint.CLI.Compare.CompareTakeSnapshot (DRagLint.CLI.Compare.pas)</para>
 /// <para>Calls: DRagLint.Charts.Snapshot.PruneAutoSnapshots, DRagLint.Charts.Snapshot.SnapshotFileName, ForceDirectories, StringReplace</para>
 /// <para>Returns: False; True</para>
 /// <para>Catches: Exception (swallowed)</para>
@@ -130,7 +130,7 @@ procedure PruneAutoSnapshots(const pAutoDir, pQuestion, pTarget: string; pKeep: 
 /// Compare saves an auto snapshot with the extension its format is detected by
 /// (R18), so the auto lookup must see all three.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Compare.LoadAutoSnapshotSide (DRagLint.Charts.Compare.pas), DRagLint.CLI.CompareIsSnapshotOnly (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.Charts.Compare.LoadAutoSnapshotSide (DRagLint.Charts.Compare.pas), DRagLint.CLI.Compare.CompareIsSnapshotOnly (DRagLint.CLI.Compare.pas)</para>
 /// <para>Calls: CompareStr, DRagLint.Charts.Snapshot.StampedFiles</para>
 /// <para>Returns: ''; Files[0].Value</para>
 /// <seealso cref="DRagLint.Charts.Snapshot.StampedFiles"/>

@@ -39,7 +39,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 function TaintFindings([string[]]$CliArgs) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $exePath @CliArgs 2>$null }
   $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
-  $all = @(); if ($b -ge 0) { try { $all = @($txt.Substring($b) | ConvertFrom-Json) } catch { $all = @() } }
+  $all = @(); if ($b -ge 0) { try { $all = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $all = @() } }
   return ,@($all | Where-Object { $_.rule -like 'taint-*' })
 }
 function At($List, [string]$Rule, [string]$Unit, [int]$Line) {
@@ -65,17 +65,17 @@ try {
   $stale = Join-Path $tmp 'stale.sqlite'
   [IO.File]::Copy($db, $stale, $true)
   $emptyFlows = 'import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute("DELETE FROM data_flows"); c.commit(); print(c.execute("SELECT COUNT(*) FROM data_flows").fetchone()[0])'
-  $n = (& { $ErrorActionPreference = 'Continue'; & python -I -c $emptyFlows $stale 2>&1 | ForEach-Object { "$_" } }) -join ' '
+  $n = (& { $ErrorActionPreference = 'Continue'; & python -I -c $(if ($PSVersionTable.PSVersion.Major -lt 7) { $emptyFlows.Replace('"', '\"') } else { $emptyFlows }) $stale 2>&1 | ForEach-Object { "$_" } }) -join ' '
   Check 'stale copy: data_flows emptied' ($n -eq '0') "python said: $n"
   $err = Join-Path $tmp 'stale.err'
-  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $stale --db $lib --json --quiet --config $empty 2>$err }
+  $raw = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($err); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath lint-all --db $stale --db $lib --json --quiet --config $empty 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   $staleNote = (Get-Content $err -Raw) -match $staleNoteRx
   $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
-  $pre = @(); if ($b -ge 0) { $pre = @($txt.Substring($b) | ConvertFrom-Json | Where-Object { $_.rule -like 'taint-*' }) }
+  $pre = @(); if ($b -ge 0) { $pre = @($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ } | Where-Object { $_.rule -like 'taint-*' }) }
   Check 'stale index: one note on stderr' $staleNote "expected `"$staleNoteRx`""
   Check 'stale index: no taint finding' ($pre.Count -eq 0) "got $($pre.Count)"
   $freshErr = Join-Path $tmp 'fresh.err'
-  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all @common --config $empty 2>$freshErr } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($freshErr); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath lint-all @common --config $empty 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-Null
   $freshNote = (Get-Content $freshErr -Raw) -match $staleNoteRx
   Check 'fresh index: no stale note (positive control)' (-not $freshNote) 'the note fired on an index the extractor filled'
 
@@ -88,14 +88,14 @@ try {
   $tinyDb = Join-Path $tmp 'tiny.sqlite'
   & { $ErrorActionPreference = 'Continue'; & $exePath index $tinyDir --db $tinyDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $tinyErr = Join-Path $tmp 'tiny.err'
-  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $tinyDb --json --quiet --config $empty 2>$tinyErr } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($tinyErr); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath lint-all --db $tinyDb --json --quiet --config $empty 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-Null
   $tinyTxt = Get-Content $tinyErr -Raw
   Check 'tiny fresh index: note fires' ($tinyTxt -match $staleNoteRx) "stderr: $tinyTxt"
   Check 'tiny fresh index: note names the no-values cause' ($tinyTxt -match 'none of them passes a value') "stderr: $tinyTxt"
 
   if ($Mode -eq 'fixture') {
     # fixture mode measures the HAND rows only: drop what the extractor wrote first
-    $n = (& { $ErrorActionPreference = 'Continue'; & python -I -c $emptyFlows $db 2>&1 | ForEach-Object { "$_" } }) -join ' '
+    $n = (& { $ErrorActionPreference = 'Continue'; & python -I -c $(if ($PSVersionTable.PSVersion.Major -lt 7) { $emptyFlows.Replace('"', '\"') } else { $emptyFlows }) $db 2>&1 | ForEach-Object { "$_" } }) -join ' '
     Check 'fixture: extractor rows cleared' ($n -eq '0') "python said: $n"
     $n = (& { $ErrorActionPreference = 'Continue'; & python -I $rowsPy $db $fx taint 2>&1 | ForEach-Object { "$_" } }) -join ' '
     Check 'fixture rows inserted (python sqlite3)' ($n -eq '50') "fixture_rows.py said: $n"
@@ -167,7 +167,7 @@ try {
   Check 'lint uDal2.pas --db reports the lint-all sink (21)' ((At $one 'taint-sql-injection' 'uDal2.pas' 21).Count -eq 1) "got $($one.Count) taint findings"
 
   # ---- POSITIVE CONTROL: every built-in source disabled -> 0 ----
-  $ids = @((Get-Content (Join-Path $repo 'rules\taint-sources.json') -Raw | ConvertFrom-Json).sources | ForEach-Object { $_.id })
+  $ids = @((Get-Content (Join-Path $repo 'rules\taint-sources.json') -Raw | ConvertFrom-Json | ForEach-Object { $_ }).sources | ForEach-Object { $_.id })
   # the receiver-name heuristic is a source too (weak): switch it off with them
   $cfg = @{ taint = @{ disable = $ids; weak_receiver_regex = '' } } | ConvertTo-Json -Depth 4
   [IO.File]::WriteAllText($noSrc, $cfg)

@@ -26,23 +26,23 @@ function Assert($name, $cond) {
 }
 function Run([string]$file, [string[]]$extra) {
   $out = & { $ErrorActionPreference = 'Continue'; & $exe lint --json --rules-dir $rulesDir @extra (Join-Path $repo "tests\lint\$file") 2>$null }
-  return @(($out -join "`n") | ConvertFrom-Json)
+  return @((($out -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 
-$base = Run 'type-name-prefix.pas' @()
+$base = @(Run 'type-name-prefix.pas' @())
 Assert "control: type-name-prefix.pas has findings without a profile (got $($base.Count))" ($base.Count -ge 1)
-$neg = Run 'type-name-prefix.pas' @('--profile', 'cwe')
+$neg = @(Run 'type-name-prefix.pas' @('--profile', 'cwe'))
 Assert "--profile cwe on type-name-prefix.pas: 0 findings (got $($neg.Count))" ($neg.Count -eq 0)
 
-$pos = Run 'hardcoded-credential.pas' @('--profile', 'cwe')
+$pos = @(Run 'hardcoded-credential.pas' @('--profile', 'cwe'))
 $hit = @($pos | Where-Object { $_.rule -eq 'hardcoded-credential' -and $_.severity -in @('warning', 'error') })
 Assert "--profile cwe on hardcoded-credential.pas: >= 1 finding at >= warning (got $($hit.Count))" ($hit.Count -ge 1)
 
-$top = Run 'hardcoded-credential.pas' @('--profile', 'cwe-top25')
+$top = @(Run 'hardcoded-credential.pas' @('--profile', 'cwe-top25'))
 Assert "--profile cwe-top25 drops hardcoded-credential (CWE-798 is not in the 2025 Top 25)" (@($top | Where-Object { $_.rule -eq 'hardcoded-credential' }).Count -eq 0)
-$topPos = Run 'sql-injection-concat.pas' @('--profile', 'cwe-top25')
+$topPos = @(Run 'sql-injection-concat.pas' @('--profile', 'cwe-top25'))
 Assert "--profile cwe-top25 keeps sql-injection-concat (CWE-89, rank 2)" (@($topPos | Where-Object { $_.rule -eq 'sql-injection-concat' }).Count -ge 1)
-$mis = Run 'hardcoded-credential.pas' @('--profile', 'misra')
+$mis = @(Run 'hardcoded-credential.pas' @('--profile', 'misra'))
 Assert "--profile misra drops hardcoded-credential (no MISRA label)" (@($mis | Where-Object { $_.rule -eq 'hardcoded-credential' }).Count -eq 0)
 
 # Override: the user's own profile `cwe` wins over the built-in one.
@@ -51,9 +51,9 @@ try {
   New-Item -ItemType Directory -Path $tmp | Out-Null
   $cfg = Join-Path $tmp 'drag-lint-lint.json'
   [IO.File]::WriteAllText($cfg, '{"profiles": {"cwe": {"disabled": ["hardcoded-credential"]}}}')
-  $ovA = Run 'hardcoded-credential.pas' @('--config', $cfg, '--profile', 'cwe')
+  $ovA = @(Run 'hardcoded-credential.pas' @('--config', $cfg, '--profile', 'cwe'))
   Assert "override: user profile cwe disables hardcoded-credential" (@($ovA | Where-Object { $_.rule -eq 'hardcoded-credential' }).Count -eq 0)
-  $ovB = Run 'type-name-prefix.pas' @('--config', $cfg, '--profile', 'cwe')
+  $ovB = @(Run 'type-name-prefix.pas' @('--config', $cfg, '--profile', 'cwe'))
   Assert "override: built-in set NOT applied (type-name-prefix still reports, got $($ovB.Count))" ($ovB.Count -ge 1)
 } finally {
   [IO.Directory]::Delete($tmp, $true)

@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $log = Join-Path $OutDir 'fieldrepo_csv_build.log'
 $bat = Join-Path $root 'build\_build_fieldrepo_csv_tests_local.bat'
-$p = Start-Process -FilePath 'cmd.exe' -ArgumentList "/c `"$bat`"" -RedirectStandardOutput $log -Wait -PassThru -WindowStyle Hidden
+$p = Start-Process -FilePath 'cmd.exe' -ArgumentList "/c `"$bat`"" -RedirectStandardOutput $log -Wait -PassThru -WindowStyle Hidden; $null = $p.Handle
 if (-not (Select-String -Path $log -Pattern 'BUILD_EXITCODE=0' -Quiet)) {
   Write-Host 'FAIL build'; Select-String -Path $log -Pattern 'Error|Fatal' | Select-Object -First 10 | ForEach-Object { $_.Line }
   exit 1

@@ -172,12 +172,12 @@ function Invoke-Session([string[]]$Dbs, [string]$Tag) {
   $argv = @('lsp'); foreach ($d in $Dbs) { $argv += @('--db', $d) }
   $p = Start-Process $Exe -ArgumentList $argv -WorkingDirectory $WorkDir `
          -RedirectStandardInput $inF -RedirectStandardOutput $outF -RedirectStandardError $errF `
-         -NoNewWindow -Wait -PassThru
+         -NoNewWindow -Wait -PassThru; $null = $p.Handle
   $raw = [System.IO.File]::ReadAllText($outF)
   $err = [System.IO.File]::ReadAllText($errF)
   $hover = '<NO REPLY>'
   foreach ($m in [regex]::Matches($raw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $m.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $m.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 2) { $hover = if ($null -eq $o.result) { '' } else { [string]$o.result.contents.value } }
   }
   return @{ Raw = $raw; Err = $err; Hover = $hover; Exit = $p.ExitCode }

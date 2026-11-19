@@ -28,7 +28,7 @@ Full flag list: [lint-all in the CLI reference](../cli.md#lint-all).
 | `--project` | `<.dproj>` |  |  |
 | `--rule` | `<id>` |  |  |
 | `--disable` |  |  |  |
-| `--output` | `<report.txt>` | alias --report; default lint-report-YYYYMMDD.txt beside --project, else beside the DB |  |
+| `--output` | `<report.txt>` | default lint-report-YYYYMMDD.txt beside --project, else beside the DB |  |
 | `--json` |  |  |  |
 | `--labels` |  |  |  |
 | `--quiet` |  | suppress per-file progress lines written to stderr |  |

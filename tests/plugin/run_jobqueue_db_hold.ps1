@@ -18,6 +18,10 @@ param(
 )
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot '..\autotest\lib\WorkDirCleanup.ps1')
+$script:RunStart = (Get-Date).AddSeconds(-2)
+try {
 if (-not $Dpr) { $Dpr = "$PSScriptRoot\..\JobQueueDbHoldTests.dpr" }
 $ErrorActionPreference = 'Stop'
 
@@ -68,3 +72,10 @@ if ($out -notmatch '(\d+) passed, 0 failed') {
 }
 Write-Host 'PASS' -ForegroundColor Green
 exit 0
+} finally {
+  Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1')
+  # the test program's own scratch: TPath.GetTempPath\drag-lint-jobqueue-dbhold-<its pid> (JobQueueDbHoldTests.dpr)
+  Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) -Directory -Filter 'drag-lint-jobqueue-dbhold-*' -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -match '^drag-lint-jobqueue-dbhold-\d+$' -and $_.CreationTime -ge $script:RunStart } |
+    ForEach-Object { Remove-WorkDir $_.FullName -Keep:($env:DL_KEEP_WORKDIR -eq '1') }
+}

@@ -108,7 +108,7 @@ function Session([bool]$withWork) {
   $sw.Stop()
   $replies = @()
   foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($null -ne $o.id) { $replies += $o }
   }
   return [pscustomobject]@{ Ms = $sw.ElapsedMilliseconds; Replies = $replies }
@@ -128,7 +128,7 @@ Check "callerCounts + hover cost under $BudgetMs ms over the control session" ($
 
 Write-Host ''
 Write-Host 'STILL RIGHT: the counts of a known call graph' -ForegroundColor Cyan
-$counts = if ($cc.Count -eq 1 -and $null -ne $cc[0].result) { @($cc[0].result.counts) } else { @() }
+$counts = @(if ($cc.Count -eq 1 -and $null -ne $cc[0].result) { @($cc[0].result.counts) } else { @() })
 function CountAt([string]$declPattern) {
   for ($i = 0; $i -lt $lines.Count; $i++) {
     if ($lines[$i] -match $declPattern) {

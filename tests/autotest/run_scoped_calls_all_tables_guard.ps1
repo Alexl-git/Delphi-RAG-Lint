@@ -211,7 +211,7 @@ end.
 function Sql([string]$Db, [string]$Q) {
   $j = & { $ErrorActionPreference = 'Continue'; & $exePath sql --query $Q --db $Db --json --limit 1000000 2>$null } | Out-String
   if ($j.IndexOf('{') -lt 0) { return $null }
-  return ($j.Substring($j.IndexOf('{')) | ConvertFrom-Json)
+  return ($j.Substring($j.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ })
 }
 # Every table but schema_meta, every column, rows sorted: the IC cmpdb method in PowerShell.
 function Dump-All([string]$Db) {

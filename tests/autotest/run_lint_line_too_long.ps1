@@ -63,7 +63,7 @@ function Code-Line([int]$Len) {
 function Lint-Rows([string]$Path, [string[]]$Extra = @()) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $Path --json @Extra 2>$null } | Out-String)
   if ([string]::IsNullOrWhiteSpace($raw)) { return ,@() }
-  try { $all = $raw | ConvertFrom-Json } catch { Write-Host "  (not JSON: $($raw.Trim()))"; return ,@() }
+  try { $all = $raw | ConvertFrom-Json | ForEach-Object { $_ } } catch { Write-Host "  (not JSON: $($raw.Trim()))"; return ,@() }
   return ,@($all | Where-Object { $_.rule -eq 'line-too-long' })
 }
 
@@ -90,7 +90,7 @@ try {
   Check 'D: --rule line-too-long still reports' ($rows.Count -eq 1) "got $($rows.Count)"
 
   Write-Host '== E catalogue'
-  $cat = (& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null } | Out-String | ConvertFrom-Json).rules | Where-Object { $_.id -eq 'line-too-long' }
+  $cat = (& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }).rules | Where-Object { $_.id -eq 'line-too-long' }
   Check 'E: rules --json lists line-too-long' ($null -ne $cat)
   Check 'E: default_enabled = true' (($null -ne $cat) -and ($cat.default_enabled -eq $true))
 }

@@ -19,18 +19,18 @@ try {
   [IO.File]::WriteAllBytes("$dir\x.dll", [byte[]](1, 2, 3, 4))
   [IO.File]::WriteAllBytes("$dir\p.bpl", [byte[]](1))
   $null = & { $ErrorActionPreference = 'Continue'; & git -C $tmp add -A 2>&1 | ForEach-Object { "$_" } }; $null = & { $ErrorActionPreference = 'Continue'; & git -C $tmp commit -qm base 2>&1 | ForEach-Object { "$_" } }
-  $r = Run; Check 'clean tree exits 0' ($r[0] -eq 0) $r[1]
+  $r = @(Run); Check 'clean tree exits 0' ($r[0] -eq 0) $r[1]
   [IO.File]::WriteAllBytes("$dir\p.bpl", [byte[]](9, 9))
-  $r = Run; Check 'drifted BPL is ignored' ($r[0] -eq 0) $r[1]
+  $r = @(Run); Check 'drifted BPL is ignored' ($r[0] -eq 0) $r[1]
   [IO.File]::WriteAllBytes("$dir\x.dll", [byte[]](9, 9, 9))
-  $r = Run
+  $r = @(Run)
   Check 'POSITIVE CONTROL: drifted DLL exits 1' ($r[0] -eq 1) $r[1]
   Check 'drift names the file and both sizes' ($r[1] -match 'dll-win64/x\.dll\s+working=3 B\s+HEAD=4 B') $r[1]
   $env:DRAGLINT_ALLOW_DLL_DRIFT = '1'
-  $r = Run; Check 'override exits 0 with WARNING' (($r[0] -eq 0) -and ($r[1] -match 'WARNING')) $r[1]
+  $r = @(Run); Check 'override exits 0 with WARNING' (($r[0] -eq 0) -and ($r[1] -match 'WARNING')) $r[1]
   $env:DRAGLINT_ALLOW_DLL_DRIFT = $null
   [IO.File]::Delete("$dir\x.dll")
-  $r = Run; Check 'deleted DLL exits 1' ($r[0] -eq 1) $r[1]
+  $r = @(Run); Check 'deleted DLL exits 1' ($r[0] -eq 1) $r[1]
   $r = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $script -Root ([IO.Path]::GetTempPath()) 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'not a work tree exits 2' ($LASTEXITCODE -eq 2) $r
 } finally {

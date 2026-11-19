@@ -29,7 +29,7 @@ $db = Join-Path $tmp 'idxfp3.sqlite'
 $unit = Join-Path $tmp 'IdxFp3.pas'
 $raw = & { $ErrorActionPreference = 'Continue'; & $exe lint $unit --db $db --rule $rule --json 2>$null }
 $f = @()
-try { $f = @(($raw | ConvertFrom-Json) | Where-Object { $_ -and $_.rule -eq $rule }) } catch { $f = @() }
+try { $f = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $_ -and $_.rule -eq $rule }) } catch { $f = @() }
 
 # map each line to its routine
 $lines = [IO.File]::ReadAllLines($unit)
@@ -56,9 +56,9 @@ foreach ($r in 'Chain1Bad', 'WhileTopBad', 'WhileTopNoContinueBad', 'ChainResetB
 # default ON (owner C3, IDXRANGE3 re-measure 0 FP / 12): no --rule, no config -> the Bad routines still fire
 $raw2 = & { $ErrorActionPreference = 'Continue'; & $exe lint $unit --db $db --json 2>$null }
 $d = @()
-try { $d = @(($raw2 | ConvertFrom-Json) | Where-Object { $_ -and $_.rule -eq $rule }) } catch { $d = @() }
+try { $d = @(($raw2 | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $_ -and $_.rule -eq $rule }) } catch { $d = @() }
 Assert "default ON: fires without --rule (got $($d.Count), narrowed $($f.Count))" (($d.Count -gt 0) -and ($d.Count -eq $f.Count))
-$rj = (& { $ErrorActionPreference = 'Continue'; & $exe rules --json 2>$null } | ConvertFrom-Json).rules
+$rj = (& { $ErrorActionPreference = 'Continue'; & $exe rules --json 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }).rules
 $ent = @($rj | Where-Object { $_.id -eq $rule })[0]
 Assert "rules --json: default_enabled true" ($ent -and $ent.default_enabled -eq $true)
 

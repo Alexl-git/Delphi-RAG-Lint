@@ -104,7 +104,7 @@ function Measure-LooseOpen([int]$Lines) {
   $cpu = [int]$p.TotalProcessorTime.TotalMilliseconds
   $pcharLines = @(); $tokCount = 0
   foreach ($mm in [regex]::Matches([IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.method -eq 'textDocument/publishDiagnostics' -and $o.params.uri -eq $uri) {
       $pcharLines = @($o.params.diagnostics | Where-Object { $_.code -eq 'pchar-arithmetic' } | ForEach-Object { [int]$_.range.start.line })
     }

@@ -61,7 +61,7 @@ $lines = @(
 
 function LintAll {
   $o = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --json --library-db none 2>$null } | Out-String)
-  $r = @(); try { $r = @($o | ConvertFrom-Json) } catch { $r = @() }
+  $r = @(); try { $r = @(($o | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $r = @() }
   return @{ Out = $o; Rows = $r }
 }
 function DriftAt($rows, [int]$line) { @($rows | Where-Object { $_.rule -eq 'doc-drift' -and $_.start_line -eq $line }) }
@@ -87,7 +87,7 @@ try {
   Check 'D: POSITIVE CONTROL Wrong2 still reports doc-drift at line 15' ((DriftAt $r.Rows 15).Count -ge 1) $r.Out
 
   $lo = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $src --db $db --project-rules --format json --library-db none 2>$null } | Out-String)
-  $lr = @(); try { $lr = @($lo | ConvertFrom-Json) } catch { $lr = @() }
+  $lr = @(); try { $lr = @(($lo | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $lr = @() }
   Check 'E: lint <file> --project-rules: no doc-drift on Wrong' ((DriftAt $lr 11).Count -eq 0) $lo
   Check 'E: lint <file> --project-rules: Wrong2 still reports' ((DriftAt $lr 15).Count -ge 1) $lo
 

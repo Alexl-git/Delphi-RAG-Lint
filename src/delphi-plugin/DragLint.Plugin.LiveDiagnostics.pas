@@ -35,7 +35,7 @@ uses
 procedure StartLiveDiagnostics;
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.Editor.UnregisterDragLintMenu (DragLint.Plugin.Editor.pas), initialization/finalization (DragLint.Plugin.LiveDiagnostics.pas)</para>
+/// <para>Called from: DragLint.Plugin.Editor.UnregisterDragLintMenu (DragLint.Plugin.Editor.pas), DragLint.Plugin.LiveDiagnostics.finalization (DragLint.Plugin.LiveDiagnostics.pas)</para>
 /// <para>Calls: DragLint.Plugin.LiveDiagnostics.LiveLog, DragLint.Plugin.Providers.UnregisterDiagnosticProvider, FreeAndNil</para>
 /// <seealso cref="DragLint.Plugin.LiveDiagnostics.LiveLog"/>
 /// <seealso cref="DragLint.Plugin.Providers.UnregisterDiagnosticProvider"/>

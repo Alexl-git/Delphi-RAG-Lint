@@ -58,7 +58,7 @@ try {
   # lint-all --json prints progress text around ONE array.
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --json 2>$null }) -join "`n"
   $a = $raw.IndexOf('['); $b = $raw.LastIndexOf(']')
-  $f = if ($a -ge 0 -and $b -gt $a) { @(ConvertFrom-Json $raw.Substring($a, $b - $a + 1)) } else { @() }
+  $f = @(if ($a -ge 0 -and $b -gt $a) { @((ConvertFrom-Json $raw.Substring($a, $b - $a + 1) | ForEach-Object { $_ }) | ForEach-Object { $_ }) } else { @() })
 
   $hits = @($f | Where-Object { $_.rule -eq 'doc-drift' -and $_.message -like '*documented as input-only*' })
   $names = @($hits | ForEach-Object {

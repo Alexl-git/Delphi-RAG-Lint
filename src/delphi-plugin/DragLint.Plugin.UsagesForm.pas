@@ -23,11 +23,12 @@ uses
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.Editor.InvokeFindUsages (DragLint.Plugin.Editor.pas), DragLint.Plugin.StructureForm.TDragLintStructureForm.FindUsagesClick (DragLint.Plugin.StructureForm.pas)</para>
-/// <para>Calls: DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create, DragLint.Plugin.UsagesForm.TDragLintUsagesForm.LoadUsages/3</para>
+/// <para>Calls: DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create, DragLint.Plugin.UsagesForm.TDragLintUsagesForm.LoadUsages/3, DragLint.Plugin.UsagesForm.TDragLintUsagesForm.SetPositionFromCaret</para>
 /// <para>Overload 1 of 2</para>
 /// <para>Directives: overload</para>
 /// <seealso cref="DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create"/>
 /// <seealso cref="DragLint.Plugin.UsagesForm.TDragLintUsagesForm.LoadUsages"/>
+/// <seealso cref="DragLint.Plugin.UsagesForm.TDragLintUsagesForm.SetPositionFromCaret"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure ShowFindUsages(const ASymbolName, AExePath, ADbPath: string); overload;
@@ -41,36 +42,51 @@ procedure ShowFindUsages(const ASymbolName, AExePath, ADbPath: string); overload
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.StructureForm.TDragLintStructureForm.FindUsagesClick (DragLint.Plugin.StructureForm.pas)</para>
-/// <para>Calls: DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create, DragLint.Plugin.UsagesForm.TDragLintUsagesForm.LoadUsages/3</para>
+/// <para>Calls: DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create, DragLint.Plugin.UsagesForm.TDragLintUsagesForm.LoadUsages/3, DragLint.Plugin.UsagesForm.TDragLintUsagesForm.SetPositionFromCaret</para>
 /// <para>Overload 2 of 2</para>
 /// <para>Directives: overload</para>
 /// <seealso cref="DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create"/>
 /// <seealso cref="DragLint.Plugin.UsagesForm.TDragLintUsagesForm.LoadUsages"/>
+/// <seealso cref="DragLint.Plugin.UsagesForm.TDragLintUsagesForm.SetPositionFromCaret"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure ShowFindUsages(const ASymbolName, AExePath: string; const ADbPaths: TArray<string>); overload;
+/// <summary>1.52 FUSCOPE: Find Usages in one of the four scopes, bound at the caret.</summary>
+/// <param name="ASymbolName">The symbol (normally the identifier at the caret).</param>
+/// <param name="AExePath">The engine.</param>
+/// <param name="ADbPaths">The project's databases.</param>
+/// <param name="AScope">symbol, project, group or everywhere (the CLI's --scope words).</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Cmd.FindUsagesScope.FindUsagesIn (DragLint.Plugin.Cmd.FindUsagesScope.pas)</para>
+/// <para>Calls: DragLint.Plugin.UsagesForm.ScopeIndexOf, DragLint.Plugin.UsagesForm.ScopeWordAt, DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create, DragLint.Plugin.UsagesForm.TDragLintUsagesForm.LoadUsages/3, DragLint.Plugin.UsagesForm.TDragLintUsagesForm.SetPositionFromCaret</para>
+/// <seealso cref="DragLint.Plugin.UsagesForm.ScopeIndexOf"/>
+/// <seealso cref="DragLint.Plugin.UsagesForm.ScopeWordAt"/>
+/// <seealso cref="DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create"/>
+/// <seealso cref="DragLint.Plugin.UsagesForm.TDragLintUsagesForm.LoadUsages"/>
+/// <seealso cref="DragLint.Plugin.UsagesForm.TDragLintUsagesForm.SetPositionFromCaret"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+procedure ShowFindUsagesScoped(const ASymbolName, AExePath: string; const ADbPaths: TArray<string>; const AScope: string);
+
+/// <summary>The open project group file.</summary>
+/// <returns>Its full path, or '' when no group is open.</returns>
+/// <remarks>
+/// Main thread only (ToolsAPI). Shared with the Search page's scope combo.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.SearchForm.TSearchHandler.RunSearch (DragLint.Plugin.SearchForm.pas), DragLint.Plugin.UsagesForm.TDragLintUsagesForm.RunCliQuery (DragLint.Plugin.UsagesForm.pas)</para>
+/// <para>Calls: Supports</para>
+/// <para>Returns: ''; MS.MainProjectGroup.FileName</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function ActiveGroupFile: string;
+
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.Editor.UnregisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
 /// <para>Calls: FreeAndNil</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-/// <summary>1.52 FUSCOPE: Find Usages in one of the four scopes, bound at the caret.</summary>
-/// <param name="ASymbolName">The symbol (normally the identifier at the caret).</param>
-/// <param name="AExePath">The engine.</param>
-/// <param name="ADbPaths">The project's databases.</param>
-/// <param name="AScope">symbol, project, group or everywhere (the CLI's --scope words).</param>
-/// <remarks>The caret of the top editor is the position that binds scope symbol: the engine
-/// binds it only when a reference or declaration of ASymbolName is there, else it answers
-/// scope project and the title says so. Scope group reads the open project group file.
-/// Main thread only.</remarks>
-procedure ShowFindUsagesScoped(const ASymbolName, AExePath: string; const ADbPaths: TArray<string>; const AScope: string);
-
-/// <summary>The open project group file.</summary>
-/// <returns>Its full path, or '' when no group is open.</returns>
-/// <remarks>Main thread only (ToolsAPI). Shared with the Search page's scope combo.</remarks>
-function ActiveGroupFile: string;
-
 procedure HideFindUsages;
 
 { v0.42: build the Find-Usages UI in a dock-panel tab: a symbol search box on
@@ -84,11 +100,9 @@ procedure HideFindUsages;
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.DockForm.TDragLintDockFrame.HandleInitTimer (DragLint.Plugin.DockForm.pas)</para>
-/// <para>Calls: DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create, DragLint.Plugin.UsagesForm.TUsagesEmbedCtl.ComboChange, DragLint.Plugin.UsagesForm.TUsagesEmbedCtl.EditKeyDown</para>
+/// <para>Calls: DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create</para>
 /// <para>UI thread only -- touches AParent, Frm</para>
 /// <seealso cref="DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create"/>
-/// <seealso cref="DragLint.Plugin.UsagesForm.TUsagesEmbedCtl.ComboChange"/>
-/// <seealso cref="DragLint.Plugin.UsagesForm.TUsagesEmbedCtl.EditKeyDown"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure CreateEmbeddedUsages(AOwner: TComponent; AParent: TWinControl);
@@ -135,8 +149,8 @@ var
   Age    : TDateTime;
 begin
   ModName:= GetModuleName(HInstance);
-  Result:= if (ModName <> '') and FileAge(ModName, Age) then 'v1.51.1-alpha (BPL built ' + FormatDateTime('yyyy-mm-dd hh:nn:ss', Age) + ')'
-    else 'v1.51.1-alpha';
+  Result:= if (ModName <> '') and FileAge(ModName, Age) then 'v1.52.0-alpha (BPL built ' + FormatDateTime('yyyy-mm-dd hh:nn:ss', Age) + ')'
+    else 'v1.52.0-alpha';
 end;
 
 { ---- TUsageNodeData: stores file + line in tree node.Data ---- }

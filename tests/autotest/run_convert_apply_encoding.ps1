@@ -75,7 +75,7 @@ function Apply([string]$Dir, [string[]]$Extra = @()) {
 function Json([string]$s) {
   $a = $s.IndexOf('{'); $b = $s.LastIndexOf('}')
   if ($a -lt 0 -or $b -le $a) { return $null }
-  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json) } catch { return $null }
+  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function Snap([string]$Dir) { return ((Get-ChildItem $Dir -File | Sort-Object Name | ForEach-Object { $_.Name + ':' + (Get-FileHash $_.FullName -Algorithm MD5).Hash }) -join '|') }
 function Bytes([string]$p) { return ,[IO.File]::ReadAllBytes($p) }

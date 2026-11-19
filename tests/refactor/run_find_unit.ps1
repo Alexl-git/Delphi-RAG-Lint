@@ -17,7 +17,7 @@ $dry = (& { $ErrorActionPreference = 'Continue'; & $exe find-unit --name TWidget
 Assert "dry-run proposes adding Lib" ($dry -match 'Lib')
 
 # --json edit set
-$json = & { $ErrorActionPreference = 'Continue'; & $exe find-unit --name TWidget --in $target --json --db $db 2>$null } | ConvertFrom-Json
+$json = & { $ErrorActionPreference = 'Continue'; & $exe find-unit --name TWidget --in $target --json --db $db 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
 Assert "json edit set non-empty" (@($json).Count -ge 1)
 
 # --apply into a temp copy, then verify Lib is in the uses clause

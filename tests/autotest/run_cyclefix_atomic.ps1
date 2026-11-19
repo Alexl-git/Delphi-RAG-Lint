@@ -89,12 +89,12 @@ function Run-Fix([hashtable]$D, [string[]]$Extra, [hashtable]$Env = @{}, [bool]$
   if ($Json) { $a += @('--format', 'json') }
   foreach ($k in $Env.Keys) { Set-Item "Env:$k" $Env[$k] }
   try {
-    $out = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$errf } | Out-String)
+    $out = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errf); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe @a 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
     $code = $LASTEXITCODE
   } finally { foreach ($k in $Env.Keys) { Remove-Item "Env:$k" -ErrorAction SilentlyContinue } }
   $err = if (Test-Path $errf) { [IO.File]::ReadAllText($errf) } else { '' }
   $j = $null
-  if ($Json) { try { $j = $out | ConvertFrom-Json } catch { $j = $null } }
+  if ($Json) { try { $j = $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $j = $null } }
   return @{ Exit = $code; Out = $out; Err = $err; Json = $j }
 }
 function Cy($r) { if ($r.Json) { return @($r.Json.cycles)[0] } return $null }
@@ -111,7 +111,7 @@ $written = @($cy.written)
 Check 'a: written[] = 5 files (4 edited + 1 new)' ($written.Count -eq 5) ($written -join ', ')
 Check 'a: the new leaf DemoGagePort.Untangle.pas is written' (@($written | Where-Object { "$_" -like '*DemoGagePort.Untangle.pas' }).Count -eq 1) ($written -join ', ')
 Check 'a: the new leaf exists' (Test-Path (Join-Path $A.Proj 'DemoGagePort.Untangle.pas')) ''
-Check 'a: one .BCK<n> backup per edited file (4)' ((Backups $A.Proj).Count -eq 4) ((Backups $A.Proj | ForEach-Object Name) -join ', ')
+Check 'a: one .BCK<n> backup per edited file (4)' ((@(Backups $A.Proj)).Count -eq 4) ((Backups $A.Proj | ForEach-Object Name) -join ', ')
 Check 'a: backups[] has 4 entries' (@($cy.backups).Count -eq 4) ($cy.backups | ConvertTo-Json -Compress)
 Check 'a: recovery.txt written' (Test-Path (Join-Path $A.Proj 'recovery.txt')) ''
 Check 'a: compile.status = ok' ($cy.compile.status -eq 'ok') ($cy.compile | ConvertTo-Json -Compress -Depth 4)
@@ -133,7 +133,7 @@ $cy = Cy $r
 Check 'b: refusal write-failed in the cycle' (@($cy.refusals | Where-Object { $_.kind -eq 'write-failed' }).Count -ge 1) $r.Out
 Check 'b: tree byte-identical' ((Get-TreeHash $B.Proj) -eq $hB) ''
 Check 'b: no .Untangle.pas left' (@(Get-ChildItem $B.Proj -Filter '*.Untangle.pas').Count -eq 0) ''
-Check 'b: no .BCK left' ((Backups $B.Proj).Count -eq 0) ''
+Check 'b: no .BCK left' ((@(Backups $B.Proj)).Count -eq 0) ''
 Check 'b: no recovery.txt left' (-not (Test-Path (Join-Path $B.Proj 'recovery.txt'))) ''
 Check 'b: DB copy unchanged' ((Get-FileSha $B.Db) -eq $dbB) ''
 $t = Run-Fix $B @('--unit', 'demogageport', '--apply') @{ DRAGLINT_TEST_FAIL_WRITE_AT = '3' } -Json $false
@@ -178,7 +178,7 @@ Check 'f: compile.status = error with the dcc lines' (($cy.compile.status -eq 'e
 Check 'f: no repair was made' (@($cy.repairs).Count -eq 0) ($cy.repairs | ConvertTo-Json -Compress)
 Check 'f: rolled_back = true' ($cy.rolled_back -eq $true) ''
 Check 'f: tree byte-identical' ((Get-TreeHash $F.Proj) -eq $hF) ''
-Check 'f: no new leaf, no .BCK, no recovery.txt' ((@(Get-ChildItem $F.Proj -Filter '*.Untangle.pas').Count -eq 0) -and ((Backups $F.Proj).Count -eq 0) -and
+Check 'f: no new leaf, no .BCK, no recovery.txt' ((@(Get-ChildItem $F.Proj -Filter '*.Untangle.pas').Count -eq 0) -and ((@(Backups $F.Proj)).Count -eq 0) -and
   -not (Test-Path (Join-Path $F.Proj 'recovery.txt'))) ''
 Check 'f: DB copy unchanged' ((Get-FileSha $F.Db) -eq $dbF) ''
 

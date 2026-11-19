@@ -114,7 +114,7 @@ type
 /// Once a stand-down has started, the grace replaces ATimeoutMs as the
 /// deadline: the engine is rolling back, and a timeout must not cut that short.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.CliAsync.TCliRun.Work (DragLint.Plugin.CliAsync.pas), DragLint.Plugin.CodeLensCache.RunCapture (DragLint.Plugin.CodeLensCache.pas), DragLint.Plugin.Editor.RunAndCaptureStdout (DragLint.Plugin.Editor.pas), DragLint.Plugin.JobQueue.TDragLintJobQueue.RunOne (DragLint.Plugin.JobQueue.pas)</para>
+/// <para>Called from: DragLint.Plugin.CliAsync.TCliRun.Work (DragLint.Plugin.CliAsync.pas), DragLint.Plugin.Cmd.CheckInit.InvokeCheckInit (DragLint.Plugin.Cmd.CheckInit.pas), DragLint.Plugin.Cmd.DisableRule.InvokeDisableRule (DragLint.Plugin.Cmd.DisableRule.pas), DragLint.Plugin.Cmd.ExtractConst.RunThen (DragLint.Plugin.Cmd.ExtractConst.pas), DragLint.Plugin.Cmd.FieldRepo.InvokeOpenEditor (DragLint.Plugin.Cmd.FieldRepo.pas) (+4 more)</para>
 /// <para>Calls: DragLint.Plugin.ProcRun.RunCore</para>
 /// <para>Returns: RunCore(ACmdLine, AOutput, ATimeoutMs, CREATE_NO_WINDOW, nil, nil, ACancel, nil, AStandDownGraceMs)</para>
 /// <seealso cref="DragLint.Plugin.ProcRun.RunCore"/>
@@ -249,14 +249,28 @@ function ProcRunBeatText: string;
 /// <summary>Tells whether a command line was built from an empty exe path.</summary>
 /// <param name="ACmdLine">The full command line, as CreateProcessW would take it.</param>
 /// <returns>True when its first token is the empty quoted string: `"" verb ...`.</returns>
-/// <remarks>EngineExeOrEmpty answers '' when no engine resolves and the sites format
+/// <remarks>
+/// EngineExeOrEmpty answers '' when no engine resolves and the sites format
 /// it into `"%s" verb ...`. Every runner in this unit refuses such a line: exit -1,
 /// PROCRUN_ENGINE_NOT_FOUND_TEXT as the output, nothing spawned, GEngineMissingHook
-/// told. A site that spawns without this unit checks it itself. Thread-safe, pure.</remarks>
+/// told. A site that spawns without this unit checks it itself. Thread-safe, pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.ProcRun.RunCore (DragLint.Plugin.ProcRun.pas), DragLint.Plugin.StructureCache.RunAndCaptureSurface (DragLint.Plugin.StructureCache.pas)</para>
+/// <para>Calls: TrimLeft</para>
+/// <para>Returns: TrimLeft(ACmdLine).StartsWith('""')</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsEmptyExeCommand(const ACmdLine: string): Boolean;
 
 /// <summary>Runs GEngineMissingHook when one is set; a failing hook is dropped.</summary>
-/// <remarks>Any thread. For a spawn site that does not pass through this unit's runners.</remarks>
+/// <remarks>
+/// Any thread. For a spawn site that does not pass through this unit's runners.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Cmd.FieldRepo.InvokeMemTableFromCsv (DragLint.Plugin.Cmd.FieldRepo.pas), DragLint.Plugin.Cmd.FieldRepo.ResolveContext (DragLint.Plugin.Cmd.FieldRepo.pas), DragLint.Plugin.Editor.DLEngineFound (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas), DragLint.Plugin.ProcRun.RunCore (DragLint.Plugin.ProcRun.pas) (+1 more)</para>
+/// <para>Calls: GEngineMissingHook</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ReportEngineMissing;
 
 implementation

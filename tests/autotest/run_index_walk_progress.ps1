@@ -78,7 +78,7 @@ $OutFile = Join-Path $WorkDir 'stdout.txt'
 $ErrFile = Join-Path $WorkDir 'stderr.txt'
 $p = Start-Process -FilePath $Exe -ArgumentList @('index', $SrcDir, '--db', $Db) `
        -RedirectStandardOutput $OutFile -RedirectStandardError $ErrFile `
-       -NoNewWindow -Wait -PassThru
+       -NoNewWindow -Wait -PassThru; $null = $p.Handle
 $so = Get-Content $OutFile -Raw
 $se = Get-Content $ErrFile -Raw
 if ($null -eq $so) { $so = '' }

@@ -62,7 +62,7 @@ $logPath = "$WorkDir\build_harness.log"
   'echo BUILD_EXITCODE=%ERRORLEVEL%'
 ) -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 $null = Start-Process cmd.exe -ArgumentList '/c', "`"$batPath`"" `
-          -RedirectStandardOutput $logPath -RedirectStandardError "$logPath.err" -NoNewWindow -Wait -PassThru
+          -RedirectStandardOutput $logPath -RedirectStandardError "$logPath.err" -NoNewWindow -Wait -PassThru; $null = $null.Handle
 $log = Get-Content $logPath -Raw -ErrorAction SilentlyContinue
 $buildOk = ($log -match 'BUILD_EXITCODE=0') -and ($log -notmatch 'Error:')
 Check 'CycleFixHarness.dpr builds (Win64)' $buildOk (($log -split "`r?`n" | Select-Object -Last 4) -join ' | ')
@@ -74,8 +74,8 @@ $kv = @{}
 foreach ($line in ($out -split "`r?`n")) { if ($line -match '^([A-Za-z0-9_.]+)=(.*)$') { $kv[$matches[1]] = $matches[2] } }
 Check 'harness ran to completion' ($out -match '(?m)^DONE') $out
 
-$dry     = Get-Content (Join-Path $FixtureDir 'outcome-15b-dryrun.json') -Raw | ConvertFrom-Json
-$applied = Get-Content (Join-Path $FixtureDir 'outcome-15b-applied.json') -Raw | ConvertFrom-Json
+$dry     = Get-Content (Join-Path $FixtureDir 'outcome-15b-dryrun.json') -Raw | ConvertFrom-Json | ForEach-Object { $_ }
+$applied = Get-Content (Join-Path $FixtureDir 'outcome-15b-applied.json') -Raw | ConvertFrom-Json | ForEach-Object { $_ }
 $dryFiles = @($dry.cycles[-1].edits | ForEach-Object { $_.file.ToLowerInvariant() } | Sort-Object -Unique).Count
 Check 'SANITY the dry run edits at least one file' ($dryFiles -gt 0) ''
 

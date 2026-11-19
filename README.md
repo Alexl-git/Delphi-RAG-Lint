@@ -211,7 +211,7 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 | Which database covers this file? | `drag-lint resolve-dbs --in <U.pas>` |
 | What is wrong with this file? | `drag-lint lint <U.pas>` |
 | ...with the whole project? | `drag-lint lint-all --db <db>` |
-| Record that a finding was reviewed | `drag-lint allow <U.pas> --fix-line <L> --fix-rule <id> --apply` |
+| Record that a finding was reviewed | `drag-lint allow <U.pas> --fix-line <L> --fix-rule <id> --apply` (re-stamp after re-reading: add `--reason "REVIEWED <yyyy-mm-dd> <why>"`) |
 | Repair what the linter can repair | `drag-lint lint-all --db <db> --fix` (preview), then `--fix --apply` |
 
 > **An explicit `--db` must exist.** If any path you pass is not there, the verb
@@ -1305,7 +1305,7 @@ A verb's usage line names the canonical flag only. Each alias is accepted wherev
 | `--force-reparse` | `--no-skip` | back-compat: the first spelling of the index re-parse switch |
 | `--help` | `-h`, `-?` | convention: the short help tokens every CLI user tries first |
 | `--in` | `--file` | one input-file option (TArgs.InFile); --in is the spelling the ask verb's own parser accepts, so it is the one that works on every verb |
-| `--output` | `--out` | back-compat: owner ruling ENG-6 (2026-09-22/23) -- scripts that use --out keep working |
+| `--output` | `--out`, `--report` | back-compat: owner ruling ENG-6 (2026-09-22/23) -- scripts that use --out keep working; --report (1.52 SMALLS 8611fb1d1) names the lint-all report file |
 | `--scan-libraries-win` | `--scan-libraries` | back-compat: the spelling before --scan-libraries-all existed |
 
 <!-- dl:registry:end flag-aliases -->

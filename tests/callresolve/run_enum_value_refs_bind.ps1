@@ -322,7 +322,7 @@ function W([string]$dir, [string]$name, [string]$body) {
 function Sql([string]$db, [string]$q) {
   $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n"
   if ([string]::IsNullOrWhiteSpace($j)) { return ,@() }
-  try { $o = $j | ConvertFrom-Json } catch { return ,@() }
+  try { $o = $j | ConvertFrom-Json | ForEach-Object { $_ } } catch { return ,@() }
   $cols = @($o.columns | ForEach-Object { $_.name })
   $out = @()
   foreach ($r in @($o.rows)) {
@@ -367,7 +367,7 @@ function IsNull($rows) {
 function Resolved([string]$db, [string]$name) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name $name --resolved --json --db $db 2>$null } | Out-String
   if ($raw.Trim() -eq '') { return @() }
-  try { return @(($raw | ConvertFrom-Json)) } catch { return @() }
+  try { return @(($raw | ConvertFrom-Json | ForEach-Object { $_ })) } catch { return @() }
 }
 
 # ===========================================================================
@@ -532,7 +532,7 @@ CheckN 1 'index reported no parse errors' ($idxOut -match '(?<!\d)0 errors') $id
 
 Write-Host ''
 Write-Host '== check 2: ROUTINE CONTROL -- green today and in EVERY later task ==' -ForegroundColor Cyan
-$dw = @((Resolved $dbA 'DoWork') | Where-Object { $_.target_qname -eq 'uEnumDecl.DoWork' })
+$dw = @((@(Resolved $dbA 'DoWork')) | Where-Object { $_.target_qname -eq 'uEnumDecl.DoWork' })
 CheckN 2 'DoWork: exactly 1 resolved caller' ($dw.Count -eq 1) ($dw | ConvertTo-Json -Compress)
 CheckN 2 'DoWork: the caller is uEnumUse.UseIt' ($dw.Count -eq 1 -and $dw[0].caller_qname -eq 'uEnumUse.UseIt') ($dw | ConvertTo-Json -Compress)
 CheckN 2 'DoWork: certain' ($dw.Count -eq 1 -and $dw[0].confidence -eq 'certain') ($dw | ConvertTo-Json -Compress)
@@ -567,7 +567,7 @@ $acExit = $LASTEXITCODE
 # non-JSON error text).
 CheckN 8 'ambiguous-calls actually ran (exit 0) -- an empty result must not pass by default' ($acExit -eq 0) "exit=$acExit raw=$acRaw"
 $acParsed = $false
-try { $null = $acRaw | ConvertFrom-Json; $acParsed = $true } catch { $acParsed = $false }
+try { $null = $acRaw | ConvertFrom-Json | ForEach-Object { $_ }; $acParsed = $true } catch { $acParsed = $false }
 CheckN 8 'ambiguous-calls returned parseable JSON' $acParsed "raw=$acRaw"
 $acHit = @($enumNames | Where-Object { $acRaw -match ("\b" + [regex]::Escape($_) + "\b") })
 CheckN 8 'ambiguous-calls names NO fixture enum value' ($acHit.Count -eq 0) ("hits=" + ($acHit -join ',') + " raw=" + $acRaw)
@@ -575,7 +575,7 @@ $uniPath = Join-Path $PSScriptRoot 'run_callsite_kind_universe.ps1'
 $uniOut  = Join-Path $scratch 'universe.out.log'
 $uniErr  = Join-Path $scratch 'universe.err.log'
 $uniProc = Start-Process pwsh -ArgumentList '-NoProfile', '-File', $uniPath, '-Exe', $exePath `
-             -Wait -PassThru -NoNewWindow -RedirectStandardOutput $uniOut -RedirectStandardError $uniErr
+             -Wait -PassThru -NoNewWindow -RedirectStandardOutput $uniOut -RedirectStandardError $uniErr; $null = $uniProc.Handle
 CheckN 8 'run_callsite_kind_universe.ps1 PASS when invoked from this guard' ($uniProc.ExitCode -eq 0) "exit=$($uniProc.ExitCode) log=$uniOut"
 
 Write-Host ''
@@ -716,7 +716,7 @@ Write-Host '== check 9: R-A -- find-callers --resolved reports an enum-value REA
 $cmdLoadSites  = @($L.Keys | Where-Object { $L[$_].exp -eq 'uEnumDecl.TCmd.cmdLoad' })
 $useItSites    = @($cmdLoadSites | Where-Object { $L[$_].f -eq $fUse })
 $bothSites     = @($cmdLoadSites | Where-Object { $L[$_].f -eq $fBoth })
-$cl = @((Resolved $dbA 'cmdLoad') | Where-Object { $_.target_qname -eq 'uEnumDecl.TCmd.cmdLoad' })
+$cl = @((@(Resolved $dbA 'cmdLoad')) | Where-Object { $_.target_qname -eq 'uEnumDecl.TCmd.cmdLoad' })
 CheckN 9 ("cmdLoad: {0} resolved rows, one per bound site" -f $cmdLoadSites.Count) ($cl.Count -eq $cmdLoadSites.Count) ("n=$($cl.Count) expected=$($cmdLoadSites.Count) " + ($cl | ConvertTo-Json -Compress))
 CheckN 9 'cmdLoad: caller set is exactly {uEnumUse.UseIt, uEnumBoth.Both}' ((@($cl | ForEach-Object { $_.caller_qname } | Sort-Object -Unique) -join ',') -eq 'uEnumBoth.Both,uEnumUse.UseIt') (@($cl | ForEach-Object { $_.caller_qname } | Sort-Object -Unique) -join ',')
 CheckN 9 ("cmdLoad: uEnumUse.UseIt owns {0} rows (A1, A3, B2)" -f $useItSites.Count) (@($cl | Where-Object { $_.caller_qname -eq 'uEnumUse.UseIt' }).Count -eq $useItSites.Count) ($cl | ConvertTo-Json -Compress)
@@ -758,7 +758,7 @@ $srcDecl = [IO.File]::ReadAllText($fDecl)
 [IO.File]::WriteAllText($buf, ($srcDecl -replace 'cmdLoad, ', ''), [Text.Encoding]::ASCII)
 CheckN 11 'buffer really dropped cmdLoad from TCmd' ([IO.File]::ReadAllText($buf) -match '(?m)^\s*TCmd = \(cmdDelta, cmdShadow, cmdClash\);') (([IO.File]::ReadAllText($buf) -split "`r`n" | Where-Object { $_ -match 'TCmd' }) -join ' ')
 $lt = & { $ErrorActionPreference = 'Continue'; & $exePath lint-tree --unit $fDecl --db $dbA --buffer $buf --baseline $base --format json 2>$null } | Out-String
-$lj = $null; try { $lj = $lt | ConvertFrom-Json } catch { }
+$lj = $null; try { $lj = $lt | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 CheckN 11 'lint-tree returned JSON' ($null -ne $lj) $lt
 if ($null -ne $lj) {
   # TWO finding CLASSES arrive the moment the gate admits enum_value, and they

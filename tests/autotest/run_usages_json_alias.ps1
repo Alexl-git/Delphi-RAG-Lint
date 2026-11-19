@@ -61,7 +61,7 @@ function RunUsages([string[]]$ExtraArgs) {
   if ($start -ge 0) {
     $body = $raw.Substring($start)
     $end  = $body.LastIndexOf('}')
-    if ($end -ge 0) { try { $json = ($body.Substring(0, $end + 1) | ConvertFrom-Json) } catch { $json = $null } }
+    if ($end -ge 0) { try { $json = ($body.Substring(0, $end + 1) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $json = $null } }
   }
   return @{ Raw = $raw; Exit = $ex; J = $json }
 }

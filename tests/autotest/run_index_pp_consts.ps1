@@ -21,6 +21,9 @@ param(
 )
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'; $script:Failed = $false; $script:Passed = 0; $script:FailedN = 0
 function Check($n, $ok, $d = '') {
@@ -48,7 +51,7 @@ function Run([string[]]$argv, [string]$tag) {
 function Col0([string]$db, [string]$q) {
   Push-Location $WorkDir
   try { $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query $q --json 2>$null } | Out-String } finally { Pop-Location }
-  try { return ,@((($j | ConvertFrom-Json).rows) | ForEach-Object { [string]$_[0] }) } catch { return ,@() }
+  try { return ,@((($j | ConvertFrom-Json | ForEach-Object { $_ }).rows) | ForEach-Object { [string]$_[0] }) } catch { return ,@() }
 }
 function IncLeaves([string]$db) {
   return ,@((Col0 $db "SELECT path FROM files WHERE path LIKE '%.inc'") | ForEach-Object { [IO.Path]::GetFileName($_) } | Sort-Object)
@@ -83,7 +86,7 @@ Check 'EXT-E4: typed const from a LIBRARY unit is not a true constant -> LTYPED_
 function ConstRow([string]$d, [string]$n) {
   Push-Location $WorkDir
   try { $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $d --json --query "SELECT COALESCE(modifiers,''), COALESCE(signature,'') FROM symbols WHERE name = '$n' AND kind = 'const'" 2>$null } | Out-String } finally { Pop-Location }
-  try { $r = @(($j | ConvertFrom-Json).rows); if ($r.Count -gt 0) { return ,@([string]$r[0][0], [string]$r[0][1]) } } catch { }
+  try { $r = @(($j | ConvertFrom-Json | ForEach-Object { $_ }).rows); if ($r.Count -gt 0) { return ,@([string]$r[0][0], [string]$r[0][1]) } } catch { }
   return ,@('<none>', '<none>')
 }
 $tc = ConstRow $db 'TYPED_C'; $d2 = ConstRow $db 'DEBUG2'; $lt = ConstRow $libDb 'LIB_TYPED'; $lb = ConstRow $libDb 'LIB_BASE'
@@ -99,7 +102,7 @@ $lj = Run @('lint', $main, '--db', $db, '--library-db', $libDb, '--project', $pr
 $lines = @()
 try {
   $jtxt = $lj.Substring($lj.IndexOf('['))
-  $lines = @(($jtxt | ConvertFrom-Json) | Where-Object { $_.rule -eq 'pp-unresolved-if' } | ForEach-Object { [int]$_.start_line })
+  $lines = @(($jtxt | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $_.rule -eq 'pp-unresolved-if' } | ForEach-Object { [int]$_.start_line })
 } catch { }
 Write-Host ("  pp-unresolved-if lines: {0}" -f ($lines -join ','))
 Check 'pp-unresolved-if fires on {$IF NOSUCHNAME = 1} (line 64)' ($lines -contains 64)
@@ -107,7 +110,7 @@ Check 'pp-unresolved-if fires on the inactive-only GHOST (line 46)' ($lines -con
 Check 'pp-unresolved-if fires on the typed const TYPED_C (line 52)' ($lines -contains 52)
 Check 'EXT-E4: pp-unresolved-if fires on the LIBRARY typed const LIB_TYPED (line 70)' ($lines -contains 70)
 $msgs = @()
-try { $msgs = @(($jtxt | ConvertFrom-Json) | Where-Object { $_.rule -eq 'pp-unresolved-if' } | ForEach-Object { '{0}|{1}' -f $_.start_line, $_.message }) } catch { }
+try { $msgs = @(($jtxt | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $_.rule -eq 'pp-unresolved-if' } | ForEach-Object { '{0}|{1}' -f $_.start_line, $_.message }) } catch { }
 $m52 = ($msgs | Where-Object { $_ -like '52|*' }) -join ' '; $m70 = ($msgs | Where-Object { $_ -like '70|*' }) -join ' '; $m64 = ($msgs | Where-Object { $_ -like '64|*' }) -join ' '
 Check 'EXT-E4: hint names TYPED_C as a typed constant' ($m52 -match 'TYPED_C \(typed constant') $m52
 Check 'EXT-E4: hint names LIB_TYPED as a typed constant' ($m70 -match 'LIB_TYPED \(typed constant') $m70
@@ -127,3 +130,4 @@ Check 'positive control: LOCAL_SUM = 9 now -> SUM_NO' (Picks $inc2 'SUM' 'NO')
   Write-Host ("RESULT: {0} passed, {1} failed" -f $script:Passed, $script:FailedN)
 }
 if ($script:Failed) { exit 1 } else { exit 0 }
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

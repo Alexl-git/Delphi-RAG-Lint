@@ -19,6 +19,12 @@ interface
 
 type
   /// <summary>One published field declaration whose type is spelled inline.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V152.RTTI5.Support.pas) ?, DRagLint.V152.RTTI5.Support.FindAnonymousFieldTypes (DRagLint.V152.RTTI5.Support.pas) ?, DRagLint.V152.RTTI5.Support.TAnonScanner.Create (DRagLint.V152.RTTI5.Support.pas) ?, DRagLint.V152.RTTI5.Support.TAnonScanner.ReadField (DRagLint.V152.RTTI5.Support.pas), DRagLint.V152.RTTI5.Support.TAnonScanner.Run (DRagLint.V152.RTTI5.Support.pas) ? (+2 more)</para>
+  /// <para>Used in units: DRagLint.V152.RTTI5, DRagLint.V152.RTTI5.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TAnonField = record
     /// <summary>The class whose published section declares the field.</summary>
     ClassName: string;
@@ -37,14 +43,31 @@ type
 /// <param name="AText">The unit source; comments, directives and strings are ignored.</param>
 /// <returns>One entry per field declaration (a `FA, FB: array[0..1] of Byte;` is one entry), in
 /// source order; empty when there is none.</returns>
-/// <remarks>Pure and stateless; never raises on malformed source (an unbalanced body just ends the
+/// <remarks>
+/// Pure and stateless; never raises on malformed source (an unbalanced body just ends the
 /// scan of that class). A named type, a dynamic array of a named element type is NOT a named type:
-/// `array of string` is reported, `TStrings`, `TArr4` and `TKinds` are not.</remarks>
+/// `array of string` is reported, `TStrings`, `TArr4` and `TKinds` are not.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V152.RTTI5.TV152RTTI5Rules.CheckFile (DRagLint.V152.RTTI5.pas)</para>
+/// <para>Calls: DRagLint.V152.RTTI5.Support.TAnonLexer.Create, DRagLint.V152.RTTI5.Support.TAnonLexer.Run, DRagLint.V152.RTTI5.Support.TAnonScanner.Create, DRagLint.V152.RTTI5.Support.TAnonScanner.Run</para>
+/// <para>Returns: Scanner.Run</para>
+/// <seealso cref="DRagLint.V152.RTTI5.Support.TAnonLexer.Create"/>
+/// <seealso cref="DRagLint.V152.RTTI5.Support.TAnonLexer.Run"/>
+/// <seealso cref="DRagLint.V152.RTTI5.Support.TAnonScanner.Create"/>
+/// <seealso cref="DRagLint.V152.RTTI5.Support.TAnonScanner.Run"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindAnonymousFieldTypes(const AText: string): TArray<TAnonField>;
 
 /// <summary>Builds the finding message of one anonymous published field.</summary>
 /// <param name="AField">The field found by <see cref="FindAnonymousFieldTypes"/>.</param>
 /// <returns>A message starting with the sub-kind `anonymous-field-type:`.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V152.RTTI5.TV152RTTI5Rules.CheckFile (DRagLint.V152.RTTI5.pas)</para>
+/// <para>Calls: Format</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AnonymousFieldMessage(const AField: TAnonField): string;
 
 implementation

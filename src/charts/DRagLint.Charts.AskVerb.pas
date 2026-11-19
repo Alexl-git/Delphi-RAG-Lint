@@ -221,7 +221,7 @@ function RunAsk(const pArgs: TAskVerbArgs; const pProducer: IReportProducer;
 /// <returns>The exit code RunAsk returns; 2 for a usage error, 0 for --help.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
 /// <para>Calls: DRagLint.Charts.AskVerb.AskUsage, DRagLint.Charts.AskVerb.ParseAskArgs, DRagLint.Charts.AskVerb.RunAsk, ParamStr, Writeln</para>
 /// <para>Returns: ASK_VERB_EXIT_SETUP</para>
 /// <seealso cref="DRagLint.Charts.AskVerb.AskUsage"/>

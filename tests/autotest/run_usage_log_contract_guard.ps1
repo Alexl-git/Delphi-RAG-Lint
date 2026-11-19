@@ -36,7 +36,7 @@ if (-not (Test-Path $Log)) {
   # no checkout on this box has a live log (fresh clone): nothing to measure -> battery SKIP
   Write-Host "SKIP live log missing: $Log and no main-checkout log (pass -Log)"; exit 77
 }
-$j = (& node $report --log $Log --json) | ConvertFrom-Json
+$j = (& node $report --log $Log --json) | ConvertFrom-Json | ForEach-Object { $_ }
 $bad = @($j.byTool.PSObject.Properties.Name | Where-Object { $_ -match '^\d+$' })
 Check ($bad.Count -eq 0) "live log: no numeric tool key (shifted rows repaired) (found: $($bad -join ','))"
 $cls = 0; foreach ($p in $j.skippedByClass.PSObject.Properties) { $cls += [int]$p.Value }
@@ -46,7 +46,7 @@ Check ($cls -eq $j.skipped) "live log: all $($j.skipped) skipped rows classified
 $fx = Join-Path $tmp 'fx.log'
 $tab = "`t"
 [IO.File]::WriteAllText($fx, ((@('2026-09-29T04:00:09Z','report','x round-trip','2','4000','report','900') -join $tab) + "`r`n"))
-$f = (& node $report --log $fx --json) | ConvertFrom-Json
+$f = (& node $report --log $fx --json) | ConvertFrom-Json | ForEach-Object { $_ }
 Check ($f.repaired -eq 1 -and $f.skipped -eq 0 -and $f.byTool.PSObject.Properties.Name -contains 'report') 'fixture: shifted report row repaired in memory'
 
 # 3. append helper

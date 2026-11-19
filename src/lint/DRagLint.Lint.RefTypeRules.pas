@@ -98,6 +98,13 @@ const
 /// <summary>True when the rule ships OFF by default (see the catalog).</summary>
 /// <param name="ARuleId">One of REF_TYPE_RULES.</param>
 /// <returns>The value to hand TLintConfig.ShouldKeep as ADefaultDisabled.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
+/// <para>Calls: SameText</para>
+/// <para>Returns: False</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RefTypeRuleDefaultOff(const ARuleId: string): Boolean;
 
 /// <summary>The static type ref_types records for the reference at a position.</summary>
@@ -109,15 +116,31 @@ function RefTypeRuleDefaultOff(const ARuleId: string): Boolean;
 /// <param name="ATypeLeaf">Out: the type's leaf name.</param>
 /// <returns>False with no table (an index older than 1.44) or no row: the caller
 /// keeps what it knew without the fact.</returns>
-/// <remarks>Two queries per call, for rule candidates and not for every expression.</remarks>
+/// <remarks>
+/// Two queries per call, for rule candidates and not for every expression.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.FactTypeOf (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.DisallowedChecks.TypedReceiverHit (DRagLint.Diagnostics.DisallowedChecks.pas), DRagLint.LSP.Feature.TypeDefinition.TLspTypeDefinitionFeature.Handle (DRagLint.LSP.Feature.TypeDefinition.pas)</para>
+/// <para>Calls: DRagLint.Lint.RefTypeRules.LeafOf, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection</para>
+/// <para>Returns: False; True</para>
+/// <para>SQL: reads REF_TYPES, REFS, SQLITE_MASTER</para>
+/// <para>Mutates: ATypeLeaf (out)</para>
+/// <seealso cref="DRagLint.Lint.RefTypeRules.LeafOf"/>
+/// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RefStaticTypeAt(const AStore: ISymbolStore; AFileId: Int64; ALine, ACol: Integer; const AName: string;
   out ATypeLeaf: string): Boolean;
 
 type
   /// <summary>The answer to "does type A descend from type B" over the indexed ancestry.</summary>
-  /// <remarks>Three values on purpose: a rule that wants to SUPPRESS on proof uses tdYes, a rule
+  /// <remarks>
+  /// Three values on purpose: a rule that wants to SUPPRESS on proof uses tdYes, a rule
   /// that wants to FIRE on proof of absence uses tdNo, and tdUnknown never changes what a rule
-  /// does today.</remarks>
+  /// does today.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.RefTypeRules.pas), DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check.DescentOf (DRagLint.Diagnostics.ExceptionThreadChecks.pas), DRagLint.Diagnostics.FlowChecks.TMethodArgModes.MethodMode (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Lint.RefTypeRules.TExprTypeReader.Descends (DRagLint.Lint.RefTypeRules.pas), DRagLint.Lint.RefTypeRules.TRefTypeScan.DescentOf (DRagLint.Lint.RefTypeRules.pas) (+6 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDescent = (
     /// <summary>Not decidable: no such type, a homonym that disagrees, an unresolved or generic
     /// ancestor with no library index, or not a class or interface. Also an ancestor that is
@@ -136,19 +159,34 @@ type
 /// <param name="ATypeLeaf">The type's name; a qualified name is cut to its leaf. Case-insensitive.</param>
 /// <param name="AAncestorLeaf">The ancestor's name, leaf only. Case-insensitive. The type itself counts.</param>
 /// <returns>tdYes, tdNo or tdUnknown; see TDescent. Needs no ref_types table, only type_ancestors.</returns>
-/// <remarks>Homonyms are intersected as in the unit comment: they can turn tdYes into tdUnknown,
+/// <remarks>
+/// Homonyms are intersected as in the unit comment: they can turn tdYes into tdUnknown,
 /// never create one. A homonym anywhere in the ancestry (the type itself or a library base it
 /// passes through) answers tdYes only when EVERY candidate declaration descends from the ancestor,
-/// and never tdNo. One call builds its own caches; use TExprTypeReader.Descends in a loop.</remarks>
+/// and never tdNo. One call builds its own caches; use TExprTypeReader.Descends in a loop.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.ReadNeverAssigned.CollectReadNeverAssigned.WriteMayReach (DRagLint.Lint.ReadNeverAssigned.pas)</para>
+/// <para>Calls: DRagLint.Lint.RefTypeRules.TExprTypeReader.Create, DRagLint.Lint.RefTypeRules.TExprTypeReader.Descends</para>
+/// <para>Returns: R.Descends(ATypeLeaf, AAncestorLeaf)</para>
+/// <seealso cref="DRagLint.Lint.RefTypeRules.TExprTypeReader.Create"/>
+/// <seealso cref="DRagLint.Lint.RefTypeRules.TExprTypeReader.Descends"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TypeDescendsFrom(const AStore, ALibStore: ISymbolStore; const ATypeLeaf, AAncestorLeaf: string): TDescent;
 
 type
   /// <summary>Static types of expressions in ONE unit, from ref_types (index fact F1).</summary>
-  /// <remarks>Not thread-safe. Owns its caches and a query on AStore's connection, so it must not
+  /// <remarks>
+  /// Not thread-safe. Owns its caches and a query on AStore's connection, so it must not
   /// outlive the store. Creating it costs one query for the file's refs; ask many nodes of the same
   /// file from one reader. Safe inside a `with`, no caller has to guard: there a name may bind to
   /// a member of the with-subject, so the reader answers only when the resolver decided the name
-  /// (see TypeLeafOf). The first with-subject is outside its own scope; a later one is inside.</remarks>
+  /// (see TypeLeafOf). The first with-subject is outside its own scope; a later one is inside.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.DropNonStringConcat (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.ConcurrencyChecks.TConcurrencyChecker.Check.ReceiverMayBeLock (DRagLint.Diagnostics.ConcurrencyChecks.pas) (+19 more)</para>
+  /// <para>Used in units: DRagLint.Diagnostics.AstChecks, DRagLint.Diagnostics.ConcurrencyChecks, DRagLint.Diagnostics.DeadCodeChecks, DRagLint.Diagnostics.ExceptionThreadChecks, DRagLint.Diagnostics.FlowChecks, DRagLint.Lint.QueryRules, DRagLint.Lint.RefTypeRules, DRagLint.Lint.TaintRules, DRagLint.V151.CMP, DRagLint.V151.THRB.Support, DRagLint.V151.TYP.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TExprTypeReader = class
     strict private
       FScan : TObject;
@@ -159,7 +197,29 @@ type
       /// <param name="ALibStore">The platform library index, or nil (see TypeDescendsFrom).</param>
       /// <param name="AFileId">The unit's id in AStore.</param>
       /// <param name="ASrc">The unit's source bytes exactly as the node was parsed from (UTF-8).</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.DropNonStringConcat (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.ConcurrencyChecks.TConcurrencyChecker.Check.ReceiverMayBeLock (DRagLint.Diagnostics.ConcurrencyChecks.pas) (+11 more)</para>
+      /// <para>Calls: DRagLint.Lint.RefTypeRules.TRefTypeScan.Attach, DRagLint.Lint.RefTypeRules.TRefTypeScan.Create, DRagLint.Lint.RefTypeRules.TRefTypeScan.HasFact, TRefTypeScan</para>
+      /// <para>constructor</para>
+      /// <para>Reads: FScan, FReady   Writes: FScan, FReady</para>
+      /// <seealso cref="DRagLint.Lint.RefTypeRules.TRefTypeScan.Attach"/>
+      /// <seealso cref="DRagLint.Lint.RefTypeRules.TRefTypeScan.Create"/>
+      /// <seealso cref="DRagLint.Lint.RefTypeRules.TRefTypeScan.HasFact"/>
+      /// <seealso cref="DRagLint.Lint.RefTypeRules.TExprTypeReader.Descends"/>
+      /// <seealso cref="DRagLint.Lint.RefTypeRules.TExprTypeReader.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor Create(const AStore, ALibStore: ISymbolStore; AFileId: Int64; const ASrc: TBytes);
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Reads: FScan</para>
+      /// <para>Directives: override</para>
+      /// <seealso cref="DRagLint.Lint.RefTypeRules.TExprTypeReader.Create"/>
+      /// <seealso cref="DRagLint.Lint.RefTypeRules.TExprTypeReader.Descends"/>
+      /// <seealso cref="DRagLint.Lint.RefTypeRules.TExprTypeReader.TypeLeafOf"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       destructor Destroy; override;
       /// <summary>False when the index has no ref_types table (older than 1.44) or the store is unusable.</summary>
       property Ready: Boolean read FReady;
@@ -173,11 +233,36 @@ type
       /// and the row of its leftmost name (or an explicit Self), neither of them a cast. The written
       /// type of `x as T` or `T(x)` is no proof there, and neither is a chain rooted in a subscript or
       /// parentheses. Never a wrong type: unknown instead.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection.ReceiverKnownNotLock (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen.ReceiverKnownNotDataset (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.OperandType (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.VisitDualHandle.IsNonRefCounted (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.DropNonStringConcat.Walk (DRagLint.Diagnostics.AstChecks.pas) (+8 more)</para>
+      /// <para>Calls: DRagLint.Lint.RefTypeRules.TRefTypeScan.ExprTypeLeaf, TRefTypeScan</para>
+      /// <para>Returns: FReady and TRefTypeScan(FScan).ExprTypeLeaf(ANode, ALeaf)</para>
+      /// <para>Reads: FReady, FScan</para>
+      /// <para>Mutates: ALeaf (out)</para>
+      /// <seealso cref="DRagLint.Lint.RefTypeRules.TRefTypeScan.ExprTypeLeaf"/>
+      /// <seealso cref="DRagLint.Lint.RefTypeRules.TExprTypeReader.Create"/>
+      /// <seealso cref="DRagLint.Lint.RefTypeRules.TExprTypeReader.Descends"/>
+      /// <seealso cref="DRagLint.Lint.RefTypeRules.TExprTypeReader.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function TypeLeafOf(const ANode: TTSNode; out ALeaf: string): Boolean;
       /// <summary>TypeDescendsFrom on this reader's caches.</summary>
       /// <param name="ATypeLeaf">See TypeDescendsFrom.</param>
       /// <param name="AAncestorLeaf">See TypeDescendsFrom.</param>
       /// <returns>See TypeDescendsFrom.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection.ReceiverKnownNotLock (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen.ReceiverKnownNotDataset (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.VisitDualHandle.IsNonRefCounted (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.ConcurrencyChecks.TConcurrencyChecker.Check.ReceiverMayBeLock (DRagLint.Diagnostics.ConcurrencyChecks.pas), DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.IsExceptionClassName (DRagLint.Diagnostics.DeadCodeChecks.pas) (+11 more)</para>
+      /// <para>Calls: DRagLint.Lint.RefTypeRules.TRefTypeScan.DescentOf, TRefTypeScan</para>
+      /// <para>Returns: tdUnknown; TRefTypeScan(FScan).DescentOf(ATypeLeaf, AAncestorLeaf)</para>
+      /// <para>Reads: FScan</para>
+      /// <seealso cref="DRagLint.Lint.RefTypeRules.TRefTypeScan.DescentOf"/>
+      /// <seealso cref="DRagLint.Lint.RefTypeRules.TExprTypeReader.Create"/>
+      /// <seealso cref="DRagLint.Lint.RefTypeRules.TExprTypeReader.Destroy"/>
+      /// <seealso cref="DRagLint.Lint.RefTypeRules.TExprTypeReader.TypeLeafOf"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function Descends(const ATypeLeaf, AAncestorLeaf: string): TDescent;
   end;
 
@@ -188,8 +273,16 @@ type
 /// <param name="ASrc">The unit's source bytes the node came from.</param>
 /// <param name="ALeaf">Out: the type's leaf name.</param>
 /// <returns>False when no fact answers; see TExprTypeReader.TypeLeafOf.</returns>
-/// <remarks>Loads the unit's refs on every call: for more than a few nodes of one unit make a
-/// TExprTypeReader.</remarks>
+/// <remarks>
+/// Loads the unit's refs on every call: for more than a few nodes of one unit make a
+/// TExprTypeReader.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: DRagLint.Lint.RefTypeRules.TExprTypeReader.Create, DRagLint.Lint.RefTypeRules.TExprTypeReader.TypeLeafOf</para>
+/// <para>Returns: R.TypeLeafOf(ANode, ALeaf)</para>
+/// <seealso cref="DRagLint.Lint.RefTypeRules.TExprTypeReader.Create"/>
+/// <seealso cref="DRagLint.Lint.RefTypeRules.TExprTypeReader.TypeLeafOf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function StaticTypeLeafOfExpr(const AStore: ISymbolStore; AFileId: Int64; const ANode: TTSNode; const ASrc: TBytes;  // dl:ok unused-public-symbol@1e97 -- REVIEWED 2026-11-06: public for tests\lint-project\ref-type-helpers, the harness that pins it (H4/O1); the rules reach it through the type reader
   out ALeaf: string): Boolean;
 /// <summary>Runs the rules on index fact F1 over a project index.</summary>
@@ -201,9 +294,21 @@ function StaticTypeLeafOfExpr(const AStore: ISymbolStore; AFileId: Int64; const 
 /// <param name="ARules">The rule ids to evaluate; empty yields no findings.</param>
 /// <param name="AOnlyFileId">One file's id, or 0 for every file of the index.</param>
 /// <returns>One finding per offending expression, anchored at it.</returns>
-/// <remarks>Reads one file's refs per file (one query) and parses through
+/// <remarks>
+/// Reads one file's refs per file (one query) and parses through
 /// TAstParseCache. A ref whose name no longer matches the source at its position
-/// answers nothing, so a stale index errs towards silence.</remarks>
+/// answers nothing, so a stale index errs towards silence.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear, DRagLint.Lint.RefTypeRules.TRefTypeScan.Create, DRagLint.Lint.RefTypeRules.TRefTypeScan.Findings, DRagLint.Lint.RefTypeRules.TRefTypeScan.HasFact, DRagLint.Lint.RefTypeRules.TRefTypeScan.ScanFile</para>
+/// <para>Returns: nil; Scan.Findings</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
+/// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear"/>
+/// <seealso cref="DRagLint.Lint.RefTypeRules.TRefTypeScan.Create"/>
+/// <seealso cref="DRagLint.Lint.RefTypeRules.TRefTypeScan.Findings"/>
+/// <seealso cref="DRagLint.Lint.RefTypeRules.TRefTypeScan.HasFact"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CollectRefTypeRules(const AStore, ALibStore: ISymbolStore; const ARules: TArray<string>;
   AOnlyFileId: Int64): TArray<TLintFinding>;
 

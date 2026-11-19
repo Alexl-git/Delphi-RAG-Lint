@@ -40,8 +40,8 @@ type
   /// IDE plugin's live + ghost compile. Not thread-safe (shares no instance
   /// state, but each call spawns a process and reads its pipe synchronously).
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.CLI.DoGhostCheck (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.MCP.Server</para>
+  /// <para>Used by: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.CLI.DoGhostCheck (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.MCP.Server, DRagLint.Refactor.CompileGate</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCompileChecker = class
@@ -69,7 +69,7 @@ type
       /// unit so findings are reported even for units DCC would otherwise skip as
       /// already up to date. Not thread-safe.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.CLI.DoGhostCheck (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas) ?, DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas), DRagLint.CLI.DoGhostCheck (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas), DRagLint.CLI.RunCommand (DRagLint.CLI.pas) ?, DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
       /// <para>Calls: Default, DRagLint.Core.StudioEnv.TStudioEnv.RsvarsBat, DRagLint.Diagnostics.CompileCheck.TCompileChecker.ParseLine, DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath, DRagLint.Diagnostics.CompileCheck.TCompileChecker.SpawnAndCapture, ExtractFileExt, Format, LowerCase, PChar, SameText, SetEnvironmentVariable</para>
       /// <para>Returns: Default(TCompileCheckResult)</para>
       /// <para>Complexity: 17 (cyclomatic, outer body), 106 lines (full implementation)</para>
@@ -112,7 +112,7 @@ type
       /// (path(line[,col]): severity code: message) and the native dcc64 format
       /// (path(line) Severity: code message).
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.RunCommand (DRagLint.Diagnostics.CompileCheck.pas)</para>
+      /// <para>Called from: DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.RunCommand (DRagLint.Diagnostics.CompileCheck.pas), DRagLint.Refactor.CompileGate.DccMessages (DRagLint.Refactor.CompileGate.pas)</para>
       /// <para>Calls: Default, DRagLint.Diagnostics.CompileCheck.TCompileChecker.NormalizeSeverity, DRagLint.Diagnostics.CompileCheck.TCompileChecker.SeverityFromCode, StrToIntDef, Trim</para>
       /// <para>Returns: False; True</para>
       /// <para>Mutates: AFinding (out)</para>

@@ -96,7 +96,7 @@ try {
     Check '5a. legacy fixture: python (sqlite3) available to drop the columns' $false 'python not on PATH -- cannot build the column-less fixture'
   } else {
     $drop = "import sqlite3; c = sqlite3.connect(r'$db2'); [c.execute('ALTER TABLE symbol_facts DROP COLUMN ' + n) for n in ('effect_free', 'effect_summary', 'effect_witness')]; c.commit(); c.close()"
-    $pyOut = (& { $ErrorActionPreference = 'Continue'; & python -c $drop 2>&1 | ForEach-Object { "$_" } }) -join "`n"
+    $pyOut = (& { $ErrorActionPreference = 'Continue'; & python -c $(if ($PSVersionTable.PSVersion.Major -lt 7) { $drop.Replace('"', '\"') } else { $drop }) 2>&1 | ForEach-Object { "$_" } }) -join "`n"
     $cols5 = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db2 --format text --query $colSql 2>&1 | ForEach-Object { "$_" } }) -join "`n"
     Check '5a. legacy fixture lacks the three columns (precondition for 5b)' `
       (($cols5 -match '\bwiring\b') -and ($cols5 -notmatch 'effect_free') -and ($cols5 -notmatch 'effect_summary') -and ($cols5 -notmatch 'effect_witness')) $pyOut

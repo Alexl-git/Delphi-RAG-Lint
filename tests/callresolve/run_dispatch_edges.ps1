@@ -34,6 +34,9 @@
 param([string]$Exe = '')
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot '..\autotest\lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
@@ -53,7 +56,7 @@ function Sql([string]$Db, [string]$Query) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $Db --json --limit 1000 --query $Query 2>$null }) -join "`n"
   $b = $raw.IndexOf('{')
   if ($b -lt 0) { throw "sql returned no JSON for: $Query" }
-  $o = $raw.Substring($b) | ConvertFrom-Json
+  $o = $raw.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }
   $names = @($o.columns | ForEach-Object { $_.name })
   $out = @()
   foreach ($r in @($o.rows)) {
@@ -133,3 +136,4 @@ exit 0
   Write-Host "FATAL: $_"
   exit 2
 }
+} finally { Remove-WorkDir $root -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

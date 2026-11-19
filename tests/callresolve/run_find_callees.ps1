@@ -47,7 +47,7 @@ try {
   # --- find-callees --json: CallsAlpha's resolved outgoing calls. ---
   $jsonOut = & { $ErrorActionPreference = 'Continue'; & $exePath find-callees --qname calledfrom.TDispatcher.CallsAlpha --json --db $db 2>$null } | Out-String
   Check '--json: parses as JSON array' ($null -ne $jsonOut -and $jsonOut.Trim().StartsWith('['))
-  $rows = $jsonOut | ConvertFrom-Json
+  $rows = $jsonOut | ConvertFrom-Json | ForEach-Object { $_ }
   Check 'CallsAlpha has exactly 1 resolved callee' (@($rows).Count -eq 1)
 
   $target_qnames = @($rows | ForEach-Object { $_.target_qname })
@@ -62,7 +62,7 @@ try {
 
   # --- find-callees on a routine with NO outgoing calls (empty body). ---
   $emptyJson = & { $ErrorActionPreference = 'Continue'; & $exePath find-callees --qname calledfrom.TAlpha.Run --json --db $db 2>$null } | Out-String
-  $emptyRows = $emptyJson | ConvertFrom-Json
+  $emptyRows = $emptyJson | ConvertFrom-Json | ForEach-Object { $_ }
   Check 'no-callees --json: empty array' (@($emptyRows).Count -eq 0)
 
   $emptyTxt = & { $ErrorActionPreference = 'Continue'; & $exePath find-callees --qname calledfrom.TAlpha.Run --db $db 2>$null } | Out-String

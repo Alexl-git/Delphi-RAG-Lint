@@ -54,7 +54,7 @@ function ReadFrames([string]$out) {
     if (-not $mm.Success) { break }
     $start = $i + $mm.Index + $mm.Length; $len = [int]$mm.Groups[1].Value
     if ($start + $len -gt $out.Length) { break }
-    $o = $out.Substring($start, $len) | ConvertFrom-Json
+    $o = $out.Substring($start, $len) | ConvertFrom-Json | ForEach-Object { $_ }
     if ($null -ne $o.id -and [int]$o.id -gt 10) { $res[[int]$o.id] = $o.result }
     $i = $start + $len
   }
@@ -68,7 +68,7 @@ function RunLspMsgs([string]$Tag, [string[]]$Msgs, [string[]]$LspArgs) {
   # Start-Process joins ArgumentList with spaces: quote the items that hold one
   $a = @($LspArgs | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } })
   $null = Start-Process $Exe -ArgumentList $a -WorkingDirectory $WorkDir `
-    -RedirectStandardInput $in -RedirectStandardOutput $so -RedirectStandardError $se -NoNewWindow -Wait -PassThru
+    -RedirectStandardInput $in -RedirectStandardOutput $so -RedirectStandardError $se -NoNewWindow -Wait -PassThru; $null = $null.Handle
   $out = if (Test-Path $so) { [IO.File]::ReadAllText($so) } else { '' }
   return @{ Out = $out; Frames = (ReadFrames $out) }
 }

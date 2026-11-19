@@ -114,7 +114,7 @@ if (-not (Test-Path $db)) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 
 function KindOf([string]$name) {
   $j = & { $ErrorActionPreference = 'Continue'; & $Exe query --name $name --db $db --json 2>$null } | Out-String
-  $o = $null; try { $o = $j | ConvertFrom-Json } catch { }
+  $o = $null; try { $o = $j | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   if ($null -eq $o) { return '<no json>' }
   $rows = @($o | Where-Object { $_.name -eq $name })
   if ($rows.Count -eq 0) { return '<not found>' }

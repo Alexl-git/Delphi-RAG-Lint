@@ -18,6 +18,9 @@ param(
 )
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 if (-not $FixtureDir) { $FixtureDir = "$PSScriptRoot\..\fixtures\formsmap-v9" }
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
@@ -48,11 +51,11 @@ function Run-Drift([string]$Tag, [scriptblock]$Edit, [string[]]$Extra = @(), [sw
     if (Test-Path $reg) { [IO.Directory]::Delete($reg, $true) }
     Copy-Item -LiteralPath "$fx\menu-registry" -Destination $reg -Recurse
     if ($Edit) { & $Edit $reg }
-    $regArgs = if ($DefaultLocation) { @() } else { @('--registry', $reg) }
-    $txt = (& { $ErrorActionPreference = 'Continue'; & $Exe menu-drift --project $proj --db $db @regArgs @Extra --format json 2> "$WorkDir\$Tag.err" } | Out-String)
+    $regArgs = @(if ($DefaultLocation) { @() } else { @('--registry', $reg) })
+    $txt = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath("$WorkDir\$Tag.err"); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe menu-drift --project $proj --db $db @regArgs @Extra --format json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
     $code = $LASTEXITCODE
     $doc = $null
-    try { $doc = $txt | ConvertFrom-Json } catch { $doc = $null }
+    try { $doc = $txt | ConvertFrom-Json | ForEach-Object { $_ } } catch { $doc = $null }
     if ($DefaultLocation) { [IO.Directory]::Delete($reg, $true) }
     $s = $doc.summary
     [pscustomobject]@{ Exit = $code; Doc = $doc; M = $s.missing; U = $s.unregistered; V = $s.moved; N = $s.notes
@@ -60,7 +63,7 @@ function Run-Drift([string]$Tag, [scriptblock]$Edit, [string[]]$Extra = @(), [sw
 }
 function SetPath([string]$Reg, [string]$Id, [string]$Path) {
     $f = "$Reg\entries\$Id.json"
-    $j = Get-Content $f -Raw | ConvertFrom-Json
+    $j = Get-Content $f -Raw | ConvertFrom-Json | ForEach-Object { $_ }
     $j.surfaces[0].path = $Path
     [IO.File]::WriteAllText($f, ($j | ConvertTo-Json -Depth 5), [Text.Encoding]::ASCII)
 }
@@ -113,3 +116,4 @@ catch {
     Write-Host "GUARD BROKEN: $($_.Exception.Message)" -ForegroundColor Red
     exit 2
 }
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

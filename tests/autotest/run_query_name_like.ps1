@@ -80,7 +80,7 @@ $errFile = Join-Path ([IO.Path]::GetTempPath()) ("draglint-namelike-" + [Guid]::
 # 'Stop' turns that banner into an ErrorRecord, which has already corrupted a
 # JSON slice in this repo.
 function Run([string[]]$A) {
-  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @A 2>$errFile }
+  $out = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe @A 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   $rc  = $LASTEXITCODE
   $err = if (Test-Path -LiteralPath $errFile) { (Get-Content -LiteralPath $errFile -Raw) } else { '' }
   if ($null -eq $err) { $err = '' }
@@ -179,7 +179,7 @@ Write-Host '-- check 7: --json and the <3 char bound' -ForegroundColor Cyan
 
 $j = Run @('query','--name-like','qlitesymbol','--db',$DbFile,'--limit','5','--json')
 $doc = $null
-try { $doc = $j.Out | ConvertFrom-Json } catch { }
+try { $doc = $j.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'stdout is valid JSON (the banner is on stderr)' ($null -ne $doc) $j.Out
 Check 'and it carries the match' (($null -ne $doc) -and (($doc | ConvertTo-Json -Depth 6) -match 'TSQLiteSymbolStore')) ''
 # `exact` is a claim ABOUT THE NAME -- "this symbol IS what you asked for". It is

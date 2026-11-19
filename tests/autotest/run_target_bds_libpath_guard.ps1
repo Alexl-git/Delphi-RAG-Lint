@@ -114,14 +114,14 @@ Check 'exactly one note line' ($noteLines.Count -eq 1) $idx2
 Check 'the note names requested and used' (($noteLines -join '') -match 'BDS 20\.0.*not installed.*BDS 37\.0') $idx2
 $jsonLine = @($idx2 -split "`r?`n" | Where-Object { $_ -match '^\{.*"library_path"' }) | Select-Object -Last 1
 Check '--json summary carries the same facts' (($jsonLine -match '"requested_bds":"20\.0"') -and ($jsonLine -match '"used_bds":"37\.0"') -and ($jsonLine -match '"note":"')) $jsonLine
-$cf = ClosureOf "$p103\P.dproj" $regNo20
+$cf = @(ClosureOf "$p103\P.dproj" $regNo20)
 Check 'the fallback closure has no library-only unit (as today)' (-not (Named $cf 'uLibOnly.pas')) ($cf -join ';')
 
 Write-Host '[3] --target-compiler wins over ProjectVersion'
-$c12 = ClosureOf "$p103\P.dproj" $reg @('--target-compiler', '12', '--platform', 'win32')
+$c12 = @(ClosureOf "$p103\P.dproj" $reg @('--target-compiler', '12', '--platform', 'win32'))
 Check 'Delphi 12: 23.0''s copy of uLibOnly' (Named ($c12 | Where-Object { $_ -like "$team23*" }) 'uLibOnly.pas') ($c12 -join ';')
 Check 'and not 20.0''s' (-not (Named ($c12 | Where-Object { $_ -like "$team20*" }) 'uLibOnly.pas')) ($c12 -join ';')
-$c13 = ClosureOf "$p103\P.dproj" $reg @('--target-compiler', '13')
+$c13 = @(ClosureOf "$p103\P.dproj" $reg @('--target-compiler', '13'))
 Check '--target-compiler 13 on a 10.3 project: the Delphi 13 closure' (-not (Named $c13 'uLibOnly.pas')) ($c13 -join ';')
 
 Write-Host '[4] positive control: a Delphi 13 project has exactly the closure it has without a target'
@@ -172,7 +172,7 @@ $cfg = Join-Path $Scratch 'all.json'
 $secs = @(@{ name = 'P103'; include = @("$p103\P.dproj") }, @{ name = 'P13'; include = @("$p13\P.dproj") })
 [IO.File]::WriteAllText($cfg, (@{ settings = @{ defaultPlatform = 'Win32'; maxJobs = 2 }; indexes = @{ sections = $secs } } | ConvertTo-Json -Depth 8), [Text.Encoding]::ASCII)
 $planText = Dl @('index', '--all', '--config', $cfg, '--dry-run', '--json') $reg
-$plan = ($planText.Substring($planText.IndexOf('{'))) | ConvertFrom-Json
+$plan = ($planText.Substring($planText.IndexOf('{'))) | ConvertFrom-Json | ForEach-Object { $_ }
 $sec103 = @($plan.sections | Where-Object { $_.name -like 'P103*' })[0]
 $sec13 = @($plan.sections | Where-Object { $_.name -like 'P13*' })[0]
 Check 'the dry-run JSON names 20.0 for the 10.3 section' ($sec103.used_bds -eq '20.0') $planText
@@ -200,7 +200,7 @@ $s20c = Join-Path $Scratch 'Studio\20.0c'
 $regCommon = Join-Path $Scratch 'registry-common.json'
 WriteRegistry $regCommon @{ '20.0' = (Studio $s20c "`$(BDSCOMMONDIR)\Lib"); '37.0' = (Studio $s37 $common) }
 WriteText "$s20c\bin\rsvars.bat" "@SET BDS=$s20c`n@SET BDSCOMMONDIR=$(Join-Path $Scratch 'CommonA')`n"
-$cRs = ClosureOf "$p103c\P.dproj" $regCommon
+$cRs = @(ClosureOf "$p103c\P.dproj" $regCommon)
 Check 'rsvars.bat names it: the unit under its Lib folder is reached' (@($cRs | Where-Object { $_ -like "$commonA*uCommonDirLib.pas" }).Count -eq 1) ($cRs -join ';')
 [IO.File]::Delete("$s20c\bin\rsvars.bat")
 # The fallback lands under \Embarcadero\, which is Studio-owned, so it is a library root
@@ -210,9 +210,9 @@ WriteUnit "$p103d\uCaller.pas" 'uCaller' 'uCommonDirLib' 'procedure CallIt;' "pr
 WriteText "$p103d\P.dproj" "<Project><PropertyGroup><ProjectVersion>18.8</ProjectVersion><DCC_UnitSearchPath>$commonB</DCC_UnitSearchPath><MainSource>P.dpr</MainSource></PropertyGroup><ItemGroup><DCCReference Include=`"uCaller.pas`"/></ItemGroup></Project>`n"
 $savedPublic = $env:PUBLIC
 $env:PUBLIC = $publicB
-$cPub = ClosureOf "$p103d\P.dproj" $regCommon
+$cPub = @(ClosureOf "$p103d\P.dproj" $regCommon)
 $env:PUBLIC = (Join-Path $Scratch 'NoSuchPublic')
-$cPubOther = ClosureOf "$p103d\P.dproj" $regCommon
+$cPubOther = @(ClosureOf "$p103d\P.dproj" $regCommon)
 $env:PUBLIC = $savedPublic
 Check 'no rsvars.bat: PUBLIC\Documents\Embarcadero\Studio\<key> is the library root' (-not (Named $cPub 'uCommonDirLib.pas')) ($cPub -join ';')
 Check 'control: with PUBLIC elsewhere the same project keeps the unit' (Named $cPubOther 'uCommonDirLib.pas') ($cPubOther -join ';')
@@ -220,7 +220,7 @@ Check 'control: with PUBLIC elsewhere the same project keeps the unit' (Named $c
 Write-Host '[10] a project folder with non-ASCII characters still reaches the library tail'
 $accented = Join-Path $Scratch ('Automa' + [char]0x00E7 + [char]0x00E3 + 'o')
 WriteProject $accented '18.8'
-$cAcc = ClosureOf "$accented\P.dproj" $reg
+$cAcc = @(ClosureOf "$accented\P.dproj" $reg)
 Check 'uLibOnly.pas is in the closure' (Named ($cAcc | Where-Object { $_ -like "$team20*" }) 'uLibOnly.pas') ($cAcc -join ';')
 Check 'and its own use uLibDeep.pas' (Named $cAcc 'uLibDeep.pas') ($cAcc -join ';')
 Check 'and no temp-project path leaked into the closure' (-not (($cAcc -join ';') -match 'dl-closure-tail')) ($cAcc -join ';')
@@ -276,7 +276,7 @@ $longAgo = [DateTime]::new(2000, 1, 1, 0, 0, 0, [DateTimeKind]::Utc)
 [IO.Directory]::SetLastWriteTimeUtc($quietTemp, $longAgo)
 $savedTmp = $env:TMP; $savedTemp = $env:TEMP
 $env:TMP = $quietTemp; $env:TEMP = $quietTemp
-$cTemp = ClosureOf "$p103\P.dproj" $reg
+$cTemp = @(ClosureOf "$p103\P.dproj" $reg)
 $env:TMP = $savedTmp; $env:TEMP = $savedTemp
 Check 'a foreign-target closure writes nothing under the temp folder' ([IO.Directory]::GetLastWriteTimeUtc($quietTemp) -eq $longAgo) ([IO.Directory]::GetLastWriteTimeUtc($quietTemp).ToString('o'))
 Check 'control: that closure did reach the library-only unit' (Named $cTemp 'uLibOnly.pas') ($cTemp -join ';')
@@ -287,7 +287,7 @@ WriteText "$pTwin\P.dpr" "program P;`nuses uCaller in 'sub\uCaller.pas';`nbegin`
 WriteUnit "$pTwin\sub\uCaller.pas" 'uCaller' 'uTwin' 'procedure CallIt;' "procedure CallIt;`nbegin`nend;"
 WriteUnit "$pTwin\sub\uTwin.pas" 'uTwin' '' '' ''
 WriteUnit "$team20\uTwin.pas" 'uTwin' '' '' ''
-$cTwin = ClosureOf "$pTwin\P.dproj" $reg
+$cTwin = @(ClosureOf "$pTwin\P.dproj" $reg)
 Check 'the unit''s own folder wins over the tail' (Named ($cTwin | Where-Object { $_ -like "$pTwin*" }) 'uTwin.pas') ($cTwin -join ';')
 Check 'and the tail copy is not added beside it' (-not (Named ($cTwin | Where-Object { $_ -like "$team20*" }) 'uTwin.pas')) ($cTwin -join ';')
 # The project's own search path beats the tail.
@@ -295,14 +295,14 @@ $pOwn = Join-Path $Scratch 'POwn'
 WriteText "$pOwn\P.dproj" "<Project><PropertyGroup><ProjectVersion>18.8</ProjectVersion><DCC_UnitSearchPath>own</DCC_UnitSearchPath><MainSource>P.dpr</MainSource></PropertyGroup></Project>`n"
 WriteText "$pOwn\P.dpr" "program P;`nuses uLibOnly;`nbegin`nend.`n"
 WriteUnit "$pOwn\own\uLibOnly.pas" 'uLibOnly' '' 'procedure LibProc;' "procedure LibProc;`nbegin`nend;"
-$cOwn = ClosureOf "$pOwn\P.dproj" $reg
+$cOwn = @(ClosureOf "$pOwn\P.dproj" $reg)
 Check 'the project search path wins over the tail' (Named ($cOwn | Where-Object { $_ -like "$pOwn*" }) 'uLibOnly.pas') ($cOwn -join ';')
 Check 'and the tail copy stays out' (-not (Named ($cOwn | Where-Object { $_ -like "$team20*" }) 'uLibOnly.pas')) ($cOwn -join ';')
 # The main source's own uses reach the tail, without a DCCReference.
 $pSeed = Join-Path $Scratch 'PSeed'
 WriteText "$pSeed\P.dproj" "<Project><PropertyGroup><ProjectVersion>18.8</ProjectVersion><MainSource>P.dpr</MainSource></PropertyGroup></Project>`n"
 WriteText "$pSeed\P.dpr" "program P;`nuses uLibOnly;`nbegin`nend.`n"
-$cSeed = ClosureOf "$pSeed\P.dproj" $reg
+$cSeed = @(ClosureOf "$pSeed\P.dproj" $reg)
 Check 'a library-only unit named by the .dpr itself is reached' (Named ($cSeed | Where-Object { $_ -like "$team20*" }) 'uLibOnly.pas') ($cSeed -join ';')
 Check 'and through it its own use' (Named $cSeed 'uLibDeep.pas') ($cSeed -join ';')
 # An in-clause outside the project folder is one file, not two spellings of it (1.42 listed it
@@ -311,7 +311,7 @@ $pRel = Join-Path $Scratch 'PRel\app'
 WriteText "$pRel\P.dproj" "<Project><PropertyGroup><ProjectVersion>18.8</ProjectVersion><MainSource>P.dpr</MainSource></PropertyGroup></Project>`n"
 WriteText "$pRel\P.dpr" "program P;`nuses uRel in '..\lib\uRel.pas';`nbegin`nend.`n"
 WriteUnit (Join-Path $Scratch 'PRel\lib\uRel.pas') 'uRel' '' '' ''
-$cRel = ClosureOf "$pRel\P.dproj" $reg
+$cRel = @(ClosureOf "$pRel\P.dproj" $reg)
 Check 'a project-relative reference is listed once' (@($cRel | Where-Object { [IO.Path]::GetFileName($_) -ieq 'uRel.pas' }).Count -eq 1) ($cRel -join ';')
 
 Write-Host ''

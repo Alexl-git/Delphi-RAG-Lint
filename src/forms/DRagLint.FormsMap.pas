@@ -83,7 +83,7 @@ type
 /// resolved.</exception>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoFormsCsv (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.Workspace.DoFormsCsv (DRagLint.CLI.Workspace.pas)</para>
 /// <para>Calls: DRagLint.FormsMap.GenerateFormsCsv/3</para>
 /// <para>Returns: GenerateFormsCsv([ADbPath], AProjectFile, ARootForm)</para>
 /// <para>Overload 1 of 2</para>
@@ -105,6 +105,7 @@ function GenerateFormsCsv(const ADbPath, AProjectFile, ARootForm: string): strin
 /// <returns>ANSI CSV text incl. the FORMS_CSV_ALGORITHM provenance footer.</returns>
 /// <exception cref="Exception">If ADbPaths is empty, the index cannot be opened,
 /// or no root can be resolved.</exception>
+/// <exception cref="ESchemaUnreadable"><!-- drag-lint:auto exc -->via DRagLint.Storage.SQLite.TSQLiteSymbolStore.CreateReadable: :</exception>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.FormsMap.GenerateFormsCsv/3 (DRagLint.FormsMap.pas)</para>
@@ -475,8 +476,7 @@ begin
           end;
         if not InProject then Continue;
       end;
-      if TFile.Exists(Node.PasPath) then Node.PasLineCount:= Length(ReadSourceFileLines(Node.PasPath))
-      else Node.PasLineCount:= 0;
+      Node.PasLineCount:= if TFile.Exists(Node.PasPath) then Length(ReadSourceFileLines(Node.PasPath)) else 0;
       if IsNavigableForm(AStore, Node.FormClass) then Result.Add(Node);
     end; // while
   finally
@@ -1266,7 +1266,7 @@ var
     see spec D2). Consulted only when a standalone launcher dead-ends. }
   HandlerToHook: TDictionary<string, string>    ;
 
-  function FileLines(AFileId: Int64; const APath: string): TArray<string>;
+  function FileLines(const APath: string): TArray<string>;
   begin
     if not PasLines.TryGetValue(APath, Result) then
     begin
@@ -1373,7 +1373,7 @@ var
       // one of the project's form classes).
       for PIdx:= 0 to Paths.Count - 1 do
       begin
-        Lines:= FileLines(Int64(NativeInt(Paths.Objects[PIdx])), Paths[PIdx]);
+        Lines:= FileLines(Paths[PIdx]);
         for LIdx:= 0 to Length(Lines) - 1 do
         begin
           Launches:= False;
@@ -1389,7 +1389,7 @@ var
       // Pass B: record H := R registrations whose RHS R is a known launcher.
       for PIdx:= 0 to Paths.Count - 1 do
       begin
-        Lines:= FileLines(Int64(NativeInt(Paths.Objects[PIdx])), Paths[PIdx]);
+        Lines:= FileLines(Paths[PIdx]);
         for LIdx:= 0 to Length(Lines) - 1 do
         begin
           T:= Lines[LIdx];
@@ -1441,7 +1441,7 @@ var
     Opener  : string        ;
     Launch  : TFormEdge     ;
   begin
-    Arr:= FileLines(APasFileId, APath);
+    Arr:= FileLines(APath);
     if (ALaunchLine < 1) or (ALaunchLine > Length(Arr)) then Exit;
     if AIsShowSite then
     begin

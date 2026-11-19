@@ -74,7 +74,7 @@ $base = "$Work\base.json"
 Check 'baseline captured' (Test-Path $base)
 
 $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-tree --unit "$Work\ProbeB.pas" --db $db --buffer "$Work\buf.pas" --baseline $base --project "$Work\ProbeProj.dpr" --platform Win64 --compile --format json 2>$null }
-$r = try { ($raw | Out-String) | ConvertFrom-Json } catch { $null }
+$r = try { ($raw | Out-String) | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
 Check 'lint-tree returned JSON' ($null -ne $r)
 $cc = @($r.findings | Where-Object { $_.ref_kind -eq 'compile' })
 Write-Host ("  compile findings: " + (($cc | ForEach-Object { (Split-Path $_.file -Leaf) + ':' + $_.message }) -join ' | ')) -ForegroundColor DarkGray
@@ -110,7 +110,7 @@ Check 'the generated probe unit never appears as a finding' `
 
 # NEG: an unchanged buffer must not compile anything at all.
 $raw2 = & { $ErrorActionPreference = 'Continue'; & $Exe lint-tree --unit "$Work\ProbeB.pas" --db $db --buffer "$Work\ProbeB.pas" --baseline $base --project "$Work\ProbeProj.dpr" --platform Win64 --compile --format json 2>$null }
-$r2 = try { ($raw2 | Out-String) | ConvertFrom-Json } catch { $null }
+$r2 = try { ($raw2 | Out-String) | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
 Check 'NEG unchanged buffer -> tier 3 does not run' ($r2.compiled -ne $true) `
       'compiling a closure on an unchanged interface burns a core per keystroke'
 

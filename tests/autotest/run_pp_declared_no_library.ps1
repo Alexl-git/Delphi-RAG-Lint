@@ -81,7 +81,7 @@ function Exec([string[]]$ArgList) {
 # sql --json rows are POSITIONAL arrays.
 function Names([string]$Db) {
   $r = Exec @('sql', '--db', $Db, '--query', "SELECT name FROM symbols WHERE kind = 'const'", '--json')
-  $set = @((($r.Out | ConvertFrom-Json).rows) | ForEach-Object { [string]$_[0] })
+  $set = @((($r.Out | ConvertFrom-Json | ForEach-Object { $_ }).rows) | ForEach-Object { [string]$_[0] })
   return ,$set
 }
 function Picks([string[]]$Set, [string[]]$Want, [string[]]$NotWant) {
@@ -100,7 +100,7 @@ function HintRows([string]$Db, [string[]]$Extra) {
   $r = Exec (@('lint', $pas, '--db', $Db, '--json', '--rule', 'pp-unresolved-if') + $Extra)
   $i = $r.Out.IndexOf('[')
   if ($i -lt 0) { return ,@() }
-  return ,@($r.Out.Substring($i) | ConvertFrom-Json)
+  return ,@(($r.Out.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 
 $libDb = Join-Path $WorkDir 'lib.sqlite'

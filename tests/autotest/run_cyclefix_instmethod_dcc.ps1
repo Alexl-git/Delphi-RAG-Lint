@@ -85,7 +85,7 @@ function Invoke-Cycles([string]$Dproj, [string]$Tag, [string[]]$Extra) {
   $o = Join-Path $WorkDir "cycles-$Tag.out"
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
     -ArgumentList (@('cycles', '--db', ('"' + $db + '"')) + $Extra) `
-    -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "cycles-$Tag.err")
+    -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "cycles-$Tag.err"); $null = $p.Handle
   return @{ Exit = $p.ExitCode; File = $o; Text = [IO.File]::ReadAllText($o) }
 }
 

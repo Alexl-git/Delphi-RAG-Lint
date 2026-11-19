@@ -36,13 +36,13 @@ function Get-Strays([string]$Script, [string[]]$ScriptArgs, [string]$Tag) {
 $dirty = Join-Path $base 'fixture-dirty.ps1'; $clean = Join-Path $base 'fixture-clean.ps1'
 [IO.File]::WriteAllText($dirty, "'x' | Set-Content -Path stray.txt`r`n", [Text.Encoding]::ASCII)
 [IO.File]::WriteAllText($clean, "`$null = 1`r`n", [Text.Encoding]::ASCII)
-Check 'CONTROL: a runner that writes into its cwd is flagged' ((Get-Strays $dirty @() 'ctl-dirty') -contains 'stray.txt')
-Check 'CONTROL: a clean runner is not flagged' ((Get-Strays $clean @() 'ctl-clean').Count -eq 0)
+Check 'CONTROL: a runner that writes into its cwd is flagged' ((@(Get-Strays $dirty @() 'ctl-dirty')) -contains 'stray.txt')
+Check 'CONTROL: a clean runner is not flagged' ((@(Get-Strays $clean @() 'ctl-clean')).Count -eq 0)
 
 foreach ($r in $Runners) {
   $path = Join-Path $PSScriptRoot $r
   if (-not (Test-Path -LiteralPath $path)) { Check "$r exists" $false; continue }
-  $s = Get-Strays $path @('-Exe', $exeP) ([IO.Path]::GetFileNameWithoutExtension($r))
+  $s = @(Get-Strays $path @('-Exe', $exeP) ([IO.Path]::GetFileNameWithoutExtension($r)))
   Check "$r leaves nothing in its cwd" ($s.Count -eq 0) ($s -join ',')
 }
 if ($script:fail) { Write-Host 'run_cwd_stray_file_guard: FAIL' -ForegroundColor Red; exit 1 }

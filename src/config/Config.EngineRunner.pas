@@ -27,11 +27,25 @@ uses
 
 type
   /// <summary>Resolves the drag-lint engine path and spawns async runs.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: Config.EngineRunner.TEngineRunner.TRunnerThread.Create (Config.EngineRunner.pas) ?, Config.EngineRunner.TEngineRunner.TRunnerThread.Execute (Config.EngineRunner.pas) ?, Config.EngineRunner.TEngineRunner.TRunnerThread.QueueDone (Config.EngineRunner.pas) ?, Config.EngineRunner.TEngineRunner.TRunnerThread.QueueLine (Config.EngineRunner.pas) ?, Config.IndexesFrame.TIndexesFrame.RunEngine (Config.IndexesFrame.pas)</para>
+  /// <para>Used in units: Config.EngineRunner, Config.IndexesFrame</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TEngineRunner = class
   private
     type
       /// <summary>Worker thread: creates the child process, reads the pipe
       /// line-by-line, and queues callbacks to the main thread.</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Used by: Config.EngineRunner.TEngineRunner.Run (Config.EngineRunner.pas)</para>
+      /// <para>Used in units: Config.EngineRunner</para>
+      /// <seealso cref="Config.EngineRunner.TEngineRunner.ResolveEngineExe"/>
+      /// <seealso cref="Config.EngineRunner.TEngineRunner.Run"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       TRunnerThread = class(TThread)
       private
         FExe:    string;
@@ -39,12 +53,60 @@ type
         FOnLine: TProc<string>;
         FOnDone: TProc<Integer>;
         /// <summary>Dispatch a line of text to the main thread via TThread.Queue.</summary>
+        /// <param name="ALine"><!-- drag-lint:auto type -->const string</param>
+        /// <remarks>
+        /// <!-- drag-lint:auto BEGIN -->
+        /// <para>Called from: Config.EngineRunner.TEngineRunner.TRunnerThread.Execute (Config.EngineRunner.pas)</para>
+        /// <para>Calls: CB</para>
+        /// <para>Reads: FOnLine</para>
+        /// <seealso cref="Config.EngineRunner.TEngineRunner.TRunnerThread.Create"/>
+        /// <seealso cref="Config.EngineRunner.TEngineRunner.TRunnerThread.Execute"/>
+        /// <seealso cref="Config.EngineRunner.TEngineRunner.TRunnerThread.QueueDone"/>
+        /// <!-- drag-lint:auto END -->
+        /// </remarks>
         procedure QueueLine(const ALine: string);
         /// <summary>Dispatch the exit code to the main thread via TThread.Queue.</summary>
+        /// <param name="ACode"><!-- drag-lint:auto type -->Integer</param>
+        /// <remarks>
+        /// <!-- drag-lint:auto BEGIN -->
+        /// <para>Called from: Config.EngineRunner.TEngineRunner.TRunnerThread.Execute (Config.EngineRunner.pas)</para>
+        /// <para>Calls: CB</para>
+        /// <para>Reads: FOnDone</para>
+        /// <seealso cref="Config.EngineRunner.TEngineRunner.TRunnerThread.Create"/>
+        /// <seealso cref="Config.EngineRunner.TEngineRunner.TRunnerThread.Execute"/>
+        /// <seealso cref="Config.EngineRunner.TEngineRunner.TRunnerThread.QueueLine"/>
+        /// <!-- drag-lint:auto END -->
+        /// </remarks>
         procedure QueueDone(ACode: Integer);
       protected
+        /// <remarks>
+        /// <!-- drag-lint:auto BEGIN -->
+        /// <para>Calls: CloseHandle, Config.EngineRunner.TEngineRunner.TRunnerThread.QueueDone, Config.EngineRunner.TEngineRunner.TRunnerThread.QueueLine, Copy, CreatePipe, CreateProcess, DWORD, FillChar, GetExitCodeProcess, GetStdHandle (+8 more)</para>
+        /// <para>Complexity: 17 (cyclomatic, outer body), 106 lines (full implementation)</para>
+        /// <para>Reads: FExe, FArgs</para>
+        /// <para>Directives: override</para>
+        /// <seealso cref="Config.EngineRunner.TEngineRunner.TRunnerThread.QueueDone"/>
+        /// <seealso cref="Config.EngineRunner.TEngineRunner.TRunnerThread.QueueLine"/>
+        /// <seealso cref="Config.EngineRunner.TEngineRunner.TRunnerThread.Create"/>
+        /// <!-- drag-lint:auto END -->
+        /// </remarks>
         procedure Execute; override;
       public
+        /// <summary><!-- drag-lint:auto sum -->TEngineRunner.TRunnerThread</summary>
+        /// <param name="AExe"><!-- drag-lint:auto type -->const string</param>
+        /// <param name="AArgs"><!-- drag-lint:auto type -->const string</param>
+        /// <param name="AOnLine"><!-- drag-lint:auto type -->TProc&lt;string&gt;</param>
+        /// <param name="AOnDone"><!-- drag-lint:auto type -->TProc&lt;Integer&gt;</param>
+        /// <remarks>
+        /// <!-- drag-lint:auto BEGIN -->
+        /// <para>Called from: Config.EngineRunner.TEngineRunner.Run (Config.EngineRunner.pas)</para>
+        /// <para>constructor</para>
+        /// <para>Writes: FExe, FArgs, FOnLine, FOnDone</para>
+        /// <seealso cref="Config.EngineRunner.TEngineRunner.TRunnerThread.Execute"/>
+        /// <seealso cref="Config.EngineRunner.TEngineRunner.TRunnerThread.QueueDone"/>
+        /// <seealso cref="Config.EngineRunner.TEngineRunner.TRunnerThread.QueueLine"/>
+        /// <!-- drag-lint:auto END -->
+        /// </remarks>
         constructor Create(const AExe, AArgs: string;
           AOnLine: TProc<string>; AOnDone: TProc<Integer>);
       end;
@@ -56,6 +118,16 @@ type
     /// Returns '' if none of the candidates exist.</summary>
     /// <param name="AEnginePath">Configured engine path, or 'auto', or empty.</param>
     /// <returns>Absolute path to drag-lint.exe, or '' if not found.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.IndexesFrame.TIndexesFrame.RunEngine (Config.IndexesFrame.pas)</para>
+    /// <para>Calls: GetModuleName</para>
+    /// <para>Returns: ''; AEnginePath; Candidate</para>
+    /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="Config.EngineRunner.TEngineRunner.Run"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function ResolveEngineExe(const AEnginePath: string): string; static;
     /// <summary>Run drag-lint.exe with AArgs asynchronously. AOnLine is called
     /// on the main thread for each stdout/stderr output line. AOnDone is called
@@ -65,6 +137,15 @@ type
     /// <param name="AArgs">Argument string appended after the exe path.</param>
     /// <param name="AOnLine">Called (main thread) for each output line.</param>
     /// <param name="AOnDone">Called (main thread) with the exit code on finish.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.IndexesFrame.TIndexesFrame.RunEngine (Config.IndexesFrame.pas)</para>
+    /// <para>Calls: Config.EngineRunner.TEngineRunner.TRunnerThread.Create</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="Config.EngineRunner.TEngineRunner.TRunnerThread.Create"/>
+    /// <seealso cref="Config.EngineRunner.TEngineRunner.ResolveEngineExe"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure Run(const AExe, AArgs: string;
       AOnLine: TProc<string>; AOnDone: TProc<Integer>); static;
   end;
@@ -162,8 +243,8 @@ const
   PIPE_BUF = 4096;
 var
   SA:          TSecurityAttributes;
-  hReadPipe,
-  hWritePipe:  THandle;
+  HReadPipe,
+  HWritePipe:  THandle;
   SI:          TStartupInfo;
   PI:          TProcessInformation;
   CmdLine:     string;
@@ -176,8 +257,8 @@ var
   P:           Integer;
   Line:        string;
 begin
-  hReadPipe   := 0;
-  hWritePipe  := 0;
+  HReadPipe   := 0;
+  HWritePipe  := 0;
   PI.hProcess := 0;
   PI.hThread  := 0;
 
@@ -186,7 +267,7 @@ begin
   SA.nLength        := SizeOf(SA);
   SA.bInheritHandle := True;
 
-  if not CreatePipe(hReadPipe, hWritePipe, @SA, 0) then
+  if not CreatePipe(HReadPipe, HWritePipe, @SA, 0) then
   begin
     QueueDone(-1);
     Exit;
@@ -194,14 +275,14 @@ begin
 
   try
     { Make the read end non-inheritable so the child cannot inherit it }
-    SetHandleInformation(hReadPipe, HANDLE_FLAG_INHERIT, 0);
+    SetHandleInformation(HReadPipe, HANDLE_FLAG_INHERIT, 0);
 
     FillChar(SI, SizeOf(SI), 0);
     SI.cb          := SizeOf(SI);
     SI.dwFlags     := STARTF_USESTDHANDLES or STARTF_USESHOWWINDOW;
     SI.wShowWindow := SW_HIDE;
-    SI.hStdOutput  := hWritePipe;
-    SI.hStdError   := hWritePipe;   { stderr merged into same pipe }
+    SI.hStdOutput  := HWritePipe;
+    SI.hStdError   := HWritePipe;   { stderr merged into same pipe }
     SI.hStdInput   := GetStdHandle(STD_INPUT_HANDLE);
 
     CmdLine := '"' + FExe + '" ' + FArgs;
@@ -215,14 +296,14 @@ begin
     end;
 
     { Close the write end in the parent so EOF is signalled when child exits }
-    CloseHandle(hWritePipe);
-    hWritePipe := 0;
+    CloseHandle(HWritePipe);
+    HWritePipe := 0;
 
     { Read pipe line-by-line, accumulating partial lines across reads }
     LineAccum := '';
     repeat
       FillChar(Buf, SizeOf(Buf), 0);
-      if not ReadFile(hReadPipe, Buf[0], PIPE_BUF, BytesRead, nil) then
+      if not ReadFile(HReadPipe, Buf[0], PIPE_BUF, BytesRead, nil) then
         Break;
       if BytesRead = 0 then
         Break;
@@ -241,7 +322,7 @@ begin
         if P = 0 then Break;
         Line := Copy(LineAccum, 1, P - 1);
         { Strip CR if present (CRLF output) }
-        if (Length(Line) > 0) and (Line[Length(Line)] = #13) then
+        if (Line <> '') and (Line[Length(Line)] = #13) then
           SetLength(Line, Length(Line) - 1);
         LineAccum := Copy(LineAccum, P + 1, MaxInt);
         QueueLine(Line);
@@ -258,8 +339,8 @@ begin
 
     QueueDone(Integer(ExitCode));
   finally
-    if hWritePipe <> 0 then CloseHandle(hWritePipe);
-    if hReadPipe  <> 0 then CloseHandle(hReadPipe);
+    if HWritePipe <> 0 then CloseHandle(HWritePipe);
+    if HReadPipe  <> 0 then CloseHandle(HReadPipe);
     if PI.hProcess <> 0 then CloseHandle(PI.hProcess);
     if PI.hThread  <> 0 then CloseHandle(PI.hThread);
   end;

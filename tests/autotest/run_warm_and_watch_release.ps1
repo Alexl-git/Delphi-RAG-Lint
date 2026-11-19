@@ -97,7 +97,7 @@ if ($LASTEXITCODE -ne 0) { throw "fixture index failed ($LASTEXITCODE): $o" }
 Write-Host '=== K1: shutdown --all stops a background warm ===' -ForegroundColor Cyan
 $env:DRAGLINT_TEST_WARM_HOLD_MS = '60000'
 try {
-  $warm = Start-Process -FilePath $Exe -ArgumentList @('warm-rule-cache', '--detached', '--db', "`"$db`"") -WindowStyle Hidden -PassThru
+  $warm = Start-Process -FilePath $Exe -ArgumentList @('warm-rule-cache', '--detached', '--db', "`"$db`"") -WindowStyle Hidden -PassThru; $null = $warm.Handle
 } finally { Remove-Item Env:\DRAGLINT_TEST_WARM_HOLD_MS -ErrorAction SilentlyContinue }
 $started.Add($warm)
 $ok0 = Wait-Until { (Test-Path -LiteralPath $marker) -and ((Get-Content -LiteralPath $marker -Raw).Trim() -eq "$($warm.Id)") } 15
@@ -115,7 +115,7 @@ Check 'W2 ... and the warm process is gone' $gone "exited=$($warm.HasExited)"
 Write-Host '=== K2: index stops a stale warm of the same database ===' -ForegroundColor Cyan
 # Stand-in stale warm: a long-lived process of THIS engine image (as run_rule_cache_warm_background B9).
 $otherDb = Join-Path $work 'other.sqlite'
-$stale = Start-Process -FilePath $Exe -ArgumentList @('index', "`"$dir`"", '--db', "`"$otherDb`"", '--watch', '--interval', '60') -WindowStyle Hidden -PassThru
+$stale = Start-Process -FilePath $Exe -ArgumentList @('index', "`"$dir`"", '--db', "`"$otherDb`"", '--watch', '--interval', '60') -WindowStyle Hidden -PassThru; $null = $stale.Handle
 $started.Add($stale)
 Start-Sleep -Seconds 3
 [System.IO.File]::WriteAllText($marker, "$($stale.Id)", [System.Text.Encoding]::ASCII)
@@ -129,7 +129,7 @@ Check 'W5 ... and the index exits 0' ($code5 -eq 0) "exit=$code5 $(if ($code5 -n
 Write-Host '=== K3: index --watch holds the lock only during a tick ===' -ForegroundColor Cyan
 $wOut = Join-Path $work 'watch.out'
 $watch = Start-Process -FilePath $Exe -ArgumentList @('index', '--project', "`"$dpr`"", '--db', "`"$db`"", '--watch', '--interval', '3', '--rule-cache-warm', 'off') `
-  -RedirectStandardOutput $wOut -RedirectStandardError (Join-Path $work 'watch.err') -WindowStyle Hidden -PassThru
+  -RedirectStandardOutput $wOut -RedirectStandardError (Join-Path $work 'watch.err') -WindowStyle Hidden -PassThru; $null = $watch.Handle
 $started.Add($watch)
 $tick1 = Wait-Until { (Test-Path -LiteralPath $wOut) -and ((Get-Content -LiteralPath $wOut -Raw) -match 'Done\.') } 30
 Start-Sleep -Milliseconds 300

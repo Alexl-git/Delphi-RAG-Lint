@@ -185,7 +185,7 @@ end.
     foreach ($line in $lines) {
       $t = "$line".Trim()
       if ($t -eq '' -or -not $t.StartsWith('{')) { continue }
-      try { $objs += ($t | ConvertFrom-Json) } catch { }
+      try { $objs += ($t | ConvertFrom-Json | ForEach-Object { $_ }) } catch { }
     }
     return @{ Findings = $objs; Raw = ($lines -join ' | ') }
   }

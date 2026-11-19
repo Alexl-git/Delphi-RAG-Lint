@@ -194,7 +194,7 @@ $db = Join-Path $WorkDir 'App.sqlite'
 Check 'V the fixture index was built' (Test-Path $db) $db
 
 function Sql([string]$Q) {
-  $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --limit 1000 --query $Q 2>$null } | ConvertFrom-Json
+  $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --limit 1000 --query $Q 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
   if ($null -eq $j) { return ,@() }
   $cols = @($j.columns | ForEach-Object { $_.name })
   $out = @()

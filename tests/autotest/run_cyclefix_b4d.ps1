@@ -81,7 +81,7 @@ function Get-Plan([string]$Root, [string]$Tag, [string]$Lib = 'none') {
   $o = Join-Path $WorkDir "plan-$Tag.out"
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
     -ArgumentList @('cycles', '--db', ('"' + $db + '"'), '--plan', '--library-db', ('"' + $Lib + '"')) `
-    -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "plan-$Tag.err")
+    -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "plan-$Tag.err"); $null = $p.Handle
   return @{ Exit = $p.ExitCode; Text = [IO.File]::ReadAllText($o) }
 }
 

@@ -161,8 +161,8 @@ type
   /// <summary>A single configurable parameter of a rule (threshold or naming knob).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: [drag-lint]declaration (DRagLint.Lint.RuleCatalog.pas), [drag-lint]DRagLint.CLI.DoRules (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoRules.AddParamsJson (DRagLint.CLI.pas), [drag-lint]DRagLint.Lint.RuleCatalog.MkParam (DRagLint.Lint.RuleCatalog.pas), [drag-lint]DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry.B (DRagLint.Lint.RuleCatalog.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.RuleCatalog, DragLint.Plugin.LintOptionsFrame</para>
+  /// <para>Used by: [drag-lint]declaration (DRagLint.Lint.RuleCatalog.pas), [drag-lint]declaration (DRagLint.V151.Api.pas), [drag-lint]DRagLint.CLI.DoRules (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoRules.AddParamsJson (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Explain.PrintJson (DRagLint.CLI.Explain.pas), [drag-lint]DRagLint.CLI.Explain.PrintText (DRagLint.CLI.Explain.pas), [drag-lint]DRagLint.Lint.RuleCatalog.MkParam (DRagLint.Lint.RuleCatalog.pas), [drag-lint]DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry.B (DRagLint.Lint.RuleCatalog.pas), [drag-lint]DRagLint.V151.Api.V151Rule (DRagLint.V151.Api.pas)</para>
+  /// <para>Used in units: [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.CLI.Explain, [drag-lint]DRagLint.Lint.RuleCatalog, DragLint.Plugin.LintOptionsFrame, [drag-lint]DRagLint.V151.Api</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRuleParam = record
@@ -174,8 +174,8 @@ type
   /// <summary>One catalogued rule.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ApplyComplianceProfile (DRagLint.CLI.pas) ?, DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas) ?, DRagLint.CLI.LintRuleArgAnswered (DRagLint.CLI.pas) ?, DRagLint.CLI.SarifMetaLookup (DRagLint.CLI.pas) ?, DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry.B (DRagLint.Lint.RuleCatalog.pas) (+10 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.RuleCatalog, DRagLint.LSP.Completion</para>
+  /// <para>Used by: declaration (DRagLint.CLI.Explain.pas) ?, DRagLint.CLI.Explain.GatherFacts (DRagLint.CLI.Explain.pas) ?, DRagLint.CLI.Explain.NearestIds (DRagLint.CLI.Explain.pas) ?, DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry.B (DRagLint.Lint.RuleCatalog.pas), DRagLint.V151.Dispatch.TV151Dispatch.CatalogRows (DRagLint.V151.Dispatch.pas) (+19 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.Explain, DRagLint.CLI.RuleScope, DRagLint.Lint.RuleCatalog, DRagLint.LSP.Completion, DRagLint.V151.Dispatch</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRuleInfo = record
@@ -218,8 +218,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas) ?, DRagLint.CLI.ApplyRunTargetCompiler (DRagLint.CLI.pas), DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.CLI.LintRuleArgAnswered (DRagLint.CLI.pas) ?, DRagLint.LSP.Completion.TLspCompletion.BuildTargetGate (DRagLint.LSP.Completion.pas) (+3 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Completion</para>
+  /// <para>Used by: DRagLint.CLI.ApplyRunTargetCompiler (DRagLint.CLI.pas), DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.CLI.Explain.RunExplain (DRagLint.CLI.Explain.pas), DRagLint.CLI.RuleScope.CheckRuleForDisable (DRagLint.CLI.RuleScope.pas), DRagLint.LSP.Completion.TLspCompletion.BuildTargetGate (DRagLint.LSP.Completion.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.Explain, DRagLint.CLI.RuleScope, DRagLint.LSP.Completion</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRuleCatalog = class
@@ -254,17 +254,17 @@ type
     /// <returns><!-- drag-lint:auto -->TArray&lt;TRuleInfo&gt; -- Observed: Res.ToArray.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.ApplyComplianceProfile (DRagLint.CLI.pas), DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.ApplyRunTargetCompiler (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.DoRules (DRagLint.CLI.pas) (+3 more)</para>
-    /// <para>Calls: CompareText, DRagLint.Lint.Compliance.TComplianceTable.Shared, DRagLint.Lint.Compliance.TComplianceTable.TryGet, DRagLint.Lint.RuleCatalog.RegisterSidecarFixRule, DRagLint.Lint.RuleCatalog.SidecarFixIsRisky, DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry, DRagLint.Lint.RuleCatalog.TRuleCatalog.ScmCategory, MatchStr, ParamStr, SameText, StrToIntDef</para>
-    /// <para>Complexity: 21 (cyclomatic, outer body), 102 lines (full implementation)</para>
+    /// <para>Called from: DRagLint.CLI.ApplyComplianceProfile (DRagLint.CLI.pas), DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.ApplyRunTargetCompiler (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.DoRules (DRagLint.CLI.pas) (+5 more)</para>
+    /// <para>Calls: CompareText, DRagLint.Lint.Compliance.TComplianceTable.Shared, DRagLint.Lint.Compliance.TComplianceTable.TryGet, DRagLint.Lint.RuleCatalog.BUILTIN_RULES_OFF_BY_DEFAULT, DRagLint.Lint.RuleCatalog.RegisterSidecarFixRule, DRagLint.Lint.RuleCatalog.SidecarFixIsRisky, DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry, DRagLint.Lint.RuleCatalog.TRuleCatalog.ScmCategory, MatchStr, ParamStr, SameText, StrToIntDef</para>
+    /// <para>Complexity: 23 (cyclomatic, outer body), 102 lines (full implementation)</para>
     /// <para>Catches: Exception (swallowed)</para>
     /// <para>Touches: file system</para>
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Lint.Compliance.TComplianceTable.Shared"/>
     /// <seealso cref="DRagLint.Lint.Compliance.TComplianceTable.TryGet"/>
+    /// <seealso cref="DRagLint.Lint.RuleCatalog.BUILTIN_RULES_OFF_BY_DEFAULT"/>
     /// <seealso cref="DRagLint.Lint.RuleCatalog.RegisterSidecarFixRule"/>
     /// <seealso cref="DRagLint.Lint.RuleCatalog.SidecarFixIsRisky"/>
-    /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.BuiltinRegistry"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function BuildCatalog(const ARulesDir: string = '';
@@ -286,7 +286,7 @@ type
     /// <summary>Category bucket for an external .scm rule id; 'other' if unmapped.</summary>
     /// <param name="AId"><!-- drag-lint:auto type -->const string</param>
     /// <returns><!-- drag-lint:auto -->string -- Observed: 'bug-patterns';
-    /// 'resource-lifetime'; 'security'; 'platform'; 'structure'; 'dead-code'.</returns>
+    /// 'resource-lifetime'; 'security'; 'platform'; 'structure'; 'dead-code'; 'other'.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog (DRagLint.Lint.RuleCatalog.pas)</para>
@@ -307,7 +307,7 @@ type
 /// <returns>True for the seven ids in ROUTINE_METRIC_RULES.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.Fix.Hygiene.FixPlaceholderHash (DRagLint.Fix.Hygiene.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas) (+2 more)</para>
+/// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.RuleScope.MarkedLine (DRagLint.CLI.RuleScope.pas), DRagLint.Fix.Hygiene.FixPlaceholderHash (DRagLint.Fix.Hygiene.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions (DRagLint.LSP.Completion.pas) (+5 more)</para>
 /// <para>Calls: SameText</para>
 /// <para>Returns: False</para>
 /// <para>Pure</para>
@@ -329,7 +329,7 @@ function IsRoutineMetricRule(const ARuleId: string): Boolean;
 /// FROM changes -- the same kind of move f709bea already made once when HashLine
 /// became HashWindow.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.Lint.RuleCatalog.MarkerExpectedHash (DRagLint.Lint.RuleCatalog.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions (DRagLint.LSP.Completion.pas)</para>
+/// <para>Called from: DRagLint.Lint.MarkerHash.LegacyExpectedHash (DRagLint.Lint.MarkerHash.pas)</para>
 /// <para>Calls: Copy, IntToStr, LowerCase</para>
 /// <para>Returns: LowerCase(Copy(THashSHA2.GetHashString(AWindowHash + '|' + IntToStr(AMetric)), 1, 4))</para>
 /// <para>Pure</para>
@@ -353,12 +353,10 @@ function MetricHash(const AWindowHash: string; AMetric: Integer): string;
 /// anchored on a `///` line is hashed at DocCommentMarkerLine, the declaration
 /// the block documents, because that is where its marker lives. Pure.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.CircularUsesForFile.CycleReviewedAt (DRagLint.CLI.pas), DRagLint.Fix.Hygiene.FixPlaceholderHash (DRagLint.Fix.Hygiene.pas), DRagLint.LSP.Completion.MarkerReviews (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas)</para>
-/// <para>Calls: DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow, DRagLint.Lint.RuleCatalog.DocCommentMarkerLine, DRagLint.Lint.RuleCatalog.IsRoutineMetricRule, DRagLint.Lint.RuleCatalog.MetricHash</para>
-/// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow"/>
-/// <seealso cref="DRagLint.Lint.RuleCatalog.DocCommentMarkerLine"/>
-/// <seealso cref="DRagLint.Lint.RuleCatalog.IsRoutineMetricRule"/>
-/// <seealso cref="DRagLint.Lint.RuleCatalog.MetricHash"/>
+/// <para>Called from: DRagLint.CLI.CircularUsesForFile.CycleReviewedAt (DRagLint.CLI.pas), DRagLint.Fix.Hygiene.FixPlaceholderHash (DRagLint.Fix.Hygiene.pas), DRagLint.LSP.Completion.VerifiedMarkerHash (DRagLint.LSP.Completion.pas)</para>
+/// <para>Calls: DRagLint.Lint.MarkerHash.ExpectedHash</para>
+/// <para>Returns: DRagLint.Lint.MarkerHash.ExpectedHash(ALines, ARuleId, AStartLine, AMetric)</para>
+/// <seealso cref="DRagLint.Lint.MarkerHash.ExpectedHash"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function MarkerExpectedHash(const ALines: TArray<string>; const ARuleId: string;
@@ -381,7 +379,7 @@ function MarkerExpectedHash(const ALines: TArray<string>; const ARuleId: string;
 /// ApplyLineMarkers and the LSP (how far the suppression span reaches) and
 /// MarkerExpectedHash (where the hash is taken), so the three agree. Pure.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.LSP.Completion.MarkerReviews (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas) (+1 more)</para>
+/// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.RuleScope.RunLineScope (DRagLint.CLI.RuleScope.pas), DRagLint.LSP.Completion.MarkerReviews (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions (DRagLint.LSP.Completion.pas) (+4 more)</para>
 /// <para>Calls: DRagLint.Lint.RuleCatalog.DocCommentMarkerLine.IsDocLine, TrimLeft</para>
 /// <para>Returns: ALine; Idx + 1</para>
 /// <seealso cref="DRagLint.Lint.RuleCatalog.DocCommentMarkerLine.IsDocLine"/>
@@ -420,18 +418,30 @@ function IsSidecarFixRule(const AId: string; out ARisky: Boolean): Boolean;
 /// <summary>The per-file rules that ship OFF by default: the core list plus every
 /// provider row registered with DefaultEnabled = False.</summary>
 /// <returns>Rule ids; the core ids first, then the provider ids in registration order.</returns>
-/// <remarks>Was a const array until v151; kept under the SAME name so every
+/// <remarks>
+/// Was a const array until v151; kept under the SAME name so every
 /// consumer (MatchText, for-in, array +) compiles unchanged and cannot drift from
-/// the catalog. Constant after unit initialization; thread-safe to read.</remarks>
+/// the catalog. Constant after unit initialization; thread-safe to read.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), DRagLint.CLI.RuleKeptByRun (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas) (+1 more)</para>
+/// <para>Returns: BUILTIN_RULES_OFF_BY_DEFAULT_CORE + GProviderOff</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BUILTIN_RULES_OFF_BY_DEFAULT: TArray<string>;  // dl:ok method-pascalcase@246e -- REVIEWED 2026-11-13 v151 FRAME: keeps the former const name so every consumer compiles unchanged
 
 /// <summary>Adds rule rows that TRuleCatalog.BuiltinRegistry appends after its own.</summary>
 /// <param name="ARows">Catalog rows; Source should be 'builtin'. A row whose
 /// DefaultEnabled is False joins BUILTIN_RULES_OFF_BY_DEFAULT.</param>
-/// <remarks>Call ONLY from a unit's initialization section (the v151 dispatcher,
+/// <remarks>
+/// Call ONLY from a unit's initialization section (the v151 dispatcher,
 /// DRagLint.V151.Dispatch, is the one caller): the lists are not locked, they are
 /// read-only once the program body runs. An id that is already a built-in is a
-/// registration bug; BuildCatalog keeps the first row only.</remarks>
+/// registration bug; BuildCatalog keeps the first row only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.Dispatch.initialization (DRagLint.V151.Dispatch.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RegisterProviderRules(const ARows: TArray<TRuleInfo>);
 
 implementation

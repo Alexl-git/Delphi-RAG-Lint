@@ -28,16 +28,39 @@ const
 
 type
   /// <summary>Base class of every repository error (missing / existing file, unknown table).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.FieldRepo.FbImport.ImportFromFirebird (DRagLint.FieldRepo.FbImport.pas), DRagLint.FieldRepo.FbImport.ImportTableFromDataSet (DRagLint.FieldRepo.FbImport.pas), DRagLint.FieldRepo.Schema.CreateRepository (DRagLint.FieldRepo.Schema.pas), DRagLint.FieldRepo.Schema.OpenRepository (DRagLint.FieldRepo.Schema.pas), DRagLint.FieldRepo.Schema.RepoRowCount (DRagLint.FieldRepo.Schema.pas) (+9 more)</para>
+  /// <para>Used in units: DRagLint.CLI.Repo, DRagLint.FieldRepo.DataServiceGen, DRagLint.FieldRepo.FbImport, DRagLint.FieldRepo.Schema, DRagLint.FieldRepo.SchemaSeed, DRagLint.FieldRepo.TextBackup</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   ERepoError = class(Exception);
 
   /// <summary>Raised when a file is not a repository of this schema version.
   /// The message names the cause (application_id, user_version, table, column).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.FieldRepo.Schema.ValidateColumns (DRagLint.FieldRepo.Schema.pas), DRagLint.FieldRepo.Schema.ValidateRepository (DRagLint.FieldRepo.Schema.pas)</para>
+  /// <para>Used in units: DRagLint.FieldRepo.Schema</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   ERepoSchemaError = class(ERepoError);
 
   /// <summary>Column kind; selects the SQLite declaration and the FireDAC TField class.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.FieldRepo.Schema.pas), DRagLint.FieldRepo.Schema.Col (DRagLint.FieldRepo.Schema.pas), DRagLint.FieldRepo.TextBackup.ParamFieldType (DRagLint.FieldRepo.TextBackup.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRepoColKind = (rckString, rckInteger, rckSmallint, rckBoolean, rckText, rckByte);
 
   /// <summary>One column of a repository table (design section 4).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.FieldRepo.Schema.pas) ?, DRagLint.FieldRepo.FbImport.CheckSourceColumns (DRagLint.FieldRepo.FbImport.pas) ?, DRagLint.FieldRepo.Schema.Col (DRagLint.FieldRepo.Schema.pas) ?, DRagLint.FieldRepo.Schema.Str (DRagLint.FieldRepo.Schema.pas) ?, DRagLint.FieldRepo.Schema.TRepoTable.FindColumn (DRagLint.FieldRepo.Schema.pas) (+17 more)</para>
+  /// <para>Used in units: DRagLint.FieldRepo.FbImport, DRagLint.FieldRepo.Schema, DRagLint.FieldRepo.SchemaSeed, DRagLint.FieldRepo.TextBackup</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRepoColumn = record
     /// <summary>Exact column name, e.g. 'TABLE_NAME'.</summary>
     Name: string;
@@ -54,6 +77,12 @@ type
   end;
 
   /// <summary>One repository table: name, Firebird source name and ordered columns.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.FieldRepo.FbImport.pas) ?, DRagLint.CLI.Repo.RepoImportFb (DRagLint.CLI.Repo.pas) ?, DRagLint.CLI.Repo.RepoInfo (DRagLint.CLI.Repo.pas) ?, DRagLint.FieldRepo.FbImport.CheckSourceColumns (DRagLint.FieldRepo.FbImport.pas) ?, DRagLint.FieldRepo.Schema.FindRepoTable (DRagLint.FieldRepo.Schema.pas) (+29 more)</para>
+  /// <para>Used in units: DRagLint.CLI.Repo, DRagLint.FieldRepo.FbImport, DRagLint.FieldRepo.Schema, DRagLint.FieldRepo.SchemaSeed, DRagLint.FieldRepo.TextBackup</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRepoTable = record
     /// <summary>Table name, e.g. 'DL_FIELDS_INFO'.</summary>
     Name: string;
@@ -63,29 +92,75 @@ type
     Columns: TArray<TRepoColumn>;
     /// <summary>Key columns in PkOrder.</summary>
     /// <returns>The primary-key columns, ordered by PkOrder.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FieldRepo.Schema.RepoTableDdl (DRagLint.FieldRepo.Schema.pas), DRagLint.FieldRepo.TextBackup.OrderByClause (DRagLint.FieldRepo.TextBackup.pas), DRagLint.FieldRepo.TextBackup.RecordHeader (DRagLint.FieldRepo.TextBackup.pas), DRagLint.FieldRepo.TextBackup.TBackupParser.ParseRecord (DRagLint.FieldRepo.TextBackup.pas)</para>
+    /// <para>Returns: List.ToArray</para>
+    /// <para>Reads: Columns</para>
+    /// <seealso cref="DRagLint.FieldRepo.Schema.TRepoTable.FindColumn"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function PkColumns: TArray<TRepoColumn>;
     /// <summary>Looks a column up by name, case-insensitively.</summary>
     /// <param name="pName">Column name.</param>
     /// <param name="pColumn">Receives the column when found.</param>
     /// <returns>True when the column exists.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FieldRepo.FbImport.CheckSourceColumns (DRagLint.FieldRepo.FbImport.pas), DRagLint.FieldRepo.Schema.ValidateColumns (DRagLint.FieldRepo.Schema.pas), DRagLint.FieldRepo.SchemaSeed.TSeedRun.LoadColumnLimits (DRagLint.FieldRepo.SchemaSeed.pas)</para>
+    /// <para>Calls: Default, SameText</para>
+    /// <para>Returns: False; True</para>
+    /// <para>Reads: Columns</para>
+    /// <para>Mutates: pColumn (out)</para>
+    /// <seealso cref="DRagLint.FieldRepo.Schema.TRepoTable.PkColumns"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function FindColumn(const pName: string; out pColumn: TRepoColumn): Boolean;
   end;
 
 /// <summary>The five repository tables in the fixed order DL_META, DL_FIELDS_INFO,
 /// DL_DATASETS_INFO, DL_ENUMVALUES, DL_ERROR_MESSAGES.</summary>
 /// <returns>A fresh array of table descriptions.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Repo.RepoInfo (DRagLint.CLI.Repo.pas), DRagLint.FieldRepo.Schema.CreateRepository (DRagLint.FieldRepo.Schema.pas), DRagLint.FieldRepo.Schema.FindRepoTable (DRagLint.FieldRepo.Schema.pas), DRagLint.FieldRepo.Schema.RepoIsEmpty (DRagLint.FieldRepo.Schema.pas), DRagLint.FieldRepo.Schema.ValidateRepository (DRagLint.FieldRepo.Schema.pas) (+2 more)</para>
+/// <para>Calls: DRagLint.FieldRepo.Schema.DatasetsInfoTable, DRagLint.FieldRepo.Schema.EnumValuesTable, DRagLint.FieldRepo.Schema.ErrorMessagesTable, DRagLint.FieldRepo.Schema.FieldsInfoTable, DRagLint.FieldRepo.Schema.MetaTable</para>
+/// <para>Returns: [MetaTable, FieldsInfoTable, DatasetsInfoTable, EnumValuesTable, ErrorMessagesTable]</para>
+/// <para>Effect-free (proven)</para>
+/// <seealso cref="DRagLint.FieldRepo.Schema.DatasetsInfoTable"/>
+/// <seealso cref="DRagLint.FieldRepo.Schema.EnumValuesTable"/>
+/// <seealso cref="DRagLint.FieldRepo.Schema.ErrorMessagesTable"/>
+/// <seealso cref="DRagLint.FieldRepo.Schema.FieldsInfoTable"/>
+/// <seealso cref="DRagLint.FieldRepo.Schema.MetaTable"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RepoTables: TArray<TRepoTable>;  // dl:ok unused-public-symbol@15fa
 
 /// <summary>Looks a repository table up by name, case-insensitively.</summary>
 /// <param name="pName">Table name.</param>
 /// <param name="pTable">Receives the table when found.</param>
 /// <returns>True when the table exists.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Repo.RepoImportFb (DRagLint.CLI.Repo.pas), DRagLint.FieldRepo.FbImport.ImportFromFirebird (DRagLint.FieldRepo.FbImport.pas), DRagLint.FieldRepo.Schema.RepoRowCount (DRagLint.FieldRepo.Schema.pas), DRagLint.FieldRepo.SchemaSeed.TSeedRun.LoadColumnLimits (DRagLint.FieldRepo.SchemaSeed.pas), DRagLint.FieldRepo.TextBackup.TBackupParser.ParseRecord (DRagLint.FieldRepo.TextBackup.pas)</para>
+/// <para>Calls: Default, DRagLint.FieldRepo.Schema.RepoTables, SameText</para>
+/// <para>Returns: False; True</para>
+/// <para>Mutates: pTable (out)</para>
+/// <seealso cref="DRagLint.FieldRepo.Schema.RepoTables"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindRepoTable(const pName: string; out pTable: TRepoTable): Boolean;  // dl:ok unused-public-symbol@c8d7
 
 /// <summary>Quotes an identifier for SQLite with double quotes. Every SQL statement
 /// of every lane quotes identifiers through this function.</summary>
 /// <param name="pName">Unquoted identifier.</param>
 /// <returns>The identifier in double quotes, embedded quotes doubled.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.FieldRepo.FbImport.ImportFromFirebird (DRagLint.FieldRepo.FbImport.pas), DRagLint.FieldRepo.FbImport.ImportOneTable (DRagLint.FieldRepo.FbImport.pas), DRagLint.FieldRepo.FbImport.InsertSql (DRagLint.FieldRepo.FbImport.pas), DRagLint.FieldRepo.Schema.ColumnDdl (DRagLint.FieldRepo.Schema.pas), DRagLint.FieldRepo.Schema.GetRepoMeta (DRagLint.FieldRepo.Schema.pas) (+11 more)</para>
+/// <para>Returns: '"' + pName.Replace('"', '""') + '"'</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function QuoteRepoIdent(const pName: string): string;  // dl:ok unused-public-symbol@0e28
 
 /// <summary>Builds the CREATE TABLE statement for a table: SQLite declared type per kind,
@@ -93,19 +168,49 @@ function QuoteRepoIdent(const pName: string): string;  // dl:ok unused-public-sy
 /// key (inline for a single integer key, table-level otherwise).</summary>
 /// <param name="pTable">Table description.</param>
 /// <returns>The DDL text.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.FieldRepo.Schema.CreateRepository (DRagLint.FieldRepo.Schema.pas)</para>
+/// <para>Calls: DRagLint.FieldRepo.Schema.ColumnDdl, DRagLint.FieldRepo.Schema.QuoteRepoIdent, DRagLint.FieldRepo.Schema.TRepoTable.PkColumns</para>
+/// <para>Returns: 'CREATE TABLE ' + QuoteRepoIdent(pTable.Name) + ' (' + sLineBreak + '  '</para>
+/// <seealso cref="DRagLint.FieldRepo.Schema.ColumnDdl"/>
+/// <seealso cref="DRagLint.FieldRepo.Schema.QuoteRepoIdent"/>
+/// <seealso cref="DRagLint.FieldRepo.Schema.TRepoTable.PkColumns"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RepoTableDdl(const pTable: TRepoTable): string;  // dl:ok unused-public-symbol@5822
 
 /// <summary>Default repository path of a project: the project folder, then
 /// REPO_FOLDER_NAME, then the project base name with REPO_FILE_EXT.</summary>
 /// <param name="pProjectFile">Full path of the project file.</param>
 /// <returns>For C:\P\App.dproj: C:\P\_DL-REPO\App.dlrepo.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Repo.ResolveRepoPath (DRagLint.CLI.Repo.pas)</para>
+/// <para>Calls: ExtractFilePath</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DefaultRepoPath(const pProjectFile: string): string;  // dl:ok unused-public-symbol@4257
 
 /// <summary>Creates a new repository file with all five tables.</summary>
 /// <param name="pFileName">Target file; its folder is created.</param>
 /// <exception cref="ERepoError">The file already exists.</exception>
-/// <remarks>Sets application_id and user_version, journal_mode=DELETE, creates the tables
-/// in one transaction and writes DL_META.schema_version.</remarks>
+/// <remarks>
+/// Sets application_id and user_version, journal_mode=DELETE, creates the tables
+/// in one transaction and writes DL_META.schema_version.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Repo.OpenOrCreateRepo (DRagLint.CLI.Repo.pas), DRagLint.CLI.Repo.RepoInit (DRagLint.CLI.Repo.pas), DRagLint.CLI.Repo.RepoRestore (DRagLint.CLI.Repo.pas)</para>
+/// <para>Calls: DRagLint.FieldRepo.Schema.NewConnection, DRagLint.FieldRepo.Schema.RepoTableDdl, DRagLint.FieldRepo.Schema.RepoTables, DRagLint.FieldRepo.Schema.SetRepoMeta, ExpandFileName, ExtractFilePath, IntToStr</para>
+/// <para>Catches: Exception (re-raise)</para>
+/// <para>Touches: file system</para>
+/// <para>Transaction: starts, commits, rolls back</para>
+/// <seealso cref="DRagLint.FieldRepo.Schema.NewConnection"/>
+/// <seealso cref="DRagLint.FieldRepo.Schema.RepoTableDdl"/>
+/// <seealso cref="DRagLint.FieldRepo.Schema.RepoTables"/>
+/// <seealso cref="DRagLint.FieldRepo.Schema.SetRepoMeta"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure CreateRepository(const pFileName: string);  // dl:ok unused-public-symbol@3469
 
 /// <summary>Opens an existing repository and validates it.</summary>
@@ -115,11 +220,30 @@ procedure CreateRepository(const pFileName: string);  // dl:ok unused-public-sym
 /// False, so every dataset on it keeps trailing blanks.</returns>
 /// <exception cref="ERepoError">The file is missing (it is never created).</exception>
 /// <exception cref="ERepoSchemaError">The file is not a repository of this version.</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Repo.OpenOrCreateRepo (DRagLint.CLI.Repo.pas), DRagLint.CLI.Repo.RepoBackup (DRagLint.CLI.Repo.pas), DRagLint.CLI.Repo.RepoInfo (DRagLint.CLI.Repo.pas), DRagLint.CLI.Repo.RepoRestore (DRagLint.CLI.Repo.pas), DRagLint.FieldRepo.DataServiceGen.RunOrmGenVerb (DRagLint.FieldRepo.DataServiceGen.pas)</para>
+/// <para>Calls: DRagLint.FieldRepo.Schema.NewConnection, DRagLint.FieldRepo.Schema.ValidateRepository</para>
+/// <para>Returns: NewConnection(pFileName, if pReadOnly then 'ReadOnly' else 'ReadWrite')</para>
+/// <para>Catches: Exception (re-raise)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.FieldRepo.Schema.NewConnection"/>
+/// <seealso cref="DRagLint.FieldRepo.Schema.ValidateRepository"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function OpenRepository(const pFileName: string; pReadOnly: Boolean): TFDConnection;  // dl:ok unused-public-symbol@f329
 
 /// <summary>Checks application_id, user_version, every table and every column.</summary>
 /// <param name="pConnection">A connected SQLite connection.</param>
 /// <exception cref="ERepoSchemaError">Names the first mismatch found.</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.FieldRepo.Schema.OpenRepository (DRagLint.FieldRepo.Schema.pas)</para>
+/// <para>Calls: DRagLint.FieldRepo.Schema.RepoTables, DRagLint.FieldRepo.Schema.ValidateColumns</para>
+/// <seealso cref="DRagLint.FieldRepo.Schema.RepoTables"/>
+/// <seealso cref="DRagLint.FieldRepo.Schema.ValidateColumns"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ValidateRepository(pConnection: TFDConnection);  // dl:ok unused-public-symbol@83e8
 
 /// <summary>Number of rows of a repository table.</summary>
@@ -127,24 +251,57 @@ procedure ValidateRepository(pConnection: TFDConnection);  // dl:ok unused-publi
 /// <param name="pTableName">A repository table name.</param>
 /// <returns>The row count.</returns>
 /// <exception cref="ERepoError">The table is not a repository table.</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Repo.RepoImportFb (DRagLint.CLI.Repo.pas), DRagLint.CLI.Repo.RepoInfo (DRagLint.CLI.Repo.pas), DRagLint.FieldRepo.Schema.RepoIsEmpty (DRagLint.FieldRepo.Schema.pas)</para>
+/// <para>Calls: DRagLint.FieldRepo.Schema.FindRepoTable, DRagLint.FieldRepo.Schema.QuoteRepoIdent</para>
+/// <para>Returns: pConnection.ExecSQLScalar('SELECT COUNT(*) FROM ' + QuoteRepoIdent(Tab.Name))</para>
+/// <seealso cref="DRagLint.FieldRepo.Schema.FindRepoTable"/>
+/// <seealso cref="DRagLint.FieldRepo.Schema.QuoteRepoIdent"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RepoRowCount(pConnection: TFDConnection; const pTableName: string): Integer;  // dl:ok unused-public-symbol@9768
 
 /// <summary>True when every repository table except DL_META has no rows.</summary>
 /// <param name="pConnection">An open repository connection.</param>
 /// <returns>True for a freshly created repository.</returns>
+/// <exception cref="ERepoError"><!-- drag-lint:auto exc -->via DRagLint.FieldRepo.Schema.RepoRowCount: Not a repository table: %s</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Repo.RepoImportFb (DRagLint.CLI.Repo.pas), DRagLint.FieldRepo.FbImport.ImportFromFirebird (DRagLint.FieldRepo.FbImport.pas), DRagLint.FieldRepo.SchemaSeed.RunSchemaSeed (DRagLint.FieldRepo.SchemaSeed.pas), DRagLint.FieldRepo.TextBackup.RestoreRepositoryFromStrings (DRagLint.FieldRepo.TextBackup.pas)</para>
+/// <para>Calls: DRagLint.FieldRepo.Schema.RepoRowCount, DRagLint.FieldRepo.Schema.RepoTables, SameText</para>
+/// <para>Returns: True; False</para>
+/// <seealso cref="DRagLint.FieldRepo.Schema.RepoRowCount"/>
+/// <seealso cref="DRagLint.FieldRepo.Schema.RepoTables"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RepoIsEmpty(pConnection: TFDConnection): Boolean;  // dl:ok unused-public-symbol@370b
 
 /// <summary>Writes (inserts or replaces) one DL_META value.</summary>
 /// <param name="pConnection">A read-write repository connection.</param>
 /// <param name="pKey">Meta key.</param>
 /// <param name="pValue">Meta value.</param>
-/// <remarks>A read-only connection raises the driver's exception.</remarks>
+/// <remarks>
+/// A read-only connection raises the driver's exception.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Repo.RepoSeed (DRagLint.CLI.Repo.pas), DRagLint.FieldRepo.FbImport.ImportFromFirebird (DRagLint.FieldRepo.FbImport.pas), DRagLint.FieldRepo.Schema.CreateRepository (DRagLint.FieldRepo.Schema.pas), DRagLint.FieldRepo.SchemaSeed.TSeedRun.Execute (DRagLint.FieldRepo.SchemaSeed.pas)</para>
+/// <para>Calls: DRagLint.FieldRepo.Schema.QuoteRepoIdent</para>
+/// <seealso cref="DRagLint.FieldRepo.Schema.QuoteRepoIdent"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure SetRepoMeta(pConnection: TFDConnection; const pKey, pValue: string);  // dl:ok unused-public-symbol@419a
 
 /// <summary>Reads one DL_META value.</summary>
 /// <param name="pConnection">An open repository connection.</param>
 /// <param name="pKey">Meta key.</param>
 /// <returns>The value, or '' when the key is absent.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: DRagLint.FieldRepo.Schema.QuoteRepoIdent</para>
+/// <para>Returns: if Q.Eof then ''</para>
+/// <seealso cref="DRagLint.FieldRepo.Schema.QuoteRepoIdent"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function GetRepoMeta(pConnection: TFDConnection; const pKey: string): string;  // dl:ok unused-public-symbol@3149
 
 implementation

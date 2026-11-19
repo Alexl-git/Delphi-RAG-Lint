@@ -22,7 +22,7 @@
   mismatch gave it away. So if the expected count below and the run disagree,
   suspect this runner before the code.
 
-  GREEN: 30 passed, 0 failed.
+  GREEN: 39 passed, 0 failed (30 + group 5, the engine/setup exe resolver).
 
   Usage: pwsh -File tests\plugin\run_update_check.ps1
 #>
@@ -40,7 +40,7 @@
 param(
   [string]$Dpr     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-update-check-build-$PID",
-  [int]   $Expected = 30
+  [int]   $Expected = 39
 )
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
@@ -80,7 +80,7 @@ $lines = @(
 $buildLog = Join-Path $WorkDir 'build.log'
 $p = Start-Process cmd.exe -ArgumentList "/c","`"$bat`"" `
        -RedirectStandardOutput $buildLog -RedirectStandardError "$buildLog.err" `
-       -NoNewWindow -Wait -PassThru
+       -NoNewWindow -Wait -PassThru; $null = $p.Handle
 $buildOut = Get-Content $buildLog -Raw
 if ($buildOut -notmatch 'BUILD_EXITCODE=0') {
   Write-Host 'FATAL: compile failed' -ForegroundColor Red

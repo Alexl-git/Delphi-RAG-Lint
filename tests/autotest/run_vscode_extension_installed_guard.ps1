@@ -60,7 +60,7 @@ function Test-InstalledTree([string]$pUserDir, [string]$pExtRoot, [string]$pDist
   $targets = @(@{ Name = '(default)'; Json = (Join-Path $pExtRoot 'extensions.json') })
   $st = Join-Path $pUserDir 'globalStorage\storage.json'
   if (Test-Path -LiteralPath $st) {
-    $prof = (Get-Content -LiteralPath $st -Raw | ConvertFrom-Json).userDataProfiles
+    $prof = (Get-Content -LiteralPath $st -Raw | ConvertFrom-Json | ForEach-Object { $_ }).userDataProfiles
     foreach ($p in @($prof)) {
       $id = ([string]$p.location).Split('/')[-1]
       if ($id) { $targets += @{ Name = [string]$p.name; Json = (Join-Path $pUserDir "profiles\$id\extensions.json") } }
@@ -68,7 +68,7 @@ function Test-InstalledTree([string]$pUserDir, [string]$pExtRoot, [string]$pDist
   }
   foreach ($t in $targets) {
     if (-not (Test-Path -LiteralPath $t.Json)) { $notes += "$($t.Name): no extensions.json"; continue }
-    $e = @((Get-Content -LiteralPath $t.Json -Raw | ConvertFrom-Json) | Where-Object { $_.identifier.id -eq 'drag-lint.drag-lint' })
+    $e = @((Get-Content -LiteralPath $t.Json -Raw | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $_.identifier.id -eq 'drag-lint.drag-lint' })
     if ($e.Count -eq 0) { $notes += "$($t.Name): drag-lint not installed in this profile"; continue }
     $loc = [string]$e[0].location.path
     $path = $loc.TrimStart('/')
@@ -108,7 +108,7 @@ function Test-EngineCopies([string]$pUserDir, [string]$pDeployedExe, [string]$pE
 }
 $pkgPath = Join-Path $Dir 'package.json'
 if (-not (Test-Path $pkgPath)) { Write-Host "FATAL: not found: $pkgPath" -ForegroundColor Red; exit 2 }
-$ver = (Get-Content $pkgPath -Raw | ConvertFrom-Json).version
+$ver = (Get-Content $pkgPath -Raw | ConvertFrom-Json | ForEach-Object { $_ }).version
 
 Write-Host 'Self-test on a fake VS Code tree (RED / GREEN / missing-vsix controls)' -ForegroundColor Cyan
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ("vsixguard-" + [Guid]::NewGuid().ToString('N'))

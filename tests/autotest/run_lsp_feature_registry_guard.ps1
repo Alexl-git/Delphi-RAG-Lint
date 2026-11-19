@@ -186,10 +186,10 @@ Start-Process $Exe -ArgumentList @('lsp', '--db', $db) -WorkingDirectory $WorkDi
 $raw = @{}
 foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
   $t = $mm.Value.Trim()
-  try { $o = $t | ConvertFrom-Json } catch { continue }
+  try { $o = $t | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
   if ($null -ne $o.id) { $raw[[int]$o.id] = $t }
 }
-function Reply([int]$id) { if ($raw.ContainsKey($id)) { return ($raw[$id] | ConvertFrom-Json) } return $null }
+function Reply([int]$id) { if ($raw.ContainsKey($id)) { return ($raw[$id] | ConvertFrom-Json | ForEach-Object { $_ }) } return $null }
 
 Write-Host ''
 Write-Host 'THE REGISTRY: advertise + dispatch' -ForegroundColor Cyan
@@ -221,7 +221,7 @@ Write-Host ''
 Write-Host 'THE EXISTING SURFACE: same bodies as the pre-S0 engine' -ForegroundColor Cyan
 function Normalise([string]$json) {
   if ($null -eq $json) { return '<no reply>' }
-  $o = $json | ConvertFrom-Json
+  $o = $json | ConvertFrom-Json | ForEach-Object { $_ }
   $res = $o.result
   # callerCounts comes out of a TDictionary walk; compare it as a set.
   if (($o.id -eq 9) -and $res -and $res.counts) {
@@ -247,7 +247,7 @@ if ($Capture) {
 }
 if (-not (Test-Path $Baseline)) { Check 'baseline file present' $false $Baseline }
 else {
-  $base = Get-Content $Baseline -Raw | ConvertFrom-Json
+  $base = Get-Content $Baseline -Raw | ConvertFrom-Json | ForEach-Object { $_ }
   foreach ($id in 4..9) {
     $want = $base."$id"
     $got  = $current["$id"]
@@ -281,7 +281,7 @@ function RaiseSession([bool]$withHook) {
   } finally { $env:DRAGLINT_LSP_TEST_RAISE = $null }
   $rr = @{}
   foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($outR), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($null -ne $o.id) { $rr[[int]$o.id] = $o }
   }
   return $rr

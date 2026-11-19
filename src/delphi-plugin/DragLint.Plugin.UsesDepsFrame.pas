@@ -351,6 +351,7 @@ type
       /// <para>Calls: DragLint.Plugin.CliAsync.RunCliAsync, DragLint.Plugin.CliAsync.TCliRunSlot.Cancel, DragLint.Plugin.UsesDepsFrame.EngineCmdLine, DragLint.Plugin.UsesDepsFrame.ReadOutcome, DragLint.Plugin.UsesDepsFrame.ReloadModules, DragLint.Plugin.UsesDepsFrame.ResolveScope, DragLint.Plugin.UsesDepsFrame.SaveAllModules, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.ApplyArgs, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.FinishApply, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Report, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.SetApplying, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.TickedNames</para>
       /// <para>Overridden by: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.HandleApply</para>
       /// <para>virtual</para>
+      /// <para>Complexity: 10 (cyclomatic, outer body), 42 lines (full implementation)</para>
       /// <para>Reads: FApplying, FRun, FVerb</para>
       /// <para>Directives: virtual</para>
       /// <seealso cref="DragLint.Plugin.CliAsync.RunCliAsync"/>
@@ -406,7 +407,7 @@ type
       /// produces. May be nil, in which case messages are dropped.</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.BuildControls (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Create (DragLint.Plugin.UsesDepsFrame.pas), DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.BuildControls (DragLint.Plugin.UsesDepsFrame.pas)</para>
       /// <para>Calls: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.BuildControls</para>
       /// <para>Overridden by: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Create</para>
       /// <para>constructor</para>
@@ -424,6 +425,7 @@ type
                          const ACaption: string; AOnReport: TUsesReportProc); reintroduce;
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Destroy (DragLint.Plugin.UsesDepsFrame.pas)</para>
       /// <para>Overridden by: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Destroy</para>
       /// <para>Reads: FRun, FRows</para>
       /// <para>Directives: override</para>
@@ -535,7 +537,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.HandleApply (DragLint.Plugin.UsesDepsFrame.pas), DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.HandleDryRun (DragLint.Plugin.UsesDepsFrame.pas)</para>
       /// <para>Calls: DragLint.Plugin.CliAsync.TCliRunSlot.Cancel, DragLint.Plugin.CycleFix.CycleFixApplyArgs, DragLint.Plugin.CycleFix.CycleFixApplyConfirmText, DragLint.Plugin.CycleFix.CycleFixDryRunArgs, DragLint.Plugin.DbResolver.GetActivePlatformForLibrary, DragLint.Plugin.ExeResolver.EngineExeOrEmpty, DragLint.Plugin.JobQueue.JobQueue, DragLint.Plugin.JobQueue.JobQueueBusy, DragLint.Plugin.JobQueue.TDragLintJob.Create, DragLint.Plugin.JobQueue.TDragLintJobQueue.Enqueue (+11 more)</para>
-      /// <para>Complexity: 11 (cyclomatic, outer body), 65 lines (full implementation)</para>
+      /// <para>Complexity: 13 (cyclomatic, outer body), 65 lines (full implementation)</para>
       /// <para>Reads: FRunning, FCycles, FRun</para>
       /// <seealso cref="DragLint.Plugin.CliAsync.TCliRunSlot.Cancel"/>
       /// <seealso cref="DragLint.Plugin.CycleFix.CycleFixApplyArgs"/>
@@ -666,16 +668,17 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.BuildControls (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Calls: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Create</para>
       /// <para>Overrides: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Create</para>
       /// <para>constructor</para>
       /// <para>Reads: FBtnTickAll, FBtnApply, FList</para>
       /// <para>UI thread only -- touches AParent</para>
       /// <para>Directives: reintroduce</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Create"/>
       /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Destroy"/>
       /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.FinishFix"/>
       /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.HandleApply"/>
       /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.HandleClickCheck"/>
-      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.HandleDryRun"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(AOwner: TComponent; AParent: TWinControl; const ACaption: string;
@@ -684,13 +687,14 @@ type
       /// after the dock is gone does not call into a freed object.</summary>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Destroy</para>
       /// <para>Overrides: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Destroy</para>
       /// <para>Directives: override</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Destroy"/>
       /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Create"/>
       /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.FinishFix"/>
       /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.HandleApply"/>
       /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.HandleClickCheck"/>
-      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.HandleDryRun"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       destructor Destroy; override;

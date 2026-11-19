@@ -139,7 +139,7 @@ function ParseGlyphExpr(const AText: string; out AExpr: TGlyphExpr): TArray<TGly
 /// <para>Called from: DRagLint.Convert.Rules.ValidateBlocks.CheckGlyphLink (DRagLint.Convert.Rules.pas)</para>
 /// <para>Calls: DRagLint.Convert.GlyphExpr.IsGlyphCountExpr, DRagLint.Convert.GlyphExpr.MakeError, Format</para>
 /// <para>Returns: nil</para>
-/// <para>Complexity: 20 (cyclomatic, outer body), 79 lines (full implementation)</para>
+/// <para>Complexity: 21 (cyclomatic, outer body), 79 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Convert.GlyphExpr.IsGlyphCountExpr"/>
 /// <seealso cref="DRagLint.Convert.GlyphExpr.MakeError"/>
 /// <!-- drag-lint:auto END -->

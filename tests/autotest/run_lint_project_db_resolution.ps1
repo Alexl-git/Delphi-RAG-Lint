@@ -176,7 +176,7 @@ if (-not ((Test-Path $dbA) -and (Test-Path $dbB))) {
 
 function Get-Findings([string[]]$JsonLines) {
   $raw = ($JsonLines -join "`n")
-  try { return @($raw | ConvertFrom-Json) } catch { return $null }
+  try { return @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { return $null }
 }
 
 # Everything below runs from a NEUTRAL cwd: no fixture project underfoot, so the
@@ -189,7 +189,7 @@ try {
   # -------------------------------------------------------------------------
   Write-Host ''
   Write-Host 'Reference: lint-all --db <A> --project AppA.dproj' -ForegroundColor Cyan
-  $refA = Get-Findings (& { $ErrorActionPreference = 'Continue'; & $exeCopy lint-all --db $dbA --project $dprojA --json 2>$null })
+  $refA = @(Get-Findings (& { $ErrorActionPreference = 'Continue'; & $exeCopy lint-all --db $dbA --project $dprojA --json 2>$null }))
   Check 'reference run emitted parseable JSON' ($null -ne $refA)
   Check 'reference run finds something (a 0 baseline proves nothing)' ($refA.Count -gt 0) "count=$($refA.Count)"
 
@@ -199,7 +199,7 @@ try {
   Write-Host ''
   Write-Host 'Under test: lint-all --project AppA.dproj (no --db)' -ForegroundColor Cyan
   $autoOut = & { $ErrorActionPreference = 'Continue'; & $exeCopy lint-all --project $dprojA --json 2>$null }
-  $autoA   = Get-Findings $autoOut
+  $autoA   = @(Get-Findings $autoOut)
   Check 'auto-resolved run emitted parseable JSON' ($null -ne $autoA)
   Check 'auto-resolved run is NOT empty' ($autoA.Count -gt 0) "count=$($autoA.Count)"
   Check 'auto-resolved count == explicit --db count' ($autoA.Count -eq $refA.Count) "auto=$($autoA.Count) db=$($refA.Count)"
@@ -227,8 +227,8 @@ try {
   # -------------------------------------------------------------------------
   Write-Host ''
   Write-Host 'Under test: lint-all --project AppB.dproj (no --db)' -ForegroundColor Cyan
-  $autoB = Get-Findings (& { $ErrorActionPreference = 'Continue'; & $exeCopy lint-all --project $dprojB --json 2>$null })
-  $refB  = Get-Findings (& { $ErrorActionPreference = 'Continue'; & $exeCopy lint-all --db $dbB --project $dprojB --json 2>$null })
+  $autoB = @(Get-Findings (& { $ErrorActionPreference = 'Continue'; & $exeCopy lint-all --project $dprojB --json 2>$null }))
+  $refB  = @(Get-Findings (& { $ErrorActionPreference = 'Continue'; & $exeCopy lint-all --db $dbB --project $dprojB --json 2>$null }))
   Check 'AppB auto-resolved run is NOT empty' ($autoB.Count -gt 0) "count=$($autoB.Count)"
   Check 'AppB auto-resolved count == explicit --db count' ($autoB.Count -eq $refB.Count) "auto=$($autoB.Count) db=$($refB.Count)"
   $leavesB = @($autoB | ForEach-Object { Split-Path $_.file_path -Leaf } | Sort-Object -Unique)
@@ -256,9 +256,9 @@ try {
   $unitA = Join-Path (Split-Path $dprojA) 'UnitA.pas'
   Check 'fixture has UnitA.pas to lint' (Test-Path $unitA) $unitA
   if (Test-Path $unitA) {
-    $bareOut  = Get-Findings (& { $ErrorActionPreference = 'Continue'; & $exeCopy lint $unitA --json 2>$null })
-    $refOut   = Get-Findings (& { $ErrorActionPreference = 'Continue'; & $exeCopy lint $unitA --db $dbA --json 2>$null })
-    $wrongOut = Get-Findings (& { $ErrorActionPreference = 'Continue'; & $exeCopy lint $unitA --db $dbB --json 2>$null })
+    $bareOut  = @(Get-Findings (& { $ErrorActionPreference = 'Continue'; & $exeCopy lint $unitA --json 2>$null }))
+    $refOut   = @(Get-Findings (& { $ErrorActionPreference = 'Continue'; & $exeCopy lint $unitA --db $dbA --json 2>$null }))
+    $wrongOut = @(Get-Findings (& { $ErrorActionPreference = 'Continue'; & $exeCopy lint $unitA --db $dbB --json 2>$null }))
     Check 'bare `lint <file>` emitted parseable JSON' ($null -ne $bareOut)
     # The reference run is what "correct" means here. If IT is empty the
     # comparison below is vacuous -- two zeros match -- so say so.

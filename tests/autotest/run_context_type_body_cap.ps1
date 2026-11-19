@@ -115,7 +115,7 @@ Check 'T5 a focus word keeps that body past the cap' (($fs -match 'procedure TBi
 Check 'C4 CONTROL the focus phrase still resolves the type' ($f -match '# Context bundle: modify uCap\.TBig\s*\n') (($f -split "`n")[0])
 
 $j = Bundle 'modify uCap.TBig' @('--max-body-tokens', '350') 'json'
-$jo = $null; try { $jo = $j | ConvertFrom-Json } catch { }
+$jo = $null; try { $jo = $j | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'T6 json carries the body-cap keys' (($null -ne $jo) -and ($jo.body_cap -eq 350) -and ($jo.bodies_omitted -eq 3) -and (@($jo.omitted_bodies).Count -eq 4) -and (@($jo.omitted_bodies | Where-Object { $_.signature -eq 'procedure TBig.Bulky;' -and $_.start_line -gt 0 }).Count -eq 1)) $j.Substring(0, [Math]::Min(400, $j.Length))
 
 $u  = Bundle 'modify uCap.TBig' @('--max-body-tokens', '0')

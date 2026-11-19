@@ -90,7 +90,7 @@ try {
   $cacheFile = Get-ChildItem $env:DRAGLINT_RULE_CACHE_DIR -Filter 'rules-*.json' | Select-Object -First 1
   Check 'warm-rule-cache wrote its cache file' ($null -ne $cacheFile)
   if ($cacheFile) {
-    $p = Start-Process cmd.exe -ArgumentList '/c', 'exit' -PassThru -WindowStyle Hidden
+    $p = Start-Process cmd.exe -ArgumentList '/c', 'exit' -PassThru -WindowStyle Hidden; $null = $p.Handle
     $p.WaitForExit()
     $deadPid = $p.Id
     $p.Dispose() # an open Process object keeps the exited pid openable; release it
@@ -122,7 +122,7 @@ try {
     $emptyIn = Join-Path $WorkDir 'empty.in'; Write-Ascii $emptyIn ''
     $errF = Join-Path $WorkDir 'serve.err'
     $pr = Start-Process -FilePath $Exe -ArgumentList @('serve') -RedirectStandardInput $emptyIn -RedirectStandardError $errF `
-            -RedirectStandardOutput (Join-Path $WorkDir 'serve.out') -NoNewWindow -PassThru
+            -RedirectStandardOutput (Join-Path $WorkDir 'serve.out') -NoNewWindow -PassThru; $null = $pr.Handle
     if (-not $pr.WaitForExit(30000)) { try { $pr.Kill($true) } catch { } }
     $se = if (Test-Path $errF) { Get-Content $errF -Raw } else { '' }
     Check 'serve names the database it uses' ($se -match 'NOTE -- no --db given.*FIRST') ($se -replace '\s+', ' ')

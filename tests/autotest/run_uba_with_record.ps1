@@ -149,7 +149,7 @@ Check 'POSITIVE CONTROL: PlainUnassigned (N: Integer read unassigned) still fire
 Check 'POSITIVE CONTROL: `with B do` on an unassigned CLASS local still fires' `
       (UbaAt (LineOf 'with B do')) ($uba -join "`n")
 Check 'B-14: `with F do` on a RECORD local is not a read (no finding for "f")' `
-      ((UbaFor 'f').Count -eq 0) ($uba -join "`n")
+      ((@(UbaFor 'f')).Count -eq 0) ($uba -join "`n")
 Check 'exactly the 2 true positives are reported' ($uba.Count -eq 2) ($uba -join "`n")
 
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

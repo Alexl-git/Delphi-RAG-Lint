@@ -86,7 +86,7 @@ function Get-Drift($qname) {
   $out = & { $ErrorActionPreference = 'Continue'; & $exePath doc-drift --qname $qname --db $db --json 2>$null }
   Check "doc-drift --qname $qname exits 0" ($LASTEXITCODE -eq 0)
   $rows = @()
-  foreach ($ln in $out) { $t = "$ln".Trim(); if ($t.StartsWith('{')) { $rows += ($t | ConvertFrom-Json) } }
+  foreach ($ln in $out) { $t = "$ln".Trim(); if ($t.StartsWith('{')) { $rows += ($t | ConvertFrom-Json | ForEach-Object { $_ }) } }
   return ,$rows
 }
 # True when a row of kind $k exists whose fixable flag equals $fx.
@@ -137,7 +137,7 @@ function Get-Findings($raw) {
   $arrStart = $raw.IndexOf('[')
   $arrEnd   = $raw.LastIndexOf(']')
   if ($arrStart -ge 0 -and $arrEnd -gt $arrStart) {
-    return @(ConvertFrom-Json ($raw.Substring($arrStart, $arrEnd - $arrStart + 1)))
+    return @((ConvertFrom-Json ($raw.Substring($arrStart, $arrEnd - $arrStart + 1)) | ForEach-Object { $_ }) | ForEach-Object { $_ })
   }
   return @()
 }
@@ -201,7 +201,7 @@ try {
   # a failure -- checking for it still catches a genuine engine crash, which
   # would not reliably land on exactly 1 either.
   Check 'D4 lint-all --json (before --fix) exits 1 (findings present, no --fail-on override)' ($LASTEXITCODE -eq 1)
-  $driftBefore = @((Get-Findings $rawBefore) | Where-Object { $_.rule -eq 'doc-drift' })
+  $driftBefore = @((@(Get-Findings $rawBefore)) | Where-Object { $_.rule -eq 'doc-drift' })
   Check 'D4 lint-all reports the stale facts block on the REMARKS-ONLY decl (summary is NULL there)' `
     (@($driftBefore | Where-Object { $_.message -like '*managed facts block is out of date*' }).Count -ge 1) `
     ("doc-drift findings=" + $driftBefore.Count)
@@ -217,7 +217,8 @@ try {
   Check 'pre-apply: all three protected doc blocks were located' `
     ($null -ne $noMinBefore -and $null -ne $blankBefore -and $null -ne $markedBefore)
 
-  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --apply --no-backup 2>$null } | Out-Null
+  # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --apply --no-compile-gate --no-backup 2>$null } | Out-Null
   Check 'lint-all --fix --apply (fixable subset) exits 0' ($LASTEXITCODE -eq 0)
   $after = [IO.File]::ReadAllLines($target)
 
@@ -261,7 +262,8 @@ try {
 
   # --- Idempotency ----------------------------------------------------------
   $bytes1 = [IO.File]::ReadAllBytes($target)
-  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --apply --no-backup 2>$null } | Out-Null
+  # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --apply --no-compile-gate --no-backup 2>$null } | Out-Null
   Check 'idempotency: 2nd lint-all --fix --apply exits 0' ($LASTEXITCODE -eq 0)
   $bytes2 = [IO.File]::ReadAllBytes($target)
   Check 'idempotent: a 2nd lint-all --fix --apply is byte-identical' `

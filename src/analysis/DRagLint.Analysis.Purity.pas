@@ -22,38 +22,105 @@ type
   /// <summary>One coordinate of the effect lattice (spec 3.1): a routine
   /// writes global state, frees or resizes heap storage, writes fields of its
   /// own instance, or does something this build cannot classify.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Analysis.Purity.pas) ?, DRagLint.Analysis.Purity.TEffectSummary.AddFlag (DRagLint.Analysis.Purity.pas) ?, DRagLint.Analysis.PurityStage.TPurityRun.LibCallee (DRagLint.Analysis.PurityStage.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TEffectFlag  = (efGlobal, efHeap, efSelfFields, efUnknown);
   /// <summary>The flag half of an effect summary.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Analysis.Purity.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TEffectFlags = set of TEffectFlag;
 
   /// <summary>A routine's effect summary (spec 3.1): the set of flags plus the
   /// 0-based ordinals of the parameters it writes through, and the FIRST
   /// blocker recorded as a human-readable witness.</summary>
-  /// <remarks>Invariants: <c>Params</c> is ascending and distinct; <c>Witness</c>
+  /// <remarks>
+  /// Invariants: <c>Params</c> is ascending and distinct; <c>Witness</c>
   /// is set by the first <c>AddFlag</c>/<c>AddParam</c> that changes the summary
   /// and never overwritten. A zero-initialised record is the bottom element
   /// (effect-free). Arity is NOT checked here -- the stage enforces
-  /// <c>k &lt; ParamCount</c> before calling <c>AddParam</c>.</remarks>
+  /// <c>k &lt; ParamCount</c> before calling <c>AddParam</c>.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Analysis.Purity.BuiltinSummary (DRagLint.Analysis.Purity.pas), DRagLint.Analysis.Purity.TEffectSummary.Decode (DRagLint.Analysis.Purity.pas), DRagLint.Analysis.PurityStage.TPurityRun.LibCallee (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.ScanFiles (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.ScanRoutine (DRagLint.Analysis.PurityStage.pas) (+18 more)</para>
+  /// <para>Used in units: DRagLint.Analysis.Purity, DRagLint.Analysis.PurityStage, DRagLint.Lint.EffectRules, DRagLint.Lint.ProjectRules</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TEffectSummary = record
     Flags  : TEffectFlags;
     Params : TArray<Integer>;
     Witness: string;
     /// <summary>True when no flag is set and no parameter is written.</summary>
     /// <returns><c>(Flags = []) and (Length(Params) = 0)</c>.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Analysis.PurityStage.TPurityRun.WriteVerdicts (DRagLint.Analysis.PurityStage.pas)</para>
+    /// <para>Returns: (Flags = []) and (Length(Params) = 0)</para>
+    /// <para>Reads: Flags, Params</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.AddFlag"/>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.AddParam"/>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.Decode"/>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.Encode"/>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.WritesParam"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsEffectFree: Boolean;
     /// <summary>Whether the routine writes through the given 0-based parameter.</summary>
     /// <param name="AOrdinal">0-based parameter ordinal.</param>
     /// <returns>True when <c>AOrdinal</c> is in <c>Params</c>.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Returns: False</para>
+    /// <para>Reads: Params</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.AddFlag"/>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.AddParam"/>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.Decode"/>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.Encode"/>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.IsEffectFree"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function WritesParam(AOrdinal: Integer): Boolean;
     /// <summary>Serialises the summary as the stored effect string: tokens
     /// <c>g</c>, <c>h</c>, <c>s</c>, then <c>p&lt;k&gt;</c> per parameter in
     /// ascending order, then <c>?</c>, joined with commas.</summary>
     /// <returns>E.g. <c>'g,p0,p3,?'</c>; <c>''</c> for an effect-free summary.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Analysis.PurityStage.TPurityRun.WriteVerdicts (DRagLint.Analysis.PurityStage.pas)</para>
+    /// <para>Calls: DRagLint.Analysis.Purity.TEffectSummary.Encode.Add, IntToStr</para>
+    /// <para>Returns: ''</para>
+    /// <para>Reads: Flags, Params</para>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.Encode.Add"/>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.AddFlag"/>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.AddParam"/>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.Decode"/>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.IsEffectFree"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Encode: string;
     /// <summary>Parses an effect string written by <c>Encode</c>.</summary>
     /// <param name="AText">Comma-separated tokens; blanks around tokens are ignored.</param>
     /// <returns>The decoded summary. An unrecognised token sets <c>efUnknown</c>:
     /// a summary this build cannot read is not clean.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Analysis.Purity.BuiltinSummary (DRagLint.Analysis.Purity.pas), DRagLint.Analysis.PurityStage.TPurityRun.LibCallee (DRagLint.Analysis.PurityStage.pas), DRagLint.Lint.EffectRules.CollectPropertyGetterWithEffect (DRagLint.Lint.EffectRules.pas), DRagLint.Lint.EffectRules.CollectSideEffectInShortCircuit (DRagLint.Lint.EffectRules.pas), DRagLint.Lint.ProjectRules.CollectAssertWithSideEffect (DRagLint.Lint.ProjectRules.pas) (+1 more)</para>
+    /// <para>Calls: Copy, Default, DRagLint.Analysis.Purity.TEffectSummary.AddFlag, DRagLint.Analysis.Purity.TEffectSummary.AddParam, LowerCase, Trim, TryStrToInt</para>
+    /// <para>Returns: Default(TEffectSummary)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.AddFlag"/>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.AddParam"/>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.Encode"/>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.IsEffectFree"/>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.WritesParam"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Decode(const AText: string): TEffectSummary; static;
     /// <summary>Joins one flag into the summary.</summary>
     /// <param name="AFlag">The flag to include.</param>
@@ -61,6 +128,19 @@ type
     /// the first change to the summary.</param>
     /// <param name="AChanged">Set True when the flag was not already present;
     /// left untouched otherwise.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Analysis.Purity.TEffectSummary.Decode (DRagLint.Analysis.Purity.pas), DRagLint.Analysis.Purity.TranslateCallee (DRagLint.Analysis.Purity.pas), DRagLint.Analysis.PurityStage.TPurityRun.AddInheritedUse (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.ApplyFacts (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.BoundCall (DRagLint.Analysis.PurityStage.pas) (+8 more)</para>
+    /// <para>Calls: Include</para>
+    /// <para>Reads: Flags, Witness   Writes: Witness</para>
+    /// <para>Mutates: AChanged (var)</para>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.AddParam"/>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.Decode"/>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.Encode"/>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.IsEffectFree"/>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.WritesParam"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure AddFlag(AFlag: TEffectFlag; const AWitness: string; var AChanged: Boolean);
     /// <summary>Joins one written-parameter ordinal into the summary, keeping
     /// <c>Params</c> ascending and distinct.</summary>
@@ -69,19 +149,43 @@ type
     /// the first change to the summary.</param>
     /// <param name="AChanged">Set True when the ordinal was not already present;
     /// left untouched otherwise.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Analysis.Purity.TEffectSummary.Decode (DRagLint.Analysis.Purity.pas), DRagLint.Analysis.Purity.TranslateCallee (DRagLint.Analysis.Purity.pas), DRagLint.Analysis.PurityStage.TPurityRun.ApplyFacts (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.LibCallee (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.MemberWrite (DRagLint.Analysis.PurityStage.pas)</para>
+    /// <para>Calls: Insert</para>
+    /// <para>Reads: Params, Witness   Writes: Witness</para>
+    /// <para>Mutates: AChanged (var)</para>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.AddFlag"/>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.Decode"/>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.Encode"/>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.IsEffectFree"/>
+    /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.WritesParam"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure AddParam(AOrdinal: Integer; const AWitness: string; var AChanged: Boolean);
   end;
 
   /// <summary>How a call argument (or a receiver) relates to the caller's own
   /// storage (spec 3.5): a literal, a non-escaping local, one of the caller's
   /// parameters, the caller's own instance or a field of it, or unclassified.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Analysis.Purity.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TArgClass = (acLiteral, acLocal, acParam, acSelfOrField, acUnknown);
 
   /// <summary>One classified argument.</summary>
-  /// <remarks><c>ParamOrdinal</c> is meaningful only when <c>Cls = acParam</c>
+  /// <remarks>
+  /// <c>ParamOrdinal</c> is meaningful only when <c>Cls = acParam</c>
   /// and is -1 otherwise. <c>RootName</c> is the leading identifier exactly as
   /// written ('' for a literal or an address-of); <c>Text</c> is the whole
-  /// argument, trimmed.</remarks>
+  /// argument, trimmed.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Analysis.Purity.ClassifyArgument (DRagLint.Analysis.Purity.pas), DRagLint.Analysis.PurityStage.TPurityRun.AddInheritedUse (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.CallRef (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.LibraryCall (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.ReceiverOf (DRagLint.Analysis.PurityStage.pas) (+6 more)</para>
+  /// <para>Used in units: DRagLint.Analysis.Purity, DRagLint.Analysis.PurityStage</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TArgInfo = record
     Cls         : TArgClass;
     ParamOrdinal: Integer;
@@ -91,18 +195,34 @@ type
 
   /// <summary>Syntactic facts about a routine body that the resolve stage uses
   /// to decide whether the body can be trusted at all (spec 7.3).</summary>
-  /// <remarks><c>HasVarBlock</c> is a <c>var</c> section before the first
+  /// <remarks>
+  /// <c>HasVarBlock</c> is a <c>var</c> section before the first
   /// <c>begin</c>; <c>HasInlineVar</c> an inline <c>var X</c> (including
   /// <c>for var</c>) at or after it; <c>HasWith</c> a <c>with</c> statement at
   /// or after it; <c>HasBareInherited</c> a bare <c>inherited;</c> anywhere in
-  /// the range. Comments, directives and string literals are never counted.</remarks>
+  /// the range. Comments, directives and string literals are never counted.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Analysis.Purity.pas) ?, declaration (DRagLint.Analysis.PurityStage.pas) ?, DRagLint.Analysis.Purity.ScanRoutineBody (DRagLint.Analysis.Purity.pas), DRagLint.Analysis.PurityStage.TPurityRun.ScanBody (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.ScanBody.Merge (DRagLint.Analysis.PurityStage.pas) ? (+1 more)</para>
+  /// <para>Used in units: DRagLint.Analysis.Purity, DRagLint.Analysis.PurityStage</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TBodyScan = record
     HasWith, HasBareInherited, HasVarBlock, HasInlineVar: Boolean;
   end;
 
   /// <summary>A set of identifier names; keys are LOWERCASED by the caller.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Analysis.Purity.pas) ?, declaration (DRagLint.Analysis.PurityStage.pas) ?, DRagLint.Analysis.Purity.ClassifyArgument (DRagLint.Analysis.Purity.pas) ?, DRagLint.Analysis.PurityStage.TPurityRun.Create (DRagLint.Analysis.PurityStage.pas) ?, DRagLint.Analysis.PurityStage.TPurityRun.NewSet (DRagLint.Analysis.PurityStage.pas) (+5 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TNameSet   = TDictionary<string, Boolean>;
   /// <summary>Lowercased parameter name -> 0-based ordinal.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Analysis.Purity.pas) ?, declaration (DRagLint.Analysis.PurityStage.pas) ?, DRagLint.Analysis.Purity.ClassifyArgument (DRagLint.Analysis.Purity.pas) ?, DRagLint.Analysis.PurityStage.TPurityRun.Create (DRagLint.Analysis.PurityStage.pas) ?, DRagLint.Analysis.PurityStage.TPurityRun.NewMap (DRagLint.Analysis.PurityStage.pas) (+1 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TParamMap  = TDictionary<string, Integer>;
 
 const
@@ -116,6 +236,13 @@ const
 /// <param name="AName">Bare callee name as written.</param>
 /// <returns>True for an axiom; a name not in the list is not an axiom,
 /// whatever it is. There is no growth hook.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Analysis.PurityStage.TPurityRun.CallRef (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.CollectEscapes (DRagLint.Analysis.PurityStage.pas)</para>
+/// <para>Calls: SameText</para>
+/// <para>Returns: False</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsPurityAxiom(const AName: string): Boolean;
 
 /// <summary>Looks up the known effect summary of a compiler intrinsic that
@@ -124,6 +251,15 @@ function IsPurityAxiom(const AName: string): Boolean;
 /// <param name="AName">Bare callee name as written.</param>
 /// <param name="ASummary">The intrinsic's summary when found; undefined otherwise.</param>
 /// <returns>True when <c>AName</c> is in the table.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Analysis.PurityStage.TPurityRun.CallRef (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.CollectEscapes (DRagLint.Analysis.PurityStage.pas)</para>
+/// <para>Calls: Default, DRagLint.Analysis.Purity.TEffectSummary.Decode, SameText</para>
+/// <para>Returns: True; False</para>
+/// <para>Mutates: ASummary (out)</para>
+/// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.Decode"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuiltinSummary(const AName: string; out ASummary: TEffectSummary): Boolean;
 
 /// <summary>Lexes the argument list that follows a callee name (spec 3.4
@@ -140,14 +276,28 @@ function BuiltinSummary(const AName: string; out ASummary: TEffectSummary): Bool
 /// <c>{$...}</c> directive sits inside the list, a string literal is left
 /// open, or the closing parenthesis is not found within
 /// <c>CMaxArgListLines</c> lines or before the end of <c>ALines</c>.</returns>
-/// <remarks>Commas inside nested parentheses, brackets, string literals and
+/// <remarks>
+/// Commas inside nested parentheses, brackets, string literals and
 /// comments do not split; comment text is dropped from the argument text; a
 /// line break inside an argument becomes one space. The ( is looked for on
 /// the name's OWN line with only blanks between; when it follows a comment or
 /// a line break the call is lexed as zero arguments, and the stage treats that
 /// conservatively. Within that contract the argument COUNT agrees with
 /// <c>CountCallArgs</c> in DRagLint.Index.CallResolver (which additionally
-/// skips comments and newlines before the parenthesis).</remarks>
+/// skips comments and newlines before the parenthesis).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Analysis.PurityStage.TPurityRun.LexUse (DRagLint.Analysis.PurityStage.pas), DRagLint.Index.CallResolver.TCallResolver.SiteArgShapes (DRagLint.Index.CallResolver.pas), DRagLint.Index.DispatchResolver.TDispatchResolver.ResolveClassRefArgs (DRagLint.Index.DispatchResolver.pas)</para>
+/// <para>Calls: CharInSet, DRagLint.Analysis.Purity.CloseOfStringLiteral, DRagLint.Analysis.Purity.LexCallArguments.AdvanceLine, DRagLint.Analysis.Purity.LexCallArguments.CloseParen, DRagLint.Analysis.Purity.LexCallArguments.Flush, DRagLint.Analysis.Purity.OpensComment, DRagLint.Analysis.Purity.SkipOpenComment, DRagLint.Analysis.Purity.StartsLineComment, Trim</para>
+/// <para>Returns: False; True</para>
+/// <para>Complexity: 27 (cyclomatic, outer body), 127 lines (full implementation)</para>
+/// <para>Mutates: AArgs (out)</para>
+/// <seealso cref="DRagLint.Analysis.Purity.CloseOfStringLiteral"/>
+/// <seealso cref="DRagLint.Analysis.Purity.LexCallArguments.AdvanceLine"/>
+/// <seealso cref="DRagLint.Analysis.Purity.LexCallArguments.CloseParen"/>
+/// <seealso cref="DRagLint.Analysis.Purity.LexCallArguments.Flush"/>
+/// <seealso cref="DRagLint.Analysis.Purity.OpensComment"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LexCallArguments(const ALines: TArray<string>; ALine, AColAfterName: Integer;
   out AArgs: TArray<string>): Boolean;
 
@@ -158,6 +308,14 @@ function LexCallArguments(const ALines: TArray<string>; ALine, AColAfterName: In
 /// <param name="AImplEnd">1-based last line, inclusive; both are clamped to the array.</param>
 /// <returns>The flags found. Word tests are case-insensitive and run on lines
 /// stripped by <see cref="StripCommentsAndStrings"/>.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Analysis.PurityStage.TPurityRun.ScanBody (DRagLint.Analysis.PurityStage.pas)</para>
+/// <para>Calls: Default, DRagLint.Analysis.Purity.StripCommentsAndStrings, Max, Min, Trim</para>
+/// <para>Returns: Default(TBodyScan)</para>
+/// <seealso cref="DRagLint.Analysis.Purity.StripCommentsAndStrings"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ScanRoutineBody(const ALines: TArray<string>; AImplStart, AImplEnd: Integer): TBodyScan;
 
 /// <summary>Returns <c>ALine</c> with every string literal replaced by
@@ -168,6 +326,14 @@ function ScanRoutineBody(const ALines: TArray<string>; AImplStart, AImplEnd: Int
 /// False for the first line and the same variable for each following line.</param>
 /// <param name="AInParen">Carries an open <c>(*</c> comment likewise.</param>
 /// <returns>The stripped line. Column positions are NOT preserved.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Analysis.Purity.ScanRoutineBody (DRagLint.Analysis.Purity.pas), DRagLint.Refactor.DocStub.CutLineComments (DRagLint.Refactor.DocStub.pas), DRagLint.Refactor.DocStub.SignatureWithoutComments (DRagLint.Refactor.DocStub.pas)</para>
+/// <para>Calls: DRagLint.Analysis.Purity.MaskLine</para>
+/// <para>Returns: MaskLine(ALine, AInBrace, AInParen, False)</para>
+/// <seealso cref="DRagLint.Analysis.Purity.MaskLine"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function StripCommentsAndStrings(const ALine: string; var AInBrace, AInParen: Boolean): string;
 
 /// <summary>Returns <c>ALine</c> with every comment and the CONTENTS of every
@@ -178,9 +344,17 @@ function StripCommentsAndStrings(const ALine: string; var AInBrace, AInParen: Bo
 /// <see cref="ReadEscapesOnLine"/> does).</summary>
 /// <param name="ALine">One raw source line.</param>
 /// <returns>A string of the same length as <c>ALine</c>.</returns>
-/// <remarks>The stage uses it to find the <c>(</c> that encloses a read at a
+/// <remarks>
+/// The stage uses it to find the <c>(</c> that encloses a read at a
 /// known column, where the compact form of <see cref="StripCommentsAndStrings"/>
-/// would have shifted the columns.</remarks>
+/// would have shifted the columns.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Analysis.PurityStage.TPurityRun.EnclosingCall (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.IsImplicitProcCall (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.PrecededByInherited (DRagLint.Analysis.PurityStage.pas)</para>
+/// <para>Calls: DRagLint.Analysis.Purity.MaskLine</para>
+/// <para>Returns: MaskLine(ALine, InBrace, InParen, True)</para>
+/// <seealso cref="DRagLint.Analysis.Purity.MaskLine"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MaskLinePreservingColumns(const ALine: string): string;
 
 /// <summary>Classifies one call argument against the caller's own names
@@ -198,6 +372,14 @@ function MaskLinePreservingColumns(const ALine: string): string;
 /// suffix) are <c>acSelfOrField</c>; a parameter (with or without a suffix)
 /// is <c>acParam</c>; a local is <c>acLocal</c> only when it is bare and
 /// non-escaping; anything else is <c>acUnknown</c>.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Analysis.PurityStage.TPurityRun.Classify (DRagLint.Analysis.PurityStage.pas)</para>
+/// <para>Calls: CharInSet, Copy, Default, LowerCase, SameText, Trim</para>
+/// <para>Returns: Default(TArgInfo)</para>
+/// <para>Complexity: 21 (cyclomatic, outer body), 43 lines (full implementation)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ClassifyArgument(const AArgText: string; ALocals: TNameSet; AParams: TParamMap;
   AFields: TNameSet; AEscaping: TNameSet): TArgInfo;
 
@@ -213,6 +395,15 @@ function ClassifyArgument(const AArgText: string; ALocals: TNameSet; AParams: TP
 /// <returns>True when the read is right of an <c>:=</c> or is taken by
 /// <c>@</c>. A receiver position (the name is followed by <c>.</c>) never
 /// escapes.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Analysis.PurityStage.TPurityRun.CollectEscapes (DRagLint.Analysis.PurityStage.pas)</para>
+/// <para>Calls: Copy, DRagLint.Analysis.Purity.MaskLine, Pos, TrimLeft</para>
+/// <para>Returns: (I &gt; 0) and (Before[I] = '@')</para>
+/// <para>Mutates: AInsideCallArgs (out)</para>
+/// <seealso cref="DRagLint.Analysis.Purity.MaskLine"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReadEscapesOnLine(const ALine: string; AStartCol, ANameLen: Integer;
   out AInsideCallArgs: Boolean): Boolean;
 
@@ -230,8 +421,19 @@ function ReadEscapesOnLine(const ALine: string; AStartCol, ANameLen: Integer;
 /// has none or it could not be classified).</param>
 /// <param name="ACaller">The caller's summary, joined in place.</param>
 /// <param name="AChanged">Set True when <c>ACaller</c> changed.</param>
-/// <remarks>Every witness for an unbound or unclassified callee starts with
-/// <c>calls </c>; the unbound form contains <c>(unbound</c>.</remarks>
+/// <remarks>
+/// Every witness for an unbound or unclassified callee starts with
+/// <c>calls </c>; the unbound form contains <c>(unbound</c>.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Analysis.PurityStage.TPurityRun.FixPoint (DRagLint.Analysis.PurityStage.pas)</para>
+/// <para>Calls: DRagLint.Analysis.Purity.TEffectSummary.AddFlag, DRagLint.Analysis.Purity.TEffectSummary.AddParam, DRagLint.Analysis.Purity.TranslateCallee.Calls, DRagLint.Analysis.Purity.TranslateCallee.Through, IntToStr</para>
+/// <para>Complexity: 13 (cyclomatic, outer body), 52 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.AddFlag"/>
+/// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.AddParam"/>
+/// <seealso cref="DRagLint.Analysis.Purity.TranslateCallee.Calls"/>
+/// <seealso cref="DRagLint.Analysis.Purity.TranslateCallee.Through"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure TranslateCallee(const ACallee: TEffectSummary; const ACalleeName: string;
   const AArgs: TArray<TArgInfo>; AArgsKnown: Boolean; const AReceiver: TArgInfo;
   var ACaller: TEffectSummary; var AChanged: Boolean);
@@ -244,6 +446,14 @@ procedure TranslateCallee(const ACallee: TEffectSummary; const ACalleeName: stri
 /// suffix, i.e. names were dropped by the cap and the list is incomplete.</param>
 /// <returns>The names shown, in order, with the <c>(var)</c>/<c>(out)</c>
 /// modifier stripped; empty for <c>''</c>.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Analysis.PurityStage.TPurityRun.ApplyFacts (DRagLint.Analysis.PurityStage.pas)</para>
+/// <para>Calls: Copy, EndsText, StartsStr, Trim</para>
+/// <para>Returns: Names.ToArray</para>
+/// <para>Mutates: ACapped (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseMutatedParamNames(const AMutatesParams: string; out ACapped: Boolean): TArray<string>;
 
 /// <summary>True when a routine's parameter is passed BY VALUE with a scalar or string type, so a
@@ -253,6 +463,14 @@ function ParseMutatedParamNames(const AMutatesParams: string; out ACapped: Boole
 /// <returns>False for var, out, const, an attributed parameter, an untyped one, an ordinal past
 /// the list, and any type not on the built-in list: an alias, class, pointer or array is not
 /// judged, so its writes stay reported.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Analysis.PurityStage.TPurityRun.ApplyFacts (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.Classify (DRagLint.Analysis.PurityStage.pas)</para>
+/// <para>Calls: Copy, DRagLint.Analysis.Purity.SignatureGroups, MatchText, Pos, StartsText, Trim</para>
+/// <para>Returns: False; MatchText(TypeName, SCALAR_TYPES)</para>
+/// <seealso cref="DRagLint.Analysis.Purity.SignatureGroups"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsByValueScalarParam(const ASignature: string; AOrdinal: Integer): Boolean;
 
 implementation

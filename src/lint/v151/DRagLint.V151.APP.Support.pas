@@ -71,8 +71,8 @@ type
   /// <summary>One routine implementation found in the masked source.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.V151.APP.Support.pas) ?, DRagLint.V151.APP.Support.TAppChecks.UiCallInConsoleOrService (DRagLint.V151.APP.Support.pas) ?, DRagLint.V151.APP.Support.TAppSrc.BodyOf (DRagLint.V151.APP.Support.pas) ?, DRagLint.V151.APP.Support.TAppSrc.Create (DRagLint.V151.APP.Support.pas) ?, DRagLint.V151.APP.Support.TAppSrc.ParseRoutine (DRagLint.V151.APP.Support.pas) (+2 more)</para>
-  /// <para>Used in units: DRagLint.V151.APP.Support</para>
+  /// <para>Used by: declaration (DRagLint.V151.APP.Support.pas) ?, DRagLint.V151.APP.Support.TAppChecks.TlsVerificationDisabled (DRagLint.V151.APP.Support.pas) ?, DRagLint.V151.APP.Support.TAppSrc.BodyOf (DRagLint.V151.APP.Support.pas) ?, DRagLint.V151.APP.Support.TAppSrc.Create (DRagLint.V151.APP.Support.pas) ?, DRagLint.V151.APP.Support.TAppSrc.ParseRoutine (DRagLint.V151.APP.Support.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.V151.APP.Support, DRagLint.V152.APP2.Support</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TAppRoutine = record
@@ -96,8 +96,8 @@ type
   /// comments, string literals and directives become spaces, line breaks are kept,
   /// so an offset in Masked is an offset in the raw text.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.V151.APP.Support.pas) ?, DRagLint.V151.APP.Support.MakeFinding (DRagLint.V151.APP.Support.pas) ?, DRagLint.V151.APP.Support.TAppChecks.TlsVerificationDisabled (DRagLint.V151.APP.Support.pas) ?, DRagLint.V151.APP.Support.TAppChecks.UiCallInConsoleOrService (DRagLint.V151.APP.Support.pas) ?, DRagLint.V151.APP.TV151APPRules.CheckFile (DRagLint.V151.APP.pas) (+5 more)</para>
-  /// <para>Used in units: DRagLint.V151.APP, DRagLint.V151.APP.Support</para>
+  /// <para>Used by: declaration (DRagLint.V151.APP.Support.pas) ?, DRagLint.V151.APP.Support.MakeFinding (DRagLint.V151.APP.Support.pas) ?, DRagLint.V151.APP.Support.TAppChecks.TlsVerificationDisabled (DRagLint.V151.APP.Support.pas) ?, DRagLint.V151.APP.TV151APPRules.CheckFile (DRagLint.V151.APP.pas), DRagLint.V152.APP2.Support.TApp2CrossUnit.Run (DRagLint.V152.APP2.Support.pas) (+10 more)</para>
+  /// <para>Used in units: DRagLint.V151.APP, DRagLint.V151.APP.Support, DRagLint.V152.APP2.Support</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TAppSrc = class  // dl:ok high-response@2221 -- REVIEWED 2026-11-14 v151 INT: one scanner class holding the per-rule checks of one lane; a split is beyond 1.51
@@ -264,7 +264,7 @@ type
     /// <param name="ARaw">The source text as read from disk.</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.V151.APP.TV151APPRules.CheckFile (DRagLint.V151.APP.pas)</para>
+    /// <para>Called from: DRagLint.V151.APP.TV151APPRules.CheckFile (DRagLint.V151.APP.pas), DRagLint.V152.APP2.Support.TApp2CrossUnit.Run (DRagLint.V152.APP2.Support.pas)</para>
     /// <para>Calls: DRagLint.V151.APP.Support.TAppSrc.BuildBlocks, DRagLint.V151.APP.Support.TAppSrc.BuildTokens, DRagLint.V151.APP.Support.TAppSrc.FindRoutines, DRagLint.V151.APP.Support.TAppSrc.Mask</para>
     /// <para>constructor</para>
     /// <para>Writes: FRaw, FDirs, FToks, FRoutines, FBlocks</para>
@@ -293,7 +293,7 @@ type
     /// <returns><!-- drag-lint:auto -->Integer -- Observed: Lo + 1.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.V151.APP.Support.MakeFinding (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppSrc.ColOf (DRagLint.V151.APP.Support.pas)</para>
+    /// <para>Called from: DRagLint.V151.APP.Support.MakeFinding (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppSrc.ColOf (DRagLint.V151.APP.Support.pas), DRagLint.V152.APP2.Support.CheckProgram (DRagLint.V152.APP2.Support.pas)</para>
     /// <para>Reads: FLineStarts</para>
     /// <para>Effect-free (proven)</para>
     /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BodyOf"/>
@@ -310,7 +310,7 @@ type
     /// FLineStarts[LineOf(APos) - 1] + 1.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.V151.APP.Support.MakeFinding (DRagLint.V151.APP.Support.pas)</para>
+    /// <para>Called from: DRagLint.V151.APP.Support.MakeFinding (DRagLint.V151.APP.Support.pas), DRagLint.V152.APP2.Support.CheckProgram (DRagLint.V152.APP2.Support.pas)</para>
     /// <para>Calls: DRagLint.V151.APP.Support.TAppSrc.LineOf</para>
     /// <para>Reads: FLineStarts</para>
     /// <para>Effect-free (proven)</para>
@@ -373,7 +373,7 @@ type
     /// ARoutine.BodyPos, ARoutine.BodyEnd - ARoutine.BodyPos).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.V151.APP.Support.TAppChecks.DunitxTestWithoutAssert (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppChecks.UiCallInConsoleOrService (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppChecks.WritelnInGuiApp (DRagLint.V151.APP.Support.pas)</para>
+    /// <para>Called from: DRagLint.V151.APP.Support.TAppChecks.DunitxTestWithoutAssert (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppChecks.TlsVerificationDisabled (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppChecks.UiCallInConsoleOrService (DRagLint.V151.APP.Support.pas), DRagLint.V151.APP.Support.TAppChecks.WritelnInGuiApp (DRagLint.V151.APP.Support.pas), DRagLint.V152.APP2.Support.DialogRoutines (DRagLint.V152.APP2.Support.pas)</para>
     /// <para>Calls: Copy</para>
     /// <para>Reads: FMasked</para>
     /// <para>Effect-free (proven)</para>
@@ -410,13 +410,13 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.V151.APP.TV151APPRules.CheckFile (DRagLint.V151.APP.pas)</para>
-    /// <para>Calls: DRagLint.V151.APP.Support.MakeFinding</para>
+    /// <para>Calls: Copy, DRagLint.V151.APP.Support.IsIdentChar, DRagLint.V151.APP.Support.MakeFinding, DRagLint.V151.APP.Support.TAppSrc.BodyOf, LastDelimiter, Pos, SameText</para>
     /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.APP.Support.IsIdentChar"/>
     /// <seealso cref="DRagLint.V151.APP.Support.MakeFinding"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.BodyOf"/>
     /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.AsmWithoutWin64Variant"/>
     /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.ContractUnitDeclaresClass"/>
-    /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.DunitxTestWithoutAssert"/>
-    /// <seealso cref="DRagLint.V151.APP.Support.TAppChecks.UiCallInConsoleOrService"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class procedure TlsVerificationDisabled(const ASrc: TAppSrc; const APath: string; AOut: TList<TLintFinding>); static;
@@ -533,7 +533,7 @@ type
 /// <returns>The file text; '' when it cannot be read.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.V151.APP.TV151APPRules.CheckFile (DRagLint.V151.APP.pas)</para>
+/// <para>Called from: DRagLint.V151.APP.TV151APPRules.CheckFile (DRagLint.V151.APP.pas), DRagLint.V152.APP2.Support.TApp2CrossUnit.Run (DRagLint.V152.APP2.Support.pas)</para>
 /// <para>Returns: TFile.ReadAllText(APath); ''</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <para>Touches: file system</para>

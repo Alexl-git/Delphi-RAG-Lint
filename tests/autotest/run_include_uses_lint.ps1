@@ -20,6 +20,9 @@ param(
 )
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'; $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -39,7 +42,7 @@ function Run([string[]]$a) {
   try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null } | Out-String } finally { Pop-Location }
   return $o
 }
-function Findings([string]$json) { try { return ,@($json | ConvertFrom-Json) } catch { return ,@() } }
+function Findings([string]$json) { try { return ,@(($json | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { return ,@() } }
 
 $db = Join-Path $WorkDir 'includeuses.sqlite'
 $null = Run @('index', '--project', (Join-Path $iu 'IncUsesX.dproj'), '--db', $db, '--library-db', 'none')
@@ -70,3 +73,4 @@ Check 'd: lint IncB.pas circular-uses at the {$I} line 12' (($cf.Count -eq 1) -a
 
 if ($script:Failed) { Write-Host 'run_include_uses_lint: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'run_include_uses_lint: PASS' -ForegroundColor Green; exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

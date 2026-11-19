@@ -148,7 +148,8 @@ Check 'repairer plans a fix for what the checker reported' `
   'checker said stale, repairer said nothing to do -- the two render under different options'
 
 # 5. And it must actually converge: apply, reindex, drift gone.
-& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --quiet --fix --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
+# 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --quiet --fix --apply --no-compile-gate 2>&1 | ForEach-Object { "$_" } } | Out-Null
 & { $ErrorActionPreference = 'Continue'; & $Exe index $srcDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $lint1 = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String
 $drift1 = ([regex]::Matches($lint1, 'doc-drift')).Count

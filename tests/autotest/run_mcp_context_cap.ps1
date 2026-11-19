@@ -73,12 +73,12 @@ function Call([string]$Name, [hashtable]$ToolArgs) {
   Write-Ascii $req ($msg + "`n")
   $out = (Get-Content -Raw $req | & { $ErrorActionPreference = 'Continue'; $input | & $exePath serve --db $db 2>$null }) -join "`n"
   $line = @($out -split "`n" | Where-Object { $_ -match '"id":1' })[0]
-  try { return ((ConvertFrom-Json -InputObject $line).result.content[0].text) } catch { return $out }
+  try { return ((ConvertFrom-Json -InputObject $line | ForEach-Object { $_ }).result.content[0].text) } catch { return $out }
 }
 function Bundle([hashtable]$Extra) {
   $a = @{ qname = 'uCap.TBig' } + $Extra
   $t = Call 'get_context_bundle' $a
-  try { return (ConvertFrom-Json -InputObject $t) } catch { return $null }
+  try { return (ConvertFrom-Json -InputObject $t | ForEach-Object { $_ }) } catch { return $null }
 }
 
 $m = Bundle @{ max_body_tokens = 350 }

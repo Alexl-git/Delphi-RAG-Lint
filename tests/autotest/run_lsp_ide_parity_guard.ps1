@@ -67,7 +67,7 @@ function LspKeys([string]$Pas, [string[]]$Flags, [string]$Tag) {
   $last = $null
   foreach ($part in ([IO.File]::ReadAllText($so) -split 'Content-Length: \d+\r\n\r\n')) {
     if ($part -notmatch 'publishDiagnostics') { continue }
-    $o = $part | ConvertFrom-Json -Depth 30
+    $o = $part | ConvertFrom-Json -Depth 30 | ForEach-Object { $_ }
     if ($o.method -eq 'textDocument/publishDiagnostics') { $last = $o }
   }
   $keys = if ($last) { foreach ($d in $last.params.diagnostics) { '{0}|{1}|{2}' -f ([int]$d.range.start.line + 1), $d.code, ([string]$d.message).Trim() } }

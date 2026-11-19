@@ -21,6 +21,9 @@ param([string]$Exe = '',
       [string]$WorkDir = (Join-Path $env:TEMP ('draglint-store-fix-negatives-' + $PID)))
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot '..\autotest\lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe') }
 $ErrorActionPreference = 'Continue'
 $exePath = (Resolve-Path $Exe).Path
@@ -41,15 +44,17 @@ function NewCase([string]$Name, [string[]]$Lines) {
 }
 function FixOnce($C, [string]$Rule, [string[]]$Extra) {
   Push-Location $C.Dir
-  try { & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $C.File --db $C.Db --fix --fix-rule $Rule --apply --no-backup @Extra *> (Join-Path $C.Dir '_fix.log') } } finally { Pop-Location }
+  # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+  try { & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $C.File --db $C.Db --fix --fix-rule $Rule --apply --no-compile-gate --no-backup @Extra *> (Join-Path $C.Dir '_fix.log') } } finally { Pop-Location }
 }
 function FixAll($C, [string]$Rule, [string[]]$Extra) {
   Push-Location $C.Dir
-  try { & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $C.Db --fix --fix-rule $Rule --apply --no-backup @Extra *> (Join-Path $C.Dir '_fixall.log') } } finally { Pop-Location }
+  # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+  try { & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $C.Db --fix --fix-rule $Rule --apply --no-compile-gate --no-backup @Extra *> (Join-Path $C.Dir '_fixall.log') } } finally { Pop-Location }
 }
 function Fires($C,[string]$Rule, [string[]]$Extra) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $C.File --db $C.Db --rule $Rule --json @Extra 2>$null } | Out-String
-  try { return @(@($raw | ConvertFrom-Json) | Where-Object { $_.rule -eq $Rule }).Count } catch { return -1 }
+  try { return @(@(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) | Where-Object { $_.rule -eq $Rule }).Count } catch { return -1 }
 }
 
 # 1. overloaded private method: the impl header is ambiguous
@@ -126,7 +131,7 @@ function AllRows($C, [string]$Rule, [string]$FileName, [string]$Needle) {
   Push-Location $C.Dir
   try { $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $C.Db --rule $Rule --json 2>$null } | Out-String } finally { Pop-Location }
   try {
-    return @(@($raw | ConvertFrom-Json) | Where-Object {
+    return @(@(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) | Where-Object {
       $_.rule -eq $Rule -and ([IO.Path]::GetFileName($_.file_path) -eq $FileName) -and $_.message.Contains($Needle) }).Count
   } catch { return -1 }
 }
@@ -240,3 +245,4 @@ Check 'emptynodb: file unchanged without --db' ([IO.File]::ReadAllText($c14.File
 
 Write-Host "store fixes: $pass passed, $fail failed"
 exit $(if ($fail -eq 0) { 0 } else { 1 })
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

@@ -47,7 +47,7 @@ function Write-Ascii([string]$Path, [string]$Body) {
 function Invoke-Dl([string[]]$Arguments) {
   $o = "$WorkDir\o.txt"; $e = "$WorkDir\e.txt"
   $p = Start-Process -FilePath $Exe -ArgumentList $Arguments -NoNewWindow -Wait -PassThru -WorkingDirectory $WorkDir `
-         -RedirectStandardOutput $o -RedirectStandardError $e
+         -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   [pscustomobject]@{ Exit = $p.ExitCode; All = [IO.File]::ReadAllText($o) + [IO.File]::ReadAllText($e) }
 }
 $notePat = 'NOTE: .*no ownership scoping'

@@ -29,6 +29,9 @@ param(
 )
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'; $script:fail = $false
 function Check($n,$ok,$d){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int][bool]$ok]),$n) -ForegroundColor (@('Red','Green')[[int][bool]$ok]); if(-not $ok){ if($d){Write-Host "      $d" -ForegroundColor DarkGray}; $script:fail=$true } }
@@ -51,7 +54,7 @@ try {
 
     function Lint-Rows {
       $j = & { $ErrorActionPreference = 'Continue'; & $exePath lint $unit --db $db --json 2>$null }
-      $a = @($j | Out-String | ConvertFrom-Json)
+      $a = @(($j | Out-String | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
       return ,@($a | ForEach-Object { '{0}|{1}|{2}|{3}' -f $_.rule, $_.start_line, $_.start_col, $_.message } | Sort-Object)
     }
 
@@ -72,7 +75,7 @@ try {
 
     $cf = @(Get-ChildItem $cache -Filter 'rules-*.json' -File)
     $held = @()
-    if ($cf.Count -eq 1) { $held = @((Get-Content $cf[0].FullName -Raw | ConvertFrom-Json).rules) }
+    if ($cf.Count -eq 1) { $held = @((Get-Content $cf[0].FullName -Raw | ConvertFrom-Json | ForEach-Object { $_ }).rules) }
     Check 'C2  one cache file written' ($cf.Count -eq 1) "files=$($cf.Count)"
     foreach ($r in 'enum-ordinal-persisted', 'dfm-event-handler-missing') {
       Check "C2  the cache holds $r" ($held -contains $r) ("holds: " + ($held -join ','))
@@ -103,3 +106,4 @@ try {
 }
 if ($script:fail) { Write-Host 'RESULT: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'RESULT: PASS' -ForegroundColor Green; exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

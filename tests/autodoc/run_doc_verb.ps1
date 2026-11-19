@@ -48,7 +48,7 @@ try {
   # --- first --apply: action=created, applied=true, .bak written ---
   $r1 = & { $ErrorActionPreference = 'Continue'; & $exePath document --qname doc_generate.Add --db $db --apply --json 2>$null } | Out-String
   $ec1 = $LASTEXITCODE
-  $o1 = $null; try { $o1 = ($r1 | ConvertFrom-Json) } catch { $o1 = $null }
+  $o1 = $null; try { $o1 = ($r1 | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $o1 = $null }
   Check 'apply #1: action = created' ($null -ne $o1 -and $o1.action -eq 'created')
   Check 'apply #1: applied = true'   ($null -ne $o1 -and $o1.applied -eq $true)
   Check 'apply #1: exit 0'           ($ec1 -eq 0)
@@ -58,7 +58,7 @@ try {
   & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   $r2 = & { $ErrorActionPreference = 'Continue'; & $exePath document --qname doc_generate.Add --db $db --apply --json 2>$null } | Out-String
   $ec2 = $LASTEXITCODE
-  $o2 = $null; try { $o2 = ($r2 | ConvertFrom-Json) } catch { $o2 = $null }
+  $o2 = $null; try { $o2 = ($r2 | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $o2 = $null }
   Check 'apply #2: action = unchanged' ($null -ne $o2 -and $o2.action -eq 'unchanged')
   Check 'apply #2: applied = false'    ($null -ne $o2 -and $o2.applied -eq $false)
   Check 'apply #2: exit 0'             ($ec2 -eq 0)

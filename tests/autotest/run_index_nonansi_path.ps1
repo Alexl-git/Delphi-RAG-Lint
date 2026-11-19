@@ -21,6 +21,9 @@
 param([string]$Exe = '')
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 
 $ErrorActionPreference = 'Continue'
@@ -50,7 +53,7 @@ New-Item -ItemType Directory -Path (Join-Path $src 'ascii') -Force | Out-Null
 [IO.File]::WriteAllText((Join-Path $src 'ascii\uAsciiPath.pas'), ($text.Replace($unitName, 'uAsciiPath').Replace('TPathProbe', 'TAsciiProbe')), [Text.Encoding]::ASCII)
 
 function FileRows {
-  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "select id, hex(path) from files" --json 2>$null }) -join "`n" | ConvertFrom-Json
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "select id, hex(path) from files" --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
   return ,@($j.rows)  # POSITIONAL arrays: [id, hex(path)]; the comma keeps a 1-row result an array of rows
 }
 
@@ -66,11 +69,11 @@ try {
   Check 'no files.path holds a literal ?' (@($rows | Where-Object { ([string]$_[1]) -match '^(..)*?3F' }).Count -eq 0)
 
   Write-Host 'CONTROL (ASCII path; passes before the fix):' -ForegroundColor Cyan
-  $c = @((& { $ErrorActionPreference = 'Continue'; & $exePath query --name TAsciiProbe --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json)
+  $c = @(((& { $ErrorActionPreference = 'Continue'; & $exePath query --name TAsciiProbe --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Check 'query --name TAsciiProbe finds the ASCII-path class' (@($c | Where-Object { $_.kind -eq 'class' }).Count -eq 1) "rows=$($c.Count)"
 
   Write-Host 'NON-ANSI PATH:' -ForegroundColor Cyan
-  $q = @((& { $ErrorActionPreference = 'Continue'; & $exePath query --name TPathProbe --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json)
+  $q = @(((& { $ErrorActionPreference = 'Continue'; & $exePath query --name TPathProbe --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Check 'query --name TPathProbe finds the class in the non-ANSI unit' (@($q | Where-Object { $_.kind -eq 'class' }).Count -eq 1) "rows=$($q.Count)"
 
   Write-Host 'PATH LOOKUPS:' -ForegroundColor Cyan
@@ -86,3 +89,4 @@ try {
 } finally { Pop-Location }
 
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally { Remove-WorkDir $work -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

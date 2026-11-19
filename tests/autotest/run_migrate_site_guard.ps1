@@ -100,6 +100,9 @@ function Find-MigrateSites([string]$Path) {
   for ($i = 0; $i -lt $lines.Count; $i++) {
     $l = $lines[$i]
     if ($l -match '^(function|procedure)\s+([A-Za-z_][A-Za-z0-9_.]*)') { $cur = $Matches[2] }
+    # 1.52 DDFIX: a whole-line // or /// comment holds no code; the SELFLZ autodoc facts blocks name
+    # ISymbolStore.Migrate in 'Calls:' lines ABOVE a routine, which attributed to the previous one.
+    if ($l -match '^\s*//') { continue }
     if ($l -match '\.Migrate\b') {
       $sites += [pscustomobject]@{ Routine = $cur; Line = ($i + 1); File = (Split-Path $Path -Leaf) }
     }

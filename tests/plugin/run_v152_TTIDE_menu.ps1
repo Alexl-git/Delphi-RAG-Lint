@@ -16,6 +16,9 @@
 #>
 [CmdletBinding()]
 param([string]$WorkDir = "$env:TEMP\drag-lint-v152-ttide-$PID")
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot '..\autotest\lib\WorkDirCleanup.ps1')
+try {
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path "$PSScriptRoot\..\..").Path
 $plug = Join-Path $repo 'src\delphi-plugin'
@@ -106,8 +109,8 @@ begin
       'changed x.pas'#13#10'repo update-orm: 0 new, 1 changed', 'summary drops diff lines');
     Check(Pos('more lines', FieldRepoRunSummary('a'#13#10'b'#13#10'c', 2)) > 0, 'summary caps the line count');
     { command line }
-    var s: string:= FieldRepoCommandLine('C:\x y\drag-lint.exe', 'refresh-schema', 'C:\p q\a.dproj', '--dry-run');
-    Check(s = '"C:\x y\drag-lint.exe" repo refresh-schema --project "C:\p q\a.dproj" --dry-run', 'command line: ' + s);
+    var s: string:= FieldRepoCommandLine('C:\x y\drag-lint.exe', 'refresh-schema', 'C:\p q\a.dproj', '--dry-run');  // # exe-freshness: absent (a fake path the command line only quotes)
+    Check(s = '"C:\x y\drag-lint.exe" repo refresh-schema --project "C:\p q\a.dproj" --dry-run', 'command line: ' + s);  // # exe-freshness: absent (a fake path the command line only quotes)
     Check(FieldRepoCommandLine('e.exe', 'info', 'a.dproj', '') = '"e.exe" repo info --project "a.dproj"', 'command line without extra');
     { masked input: the VCL InputQuery masks the edit when the prompt starts with #31 }
     Check(MaskedPrompt('Pw:') = #31 + 'Pw:', 'MaskedPrompt prefixes #31');
@@ -124,7 +127,7 @@ $lines = @('@echo off', ('call "{0}"' -f $rs), ('cd /d "{0}"' -f $WorkDir),
   ('dcc64 -B -NSSystem;Winapi;Vcl -E"{0}" -N0"{0}\dcu" FieldRepoMenuCheck.dpr' -f $WorkDir), 'echo BUILD_EXITCODE=%ERRORLEVEL%')
 [IO.File]::WriteAllText($bat, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 $buildLog = Join-Path $WorkDir 'build.log'
-$null = Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $buildLog -NoNewWindow -Wait -PassThru
+$null = Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $buildLog -NoNewWindow -Wait -PassThru; $null = $null.Handle
 $buildOut = [IO.File]::ReadAllText($buildLog)
 if ($buildOut -notmatch 'BUILD_EXITCODE=0') {
   Write-Host 'FAIL: headless check did not compile' -ForegroundColor Red
@@ -138,7 +141,7 @@ if ($rc -ne 0) { Bad "headless check exit $rc" }
 if ($out -notmatch '(\d+) passed, 0 failed') { Bad 'no pass/fail summary from the headless check' }
 
 # ---- registry entry: the six FULL ide-menu paths ----
-$entry = Get-Content (Join-Path $repo 'features\entries\field-repository.json') -Raw | ConvertFrom-Json
+$entry = Get-Content (Join-Path $repo 'features\entries\field-repository.json') -Raw | ConvertFrom-Json | ForEach-Object { $_ }
 $paths = @($entry.surfaces | Where-Object type -eq 'ide-menu' | ForEach-Object { $_.path })
 foreach ($c in ($shown + $hidden)) {
   $want = "drag-lint > Field Repository > $c"
@@ -149,3 +152,4 @@ if ($paths.Count -ge 6) { Ok "entry registers $($paths.Count) ide-menu paths" }
 if ($fail) { Write-Host "FAIL ($fail)" -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green
 exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

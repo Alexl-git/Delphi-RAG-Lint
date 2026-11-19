@@ -383,7 +383,7 @@ Check 'V the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db
 Check 'V the load checker is available (lib\DfmLoadCheck.ps1)' (Test-DfmLoadsChecker)
 
 $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'SemDM.pas') --rules (P 'sem.rules') --db $db --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
-$j = $null; try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {}
+$j = $null; try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'A0 dry run parses as apply/1 JSON' ($null -ne $j) $o
 $r = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'SemDM.pas') --rules (P 'sem.rules') --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'A1 --apply exits 0' ($LASTEXITCODE -eq 0) $r
@@ -434,7 +434,7 @@ Check 'F4e ParamData is no longer reported unlinked' `
 
 # ---- F5: .pas access sites use their own block's #link -----------------------
 $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'SiteDM.pas') --rules (P 'sites.rules') --db $db --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
-$js = $null; try { $js = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {}
+$js = $null; try { $js = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 $sites = @($js.items | Where-Object { $_.kind -eq 'access-site-rewritten' })
 Check 'F5a exactly ONE access-site rewrite per site: db and tbl one each (2 in all)' `
   (($sites.Count -eq 2) -and (@($sites | Where-Object instance -eq 'db').Count -eq 1) -and (@($sites | Where-Object instance -eq 'tbl').Count -eq 1)) (($sites | ForEach-Object text) -join ' | ')

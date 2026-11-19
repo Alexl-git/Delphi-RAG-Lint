@@ -106,6 +106,7 @@
         <DCCReference Include="DragLint.Plugin.LiveDbChoice.pas"/>
         <DCCReference Include="DragLint.Plugin.IndexJob.pas"/>
         <DCCReference Include="DragLint.Plugin.FanOutState.pas"/>
+        <DCCReference Include="DragLint.Plugin.UnsavedPolicy.pas"/>
         <DCCReference Include="DragLint.Plugin.FanOut.pas"/>
         <DCCReference Include="DragLint.Plugin.UsagesForm.pas"/>
         <DCCReference Include="DragLint.Plugin.UsagesQuery.pas"/>

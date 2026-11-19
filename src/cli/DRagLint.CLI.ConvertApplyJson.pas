@@ -14,9 +14,15 @@ type
 
   /// <summary>Everything schema apply/1 reports about one convert-apply run.
   /// A record rather than nine parameters, per too-many-parameters (max 7).</summary>
-  /// <remarks>Populated on the SUCCESS path and on both failure paths (rule
+  /// <remarks>
+  /// Populated on the SUCCESS path and on both failure paths (rule
   /// validation, and BuildApplyPlan returning Ok=False), so a JSON consumer gets
-  /// a parseable document with ok=false rather than nothing at all.</remarks>
+  /// a parseable document with ok=false rather than nothing at all.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.ConvertApplyJson.pas) ?, DRagLint.CLI.ConvertApply.DoConvertApply (DRagLint.CLI.ConvertApply.pas) ?, DRagLint.CLI.ConvertApply.DoConvertApply.RunUnit (DRagLint.CLI.ConvertApply.pas), DRagLint.CLI.ConvertApply.EncodingGuardReason (DRagLint.CLI.ConvertApply.pas) ?, DRagLint.CLI.ConvertApplyJson.EmitApplyJson (DRagLint.CLI.ConvertApplyJson.pas) ?</para>
+  /// <para>Used in units: DRagLint.CLI.ConvertApply, DRagLint.CLI.ConvertApplyJson</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TApplyJsonCtx = record
     Report    : TApplyReport;
     UnitPas   : string;
@@ -114,6 +120,12 @@ const
 /// without a blank terminator every such slice ran to end-of-output and so
 /// silently included every later block, which made those assertions pass for the
 /// wrong reason. Empty surfaces print nothing at all, as before.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ConvertApply.DoConvertApply.RunUnit (DRagLint.CLI.ConvertApply.pas)</para>
+/// <para>Calls: DRagLint.CLI.ConvertApplyJson.PrintApplyReport.Block, ExtractFileExt, Format, IntToStr, SameText, Writeln</para>
+/// <para>Complexity: 32 (cyclomatic, outer body), 127 lines (full implementation)</para>
+/// <seealso cref="DRagLint.CLI.ConvertApplyJson.PrintApplyReport.Block"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure PrintApplyReport(const AReport: TApplyReport; AEditCount: Integer; const AVerb: string);
 
@@ -136,6 +148,15 @@ procedure PrintApplyReport(const AReport: TApplyReport; AEditCount: Integer; con
 ///
 /// Emits nothing else on stdout: under JSON the caller suppresses RenderDryRun
 /// and every Writeln, or the document would not parse.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ConvertApply.DoConvertApply.FailUnit (DRagLint.CLI.ConvertApply.pas), DRagLint.CLI.ConvertApply.DoConvertApply.RefuseUnit (DRagLint.CLI.ConvertApply.pas), DRagLint.CLI.ConvertApply.DoConvertApply.RunUnit (DRagLint.CLI.ConvertApply.pas)</para>
+/// <para>Calls: ApplyFieldName, ApplyItemKindName, DRagLint.CLI.Common.WriteStdoutDocument, DRagLint.CLI.Convert.UnreachableJson, DRagLint.CLI.ConvertApplyJson.EmitApplyJson.ArrOf, DRagLint.CLI.ConvertApplyJson.EmitApplyJson.GlyphsJson, DRagLint.CLI.ConvertApplyJson.EmitApplyJson.ItemJson, DRagLint.CLI.ConvertApplyJson.PasUsesJson, DRagLint.Convert.Rules.DistinctUnreachable</para>
+/// <seealso cref="DRagLint.CLI.Common.WriteStdoutDocument"/>
+/// <seealso cref="DRagLint.CLI.Convert.UnreachableJson"/>
+/// <seealso cref="DRagLint.CLI.ConvertApplyJson.EmitApplyJson.ArrOf"/>
+/// <seealso cref="DRagLint.CLI.ConvertApplyJson.EmitApplyJson.GlyphsJson"/>
+/// <seealso cref="DRagLint.CLI.ConvertApplyJson.EmitApplyJson.ItemJson"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure EmitApplyJson(const ACtx: TApplyJsonCtx);
 
@@ -146,6 +167,17 @@ procedure EmitApplyJson(const ACtx: TApplyJsonCtx);
 /// <param name="AHasInherited">True when the run met inherited / inline objects (a unit-rules-only book still counts as applied).</param>
 /// <param name="AHasRetype">True when a retype still applies with no .dfm instance (the part is then not skipped).</param>
 /// <returns>'applied', 'skipped-no-dfm', 'skipped-no-convert-rules' or 'skipped-no-instances'.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ConvertApply.DoConvertApply.RunUnit (DRagLint.CLI.ConvertApply.pas)</para>
+/// <para>Calls: DRagLint.Convert.Apply.FindConvertInstances, DRagLint.Convert.Apply.ReadUnitText, DRagLint.Convert.UnitRules.BookHasUnitRules</para>
+/// <para>Returns: 'applied'; 'skipped-no-dfm'; 'skipped-no-convert-rules'; 'skipped-no-instances'</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Convert.Apply.FindConvertInstances"/>
+/// <seealso cref="DRagLint.Convert.Apply.ReadUnitText"/>
+/// <seealso cref="DRagLint.Convert.UnitRules.BookHasUnitRules"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ConvertApplyComponentPart(const ARules: TConversionRuleSet; const ADfmPath: string;
   const AOnly: TArray<string>; AHasInherited, AHasRetype: Boolean): string;
 

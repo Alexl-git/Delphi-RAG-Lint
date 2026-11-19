@@ -63,7 +63,7 @@ function Get-Plan([string]$Fixture, [string]$Dproj, [string]$Tag, [scriptblock]$
   try {
     $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
       -ArgumentList @('cycles', '--db', ('"' + $db + '"'), '--plan', '--library-db', ('"' + $Lib + '"')) `
-      -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "plan-$Tag.err")
+      -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "plan-$Tag.err"); $null = $p.Handle
   } finally { $env:DRAGLINT_TEST_DUMP_PLAN = $null }
   $verdict = ''; $refusals = ''
   if (Test-Path $dump) {

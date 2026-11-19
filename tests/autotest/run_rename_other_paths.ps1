@@ -110,7 +110,7 @@ function Lsp([string]$Root, [string[]]$Dbs, [array]$Reqs) {
   Start-Process $Exe -ArgumentList $la -WorkingDirectory $work -RedirectStandardInput $inF -RedirectStandardOutput $outF -RedirectStandardError "$Root\err.txt" -NoNewWindow -Wait | Out-Null
   $r = @{ res = @{}; err = @{} }
   foreach ($mm in [regex]::Matches([IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -gt 10) {
       if ($null -ne $o.error) { $r.err[[int]$o.id] = $o.error.message }
       elseif ($o.PSObject.Properties.Name -contains 'result') { $r.res[[int]$o.id] = $o.result }

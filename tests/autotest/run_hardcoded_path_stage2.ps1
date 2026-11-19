@@ -196,7 +196,7 @@ $db  = Join-Path $WorkDir 'p.sqlite'
 $rep = Join-Path $WorkDir 'rep.txt'
 $idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --output $rep --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
-$out = if (Test-Path $rep) { Get-Content $rep } else { @() }
+$out = @(if (Test-Path $rep) { Get-Content $rep } else { @() })
 
 Check 'control: the fixture units parsed' ($idx -notmatch '-> 0 symbols') `
   'a parse failure would make every silent-arm pass by silence'

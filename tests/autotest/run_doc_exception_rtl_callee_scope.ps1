@@ -221,7 +221,7 @@ try {
 
   function Lane-NeverRaisedIn([string]$LibArg) {
     $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $projDb --rule doc-drift --library-db $LibArg --json 2>$null } | Out-String)
-    $rows = @($raw | ConvertFrom-Json)
+    $rows = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
     $names = @{}
     foreach ($r in $rows) {
       if ($r.message -notmatch 'never raises') { continue }

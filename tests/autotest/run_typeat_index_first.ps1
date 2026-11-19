@@ -130,7 +130,7 @@ end.
 '@ | Set-Content $dpr2 -Encoding ascii
 $db2 = "$WorkDir\idx2.sqlite"
 $lib = if ($env:DL_LIBRARY_DB) { $env:DL_LIBRARY_DB } else { 'C:\Projects\.drag-lint\library-Win64.sqlite' }
-$libArgs = if (Test-Path $lib) { @('--library-db', $lib) } else { @() }
+$libArgs = @(if (Test-Path $lib) { @('--library-db', $lib) } else { @() })
 & { $ErrorActionPreference = 'Continue'; & $Exe index $src2 --db $db2 @libArgs 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $ext = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db2 --query "select r.external_target from refs r join files f on f.id=r.file_id where f.path like '%IdxVcl.dpr' and r.name_text='Application' and r.external_target is not null" 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 if ($ext -match 'Vcl\.Forms\.Application') {

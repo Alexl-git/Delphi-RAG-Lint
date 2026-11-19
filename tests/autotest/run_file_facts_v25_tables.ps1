@@ -49,7 +49,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 function Lane-Sql([string]$Db, [string]$Query) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --query $Query --db $Db --json 2>$null }
   if ($LASTEXITCODE -ne 0 -or -not $raw) { return }
-  try { $j = ($raw -join "`n") | ConvertFrom-Json } catch { return }
+  try { $j = ($raw -join "`n") | ConvertFrom-Json | ForEach-Object { $_ } } catch { return }
   $cols = @($j.columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
   $out = New-Object System.Collections.Generic.List[object]
   foreach ($r in @($j.rows)) {
@@ -79,7 +79,7 @@ foreach ($t in 'dfm_properties', 'comment_facts') {
   # `sql` refuses PRAGMA: an empty SELECT * still reports the column list, in order.
   $raw  = & { $ErrorActionPreference = 'Continue'; & $Exe sql --query "SELECT * FROM $t LIMIT 0" --db $db --json 2>$null }
   $got  = ''
-  try { $got = (@((($raw -join "`n") | ConvertFrom-Json).columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })) -join ',' } catch { }
+  try { $got = (@((($raw -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }).columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })) -join ',' } catch { }
   Check "T2 $t columns match the spec" ($got -eq $want[$t]) "($got)"
 }
 

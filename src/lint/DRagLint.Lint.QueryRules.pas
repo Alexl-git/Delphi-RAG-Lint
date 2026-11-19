@@ -251,8 +251,7 @@ type
       /// the enclosing routine (defProc) up to the picked node, or the file start when
       /// the match is outside a routine. Each brace-wrapped capture name becomes the
       /// regex-escaped text of capture @name, so the pattern can insist on the SAME array
-      /// the match named. A pattern ending in an unescaped $ (end-anchored) is matched against
-      /// only the last 512 bytes of the window, so the check stays linear per file.</summary>
+      /// the match named.</summary>
       /// <param name="APicked"><!-- drag-lint:auto type -->const TTSNode</param>
       /// <param name="ACaptures"><!-- drag-lint:auto type -->const TTSQueryCaptureArray</param>
       /// <param name="ASource"><!-- drag-lint:auto type -->const TBytes</param>
@@ -261,6 +260,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Lint.QueryRules.TQueryRule.Run (DRagLint.Lint.QueryRules.pas)</para>
       /// <para>Calls: DRagLint.Lint.QueryRules.NodeText, Integer, StringReplace, TreeSitter.Query.TTSQuery.CaptureNameForID, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.Parent, TreeSitter.TTSNodeHelper.StartByte, Trim</para>
+      /// <para>Complexity: 17 (cyclomatic, outer body), 59 lines (full implementation)</para>
       /// <para>Reads: FExcludePrecededBy, FQuery</para>
       /// <seealso cref="DRagLint.Lint.QueryRules.NodeText"/>
       /// <seealso cref="TreeSitter.Query.TTSQuery.CaptureNameForID"/>
@@ -359,16 +359,16 @@ type
       /// FoundList.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas) ?, DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas)</para>
-      /// <para>Calls: Default, DRagLint.Lint.QueryRules.AllPredicatesPass, DRagLint.Lint.QueryRules.NoteRuleTicks, DRagLint.Lint.QueryRules.RuleProfileArmed, DRagLint.Lint.QueryRules.TDeclScopeCache.Create, DRagLint.Lint.QueryRules.TQueryRule.AttachFix, DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor, DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor, DRagLint.Lint.QueryRules.TQueryRule.IsArgumentOfExcludedCallee, DRagLint.Lint.QueryRules.TQueryRule.IsPrecededByExcludedText (+10 more)</para>
-      /// <para>Complexity: 17 (cyclomatic, outer body), 92 lines (full implementation)</para>
+      /// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas) ?, DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas)</para>
+      /// <para>Calls: Default, DRagLint.Core.Encoding.Utf8ByteColToCharCol, DRagLint.Lint.QueryRules.AllPredicatesPass, DRagLint.Lint.QueryRules.NoteRuleTicks, DRagLint.Lint.QueryRules.RuleProfileArmed, DRagLint.Lint.QueryRules.TDeclScopeCache.Create, DRagLint.Lint.QueryRules.TQueryRule.AttachFix, DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor, DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor, DRagLint.Lint.QueryRules.TQueryRule.IsArgumentOfExcludedCallee (+13 more)</para>
+      /// <para>Complexity: 18 (cyclomatic, outer body), 94 lines (full implementation)</para>
       /// <para>Reads: FQuery, FWarnCapture, FId, FSeverity, FMessage, FFixes, FRuleId</para>
       /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.Encoding.Utf8ByteColToCharCol"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.AllPredicatesPass"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.NoteRuleTicks"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.RuleProfileArmed"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TDeclScopeCache.Create"/>
-      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.AttachFix"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function Run(const ARootNode: TTSNode; const ASource: TBytes; const AFilePath: string; const AOracle: ITypeOracle = nil; const AColSource: TBytes = nil): TArray<TLintFinding>;
@@ -582,14 +582,14 @@ function CreateStoreTypeOracle(const AStore: ISymbolStore; AFileId: Int64; const
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Diagnostics.ExprChecks.TExprChecker.Check.CheckDoubleLookup (DRagLint.Diagnostics.ExprChecks.pas), DRagLint.Lint.Linter.EmitFieldByNameLoopFinding (DRagLint.Lint.Linter.pas)</para>
-/// <para>Calls: Copy, DRagLint.Lint.QueryRules.ITypeOracle.ClassDescends, DRagLint.Lint.QueryRules.ITypeOracle.TypeAt, DRagLint.Lint.QueryRules.NodeText, Integer, Pos, SameText, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.StartPoint</para>
+/// <para>Calls: Copy, DRagLint.Core.Encoding.Utf8ByteColToCharCol, DRagLint.Lint.QueryRules.ITypeOracle.ClassDescends, DRagLint.Lint.QueryRules.ITypeOracle.TypeAt, DRagLint.Lint.QueryRules.NodeText, Integer, Pos, SameText, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.StartByte, TreeSitter.TTSNodeHelper.StartPoint</para>
 /// <para>Returns: False; AOracle.ClassDescends(Leaf, 'TObject')</para>
 /// <para>Complexity: 10 (cyclomatic, outer body), 19 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Core.Encoding.Utf8ByteColToCharCol"/>
 /// <seealso cref="DRagLint.Lint.QueryRules.ITypeOracle.ClassDescends"/>
 /// <seealso cref="DRagLint.Lint.QueryRules.ITypeOracle.TypeAt"/>
 /// <seealso cref="DRagLint.Lint.QueryRules.NodeText"/>
 /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
-/// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ReceiverProvenOtherClass(const AOracle: ITypeOracle; const ARecv: TTSNode; const ASource: TBytes; const ARoots: array of string): Boolean;
@@ -605,7 +605,7 @@ function ReceiverProvenOtherClass(const AOracle: ITypeOracle; const ARecv: TTSNo
 /// an untyped inline var or anything else the source does not show.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Lint.Autofix.DeclTypeOf (DRagLint.Lint.Autofix.pas)</para>
+/// <para>Called from: DRagLint.Lint.Autofix.DeclTypeOf (DRagLint.Lint.Autofix.pas), DRagLint.V151.MEM.Support.TMemRun.DeclTypeOf (DRagLint.V151.MEM.Support.pas)</para>
 /// <para>Calls: DRagLint.Lint.QueryRules.NamedChildrenOf, DRagLint.Lint.QueryRules.TDeclScopeCache.Create, DRagLint.Lint.QueryRules.TDeclScopeCache.Find, TreeSitter.TTSNodeHelper.EndByte, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.Parent, TreeSitter.TTSNodeHelper.StartByte</para>
 /// <para>Returns: False</para>
 /// <para>Mutates: AType (out)</para>
@@ -1164,6 +1164,25 @@ begin
     end;
     Cur:= Cur.Parent;
   end;
+end;
+
+{ (#parent? @cap "nodeType" ["field"]) / (#not-parent? ...) -- 2026-11-18.
+  True when the DIRECT parent of the captured node has type ANodeType and,
+  when AField is given, the node sits in that parent's AField field. #in?
+  walks every ancestor, which is too wide for "is this if/else the else arm
+  of another if/else": an if/else nested inside a begin..end branch of an
+  outer if/else also has an ifElse ancestor, and must keep firing. Born for
+  ifthen-to-if-expression (the tail of an else-if chain is not a two-way
+  choice). }
+function ParentIsField(const ANode: TTSNode; const ANodeType, AField: string): Boolean;
+var
+  P: TTSNode;
+begin
+  Result:= False;
+  if ANode.IsNull then Exit;
+  P:= ANode.Parent;
+  if P.IsNull or (P.NodeType <> ANodeType) then Exit;
+  Result:= (AField = '') or (P.ChildByField(AField) = ANode);
 end;
 
 { True when ANode's subtree contains an `identifier` whose text is AName
@@ -2152,7 +2171,7 @@ begin
 end;
 
 // Evaluate one predicate. Returns True if it passes.
-function EvalPredicate(const AQuery: TTSQuery; const AMatch: TTSQueryMatch; const ASource: TBytes; const AArgs: TArray<TPredicateArg>;
+function EvalPredicate(const AMatch: TTSQueryMatch; const ASource: TBytes; const AArgs: TArray<TPredicateArg>;
   ACache: TDeclScopeCache): Boolean;
 const
   { #in? / #not-in? argument positions: (#in? @cap "nodeType" ["nameRegex"]) }
@@ -2241,6 +2260,21 @@ begin
     Exit;
   end;
 
+  if (Op = 'parent?') or (Op = 'not-parent?') then
+  begin
+    { (#parent? @cap "nodeType" ["field"]) -- see ParentIsField. The third
+      argument is a FIELD name here, not a name regex. Malformed arguments
+      pass, as above. }
+    if (Length(AArgs) < MinArgs) or (Length(AArgs) > MaxArgs) then Exit(True);
+    if (not AArgs[CapArg].IsCapture) or AArgs[TypeArg].IsCapture then Exit(True);
+    if (Length(AArgs) = MaxArgs) and AArgs[NameRxArg].IsCapture then Exit(True);
+    Pattern:= '';
+    if Length(AArgs) = MaxArgs then Pattern:= AArgs[NameRxArg].StringValue;
+    Result:= ParentIsField(ResolveCaptureNode(AMatch, AArgs[CapArg].CaptureIndex), AArgs[TypeArg].StringValue, Pattern);
+    if Op = 'not-parent?' then Result:= not Result;
+    Exit;
+  end;
+
   if (Op = 'reset-in-loop?') or (Op = 'not-reset-in-loop?') then
     Exit(EvalResetInLoop(AMatch, ASource, AArgs, Op = 'not-reset-in-loop?'));
 
@@ -2295,7 +2329,7 @@ begin
         begin
           // End of one predicate. Evaluate; if false, the whole match
           // fails. Then reset Current for the next predicate (if any).
-          if not EvalPredicate(AQuery, AMatch, ASource, Current.ToArray, ACache) then Exit(False);
+          if not EvalPredicate(AMatch, ASource, Current.ToArray, ACache) then Exit(False);
           Current.Clear;
         end;
       end; // case

@@ -68,7 +68,7 @@ function Invoke-Raw([string[]]$ArgList, [string]$Cwd = $WorkDir) {
   [pscustomobject]@{ Out = $msOut.ToArray(); Err = $msErr.ToArray(); Code = $p.ExitCode }
 }
 # rows[0][0] of a sql --json document; $null when it does not parse.
-function Row0([byte[]]$b, $enc) { try { ($enc.GetString($b) | ConvertFrom-Json).rows[0][0] } catch { $null } }
+function Row0([byte[]]$b, $enc) { try { ($enc.GetString($b) | ConvertFrom-Json | ForEach-Object { $_ }).rows[0][0] } catch { $null } }
 function HiCount([byte[]]$b) { @($b | Where-Object { $_ -gt 127 }).Count }
 function HasBytes([byte[]]$hay, [byte[]]$needle) {
   $h = [BitConverter]::ToString($hay); $n = [BitConverter]::ToString($needle)
@@ -99,7 +99,7 @@ Write-Host 'Input: a non-ANSI path survives into the index' -ForegroundColor Cya
 $r = Invoke-Raw @('index', $fx, '--db', $db, '--quiet')
 Check 'index exits 0' ($r.Code -eq 0) "(exit $($r.Code))"
 $r = Invoke-Raw @('sql', '--query', 'select hex(path) from files', '--db', $db, '--json')
-$hex = ([System.Text.Encoding]::ASCII.GetString($r.Out) | ConvertFrom-Json).rows[0][0]
+$hex = ([System.Text.Encoding]::ASCII.GetString($r.Out) | ConvertFrom-Json | ForEach-Object { $_ }).rows[0][0]
 $want = ([BitConverter]::ToString([System.Text.Encoding]::UTF8.GetBytes($unit))).Replace('-', '')
 Check 'files.path holds the exact UTF-8 of the path' ($hex -eq $want) "(got $hex)"
 Check 'NEGATIVE: files.path has no ? where U+0434 was' (-not $hex.Contains('C3A93F')) ''
@@ -130,7 +130,7 @@ Check 'stderr carries the escaped path' ($etxt.Contains('fx_' + $escOdd)) ''
 Write-Host ''
 Write-Host 'lint --json (the LSP reader: UTF-8 decode)' -ForegroundColor Cyan
 $r = Invoke-Raw @('lint', $unit, '--db', $db, '--json')
-$js = [System.Text.Encoding]::UTF8.GetString($r.Out) | ConvertFrom-Json
+$js = [System.Text.Encoding]::UTF8.GetString($r.Out) | ConvertFrom-Json | ForEach-Object { $_ }
 $paths = @($js | ForEach-Object { $_.file_path } | Where-Object { $_ })
 Check 'lint --json has findings' ($paths.Count -gt 0) ''
 Check 'a UTF-8 reader gets the exact path back' ($paths.Count -gt 0 -and ($paths | Where-Object { $_ -ceq $unit }).Count -eq $paths.Count) "($($paths[0]))"
@@ -188,7 +188,7 @@ Check 'default: the warning appears exactly once' ($warn.Count -eq 1) "($($warn.
 $m = [regex]::Match($etxt, '(\d+) non-ASCII character')
 Check 'default: the warning count is positive' ($m.Success -and [int]$m.Groups[1].Value -gt 0) "($($m.Groups[1].Value))"
 Check 'default: the warning names the switch and the config key' ($etxt.Contains('--output-encoding utf8') -and $etxt.Contains('outputEncoding')) ''
-$doc = [System.Text.Encoding]::ASCII.GetString($b) | ConvertFrom-Json
+$doc = [System.Text.Encoding]::ASCII.GetString($b) | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'default: a JSON file gains lossy_output > 0' ($doc.lossy_output -gt 0) "($($doc.lossy_output))"
 $fU = Join-Path $WorkDir 'out-utf8.json'
 $r = Invoke-Raw ($qf + @('--output', $fU, '--output-encoding', 'utf8'))

@@ -128,7 +128,7 @@ try {
 $pend = New-PendingDelete $lockPath
 $outB = Join-Path $work 'o-b4.log'
 $p = Start-Process -FilePath $Exe -ArgumentList @('index', '--project', "`"$dpr`"", '--db', "`"$db`"") `
-  -PassThru -NoNewWindow -RedirectStandardOutput $outB -RedirectStandardError ($outB + '.err')
+  -PassThru -NoNewWindow -RedirectStandardOutput $outB -RedirectStandardError ($outB + '.err'); $null = $p.Handle
 Start-Sleep -Milliseconds 300
 $pend.Dispose()
 if (-not $p.WaitForExit(120000)) { $p.Kill(); Check '4. CONTROL: run finished in time' $false 'killed after 120 s' }

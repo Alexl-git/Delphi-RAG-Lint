@@ -20,8 +20,16 @@ uses
 /// <param name="ADir">A folder: the engine exe folder or the BPL folder.</param>
 /// <returns>TInstalledLayout.ManifestLocation(ADir): the explicit file (DRAGLINT_MANIFEST), else
 /// under DRAGLINT_LAYOUT=v2 the roaming file when it exists, else ADir\drag-lint.json.</returns>
-/// <remarks>Layout OFF and no explicit file: Path = ADir + 'drag-lint.json', the plugin's
-/// behaviour before phase 3. Reads the environment; thread-safe.</remarks>
+/// <remarks>
+/// Layout OFF and no explicit file: Path = ADir + 'drag-lint.json', the plugin's
+/// behaviour before phase 3. Reads the environment; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DbResolver.ManifestPathBesideEngine (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.DbResolver.TryLoadManifest (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.ManifestPaths.PluginManifestCandidates (DragLint.Plugin.ManifestPaths.pas)</para>
+/// <para>Calls: DRagLint.Index.Manifest.TInstalledLayout.ManifestLocation</para>
+/// <para>Returns: TInstalledLayout.ManifestLocation(ADir)</para>
+/// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.ManifestLocation"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PluginManifestIn(const ADir: string): TManifestLocation;
 
 /// <summary>The manifests the library lookup probes, in order: the engine's, then the BPL's.</summary>
@@ -29,6 +37,15 @@ function PluginManifestIn(const ADir: string): TManifestLocation;
 /// <param name="ABplDir">Folder of the plugin BPL.</param>
 /// <returns>Each folder's PluginManifestIn path, duplicates removed (case-insensitive). With an
 /// explicit or roaming manifest both rungs answer the same file, so the result has one entry.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DbResolver.ManifestLibraryDbFor (DragLint.Plugin.DbResolver.pas)</para>
+/// <para>Calls: DragLint.Plugin.ManifestPaths.PluginManifestCandidates.AddUnique, DragLint.Plugin.ManifestPaths.PluginManifestIn, ExtractFilePath, SameText</para>
+/// <para>Returns: nil</para>
+/// <seealso cref="DragLint.Plugin.ManifestPaths.PluginManifestCandidates.AddUnique"/>
+/// <seealso cref="DragLint.Plugin.ManifestPaths.PluginManifestIn"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PluginManifestCandidates(const AEngineExe, ABplDir: string): TArray<string>;
 
 /// <summary>The library outDir a manifest names, the way the engine reads it.</summary>
@@ -36,12 +53,29 @@ function PluginManifestCandidates(const AEngineExe, ABplDir: string): TArray<str
 /// <param name="AManifestPath">The manifest file the value came from.</param>
 /// <returns>Layout v2: %NAME% expanded (E6); an empty value in the roaming manifest gives
 /// %LOCALAPPDATA%\drag-lint\library (ruling 3). Layout OFF: ARawOutDir unchanged.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DbResolver.ManifestLibraryDbFor (DragLint.Plugin.DbResolver.pas)</para>
+/// <para>Calls: DRagLint.Index.Manifest.TInstalledLayout.DefaultOutDir, DRagLint.Index.Manifest.TInstalledLayout.ExpandOutDir, ExtractFilePath</para>
+/// <para>Returns: TInstalledLayout.ExpandOutDir(ARawOutDir); TInstalledLayout.DefaultOutDir(ExtractFilePath(AManifestPath))</para>
+/// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.DefaultOutDir"/>
+/// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.ExpandOutDir"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PluginLibraryOutDir(const ARawOutDir, AManifestPath: string): string;
 
 /// <summary>The global manifest file the Options page writes when no project is open.</summary>
 /// <param name="AEngineDir">The engine exe folder ('' when unresolved).</param>
 /// <returns>TInstalledLayout.WriteTarget(AEngineDir): the file the engine reads; under v2 with no
 /// manifest anywhere, the roaming file. Layout OFF: AEngineDir\drag-lint.json.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.ManifestPathForWrite (DragLint.Plugin.OptionsFrames.pas)</para>
+/// <para>Calls: DRagLint.Index.Manifest.TInstalledLayout.WriteTarget</para>
+/// <para>Returns: TInstalledLayout.WriteTarget(AEngineDir)</para>
+/// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.WriteTarget"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PluginManifestWriteTarget(const AEngineDir: string): string;
 
 implementation

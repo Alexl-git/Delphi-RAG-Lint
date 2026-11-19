@@ -92,7 +92,7 @@ function Caps([byte[]]$b) {
   $t = [Text.Encoding]::UTF8.GetString($b)
   foreach ($m in [regex]::Matches($t, '\{"jsonrpc":"2\.0","id":1,.*?\}(?=Content-Length:|\s*$)', 'Singleline')) {
     try {
-      $o = $m.Value | ConvertFrom-Json
+      $o = $m.Value | ConvertFrom-Json | ForEach-Object { $_ }
       if ($o.result -and $o.result.capabilities) { return ($o.result.capabilities | ConvertTo-Json -Compress -Depth 60) }
     } catch { }
   }

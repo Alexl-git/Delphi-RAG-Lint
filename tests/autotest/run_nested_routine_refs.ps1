@@ -99,7 +99,7 @@ for nm in ('CalledOnlyFromNested','NeverCalledAtAll','Guard'):
 print(json.dumps(out))
 c.close()
 '@ | Set-Content $py -Encoding ascii
-$refs = (& python $py $db) -join "`n" | ConvertFrom-Json
+$refs = (& python $py $db) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 
 Write-Host 'Reference index' -ForegroundColor Cyan
 Check 'a call made INSIDE a nested routine is recorded' ($refs.CalledOnlyFromNested -ge 1) `

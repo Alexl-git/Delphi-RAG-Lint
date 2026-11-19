@@ -17,7 +17,7 @@
     {
       "type": "cli",
       "verb": "allow",
-      "usage": "drag-lint allow <file> --fix-line <L> --fix-rule <id> [--apply] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>] (record a dl:ok review of ONE finding; dry-run without --apply; the lint options decide which findings the line has)",
+      "usage": "drag-lint allow <file> --fix-line <L> --fix-rule <id> [--apply] [--reason \"<text>\"] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>] (record a dl:ok review of ONE finding; dry-run without --apply; --reason replaces the marker's reason, e.g. \"REVIEWED <yyyy-mm-dd> <why>\" -- without it a re-hash of a stale marker drops its REVIEWED stamp; the lint options decide which findings the line has)",
       "flags": [
         {
           "name": "--fix-line",
@@ -29,6 +29,10 @@
         },
         {
           "name": "--apply"
+        },
+        {
+          "name": "--reason",
+          "arg": "<text>"
         },
         {
           "name": "--rules-dir",
@@ -54,7 +58,7 @@
         }
       ],
       "helpOrder": 16,
-      "help": ["  drag-lint allow <file>       --fix-line <L> --fix-rule <id> [--apply] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>]   (record a dl:ok review of ONE finding; dry-run without --apply; the lint options decide which findings the line has)"]
+      "help": ["  drag-lint allow <file>       --fix-line <L> --fix-rule <id> [--apply] [--reason \"<text>\"] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>]   (record a dl:ok review of ONE finding; dry-run without --apply; --reason replaces the marker's reason, e.g. \"REVIEWED <yyyy-mm-dd> <why>\" -- without it a re-hash of a stale marker drops its REVIEWED stamp; the lint options decide which findings the line has)"]
     }
   ],
   "audience": "both",
@@ -75,9 +79,9 @@
     "by": "ENGINE"
   },
   "verified": {
-    "date": "2026-11-07",
+    "date": "2026-11-18",
     "by": "ENGINE",
-    "build": "1.46.0-alpha",
-    "surfaceHash": "743633f9c86c0e8c21028de9a717befee3c186bfa8a97c46128007873b4cf949"
+    "build": "1.52.0-alpha",
+    "surfaceHash": "52a7f09491cc264f7577e47b54319054cc6db836d3def4229c2634b348372a50"
   }
 }

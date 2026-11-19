@@ -35,7 +35,8 @@ type
   TLspCompletion = class
     public
       /// <param name="AKind"><!-- drag-lint:auto type -->TSymbolKind</param>
-      /// <returns><!-- drag-lint:auto -->Integer -- Observed: 7; 22; 8; 13; 20; 2.</returns>
+      /// <returns><!-- drag-lint:auto -->Integer -- Observed: 7; 22; 8; 13; 20; 2; 4; 10;
+      /// 5; 9; 21; 6; 1.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Completion.TLspCompletion.MakeCompletionItem (DRagLint.LSP.Completion.pas)</para>
@@ -197,7 +198,7 @@ type
       /// run at the default target (37) publishes exactly what it did before.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/3 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Server.TLSPServer.PublishDiagnostics (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindCompilerFindingsForFile, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware, DRagLint.Diagnostics.AstChecks.TAstChecker.DropNonStringConcat, DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check, DRagLint.Lint.Config.TLintConfig.ApplySeverity, DRagLint.Lint.Config.TLintConfig.Load, DRagLint.Lint.Linter.TLinter.DefaultDisabledRuleIds (+20 more)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindCompilerFindingsForFile, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware, DRagLint.Diagnostics.AstChecks.TAstChecker.DropNonStringConcat, DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check, DRagLint.Lint.Config.TLintConfig.ApplySeverity, DRagLint.Lint.Config.TLintConfig.Load, DRagLint.Lint.Linter.TLinter.DefaultDisabledRuleIds (+21 more)</para>
       /// <para>Returns: TJSONArray.Create</para>
       /// <para>Overload 2 of 2</para>
       /// <para>Complexity: 31 (cyclomatic, outer body), 291 lines (full implementation)</para>
@@ -285,16 +286,16 @@ type
       /// Pure function. Insertion must use TReviewMarkers.InsertInto().
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow, DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto, DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse, DRagLint.Lint.RuleCatalog.DocCommentMarkerLine, DRagLint.Lint.RuleCatalog.IsRoutineMetricRule, DRagLint.Lint.RuleCatalog.MetricHash, DRagLint.LSP.Completion.PathToFileUri, SameText, StrToIntDef</para>
+      /// <para>Calls: DRagLint.Lint.MarkerHash.ExpectedHash, DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow, DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto, DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse, DRagLint.Lint.RuleCatalog.DocCommentMarkerLine, DRagLint.Lint.RuleCatalog.IsRoutineMetricRule, DRagLint.LSP.Completion.PathToFileUri, Format, SameText, StrToIntDef</para>
       /// <para>Returns: TJSONArray.Create</para>
-      /// <para>Complexity: 22 (cyclomatic, outer body), 136 lines (full implementation)</para>
+      /// <para>Complexity: 23 (cyclomatic, outer body), 157 lines (full implementation)</para>
       /// <para>Owns returned: new (caller owns)</para>
       /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Lint.MarkerHash.ExpectedHash"/>
       /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow"/>
       /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto"/>
       /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse"/>
       /// <seealso cref="DRagLint.Lint.RuleCatalog.DocCommentMarkerLine"/>
-      /// <seealso cref="DRagLint.Lint.RuleCatalog.IsRoutineMetricRule"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function BuildCodeActions(const AFile: string; AStartLine, AStartCol, AEndLine, AEndCol: Integer;
@@ -432,8 +433,15 @@ type
 /// server builds afterwards (PathToFileUri, TLSPServer.FileToUri) is in that same form.</summary>
 /// <param name="AUri">Any URI from the client. Only a file:/// URI whose path starts with a drive
 /// letter changes the recorded form: `C:` / `c:` (IDE plugin) or `c%3A` (VS Code).</param>
-/// <remarks>Process-wide state: one LSP server per process talks to one client. Written and read
-/// on the request thread only; not guarded for concurrent writers.</remarks>
+/// <remarks>
+/// Process-wide state: one LSP server per process talks to one client. Written and read
+/// on the request thread only; not guarded for concurrent writers.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Server.TLSPServer.FileFromUri (DRagLint.LSP.Server.pas)</para>
+/// <para>Calls: CharInSet, Copy, DRagLint.LSP.Completion.IsDriveLetter, SameText, StartsText</para>
+/// <seealso cref="DRagLint.LSP.Completion.IsDriveLetter"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure NoteClientFileUri(const AUri: string);
 
 /// <summary>Maps a local path to the percent-encoded file:/// URI the client holds for it.</summary>
@@ -442,6 +450,14 @@ procedure NoteClientFileUri(const AUri: string);
 /// client sent a drive-letter URI (NoteClientFileUri) the drive letter's case and its colon
 /// (`:` or `%3A`) follow the client's form, so the result equals the client's URI for the same
 /// document. Before that, the drive is written as the path has it, with a plain colon.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildFixActions (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesActions (DRagLint.LSP.Completion.pas), DRagLint.LSP.Server.TLSPServer.FileToUri (DRagLint.LSP.Server.pas)</para>
+/// <para>Calls: Copy, DRagLint.LSP.Completion.IsDriveLetter, LowerCase, StringReplace, UpperCase</para>
+/// <para>Returns: FILE_URI_PREFIX + Encoded</para>
+/// <seealso cref="DRagLint.LSP.Completion.IsDriveLetter"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PathToFileUri(const APath: string): string;
 
 implementation

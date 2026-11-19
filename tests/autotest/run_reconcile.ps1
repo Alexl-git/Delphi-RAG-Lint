@@ -39,7 +39,7 @@ Check 'uOrphan untouched'     ($rep2 -match 'EXTRA[\s\S]*uOrphan')
 $j = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$fx\App.dpr" --json 2>$null } | Out-String
 Check 'json has missing array' ($j -match '"missing"\s*:\s*\[')
 Check 'json has stale array'   ($j -match '"stale"\s*:\s*\[')
-Check 'json parses'            ([bool]($j | ConvertFrom-Json))
+Check 'json parses'            ([bool]($j | ConvertFrom-Json | ForEach-Object { $_ }))
 
 # FIX 1 regression: EditDpr must not corrupt .dpr when a uses entry carries a
 # brace comment containing ';' (e.g. uMain in 'uMain.pas' {Form: TBar; note}).
@@ -137,7 +137,7 @@ if (Test-Path $py) {
   # JSON run (fresh DB): one valid JSON object with coherence.incoherent >= 1.
   $cjson = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$cx\App.dpr" --db $cdb2 --json 2>$null } | Out-String
   $cobj = $null
-  try { $cobj = $cjson | ConvertFrom-Json } catch { $cobj = $null }
+  try { $cobj = $cjson | ConvertFrom-Json | ForEach-Object { $_ } } catch { $cobj = $null }
   Check 'coh: --json parses as one object'    ($null -ne $cobj)
   Check 'coh: json coherence.incoherent>=1'   ($null -ne $cobj -and $null -ne $cobj.coherence -and [int]$cobj.coherence.incoherent -ge 1)
   # JSON stays a superset of the original report (missing/stale still present).

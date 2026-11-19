@@ -73,8 +73,8 @@ function Run-Arm([string]$Name, [string]$Value, [string]$PathFile = '') {
   [Environment]::SetEnvironmentVariable('DRAGLINT_PP_TRACE', $(if ($Value -ne '') { $Value } else { $null }))
   Push-Location $cwd
   try {
-    & { $ErrorActionPreference = 'Continue'; & $Exe index --project $proj --db $db 2>>$errFile } | Out-Null
-    & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --project $proj --rule ifdef-undefined-symbol --json 2>>$errFile } | Out-Null
+    & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); & $Exe index --project $proj --db $db 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-Null
+    & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); & $Exe lint-all --db $db --project $proj --rule ifdef-undefined-symbol --json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-Null
   } finally {
     Pop-Location
     [Environment]::SetEnvironmentVariable('DRAGLINT_PP_TRACE', $null)

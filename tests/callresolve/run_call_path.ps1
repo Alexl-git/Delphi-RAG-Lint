@@ -53,7 +53,7 @@ try {
 
   # --- call-path --json: ordered path array. ---
   $jsonOut = & { $ErrorActionPreference = 'Continue'; & $exePath call-path --from StepA --to StepD --json --db $db 2>$null } | Out-String
-  $obj = $jsonOut | ConvertFrom-Json
+  $obj = $jsonOut | ConvertFrom-Json | ForEach-Object { $_ }
   Check 'json found:true' ($obj.found -eq $true)
   $names = @($obj.path)
   Check 'json path has 4 nodes'                 (@($names).Count -eq 4)
@@ -67,7 +67,7 @@ try {
   Check 'no-path prints "no path"' ($noTxt -match 'no path')
 
   $noJson = & { $ErrorActionPreference = 'Continue'; & $exePath call-path --from StepA --to Lonely --json --db $db 2>$null } | Out-String
-  $noObj  = $noJson | ConvertFrom-Json
+  $noObj  = $noJson | ConvertFrom-Json | ForEach-Object { $_ }
   Check 'no-path json found:false' ($noObj.found -eq $false)
 } finally { Pop-Location }
 

@@ -269,7 +269,7 @@ function TryWindowHiddenCount(const AContent: string; out ACount: Integer): Bool
 /// <para>Called from: DRagLint.CLI.DoDocForget (DRagLint.CLI.pas)</para>
 /// <para>Calls: Default, DRagLint.Doc.ProjectTags.AddWrappedFact, DRagLint.Doc.ProjectTags.FenceCarriesTags, DRagLint.Doc.ProjectTags.ForgetEntry, DRagLint.Doc.ProjectTags.ParseFactLine, DRagLint.Doc.Regions.FoldFactLine, EndsStr, Pos</para>
 /// <para>Returns: string.Join(#10, Kept.ToArray)</para>
-/// <para>Complexity: 10 (cyclomatic, outer body), 58 lines (full implementation)</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 58 lines (full implementation)</para>
 /// <para>Mutates: AStats (out)</para>
 /// <seealso cref="DRagLint.Doc.ProjectTags.AddWrappedFact"/>
 /// <seealso cref="DRagLint.Doc.ProjectTags.FenceCarriesTags"/>
@@ -311,15 +311,31 @@ function ListTags(const AText: string): TArray<string>;
 /// <param name="AFrom">1-based start position.</param>
 /// <param name="ALabel">Receives the label exactly as it appears; '' when there is none.</param>
 /// <returns>The 1-based position of the label; 0 when AText holds none at or after AFrom.</returns>
-/// <remarks>A via prefix not followed by a name (letters, digits, '_', '.') and '):' is not a
+/// <remarks>
+/// A via prefix not followed by a name (letters, digits, '_', '.') and '):' is not a
 /// label and is passed over. 'Used in:' and the via prefix differ at their 9th character, so no
-/// two labels start at one position.</remarks>
+/// two labels start at one position.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Doc.ProjectTags.ParseFactLine (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.SharedFacts.InboundLabelsInText (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.MergedFactLine (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.ParseBlock (DRagLint.Doc.SharedFacts.pas)</para>
+/// <para>Calls: DRagLint.Doc.ProjectTags.ViaLabelAt, PosEx</para>
+/// <para>Returns: 0; P; ViaAt</para>
+/// <para>Mutates: ALabel (out)</para>
+/// <seealso cref="DRagLint.Doc.ProjectTags.ViaLabelAt"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindInboundLabel(const AText: string; AFrom: Integer; out ALabel: string): Integer;
 
 /// <summary>Wave 149 LX: True for an accessor echo label 'Used in (via property X):'.</summary>
 /// <param name="ALabel">A label as FindInboundLabel returns it.</param>
 /// <returns>True when ALabel starts with VIA_PROPERTY_LABEL_PREFIX and ends with
 /// VIA_PROPERTY_LABEL_END.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Doc.SharedFacts.InboundKeys (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.InboundLabelsInText (DRagLint.Doc.SharedFacts.pas)</para>
+/// <para>Calls: EndsStr, StartsStr</para>
+/// <para>Returns: StartsStr(VIA_PROPERTY_LABEL_PREFIX, ALabel) and EndsStr(VIA_PROPERTY_LABEL_END, ALabel)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsViaPropertyLabel(const ALabel: string): Boolean;
 
 implementation

@@ -176,7 +176,7 @@ ORDER BY f.path, r.start_line, r.start_col, r.name_text, 1
 '@
 function Lane-Dump([string]$Db) {
   $j = & { $ErrorActionPreference = 'Continue'; & $exePath sql --query $dumpSql --db $Db --json --limit 1000000 2>$null } | Out-String
-  $o = $j.Substring($j.IndexOf('{')) | ConvertFrom-Json
+  $o = $j.Substring($j.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ }
   return (@($o.rows | ForEach-Object { [string]$_[0] }) -join "`n") -replace [regex]::Escape($scratch), '<S>'
 }
 # The three derived tables the calls pass rewrites per ref (round 3: the scoped pass left
@@ -200,7 +200,7 @@ ORDER BY 1
 '@
 function Lane-DumpDerived([string]$Db) {
   $j = & { $ErrorActionPreference = 'Continue'; & $exePath sql --query $derivedSql --db $Db --json --limit 1000000 2>$null } | Out-String
-  $o = $j.Substring($j.IndexOf('{')) | ConvertFrom-Json
+  $o = $j.Substring($j.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ }
   return (@($o.rows | ForEach-Object { [string]$_[0] }) -join "`n") -replace [regex]::Escape($scratch), '<S>'
 }
 function Lane-CompareDerived([string]$Tag, [string]$Scoped, [string]$Whole) {

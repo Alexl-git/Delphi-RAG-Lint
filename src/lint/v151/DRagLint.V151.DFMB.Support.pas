@@ -10,7 +10,6 @@ uses
   System.SysUtils
   , System.Classes
   , System.Generics.Collections
-  , System.Generics.Defaults
   , DRagLint.Core.Model
   , DRagLint.Lint.Config
   , DRagLint.V151.Dfm.Common
@@ -21,7 +20,7 @@ type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.V151.DFMB.Support.pas) ?, DRagLint.V151.DFMB.Support.ParseHeader (DRagLint.V151.DFMB.Support.pas), DRagLint.V151.DFMB.Support.TDfmModel.Add (DRagLint.V151.DFMB.Support.pas) ?, DRagLint.V151.DFMB.Support.TDfmModel.Create (DRagLint.V151.DFMB.Support.pas) ?, DRagLint.V151.DFMB.Support.TDfmModel.Find (DRagLint.V151.DFMB.Support.pas) ? (+13 more)</para>
-  /// <para>Used in units: DRagLint.V151.DFMB.Support</para>
+  /// <para>Used in units: DRagLint.FieldRepo.ParamArray.Prepare, DRagLint.V151.DFMB.Support</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDfmObj = class
@@ -192,7 +191,7 @@ type
     /// <param name="AParent">Enclosing object or nil.</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.AcquireIndexLock (DRagLint.CLI.pas) ?, DRagLint.CLI.DoQueryUnitUsageProjectWide (DRagLint.CLI.pas) ?, DRagLint.CLI.ExpandProjectScope.AddOnce (DRagLint.CLI.pas) ?, DRagLint.CLI.ProjectScopeRoots.AddDir (DRagLint.CLI.pas) ?, DRagLint.V151.DFMB.Support.TDfmModel.Parse (DRagLint.V151.DFMB.Support.pas) (+53 more)</para>
+    /// <para>Called from: DRagLint.CLI.ApplyNearFilter (DRagLint.CLI.pas) ?, DRagLint.CLI.DoQueryUnitUsageProjectWide (DRagLint.CLI.pas) ?, DRagLint.CLI.ExpandProjectScope.AddOnce (DRagLint.CLI.pas) ?, DRagLint.CLI.ProjectScopeRoots.AddDir (DRagLint.CLI.pas) ?, DRagLint.V151.DFMB.Support.TDfmModel.Parse (DRagLint.V151.DFMB.Support.pas) (+37 more)</para>
     /// <para>Calls: LowerCase</para>
     /// <para>Reads: FRoots, FAll, FByName</para>
     /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmModel.Create"/>
@@ -220,8 +219,8 @@ type
     /// <returns>Findings located in ADfmPath.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas) ?, DRagLint.V151.DFMB.TV151DFMBRules.CheckDfm (DRagLint.V151.DFMB.pas)</para>
-    /// <para>Calls: AWants, DRagLint.V151.DFMB.Support.CheckCircular, DRagLint.V151.DFMB.Support.CheckDisallowed, DRagLint.V151.DFMB.Support.CheckDupBinding, DRagLint.V151.DFMB.Support.CheckMasterFields, DRagLint.V151.DFMB.Support.CheckRequired, DRagLint.V151.DFMB.Support.CheckTypeMismatch, DRagLint.V151.DFMB.Support.TDfmModel.Parse</para>
+    /// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas) ?, DRagLint.V151.DFMB.TV151DFMBRules.CheckDfm (DRagLint.V151.DFMB.pas)</para>
+    /// <para>Calls: AWants, DRagLint.V151.DFMB.Support.CheckCircular, DRagLint.V151.DFMB.Support.CheckDisallowed, DRagLint.V151.DFMB.Support.CheckDupBinding, DRagLint.V151.DFMB.Support.CheckMasterFields, DRagLint.V151.DFMB.Support.CheckRequired, DRagLint.V151.DFMB.Support.CheckTypeMismatch, DRagLint.V151.DFMB.Support.CodeBoundFields, DRagLint.V151.DFMB.Support.TDfmModel.Parse</para>
     /// <para>Returns: nil; Found.ToArray</para>
     /// <para>Touches: file system</para>
     /// <para>Directives: static</para>

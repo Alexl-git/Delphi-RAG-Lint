@@ -19,6 +19,9 @@ param(
 )
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -50,7 +53,7 @@ $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint $use --db $db --
 $txt = ($raw -join "`n")
 Write-Host ("raw: " + $txt.Substring(0, [Math]::Min(200, $txt.Length)))
 $found = @()
-try { $found = @($txt | ConvertFrom-Json) } catch { Check 'lint output is JSON' $false $txt }
+try { $found = @(($txt | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { Check 'lint output is JSON' $false $txt }
 $got = @($found | Where-Object { $_.rule_id -eq $rule -or $_.rule -eq $rule } | ForEach-Object { [int]$_.start_line })
 foreach ($l in $hit) { Check "fires at $l" ($got -contains $l) "got: $($got -join ',')" }
 foreach ($l in $ok)  { Check "silent at $l" (-not ($got -contains $l)) "got: $($got -join ',')" }
@@ -58,10 +61,11 @@ foreach ($l in $ok)  { Check "silent at $l" (-not ($got -contains $l)) "got: $($
 # positive control: the rule disabled must lose the must-fire lines
 $raw2 = & { $ErrorActionPreference = 'Continue'; & $exePath lint $use --db $db --rule $rule --disable $rule --json 2>$null }
 $f2 = @()
-try { $f2 = @(($raw2 -join "`n") | ConvertFrom-Json) } catch { $f2 = @() }
+try { $f2 = @((($raw2 -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $f2 = @() }
 $got2 = @($f2 | Where-Object { $_.rule_id -eq $rule -or $_.rule -eq $rule } | ForEach-Object { [int]$_.start_line })
 Check 'positive control: --disable removes the findings' ($got2.Count -eq 0) "got: $($got2 -join ',')"
 
 if ($script:fail) { Write-Host 'RESULT: FAIL'; exit 1 }
 Write-Host 'RESULT: PASS'
 exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

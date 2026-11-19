@@ -24,6 +24,12 @@ uses
 
 type
   /// <summary>One use of the target (a read or member access).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.HappensBefore.Events.pas) ?, declaration (DRagLint.Query.HappensBefore.Fields.pas) ?, DRagLint.Query.HappensBefore.Events.TCollector.Collect (DRagLint.Query.HappensBefore.Events.pas), DRagLint.Query.HappensBefore.Fields.TFieldSolver.LoadWrites (DRagLint.Query.HappensBefore.Fields.pas) ?, DRagLint.Query.HappensBefore.Fields.TFieldSolver.ReachBeforeWrite (DRagLint.Query.HappensBefore.Fields.pas) ? (+3 more)</para>
+  /// <para>Used in units: DRagLint.Query.HappensBefore, DRagLint.Query.HappensBefore.Events, DRagLint.Query.HappensBefore.Fields</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THbUse = record
     Site: THbSite;
     /// <summary>True for `Assigned(T)`, `T = nil`, `T &lt;&gt; nil` (and `nil = T`): the use tests
@@ -33,8 +39,14 @@ type
 
   /// <summary>Everything check-init knows about one target before ordering: the target, its writers
   /// and its uses.</summary>
-  /// <remarks>Writers are sorted by file, line, column; so are UseSites. A writer row with
-  /// Counts = False never helps to prove SET (assign-nil and every soft writer).</remarks>
+  /// <remarks>
+  /// Writers are sorted by file, line, column; so are UseSites. A writer row with
+  /// Counts = False never helps to prove SET (assign-nil and every soft writer).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.HappensBefore.Events.pas) ?, DRagLint.Query.HappensBefore.Events.TCollector.Collect (DRagLint.Query.HappensBefore.Events.pas), DRagLint.Query.HappensBefore.Events.TCollector.CollectDfmStream (DRagLint.Query.HappensBefore.Events.pas) ?, DRagLint.Query.HappensBefore.Events.TCollector.LoadTarget (DRagLint.Query.HappensBefore.Events.pas) ?, DRagLint.Query.HappensBefore.Events.TCollector.ResolveTarget (DRagLint.Query.HappensBefore.Events.pas) ? (+12 more)</para>
+  /// <para>Used in units: DRagLint.Query.HappensBefore, DRagLint.Query.HappensBefore.Events, DRagLint.Query.HappensBefore.Fields</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THbEvents = record
     Target: THbTarget;
     Writers: TArray<THbWriter>;
@@ -59,7 +71,8 @@ type
 /// file:line); a target that is not a unit variable, class var or instance field (local, parameter,
 /// record field, property, constant: one-line reason); --at naming no variable, several, or a
 /// different one than pTarget.</exception>
-/// <remarks>Read-only. A member access in write mode (`Other.F := x`, `TC.ClassVar := x`,
+/// <remarks>
+/// Read-only. A member access in write mode (`Other.F := x`, `TC.ClassVar := x`,
 /// `UnitName.GVar := x`) is a writer, never a use. `:= nil` and `FreeAndNil(T)` are how = assign-nil and never count (HB4: nil
 /// is the zero value of every type that accepts it). A var / out argument counts (as dcc's W1036
 /// does); the parameter mode comes from the callee's signature through the data_flows `arg` row,
@@ -67,7 +80,15 @@ type
 /// soft writer. A DFM-bound handler gets FiredBy (all bindings, ', '-joined) and CallerCount 0.
 /// v152 HBFIX: a property whose accessor IS the target field stands for the field -- `Obj.P := x`
 /// through `write F` is a counting writer, a read of P through `read F` is a use; an unresolved member
-/// write `X.F := ..` / `X.P := ..` (receiver type unknown) is a soft writer.</remarks>
+/// write `X.F := ..` / `X.P := ..` (receiver type unknown) is a soft writer.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.HappensBefore.CheckInit (DRagLint.Query.HappensBefore.pas)</para>
+/// <para>Calls: DRagLint.Query.HappensBefore.Events.TCollector.Collect, DRagLint.Query.HappensBefore.Events.TCollector.Create</para>
+/// <para>Returns: C.Collect(pTarget, pAt)</para>
+/// <seealso cref="DRagLint.Query.HappensBefore.Events.TCollector.Collect"/>
+/// <seealso cref="DRagLint.Query.HappensBefore.Events.TCollector.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CollectEvents(const pIndex: TChartsIndex; const pTarget: string; const pAt: THbSite): THbEvents;
 
 /// <summary>Whether the events allow the verdict NEVER-SET (spec 6.2, the parts the events decide).</summary>
@@ -77,6 +98,14 @@ function CollectEvents(const pIndex: TChartsIndex; const pTarget: string; const 
 /// when the answer is True or a counting writer exists.</param>
 /// <returns>True when no writer of any kind exists and the target is neither published nor an
 /// overlay. Index completeness is the solver's check, not this one.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.HappensBefore.CheckInit (DRagLint.Query.HappensBefore.pas), DRagLint.Query.HappensBefore.Fields.TFieldSolver.Run (DRagLint.Query.HappensBefore.Fields.pas)</para>
+/// <para>Returns: (Length(pEvents.Writers) = 0) and not pEvents.IsPublished and not pEvents.AbsoluteOverlay</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 14 lines (full implementation)</para>
+/// <para>Mutates: pBlockers (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HbIsNeverSet(const pEvents: THbEvents; out pBlockers: TArray<THbReason>): Boolean;
 
 implementation

@@ -50,7 +50,7 @@ try {
        "join files f on f.id = r.file_id left join symbols s on s.id = r.symbol_id " +
        "where f.path like '%uT3Use.pas' and r.kind in ('type_use','member-access')"
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --query $q --db $Db --json 2>$null }) -join "`n"
-  $js  = $raw | ConvertFrom-Json
+  $js  = $raw | ConvertFrom-Json | ForEach-Object { $_ }
   $cols = @($js.columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
   $rows = @(foreach ($r in $js.rows) { $o = [ordered]@{}; for ($i = 0; $i -lt $cols.Count; $i++) { $o[$cols[$i]] = $r[$i] }; [pscustomobject]$o })
   if ($rows.Count -lt 10) { Write-Host "FATAL: only $($rows.Count) refs read -- shape changed? raw: $raw" -ForegroundColor Red; exit 2 }

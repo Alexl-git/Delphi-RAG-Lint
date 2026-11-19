@@ -69,7 +69,7 @@ const
 /// on a variable either of them may have inherited differently. Caught by
 /// running it, not by reading it.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoIdeRelease (DRagLint.CLI.pas), DRagLint.Core.EngineHold.EngineIsHeld (DRagLint.Core.EngineHold.pas), DRagLint.Core.EngineHold.HoldEngine (DRagLint.Core.EngineHold.pas), DRagLint.Core.EngineHold.ReleaseEngineHold (DRagLint.Core.EngineHold.pas)</para>
+/// <para>Called from: DRagLint.CLI.Shutdown.DoIdeRelease (DRagLint.CLI.Shutdown.pas), DRagLint.Core.EngineHold.EngineIsHeld (DRagLint.Core.EngineHold.pas), DRagLint.Core.EngineHold.HoldEngine (DRagLint.Core.EngineHold.pas), DRagLint.Core.EngineHold.ReleaseEngineHold (DRagLint.Core.EngineHold.pas)</para>
 /// <para>Calls: DRagLint.Core.EngineHold.EngineHoldDir</para>
 /// <para>Returns: TPath.Combine(EngineHoldDir, HOLD_FILE_NAME)</para>
 /// <para>Touches: file system</para>
@@ -91,7 +91,7 @@ function EngineHoldFilePath: string;
 /// observes it on its status timer. A caller that needs the lock gone must
 /// still wait for it.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoIdeRelease (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.Shutdown.DoIdeRelease (DRagLint.CLI.Shutdown.pas)</para>
 /// <para>Calls: DRagLint.Core.EngineHold.EngineHoldDir, DRagLint.Core.EngineHold.EngineHoldFilePath, DRagLint.Core.EngineHold.NowEpochUtc, IntToStr</para>
 /// <para>Returns: True; False</para>
 /// <para>Catches: Exception (swallowed)</para>
@@ -110,7 +110,7 @@ function HoldEngine(ASeconds: Integer; out AError: string): Boolean;
 /// begin with, which is a success, not an error.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoIdeRelease (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.Shutdown.DoIdeRelease (DRagLint.CLI.Shutdown.pas)</para>
 /// <para>Calls: DRagLint.Core.EngineHold.EngineHoldFilePath</para>
 /// <para>Returns: True; False</para>
 /// <para>Catches: Exception (swallowed)</para>
@@ -129,7 +129,7 @@ function ReleaseEngineHold(out AError: string): Boolean;
 /// Cheap enough to call from a 1 s UI timer: one stat and one short
 /// read. Never raises.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: [drag-lint]DRagLint.CLI.DoIdeRelease (DRagLint.CLI.pas), [dclDragLintWizard]DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas), [dclDragLintWizard]DragLint.Plugin.JobQueue.TDragLintJobQueue.WaitWhileEngineHeld (DragLint.Plugin.JobQueue.pas), [dclDragLintWizard]DragLint.Plugin.StatusBar.TDragLintStatusBar.PollEngineHold (DragLint.Plugin.StatusBar.pas)</para>
+/// <para>Called from: [drag-lint]DRagLint.CLI.Shutdown.DoIdeRelease (DRagLint.CLI.Shutdown.pas), [dclDragLintWizard]DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas), [dclDragLintWizard]DragLint.Plugin.JobQueue.TDragLintJobQueue.WaitWhileEngineHeld (DragLint.Plugin.JobQueue.pas), [dclDragLintWizard]DragLint.Plugin.StatusBar.TDragLintStatusBar.PollEngineHold (DragLint.Plugin.StatusBar.pas)</para>
 /// <para>Calls: DRagLint.Core.EngineHold.EngineHoldFilePath, DRagLint.Core.EngineHold.NowEpochUtc, Integer, Trim, TryStrToInt64</para>
 /// <para>Returns: False; True</para>
 /// <para>Catches: Exception (empty); Exception (swallowed)</para>
@@ -217,7 +217,8 @@ begin
   try
     { "Nothing to release" is the desired end state, so it is a success. A
       caller scripting this should not have to special-case the common case. }
-    if TFile.Exists(EngineHoldFilePath) then TFile.Delete(EngineHoldFilePath);
+    if (not System.SysUtils.DeleteFile(EngineHoldFilePath))
+       and (GetLastError <> ERROR_FILE_NOT_FOUND) and (GetLastError <> ERROR_PATH_NOT_FOUND) then RaiseLastOSError;
     Result:= True;
   except
     on E: Exception do

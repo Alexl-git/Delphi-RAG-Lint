@@ -83,6 +83,18 @@ type
     [Test] procedure FolderTargetIndexIsNeverAccepted;
   end;
 
+  /// <summary>Pins which question a Reports menu click asks (1.51.2 RPT): the
+  /// index bound when the item was built, never the click's Sender or the
+  /// item's Tag, which the IDE's main menu does not hand back intact.</summary>
+  [TestFixture]
+  TReportClickTests = class
+  public
+    [Test] procedure NonMenuSenderStillAsksTheBoundQuestion;
+    [Test] procedure OverwrittenTagStillAsksTheBoundQuestion;
+    [Test] procedure EveryCatalogIndexResolves;
+    [Test] procedure OutOfRangeIndexSaysWhy;
+  end;
+
 implementation
 
 uses
@@ -94,6 +106,7 @@ uses
   , System.RegularExpressions
   , Winapi.Windows
   , Winapi.ShellAPI
+  , Vcl.Menus
   , DragLint.Plugin.ReportText
   ;
 
@@ -699,8 +712,81 @@ begin
   Assert.AreEqual(0, Integer(Length(ParseReindexCommands(''))));
 end;
 
+{ ---- TReportClickTests ---- }
+
+const
+  ROUND_TRIP_ID = 'round-trip';
+  { what an IDE-side owner could leave in a TMenuItem.Tag: a pointer-sized value }
+  FOREIGN_TAG = $7FFF0000;
+
+function IndexOfQuestion(const pId: string): Integer;
+begin
+  for var I: Integer:= Low(REPORT_QUESTIONS) to High(REPORT_QUESTIONS) do
+    if REPORT_QUESTIONS[I].Id = pId then Exit(I);
+  Result:= -1;
+end;
+
+procedure TReportClickTests.NonMenuSenderStillAsksTheBoundQuestion;
+var
+  Sender : TObject;
+  Q      : TReportQuestion;
+  Problem: string;
+begin
+  Sender:= TObject.Create; { e.g. an action-bar client item, not a TMenuItem }
+  try
+    Assert.IsTrue(ReportClickQuestion(Sender, IndexOfQuestion(ROUND_TRIP_ID), Q, Problem), Problem);
+    Assert.AreEqual(ROUND_TRIP_ID, Q.Id);
+    Assert.AreEqual('', Problem);
+  finally
+    Sender.Free;
+  end;
+end;
+
+procedure TReportClickTests.OverwrittenTagStillAsksTheBoundQuestion;
+var
+  Item   : TMenuItem;
+  Q      : TReportQuestion;
+  Problem: string;
+begin
+  Item:= TMenuItem.Create(nil);
+  try
+    Item.Tag:= FOREIGN_TAG;
+    Assert.IsTrue(ReportClickQuestion(Item, IndexOfQuestion(ROUND_TRIP_ID), Q, Problem), Problem);
+    Assert.AreEqual(ROUND_TRIP_ID, Q.Id);
+    Item.Tag:= 0; { a Tag reset to 0 must not turn every item into the first question }
+    Assert.IsTrue(ReportClickQuestion(Item, IndexOfQuestion(ROUND_TRIP_ID), Q, Problem), Problem);
+    Assert.AreEqual(ROUND_TRIP_ID, Q.Id);
+  finally
+    Item.Free;
+  end;
+end;
+
+procedure TReportClickTests.EveryCatalogIndexResolves;
+var
+  Q      : TReportQuestion;
+  Problem: string;
+begin
+  for var I: Integer:= Low(REPORT_QUESTIONS) to High(REPORT_QUESTIONS) do
+  begin
+    Assert.IsTrue(ReportClickQuestion(nil, I, Q, Problem), Format('index %d: %s', [I, Problem]));
+    Assert.AreEqual(REPORT_QUESTIONS[I].Id, Q.Id);
+  end;
+end;
+
+procedure TReportClickTests.OutOfRangeIndexSaysWhy;
+var
+  Q      : TReportQuestion;
+  Problem: string;
+begin
+  Assert.IsFalse(ReportClickQuestion(nil, Low(REPORT_QUESTIONS) - 1, Q, Problem));
+  Assert.IsTrue(Problem <> '', 'a refused click must say why');
+  Assert.IsFalse(ReportClickQuestion(nil, High(REPORT_QUESTIONS) + 1, Q, Problem));
+  Assert.IsTrue(Problem <> '', 'a refused click must say why');
+end;
+
 initialization  TDUnitX.RegisterTestFixture(TReportCatalogTests);
   TDUnitX.RegisterTestFixture(TReportFormatterTests);
   TDUnitX.RegisterTestFixture(TReportGlueTests);
+  TDUnitX.RegisterTestFixture(TReportClickTests);
 
 end.

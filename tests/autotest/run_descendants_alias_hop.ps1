@@ -180,14 +180,14 @@ function Descendants([string]$Of) {
   $code = $LASTEXITCODE
   $json = JsonFrom $raw
   $names = @()
-  if ($json) { $names = @(($json | ConvertFrom-Json).descendants) }
+  if ($json) { $names = @(($json | ConvertFrom-Json | ForEach-Object { $_ }).descendants) }
   return @{ Code = $code; Names = $names }
 }
 function Descends([string]$Name, [string]$Of) {
   $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query ancestors --name $Name --of $Of --json --db $db 2>$null }) | ForEach-Object { "$_" }
   $json = JsonFrom $raw
   if (-not $json) { return $null }
-  return [bool](($json | ConvertFrom-Json).is_descendant)
+  return [bool](($json | ConvertFrom-Json | ForEach-Object { $_ }).is_descendant)
 }
 
 # --- preconditions: the index holds the rows a query-time walk needs -----------

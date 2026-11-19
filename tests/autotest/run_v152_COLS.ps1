@@ -116,7 +116,7 @@ function Session([array]$Reqs) {
     -RedirectStandardOutput $outF -RedirectStandardError (Join-Path $WorkDir 'err.txt') -NoNewWindow -Wait | Out-Null
   $r = @{ res = @{}; err = @{} }
   foreach ($mm in [regex]::Matches([IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -gt 10) {
       if ($null -ne $o.error) { $r.err[[int]$o.id] = $o.error }
       elseif ($o.PSObject.Properties.Name -contains 'result') { $r.res[[int]$o.id] = ,$o.result }
@@ -142,9 +142,9 @@ $s = Session @(
   @{ method='textDocument/definition'; line=$lAFoo; col=($cAFoo + 1) },
   @{ method='textDocument/rename'; line=$lBFoo; col=($cBFoo + 1); newName='Bar' }
 )
-$d1 = DefLines $s.res[11]
+$d1 = @(DefLines $s.res[11])
 Check 'L1: definition on B.Foo after four non-ASCII chars names Foo (TB.Foo among the answers)' (($d1 -contains $lTBIntf) -or ($d1 -contains $lTBDecl)) "got lines $($d1 -join ',') (TB: $lTBIntf/$lTBDecl, TA: $lTAIntf/$lTADecl)"
-$d2 = DefLines $s.res[12]
+$d2 = @(DefLines $s.res[12])
 Check 'L3: control -- definition on A.Foo (ASCII line) names Foo' (($d2 -contains $lTADecl) -or ($d2 -contains $lTAIntf)) "got lines $($d2 -join ',')"
 $edits = @()
 if ($s.res.ContainsKey(13) -and $null -ne $s.res[13][0]) {
@@ -235,7 +235,7 @@ end.
   & { $ErrorActionPreference = 'Continue'; & $Exe index $srcU --db $dbU 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $oU = & { $ErrorActionPreference = 'Continue'; & $Exe unwith --db $dbU --library-db $LibraryDb --in $fileU --plan --json 2>&1 | ForEach-Object { "$_" } }
   $jU = ($oU | Where-Object { $_ -like '{*' } | Select-Object -Last 1)
-  $pU = $null; try { $pU = $jU | ConvertFrom-Json } catch { }
+  $pU = $null; try { $pU = $jU | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   $bU = @(if ($pU) { $pU.sites | ForEach-Object { $_.bindings } })
   Check 'U1: the with-site is a candidate (nothing refused)' ($null -ne $pU -and $pU.candidates -eq 1 -and $pU.refused -eq 0) "plan: $jU"
   Check 'U2: Alpha (after the non-ASCII comment) and Beta are both bound and prefixed' (

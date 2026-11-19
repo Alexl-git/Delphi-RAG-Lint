@@ -147,7 +147,7 @@ try {
        "FROM refs r JOIN symbols enc ON enc.id = r.enclosing_symbol_id " +
        "LEFT JOIN member_accesses ma ON ma.ref_id = r.id LEFT JOIN symbols m ON m.id = ma.member_symbol_id " +
        "LEFT JOIN symbols a ON a.id = ma.accessor_symbol_id WHERE r.kind = 'member-access'"
-  $j = & $exePath sql --db $db --query $q --json | Out-String | ConvertFrom-Json
+  $j = & $exePath sql --db $db --query $q --json | Out-String | ConvertFrom-Json | ForEach-Object { $_ }
   $cols = @($j.columns | ForEach-Object { $_.name })
   $m = @{}
   foreach ($row in $j.rows) {
