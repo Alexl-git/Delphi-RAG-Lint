@@ -24486,6 +24486,8 @@ var
 { try one edit on a fresh copy, compile it, accept into Work only if it adds
     no new error vs the baseline. AKind: 'move' | 'remove'. }
   function TryEdit(const AUnitName: string; AEntryLine: Integer; const AKind: string): Boolean;
+  const
+    USESFIX_GUID_CHARS = 8; { hex chars of the GUID kept in the per-edit shadow dir name }
   var
     Trial    : TStringList        ;
     ShadowDir: string             ;
@@ -24508,11 +24510,22 @@ var
         Work:= Saved;
       end;
 
-      ShadowDir:= TPath.Combine(TPath.GetTempPath, 'draglint_usesfix');
+      { 1.52.1 SMALLS: a per-process, per-edit shadow dir (pid + guid), removed after the compile --
+        the old fixed %TEMP%\draglint_usesfix made two concurrent uses-fix runs overwrite each other's
+        copy of the unit (EFCreateError / a verdict on the other run's text). }
+      ShadowDir:= TPath.Combine(TPath.GetTempPath, Format('draglint_usesfix_%d_%s', [GetCurrentProcessId, Copy(TGUID.NewGuid.ToString, 2, USESFIX_GUID_CHARS)]));
       TDirectory.CreateDirectory(ShadowDir);
-      Trial.SaveToFile(TPath.Combine(ShadowDir, ExtractFileName(SrcPath)));
-
-      Res:= CompileUnitInContext(SrcPath, Proj, Plat, ShadowDir);
+      try
+        Trial.SaveToFile(TPath.Combine(ShadowDir, ExtractFileName(SrcPath)));
+        Res:= CompileUnitInContext(SrcPath, Proj, Plat, ShadowDir);
+      finally
+        try
+          TDirectory.Delete(ShadowDir, True);
+        except
+          on E: Exception do { best-effort scratch cleanup: a locked file must not change the verdict, but is told }
+            Writeln(ErrOutput, 'NOTE: uses-fix: could not remove ', ShadowDir, ': ', E.Message);
+        end;
+      end;
 
       { SAFETY GUARD: a Fatal (F-code) means the compile ABORTED -- usually on a
         dependency it couldn't resolve in this single-unit context -- BEFORE it
