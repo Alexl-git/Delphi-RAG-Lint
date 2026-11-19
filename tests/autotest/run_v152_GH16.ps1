@@ -8,7 +8,10 @@
   The fixture bytes are written from code points so this file stays 7-bit ASCII. pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
 function Check($n, $ok, $d) {
@@ -42,7 +45,7 @@ $bom  = 'EF BB BF'
 $bomx = 'C3 AF C2 BB C2 BF'
 Push-Location $work
 try {
-  & $exe index $fx --db $db *> $null
+  & { $ErrorActionPreference = 'Continue'; & $exe index $fx --db $db *> $null }
   Check 'fixture indexed' ($LASTEXITCODE -eq 0 -and (Test-Path $db)) "exit $LASTEXITCODE"
 
   $h = Hex (RunBytes @('context', '--task', 'modify Painter.PaintCircle', '--format', 'md', '--output-encoding', 'utf8', '--db', $db))

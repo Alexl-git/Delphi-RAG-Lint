@@ -24,6 +24,10 @@ resolver 1.28.0 -> 1.29.0-alpha.
   first expensive phase (program init orders computed once, deadline checks in the field solver, receiver proof and
   use walks): a hover on the drag-lint index took 7-12 s, now 5.3-6.4 s at a 5 s cap, and uses past the deadline say
   'stopped on budget'. `DRAGLINT_PROFILE` prints a `used-in directions` timer line.
+- GitHub issues (lane GHTRIAGE): #14 `impact` walks RESOLVED callers, so a same-named routine of another class is
+  no longer counted, and a qname naming no symbol exits 1; #15 `context` drops DFM bindings of other forms; #16
+  source reads honour a UTF-8 BOM (no double-encoded text in declarations and slices); #19 `usages --width wide`
+  restricts its transitive-caller CTE to container kinds (was quadratic on large indexes).
 - `allow --apply` on a wrapped statement whose `dl:ok` marker sat on a continuation line (a superseded marker) moved
   the marker to the anchor line with an EMPTY reason, so the reviewer's text vanished silently (INT14 tail). The
   reason now moves with it; its `REVIEWED <date>` stamp is dropped with the same note a stale re-hash prints (a

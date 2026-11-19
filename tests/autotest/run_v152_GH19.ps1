@@ -11,7 +11,10 @@
   pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe", [int]$N = 20)
+param([string]$Exe = '', [int]$N = 20)
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
 function Check($n, $ok, $d) {
@@ -35,10 +38,10 @@ for ($u = 1; $u -le $N; $u++) {
 $db = Join-Path $work 'u.sqlite'
 Push-Location $work
 try {
-  & $exe index $fx --db $db *> $null
+  & { $ErrorActionPreference = 'Continue'; & $exe index $fx --db $db *> $null }
   Check 'fixture indexed' ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
-  $wid = (& $exe usages --name TThing --width wide --depth 2 --format json --limit 50 --db $db 2>$null | Out-String) | ConvertFrom-Json
-  $nar = (& $exe usages --name TThing --width narrow --format json --limit 50 --db $db 2>$null | Out-String) | ConvertFrom-Json
+  $wid = (& { $ErrorActionPreference = 'Continue'; & $exe usages --name TThing --width wide --depth 2 --format json --limit 50 --db $db 2>$null } | Out-String) | ConvertFrom-Json
+  $nar = (& { $ErrorActionPreference = 'Continue'; & $exe usages --name TThing --width narrow --format json --limit 50 --db $db 2>$null } | Out-String) | ConvertFrom-Json
   $cap = 11 * $N + 5
   $d1 = @($wid.impact | Where-Object { $_.depth -eq 1 })[0].callers
   $d2 = @($wid.impact | Where-Object { $_.depth -eq 2 })

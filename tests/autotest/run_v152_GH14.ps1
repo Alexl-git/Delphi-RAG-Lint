@@ -11,7 +11,10 @@
   Run from a NEUTRAL CWD, pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
 function Check($n, $ok, $d) {
@@ -79,27 +82,27 @@ end.
 $db = Join-Path $work 'fx.sqlite'
 Push-Location $work
 try {
-  & $exe index $fx --db $db *> $null
+  & { $ErrorActionPreference = 'Continue'; & $exe index $fx --db $db *> $null }
   Check 'fixture indexed' ($LASTEXITCODE -eq 0 -and (Test-Path $db)) "exit $LASTEXITCODE"
 
-  $o = (& $exe impact --qname Shapes.TCircle.Draw --depth 1 --db $db 2>&1 | Out-String); $rc = $LASTEXITCODE
+  $o = (& { $ErrorActionPreference = 'Continue'; & $exe impact --qname Shapes.TCircle.Draw --depth 1 --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String); $rc = $LASTEXITCODE
   Check 'TCircle.Draw: 2 callers in 2 units, exit 0' (($o -match 'Depth 1:\s+2 callers in 2 units') -and $rc -eq 0) "exit $rc / $($o.Trim())"
 
-  $o = (& $exe impact --qname Shapes.TSquare.Draw --depth 1 --db $db 2>&1 | Out-String); $rc = $LASTEXITCODE
+  $o = (& { $ErrorActionPreference = 'Continue'; & $exe impact --qname Shapes.TSquare.Draw --depth 1 --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String); $rc = $LASTEXITCODE
   Check 'TSquare.Draw: 1 caller in 1 unit' (($o -match 'Depth 1:\s+1 callers? in 1 units?') -and $rc -eq 0) "exit $rc / $($o.Trim())"
 
-  $j = (& $exe impact --qname Shapes.TCircle.Draw --depth 1 --format json --db $db 2>$null | Out-String)
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exe impact --qname Shapes.TCircle.Draw --depth 1 --format json --db $db 2>$null } | Out-String)
   $ok = $false
   try { $p = $j | ConvertFrom-Json; $ok = ($p.levels[0].callers -eq 2 -and $p.levels[0].units -eq 2) } catch { }
   Check 'json levels[0] = 2 callers / 2 units' $ok $j.Trim()
 
-  $fc = (& $exe query find-callers --name TCircle.Draw --resolved --db $db 2>&1 | Out-String)
+  $fc = (& { $ErrorActionPreference = 'Continue'; & $exe query find-callers --name TCircle.Draw --resolved --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check 'agrees with find-callers --resolved (2 callers)' ($fc -match '2 callers') $fc.Trim()
 
-  $o = (& $exe impact --qname NoSuchUnit.TNothing.Draw --depth 1 --db $db 2>&1 | Out-String); $rc = $LASTEXITCODE
+  $o = (& { $ErrorActionPreference = 'Continue'; & $exe impact --qname NoSuchUnit.TNothing.Draw --depth 1 --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String); $rc = $LASTEXITCODE
   Check 'unknown qname: exit 1, no caller count' ($rc -eq 1 -and $o -notmatch 'callers in' -and $o -match 'NoSuchUnit\.TNothing\.Draw') "exit $rc / $($o.Trim())"
 
-  $o = (& $exe impact --qname Shapes.TCircle.Draw --depth 2 --db $db 2>&1 | Out-String); $rc = $LASTEXITCODE
+  $o = (& { $ErrorActionPreference = 'Continue'; & $exe impact --qname Shapes.TCircle.Draw --depth 2 --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String); $rc = $LASTEXITCODE
   Check 'positive control: depth 2 reaches Client.Go (1 caller)' ($o -match 'Depth 2:\s+1 callers? in 1 units?') "exit $rc / $($o.Trim())"
 }
 finally {

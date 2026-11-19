@@ -8,7 +8,10 @@
   Run from a NEUTRAL CWD, pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
 function Check($n, $ok, $d) {
@@ -70,17 +73,17 @@ end
 $db = Join-Path $work 'fx.sqlite'
 Push-Location $work
 try {
-  & $exe index $fx --db $db *> $null
+  & { $ErrorActionPreference = 'Continue'; & $exe index $fx --db $db *> $null }
   Check 'fixture indexed' ($LASTEXITCODE -eq 0 -and (Test-Path $db)) "exit $LASTEXITCODE"
 
-  $a = (& $exe context --task "modify FormA.TFormA.FormShow" --format md --max-callers 20 --db $db 2>&1 | Out-String)
+  $a = (& { $ErrorActionPreference = 'Continue'; & $exe context --task "modify FormA.TFormA.FormShow" --format md --max-callers 20 --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $callersA = ([regex]::Matches($a, '(?m)^- .*?\\(\w+)\.dfm:') | ForEach-Object { $_.Groups[1].Value }) -join ','
   Check 'TFormA.FormShow: FormA.dfm listed' ($callersA -match '\bFormA\b') $callersA
   Check 'TFormA.FormShow: FormA2.dfm (descendant) listed' ($callersA -match '\bFormA2\b') $callersA
   Check 'TFormA.FormShow: FormB.dfm NOT listed' ($callersA -notmatch '\bFormB\b') $callersA
   Check 'control: unknown root class (Orphan.dfm) kept' ($callersA -match '\bOrphan\b') $callersA
 
-  $b = (& $exe context --task "modify FormB.TFormB.FormShow" --format md --max-callers 20 --db $db 2>&1 | Out-String)
+  $b = (& { $ErrorActionPreference = 'Continue'; & $exe context --task "modify FormB.TFormB.FormShow" --format md --max-callers 20 --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $callersB = ([regex]::Matches($b, '(?m)^- .*?\\(\w+)\.dfm:') | ForEach-Object { $_.Groups[1].Value }) -join ','
   Check 'TFormB.FormShow: FormB.dfm listed, FormA / FormA2 not' (($callersB -match '\bFormB\b') -and ($callersB -notmatch '\bFormA2?\b')) $callersB
 }
