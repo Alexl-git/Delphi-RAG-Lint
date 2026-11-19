@@ -145,7 +145,8 @@ try {
   Check 'B: doc-drift reports stale blocks' ($drift.Count -ge 2) ("lines=" + (($drift | ForEach-Object { $_.start_line }) -join ','))
 
   # ---- Part C: the invariant -------------------------------------------------
-  & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --fix --apply --no-backup 2>$null } | Out-Null
+  # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+  & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --fix --apply --no-compile-gate --no-backup 2>$null } | Out-Null
   $codeAfter = CodeLines
   $same = ($codeBefore.Count -eq $codeAfter.Count) -and (@(Compare-Object $codeBefore $codeAfter -SyncWindow 0).Count -eq 0)
   Check 'C: --fix left every non-/// line intact and in order' $same `

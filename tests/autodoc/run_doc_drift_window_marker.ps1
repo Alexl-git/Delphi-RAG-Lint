@@ -319,7 +319,8 @@ try {
   Check 'CASE-CONFIDENCE the fix is refused' ($t8 -match 'not auto-fixed') $t8.Trim()
 
   # --- end to end: --fix --apply repairs the vouched ones, preserves the rest -
-  $null = Run @('lint-all', '--db', $db, '--rule', 'doc-drift', '--fix', '--apply')
+  # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+  $null = Run @('lint-all', '--db', $db, '--rule', 'doc-drift', '--fix', '--apply', '--no-compile-gate')
   $after1 = BlockAbove $tgt '^procedure Target;'
   $after2 = BlockAbove $tgt '^procedure Target2;'
   $after3 = BlockAbove $tgt '^procedure Target3;'

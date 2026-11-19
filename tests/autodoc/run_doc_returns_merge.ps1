@@ -54,19 +54,19 @@ try {
   $lines = [IO.File]::ReadAllLines($target)
 
   # Pick overloads (free functions)
-  $pickInt = (@(DocBlockAbove $lines '^function Pick\(A: Integer\)')) -join "`n"
-  $pickStr = (@(DocBlockAbove $lines '^function Pick\(const A: string\)')) -join "`n"
+  $pickInt = (DocBlockAbove $lines '^function Pick\(A: Integer\)') -join "`n"
+  $pickStr = (DocBlockAbove $lines '^function Pick\(const A: string\)') -join "`n"
   Check 'Pick(Integer) has an Overload line' ($pickInt -match 'Overload \d of 2')
   Check 'Pick(string) has an Overload line'  ($pickStr -match 'Overload \d of 2')
   Check 'no spurious self Calls: Pick'        (-not ($pickInt -match 'Calls:.*\bPick\b'))
 
   # Doubler: hand returns preserved + Returns fact line added
-  $dbl = (@(DocBlockAbove $lines '^function Doubler\(')) -join "`n"
+  $dbl = (DocBlockAbove $lines '^function Doubler\(') -join "`n"
   Check 'Doubler keeps its hand-written <returns>' ($dbl -match '<returns>The doubled value\.</returns>')
   Check 'Doubler gains a managed Returns: fact line' ($dbl -match 'Returns: X \* 2')
 
   # Flag: mined cases in the <returns> tag, NO fact line
-  $flag = (@(DocBlockAbove $lines '^function Flag\(')) -join "`n"
+  $flag = (DocBlockAbove $lines '^function Flag\(') -join "`n"
   Check 'Flag has Observed cases in the <returns> tag' ($flag -match [regex]::Escape('<returns><!-- drag-lint:auto -->') + '(?:[^<]*-- )?Observed:.*</returns>')
   Check 'Flag has NO separate Returns: fact line'       (-not ($flag -match '///\s*Returns:'))
 
