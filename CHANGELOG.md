@@ -26,6 +26,11 @@ resolver 1.28.0 -> 1.29.0-alpha.
   first expensive phase (program init orders computed once, deadline checks in the field solver, receiver proof and
   use walks): a hover on the drag-lint index took 7-12 s, now 5.3-6.4 s at a 5 s cap, and uses past the deadline say
   'stopped on budget'. `DRAGLINT_PROFILE` prints a `used-in directions` timer line.
+- One-file incremental index is faster (GitHub #18, lane INCR18, owner ruling: in 1.52): the scoped resolve pass keeps
+  local / parameter names out of the changed-name scope (unless the changed file hosts or is an include, or
+  `DRAGLINT_SCOPED_LOCAL_NAMES=1`) and collects the scoped ref ids once. One file on the drag-lint index: call
+  resolution 32.6 -> 4.1 s, wall 68.4 -> 34.6 s; scoped incremental = full reindex, 0 diff rows (`run_v1521_INCR18`).
+  The compile-closure walk (~7 s) and the purity stage (~19 s) still run whole; they are the rest of #18 (1.52.1).
 - GitHub issues (lane GHTRIAGE): #14 `impact` walks RESOLVED callers, so a same-named routine of another class is
   no longer counted, and a qname naming no symbol exits 1; #15 `context` drops DFM bindings of other forms; #16
   source reads honour a UTF-8 BOM (no double-encoded text in declarations and slices); #19 `usages --width wide`

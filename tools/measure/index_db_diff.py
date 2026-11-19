@@ -22,7 +22,7 @@ CHANGED and their own groups are excluded; rows in OTHER files that differ
 because they point into a changed file are still reported, marked as such.
 
 usage: python index_db_diff.py <a.sqlite> <b.sqlite> [--show N]
-exit 0 = identical (outside changed sources), 1 = differences found.
+exit 0 = identical (outside changed sources), 1 = differences found, 2 = a table has no comparison.
 """
 import hashlib
 import sqlite3
@@ -38,6 +38,15 @@ def SK(a, f):
 
 def SYM(a, f, col):
     return "LEFT JOIN symbols %s ON %s.id = %s LEFT JOIN files %s ON %s.id = %s.file_id" % (a, a, col, f, f, a)
+
+def RK(a, f):
+    """Natural key of the ref aliased `a`, whose file is aliased `f` (the file's path comes first)."""
+    return "lower(%s.path), %s.kind, %s.name_text, %s.start_line, %s.start_col, %s.end_line, %s.end_col" % (
+        f, a, a, a, a, a, a)
+
+
+def REF(a, f, col):
+    return "JOIN refs %s ON %s.id = %s JOIN files %s ON %s.id = %s.file_id" % (a, a, col, f, f, a)
 
 
 # name -> (select list with the GROUP expression first, FROM/JOIN clause, group expression)
@@ -112,8 +121,62 @@ TABLES = {
     'compiler_findings': (
         "lower(coalesce(f.path, c.raw_path)), c.raw_path, c.code, c.severity, c.line_no, c.col_no, c.message",
         "compiler_findings c LEFT JOIN files f ON f.id = c.file_id", "lower(coalesce(f.path, c.raw_path))"),
-    'schema_meta': ("'*', key, value", "schema_meta WHERE key NOT LIKE '%_unix' AND key <> 'closure_cache_fp'", None),
+    # prop_types_filled is '<version>;<unix time of the fill>': the version is compared, the time is not.
+    'schema_meta': ("'*', key, CASE WHEN key = 'prop_types_filled' AND instr(value, ';') > 0 "
+                    "THEN substr(value, 1, instr(value, ';')) ELSE value END", "schema_meta WHERE key NOT LIKE '%_unix' AND key <> 'closure_cache_fp'", None),
+    # 1.52.1 INCR18: the tables the resolve pass and the later extractors added since this tool
+    # was written. Without them the tool stopped at the first one ('attributes') with exit 1 --
+    # the same code as "differences found".
+    'ref_types': (
+        RK('r', 'f') + ", x.type_qname, x.via, " + SK('t', 'tf'),
+        "ref_types x " + REF('r', 'f', 'x.ref_id') + " " + SYM('t', 'tf', 'x.type_symbol_id'), "lower(f.path)"),
+    'ref_element_types': (
+        RK('r', 'f') + ", x.type_qname, " + SK('t', 'tf'),
+        "ref_element_types x " + REF('r', 'f', 'x.ref_id') + " " + SYM('t', 'tf', 'x.type_symbol_id'), "lower(f.path)"),
+    'ref_receivers': (
+        RK('r', 'f') + ", " + RK('q', 'qf'),
+        "ref_receivers x " + REF('r', 'f', 'x.ref_id') + " " + REF('q', 'qf', 'x.receiver_ref_id'), "lower(f.path)"),
+    'ref_host_bindings': (
+        RK('r', 'f') + ", lower(hf.path), " + SK('t', 'tf'),
+        "ref_host_bindings x " + REF('r', 'f', 'x.ref_id') + " JOIN files hf ON hf.id = x.host_file_id "
+        + SYM('t', 'tf', 'x.symbol_id'), "lower(f.path)"),
+    'classref_args': (
+        RK('r', 'f') + ", x.arg_index, x.confidence, " + SK('p', 'pf') + ", " + SK('c', 'cf'),
+        "classref_args x " + REF('r', 'f', 'x.ref_id') + " " + SYM('p', 'pf', 'x.param_symbol_id') + " "
+        + SYM('c', 'cf', 'x.class_symbol_id'), "lower(f.path)"),
+    'data_flows': (
+        "lower(f.path), " + SK('s', 'sf') + ", " + SK('o', 'of') + ", x.dst_kind, x.dst_line, x.dst_col, x.dst_index, "
+        "x.dst_name, x.dst_receiver, x.src_kind, x.src_index, x.src_line, x.src_col, x.src_name, x.via_local, x.cond",
+        "data_flows x JOIN files f ON f.id = x.file_id " + SYM('s', 'sf', 'x.symbol_id') + " "
+        + SYM('o', 'of', 'x.owner_id'), "lower(f.path)"),
+    'dispatch_edges': (
+        SK('b', 'f') + ", x.kind, x.confidence, " + SK('i', 'xf'),
+        "dispatch_edges x JOIN symbols b ON b.id = x.base_symbol_id JOIN files f ON f.id = b.file_id "
+        + SYM('i', 'xf', 'x.impl_symbol_id'), "lower(f.path)"),
+    'inc_variants': (
+        "lower(f.path), lower(hf.path), x.variant, x.ctx_sha",
+        "inc_variants x JOIN files f ON f.id = x.file_id JOIN files hf ON hf.id = x.host_file_id", "lower(f.path)"),
+    'dfm_objects': (
+        "lower(f.path), x.ordinal, x.name, x.class_name, x.parent_name, x.obj_kind, x.depth, x.start_line, "
+        "x.start_col, x.end_line, x.end_col, " + SK('t', 'tf'),
+        "dfm_objects x JOIN files f ON f.id = x.file_id " + SYM('t', 'tf', 'x.symbol_id'), "lower(f.path)"),
+    'attributes': (
+        "lower(f.path), x.ordinal, x.attr_name, x.arg_text, x.line, x.col, " + SK('t', 'tf'),
+        "attributes x JOIN files f ON f.id = x.file_id " + SYM('t', 'tf', 'x.symbol_id'), "lower(f.path)"),
+    'comment_facts': (
+        "lower(f.path), x.ordinal, x.start_offset, x.end_offset, x.line, x.col, x.end_line, x.kind, x.text, "
+        "x.anchor_kind, " + SK('t', 'tf'),
+        "comment_facts x JOIN files f ON f.id = x.file_id " + SYM('t', 'tf', 'x.anchor_symbol_id'), "lower(f.path)"),
+    'symbol_search': (
+        "lower(f.path), " + SK('s', 'f') + ", x.tokens, x.summary, x.remarks",
+        "symbol_search x JOIN symbols s ON s.id = x.symbol_id JOIN files f ON f.id = s.file_id", "lower(f.path)"),
+    'symbol_search_fts_docsize': (
+        "lower(f.path), " + SK('s', 'f') + ", d.sz",
+        "symbol_search_fts_docsize d JOIN symbols s ON s.id = d.id JOIN files f ON f.id = s.file_id", "lower(f.path)"),
 }
+# Per-file tables with no id column but file_id: every other column, grouped by the file's path.
+FILE_GENERIC = ('file_includes', 'dfm_nav_nodes', 'dfm_nav_props', 'dfm_properties', 'pp_regions', 'pp_directives',
+                'project_settings')
 # Tables that hold no per-file rows on the corpora this is used for; compared
 # generically (every column except ids and *_at) so a non-empty one is not skipped.
 GENERIC = ('fb_columns', 'fb_datasets', 'fb_enum_values', 'fb_field_info', 'fb_relations', 'orm_links')
@@ -140,10 +203,21 @@ def query_for(conn, table):
         cols = [r[1] for r in conn.execute("PRAGMA table_info('%s')" % table)
                 if r[1] != 'id' and not r[1].endswith('_at')]
         return "SELECT '*', %s FROM '%s'" % (",".join('"%s"' % c for c in cols), table), None
-    raise SystemExit("index_db_diff: no comparison defined for table %r -- add it to TABLES or GENERIC" % table)
+    if table in FILE_GENERIC:
+        cols = [r[1] for r in conn.execute("PRAGMA table_info('%s')" % table) if r[1] != 'file_id']
+        return ("SELECT lower(f.path), %s FROM '%s' x JOIN files f ON f.id = x.file_id"
+                % (",".join('x."%s"' % c for c in cols), table), "lower(f.path)")
+    # exit 2, not 1: 1 means "the databases differ", and a caller must not read a missing
+    # comparison as a difference (or, worse, a positive control as satisfied).
+    sys.stderr.write("index_db_diff: no comparison defined for table %r -- add it to TABLES, GENERIC or FILE_GENERIC\n" % table)
+    sys.exit(2)
 
 
 def fts_query(fts):
+    if fts.startswith('symbol_search'):   # content_rowid = symbol_id, not a string_literals id
+        return ("SELECT lower(f.path), s.kind, s.qualified_name, s.start_line, s.start_col, v.term, v.col, v.offset "
+                "FROM temp.v_%s v JOIN symbols s ON s.id = v.doc JOIN files f ON f.id = s.file_id" % fts,
+                "lower(f.path)")
     return ("SELECT lower(f.path), l.source, l.kind, l.start_line, l.start_col, v.term, v.col, v.offset "
             "FROM temp.v_%s v JOIN string_literals l ON l.id = v.doc JOIN files f ON f.id = l.file_id" % fts,
             "lower(f.path)")

@@ -1251,6 +1251,6 @@
 #   Superseded: 1.41.0-alpha|f2692a1010f977f7d45a99b9ac03c4f475e3a4ab615c8da91f4d3297fe90c243
 #   2026-11-18 v152 INT13 hash-only re-pin (rides the one 1.52 bump 464d590a8): dl:ok marker COMMENT text re-stamped in hashed units (commit 12d7450b1: Storage.SQLite, Index.CallResolver, Preprocess.Decls and 7 non-hashed units); no code change, no parse/symbol/ref/edge change.
 #   Superseded: 1.41.0-alpha|6592bae0fd934a01ff98bc72cfe1229febdd8f7eeb7c3e204e4c679829c8a69d
-#   2026-11-18 v152 INT14 re-pin at the same version (rides the one 1.52 bump 464d590a8, not yet deployed, so the single 1.52 re-parse covers it): #111 GHTRIAGE BOM-aware source reads (GitHub #16, Storage.SQLite + 32 readers), #109 SELFLZ autodoc comment blocks in index/storage/preprocess units, #113/#105 HOVERCAP/HOVERCACHE.
+#   2026-11-18 v152 INT14 re-pin at the same version on the merged tree (rides the one 1.52 bump 464d590a8, not yet deployed, so the single 1.52 re-parse covers it): #111 GHTRIAGE BOM-aware source reads (GitHub #16), #109 SELFLZ autodoc comment blocks, #113/#105 HOVERCAP/HOVERCACHE, and #117 INCR18 (GitHub #18) Storage.SQLite UpsertSymbol files a local/parameter name under FScopeLocalNames -- scoped-resolve bookkeeping only, 0 diff rows full vs incremental (run_v1521_INCR18).
 #   Superseded: 1.41.0-alpha|74f83e97094a724ce2c307a3813421135cdcfe8261f21ff52119e09f70f16231
-1.41.0-alpha|797bcd9bdf24b3278dbd8c0cb70e2ff693752daa67301a9d5a5ebe0807d55d4b
+1.41.0-alpha|7f8d87a7e4a0f18cc3d7a7f9d619572512fbe655dde10c3b16f170bce37f0e8e
