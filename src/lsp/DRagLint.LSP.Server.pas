@@ -3950,7 +3950,7 @@ begin
   if FEphemDbPath = '' then Exit;
   for var Suffix in TArray<string>.Create('', '-wal', '-shm') do
     try
-      if TFile.Exists(FEphemDbPath + Suffix) then TFile.Delete(FEphemDbPath + Suffix);
+      if TFile.Exists(FEphemDbPath + Suffix) then TFile.Delete(FEphemDbPath + Suffix);  // dl:ok stat-gated-destructive@85f7 -- REVIEWED 2026-11-19 SLZ-MARK: own ephemeral temp DB; the exception is swallowed on purpose
     except
       { see above -- deliberately swallowed }
     end;
@@ -3975,7 +3975,7 @@ begin
   FEphemDbPath:= TPath.Combine(TPath.GetTempPath,
     Format('drag-lint-lsp-ephem-%d-%d.sqlite', [GetCurrentProcessId, FEphemSeq]));
   try
-    if TFile.Exists(FEphemDbPath) then TFile.Delete(FEphemDbPath);
+    if TFile.Exists(FEphemDbPath) then TFile.Delete(FEphemDbPath);  // dl:ok stat-gated-destructive@97a6 -- REVIEWED 2026-11-19 SLZ-MARK: own ephemeral temp DB; the exception is swallowed on purpose
 
     var S: ISymbolStore:= TSQLiteSymbolStore.Create(FEphemDbPath);
     S.Migrate;
@@ -5206,7 +5206,7 @@ begin
 
   try
     Stamp:= TFile.GetLastWriteTime(APath);
-  except
+  except  // dl:ok try-except-swallowed@8f3b, bare-except@8f3b -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
     Exit;
   end;
 
@@ -6778,7 +6778,7 @@ begin
               if TLiveDocuments.Readable(RowPath) then
                 try
                   SrcLines:= TLiveDocuments.ReadLines(RowPath);
-                except
+                except  // dl:ok try-except-swallowed@cb30 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
                   { A caller row is worth showing without its text; it is not
                     worth failing the whole tooltip for. }
                   on E: Exception do SetLength(SrcLines, 0);
@@ -7552,7 +7552,7 @@ begin
     if HNul <> INVALID_HANDLE_VALUE then CloseHandle(HNul);
     try
       TFile.Delete(TmpPath);
-    except
+    except  // dl:ok try-except-swallowed@767f -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
       on Exception do ; { a leftover temp file is harmless; raising out of didSave is not }
     end;
   end;

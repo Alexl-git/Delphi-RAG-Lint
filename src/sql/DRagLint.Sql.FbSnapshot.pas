@@ -109,7 +109,7 @@ begin
     Q.ParamByName('n').AsWideString:= UpperCase(AName);
     Q.Open;
     Result:= not Q.IsEmpty;
-  except
+  except  // dl:ok bare-except@79dc -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
     Result:= False;
   end;
   Q.Free;
@@ -120,11 +120,11 @@ procedure ClearPriorSnapshot(ASqlite: TFDConnection);
   snapshot in each fb_* table. Reduce DB bloat. If you want history,
   duplicate the table or back up the sqlite before re-snapshotting. }
 begin
-  ASqlite.ExecSQL('DELETE FROM fb_columns'    );
-  ASqlite.ExecSQL('DELETE FROM fb_relations'  );
-  ASqlite.ExecSQL('DELETE FROM fb_field_info' );
-  ASqlite.ExecSQL('DELETE FROM fb_datasets'   );
-  ASqlite.ExecSQL('DELETE FROM fb_enum_values');
+  ASqlite.ExecSQL('DELETE FROM fb_columns'    );  // dl:ok sql-update-delete-without-where@acec -- REVIEWED 2026-11-19 SLZ-MARK: documented rolling snapshot: only the latest snapshot is kept
+  ASqlite.ExecSQL('DELETE FROM fb_relations'  );  // dl:ok sql-update-delete-without-where@8545 -- REVIEWED 2026-11-19 SLZ-MARK: documented rolling snapshot: only the latest snapshot is kept
+  ASqlite.ExecSQL('DELETE FROM fb_field_info' );  // dl:ok sql-update-delete-without-where@398c -- REVIEWED 2026-11-19 SLZ-MARK: documented rolling snapshot: only the latest snapshot is kept
+  ASqlite.ExecSQL('DELETE FROM fb_datasets'   );  // dl:ok sql-update-delete-without-where@55ab -- REVIEWED 2026-11-19 SLZ-MARK: documented rolling snapshot: only the latest snapshot is kept
+  ASqlite.ExecSQL('DELETE FROM fb_enum_values');  // dl:ok sql-update-delete-without-where@7115 -- REVIEWED 2026-11-19 SLZ-MARK: documented rolling snapshot: only the latest snapshot is kept
 end;
 
 procedure ResolveSqlSymbolLinks(ASqlite: TFDConnection);

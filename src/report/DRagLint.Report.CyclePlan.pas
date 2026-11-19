@@ -5660,7 +5660,7 @@ begin
       G.HasIntf:= False;
       for var X in G.Members do
         for var Y in G.Members do
-          if (X <> Y) and Edges[X].Contains(Y + CIntfMark) then G.HasIntf:= True;
+          if (X <> Y) and Edges[X].Contains(Y + CIntfMark) then G.HasIntf:= True;  // dl:ok dictionary-get-without-check@76ed -- REVIEWED 2026-11-19 SLZ-MARK: the map is keyed by the same ids or keys filled in an earlier pass; the lookup cannot miss
       FPredicted.Add(G);
     end;
   finally

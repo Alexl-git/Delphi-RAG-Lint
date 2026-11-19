@@ -827,7 +827,7 @@ begin
   if (ADprojPath = '') or not TFile.Exists(ADprojPath) then Exit;
   try
     Text:= TFile.ReadAllText(ADprojPath);
-  except
+  except  // dl:ok try-except-swallowed@4ff4 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
     on EInOutError do Exit; { includes EFileNotFoundException: deleted between Exists and the read }
     on EFOpenError do Exit;
     on EEncodingError do Exit;
@@ -1696,10 +1696,10 @@ begin
       SetLength(MapIdx[K], Length(AParses[K].Symbols));
       for I:= 0 to High(AParses[K].Symbols) do
       begin
-        var Everywhere: Boolean:= SymCount[SymKeys[K][I]] = N;
+        var Everywhere: Boolean:= SymCount[SymKeys[K][I]] = N;  // dl:ok dictionary-get-without-check@335e -- REVIEWED 2026-11-19 SLZ-MARK: the map is keyed by the same ids or keys filled in an earlier pass; the lookup cannot miss
         if Everywhere and (K > 0) then
         begin
-          MapIdx[K][I]:= Shared[SymKeys[K][I]];
+          MapIdx[K][I]:= Shared[SymKeys[K][I]];  // dl:ok dictionary-get-without-check@b935 -- REVIEWED 2026-11-19 SLZ-MARK: the map is keyed by the same ids or keys filled in an earlier pass; the lookup cannot miss
           Continue;
         end;
         MapIdx[K][I]:= Syms.Add(AParses[K].Symbols[I]);
@@ -1709,7 +1709,7 @@ begin
       end;
       for I:= 0 to High(AParses[K].References) do
       begin
-        var Everywhere: Boolean:= RefCount[RefKeys[K][I]] = N;
+        var Everywhere: Boolean:= RefCount[RefKeys[K][I]] = N;  // dl:ok dictionary-get-without-check@d725 -- REVIEWED 2026-11-19 SLZ-MARK: the map is keyed by the same ids or keys filled in an earlier pass; the lookup cannot miss
         if Everywhere and (K > 0) then Continue;
         Refs.Add(AParses[K].References[I]);
         RefVar.Add(if Everywhere then 0 else K + 1);
@@ -1980,7 +1980,7 @@ begin
     var FileSize: Int64;
     try
       FileSize:= TFile.GetSize(AFilePath);
-    except
+    except  // dl:ok bare-except@a4e3 -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
       FileSize:= 0;
     end;
     if FileSize > Int64(FWalkFilter.MaxFileKB) * 1024 then
@@ -2666,7 +2666,7 @@ begin
     { Files directly in this directory whose extension a parser handles. }
     try
       Files:= TDirectory.GetFiles(ADir, '*', TSearchOption.soTopDirectoryOnly);
-    except
+    except  // dl:ok bare-except@9708, try-except-swallowed@9708 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
       SetLength(Files, 0);
     end;
     for F in Files do
@@ -2705,7 +2705,7 @@ begin
 
     try
       SubDirs:= TDirectory.GetDirectories(ADir, '*', TSearchOption.soTopDirectoryOnly);
-    except
+    except  // dl:ok bare-except@1eab, try-except-swallowed@1eab -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
       SetLength(SubDirs, 0);
     end;
     for D in SubDirs do

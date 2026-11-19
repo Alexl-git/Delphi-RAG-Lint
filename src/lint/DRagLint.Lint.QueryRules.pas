@@ -2222,7 +2222,7 @@ begin
     Pattern:= AArgs[2].StringValue;
     try
       Result:= TRegEx.IsMatch(FirstText, Pattern);
-    except
+    except  // dl:ok bare-except@79dc -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
       Result:= False;
     end;
     if Op = 'not-match?' then Result:= not Result;

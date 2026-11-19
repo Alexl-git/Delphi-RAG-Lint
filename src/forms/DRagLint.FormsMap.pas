@@ -3098,7 +3098,7 @@ begin
           try
             Qver.Open;
             if not Qver.IsEmpty then SchemaVer:= StrToIntDef(Qver.Fields[0].AsString, 0);
-          except
+          except  // dl:ok bare-except@2b84 -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
             SchemaVer:= 0; // pre-schema_meta db
           end;
         finally

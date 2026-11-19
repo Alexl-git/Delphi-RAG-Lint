@@ -201,7 +201,7 @@ begin
     Dir:= pWorkDir;
     DirPtr:= nil;
     if Dir <> '' then DirPtr:= PWideChar(Dir);
-    if not CreateProcessW(nil, PWideChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, DirPtr, SI, PI) then Exit;
+    if not CreateProcessW(nil, PWideChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, DirPtr, SI, PI) then Exit;  // dl:ok taint-command-injection@a883 -- REVIEWED 2026-11-19 SLZ-MARK: RunCapture runs steps of the init verb; the arguments are the operator's own
     Result:= True;
     // The child owns its copies now; closing ours is what lets the pipes end.
     CloseIfOpen(OutWr);

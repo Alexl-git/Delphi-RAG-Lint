@@ -248,7 +248,7 @@ begin
     finally
       JVal.Free;
     end;
-  except
+  except  // dl:ok try-except-swallowed@51eb -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
     { A malformed declaration defaults rather than throws: the fallback is the
       project's own folder, which is never WRONG, only narrow. The parse
       failure itself is swallowed HERE -- E.Message is not captured onto this

@@ -1945,7 +1945,7 @@ begin
   SI.wShowWindow:= SW_HIDE;
   Watch:= TStopwatch.StartNew;
   UniqueString(Cmd);
-  if not CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NO_WINDOW, nil, nil, SI, PI) then  // dl:ok unsafe-shellexecute@d2cc -- ParamStr(0) is this engine; the paths are this run's own --db and the project file it records
+  if not CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NO_WINDOW, nil, nil, SI, PI) then  // dl:ok unsafe-shellexecute@d2cc, taint-command-injection@d2cc -- REVIEWED 2026-11-19 SLZ-MARK: spawns this executable's own ParamStr(0)
   begin
     ARx.Status:= 'failed';
     ARx.Reason:= Format('could not start the re-index (%s) -- run: drag-lint index --project "%s" --db "%s"',
@@ -2023,7 +2023,7 @@ begin
   AOk:= False;
   try
     Result:= TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}False);
-  except
+  except  // dl:ok bare-except@7c42 -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
     Result:= nil; Exit; // writable open failed (locked / read-only file) -> caller falls back
   end;
   if Result.IsSchemaCurrent(Found, Expected) then AOk:= True

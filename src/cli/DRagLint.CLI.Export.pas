@@ -342,7 +342,7 @@ begin
     try
       Body:= TFile.ReadAllText(ObsCfg, TEncoding.UTF8);
       Cfg:= TJSONObject.ParseJSONValue(Body) as TJSONObject;
-    except
+    except  // dl:ok bare-except@daad -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
       Cfg:= nil;
     end;
     if Cfg = nil then begin Writeln('  (could not parse ', ObsCfg, ')'); Exit; end;

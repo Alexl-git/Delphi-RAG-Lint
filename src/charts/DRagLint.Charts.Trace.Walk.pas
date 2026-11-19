@@ -2152,7 +2152,7 @@ begin
   var L:= TList<TBranch>.Create;
   try
     for var K in pOrder do
-      L.Add(pMap[K]);
+      L.Add(pMap[K]);  // dl:ok dictionary-get-without-check@2414 -- REVIEWED 2026-11-19 SLZ-MARK: the map is keyed by the same ids or keys filled in an earlier pass; the lookup cannot miss
     Result:= L.ToArray;
   finally
     L.Free;

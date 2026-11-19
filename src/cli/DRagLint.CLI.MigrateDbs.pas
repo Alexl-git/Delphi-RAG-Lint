@@ -99,7 +99,7 @@ begin
   for Suffix in ['-wal', '-shm'] do
     if TFile.Exists(ASrc + Suffix) then
     begin
-      if TFile.Exists(ADst + Suffix) then TFile.Delete(ADst + Suffix);
+      if TFile.Exists(ADst + Suffix) then TFile.Delete(ADst + Suffix);  // dl:ok stat-gated-destructive@2cce -- REVIEWED 2026-11-19 SLZ-MARK: own .dcu, journal or -wal/-shm sidecar inside try/except; a failed stat only leaves a stale file
       TFile.Move(ASrc + Suffix, ADst + Suffix);
     end;
 end;
@@ -126,7 +126,7 @@ begin
       Check:= Conn.ExecSQLScalar('PRAGMA quick_check');
       Rows := Conn.ExecSQLScalar('SELECT COUNT(*) FROM files');
       Result:= SameText(Check, 'ok') and (Rows > 0);
-    except
+    except  // dl:ok bare-except@79dc -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
       Result:= False;   { not a database, or too corrupt to answer either query }
     end;
   finally

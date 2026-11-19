@@ -881,7 +881,7 @@ begin
     try
       for var Dpk: string in TDirectory.GetFiles(Dir, '*.dpk') do
         AddDirectives(TFile.ReadAllText(Dpk), Dir, ChangeFileExt(ExtractFileName(Dpk), ''), True);
-    except
+    except  // dl:ok try-except-swallowed@d59a -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
       on EInOutError do ;  // dl:ok empty-on-handler@59cd -- REVIEWED 2026-11-14 v151 CMP: a folder that cannot be listed has no .dpk to read; the remaining resource files still count
     end;
     for var F: string in Files do

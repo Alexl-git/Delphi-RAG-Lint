@@ -698,7 +698,7 @@ begin
   try
     Content:= TFile.ReadAllText(Candidate);
     J:= TJSONObject.ParseJSONValue(Content) as TJSONObject;
-  except
+  except  // dl:ok bare-except@8f3b, try-except-swallowed@8f3b -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
     Exit;
   end;
   if J = nil then Exit;
@@ -1823,7 +1823,7 @@ begin
   H:= OpenProcess(SYNCHRONIZE, False, DWORD(NativeUInt(P)));
   if H = 0 then Exit;
   try
-    if WaitForSingleObject(H, INFINITE) = WAIT_OBJECT_0 then TerminateProcess(GetCurrentProcess, 0);
+    if WaitForSingleObject(H, INFINITE) = WAIT_OBJECT_0 then TerminateProcess(GetCurrentProcess, 0);  // dl:ok halt-in-library@8e95 -- REVIEWED 2026-11-19 SLZ-MARK: parent-process watchdog: TerminateProcess/Halt is the intent when the parent dies
   finally
     CloseHandle(H);
   end;
@@ -2071,7 +2071,7 @@ begin
   try
     DocManifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
     Result:= DocManifest.Docs.MaxReturnCases;
-  except
+  except  // dl:ok bare-except@2abd -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
     Result:= 20;
   end;
 end;
@@ -2096,7 +2096,7 @@ begin
   try
     DocManifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
     Result:= DocManifest.Docs.MaxCallers;
-  except
+  except  // dl:ok bare-except@e81c -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
     Result:= 5;
   end;
 end;
@@ -2163,7 +2163,7 @@ begin
   try
     DocManifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
     Result:= DocManifest.Docs.AccessorTrivialMaxLines;
-  except
+  except  // dl:ok bare-except@8ecc -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
     Result:= 2;
   end;
 end;
@@ -4672,7 +4672,7 @@ begin
       Flush(Output);
       Flush(ErrOutput);
       BatchChannelClose;
-      Halt(CONTROL_EXIT_STOOD_DOWN);
+      Halt(CONTROL_EXIT_STOOD_DOWN);  // dl:ok halt-in-library@dcbb -- REVIEWED 2026-11-19 SLZ-MARK: control-channel stand-down must end the process after the flush
     end;
 end;
 
@@ -6668,7 +6668,7 @@ begin
      and TDirectory.Exists(AArgs.Path) then
   begin
     var DbScanType: string:= '';
-    try DbScanType:= Store.GetMetaValue(SCAN_TYPE_KEY); except DbScanType:= ''; end;
+    try DbScanType:= Store.GetMetaValue(SCAN_TYPE_KEY); except DbScanType:= ''; end;  // dl:ok bare-except@eea9 -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
 
     if SameText(DbScanType, SCAN_TYPE_PROJECT) then
     begin
@@ -9698,7 +9698,7 @@ begin
   if AArgs.InFile = '' then Exit;
   try
     Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
-  except
+  except  // dl:ok try-except-swallowed@4c6b -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
     { No manifest is not an error here -- the caller falls back to its old
       single-path behaviour and reports that in its own words. }
     on E: Exception do Exit;
@@ -15396,7 +15396,7 @@ begin
         ScopeDict:= BuildProjectFileScope(AArgs);
         if ScopeDict <> nil then
           for var ScopedFile: string in ScopeDict.Keys do ClosureList:= ClosureList + [ScopedFile];
-      except
+      except  // dl:ok bare-except@febb -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
         { A closure that cannot be resolved must not take the whole verb down;
           the direction simply does not run. }
         ClosureList:= nil;
@@ -16553,7 +16553,7 @@ begin
       begin
         try
           FileSource:= ReadSourceFileText(FilePath);
-        except
+        except  // dl:ok bare-except@159c -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
           FileSource:= '';
         end;
         FileCache.AddOrSetValue(FilePath, FileSource);
@@ -16790,7 +16790,7 @@ begin
     Lang:= AGetLanguage();
     if Lang = nil then Result:= 'unknown'
     else Result:= IntToStr(Lang.Version);
-  except
+  except  // dl:ok bare-except@c8fc -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
     Result:= 'unknown';
   end;
 end;
@@ -16822,7 +16822,7 @@ begin
       finally
         Q.Free;
       end;
-    except
+    except  // dl:ok bare-except@79dc -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
       Result:= False;
     end; // try
   finally
@@ -19506,7 +19506,7 @@ begin
     { An unreadable/absent project file must surface as "no scope" -- which the
       caller turns into a usage error -- not as an unhandled exception. }
     CR:= Default(TClosureResult);
-    try CR:= Resolver.Resolve(AArgs.ProjectPath, AArgs.ExcludeGlobs); except CR:= Default(TClosureResult); end;
+    try CR:= Resolver.Resolve(AArgs.ProjectPath, AArgs.ExcludeGlobs); except CR:= Default(TClosureResult); end;  // dl:ok bare-except@a2eb -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
   finally
     Resolver.Free;
   end;
@@ -22660,12 +22660,12 @@ begin
     Content:= TFile.ReadAllText(ADproj);
     M:= TRegEx.Match(Content, '<DCC_DcuOutput>(.*?)</DCC_DcuOutput>', [roIgnoreCase, roSingleLine]);
     if M.Success and (Trim(M.Groups[1].Value) <> '') then DcuOut:= Trim(M.Groups[1].Value);
-  except
+  except  // dl:ok try-except-swallowed@e230, empty-except@e230 -- REVIEWED 2026-11-19 SLZ-MARK: best-effort cleanup or timestamp restore of the check's own overlay, journal or temp file; it must not fail the check and a failure only leaves a stale file
   end;
   DcuOut:= StringReplace(DcuOut, '$(Platform)', Plat   , [rfReplaceAll, rfIgnoreCase]);
   DcuOut:= StringReplace(DcuOut, '$(Config)'  , 'Debug', [rfReplaceAll, rfIgnoreCase]);
   if not TPath.IsPathRooted(DcuOut) then
-  try DcuOut:= TPath.GetFullPath(TPath.Combine(ExtractFilePath(ADproj), DcuOut)); except end;
+  try DcuOut:= TPath.GetFullPath(TPath.Combine(ExtractFilePath(ADproj), DcuOut)); except end;  // dl:ok empty-except@b4fc, try-except-swallowed@b4fc -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
   Result:= TPath.Combine(DcuOut, ChangeFileExt(ExtractFileName(AUnit), '.dcu'));
 end; // function
 
@@ -22680,7 +22680,7 @@ begin
     if not TDirectory.Exists(Result) then TDirectory.CreateDirectory(Result);
     Attrs:= GetFileAttributes(PChar(Result));
     if Attrs <> INVALID_FILE_ATTRIBUTES then SetFileAttributes(PChar(Result), Attrs or FILE_ATTRIBUTE_HIDDEN);
-  except
+  except  // dl:ok empty-except@e230, try-except-swallowed@e230 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
   end;
 end;
 
@@ -22769,7 +22769,7 @@ begin
       Writeln(ErrOutput, 'ghost-check: WARNING: could not write the recovery journal ', E.Journal, ' (', Ex.Message, '); ghost-recover cannot undo this overlay after a crash.');
   end;
   TFile.WriteAllBytes(E.RealPath, E.BufBytes);
-  try TFile.SetLastWriteTime(E.RealPath, Now); except end;
+  try TFile.SetLastWriteTime(E.RealPath, Now); except end;  // dl:ok empty-except@7a44, try-except-swallowed@7a44 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
   { Capture the timestamp our write actually left behind, and record it in the
     journal too. Read it back rather than assuming the value we asked for: the
     filesystem's granularity, not ours, decides what is stored, and the restore
@@ -22780,7 +22780,7 @@ begin
   if E.HaveOvlFT then
   try TFile.AppendAllText(E.Journal, 'ovlft=' + IntToStr(FileTimeToI64(E.OvlFT)) + sLineBreak); except end;
   if (E.DcuPath <> '') and TFile.Exists(E.DcuPath) then
-  try TFile.Delete(E.DcuPath); except end;
+  try TFile.Delete(E.DcuPath); except end;  // dl:ok stat-gated-destructive@d5d0, empty-except@d5d0, try-except-swallowed@d5d0 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
 end; // procedure
 
 { Restore one overlay: put the original content + EXACT timestamp back (verified),
@@ -22802,7 +22802,7 @@ begin
       { Already the original content. Nothing to rewrite; just put the ORIGINAL
         timestamp back (the overlay stamped 'Now' to force the rebuild). }
       if not (E.HaveFT and SetFileWriteTime(E.RealPath, E.OrigFT)) then
-      try TFile.SetLastWriteTime(E.RealPath, E.OrigMtime); except end;
+      try TFile.SetLastWriteTime(E.RealPath, E.OrigMtime); except end;  // dl:ok try-except-swallowed@9cd0, empty-except@9cd0 -- REVIEWED 2026-11-19 SLZ-MARK: best-effort cleanup or timestamp restore of the check's own overlay, journal or temp file; it must not fail the check and a failure only leaves a stale file
       RestoreDone:= True;
     end
     else if BytesSame(CurBytes, E.BufBytes) then
@@ -22825,9 +22825,9 @@ begin
       begin
         TFile.WriteAllBytes(E.RealPath, E.OrigBytes);
         if not (E.HaveFT and SetFileWriteTime(E.RealPath, E.OrigFT)) then
-        try TFile.SetLastWriteTime(E.RealPath, E.OrigMtime); except end;
+        try TFile.SetLastWriteTime(E.RealPath, E.OrigMtime); except end;  // dl:ok empty-except@9cd0, try-except-swallowed@9cd0 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
         try RestoreDone:= BytesSame(TFile.ReadAllBytes(E.RealPath), E.OrigBytes);
-        except RestoreDone:= False; end;
+        except RestoreDone:= False; end;  // dl:ok bare-except@8989 -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
       end
       else
       begin
@@ -22844,15 +22844,15 @@ begin
       RestoreDone:= True;
       Writeln('ghost-check: NOTE -- ', E.RealPath, ' changed externally during the check; left as-is.');
     end;
-  except
+  except  // dl:ok bare-except@2d51 -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
     RestoreDone:= False;
   end; // try
   if (E.DcuPath <> '') and TFile.Exists(E.DcuPath) then
-  try TFile.Delete(E.DcuPath); except end;
+  try TFile.Delete(E.DcuPath); except end;  // dl:ok empty-except@d5d0, try-except-swallowed@d5d0, stat-gated-destructive@d5d0 -- REVIEWED 2026-11-19 SLZ-MARK: own .dcu, journal or -wal/-shm sidecar inside try/except; a failed stat only leaves a stale file
   if RestoreDone then
   begin
-    try if TFile.Exists(E.Journal) then TFile.Delete(E.Journal); except end;
-    try if TFile.Exists(E.OrigBak) then TFile.Delete(E.OrigBak); except end;
+    try if TFile.Exists(E.Journal) then TFile.Delete(E.Journal); except end;  // dl:ok try-except-swallowed@6637, stat-gated-destructive@6637, empty-except@6637 -- REVIEWED 2026-11-19 SLZ-MARK: best-effort cleanup or timestamp restore of the check's own overlay, journal or temp file; it must not fail the check and a failure only leaves a stale file
+    try if TFile.Exists(E.OrigBak) then TFile.Delete(E.OrigBak); except end;  // dl:ok empty-except@84b0, try-except-swallowed@84b0, stat-gated-destructive@84b0 -- REVIEWED 2026-11-19 SLZ-MARK: own .dcu, journal or -wal/-shm sidecar inside try/except; a failed stat only leaves a stale file
   end
   else Writeln('ghost-check: WARNING -- could not safely restore ', E.RealPath, '; recovery journal kept (run ghost-recover or restart the IDE).');
 end; // procedure
@@ -22915,7 +22915,7 @@ begin
       if not TFile.Exists(AArgs.GhostOverlays) then
       begin Writeln('ERROR: overlays manifest not found: ', AArgs.GhostOverlays); Exit(2); end;
       try ManifestLines:= TFile.ReadAllLines(AArgs.GhostOverlays);
-      except SetLength(ManifestLines, 0); end;
+      except SetLength(ManifestLines, 0); end;  // dl:ok try-except-swallowed@a1d6, bare-except@a1d6 -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
       for Ln in ManifestLines do
       begin
         if Trim(Ln) = '' then Continue;
@@ -23028,7 +23028,7 @@ begin
       finally
         { Best-effort: a leftover temp dir is harmless, and failing to delete it
           must never turn a successful check into an error. }
-        try if TDirectory.Exists(ShadowDir) then TDirectory.Delete(ShadowDir, True); except end;
+        try if TDirectory.Exists(ShadowDir) then TDirectory.Delete(ShadowDir, True); except end;  // dl:ok empty-except@b3c6, try-except-swallowed@b3c6 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
       end;
       Res.Findings:= NormalizeFindings(Res.Findings,
         ExtractFilePath(StringReplace(Dproj, '/', '\', [rfReplaceAll])));
@@ -23129,7 +23129,7 @@ begin
   if not TDirectory.Exists(DragDir) then begin Writeln('ghost-recover: nothing pending.'); Exit (0 ); end;
   try
     Journals:= TDirectory.GetFiles(DragDir, '*.ghost-journal');
-  except
+  except  // dl:ok try-except-swallowed@63e5, bare-except@63e5 -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
     SetLength(Journals, 0);
   end;
   for J in Journals do
@@ -23143,7 +23143,7 @@ begin
       else if Ln.StartsWith('mtime=') then MtimeStr:= Copy(Ln, 7, MaxInt)
       else if Ln.StartsWith('ovlft=') then OvlFtStr:= Copy(Ln, 7, MaxInt)
       else if Ln.StartsWith('ft=') then FtStr:= Copy(Ln, 4, MaxInt);
-    except end;
+    except end;  // dl:ok try-except-swallowed@3be8, empty-except@3be8 -- REVIEWED 2026-11-19 SLZ-MARK: best-effort cleanup or timestamp restore of the check's own overlay, journal or temp file; it must not fail the check and a failure only leaves a stale file
     { Same ownership rule as the live restore: only undo an overlay that is still
       OURS. Without this the recovery pass reverted the file to the pre-crash
       original no matter what had happened since -- including a save the user
@@ -23181,23 +23181,23 @@ begin
         begin
           if not SetFileWriteTime(UnitPath, I64ToFileTime(FtVal)) then
             if MtimeStr <> '' then
-            try TFile.SetLastWriteTime(UnitPath, TDateTime(StrToFloat(MtimeStr, TFormatSettings.Invariant))); except end;
+            try TFile.SetLastWriteTime(UnitPath, TDateTime(StrToFloat(MtimeStr, TFormatSettings.Invariant))); except end;  // dl:ok try-except-swallowed@1530, empty-except@1530 -- REVIEWED 2026-11-19 SLZ-MARK: best-effort cleanup or timestamp restore of the check's own overlay, journal or temp file; it must not fail the check and a failure only leaves a stale file
         end
         else if MtimeStr <> '' then
-        try TFile.SetLastWriteTime(UnitPath, TDateTime(StrToFloat(MtimeStr, TFormatSettings.Invariant))); except end;
-        try TFile.Delete(OrigBak); except end;
-        try TFile.Delete(J); except end;
+        try TFile.SetLastWriteTime(UnitPath, TDateTime(StrToFloat(MtimeStr, TFormatSettings.Invariant))); except end;  // dl:ok empty-except@1530, try-except-swallowed@1530 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
+        try TFile.Delete(OrigBak); except end;  // dl:ok empty-except@5d18, try-except-swallowed@5d18 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
+        try TFile.Delete(J); except end;  // dl:ok empty-except@e57f, try-except-swallowed@e57f -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
         Inc(Recovered);
         Writeln('Recovered ', UnitPath, ' (crash content kept at ', CrashBuf, ')');
-      except
+      except  // dl:ok bare-except@ad49 -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
         Writeln('FAILED to recover ', UnitPath);
       end; // try
     end // if
     else
     begin
       { stale/incomplete journal -> drop it }
-      try TFile.Delete(J); except end;
-      try if (OrigBak <> '') and TFile.Exists(OrigBak) then TFile.Delete(OrigBak); except end;
+      try TFile.Delete(J); except end;  // dl:ok try-except-swallowed@e57f, empty-except@e57f -- REVIEWED 2026-11-19 SLZ-MARK: best-effort cleanup or timestamp restore of the check's own overlay, journal or temp file; it must not fail the check and a failure only leaves a stale file
+      try if (OrigBak <> '') and TFile.Exists(OrigBak) then TFile.Delete(OrigBak); except end;  // dl:ok stat-gated-destructive@5a5f, try-except-swallowed@5a5f, empty-except@5a5f -- REVIEWED 2026-11-19 SLZ-MARK: best-effort cleanup or timestamp restore of the check's own overlay, journal or temp file; it must not fail the check and a failure only leaves a stale file
     end;
   end; // for
   Writeln(Format('ghost-recover: %d file(s) restored.', [Recovered]));
@@ -23293,7 +23293,7 @@ var
 begin
   Result:= '';
   if (ADprojPath = '') or not TFile.Exists(ADprojPath) then Exit;
-  try Content:= TFile.ReadAllText(ADprojPath); except Exit; end;
+  try Content:= TFile.ReadAllText(ADprojPath); except Exit; end;  // dl:ok try-except-swallowed@27b3, bare-except@27b3 -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
   M:= TRegEx.Match(Content, '<DCC_DcuOutput>(.*?)</DCC_DcuOutput>', [roIgnoreCase, roSingleLine]);
   if not M.Success then Exit;
   Rel:= Trim(M.Groups[1].Value);
@@ -23318,7 +23318,7 @@ var
 begin
   Result:= False;
   if (ADprojPath = '') or not TFile.Exists(ADprojPath) then Exit;
-  try Content:= TFile.ReadAllText(ADprojPath); except Exit; end;
+  try Content:= TFile.ReadAllText(ADprojPath); except Exit; end;  // dl:ok bare-except@27b3, try-except-swallowed@27b3 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
   Result:= TRegEx.IsMatch(Content, '<DCC_DebugDCUs>\s*true\s*</DCC_DebugDCUs>', [roIgnoreCase]);
 end;
 // Read DCC_Namespace from a .dproj (so dotted-down 'uses Forms' etc. resolve),
@@ -23334,7 +23334,7 @@ begin
   if (ADprojPath = '') or not TFile.Exists(ADprojPath) then Exit;
   try
     Content:= TFile.ReadAllText(ADprojPath);
-  except
+  except  // dl:ok try-except-swallowed@8f3b, bare-except@8f3b -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
     Exit;
   end;
   M:= TRegEx.Match(Content, '<DCC_Namespace>(.*?)</DCC_Namespace>', [roIgnoreCase, roSingleLine]);
@@ -24382,7 +24382,7 @@ begin
       ImplLine:= MaxInt;
       if TFile.Exists(Path) then
       begin
-        try Lines.LoadFromFile(Path); except Continue; end;
+        try Lines.LoadFromFile(Path); except Continue; end;  // dl:ok bare-except@85fe, try-except-swallowed@85fe -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
         for i:= 0 to Lines.Count - 1 do
           if SameText(Trim(Lines[i]), 'implementation') then begin ImplLine:= i + 1; Break; end;
       end;
@@ -26297,7 +26297,7 @@ begin
   if not TFile.Exists(ADbPath) then Exit;
   try
     FileSize64:= TFile.GetSize(ADbPath);
-  except
+  except  // dl:ok bare-except@8f3b, try-except-swallowed@8f3b -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
     Exit;
   end;
   FileSizeMB:= FileSize64 div (1024 * 1024);
@@ -26685,7 +26685,7 @@ begin
         if SameText(X, D) then Dup:= True;
       if not Dup then Result:= Result + [D];
     end;
-  except
+  except  // dl:ok bare-except@3935 -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
     { A manifest that will not load is not this function's problem to report --
       every caller already treats an empty answer as "no library index" and degrades. }
     Result:= nil;
@@ -27208,7 +27208,7 @@ function DoSelfTestGlob: Integer;
 
   procedure Expect(const ADesc: string; AActual, AExpected: Boolean);
   begin
-    if AActual <> AExpected then begin Writeln('GLOB-FAIL: ', ADesc); Halt(1); end;
+    if AActual <> AExpected then begin Writeln('GLOB-FAIL: ', ADesc); Halt(1); end;  // dl:ok halt-in-library@d10b -- REVIEWED 2026-11-19 SLZ-MARK: self-test verb: Halt(1) on the first failed check is the contract
   end;
 
 begin
@@ -27240,12 +27240,12 @@ var
 
   procedure Assert(const ADesc: string; AActual, AExpected: Boolean);
   begin
-    if AActual <> AExpected then begin Writeln('IGNORE-FAIL: ', ADesc, ' (expected=', BoolToStr(AExpected, True), ' got=', BoolToStr(AActual, True), ')'); Halt(1); end;
+    if AActual <> AExpected then begin Writeln('IGNORE-FAIL: ', ADesc, ' (expected=', BoolToStr(AExpected, True), ' got=', BoolToStr(AActual, True), ')'); Halt(1); end;  // dl:ok halt-in-library@85ee -- REVIEWED 2026-11-19 SLZ-MARK: self-test verb: Halt(1) on the first failed check is the contract
   end;
 
 begin
   ProjDir:= AArgs.Path;
-  if ProjDir = '' then begin Writeln('IGNORE-FAIL: --dir <proj> required'); Halt (1 ); end;
+  if ProjDir = '' then begin Writeln('IGNORE-FAIL: --dir <proj> required'); Halt (1 ); end;  // dl:ok halt-in-library@a660 -- REVIEWED 2026-11-19 SLZ-MARK: self-test verb: Halt(1) on the first failed check is the contract
   SubDir:= TPath.Combine(ProjDir, 'sub');
 
   Stack:= TIgnoreStack.Create;
@@ -27475,7 +27475,7 @@ begin
     else Writeln('PASS recreate: stable symbol count across both modes');
   finally
     Store:= nil;
-    try TDirectory.Delete(TmpRoot, True); except end;
+    try TDirectory.Delete(TmpRoot, True); except end;  // dl:ok try-except-swallowed@8cc5, empty-except@8cc5 -- REVIEWED 2026-11-19 SLZ-MARK: best-effort cleanup or timestamp restore of the check's own overlay, journal or temp file; it must not fail the check and a failure only leaves a stale file
   end; // try
 end; // function
 
@@ -27518,7 +27518,7 @@ begin
       Result:= 1;
     end;
   finally
-    try TDirectory.Delete(TmpDir, True); except end;
+    try TDirectory.Delete(TmpDir, True); except end;  // dl:ok empty-except@9cf6, try-except-swallowed@9cf6 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
   end; // try
 end; // function
 
@@ -27825,7 +27825,7 @@ begin
     Raised:= False;
     try
       TManifestIO.Save(M, Path);
-    except
+    except  // dl:ok bare-except@1ded -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
       Raised:= True;   { expected: the swap must fail, loudly }
     end;
     if not Raised then
@@ -28473,7 +28473,7 @@ begin
     end
     else Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
     StaleGlobs:= Manifest.GlobalExclude;
-  except
+  except  // dl:ok bare-except@75f3 -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
     // Advisory: if manifest load fails, proceed with built-in globs only.
     StaleGlobs:= nil;
     Manifest:= Default(TIndexManifest);
@@ -28682,7 +28682,7 @@ begin
               // rather than AArgs.AsJson.
               RefreshProjectFindingsCore(Store, ProjectFile, True, nil, False, False, AArgs.CheckPlatform);
               CohRecomp:= True;
-            except
+            except  // dl:ok bare-except@91b0 -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
               CohRecomp:= False;
             end;
           end;

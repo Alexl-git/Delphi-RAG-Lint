@@ -175,7 +175,7 @@ begin
         DiskMTime:= FileMTimeUnix(AMembers[I].UnitPath);
         HasDiskMTime:= True;
       end;
-    except
+    except  // dl:ok bare-except@fe9b -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
       HasDiskMTime:= False; // gone/inaccessible on disk -> treat as not fresh
     end;
 

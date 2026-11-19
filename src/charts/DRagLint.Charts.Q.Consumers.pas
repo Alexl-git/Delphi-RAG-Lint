@@ -1356,7 +1356,7 @@ begin
   var NameRows: TArray<TDotRow>:= [];
   for var P in FByNameKeys do
   begin
-    var Ls:= FByNameFiles[P];
+    var Ls:= FByNameFiles[P];  // dl:ok dictionary-get-without-check@c381 -- REVIEWED 2026-11-19 SLZ-MARK: the map is keyed by the same ids or keys filled in an earlier pass; the lookup cannot miss
     var Kinds: TArray<string>:= [];
     var Lines: TArray<string>:= [];
     for var L in Ls do

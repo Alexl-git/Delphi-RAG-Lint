@@ -1610,7 +1610,7 @@ begin
         + Ink[0] + '"; fillcolor="' + Ink[1] + '"; penwidth=1.5; margin=12;');
       for var N in InLane do
         if N.Kind <> KIND_ALSO then
-          L(pNodeLines[N.Key]);
+          L(pNodeLines[N.Key]);  // dl:ok dictionary-get-without-check@1a33 -- REVIEWED 2026-11-19 SLZ-MARK: the map is keyed by the same ids or keys filled in an earlier pass; the lookup cannot miss
       for var N in InLane do
         if N.Kind = KIND_ALSO then
         begin

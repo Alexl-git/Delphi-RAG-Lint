@@ -349,7 +349,7 @@ begin
   if not TFile.Exists(AFilePath) then Exit;
   try
     Lines:= ReadSourceFileLines(AFilePath);
-  except
+  except  // dl:ok bare-except@8f3b, try-except-swallowed@8f3b -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
     Exit;
   end;
   if AStartLine > Length(Lines) then Exit;

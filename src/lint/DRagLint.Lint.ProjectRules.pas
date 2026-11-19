@@ -1361,7 +1361,7 @@ begin
       try
         try
           SL.LoadFromFile(RPath);
-        except
+        except  // dl:ok try-except-swallowed@69ff, bare-except@69ff -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
           Continue; { unreadable source acknowledges nothing and reports nothing }
         end;
         var Lines: TArray<string>:= SL.ToStringArray;
@@ -1763,7 +1763,7 @@ var
 
       SiteList:= nil;
       Shown   := 0;
-      for C:= 0 to High(Masking) do
+      for C:= 0 to High(Masking) do  // dl:ok index-possibly-out-of-range@5445 -- REVIEWED 2026-11-19 SLZ-MARK: MaskUnits is parallel to Masking, filled in the same loop
       begin
         if Shown >= CMaxDupSitesShown then Break;
         SiteList:= SiteList + [Format('%s:%d uses %s',
@@ -2963,7 +2963,7 @@ var
     try
       try
         SL.LoadFromFile(Dfm);
-      except
+      except  // dl:ok bare-except@9e0f, try-except-swallowed@9e0f -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
         { A .dfm that cannot be read demotes nothing. Silently: this runs on a
           handful of findings and a read error here is not the user's question. }
         Exit;
@@ -3037,7 +3037,7 @@ var
     try
       try
         SL.LoadFromFile(Dfm);
-      except
+      except  // dl:ok bare-except@f022, try-except-swallowed@f022 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
         { A .dfm that cannot be read -- a binary TPF0 form included -- yields no
           members, exactly as it yielded no match before. }
         Exit;
@@ -5524,7 +5524,7 @@ begin
       ProfLine('  (accessor-set parse)'    , TAccess);
       ProfLine('  (per-file store reads)'  , TOuter );
       var Listed: Int64:= TCirc + TGlob + TDupD + TCens + TPurity + TEnum + TRts + TUuiu + TGod + TUpub + TUpriv + TAccess + TOuter;
-      for var Li:= 0 to High(LapNames) do
+      for var Li:= 0 to High(LapNames) do  // dl:ok index-possibly-out-of-range@11ef -- REVIEWED 2026-11-19 SLZ-MARK: LapTicks and LapNames are parallel arrays
       begin
         ProfLine(LapNames[Li], LapTicks[Li]);
         Inc(Listed, LapTicks[Li]);

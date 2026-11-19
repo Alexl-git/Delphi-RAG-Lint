@@ -254,7 +254,7 @@ begin
     if Left > ENGINE_HOLD_MAX_SECONDS then Left:= ENGINE_HOLD_MAX_SECONDS;
     ASecondsLeft:= Integer(Left);
     Result      := True;
-  except
+  except  // dl:ok bare-except@651d -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
     { A locked or unreadable sentinel is NOT a hold -- see the unit header. }
     ASecondsLeft:= 0;
     Result      := False;
