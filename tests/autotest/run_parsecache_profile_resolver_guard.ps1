@@ -90,17 +90,17 @@ Check 'SETUP project index built' ($files -ge 2) "files=$files"
 
 function LintRule([string]$File, [string]$Rule, [string[]]$Extra = @()) {
   $out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $File --json --db $Db @Extra 2>$null } | Out-String
-  $j = @($out | ConvertFrom-Json)
+  $j = @(($out | ConvertFrom-Json) | ForEach-Object { $_ })
   return @($j | Where-Object { $_.rule -eq $Rule } | ForEach-Object { [int]$_.start_line })
 }
 
-$a = LintRule "$WorkDir\proj\uUnit.pas" 'parser-error'
+$a = @(LintRule "$WorkDir\proj\uUnit.pas" 'parser-error')
 Check 'a uUnit.pas: 0 parser-error (active Debug config)' ($a.Count -eq 0) "lines=$($a -join ',')"
-$b = LintRule "$WorkDir\other\uLoose.pas" 'parser-error'
+$b = @(LintRule "$WorkDir\other\uLoose.pas" 'parser-error')
 Check 'b uLoose.pas: >= 1 parser-error (POSITIVE CONTROL)' ($b.Count -ge 1) "lines=$($b -join ',')"
-$c = LintRule "$WorkDir\proj\uUnit.pas" 'parser-error' @('--project', "$WorkDir\proj\App.dproj", '--no-preprocess')
+$c = @(LintRule "$WorkDir\proj\uUnit.pas" 'parser-error' @('--project', "$WorkDir\proj\App.dproj", '--no-preprocess'))
 Check 'c --no-preprocess: >= 1 parser-error (SETUP)' ($c.Count -ge 1) "lines=$($c -join ',')"
-$d = LintRule "$WorkDir\proj\uUnit.pas" 'with-statement'
+$d = @(LintRule "$WorkDir\proj\uUnit.pas" 'with-statement')
 Check "d with-statement on line $WithLine" ($d -contains $WithLine) "lines=$($d -join ',')"
 }
 catch { Write-Host "FATAL: $($_.Exception.Message)" -ForegroundColor Red; $script:Failed = $true }

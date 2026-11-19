@@ -111,7 +111,7 @@ try {
       try {
         # 1. apply, byte-identical
         $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $copy --fix --fix-rule $id --json --apply --no-backup @extra 2>$null } | Out-String
-        $rows = @(); try { $rows = @($raw | ConvertFrom-Json) } catch { $rows = @() }
+        $rows = @(); try { $rows = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $rows = @() }
         $applied = @($rows | Where-Object { $_.rule -eq $id -and $_.applied -eq $true }).Count
         Check "${tag}: --fix --apply applied >= 1 row" ($applied -ge 1) $raw.Trim()
         $same = BytesEqual ([IO.File]::ReadAllBytes($copy)) ([IO.File]::ReadAllBytes($fixed))
@@ -125,7 +125,7 @@ try {
         Check "${tag}: second run left the bytes unchanged" (BytesEqual $before ([IO.File]::ReadAllBytes($copy)))
         # 3. the rule no longer fires (a --db case was re-indexed after the fix, above)
         $raw3 = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $copy --rule $id --json @extra 2>$null } | Out-String
-        $left = -1; try { $left = @(@($raw3 | ConvertFrom-Json) | Where-Object { $_.rule -eq $id }).Count } catch { $left = -1 }
+        $left = -1; try { $left = @(@(($raw3 | ConvertFrom-Json) | ForEach-Object { $_ }) | Where-Object { $_.rule -eq $id }).Count } catch { $left = -1 }
         $want = 0; $lf = Join-Path $dir.FullName "$case.leaves"; if (Test-Path $lf) { $want = [int](Get-Content $lf -Raw).Trim() }
         Check "${tag}: '$id' fires on the fixed file exactly $want time(s) (got $left)" ($left -eq $want) $raw3.Trim()
       } finally { Pop-Location }

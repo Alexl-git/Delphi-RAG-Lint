@@ -501,8 +501,8 @@ foreach ($c in $edCases) {
 #     not fail on this Windows build, so this cannot go RED here.
 Write-Host ''
 Write-Host 'k: stdout on a console' -ForegroundColor Cyan
-$kArgs = if ($LibDb) { @('proptree', '--qname', 'Bde.DBTables.TQuery', '--depth', '3', '--refs-as-leaves', '--no-write-back', '--json', '--db', $LibDb) }
-         else { @('proptree', '--qname', 'OutFix.TSrcComp', '--json', '--no-write-back', '--db', $db) }
+$kArgs = @(if ($LibDb) { @('proptree', '--qname', 'Bde.DBTables.TQuery', '--depth', '3', '--refs-as-leaves', '--no-write-back', '--json', '--db', $LibDb) }
+         else { @('proptree', '--qname', 'OutFix.TSrcComp', '--json', '--no-write-back', '--db', $db) })
 $pk = Start-Process -FilePath $Exe -ArgumentList $kArgs -WindowStyle Hidden -PassThru
 $finK = $pk.WaitForExit(300000)
 if (-not $finK) { try { $pk.Kill() } catch {} }
@@ -578,7 +578,7 @@ exit $answer.Code
     Write-Host ("      {0}: {1} compared case(s), runner exit {2} (informational)" -f $rn.Name, ($after - $before), $rc) -ForegroundColor DarkGray
   }
   Remove-Item Env:\DLT2I_NEW, Env:\DLT2I_OLD, Env:\DLT2I_LOG -ErrorAction SilentlyContinue
-  $rows = if (Test-Path $shimLog) { @(Get-Content $shimLog | ForEach-Object { , ($_ -split "`t") }) } else { @() }
+  $rows = @(if (Test-Path $shimLog) { @(Get-Content $shimLog | ForEach-Object { , ($_ -split "`t") }) } else { @() })
   $okRows = @($rows | Where-Object { $_[2] -eq 'True' -and $_[3] -eq 'True' })
   $bad = @($rows | Where-Object { -not ($_[2] -eq 'True' -and $_[3] -eq 'True') })
   $pt = @($rows | Where-Object { $_[0] -eq 'proptree' }).Count

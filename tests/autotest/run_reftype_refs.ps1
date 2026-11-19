@@ -107,7 +107,7 @@ Check 'no parameter NAME is a type_use' ($paramHits.Count -eq 0) "hits=$($paramH
 # uRefTypeOnly uses uRefTypeOnlyDefs ONLY in `reference to function(..): TRtOnly`.
 # Before the fix uses-audit returned [{"unit":"uRefTypeOnlyDefs","verdict":"unused",..}].
 $auditRaw = (& { $ErrorActionPreference = 'Continue'; & $Exe uses-audit (Join-Path $SrcDir 'uRefTypeOnly.pas') --db $db --format json 2>$null } | Out-String)
-$audit = @($auditRaw | ConvertFrom-Json)
+$audit = @(($auditRaw | ConvertFrom-Json) | ForEach-Object { $_ })
 Check 'uses-audit returned a JSON array' ($auditRaw.Trim().StartsWith('[')) $auditRaw.Trim()
 $flagged = @($audit | Where-Object { $_.unit -eq 'uRefTypeOnlyDefs' })
 Check 'uses-audit keeps uRefTypeOnlyDefs (signature-only use)' ($flagged.Count -eq 0) $auditRaw.Trim()
@@ -151,7 +151,7 @@ Check 'no declared name in an initializer line is a ref' ($declHits.Count -eq 0)
 # uRefInitOnly uses uRefInitOnlyDefs ONLY in `CInitOnly = RiOnly;` (the CLI.pas:69 shape).
 $iaRaw = (& { $ErrorActionPreference = 'Continue'; & $Exe uses-audit (Join-Path $SrcDir 'uRefInitOnly.pas') --db $db --format json 2>$null } | Out-String)
 Check 'uses-audit (init) returned a JSON array' ($iaRaw.Trim().StartsWith('[')) $iaRaw.Trim()
-$iflag = @(@($iaRaw | ConvertFrom-Json) | Where-Object { $_.unit -eq 'uRefInitOnlyDefs' })
+$iflag = @(@(($iaRaw | ConvertFrom-Json) | ForEach-Object { $_ }) | Where-Object { $_.unit -eq 'uRefInitOnlyDefs' })
 Check 'uses-audit keeps uRefInitOnlyDefs (initializer-only use)' ($iflag.Count -eq 0) $iaRaw.Trim()
 
 if ($script:Failed) { Write-Host 'run_reftype_refs: FAIL' -ForegroundColor Red; exit 1 }

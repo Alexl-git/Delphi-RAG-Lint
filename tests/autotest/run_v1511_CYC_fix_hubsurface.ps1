@@ -137,7 +137,7 @@ try {
 
   Push-Location $WorkDir
   try { $js = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --causes --format json --hub-surface --project $Ctl.Dproj --db $Ctl.Db --library-db none 2>$null } | Out-String); $jsCode = $LASTEXITCODE } finally { Pop-Location }
-  $fx = try { @($js | ConvertFrom-Json)[0].fix } catch { $null }
+  $fx = try { @(($js | ConvertFrom-Json) | ForEach-Object { $_ })[0].fix } catch { $null }
   Check 'f8 --causes json --hub-surface: the fix commands are the gated cycles --fix --hub-surface' (($jsCode -eq 0) -and ($null -ne $fx) -and
     ($fx.part -eq 'r3') -and ($fx.dry_run -match '^drag-lint cycles --fix --hub-surface --project ".*HubSurface\.dproj" --db ".*" --cycle 1$') -and
     ($fx.apply -match '^drag-lint cycles --fix --hub-surface --project .* --cycle 1 --apply$')) "exit=$jsCode $js"

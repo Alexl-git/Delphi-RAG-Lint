@@ -69,14 +69,14 @@ $LA = LineOf '{A}'; $LB = LineOf '{B}'; $LC = LineOf '{C}'; $LD = LineOf '{D}'
 function LintJson([string[]]$Extra) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $Unit --json @Extra 2>$null }) -join "`n"
   Write-Host ('raw[0..200]: ' + $raw.Substring(0, [Math]::Min(200, $raw.Length)).Replace("`n", ' '))
-  try { return @($raw | ConvertFrom-Json) } catch { Check 'lint --json parses' $false; return @() }
+  try { return @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { Check 'lint --json parses' $false; return @() }
 }
 function Msg($all, $line) {
   @($all | Where-Object { $_.rule -eq 'review-marker-malformed' -and $_.start_line -eq $line } | ForEach-Object { $_.message })
 }
 
 try {
-  $all = LintJson @()
+  $all = @(LintJson @())
   Check 'lint returned findings (non-empty answer)' ($all.Count -gt 0) "count=$($all.Count)"
   $a = Msg $all $LA; $b = Msg $all $LB; $c = Msg $all $LC; $d = Msg $all $LD
   Check "A: dl:ok typo reported (line $LA)" ($a.Count -eq 1) "n=$($a.Count)"
@@ -87,7 +87,7 @@ try {
   Check 'C: no guess offered' (-not (($c -join '') -like '*Did you mean*')) ($c -join '')
   Check "D: known id + reason not reported (line $LD)" ($d.Count -eq 0) "n=$($d.Count)"
 
-  $off = LintJson @('--disable', 'review-marker-malformed')
+  $off = @(LintJson @('--disable', 'review-marker-malformed'))
   Check 'P: positive control -- rule disabled, A and B gone' (((Msg $off $LA).Count + (Msg $off $LB).Count) -eq 0)
 } finally {
   try { [IO.Directory]::Delete($Work, $true) } catch { }

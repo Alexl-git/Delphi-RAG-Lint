@@ -78,7 +78,7 @@ function At([int]$Line, [string]$Name) {
   return @($script:Refs | Where-Object { [int]$_.l -eq $Line -and $_.n -eq $Name } | ForEach-Object { "$($_.k)>$($_.bound)$(if ($_.ext) { "|$($_.ext)" })" })
 }
 function Bound($Label, [int]$Line, [string]$Name, [string]$Kind, [string]$QName) {
-  $a = At $Line $Name
+  $a = @(At $Line $Name)
   Check $Label ($a -contains "$Kind>$QName") "line $Line $Name : [$($a -join '; ')]"
 }
 
@@ -99,7 +99,7 @@ Bound 'i8 inherited Make(N)'                $l 'Make'  'call' 'NrTypes.TBase.Mak
 Bound 'i9 inherited Make(N).Count'          $l 'Count' 'member-access' 'NrTypes.TBase.Count'
 $c = @($script:Refs | Where-Object { [int]$_.l -eq (LineOf '^  inherited;$') }).Count
 Check 'i10 a bare inherited names nothing: no row' ($c -eq 0) "rows=$c"
-$a = At (LineOf '^  inherited Clear;') 'Clear'
+$a = @(At (LineOf '^  inherited Clear;') 'Clear')
 Check 'i11 a library parent: external, not a project symbol' (($a | Where-Object { $_ -match '^call>\|.*TStringList\.Clear' }).Count -eq 1) "[$($a -join '; ')]"
 
 Write-Host 'property specifiers' -ForegroundColor Cyan
@@ -120,7 +120,7 @@ Check 's9 implements: a second type_use of IDoer' (@(At $l 'IDoer' | Where-Objec
 Write-Host 'for X in' -ForegroundColor Cyan
 Bound 'f1 iterator X'     (LineOf 'for X in A do') 'X' 'write' 'NrTypes.Use.X'
 Bound 'f2 iterator Y, never read' (LineOf 'for Y in A do') 'Y' 'write' 'NrTypes.Use.Y'
-$a = At (LineOf 'for var Z in A do') 'Z'
+$a = @(At (LineOf 'for var Z in A do') 'Z')
 Check 'f3 for var Z: a declaration, no row' ($a.Count -eq 0) "[$($a -join '; ')]"
 
 Write-Host 'record-constant field names' -ForegroundColor Cyan
@@ -135,11 +135,11 @@ Bound 'r5 field of an inline array' (LineOf '^    Pts: \(\(Alpha') 'Alpha' $RF '
 Bound 'r6 field of a named array'   (LineOf '^    Named: \(\(Alpha') 'Alpha' $RF 'NrTypes.TPoint2.Alpha'
 Bound 'r7 const of an inline array' (LineOf 'CArr: array') 'Alpha' $RF 'NrTypes.TPoint2.Alpha'
 Bound 'r8 const of a named array'   (LineOf 'CAlias: TPairs') 'Alpha' $RF 'NrTypes.TPoint2.Alpha'
-$a = At (LineOf 'COther: TOtherPt') 'Alpha'
+$a = @(At (LineOf 'COther: TOtherPt') 'Alpha')
 Check 'r9 same name, other record: only its own type answers' (($a -join ';') -eq "$RF>NrTypes.TOtherPt.Alpha") "[$($a -join '; ')]"
 Bound 'r10 var initializer' (LineOf 'VOne: TPoint2 =') 'Alpha' $RF 'NrTypes.TPoint2.Alpha'
 Bound 'r11 routine-local const' (LineOf 'CLocal: TPoint2 =') 'Alpha' $RF 'NrTypes.TPoint2.Alpha'
-$a = At (LineOf 'CLib: TPoint =') 'X'
+$a = @(At (LineOf 'CLib: TPoint =') 'X')
 Check 'r12 a library record: external, not TOtherPt.X' ((($a -join ';') -match '^record-field>\|.*TPoint\.X') ) "[$($a -join '; ')]"
 
 Write-Host 'an incremental re-emit writes the same rows' -ForegroundColor Cyan

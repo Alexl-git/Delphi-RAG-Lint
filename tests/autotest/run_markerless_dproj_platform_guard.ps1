@@ -50,13 +50,13 @@ function Plat($out) { $l = @($out | Where-Object { $_ -like 'platform=*' }); if 
 Write-Host ''
 Write-Host 'run_markerless_dproj_platform_guard -- marker-less .dproj lints as Win32 (ruling a3)' -ForegroundColor Cyan
 New-Item -ItemType Directory $WorkDir -Force | Out-Null
-$a = RunCase 'a-markerless' '' @()
+$a = @(RunCase 'a-markerless' '' @())
 Check 'A: owning .dproj found' (@($a | Where-Object { $_ -like 'dproj=*Legacy.dproj' }).Count -eq 1) "out=$($a[0..4] -join ' | ')"
 Check 'A: marker-less Win32-only .dproj -> platform=Win32' ((Plat $a) -eq 'Win32') "platform=$(Plat $a)"
 Check 'A: profile holds WIN32, not WIN64' (($a -contains 'WIN32') -and -not ($a -contains 'WIN64')) "WIN32=$($a -contains 'WIN32') WIN64=$($a -contains 'WIN64')"
-$b = RunCase 'b-marker64' 'Win64' @()
+$b = @(RunCase 'b-marker64' 'Win64' @())
 Check 'B control: a Win64 marker still decides -> platform=Win64' ((Plat $b) -eq 'Win64') "platform=$(Plat $b)"
-$c = RunCase 'c-override' '' @('--platform', 'win64')
+$c = @(RunCase 'c-override' '' @('--platform', 'win64'))
 Check 'C control: --platform win64 wins -> platform=Win64' ((Plat $c) -eq 'Win64') "platform=$(Plat $c)"
 [IO.Directory]::Delete($WorkDir, $true)
 if ($script:Failed) { exit 1 }

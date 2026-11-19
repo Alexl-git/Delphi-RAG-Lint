@@ -80,7 +80,7 @@ $now = Get-Content $mcp -Raw | ConvertFrom-Json
 Check 'delphi-lsp gone' (-not ($now.servers.PSObject.Properties.Name -contains 'delphi-lsp'))
 Check 'other server JSON-equal' (Json-Eq $now.servers.other $orig.servers.other)
 Check 'inputs survived' (Json-Eq $now.inputs $orig.inputs)
-$bk = Backups
+$bk = @(Backups)
 Check 'one .bak written' ($bk.Count -eq 1) "found $($bk.Count)"
 if ($bk.Count -eq 1) {
   Check 'backup name is mcp.json.draglint-yyyymmdd-hhmmss.bak' ($bk[0].Name -match '^mcp\.json\.draglint-\d{8}-\d{6}\.bak$') $bk[0].Name
@@ -91,7 +91,7 @@ Write-Host ''
 Write-Host 'CASE 3: POSITIVE CONTROL -- --off again is a no-op' -ForegroundColor Cyan
 $r = Run-Switch @('--vscode','--off','--workspace',$ws,'--assume-host-stopped')
 Check '--off again exit 1' ($r.Code -eq 1) "exit=$($r.Code)"
-Check 'no second backup' ((Backups).Count -eq 1)
+Check 'no second backup' ((@(Backups)).Count -eq 1)
 $r = Run-Switch @('--vscode','--status','--workspace',$ws,'--assume-host-stopped')
 Check 'status says absent' ($r.Out -match 'delphi-lsp: absent') $r.Out.Trim()
 

@@ -165,7 +165,7 @@ Check '2c dry run omits backups/edited; apply carries them' `
 
 # THE PATHS MUST BE REAL. A field naming a .bak that is not on disk is worse
 # than no field: it is what a revert button would offer.
-$bakPaths   = PathList $app.backups
+$bakPaths   = @(PathList $app.backups)
 $bakAllExist = $true
 foreach ($b in $bakPaths) { if (-not (Test-Path $b)) { $bakAllExist = $false } }
 Check '2d apply: every reported backup path exists on disk' `

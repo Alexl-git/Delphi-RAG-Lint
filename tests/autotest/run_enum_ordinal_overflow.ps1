@@ -214,7 +214,7 @@ function SigOf($Hits) {
 }
 
 function CheckOrd([string]$Name, [string]$Expected, [string]$Note = '') {
-  $h = Find-Sym $Name
+  $h = @(Find-Sym $Name)
   $sig = SigOf $h
   Check ("{0} -> {1}" -f $Name, $Expected) ($h.Count -eq 1 -and $sig -eq $Expected) `
     ("hits={0} signature='{1}' {2}" -f $h.Count, $sig, $Note)
@@ -228,7 +228,7 @@ Write-Host '  (if any of these fails, this runner is measuring the QUERY path, n
 CheckOrd 'ctA' '0'   'positional ordinal'
 CheckOrd 'ctB' '128' 'explicit initializer resets the counter'
 CheckOrd 'ctC' '129' 'reset-then-continue semantics -- the fix must not disturb this'
-$none = Find-Sym 'NoSuchSymbolZq'
+$none = @(Find-Sym 'NoSuchSymbolZq')
 Check '--exact does not match a symbol that does not exist' ($none.Count -eq 0) `
   "hits=$($none.Count) -- without this, every 'hits=1' below could be --exact matching everything"
 
@@ -242,11 +242,11 @@ CheckOrd 'ohForce' '2147483647' 'UPPER-case hex -- the D3DCommon / dxFontFile fo
 CheckOrd 'olForce' '2147483647' 'lower-case hex -- the Winapi.D3D10 form'
 CheckOrd 'odOnly'  '2147483647' 'decimal -- the WinAPI.Media / WinAPI.UI.Core form'
 
-$marker = Find-Sym 'OvfMarkerConst'
+$marker = @(Find-Sym 'OvfMarkerConst')
 Check 'OvfMarkerConst is present' ($marker.Count -eq 1) `
   "hits=$($marker.Count) -- a const OUTSIDE the enum: this is what proves the WHOLE FILE committed"
 
-$unitRow = Find-Sym 'uOvfMax'
+$unitRow = @(Find-Sym 'uOvfMax')
 Check 'the uOvfMax unit row is present' ($unitRow.Count -eq 1) `
   "hits=$($unitRow.Count) -- a project/library DB holds only indexed members, so a hit IS membership"
 

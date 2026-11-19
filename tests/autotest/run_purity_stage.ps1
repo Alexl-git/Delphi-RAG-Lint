@@ -65,7 +65,7 @@ function Verdict([string]$qname) {
 }
 function PurityLine([string[]]$o) { return @($o | Where-Object { $_ -match '^\s*resolve: purity -- ' }) -join "`n" }
 
-$out = Run-Index @()
+$out = @(Run-Index @())
 Check '0. fixture indexed' (Test-Path $db) $db
 
 Write-Host 'THE STAGE RAN' -ForegroundColor Cyan
@@ -145,7 +145,7 @@ if ($null -eq $py) {
   $del = "import sqlite3; c = sqlite3.connect(r'$db'); n = c.execute(""DELETE FROM symbols WHERE kind='local_var' AND parent_id=(SELECT id FROM symbols WHERE qualified_name='uEffects.TThing.Nested.Inner')"").rowcount; c.commit(); c.close(); print(n)"
   $pyOut = (& { $ErrorActionPreference = 'Continue'; & python -c $del 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check '21. gate control precondition: exactly one local_var row was dropped' ($pyOut.Trim() -eq '1') $pyOut
-  $ro = Run-Index @('--resolve-only')
+  $ro = @(Run-Index @('--resolve-only'))
   Check '21. --resolve-only runs the stage' (($ro -join "`n") -match 'stage: purity -- done in') ''
   $v = Verdict 'uEffects.TThing.Nested.Inner'
   Check '21. gate: var block + no local_var row -> unknown, witness says the local table is incomplete' (($v.ef -eq 0) -and ($v.es -eq '?') -and ($v.ew -eq 'local table incomplete (var declarations without local_var rows)')) "$($v.es) | $($v.ew)"
@@ -160,13 +160,13 @@ Write-Host 'PER-FILE REINDEX RESTORES THE COLUMNS (acceptance 28)' -ForegroundCo
 $f = Join-Path $src 'uEffects.pas'
 [System.IO.File]::AppendAllText($f, "// acceptance 28: content changed`r`n", [Text.Encoding]::ASCII)
 [System.IO.File]::SetLastWriteTimeUtc($f, (Get-Date).ToUniversalTime().AddSeconds(5))
-$out2 = Run-Index @()
+$out2 = @(Run-Index @())
 $nulls = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --format text --query "SELECT count(*) FROM symbol_facts WHERE ifnull(body_loc,0) > 0 AND effect_free IS NULL" 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check '28. after an incremental run every routine has a verdict again' ($nulls -match '(?m)^\s*0\s*$') $nulls
 Check '28. the stage ran on that run' (($out2 -join "`n") -match 'stage: purity -- done in') ''
 $v = Verdict 'uEffects.TThing.Nested.Inner'
 Check '28. the re-parse restored the local_var row, so the gate no longer fires' (($v.ef -eq 0) -and ($v.es -eq 'g')) "$($v.es) | $($v.ew)"
-$out3 = Run-Index @()
+$out3 = @(Run-Index @())
 Check 'a no-change run SKIPS the stage and says so' (($out3 -join "`n") -match 'stage: purity -- skipped') ''
 Check 'a no-change run prints no resolve: purity line' ((PurityLine $out3) -eq '') ''
 
@@ -177,14 +177,14 @@ Write-Host 'STALE SOURCE (plan ruling 7)' -ForegroundColor Cyan
 $fc = Join-Path $src 'uCycle.pas'
 [System.IO.File]::WriteAllText($fc, ([System.IO.File]::ReadAllText($fc) + "{ edited after indexing }`r`n"), [System.Text.Encoding]::ASCII)
 [System.IO.File]::SetLastWriteTimeUtc($fc, (Get-Date).ToUniversalTime().AddSeconds(20))
-$ro2 = Run-Index @('--resolve-only')
+$ro2 = @(Run-Index @('--resolve-only'))
 $v = Verdict 'uCycle.IsEven'
 Check 'R7. a routine in a file edited since indexing is ? with the stale witness' (($v.ef -eq 0) -and ($v.es -eq '?') -and ($v.ew -eq 'source changed since indexing')) "$($v.es) | $($v.ew)"
 $w = Verdict 'uEffects.AddUp'
 Check 'R7. a routine in an UNCHANGED file keeps its verdict' ($w.ef -eq 1) "$($w.es) | $($w.ew)"
 $pl = PurityLine $ro2
 Check 'R7. the resolve: purity line counts one stale file' ($pl -match '1 stale file\(s\)') $pl
-$out4 = Run-Index @()
+$out4 = @(Run-Index @())
 $v = Verdict 'uCycle.IsEven'
 Check 'R7. a real reindex of the edited file restores its verdict' ($v.ef -eq 1) "$($v.es) | $($v.ew)"
 Check 'R7. and reports no stale file' ((PurityLine $out4) -match '0 stale file\(s\)') (PurityLine $out4)

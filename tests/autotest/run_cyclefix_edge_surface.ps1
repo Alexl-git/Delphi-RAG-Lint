@@ -55,7 +55,7 @@ function Get-Groups([string]$Db, [string[]]$Extra, [string]$Tag) {
     -ArgumentList (@('cycles', '--db', ('"' + $Db + '"'), '--format', 'json') + $Extra) `
     -RedirectStandardOutput $o -RedirectStandardError $e
   Check "cycles $Tag exit 0" ($p.ExitCode -eq 0) "exit=$($p.ExitCode)"
-  try { return ,@([IO.File]::ReadAllText($o) | ConvertFrom-Json) } catch { Check "cycles $Tag is JSON" $false $_.Exception.Message; return ,@() }
+  try { return ,@(([IO.File]::ReadAllText($o) | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { Check "cycles $Tag is JSON" $false $_.Exception.Message; return ,@() }
 }
 function Find-Edge($Groups, [string]$From, [string]$To) {
   foreach ($g in $Groups) {

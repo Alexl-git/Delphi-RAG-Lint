@@ -155,13 +155,13 @@ function RaisesLines([string]$md) { return @(($md -split "`n") | Where-Object { 
 # ---------------- ON (default) ----------------
 $on = Session @() 'on'
 $mdRisky = HoverMd $on[2]; $mdSafe = HoverMd $on[3]; $mdPlain = HoverMd $on[4]
-$rl = RaisesLines $mdRisky
+$rl = @(RaisesLines $mdRisky)
 Check 'H1 hover Risky (no-doc path): exactly one Raises: line' ($rl.Count -eq 1) ("lines=" + ($rl -join ' | '))
 Check 'H1 hover Risky: EFoo (bound), EArgumentException (spelled), source order' ($mdRisky -match 'Raises: EFoo \(bound\), EArgumentException \(spelled\)') ($rl -join ' | ')
-$rs = RaisesLines $mdSafe
+$rs = @(RaisesLines $mdSafe)
 Check 'H1 hover Safe (doc path): Raises: EFoo (handler) -- the reraise under on E: EFoo' ($rs.Count -eq 1 -and $mdSafe -match 'Raises: EFoo \(handler\)') ("md=" + ($mdSafe -replace "`n", ' / '))
 Check 'H1 control: the doc path really is the doc path (summary text shown)' ($mdSafe -match 'absorbs what it may raise')
-Check 'H3 hover Plain: no Raises: line' ($mdPlain -ne '' -and (RaisesLines $mdPlain).Count -eq 0) ("md=" + ($mdPlain -replace "`n", ' / '))
+Check 'H3 hover Plain: no Raises: line' ($mdPlain -ne '' -and (@(RaisesLines $mdPlain)).Count -eq 0) ("md=" + ($mdPlain -replace "`n", ' / '))
 $b = $on[5].result
 Check 'H2 hoverBundle markdown carries the line' ($null -ne $b -and ([string]$b.markdown) -match 'Raises: EFoo \(bound\), EArgumentException \(spelled\)')
 $bf = @(); if ($null -ne $b -and $null -ne $b.model) { $bf = @($b.model.facts) }
@@ -169,7 +169,7 @@ Check 'H2 hoverBundle model facts carry the line (the IDE popup renders these)' 
 
 $lens = @(); if ($null -ne $on[6]) { $lens = @($on[6].result) }
 function LensTitles($ls, $ln) { return @($ls | Where-Object { $_.range.start.line -eq $ln } | ForEach-Object { [string]$_.command.title }) }
-$tR = LensTitles $lens $lnRisky; $tS = LensTitles $lens $lnSafe; $tP = LensTitles $lens $lnPlain
+$tR = @(LensTitles $lens $lnRisky); $tS = @(LensTitles $lens $lnSafe); $tP = @(LensTitles $lens $lnPlain)
 Check 'L1 lens on Risky: raises 2 types' ($tR -contains 'raises 2 types') ($tR -join ' | ')
 Check 'L1 lens on Safe: raises 1 type, handles 2 types' ($tS -contains 'raises 1 type, handles 2 types') ($tS -join ' | ')
 Check 'L1 no exception lens on Plain' (@($tP | Where-Object { $_ -match 'raises|handles' }).Count -eq 0) ($tP -join ' | ')
@@ -182,7 +182,7 @@ function ExcTitle($resp, $ln) {
 }
 $cc = $on[7]
 Check 'C1 callerCounts has an exceptions array' ($null -ne $cc -and $null -ne $cc.result -and $null -ne $cc.result.exceptions) ("raw=" + ($cc | ConvertTo-Json -Compress -Depth 6))
-Check 'C1 callerCounts exceptions: Risky line = raises 2 types' (@(ExcTitle $cc $lnRisky) -contains 'raises 2 types') ((ExcTitle $cc $lnRisky) -join ' | ')
+Check 'C1 callerCounts exceptions: Risky line = raises 2 types' (@(ExcTitle $cc $lnRisky) -contains 'raises 2 types') ((@(ExcTitle $cc $lnRisky)) -join ' | ')
 Check 'C1 callerCounts exceptions: Safe line = raises 1 type, handles 2 types' (@(ExcTitle $cc $lnSafe) -contains 'raises 1 type, handles 2 types')
 Check 'C1 callerCounts exceptions: nothing on Plain' (@(ExcTitle $cc $lnPlain).Count -eq 0)
 Check 'C1 callerCounts counts unchanged (Risky 1)' (@($cc.result.counts | Where-Object { $_.line -eq $lnRisky -and $_.count -eq 1 }).Count -eq 1)
@@ -202,7 +202,7 @@ Check 'X3 exceptionFacts on Plain (no raise): [] (negative)' ($null -ne $xp -and
 $off = Session @('--no-exception-facts') 'off'
 $oRisky = HoverMd $off[2]; $oSafe = HoverMd $off[3]
 Check 'O1 OFF: hover still answers' ($oRisky -match 'Risky') ("md=" + ($oRisky -replace "`n", ' / '))
-Check 'O1 OFF: no Raises: line' ((RaisesLines $oRisky).Count -eq 0 -and (RaisesLines $oSafe).Count -eq 0)
+Check 'O1 OFF: no Raises: line' ((@(RaisesLines $oRisky)).Count -eq 0 -and (@(RaisesLines $oSafe)).Count -eq 0)
 function Strip([string]$md) { return ((($md -split "`n") | Where-Object { $_ -notmatch 'Raises:' }) -join "`n") }
 # Wave 150 LX2: Risky also has a 'Called from:' fact now (Safe calls it), so the 'Analysis facts:'
 # header stays in both arms and only the Raises: line differs.
@@ -213,7 +213,7 @@ $ob = @(); if ($null -ne $off[5].result -and $null -ne $off[5].result.model) { $
 Check 'O1 OFF: no Raises: in bundle facts' (@($ob | Where-Object { $_ -match 'Raises:' }).Count -eq 0)
 $olens = @(); if ($null -ne $off[6]) { $olens = @($off[6].result) }
 Check 'O1 OFF: no exception lens' (@($olens | Where-Object { ([string]$_.command.title) -match 'raises|handles' }).Count -eq 0)
-Check 'O1 OFF: caller lenses unchanged' ((LensTitles $olens $lnRisky) -contains '1 caller')
+Check 'O1 OFF: caller lenses unchanged' ((@(LensTitles $olens $lnRisky)) -contains '1 caller')
 Check 'O1 OFF: callerCounts exceptions = [] (counts still there)' ($null -ne $off[7].result -and @($off[7].result.exceptions).Count -eq 0 -and @($off[7].result.counts).Count -gt 0)
 Check 'O1 OFF: exceptionFacts answers []' ($null -ne $off[8] -and @($off[8].result).Count -eq 0)
 # Wave 150 LX2 item 2: the capability follows the switch (ON advertises it: X1 above = the positive control).

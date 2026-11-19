@@ -140,7 +140,7 @@ Check "V the fixture holds more than one ref at the single call site (got $nRefs
 # ---- T1: one site -> one caller ----------------------------------------------
 $a = Bundle $dbA
 Check 'T1 a single call site is listed ONCE: Callers (1)' ((CallerCount $a) -eq 1) ("Callers count = $(CallerCount $a)")
-Check 'T1b and exactly one caller line is printed' ((CallerLines $a).Count -eq 1) ((CallerLines $a) -join ' | ')
+Check 'T1b and exactly one caller line is printed' ((@(CallerLines $a)).Count -eq 1) ((@(CallerLines $a)) -join ' | ')
 
 # ---- P1: two sites -> two callers (the dedupe is on position) ---------------
 $b = Bundle $dbB
@@ -150,7 +150,7 @@ Check 'P1b and the two lines name two different positions' (($bl | Select-Object
 
 # ---- P2: the cap still applies after the dedupe -----------------------------
 $c = Bundle $dbB @('--max-callers', '1')
-Check 'P2 --max-callers 1 prints exactly one caller line' ((CallerLines $c).Count -eq 1) ((CallerLines $c) -join ' | ')
+Check 'P2 --max-callers 1 prints exactly one caller line' ((@(CallerLines $c)).Count -eq 1) ((@(CallerLines $c)) -join ' | ')
 
 # ---- T2: the header names the running engine --------------------------------
 $ver = ((& { $ErrorActionPreference = 'Continue'; & $exePath --version 2>$null }) -join ' ')

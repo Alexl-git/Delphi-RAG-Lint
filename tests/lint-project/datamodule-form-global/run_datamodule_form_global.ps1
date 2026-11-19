@@ -26,7 +26,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 function Parse-Findings([string[]]$Raw) {
   $txt = ($Raw -join "`n"); $b = $txt.IndexOf('[')
-  $out = @(); if ($b -ge 0) { try { $out = @($txt.Substring($b) | ConvertFrom-Json) } catch { $out = @() } }
+  $out = @(); if ($b -ge 0) { try { $out = @(($txt.Substring($b) | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $out = @() } }
   if ($null -eq $out) { $out = @() }
   return ,@($out)
 }
@@ -48,7 +48,7 @@ try {
   $mod = Join-Path $src 'uDmfModule.pas'
 
   # positive-control: datamodule-form-global
-  $hits = RuleFindings $db @('--rule', $Rule)
+  $hits = @(RuleFindings $db @('--rule', $Rule))
   $inModule = @($hits | Where-Object { $_.file_path -like '*uDmfModule.pas' })
   $lines = @($inModule | ForEach-Object { [int]$_.start_line } | Sort-Object)
   $want  = @((LineOf $mod 'TRIGGER-MAIN'), (LineOf $mod 'TRIGGER-PLAIN') | Sort-Object)
@@ -56,7 +56,7 @@ try {
   Check 'RUN 1 nothing fires outside the data module (CONTROL-NOTMODULE)' ($hits.Count -eq $inModule.Count) "$($hits.Count) total"
   Check 'RUN 1 the message counts both references of MainForm' (@($inModule | Where-Object { $_.message -match 'MainForm' -and $_.message -match '\b2 time' }).Count -eq 1) ''
 
-  $off = RuleFindings $db @()
+  $off = @(RuleFindings $db @())
   Check 'RUN 2 plain lint-all: the rule ships OFF' ($off.Count -eq 0) "$($off.Count) finding(s)"
 
   $libSrc = Join-Path $scratch 'libsrc'
@@ -72,7 +72,7 @@ try {
   $t = [IO.File]::ReadAllText($mod).Replace('class(TDataModule)', 'class(TObject)')
   [IO.File]::WriteAllText($mod, $t, [Text.Encoding]::ASCII)
   & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
-  $gone = RuleFindings $db @('--rule', $Rule)
+  $gone = @(RuleFindings $db @('--rule', $Rule))
   Check 'RUN 3 no TDataModule in the unit: the same reads are silent' ($gone.Count -eq 0) "$($gone.Count) finding(s)"
 } finally {
   if (Test-Path $scratch) { [System.IO.Directory]::Delete($scratch, $true) }

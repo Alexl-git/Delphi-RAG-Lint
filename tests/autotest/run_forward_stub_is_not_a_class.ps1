@@ -53,7 +53,7 @@ function WriteAnsi($path, $text) {
 function ParseJsonArray([string]$raw) {
   $end = $raw.LastIndexOf(']')
   if ($end -lt 0) { return @() }
-  return @($raw.Substring(0, $end + 1) | ConvertFrom-Json)
+  return @(($raw.Substring(0, $end + 1) | ConvertFrom-Json) | ForEach-Object { $_ })
 }
 
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }

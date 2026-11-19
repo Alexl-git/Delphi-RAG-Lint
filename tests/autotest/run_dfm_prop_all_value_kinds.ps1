@@ -135,7 +135,7 @@ Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 function Count-Text([string]$Phrase) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe query --text $Phrase --source dfm --db $db --json 2>$null }) -join "`n"
   if ([string]::IsNullOrWhiteSpace($raw)) { return 0 }
-  try { return @($raw | ConvertFrom-Json).Count } catch { return 0 }
+  try { return @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }).Count } catch { return 0 }
 }
 
 Write-Host ''

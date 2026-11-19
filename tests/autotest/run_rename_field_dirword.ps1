@@ -41,7 +41,7 @@ function Get-ParseFindings([string]$Dir, [string]$File, [string]$Db) {
     $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $File --db $Db --json 2>$null } | Out-String
   } finally { Pop-Location }
   $rows = @()
-  try { $rows = @($raw | ConvertFrom-Json) } catch {}
+  try { $rows = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) } catch {}
   return @($rows | Where-Object { $_.rule -in 'parser-error', 'syntax-error' })
 }
 
@@ -89,10 +89,10 @@ end.
   }
 
   # POSITIVE CONTROL: the parse rules fire on a real syntax error.
-  $badHits = Get-ParseFindings $bad (Join-Path $bad 'FieldDirWord.pas') $bdb
+  $badHits = @(Get-ParseFindings $bad (Join-Path $bad 'FieldDirWord.pas') $bdb)
   Check 'CONTROL broken twin raises parser-error/syntax-error' ($badHits.Count -gt 0) "count=$($badHits.Count)"
 
-  $goodHits = Get-ParseFindings $good (Join-Path $good 'FieldDirWord.pas') $gdb
+  $goodHits = @(Get-ParseFindings $good (Join-Path $good 'FieldDirWord.pas') $gdb)
   Check 'ASSERT no parser-error/syntax-error with a field named Platform' ($goodHits.Count -eq 0) `
     ("count={0} {1}" -f $goodHits.Count, (($goodHits | ForEach-Object { "L$($_.start_line)" }) -join ','))
 

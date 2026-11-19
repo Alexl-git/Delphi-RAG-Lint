@@ -256,7 +256,7 @@ $edgesA = (& { $ErrorActionPreference = 'Continue'; & $exePath dump-call-edges -
 $parsedA = Parse-CallEdges $edgesA
 Check-EdgeDumpLayout 'A' $parsedA $edgesA
 foreach ($nm in @('MakePoint','SumPoint')) {
-  $eA = Edges-Into $parsedA "callerline.$nm" 'certain'
+  $eA = @(Edges-Into $parsedA "callerline.$nm" 'certain')
   Check "A PRECONDITION: the index holds exactly ONE certain call edge into $nm" ($eA.Count -eq 1) `
     ("edges=" + ($edgesA -replace "`n",' / '))
 }
@@ -382,7 +382,7 @@ $dbB = Join-Path $sb 'b.sqlite'
 $edges = (& { $ErrorActionPreference = 'Continue'; & $exePath dump-call-edges --db $dbB 2>$null }) -join "`n"
 $parsedB = Parse-CallEdges $edges
 Check-EdgeDumpLayout 'B' $parsedB $edges
-$pingEdges = Edges-Into $parsedB 'callerline_mixed.Ping' 'certain'
+$pingEdges = @(Edges-Into $parsedB 'callerline_mixed.Ping' 'certain')
 Check 'B PRECONDITION: the index holds exactly ONE certain call edge into Ping' ($pingEdges.Count -eq 1) `
   ("edges=" + ($edges -replace "`n",' / '))
 

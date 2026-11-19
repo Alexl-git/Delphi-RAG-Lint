@@ -49,7 +49,7 @@ function Skip([string]$Name, [string]$Why) { $script:skip++; Write-Host "[SKIP] 
 # lint --json / lint-all --json print a bare array of findings (start_line, file_path, rule, severity).
 function Parse-Findings([string[]]$Raw) {
   $txt = ($Raw -join "`n"); $b = $txt.IndexOf('[')
-  $out = @(); if ($b -ge 0) { try { $out = @($txt.Substring($b) | ConvertFrom-Json) } catch { $out = @() } }
+  $out = @(); if ($b -ge 0) { try { $out = @(($txt.Substring($b) | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $out = @() } }
   return ,@($out)
 }
 function RuleHits([string]$Verb, [string]$Db, [string[]]$Extra) {

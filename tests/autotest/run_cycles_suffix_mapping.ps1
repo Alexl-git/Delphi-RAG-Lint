@@ -55,7 +55,7 @@ function Measure-Both([string]$Root, [string]$Tag) {
   $cy = Invoke-Engine @('cycles', '--db', ('"' + $db + '"'), '--library-db', 'none', '--format', 'json') "$Tag-cycles"
   $lint = @(); $groups = @()
   try { $lint = @($li.Out | ConvertFrom-Json | Where-Object { $_.rule -eq 'circular-uses' }) } catch { Check "$Tag lint json parses" $false $li.Out }
-  try { $groups = @($cy.Out | ConvertFrom-Json) } catch { Check "$Tag cycles json parses" $false $cy.Out }
+  try { $groups = @(($cy.Out | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { Check "$Tag cycles json parses" $false $cy.Out }
   $qs = Invoke-Engine @('query', '--name', 'Other.Lib.SQLite', '--db', ('"' + $db + '"')) "$Tag-q"
   return @{ Lint = $lint.Count; Groups = $groups; LintMsg = (($lint | ForEach-Object { $_.message }) -join ' | '); Query = $qs.Out }
 }

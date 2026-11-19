@@ -130,31 +130,31 @@ end.
 
   # ---- find-callers --resolved ------------------------------------------------
   $raw = JsonOf @('query','find-callers','--name','Solo','--resolved','--json','--db',$Db)
-  $rows = @($raw | ConvertFrom-Json)
+  $rows = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ })
   Check 'resolved Solo: one row, resolution=exact' (($rows.Count -eq 1) -and ($rows[0].resolution -ceq 'exact')) "got=$((Kinds $rows) -join ',')"
   Check 'resolved Solo: resolution is the LAST key of the row' ($raw -match '"resolution":\s*"exact"\s*\}') 'key order'
-  $pk = @((JsonOf @('query','find-callers','--name','Pick','--resolved','--json','--db',$Db)) | ConvertFrom-Json)
+  $pk = @(((JsonOf @('query','find-callers','--name','Pick','--resolved','--json','--db',$Db)) | ConvertFrom-Json) | ForEach-Object { $_ })
   # rb5-ovl (63096549, 2026-10-28) narrows a same-arity overload tie by ARGUMENT SHAPE: the
   # string / integer literal calls now resolve exact; the call-shaped argument (Trim(..)) is a
   # shape the narrowing cannot read, so that site must stay ambiguous (the ambiguous control).
   $pkk = (@($pk | ForEach-Object { $_.resolution }) | Sort-Object) -join ','
   Check 'resolved Pick: literal-argument overload calls are exact, an unreadable-shape call stays ambiguous' ($pkk -ceq 'ambiguous,exact,exact') "got=$pkk"
-  $cb = @((JsonOf @('query','find-callers','--name','A_Predicate','--resolved','--json','--db',$Db)) | ConvertFrom-Json)
+  $cb = @(((JsonOf @('query','find-callers','--name','A_Predicate','--resolved','--json','--db',$Db)) | ConvertFrom-Json) | ForEach-Object { $_ })
   Check 'resolved A_Predicate: a callback reach is name-only' ((@($cb | Where-Object { $_.confidence -ceq 'callback' -and $_.resolution -ceq 'name-only' })).Count -ge 1) "got=$((Kinds $cb) -join ',')"
   $tx = (& { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name Pick --resolved --db $Db 2>$null } | Out-String)
   Check 'resolved text: totals line names the kinds' ($tx -match '\d+ callers? \(.*\d+ ambiguous') $tx.Trim()
 
   # ---- find-callers (name path): POSITIVE CONTROL exact + name-only in ONE answer ----
-  $nm = @((JsonOf @('query','find-callers','--name','Solo','--json','--db',$Db)) | ConvertFrom-Json)
+  $nm = @(((JsonOf @('query','find-callers','--name','Solo','--json','--db',$Db)) | ConvertFrom-Json) | ForEach-Object { $_ })
   Check 'name path Solo: json rows carry resolution' ((@($nm | Where-Object { -not $_.resolution }).Count -eq 0) -and ($nm.Count -ge 2)) "got=$((Kinds $nm) -join ',')"
   Check 'CONTROL name path Solo: an exact row AND a name-only row in one answer' (((Kinds $nm) -contains 'exact') -and ((Kinds $nm) -contains 'name-only')) "got=$((Kinds $nm) -join ',')"
-  $ms = @((JsonOf @('query','find-callers','--name','Missing','--json','--db',$Db)) | ConvertFrom-Json)
+  $ms = @(((JsonOf @('query','find-callers','--name','Missing','--json','--db',$Db)) | ConvertFrom-Json) | ForEach-Object { $_ })
   Check 'name path Missing: an undeclared callee is name-only' (($ms.Count -ge 1) -and (@($ms | Where-Object { $_.resolution -cne 'name-only' }).Count -eq 0)) "got=$((Kinds $ms) -join ',')"
   $nt = (& { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name Solo --db $Db 2>$null } | Out-String)
   Check 'name path text: totals line names the kinds' (($nt -match '\d+ caller\(s\) \(') -and ($nt -match 'exact') -and ($nt -match 'name-only')) $nt.Trim()
 
   # ---- find-callees -----------------------------------------------------------
-  $ce = @((JsonOf @('find-callees','--qname','uResKind.Driver','--json','--db',$Db)) | ConvertFrom-Json)
+  $ce = @(((JsonOf @('find-callees','--qname','uResKind.Driver','--json','--db',$Db)) | ConvertFrom-Json) | ForEach-Object { $_ })
   Check 'find-callees: resolved edges carry exact and ambiguous' ((((Kinds $ce) -contains 'exact') -and ((Kinds $ce) -contains 'ambiguous')) -and (@($ce | Where-Object { -not $_.resolution }).Count -eq 0)) "got=$((Kinds $ce) -join ',')"
 
   # ---- usages -----------------------------------------------------------------
@@ -177,11 +177,11 @@ end.
   & { $ErrorActionPreference = 'Continue'; & $Exe index $lib --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
   & { $ErrorActionPreference = 'Continue'; & $Exe index $app --db $appxDb --library-db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
   & { $ErrorActionPreference = 'Continue'; & $Exe index $app --db $appDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
-  $ex = @((JsonOf @('query','find-callers','--name','Read','--json','--db',$appxDb)) | ConvertFrom-Json)
+  $ex = @(((JsonOf @('query','find-callers','--name','Read','--json','--db',$appxDb)) | ConvertFrom-Json) | ForEach-Object { $_ })
   Check 'external: a library-bound call is resolution=external' ((Kinds $ex) -contains 'external') "got=$((Kinds $ex) -join ',')"
-  $ne = @((JsonOf @('query','find-callers','--name','Read','--json','--db',$appDb)) | ConvertFrom-Json)
+  $ne = @(((JsonOf @('query','find-callers','--name','Read','--json','--db',$appDb)) | ConvertFrom-Json) | ForEach-Object { $_ })
   Check 'CONTROL external: same site without a library DB is name-only' (($ne.Count -ge 1) -and ((Kinds $ne) -notcontains 'external') -and ((Kinds $ne) -contains 'name-only')) "got=$((Kinds $ne) -join ',')"
-  $ec = @((JsonOf @('find-callees','--qname','xt_app.Go','--json','--db',$appxDb)) | ConvertFrom-Json)
+  $ec = @(((JsonOf @('find-callees','--qname','xt_app.Go','--json','--db',$appxDb)) | ConvertFrom-Json) | ForEach-Object { $_ })
   Check 'find-callees external rows are resolution=external' (@($ec | Where-Object { ($_.external -eq $true) -and ($_.resolution -ceq 'external') }).Count -ge 1) "got=$((Kinds $ec) -join ',')"
 } finally {
   Pop-Location

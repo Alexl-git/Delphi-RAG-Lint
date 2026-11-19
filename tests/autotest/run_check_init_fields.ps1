@@ -186,7 +186,7 @@ try {
 
   function Invoke-Answer($Case, [string]$Source) {
     $db = $dbs[$Case.Fix]
-    $max = if ($Case.Max) { @('--max-routines', "$($Case.Max)") } else { @() }
+    $max = @(if ($Case.Max) { @('--max-routines', "$($Case.Max)") } else { @() })
     if ($Source -eq 'cli') { $raw = & { $ErrorActionPreference = 'Continue'; & $Exe check-init $Case.Target --db $db --json @max 2>$null } }
     else { $raw = & { $ErrorActionPreference = 'Continue'; & $driverExe --db $db --target $Case.Target @max --stable 2>$null } }
     $code = $LASTEXITCODE

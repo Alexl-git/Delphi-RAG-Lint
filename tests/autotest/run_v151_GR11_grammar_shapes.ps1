@@ -64,7 +64,7 @@ function Invoke-Sql([string]$Db, [string]$Query) {
 function Get-Findings([string]$Pas, [string]$Db, [string[]]$Extra) {
   $txt = (& { $ErrorActionPreference = 'Continue'; & $exePath lint $Pas --db $Db --library-db none @Extra --json 2>$null }) -join "`n"
   if ($txt.Trim() -eq '') { return , @() }
-  return , @($txt | ConvertFrom-Json)
+  return , @(($txt | ConvertFrom-Json) | ForEach-Object { $_ })
 }
 
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ('gr11-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))

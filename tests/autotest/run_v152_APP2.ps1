@@ -61,10 +61,10 @@ try {
   $c0 = Join-Path $WorkDir 'Direct.pas'
   [IO.File]::WriteAllText($c0, "program Direct;`r`n`r`n{`$APPTYPE CONSOLE}`r`n`r`nuses Vcl.Dialogs;`r`n`r`nbegin`r`n  ShowMessage('x');`r`nend.`r`n")
   $d = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $c0 --json 2>$null }) -join "`n"
-  $d0 = if ($d.Trim() -eq '') { @() } else { @($d | ConvertFrom-Json | Where-Object { $_.rule -eq $Rule }) }
+  $d0 = @(if ($d.Trim() -eq '') { @() } else { @($d | ConvertFrom-Json | Where-Object { $_.rule -eq $Rule }) })
   Check 'c0 positive control: per-file rule fires on a direct dialog call' ($d0.Count -ge 1) "raw: $d"
 
-  $fc = Get-Findings $DbC @()
+  $fc = @(Get-Findings $DbC @())
   $prog = @($fc | Where-Object { [IO.Path]::GetFileName([string]$_.file_path) -eq 'ConsoleProg.dpr' })
   $lines = @($prog | ForEach-Object { [int]$_.start_line } | Sort-Object)
   Write-Host ("  console ConsoleProg.dpr lines: " + ($lines -join ','))
@@ -74,10 +74,10 @@ try {
   Check 'c4 console: qualified UDialogs.ShowDone fires'       ($lines -contains 12)
   Check 'c5 console: exactly lines 10,11,12 (UOther.Hello does not leak)' (($lines -join ',') -eq '10,11,12') ("got " + ($lines -join ','))
 
-  $fg = Get-Findings $DbG @()
+  $fg = @(Get-Findings $DbG @())
   Check 'c6 gui: same calls are silent (twin of c2)' (@($fg | Where-Object { [IO.Path]::GetFileName([string]$_.file_path) -eq 'GuiProg.dpr' }).Count -eq 0) ("got " + $fg.Count)
 
-  $fn = Get-Findings $DbC @('--rule', $Rule)
+  $fn = @(Get-Findings $DbC @('--rule', $Rule))
   Check 'c7 --rule reaches the cross-unit findings' (@($fn | Where-Object { [IO.Path]::GetFileName([string]$_.file_path) -eq 'ConsoleProg.dpr' }).Count -eq 3) ("got " + $fn.Count)
 }
 finally { Pop-Location }

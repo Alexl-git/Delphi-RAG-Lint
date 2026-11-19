@@ -231,20 +231,20 @@ $null = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db --re
 Check '--rebuild re-fills the row' ((SigOf 'uPropBase.TDerived.Text') -eq ': string') "got: [$(SigOf 'uPropBase.TDerived.Text')]"
 # The reported shape: a use site whose LHS type (TDerived) owns the bare
 # re-publication, so the hover's chosen symbol IS uPropBase.TDerived.Text.
-$p = Pos0 '*E.Text:=*' 'Text' ($useText -split "`r?`n")
+$p = @(Pos0 '*E.Text:=*' 'Text' ($useText -split "`r?`n"))
 $r = Invoke-Lsp $p[0] $p[1] $useFile
 Check 'LSP use-site hover chose the re-publication (premise)' ($r.md -match 'uPropBase\.TDerived\.Text') "got: [$($r.md)]"
 Check 'LSP hover on the re-publication shows property Text: string' ($r.md -match 'property Text: string') "got: [$($r.md)]"
 Check 'LSP hover names the declaring ancestor' ($r.md -match 'declared in `?uPropBase\.TBase') "got: [$($r.md)]"
 Check 'hoverBundle model type = string' ($null -ne $r.model -and $r.model.type -eq 'string') "got: [$($r.model.type)]"
 Check 'hoverBundle model declared_in = uPropBase.TBase' ($null -ne $r.model -and $r.model.declared_in -eq 'uPropBase.TBase') "got: [$($r.model.declared_in)]"
-$p = Pos0 '*Text:= AName;*' 'Text'
+$p = @(Pos0 '*Text:= AName;*' 'Text')
 $r = Invoke-Lsp $p[0] $p[1]
 Check 'LSP hover at a same-class use site shows Text: string' ($r.md -match 'Text: string') "got: [$($r.md)]"
-$p = Pos0 '*L:= Length(AName);*' 'L:='
+$p = @(Pos0 '*L:= Length(AName);*' 'L:=')
 $r = Invoke-Lsp $p[0] $p[1]
 Check 'LSP hover on a local var shows L: Integer' ($r.md -match 'L: Integer') "got: [$($r.md)]"
-$p = Pos0 '*property Text: string read*' 'Text'
+$p = @(Pos0 '*property Text: string read*' 'Text')
 $r = Invoke-Lsp $p[0] $p[1]
 Check 'CONTROL: LSP hover on TBase.Text shows its own type' ($r.md -match 'property Text: string') "got: [$($r.md)]"
 Check 'CONTROL: TBase.Text names no ancestor' ($r.md -notmatch 'declared in') "got: [$($r.md)]"

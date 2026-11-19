@@ -145,7 +145,7 @@ try {
   }
   $first = $null
   foreach ($c in $Cases) {
-    $extra = if ($c.Args) { $c.Args } else { @() }
+    $extra = @(if ($c.Args) { $c.Args } else { @() })
     $raw = & { $ErrorActionPreference = 'Continue'; & $Exe check-init $c.Target --db $dbs[$c.Fix] --json @extra 2>$null }
     $code = $LASTEXITCODE
     $json = $null

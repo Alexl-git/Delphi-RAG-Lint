@@ -84,7 +84,7 @@ try {
   $jIntf = if ($jTxt8) { ($jTxt8 -split 'implementation')[0] } else { '' }
   $jImpl = if ($jTxt8) { ($jTxt8 -split 'implementation')[1] } else { '' }
   Check 'utf8: uB left the interface uses AND joined the implementation uses (whole fix, no half)' (($jIntf -notmatch '\buB\b') -and ($jImpl -match '\buB\b'))
-  $jRows = @(); $jb = $jRaw.IndexOf('['); if ($jb -ge 0) { try { $jRows = @($jRaw.Substring($jb) | ConvertFrom-Json) } catch { } }
+  $jRows = @(); $jb = $jRaw.IndexOf('['); if ($jb -ge 0) { try { $jRows = @(($jRaw.Substring($jb) | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { } }
   $jRow = @($jRows | Where-Object { $_.rule -eq $rule -and ($_.file_path -match 'uJ\.pas$' -or $_.file -match 'uJ\.pas$') })
   Check 'utf8: --json row says applied, not declined' (($jRow.Count -eq 1) -and ($jRow[0].applied -eq $true) -and ($jRow[0].declined -ne $true)) $jRaw.Trim()  Check 'ON by default: no config, no --rule -> fires' ($off.Count -eq 9)
   Check 'config enabled -> fires without --rule' ($viaCfg.Count -eq 9)

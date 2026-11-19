@@ -291,7 +291,7 @@ try { $raw2 = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $pr
 $doc2 = $null; try { $doc2 = $raw2 | ConvertFrom-Json } catch { }
 Check 'project-only lint-all parses' ($null -ne $doc2) ''
 if ($null -ne $doc2) {
-  $all2 = if ($doc2.PSObject.Properties['findings']) { @($doc2.findings) } else { @($doc2) }
+  $all2 = @(if ($doc2.PSObject.Properties['findings']) { @($doc2.findings) } else { @($doc2) })
   $dup2 = @($all2 | Where-Object { ($_.rule -eq 'duplicate-global-decl' -or $_.rule_id -eq 'duplicate-global-decl' -or $_.ruleId -eq 'duplicate-global-decl') })
   # NOTE: lint-all may still resolve the MACHINE's real library index through the
   # manifest when only one --db is given, so this control asserts only that the

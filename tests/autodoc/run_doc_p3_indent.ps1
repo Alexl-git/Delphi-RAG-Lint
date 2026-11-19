@@ -218,7 +218,7 @@ Write-Host '--- INDENTATION: every emitted line sits at the DECLARATION s own in
 
 foreach ($nm in $shapes.Keys) {
   $want = $shapes[$nm].Indent
-  $blk  = Get-Lines $res[$nm].Block
+  $blk  = @(Get-Lines $res[$nm].Block)
   Check "INDENT $nm : a doc block was written at all" ($blk.Count -gt 0) ("count=" + $blk.Count)
   if ($blk.Count -eq 0) { continue }
   # EXACT equality on the whole leading-whitespace run: 'starts with' would
@@ -382,7 +382,7 @@ foreach ($nm in $shapes.Keys) {
 # FreshMember had no comment at all, so its whole block is engine-owned and
 # strip must remove it entirely -- there is no "pristine" to come back to.
 Check 'STRIP FreshMember : the entire engine-written block is gone (nothing was left behind)' `
-  ((Get-Lines $res['FreshMember'].Stripped).Count -eq 0) (($res['FreshMember'].Stripped) -join ' | ')
+  ((@(Get-Lines $res['FreshMember'].Stripped)).Count -eq 0) (($res['FreshMember'].Stripped) -join ' | ')
 
 # The four shapes whose pristine indentation is ALREADY correct and whose
 # pristine tag order already matches the emitter's own fixed order round-trip

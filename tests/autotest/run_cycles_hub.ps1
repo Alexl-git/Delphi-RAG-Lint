@@ -68,7 +68,7 @@ try {
 
   Write-Host '== positive controls' -ForegroundColor Cyan
   $all = Invoke-Engine @('cycles', '--db', $qdb, '--library-db', 'none', '--format', 'json') 'all'
-  $allG = @(); try { $allG = @($all.Out | ConvertFrom-Json) } catch { }
+  $allG = @(); try { $allG = @(($all.Out | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { }
   Check 'plain cycles reports both groups (star and knot)' ($allG.Count -eq 2) "groups=$($allG.Count)"
   $plain = Invoke-Engine @('cycles', '--db', $qdb, '--library-db', 'none') 'plain'
   Check 'without --hub no hub line is printed' ($plain.Exit -eq 0 -and $plain.Out -notmatch '(?m)^\s+hub |hubs: none|zero-ref edges') ''

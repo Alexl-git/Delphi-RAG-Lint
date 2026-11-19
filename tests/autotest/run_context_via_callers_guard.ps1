@@ -118,7 +118,7 @@ $IMPL  = 'uViaWork.TWorker.DoWork'
 $IFACE = 'uViaWork.IWorker.DoWork'
 
 $jraw = (& { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name DoWork --resolved --json --db $db 2>$null }) -join "`n"
-$fc = @($jraw.Substring($jraw.IndexOf('[')) | ConvertFrom-Json)
+$fc = @(($jraw.Substring($jraw.IndexOf('[')) | ConvertFrom-Json) | ForEach-Object { $_ })
 $N = @($fc | Where-Object { $_.target_qname -eq $IMPL -and $_.via -eq $IFACE }).Count
 Check 'FC find-callers --resolved: N >= 1 via rows on TWorker.DoWork' ($N -ge 1) "N=$N"
 

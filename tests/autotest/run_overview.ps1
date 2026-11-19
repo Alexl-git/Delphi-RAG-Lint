@@ -77,7 +77,7 @@ Check 'T1 six section headers in the fixed order' ($r.Exit -eq 0 -and $ordered) 
 
 $j = Run @('--db',$db,'--json')
 $obj = $null; try { $obj = $j.Text | ConvertFrom-Json } catch {}
-$keys = if ($obj) { @($obj.PSObject.Properties.Name) } else { @() }
+$keys = @(if ($obj) { @($obj.PSObject.Properties.Name) } else { @() })
 Check 'T2 --json has exactly the six section keys, in order' (($keys -join ',') -eq ($sections -join ',')) ("keys=$($keys -join ',')")
 
 if ($obj) {

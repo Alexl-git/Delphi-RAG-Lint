@@ -154,7 +154,7 @@ try {
   foreach ($mode in @('qname', 'unit')) {
     $fx = New-Fixture (Join-Path $WorkDir "d2$mode")
     [IO.File]::WriteAllText($fx.App, "{ shifted }`r`n" + [IO.File]::ReadAllText($fx.App), [Text.Encoding]::ASCII)
-    $sel = if ($mode -eq 'qname') { @('--qname', 'uApp.AppDo') } else { @('--unit', $fx.App) }
+    $sel = @(if ($mode -eq 'qname') { @('--qname', 'uApp.AppDo') } else { @('--unit', $fx.App) })
     $c = Run $fx (@('document') + $sel + @('--apply', '--json', '--no-backup'))
     $cj = Parse-One $c.Out
     Check "D2-JSON --$mode stdout parses as ONE JSON document" ($null -ne $cj) "out=$(($c.Out -split "`r?`n" | Select-Object -First 2) -join ' | ')"

@@ -104,7 +104,7 @@ foreach ($case in $cases) {
     $args = @("lint-all","--db",$db,"--json")
     if (Test-Path $cfgFile) { $args += @("--config",$cfgFile) }
     $raw = & { $ErrorActionPreference = 'Continue'; & $exePath @args 2>$null } @args
-    foreach ($f in (Parse-Findings $raw)) {
+    foreach ($f in (@(Parse-Findings $raw))) {
       $fp = if ($f.file_path) { $f.file_path } else { $f.file }
       $fn = if ($fp) { Split-Path $fp -Leaf } else { "" }
       $findings += [pscustomobject]@{ rule=$f.rule; line=$f.start_line; file=$fn }
@@ -116,7 +116,7 @@ foreach ($case in $cases) {
       $args = @("check-ast",$pas.FullName,"--db",$db,"--format","json")
       if (Test-Path $cfgFile) { $args += @("--config",$cfgFile) }
       $raw = & { $ErrorActionPreference = 'Continue'; & $exePath @args 2>$null } @args
-      foreach ($f in (Parse-Findings $raw)) {
+      foreach ($f in (@(Parse-Findings $raw))) {
         $findings += [pscustomobject]@{ rule=$f.rule; line=$f.start_line; file=$pas.Name }
       }
     }

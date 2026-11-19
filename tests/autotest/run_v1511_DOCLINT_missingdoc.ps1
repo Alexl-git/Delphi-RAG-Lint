@@ -85,7 +85,7 @@ $lb = @('unit doclint1511b;', '', 'interface', 'type', '  /// <summary>Other.</s
 $dl = @('object Holder: THolder', '  OnClick = btnGoClick', 'end')
 [IO.File]::WriteAllText($dfm, (($dl -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 
-function RowsOf([string]$o) { $r = @(); try { $r = @($o | ConvertFrom-Json) } catch { $r = @() }; return ,$r }
+function RowsOf([string]$o) { $r = @(); try { $r = @(($o | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $r = @() }; return ,$r }
 function At($rows, [string]$rule, [int]$line) { @($rows | Where-Object { $_.rule -eq $rule -and $_.start_line -eq $line }) }
 Push-Location $WorkDir
 try {

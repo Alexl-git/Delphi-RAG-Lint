@@ -70,7 +70,7 @@ try {
   [IO.File]::WriteAllText($dtor, $dtorTxt, [Text.Encoding]::ASCII)
   Check 'off-line: fixture has no System.SysUtils' (-not $dtorTxt.Contains('System.SysUtils'))
   $raw4 = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $dtor --fix --fix-rule field-created-not-freed --json --apply --no-backup 2>$null } | Out-String
-  $arr4 = $null; try { $arr4 = @($raw4 | ConvertFrom-Json) } catch { $arr4 = $null }
+  $arr4 = $null; try { $arr4 = @(($raw4 | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $arr4 = $null }
   $t4 = $arr4 | Where-Object { $_.rule -eq 'field-created-not-freed' } | Select-Object -First 1
   Check 'off-line: finding present' ($null -ne $t4)
   $after = [IO.File]::ReadAllText($dtor)
@@ -88,7 +88,7 @@ try {
     Copy-Item $fx.FullName $tgt -Force
     $before = [IO.File]::ReadAllText($tgt)
     $rawX = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $tgt --fix --fix-rule $id --json --apply --no-backup 2>$null } | Out-String
-    $arrX = $null; try { $arrX = @($rawX | ConvertFrom-Json) } catch { $arrX = $null }
+    $arrX = $null; try { $arrX = @(($rawX | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $arrX = $null }
     $appX = @($arrX | Where-Object { $_.rule -eq $id -and $_.applied -eq $true })
     Check "off-line ${id}: applied=true and the file changed" (($appX.Count -ge 1) -and ([IO.File]::ReadAllText($tgt) -ne $before))
   }

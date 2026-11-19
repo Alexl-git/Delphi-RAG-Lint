@@ -63,7 +63,7 @@ function Profile([string]$dproj, [string]$platform, [string]$config) {
 Push-Location C:\TEMP
 try {
   # --- Win64 / Release ---
-  $rel64 = Profile $sample 'Win64' 'Release'
+  $rel64 = @(Profile $sample 'Win64' 'Release')
   Check 'Win64/Release CONTAINS win64 (platform builtin)'              ($rel64 -contains 'win64')
   Check 'Win64/Release CONTAINS mswindows (platform builtin)'          ($rel64 -contains 'mswindows')
   Check 'Win64/Release CONTAINS unicode (platform builtin)'            ($rel64 -contains 'unicode')
@@ -73,13 +73,13 @@ try {
   Check 'Win64/Release NOT debug (Cfg_1 not selected)'                 (-not ($rel64 -contains 'debug'))
 
   # --- Win64 / Debug ---
-  $dbg64 = Profile $sample 'Win64' 'Debug'
+  $dbg64 = @(Profile $sample 'Win64' 'Debug')
   Check 'Win64/Debug CONTAINS debug (Cfg_1 DCC_Define)'                ($dbg64 -contains 'debug')
   Check 'Win64/Debug CONTAINS custom_base (Base DCC_Define)'           ($dbg64 -contains 'custom_base')
   Check 'Win64/Debug NOT release (Cfg_2 not selected)'                 (-not ($dbg64 -contains 'release'))
 
   # --- Win32 / Release ---
-  $rel32 = Profile $sample 'Win32' 'Release'
+  $rel32 = @(Profile $sample 'Win32' 'Release')
   Check 'Win32/Release CONTAINS win32 (platform builtin)'              ($rel32 -contains 'win32')
   Check 'Win32/Release CONTAINS cpux86 (platform builtin)'             ($rel32 -contains 'cpux86')
   Check 'Win32/Release NOT win64 (wrong-platform builtin absent)'      (-not ($rel32 -contains 'win64'))
@@ -94,19 +94,19 @@ try {
   # the selector groups whose Condition names BOTH $(Base) and $(Base_Win64) but
   # carry no DCC_Define. See docs\INBOX-pp-profile-ignores-platform-propertygroups.md.
   $plat = Join-Path $fixDir 'platform_groups.dproj'
-  $p64d = Profile $plat 'Win64' 'Debug'
+  $p64d = @(Profile $plat 'Win64' 'Debug')
   Check 'plat Win64/Debug CONTAINS all_base (Base)'                    ($p64d -contains 'all_base')
   Check 'plat Win64/Debug CONTAINS plat64_only (Base_Win64)'           ($p64d -contains 'plat64_only')
   Check 'plat Win64/Debug CONTAINS debug (Cfg_1)'                      ($p64d -contains 'debug')
   Check 'plat Win64/Debug CONTAINS cfg1_w64 (Cfg_1_Win64)'             ($p64d -contains 'cfg1_w64')
   Check 'plat Win64/Debug NOT plat32_only (Base_Win32 is other platform)' (-not ($p64d -contains 'plat32_only'))
   Check 'plat Win64/Debug NOT cfg2_w32 (Cfg_2_Win32 not selected)'     (-not ($p64d -contains 'cfg2_w32'))
-  $p32r = Profile $plat 'Win32' 'Release'
+  $p32r = @(Profile $plat 'Win32' 'Release')
   Check 'plat Win32/Release CONTAINS plat32_only (Base_Win32)'         ($p32r -contains 'plat32_only')
   Check 'plat Win32/Release CONTAINS cfg2_w32 (Cfg_2_Win32)'           ($p32r -contains 'cfg2_w32')
   Check 'plat Win32/Release NOT plat64_only (Base_Win64 is other platform)' (-not ($p32r -contains 'plat64_only'))
   Check 'plat Win32/Release NOT cfg1_w64 (Cfg_1_Win64 not selected)'   (-not ($p32r -contains 'cfg1_w64'))
-  $p64r = Profile $plat 'Win64' 'Release'
+  $p64r = @(Profile $plat 'Win64' 'Release')
   Check 'plat Win64/Release NOT cfg1_w64 (Debug platform group not selected)' (-not ($p64r -contains 'cfg1_w64'))
   Check 'plat Win64/Release CONTAINS plat64_only (Base_Win64 is config-independent)' ($p64r -contains 'plat64_only')
 
@@ -116,19 +116,19 @@ try {
   # C:\Projects corpus. The union reader kept the replaced define, so the index
   # parsed {$IFDEF} branches the build never compiles.
   $repl = Join-Path $fixDir 'replace_groups.dproj'
-  $r64d = Profile $repl 'Win64' 'Debug'
+  $r64d = @(Profile $repl 'Win64' 'Debug')
   Check 'repl Win64/Debug CONTAINS w64_only (Base_Win64 replaces)'      ($r64d -contains 'w64_only')
   Check 'repl Win64/Debug CONTAINS debug (Cfg_1 appends, token first)'  ($r64d -contains 'debug')
   Check 'repl Win64/Debug NOT base_a (replaced by Base_Win64)'          (-not ($r64d -contains 'base_a'))
   Check 'repl Win64/Debug CONTAINS win64 (builtins survive a replace)'  ($r64d -contains 'win64')
-  $r32d = Profile $repl 'Win32' 'Debug'
+  $r32d = @(Profile $repl 'Win32' 'Debug')
   Check 'repl Win32/Debug CONTAINS base_a (no replace on Win32)'        ($r32d -contains 'base_a')
   Check 'repl Win32/Debug CONTAINS debug'                               ($r32d -contains 'debug')
-  $r32r = Profile $repl 'Win32' 'Release'
+  $r32r = @(Profile $repl 'Win32' 'Release')
   Check 'repl Win32/Release CONTAINS only_r32 (Cfg_2_Win32 replaces)'   ($r32r -contains 'only_r32')
   Check 'repl Win32/Release NOT release (replaced by Cfg_2_Win32)'      (-not ($r32r -contains 'release'))
   Check 'repl Win32/Release NOT base_a (replaced by Cfg_2_Win32)'       (-not ($r32r -contains 'base_a'))
-  $r64r = Profile $repl 'Win64' 'Release'
+  $r64r = @(Profile $repl 'Win64' 'Release')
   Check 'repl Win64/Release CONTAINS release (appends after replace)'   ($r64r -contains 'release')
   Check 'repl Win64/Release NOT base_a'                                 (-not ($r64r -contains 'base_a'))
 
@@ -137,21 +137,21 @@ try {
   # (child of Release/Cfg_1), Staging=Cfg_4 (child of Base). The old reader
   # mapped Debug->Cfg_1 and everything else->Cfg_2.
   $cust = Join-Path $fixDir 'custom_configs.dproj'
-  $c64d = Profile $cust 'Win64' 'Debug'
+  $c64d = @(Profile $cust 'Win64' 'Debug')
   Check 'cust Win64/Debug CONTAINS debug (Debug is Cfg_2 here)'         ($c64d -contains 'debug')
   Check 'cust Win64/Debug NOT release (Cfg_1 is Release here)'          (-not ($c64d -contains 'release'))
   Check 'cust Win64/Debug NOT rel_w64'                                  (-not ($c64d -contains 'rel_w64'))
-  $c64r = Profile $cust 'Win64' 'Release'
+  $c64r = @(Profile $cust 'Win64' 'Release')
   Check 'cust Win64/Release CONTAINS release + rel_w64'                 (($c64r -contains 'release') -and ($c64r -contains 'rel_w64'))
   Check 'cust Win64/Release NOT debug'                                  (-not ($c64r -contains 'debug'))
-  $c64p = Profile $cust 'Win64' 'Profiling'
+  $c64p = @(Profile $cust 'Win64' 'Profiling')
   Check 'cust Win64/Profiling CONTAINS profiling + prof_w64 (Cfg_3, Cfg_3_Win64)' (($c64p -contains 'profiling') -and ($c64p -contains 'prof_w64'))
   Check 'cust Win64/Profiling CONTAINS release + rel_w64 (parent Cfg_1 chain)'    (($c64p -contains 'release') -and ($c64p -contains 'rel_w64'))
   Check 'cust Win64/Profiling CONTAINS all_base'                        ($c64p -contains 'all_base')
   Check 'cust Win64/Profiling NOT debug (not Cfg_2)'                    (-not ($c64p -contains 'debug'))
-  $c32p = Profile $cust 'Win32' 'Profiling'
+  $c32p = @(Profile $cust 'Win32' 'Profiling')
   Check 'cust Win32/Profiling NOT prof_w64 / rel_w64 (other platform)'  (-not (($c32p -contains 'prof_w64') -or ($c32p -contains 'rel_w64')))
-  $c64s = Profile $cust 'Win64' 'Staging'
+  $c64s = @(Profile $cust 'Win64' 'Staging')
   Check 'cust Win64/Staging CONTAINS staging + all_base'                (($c64s -contains 'staging') -and ($c64s -contains 'all_base'))
   Check 'cust Win64/Staging NOT release / debug (parent is Base)'       (-not (($c64s -contains 'release') -or ($c64s -contains 'debug')))
 
@@ -166,16 +166,16 @@ try {
   }
   function FactNames($f) { return @($f.defines | ForEach-Object { $_.name.ToLower() }) }
   $fr = Facts $repl 'Win64' 'Debug'
-  Check 'facts repl Win64/Debug NOT base_a (Base_Win64 replaces)'       (-not ((FactNames $fr) -contains 'base_a'))
-  Check 'facts repl Win64/Debug CONTAINS w64_only + debug'              (((FactNames $fr) -contains 'w64_only') -and ((FactNames $fr) -contains 'debug'))
+  Check 'facts repl Win64/Debug NOT base_a (Base_Win64 replaces)'       (-not ((@(FactNames $fr)) -contains 'base_a'))
+  Check 'facts repl Win64/Debug CONTAINS w64_only + debug'              (((@(FactNames $fr)) -contains 'w64_only') -and ((@(FactNames $fr)) -contains 'debug'))
   $fr32 = Facts $repl 'Win32' 'Release'
-  Check 'facts repl Win32/Release NOT release / base_a (Cfg_2_Win32 replaces)' (-not (((FactNames $fr32) -contains 'release') -or ((FactNames $fr32) -contains 'base_a')))
+  Check 'facts repl Win32/Release NOT release / base_a (Cfg_2_Win32 replaces)' (-not (((@(FactNames $fr32)) -contains 'release') -or ((@(FactNames $fr32)) -contains 'base_a')))
   $fc = Facts $cust 'Win64' 'Debug'
   Check 'facts cust Win64/Debug cfg = Cfg_2 (swapped alias)'            ($fc.cfg -eq 'Cfg_2')
-  Check 'facts cust Win64/Debug CONTAINS debug, NOT release'            (((FactNames $fc) -contains 'debug') -and -not ((FactNames $fc) -contains 'release'))
+  Check 'facts cust Win64/Debug CONTAINS debug, NOT release'            (((@(FactNames $fc)) -contains 'debug') -and -not ((@(FactNames $fc)) -contains 'release'))
   $fp = Facts $cust 'Win64' 'Profiling'
   Check 'facts cust Win64/Profiling cfg = Cfg_3, config = Profiling'    (($fp.cfg -eq 'Cfg_3') -and ($fp.config -eq 'Profiling'))
-  Check 'facts cust Win64/Profiling CONTAINS profiling + release (chain)' (((FactNames $fp) -contains 'profiling') -and ((FactNames $fp) -contains 'release'))
+  Check 'facts cust Win64/Profiling CONTAINS profiling + release (chain)' (((@(FactNames $fp)) -contains 'profiling') -and ((@(FactNames $fp)) -contains 'release'))
   $fpb = @($fp.defines | Where-Object { $_.name -eq 'ALL_BASE' })
   Check 'facts cust: ALL_BASE source is Base'                           (($fpb.Count -eq 1) -and ($fpb[0].sources -contains 'Base'))
   $plat2 = Facts (Join-Path $fixDir 'platform_groups.dproj') 'Win64' 'Debug'
@@ -183,7 +183,7 @@ try {
   Check 'facts platform_groups: builtin win64 still reported'           ($both.Count -eq 1 -and $both[0].sources -contains 'builtin')
 
   # --- nonexistent .dproj -> Win64 builtins only, no crash ---
-  $none = Profile $missing 'Win64' 'Release'
+  $none = @(Profile $missing 'Win64' 'Release')
   Check 'missing.dproj CONTAINS win64 (builtins still returned)'       ($none -contains 'win64')
   Check 'missing.dproj CONTAINS unicode (builtins still returned)'     ($none -contains 'unicode')
   Check 'missing.dproj NOT custom_base (no .dproj parsed)'             (-not ($none -contains 'custom_base'))

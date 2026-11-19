@@ -797,7 +797,7 @@ end
           $checks.Add(@($ln, 'to', $Matches[1], @($b)))
         } elseif ($L -match '^#mapping\s+(\S+)\s+#(when|else)\b(.*)$') {
           $name = $Matches[1]; $rest = $Matches[3]
-          $bs = if ($applies.ContainsKey($name)) { $applies[$name] } elseif ($b -gt 0) { @($b) } else { @() }
+          $bs = @(if ($applies.ContainsKey($name)) { $applies[$name] } elseif ($b -gt 0) { @($b) } else { @() })
           if ($Matches[2] -eq 'when' -and $rest -match '^\s*(\S+)\s*=') { $checks.Add(@($ln, 'from', $Matches[1], $bs)) }
           if ($rest -match '->\s*(.+)$') { foreach ($set in $Matches[1].Split(',')) { if ($set.Trim() -match '^(\S+)') { $checks.Add(@($ln, 'to', $Matches[1], $bs)) } } }
         }

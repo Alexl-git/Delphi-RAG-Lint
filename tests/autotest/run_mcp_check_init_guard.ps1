@@ -95,7 +95,7 @@ foreach ($ln in ($mcp -split "`n")) { try { $o = $ln.Trim() | ConvertFrom-Json; 
 $tools = @($rep[2].result.tools)
 $t = @($tools | Where-Object { $_.name -eq 'check_init' })
 Check 'C1 tools/list carries check_init' ($t.Count -eq 1)
-$props = if ($t.Count -eq 1) { @($t[0].inputSchema.properties.PSObject.Properties.Name) } else { @() }
+$props = @(if ($t.Count -eq 1) { @($t[0].inputSchema.properties.PSObject.Properties.Name) } else { @() })
 Check 'C1 schema names target, at, explain, max_routines' (($props -contains 'target') -and ($props -contains 'at') -and ($props -contains 'explain') -and ($props -contains 'max_routines')) "props=$($props -join ',')"
 function ToolText($r) { if ($null -eq $r -or $null -eq $r.result -or $null -eq $r.result.content) { return '' } return ([string]@($r.result.content)[0].text).Trim() }
 $txtT = ToolText $rep[3]

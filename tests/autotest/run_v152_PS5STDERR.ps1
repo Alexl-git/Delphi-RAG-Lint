@@ -25,6 +25,11 @@
     GC positive control: the same scan flags a synthetic unwrapped call.
     B  behaviour under powershell.exe: the wrapped shape survives a stderr line
        and yields the plain text; BC the unwrapped shape still throws (control).
+    G2 guard: no @(<x> | ConvertFrom-Json) in tests\ (PS5 does not unroll a
+       JSON array there); G2C positive control.
+    B2 PS5 behaviour of the fixed JSON shape and of @(helper) around a helper
+       that returns @(...) (PS5 has no .Count on a scalar [pscustomobject]);
+       B2C the bare shapes still misbehave under PS5 (control).
 #>
 [CmdletBinding()]
 param([string]$Root = '')
@@ -73,6 +78,22 @@ function Find-Unwrapped([string]$Text) {
   return $out
 }
 
+function Find-JsonArrayWrap([string]$Text) {
+  $tok = $null; $err = $null
+  $ast = [Management.Automation.Language.Parser]::ParseInput($Text, [ref]$tok, [ref]$err)
+  if ($err.Count) { return @('PARSE-ERROR') }
+  $out = @()
+  foreach ($a in $ast.FindAll({ param($x) $x -is [Management.Automation.Language.ArrayExpressionAst] }, $true)) {
+    $st = $a.SubExpression.Statements
+    if ($st.Count -ne 1 -or $st[0] -isnot [Management.Automation.Language.PipelineAst]) { continue }
+    $last = $st[0].PipelineElements[$st[0].PipelineElements.Count - 1]
+    if ($last -is [Management.Automation.Language.CommandAst] -and $last.GetCommandName() -eq 'ConvertFrom-Json') {
+      $out += "line $($a.Extent.StartLineNumber): $($a.Extent.Text)"
+    }
+  }
+  return $out
+}
+
 try {
   # ---- G: the tree ----------------------------------------------------------
   $enc = [Text.Encoding]::GetEncoding(28591)
@@ -81,13 +102,27 @@ try {
   foreach ($f in $files) {
     $t = $enc.GetString([IO.File]::ReadAllBytes($f.FullName))
     if ($t -notmatch '[2*]>') { continue }
-    foreach ($u in (Find-Unwrapped $t)) { $bad += "$($f.FullName.Substring($Root.Length)) $u" }
+    foreach ($u in (@(Find-Unwrapped $t))) { $bad += "$($f.FullName.Substring($Root.Length)) $u" }
   }
   Check "G no unwrapped redirected-stderr native call in tests\ ($($files.Count) scripts scanned)" ($bad.Count -eq 0) (($bad | Select-Object -First 10) -join "`n      ")
 
   # ---- GC: positive control -------------------------------------------------
-  $ctl = Find-Unwrapped "`$x = & `$Exe index a --db b 2>&1`r`n& { `$ErrorActionPreference = 'Continue'; & `$Exe y 2>`$null }`r`n"
+  $ctl = @(Find-Unwrapped "`$x = & `$Exe index a --db b 2>&1`r`n& { `$ErrorActionPreference = 'Continue'; & `$Exe y 2>`$null }`r`n")
   Check 'GC the scan flags an unwrapped call and only that one' (@($ctl).Count -eq 1 -and "$ctl" -match 'line 1') "$ctl"
+
+  # ---- G2: @(<x> | ConvertFrom-Json) ---------------------------------------
+  # PS5 ConvertFrom-Json emits a JSON array as ONE object, so @(...) around it
+  # has Count 1 for [] and for [a,b]; pwsh enumerates. The fixed shape is
+  # @((<x> | ConvertFrom-Json) | ForEach-Object { $_ }).
+  $bad2 = @()
+  foreach ($f in $files) {
+    $t = $enc.GetString([IO.File]::ReadAllBytes($f.FullName))
+    if ($t -notmatch 'ConvertFrom-Json') { continue }
+    foreach ($u in @(Find-JsonArrayWrap $t)) { $bad2 += "$($f.FullName.Substring($Root.Length)) $u" }
+  }
+  Check 'G2 no @(<x> | ConvertFrom-Json) left in tests\' ($bad2.Count -eq 0) (($bad2 | Select-Object -First 10) -join "`n      ")
+  $ctl2 = @(Find-JsonArrayWrap "`$a = @(`$o | ConvertFrom-Json)`r`n`$b = @((`$o | ConvertFrom-Json) | ForEach-Object { `$_ })`r`n")
+  Check 'G2C the scan flags the bare shape and not the fixed one' ($ctl2.Count -eq 1 -and "$ctl2" -match 'line 1') "$ctl2"
 
   # ---- B / BC: behaviour under Windows PowerShell 5.1 -----------------------
   $ps5 = Join-Path $env:windir 'System32\WindowsPowerShell\v1.0\powershell.exe'
@@ -102,6 +137,10 @@ try {
   "WRAPPED-OK [" + (($w -split "`r?`n" | Where-Object { $_ }) -join '|') + "]"
 } catch { "WRAPPED-THREW" }
 try { $u = & cmd /c "echo err-line 1>&2" 2>&1; "UNWRAPPED-OK" } catch { "UNWRAPPED-THREW" }
+"JSON-FIXED " + @(('[]' | ConvertFrom-Json) | ForEach-Object { $_ }).Count + " " + @(('[{"a":1},{"a":2}]' | ConvertFrom-Json) | ForEach-Object { $_ }).Count
+"JSON-BARE " + @('[{"a":1},{"a":2}]' | ConvertFrom-Json).Count
+function One { return @([pscustomobject]@{ a = 1 }) }
+"COUNT-FIXED " + @(One).Count + " BARE [" + (One).Count + "]"
 '@
     [IO.File]::WriteAllText($probe, $body.Replace("`r`n", "`n").Replace("`n", "`r`n"), [Text.Encoding]::ASCII)
     try {
@@ -109,6 +148,8 @@ try { $u = & cmd /c "echo err-line 1>&2" 2>&1; "UNWRAPPED-OK" } catch { "UNWRAPP
     } finally { [IO.File]::Delete($probe) }
     Check 'B wrapped call survives stderr under PS5 and yields plain text' ($r -match 'WRAPPED-OK \[out-line \|err-line \]') $r
     Check 'BC control: the unwrapped call still throws under PS5' ($r -match 'UNWRAPPED-THREW') $r
+    Check 'B2 fixed shapes under PS5: JSON [] -> 0, [a,b] -> 2; @(helper) of one object -> 1' ($r -match 'JSON-FIXED 0 2' -and $r -match 'COUNT-FIXED 1 ') $r
+    Check 'B2C control: under PS5 the bare JSON shape gives 1 for [a,b] and a scalar object has no Count' ($r -match 'JSON-BARE 1' -and $r -match 'BARE \[\]') $r
   }
 } catch {
   Check 'runner raised' $false $_.Exception.Message

@@ -183,7 +183,7 @@ $q1 = Run-Engine $both @('query', '--name', 'LibOneRoutine', '--platform', 'Win6
 Check 'P1 query finds the FIRST library section''s symbol (control)' ($q1 -match 'LibOneUnit\.LibOneRoutine') "got: [$q1]"
 $rd = Run-Engine $both @('resolve-dbs', '--platform', 'Win64', '--json')
 $rdList = @()
-try { $rdList = @(($rd -split "`r?`n" | Where-Object { $_.TrimStart().StartsWith('[') } | Select-Object -Last 1) | ConvertFrom-Json) } catch { $rdList = @() }
+try { $rdList = @((($rd -split "`r?`n" | Where-Object { $_.TrimStart().StartsWith('[') } | Select-Object -Last 1) | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $rdList = @() }
 $i1 = [Array]::FindIndex([string[]]$rdList, [Predicate[string]]{ param($x) $x -like '*library-Win64.sqlite' })
 $i2 = [Array]::FindIndex([string[]]$rdList, [Predicate[string]]{ param($x) $x -like '*libextra-Win64.sqlite' })
 Check 'R1 resolve-dbs lists libextra-Win64 after library-Win64' (($i1 -ge 0) -and ($i2 -gt $i1)) "got: [$($rdList -join ' | ')]"

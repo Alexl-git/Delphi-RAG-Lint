@@ -72,7 +72,7 @@ try {
   $rcJ = & { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name Child --resolved --json --db $db 2>$null } | Out-String
   $ra = & { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name Anchor --resolved --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   $rcOk = $true; $rcRows = @()
-  try { $rcRows = @($rcJ | ConvertFrom-Json) } catch { $rcOk = $false }
+  try { $rcRows = @(($rcJ | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $rcOk = $false }
   Check 'SANITY: find-callers --name Child --resolved --json parsed' $rcOk $rcJ
   Check 'SANITY: the METHOD Child has NO resolved caller (the dangerous shape)' `
         ($rcOk -and @($rcRows | Where-Object { $_.target_qname -eq 'uLeafDecl.TWalker.Child' }).Count -eq 0) $rcJ

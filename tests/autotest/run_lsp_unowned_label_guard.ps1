@@ -82,11 +82,11 @@ function Get-Sources([string]$PasFile) {
 }
 
 Write-Host 'CASE A: owned file keeps the normal source' -ForegroundColor Cyan
-$a = Get-Sources $ownedFile
+$a = @(Get-Sources $ownedFile)
 Check 'PC: owned file publishes a with-statement finding' ($a.Count -ge 1) "sources=[$($a -join ',')]"
 Check 'A: every source is exactly "drag-lint"' ($a.Count -ge 1 -and @($a | Where-Object { $_ -ne 'drag-lint' }).Count -eq 0)
 Write-Host 'CASE B: unowned file is labelled' -ForegroundColor Cyan
-$b = Get-Sources $looseFile
+$b = @(Get-Sources $looseFile)
 Check 'PC: unowned file publishes a with-statement finding' ($b.Count -ge 1) "sources=[$($b -join ',')]"
 Check 'B: every source is "drag-lint (unowned)"' ($b.Count -ge 1 -and @($b | Where-Object { $_ -ne 'drag-lint (unowned)' }).Count -eq 0)
 

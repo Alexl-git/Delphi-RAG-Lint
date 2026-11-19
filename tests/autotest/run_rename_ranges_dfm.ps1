@@ -178,7 +178,7 @@ function Run-Rename($fx, [string[]]$RenameArgs) {
 # Every edit's (line, col, len(old)) slice of its file must BE old.
 function Check-Ranges([string]$Label, $Out) {
   $edits = $null
-  try { $edits = @($Out | ConvertFrom-Json) } catch { }
+  try { $edits = @(($Out | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { }
   Check "$Label --json parses to edits" ($null -ne $edits -and $edits.Count -gt 0) "count=$(@($edits).Count)"
   if ($null -eq $edits) { return @() }
   foreach ($e in $edits) {
@@ -206,7 +206,7 @@ $cases = @(
 foreach ($c in $cases) {
   $r = Run-Rename $r1 @('--kind', 'symbol', '--name', $c.Q, '--to', $c.To, '--json')
   Check "$($c.Q) --json exits 0" ($r.Exit -eq 0) "exit=$($r.Exit)"
-  $ed = Check-Ranges $c.Q $r.Std
+  $ed = @(Check-Ranges $c.Q $r.Std)
   Check "$($c.Q) has >= $($c.MinEdits) edits" (@($ed).Count -ge $c.MinEdits) "count=$(@($ed).Count)"
 }
 
@@ -215,7 +215,7 @@ Write-Host 'Fixture H: handler rename rewrites the text .dfm binding' -Foregroun
 $h = New-Fixture 'H'
 $r = Run-Rename $h @('--kind', 'symbol', '--name', 'Unit1.TForm1.Button1Click', '--to', 'OkClick', '--json')
 Check 'handler --json exits 0' ($r.Exit -eq 0) "exit=$($r.Exit)"
-$ed = Check-Ranges 'handler' $r.Std
+$ed = @(Check-Ranges 'handler' $r.Std)
 Check 'handler --json carries a Unit1.dfm edit' (@($ed | Where-Object { $_.file -like '*Unit1.dfm' }).Count -eq 1)
 $r = Run-Rename $h @('--kind', 'symbol', '--name', 'Unit1.TForm1.Button1Click', '--to', 'OkClick', '--apply', '--no-backup')
 Check 'handler --apply exits 0' ($r.Exit -eq 0) "exit=$($r.Exit) $($r.Out)"

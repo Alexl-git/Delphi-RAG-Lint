@@ -86,7 +86,7 @@ $WantUse = 'scoBusy=1,scoDefault=2,scoWait=1,TGoneOld=1,TOldThing=3,TScreenCurso
 
 # ---- dry run: file-scope book -------------------------------------------------
 $r = Apply 'CvUse.pas' 'type.rules' @('--format', 'json')
-$ma = Kinds $r.J 'migrate-applied'
+$ma = @(Kinds $r.J 'migrate-applied')
 Check 'T1 file-scope dry run: exit 0, JSON parsed' (($r.Code -eq 0) -and ($null -ne $r.J)) $r.Out
 Check 'T2 ... migrate-applied per Old (types, enum members by name, explicit override, cast/is/as, generic arg, unresolved From)' `
   ((Tally $ma) -eq $WantUse) (Tally $ma)
@@ -95,18 +95,18 @@ Check 'T3 ... scoBusy goes to the EXPLICIT scnHourGlass, never the name match sc
 Check 'T4 ... scoWait / scoDefault go by name to scnWait / scnDefault' `
   ((@($ma | Where-Object { ($_.path -eq 'scoWait' -and $_.value -eq 'scnWait') -or ($_.path -eq 'scoDefault' -and $_.value -eq 'scnDefault') }).Count -eq 3)) (($ma | ForEach-Object { "$($_.path)->$($_.value)" }) -join ', ')
 Check 'T5 ... every applied item has a line and the rule line' ((@($ma | Where-Object { $_.line -le 0 -or $_.rule_line -le 0 }).Count -eq 0) -and ($ma.Count -gt 0)) $r.Out
-Check 'T6 ... no migrate-check on the clean unit' ((Kinds $r.J 'migrate-check').Count -eq 0) (((Kinds $r.J 'migrate-check') | ForEach-Object { $_.text }) -join ' | ')
+Check 'T6 ... no migrate-check on the clean unit' ((@(Kinds $r.J 'migrate-check')).Count -eq 0) (((@(Kinds $r.J 'migrate-check')) | ForEach-Object { $_.text }) -join ' | ')
 $plan = Tally $ma
 
 # ---- the same rules inside the #convert block --------------------------------
 $r = Apply 'CvUse.pas' 'inblock.rules' @('--format', 'json')
-$mb = Kinds $r.J 'migrate-applied'
+$mb = @(Kinds $r.J 'migrate-applied')
 Check 'B1 in-block book: the same migrate-applied plan as file scope' ((Tally $mb) -eq $plan) (Tally $mb)
-Check 'B2 ... and no migrate-check (the old "uses units after a member #migrate" refusal is gone)' ((Kinds $r.J 'migrate-check').Count -eq 0) (((Kinds $r.J 'migrate-check') | ForEach-Object { $_.text }) -join ' | ')
+Check 'B2 ... and no migrate-check (the old "uses units after a member #migrate" refusal is gone)' ((@(Kinds $r.J 'migrate-check')).Count -eq 0) (((@(Kinds $r.J 'migrate-check')) | ForEach-Object { $_.text }) -join ' | ')
 
 # ---- positive control -----------------------------------------------------------
 $r = Apply 'CvUse.pas' 'control.rules' @('--format', 'json')
-Check 'C1 control dry run: no migrate item of any kind' (($r.Code -eq 0) -and ((Kinds $r.J 'migrate-applied').Count + (Kinds $r.J 'migrate-check').Count -eq 0)) $r.Out
+Check 'C1 control dry run: no migrate item of any kind' (($r.Code -eq 0) -and ((@(Kinds $r.J 'migrate-applied')).Count + (@(Kinds $r.J 'migrate-check')).Count -eq 0)) $r.Out
 $r = Apply 'CvUse.pas' 'control.rules' @('--apply', '--no-backup')
 $t = Text 'CvUse.pas'
 Check 'C2 ... --apply keeps every TScreenCursorOld / scoWait / TOldThing token' `
@@ -149,11 +149,11 @@ Check 'U5 second --apply adds nothing more (idempotent)' (($r.Code -eq 0) -and (
 [IO.File]::WriteAllBytes((P 'CvUse.dfm'), $orig['CvUse.dfm'])
 Reindex
 $r = Apply 'CvUse.pas' 'type.rules' @('--format', 'json')
-Check 'I1 second run: no migrate-applied item' (($r.Code -eq 0) -and ((Kinds $r.J 'migrate-applied').Count -eq 0)) $r.Out
+Check 'I1 second run: no migrate-applied item' (($r.Code -eq 0) -and ((@(Kinds $r.J 'migrate-applied')).Count -eq 0)) $r.Out
 
 # ---- warnings: unmatched member, unresolvable target, qualified ----------------
 $r = Apply 'CvWarn.pas' 'type.rules' @('--format', 'json')
-$mc = Kinds $r.J 'migrate-check'
+$mc = @(Kinds $r.J 'migrate-check')
 $wl = (Text 'CvWarn.pas') -split "`r`n"
 function LineOf([string]$s) { return 1 + [array]::IndexOf($wl, $s) }
 Check 'W1 warn dry run: exit 0, JSON parsed' (($r.Code -eq 0) -and ($null -ne $r.J)) $r.Out
@@ -166,7 +166,7 @@ Check 'W3b ... and ONE rule-level (line 0) migrate-check for that rule (1.42 MIG
 Check 'W4 ... qualified CvLib.scoWait: a migrate-check, not rewritten' `
   (@($mc | Where-Object { $_.path -eq 'scoWait' -and $_.line -eq (LineOf '  C:= CvLib.scoWait;') }).Count -eq 1) (($mc | ForEach-Object { "$($_.path)@$($_.line): $($_.text)" }) -join ' | ')
 Check 'W5 POSITIVE CONTROL: the var type in the same unit IS renamed (1 migrate-applied)' `
-  ((Tally (Kinds $r.J 'migrate-applied')) -eq 'TScreenCursorOld=1') (Tally (Kinds $r.J 'migrate-applied'))
+  ((Tally (@(Kinds $r.J 'migrate-applied'))) -eq 'TScreenCursorOld=1') (Tally (@(Kinds $r.J 'migrate-applied')))
 $r = Apply 'CvWarn.pas' 'type.rules' @('--apply', '--no-backup')
 $t = Text 'CvWarn.pas'
 Check 'W6 ... --apply leaves scoOther, TOldThing2 and CvLib.scoWait as written' `
@@ -176,7 +176,7 @@ Check 'W6 ... --apply leaves scoOther, TOldThing2 and CvLib.scoWait as written' 
 $WantCode = 'scoDefault=1,scoWait=1,TScreenCursorOld=1'
 $r = Apply 'CvCode.pas' 'type.rules' @('--format', 'json')
 Check 'N1 CvCode (no .dfm) dry run: exit 0, ok, component_part skipped-no-dfm, the three sites applied' `
-  (($r.Code -eq 0) -and ($null -ne $r.J) -and $r.J.ok -and ($r.J.component_part -eq 'skipped-no-dfm') -and ((Tally (Kinds $r.J 'migrate-applied')) -eq $WantCode)) $r.Out
+  (($r.Code -eq 0) -and ($null -ne $r.J) -and $r.J.ok -and ($r.J.component_part -eq 'skipped-no-dfm') -and ((Tally (@(Kinds $r.J 'migrate-applied'))) -eq $WantCode)) $r.Out
 $r = Apply 'CvCode.pas' 'type.rules' @('--apply', '--no-backup')
 $t = Text 'CvCode.pas'
 Check 'N2 ... --apply renames them, adds CvNew once to the implementation uses, writes no .dfm' `
@@ -185,7 +185,7 @@ Check 'N2 ... --apply renames them, adds CvNew once to the implementation uses, 
 $nb = [IO.File]::ReadAllBytes((P 'CvNoInst.dfm'))
 $r = Apply 'CvNoInst.pas' 'type.rules' @('--format', 'json')
 Check 'N3 CvNoInst (.dfm, no #convert instance) dry run: exit 0, ok, component_part applied, the three sites applied' `
-  (($r.Code -eq 0) -and ($null -ne $r.J) -and $r.J.ok -and ($r.J.component_part -eq 'applied') -and ((Tally (Kinds $r.J 'migrate-applied')) -eq $WantCode)) $r.Out
+  (($r.Code -eq 0) -and ($null -ne $r.J) -and $r.J.ok -and ($r.J.component_part -eq 'applied') -and ((Tally (@(Kinds $r.J 'migrate-applied'))) -eq $WantCode)) $r.Out
 $r = Apply 'CvNoInst.pas' 'type.rules' @('--apply', '--no-backup')
 $t = Text 'CvNoInst.pas'
 Check 'N4 ... --apply renames them, CvNew added once, the .dfm byte-unchanged' `

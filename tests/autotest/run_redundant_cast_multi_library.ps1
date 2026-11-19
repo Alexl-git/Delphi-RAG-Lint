@@ -75,7 +75,7 @@ try {
     $e = Join-Path $WorkDir 'plan.err'
     $po = & { $ErrorActionPreference = 'Continue'; & $exe lint --fix --fix-rule redundant-cast --db $db --project $proj --platform win32 --format json @extra 2> $e }
     $pl = $null; try { $pl = ($po -join "`n") | ConvertFrom-Json } catch { }
-    $lines = if ($pl) { @($pl.fixes | ForEach-Object { [int]$_.line } | Sort-Object) } else { $null }
+    $lines = @(if ($pl) { @($pl.fixes | ForEach-Object { [int]$_.line } | Sort-Object) } else { $null })
     [pscustomobject]@{ Plan = $pl; Lines = $lines; Err = [string](Get-Content $e -Raw -ErrorAction SilentlyContinue) }
   }
   $has = { param($r, $ln) $null -ne $r.Lines -and ($r.Lines -contains $ln) }

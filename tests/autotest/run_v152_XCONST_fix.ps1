@@ -115,7 +115,7 @@ function Build($C) {
   $p = Start-Process -Wait -PassThru -NoNewWindow -FilePath cmd.exe -ArgumentList '/c', $bat -RedirectStandardOutput (Join-Path $C.Dir 'b.out')
   return $p.ExitCode
 }
-$Gate = if ($HaveDcc) { @('--compile-gate') } else { @('--no-compile-gate') }
+$Gate = @(if ($HaveDcc) { @('--compile-gate') } else { @('--no-compile-gate') })
 $LNum = LineNo 'xc-num'; $LNum2 = LineNo 'xc-num2'; $LDbl = LineNo 'xc-double'; $LWord = LineNo 'xc-word'
 $LStr = LineNo 'xc-str'; $LIface = LineNo 'xc-iface'
 try {

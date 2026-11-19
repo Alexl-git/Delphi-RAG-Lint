@@ -60,7 +60,7 @@ Check 'CONTROL X1Unused has no ref' ($u.Count -eq 1 -and $u[0][0] -eq 0)
 
 Push-Location $WorkDir
 try { $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --json 2>$null } | Out-String } finally { Pop-Location }
-$f = @($raw | ConvertFrom-Json) | Where-Object { $_.rule -eq 'unused-public-symbol' }
+$f = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) | Where-Object { $_.rule -eq 'unused-public-symbol' }
 $fTwice  = @($f | Where-Object { $_.message -match '\bX1Twice\b' })
 $fUnused = @($f | Where-Object { $_.message -match '\bX1Unused\b' })
 Check 'E3 unused-public-symbol does not flag X1Twice' ($fTwice.Count -eq 0)

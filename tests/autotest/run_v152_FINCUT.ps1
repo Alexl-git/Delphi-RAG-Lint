@@ -155,8 +155,8 @@ function Test-ConsumerFirst([string]$Tag, [string[]]$Order, [scriptblock]$Patch)
   $out1 = Invoke-Program $P
   Write-Host "      untouched run: $(($out0 -split "`r?`n") -join ' / ')" -ForegroundColor DarkGray
   Write-Host "      applied run:   $(($out1 -split "`r?`n") -join ' / ')" -ForegroundColor DarkGray
-  $i0 = (Get-Lines $out0 'init') -join ','; $i1 = (Get-Lines $out1 'init') -join ','
-  $f0 = (Get-Lines $out0 'fin') -join ','; $f1 = (Get-Lines $out1 'fin') -join ','
+  $i0 = (@(Get-Lines $out0 'init')) -join ','; $i1 = (@(Get-Lines $out1 'init')) -join ','
+  $f0 = (@(Get-Lines $out0 'fin')) -join ','; $f1 = (@(Get-Lines $out1 'fin')) -join ','
   Check "$Tag.7 the applied program keeps its init order [$i1] = [$i0] and fin order [$f1] = [$f0]" (($leaf.Count -eq 1) -and ($i0 -ne '') -and ($i0 -eq $i1) -and ($f0 -eq $f1) -and ([array]::IndexOf(@($i0 -split ','), 'FP3A') -lt [array]::IndexOf(@($i0 -split ','), 'FP3B'))) "before=[$out0] after=[$out1]"
   Check "$Tag.8 stdout byte-identical; FP3B's name already empty at FP3A's finalization before and after" ($b1.Ok -and ($leaf.Count -eq 1) -and ($out0 -ne '<no exe>') -and ($out1 -ceq $out0) -and ($out0 -match '(?m)\[b\] a stopped name=\r?$')) "before=[$out0] after=[$out1]"
 }

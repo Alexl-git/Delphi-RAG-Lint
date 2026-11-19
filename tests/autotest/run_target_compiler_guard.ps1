@@ -55,7 +55,7 @@ function RulesJson([string[]]$Extra) {
 }
 function LintPairs([string]$File, [string[]]$Extra) {
   $r = Run (@('lint', $File, '--json') + $Extra)
-  $rows = @(); try { $rows = @($r.Out | ConvertFrom-Json) } catch { $rows = @() }
+  $rows = @(); try { $rows = @(($r.Out | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $rows = @() }
   return @{ Pairs = @($rows | ForEach-Object { "$($_.rule):$($_.start_line)" }); Err = $r.Err; Code = $r.Code }
 }
 

@@ -45,7 +45,7 @@ function RunJson([string[]]$argv, [string]$tag) {
   [IO.File]::WriteAllText((Join-Path $WorkDir "$tag.json"), $o)
   # lint / lint-all --json: a bare ARRAY of findings with start_line (see
   # feedback_lint_json_is_an_array_with_start_line).
-  try { return ,@($o | ConvertFrom-Json) } catch { return ,@() }
+  try { return ,@(($o | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { return ,@() }
 }
 function BodyHits($findings, [string]$rule) {
   return ,@($findings | Where-Object { ($_.rule -eq $rule) -and ([IO.Path]::GetFileName([string]$_.file_path) -ieq 'Body.inc') })

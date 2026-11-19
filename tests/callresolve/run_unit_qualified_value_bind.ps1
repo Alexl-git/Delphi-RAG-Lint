@@ -194,7 +194,7 @@ try {
     $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name $nm --resolved --json --db $db 2>$null }) -join "`n"
     Write-Host "   raw find-callers --name $nm --resolved --json: $(($raw -replace '\s+', ' '))"
     $fc  = @()
-    try { $fc = @($raw | ConvertFrom-Json) } catch { $fc = @() }
+    try { $fc = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $fc = @() }
     foreach ($x in @($modes | Where-Object { ($_.M -eq 'MARK-CONST') -eq ($nm -eq 'CMax') })) {
       $ln  = LineOf $x.M
       $hit = @($fc | Where-Object { [int]$_.line -eq $ln })

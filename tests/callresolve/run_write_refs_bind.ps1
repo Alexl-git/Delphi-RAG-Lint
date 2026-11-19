@@ -124,7 +124,7 @@ $neg = @(
 function Check-Positives([string]$Tag, [string[]]$Skip) {
   foreach ($p in $pos) {
     if ($Skip -contains $p.M) { continue }
-    $rows = WriteAt (LineOf $p.M) $p.N
+    $rows = @(WriteAt (LineOf $p.M) $p.N)
     $ok = ($rows.Count -eq 1) -and ($rows[0].tq -eq $p.Q)
     $det = if ($rows.Count -eq 1) { "tq=$($rows[0].tq)" } else { "rows=$($rows.Count)" }
     Check ("{0}  {1}: write {2} binds to {3}" -f $Tag, $p.M, $p.N, $p.Q) $ok $det
@@ -138,7 +138,7 @@ try {
   # --- check 1 / 2 ----------------------------------------------------------------
   Check-Positives 'check 1' @()
   foreach ($n in $neg) {
-    $rows = WriteAt (LineOf $n.M) $n.N
+    $rows = @(WriteAt (LineOf $n.M) $n.N)
     $ok = ($rows.Count -eq 1) -and ($null -eq $rows[0].symbol_id)
     $det = if ($rows.Count -eq 1) { "sid=$($rows[0].symbol_id) tq=$($rows[0].tq)" } else { "rows=$($rows.Count)" }
     Check ("check 2  {0}: write {1} stays unbound" -f $n.M, $n.N) $ok $det
@@ -174,7 +174,7 @@ try {
   [System.IO.File]::SetLastWriteTimeUtc($lib2, (Get-Date).ToUniversalTime().AddSeconds(5))
   $log2 = (& { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db *>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'check 5  the re-index ran a SCOPED pass' ($log2 -match 'starting SCOPED pass') ''
-  $rows = WriteAt (LineOf 'W-USED-UNIT') 'GShared'
+  $rows = @(WriteAt (LineOf 'W-USED-UNIT') 'GShared')
   Check 'check 5  W-USED-UNIT is now ambiguous and unbound' (($rows.Count -eq 1) -and ($null -eq $rows[0].symbol_id)) ("sid=" + $(if ($rows.Count -ge 1) { $rows[0].symbol_id } else { '<none>' }))
   Check-Positives 'check 5' @('W-USED-UNIT')
 } finally {

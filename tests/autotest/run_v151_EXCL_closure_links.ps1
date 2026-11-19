@@ -56,7 +56,7 @@ function LinkFindings([string[]]$extra) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --project $Dproj --rule unit-not-in-dpr --json @extra 2>$null }) -join "`n"
   Write-Host ('  raw[0..200]: ' + $raw.Substring(0, [Math]::Min(200, $raw.Length)))
   $arr = @()
-  try { $arr = @($raw | ConvertFrom-Json) } catch { }
+  try { $arr = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { }
   return ,$arr
 }
 

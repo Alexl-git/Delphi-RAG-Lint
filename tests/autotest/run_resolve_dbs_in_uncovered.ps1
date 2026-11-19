@@ -88,7 +88,7 @@ try {
 
   $d = Invoke-In $covered -Json
   $dArr = @()
-  try { $dArr = @($d.Out | ConvertFrom-Json) } catch { $dArr = @() }
+  try { $dArr = @(($d.Out | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $dArr = @() }
   Check 'D: covered --json -- one DB' (($dArr.Count -eq 1) -and ($dArr[0] -like '*App.sqlite')) "stdout='$($d.Out)'"
   Check 'D: covered --json -- no NOTE' ($d.Err -notmatch 'NOTE: no index covers') "stderr='$($d.Err)'"
   # E/F (X-10): the config itself names the root, but the index was never built.

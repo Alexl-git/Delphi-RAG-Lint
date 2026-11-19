@@ -56,7 +56,7 @@ Check 'V the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db
 
 $host1 = Join-Path $fx 'PaHost.pas'
 $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule unused-unit-in-uses --json 2>$null }) -join "`n"
-$rule = @(@($raw | ConvertFrom-Json) | Where-Object { $_.file_path -like '*\PaHost.pas' } | ForEach-Object { if ($_.message -match "Unit '([^']+)'") { $Matches[1] } } | Sort-Object -Unique)
+$rule = @(@(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) | Where-Object { $_.file_path -like '*\PaHost.pas' } | ForEach-Object { if ($_.message -match "Unit '([^']+)'") { $Matches[1] } } | Sort-Object -Unique)
 $verb = VerbUnused $db $host1
 Check 'control: the rule flags PaC (exports nothing PaHost names)' ($rule -contains 'PaC') ("rule=" + ($rule -join ','))
 Check 'control: neither side flags PaA (PaHost names TPaA)' (($rule -notcontains 'PaA') -and ($verb -notcontains 'PaA')) ("rule=" + ($rule -join ',') + " verb=" + ($verb -join ','))
@@ -69,7 +69,7 @@ if ($YadfDb -ne '') {
   $q = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $YadfDb --json --limit 100000 --query 'select path from files' 2>$null } | ConvertFrom-Json
   $stems = @{}
   foreach ($r in $q.rows) { $stems[[IO.Path]::GetFileNameWithoutExtension($r[0]).ToLowerInvariant()] = $true }
-  $all = @((& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $YadfDb --rule unused-unit-in-uses --json 2>$null }) -join "`n" | ConvertFrom-Json)
+  $all = @(((& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $YadfDb --rule unused-unit-in-uses --json 2>$null }) -join "`n" | ConvertFrom-Json) | ForEach-Object { $_ })
   $top = @($all | Group-Object file_path | Sort-Object Count -Descending | Select-Object -First $YadfFiles)
   if ($top.Count -eq 0) { Write-Host '  (no unused-unit-in-uses findings in this DB: nothing to compare)' -ForegroundColor Yellow }
   foreach ($g in $top) {

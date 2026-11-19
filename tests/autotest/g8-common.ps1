@@ -29,10 +29,10 @@ function Invoke-G8Index([string]$Exe, [string]$Dir, [string]$Db) {
 }
 function Get-G8Findings([string]$Exe, [string]$Db, [string]$Rule, [string[]]$Extra = @(), [switch]$AllRules) {
   # -AllRules: no --rule flag (an explicit --rule opts an OFF-by-default rule in, so it cannot test OFF).
-  $ruleArgs = if ($AllRules) { @() } else { @('--rule', $Rule) }
+  $ruleArgs = @(if ($AllRules) { @() } else { @('--rule', $Rule) })
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db @ruleArgs --format json @Extra 2>$null }
   $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
-  $f = @(); if ($b -ge 0) { try { $f = @($txt.Substring($b) | ConvertFrom-Json) } catch { $f = @() } }
+  $f = @(); if ($b -ge 0) { try { $f = @(($txt.Substring($b) | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $f = @() } }
   return ,@($f | Where-Object { $_.rule -eq $Rule })
 }
 function Test-G8BytesEqual([string]$A, [string]$B) {

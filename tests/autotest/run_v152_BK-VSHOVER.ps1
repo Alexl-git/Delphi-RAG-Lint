@@ -339,7 +339,7 @@ end.
   $isDis = @($all | ForEach-Object { $null -ne $_.command -and $_.command.command -eq 'drag-lint.disableRule' })
   $firstDis = [Array]::IndexOf($isDis, $true); $lastOther = [Array]::LastIndexOf($isDis, $false)
   Check 'A1 the disable actions come LAST (Fix finding applies the first quickfix)' ($firstDis -ge 0 -and $lastOther -ge 0 -and $firstDis -gt $lastOther) ("order=" + (($all | ForEach-Object { $_.title }) -join ' | '))
-  $a0 = if ($acts.Count -gt 0) { $acts[0].command.arguments } else { @() }
+  $a0 = @(if ($acts.Count -gt 0) { $acts[0].command.arguments } else { @() })
   Check 'A1 arguments are [rule, scope, file, line(1-based)]' ($a0.Count -eq 4 -and $a0[0] -eq 'empty-except' -and ([string]$a0[2]) -ieq $file -and [int]$a0[3] -eq ($pE.line + 1)) ("args=" + ($a0 -join ' | '))
 
   $lsp.Send((J @{ jsonrpc = '2.0'; id = 2; method = 'shutdown'; params = @{} }))

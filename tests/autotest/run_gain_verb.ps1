@@ -104,7 +104,7 @@ $out = (& { $ErrorActionPreference = 'Continue'; & $exePath context --task 'modi
 $ctxExit = $LASTEXITCODE
 $ln = @(Log-Lines $log)
 Check 'T1 context appended exactly one usage line' ($ln.Count -eq 1) "lines=$($ln.Count) log=$log"
-$f = if ($ln.Count -ge 1) { $ln[0] -split "`t" } else { @() }
+$f = @(if ($ln.Count -ge 1) { $ln[0] -split "`t" } else { @() })
 Check 'T1a the line has 6 tab-separated fields: iso, verb, db, tokens, units, bytes' ($f.Count -eq 6 -and $f[0] -match '^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$') ($ln -join ' | ')
 Check 'T1b verb = context, db tag = gain'                 ($f.Count -eq 6 -and $f[1] -eq 'context' -and $f[2] -eq 'gain') ($ln -join ' | ')
 Check 'T1c tokens_returned > 0'                           ($f.Count -eq 6 -and [int64]$f[3] -gt 0) ($ln -join ' | ')
@@ -146,7 +146,7 @@ $log = Fresh-Local 'la3'
 $env:DRAGLINT_USAGE_LOG = '0'
 $off = (& { $ErrorActionPreference = 'Continue'; & $exePath context --task 'modify uW.TW.Save' --db $db 2>$null }) -join "`n"
 Remove-Item Env:\DRAGLINT_USAGE_LOG
-Check 'T3 DRAGLINT_USAGE_LOG=0 writes no log line' ((Log-Lines $log).Count -eq 0) "log exists: $(Test-Path $log)"
+Check 'T3 DRAGLINT_USAGE_LOG=0 writes no log line' ((@(Log-Lines $log)).Count -eq 0) "log exists: $(Test-Path $log)"
 Check 'T3b POSITIVE CONTROL: the verb still answers with the log off' ($off -match '## Callers') ''
 
 # ---- T4: an unwritable LOCALAPPDATA does not change the verb ------------------

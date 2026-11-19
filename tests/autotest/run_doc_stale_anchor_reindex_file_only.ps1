@@ -115,7 +115,7 @@ function ScanType {
 
 $ix = RunEngine @('index','--project',$dpr,'--db',$db)
 if ($ix.Code -ne 0) { throw "fixture index failed: $($ix.Text)" }
-$before = IndexedFiles
+$before = @(IndexedFiles)
 
 $p1 = RunEngine @('document','--unit',$app,'--db',$db)
 Check 'P1 fresh index: exit 0, an edit rendered' (($p1.Code -eq 0) -and ($p1.Text -match 'insert after line')) "exit $($p1.Code)"
@@ -144,7 +144,7 @@ $r1 = RunEngine @('document','--unit',$app,'--db',$db,'--apply','--no-backup')
 Check 'R1 stale own file, no --project: exit 0, applied' (($r1.Code -eq 0) -and ($r1.Text -match 'applied')) "exit $($r1.Code)"
 Check 'R2 the D-2 reindex-and-retry ran' ($r1.Text -match 'reindexing and retrying once') ($r1.Text.Trim() -split "`n" | Select-Object -Last 2)
 Check 'R2 the reindex did not fail' (-not ($r1.Text -match 'reindex FAILED'))
-$after = IndexedFiles
+$after = @(IndexedFiles)
 Check 'R3 same 3 files indexed' (($after.Count -eq 3) -and (($after -join ',') -eq ($before -join ','))) ($after -join ',')
 Check 'R3 Loose.pas not indexed' (-not ($after -contains 'Loose.pas'))
 Check 'R3 scan_type still project' ((ScanType) -eq 'project')

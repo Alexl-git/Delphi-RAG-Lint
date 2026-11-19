@@ -73,7 +73,7 @@ Write-Host 'Running the legacy .bat doctest chain against the current engine' -F
 $p = Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', $driver `
                    -Wait -NoNewWindow -PassThru `
                    -RedirectStandardOutput $log -RedirectStandardError "$log.err"
-$out = if (Test-Path $log) { Get-Content $log } else { @() }
+$out = @(if (Test-Path $log) { Get-Content $log } else { @() })
 Remove-Item Env:\EXE -ErrorAction SilentlyContinue
 
 $sections = @($out | Where-Object { $_ -match '^=== T\d+' })

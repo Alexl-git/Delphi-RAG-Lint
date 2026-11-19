@@ -33,7 +33,7 @@ function Hits([string]$File, [string]$Rule, [string[]]$Extra = @()) {
 try {
   # ---- B02 ----
   $fx = Join-Path $Root 'tests\lint\used-before-assignment-on-e-inline-var.pas'
-  $h = Hits $fx 'used-before-assignment'
+  $h = @(Hits $fx 'used-before-assignment')
   Check 'B02 positive control: plain unassigned local (line 37) fires' ($h -contains 37) "hits=$($h -join ',')"
   Check 'B02 `on E:` read (line 27) before a later inline var E is silent' ($h -notcontains 27) "hits=$($h -join ',')"
 
@@ -62,15 +62,15 @@ try {
     Join-Path $d "$Name.pas"
   }
   $p = MakeUnit 'FxNone' @('  Beep;')
-  Check 'B35 positive control: no assignment -> duplicate fires' ((Hits $p 'dfm-duplicate-binding').Count -eq 1)
+  Check 'B35 positive control: no assignment -> duplicate fires' ((@(Hits $p 'dfm-duplicate-binding')).Count -eq 1)
   $p = MakeUnit 'FxBare' @('  edtB.DataField:= ''X'';')
-  Check 'B35 bare edtB.DataField := silences' ((Hits $p 'dfm-duplicate-binding').Count -eq 0)
+  Check 'B35 bare edtB.DataField := silences' ((@(Hits $p 'dfm-duplicate-binding')).Count -eq 0)
   $p = MakeUnit 'FxSelf' @('  Self.edtB.DataField:= ''X'';')
-  Check 'B35 Self.edtB.DataField := silences' ((Hits $p 'dfm-duplicate-binding').Count -eq 0)
+  Check 'B35 Self.edtB.DataField := silences' ((@(Hits $p 'dfm-duplicate-binding')).Count -eq 0)
   $p = MakeUnit 'FxOther' @('  OtherForm.edtB.DataField:= ''X'';')
-  Check 'B35 OtherForm.edtB.DataField := (another instance) does NOT silence' ((Hits $p 'dfm-duplicate-binding').Count -eq 1)
+  Check 'B35 OtherForm.edtB.DataField := (another instance) does NOT silence' ((@(Hits $p 'dfm-duplicate-binding')).Count -eq 1)
   $p = MakeUnit 'FxNoise' @('  // edtB.DataField:= ''X'';', '  Writeln(''edtB.DataField:= 1'');')
-  Check 'B35 comment / string mentions do NOT silence' ((Hits $p 'dfm-duplicate-binding').Count -eq 1)
+  Check 'B35 comment / string mentions do NOT silence' ((@(Hits $p 'dfm-duplicate-binding')).Count -eq 1)
 }
 finally {
   [IO.Directory]::Delete($Work, $true)

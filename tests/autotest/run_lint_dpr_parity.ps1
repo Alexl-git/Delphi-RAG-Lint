@@ -72,7 +72,7 @@ end.
 '@
 
 function Sets($json) {
-  $a = @($json | ConvertFrom-Json)
+  $a = @(($json | ConvertFrom-Json) | ForEach-Object { $_ })
   @($a | ForEach-Object { '{0}@{1}' -f $_.rule, $_.start_line } | Sort-Object)
 }
 function Run($name, $mark) {
@@ -111,7 +111,7 @@ Check 'A3b PARITY with the marker present' `
 $dk = Join-Path $WorkDir 'dpk'; New-Item -ItemType Directory -Path $dk -Force | Out-Null
 Write-Ascii (Join-Path $dk 'PDpk.dpk') (($template -replace '@@MARK@@','') -replace '^program PDprParity;','package PDpk;')
 $o = (& { $ErrorActionPreference = 'Continue'; & $exePath lint (Join-Path $dk 'PDpk.dpk') --rules-dir $rules --json 2>$null } | Out-String)
-$ids = if ($o.Trim()) { Sets $o } else { @() }
+$ids = @(if ($o.Trim()) { Sets $o } else { @() })
 Check 'A4  .dpk per-file: no AST findings (unchanged; lint-all does not scan .dpk)' `
       (($ids -match '^(try-except-swallowed|write-only-local)@').Count -eq 0) ($ids -join ', ')
 

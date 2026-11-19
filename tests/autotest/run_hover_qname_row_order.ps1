@@ -143,7 +143,7 @@ print(json.dumps(rows))
 function Get-Rows([string]$qname) {
     $j = (& python $rowPy $db $qname) -join ''
     if ([string]::IsNullOrWhiteSpace($j)) { return @() }
-    return @($j | ConvertFrom-Json)
+    return @(($j | ConvertFrom-Json) | ForEach-Object { $_ })
 }
 function Get-HoverDefLine([string]$qname) {
     $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath hover --qname $qname --db $db --format json 2>$null }) -join ''
@@ -167,7 +167,7 @@ $bodyLine = Line-Of '^\s*TThing = class\(TObject\)\s*$'
 Check 'PRECONDITION: the fixture spells the stub ABOVE the body' `
   (($stubLine -gt 0) -and ($bodyLine -gt $stubLine)) "stub=$stubLine body=$bodyLine"
 
-$tRows = Get-Rows 'qrowfix.TThing'
+$tRows = @(Get-Rows 'qrowfix.TThing')
 Check 'PRECONDITION: the index holds exactly TWO rows for qrowfix.TThing' `
   ($tRows.Count -eq 2) ("rows=" + (($tRows | ForEach-Object { "$($_.start_line)..$($_.end_line)" }) -join ' '))
 
@@ -205,7 +205,7 @@ $implLine = Line-Of '^\s*function Doubled: Integer; overload;'
 Check 'PRECONDITION: the fixture declares the ABSTRACT overload above the implemented one' `
   (($absLine -gt 0) -and ($implLine -gt $absLine)) "abstract=$absLine implemented=$implLine"
 
-$dRows = Get-Rows 'qrowfix.TThing.Doubled'
+$dRows = @(Get-Rows 'qrowfix.TThing.Doubled')
 Check 'PRECONDITION: the index holds exactly TWO rows for qrowfix.TThing.Doubled' `
   ($dRows.Count -eq 2) ("rows=" + (($dRows | ForEach-Object { "$($_.start_line)/impl=$($_.impl)" }) -join ' '))
 $noBody = @($dRows | Where-Object { $_.impl -le 0 })
@@ -236,7 +236,7 @@ Write-Host '=== Control: an ordinary single-row symbol still answers ===' -Foreg
 # Non-vacuity for the whole file: an ORDER BY that returned nothing, or a hover
 # that failed on every qname, would satisfy nothing above but must be told apart
 # from a working engine all the same.
-$hRows = Get-Rows 'qrowfix.THolder'
+$hRows = @(Get-Rows 'qrowfix.THolder')
 Check 'PRECONDITION: qrowfix.THolder owns exactly ONE row (no ordering to do)' ($hRows.Count -eq 1) `
   ("rows=" + $hRows.Count)
 $hDef = Get-HoverDefLine 'qrowfix.THolder'

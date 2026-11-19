@@ -73,8 +73,8 @@ function Texts($items) { return (($items | ForEach-Object { "$($_.line): $($_.te
 
 # ---- positive control: no flag ------------------------------------------------
 $r  = Apply 'enum.rules' @('--format', 'json')
-$ma = Kinds $r.J 'migrate-applied'
-$mc = Kinds $r.J 'migrate-check'
+$ma = @(Kinds $r.J 'migrate-applied')
+$mc = @(Kinds $r.J 'migrate-check')
 Check 'C1 no flag: JSON parsed, exit 0' (($r.Code -eq 0) -and ($null -ne $r.J)) $r.Out
 Check 'C2 ... today''s members map by name, never by ordinal' `
   (((Applied $ma 'pcrDefault' 'ncrDefault') -eq 1) -and ((Applied $ma 'pcrAdded' 'ncrAdded') -eq 1) -and ((Applied $ma 'pcrDefault' 'ncrNone') -eq 0)) (Show $ma)
@@ -87,8 +87,8 @@ Check 'C4 ... the enum only the old platform declares: rule-level migrate-check,
 $before = (Get-Item $oldDb).LastWriteTimeUtc
 $len    = (Get-Item $oldDb).Length
 $r  = Apply 'enum.rules' @('--old-platform-db', $oldDb, '--format', 'json')
-$ma = Kinds $r.J 'migrate-applied'
-$mc = Kinds $r.J 'migrate-check'
+$ma = @(Kinds $r.J 'migrate-applied')
+$mc = @(Kinds $r.J 'migrate-check')
 Check 'F1 --old-platform-db: JSON parsed, exit 0' (($r.Code -eq 0) -and ($null -ne $r.J)) $r.Out
 Check 'F2 ... pcrSQLWait, in the old enum only, maps by name' ((Applied $ma 'pcrSQLWait' 'ncrSQLWait') -eq 1) (Show $ma)
 Check 'F3 ... pcrDefault / pcrHourGlass by name, never by ordinal (ncrNone is ordinal 0)' `
@@ -103,8 +103,8 @@ Check 'F8 ... no rule-level complaint about TGoneCursor any more' (@($mc | Where
 
 # ---- explicit member lines beat the name match ---------------------------------
 $r  = Apply 'explicit.rules' @('--old-platform-db', $oldDb, '--format', 'json')
-$ma = Kinds $r.J 'migrate-applied'
-$mc = Kinds $r.J 'migrate-check'
+$ma = @(Kinds $r.J 'migrate-applied')
+$mc = @(Kinds $r.J 'migrate-check')
 Check 'E1 explicit lines win: pcrOther -> ncrNone, pcrSQLWait -> ncrHourGlass, not ncrSQLWait' `
   (((Applied $ma 'pcrOther' 'ncrNone') -eq 1) -and ((Applied $ma 'pcrSQLWait' 'ncrHourGlass') -eq 1) -and ((Applied $ma 'pcrSQLWait' 'ncrSQLWait') -eq 0)) (Show $ma)
 Check 'E2 ... so no member warning is left' (@($mc | Where-Object { $_.text -match 'no counterpart' }).Count -eq 0) (Texts $mc)

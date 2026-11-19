@@ -48,7 +48,7 @@ function Run-Drift([string]$Tag, [scriptblock]$Edit, [string[]]$Extra = @(), [sw
     if (Test-Path $reg) { [IO.Directory]::Delete($reg, $true) }
     Copy-Item -LiteralPath "$fx\menu-registry" -Destination $reg -Recurse
     if ($Edit) { & $Edit $reg }
-    $regArgs = if ($DefaultLocation) { @() } else { @('--registry', $reg) }
+    $regArgs = @(if ($DefaultLocation) { @() } else { @('--registry', $reg) })
     $txt = (& { $ErrorActionPreference = 'Continue'; & $Exe menu-drift --project $proj --db $db @regArgs @Extra --format json 2> "$WorkDir\$Tag.err" } | Out-String)
     $code = $LASTEXITCODE
     $doc = $null

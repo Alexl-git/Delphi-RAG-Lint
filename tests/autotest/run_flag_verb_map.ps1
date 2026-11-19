@@ -405,7 +405,7 @@ if (Test-Path -LiteralPath $aliasPath) {
   }
 }
 $tableGroups = @($tableGroups | Sort-Object -Unique)
-$parserGroups = Get-ParserAliasGroups -CliText ([IO.File]::ReadAllText($Cli))
+$parserGroups = @(Get-ParserAliasGroups -CliText ([IO.File]::ReadAllText($Cli)))
 Check 'alias groups read from the parser (else the two-way check below is vacuous)' ($parserGroups.Count -ge 4) `
   ("($($parserGroups.Count) group(s)): " + ($parserGroups -join ' | '))
 $grpDiff = @(Compare-Object -ReferenceObject $parserGroups -DifferenceObject $tableGroups |

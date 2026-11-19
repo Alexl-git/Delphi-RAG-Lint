@@ -152,17 +152,17 @@ function RowFor([string]$VarName) {
 
 Write-Host ''
 Write-Host 'CONTROLS' -ForegroundColor Cyan
-$plain = RowFor 'XP'
+$plain = @(RowFor 'XP')
 Check 'a non-witness may-unassigned read is reported' ($plain.Count -eq 1) ("rows=" + ($plain | ConvertTo-Json -Compress))
 Check 'and it STAYS at warning' (($plain.Count -eq 1) -and ($plain[0].Sev -eq 'warning')) ("sev=" + ($plain | ForEach-Object { $_.Sev }))
 
-$def = RowFor 'XD'
+$def = @(RowFor 'XD')
 Check 'a DEFINITE unassigned read is reported' ($def.Count -eq 1) ("rows=" + ($def | ConvertTo-Json -Compress))
 Check 'and it STAYS an error (tiering never touches the must arm)' (($def.Count -eq 1) -and ($def[0].Sev -eq 'error')) ("sev=" + ($def | ForEach-Object { $_.Sev }))
 
 Write-Host ''
 Write-Host 'THE TIERING' -ForegroundColor Cyan
-$wit = RowFor 'XW'
+$wit = @(RowFor 'XW')
 Check 'the witness-flag read is STILL REPORTED (not suppressed)' ($wit.Count -eq 1) ("rows=" + ($wit | ConvertTo-Json -Compress))
 Check 'the witness-flag read says POSSIBLE, at warning' (($wit.Count -eq 1) -and ($wit[0].Sev -eq 'warning') -and ($wit[0].Msg -match 'POSSIBLE use before assignment')) ("sev=" + ($wit | ForEach-Object { $_.Sev }) + " msg=" + ($wit | ForEach-Object { $_.Msg }))
 Check 'the PLAIN may-case does NOT say POSSIBLE' (($plain.Count -eq 1) -and ($plain[0].Msg -notmatch 'POSSIBLE')) ("msg=" + ($plain | ForEach-Object { $_.Msg }))

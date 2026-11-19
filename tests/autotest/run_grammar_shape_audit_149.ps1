@@ -38,7 +38,7 @@ function Get-RgLine([string]$File, [string]$Text) {
 function Get-Findings([string]$PasCopy, [string]$Db, [string]$Rules) {
   $txt = (& { $ErrorActionPreference = 'Continue'; & $exePath lint $PasCopy --db $Db --library-db none --enable $Rules --json 2>$null }) -join "`n"
   if ($txt.Trim() -eq '') { return @() }
-  return @($txt | ConvertFrom-Json)
+  return @(($txt | ConvertFrom-Json) | ForEach-Object { $_ })
 }
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ("rg149-" + [Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($tmp) | Out-Null

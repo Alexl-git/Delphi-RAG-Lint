@@ -55,7 +55,7 @@ try {
 
   Write-Host '== positive controls' -ForegroundColor Cyan
   $all = Invoke-Engine @('cycles', '--db', $qdb, '--library-db', 'none', '--format', 'json') 'all'
-  $allG = @(); try { $allG = @($all.Out | ConvertFrom-Json) } catch { }
+  $allG = @(); try { $allG = @(($all.Out | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { }
   Check 'plain cycles reports both groups (FA/FB and IC/ID)' ($allG.Count -eq 2) "groups=$($allG.Count)"
   $cau = Invoke-Engine @('cycles', '--db', $qdb, '--library-db', 'none', '--causes') 'causes'
   Check '--causes text still names the forcing symbol' ($cau.Out -match "fa's INTERFACE needs fb via:" -and $cau.Out -match 'line \d+: TB\s+\[') ''

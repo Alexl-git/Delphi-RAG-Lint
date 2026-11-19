@@ -42,7 +42,7 @@ function Check([bool]$ok, [string]$what) {
 }
 function Parse-Findings([string[]]$Raw) {
   $txt = ($Raw -join "`n"); $b = $txt.IndexOf('[')
-  $out = @(); if ($b -ge 0) { try { $out = @($txt.Substring($b) | ConvertFrom-Json) } catch { $out = @() } }
+  $out = @(); if ($b -ge 0) { try { $out = @(($txt.Substring($b) | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $out = @() } }
   return ,@($out)
 }
 # sql --json rows are POSITIONAL arrays: map rows[i][k] onto columns[k].name.

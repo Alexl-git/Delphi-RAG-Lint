@@ -189,11 +189,11 @@ try {
 
   function Get-Rows([string]$name) {
     $j = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --db $db --json 2>$null }) -join "`n"
-    try { return @($j | ConvertFrom-Json) } catch { return @() }
+    try { return @(($j | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { return @() }
   }
 
   # --- 1. the nested routine is a symbol at all ------------------------------
-  $nh = Get-Rows 'NestedHelper'
+  $nh = @(Get-Rows 'NestedHelper')
   Check 'NestedHelper is indexed as a symbol' ($nh.Count -ge 1) "rows=$($nh.Count)"
   if ($nh.Count -ge 1) {
     Check 'NestedHelper is qualified by its enclosing routine (nestsyms.OuterOne.NestedHelper)' `
@@ -202,7 +202,7 @@ try {
   }
 
   # --- 2. THE DISCRIMINATOR: two same-named nested routines stay distinct ----
-  $tw = Get-Rows 'SharedName'
+  $tw = @(Get-Rows 'SharedName')
   Check 'both SharedName routines are indexed, not collapsed into one' ($tw.Count -eq 2) "rows=$($tw.Count)"
   if ($tw.Count -eq 2) {
     $q = @($tw | ForEach-Object { $_.qualified_name }) | Sort-Object
@@ -211,7 +211,7 @@ try {
   }
 
   # --- 3. the enclosing routines are unharmed --------------------------------
-  Check 'OuterOne is still indexed exactly once' ((Get-Rows 'OuterOne').Count -eq 1)
+  Check 'OuterOne is still indexed exactly once' ((@(Get-Rows 'OuterOne')).Count -eq 1)
 
   # --- 4. SAFETY: batch documentation must not touch a nested routine --------
   # Asserted as the public-surface COUNT, not as "the name never appears": the
@@ -247,7 +247,7 @@ try {
   }
 
   # --- 5. N1: a nested routine's classic var block is extracted ---------------
-  $nl = LocalsOf 'nestsyms.OuterOne.NestedHelper'
+  $nl = @(LocalsOf 'nestsyms.OuterOne.NestedHelper')
   Check 'N1 NestedHelper has local_var NestedLocal, NestedOther' (($nl -contains 'NestedLocal') -and ($nl -contains 'NestedOther')) "locals=$($nl -join ',')"
 
   # --- 6. N2: inline var and for-var inside the nested routine ----------------
@@ -257,13 +257,13 @@ try {
   Check 'N1/N2 qualified_name is Unit.Outer.Nested.X' (($qn.Count -eq 1) -and ($qn[0].qualified_name -eq 'nestsyms.OuterOne.NestedHelper.InlineOne')) "qn=$($qn[0].qualified_name)"
 
   # --- 7. N3: NO LEAK into the enclosing routine ------------------------------
-  $ol = LocalsOf 'nestsyms.OuterOne'
+  $ol = @(LocalsOf 'nestsyms.OuterOne')
   Check 'N3 OuterOne keeps exactly its own two locals' ((($ol -join ',') -eq 'OuterLocal,ResolvedYadf')) "locals=$($ol -join ',')"
   Check 'N3 OuterOne did NOT gain NestedLocal/InlineOne/LoopVar' (-not (($ol -contains 'NestedLocal') -or ($ol -contains 'InlineOne') -or ($ol -contains 'LoopVar')))
 
   # --- 8. N4: twins keep their OWN locals -------------------------------------
-  $hl = LocalsOf 'nestsyms.TwinHost.SharedName'
-  $gl = LocalsOf 'nestsyms.TwinGuest.SharedName'
+  $hl = @(LocalsOf 'nestsyms.TwinHost.SharedName')
+  $gl = @(LocalsOf 'nestsyms.TwinGuest.SharedName')
   Check 'N4 TwinHost.SharedName has HostOnly only' (($hl -join ',') -eq 'HostOnly') "locals=$($hl -join ',')"
   Check 'N4 TwinGuest.SharedName has GuestOnly only' (($gl -join ',') -eq 'GuestOnly') "locals=$($gl -join ',')"
 

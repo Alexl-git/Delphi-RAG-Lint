@@ -107,7 +107,7 @@ $hexLine = LineOf $body 'Result:= $Ff'
 $oneDiag = @($hexDiags | Where-Object { $_['range']['start']['line'] -eq $hexLine })
 $r = Session @((OpenFrame $body), (ActionFrame 11 $hexLine $oneDiag))
 $reply = $r.byId[11]
-$ti = Titles $reply
+$ti = @(Titles $reply)
 Write-Host "  titles: $($ti -join ' | ')"
 Check 'Fix: mixed-case-hex still offered (unchanged title)' ($null -ne (ActOf $reply 'Fix: mixed-case-hex'))
 $ruleAll = ActOf $reply 'drag-lint: fix all mixed-case-hex in file'
@@ -143,7 +143,7 @@ Check 'quiet line, no only: no fix-all action' (-not (@(Titles $rq.byId[12]) -ma
 # context.only = source.fixAll on the same quiet line: the source action is offered.
 $ro = Session @((OpenFrame $body), (ActionFrame 13 $quiet @() 'source.fixAll'))
 $srcAct = ActOf $ro.byId[13] 'drag-lint: fix all fixable in file'
-Check 'only=source.fixAll on a quiet line: fix-all source action offered' ($null -ne $srcAct) ("titles=$((Titles $ro.byId[13]) -join ' | ')")
+Check 'only=source.fixAll on a quiet line: fix-all source action offered' ($null -ne $srcAct) ("titles=$((@(Titles $ro.byId[13])) -join ' | ')")
 Check 'only=source.fixAll: kind source.fixAll.drag-lint' ($srcAct -and $srcAct['kind'] -eq 'source.fixAll.drag-lint')
 
 Write-Host ''

@@ -125,7 +125,7 @@ Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 function Get-Member([string]$Name) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe query --name $Name --exact --json --db $db 2>$null }) -join "`n"
   if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
-  return @($raw | ConvertFrom-Json) | Select-Object -First 1
+  return @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) | Select-Object -First 1
 }
 
 Write-Host ''

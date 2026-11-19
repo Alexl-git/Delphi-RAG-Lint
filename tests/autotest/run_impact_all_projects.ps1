@@ -77,8 +77,8 @@ WriteAscii "$work\shared\uShared.pas" @('unit uShared;', 'interface', 'type',
   'procedure UseShared(const pS: IShared);', 'begin', '  pS.Ping;', 'end;', 'end.')
 foreach ($p in 'A', 'B', 'C') {
   $uses = if ($p -eq 'A') { 'uShared, uLibIntf' } else { 'uShared' }
-  $lib  = if ($p -eq 'A') { @('  TLibImpl = class(TInterfacedObject, ILibThing)', '  public', '    procedure Thing;', '  end;') } else { @() }
-  $libB = if ($p -eq 'A') { @('procedure TLibImpl.Thing;', 'begin', 'end;', 'procedure AThing(const pT: ILibThing);', 'begin', '  pT.Thing;', 'end;') } else { @() }
+  $lib  = @(if ($p -eq 'A') { @('  TLibImpl = class(TInterfacedObject, ILibThing)', '  public', '    procedure Thing;', '  end;') } else { @() })
+  $libB = @(if ($p -eq 'A') { @('procedure TLibImpl.Thing;', 'begin', 'end;', 'procedure AThing(const pT: ILibThing);', 'begin', '  pT.Thing;', 'end;') } else { @() })
   WriteAscii "$work\$p\u$p.pas" (@("unit u$p;", 'interface', "uses $uses;", 'type',
     "  T${p}Impl = class(TInterfacedObject, IShared)", '  public', '    procedure Ping;', '  end;') + $lib +
     @("procedure Call$p;", 'implementation', "procedure T${p}Impl.Ping;", 'begin', 'end;') + $libB +

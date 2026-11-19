@@ -43,11 +43,11 @@ function Assert($name, $cond) {
   if ($cond) { Write-Host "PASS  $name" } else { Write-Host "FAIL  $name" -ForegroundColor Red; $script:fail++ }
 }
 function Lint([string]$path, [string]$cfg, [switch]$NoNarrow) {
-  $a = if ($NoNarrow) { @('lint', $path, '--json') } else { @('lint', $path, '--rule', $rule, '--json') }
+  $a = @(if ($NoNarrow) { @('lint', $path, '--json') } else { @('lint', $path, '--rule', $rule, '--json') })
   if ($cfg) { $a += @('--config', $cfg) }
   $raw = & { $ErrorActionPreference = 'Continue'; & $exe @a 2>$null }
   $r = @()
-  try { $r = @($raw | ConvertFrom-Json) } catch { $r = @() }
+  try { $r = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $r = @() }
   return ,@($r | Where-Object { $_ -and $_.rule -eq $rule })
 }
 

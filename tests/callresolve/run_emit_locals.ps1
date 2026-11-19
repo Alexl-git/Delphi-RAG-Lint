@@ -88,7 +88,7 @@ try {
 
   # --- OVERLOAD: two Combine(...) overloads, each with its own Tmp local, same
   # qualified_name -- must attribute to the RIGHT overload (by Signature). ---
-  $combineTmps = LocalsByQName 'Tmp' 'locals.TWorker.Combine.Tmp'
+  $combineTmps = @(LocalsByQName 'Tmp' 'locals.TWorker.Combine.Tmp')
   Check 'both Combine overloads emit their own Tmp (2 rows, same qname)' `
     ($combineTmps.Count -eq 2)
   $tmpInt    = @($combineTmps | Where-Object { $_.signature -match '^\s*Integer\s*$' })

@@ -138,7 +138,7 @@ $live = New-Fixture 'live' $Garbage $Good
 function CliLines([string]$PasFile, [string[]]$Extra = @()) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $PasFile --json @Extra 2>$null }) -join "`n"
   $arr = @()
-  if ($raw.Trim()) { $arr = @($raw | ConvertFrom-Json) }
+  if ($raw.Trim()) { $arr = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) }
   return ,@($arr | Where-Object { $_.rule -eq 'parser-error' } | ForEach-Object { [int]$_.start_line })
 }
 # drag-lint parser-error lines in the merged publish for the fixture; 'NO-PUBLISH' /

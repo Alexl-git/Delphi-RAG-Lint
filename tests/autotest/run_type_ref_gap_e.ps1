@@ -251,15 +251,15 @@ print(json.dumps([r[0] for r in cur.fetchall()]))
 c.close()
 '@ | Set-Content $py -Encoding ascii
 
-$staleRefRows = @((python $py $db 'refs' 'name_text' 'Widget') -join "`n" | ConvertFrom-Json)
+$staleRefRows = @(((python $py $db 'refs' 'name_text' 'Widget') -join "`n" | ConvertFrom-Json) | ForEach-Object { $_ })
 Check 'direct refs-table query: zero rows with name_text = "Widget" (case-sensitive)' `
   ($staleRefRows.Count -eq 0) "count=$($staleRefRows.Count)"
 
-$oldSym = @((python $py $db 'symbols' 'name' 'Widget') -join "`n" | ConvertFrom-Json)
+$oldSym = @(((python $py $db 'symbols' 'name' 'Widget') -join "`n" | ConvertFrom-Json) | ForEach-Object { $_ })
 Check 'zero symbols still named (case-sensitive) "Widget"' `
   ($oldSym.Count -eq 0) "count=$($oldSym.Count)"
 
-$newSym = @((python $py $db 'symbols' 'name' 'TWidget') -join "`n" | ConvertFrom-Json)
+$newSym = @(((python $py $db 'symbols' 'name' 'TWidget') -join "`n" | ConvertFrom-Json) | ForEach-Object { $_ })
 Check 'class now resolves under the new name "TWidget" (case-sensitive)' `
   ($newSym.Count -ge 1) "count=$($newSym.Count)"
 

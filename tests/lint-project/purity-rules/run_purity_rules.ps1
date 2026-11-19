@@ -55,7 +55,7 @@ $RuleQuery   = 'query-name-with-effect'
 
 function Parse-Findings([string[]]$Raw) {
   $txt = ($Raw -join "`n"); $b = $txt.IndexOf('[')
-  $out = @(); if ($b -ge 0) { try { $out = @($txt.Substring($b) | ConvertFrom-Json) } catch { $out = @() } }
+  $out = @(); if ($b -ge 0) { try { $out = @(($txt.Substring($b) | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $out = @() } }
   if ($null -eq $out) { $out = @() }
   return ,@($out)
 }

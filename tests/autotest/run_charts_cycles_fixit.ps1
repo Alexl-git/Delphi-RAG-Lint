@@ -115,7 +115,7 @@ try {
 
   Write-Host '== (c) POSITIVE CONTROL: a stub engine without `fix`' -ForegroundColor Cyan
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe cycles --db $db --project $proj --format json --edges --causes --library-db none 2>$null } | Out-String
-  $j = @($raw | ConvertFrom-Json)
+  $j = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ })
   Check 'c0: SANITY the real JSON has a fix object on all 3 cycles' (@($j | Where-Object { $_.PSObject.Properties['fix'] }).Count -eq 3) ''
   $old = @($raw | ConvertFrom-Json | ForEach-Object { $_.PSObject.Properties.Remove('fix'); $_ })
   $stubOld = New-Stub 'old' $old
@@ -124,7 +124,7 @@ try {
   Check 'c2: no dry-run command and no `not available` cell rendered' (((Count-Code $po.Dot) -eq 0) -and ($po.Dot -notmatch 'fix-it: not available')) ''
 
   Write-Host '== (d) a stub with recipe member-interface (the library case)' -ForegroundColor Cyan
-  $j2 = @($raw | ConvertFrom-Json)
+  $j2 = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ })
   $j2[1].fix.available = $true; $j2[1].fix.reason = ''
   $j2[1].fix.edges = @([pscustomobject]@{ from = 'demogageport'; to = 'demouiconnect'; recipe = 'member-interface'; chosen = $true })
   $stubMi = New-Stub 'mi' $j2

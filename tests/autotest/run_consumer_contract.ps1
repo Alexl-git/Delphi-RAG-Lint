@@ -93,24 +93,24 @@ function Rows([string[]]$ExtraArgs) {
   $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null }) | ForEach-Object { "$_" }
   $txt = ($raw -join "`n").Trim()
   if (-not $txt.StartsWith('[')) { return @() }
-  return @($txt | ConvertFrom-Json)
+  return @(($txt | ConvertFrom-Json) | ForEach-Object { $_ })
 }
 
 # --- 2.4a --exact -------------------------------------------------------------
 Write-Host ''
 Write-Host '2.4a -- --exact suppresses the fuzzy fallback' -ForegroundColor Cyan
 # A name close enough for the fuzzy fallback to answer, but not present.
-$loose = Rows @('--name', 'TWidgetX')
+$loose = @(Rows @('--name', 'TWidgetX'))
 Check 'without --exact, a near-miss DOES get a suggestion' ($loose.Count -gt 0) "rows=$($loose.Count)"
 if ($loose.Count -gt 0) {
   Check 'and it is labelled match_kind=fuzzy' ($loose[0].match_kind -eq 'fuzzy') "match_kind=$($loose[0].match_kind)"
 }
-$strict = Rows @('--name', 'TWidgetX', '--exact')
+$strict = @(Rows @('--name', 'TWidgetX', '--exact'))
 Check 'with --exact, the same query returns NOTHING' ($strict.Count -eq 0) "rows=$($strict.Count)"
 
 # --exact must not break a genuine hit -- otherwise it would "pass" by returning
 # nothing for everything.
-$stillFinds = Rows @('--name', 'TWidget', '--exact')
+$stillFinds = @(Rows @('--name', 'TWidget', '--exact'))
 Check '--exact still returns a REAL hit' ($stillFinds.Count -eq 1) "rows=$($stillFinds.Count)"
 if ($stillFinds.Count -eq 1) {
   Check 'and labels it match_kind=exact' ($stillFinds[0].match_kind -eq 'exact') "match_kind=$($stillFinds[0].match_kind)"
@@ -119,7 +119,7 @@ if ($stillFinds.Count -eq 1) {
 # --- 2.4b --name accepts a qualified name -------------------------------------
 Write-Host ''
 Write-Host '2.4b -- --name accepts a qualified name' -ForegroundColor Cyan
-$byQualified = Rows @('--name', 'ContractKit.TWidget')
+$byQualified = @(Rows @('--name', 'ContractKit.TWidget'))
 Check '--name with a DOTTED value resolves' ($byQualified.Count -eq 1) "rows=$($byQualified.Count)"
 if ($byQualified.Count -eq 1) {
   Check 'it is the right symbol' ($byQualified[0].qualified_name -eq 'ContractKit.TWidget') `
@@ -128,7 +128,7 @@ if ($byQualified.Count -eq 1) {
     "match_kind=$($byQualified[0].match_kind)"
 }
 # The bare lookup must still win -- the qualified fallback is only tried on a miss.
-$bare = Rows @('--name', 'TWidget')
+$bare = @(Rows @('--name', 'TWidget'))
 Check 'a BARE name still resolves as before' ($bare.Count -eq 1) "rows=$($bare.Count)"
 
 # --- 2.6 enum members are reachable -------------------------------------------

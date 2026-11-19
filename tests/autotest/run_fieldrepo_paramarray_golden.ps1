@@ -64,7 +64,7 @@ foreach ($u in $j.units) {
   $gen = Get-Triples (($u.block -split "`r?`n"))
   $src = [IO.File]::ReadAllLines("$copy\$($u.unit).pas")
   $ex = Get-Triples $src
-  $gp = Params-Of $gen; $ep = Params-Of $ex
+  $gp = @(Params-Of $gen); $ep = @(Params-Of $ex)
   $constDiff = Compare-Object @(Consts-Of ($u.block -split "`r?`n")) @(Consts-Of $src)
   if ($gen.SetEquals($ex)) { $row.class = 'same' }
   elseif ((@($gp) -join ',') -eq (@($ep) -join ',')) { $row.class = 'hand-edited'; $row.note = 'same params, triple differs' }

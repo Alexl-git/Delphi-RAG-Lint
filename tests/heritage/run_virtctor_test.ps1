@@ -20,7 +20,7 @@ if (Test-Path $db) { Remove-Item $db -Force }
 
 $raw = (& { $ErrorActionPreference = 'Continue'; & $exe check-ast $pas --db $db --format json 2>$null } | Out-String)
 $idx = $raw.IndexOf('[')
-$findings = if ($idx -ge 0) { $raw.Substring($idx) | ConvertFrom-Json } else { @() }
+$findings = @(if ($idx -ge 0) { $raw.Substring($idx) | ConvertFrom-Json } else { @() })
 
 function Has($rule, $line) {
   return @($findings | Where-Object { $_.rule -eq $rule -and $_.start_line -eq $line }).Count -ge 1

@@ -100,7 +100,7 @@ function HintRows([string]$Db, [string[]]$Extra) {
   $r = Exec (@('lint', $pas, '--db', $Db, '--json', '--rule', 'pp-unresolved-if') + $Extra)
   $i = $r.Out.IndexOf('[')
   if ($i -lt 0) { return ,@() }
-  return ,@($r.Out.Substring($i) | ConvertFrom-Json)
+  return ,@(($r.Out.Substring($i) | ConvertFrom-Json) | ForEach-Object { $_ })
 }
 
 $libDb = Join-Path $WorkDir 'lib.sqlite'

@@ -294,7 +294,7 @@ try {
   Write-Host '== e1: a non-ASCII char in a line the recipe copies into a new unit (staged UTF-8 + BOM)' -ForegroundColor Cyan
   # 0xE9 (e-acute, cp1252) in the doc comment of TDemoLogLevel, which Part A moves into a new unit.
   $r = Run-Patched 'e1' { param($p) Patch-Bytes (Join-Path $p 'DemoLogger.pas') 'Severity of a log line' ([byte[]](0x53,0xE9,0x76,0xE9,0x72,0x69,0x74,0xE9)) }
-  $kinds = if ($r.Json) { @($r.Json.cycles[0].refusals | ForEach-Object { $_.kind }) } else { @() }
+  $kinds = @(if ($r.Json) { @($r.Json.cycles[0].refusals | ForEach-Object { $_.kind }) } else { @() })
   # W6 C7 (lane CYCC): was refused non-ascii-text; the new unit is now staged as UTF-8 with a BOM.
   Check 'e1: exit 0, mechanical (no non-ascii-text refusal)' ($r.Exit -eq 0 -and -not ($kinds -contains 'non-ascii-text')) $r.Out
   $nu = @(Get-ChildItem $r.Shadow -Recurse -File -Filter 'DemoLogger.Untangle.pas' -ErrorAction SilentlyContinue)
@@ -305,7 +305,7 @@ try {
   Write-Host '== e1b (C6): a cp1252 char in a line the recipe REPLACES in an existing ANSI file (representable: no refusal)' -ForegroundColor Cyan
   # 0xE9 in the trailing comment of DemoConfig.pas's `DemoLogger;` uses entry, which Part A rewrites to `DemoLogger.Untangle;`.
   $r = Run-Patched 'e1b' { param($p) Patch-Bytes (Join-Path $p 'DemoConfig.pas') 'DemoLogger;' ([byte[]](0x44,0x65,0x6D,0x6F,0x4C,0x6F,0x67,0x67,0x65,0x72,0x3B,0x20,0x2F,0x2F,0x20,0x63,0x61,0x66,0xE9)) }
-  $kinds = if ($r.Json) { @($r.Json.cycles[0].refusals | ForEach-Object { $_.kind }) } else { @() }
+  $kinds = @(if ($r.Json) { @($r.Json.cycles[0].refusals | ForEach-Object { $_.kind }) } else { @() })
   Check 'e1b: exit 0, mechanical (no non-ascii-text refusal: cp1252 represents e-acute)' ($r.Exit -eq 0 -and $r.Json -and $r.Json.cycles[0].verdict -eq 'mechanical' -and -not ($kinds -contains 'non-ascii-text')) $r.Out
   $cb = if (Test-Path (Join-Path $r.Shadow 'DemoConfig.pas')) { [IO.File]::ReadAllBytes((Join-Path $r.Shadow 'DemoConfig.pas')) } else { [byte[]]@() }
   Check 'e1b: the staged DemoConfig.pas stays ANSI (no BOM) and keeps the 0xE9 byte on the rewritten uses line' ($cb.Length -gt 3 -and -not ($cb[0] -eq 0xEF -and $cb[1] -eq 0xBB) -and ([Text.Encoding]::GetEncoding(28591).GetString($cb)).Contains('DemoLogger.Untangle; // caf' + [char]0xE9)) "bytes=$($cb.Length)"
@@ -326,7 +326,7 @@ try {
   $r0 = Run-Patched 'e3c' { param($p) }
   Check 'e3: CONTROL without the seam the same plan is mechanical (exit 0)' ($r0.Exit -eq 0) $r0.Out
   $r = Run-Patched 'e3' { param($p) } @{ DRAGLINT_CYCLEFIX_TEST_TAMPER = 'DemoLogger.pas|llWarn, llError|llWarn, llXError' }
-  $kinds = if ($r.Json) { @($r.Json.cycles[0].refusals | ForEach-Object { $_.kind }) } else { @() }
+  $kinds = @(if ($r.Json) { @($r.Json.cycles[0].refusals | ForEach-Object { $_.kind }) } else { @() })
   Check 'e3: exit 1, refusal anchor-mismatch' ($r.Exit -eq 1 -and $kinds -contains 'anchor-mismatch') $r.Out
   Check 'e3: shadow empty or absent' ($r.ShadowFiles -eq 0) "files=$($r.ShadowFiles)"
   Check 'e3: stderr announces the seam (dry run)' ($r.Err.Contains('cycles --fix: TEST TAMPER active (dry run only)')) $r.Err

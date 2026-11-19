@@ -36,7 +36,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 Push-Location ([IO.Path]::GetTempPath())
 try { $Out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $Fixture --rules-dir $Rules --json 2>$null } } finally { Pop-Location }
 $Txt = ($Out -join "`n")
-$All = if ($Txt.Trim() -eq '') { @() } else { @($Txt | ConvertFrom-Json) }
+$All = @(if ($Txt.Trim() -eq '') { @() } else { @(($Txt | ConvertFrom-Json) | ForEach-Object { $_ }) })
 # lint --json is a bare array; the line field is start_line (never .line)
 $Lines = @($All | Where-Object { $_.rule -eq $Rule } | ForEach-Object { [int]$_.start_line })
 Write-Host ("large-magic-number lines: " + (($Lines | Sort-Object) -join ','))

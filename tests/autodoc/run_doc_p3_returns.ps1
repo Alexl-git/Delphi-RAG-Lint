@@ -322,7 +322,7 @@ $pre = ([IO.File]::ReadAllLines($tgt) -replace '</?para>','')   # PRE-APPLY sour
 foreach ($p in @(
     @{ Host_ = 'AnonHost' ; Rx = 'Result := AInner\.Beta' ; What = 'the anonymous method''s Result' },
     @{ Host_ = 'LocalHost'; Rx = 'Result := X \* 5'       ; What = 'the local routine Twice''s Result' })) {
-  $span = Get-ImplSpan $db $p.Host_
+  $span = @(Get-ImplSpan $db $p.Host_)
   $ln   = @(Find-Lines $pre $p.Rx)
   $ok   = ($span[0] -gt 0) -and ($ln.Count -eq 1) -and ($ln[0] -ge $span[0]) -and ($ln[0] -le $span[1])
   Check ("PRECONDITION: {0}'s indexed impl span {1}..{2} CONTAINS {3} (line {4})" -f `
@@ -340,8 +340,8 @@ foreach ($p in @(
 # value out of LocalHost's <returns>, which is what the NESTED check further
 # down actually tests. Containment is asserted directly rather than inferred
 # from "Twice has no span of its own", which is no longer true.
-$twiceSpan = Get-ImplSpan $db 'Twice'
-$hostSpan  = Get-ImplSpan $db 'LocalHost'
+$twiceSpan = @(Get-ImplSpan $db 'Twice')
+$hostSpan  = @(Get-ImplSpan $db 'LocalHost')
 Check 'PRECONDITION: the nested routine Twice IS indexed, with an impl span of its own' `
   ($twiceSpan[0] -gt 0) ("span=" + ($twiceSpan -join '..'))
 Check 'PRECONDITION: Twice''s span lies INSIDE LocalHost''s, so a mask failure would still surface' `
@@ -353,7 +353,7 @@ Check 'PRECONDITION: Twice''s span lies INSIDE LocalHost''s, so a mask failure w
 foreach ($p in @(
     @{ N = 'PrevIdx'; Rx = 'Dec\(Result\)'          ; What = 'a Dec(Result) mutation' },
     @{ N = 'Accum'  ; Rx = 'Result := Result \+ '   ; What = 'a self-referential Result := Result + x' })) {
-  $span = Get-ImplSpan $db $p.N
+  $span = @(Get-ImplSpan $db $p.N)
   $ln   = @(Find-Lines $pre $p.Rx)
   $in   = @($ln | Where-Object { $_ -ge $span[0] -and $_ -le $span[1] })
   Check ("PRECONDITION: {0}'s indexed impl span {1}..{2} CONTAINS {3}" -f $p.N, $span[0], $span[1], $p.What) `
@@ -363,7 +363,7 @@ foreach ($p in @(
 # (2) MultiLineRhs only tests the incomplete-capture rule if its RHS genuinely
 # runs onto a second physical line: the assignment line must carry no ';' and
 # the NEXT line must.
-$mlSpan = Get-ImplSpan $db 'MultiLineRhs'
+$mlSpan = @(Get-ImplSpan $db 'MultiLineRhs')
 $mlLn   = @(Find-Lines $pre 'Result := \(A > 0\) and')
 $mlOk   = ($mlSpan[0] -gt 0) -and ($mlLn.Count -eq 1) -and ($mlLn[0] -ge $mlSpan[0]) -and ($mlLn[0] -le $mlSpan[1]) `
           -and ($pre[$mlLn[0]-1] -notmatch ';') -and ($pre[$mlLn[0]] -match ';')
@@ -372,7 +372,7 @@ Check 'PRECONDITION: MultiLineRhs''s RHS spans TWO physical lines inside its ind
 
 # (3) OneLiner only tests the block-keyword terminator if an 'end' really does
 # sit between its Result assignment and the line's only ';'.
-$olSpan = Get-ImplSpan $db 'OneLiner'
+$olSpan = @(Get-ImplSpan $db 'OneLiner')
 $olLn   = @(Find-Lines $pre 'Result := A \* 3')
 $olTxt  = if ($olLn.Count -eq 1) { $pre[$olLn[0]-1] } else { '' }
 $olTail = if ($olTxt -match 'Result := A \* 3(.*)$') { $Matches[1] } else { '' }
@@ -384,7 +384,7 @@ Check 'PRECONDITION: OneLiner''s Result assignment is followed by ''end'' BEFORE
 # "the whole nested call is captured" if the call really is nested, really has
 # the space after the open paren that the reporter blamed, and really is ONE
 # physical line ending in ';'.
-$ncSpan = Get-ImplSpan $db 'NestedCallRhs'
+$ncSpan = @(Get-ImplSpan $db 'NestedCallRhs')
 $ncLn   = @(Find-Lines $pre 'Result := ConcatPath\( ConcatPath\(')
 $ncTxt  = if ($ncLn.Count -eq 1) { $pre[$ncLn[0]-1] } else { '' }
 Check 'PRECONDITION: NestedCallRhs''s RHS is ONE physical line, nested, with a space after the open paren, ending in '';''' `
@@ -393,7 +393,7 @@ Check 'PRECONDITION: NestedCallRhs''s RHS is ONE physical line, nested, with a s
 
 # (regression) DefaultCfg only guards the 42-field blow-up if it really does
 # assign several distinct members of Result and nothing else.
-$dcSpan   = Get-ImplSpan $db 'DefaultCfg'
+$dcSpan   = @(Get-ImplSpan $db 'DefaultCfg')
 $dcFields = @('Alpha','Beta','Gamma','Delta','Sigma','Omega')
 $dcHits   = @($dcFields | Where-Object { @(Find-Lines $pre ("Result\.$_\s*:=")) | Where-Object { $_ -ge $dcSpan[0] -and $_ -le $dcSpan[1] } })
 Check 'PRECONDITION: DefaultCfg assigns all SIX Result.<Field> members inside its indexed span' `
@@ -401,7 +401,7 @@ Check 'PRECONDITION: DefaultCfg assigns all SIX Result.<Field> members inside it
 
 # (guard) InlineProcVar only guards the nested-routine DETECTOR if it really
 # spells the 'function' keyword inside its own span without opening a scope.
-$ipSpan = Get-ImplSpan $db 'InlineProcVar'
+$ipSpan = @(Get-ImplSpan $db 'InlineProcVar')
 $ipLn   = @(Find-Lines $pre 'F: function\(X: Integer\): Integer;')
 Check 'PRECONDITION: InlineProcVar declares a PARAMETERISED PROCEDURAL-TYPE local (the ''function'' keyword, no body) inside its indexed span' `
   (($ipSpan[0] -gt 0) -and ($ipLn.Count -eq 1) -and ($ipLn[0] -ge $ipSpan[0]) -and ($ipLn[0] -le $ipSpan[1])) `
@@ -414,7 +414,7 @@ Check 'PRECONDITION: InlineProcVar declares a PARAMETERISED PROCEDURAL-TYPE loca
 foreach ($p in @(
     @{ N = 'ParamlessProcVar' ; Rx = 'F: function: Integer;'        ; What = 'a PARAMETERLESS procedural-type VAR' },
     @{ N = 'LocalProcTypeDecl'; Rx = 'TGetter = function: Integer;' ; What = 'a PARAMETERLESS procedural-type local TYPE' })) {
-  $span = Get-ImplSpan $db $p.N
+  $span = @(Get-ImplSpan $db $p.N)
   $ln   = @(Find-Lines $pre $p.Rx)
   $in   = @($ln | Where-Object { $_ -ge $span[0] -and $_ -le $span[1] })
   $noParen = ($in.Count -eq 1) -and ($pre[$in[0]-1] -notmatch '\(')
@@ -427,13 +427,13 @@ foreach ($p in @(
 # the two routines really do SHARE a simple name in the index and really are
 # adjacent with a blank line above the first. Both properties are the fixture's,
 # not the output's, and neither is visible in a rendered <returns>.
-$snRows = @((& { $ErrorActionPreference = 'Continue'; & $exePath query --name Same --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json)
+$snRows = @(((& { $ErrorActionPreference = 'Continue'; & $exePath query --name Same --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json) | ForEach-Object { $_ })
 $snQ    = @($snRows | ForEach-Object { $_.qualified_name } | Sort-Object -Unique)
 Check 'PRECONDITION (same-name): the index holds TWO DISTINCT qualified names whose SIMPLE name is both `Same`' `
   (($snQ.Count -eq 2) -and ($snQ -contains 'returns.TAlpha.Same') -and ($snQ -contains 'returns.TBeta.Same')) `
   ("qnames=" + ($snQ -join ','))
-$snA = Get-ImplSpanQ $db 'returns.TAlpha.Same'
-$snB = Get-ImplSpanQ $db 'returns.TBeta.Same'
+$snA = @(Get-ImplSpanQ $db 'returns.TAlpha.Same')
+$snB = @(Get-ImplSpanQ $db 'returns.TBeta.Same')
 Check ("PRECONDITION (same-name): TAlpha.Same {0}..{1} immediately precedes TBeta.Same {2}..{3}, and the line above TAlpha.Same's header is BLANK" -f `
        $snA[0], $snA[1], $snB[0], $snB[1]) `
   (($snA[0] -gt 1) -and ($snB[0] -gt $snA[1]) -and ($pre[$snA[0] - 2].Trim() -eq '') `
@@ -448,7 +448,7 @@ foreach ($p in @(
     @{ N = 'BraceCommentSelfRef'; Rx = '\{ was: Result := Result \+ 1; \}'        ; What = 'a self-referential Result := inside a {...} comment' },
     @{ N = 'ParenStarSetLength' ; Rx = '\(\* dead: SetLength\(Result, A\); \*\)'  ; What = 'SetLength(Result, ..) inside a (*..*) comment' },
     @{ N = 'StrLiteralResult'   ; Rx = "Format\('Result := Result \+ 1; %d'"      ; What = "'Result := Result + 1' inside a STRING LITERAL" })) {
-  $span = Get-ImplSpan $db $p.N
+  $span = @(Get-ImplSpan $db $p.N)
   $ln   = @(Find-Lines $pre $p.Rx)
   $in   = @($ln | Where-Object { $_ -ge $span[0] -and $_ -le $span[1] })
   Check ("PRECONDITION: {0}'s indexed impl span {1}..{2} CONTAINS {3}" -f $p.N, $span[0], $span[1], $p.What) `
@@ -786,7 +786,7 @@ foreach ($p in @(
        Want = 'Twice(A) + 1' ; Why = 'a host with a NAMED nested routine -- green before the fix, kept as its control' },
     @{ N = 'ClassLag' ; Q = 'returns.TBox.ClassLag' ; Hdr = '^class\s+function\s+TBox\.ClassLag\('
        Want = 'A + 41'       ; Why = 'a CLASS method, whose body''s first token is `class` -- RED at 55bcdaf, "returns":[]' })) {
-  $span0 = Get-ImplSpan $db2 $p.N
+  $span0 = @(Get-ImplSpan $db2 $p.N)
   $ok    = ($span0[0] -ge 2) -and ($src2[$span0[0] - 2].Trim() -eq '') -and `
            ($src2[$span0[0] - 1] -match $p.Hdr)
   Check ("PRECONDITION (lag): {0}'s TRUE span starts on its header line {1}, and the line above it is BLANK" -f $p.N, $span0[0]) `
@@ -800,7 +800,7 @@ foreach ($p in @(
   $rc = (& python $lagPy $db2 $p.N) -join ''
   Check ("PRECONDITION (lag): the UPDATE moved exactly ONE {0} row back by a line" -f $p.N) `
     ($rc.Trim() -eq '1') ("rowcount=" + $rc)
-  $span1 = Get-ImplSpan $db2 $p.N
+  $span1 = @(Get-ImplSpan $db2 $p.N)
   Check ("PRECONDITION (lag): {0}'s span now READS {1}..{2} -- one line before the header, ending where it did" -f `
          $p.N, $span1[0], $span1[1]) `
     (($span1[0] -eq $span0[0] - 1) -and ($span1[1] -eq $span0[1])) ("was=" + ($span0 -join '..') + " now=" + ($span1 -join '..'))
@@ -876,8 +876,8 @@ con.commit()
 print(cur.rowcount)
 '@ | Set-Content $fgnPy -Encoding ascii
 
-$spanA = Get-ImplSpan $db3 'ForeignA'
-$spanB = Get-ImplSpan $db3 'ForeignB'
+$spanA = @(Get-ImplSpan $db3 'ForeignA')
+$spanB = @(Get-ImplSpan $db3 'ForeignB')
 
 # The two routines really are adjacent and in this order, and the line above
 # ForeignA's header really is blank -- otherwise "one line above ANOTHER
@@ -900,7 +900,7 @@ foreach ($p in @(@{ N = 'ForeignA'; Want = 'A * 7' }, @{ N = 'ForeignB'; Want = 
 $rc3 = (& python $fgnPy $db3 'ForeignB' ($spanA[0] - 1)) -join ''
 Check 'PRECONDITION (foreign): the UPDATE moved exactly ONE ForeignB row' ($rc3.Trim() -eq '1') ("rowcount=" + $rc3)
 
-$spanB2 = Get-ImplSpan $db3 'ForeignB'
+$spanB2 = @(Get-ImplSpan $db3 'ForeignB')
 Check ("PRECONDITION (foreign): ForeignB's span now READS {0}..{1} -- it begins one line ABOVE ForeignA's header and COVERS ForeignA's body" -f `
        $spanB2[0], $spanB2[1]) `
   (($spanB2[0] -eq $spanA[0] - 1) -and ($spanB2[1] -eq $spanB[1]) -and ($spanB2[1] -ge $spanA[1])) `
@@ -983,8 +983,8 @@ con.commit()
 print(cur.rowcount)
 '@ | Set-Content $snPy -Encoding ascii
 
-$spanSA = Get-ImplSpanQ $db4 'returns.TAlpha.Same'
-$spanSB = Get-ImplSpanQ $db4 'returns.TBeta.Same'
+$spanSA = @(Get-ImplSpanQ $db4 'returns.TAlpha.Same')
+$spanSB = @(Get-ImplSpanQ $db4 'returns.TBeta.Same')
 
 Check ("PRECONDITION (same-name): TAlpha.Same {0}..{1} precedes TBeta.Same {2}..{3}, and the line above TAlpha.Same's header is BLANK" -f `
        $spanSA[0], $spanSA[1], $spanSB[0], $spanSB[1]) `
@@ -1011,8 +1011,8 @@ foreach ($p in @(@{ Q = 'returns.TAlpha.Same'; Want = 'A * 11' }, @{ Q = 'return
 $rc4 = (& python $snPy $db4 'returns.TBeta.Same' ($spanSA[0] - 1)) -join ''
 Check 'PRECONDITION (same-name): the UPDATE moved exactly ONE row, TBeta.Same''s' ($rc4.Trim() -eq '1') ("rowcount=" + $rc4)
 
-$spanSB2 = Get-ImplSpanQ $db4 'returns.TBeta.Same'
-$spanSA2 = Get-ImplSpanQ $db4 'returns.TAlpha.Same'
+$spanSB2 = @(Get-ImplSpanQ $db4 'returns.TBeta.Same')
+$spanSA2 = @(Get-ImplSpanQ $db4 'returns.TAlpha.Same')
 Check ("PRECONDITION (same-name): TBeta.Same's span now READS {0}..{1} -- one line ABOVE TAlpha.Same's header, COVERING TAlpha.Same's body -- and TAlpha.Same's own span is UNTOUCHED" -f `
        $spanSB2[0], $spanSB2[1]) `
   (($spanSB2[0] -eq $spanSA[0] - 1) -and ($spanSB2[1] -eq $spanSB[1]) -and ($spanSB2[1] -ge $spanSA[1]) `

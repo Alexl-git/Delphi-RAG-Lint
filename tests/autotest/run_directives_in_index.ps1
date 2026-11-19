@@ -192,7 +192,7 @@ Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 function Get-Sym([string]$Name) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe query --name $Name --exact --json --db $db 2>$null }) -join "`n"
   if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
-  $rows = @($raw | ConvertFrom-Json)
+  $rows = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ })
   return $rows | Where-Object { $_.kind -in @('method','procedure','function') } | Select-Object -First 1
 }
 

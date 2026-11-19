@@ -91,7 +91,7 @@ function RunUsesCase([string]$dirName, [string]$style) {
   & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $j = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file --db $db --json --rule unused-unit-in-uses 2>$null }
   $ErrorActionPreference = $ea
-  $diags = @(@(($j -join "`n") | ConvertFrom-Json) | Where-Object { $_.rule -eq 'unused-unit-in-uses' } | ForEach-Object {
+  $diags = @(@((($j -join "`n") | ConvertFrom-Json) | ForEach-Object { $_ }) | Where-Object { $_.rule -eq 'unused-unit-in-uses' } | ForEach-Object {
     @{ range = @{ start = @{ line = $_.start_line - 1; character = $_.start_col - 1 }; end = @{ line = $_.end_line - 1; character = $_.end_col - 1 } }
        severity = 2; source = 'drag-lint'; code = $_.rule; message = $_.message } })
   $uri = ClientUri $file $style

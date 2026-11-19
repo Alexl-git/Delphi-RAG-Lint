@@ -129,7 +129,7 @@ function Line([object[]]$Lines, [string]$Unit) { return (($Lines | Where-Object 
 $libDb = Join-Path $WorkDir 'lib.sqlite'; $prjDb = Join-Path $WorkDir 'prj.sqlite'
 & { $ErrorActionPreference = 'Continue'; & $Exe index $lib --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 & { $ErrorActionPreference = 'Continue'; & $Exe index $prj --db $prjDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
-$new = Run-Lint $Exe $libDb $prjDb 'new'
+$new = @(Run-Lint $Exe $libDb $prjDb 'new')
 $idle = Line $new 'uIdleInit'; $reg = Line $new 'uRegInit'; $fin = Line $new 'uFinInit'
 Write-Host '== unused-unit-in-uses: initialization section refs ==' -ForegroundColor Cyan
 Check 'the rule fires for all three units (control: not vacuous)' (($idle -ne '') -and ($reg -ne '') -and ($fin -ne '')) "idle=$($idle.Length) reg=$($reg.Length) fin=$($fin.Length)"
@@ -146,11 +146,11 @@ if ($py) {
   Copy-Item $libDb $oldLib
   $stamp = & $py.Source -I -c "import sqlite3,sys;c=sqlite3.connect(sys.argv[1]);r=c.execute(`"select value from schema_meta where key='resolver_fingerprint'`").fetchone();import re;v=re.sub(r'r=[0-9.]+-alpha','r=1.19.0-alpha',r[0]);c.execute(`"update schema_meta set value=? where key='resolver_fingerprint'`",(v,));c.commit();print(v)" $oldLib
   Check 'setup: copy stamped with the older resolver' ($stamp -match 'r=1\.19\.0-alpha') "$stamp"
-  $old = Run-Lint $Exe $oldLib $prjDb 'oldlib'
+  $old = @(Run-Lint $Exe $oldLib $prjDb 'oldlib')
   $oi = Line $old 'uIdleInit'
   Check 'GATE: library DB from an older resolver -> unknown -> plain INFO, never WARNING' (($oi -match 'VERIFY BEFORE REMOVING') -and ($oi -notmatch 'warning') -and ($oi -notmatch 'references:'))
 } else { Write-Host '  [SKIP] old-resolver gate (no python)' -ForegroundColor Yellow }
-$none = Run-Lint $Exe '' $prjDb 'nolib'
+$none = @(Run-Lint $Exe '' $prjDb 'nolib')
 Check 'no library DB: no section finding, no crash' ((Line $none 'uIdleInit') -eq '')
 
 if ($script:Failed) { Write-Host 'UU INIT SECTION GUARD: FAIL' -ForegroundColor Red; exit 1 }

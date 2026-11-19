@@ -56,7 +56,7 @@ function LintAll([string[]]$extra) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --project $Dproj --json @extra 2>$null }) -join "`n"
   Write-Host ('  raw[0..160]: ' + $raw.Substring(0, [Math]::Min(160, $raw.Length)))
   $arr = @()
-  try { $arr = @($raw | ConvertFrom-Json) } catch { }
+  try { $arr = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { }
   return ,$arr
 }
 function UnitsOf($findings, [string]$rule) {

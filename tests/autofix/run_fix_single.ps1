@@ -53,7 +53,7 @@ function Invoke-FixChecks($form, $tag) {
   Copy-Item $fixture $target -Force
   if (Test-Path $bak) { Remove-Item $bak -Force }
   $before = [IO.File]::ReadAllText($target)
-  $pvArgs = (TargetArgs $form) + @('--fix','--fix-line',$L,'--fix-rule',$Rule,'--json')
+  $pvArgs = (@(TargetArgs $form)) + @('--fix','--fix-line',$L,'--fix-rule',$Rule,'--json')
   $raw = & { $ErrorActionPreference = 'Continue'; & $exePath @pvArgs 2>$null } | Out-String
   $arr = $null
   try { $arr = ($raw | ConvertFrom-Json) } catch { $arr = $null }
@@ -77,7 +77,7 @@ function Invoke-FixChecks($form, $tag) {
   # --- 2) APPLY (--apply --json): parens stripped, applied=true, .bak exists ---
   Copy-Item $fixture $target -Force
   if (Test-Path $bak) { Remove-Item $bak -Force }
-  $apArgs = (TargetArgs $form) + @('--fix','--fix-line',$L,'--fix-rule',$Rule,'--json','--apply')
+  $apArgs = (@(TargetArgs $form)) + @('--fix','--fix-line',$L,'--fix-rule',$Rule,'--json','--apply')
   $raw2 = & { $ErrorActionPreference = 'Continue'; & $exePath @apArgs 2>$null } | Out-String
   $arr2 = $null
   try { $arr2 = ($raw2 | ConvertFrom-Json) } catch { $arr2 = $null }

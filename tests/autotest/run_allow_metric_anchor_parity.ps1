@@ -104,7 +104,7 @@ function LintJson {
   $o = & { $ErrorActionPreference = 'Continue'; & $Exe lint $pas '--json' 2>$errFile }
   $t = ($o | Out-String).Trim()
   if ($t -eq '') { return ,@() }
-  return ,@($t | ConvertFrom-Json)
+  return ,@(($t | ConvertFrom-Json) | ForEach-Object { $_ })
 }
 function Has($Fs, [string]$Rule, [int]$Line) { @($Fs | Where-Object { $_.rule -eq $Rule -and $_.start_line -eq $Line }).Count -gt 0 }
 function Allow([int]$Line, [string]$Rule) {

@@ -76,7 +76,7 @@ Copy-Item $LibraryDb $Lib -Force
 # A loopback address no other process pings: the parked build is found by it, and only it.
 $PingHost = '127.{0}.{1}.{2}' -f (Get-Random -Min 2 -Max 250), (Get-Random -Min 2 -Max 250), (Get-Random -Min 2 -Max 250)
 function Parked { return @(Get-CimInstance Win32_Process -Filter "Name = 'PING.EXE' OR Name = 'ping.exe'" | Where-Object { "$($_.CommandLine)" -match [regex]::Escape($PingHost) }) }
-function Stop-Parked { foreach ($p in (Parked)) { try { [Diagnostics.Process]::GetProcessById([int]$p.ProcessId).Kill() } catch { } } }
+function Stop-Parked { foreach ($p in (@(Parked))) { try { [Diagnostics.Process]::GetProcessById([int]$p.ProcessId).Kill() } catch { } } }
 
 function Copy-Tree([string]$From, [string]$To) {
   New-Item -ItemType Directory -Force $To | Out-Null
@@ -139,7 +139,7 @@ $fake = New-FakeRsvars 'c' $C.Proj 'after'
 $run = Start-Fix $C @('--unit', 'demogageport', '--apply', '--build-timeout', '600', '--rsvars', $fake.Bat) 'c'
 $parked = Wait-For { (Test-Path $fake.Flag) -or $run.P.HasExited } 240
 Check 'setup: the after-build parked (the run reached it)' ($parked -and (Test-Path $fake.Flag) -and -not $run.P.HasExited) ("exited=" + $run.P.HasExited + ' ' + (Read-Text $run.Out) + (Read-Text $run.Err))
-$bck = Backups $C.Proj
+$bck = @(Backups $C.Proj)
 $changed = @($srcBefore.Keys | Where-Object { (Test-Path (Join-Path $C.Proj $_)) -and ((Get-FileSha (Join-Path $C.Proj $_)) -ne $srcBefore[$_]) })
 Check 'c1 the edits are on disk when the cancel is sent (mid-apply)' (($bck.Count -gt 0) -and ($changed.Count -gt 0)) ("backups=" + $bck.Count + ' changed=' + ($changed -join ','))
 # each backup, as it is mid-run: <File>.<ext>.BCK<n> holds the pre-run bytes of <File>.<ext>
@@ -161,7 +161,7 @@ foreach ($k in $bckSha.Keys) { $srcAfter[$k] = if (Test-Path (Join-Path $C.Proj 
 $bad = @($bckSha.Keys | Where-Object { $srcAfter[$_] -ne $bckSha[$_] })
 Check 'c5 every source is byte-identical to its backup (as captured mid-run)' (($bckSha.Count -gt 0) -and ($bad.Count -eq 0)) ("differ: " + ($bad -join ','))
 Check 'c6 the tree is byte-identical to before (no new leaf, no .BCK, no recovery.txt)' ((Get-TreeHash $C.Proj) -eq $before) (Get-TreeHash $C.Proj)
-Check 'c7 the parked build is gone (the engine killed its own build tree)' ((Parked).Count -eq 0) ("still alive: " + ((Parked | ForEach-Object ProcessId) -join ','))
+Check 'c7 the parked build is gone (the engine killed its own build tree)' ((@(Parked)).Count -eq 0) ("still alive: " + ((Parked | ForEach-Object ProcessId) -join ','))
 Stop-Parked
 
 # ---------------------------------------------------------------- (c-text) the text verdict of a cancelled run

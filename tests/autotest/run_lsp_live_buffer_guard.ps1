@@ -239,7 +239,7 @@ Check 'shows the real parameter ASource' ($h -match 'ASource') "got: [$h]"
 # path cannot work at all without the overlay.
 Write-Host ''
 Write-Host 'CASE 2: completion after didChange' -ForegroundColor Cyan
-$labels = CompletionLabels (Invoke-Lsp 'textDocument/completion' $liveLine $dotCol 'change')
+$labels = @(CompletionLabels (Invoke-Lsp 'textDocument/completion' $liveLine $dotCol 'change'))
 Check 'completion returns items at the unsaved dot' ($labels.Count -gt 0) "count=$($labels.Count)"
 Check 'offers Assign'             ($labels -contains 'Assign')             "got: $($labels -join ',')"
 Check 'offers AlreadySavedMethod' ($labels -contains 'AlreadySavedMethod') "got: $($labels -join ',')"

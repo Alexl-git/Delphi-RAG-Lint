@@ -80,13 +80,13 @@ try {
 
   # c1
   $o1 = Order 'P1.dpr'
-  $f1 = if ($o1.Count -eq 1) { $o1[0].Split('|') } else { @('', '', '', '', '', '') }
+  $f1 = @(if ($o1.Count -eq 1) { $o1[0].Split('|') } else { @('', '', '', '', '', '') })
   Check (($o1.Count -eq 1) -and ($f1[5] -eq 'C,B,A,D') -and ($f1[2] -eq '0') -and ($f1[4] -eq 'yes')) "c1 P1 order C,B,A,D, reliable, program block (got '$($o1 -join ' / ')')"
 
   # c2: second engine call -- the order init-order-hazard walks
   $lj = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rule init-order-hazard --json 2>$null }) -join "`n"
   Write-Host "  lint raw: $($lj.Substring(0, [Math]::Min(400, $lj.Length)))"
-  $lint = @($lj | ConvertFrom-Json)
+  $lint = @(($lj | ConvertFrom-Json) | ForEach-Object { $_ })
   $hz = @($lint | Where-Object { ([IO.Path]::GetFileName([string]$_.file_path) -eq 'C.pas') -and ($_.message -match 'A\.GVal') })
   $m = if ($hz.Count -ge 1) { [regex]::Match($hz[0].message, 'but (\w+) initializes after (\w+) in (\S+):') } else { $null }
   $lintSaysAAfterC = ($null -ne $m) -and $m.Success -and ($m.Groups[1].Value -eq 'A') -and ($m.Groups[2].Value -eq 'C') -and ($m.Groups[3].Value -eq 'P1.dpr')
@@ -104,7 +104,7 @@ try {
 
   # c4
   $o2 = Order 'P2.dpr'
-  $f2 = if ($o2.Count -eq 1) { $o2[0].Split('|') } else { @('', '', '', '', '', '') }
+  $f2 = @(if ($o2.Count -eq 1) { $o2[0].Split('|') } else { @('', '', '', '', '', '') })
   Check (($o2.Count -eq 1) -and ($f2[5] -eq 'Y,V,W,X') -and ($f2[2] -eq '1') -and ($f2[3] -like 'X.pas:*')) "c4 P2 order Y,V,W,X, unreliable at X.pas (got '$($o2 -join ' / ')')"
 
   # c5..c9

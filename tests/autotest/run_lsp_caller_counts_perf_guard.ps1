@@ -128,7 +128,7 @@ Check "callerCounts + hover cost under $BudgetMs ms over the control session" ($
 
 Write-Host ''
 Write-Host 'STILL RIGHT: the counts of a known call graph' -ForegroundColor Cyan
-$counts = if ($cc.Count -eq 1 -and $null -ne $cc[0].result) { @($cc[0].result.counts) } else { @() }
+$counts = @(if ($cc.Count -eq 1 -and $null -ne $cc[0].result) { @($cc[0].result.counts) } else { @() })
 function CountAt([string]$declPattern) {
   for ($i = 0; $i -lt $lines.Count; $i++) {
     if ($lines[$i] -match $declPattern) {

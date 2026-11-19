@@ -140,13 +140,13 @@ function Bound([string]$Marker, [string]$AName, [string]$Qn) {
   return @($ok, ("rows=$($r.Count) " + (($r | ForEach-Object { "[$($_.kind) sid=$($_.sid) qn=$($_.qn) rt=$($_.rt)]" }) -join ' ')))
 }
 
-$b = Bound 'C1' 'L' 'uD.TRec.L'
+$b = @(Bound 'C1' 'L' 'uD.TRec.L')
 Check 'C1  F().L (implicit deref): bound to uD.TRec.L (positive control)' $b[0] $b[1]
-$b = Bound 'D1' 'M' 'uD.TRec.M'
+$b = @(Bound 'D1' 'M' 'uD.TRec.M')
 Check 'D1  F()^.M: bound to uD.TRec.M' $b[0] $b[1]
-$b = Bound 'D2' 'N' 'uD.TRec.N'
+$b = @(Bound 'D2' 'N' 'uD.TRec.N')
 Check 'D2  G(1, 2)^.N: bound to uD.TRec.N' $b[0] $b[1]
-$b = Bound 'D3' 'K' 'uD.TRec.K'
+$b = @(Bound 'D3' 'K' 'uD.TRec.K')
 Check 'D3  PRec(P)^.K: bound to uD.TRec.K' $b[0] $b[1]
 $r = RefAt 'N1' 'M'
 Check 'N1  Q()^.M (Q: Pointer): stays unbound (negative control)' `

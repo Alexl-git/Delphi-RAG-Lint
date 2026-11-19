@@ -128,9 +128,9 @@ function Count-Exact([string[]]$Facts, [string]$Text) {
 
 Write-Host ''
 Write-Host 'THE FACT LINE (hover, the CLI surface that renders without a doc row)' -ForegroundColor Cyan
-$fa = Get-HoverFacts 'uEmit.AddUp'
-$fw = Get-HoverFacts 'uEmit.WriteGlobal'
-$fd = Get-HoverFacts 'uEmit.Driver'
+$fa = @(Get-HoverFacts 'uEmit.AddUp')
+$fw = @(Get-HoverFacts 'uEmit.WriteGlobal')
+$fd = @(Get-HoverFacts 'uEmit.Driver')
 Check '26a. proven routine hover carries "Effect-free (proven)" exactly once' `
   ((Count-Exact $fa 'Effect-free (proven)') -eq 1) ("AddUp facts: " + ($fa -join ' | '))
 # @(...) around each: a one-element array RETURNS as a bare string, and then
@@ -189,7 +189,7 @@ if (-not $py) {
   $clear = "import sqlite3; c = sqlite3.connect(r'$db'); n = c.execute('UPDATE symbol_facts SET effect_free=NULL, effect_summary=NULL, effect_witness=NULL').rowcount; c.commit(); c.close(); print(n)"
   $rows  = (& { $ErrorActionPreference = 'Continue'; & python -c $clear 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check '27a. the verdict was cleared on every facts row' ($rows.Trim() -match '^[1-9]\d*$') "rows=[$($rows.Trim())]"
-  $fn = Get-HoverFacts 'uEmit.AddUp'
+  $fn = @(Get-HoverFacts 'uEmit.AddUp')
   Check '27b. a NULL verdict prints no effect line (and no Pure)' `
     ((@($fn | Where-Object { $_ -match 'Effect-free' -or $_.Trim() -eq 'Pure' })).Count -eq 0) ($fn -join ' | ')
   $jn = Get-HoverJson 'uEmit.AddUp'

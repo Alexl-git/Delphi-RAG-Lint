@@ -31,7 +31,7 @@ function Sev([string]$Database) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $Database --json --quiet 2>$null }
   $t = $raw -join "`n"; $b = $t.IndexOf('[')
   $m = @{}
-  if ($b -ge 0) { foreach ($f in @($t.Substring($b) | ConvertFrom-Json)) { if ($f.rule -eq 'taint-sql-injection') { $m[[int]$f.start_line] = $f.severity } } }
+  if ($b -ge 0) { foreach ($f in @(($t.Substring($b) | ConvertFrom-Json) | ForEach-Object { $_ })) { if ($f.rule -eq 'taint-sql-injection') { $m[[int]$f.start_line] = $f.severity } } }
   return $m
 }
 Push-Location $env:TEMP

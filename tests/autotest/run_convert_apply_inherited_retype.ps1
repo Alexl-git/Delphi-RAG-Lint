@@ -786,16 +786,16 @@ $j = Json $r.Out
 Check 'A1 RChild dry run: exit 0, ok' (($r.Code -eq 0) -and ($null -ne $j) -and $j.ok) $r.Out
 $keys = if ($j -and @($j.inherited).Count -gt 0) { (@($j.inherited)[0].PSObject.Properties.Name) -join ',' } else { '' }
 Check 'A2 inherited[] keys: the six N1 keys, then action' ($keys -eq 'name,type,line,ancestor_unit,ancestor_state,reason,action') $keys
-$b = Inh $j 'rbtn'
+$b = @(Inh $j 'rbtn')
 Check 'A3 rbtn: ancestor RBase (two levels up), converted, action retyped' `
   (($b.Count -eq 1) -and ($b[0].ancestor_unit -eq 'RBase') -and ($b[0].ancestor_state -eq 'converted') -and ($b[0].action -eq 'retyped') -and ($b[0].type -eq 'TSrcA')) ($b | ConvertTo-Json -Compress)
-$n = Inh $j 'rnest'
+$n = @(Inh $j 'rnest')
 Check 'A4 nested rnest (inside inherited rpnl): retyped' (($n.Count -eq 1) -and ($n[0].action -eq 'retyped')) ($n | ConvertTo-Json -Compress)
-$f = Inh $j 'fb'
+$f = @(Inh $j 'fb')
 Check 'A5 inline frame child fb: ancestor RFrame, retyped' (($f.Count -eq 1) -and ($f[0].ancestor_unit -eq 'RFrame') -and ($f[0].action -eq 'retyped')) ($f | ConvertTo-Json -Compress)
-$u = Inh $j 'ubtn'
+$u = @(Inh $j 'ubtn')
 Check 'A6 ubtn (ancestor still TSrcA): unconverted, action skipped' (($u.Count -eq 1) -and ($u[0].ancestor_state -eq 'unconverted') -and ($u[0].action -eq 'skipped')) ($u | ConvertTo-Json -Compress)
-$c = Inh $j 'rcode'
+$c = @(Inh $j 'rcode')
 Check 'A7 rcode (code-only use, N2a): action code, ancestor RBase, converted, line = its first code reference' `
   (($c.Count -eq 1) -and ($c[0].action -eq 'code') -and ($c[0].ancestor_unit -eq 'RBase') -and ($c[0].ancestor_state -eq 'converted') -and ($c[0].line -eq 22)) ($c | ConvertTo-Json -Compress)
 $rk = @($j.items | Where-Object { $_.kind -eq 'inherited-instance-retyped' })
@@ -838,7 +838,7 @@ Check 'B10 own field retyped and LibB added to the INTERFACE uses (C13 a)' `
 # ---- N2a: a code-only descendant -------------------------------------------------
 $r = ApplyTo @('RCode.pas') 'retype.rules' @('--format', 'json')
 $j = Json $r.Out
-$c = if ($j) { Inh $j 'rcode' } else { @() }
+$c = @(if ($j) { Inh $j 'rcode' } else { @() })
 Check 'C1 RCode (no own instance, no .dfm re-open): exit 0, ok, component_part applied, rcode action code' `
   (($r.Code -eq 0) -and ($null -ne $j) -and $j.ok -and ($j.component_part -eq 'applied') -and ($c.Count -eq 1) -and ($c[0].action -eq 'code')) $r.Out
 Check 'C2 two access sites rewritten' (@($j.access_sites).Count -eq 2) ($j.access_sites -join ' | ')
@@ -1012,7 +1012,7 @@ Check 'LOAD1 every .dfm --apply wrote LOADS (text -> binary -> text -> binary)' 
 # ---- UNCONVERTED ancestor, code only (1.26.7) ----------------------------------------
 $r = ApplyTo @('RUnconv.pas') 'retype.rules' @('--format', 'json')
 $j = Json $r.Out
-$uu = if ($j) { @($j.inherited | Where-Object { $_.name -eq 'ubtn' }) } else { @() }
+$uu = @(if ($j) { @($j.inherited | Where-Object { $_.name -eq 'ubtn' }) } else { @() })
 Check 'U1 a code-only use of an UNCONVERTED ancestor field (two levels up): one entry, action skipped, state unconverted, reason "ancestor not converted", line 19, ancestor RBase' `
   (($r.Code -eq 0) -and ($uu.Count -eq 1) -and ($uu[0].action -eq 'skipped') -and ($uu[0].ancestor_state -eq 'unconverted') -and `
    ($uu[0].reason -eq 'ancestor not converted') -and ($uu[0].line -eq 19) -and ($uu[0].ancestor_unit -eq 'RBase') -and ($uu[0].type -eq 'TSrcA')) ($r.Out)

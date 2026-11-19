@@ -118,7 +118,7 @@ try {
   $pt = [IO.File]::ReadAllText($plan)
   $m = [regex]::Match($pt, '(?s)## Cycle 1:.*?It must print exactly:\s*\r?\n```text\r?\n(.*?)\r?\n```')
   Check 'Cycle 1 has a predicted block' $m.Success
-  $pred = if ($m.Success) { Keep $m.Groups[1].Value } else { @() }
+  $pred = @(if ($m.Success) { Keep $m.Groups[1].Value } else { @() })
   $same = ($pred.Count -gt 0) -and (($pred -join "`n") -ceq ($actual -join "`n"))
   Check 'predicted block == actual cycles output, group order included' $same ("`n  predicted:`n    " + ($pred -join "`n    ") + "`n  actual:`n    " + ($actual -join "`n    "))
 

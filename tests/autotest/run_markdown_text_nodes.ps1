@@ -108,7 +108,7 @@ try {
 
   $LJ = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --json 2>$null }) -join "`n"
   $LA = @()
-  try { $LA = @($LJ.Substring($LJ.IndexOf('[')) | ConvertFrom-Json) } catch { }
+  try { $LA = @(($LJ.Substring($LJ.IndexOf('[')) | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { }
   Check '9 control: lint-all anchors no finding in a .md' (@($LA | Where-Object { $_.file_path -like '*.md' }).Count -eq 0) ("findings: " + $LA.Count)
 }
 finally {

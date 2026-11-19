@@ -100,7 +100,7 @@ function HiddenB { return @('  {$I refs.txt}') }
 
 try {
   Write-Host '== T09: a naming fix in a shared unit builds every project that compiles it ==' -ForegroundColor Cyan
-  $p = New-Lab 't1' -BBody (HiddenB)
+  $p = New-Lab 't1' -BBody (@(HiddenB))
   WriteAscii "$p\B\refs.txt" @('  Result:= My_Const;')
   $h = Sources $p
   $o = Fix $p "$p\shared\uShared.pas" 6
@@ -115,7 +115,7 @@ try {
   $exeB = Get-ChildItem "$p\B" -Recurse -Filter B.exe | Sort-Object LastWriteTime -Descending | Select-Object -First 1
   Check 't2 B''s binary, rebuilt after the rename, prints 42' ($exeB -and ((& $exeB.FullName | Out-String).Trim() -eq '42'))
 
-  $p = New-Lab 't3' -BBody (HiddenB)
+  $p = New-Lab 't3' -BBody (@(HiddenB))
   WriteAscii "$p\B\refs.txt" @('  Result:= My_Const;')
   $h = Sources $p
   $o = Fix $p "$p\shared\uShared.pas" 6 -NoProject

@@ -144,7 +144,7 @@ Check 'TOrphan.Caption stays empty' ((SigOf 'uDerived.TOrphan.Caption') -eq '') 
 
 Write-Host ''
 Write-Host '(3) query and a read-only hover see the stored type' -ForegroundColor Cyan
-$q = @((& { $ErrorActionPreference = 'Continue'; & $Exe query --name Text --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json) |
+$q = @(((& { $ErrorActionPreference = 'Continue'; & $Exe query --name Text --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json) | ForEach-Object { $_ }) |
   Where-Object { $_.qualified_name -eq 'uDerived.TDerived.Text' }
 Check 'query --name Text --json carries : string for TDerived.Text' (@($q).Count -eq 1 -and $q[0].signature -eq ': string') "got: [$(@($q).Count) row(s), sig=$($q.signature)]"
 $h = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname uDerived.TDerived.Text --db $db --format json 2>$null }) -join "`n" | ConvertFrom-Json

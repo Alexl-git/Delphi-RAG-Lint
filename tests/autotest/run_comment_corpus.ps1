@@ -129,21 +129,21 @@ function Find-Text([string]$Phrase, [string]$Kind = '') {
 
 Write-Host ''
 Write-Host 'Each comment FORM is searchable (four lexically different constructs)' -ForegroundColor Cyan
-$slash = Find-Text 'axolotl body slash marker'
+$slash = @(Find-Text 'axolotl body slash marker')
 Check 'a // comment inside a routine BODY is found' ($slash.Count -ge 1) "hits=$($slash.Count)"
 Check '  ...and is reported as kind comment' `
   ($slash.Count -ge 1 -and (KindOf $slash) -eq 'comment') "kind=$((KindOf $slash))"
 
-$brace = Find-Text 'pangolin brace block marker'
+$brace = @(Find-Text 'pangolin brace block marker')
 Check 'a { } block comment is found' ($brace.Count -ge 1) "hits=$($brace.Count)"
 
-$paren = Find-Text 'capybara paren star marker'
+$paren = @(Find-Text 'capybara paren star marker')
 Check 'a (* *) comment is found' ($paren.Count -ge 1) "hits=$($paren.Count)"
 
-$trail = Find-Text 'narwhal trailing marker'
+$trail = @(Find-Text 'narwhal trailing marker')
 Check 'a trailing // comment after a field declaration is found' ($trail.Count -ge 1) "hits=$($trail.Count)"
 
-$doc = Find-Text 'quokka doc marker'
+$doc = @(Find-Text 'quokka doc marker')
 Check 'a /// doc comment is found' ($doc.Count -ge 1) "hits=$($doc.Count)"
 Check '  ...and is reported as kind doc, NOT comment' `
   ($doc.Count -ge 1 -and (KindOf $doc) -eq 'doc') `
@@ -151,7 +151,7 @@ Check '  ...and is reported as kind doc, NOT comment' `
 
 Write-Host ''
 Write-Host 'REGRESSION CONTROL -- string literals still behave exactly as before' -ForegroundColor Cyan
-$lit = Find-Text 'okapi literal marker'
+$lit = @(Find-Text 'okapi literal marker')
 Check 'a string literal is still found' ($lit.Count -ge 1) "hits=$($lit.Count)"
 Check '  ...still as kind literal' `
   ($lit.Count -ge 1 -and (KindOf $lit) -eq 'literal') "kind=$((KindOf $lit))"
@@ -159,20 +159,20 @@ Check '  ...still as kind literal' `
 Write-Host ''
 Write-Host 'THE --kind FILTER SEPARATES THEM (else kind is decorative)' -ForegroundColor Cyan
 Check '--kind literal does NOT return a comment phrase' `
-  ((Find-Text 'axolotl body slash marker' 'literal').Count -eq 0) `
+  ((@(Find-Text 'axolotl body slash marker' 'literal')).Count -eq 0) `
   'if this fails, comments were indexed as literals and every existing --kind literal query is now wrong'
 Check '--kind comment does NOT return a literal phrase' `
-  ((Find-Text 'okapi literal marker' 'comment').Count -eq 0) ''
+  ((@(Find-Text 'okapi literal marker' 'comment')).Count -eq 0) ''
 Check '--kind comment DOES return the comment phrase' `
-  ((Find-Text 'axolotl body slash marker' 'comment').Count -ge 1) ''
+  ((@(Find-Text 'axolotl body slash marker' 'comment')).Count -ge 1) ''
 Check '--kind literal still returns the literal phrase' `
-  ((Find-Text 'okapi literal marker' 'literal').Count -ge 1) `
+  ((@(Find-Text 'okapi literal marker' 'literal')).Count -ge 1) `
   '--kind literal is the documented way to get the pre-comment behaviour back'
 
 Write-Host ''
 Write-Host 'A COMPILER DIRECTIVE IS NOT PROSE' -ForegroundColor Cyan
 Check '{$R ...} is NOT indexed as comment text' `
-  ((Find-Text 'zebrafish_directive_marker').Count -eq 0) `
+  ((@(Find-Text 'zebrafish_directive_marker')).Count -eq 0) `
   'directives are not comment nodes in the grammar (probed with dumpnode); if they become so, --text fills with {$R} noise'
 
 Write-Host ''

@@ -137,7 +137,7 @@ function Get-Findings($raw) {
   $arrStart = $raw.IndexOf('[')
   $arrEnd   = $raw.LastIndexOf(']')
   if ($arrStart -ge 0 -and $arrEnd -gt $arrStart) {
-    return @(ConvertFrom-Json ($raw.Substring($arrStart, $arrEnd - $arrStart + 1)))
+    return @((ConvertFrom-Json ($raw.Substring($arrStart, $arrEnd - $arrStart + 1))) | ForEach-Object { $_ })
   }
   return @()
 }
@@ -201,7 +201,7 @@ try {
   # a failure -- checking for it still catches a genuine engine crash, which
   # would not reliably land on exactly 1 either.
   Check 'D4 lint-all --json (before --fix) exits 1 (findings present, no --fail-on override)' ($LASTEXITCODE -eq 1)
-  $driftBefore = @((Get-Findings $rawBefore) | Where-Object { $_.rule -eq 'doc-drift' })
+  $driftBefore = @((@(Get-Findings $rawBefore)) | Where-Object { $_.rule -eq 'doc-drift' })
   Check 'D4 lint-all reports the stale facts block on the REMARKS-ONLY decl (summary is NULL there)' `
     (@($driftBefore | Where-Object { $_.message -like '*managed facts block is out of date*' }).Count -ge 1) `
     ("doc-drift findings=" + $driftBefore.Count)

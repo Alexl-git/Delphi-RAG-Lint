@@ -143,7 +143,7 @@ function LspLines([string]$PasFile) {
 function CliLines([string]$PasFile) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $PasFile --json 2>$null }) -join "`n"
   $arr = @()
-  if ($raw.Trim()) { $arr = @($raw | ConvertFrom-Json) }
+  if ($raw.Trim()) { $arr = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) }
   return ,@($arr | Where-Object { $_.rule -eq $Rule } | ForEach-Object { [int]$_.start_line })
 }
 function Verify([string]$Name, [string]$PasFile, [int]$Expect) {

@@ -112,7 +112,7 @@ $dlO = @(LinesIn (DirectRows $OTHER))
 Check 'FC2 TOtherCopy direct = the shadowed site only' (($dlO -join ',') -eq "$shadowLine") "got=$($dlO -join ',')"
 
 $jraw = (& { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name TransferFile --resolved --json --db $db 2>$null }) -join "`n"
-$j = @($jraw.Substring($jraw.IndexOf('[')) | ConvertFrom-Json)
+$j = @(($jraw.Substring($jraw.IndexOf('[')) | ConvertFrom-Json) | ForEach-Object { $_ })
 $withVia = @($j | Where-Object { $_.PSObject.Properties.Name -contains 'via' })
 Check 'FC3 json: 16 via rows (8 per implementor)' ($withVia.Count -eq 16) "n=$($withVia.Count)"
 Check 'FC3 json: every via row names the interface method, kind interface' (@($withVia | Where-Object { $_.via -ne $IFACE -or $_.via_kind -ne 'interface' }).Count -eq 0)

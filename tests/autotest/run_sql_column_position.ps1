@@ -59,11 +59,11 @@ function PosOf([string]$Token) {
   return @(-1, -1)
 }
 $expect = [ordered]@{
-  'ID'        = PosOf 'ID INTEGER'
-  'REASON'    = PosOf 'REASON'
-  'NOTE_TEXT' = PosOf 'NOTE_TEXT'
-  'TABLE'     = PosOf '"TABLE"'
-  'AMOUNT'    = PosOf 'AMOUNT'
+  'ID'        = @(PosOf 'ID INTEGER')
+  'REASON'    = @(PosOf 'REASON')
+  'NOTE_TEXT' = @(PosOf 'NOTE_TEXT')
+  'TABLE'     = @(PosOf '"TABLE"')
+  'AMOUNT'    = @(PosOf 'AMOUNT')
 }
 
 & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
@@ -84,7 +84,7 @@ Check 'all five columns indexed (PRIMARY KEY clause is not a column)' ($got.Coun
 
 foreach ($kv in $expect.GetEnumerator()) {
   $n = $kv.Key; $want = $kv.Value
-  $have = if ($got.ContainsKey($n)) { $got[$n] } else { @(-1, -1) }
+  $have = @(if ($got.ContainsKey($n)) { $got[$n] } else { @(-1, -1) })
   $label = if ($n -eq 'ID') { "ID (on the CREATE line -- the control)" } else { $n }
   Check ("{0} at line {1}" -f $label, $want[0]) ($have[0] -eq $want[0]) ("got line {0}" -f $have[0])
   Check ("{0} at column {1}" -f $label, $want[1]) ($have[1] -eq $want[1]) ("got col {0}" -f $have[1])

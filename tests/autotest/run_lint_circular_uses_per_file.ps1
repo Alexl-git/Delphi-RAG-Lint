@@ -77,7 +77,7 @@ function Lint-One([string]$File, [string]$Db, [string[]]$Extra = @()) {
   $a = @('lint', $File, '--db', $Db, '--rule', 'circular-uses', '--format', 'json', '--library-db', 'none') + $Extra
   $out = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null } | Out-String)
   $rows = @()
-  try { $rows = @($out | ConvertFrom-Json) } catch { $rows = $null }
+  try { $rows = @(($out | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $rows = $null }
   return @{ Out = $out; Rows = $rows }
 }
 

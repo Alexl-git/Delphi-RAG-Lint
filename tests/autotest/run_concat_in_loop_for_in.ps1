@@ -93,7 +93,7 @@ end.
 
   # `lint --rule` cannot be used: its validator rejects external .scm ids.
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture --json 2>$null }) -join "`n"
-  $all = @($raw | ConvertFrom-Json)
+  $all = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ })
   $fired = @($all | Where-Object { $_.rule -eq 'concat-in-loop' } |
     ForEach-Object { [int]$_.start_line } | Sort-Object -Unique)
   Check 'lint --json returned findings with a start_line (shape check)' (

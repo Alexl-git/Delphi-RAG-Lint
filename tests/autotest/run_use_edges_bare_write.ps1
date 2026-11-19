@@ -212,11 +212,11 @@ end.
 
   Write-Host '== check 11: usages --rw lists each site once ==' -ForegroundColor Cyan
   $q = UsagesRw $db 'FFlag'
-  $w = if ($q) { @($q.targets)[0].writers } else { @() }
+  $w = @(if ($q) { @($q.targets)[0].writers } else { @() })
   $okW = ((CountAt $w 'uProv.pas' $B1) -eq 1) -and ((CountAt $w 'uProv.pas' $B5) -eq 1) -and ((CountAt $w 'uProv.pas' $B8) -eq 1) -and ((CountAt $w 'uCons.pas' $C4) -eq 1) -and (@($w).Count -eq 4)
   Check '11a FFlag writers: B1 B5 B8 C4, once each' $okW ($w | ConvertTo-Json -Compress)
   $q = UsagesRw $db 'SetValue'
-  $w = if ($q) { @($q.targets)[0].writers } else { @() }
+  $w = @(if ($q) { @($q.targets)[0].writers } else { @() })
   Check '11b SetValue writers: B3 and C2, once each' (((CountAt $w 'uProv.pas' $B3) -eq 1) -and ((CountAt $w 'uCons.pas' $C2) -eq 1) -and (@($w).Count -eq 2)) ($w | ConvertTo-Json -Compress)
 }
 finally {

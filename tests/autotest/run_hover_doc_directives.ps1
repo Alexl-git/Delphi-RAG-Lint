@@ -130,9 +130,9 @@ function Get-DirectivesFact([string[]]$Facts) {
 # --- surface 1: hover ---------------------------------------------------------
 Write-Host ''
 Write-Host 'SURFACE 1: CLI hover' -ForegroundColor Cyan
-$hovVirtual = Get-DirectivesFact (Get-HoverFacts 'uHov.THovKit.MVirtual')
-$hovCombo   = Get-DirectivesFact (Get-HoverFacts 'uHov.THovKit.MCombo')
-$hovPlain   = Get-DirectivesFact (Get-HoverFacts 'uHov.THovKit.MPlain')
+$hovVirtual = Get-DirectivesFact (@(Get-HoverFacts 'uHov.THovKit.MVirtual'))
+$hovCombo   = Get-DirectivesFact (@(Get-HoverFacts 'uHov.THovKit.MCombo'))
+$hovPlain   = Get-DirectivesFact (@(Get-HoverFacts 'uHov.THovKit.MPlain'))
 
 Check "hover MVirtual HAS a Directives fact" ($null -ne $hovVirtual) "got: $(if ($null -eq $hovVirtual) { 'ABSENT' } else { $hovVirtual })"
 Check "hover MCombo   HAS a Directives fact" ($null -ne $hovCombo)   "got: $(if ($null -eq $hovCombo)   { 'ABSENT' } else { $hovCombo })"

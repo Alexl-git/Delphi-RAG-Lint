@@ -532,7 +532,7 @@ CheckN 1 'index reported no parse errors' ($idxOut -match '(?<!\d)0 errors') $id
 
 Write-Host ''
 Write-Host '== check 2: ROUTINE CONTROL -- green today and in EVERY later task ==' -ForegroundColor Cyan
-$dw = @((Resolved $dbA 'DoWork') | Where-Object { $_.target_qname -eq 'uEnumDecl.DoWork' })
+$dw = @((@(Resolved $dbA 'DoWork')) | Where-Object { $_.target_qname -eq 'uEnumDecl.DoWork' })
 CheckN 2 'DoWork: exactly 1 resolved caller' ($dw.Count -eq 1) ($dw | ConvertTo-Json -Compress)
 CheckN 2 'DoWork: the caller is uEnumUse.UseIt' ($dw.Count -eq 1 -and $dw[0].caller_qname -eq 'uEnumUse.UseIt') ($dw | ConvertTo-Json -Compress)
 CheckN 2 'DoWork: certain' ($dw.Count -eq 1 -and $dw[0].confidence -eq 'certain') ($dw | ConvertTo-Json -Compress)
@@ -716,7 +716,7 @@ Write-Host '== check 9: R-A -- find-callers --resolved reports an enum-value REA
 $cmdLoadSites  = @($L.Keys | Where-Object { $L[$_].exp -eq 'uEnumDecl.TCmd.cmdLoad' })
 $useItSites    = @($cmdLoadSites | Where-Object { $L[$_].f -eq $fUse })
 $bothSites     = @($cmdLoadSites | Where-Object { $L[$_].f -eq $fBoth })
-$cl = @((Resolved $dbA 'cmdLoad') | Where-Object { $_.target_qname -eq 'uEnumDecl.TCmd.cmdLoad' })
+$cl = @((@(Resolved $dbA 'cmdLoad')) | Where-Object { $_.target_qname -eq 'uEnumDecl.TCmd.cmdLoad' })
 CheckN 9 ("cmdLoad: {0} resolved rows, one per bound site" -f $cmdLoadSites.Count) ($cl.Count -eq $cmdLoadSites.Count) ("n=$($cl.Count) expected=$($cmdLoadSites.Count) " + ($cl | ConvertTo-Json -Compress))
 CheckN 9 'cmdLoad: caller set is exactly {uEnumUse.UseIt, uEnumBoth.Both}' ((@($cl | ForEach-Object { $_.caller_qname } | Sort-Object -Unique) -join ',') -eq 'uEnumBoth.Both,uEnumUse.UseIt') (@($cl | ForEach-Object { $_.caller_qname } | Sort-Object -Unique) -join ',')
 CheckN 9 ("cmdLoad: uEnumUse.UseIt owns {0} rows (A1, A3, B2)" -f $useItSites.Count) (@($cl | Where-Object { $_.caller_qname -eq 'uEnumUse.UseIt' }).Count -eq $useItSites.Count) ($cl | ConvertTo-Json -Compress)

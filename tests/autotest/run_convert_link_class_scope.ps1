@@ -223,7 +223,7 @@ Check 'Q4 convert-validate --from FMX.StdCtrls.TLabel: WordWrap rejected' (($r.C
 # A .dfm form is VCL (FMX streams .fmx), so an FMX.* candidate is excluded:
 # UNone (no .dproj, no uses declarer, nothing streamed) converts as VCL.
 $j = ApplyJ 'UNone' 'bare_vcl.rules'
-$fx = if ($null -ne $j.J) { @($j.J.qualify_fixes) } else { @() }
+$fx = @(if ($null -ne $j.J) { @($j.J.qualify_fixes) } else { @() })
 Check 'F1 no .dproj, ambiguous bare TLabel, a .dfm form: inferred Vcl.StdCtrls.TLabel from the form file, converts, exit 0' `
   (($j.Code -eq 0) -and ($fx.Count -eq 1) -and ($fx[0].outcome -eq 'inferred') -and ($fx[0].chosen -eq 'Vcl.StdCtrls.TLabel') -and
    ($fx[0].inference -eq 'the form file UNone.dfm (VCL)') -and ($fx[0].suggestions[1].candidate -eq 'FMX.StdCtrls.TLabel') -and
@@ -260,7 +260,7 @@ Check 'G2b ... JSON qualify_fixes[] is EXACTLY one refused fix with both suggest
 # ---- I: INFERENCE before refusing (owner ruling 2026-10-11) ------------------
 $r = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'app2\W.pas') --rules (P 'bare_vcl.rules') --db (P 'app2.sqlite') --db (P 'lib.sqlite') --format json 2>$null }) -join "`n"
 $ij = $null; try { $ij = $r.Substring($r.IndexOf('{')) | ConvertFrom-Json } catch {}
-$fx = if ($null -ne $ij) { @($ij.qualify_fixes) } else { @() }
+$fx = @(if ($null -ne $ij) { @($ij.qualify_fixes) } else { @() })
 Check 'I1 (a) project framework: Q.dproj says VCL -- the bare TLabel converts as Vcl.StdCtrls.TLabel (WordWrap validates), exit 0' `
   (($null -ne $ij) -and $ij.ok -and ($fx.Count -eq 1) -and ($fx[0].outcome -eq 'inferred') -and ($fx[0].chosen -eq 'Vcl.StdCtrls.TLabel') -and
    ($fx[0].inference -eq 'the project framework VCL (Q.dproj)') -and ($fx[0].suggestions[0].replacement -eq '#convert Vcl.StdCtrls.TLabel -> TSolo') -and
@@ -269,7 +269,7 @@ $want = '#convert TLabel resolved to Vcl.StdCtrls.TLabel (line 1): inferred from
 Check 'I2 ... a WARNING names the inference and the line to paste; items[] kind convert-class-inferred' `
   (($null -ne $ij) -and (@($ij.warnings) -contains $want) -and (@($ij.items | Where-Object { $_.kind -eq 'convert-class-inferred' -and $_.text -eq $want -and $_.rule_line -eq 1 }).Count -eq 1)) $r
 $j = ApplyJ 'UTwinP' 'twin.rules'
-$fx = if ($null -ne $j.J) { @($j.J.qualify_fixes) } else { @() }
+$fx = @(if ($null -ne $j.J) { @($j.J.qualify_fixes) } else { @() })
 Check 'I3 (b) .dfm evidence: Twin1 streams AOnly, which only Vcl.TwinA.TTwin declares -- inferred, converts, exit 0' `
   (($j.Code -eq 0) -and ($fx.Count -eq 1) -and ($fx[0].outcome -eq 'inferred') -and ($fx[0].chosen -eq 'Vcl.TwinA.TTwin') -and
    ($fx[0].inference -eq '.dfm properties AOnly') -and ($fx[0].suggestions[1].candidate -eq 'Vcl.TwinB.TTwin') -and

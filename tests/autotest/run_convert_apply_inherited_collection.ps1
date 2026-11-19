@@ -62,7 +62,7 @@ Check 'V the fixture index was built' (Test-Path $db)
 
 # ---- ancestor converted: dry run ------------------------------------------------
 $r = Apply @('--format', 'json')
-$inh = if ($r.J) { @($r.J.inherited) } else { @() }
+$inh = @(if ($r.J) { @($r.J.inherited) } else { @() })
 Check 'Q1 dry run: exit 0, ok' (($r.Code -eq 0) -and ($null -ne $r.J) -and $r.J.ok) $r.Out
 Check 'Q2 ... Q and F retyped (ancestor CvBase, converted)' `
   ((@($inh | Where-Object { $_.ancestor_state -eq 'converted' -and $_.action -eq 'retyped' -and $_.ancestor_unit -eq 'CvBase' }).Count -eq 2) -and
@@ -90,7 +90,7 @@ Restore
 [IO.File]::WriteAllText((P 'CvBase.dfm'), (Text 'CvBase.dfm').Replace('TNewQuery', 'TOldQuery').Replace('TNewField', 'TOldField'), [Text.Encoding]::ASCII)
 Reindex
 $r = Apply @('--format', 'json')
-$inh = if ($r.J) { @($r.J.inherited) } else { @() }
+$inh = @(if ($r.J) { @($r.J.inherited) } else { @() })
 Check 'C1 CONTROL unconverted ancestor: Q and F skipped, ancestor_state unconverted' `
   ((@($inh | Where-Object { $_.ancestor_state -eq 'unconverted' -and $_.action -eq 'skipped' }).Count -eq 2) -and
    (@($inh | Where-Object { $_.action -eq 'retyped' }).Count -eq 0)) "$($r.Out)"

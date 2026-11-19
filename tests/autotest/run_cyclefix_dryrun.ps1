@@ -109,7 +109,7 @@ try {
   Check 'a: 18 edits' ($c -and @($c.edits).Count -eq 18) "got $(@($c.edits).Count)"
   $need = 'n','units','interface_edges','edges','part','verdict','recipe','edge','refusals','moves','uses','new_units','edits',
           'compile','baseline','repairs','written','backups','reindex','predicted','actual','verified'
-  $have = if ($c) { @($c.PSObject.Properties.Name) } else { @() }
+  $have = @(if ($c) { @($c.PSObject.Properties.Name) } else { @() })
   Check 'a: every documented field is present' (@($need | Where-Object { $have -notcontains $_ }).Count -eq 0) `
     ('missing: ' + (@($need | Where-Object { $have -notcontains $_ }) -join ','))
   Check 'a: arrays are arrays (refusals/repairs/written/backups empty)' `
@@ -159,7 +159,7 @@ try {
   Check 'g: --format json error: exit 2 and a JSON object with "error"' `
     ($r.Exit -eq 2 -and $r.Json -and $r.Json.error -match '--cycle' -and $r.Json.ok -eq $false -and $r.Json.exit_code -eq 2) $r.Out
   $r = Run-Fix $demo $db @('--part', 'b', '--no-compile', '--library-db', 'none')
-  $parts = if ($r.Json) { @($r.Json.cycles | ForEach-Object { $_.part }) } else { @() }
+  $parts = @(if ($r.Json) { @($r.Json.cycles | ForEach-Object { $_.part }) } else { @() })
   Check 'g: default scan with --part b skips the part-a group and picks a part-b one (exit 0)' `
     ($r.Exit -eq 0 -and $parts.Count -ge 1 -and (@($parts | Where-Object { $_ -ne 'b' }).Count -eq 0) -and $r.Json.cycles[-1].verdict -eq 'mechanical') $r.Out
 
@@ -172,7 +172,7 @@ try {
   New-Item -ItemType Directory -Force (Join-Path $own 'owned'), (Join-Path $own '_D-RAG') | Out-Null
   [IO.File]::WriteAllText((Join-Path $own '_D-RAG\drag-lint-project.json'), '{ "ownRoots": ["owned"] }')
   $r = Run-Fix $own $odb @('--cycle', '1', '--no-compile', '--library-db', 'none')
-  $kinds = if ($r.Json) { @($r.Json.cycles[0].refusals | ForEach-Object { $_.kind }) } else { @() }
+  $kinds = @(if ($r.Json) { @($r.Json.cycles[0].refusals | ForEach-Object { $_.kind }) } else { @() })
   Check 'h: --cycle 1 -> exit 1, refusals include outside-roots' ($r.Exit -eq 1 -and $kinds -contains 'outside-roots') $r.Out
 
   Write-Host '== (i) manual-edit: a plan with a manual edit is refused (planner-sourced; see note)' -ForegroundColor Cyan

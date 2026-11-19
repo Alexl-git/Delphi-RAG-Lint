@@ -50,7 +50,7 @@ function LintAll([string]$Tag, [string]$Config, [string[]]$Extra = @()) {
   $txt = $so.Result; $etx = $se.Result
   [IO.File]::WriteAllText($out, $txt); [IO.File]::WriteAllText($err, $etx)
   $all = @(); $b = $txt.IndexOf('[')
-  if ($b -ge 0) { try { $all = @($txt.Substring($b) | ConvertFrom-Json) } catch { $all = @() } }
+  if ($b -ge 0) { try { $all = @(($txt.Substring($b) | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $all = @() } }
   return @{ Done = $done; Exit = $(if ($done) { $p.ExitCode } else { -1 }); Err = $etx;
             Taint = @($all | Where-Object { $_.rule -like 'taint-*' }) }
 }

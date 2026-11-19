@@ -64,7 +64,7 @@ function Lines([string]$File, [string]$Cfg, [string]$Rule) {
   try { $Out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $File --config $Cfg --json 2>$null } } finally { Pop-Location }
   $Txt = ($Out -join "`n")
   if ($Txt.Trim() -eq '') { return ,@() }
-  return ,@(@($Txt | ConvertFrom-Json) | Where-Object { [string]$_.rule -eq $Rule } | ForEach-Object { [int]$_.start_line })
+  return ,@(@(($Txt | ConvertFrom-Json) | ForEach-Object { $_ }) | Where-Object { [string]$_.rule -eq $Rule } | ForEach-Object { [int]$_.start_line })
 }
 function Dl([string[]]$A) {
   Push-Location $Work

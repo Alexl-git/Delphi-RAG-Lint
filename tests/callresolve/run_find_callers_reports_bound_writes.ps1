@@ -197,7 +197,7 @@ end.
   Write-Host '== check 2: every bound write site is reported with mode = write (D31) ==' -ForegroundColor Cyan
   foreach ($k in $writes) {
     $s = $Sites[$k]
-    $at = RowsAt $fc[$s.n] $s.f $s.l
+    $at = @(RowsAt $fc[$s.n] $s.f $s.l)
     Check ("{0}: {1} lists {2}:{3} (caller {4})" -f $k, $s.n, $s.f, $s.l, $s.caller) ($at.Count -ge 1 -and $at[0].caller_qname -eq $s.caller -and $at[0].target_qname -eq $s.q) ($fc[$s.n] | ConvertTo-Json -Compress)
     Check ("{0}: mode = write" -f $k) ($at.Count -ge 1 -and @($at | Where-Object { $_.mode -ne 'write' }).Count -eq 0) ($at | ConvertTo-Json -Compress)
   }
@@ -211,13 +211,13 @@ end.
   Write-Host '== check 3: POSITIVE CONTROL -- bound FFlag reads still report mode = read ==' -ForegroundColor Cyan
   foreach ($k in @('R1', 'R2')) {
     $s = $Sites[$k]
-    $at = RowsAt $fc[$s.n] $s.f $s.l
+    $at = @(RowsAt $fc[$s.n] $s.f $s.l)
     Check ("{0}: FFlag lists {1}:{2} (caller {3}) with mode = read" -f $k, $s.f, $s.l, $s.caller) ($at.Count -eq 1 -and $at[0].caller_qname -eq $s.caller -and $at[0].mode -eq 'read') ($fc[$s.n] | ConvertTo-Json -Compress)
   }
 
   Write-Host ''
   Write-Host '== check 4: no site listed twice (the DOTTED write W2 is the double-row trap) ==' -ForegroundColor Cyan
-  $w2Rows = RowsAt $fc['FFlag'] $Sites.W2.f $Sites.W2.l
+  $w2Rows = @(RowsAt $fc['FFlag'] $Sites.W2.f $Sites.W2.l)
   Check 'fixture health: W2 owns a member_accesses row (so the member arm lists it and the trap is armed)' `
     ((@(Sql $db ("SELECT COUNT(*) AS n FROM member_accesses ma JOIN refs r ON r.id = ma.ref_id JOIN files f ON f.id = r.file_id " +
                  "WHERE f.path LIKE '%\{0}' AND r.start_line = {1} AND ma.mode = 'write'" -f $Sites.W2.f, $Sites.W2.l)) | ForEach-Object { [int]$_.n }) -eq 1) ''
@@ -232,7 +232,7 @@ end.
   Write-Host '== check 5: R7 CONTROL -- enum values still report mode = read ==' -ForegroundColor Cyan
   foreach ($k in @('E1', 'E2')) {
     $s = $Sites[$k]
-    $at = RowsAt $fc[$s.n] $s.f $s.l
+    $at = @(RowsAt $fc[$s.n] $s.f $s.l)
     Check ("{0}: {1} lists {2}:{3} with mode = read" -f $k, $s.n, $s.f, $s.l) ($at.Count -eq 1 -and $at[0].target_qname -eq $s.q -and $at[0].mode -eq 'read') ($fc[$s.n] | ConvertTo-Json -Compress)
   }
 

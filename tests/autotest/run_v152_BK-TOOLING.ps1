@@ -32,16 +32,16 @@ try {
     return @(@('00001_a.dfm', $aErr, 'C:\c\a.dfm'), @('00002_b.dfm', 0, 'C:\c\b.dfm'), @('00003_FormAnsi.dfm', $fxErr, $fxA), @('00004_FormUtf8.dfm', 0, $fxB))
   }
   WriteTsv "$scratch\A.tsv" $A
-  WriteTsv "$scratch\B.tsv" (MakeB 0 0)
+  WriteTsv "$scratch\B.tsv" (@(MakeB 0 0))
   $null = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $cmp -A "$scratch\A.tsv" -B "$scratch\B.tsv" 2>&1 | ForEach-Object { "$_" } }
   Check 'B13 clean pair (B fixes b + both fixtures) passes' ($LASTEXITCODE -eq 0)
-  WriteTsv "$scratch\Breg.tsv" (MakeB 4 0)
+  WriteTsv "$scratch\Breg.tsv" (@(MakeB 4 0))
   $null = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $cmp -A "$scratch\A.tsv" -B "$scratch\Breg.tsv" 2>&1 | ForEach-Object { "$_" } }
   Check 'B13 CONTROL a regression in B is rejected' ($LASTEXITCODE -ne 0)
-  WriteTsv "$scratch\Bfx.tsv" (MakeB 0 1)
+  WriteTsv "$scratch\Bfx.tsv" (@(MakeB 0 1))
   $null = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $cmp -A "$scratch\A.tsv" -B "$scratch\Bfx.tsv" 2>&1 | ForEach-Object { "$_" } }
   Check 'B13 CONTROL a fixture that still fails in B is rejected' ($LASTEXITCODE -ne 0)
-  WriteTsv "$scratch\Bshort.tsv" ((MakeB 0 0) | Select-Object -First 3)
+  WriteTsv "$scratch\Bshort.tsv" ((@(MakeB 0 0)) | Select-Object -First 3)
   $null = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $cmp -A "$scratch\A.tsv" -B "$scratch\Bshort.tsv" 2>&1 | ForEach-Object { "$_" } }
   Check 'B13 CONTROL a short run (different file set) is rejected' ($LASTEXITCODE -ne 0)
 

@@ -97,7 +97,7 @@ function Invoke-Case([string]$Tag, [string[]]$Pairs) {
          -WorkingDirectory $WorkDir -NoNewWindow -PassThru -Wait -RedirectStandardOutput $out -RedirectStandardError "$out.err"
   $raw = Get-Content -LiteralPath $out -Raw
   $json = if ($raw -match '(?s)(\[.*\])') { $Matches[1] } else { '[]' }
-  $items = @($json | ConvertFrom-Json)
+  $items = @(($json | ConvertFrom-Json) | ForEach-Object { $_ })
   [pscustomobject]@{ Items = $items; Errors = @($items | Where-Object { $_.severity -eq 'Error' }); Raw = $raw; Exit = $p.ExitCode }
 }
 function Check-Untouched([string]$Tag) {

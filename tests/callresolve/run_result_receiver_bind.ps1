@@ -82,16 +82,16 @@ function Show($r) { ($r | ForEach-Object { "sq=$($_.sq) mode=$($_.mode) tq=$($_.
 $null = & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
-$r = At 'POS-WRITE' 'member-access' 'Streaming'
+$r = @(At 'POS-WRITE' 'member-access' 'Streaming')
 Check 'POS-WRITE Result.Streaming := binds TJob.Streaming, mode write' `
   (@($r | Where-Object { $_.sq -eq 'uResRecv.TJob.Streaming' -and $_.mode -eq 'write' }).Count -eq 1) (Show $r)
-$r = At 'POS-READ' 'member-access' 'Streaming'
+$r = @(At 'POS-READ' 'member-access' 'Streaming')
 Check 'POS-READ if Result.Streaming binds TJob.Streaming, mode read' `
   (@($r | Where-Object { $_.sq -eq 'uResRecv.TJob.Streaming' -and $_.mode -eq 'read' }).Count -eq 1) (Show $r)
-$r = At 'POS-CALL' 'call' 'Start'
+$r = @(At 'POS-CALL' 'call' 'Start')
 Check 'POS-CALL Result.Start() has a call edge to TJob.Start' `
   (@($r | Where-Object { $_.tq -eq 'uResRecv.TJob.Start' }).Count -eq 1) (Show $r)
-$r = At 'NEG-LOCAL' 'member-access' 'Streaming'
+$r = @(At 'NEG-LOCAL' 'member-access' 'Streaming')
 Check 'NEG-LOCAL a local Result: TOtherJob binds TOtherJob.Streaming, never TJob''s' `
   (@($r | Where-Object { $_.sq -eq 'uResRecv.TOtherJob.Streaming' }).Count -eq 1 -and
    @($r | Where-Object { $_.sq -eq 'uResRecv.TJob.Streaming' }).Count -eq 0) (Show $r)
@@ -99,10 +99,10 @@ Check 'NEG-LOCAL a local Result: TOtherJob binds TOtherJob.Streaming, never TJob
 # review 2026-10-23: inside an anonymous method `Result` is the anonymous
 # method's, not the enclosing function's -- never typed from MakeWithAnon's
 # return type. Positive control: before the fix NEG-ANON bound TJob.Streaming.
-$r = At 'NEG-ANON' 'member-access' 'Streaming'
+$r = @(At 'NEG-ANON' 'member-access' 'Streaming')
 Check 'NEG-ANON Result inside an anonymous function never binds TJob.Streaming' `
   (@($r | Where-Object { $_.sq -eq 'uResRecv.TJob.Streaming' }).Count -eq 0) (Show $r)
-$r = At 'POS-AFTER-ANON' 'member-access' 'Streaming'
+$r = @(At 'POS-AFTER-ANON' 'member-access' 'Streaming')
 Check 'POS-AFTER-ANON Result after the anonymous method closes still binds TJob.Streaming' `
   (@($r | Where-Object { $_.sq -eq 'uResRecv.TJob.Streaming' -and $_.mode -eq 'write' }).Count -eq 1) (Show $r)
 
@@ -111,16 +111,16 @@ Check 'POS-AFTER-ANON Result after the anonymous method closes still binds TJob.
 # value reads/writes use -- never from the first child of that name. Positive
 # control: the first-match lookup declined both RCV-DUP-* (types differ) and
 # typed RCV-LATE from the TOtherJob local declared AFTER it.
-$r = At 'RCV-DUP-FIRST' 'member-access' 'Streaming'
+$r = @(At 'RCV-DUP-FIRST' 'member-access' 'Streaming')
 Check 'RCV-DUP-FIRST J (first inline var, TJob) binds TJob.Streaming' `
   (@($r | Where-Object { $_.sq -eq 'uResRecv.TJob.Streaming' }).Count -eq 1) (Show $r)
-$r = At 'RCV-DUP-SECOND' 'member-access' 'Streaming'
+$r = @(At 'RCV-DUP-SECOND' 'member-access' 'Streaming')
 Check 'RCV-DUP-SECOND J (second inline var, TOtherJob) binds TOtherJob.Streaming' `
   (@($r | Where-Object { $_.sq -eq 'uResRecv.TOtherJob.Streaming' }).Count -eq 1) (Show $r)
-$r = At 'RCV-LATE' 'member-access' 'Streaming'
+$r = @(At 'RCV-LATE' 'member-access' 'Streaming')
 Check 'RCV-LATE GPeer before the inline GPeer is declared never binds TOtherJob.Streaming' `
   (@($r | Where-Object { $_.sq -eq 'uResRecv.TOtherJob.Streaming' }).Count -eq 0) (Show $r)
-$r = At 'RCV-INNER-LATE' 'member-access' 'Streaming'
+$r = @(At 'RCV-INNER-LATE' 'member-access' 'Streaming')
 Check 'RCV-INNER-LATE the inline GPeer: TOtherJob binds TOtherJob.Streaming' `
   (@($r | Where-Object { $_.sq -eq 'uResRecv.TOtherJob.Streaming' }).Count -eq 1) (Show $r)
 
@@ -136,10 +136,10 @@ function EdgesAt([string]$Marker, [string]$Name) {
                 "JOIN symbols t ON t.id = ce.target_symbol_id WHERE r.name_text = '$Name' AND r.start_line = $line") |
            Where-Object { $_ })
 }
-$r = EdgesAt 'PV-ANON-CALL' 'GetNum'
+$r = @(EdgesAt 'PV-ANON-CALL' 'GetNum')
 Check 'PV-ANON-CALL Result := GetNum inside an anonymous function: Integer is a call edge to GetNum' `
   (@($r | Where-Object { $_.tq -eq 'uResRecv.GetNum' }).Count -eq 1) "edges=$($r.Count)"
-$r = EdgesAt 'PV-OUTER-ADDR' 'GetNum'
+$r = @(EdgesAt 'PV-OUTER-ADDR' 'GetNum')
 Check 'PV-OUTER-ADDR Result := GetNum in a function returning TNumFn is no call edge (address)' `
   ($r.Count -eq 0) "edges=$($r.Count)"
 
@@ -148,10 +148,10 @@ Check 'PV-OUTER-ADDR Result := GetNum in a function returning TNumFn is no call 
 # a TJob function) and PV-ANON-CALL (Integer in a TNumFn function) stay declined.
 # Positive control: the any-anonymous-method decline left POS-ANON-SAME unbound
 # and made PV-ANON-SAME-ADDR a call edge.
-$r = At 'POS-ANON-SAME' 'member-access' 'Streaming'
+$r = @(At 'POS-ANON-SAME' 'member-access' 'Streaming')
 Check 'POS-ANON-SAME Result inside an anonymous function: TJob in a TJob function binds TJob.Streaming' `
   (@($r | Where-Object { $_.sq -eq 'uResRecv.TJob.Streaming' -and $_.mode -eq 'write' }).Count -eq 1) (Show $r)
-$r = EdgesAt 'PV-ANON-SAME-ADDR' 'GetNum'
+$r = @(EdgesAt 'PV-ANON-SAME-ADDR' 'GetNum')
 Check 'PV-ANON-SAME-ADDR Result := GetNum inside an anonymous function: TNumFn is no call edge (address)' `
   ($r.Count -eq 0) "edges=$($r.Count)"
 
@@ -160,13 +160,13 @@ Check 'PV-ANON-SAME-ADDR Result := GetNum inside an anonymous function: TNumFn i
 # function, is the same type; a qualified OTHER type still declines.
 # Positive control: text equality declined QUAL-POS-ANON and made
 # QUAL-PV-ANON-ADDR a call edge.
-$r = At 'QUAL-POS-ANON' 'member-access' 'Streaming'
+$r = @(At 'QUAL-POS-ANON' 'member-access' 'Streaming')
 Check 'QUAL-POS-ANON Result inside function: uResRecv.TJob in a TJob function binds TJob.Streaming' `
   (@($r | Where-Object { $_.sq -eq 'uResRecv.TJob.Streaming' -and $_.mode -eq 'write' }).Count -eq 1) (Show $r)
-$r = EdgesAt 'QUAL-PV-ANON-ADDR' 'GetNum'
+$r = @(EdgesAt 'QUAL-PV-ANON-ADDR' 'GetNum')
 Check 'QUAL-PV-ANON-ADDR Result := GetNum inside function: TNumFn in a uResRecv.TNumFn function is no call edge (address)' `
   ($r.Count -eq 0) "edges=$($r.Count)"
-$r = At 'QUAL-NEG-ANON' 'member-access' 'Streaming'
+$r = @(At 'QUAL-NEG-ANON' 'member-access' 'Streaming')
 Check 'QUAL-NEG-ANON Result inside function: uResRecv.TOtherJob in a TJob function never binds TJob.Streaming' `
   (@($r | Where-Object { $_.sq -eq 'uResRecv.TJob.Streaming' }).Count -eq 0) (Show $r)
 if ($script:fail) { Write-Host 'FAIL'; exit 1 } else { Write-Host 'PASS'; exit 0 }

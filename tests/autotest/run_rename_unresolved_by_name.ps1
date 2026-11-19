@@ -145,7 +145,7 @@ function FileHash($fx, [string]$Leaf) {
 function Edit-Set($fx) {
   $r = Run-Rename $fx ($RenArgs + '--json')
   $edits = @()
-  try { $edits = @(($r.Out -split "`n" | Where-Object { $_ -notmatch '^drag-lint: note:' -and $_ -notmatch '^\(loaded' }) -join "`n" | ConvertFrom-Json) } catch { }
+  try { $edits = @((($r.Out -split "`n" | Where-Object { $_ -notmatch '^drag-lint: note:' -and $_ -notmatch '^\(loaded' }) -join "`n" | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { }
   [pscustomobject]@{
     Exit = $r.Exit
     Out  = $r.Out

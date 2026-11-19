@@ -80,7 +80,7 @@ function UnusedIn([string]$Buffer) {
 }
 
 # PREMISE: on the unedited buffer both imports are dead, from the index.
-$base = UnusedIn $main
+$base = @(UnusedIn $main)
 Check 'P1 premise: both unused imports are reported for the unedited unit' `
   ((@($base | Where-Object Unit -eq 'uUbDeadA').Count -eq 1) -and (@($base | Where-Object Unit -eq 'uUbDeadB').Count -eq 1)) `
   "got: $(@($base | ForEach-Object { "$($_.Unit)@$($_.Line)" }) -join ', ')"
@@ -88,7 +88,7 @@ Check 'P1 premise: both unused imports are reported for the unedited unit' `
 # THE DEFECT: the buffer comments uUbDeadA out; the index still lists it.
 $buf1 = Join-Path $WorkDir 'drag-lint-live-1.pas'
 W $buf1 ($mainText -replace '  uUbDeadA,', '  //uUbDeadA,')
-$r1 = UnusedIn $buf1
+$r1 = @(UnusedIn $buf1)
 Check 'B1 an import commented out in the BUFFER is not reported (index still lists it)' `
   (@($r1 | Where-Object Unit -eq 'uUbDeadA').Count -eq 0) "got: $(@($r1 | ForEach-Object { "$($_.Unit)@$($_.Line)" }) -join ', ')"
 Check 'B2 CONTROL: the import still in the buffer IS reported' (@($r1 | Where-Object Unit -eq 'uUbDeadB').Count -eq 1) ''
@@ -96,7 +96,7 @@ Check 'B2 CONTROL: the import still in the buffer IS reported' (@($r1 | Where-Ob
 # THE LINE: the buffer pushes the uses clause down three lines.
 $buf2 = Join-Path $WorkDir 'drag-lint-live-2.pas'
 W $buf2 ($mainText -replace 'interface', "interface`n`n// added`n")
-$r2 = UnusedIn $buf2
+$r2 = @(UnusedIn $buf2)
 $b = @($r2 | Where-Object Unit -eq 'uUbDeadB')
 Check 'L1 the finding follows the BUFFER line, not the indexed one' (($b.Count -eq 1) -and ($b[0].Line -eq 10)) "got line: $($b.Line) (indexed: 7)"
 

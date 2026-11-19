@@ -193,7 +193,7 @@ Check "R.Inner.K := 1; leaf 'K' has receiver 'R.Inner'" ($leaf -and $leaf.rcv -e
 
 Write-Host 'Lint answers on the same fixture' -ForegroundColor Cyan
 $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $pas --db $db --json --enable used-before-assignment,overwrite-before-read,referenced-never-set,unused-local 2>$null } | Out-String
-$f = @($raw | ConvertFrom-Json)
+$f = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ })
 function Has([string]$Rule, [int]$Line) { @($f | Where-Object { $_.rule -eq $Rule -and $_.start_line -eq $Line }).Count -gt 0 }
 Check 'control: used-before-assignment fires on UseI(Y)'         (Has 'used-before-assignment' (LineOf 'UseI(Y);')) ''
 Check 'control: overwrite-before-read fires on the dead X := 1'   (Has 'overwrite-before-read' (LineOf 'X := 1;')) ''

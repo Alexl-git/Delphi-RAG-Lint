@@ -214,7 +214,7 @@ try {
   # procedural var, procedural parameter -- still listed (positive control).
   $fc = (& { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name NextId --resolved --db $db --json 2>$null }) -join "`n"
   $fb = $fc.IndexOf('[')
-  $fr = @(); if ($fb -ge 0) { $fr = @($fc.Substring($fb) | ConvertFrom-Json) }
+  $fr = @(); if ($fb -ge 0) { $fr = @(($fc.Substring($fb) | ConvertFrom-Json) | ForEach-Object { $_ }) }
   $certDriver = @($fr | Where-Object { $_.confidence -eq 'certain' -and $_.caller_qname -eq 'uParenlessUse.Driver' })
   $cbLines = @($fr | Where-Object { $_.confidence -eq 'callback' } | ForEach-Object { [int]$_.line })
   $dbl  = @(@((LineOf 'POS-ASSERT'), (LineOf 'POS-ASSIGN'), (LineOf 'POS-ARG')) | Where-Object { $cbLines -contains $_ })

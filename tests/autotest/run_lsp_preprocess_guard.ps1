@@ -134,7 +134,7 @@ function LspLines([string]$PasFile, [string]$Rule) {
 function CliLines([string]$PasFile, [string]$Rule, [string[]]$Extra = @()) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $PasFile --json @Extra 2>$null }) -join "`n"
   $arr = @()
-  if ($raw.Trim()) { $arr = @($raw | ConvertFrom-Json) }
+  if ($raw.Trim()) { $arr = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) }
   return ,@($arr | Where-Object { $_.rule -eq $Rule } | ForEach-Object { [int]$_.start_line })
 }
 

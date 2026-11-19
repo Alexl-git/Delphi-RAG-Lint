@@ -37,7 +37,7 @@ function Run-LintAll([string]$Rule) {
   $out = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $script:dbc --rule $Rule --json 2> $errF } | Out-String
   $sw.Stop()
   $rows = @()
-  if ($out.Trim() -ne '') { $rows = @($out | ConvertFrom-Json) }
+  if ($out.Trim() -ne '') { $rows = @(($out | ConvertFrom-Json) | ForEach-Object { $_ }) }
   $keys = @($rows | ForEach-Object { '{0}:{1}:{2}' -f $_.rule, $_.file_path, $_.start_line } | Sort-Object)
   [pscustomobject]@{ Secs = $sw.Elapsed.TotalSeconds; Keys = $keys; Err = [IO.File]::ReadAllText($errF) }
 }

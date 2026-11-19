@@ -172,7 +172,7 @@ Check 'procedure Plain is_class_method=False' ((Flag $rP) -eq 'False') "got: $(F
 Write-Host ''
 Write-Host 'CASE D: outline --json / text' -ForegroundColor Cyan
 $oj = @()
-try { $oj = @((& { $ErrorActionPreference = 'Continue'; & $Exe outline --file $unit --db $db --format json 2>$null } | Out-String) | ConvertFrom-Json) } catch { }
+try { $oj = @(((& { $ErrorActionPreference = 'Continue'; & $Exe outline --file $unit --db $db --format json 2>$null } | Out-String) | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { }
 $oC  = @($oj | Where-Object { $_.qname -eq 'ClsCtor.TReg.Create' })[0]
 $oCI = @($oj | Where-Object { $_.qname -eq 'ClsCtor.TReg.CreateInst' })[0]
 Check 'outline json: class ctor is_class_method=True' ((Flag $oC) -eq 'True') "got: $(Flag $oC)"

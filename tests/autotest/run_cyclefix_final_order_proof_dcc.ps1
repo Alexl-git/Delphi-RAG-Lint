@@ -201,11 +201,11 @@ try {
         $b = Invoke-Build $P
         Check ("m.build {0} first, cut={1}" -f $first, $cut) $b.Ok $b.Errors
         $out = Invoke-Program $P
-        $init = (Get-Lines $out 'init') -join ','
-        $fin = Get-Lines $out 'fin'
+        $init = (@(Get-Lines $out 'init')) -join ','
+        $fin = @(Get-Lines $out 'fin')
         [array]::Reverse($fin)
         $finRev = $fin -join ','
-        $model = ((Get-ModelOrder $P.Root) | Where-Object { $_ -ne 'FP3Hook' }) -join ','
+        $model = ((@(Get-ModelOrder $P.Root)) | Where-Object { $_ -ne 'FP3Hook' }) -join ','
         $state = if ($out -match '\[b\] a stopped name=alive') { 'alive' } elseif ($out -match '(?m)\[b\] a stopped name=\r?$') { 'gone' } else { '?' }
         $script:ModelTable += ("| {0} first | {1} | {2} | {3} | {4} | {5} |" -f $first, $(if ($cut) { 'cut' } else { 'cycle' }), $init, ($finRev -replace ',', '<'), $model, $state)
         Check ("m.init {0} first, cut={1}: run [{2}] = model [{3}]" -f $first, $cut, $init, $model) (($init -ne '') -and ($init -eq $model)) $out

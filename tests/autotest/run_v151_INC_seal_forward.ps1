@@ -30,9 +30,9 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
   if (-not $Ok) { $script:fail = $true }
 }
 function Lines([string]$File, [string]$Db, [string[]]$Extra) {
-  $sel = if ($Extra.Count -gt 0) { $Extra } else { @('--rule', 'is-never-true') }
+  $sel = @(if ($Extra.Count -gt 0) { $Extra } else { @('--rule', 'is-never-true') })
   $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath lint $File --db $Db --json @sel 2>$null }) -join "`n"
-  $j = @($raw | ConvertFrom-Json)
+  $j = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ })
   return ,@($j | Where-Object { $_.rule -eq 'is-never-true' } | ForEach-Object { [int]$_.start_line })
 }
 try {

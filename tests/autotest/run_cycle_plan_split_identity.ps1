@@ -91,7 +91,7 @@ function Get-PlanText([string]$Db, [string]$RunDir) {
   } finally {
     $env:DRAGLINT_TEST_DUMP_PLAN = $null
   }
-  $dump = if (Test-Path $dumpFile) { @([IO.File]::ReadAllLines($dumpFile) | Where-Object { $_ -ne '' }) } else { @() }
+  $dump = @(if (Test-Path $dumpFile) { @([IO.File]::ReadAllLines($dumpFile) | Where-Object { $_ -ne '' }) } else { @() })
   return @{ Exit = $p.ExitCode; Text = $Ascii.GetString([IO.File]::ReadAllBytes($outFile)); Dump = $dump }
 }
 

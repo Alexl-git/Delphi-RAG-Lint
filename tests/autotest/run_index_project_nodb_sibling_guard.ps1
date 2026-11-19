@@ -331,7 +331,7 @@ $db2 = Get-DatabaseLine $r2.Text
 Check 'index --project Hello2 exits 0' ($r2.Code -eq 0) "exit=$($r2.Code)"
 Check 'Database: names Hello2.sqlite (the project''s own _D-RAG DB)' (Test-SamePath $db2 $hello2Db) "Database=[$db2]"
 Check 'Hello2.sqlite exists' (Test-Path $hello2Db) $hello2Db
-$h2Files = if (Test-Path $hello2Db) { Get-FilePaths $hello2Db } else { @() }
+$h2Files = @(if (Test-Path $hello2Db) { Get-FilePaths $hello2Db } else { @() })
 Check 'Hello2.sqlite holds Hello2.dpr' (@($h2Files | Where-Object { $_ -match '\\hello2\.dpr$' }).Count -eq 1) ($h2Files -join ',')
 $helloFilesAfter = Get-FilePaths $helloDb
 Check 'Hello.sqlite file list is UNCHANGED' (($helloFiles -join '|') -eq ($helloFilesAfter -join '|')) ("before=[{0}] after=[{1}]" -f ($helloFiles -join ','), ($helloFilesAfter -join ','))

@@ -142,7 +142,7 @@ $synthetic = @(
   "  Lines.Add('Planted marker -- touches ' + T);",
   'end;'
 ) -join "`r`n"
-$pl = Get-EmittedLabels $synthetic
+$pl = @(Get-EmittedLabels $synthetic)
 Check 'P1 the extractor finds a planted AppendFact label' ($pl -contains 'Planted label: ') ("got: " + ($pl -join ' | '))
 Check 'P1 the extractor finds a planted Format label, cut at its first %' ($pl -contains 'Planted count ') ''
 Check 'P1 the extractor finds both RefVerb:= literals' (($pl -contains 'Planted verb: ') -and ($pl -contains 'Other verb: ')) ''
@@ -159,15 +159,15 @@ $syntheticConst = @(
   "    'Gamma ');",
   "  OTHER: array[0..0] of string = ('Delta:');"
 ) -join "`r`n"
-$pr = Get-RegisteredLabels $syntheticConst
+$pr = @(Get-RegisteredLabels $syntheticConst)
 Check 'P2 the ALL_LABELS reader finds every literal in the array and nothing else' `
       (($pr.Count -eq 3) -and ($pr -contains 'Alpha:') -and ($pr -contains 'Beta:') -and ($pr -contains 'Gamma ')) ("got: " + ($pr -join ' | '))
 
 # ---- the real comparison ----------------------------------------------------
 Write-Host ''
 Write-Host 'Doc.Regions emitted labels vs Doc.SharedFacts ALL_LABELS' -ForegroundColor Cyan
-$emitted    = Get-EmittedLabels ([System.IO.File]::ReadAllText($Regions))
-$registered = Get-RegisteredLabels ([System.IO.File]::ReadAllText($SharedFacts))
+$emitted    = @(Get-EmittedLabels ([System.IO.File]::ReadAllText($Regions)))
+$registered = @(Get-RegisteredLabels ([System.IO.File]::ReadAllText($SharedFacts)))
 Write-Host ("  emitted    ({0}): {1}" -f $emitted.Count,    (($emitted    | ForEach-Object { "[$_]" }) -join ' ')) -ForegroundColor DarkGray
 Write-Host ("  registered ({0}): {1}" -f $registered.Count, (($registered | ForEach-Object { "[$_]" }) -join ' ')) -ForegroundColor DarkGray
 Check 'E0 the renderer scan found labels at all' ($emitted.Count -gt 0) ''

@@ -73,10 +73,10 @@ foreach ($mm in [regex]::Matches([IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(
 function RowLines($id) { return @(@($res[$id].result) | ForEach-Object { $_.range.start.line + 1 }) }
 function MaxPerLine($id) { $g = RowLines $id | Group-Object | Sort-Object Count -Descending | Select-Object -First 1; if ($g) { return $g.Count } else { return 0 } }
 $all = "$lineA,$($lineA + 1),$($lineA + 2)"
-Check 'P0 usagesScope=project: still all three Run call lines (positive control)' ((((RowLines 5) | Sort-Object -Unique) -join ',') -eq $all) "lines=$((RowLines 5) -join ',') want=$all"
-Check 'R1 usagesScope=project: every call line is listed once' ((MaxPerLine 5) -eq 1) "rows per line max=$(MaxPerLine 5) lines=$((RowLines 5) -join ',')"
-Check 'R2 usagesScope=project: exactly 3 rows for 3 calls' ((RowLines 5).Count -eq 3) "rows=$((RowLines 5).Count)"
-Check 'R3 default scope symbol: the A.Run call is listed once' (((RowLines 2) -join ',') -eq "$lineA") "lines=$((RowLines 2) -join ',')"
+Check 'P0 usagesScope=project: still all three Run call lines (positive control)' ((((@(RowLines 5)) | Sort-Object -Unique) -join ',') -eq $all) "lines=$((@(RowLines 5)) -join ',') want=$all"
+Check 'R1 usagesScope=project: every call line is listed once' ((MaxPerLine 5) -eq 1) "rows per line max=$(MaxPerLine 5) lines=$((@(RowLines 5)) -join ',')"
+Check 'R2 usagesScope=project: exactly 3 rows for 3 calls' ((@(RowLines 5)).Count -eq 3) "rows=$((@(RowLines 5)).Count)"
+Check 'R3 default scope symbol: the A.Run call is listed once' (((@(RowLines 2)) -join ',') -eq "$lineA") "lines=$((@(RowLines 2)) -join ',')"
 try { [IO.Directory]::Delete($scratch, $true) } catch { Write-Host "note: scratch left at $scratch" }
 if ($script:fail) { Write-Host 'run_v152_BK-SCOPEUI_lsp_refs: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'run_v152_BK-SCOPEUI_lsp_refs: PASS' -ForegroundColor Green

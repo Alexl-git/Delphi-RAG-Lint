@@ -45,7 +45,7 @@ $pas = Join-Path $WorkDir 'uTwo.pas'
 $db = Join-Path $WorkDir 'fx.sqlite'
 & { $ErrorActionPreference = 'Continue'; & $exePath index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
-$all = @(& { $ErrorActionPreference = 'Continue'; & $exePath lint $pas --db $db --enable magic-literal --json 2>$null } | ConvertFrom-Json)
+$all = @((& { $ErrorActionPreference = 'Continue'; & $exePath lint $pas --db $db --enable magic-literal --json 2>$null } | ConvertFrom-Json) | ForEach-Object { $_ })
 function At($rule, $line) { @($all | Where-Object { $_.rule -eq $rule -and $_.start_line -eq $line }) }
 
 # ---- positive controls ------------------------------------------------------------

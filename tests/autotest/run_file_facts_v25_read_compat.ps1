@@ -76,7 +76,7 @@ try {
   Check 'VACUITY the fixture was indexed' ($r.Code -eq 0) "(exit $($r.Code))"
   $sch = Schema-Of $fresh
   $engine = if ($null -ne $sch.engine_schema_version) { [int]$sch.engine_schema_version } else { [int]$sch.schema_version }
-  $names = Table-Names $sch
+  $names = @(Table-Names $sch)
   Check 'VACUITY schema --format json lists tables' ($names.Count -gt 10) "($($names.Count) tables)"
   Check 'FRESH the engine creates dfm_properties and comment_facts' (($names -contains 'dfm_properties') -and ($names -contains 'comment_facts')) ''
   Write-Host "  engine schema v$engine"
@@ -108,7 +108,7 @@ c.close()
     Check "$($c.Tag) Q query answers" (($q.Code -eq 0) -and ($q.Out -match 'TFfForm') -and -not ($q.Out -match 'index schema v\d+ <') -and (No-Av $q.Out)) "(exit $($q.Code))"
 
     $s = Schema-Of $db
-    $sn = Table-Names $s
+    $sn = @(Table-Names $s)
     $gone = @($c.Drop.Split(',') | Where-Object { $sn -contains $_ })
     Check "$($c.Tag) S schema reads it and the dropped tables stay absent" (($null -ne $s) -and ($s.schema_readable -ne $false) -and ($gone.Count -eq 0) -and ($sn.Count -gt 10)) "(still listed: $($gone -join ','))"
 
@@ -122,7 +122,7 @@ c.close()
   # ---- arm W: a writer upgrades the v24 copy -----------------------------------
   $w = $copies[0].Db
   $r = Run-Exe @('index', $fx, '--db', $w)
-  $wn = Table-Names (Schema-Of $w)
+  $wn = @(Table-Names (Schema-Of $w))
   Check 'W index into the v24 copy: exit 0, both tables created' (($r.Code -eq 0) -and ($wn -contains 'dfm_properties') -and ($wn -contains 'comment_facts') -and (No-Av $r.Out)) "(exit $($r.Code))"
 }
 finally {

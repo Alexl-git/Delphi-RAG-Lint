@@ -142,9 +142,9 @@ $s = Session @(
   @{ method='textDocument/definition'; line=$lAFoo; col=($cAFoo + 1) },
   @{ method='textDocument/rename'; line=$lBFoo; col=($cBFoo + 1); newName='Bar' }
 )
-$d1 = DefLines $s.res[11]
+$d1 = @(DefLines $s.res[11])
 Check 'L1: definition on B.Foo after four non-ASCII chars names Foo (TB.Foo among the answers)' (($d1 -contains $lTBIntf) -or ($d1 -contains $lTBDecl)) "got lines $($d1 -join ',') (TB: $lTBIntf/$lTBDecl, TA: $lTAIntf/$lTADecl)"
-$d2 = DefLines $s.res[12]
+$d2 = @(DefLines $s.res[12])
 Check 'L3: control -- definition on A.Foo (ASCII line) names Foo' (($d2 -contains $lTADecl) -or ($d2 -contains $lTAIntf)) "got lines $($d2 -join ',')"
 $edits = @()
 if ($s.res.ContainsKey(13) -and $null -ne $s.res[13][0]) {

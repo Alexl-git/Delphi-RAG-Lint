@@ -185,7 +185,7 @@ $want = 'Foo:call:50:23 Bar:call:50:32 Baz:call:55:13 Qux:call:55:22 Foo:call:62
 Check 'P branch calls, one call row each' ($got -eq $want) "got=[$got]"
 
 # L / S: lint --json is a bare array of {rule, start_line, ...}
-$lint = @(& { $ErrorActionPreference = 'Continue'; & $exePath lint $pas --db $db --rule 'used-before-assignment,dead-store-before-out-arg' --json 2>$null } | ConvertFrom-Json)
+$lint = @((& { $ErrorActionPreference = 'Continue'; & $exePath lint $pas --db $db --rule 'used-before-assignment,dead-store-before-out-arg' --json 2>$null } | ConvertFrom-Json) | ForEach-Object { $_ })
 $uba = @($lint | Where-Object { $_.rule -eq 'used-before-assignment' } | ForEach-Object { [int]$_.start_line } | Sort-Object)
 $dso = @($lint | Where-Object { $_.rule -eq 'dead-store-before-out-arg' } | ForEach-Object { [int]$_.start_line } | Sort-Object)
 Check 'L positive control PlainRead (83) fires' ($uba -contains 83) "uba=[$($uba -join ',')]"

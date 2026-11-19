@@ -467,7 +467,7 @@ Check 'B4 --apply with backups: still nothing written, no .BCK, no recovery reco
 $hq = Hash 'PlainDM.pas'
 $r = ApplyTo @('DupForm.pas', 'PlainDM.pas') 'nest.rules' @('--apply', '--no-backup', '--format', 'json')
 $j = Json $r.Out
-$u = if ($j) { @($j.units) } else { @() }
+$u = @(if ($j) { @($j.units) } else { @() })
 Check 'B5 batch: only DupForm fails (exit 1), PlainDM is converted' `
   (($r.Code -eq 1) -and ($u.Count -eq 2) -and ($u[0].ok -eq $false) -and ($u[1].ok -eq $true) -and `
    ((Hash 'DupForm.pas') -eq $hp) -and ((Hash 'PlainDM.pas') -ne $hq) -and ((Text 'PlainDM.dfm') -match 'object ptbl: TDstTable')) $r.Out

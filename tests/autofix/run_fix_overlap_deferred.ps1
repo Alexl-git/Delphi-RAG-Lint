@@ -40,7 +40,7 @@ function Compiles([string]$dir, [string]$unit) {
   $out = & { $ErrorActionPreference = 'Continue'; cmd /c "call `"$Rsvars`" >nul && cd /d `"$dir`" && dcc64 -M -Q -NSSystem;Winapi;Vcl -NU`"$dir`" `"$unit`"" 2>&1 | ForEach-Object { "$_" } } | Out-String
   return -not ($out -match '(?m)\b(Error|Fatal)\b|[EF]\d{4}')
 }
-function Rows([string]$raw) { $r = @(); try { $r = @($raw | ConvertFrom-Json) } catch { $r = @() }; return ,@($r) }
+function Rows([string]$raw) { $r = @(); try { $r = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $r = @() }; return ,@($r) }
 
 $exePath = (Resolve-Path $Exe).Path
 New-Item -ItemType Directory -Force $WorkDir | Out-Null

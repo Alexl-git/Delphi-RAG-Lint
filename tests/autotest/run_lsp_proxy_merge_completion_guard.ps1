@@ -152,7 +152,7 @@ function Reply7([byte[]]$b) {
     try { $j = $f.Body | ConvertFrom-Json -AsHashtable } catch { continue }
     if ($j -and $j.ContainsKey('id') -and ($j['id'] -eq 7) -and $j.ContainsKey('result')) {
       $r = $j['result']
-      $items = if ($null -eq $r) { $null } elseif ($r -is [System.Collections.IDictionary]) { @($r['items']) } else { @($r) }
+      $items = @(if ($null -eq $r) { $null } elseif ($r -is [System.Collections.IDictionary]) { @($r['items']) } else { @($r) })
       return [pscustomobject]@{ Frame = $f; Items = $items; IsNull = ($null -eq $r) }
     }
   }
@@ -224,15 +224,15 @@ $env1 = Script $theirs1
 $r1   = Invoke-Raw $Exe $onArgs $in1 $env1
 $p1   = Invoke-Raw $Exe $plainArgs $in1 $env1
 $m1   = Reply7 $r1.Out
-$it1  = if ($m1) { $m1.Items } else { @() }
-$pr1  = Pairs $it1
+$it1  = @(if ($m1) { $m1.Items } else { @() })
+$pr1  = @(Pairs $it1)
 Check 'reply for id 7 present' ($null -ne $m1) ''
 Check 'theirs first, in order' (($pr1.Count -ge 3) -and ($pr1[0] -eq 'FIrst|5') -and ($pr1[1] -eq 'FIeld2|10') -and ($pr1[2] -eq 'StubOnly|3')) ("items=$($pr1 -join ',')")
 Check 'drag-lint item appended: FIeld2 under kind 5 (same label, other kind: legitimately twice)' (@($pr1 | Where-Object { $_ -eq 'FIeld2|5' }).Count -eq 1 -and @(Labels $it1 | Where-Object { $_ -eq 'FIeld2' }).Count -eq 2) ("items=$($pr1 -join ',')")
 Check 'no duplicate (label, kind): FIrst|5 exactly once' (@($pr1 | Where-Object { $_ -eq 'FIrst|5' }).Count -eq 1) ("items=$($pr1 -join ',')")
 Check 'no duplicate pair anywhere' ($pr1.Count -gt 0 -and @($pr1 | Select-Object -Unique).Count -eq $pr1.Count) ''
 Check 'Content-Length is exact' ($m1 -and $m1.Frame.Declared -eq $m1.Frame.Actual -and $m1.Frame.Declared -eq [Text.Encoding]::UTF8.GetByteCount($m1.Frame.Body)) ''
-Check '(7) decoy FIx absent from the member list' ($m1 -and -not ((Labels $it1) -contains 'FIx')) ''
+Check '(7) decoy FIx absent from the member list' ($m1 -and -not ((@(Labels $it1)) -contains 'FIx')) ''
 
 # --- 2 theirs empty / null ---------------------------------------------------
 Write-Host ''
@@ -240,9 +240,9 @@ Write-Host '(2) theirs [] and theirs null: drag-lint items alone' -ForegroundCol
 foreach ($t in @('[]', 'null')) {
   $r2  = Invoke-Raw $Exe $onArgs $in1 (Script $t)
   $m2  = Reply7 $r2.Out
-  $pr2 = if ($m2 -and -not $m2.IsNull) { Pairs $m2.Items } else { @() }
+  $pr2 = @(if ($m2 -and -not $m2.IsNull) { Pairs $m2.Items } else { @() })
   Check "theirs ${t}: FIrst|5 and FIeld2|5 present" (($pr2 -contains 'FIrst|5') -and ($pr2 -contains 'FIeld2|5')) ("items=$($pr2 -join ',')")
-  Check "theirs ${t}: nothing but drag-lint items" ($pr2.Count -ge 2 -and -not ($pr2 -contains 'StubOnly|3') -and -not ((Labels $m2.Items) -contains 'FIx')) ("items=$($pr2 -join ',')")
+  Check "theirs ${t}: nothing but drag-lint items" ($pr2.Count -ge 2 -and -not ($pr2 -contains 'StubOnly|3') -and -not ((@(Labels $m2.Items)) -contains 'FIx')) ("items=$($pr2 -join ',')")
 }
 
 # --- 3 ours empty ------------------------------------------------------------
@@ -283,7 +283,7 @@ Write-Host ''
 Write-Host '(7) the decoy surfaces for a bare-identifier request' -ForegroundColor Cyan
 $r7  = Invoke-Raw $Exe $onArgs ([byte[]]($didOpen + $bareReq)) (Script '[]')
 $m7  = Reply7 $r7.Out
-$l7  = if ($m7 -and -not $m7.IsNull) { Labels $m7.Items } else { @() }
+$l7  = @(if ($m7 -and -not $m7.IsNull) { Labels $m7.Items } else { @() })
 Check 'bare "FI": FIx offered (the index and the tap serve it)' ($l7 -contains 'FIx') ("labels=$($l7 -join ',')")
 
 # --- 8 a request without line / character (A3 fix 3) -----------------------------
@@ -298,7 +298,7 @@ $r8   = Invoke-Raw $Exe $onArgs $in8 $env8
 $m8   = Reply7 $r8.Out
 $e8   = @((Utf8 $r8.Err) -split "\r?\n" | Where-Object { $_ -match 'could not record' })
 Check 'two position-less requests: no stderr line about them' ($e8.Count -eq 0) ("lines=$($e8.Count) err=$(Utf8 $r8.Err)")
-Check 'positive control: the later request 7 in the same session still merges' ($m8 -and ((Pairs $m8.Items) -contains 'FIeld2|5')) ''
+Check 'positive control: the later request 7 in the same session still merges' ($m8 -and ((@(Pairs $m8.Items)) -contains 'FIeld2|5')) ''
 $n8 = @(Split-Frames $r8.Out | ForEach-Object { try { $_.Body | ConvertFrom-Json -AsHashtable } catch { $null } } |
         Where-Object { $_ -and $_.ContainsKey('id') -and ($_['id'] -in 5, 6) -and $_.ContainsKey('result') } |
         ForEach-Object { @($_['result']['items']).Count })
@@ -318,7 +318,7 @@ $looseOpen = Frame ('{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{
 $looseReq  = Frame ('{"jsonrpc":"2.0","id":7,"method":"textDocument/completion","params":{"textDocument":{"uri":"' + $looseUri + '"},"position":{"line":11,"character":21}}}')
 $r9 = Invoke-Raw $Exe $onArgs ([byte[]]($looseOpen + $looseReq)) (Script '[]')
 $m9 = Reply7 $r9.Out
-$l9 = if ($m9 -and -not $m9.IsNull) { Labels $m9.Items } else { @() }
+$l9 = @(if ($m9 -and -not $m9.IsNull) { Labels $m9.Items } else { @() })
 Check 'unowned file: LooseCount offered (StoresForFile, as plain lsp does)' ($l9 -contains 'LooseCount') ("labels=$($l9 -join ',')")
 
 # --- 10 a --db list with one missing path (A3 fix 4) -----------------------------------
@@ -330,7 +330,7 @@ $r10 = Invoke-Raw $Exe $mixArgs $in1 $env1
 $m10 = Reply7 $r10.Out
 $e10 = @((Utf8 $r10.Err) -split "\r?\n" | Where-Object { $_.Contains('gone-a3fix.sqlite') })
 Check 'exactly one stderr line names the missing path' ($e10.Count -eq 1) ("lines=$($e10.Count) err=$(Utf8 $r10.Err)")
-Check 'positive control: the good index still merges' ($m10 -and ((Pairs $m10.Items) -contains 'FIeld2|5')) ''
+Check 'positive control: the good index still merges' ($m10 -and ((@(Pairs $m10.Items)) -contains 'FIeld2|5')) ''
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

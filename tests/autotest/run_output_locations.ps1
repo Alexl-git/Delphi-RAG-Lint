@@ -99,7 +99,7 @@ Write-Host 'find-callers --resolved (Q-RESOLVED-PATH, owner ruling D1 2026-11-03
 # `resolution`, which stays the LAST key (XERJ item 3, run_query_callers_shared_guard.ps1);
 # `file` stays the bare name the diffs key on; the text row names the full path.
 $j = (& { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name Target --resolved --json --db $db 2>$null }) -join "`n"
-$rows = @(ConvertFrom-Json -InputObject $j)
+$rows = @((ConvertFrom-Json -InputObject $j) | ForEach-Object { $_ })
 Check 'one resolved caller' ($rows.Count -eq 1) "json: $j"
 if ($rows.Count -eq 1) {
   Check 'CONTROL: `file` is still the file NAME (the contract consumers diff on)' ($rows[0].file -eq 'uWhere.pas') "file=$($rows[0].file)"

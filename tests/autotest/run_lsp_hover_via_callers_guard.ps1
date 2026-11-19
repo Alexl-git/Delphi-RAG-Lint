@@ -129,7 +129,7 @@ $IFACE = 'uViaWork.IWorker.DoWork'
 $DIRECT = 'uViaWork.TWorker.Direct'
 
 $jraw = (& { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name DoWork --resolved --json --db $db 2>$null }) -join "`n"
-$fc = @($jraw.Substring($jraw.IndexOf('[')) | ConvertFrom-Json)
+$fc = @(($jraw.Substring($jraw.IndexOf('[')) | ConvertFrom-Json) | ForEach-Object { $_ })
 $fcImpl = @($fc | Where-Object { $_.target_qname -eq $IMPL })
 $N = $fcImpl.Count
 Check 'FC find-callers --resolved: TWorker.DoWork has >= 1 caller, all via IWorker' `

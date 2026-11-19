@@ -152,22 +152,22 @@ try {
   $ctor = Get-Drift 'ctorbody.TThing.Create'
   Check 'FIX 1: constructor draws NO "no <returns> tag" finding' `
     ((Messages $ctor | Where-Object { $_ -like '*no <returns> tag*' }).Count -eq 0) `
-    ((Messages $ctor) -join ' | ')
+    ((@(Messages $ctor)) -join ' | ')
 
   $iface0 = Get-Drift 'ctorbody.IThing.ClearAll'
   Check 'FIX 2: interface method draws NO "body never raises it" finding' `
     ((Messages $iface0 | Where-Object { $_ -like '*never raises it*' }).Count -eq 0) `
-    ((Messages $iface0) -join ' | ')
+    ((@(Messages $iface0)) -join ' | ')
 
   $named0 = Get-Drift 'ctorbody.TThing.Named'
   Check 'CONTROL: a real function with no <returns> is STILL reported' `
     ((Messages $named0 | Where-Object { $_ -like '*no <returns> tag*' }).Count -ge 1) `
-    ((Messages $named0) -join ' | ')
+    ((@(Messages $named0)) -join ' | ')
 
   $bogus0 = Get-Drift 'ctorbody.TThing.Bogus'
   Check 'CONTROL: a routine WITH a body that never raises its documented cref is STILL reported' `
     ((Messages $bogus0 | Where-Object { $_ -like '*ENeverRaised*' }).Count -ge 1) `
-    ((Messages $bogus0) -join ' | ')
+    ((@(Messages $bogus0)) -join ' | ')
 
   # =========================================================================
   # PHASE 2 -- the engine's own output, and the constructor marker it writes.
@@ -228,7 +228,7 @@ try {
   $ctor2 = Get-Drift 'ctorbody.TThing.Create'
   Check 'constructor is still clean after a second apply' `
     ((Messages $ctor2 | Where-Object { $_ -like '*no <returns> tag*' }).Count -eq 0) `
-    ((Messages $ctor2) -join ' | ')
+    ((@(Messages $ctor2)) -join ' | ')
 
   Check 'every emitted /// line is 7-bit ASCII' `
     (@([IO.File]::ReadAllLines($src) | Where-Object { $_ -match '^\s*///' -and ($_.ToCharArray() | Where-Object { [int]$_ -gt 126 }) }).Count -eq 0)

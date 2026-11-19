@@ -213,7 +213,7 @@ function Pt([string[]]$A) {
   $o = (& { $ErrorActionPreference = 'Continue'; & $Exe proptree --qname DeepFix.TDeep --no-write-back --json --db $db @A 2>$null }) -join "`n"
   $code = $LASTEXITCODE
   $j = Json $o
-  $paths = if ($j) { @($j.properties | ForEach-Object { [string]$_.path }) } else { @() }
+  $paths = @(if ($j) { @($j.properties | ForEach-Object { [string]$_.path }) } else { @() })
   return [pscustomobject]@{ Code = $code; Out = $o; J = $j; Paths = $paths; Max = (MaxSegs $paths) }
 }
 function Run([string[]]$A) {

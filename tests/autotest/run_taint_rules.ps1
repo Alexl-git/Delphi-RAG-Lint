@@ -39,7 +39,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 function TaintFindings([string[]]$CliArgs) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $exePath @CliArgs 2>$null }
   $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
-  $all = @(); if ($b -ge 0) { try { $all = @($txt.Substring($b) | ConvertFrom-Json) } catch { $all = @() } }
+  $all = @(); if ($b -ge 0) { try { $all = @(($txt.Substring($b) | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $all = @() } }
   return ,@($all | Where-Object { $_.rule -like 'taint-*' })
 }
 function At($List, [string]$Rule, [string]$Unit, [int]$Line) {

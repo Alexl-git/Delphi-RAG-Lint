@@ -69,7 +69,7 @@ function Index-Case([string]$Dir) {
 # TLspCompletion.DiagnosticsFromLintJson maps it.
 function Get-LintDiags([string]$Dir, [string]$Db, [string]$Unit) {
   $j = & { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $Dir $Unit) --db $Db --json --rule unused-unit-in-uses 2>$null }
-  $arr = @(($j -join "`n") | ConvertFrom-Json)
+  $arr = @((($j -join "`n") | ConvertFrom-Json) | ForEach-Object { $_ })
   return ,@($arr | Where-Object { $_.rule -eq 'unused-unit-in-uses' } | ForEach-Object {
     [ordered]@{
       range    = @{ start = @{ line = $_.start_line - 1; character = $_.start_col - 1 }

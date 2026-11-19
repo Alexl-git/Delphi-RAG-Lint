@@ -75,7 +75,7 @@ try {
   function FoundBy($Name) {
     $ids = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "select id from symbols where hex(name) = '$(Utf8Hex $Name)'" --json 2>$null }) -join "`n" | ConvertFrom-Json
     $id  = if ($ids.rows.Count -ge 1) { [long]$ids.rows[0][0] } else { -1 }
-    $r = @((& { $ErrorActionPreference = 'Continue'; & $exePath query --name $Name --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json)
+    $r = @(((& { $ErrorActionPreference = 'Continue'; & $exePath query --name $Name --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json) | ForEach-Object { $_ })
     $hit = @($r | Where-Object { ([long]$_.id -eq $id) -and ($_.match_kind -eq 'exact') })
     Check "query --name finds $(Utf8Hex $Name) by its real spelling (exact, id $id)" (($id -ge 0) -and ($hit.Count -eq 1)) "rows=$($r.Count)"
   }

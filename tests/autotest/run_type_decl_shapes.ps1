@@ -95,7 +95,7 @@ function Row([string]$Name) {
   # -ceq: the row must carry the spelling asked for. match_kind guards against the
   # FUZZY fallback answering for a name that does not exist -- without it, a
   # deleted declaration still "passes" via its nearest neighbour.
-  $hit = @(@($txt | ConvertFrom-Json) | Where-Object { ($_.name -ceq $Name) -and ($_.match_kind -eq 'exact') })
+  $hit = @(@(($txt | ConvertFrom-Json) | ForEach-Object { $_ }) | Where-Object { ($_.name -ceq $Name) -and ($_.match_kind -eq 'exact') })
   if ($hit.Count -eq 0) { return $null }
   return $hit[0]
 }

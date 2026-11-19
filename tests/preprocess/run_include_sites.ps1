@@ -60,7 +60,7 @@ Push-Location C:\TEMP
 try {
   $s = Sites @()
   Check "one site reported (got $($s.Count))" ($s.Count -eq 1)
-  $f = if ($s.Count -ge 1) { $s[0] -split "`t" } else { @('','','','','','','') }
+  $f = @(if ($s.Count -ge 1) { $s[0] -split "`t" } else { @('','','','','','','') })
   Check "site depth 0, line 7, col 3 (got $($f[1]),$($f[2]),$($f[3]))" (($f[1] -eq '0') -and ($f[2] -eq '7') -and ($f[3] -eq '3'))
   Check "site path is live.inc (got '$($f[6])')" ($f[6] -eq $live)
   Check 'inactive-branch dead.inc gives no site' (-not ($s -match 'dead\.inc'))
@@ -70,7 +70,7 @@ try {
   Check 'site MD5 = MD5 of the child output' ($f[5] -eq (Md5Hex $child))
 
   $sFlag = Sites @('--define', 'HOST_FLAG')
-  $fFlag = if ($sFlag.Count -ge 1) { $sFlag[0] -split "`t" } else { @('','','','','','','') }
+  $fFlag = @(if ($sFlag.Count -ge 1) { $sFlag[0] -split "`t" } else { @('','','','','','','') })
   $childFlag = Run-Bytes @('--file', (Q $live), '--include-mode', 'defines-only', '--define', 'HOST_FLAG')
   Check 'positive control: HOST_FLAG changes the site MD5' (($fFlag[5] -ne '') -and ($fFlag[5] -ne $f[5]))
   Check 'with HOST_FLAG the site MD5 = that child output' ($fFlag[5] -eq (Md5Hex $childFlag))

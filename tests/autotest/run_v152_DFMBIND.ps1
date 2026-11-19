@@ -53,7 +53,7 @@ function FormLines() {
 }
 function MakeUnit([string]$Dir, [string]$Unit, [string[]]$Body) {
   [void](New-Item -ItemType Directory -Force $Dir)
-  WriteAscii (Join-Path $Dir "$Unit.dfm") (FormLines)
+  WriteAscii (Join-Path $Dir "$Unit.dfm") (@(FormLines))
   $Src = @("unit $Unit;", '', 'interface', '', 'type', '  TForm1 = class', '  end;', '',
            'implementation', '', '{$R *.dfm}', '', 'procedure Rebind;', 'begin') + $Body + @('end;', '', 'end.')
   WriteAscii (Join-Path $Dir "$Unit.pas") $Src
@@ -65,7 +65,7 @@ function DupCount([string]$Dir, [string]$Unit) {
   $Txt = ($Out -join "`n")
   if ($Txt.Trim() -eq '') { return 0 }
   $J = $Txt | ConvertFrom-Json
-  $All = if ($J -is [array]) { @($J) } elseif ($null -ne $J.findings) { @($J.findings) } else { @($J) }
+  $All = @(if ($J -is [array]) { @($J) } elseif ($null -ne $J.findings) { @($J.findings) } else { @($J) })
   return @($All | Where-Object { ([string]$_.rule_id + [string]$_.rule) -eq 'dfm-duplicate-binding' }).Count
 }
 

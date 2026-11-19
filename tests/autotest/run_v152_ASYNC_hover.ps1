@@ -234,7 +234,7 @@ end.
   Write-Host "  raw T1: $(Raw $r1)"
   Check "T1 announced first ask answered < $FAST_MS ms" ($ms1 -ge 0 -and $ms1 -lt $FAST_MS) "ms=$ms1"
   Check 'T1 result.deferred names the placeholder' ($null -ne $r1 -and $null -ne $r1.o.result.deferred -and $r1.o.result.deferred.placeholder -eq $PLACEHOLDER) (Raw $r1)
-  Check 'T1 model.facts carries the placeholder line' ((Facts $r1) -contains $PLACEHOLDER) ("facts=" + ((Facts $r1) -join ' | '))
+  Check 'T1 model.facts carries the placeholder line' ((@(Facts $r1)) -contains $PLACEHOLDER) ("facts=" + ((@(Facts $r1)) -join ' | '))
   Check 'T1 no caller rows yet' ($null -ne $r1 -and @($r1.o.result.resolvedCallers).Count -eq 0 -and @($r1.o.result.nameCallers).Count -eq 0)
 
   # T2 second ask, same position: whole and slow.
@@ -242,7 +242,7 @@ end.
   $r2 = WaitId 11 30000
   $ms2 = if ($r2) { $r2.ms - $t2 } else { -1 }
   Check 'T2 second ask: the whole bundle (no deferred key, both callers)' ($null -ne $r2 -and $null -ne $r2.o.result -and $null -eq $r2.o.result.deferred -and @($r2.o.result.resolvedCallers).Count -ge 2) (Raw $r2)
-  Check 'T2 no placeholder left in the facts' (-not ((Facts $r2) -contains $PLACEHOLDER)) ("facts=" + ((Facts $r2) -join ' | '))
+  Check 'T2 no placeholder left in the facts' (-not ((@(Facts $r2)) -contains $PLACEHOLDER)) ("facts=" + ((@(Facts $r2)) -join ' | '))
   Check "P2/T2 the whole answer came late (>= $($SlowMs - 100) ms) and was still caught" ($ms2 -ge ($SlowMs - 100)) "ms=$ms2"
 
   # T3 a move during a second step.

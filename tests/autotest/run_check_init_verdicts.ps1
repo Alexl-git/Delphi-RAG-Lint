@@ -203,7 +203,7 @@ try {
 
   function Invoke-Answer($Case, [string]$Source) {
     $db = $dbs[$Case.Fix]
-    $max = if ($Case.Max) { @('--max-routines', "$($Case.Max)") } else { @() }
+    $max = @(if ($Case.Max) { @('--max-routines', "$($Case.Max)") } else { @() })
     if ($Source -eq 'cli') { $raw = & { $ErrorActionPreference = 'Continue'; & $Exe check-init $Case.Target --db $db --json @max 2>$null } }
     else { $raw = & { $ErrorActionPreference = 'Continue'; & $driverExe --db $db --target $Case.Target @max --stable 2>$null } }
     $code = $LASTEXITCODE
@@ -248,7 +248,7 @@ try {
   $pcAns = Invoke-Answer $pcCase $src0
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $dbs['solve-initorder'] --rule init-order-hazard --format json 2>$null }
   $txt = (@($raw) -join "`n"); $bi = $txt.IndexOf('[')
-  $finds = @(); if ($bi -ge 0) { try { $finds = @($txt.Substring($bi) | ConvertFrom-Json) } catch { $finds = @() } }
+  $finds = @(); if ($bi -ge 0) { try { $finds = @(($txt.Substring($bi) | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $finds = @() } }
   $finds = @($finds | Where-Object { $_.rule -eq 'init-order-hazard' })
   Write-Host "  -- init-order-hazard findings: $(@($finds | ForEach-Object { '{0}:{1}' -f (Split-Path $_.file_path -Leaf), $_.start_line }) -join ', ')"
   Check 'positive control: init-order-hazard fires on solve-initorder' ($finds.Count -ge 1) "findings=$($finds.Count)"
@@ -262,7 +262,7 @@ try {
   }
   $raw2 = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $dbs['solve-initorder-swapped'] --rule init-order-hazard --format json 2>$null }
   $txt2 = (@($raw2) -join "`n"); $bi2 = $txt2.IndexOf('[')
-  $f2 = @(); if ($bi2 -ge 0) { try { $f2 = @($txt2.Substring($bi2) | ConvertFrom-Json) } catch { $f2 = @() } }
+  $f2 = @(); if ($bi2 -ge 0) { try { $f2 = @(($txt2.Substring($bi2) | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $f2 = @() } }
   Check 'twin: init-order-hazard is silent on solve-initorder-swapped' (@($f2 | Where-Object { $_.rule -eq 'init-order-hazard' }).Count -eq 0) ''
 
   # Comparator control: a flipped expectation must be reported.

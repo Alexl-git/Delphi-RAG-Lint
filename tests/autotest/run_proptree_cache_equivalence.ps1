@@ -392,7 +392,7 @@ if (-not $LibDb) {
       $r = RunPt $Exe $LibDb @('--qname', $q, '--depth', '2', '--refs-as-leaves', '--min-visibility', $mv, '--json')
       $nj = Json $r.Out
       $newL = @($nj.properties | ForEach-Object { NodeLine $_ })
-      $ok = if ($mv -eq 'published') { @('published') } else { @('published', 'public') }
+      $ok = @(if ($mv -eq 'published') { @('published') } else { @('published', 'public') })
       $want = @(PrunePrivate @($old2.properties) | Where-Object { ($ok -contains $_.visibility) } | ForEach-Object { NodeLine $_ })
       $d = FirstDiff $want $newL
       Check "d --min-visibility $mv (depth 2) equals the old engine's, minus private ($($want.Count) nodes, $([Math]::Round($r.Sec, 1)) s)" `

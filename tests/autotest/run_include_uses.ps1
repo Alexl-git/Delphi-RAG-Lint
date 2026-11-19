@@ -76,7 +76,7 @@ try {
 } finally { Pop-Location }
 $grp = @($cyc -split "`r?`n" | Where-Object { ($_ -match '\bIncA\b') -and ($_ -match '\bIncB\b') })
 Check 'c: cycles prints a group naming IncA and IncB' ($grp.Count -ge 1) ($cyc.Trim() -replace "`r?`n", ' | ')
-$fs = @(); try { $fs = @($la | ConvertFrom-Json) } catch { }
+$fs = @(); try { $fs = @(($la | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { }
 Check 'c: lint-all circular-uses names IncA and IncB' (@($fs | Where-Object { ($_.message -match '\bIncA\b') -and ($_.message -match '\bIncB\b') }).Count -ge 1) "findings=$($fs.Count)"
 
 $dbN = Join-Path $WorkDir 'incuses-nopp.sqlite'

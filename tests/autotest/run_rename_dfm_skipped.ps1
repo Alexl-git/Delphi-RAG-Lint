@@ -144,7 +144,7 @@ foreach ($m in @(
   Check "$($m.N) CONTROL no note for Unit6.dfm (indexed text, rewritten)" (@($n | Where-Object { $_ -match 'Unit6\.dfm' }).Count -eq 0) ($n -join ' | ')
   Check "$($m.N) CONTROL no note for Unit5.dfm (unrelated form)"          (@($n | Where-Object { $_ -match 'Unit5\.dfm' }).Count -eq 0) ($n -join ' | ')
   if ($m.N -eq '--json') {
-    $ed = $null; try { $ed = @($r.Out | ConvertFrom-Json) } catch { }
+    $ed = $null; try { $ed = @(($r.Out | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { }
     Check '--json stdout is still a bare edit array'      ($null -ne $ed -and $ed.Count -gt 0) $r.Out
     Check '--json rewrites Unit6.dfm (indexed descendant)' (@($ed | Where-Object { $_.file -like '*Unit6.dfm' }).Count -eq 1)
   }

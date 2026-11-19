@@ -41,7 +41,7 @@ if (Test-Path $WorkDir) { [System.IO.Directory]::Delete($WorkDir, $true) }
 New-Item -ItemType Directory -Force "$WorkDir\src" | Out-Null
 
 function New-Src([bool]$WithFinding) {
-  $body = if ($WithFinding) { @('  with X do', '    Free;') } else { @('  X.Free;') }
+  $body = @(if ($WithFinding) { @('  with X do', '    Free;') } else { @('  X.Free;') })
   (@('unit uWatch;', '', 'interface', '', 'procedure A(X: TObject);', '', 'implementation', '',
      'procedure A(X: TObject);', 'begin') + $body + @('end;', '', 'end.') -join "`r`n") + "`r`n"
 }

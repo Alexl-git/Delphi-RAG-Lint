@@ -38,7 +38,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 function Parse-Findings([string[]]$Raw) {
   $txt = ($Raw -join "`n"); $b = $txt.IndexOf('[')
-  $out = @(); if ($b -ge 0) { try { $out = @($txt.Substring($b) | ConvertFrom-Json) } catch { $out = @() } }
+  $out = @(); if ($b -ge 0) { try { $out = @(($txt.Substring($b) | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $out = @() } }
   if ($null -eq $out) { $out = @() }
   return ,@($out)
 }
@@ -61,9 +61,9 @@ Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 # RUN 1 -- the using unit alone
 $r1 = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $use --db $db --json 2>$null })
 $c1 = @($r1 | Where-Object { $_.rule -eq $Rule })
-Check 'run 1 positive control: TFreeCmd(1) fires' ((At $c1 'uEnumUse.pas' $fCast).Count -eq 1) "count=$($c1.Count)"
-Check 'run 1 TMarkedCmd(1) silenced by the type marker in another unit' ((At $c1 'uEnumUse.pas' $mCast).Count -eq 0)
-Check 'run 1 Ord(M) = 2 silenced by the type marker in another unit' ((At $c1 'uEnumUse.pas' $mOrd).Count -eq 0)
+Check 'run 1 positive control: TFreeCmd(1) fires' ((@(At $c1 'uEnumUse.pas' $fCast)).Count -eq 1) "count=$($c1.Count)"
+Check 'run 1 TMarkedCmd(1) silenced by the type marker in another unit' ((@(At $c1 'uEnumUse.pas' $mCast)).Count -eq 0)
+Check 'run 1 Ord(M) = 2 silenced by the type marker in another unit' ((@(At $c1 'uEnumUse.pas' $mOrd)).Count -eq 0)
 
 # RUN 2 -- the declaring unit alone: the casts are elsewhere, so the marker cannot be judged
 $r2 = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $decl --db $db --json 2>$null })
@@ -72,8 +72,8 @@ Check 'run 2 type marker is NOT reported unused by a file-scoped run' (@(At @($r
 # RUN 3 -- lint-all
 $r3 = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json 2>$null })
 $c3 = @($r3 | Where-Object { $_.rule -eq $Rule })
-Check 'run 3 lint-all: TFreeCmd(1) fires' ((At $c3 'uEnumUse.pas' $fCast).Count -eq 1) "count=$($c3.Count)"
-Check 'run 3 lint-all: TMarkedCmd casts silent' (((At $c3 'uEnumUse.pas' $mCast).Count + (At $c3 'uEnumUse.pas' $mOrd).Count) -eq 0)
+Check 'run 3 lint-all: TFreeCmd(1) fires' ((@(At $c3 'uEnumUse.pas' $fCast)).Count -eq 1) "count=$($c3.Count)"
+Check 'run 3 lint-all: TMarkedCmd casts silent' (((@(At $c3 'uEnumUse.pas' $mCast)).Count + (@(At $c3 'uEnumUse.pas' $mOrd)).Count) -eq 0)
 Check 'run 3 lint-all: type marker NOT reported unused' (@(At @($r3 | Where-Object { $_.rule -eq 'review-marker-unused' }) 'uEnumDecl.pas' $typeLine).Count -eq 0)
 
 # RUN 4 -- positive control: remove the marker, the casts come back
@@ -83,8 +83,8 @@ Check 'fixture spells the marker' ($txt.Contains($mark))
 [IO.File]::WriteAllText($decl, $txt.Replace($mark, '// marker removed'), [Text.Encoding]::ASCII)
 $r4 = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $use --db $db --json 2>$null })
 $c4 = @($r4 | Where-Object { $_.rule -eq $Rule })
-Check 'run 4 marker removed -> TMarkedCmd(1) fires' ((At $c4 'uEnumUse.pas' $mCast).Count -eq 1) "count=$($c4.Count)"
-Check 'run 4 marker removed -> Ord(M) = 2 fires' ((At $c4 'uEnumUse.pas' $mOrd).Count -eq 1)
+Check 'run 4 marker removed -> TMarkedCmd(1) fires' ((@(At $c4 'uEnumUse.pas' $mCast)).Count -eq 1) "count=$($c4.Count)"
+Check 'run 4 marker removed -> Ord(M) = 2 fires' ((@(At $c4 'uEnumUse.pas' $mOrd)).Count -eq 1)
 }
 finally {
   if (Test-Path $scratch) { try { [System.IO.Directory]::Delete($scratch, $true) } catch { } }

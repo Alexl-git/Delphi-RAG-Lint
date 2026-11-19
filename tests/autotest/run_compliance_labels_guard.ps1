@@ -120,7 +120,7 @@ Assert "sarif: hardcoded-credential has a relationship targeting 798" ($null -ne
 
 # ---- item 7: built-in profile `cwe` ----------------------------------------------------------
 $p1 = & { $ErrorActionPreference = 'Continue'; & $exe lint --json --profile cwe --rules-dir $rulesDir (Join-Path $repo 'tests\lint\type-name-prefix.pas') 2>$null }
-$n1 = @(($p1 -join "`n") | ConvertFrom-Json).Count
+$n1 = @((($p1 -join "`n") | ConvertFrom-Json) | ForEach-Object { $_ }).Count
 Assert "--profile cwe on type-name-prefix.pas: 0 findings (got $n1)" ($n1 -eq 0)
 $p2 = & { $ErrorActionPreference = 'Continue'; & $exe lint --json --profile cwe --rules-dir $rulesDir (Join-Path $repo 'tests\lint\hardcoded-credential.pas') 2>$null }
 $h2 = @(($p2 -join "`n") | ConvertFrom-Json | Where-Object { $_.rule -eq 'hardcoded-credential' -and $_.severity -in @('warning','error') })

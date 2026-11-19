@@ -85,12 +85,12 @@ try {
     if (-not $raw.Trim()) { return @() }
     return @(($raw | ConvertFrom-Json) | ForEach-Object { $_.qualified_name })
   }
-  $plain = TEditOrder @($pairDb)
+  $plain = @(TEditOrder @($pairDb))
   Check 'SANITY A3: both TEdit rows exist' ($plain.Count -ge 2) ($plain -join ',')
-  $ctx = TEditOrder @($vclDb, $pairDb)
+  $ctx = @(TEditOrder @($vclDb, $pairDb))
   Check 'A3  manifest names library-Pair as a library: the VCL project context puts Vcl.StdCtrls.TEdit first' ($ctx.Count -ge 2 -and $ctx[0] -eq 'Vcl.StdCtrls.TEdit') ($ctx -join ',')
   $stray = Join-Path $WorkDir 'library-Stray.sqlite'; Copy-Item $pairDb $stray
-  $ctx2 = TEditOrder @($vclDb, $stray)
+  $ctx2 = @(TEditOrder @($vclDb, $stray))
   Check 'A3b CONTROL: a library-*.sqlite no section names is a project DB: two project DBs give no single context (SQL order, FMX first)' ($ctx2.Count -ge 2 -and $ctx2[0] -eq 'FMX.Edit.TEdit') ($ctx2 -join ',')
 
   # ---- B: redundant-cast default library ----

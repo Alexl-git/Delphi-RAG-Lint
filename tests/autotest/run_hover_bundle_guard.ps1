@@ -256,9 +256,9 @@ function CliResolved([string]$name) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name $name --resolved --json --db $Db 2>$null } | Out-String
   $m = [regex]::Match($raw, '\[.*\]', 'Singleline')
   if (-not $m.Success) { return @() }
-  try { return @($m.Value | ConvertFrom-Json) } catch { return @() }
+  try { return @(($m.Value | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { return @() }
 }
-$cliRes = CliResolved 'ApplyDelta'
+$cliRes = @(CliResolved 'ApplyDelta')
 $bunRes = @($bundle.resolvedCallers)
 Check 'resolvedCallers count matches find-callers --resolved' ($cliRes.Count -eq $bunRes.Count) `
   "cli=$($cliRes.Count) bundle=$($bunRes.Count)"

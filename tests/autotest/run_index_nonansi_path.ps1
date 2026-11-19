@@ -66,11 +66,11 @@ try {
   Check 'no files.path holds a literal ?' (@($rows | Where-Object { ([string]$_[1]) -match '^(..)*?3F' }).Count -eq 0)
 
   Write-Host 'CONTROL (ASCII path; passes before the fix):' -ForegroundColor Cyan
-  $c = @((& { $ErrorActionPreference = 'Continue'; & $exePath query --name TAsciiProbe --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json)
+  $c = @(((& { $ErrorActionPreference = 'Continue'; & $exePath query --name TAsciiProbe --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json) | ForEach-Object { $_ })
   Check 'query --name TAsciiProbe finds the ASCII-path class' (@($c | Where-Object { $_.kind -eq 'class' }).Count -eq 1) "rows=$($c.Count)"
 
   Write-Host 'NON-ANSI PATH:' -ForegroundColor Cyan
-  $q = @((& { $ErrorActionPreference = 'Continue'; & $exePath query --name TPathProbe --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json)
+  $q = @(((& { $ErrorActionPreference = 'Continue'; & $exePath query --name TPathProbe --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json) | ForEach-Object { $_ })
   Check 'query --name TPathProbe finds the class in the non-ANSI unit' (@($q | Where-Object { $_.kind -eq 'class' }).Count -eq 1) "rows=$($q.Count)"
 
   Write-Host 'PATH LOOKUPS:' -ForegroundColor Cyan

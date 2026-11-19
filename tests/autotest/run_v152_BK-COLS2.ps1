@@ -111,7 +111,7 @@ foreach ($enc in @(@{ N = 'cp1252'; E = $Cp1252 }, @{ N = 'utf8'; E = $Utf8 })) 
   $db = Join-Path $d 'c.sqlite'
   & { $ErrorActionPreference = 'Continue'; & $Exe index $d --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $f --db $db --enable magic-literal,multiple-statements-per-line,commented-out-code --json 2>$null } | Out-String
-  $all = @(); try { $all = @($raw | ConvertFrom-Json) } catch { $all = @() }
+  $all = @(); try { $all = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { $all = @() }
   Check "C0 ($($enc.N)): lint --json answered" ($all.Count -ge 10) "count=$($all.Count)"
   foreach ($c in $Cases) {
     $hit = @($all | Where-Object { ([int]$_.start_line -eq $c.L) -and ($_.rule -eq $c.R) })

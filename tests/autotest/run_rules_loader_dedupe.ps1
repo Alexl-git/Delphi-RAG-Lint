@@ -50,7 +50,7 @@ function Run-Lint($e) {
   $err = Join-Path $Work 'err.txt'
   $out = & { $ErrorActionPreference = 'Continue'; & (Join-Path $e (Split-Path $Exe -Leaf)) lint $Fix --json 2>$err }
   $json = ($out | Where-Object { $_ -notmatch '^\(loaded defaults' }) -join "`n"
-  $f = @(); if ($json.Trim()) { $f = @($json | ConvertFrom-Json) }
+  $f = @(); if ($json.Trim()) { $f = @(($json | ConvertFrom-Json) | ForEach-Object { $_ }) }
   [pscustomobject]@{ Findings = $f; Err = @((@(Get-Content $err -ErrorAction SilentlyContinue) -join ' ') -split '(?=RULE-DUPLICATE-ID)' | Where-Object { $_.Trim() }) }
 }
 function Dups($r) { @($r.Err | Where-Object { $_ -match 'RULE-DUPLICATE-ID' }) }

@@ -170,7 +170,7 @@ Check 'precondition: the anchor is a WRAPPED statement (it does not end in ";")'
 
 $before = Report
 Check 'precondition: the wrapped statement reports concat-in-loop before allow' `
-  ((LinesFor $before 'concat-in-loop') -contains $anchor) "got: $((LinesFor $before 'concat-in-loop') -join ', ')"
+  ((@(LinesFor $before 'concat-in-loop')) -contains $anchor) "got: $((@(LinesFor $before 'concat-in-loop')) -join ', ')"
 
 # Follow the remedy the engine itself prints.
 & { $ErrorActionPreference = 'Continue'; & $Exe allow $pas --fix-line $anchor --fix-rule concat-in-loop --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
@@ -185,7 +185,7 @@ $after | ForEach-Object { Write-Host ("  {0}:{1}" -f $_.Line, $_.Rule) }
 
 # 1. the reviewed finding is actually suppressed
 Check "1. the wrapped statement's concat-in-loop is SUPPRESSED (line $anchor)" `
-  (-not ((LinesFor $after 'concat-in-loop') -contains $anchor))
+  (-not ((@(LinesFor $after 'concat-in-loop')) -contains $anchor))
 
 # 2. THE FIX -- no new hint ON THE REVIEWED STATEMENT.
 #
@@ -195,10 +195,10 @@ Check "1. the wrapped statement's concat-in-loop is SUPPRESSED (line $anchor)" `
 #    reported. The two assertions contradicted each other: a file-wide "zero
 #    unused" is only satisfiable by the wrong fix this runner exists to rule out.
 #    Scoping it to the statement is what makes cases 2 and 5 independent.
-$unusedOnStmt = @((LinesFor $after 'review-marker-unused') | Where-Object { $_ -ge $anchor -and $_ -le $wrapEnd })
+$unusedOnStmt = @((@(LinesFor $after 'review-marker-unused')) | Where-Object { $_ -ge $anchor -and $_ -le $wrapEnd })
 Check "2. no review-marker-unused on the reviewed statement (lines $anchor-$wrapEnd)" `
   ($unusedOnStmt.Count -eq 0) `
-  "got lines: $($unusedOnStmt -join ', ')  (all unused: $((LinesFor $after 'review-marker-unused') -join ', '))"
+  "got lines: $($unusedOnStmt -join ', ')  (all unused: $((@(LinesFor $after 'review-marker-unused')) -join ', '))"
 
 # 3. exactly one marker for the rule on that statement
 $stmtMarkers = @($post[($anchor - 1)..($wrapEnd - 1)] | Where-Object { $_ -match 'dl:ok[^/]*concat-in-loop' }).Count
@@ -209,7 +209,7 @@ Check "4. CONTROL: the same rule's marker on a DIFFERENT statement is byte-ident
   ($post[$otherLn - 1] -ceq $src[$otherLn - 1]) `
   "before='$($src[$otherLn - 1])' after='$($post[$otherLn - 1])'"
 Check "4b. CONTROL: and that statement still reports concat-in-loop" `
-  ((LinesFor $after 'concat-in-loop') -contains $otherLn)
+  ((@(LinesFor $after 'concat-in-loop')) -contains $otherLn)
 
 # 5. CONTROL -- the unused reporter is still alive
 Check "5. CONTROL: the unrelated dead marker is STILL reported stale-or-unused (line $quietLn)" `

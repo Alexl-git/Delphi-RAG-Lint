@@ -242,7 +242,7 @@ end.
   $o = (& { $ErrorActionPreference = 'Continue'; & $Exe index --project $PProj --db $PDb 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   if ($LASTEXITCODE -ne 0) { Write-Host $o; throw 'index PApp failed' }
   $rawP = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $PDb --project $PProj --json --no-stand-down --rule member-could-be-private 2>$null }) -join "`n"
-  $pf = @(); try { $pf = @($rawP | ConvertFrom-Json) } catch { Write-Host ('  unparsed: ' + $rawP.Substring(0, [Math]::Min(200, $rawP.Length))) }
+  $pf = @(); try { $pf = @(($rawP | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { Write-Host ('  unparsed: ' + $rawP.Substring(0, [Math]::Min(200, $rawP.Length))) }
   $mp = { param($w) @($pf | Where-Object { $_.rule -eq 'member-could-be-private' -and ('' + $_.message) -match "\.$w\b" }).Count }
   Check 'P1 MsgToString called only under an inactive {$IFDEF} in UCaller -> silent' ((& $mp 'MsgToString') -eq 0) ("hits=$(& $mp 'MsgToString')")
   Check 'P2 control: OnlyHere (own unit only) fires' ((& $mp 'OnlyHere') -eq 1) ("hits=$(& $mp 'OnlyHere')")
@@ -266,7 +266,7 @@ end.
   function LintS {
     $errFile = Join-Path $Work ('err-' + [guid]::NewGuid().ToString('N') + '.txt')
     $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Real1 --project $P1 --json --no-stand-down --rule unused-global 2>$errFile }) -join "`n"
-    $arr = @(); try { $arr = @($raw | ConvertFrom-Json) } catch { Write-Host ('  unparsed: ' + $raw.Substring(0, [Math]::Min(200, $raw.Length))) }
+    $arr = @(); try { $arr = @(($raw | ConvertFrom-Json) | ForEach-Object { $_ }) } catch { Write-Host ('  unparsed: ' + $raw.Substring(0, [Math]::Min(200, $raw.Length))) }
     $err = if (Test-Path $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
     return [pscustomobject]@{ F = $arr; Err = $err }
   }
