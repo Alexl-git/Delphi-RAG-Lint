@@ -766,7 +766,9 @@
 #   Superseded: 1.29.0-alpha|80409115e20c50c5f78ad9ff42cfeb45b2620c9852d63a6d13e1f34b75c2b5b4
 #   2026-11-19 v152 INT14 re-pin after merging #117 INCR18 (GitHub #18): Storage.SQLite scoped-resolve bookkeeping (local/param names in FScopeLocalNames, scoped ref ids collected once); edges unchanged -- full vs scoped incremental 0 diff rows (run_v1521_INCR18).
 #   Superseded: 1.29.0-alpha|634fef5551069d69b1f5a5fd0bfa408d61a517fdb96b4c8a6236b74827a1cf4e
-1.29.0-alpha|2e30f54695c5dd8d95ed2e11474f1f9fdfe8fc3dc2f39b20789ab11ca06a197a
+# superseded: 1.29.0-alpha|2e30f54695c5dd8d95ed2e11474f1f9fdfe8fc3dc2f39b20789ab11ca06a197a
+#   2026-11-19 1.29.0 -> 1.30.0-alpha (1.52.1 INCR18): closure_cache + scoped purity re-derivation. Rides the 1.42.0 extractor re-parse.
+1.30.0-alpha|49289cf04d8d66b85a226333f726bcc8e6ba86b8c83b58f2e65232941e875873
 #   2026-11-06 int2: hash moved WITHOUT a bump from 631322c4: the dl:ok comment on ResolveCallTargets re-stamped by the lint sweep, no code change.
 # superseded: 1.19.0-alpha|e4c14c16d87b21940e6ce6017456b8446a5cc516e342b72b816e3e161612ecba
 #   2026-11-06 1.19.0 -> 1.20.0-alpha (lanes facts + rename): ref_types (static type of a reference), ref_receivers (receiver link of a ref), references in initialization / finalization attributed to the section symbol. Additive, no SCHEMA_VERSION move. Remedy: index --all --resolve-only.

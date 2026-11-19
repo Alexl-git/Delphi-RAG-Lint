@@ -828,8 +828,7 @@ begin
   try
     Text:= TFile.ReadAllText(ADprojPath);
   except  // dl:ok try-except-swallowed@2e72 -- an unreadable .dproj is the documented "no scopes" answer, not an error
-    on EInOutError do Exit;
-    on EFileNotFoundException do Exit; { deleted between Exists and the read }
+    on EInOutError do Exit; { includes EFileNotFoundException: deleted between Exists and the read }
     on EFOpenError do Exit;
     on EEncodingError do Exit;
   end;

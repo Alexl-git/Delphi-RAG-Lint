@@ -759,7 +759,7 @@ var
 begin
   Result:= nil;
   if not LineOf(AFinding, ALines, Line) then Exit;
-  Span:= TrimRight(Copy(Line, AFinding.StartCol, MaxInt)); // a line comment runs to the end of the line; the node may carry the CR
+  Span:= Copy(Line, AFinding.StartCol, MaxInt); // a line comment runs to the end of the line (grammar v1.4.14: the node no longer carries the CR)
   Match:= TRegEx.Match(Span, '^//\s*(.*?)\s*//\s*(dl:shared\s+\S[^/]*?)\s*(//.*)?$', [roIgnoreCase]);
   if (not Match.Success) or (Match.Groups[1].Value = '') then Exit;
   Note:= Match.Groups[1].Value;

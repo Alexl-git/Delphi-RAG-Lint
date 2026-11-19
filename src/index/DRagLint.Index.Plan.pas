@@ -174,7 +174,7 @@ end;
 // Resolve include entries to absolute paths against ARootDir.
 // All entries are returned regardless of mode; the caller (BuildPlanItem)
 // decides how to consume them (closure walk vs folder walk).
-function ResolveRoots(const ASection: TIndexSection; const ARootDir: string; AMode: TPlanSectionMode): TArray<string>;
+function ResolveRoots(const ASection: TIndexSection; const ARootDir: string): TArray<string>;
 var
   List: TList<string>;
   Inc : string       ;
@@ -285,8 +285,7 @@ var
   Mode        : TPlanSectionMode   ;
   Items       : TList<TPlanSection>;
   PS          : TPlanSection       ;
-  OutDir      : string             ;
-  DbTemplate  : string             ;
+  DbTemplate : string             ;
   DbPath      : string             ;
   RegPlatforms: TArray<string>     ;
   SecPlatforms: TArray<string>     ;
@@ -299,16 +298,6 @@ begin
   Result:= Default(TIndexPlan);
   Items:= TList<TPlanSection>.Create;
   try
-    // Resolve OutDir against RootDir
-    OutDir:= AManifest.OutDir;
-    if (OutDir <> '') and (not TPath.IsPathRooted(OutDir)) then OutDir:= TPath.Combine(AManifest.RootDir, OutDir);
-    if OutDir = '' then OutDir:= AManifest.RootDir;
-    try
-      OutDir:= TPath.GetFullPath(OutDir);
-    except
-      // keep as-is
-    end;
-
     // --- Pass 1: resolve each section into plan item(s) (no dedup yet) ---
     for Sec in AManifest.Sections do
     begin
@@ -351,7 +340,7 @@ begin
             place `reconcile-project --apply --to library` writes a third-party
             folder that is on no registry library path (DUnitX). Empty for
             every manifest written before this, so their plans are unchanged. }
-          AppendUnique(LibRoots, ResolveRoots(Sec, AManifest.RootDir, smLibrary));
+          AppendUnique(LibRoots, ResolveRoots(Sec, AManifest.RootDir));
           PS.Roots:= LibRoots;
           PS.Filter:= BuildFilter(AManifest, Sec);
           // DedupExcludeRoots: computed in pass 2
@@ -374,7 +363,7 @@ begin
           agreeing with it, or a post-migration `index --all` would recreate a
           second, stale database at the old OutDir location. }
         PS.DbPath:= ExpandSectionDb(AManifest, Sec);
-        PS.Roots:= ResolveRoots(Sec, AManifest.RootDir, Mode);
+        PS.Roots:= ResolveRoots(Sec, AManifest.RootDir);
         PS.Filter:= BuildFilter(AManifest, Sec);
         PS.LibraryResolve:= Sec.LibraryResolve;
         Items.Add(PS);

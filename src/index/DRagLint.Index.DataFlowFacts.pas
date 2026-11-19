@@ -197,8 +197,7 @@ type
 implementation
 
 uses
-  System.Generics.Defaults
-  , DRagLint.Core.Encoding { 1.52 EXTGAPS2: data_flows positions are refs' CHARACTER columns }
+  DRagLint.Core.Encoding { 1.52 EXTGAPS2: data_flows positions are refs' CHARACTER columns }
   , DRagLint.Analysis.Cfg
   , DRagLint.Analysis.DataFlow
   , DRagLint.Analysis.Flow.Lattices

@@ -1253,4 +1253,13 @@
 #   Superseded: 1.41.0-alpha|6592bae0fd934a01ff98bc72cfe1229febdd8f7eeb7c3e204e4c679829c8a69d
 #   2026-11-18 v152 INT14 re-pin at the same version on the merged tree (rides the one 1.52 bump 464d590a8, not yet deployed, so the single 1.52 re-parse covers it): #111 GHTRIAGE BOM-aware source reads (GitHub #16), #109 SELFLZ autodoc comment blocks, #113/#105 HOVERCAP/HOVERCACHE, and #117 INCR18 (GitHub #18) Storage.SQLite UpsertSymbol files a local/parameter name under FScopeLocalNames -- scoped-resolve bookkeeping only, 0 diff rows full vs incremental (run_v1521_INCR18).
 #   Superseded: 1.41.0-alpha|74f83e97094a724ce2c307a3813421135cdcfe8261f21ff52119e09f70f16231
-1.41.0-alpha|7f8d87a7e4a0f18cc3d7a7f9d619572512fbe655dde10c3b16f170bce37f0e8e
+#   2026-11-18 v1521 INCR18 step 3 hash-only re-pin (no bump; GitHub #18, closure_cache): Preprocess records every include directive a defines-only run tried to resolve (TPPReport.Probes, new type TPPIncludeProbe, new export PPResolveInclude) and Index.Closure keeps each unit's scan between runs, validated by the unit stamp plus every probed include (path, size, mtime). The preprocessed bytes, the sites and every parse are unchanged; the closure a cached walk returns is the closure a cold walk returns (proof: tests\autotest\run_v1521_INCR18.ps1 part 1b, cached = uncached = full index, 0 diff rows; DL index cached = uncached, IDENTICAL).
+#   Superseded: 1.41.0-alpha|ae36c9aeb00997421274432cac0fd418b4bfadaddb081dc94c90c2c7b704ec52
+#   Superseded: 1.41.0-alpha|08f3cfe438499ee952bb730926bde1a638f828dfbde862b9411ea757ed41ef75
+#   2026-11-19 v1521 INCR18 step 4 hash-only re-pin (no bump; GitHub #18, scoped purity): Storage.SQLite UpsertSymbol sets FPurPending (a flag the purity stage's scope reads: a write after the last call-target pass) and NoteScopeRemoval records the routines that use the outgoing file's symbols -- bookkeeping of the resolve / purity scope only; no parsed or emitted row changes.
+#   Superseded: 1.41.0-alpha|26ec6461fed44cd14f16ae09f2e4973ff0b91fdd9a2e2ca72459b071ead3adbd
+#   Superseded (lane/v1521-int c8118a66d side): 1.41.0-alpha|7f8d87a7e4a0f18cc3d7a7f9d619572512fbe655dde10c3b16f170bce37f0e8e
+#   2026-11-19 v1521 INCR18 merge of lane/v1521-int c8118a66d: hash-only re-pin of the merged tree (both sides were hash-only re-pins, no bump).
+# superseded: 1.41.0-alpha|5d7a9e014d9a6744a0836c80345dd6126840b0c7862e3e5b8549cc33194a4202
+#   2026-11-19 v1521 INT bump 1.41.0 -> 1.42.0 (ONE bump for 1.52.1): INITDEP init_deps facts, SRC deferred extractor surface patch, grammar v1.4.14.
+1.42.0-alpha|c2b21956626c0cec74d9255867740e7e6bf1395a60d55a2bbc4e0b05b9b2592a

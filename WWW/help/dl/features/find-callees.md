@@ -7,7 +7,7 @@ group: search-navigation
 order: 20008
 since: 0.91.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # find-callees
@@ -25,6 +25,7 @@ Full flag list: [find-callees in the CLI reference](../cli.md#find-callees).
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
 | `--qname` | `<Foo.Bar>` |  |  |
+| `--name` | `<bare>` | the bare routine name (the find-callers spelling); every routine of that name is a target |  |
 | `--db` | `PATH` |  |  |
 | `--library-db` | `LIBRARY` | the library index to bind library-bound callees against at read time (a second --db does the same) |  |
 | `--json` |  |  |  |
