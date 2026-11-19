@@ -136,16 +136,7 @@ begin
     end;
   var AsmWatch: TStopwatch:= TStopwatch.StartNew;
   var Asm_ : THoverAssembly:= AssembleHover(Store, Syms[0], (Fmt = 'json') or (Fmt = 'md'), HovExtra);
-  { v152 HOVERCAP: DRAGLINT_PROFILE prints where the hover's time went -- the whole assembly, the check-init
-    'Set by:' solve inside it, and the facts breakdown (its 'used-in directions' line printed only under
-    lint doc-drift before, which hover never runs). stderr, so --format json stays one object. }
-  if GetEnvironmentVariable('DRAGLINT_PROFILE') <> '' then
-  begin
-    var SetByMs: string:= TRegEx.Match(Asm_.Model.SetByJson, '"ms":(\d+)').Groups[1].Value;
-    Writeln(ErrOutput, System.SysUtils.Format('  HOVER PROFILE assemble %d ms | set-by (check-init) %s ms',
-      [AsmWatch.ElapsedMilliseconds, if SetByMs = '' then '--' else SetByMs]));
-    Writeln(ErrOutput, DocFactsBuildProfile);
-  end;
+  var AsmMs: Int64:= AsmWatch.ElapsedMilliseconds;
   var Rhs  : TArray<string>:= Asm_.ReturnRhs;
   var Model: THoverModel   := Asm_.Model    ;
 
@@ -174,6 +165,17 @@ begin
   begin
     Write(DRagLint.Hover.Renderer.RenderHoverPlain(Syms[0], Doc, Asm_.DeclaredType));
     for var ImplLine in Asm_.ImplLines do Writeln(ImplLine); { C22: plain skips FactLines, so the answering-methods line is printed here }
+  end;
+  { v152 HOVERCAP: DRAGLINT_PROFILE prints where the hover's time went -- the whole assembly, the check-init
+    'Set by:' solve inside it, and the facts breakdown (its 'used-in directions' line printed only under
+    lint doc-drift before, which hover never runs). stderr, so --format json stays one object.
+    v152 HOVERCACHE: printed after the card, with 'total' = assembly + render, the span the hover cap covers. }
+  if GetEnvironmentVariable('DRAGLINT_PROFILE') <> '' then
+  begin
+    var SetByMs: string:= TRegEx.Match(Asm_.Model.SetByJson, '"ms":(\d+)').Groups[1].Value;
+    Writeln(ErrOutput, System.SysUtils.Format('  HOVER PROFILE assemble %d ms | set-by (check-init) %s ms | total %d ms',
+      [AsmMs, if SetByMs = '' then '--' else SetByMs, AsmWatch.ElapsedMilliseconds]));
+    Writeln(ErrOutput, DocFactsBuildProfile);
   end;
   Result:= 0;
 end; // function

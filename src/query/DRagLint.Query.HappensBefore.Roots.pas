@@ -72,7 +72,9 @@ type
 
   /// <summary>Classifies routines as escaped or not, caching what is shared between routines (the
   /// interface-answer set, the TThread descendants).</summary>
-  /// <remarks>Read-only on the store. Not thread-safe; one instance per query. The store must outlive it.</remarks>
+  /// <remarks>Read-only on the store. Not thread-safe; one instance per query. The store must outlive it.
+  /// v152 HOVERCACHE: a COMPLETE interface-answer set is also kept process-wide per index version
+  /// (HbIndexVersionKey of the store's DbPath), so the next classifier over the same index skips the walk.</remarks>
   THbEscapeClassifier = class  // dl:ok high-response@8273 -- REVIEWED 2026-11-17 v152 HBROOTS: one classifier, one escape class per question (spec 5.2 lists ten); its RFC is the store calls each class needs, splitting it would only spread the same calls
   strict private
     FStore: ISymbolStore;
@@ -130,6 +132,18 @@ function LoadRoots(const pStore: ISymbolStore): THbRoots;  // dl:ok unused-publi
 /// once halves its setup (~1.1 s on the drag-lint index).</remarks>
 function RootsOfOrders(const pOrders: TArray<TProgramInitOrder>): THbRoots;
 
+
+/// <summary>v152 HOVERCACHE: ProgramInitOrders of the index, cached per index version in this process.</summary>
+/// <param name="pStore">The project index; its DbPath keys the cache (an in-memory store is never cached).</param>
+/// <param name="pStop">As ProgramInitOrders' AStop. A walk it stopped is returned PARTIAL and never cached.</param>
+/// <param name="pCached">True when the answer came from the cache.</param>
+/// <returns>What ProgramInitOrders(pStore, pStop) returns for that index version.</returns>
+/// <remarks>The whole-index walk costs ~1.1 s on the drag-lint index, on every check-init solve; a long-running
+/// engine (LSP, serve) now pays it once per index version. Thread-safe: one lock guards the cache, the walk
+/// runs outside it. Keeps at most HB_CACHE_VERSIONS versions (oldest dropped first).</remarks>
+function HbCachedInitOrders(const pStore: ISymbolStore; const pStop: TFunc<Boolean>;
+  out pCached: Boolean): TArray<TProgramInitOrder>;
+
 /// <summary>True when the routine is an unordered root (any escape class but hecNone).</summary>
 /// <param name="pStore">The project index; must not be nil.</param>
 /// <param name="pRoutineId">symbols.id of the routine.</param>
@@ -152,10 +166,15 @@ function EscapeClassCode(pClass: THbEscapeClass): string;  // dl:ok unused-publi
 implementation
 
 uses
-  DRagLint.Query.Implementors
+  Winapi.Windows
+, System.Diagnostics
+, DRagLint.Query.Implementors
+, DRagLint.Query.HappensBefore.Types
   ;
 
 const
+  /// <summary>v152 HOVERCACHE: index versions each whole-index cache keeps before it is emptied.</summary>
+  HB_CACHE_VERSIONS = 8;
   ESCAPE_CODES: array[THbEscapeClass] of string = ('none', 'finalization', 'class-ctor-dtor', 'dfm-event',
     'message-handler', 'thread-execute', 'exported', 'interface-method', 'published', 'address-taken',
     'zero-callers');
@@ -210,6 +229,78 @@ begin
   end;
 end;
 
+{ v152 HOVERCACHE: the per-index-version caches of the two whole-index loads of a check-init solve. }
+var
+  GHbCacheLock: TObject;
+  GHbOrdersCache: TDictionary<string, TArray<TProgramInitOrder>>;
+  GHbAnswersCache: TDictionary<string, TArray<Int64>>;
+
+{ 'size:lastwrite' of one file, read through a handle; '' when it cannot be opened. }
+function FileVersion(const pPath: string): string;
+var
+  Info: TByHandleFileInformation;
+begin
+  Result:= '';
+  var H: THandle:= CreateFile(PChar(pPath), FILE_READ_ATTRIBUTES,
+    FILE_SHARE_READ or FILE_SHARE_WRITE or FILE_SHARE_DELETE, nil, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+  if H = INVALID_HANDLE_VALUE then Exit;
+  try
+    if GetFileInformationByHandle(H, Info) then
+      Result:= Format('%d:%d:%d:%d', [Info.nFileSizeHigh, Info.nFileSizeLow, Info.ftLastWriteTime.dwHighDateTime,
+        Info.ftLastWriteTime.dwLowDateTime]);
+  finally
+    CloseHandle(H);
+  end;
+end;
+
+{ v152 HOVERCACHE: the identity of one version of an index file -- size and last write time of the .sqlite and
+  of its -wal, read through a handle (NTFS updates the directory entry late for a file another process holds
+  open). '' (do not cache) for '' or a missing file; else a key that changes when a writer commits (the WAL
+  grows or is rewritten) or checkpoints (the main file changes). }
+function HbIndexVersionKey(const pDbPath: string): string;
+begin
+  Result:= '';
+  if pDbPath = '' then Exit;
+  var Main:= FileVersion(pDbPath);
+  if Main = '' then Exit;
+  Result:= LowerCase(ExpandFileName(pDbPath)) + '|' + Main + '|' + FileVersion(pDbPath + '-wal');
+end;
+
+function HbCachedInitOrders(const pStore: ISymbolStore; const pStop: TFunc<Boolean>;
+  out pCached: Boolean): TArray<TProgramInitOrder>;
+begin
+  pCached:= False;
+  var Key:= if pStore = nil then '' else HbIndexVersionKey(pStore.DbPath);
+  if Key <> '' then
+  begin
+    TMonitor.Enter(GHbCacheLock);
+    try
+      pCached:= GHbOrdersCache.TryGetValue(Key, Result);
+    finally
+      TMonitor.Exit(GHbCacheLock);
+    end;
+    if pCached then Exit;
+  end;
+  { a walk the stop callback ended is partial: returned, never cached }
+  var Stopped:= False;
+  var Stop: TFunc<Boolean>:= nil;
+  if Assigned(pStop) then
+    Stop:= function: Boolean
+      begin
+        Result:= pStop();
+        if Result then Stopped:= True;
+      end;
+  Result:= ProgramInitOrders(pStore, Stop);
+  if (Key = '') or Stopped then Exit;
+  TMonitor.Enter(GHbCacheLock);
+  try
+    if GHbOrdersCache.Count >= HB_CACHE_VERSIONS then GHbOrdersCache.Clear;
+    GHbOrdersCache.AddOrSetValue(Key, Result);
+  finally
+    TMonitor.Exit(GHbCacheLock);
+  end;
+end;
+
 { THbEscapeClassifier }
 
 constructor THbEscapeClassifier.Create(const pStore: ISymbolStore);
@@ -235,16 +326,50 @@ procedure THbEscapeClassifier.LoadAnswers;
 begin
   if FAnswersLoaded then Exit;
   FAnswersLoaded:= True;
+  var Watch:= TStopwatch.StartNew;
+  { v152 HOVERCACHE: the set is a whole-index walk (2.5-3.2 s on the drag-lint index); a long-running engine
+    keeps it per index version. Only a COMPLETE walk is cached. }
+  var Key:= HbIndexVersionKey(FStore.DbPath);
+  if Key <> '' then
+  begin
+    var Ids: TArray<Int64>;
+    var Hit: Boolean;
+    TMonitor.Enter(GHbCacheLock);
+    try
+      Hit:= GHbAnswersCache.TryGetValue(Key, Ids);
+    finally
+      TMonitor.Exit(GHbCacheLock);
+    end;
+    if Hit then
+    begin
+      for var Id in Ids do FAnswers.Add(Id);
+      HbProfileAdd('interface-answers', Watch.ElapsedMilliseconds, 'cached');
+      Exit;
+    end;
+  end;
   for var Intf: TSymbol in FStore.FindSymbolsByKind('interface', False, MaxInt) do
   begin
     for var Member: TSymbol in FStore.FindAllChildSymbols(Intf.Id) do
     begin
       { per member, not per interface: one interface of the drag-lint index (ISymbolStore) holds hundreds }
-      if Assigned(FStopCheck) and FStopCheck() then Exit;
+      if Assigned(FStopCheck) and FStopCheck() then
+      begin
+        HbProfileAdd('interface-answers', Watch.ElapsedMilliseconds, 'stopped');
+        Exit;
+      end;
       if Member.Kind in [skProcedure, skFunction, skMethod] then
         for var Answer: TSymbol in ImplementingMethodsOf(FStore, Member) do
           FAnswers.Add(Answer.Id);
     end;
+  end;
+  HbProfileAdd('interface-answers', Watch.ElapsedMilliseconds, 'computed');
+  if Key = '' then Exit;
+  TMonitor.Enter(GHbCacheLock);
+  try
+    if GHbAnswersCache.Count >= HB_CACHE_VERSIONS then GHbAnswersCache.Clear;
+    GHbAnswersCache.AddOrSetValue(Key, FAnswers.ToArray);
+  finally
+    TMonitor.Exit(GHbCacheLock);
   end;
 end;
 
@@ -393,5 +518,15 @@ function IsEscaped(const pStore: ISymbolStore; pRoutineId: Int64): Boolean;
 begin
   Result:= EscapeClassOf(pStore, pRoutineId) <> hecNone;
 end;
+
+initialization
+  GHbCacheLock:= TObject.Create;
+  GHbOrdersCache:= TDictionary<string, TArray<TProgramInitOrder>>.Create;
+  GHbAnswersCache:= TDictionary<string, TArray<Int64>>.Create;
+
+finalization
+  GHbAnswersCache.Free;
+  GHbOrdersCache.Free;
+  GHbCacheLock.Free;
 
 end.

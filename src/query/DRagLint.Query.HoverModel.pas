@@ -82,6 +82,14 @@ const
   /// Override: environment variable DRAGLINT_HOVER_SETBY_MAX_SECONDS (a number &gt; 0).</summary>
   HOVER_SETBY_MAX_SECONDS = 5;
 
+  /// <summary>v152 HOVERCACHE: seconds of the hover cap kept back for what follows the 'Set by:' solve
+  /// (building its JSON and lines, rendering the card) and for the solve's own last step past its clock.</summary>
+  HOVER_RENDER_HEADROOM_SECONDS = 0.15;
+
+  /// <summary>v152 HOVERCACHE: the least wall clock the 'Set by:' solve gets when the facts build already
+  /// used the cap; the writer list needs no solve, so it stays complete even then.</summary>
+  HOVER_SETBY_MIN_SECONDS = 0.05;
+
   /// <summary>Writer rows the hover card shows before 'Set by: and N more' (plan D5).</summary>
   HOVER_SETBY_ROWS = 5;
 
@@ -132,6 +140,9 @@ function AssembleHover(const AStore: ISymbolStore; const ASym: TSymbol;
 /// <param name="ASym">The hovered symbol. Only a variable or field is answered; check-init refuses
 /// a local, a parameter, a record field ... and then nothing is added.</param>
 /// <param name="AAsm">The assembly to extend; FactLines is appended to, never replaced.</param>
+/// <param name="ASpentSeconds">v152 HOVERCACHE: seconds the hover already spent before this section (the
+/// facts build); the solve gets the cap minus this and minus HOVER_RENDER_HEADROOM_SECONDS, never less than
+/// HOVER_SETBY_MIN_SECONDS, so the WHOLE hover stays inside the cap. 0 (the LSP's deferred step) = the full cap.</param>
 /// <remarks>
 /// <para>The JSON `set_by` object: state (listed | never-set | budget-exceeded | error), verdict
 /// (SET, NEVER-SET, MAY-BE-UNSET, UNKNOWN-CALLEE), proven, summary, writers (byte-equal to
@@ -144,7 +155,8 @@ function AssembleHover(const AStore: ISymbolStore; const ASym: TSymbol;
 /// recomputes. Thread-safe: one lock serialises CheckInit (whose parse cache is not thread-safe)
 /// and the cache. LSP: call it in the deferred second step only (it can take a solve).</para>
 /// </remarks>
-procedure AttachHoverSetBy(const AStore: ISymbolStore; const ASym: TSymbol; var AAsm: THoverAssembly);
+procedure AttachHoverSetBy(const AStore: ISymbolStore; const ASym: TSymbol; var AAsm: THoverAssembly;
+  ASpentSeconds: Double = 0);
 
 implementation
 
@@ -156,6 +168,7 @@ uses
   System.JSON                  ,
   System.IOUtils               ,
   System.Generics.Collections  ,
+  System.Diagnostics           ,
   DRagLint.Query.HappensBefore        ,
   DRagLint.Query.HappensBefore.Types  ,
   DRagLint.Query.HappensBefore.Render ,
@@ -322,16 +335,20 @@ begin
   end;
 end;
 
-procedure AttachHoverSetBy(const AStore: ISymbolStore; const ASym: TSymbol; var AAsm: THoverAssembly);
+procedure AttachHoverSetBy(const AStore: ISymbolStore; const ASym: TSymbol; var AAsm: THoverAssembly;
+  ASpentSeconds: Double);
 begin
   if (AStore = nil) or (ASym.Kind not in [skVarDecl, skField]) then Exit;
   var DbPath: string:= AStore.DbPath; { v152 BK-VSHOVER (B51): was an RTTI read of FConn }
   if (DbPath = '') or not TFile.Exists(DbPath) then Exit;
   var MaxR: Integer:= SetByMaxRoutines;
   var MaxS: Double:= SetByMaxSeconds;
+  { the cache key carries the hover cap, not the remaining budget: a re-hover reuses the answer }
   var Key: string:= Format('%s|%s|%s|%d|%s', [LowerCase(DbPath),
     FormatDateTime('yyyymmddhhnnsszzz', TFile.GetLastWriteTime(DbPath)), ASym.QualifiedName, MaxR,
     FloatToStr(MaxS, TFormatSettings.Invariant)]);
+  { v152 HOVERCACHE: the cap covers the whole hover, so the solve gets what the facts build left }
+  var SolveS: Double:= Max(MaxS - ASpentSeconds - HOVER_RENDER_HEADROOM_SECONDS, HOVER_SETBY_MIN_SECONDS);
   var Entry: TSetByEntry;
   TMonitor.Enter(GSetByLock);
   try
@@ -339,7 +356,7 @@ begin
     begin
       var Opt: THbOptions:= Default(THbOptions);
       Opt.MaxRoutines:= MaxR;
-      Opt.MaxSeconds:= MaxS;
+      Opt.MaxSeconds:= SolveS;
       try
         Entry:= BuildSetBy(CheckInit(DbPath, ASym.QualifiedName, '', Opt), MaxR);
       except
@@ -378,6 +395,8 @@ var
 begin
   Result:= Default(THoverAssembly);
   if AStore = nil then Exit;
+  { v152 HOVERCACHE: the hover cap covers the whole assembly; AttachHoverSetBy gets what is left }
+  var Watch: TStopwatch:= TStopwatch.StartNew;
 
   { No doc comment is not fatal: the renderer still shows the qualified name and
     an IDE-style Parameters block parsed from the signature. }
@@ -540,7 +559,8 @@ begin
   end;
   { v152 HBHOVER (ruling HB2): which routines / events set this variable. Only with the facts: the
     plain format and the fast first step of a deferred hover never pay for a solve. }
-  if AWithFacts and (hskSetBy not in ASkip) then AttachHoverSetBy(AStore, ASym, Result);
+  if AWithFacts and (hskSetBy not in ASkip) then
+    AttachHoverSetBy(AStore, ASym, Result, Watch.Elapsed.TotalSeconds);
 end; // function
 
 initialization

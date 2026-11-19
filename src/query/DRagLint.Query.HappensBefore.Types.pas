@@ -273,6 +273,21 @@ function HbBudgetWhy: string;
 /// <returns>e.g. '60' or '0.001'; '0' when no cap is in force.</returns>
 function HbCapText: string;
 
+/// <summary>v152 HOVERCACHE: starts a fresh DRAGLINT_PROFILE phase list for one check-init call.</summary>
+/// <remarks>Off (every HbProfile* call a no-op) unless the environment variable DRAGLINT_PROFILE is set.
+/// Diagnostic only: one process-wide list, so concurrent check-init calls would interleave their phases.</remarks>
+procedure HbProfileReset;
+
+/// <summary>v152 HOVERCACHE: appends one phase of the current check-init call to the profile list.</summary>
+/// <param name="pPhase">Phase name, e.g. 'init-orders'.</param>
+/// <param name="pMs">Its wall time in milliseconds.</param>
+/// <param name="pNote">'' or a word shown in brackets after the time (cached, computed, stopped).</param>
+procedure HbProfileAdd(const pPhase: string; pMs: Int64; const pNote: string = '');
+
+/// <summary>v152 HOVERCACHE: the phases added since HbProfileReset, 'name N ms (note) | ...'.</summary>
+/// <returns>'' when profiling is off or nothing was added.</returns>
+function HbProfileText: string;
+
 implementation
 
 uses
@@ -392,6 +407,29 @@ end;
 function HbTimedOut: Boolean;
 begin
   Result:= GHbTimedOut;
+end;
+
+var
+  GHbProfileOn: Boolean;
+  GHbProfile: string;
+
+procedure HbProfileReset;
+begin
+  GHbProfileOn:= GetEnvironmentVariable('DRAGLINT_PROFILE') <> '';
+  GHbProfile:= '';
+end;
+
+procedure HbProfileAdd(const pPhase: string; pMs: Int64; const pNote: string);
+begin
+  if not GHbProfileOn then Exit;
+  var Item: string:= Format('%s %d ms', [pPhase, pMs]);
+  if pNote <> '' then Item:= Item + ' (' + pNote + ')';
+  GHbProfile:= if GHbProfile = '' then Item else GHbProfile + ' | ' + Item;
+end;
+
+function HbProfileText: string;
+begin
+  Result:= if GHbProfileOn then GHbProfile else '';
 end;
 
 function HbCapText: string;

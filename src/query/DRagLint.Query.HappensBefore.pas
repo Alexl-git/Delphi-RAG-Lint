@@ -226,6 +226,8 @@ type
     function JudgeUse(const pProg: TProgramView; const pUse: THbSite): TUseInProgram;
     function RootReasons(const pProg: TProgramView; pRootId: Int64; out pWhy: string): TArray<THbReason>;
     function HopReasons(pId: Int64; pLine, pCol: Integer): TArray<THbReason>;
+    { v152 HOVERCACHE: Run's per-use loop, split out so DRAGLINT_PROFILE times the setup phases apart }
+    procedure RunUses(var pAnswer: THbAnswer);
   public
     constructor Create(const pIndex: TChartsIndex; const pStore: ISymbolStore; pMax: Integer;
       const pEvents: THbEvents);
@@ -831,8 +833,13 @@ begin
   { v152 HOVERCAP: the init orders are a whole-index walk (~1.1 s on the drag-lint index); it ran TWICE here
     (LoadRoots computed them again) and after the cap had run out. Past the cap no use is judged (Run stops
     on HbTimeUp), so a PARTIAL walk, or the one placeholder program below, is all Run needs. }
+  { v152 HOVERCACHE: cached per index version in a long-running engine (HbCachedInitOrders) }
   var Orders: TArray<TProgramInitOrder>:= nil;
-  if not HbTimeUp then Orders:= ProgramInitOrders(FStore, function: Boolean begin Result:= HbTimeUp; end);
+  var Watch:= TStopwatch.StartNew;
+  var Cached:= False;
+  if not HbTimeUp then Orders:= HbCachedInitOrders(FStore, function: Boolean begin Result:= HbTimeUp; end, Cached);
+  HbProfileAdd('init-orders', Watch.ElapsedMilliseconds,
+    if Cached then 'cached' else if HbTimedOut then 'stopped' else 'computed');
   var Roots:= RootsOfOrders(Orders);
   for var O in Orders do
   begin
@@ -1270,9 +1277,23 @@ end;
 
 procedure TSolver.Run(var pAnswer: THbAnswer);
 begin
+  var Watch:= TStopwatch.StartNew;
   ComputeReachA;
+  HbProfileAdd('reach-a', Watch.ElapsedMilliseconds);
+  Watch:= TStopwatch.StartNew;
   ComputeMustA;
+  HbProfileAdd('must-a', Watch.ElapsedMilliseconds);
   LoadPrograms;
+  Watch:= TStopwatch.StartNew;
+  try
+    RunUses(pAnswer);
+  finally
+    HbProfileAdd('judge-uses', Watch.ElapsedMilliseconds);
+  end;
+end;
+
+procedure TSolver.RunUses(var pAnswer: THbAnswer);
+begin
   var JudgedPrograms:= THashSet<string>.Create;
   try
     var Headline:= hvSet;
@@ -1647,9 +1668,14 @@ begin
   var MaxR:= if pOptions.MaxRoutines > 0 then pOptions.MaxRoutines else HB_DEFAULT_MAX_ROUTINES;
   var MaxS: Double:= if IsZero(pOptions.MaxSeconds) then HB_DEFAULT_MAX_SECONDS else pOptions.MaxSeconds;
   HbStartClock(MaxS);
+  { v152 HOVERCACHE: DRAGLINT_PROFILE prints where the call's time went (one stderr line, below) }
+  HbProfileReset;
+  var Phase:= TStopwatch.StartNew;
   var Index:= TChartsIndex.Create(pDbPath);
   try
     var Store: ISymbolStore:= TSQLiteSymbolStore.Create(pDbPath, {AReadOnly=}True);
+    HbProfileAdd('open', Phase.ElapsedMilliseconds);
+    Phase:= TStopwatch.StartNew;
     var Events:= CollectEvents(Index, pTarget, AtSite);
     PlaceMainBlockSites(Index, Events);
     var Answers:= LoadCalleeAnswers(pDbPath);
@@ -1658,15 +1684,20 @@ begin
     finally
       Answers.Free;
     end;
+    HbProfileAdd('events', Phase.ElapsedMilliseconds);
     Result.Target:= Events.Target;
     Result.Writers:= Events.Writers;
     Result.Scope:= if Events.Target.Kind = htkInstanceField then hsInstance else hsProgram;
     if Events.Target.Kind = htkInstanceField then
     begin
       { spec 5.5: the constructor model (lane HBFIELDS) }
+      Phase:= TStopwatch.StartNew;
       Result:= CheckInstanceField(Index, Store, Events, MaxR);
+      HbProfileAdd('field-solve', Phase.ElapsedMilliseconds);
+      Phase:= TStopwatch.StartNew;
       { lane HBRECV: Init/Run on the same object proves eligible MAY uses SET }
       ApplyReceiverProof(Index, Store, Result, MaxR);
+      HbProfileAdd('receiver-proof', Phase.ElapsedMilliseconds);
       { the answer's writers include the writes through another object the events lane read as uses }
       Events.Writers:= Result.Writers;
       AddWriterReasons(Events, Result);
@@ -1711,6 +1742,9 @@ begin
     Index.Free;
   end;
   Result.Budget.Ms:= Watch.ElapsedMilliseconds;
+  var Prof:= HbProfileText;
+  if (Prof <> '') and IsConsole then
+    Writeln(ErrOutput, Format('  CHECK-INIT PROFILE %s total %d ms | %s', [Result.Target.QName, Result.Budget.Ms, Prof]));
 end;
 
 end.
