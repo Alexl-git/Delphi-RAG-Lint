@@ -83,7 +83,7 @@ type
 /// resolved.</exception>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoFormsCsv (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.Workspace.DoFormsCsv (DRagLint.CLI.Workspace.pas)</para>
 /// <para>Calls: DRagLint.FormsMap.GenerateFormsCsv/3</para>
 /// <para>Returns: GenerateFormsCsv([ADbPath], AProjectFile, ARootForm)</para>
 /// <para>Overload 1 of 2</para>
@@ -105,6 +105,7 @@ function GenerateFormsCsv(const ADbPath, AProjectFile, ARootForm: string): strin
 /// <returns>ANSI CSV text incl. the FORMS_CSV_ALGORITHM provenance footer.</returns>
 /// <exception cref="Exception">If ADbPaths is empty, the index cannot be opened,
 /// or no root can be resolved.</exception>
+/// <exception cref="ESchemaUnreadable"><!-- drag-lint:auto exc -->via DRagLint.Storage.SQLite.TSQLiteSymbolStore.CreateReadable: :</exception>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.FormsMap.GenerateFormsCsv/3 (DRagLint.FormsMap.pas)</para>

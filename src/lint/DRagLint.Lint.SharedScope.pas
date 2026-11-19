@@ -20,7 +20,7 @@ type
   /// <remarks>
   /// The caller owns the returned store's lifetime for the whole run.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Lint.ProjectRules.pas), DRagLint.CLI.MakeSiblingStoreResolver (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.CollectDependentProjectNotRecompiled (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas) (+2 more)</para>
+  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Lint.ProjectRules.pas), DRagLint.CLI.MakeSiblingStoreResolver (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.CollectDependentProjectNotRecompiled (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas) (+3 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSiblingStoreResolver = reference to function(const AProjectName: string): ISymbolStore;
@@ -29,7 +29,7 @@ type
   /// <returns>Section names; empty when no manifest loads.</returns>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Lint.ProjectRules.pas), declaration (DRagLint.Lint.SharedScope.pas), DRagLint.CLI.MakeSiblingProjectLister (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas) (+1 more)</para>
+  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Lint.ProjectRules.pas), declaration (DRagLint.Lint.SharedScope.pas), DRagLint.CLI.MakeSiblingProjectLister (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas) (+2 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSiblingProjectLister = reference to function: TArray<string>;
@@ -51,7 +51,7 @@ type
   /// listing project was checked, fresh, and none uses it -- report. svUndecided: a listing
   /// project's index is missing, will not open or is stale -- do not report.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Lint.SharedScope.pas), DRagLint.Lint.SharedScope.TSharedScope.Judge (DRagLint.Lint.SharedScope.pas), DRagLint.Lint.UnusedGlobal.CollectUnusedGlobal (DRagLint.Lint.UnusedGlobal.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Lint.SharedScope.pas), DRagLint.Lint.SharedScope.TSharedScope.Judge (DRagLint.Lint.SharedScope.pas), DRagLint.Lint.UnusedGlobal.CollectUnusedGlobal (DRagLint.Lint.UnusedGlobal.pas), DRagLint.V152.ATLB.TV152ATLBRules.CheckProject (DRagLint.V152.ATLB.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSharedVerdict = (svNotShared, svUsedElsewhere, svUnusedEverywhere, svUndecided);
@@ -69,8 +69,8 @@ type
   /// the freshness probe are cached per path / per project for the object's life.
   /// Not thread-safe; one per lint run.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Lint.UnusedGlobal.pas) ?, DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.UnusedGlobal.CollectUnusedGlobal (DRagLint.Lint.UnusedGlobal.pas) ?</para>
-  /// <para>Used in units: DRagLint.Lint.ProjectRules, DRagLint.Lint.UnusedGlobal</para>
+  /// <para>Used by: declaration (DRagLint.Lint.UnusedGlobal.pas) ?, DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.UnusedGlobal.CollectUnusedGlobal (DRagLint.Lint.UnusedGlobal.pas) ?, DRagLint.V152.ATLB.TV152ATLBRules.CheckProject (DRagLint.V152.ATLB.pas)</para>
+  /// <para>Used in units: DRagLint.Lint.ProjectRules, DRagLint.Lint.UnusedGlobal, DRagLint.V152.ATLB</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSharedScope = class
@@ -88,7 +88,7 @@ type
     /// FResolve(Trim(AName)).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoExportObsidian (DRagLint.CLI.pas) ?, DRagLint.Lint.SharedScope.TSharedScope.Judge (DRagLint.Lint.SharedScope.pas), DRagLint.Lint.SharedScope.TSharedScope.ResolvePath (DRagLint.Lint.SharedScope.pas)</para>
+    /// <para>Called from: DRagLint.Lint.SharedScope.TSharedScope.Judge (DRagLint.Lint.SharedScope.pas), DRagLint.Lint.SharedScope.TSharedScope.ResolvePath (DRagLint.Lint.SharedScope.pas)</para>
     /// <para>Calls: FResolve, Trim</para>
     /// <para>Reads: FResolve</para>
     /// <para>Catches: Exception (swallowed)</para>
@@ -139,15 +139,15 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Lint.SharedScope.TSharedScope.Judge (DRagLint.Lint.SharedScope.pas)</para>
-    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Lint.SharedScope.TSharedScope.IsSelf, DRagLint.Lint.SharedScope.TSharedScope.Open, DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOf, FLister, Format, LowerCase, Trim</para>
-    /// <para>Complexity: 13 (cyclomatic, outer body), 49 lines (full implementation)</para>
-    /// <para>Reads: FLister, FNamesOk, FNames, FListing, FWhyNot   Writes: FNamesOk, FNames</para>
+    /// <para>Calls: ChangeFileExt, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue, DRagLint.Lint.SharedScope.AnnounceUnindexedPeer, DRagLint.Lint.SharedScope.TSharedScope.IsSelf, DRagLint.Lint.SharedScope.TSharedScope.Open, DRagLint.Lint.SharedScope.UnindexedPeerListing, DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOf, ExtractFileName, FLister, Format, LowerCase, SameText, Trim</para>
+    /// <para>Complexity: 18 (cyclomatic, outer body), 65 lines (full implementation)</para>
+    /// <para>Reads: FLister, FNamesOk, FNames, FStore, FListing, FWhyNot   Writes: FNamesOk, FNames</para>
     /// <para>Catches: Exception (swallowed)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue"/>
+    /// <seealso cref="DRagLint.Lint.SharedScope.AnnounceUnindexedPeer"/>
     /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.IsSelf"/>
     /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.Open"/>
-    /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOf"/>
-    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.Create"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure ResolvePath(const APath: string);
@@ -158,7 +158,7 @@ type
     /// <param name="ALister">Lists the manifest's section names; nil = header names only.</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
+    /// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas), DRagLint.V152.ATLB.TV152ATLBRules.CheckProject (DRagLint.V152.ATLB.pas)</para>
     /// <para>constructor</para>
     /// <para>Writes: FStore, FResolve, FLister, FListing, FWhyNot, FUsable</para>
     /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.Destroy"/>
@@ -191,7 +191,7 @@ type
     /// <returns>The verdict; see TSharedVerdict.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.UnusedGlobal.CollectUnusedGlobal (DRagLint.Lint.UnusedGlobal.pas)</para>
+    /// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.UnusedGlobal.CollectUnusedGlobal (DRagLint.Lint.UnusedGlobal.pas), DRagLint.V152.ATLB.TV152ATLBRules.CheckProject (DRagLint.V152.ATLB.pas)</para>
     /// <para>Calls: AUsed, DRagLint.Lint.SharedScope.TSharedScope.IsUsable, DRagLint.Lint.SharedScope.TSharedScope.Open, DRagLint.Lint.SharedScope.TSharedScope.ResolvePath, Format, LowerCase</para>
     /// <para>Returns: svUndecided; svUnusedEverywhere</para>
     /// <para>Reads: FListing, FWhyNot</para>
@@ -216,7 +216,7 @@ type
 /// whose finding was withheld for want of a fresh sibling index reads as "cannot judge", not
 /// "suppresses nothing" (DLOK-UNDECIDED).
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.UnusedGlobal.CollectUnusedGlobal (DRagLint.Lint.UnusedGlobal.pas)</para>
+/// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.UnusedGlobal.CollectUnusedGlobal (DRagLint.Lint.UnusedGlobal.pas), DRagLint.V152.ATLB.TV152ATLBRules.CheckProject (DRagLint.V152.ATLB.pas)</para>
 /// <para>Calls: DRagLint.Lint.SharedScope.SiteKey</para>
 /// <seealso cref="DRagLint.Lint.SharedScope.SiteKey"/>
 /// <!-- drag-lint:auto END -->
@@ -260,6 +260,15 @@ function IsUndecidedSite(const AFile: string; ALine: Integer; const ARule: strin
 /// then answers svUndecided for every unit it lists and writes one stderr line per such peer.
 /// 1.52 TAILS-ENG2: the same for every unit in a folder the unindexed peer searches (its own folder and
 /// its `.dproj` DCC_UnitSearchPath) -- the peer may compile such a unit without listing it.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.LoadSiblingNameToDb (DRagLint.CLI.pas)</para>
+/// <para>Calls: ChangeFileExt, DRagLint.Lint.SharedScope.AddGroupPeers, DRagLint.Lint.SharedScope.AddPeer, DRagLint.Lint.SharedScope.GroupProjsIn, ExcludeTrailingPathDelimiter, ExpandFileName, ExtractFileDir, ExtractFileName, ExtractFilePath, SameText</para>
+/// <para>Complexity: 17 (cyclomatic, outer body), 41 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Lint.SharedScope.AddGroupPeers"/>
+/// <seealso cref="DRagLint.Lint.SharedScope.AddPeer"/>
+/// <seealso cref="DRagLint.Lint.SharedScope.GroupProjsIn"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure AddDiscoveredPeers(const APrimaryDb, AProjectPath: string; AIsCopy: Boolean;
   const ANameToDb: TDictionary<string, string>);

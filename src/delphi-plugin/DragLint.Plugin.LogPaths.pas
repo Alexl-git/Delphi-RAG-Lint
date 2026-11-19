@@ -35,8 +35,8 @@ function PluginLogPathIn(const pLocalAppData, pFileName: string): string;
 /// the plugin is already best-effort.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.LspClient.GetPluginLogPath (DragLint.Plugin.LspClient.pas), DragLint.Plugin.Telemetry.TelemetryLogPath (DragLint.Plugin.Telemetry.pas)</para>
-/// <para>Calls: DragLint.Plugin.LogPaths.PluginLogPathIn, ExtractFilePath, ForceDirectories</para>
-/// <para>Returns: PluginLogPathIn(GLocalAppData, pFileName)</para>
+/// <para>Calls: DragLint.Plugin.LogPaths.PluginLogPathIn, ExtractFilePath, ForceDirectories, IncludeTrailingPathDelimiter</para>
+/// <para>Returns: IncludeTrailingPathDelimiter(GLogDirOverride) + pFileName; PluginLogPathIn(GLocalAppData, pFileName)</para>
 /// <seealso cref="DragLint.Plugin.LogPaths.PluginLogPathIn"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

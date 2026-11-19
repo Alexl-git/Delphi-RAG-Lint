@@ -16,8 +16,22 @@ uses
 /// index set the same way `query` does; AsJson or Format='json' selects JSON.</param>
 /// <returns>0 on success; 1 when --term matched nothing or --check found drift;
 /// 2 for a usage error or an unresolvable index.</returns>
-/// <remarks>Read-only. --term exits 1 on no match ON PURPOSE, so a script can
-/// branch on "this word is not in the wiki" without parsing the output.</remarks>
+/// <remarks>
+/// Read-only. --term exits 1 on no match ON PURPOSE, so a script can
+/// branch on "this word is not in the wiki" without parsing the output.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Common.OpenReadOnlyStore, DRagLint.CLI.Wiki.CollectWikiTopics, DRagLint.CLI.Wiki.PrintWikiTopic, DRagLint.CLI.Wiki.ResolveSeeCode, DRagLint.CLI.Wiki.WikiTopicToJson, DRagLint.Doc.Wiki.TWikiParser.CompareRanked, DRagLint.Doc.Wiki.TWikiParser.MatchScore, Format, LowerCase, SameText, Trim, Writeln</para>
+/// <para>Returns: 2; 0; 1</para>
+/// <para>Complexity: 35 (cyclomatic, outer body), 212 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.OpenReadOnlyStore"/>
+/// <seealso cref="DRagLint.CLI.Wiki.CollectWikiTopics"/>
+/// <seealso cref="DRagLint.CLI.Wiki.PrintWikiTopic"/>
+/// <seealso cref="DRagLint.CLI.Wiki.ResolveSeeCode"/>
+/// <seealso cref="DRagLint.CLI.Wiki.WikiTopicToJson"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoWiki(const AArgs: TArgs): Integer;
 
 implementation

@@ -95,7 +95,7 @@ function RemarksBlockIsReport(const pBlock: TRemarksBlock; out pHeader: TReportH
 /// <para>Called from: DRagLint.Charts.Compare.UpdateDoc (DRagLint.Charts.Compare.pas)</para>
 /// <para>Calls: Copy, DeleteFile, DRagLint.Charts.Remarks.BytesAreValidUtf8, DRagLint.Charts.Remarks.FirstLineEnd, DRagLint.Charts.Remarks.HasBom, DRagLint.Charts.Remarks.HasHighByte, DRagLint.Charts.Remarks.SplitSpans, Format, Move, MoveFileEx, PChar, StringReplace</para>
 /// <para>Returns: False; True</para>
-/// <para>Complexity: 16 (cyclomatic, outer body), 88 lines (full implementation)</para>
+/// <para>Complexity: 18 (cyclomatic, outer body), 88 lines (full implementation)</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <para>Mutates: pWhyNot (out)</para>
 /// <para>Touches: file system</para>

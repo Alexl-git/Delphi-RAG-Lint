@@ -125,7 +125,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas) ?, DRagLint.Diagnostics.ParseCache.TAstParseCache.UnresolvedIfs (DRagLint.Diagnostics.ParseCache.pas) ?, DRagLint.Preprocess.Preprocess/2 (DRagLint.Preprocess.pas), DRagLint.Preprocess.Preprocess/3 (DRagLint.Preprocess.pas), DRagLint.Preprocess.PreprocessReport (DRagLint.Preprocess.pas) (+3 more)</para>
+  /// <para>Used by: DRagLint.Core.Indexer.TIndexer.HostIncContexts (DRagLint.Core.Indexer.pas) ?, DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas) ?, DRagLint.Preprocess.Preprocess/2 (DRagLint.Preprocess.pas), DRagLint.Preprocess.Preprocess/3 (DRagLint.Preprocess.pas), DRagLint.Preprocess.PreprocessReport (DRagLint.Preprocess.pas) (+4 more)</para>
   /// <para>Used in units: DRagLint.Core.Indexer, DRagLint.Diagnostics.ParseCache, DRagLint.Index.PPUnitSource, DRagLint.Preprocess</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -235,7 +235,7 @@ function Preprocess(const AUtf8: TBytes; const AOptions: TPPOptions;
 /// result, result without the symbol table, unresolved names, expression) --
 /// a measurement aid.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.UnresolvedIfs (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.Scan (DRagLint.Index.PPUnitSource.pas)</para>
+/// <para>Called from: DRagLint.Core.Indexer.TIndexer.HostIncContexts (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.UnresolvedIfs (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.Scan (DRagLint.Index.PPUnitSource.pas)</para>
 /// <para>Calls: Default, DRagLint.Preprocess.PreprocessWithSites</para>
 /// <para>Returns: PreprocessWithSites(AUtf8, AOptions, Sites, AReport)</para>
 /// <para>Mutates: AReport (out)</para>

@@ -37,7 +37,7 @@ interface
 procedure StartOpenSourceServer;
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.Wizard.TDragLintWizard.Destroyed (DragLint.Plugin.Wizard.pas), initialization/finalization (DragLint.Plugin.OpenSourceServer.pas)</para>
+/// <para>Called from: DragLint.Plugin.OpenSourceServer.finalization (DragLint.Plugin.OpenSourceServer.pas), DragLint.Plugin.Wizard.TDragLintWizard.Destroyed (DragLint.Plugin.Wizard.pas)</para>
 /// <para>Calls: CloseHandle, CreateFile, FreeAndNil, WaitForSingleObject, WaitNamedPipe</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

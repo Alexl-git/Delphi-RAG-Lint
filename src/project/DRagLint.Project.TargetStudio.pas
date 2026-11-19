@@ -90,7 +90,7 @@ type
 /// Set once at start-up, before any verb. A --jobs child receives the same
 /// flag on its command line, so its value matches its parent's.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
 /// <para>Calls: Trim</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

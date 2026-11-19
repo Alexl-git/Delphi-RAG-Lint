@@ -13,6 +13,19 @@ uses
 /// <summary>drag-lint wiring --qname Interface | --coverage [--db path] [--format text|json]: the Spring4D DI wiring of an interface (implementations with lifetime, resolve sites), or the registrations not resolved into an interface-to-type edge.</summary>
 /// <param name="AArgs">--qname or --coverage, --db, --format.</param>
 /// <returns>0 on an answer; 2 on a usage error or a missing / stale --db.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Common.ExplicitDbsExist, DRagLint.CLI.Common.FirstProjectDb, DRagLint.CLI.Common.OpenReadOnlyStore, DRagLint.CLI.Common.ReportNotFoundFor, DRagLint.CLI.Common.StaleDbRefusesRun, DRagLint.CLI.ConsumerDbs.ResolveConsumerDbs, DRagLint.Core.Interfaces.ISymbolStore.FindDiResolveSites, DRagLint.Core.Interfaces.ISymbolStore.FindDiUnresolved, DRagLint.Core.Interfaces.ISymbolStore.FindEventHandlersForForm, DRagLint.Core.Interfaces.ISymbolStore.FindImplementationsOf, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Wiring.BuildWiringJson, Format, SameText, Writeln</para>
+/// <para>Returns: 2; 0</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 103 lines (full implementation)</para>
+/// <seealso cref="DRagLint.CLI.Common.ExplicitDbsExist"/>
+/// <seealso cref="DRagLint.CLI.Common.FirstProjectDb"/>
+/// <seealso cref="DRagLint.CLI.Common.OpenReadOnlyStore"/>
+/// <seealso cref="DRagLint.CLI.Common.ReportNotFoundFor"/>
+/// <seealso cref="DRagLint.CLI.Common.StaleDbRefusesRun"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoWiring(const AArgs: TArgs): Integer;
 
 /// <summary>The `implementors` verb: the interface report for --target (spec
@@ -21,6 +34,21 @@ function DoWiring(const AArgs: TArgs): Integer;
 /// --uses, --max-sites N, --include-library, --format text|json|dot|mermaid, --json, --output.</param>
 /// <returns>0 answered (also zero implementors), 1 target not found, 2 usage error,
 /// ambiguous target or missing/stale db.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Common.NoDbResolved, DRagLint.CLI.Common.OpenReadOnlyStore, DRagLint.CLI.Common.ReportNotFoundFor, DRagLint.CLI.Common.StaleDbRefusesRun, DRagLint.Core.OutputEncoding.WriteOutputFile, DRagLint.Query.Implementors.BuildImplementorsReport, DRagLint.Query.Implementors.ImplementorsReportToChart, DRagLint.Query.Implementors.ImplementorsReportToJson, DRagLint.Query.Implementors.ImplementorsReportToText, DRagLint.Query.Implementors.TImplementorsOptions.Defaults, LowerCase, MatchText, Write, Writeln</para>
+/// <para>Returns: 2; if E.Ambiguous then 2 else 1; 0</para>
+/// <para>Complexity: 22 (cyclomatic, outer body), 65 lines (full implementation)</para>
+/// <para>Catches: EImplementorsTarget (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.NoDbResolved"/>
+/// <seealso cref="DRagLint.CLI.Common.OpenReadOnlyStore"/>
+/// <seealso cref="DRagLint.CLI.Common.ReportNotFoundFor"/>
+/// <seealso cref="DRagLint.CLI.Common.StaleDbRefusesRun"/>
+/// <seealso cref="DRagLint.Core.OutputEncoding.WriteOutputFile"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoImplementors(const AArgs: TArgs): Integer;
 
 /// <summary>`impact --all-projects`: asks every database the manifest names, one row
@@ -30,8 +58,23 @@ function DoImplementors(const AArgs: TArgs): Integer;
 /// <returns>0 the target was found somewhere, also with sections unanswered (the
 /// report says so); 1 found nowhere, or depth 0; 2 usage error, --db given, or a
 /// manifest that did not load.</returns>
-/// <remarks>Read-only. --db is refused rather than ignored: it would name one
-/// database while the answer came from all of them.</remarks>
+/// <remarks>
+/// Read-only. --db is refused rather than ignored: it would name one
+/// database while the answer came from all of them.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.CLI.Common.IndexSectionCommand, DRagLint.CLI.Common.ReportNotFoundFor, DRagLint.Index.Manifest.TManifestIO.Load, DRagLint.Index.Manifest.TManifestIO.ParseText, DRagLint.Index.Manifest.TManifestIO.Validate, DRagLint.Index.Plan.ResolvePlan, DRagLint.Project.Resolver.TProjectResolver.Create, DRagLint.Query.CrossImpact.BuildCrossImpact, DRagLint.Query.CrossImpact.CrossImpactToJson (+7 more)</para>
+/// <para>Returns: 2; 1; if Report.Found then 0</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 73 lines (full implementation)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.IndexSectionCommand"/>
+/// <seealso cref="DRagLint.CLI.Common.ReportNotFoundFor"/>
+/// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
+/// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseText"/>
+/// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Validate"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoImpactAllProjects(const AArgs: TArgs): Integer;
 
 /// <summary>drag-lint impact --qname X [--depth N] [--db path] [--format text|json]: the transitive callers of X, up to depth N.</summary>
@@ -60,6 +103,20 @@ function ResolvedImpactLevels(const AStore: ISymbolStore; const ASyms: TArray<TS
 /// <summary>drag-lint surface --qname Foo.TBar [--db path] [--include-impl] [--all-visibility] [--format text|json]: the interface-section declaration of a class, read from its source lines.</summary>
 /// <param name="AArgs">--qname (required), --db, --include-impl, --all-visibility, --format.</param>
 /// <returns>0 on success; 1 when the symbol is not found or not a class; 2 on a usage error or a missing / stale db.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Common.NoDbResolved, DRagLint.CLI.Common.OpenReadOnlyStore, DRagLint.CLI.Common.ReportNotFoundFor, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetClassSurface, DRagLint.Core.Model.TSymbolKindHelper.ToText, SameText, Writeln</para>
+/// <para>Returns: 2; 1; 0</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 107 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.NoDbResolved"/>
+/// <seealso cref="DRagLint.CLI.Common.OpenReadOnlyStore"/>
+/// <seealso cref="DRagLint.CLI.Common.ReportNotFoundFor"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoSurface(const AArgs: TArgs): Integer;
 
 implementation

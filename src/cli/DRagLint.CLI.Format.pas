@@ -25,11 +25,34 @@ uses
 /// <param name="AArgs">Parsed CLI args; DbPath is the index to purge; AsJson picks JSON output.</param>
 /// <returns>0 on success (including the idempotent 0-removed second run); 2 on
 /// usage error / missing --db / missing db file.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Common.AcquireIndexLock, DRagLint.CLI.Common.ConfigDbRedirectsWrite, DRagLint.Core.Interfaces.ISymbolStore.Migrate, DRagLint.Core.Interfaces.ISymbolStore.PurgeLocals, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, FileExists, Format, Writeln</para>
+/// <para>Returns: 2; 0</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.AcquireIndexLock"/>
+/// <seealso cref="DRagLint.CLI.Common.ConfigDbRedirectsWrite"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.Migrate"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.PurgeLocals"/>
+/// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoPurgeLocals(const AArgs: TArgs): Integer;
 
 /// <summary>drag-lint format FILE [--yadf-path PATH] [--dry-run|--diff]: formats one unit with YADF; --dry-run / --diff never write the file.</summary>
 /// <param name="AArgs">The file, --yadf-path, --dry-run, --diff.</param>
 /// <returns>0 on success; 2 on a usage error or a missing file; 3 / 4 passed on from the formatter.</returns>
+/// <exception cref="EYadfFormatError"><!-- drag-lint:auto exc -->via DRagLint.Format.Yadf.TYadfFormatter.Format: File not found: %s</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Format.Yadf.TYadfFormatter.Format, FileExists, Trim, Writeln</para>
+/// <para>Returns: 1; 0</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 48 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Format.Yadf.TYadfFormatter.Format"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoFormat(const AArgs: TArgs): Integer;
 
 implementation

@@ -95,7 +95,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoContext (DRagLint.CLI.pas)</para>
       /// <para>Calls: DRagLint.Context.Bundler.OmittedMethodCount, DRagLint.Core.Model.CapOmittedNote, DRagLint.Doc.Regions.TDocRegions.StripForDisplay, Format, FormatDateTime, IfThen</para>
-      /// <para>Complexity: 32 (cyclomatic, outer body), 175 lines (full implementation)</para>
+      /// <para>Complexity: 33 (cyclomatic, outer body), 175 lines (full implementation)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Context.Bundler.OmittedMethodCount"/>
       /// <seealso cref="DRagLint.Core.Model.CapOmittedNote"/>

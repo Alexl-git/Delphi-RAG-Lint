@@ -96,7 +96,7 @@ type
 /// <para>Called from: DRagLint.Report.CyclePlan.TCyclePlanner.AssignLeafNames (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.InversionLeaf (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.PlanMemberHandOver (DRagLint.Report.CyclePlan.pas)</para>
 /// <para>Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Report.UntangleCatalog.InterfaceUses, DRagLint.Report.UntangleCatalog.IsUnder, DRagLint.Report.UntangleCatalog.LastInterfaceLine, DRagLint.Report.UntangleCatalog.NormPath, DRagLint.Report.UntangleCatalog.StemOf (+9 more)</para>
 /// <para>Returns: Default(TUntangleLeaf)</para>
-/// <para>Complexity: 13 (cyclomatic, outer body), 71 lines (full implementation)</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 71 lines (full implementation)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>

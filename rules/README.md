@@ -111,6 +111,7 @@ The runner evaluates these standard tree-sitter predicates:
 | `#match? @cap "re"` / `#not-match?` | Capture text matches the regex (TRegEx) |
 | `#any-of? @cap "a" "b" ...` / `#not-any-of?` | Capture text equals any of the listed |
 | `#in? @cap "nodeType" ["nameRegex"]` / `#not-in?` | **drag-lint's own (2026-09-16):** some ANCESTOR of the captured node has that node type and, when the regex is given, its `name:` field matches it. Walks parents, so it needs no knowledge of which syntactic context the capture sits in. Put it last -- it runs only for matches that passed the cheaper predicates. Born for `hardcoded-ip-address`: `(#not-in? @warn "declConst" "(?i)version")` keeps a dotted-quad VERSION const from reading as an IPv4 address |
+| `#parent? @cap "nodeType" ["field"]` / `#not-parent?` | **drag-lint's own (2026-11-18):** the DIRECT parent of the captured node has that node type and, when the field is given, the node sits in that field of it. Unlike `#in?` it does not walk ancestors. Born for `ifthen-to-if-expression`: `(#not-parent? @warn "ifElse" "else")` skips the tail of an else-if chain without skipping an if/else nested in a begin..end branch |
 
 **Escaping in `#match?` regexes.** A backslash escape does not reliably survive the engine's predicate handling, so write a metacharacter as a one-member class instead: `[$]` for a dollar sign, `[[]` for `[` and `[]]` for `]` (see `rules\mixed-case-hex.scm`). A literal dot is `[.]`; `\\.` also works inside the `.scm` string, as in `ifthen-both-branches.scm`.
 

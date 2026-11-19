@@ -113,7 +113,7 @@ type
     /// <summary>Read the registry into FSettings and populate this page.</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DragLint.Plugin.Options.TDragLintOptionsPage.FrameCreated (DragLint.Plugin.Options.pas)</para>
+    /// <para>Called from: DragLint.Plugin.Options.TDragLintOptionsPage.FrameCreated (DragLint.Plugin.Options.pas), DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.Load (DragLint.Plugin.OptionsFrames.pas)</para>
     /// <para>Calls: DragLint.Plugin.OptionsFrames.TDLPageFrame.LoadControls, DragLint.Plugin.Settings.LoadSettings</para>
     /// <para>Overridden by: DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.Load</para>
     /// <para>virtual</para>
@@ -130,7 +130,7 @@ type
     /// <summary>Re-read the registry, apply this page's controls, write back.</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DragLint.Plugin.Options.TDragLintOptionsPage.DialogClosed (DragLint.Plugin.Options.pas)</para>
+    /// <para>Called from: DragLint.Plugin.Options.TDragLintOptionsPage.DialogClosed (DragLint.Plugin.Options.pas), DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.Save (DragLint.Plugin.OptionsFrames.pas)</para>
     /// <para>Calls: DragLint.Plugin.OptionsFrames.TDLPageFrame.SaveControls, DragLint.Plugin.Settings.LoadSettings, DragLint.Plugin.Settings.SaveSettings</para>
     /// <para>Overridden by: DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.Save</para>
     /// <para>virtual</para>
@@ -408,14 +408,15 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.ReadMaxReturnCases (DragLint.Plugin.OptionsFrames.pas), DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.WriteMaxReturnCases (DragLint.Plugin.OptionsFrames.pas)</para>
-    /// <para>Calls: DragLint.Plugin.ExeResolver.ResolveEngine, ExtractFilePath, Supports</para>
+    /// <para>Calls: DragLint.Plugin.ExeResolver.ResolveEngine, DragLint.Plugin.ManifestPaths.PluginManifestWriteTarget, ExtractFilePath, Supports</para>
+    /// <para>Returns: PluginManifestWriteTarget(ExeDir)</para>
     /// <para>Reads: FSettings</para>
     /// <para>Catches: Exception (swallowed)</para>
     /// <seealso cref="DragLint.Plugin.ExeResolver.ResolveEngine"/>
+    /// <seealso cref="DragLint.Plugin.ManifestPaths.PluginManifestWriteTarget"/>
     /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.BtnEditRulesClick"/>
     /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.BuildControls"/>
     /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.Load"/>
-    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.LoadControls"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function ManifestPathForWrite: string;
@@ -503,29 +504,29 @@ type
   public
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Calls: DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.ReadMaxReturnCases</para>
+    /// <para>Calls: DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.ReadMaxReturnCases, DragLint.Plugin.OptionsFrames.TDLPageFrame.Load</para>
     /// <para>Overrides: DragLint.Plugin.OptionsFrames.TDLPageFrame.Load</para>
     /// <para>Reads: FEdMaxReturnCases</para>
     /// <para>Directives: override</para>
     /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.ReadMaxReturnCases"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.Load"/>
     /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.BtnEditRulesClick"/>
     /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.BuildControls"/>
     /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.LoadControls"/>
-    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.ManifestPathForWrite"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure Load; override;
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Calls: DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.WriteMaxReturnCases</para>
+    /// <para>Calls: DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.WriteMaxReturnCases, DragLint.Plugin.OptionsFrames.TDLPageFrame.Save</para>
     /// <para>Overrides: DragLint.Plugin.OptionsFrames.TDLPageFrame.Save</para>
     /// <para>Reads: FEdMaxReturnCases</para>
     /// <para>Directives: override</para>
     /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.WriteMaxReturnCases"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.Save"/>
     /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.BtnEditRulesClick"/>
     /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.BuildControls"/>
     /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.Load"/>
-    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.LoadControls"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure Save; override;

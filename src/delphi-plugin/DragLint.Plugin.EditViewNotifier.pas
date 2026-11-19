@@ -33,11 +33,10 @@ procedure UnregisterDragLintEditViewNotifier;
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.Keyboard.TDragLintKeyboardBinding.InlineInfoKey (DragLint.Plugin.Keyboard.pas)</para>
-/// <para>Calls: DragLint.Plugin.DiagnosticCache.Cache, DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.GetForLine, DragLint.Plugin.EditViewNotifier.TInlineHintHelper.OnHintTimer, FreeAndNil, GetCursorPos, OffsetRect, Supports</para>
+/// <para>Calls: DragLint.Plugin.DiagnosticCache.Cache, DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.GetForLine, FreeAndNil, GetCursorPos, OffsetRect, Supports</para>
 /// <para>Complexity: 14 (cyclomatic, outer body), 76 lines (full implementation)</para>
 /// <seealso cref="DragLint.Plugin.DiagnosticCache.Cache"/>
 /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.GetForLine"/>
-/// <seealso cref="DragLint.Plugin.EditViewNotifier.TInlineHintHelper.OnHintTimer"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure InvokeInlineInfo;

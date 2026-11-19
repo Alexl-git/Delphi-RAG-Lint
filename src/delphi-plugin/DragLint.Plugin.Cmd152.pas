@@ -37,22 +37,42 @@ type
   /// <summary>The click handler of one 1.52 command.</summary>
   /// <param name="Sender">The clicked TMenuItem (main menu) or the TAction
   /// behind the clicked item (editor right-click menu).</param>
-  /// <remarks>Assignment-compatible with Editor's TMenuProc, so the host
-  /// factory can hand it straight to AddWrappedItem.</remarks>
+  /// <remarks>
+  /// Assignment-compatible with Editor's TMenuProc, so the host
+  /// factory can hand it straight to AddWrappedItem.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.Cmd152.pas), DragLint.Plugin.Cmd.FieldRepo.RegisterRow (DragLint.Plugin.Cmd.FieldRepo.pas), DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCmd152Click = procedure(Sender: TObject);
 
   /// <summary>Where a 1.52 command is offered.</summary>
-  /// <remarks>csMainMenu = the drag-lint main menu; csEditorContext = the
-  /// code editor's right-click menu, submenu "drag-lint".</remarks>
+  /// <remarks>
+  /// csMainMenu = the drag-lint main menu; csEditorContext = the
+  /// code editor's right-click menu, submenu "drag-lint".
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.Cmd152.pas), DragLint.Plugin.Cmd152.Cmd152OnSurface (DragLint.Plugin.Cmd152.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCmd152Surface = (csMainMenu, csEditorContext);
 
   /// <summary>The surfaces of one row; never empty.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.Cmd152.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCmd152Surfaces = set of TCmd152Surface;
 
   /// <summary>What the caret must be on for the command to be enabled in
   /// the editor right-click menu.</summary>
-  /// <remarks>cnNothing = always enabled; cnSymbol = an identifier under the
-  /// caret; cnFinding = a drag-lint finding on the caret line.</remarks>
+  /// <remarks>
+  /// cnNothing = always enabled; cnSymbol = an identifier under the
+  /// caret; cnFinding = a drag-lint finding on the caret line.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.Cmd152.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCmd152Needs = (cnNothing, cnSymbol, cnFinding);
 
   /// <summary>One row of the 1.52 command table.</summary>
@@ -64,6 +84,10 @@ type
   /// ampersands ignored; a level that does not exist is created at the end of
   /// its parent. AfterCaption names the sibling the item is inserted after
   /// (same matching); '' or a caption not found appends.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DragLint.Plugin.Cmd.CheckInit.RegisterCommand (DragLint.Plugin.Cmd.CheckInit.pas) ?, DragLint.Plugin.Cmd.DisableRule.RegisterCommand (DragLint.Plugin.Cmd.DisableRule.pas) ?, DragLint.Plugin.Cmd.ExtractConst.RegisterCommand (DragLint.Plugin.Cmd.ExtractConst.pas) ?, DragLint.Plugin.Cmd.FieldRepo.RegisterRow (DragLint.Plugin.Cmd.FieldRepo.pas) ?, DragLint.Plugin.Cmd.FindUsagesScope.BaseRow (DragLint.Plugin.Cmd.FindUsagesScope.pas) (+14 more)</para>
+  /// <para>Used in units: DragLint.Plugin.Cmd.CheckInit, DragLint.Plugin.Cmd.DisableRule, DragLint.Plugin.Cmd.ExtractConst, DragLint.Plugin.Cmd.FieldRepo, DragLint.Plugin.Cmd.FindUsagesScope, DragLint.Plugin.Cmd.FixMarker, DragLint.Plugin.Cmd.IdxRange, DragLint.Plugin.Cmd152, DragLint.Plugin.EditorLocalMenu</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCmd152Command = record
     /// <summary>Unique command id, e.g. 'check-init'.</summary>
@@ -96,6 +120,11 @@ type
   /// <param name="pCaption">The item caption.</param>
   /// <param name="pClick">The click handler.</param>
   /// <returns>The new item, already a child of pParent.</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.Cmd152.pas), DragLint.Plugin.Cmd152.BuildCmd152Menu (DragLint.Plugin.Cmd152.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCmd152AddItem = reference to function(pParent: TMenuItem; const pCaption: string;
     pClick: TCmd152Click): TMenuItem;
 
@@ -104,20 +133,39 @@ type
 /// must be assigned; Surfaces must not be empty.</param>
 /// <exception cref="EArgumentException">Raised on an empty or duplicate Id, a
 /// nil Click or empty Surfaces.</exception>
-/// <remarks>Called from the initialization section of each
+/// <remarks>
+/// Called from the initialization section of each
 /// DragLint.Plugin.Cmd.X unit, i.e. on package load, before Register runs.
-/// Not thread-safe; main thread only.</remarks>
+/// Not thread-safe; main thread only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Cmd.CheckInit.RegisterCommand (DragLint.Plugin.Cmd.CheckInit.pas), DragLint.Plugin.Cmd.DisableRule.RegisterCommand (DragLint.Plugin.Cmd.DisableRule.pas), DragLint.Plugin.Cmd.ExtractConst.RegisterCommand (DragLint.Plugin.Cmd.ExtractConst.pas), DragLint.Plugin.Cmd.FieldRepo.RegisterRow (DragLint.Plugin.Cmd.FieldRepo.pas), DragLint.Plugin.Cmd.FindUsagesScope.RegisterRows (DragLint.Plugin.Cmd.FindUsagesScope.pas) (+2 more)</para>
+/// <para>Calls: SameText, Trim</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RegisterCmd152(const pCommand: TCmd152Command);
 
 /// <summary>The registered rows, sorted by Id.</summary>
 /// <returns>A copy of the table; changing it does not change the
 /// registry.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas), DragLint.Plugin.EditorLocalMenu.RegisterDragLintEditorLocalMenu (DragLint.Plugin.EditorLocalMenu.pas)</para>
+/// <para>Calls: CompareText</para>
+/// <para>Returns: GCommands.ToArray</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function Cmd152Table: TArray<TCmd152Command>;
 
 /// <summary>The rows offered on one surface, in table order.</summary>
 /// <param name="pTable">The rows (normally Cmd152Table).</param>
 /// <param name="pSurface">The surface asked for.</param>
 /// <returns>Every row whose Surfaces contain pSurface.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Cmd152.BuildCmd152Menu (DragLint.Plugin.Cmd152.pas), DragLint.Plugin.EditorLocalMenu.RegisterDragLintEditorLocalMenu (DragLint.Plugin.EditorLocalMenu.pas)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function Cmd152OnSurface(const pTable: TArray<TCmd152Command>;
   pSurface: TCmd152Surface): TArray<TCmd152Command>;
 
@@ -127,6 +175,13 @@ function Cmd152OnSurface(const pTable: TArray<TCmd152Command>;
 /// <param name="pHasSymbol">An identifier is under the caret.</param>
 /// <param name="pHasFinding">A drag-lint finding is on the caret line.</param>
 /// <returns>True for cnNothing; else the matching flag.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.EditorLocalMenu.TEditorMenuHandler.ItemUpdate (DragLint.Plugin.EditorLocalMenu.pas)</para>
+/// <para>Returns: pHasSymbol; pHasFinding; True</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function Cmd152Enabled(const pCommand: TCmd152Command; pHasSymbol, pHasFinding: Boolean): Boolean;
 
 /// <summary>The full right-click menu path of a row, as feature-registry
@@ -134,6 +189,11 @@ function Cmd152Enabled(const pCommand: TCmd152Command; pHasSymbol, pHasFinding: 
 /// <param name="pCommand">The row.</param>
 /// <returns>'Editor context > drag-lint > ' + (EditorParent + ' > ' when set) + the
 /// caption, hotkey ampersands removed; '' when the row is not on csEditorContext.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: StripHotkey</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function Cmd152EditorPath(const pCommand: TCmd152Command): string;
 
 /// <summary>Creates one menu item per csMainMenu row under pRoot, hidden when
@@ -142,10 +202,20 @@ function Cmd152EditorPath(const pCommand: TCmd152Command): string;
 /// <param name="pTable">The rows to place, in order (normally Cmd152Table);
 /// rows without csMainMenu are skipped.</param>
 /// <param name="pAddItem">The host's item factory (see TCmd152AddItem).</param>
-/// <remarks>Main thread only. Visible items and their order are untouched
+/// <remarks>
+/// Main thread only. Visible items and their order are untouched
 /// when every row is hidden. A submenu created here gets Visible = True only
 /// if one of its rows (at any depth) is visible; an existing submenu is never
-/// changed.</remarks>
+/// changed.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.Cmd152.Cmd152OnSurface, DragLint.Plugin.Cmd152.EnsurePath, DragLint.Plugin.Cmd152.FindChild, DragLint.Plugin.Cmd152.HasVisibleChild, pAddItem</para>
+/// <seealso cref="DragLint.Plugin.Cmd152.Cmd152OnSurface"/>
+/// <seealso cref="DragLint.Plugin.Cmd152.EnsurePath"/>
+/// <seealso cref="DragLint.Plugin.Cmd152.FindChild"/>
+/// <seealso cref="DragLint.Plugin.Cmd152.HasVisibleChild"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure BuildCmd152Menu(pRoot: TMenuItem; const pTable: TArray<TCmd152Command>;
   const pAddItem: TCmd152AddItem);
 
@@ -156,12 +226,25 @@ procedure BuildCmd152Menu(pRoot: TMenuItem; const pTable: TArray<TCmd152Command>
 /// <param name="pVisibleOnly">True skips hidden items and everything under
 /// them, i.e. renders what the user sees.</param>
 /// <returns>The rendering, CRLF-separated, or '' for no children.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: DragLint.Plugin.Cmd152.DumpLevel</para>
+/// <para>Returns: Builder.ToString</para>
+/// <seealso cref="DragLint.Plugin.Cmd152.DumpLevel"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DumpMenuTree(pRoot: TMenuItem; pVisibleOnly: Boolean): string;  // dl:ok unused-public-symbol@4abc -- test seam: run_v152_PLUGFRAME_cmdtable.ps1 and the owning lanes' menu runners render the tree with it
 
 /// <summary>The shared body of a stub command that is not implemented yet.</summary>
 /// <param name="pId">The command id, shown in the message.</param>
-/// <remarks>Only reachable when a lane sets Visible before it replaces the
-/// stub's click; shows a message box.</remarks>
+/// <remarks>
+/// Only reachable when a lane sets Visible before it replaces the
+/// stub's click; shows a message box.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Cmd.IdxRange.InvokeIdxRange (DragLint.Plugin.Cmd.IdxRange.pas)</para>
+/// <para>Calls: ShowMessage</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure Cmd152NotYetAvailable(const pId: string);
 
 implementation

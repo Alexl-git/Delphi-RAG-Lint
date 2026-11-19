@@ -28,7 +28,7 @@ type
   /// <summary>Governs how projects are partitioned when building indexes.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: Config.SettingsFrame.TSettingsFrame.ProjectsIndexingStr (Config.SettingsFrame.pas), Config.SettingsFrame.TSettingsFrame.StrToProjectsIndexing (Config.SettingsFrame.pas), declaration (Config.SettingsFrame.pas), [drag-lint]declaration (DRagLint.Index.Manifest.pas), [drag-lint]DRagLint.Index.Manifest.ParseProjectsIndexing (DRagLint.Index.Manifest.pas), [drag-lint]DRagLint.Index.Manifest.ProjectsIndexingToStr (DRagLint.Index.Manifest.pas)</para>
+  /// <para>Used by: Config.SettingsFrame.TSettingsFrame.ProjectsIndexingStr (Config.SettingsFrame.pas), Config.SettingsFrame.TSettingsFrame.StrToProjectsIndexing (Config.SettingsFrame.pas), declaration (Config.SettingsFrame.pas), [dclDragLintWizard,drag-lint]declaration (DRagLint.Index.Manifest.pas), [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.ParseProjectsIndexing (DRagLint.Index.Manifest.pas), [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.ProjectsIndexingToStr (DRagLint.Index.Manifest.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TProjectsIndexing = (piPerProject, piPerGroup, piSingle);
@@ -36,7 +36,7 @@ type
   /// <summary>Top-level settings block from the drag-lint manifest.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: Config.MainForm.TMainForm.LoadManifest (Config.MainForm.pas), [drag-lint]declaration (DRagLint.Index.Manifest.pas), [drag-lint]DRagLint.CLI.DoSelfTestManifestSaveAtomic (DRagLint.CLI.pas), [drag-lint]DRagLint.Index.Manifest.TIndexSettings.Defaults (DRagLint.Index.Manifest.pas), [drag-lint]DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas), [drag-lint]DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas)</para>
+  /// <para>Used by: Config.MainForm.TMainForm.LoadManifest (Config.MainForm.pas), [dclDragLintWizard,drag-lint]declaration (DRagLint.Index.Manifest.pas), [drag-lint]DRagLint.CLI.DoSelfTestManifestSaveAtomic (DRagLint.CLI.pas), [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.TIndexSettings.Defaults (DRagLint.Index.Manifest.pas), [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas), [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas)</para>
   /// <para>Used in units: Config.MainForm, DRagLint.CLI, DRagLint.Index.Manifest</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -151,9 +151,9 @@ type
   /// <summary>Describes one named index section within the manifest.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: [drag-lint]declaration (DRagLint.Index.Manifest.pas), [drag-lint]DRagLint.CLI.DetectPlatformFromDproj (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoSelfTestManifestSaveAtomic (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoSelfTestSectionDb (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.LibraryDbForPlatform (DRagLint.CLI.pas) ?, [drag-lint]DRagLint.CLI.ManifestLibraryIncludeRoots (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ManifestSectionLibraryResolve (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ResolveIndexDb (DRagLint.CLI.pas), [drag-lint]DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas), [drag-lint]DRagLint.Index.Manifest.ExpandSectionDb (DRagLint.Index.Manifest.pas) ?, [drag-lint]DRagLint.Index.Manifest.ParseSection (DRagLint.Index.Manifest.pas), [drag-lint]DRagLint.Index.Manifest.ResolveFolderDb (DRagLint.Index.Manifest.pas), [drag-lint]DRagLint.Index.Manifest.ResolveProjectDb (DRagLint.Index.Manifest.pas),
-  /// [drag-lint]DRagLint.Index.Manifest.SectionProjectFile (DRagLint.Index.Manifest.pas) ?, [drag-lint]DRagLint.Index.Manifest.TIndexManifest.FindSection (DRagLint.Index.Manifest.pas), [drag-lint]DRagLint.Index.Manifest.TManifestIO.ToJson (DRagLint.Index.Manifest.pas), [drag-lint]DRagLint.Index.Manifest.TManifestIO.Validate (DRagLint.Index.Manifest.pas), [drag-lint]DRagLint.Index.Plan.BuildFilter (DRagLint.Index.Plan.pas), [drag-lint]DRagLint.Index.Plan.ClassifyMode (DRagLint.Index.Plan.pas), [drag-lint]DRagLint.Index.Plan.ResolvePlan (DRagLint.Index.Plan.pas), [drag-lint]DRagLint.Index.Plan.ResolveRoots (DRagLint.Index.Plan.pas), [drag-lint]DRagLint.Refactor.MultiProjectRename.OwnerOf (DRagLint.Refactor.MultiProjectRename.pas)</para>
-  /// <para>Used in units: Config.IndexesFrame, [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.Index.Coverage, [drag-lint]DRagLint.Index.Manifest, [drag-lint]DRagLint.Index.Plan, [drag-lint]DRagLint.Refactor.MultiProjectRename</para>
+  /// <para>Used by: [dclDragLintWizard,drag-lint]declaration (DRagLint.Index.Manifest.pas), [drag-lint]DRagLint.CLI.ConsumerDbs.DetectPlatformFromDproj (DRagLint.CLI.ConsumerDbs.pas) ?, [drag-lint]DRagLint.CLI.DoSelfTestManifestSaveAtomic (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoSelfTestSectionDb (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.LibraryDbForPlatform (DRagLint.CLI.pas) ?, [drag-lint]DRagLint.CLI.ManifestLibraryIncludeRoots (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ManifestSectionLibraryResolve (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ResolveIndexDb (DRagLint.CLI.pas), [drag-lint]DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas), [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.ExpandSectionDb (DRagLint.Index.Manifest.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.ParseSection (DRagLint.Index.Manifest.pas), [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.ResolveFolderDb (DRagLint.Index.Manifest.pas),
+  /// [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.ResolveProjectDb (DRagLint.Index.Manifest.pas), [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.SectionProjectFile (DRagLint.Index.Manifest.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.TIndexManifest.FindSection (DRagLint.Index.Manifest.pas), [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.TManifestIO.ToJson (DRagLint.Index.Manifest.pas), [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.TManifestIO.Validate (DRagLint.Index.Manifest.pas), [drag-lint]DRagLint.Index.Plan.BuildFilter (DRagLint.Index.Plan.pas), [drag-lint]DRagLint.Index.Plan.ClassifyMode (DRagLint.Index.Plan.pas), [drag-lint]DRagLint.Index.Plan.ResolvePlan (DRagLint.Index.Plan.pas), [drag-lint]DRagLint.Index.Plan.ResolveRoots (DRagLint.Index.Plan.pas), [drag-lint]DRagLint.Refactor.MultiProjectRename.OwnerOf (DRagLint.Refactor.MultiProjectRename.pas)</para>
+  /// <para>Used in units: Config.IndexesFrame, [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.CLI.ConsumerDbs, [drag-lint]DRagLint.Index.Coverage, [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest, [drag-lint]DRagLint.Index.Plan, [drag-lint]DRagLint.Refactor.MultiProjectRename</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TIndexSection = record
@@ -192,13 +192,14 @@ type
   /// <summary>Complete parsed and merged manifest for a drag-lint installation.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: [drag-lint]declaration (DRagLint.CLI.pas), [drag-lint]declaration (DRagLint.Index.Coverage.pas), [drag-lint]declaration (DRagLint.Index.DbSelect.pas), [drag-lint]declaration (DRagLint.Index.Manifest.pas), [drag-lint]declaration (DRagLint.Index.Plan.pas), [drag-lint]declaration (DRagLint.Project.DefineProfile.pas), [drag-lint]declaration (DRagLint.Refactor.MultiProjectRename.pas), [drag-lint]DRagLint.CLI.ApplyReconcileToLibrary (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ContextDefaultLibraryDb (DRagLint.CLI.pas) ?, [drag-lint]DRagLint.CLI.DetectPlatformFromDproj (DRagLint.CLI.pas) ?, [drag-lint]DRagLint.CLI.DoImpactAllProjects (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoIndex (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas),
-  /// [drag-lint]DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoSelfTestCoverage (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoSelfTestDbSelect (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoSelfTestManifestMerge (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoSelfTestManifestSaveAtomic (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoSelfTestSectionDb (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.LibraryDbForPlatform (DRagLint.CLI.pas) ?, [drag-lint]DRagLint.CLI.LibrarySectionDbs (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.LoadDocAccessorMaxLines (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.LoadDocMaxCallers (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.LoadDocMaxReturnCases (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.LoadManifestForProject (DRagLint.CLI.pas) ?, [drag-lint]DRagLint.CLI.LoadSiblingNameToDb (DRagLint.CLI.pas) ?, [drag-lint]DRagLint.CLI.ManifestLibraryIncludeRoots (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ManifestProjectFileForDb (DRagLint.CLI.pas),
-  /// [drag-lint]DRagLint.CLI.ManifestSectionLibraryResolve (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ManifestToJson (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ManifestWriteRefused (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.MissingDbBuildCommand (DRagLint.CLI.pas) ?, [drag-lint]DRagLint.CLI.PlanMultiOwnerNaming (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.PlanToJson (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ReadPlatformFor (DRagLint.CLI.pas) ?, [drag-lint]DRagLint.CLI.ResolveCompileCheckDb (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ResolveConsumerDbs (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ResolveFrameworkContextDb (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ResolveIndexDb (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ResolveLibraryDbs (DRagLint.CLI.pas) ?, [drag-lint]DRagLint.CLI.ResolveOwnProjectDb (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ResolveProjectWriteDbIn (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ResolveReadDbsForFile (DRagLint.CLI.pas),
-  /// [drag-lint]DRagLint.CLI.ResolveReadDbsForFileWith (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.UnitNotInLibraryFindings (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.UsagesDbForFile (DRagLint.CLI.pas), [drag-lint]DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas) ?, [drag-lint]DRagLint.Index.DbSelect.TDbSelect.Resolve (DRagLint.Index.DbSelect.pas), [drag-lint]DRagLint.Index.Manifest.ExpandSectionDb (DRagLint.Index.Manifest.pas) ?, [drag-lint]DRagLint.Index.Manifest.LoadDocComplexityMin (DRagLint.Index.Manifest.pas), [drag-lint]DRagLint.Index.Manifest.LoadDocHandlesOptions (DRagLint.Index.Manifest.pas), [drag-lint]DRagLint.Index.Manifest.MergeEdits (DRagLint.Index.Manifest.pas), [drag-lint]DRagLint.Index.Manifest.ResolveFolderDb (DRagLint.Index.Manifest.pas) ?, [drag-lint]DRagLint.Index.Manifest.ResolveProjectDb (DRagLint.Index.Manifest.pas) ?, [drag-lint]DRagLint.Index.Manifest.ResolveReadDbs (DRagLint.Index.Manifest.pas) ?,
-  /// [drag-lint]DRagLint.Index.Manifest.SectionProjectFile (DRagLint.Index.Manifest.pas) ?, [drag-lint]DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas), [drag-lint]DRagLint.Index.Manifest.TManifestIO.Load.MergeSections (DRagLint.Index.Manifest.pas), [drag-lint]DRagLint.Index.Manifest.TManifestIO.ParseText (DRagLint.Index.Manifest.pas), [drag-lint]DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas), [drag-lint]DRagLint.Index.Manifest.TManifestIO.Save (DRagLint.Index.Manifest.pas), [drag-lint]DRagLint.Index.Manifest.TManifestIO.SaveEdits (DRagLint.Index.Manifest.pas), [drag-lint]DRagLint.Index.Manifest.TManifestIO.ToJson (DRagLint.Index.Manifest.pas), [drag-lint]DRagLint.Index.Manifest.TManifestIO.Validate (DRagLint.Index.Manifest.pas), [drag-lint]DRagLint.Index.ManifestWrite.RegisterProjectSection (DRagLint.Index.ManifestWrite.pas), [drag-lint]DRagLint.Index.Plan.BuildFilter (DRagLint.Index.Plan.pas),
-  /// [drag-lint]DRagLint.Index.Plan.ResolvePlan (DRagLint.Index.Plan.pas) ?, [drag-lint]DRagLint.LSP.Server.PrivateEngineOutDir (DRagLint.LSP.Server.pas) ?, [drag-lint]DRagLint.Project.DefineProfile.DprojForFileWith (DRagLint.Project.DefineProfile.pas), [drag-lint]DRagLint.Project.DefineProfile.LoadManifestSafe (DRagLint.Project.DefineProfile.pas), [drag-lint]DRagLint.Refactor.MultiProjectRename.FindRenameOwners (DRagLint.Refactor.MultiProjectRename.pas) ?, [drag-lint]DRagLint.Refactor.MultiProjectRename.OwnerOf (DRagLint.Refactor.MultiProjectRename.pas), [drag-lint]DRagLint.Refactor.MultiProjectRename.RenameAcrossOwners (DRagLint.Refactor.MultiProjectRename.pas)</para>
-  /// <para>Used in units: Config.MainForm, [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.Index.Coverage, [drag-lint]DRagLint.Index.DbSelect, [drag-lint]DRagLint.Index.Manifest, [drag-lint]DRagLint.Index.ManifestWrite, [drag-lint]DRagLint.Index.Plan, [drag-lint]DRagLint.LSP.Server, DragLint.Plugin.DbResolver, [drag-lint]DRagLint.Project.DefineProfile, [drag-lint]DRagLint.Refactor.MultiProjectRename</para>
+  /// <para>Used by: [drag-lint]declaration (DRagLint.CLI.Common.pas) ?, [drag-lint]declaration (DRagLint.CLI.ConsumerDbs.pas) ?, [drag-lint]declaration (DRagLint.Index.Coverage.pas), [drag-lint]declaration (DRagLint.Index.DbSelect.pas), [dclDragLintWizard,drag-lint]declaration (DRagLint.Index.Manifest.pas), [drag-lint]declaration (DRagLint.Index.Plan.pas), [drag-lint]declaration (DRagLint.Project.DefineProfile.pas), [drag-lint]declaration (DRagLint.Refactor.MultiProjectRename.pas), [drag-lint]DRagLint.CLI.ApplyReconcileToLibrary (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Common.LibrarySectionDbs (DRagLint.CLI.Common.pas) ?, [drag-lint]DRagLint.CLI.Common.ResolveOwnProjectDb (DRagLint.CLI.Common.pas) ?, [drag-lint]DRagLint.CLI.ConsumerDbs.DetectPlatformFromDproj (DRagLint.CLI.ConsumerDbs.pas) ?, [drag-lint]DRagLint.CLI.ConsumerDbs.LoadManifestForProject (DRagLint.CLI.ConsumerDbs.pas) ?, [drag-lint]DRagLint.CLI.ConsumerDbs.ReadPlatformFor (DRagLint.CLI.ConsumerDbs.pas) ?,
+  /// [drag-lint]DRagLint.CLI.ConsumerDbs.ResolveConsumerDbs (DRagLint.CLI.ConsumerDbs.pas) ?, [drag-lint]DRagLint.CLI.ContextDefaultLibraryDb (DRagLint.CLI.pas) ?, [drag-lint]DRagLint.CLI.DoIndex (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoSelfTestCoverage (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoSelfTestDbSelect (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoSelfTestManifestMerge (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoSelfTestManifestSaveAtomic (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoSelfTestSectionDb (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.LibraryDbForPlatform (DRagLint.CLI.pas) ?, [drag-lint]DRagLint.CLI.LibrarySectionRoots (DRagLint.CLI.pas) ?, [drag-lint]DRagLint.CLI.LoadDocAccessorMaxLines (DRagLint.CLI.pas),
+  /// [drag-lint]DRagLint.CLI.LoadDocMaxCallers (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.LoadDocMaxReturnCases (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.LoadManifestNameToDb (DRagLint.CLI.pas) ?, [drag-lint]DRagLint.CLI.ManifestLibraryIncludeRoots (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ManifestProjectFileForDb (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ManifestSectionLibraryResolve (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ManifestToJson (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ManifestWriteRefused (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.MigrateDbs.DoMigrateDbs (DRagLint.CLI.MigrateDbs.pas) ?, [drag-lint]DRagLint.CLI.MissingDbBuildCommand (DRagLint.CLI.pas) ?, [drag-lint]DRagLint.CLI.PlanMultiOwnerNaming (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.PlanToJson (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ResolveCompileCheckDb (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ResolveFrameworkContextDb (DRagLint.CLI.pas),
+  /// [drag-lint]DRagLint.CLI.ResolveIndexDb (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ResolveLibraryDbs (DRagLint.CLI.pas) ?, [drag-lint]DRagLint.CLI.ResolveProjectWriteDbIn (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ResolveReadDbsForFile (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ResolveReadDbsForFileWith (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.UnitNotInLibraryFindings (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.UsagesDbForFile (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Wiring.DoImpactAllProjects (DRagLint.CLI.Wiring.pas), [drag-lint]DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas) ?, [drag-lint]DRagLint.Index.DbSelect.TDbSelect.Resolve (DRagLint.Index.DbSelect.pas), [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.ExpandSectionDb (DRagLint.Index.Manifest.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.LoadDocComplexityMin (DRagLint.Index.Manifest.pas),
+  /// [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.LoadDocHandlesOptions (DRagLint.Index.Manifest.pas), [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.MergeEdits (DRagLint.Index.Manifest.pas), [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.ResolveFolderDb (DRagLint.Index.Manifest.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.ResolveProjectDb (DRagLint.Index.Manifest.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.ResolveReadDbs (DRagLint.Index.Manifest.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.SectionProjectFile (DRagLint.Index.Manifest.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas), [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.TManifestIO.Load.MergeSections (DRagLint.Index.Manifest.pas), [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.TManifestIO.ParseText (DRagLint.Index.Manifest.pas),
+  /// [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas), [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.TManifestIO.Save (DRagLint.Index.Manifest.pas), [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.TManifestIO.SaveEdits (DRagLint.Index.Manifest.pas), [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.TManifestIO.ToJson (DRagLint.Index.Manifest.pas), [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.TManifestIO.Validate (DRagLint.Index.Manifest.pas), [drag-lint]DRagLint.Index.ManifestWrite.RegisterProjectSection (DRagLint.Index.ManifestWrite.pas), [drag-lint]DRagLint.Index.Plan.BuildFilter (DRagLint.Index.Plan.pas), [drag-lint]DRagLint.Index.Plan.ResolvePlan (DRagLint.Index.Plan.pas) ?, [drag-lint]DRagLint.LSP.Server.PrivateEngineOutDir (DRagLint.LSP.Server.pas) ?, [dclDragLintWizard]DragLint.Plugin.DbResolver.ManifestDbForFile (DragLint.Plugin.DbResolver.pas) ?,
+  /// [dclDragLintWizard]DragLint.Plugin.DbResolver.ManifestDbForProject (DragLint.Plugin.DbResolver.pas) ?, [dclDragLintWizard]DragLint.Plugin.DbResolver.ManifestReadDbs (DragLint.Plugin.DbResolver.pas) ?, [dclDragLintWizard]DragLint.Plugin.DbResolver.TryLoadManifest (DragLint.Plugin.DbResolver.pas), [drag-lint]DRagLint.Project.DefineProfile.DprojForFileWith (DRagLint.Project.DefineProfile.pas), [drag-lint]DRagLint.Project.DefineProfile.LoadManifestSafe (DRagLint.Project.DefineProfile.pas), [drag-lint]DRagLint.Query.UsageScope.GroupMemberDb (DRagLint.Query.UsageScope.pas) ?, [drag-lint]DRagLint.Query.UsageScope.UsageScopeDbs (DRagLint.Query.UsageScope.pas), [drag-lint]DRagLint.Refactor.MultiProjectRename.FindRenameOwners (DRagLint.Refactor.MultiProjectRename.pas) ?, [drag-lint]DRagLint.Refactor.MultiProjectRename.OwnerOf (DRagLint.Refactor.MultiProjectRename.pas), [drag-lint]DRagLint.Refactor.MultiProjectRename.RenameAcrossOwners (DRagLint.Refactor.MultiProjectRename.pas)</para>
+  /// <para>Used in units: Config.MainForm, [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.CLI.Common, [drag-lint]DRagLint.CLI.ConsumerDbs, [drag-lint]DRagLint.CLI.MigrateDbs, [drag-lint]DRagLint.CLI.Wiring, [drag-lint]DRagLint.Index.Coverage, [drag-lint]DRagLint.Index.DbSelect, [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest, [drag-lint]DRagLint.Index.ManifestWrite, [drag-lint]DRagLint.Index.Plan, [drag-lint]DRagLint.LSP.Server, [dclDragLintWizard]DragLint.Plugin.DbResolver, [drag-lint]DRagLint.Project.DefineProfile, [drag-lint]DRagLint.Query.UsageScope, [drag-lint]DRagLint.Refactor.MultiProjectRename</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TIndexManifest = record
@@ -248,7 +249,7 @@ type
   /// TManifestIO.ParseText / ParseTextEx; TManifestIO.Load catches it and
   /// records it in TIndexManifest.LoadError.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.LoadConfigDefaults (DRagLint.CLI.pas) ?, DRagLint.Index.Manifest.GetTyped (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.MergeEdits (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.ParseManifestRoot (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas) (+1 more)</para>
+  /// <para>Used by: [dclDragLintWizard]DRagLint.Index.Manifest.GetTyped (DRagLint.Index.Manifest.pas), [dclDragLintWizard]DRagLint.Index.Manifest.MergeEdits (DRagLint.Index.Manifest.pas), [dclDragLintWizard]DRagLint.Index.Manifest.ParseManifestRoot (DRagLint.Index.Manifest.pas), [dclDragLintWizard]DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Index.Manifest</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -275,8 +276,8 @@ type
   /// because both ask <see cref="TInstalledLayout.ManifestLocation"/>.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Index.Manifest.pas) ?, DRagLint.CLI.DoManifest (DRagLint.CLI.pas), DRagLint.Index.Manifest.TInstalledLayout.ManifestLocation (DRagLint.Index.Manifest.pas) ?, DRagLint.Index.Manifest.TInstalledLayout.ResolveManifest (DRagLint.Index.Manifest.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Index.Manifest</para>
+  /// <para>Used by: [dclDragLintWizard]declaration (DRagLint.Index.Manifest.pas) ?, [dclDragLintWizard]declaration (DragLint.Plugin.ManifestPaths.pas) ?, DRagLint.CLI.DoManifest (DRagLint.CLI.pas), [dclDragLintWizard]DRagLint.Index.Manifest.TInstalledLayout.ManifestLocation (DRagLint.Index.Manifest.pas) ?, [dclDragLintWizard]DRagLint.Index.Manifest.TInstalledLayout.ResolveManifest (DRagLint.Index.Manifest.pas), [dclDragLintWizard]DragLint.Plugin.DbResolver.TryLoadManifest (DragLint.Plugin.DbResolver.pas) ?, [dclDragLintWizard]DragLint.Plugin.ManifestPaths.PluginManifestIn (DragLint.Plugin.ManifestPaths.pas) ?</para>
+  /// <para>Used in units: DRagLint.CLI, [dclDragLintWizard]DRagLint.Index.Manifest, [dclDragLintWizard]DragLint.Plugin.DbResolver, [dclDragLintWizard]DragLint.Plugin.ManifestPaths, DRagLint.V152.ATLA.Support</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TManifestLocation = record
@@ -299,8 +300,8 @@ type
   /// (DRAGLINT_MANIFEST, set by --manifest) is honoured in BOTH layouts: an explicit request
   /// that was silently ignored would load the real manifest, the failure it exists to stop.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ApplyManifestSwitch (DRagLint.CLI.pas), DRagLint.CLI.ApplyReconcileToLibrary (DRagLint.CLI.pas), DRagLint.CLI.DoManifest (DRagLint.CLI.pas), DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas) (+5 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Index.Manifest, DRagLint.Index.ManifestWrite</para>
+  /// <para>Used by: DRagLint.CLI.ApplyManifestSwitch (DRagLint.CLI.pas), DRagLint.CLI.ApplyReconcileToLibrary (DRagLint.CLI.pas), DRagLint.CLI.DoManifest (DRagLint.CLI.pas), DRagLint.CLI.MigrateDbs.DoMigrateDbs (DRagLint.CLI.MigrateDbs.pas), DRagLint.CLI.RunCommand (DRagLint.CLI.pas), [dclDragLintWizard]DRagLint.Index.Manifest.TManifestIO.IgnoresLocalConfig (DRagLint.Index.Manifest.pas), [dclDragLintWizard]DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas), [dclDragLintWizard]DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas), [dclDragLintWizard]DragLint.Plugin.ManifestPaths.PluginLibraryOutDir (DragLint.Plugin.ManifestPaths.pas), [dclDragLintWizard]DragLint.Plugin.ManifestPaths.PluginManifestIn (DragLint.Plugin.ManifestPaths.pas), [dclDragLintWizard]DragLint.Plugin.ManifestPaths.PluginManifestWriteTarget (DragLint.Plugin.ManifestPaths.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.MigrateDbs, [dclDragLintWizard]DRagLint.Index.Manifest, DRagLint.Index.ManifestWrite, [dclDragLintWizard]DragLint.Plugin.ManifestPaths, DRagLint.V152.ATLA.Support</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TInstalledLayout = class
@@ -324,7 +325,7 @@ type
       /// v1 included: False.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoManifest (DRagLint.CLI.pas), DRagLint.Index.Manifest.TInstalledLayout.DefaultOutDir (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TInstalledLayout.ExpandOutDir (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TInstalledLayout.LibraryDir (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TInstalledLayout.LogDir (DRagLint.Index.Manifest.pas) (+4 more)</para>
+      /// <para>Called from: DRagLint.CLI.DoManifest (DRagLint.CLI.pas), [dclDragLintWizard]DRagLint.Index.Manifest.TInstalledLayout.DefaultOutDir (DRagLint.Index.Manifest.pas), [dclDragLintWizard]DRagLint.Index.Manifest.TInstalledLayout.ExpandOutDir (DRagLint.Index.Manifest.pas), [dclDragLintWizard]DRagLint.Index.Manifest.TInstalledLayout.LibraryDir (DRagLint.Index.Manifest.pas), [dclDragLintWizard]DRagLint.Index.Manifest.TInstalledLayout.LogDir (DRagLint.Index.Manifest.pas), [dclDragLintWizard]DRagLint.Index.Manifest.TInstalledLayout.ManifestLocation (DRagLint.Index.Manifest.pas), [dclDragLintWizard]DRagLint.Index.Manifest.TInstalledLayout.WriteTarget (DRagLint.Index.Manifest.pas)</para>
       /// <para>Calls: GetEnvironmentVariable, SameText</para>
       /// <para>Returns: if Value = '' then DEFAULT_LAYOUT_V2</para>
       /// <para>Directives: static</para>
@@ -367,7 +368,7 @@ type
       /// <returns>The manifest TManifestIO.Load reads and the writers rewrite.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.ApplyReconcileToLibrary (DRagLint.CLI.pas), DRagLint.CLI.DoManifest (DRagLint.CLI.pas), DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.Index.Manifest.TInstalledLayout.WriteTarget (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas) (+1 more)</para>
+      /// <para>Called from: DRagLint.CLI.ApplyReconcileToLibrary (DRagLint.CLI.pas), DRagLint.CLI.DoManifest (DRagLint.CLI.pas), DRagLint.CLI.MigrateDbs.DoMigrateDbs (DRagLint.CLI.MigrateDbs.pas), [dclDragLintWizard]DRagLint.Index.Manifest.TInstalledLayout.WriteTarget (DRagLint.Index.Manifest.pas), [dclDragLintWizard]DRagLint.Index.Manifest.TManifestIO.IgnoresLocalConfig (DRagLint.Index.Manifest.pas), [dclDragLintWizard]DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas), [dclDragLintWizard]DragLint.Plugin.ManifestPaths.PluginManifestIn (DragLint.Plugin.ManifestPaths.pas)</para>
       /// <para>Calls: DRagLint.Index.Manifest.TInstalledLayout.Enabled, DRagLint.Index.Manifest.TInstalledLayout.ResolveManifest, GetEnvironmentVariable</para>
       /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.Enabled"/>
@@ -384,7 +385,7 @@ type
       /// <returns>v2: %LOCALAPPDATA%\drag-lint\logs, '' when LOCALAPPDATA is unset. Not created.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoManifest (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoManifest (DRagLint.CLI.pas), DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
       /// <para>Calls: DRagLint.Index.Manifest.TInstalledLayout.Enabled, GetEnvironmentVariable</para>
       /// <para>Returns: if Local = '' then ''</para>
       /// <para>Touches: file system</para>
@@ -443,7 +444,7 @@ type
       /// <returns>Full path of the file to write; it need not exist.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Index.ManifestWrite.RegisterProjectSection (DRagLint.Index.ManifestWrite.pas)</para>
+      /// <para>Called from: DRagLint.Index.ManifestWrite.RegisterProjectSection (DRagLint.Index.ManifestWrite.pas), [dclDragLintWizard]DragLint.Plugin.ManifestPaths.PluginManifestWriteTarget (DragLint.Plugin.ManifestPaths.pas)</para>
       /// <para>Calls: DRagLint.Index.Manifest.TInstalledLayout.AppDataManifestFor, DRagLint.Index.Manifest.TInstalledLayout.Enabled, DRagLint.Index.Manifest.TInstalledLayout.ManifestLocation, GetEnvironmentVariable</para>
       /// <para>Returns: Located.Path; Roaming</para>
       /// <para>Directives: static</para>
@@ -463,7 +464,7 @@ type
       /// lone % and %% stay literal.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas)</para>
+      /// <para>Called from: DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas), DragLint.Plugin.ManifestPaths.PluginLibraryOutDir (DragLint.Plugin.ManifestPaths.pas)</para>
       /// <para>Calls: Copy, Delete, DRagLint.Index.Manifest.TInstalledLayout.Enabled, GetEnvironmentVariable, Pos</para>
       /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.Enabled"/>
@@ -483,7 +484,7 @@ type
       /// today's behaviour).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas)</para>
+      /// <para>Called from: DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas), DragLint.Plugin.ManifestPaths.PluginLibraryOutDir (DragLint.Plugin.ManifestPaths.pas)</para>
       /// <para>Calls: DRagLint.Index.Manifest.TInstalledLayout.AppDataManifestFor, DRagLint.Index.Manifest.TInstalledLayout.Enabled, DRagLint.Index.Manifest.TInstalledLayout.LibraryDir, ExtractFileDir, GetEnvironmentVariable, IncludeTrailingPathDelimiter, SameText</para>
       /// <para>Returns: ''; LibraryDir</para>
       /// <para>Touches: file system</para>
@@ -518,8 +519,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ApplyReconcileToLibrary (DRagLint.CLI.pas), DRagLint.CLI.ContextDefaultLibraryDb (DRagLint.CLI.pas), DRagLint.CLI.DoCycles.OpenPlanLibrary (DRagLint.CLI.pas), DRagLint.CLI.DoImpactAllProjects (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) (+38 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Index.Manifest, DRagLint.Index.ManifestWrite, DRagLint.LSP.Server, DRagLint.Project.DefineProfile, DRagLint.Refactor.MultiProjectRename</para>
+  /// <para>Used by: DRagLint.CLI.ApplyReconcileToLibrary (DRagLint.CLI.pas), DRagLint.CLI.Common.SplitConsumerDbs (DRagLint.CLI.Common.pas), DRagLint.CLI.ConsumerDbs.LoadManifestForProject (DRagLint.CLI.ConsumerDbs.pas), DRagLint.CLI.ContextDefaultLibraryDb (DRagLint.CLI.pas), DRagLint.CLI.DoCycles.OpenPlanLibrary (DRagLint.CLI.pas), [dclDragLintWizard]DRagLint.Index.Manifest.LoadDocComplexityMin (DRagLint.Index.Manifest.pas), [dclDragLintWizard]DRagLint.Index.Manifest.LoadDocHandlesOptions (DRagLint.Index.Manifest.pas), [dclDragLintWizard]DRagLint.Index.Manifest.MergeEdits (DRagLint.Index.Manifest.pas), [dclDragLintWizard]DragLint.Plugin.DbResolver.TryLoadManifest (DragLint.Plugin.DbResolver.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.Common, DRagLint.CLI.ConsumerDbs, DRagLint.CLI.MigrateDbs, DRagLint.CLI.Wiring, [dclDragLintWizard]DRagLint.Index.Manifest, DRagLint.Index.ManifestWrite, DRagLint.LSP.Server, [dclDragLintWizard]DragLint.Plugin.DbResolver, DRagLint.Project.DefineProfile, DRagLint.Query.UsageScope, DRagLint.Refactor.MultiProjectRename</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TManifestIO = class
@@ -530,9 +531,24 @@ type
       /// <returns>True = this engine reads NO <c>.drag-lint.json</c> found by walking up from the
       /// working directory (neither the manifest merge in Load nor the CLI defaults); False when
       /// the key is absent, false, not a boolean, or the manifest is missing or unreadable.</returns>
-      /// <remarks>B28 (1.52): a lane-private engine copy runs from a CWD under C:\Projects and used
+      /// <remarks>
+      /// B28 (1.52): a lane-private engine copy runs from a CWD under C:\Projects and used
       /// to merge C:\Projects\.drag-lint.json (a "db" key there became an explicit --db). The key
-      /// is opt-in, so a deployed engine behaves exactly as before. Touches: file system.</remarks>
+      /// is opt-in, so a deployed engine behaves exactly as before. Touches: file system.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.LoadConfigDefaults (DRagLint.CLI.pas), DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas)</para>
+      /// <para>Calls: DRagLint.Index.Manifest.TInstalledLayout.ManifestLocation, TJSONBool, TJSONObject</para>
+      /// <para>Returns: False; (JKey is TJSONBool) and TJSONBool(JKey).AsBoolean</para>
+      /// <para>Catches: Exception (swallowed)</para>
+      /// <para>Touches: file system</para>
+      /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.ManifestLocation"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseText"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseTextEx"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Save"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function IgnoresLocalConfig(const AEngineDir: string): Boolean; static;
 
       /// <summary>Load and merge: reads the global config beside AEngineDir, then
@@ -548,18 +564,18 @@ type
       /// <para>Load does not raise on a bad file: a READ verb may carry on with
       /// what parsed. A WRITE verb must refuse when LoadError is not ''.</para>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.ContextDefaultLibraryDb (DRagLint.CLI.pas), DRagLint.CLI.DoCycles.OpenPlanLibrary (DRagLint.CLI.pas), DRagLint.CLI.DoImpactAllProjects (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas) (+28 more)</para>
-      /// <para>Calls: Default, DRagLint.Index.Manifest.TDocSettings.Defaults, DRagLint.Index.Manifest.TIndexSettings.Defaults, DRagLint.Index.Manifest.TInstalledLayout.ManifestLocation, DRagLint.Index.Manifest.TManifestIO.Load.MergeSections, DRagLint.Index.Manifest.TManifestIO.Load.NoteLoadError, DRagLint.Index.Manifest.TManifestIO.ParseText, DRagLint.Index.Manifest.TManifestIO.ParseTextEx, FirstLoadWarning, SameText, Writeln</para>
+      /// <para>Called from: DRagLint.CLI.Common.SplitConsumerDbs (DRagLint.CLI.Common.pas), DRagLint.CLI.ConsumerDbs.LoadManifestForProject (DRagLint.CLI.ConsumerDbs.pas), DRagLint.CLI.ContextDefaultLibraryDb (DRagLint.CLI.pas), DRagLint.CLI.DoCycles.OpenPlanLibrary (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), [dclDragLintWizard]DRagLint.Index.Manifest.LoadDocComplexityMin (DRagLint.Index.Manifest.pas), [dclDragLintWizard]DRagLint.Index.Manifest.LoadDocHandlesOptions (DRagLint.Index.Manifest.pas)</para>
+      /// <para>Calls: Default, DRagLint.Index.Manifest.TDocSettings.Defaults, DRagLint.Index.Manifest.TIndexSettings.Defaults, DRagLint.Index.Manifest.TInstalledLayout.ManifestLocation, DRagLint.Index.Manifest.TManifestIO.IgnoresLocalConfig, DRagLint.Index.Manifest.TManifestIO.Load.MergeSections, DRagLint.Index.Manifest.TManifestIO.Load.NoteLoadError, DRagLint.Index.Manifest.TManifestIO.ParseText, DRagLint.Index.Manifest.TManifestIO.ParseTextEx, FirstLoadWarning, SameText, Writeln</para>
       /// <para>Returns: Default(TIndexManifest); GlobalManifest; LocalManifest</para>
-      /// <para>Complexity: 27 (cyclomatic, outer body), 148 lines (full implementation)</para>
+      /// <para>Complexity: 28 (cyclomatic, outer body), 148 lines (full implementation)</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Index.Manifest.TDocSettings.Defaults"/>
       /// <seealso cref="DRagLint.Index.Manifest.TIndexSettings.Defaults"/>
       /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.ManifestLocation"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.IgnoresLocalConfig"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load.MergeSections"/>
-      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load.NoteLoadError"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Load(const AEngineDir, AStartDir: string): TIndexManifest; static;
@@ -572,16 +588,16 @@ type
       /// the wrong JSON type; the message names the key path.</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.ApplyReconcileToLibrary (DRagLint.CLI.pas), DRagLint.CLI.DoImpactAllProjects (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas) (+11 more)</para>
+      /// <para>Called from: DRagLint.CLI.ApplyReconcileToLibrary (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), [dclDragLintWizard]DRagLint.Index.Manifest.MergeEdits (DRagLint.Index.Manifest.pas), [dclDragLintWizard]DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas), [dclDragLintWizard]DragLint.Plugin.DbResolver.TryLoadManifest (DragLint.Plugin.DbResolver.pas)</para>
       /// <para>Calls: DRagLint.Index.Manifest.TManifestIO.ParseTextEx</para>
       /// <para>Returns: ParseTextEx(AJson, ARootDir, Keys)</para>
       /// <para>Pure</para>
       /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseTextEx"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.IgnoresLocalConfig"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Save"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.SaveEdits"/>
-      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ToJson"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function ParseText(const AJson, ARootDir: string): TIndexManifest; static;
@@ -626,10 +642,10 @@ type
       /// <para>Pure</para>
       /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Index.Manifest.ProjectsIndexingToStr"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.IgnoresLocalConfig"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseText"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseTextEx"/>
-      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Save"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function ToJson(const AManifest: TIndexManifest): TJSONObject; static;
@@ -652,9 +668,9 @@ type
       /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Core.JsonFile.WriteJsonFileAtomic"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ToJson"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.IgnoresLocalConfig"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseText"/>
-      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseTextEx"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class procedure Save(const AManifest: TIndexManifest; const APath: string); static;
@@ -679,14 +695,14 @@ type
       /// future setting, a section "_note") are never touched. A renamed section
       /// is a delete plus an add, so its unmodelled keys go with the old name.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.ApplyReconcileToLibrary (DRagLint.CLI.pas), DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas)</para>
+      /// <para>Called from: DRagLint.CLI.ApplyReconcileToLibrary (DRagLint.CLI.pas), DRagLint.CLI.MigrateDbs.DoMigrateDbs (DRagLint.CLI.MigrateDbs.pas)</para>
       /// <para>Calls: DRagLint.Core.JsonFile.WriteJsonFileAtomic, DRagLint.Index.Manifest.MergeEdits</para>
       /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Core.JsonFile.WriteJsonFileAtomic"/>
       /// <seealso cref="DRagLint.Index.Manifest.MergeEdits"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.IgnoresLocalConfig"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseText"/>
-      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseTextEx"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class procedure SaveEdits(const AOriginalText: string; const AEdited: TIndexManifest; const APath: string); static;
@@ -697,17 +713,17 @@ type
       /// <returns>Empty string if valid; first error message otherwise.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoImpactAllProjects (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.Wiring.DoImpactAllProjects (DRagLint.CLI.Wiring.pas)</para>
       /// <para>Calls: DRagLint.Index.Manifest.TIndexManifest.FindSection, Format</para>
       /// <para>Returns: ''; Format('Section %d has an empty name', [I]); Format('Duplicate section name: "%s"', [Sec.Name]); Format('Section "%s" has no include paths and source is not registry-libraries', [Sec.Name]); Format('Section "%s" dedupAgainst references unknown section "%s"', [Sec.Name, DA])</para>
       /// <para>Complexity: 15 (cyclomatic, outer body), 64 lines (full implementation)</para>
       /// <para>Pure</para>
       /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Index.Manifest.TIndexManifest.FindSection"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.IgnoresLocalConfig"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseText"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseTextEx"/>
-      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Save"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Validate(const AManifest: TIndexManifest): string; static;
@@ -722,7 +738,7 @@ type
   /// onto a chosen DB is what made a project-scoped rebuild destructive: the
   /// wrong DB gets cleared and refilled, and the right one is never written.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: [drag-lint]declaration (DRagLint.Index.Manifest.pas), declaration (DragLint.Plugin.DbResolver.pas), [drag-lint]DRagLint.CLI.ResolveOwnProjectDb (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.UsagesDbForFile (DRagLint.CLI.pas), [drag-lint]DRagLint.Index.Manifest.ResolveProjectDb (DRagLint.Index.Manifest.pas)</para>
+  /// <para>Used by: [drag-lint]declaration (DRagLint.CLI.Common.pas), [dclDragLintWizard,drag-lint]declaration (DRagLint.Index.Manifest.pas), [dclDragLintWizard]declaration (DragLint.Plugin.DbResolver.pas), [dclDragLintWizard]declaration (DragLint.Plugin.IndexJob.pas), [drag-lint]DRagLint.CLI.Common.ResolveOwnProjectDb (DRagLint.CLI.Common.pas), [drag-lint]DRagLint.CLI.UsagesDbForFile (DRagLint.CLI.pas), [dclDragLintWizard,drag-lint]DRagLint.Index.Manifest.ResolveProjectDb (DRagLint.Index.Manifest.pas), [dclDragLintWizard]DragLint.Plugin.DbResolver.ActiveProjectWriteDb (DragLint.Plugin.DbResolver.pas), [dclDragLintWizard]DragLint.Plugin.DbResolver.ManifestDbForProject (DragLint.Plugin.DbResolver.pas), [dclDragLintWizard]DragLint.Plugin.IndexJob.ReindexTargetDb (DragLint.Plugin.IndexJob.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TProjectDbMatch = (
@@ -763,7 +779,7 @@ type
 /// data loss once the caller passes --rebuild, which clears the whole DB.
 /// Pure: no file system access, no globals. Safe to call from any thread.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DRagLint.CLI.ResolveFrameworkContextDb (DRagLint.CLI.pas), DRagLint.CLI.ResolveOwnProjectDb (DRagLint.CLI.pas), DRagLint.CLI.ResolveReadDbsForFileWith (DRagLint.CLI.pas), DRagLint.Index.Manifest.ResolveReadDbs (DRagLint.Index.Manifest.pas) (+1 more)</para>
+/// <para>Called from: DRagLint.CLI.Common.ResolveOwnProjectDb (DRagLint.CLI.Common.pas), DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DRagLint.CLI.ResolveFrameworkContextDb (DRagLint.CLI.pas), DRagLint.CLI.ResolveReadDbsForFileWith (DRagLint.CLI.pas), [dclDragLintWizard]DRagLint.Index.Manifest.ResolveReadDbs (DRagLint.Index.Manifest.pas), [dclDragLintWizard]DragLint.Plugin.DbResolver.ManifestDbForProject (DragLint.Plugin.DbResolver.pas)</para>
 /// <para>Calls: DRagLint.Index.Manifest.ExpandSectionDb, DRagLint.Index.Manifest.NormalizeProjectPath, ExtractFileExt, SameText</para>
 /// <para>Returns: pdmNone; pdmUnique</para>
 /// <para>Complexity: 11 (cyclomatic, outer body), 44 lines (full implementation)</para>
@@ -787,7 +803,7 @@ function ResolveProjectDb(const AManifest: TIndexManifest; const AProjectFile: s
 /// Handles relative paths, empty paths (defaults), and environment variable expansion.
 /// Used by DB selection logic to match resolved DBs back to manifest sections.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestSectionDb (DRagLint.CLI.pas), DRagLint.CLI.LibraryDbForPlatform (DRagLint.CLI.pas), DRagLint.CLI.ManifestProjectFileForDb (DRagLint.CLI.pas), DRagLint.CLI.ManifestSectionLibraryResolve (DRagLint.CLI.pas) (+4 more)</para>
+/// <para>Called from: DRagLint.CLI.DoSelfTestSectionDb (DRagLint.CLI.pas), DRagLint.CLI.LibraryDbForPlatform (DRagLint.CLI.pas), DRagLint.CLI.ManifestProjectFileForDb (DRagLint.CLI.pas), DRagLint.CLI.ManifestSectionLibraryResolve (DRagLint.CLI.pas), DRagLint.CLI.MigrateDbs.DoMigrateDbs (DRagLint.CLI.MigrateDbs.pas), [dclDragLintWizard]DRagLint.Index.Manifest.ResolveFolderDb (DRagLint.Index.Manifest.pas), [dclDragLintWizard]DRagLint.Index.Manifest.ResolveProjectDb (DRagLint.Index.Manifest.pas)</para>
 /// <para>Calls: DRagLint.Index.Manifest.SectionProjectFile, ExpandFileName, ExtractFilePath</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Index.Manifest.SectionProjectFile"/>
@@ -805,7 +821,7 @@ function ExpandSectionDb(const AManifest: TIndexManifest; const ASection: TIndex
 /// project indexes that project's compile closure, so a second project target
 /// would be a second section -- which is how the manifest already models it.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.CLI.ManifestProjectFileForDb (DRagLint.CLI.pas), DRagLint.Index.Manifest.ExpandSectionDb (DRagLint.Index.Manifest.pas), DRagLint.Project.DefineProfile.DprojForFileWith (DRagLint.Project.DefineProfile.pas), DRagLint.Refactor.MultiProjectRename.OwnerOf (DRagLint.Refactor.MultiProjectRename.pas)</para>
+/// <para>Called from: DRagLint.CLI.ManifestProjectFileForDb (DRagLint.CLI.pas), DRagLint.CLI.MigrateDbs.DoMigrateDbs (DRagLint.CLI.MigrateDbs.pas), DRagLint.Index.Manifest.ExpandSectionDb (DRagLint.Index.Manifest.pas), DRagLint.Project.DefineProfile.DprojForFileWith (DRagLint.Project.DefineProfile.pas), DRagLint.Refactor.MultiProjectRename.OwnerOf (DRagLint.Refactor.MultiProjectRename.pas)</para>
 /// <para>Calls: ExpandFileName, ExtractFileExt, LowerCase</para>
 /// <para>Touches: file system</para>
 /// <!-- drag-lint:auto END -->
@@ -827,7 +843,7 @@ function SectionProjectFile(const AManifest: TIndexManifest; const ASection: TIn
 /// folder: see ResolveProjectDb and ResolveReadDbs.
 /// Pure: no file system access. Safe to call from any thread.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Index.Manifest.ResolveReadDbs (DRagLint.Index.Manifest.pas)</para>
+/// <para>Called from: DRagLint.Index.Manifest.ResolveReadDbs (DRagLint.Index.Manifest.pas), DragLint.Plugin.DbResolver.ManifestDbForFile (DragLint.Plugin.DbResolver.pas)</para>
 /// <para>Calls: DRagLint.Index.Manifest.ExpandSectionDb, ExpandFileName, ExtractFileExt, ExtractFilePath, IncludeTrailingPathDelimiter, LowerCase, Pos, SameText</para>
 /// <para>Returns: ''; ExpandSectionDb(AManifest, Sec)</para>
 /// <para>Complexity: 14 (cyclomatic, outer body), 40 lines (full implementation)</para>
@@ -866,7 +882,7 @@ function ResolveFolderDb(const AManifest: TIndexManifest; const AFilePath: strin
 /// right at a fraction of the cost.
 /// Pure: no file system access. Safe to call from any thread.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.ResolveReadDbsForFileWith (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.ResolveReadDbsForFileWith (DRagLint.CLI.pas), [dclDragLintWizard]DragLint.Plugin.DbResolver.ManifestReadDbs (DragLint.Plugin.DbResolver.pas)</para>
 /// <para>Calls: DRagLint.Index.Manifest.ResolveFolderDb, DRagLint.Index.Manifest.ResolveProjectDb, SameText</para>
 /// <seealso cref="DRagLint.Index.Manifest.ResolveFolderDb"/>
 /// <seealso cref="DRagLint.Index.Manifest.ResolveProjectDb"/>
@@ -919,7 +935,7 @@ type
 /// keeps library-source browsing working.
 /// Pure apart from AContains. Cost is one probe per candidate (small list).
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.ResolveConsumerDbs (DRagLint.CLI.pas), DRagLint.CLI.ResolveReadDbsForFileWith (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.ConsumerDbs.ResolveConsumerDbs (DRagLint.CLI.ConsumerDbs.pas), DRagLint.CLI.ResolveReadDbsForFileWith (DRagLint.CLI.pas)</para>
 /// <para>Calls: AContains, SameText</para>
 /// <para>Returns: ACandidates; Holders + Others</para>
 /// <para>Complexity: 11 (cyclomatic, outer body), 49 lines (full implementation)</para>
@@ -949,7 +965,7 @@ function OrderDbsByMembership(const ACandidates: TArray<string>;
 /// out over a manifest problem.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas) (+1 more)</para>
+/// <para>Called from: DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas)</para>
 /// <para>Calls: DRagLint.Index.Manifest.TManifestIO.Load, ExtractFilePath, ParamStr</para>
 /// <para>Returns: DocManifest.Docs.ComplexityMin; 10</para>
 /// <para>Catches: Exception (swallowed)</para>
@@ -969,7 +985,7 @@ function LoadDocComplexityMin: Integer;
 /// errors out over a manifest problem.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DocRenderOptionsFor (DRagLint.CLI.pas), DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas) (+2 more)</para>
+/// <para>Called from: DRagLint.CLI.DocRenderOptionsFor (DRagLint.CLI.pas), DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas)</para>
 /// <para>Calls: DRagLint.Core.Model.TDocHandlesOptions.Defaults, DRagLint.Index.Manifest.TManifestIO.Load, ExtractFilePath, ParamStr</para>
 /// <para>Returns: TDocHandlesOptions.Defaults; DocManifest.Docs.Handles</para>
 /// <para>Catches: Exception (swallowed)</para>

@@ -42,10 +42,22 @@ interface
 /// <returns>Process exit code: 0 done, 1 nothing to do (already disabled / nothing to
 /// enable), 2 usage error or refused (unknown rule, missing flag, a line that cannot carry
 /// a marker, an unreadable config).</returns>
-/// <remarks>Line scope edits the source file in place, keeping its encoding and every other
+/// <remarks>
+/// Line scope edits the source file in place, keeping its encoding and every other
 /// byte; unit and project scope edit only the config file. A refused call writes nothing.
 /// Line scope refuses the routine-metric rules (their marker binds the measured value, which
-/// only `drag-lint allow` measures) and the review-marker / parser-error ids, as allow does.</remarks>
+/// only `drag-lint allow` measures) and the review-marker / parser-error ids, as allow does.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.RuleScope.Outcome, DRagLint.CLI.RuleScope.Report, DRagLint.CLI.RuleScope.RunConfigScope, DRagLint.CLI.RuleScope.RunLineScope, DRagLint.CLI.RuleScope.Validate, LowerCase, SameText, Trim</para>
+/// <para>Returns: Res.Code</para>
+/// <seealso cref="DRagLint.CLI.RuleScope.Outcome"/>
+/// <seealso cref="DRagLint.CLI.RuleScope.Report"/>
+/// <seealso cref="DRagLint.CLI.RuleScope.RunConfigScope"/>
+/// <seealso cref="DRagLint.CLI.RuleScope.RunLineScope"/>
+/// <seealso cref="DRagLint.CLI.RuleScope.Validate"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunRuleScope(const pAction, pRuleId, pScope, pFile: string; pLine: Integer;
   const pReason, pProject, pConfigPath: string; pJson: Boolean): Integer;
 

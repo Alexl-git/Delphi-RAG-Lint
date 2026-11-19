@@ -13,21 +13,64 @@ uses
 /// <summary>`drag-lint top`: the most-referenced symbols of the index.</summary>
 /// <param name="AArgs">--db (required), --limit (default 50).</param>
 /// <returns>0; 2 without --db or when the database is missing.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Common.ReportCap, DRagLint.Storage.FileMembership.ConnectReadOnly, Format, StringOfChar, Writeln</para>
+/// <para>Returns: 0</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.ReportCap"/>
+/// <seealso cref="DRagLint.Storage.FileMembership.ConnectReadOnly"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoTop(const AArgs: TArgs): Integer;
 
 /// <summary>`drag-lint import-log &lt;logfile&gt; --db`: imports the compiler messages of a build log into the index (compiler_findings), which `query hints` reads.</summary>
 /// <param name="AArgs">Path = the log file, --db.</param>
 /// <returns>0; 2 without the log file or --db.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Core.FileTime.NowUnixUtc, DRagLint.Storage.FileMembership.ConnectWriter, ExtractFileName, Format, StrToIntDef, Trim, UpCase, Writeln</para>
+/// <para>Returns: 0</para>
+/// <para>Complexity: 13 (cyclomatic, outer body), 116 lines (full implementation)</para>
+/// <para>Catches: Exception (re-raise)</para>
+/// <para>SQL: reads FILES; writes COMPILER_FINDINGS</para>
+/// <para>Touches: file system</para>
+/// <para>Transaction: starts, commits, rolls back</para>
+/// <seealso cref="DRagLint.Core.FileTime.NowUnixUtc"/>
+/// <seealso cref="DRagLint.Storage.FileMembership.ConnectWriter"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoImportLog(const AArgs: TArgs): Integer;
 
 /// <summary>`query hints`: the compiler findings import-log recorded, at most 500, ordered by file and line.</summary>
 /// <param name="AArgs">--db (required); --name filters by code, --rule by severity.</param>
 /// <returns>0; 2 without --db or when the database is missing.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Storage.FileMembership.ConnectReadOnly, Format, LowerCase, UpperCase, Writeln</para>
+/// <para>Returns: 0</para>
+/// <para>SQL: reads COMPILER_FINDINGS</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Storage.FileMembership.ConnectReadOnly"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoQueryHints(const AArgs: TArgs): Integer;
 
 /// <summary>`drag-lint export enums|obsidian`: dispatches to the enum exporter or the Obsidian vault writer.</summary>
 /// <param name="AArgs">SubCommand enums|obsidian and their options.</param>
 /// <returns>The sub-verb's exit code; 2 for an unknown sub-command.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Export.DoExportEnums, DRagLint.CLI.Export.DoExportObsidian, Writeln</para>
+/// <para>Returns: DoExportEnums(AArgs); DoExportObsidian(AArgs); 2</para>
+/// <seealso cref="DRagLint.CLI.Export.DoExportEnums"/>
+/// <seealso cref="DRagLint.CLI.Export.DoExportObsidian"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoExport(const AArgs: TArgs): Integer;
 
 implementation

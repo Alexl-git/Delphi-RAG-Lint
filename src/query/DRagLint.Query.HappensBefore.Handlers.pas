@@ -67,9 +67,15 @@ const
 
 type
   /// <summary>How one event handler is ordered in one program (ruling HB5).</summary>
-  /// <remarks>Ordered = True only when every unordered rule of the unit header failed to hold; then
+  /// <remarks>
+  /// Ordered = True only when every unordered rule of the unit header failed to hold; then
   /// RunSite is the top-level `Application.Run` statement of the program block and CreateSite the
-  /// CreateForm statement of the handler's form. WhyNot is '' exactly when Ordered.</remarks>
+  /// CreateForm statement of the handler's form. WhyNot is '' exactly when Ordered.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.HappensBefore.Handlers.pas) ?, DRagLint.Query.HappensBefore.Handlers.HbPrefixMissText (DRagLint.Query.HappensBefore.Handlers.pas) ?, DRagLint.Query.HappensBefore.Handlers.HbReliedText (DRagLint.Query.HappensBefore.Handlers.pas) ?, DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.OrderOf (DRagLint.Query.HappensBefore.Handlers.pas), DRagLint.Query.HappensBefore.TSolver.HandlerOrder (DRagLint.Query.HappensBefore.pas) (+4 more)</para>
+  /// <para>Used in units: DRagLint.Query.HappensBefore, DRagLint.Query.HappensBefore.Handlers</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THbHandlerOrder = record
     /// <summary>symbols.id of the handler method.</summary>
     RoutineId: Int64;
@@ -93,10 +99,27 @@ type
 
   /// <summary>Answers "is this event handler ordered after the program-block prefix?" for the
   /// check-init solver, caching what one program and one form share.</summary>
-  /// <remarks>Owns its caches, not the index. Not thread-safe (the shared parse cache).</remarks>
+  /// <remarks>
+  /// Owns its caches, not the index. Not thread-safe (the shared parse cache).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.HappensBefore.pas) ?, DRagLint.Query.HappensBefore.TSolver.Create (DRagLint.Query.HappensBefore.pas)</para>
+  /// <para>Used in units: DRagLint.Query.HappensBefore</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THbHandlerOrderer = class
   strict private
     type
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Used by: declaration (DRagLint.Query.HappensBefore.Handlers.pas) ?, DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.ProgramFacts (DRagLint.Query.HappensBefore.Handlers.pas) ?, DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.ReadProgram (DRagLint.Query.HappensBefore.Handlers.pas)</para>
+      /// <para>Used in units: DRagLint.Query.HappensBefore.Handlers</para>
+      /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.BindingsOf"/>
+      /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.CodeRefCount"/>
+      /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.Create"/>
+      /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.Destroy"/>
+      /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.OrderOf"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       TProgramFacts = record
         Name: string;
         Path: string;
@@ -110,27 +133,159 @@ type
       FPrograms: TArray<TProgramFacts>;
       FProgramIds: TArray<Int64>;
       FLines: TDictionary<string, TArray<string>>;
+    /// <param name="pProgramBlockId"><!-- drag-lint:auto type -->Int64</param>
+    /// <returns><!-- drag-lint:auto -->TProgramFacts -- Observed:
+    /// ReadProgram(pProgramBlockId).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.OrderOf (DRagLint.Query.HappensBefore.Handlers.pas), DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.RunSiteOf (DRagLint.Query.HappensBefore.Handlers.pas)</para>
+    /// <para>Calls: DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.ReadProgram</para>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.ReadProgram"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.BindingsOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.CodeRefCount"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.Create"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ProgramFacts(pProgramBlockId: Int64): TProgramFacts;
+    /// <param name="pProgramBlockId"><!-- drag-lint:auto type -->Int64</param>
+    /// <returns><!-- drag-lint:auto -->TProgramFacts -- Observed: Default(TProgramFacts).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.ProgramFacts (DRagLint.Query.HappensBefore.Handlers.pas)</para>
+    /// <para>Calls: Default, DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Query.HappensBefore.Handlers.CollectLeaves, DRagLint.Query.HappensBefore.Handlers.FindMainBlock, DRagLint.Query.HappensBefore.Handlers.LastSegment, DRagLint.Query.HappensBefore.Handlers.NodeText, DRagLint.Query.HappensBefore.Handlers.Squeezed, FileExists (+6 more)</para>
+    /// <para>Complexity: 13 (cyclomatic, outer body), 46 lines (full implementation)</para>
+    /// <para>SQL: reads FILES, SYMBOLS</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.CollectLeaves"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.FindMainBlock"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ReadProgram(pProgramBlockId: Int64): TProgramFacts;
+    /// <param name="pPath"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="pLine"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: if InRange(pLine, 1,
+    /// Length(L)) then L[pLine - 1].</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.BindingsOf (DRagLint.Query.HappensBefore.Handlers.pas)</para>
+    /// <para>Calls: FileExists, InRange</para>
+    /// <para>Catches: EFileStreamError (swallowed); EInOutError (swallowed)</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.BindingsOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.CodeRefCount"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.Create"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.Destroy"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.OrderOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function SourceLine(const pPath: string; pLine: Integer): string;
+    /// <summary><!-- drag-lint:auto sum -->Every DFM binding of pClass.pMethod: pBindings
+    /// = `Form.Control.Event`, pEvents = the event names.</summary>
+    /// <param name="pClass"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="pMethod"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="pBindings"><!-- drag-lint:auto type -->out TArray&lt;string&gt;</param>
+    /// <param name="pEvents"><!-- drag-lint:auto type -->out TArray&lt;string&gt;</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: pBindings &lt;&gt; nil.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.OrderOf (DRagLint.Query.HappensBefore.Handlers.pas)</para>
+    /// <para>Calls: Copy, DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Query.HappensBefore.Handlers.Sq, DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.SourceLine, Trim</para>
+    /// <para>SQL: reads FILES, REFS, SYMBOLS</para>
+    /// <para>Mutates: pBindings (out), pEvents (out)</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.Sq"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.SourceLine"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.CodeRefCount"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function BindingsOf(const pClass, pMethod: string; out pBindings, pEvents: TArray<string>): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->References to the method from code: resolved
+    /// refs of any kind but the DFM binding, call edges, and unresolved refs of the same
+    /// name (a doubt counts).</summary>
+    /// <param name="pRoutineId"><!-- drag-lint:auto type -->Int64</param>
+    /// <param name="pMethod"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Integer -- Observed: if R.Count &gt; 0 then
+    /// R[0].I('n').</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.OrderOf (DRagLint.Query.HappensBefore.Handlers.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Query.HappensBefore.Handlers.Sq, IntToStr</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.Sq"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.BindingsOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.Create"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function CodeRefCount(pRoutineId: Int64; const pMethod: string): Integer;
   public
     /// <summary>Creates an orderer over an open index.</summary>
     /// <param name="pIndex">The project index; must stay open while the orderer lives. Not owned.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Query.HappensBefore.TSolver.Create (DRagLint.Query.HappensBefore.pas)</para>
+    /// <para>constructor</para>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.BindingsOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.CodeRefCount"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.Destroy"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.OrderOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.ProgramFacts"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(const pIndex: TChartsIndex);
     /// <summary>Frees the caches (not the index).</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.BindingsOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.CodeRefCount"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.Create"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.OrderOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.ProgramFacts"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>The top-level `Application.Run` statement of a program block.</summary>
     /// <param name="pProgramBlockId">symbols.id of the program symbol (its main block).</param>
     /// <param name="pSite">Out: the statement start (1-based line and column, file of the program).</param>
     /// <returns>False when the id is no program or its block has no unconditional top-level
     /// Application.Run; the solver then asks no prefix state.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Query.HappensBefore.TSolver.LoadPrograms (DRagLint.Query.HappensBefore.pas)</para>
+    /// <para>Calls: DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.ProgramFacts</para>
+    /// <para>Returns: pSite.Line &gt; 0</para>
+    /// <para>Mutates: pSite (out)</para>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.ProgramFacts"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.BindingsOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.CodeRefCount"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.Create"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function RunSiteOf(pProgramBlockId: Int64; out pSite: THbSite): Boolean;
     /// <summary>Judges one escaped routine against one program (rules of the unit header).</summary>
     /// <param name="pProgramBlockId">symbols.id of the program symbol; 0 = no program known.</param>
     /// <param name="pRoutineId">symbols.id of the routine (normally a dfm-event escaped root).</param>
     /// <returns>The order; Ordered = False with WhyNot set for every doubt. Never raises for an unknown id.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Query.HappensBefore.TSolver.HandlerOrder (DRagLint.Query.HappensBefore.pas), DRagLint.Query.HappensBefore.TSolver.RootReasons (DRagLint.Query.HappensBefore.pas)</para>
+    /// <para>Calls: Default, DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Query.HappensBefore.Handlers.HbIsUnorderedEvent, DRagLint.Query.HappensBefore.Handlers.HbIsUnorderedHandlerName, DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.BindingsOf, DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.CodeRefCount, DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.ProgramFacts, Format, IntToStr, SameText</para>
+    /// <para>Returns: Default(THbHandlerOrder)</para>
+    /// <para>Complexity: 14 (cyclomatic, outer body), 71 lines (full implementation)</para>
+    /// <para>SQL: reads SYMBOLS</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.HbIsUnorderedEvent"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.HbIsUnorderedHandlerName"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.BindingsOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.CodeRefCount"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function OrderOf(pProgramBlockId, pRoutineId: Int64): THbHandlerOrder;
   end;
 
@@ -138,11 +293,27 @@ type
 /// HB_UNORDERED_EVENT_PREFIXES prefix), or is empty / unknown ('?').</summary>
 /// <param name="pEvent">The property name as the form file writes it, e.g. 'OnClick'.</param>
 /// <returns>True = a handler bound to it is never ordered.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.OrderOf (DRagLint.Query.HappensBefore.Handlers.pas)</para>
+/// <para>Calls: CharInSet, DRagLint.Query.HappensBefore.Handlers.InList, Trim</para>
+/// <para>Returns: False</para>
+/// <seealso cref="DRagLint.Query.HappensBefore.Handlers.InList"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HbIsUnorderedEvent(const pEvent: string): Boolean;  // dl:ok unused-public-symbol@6826 -- REVIEWED 2026-11-17 v152 HBEVORD: HB5 contract; called by HandlersHarness.dpr (fixture, not in the project index) and by OrderOf
 
 /// <summary>True when a handler method name is one of HB_UNORDERED_HANDLER_NAMES.</summary>
 /// <param name="pName">The bare method name, e.g. 'FormCreate'.</param>
 /// <returns>True = the handler is never ordered, whatever it is bound to.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.HappensBefore.Handlers.THbHandlerOrderer.OrderOf (DRagLint.Query.HappensBefore.Handlers.pas)</para>
+/// <para>Calls: DRagLint.Query.HappensBefore.Handlers.InList, Trim</para>
+/// <para>Returns: InList(Trim(pName), HB_UNORDERED_HANDLER_NAMES)</para>
+/// <seealso cref="DRagLint.Query.HappensBefore.Handlers.InList"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HbIsUnorderedHandlerName(const pName: string): Boolean;  // dl:ok unused-public-symbol@51a2 -- REVIEWED 2026-11-17 v152 HBEVORD: HB5 contract; called by HandlersHarness.dpr (fixture, not in the project index) and by OrderOf
 
 /// <summary>The text an answer shows when a use relied on the order of pOrder: it names the handler,
@@ -151,6 +322,12 @@ function HbIsUnorderedHandlerName(const pName: string): Boolean;  // dl:ok unuse
 /// <returns>One line, e.g. 'relies on handler order: hoMain.TMainForm.btnGoClick (fired by
 /// MainForm.btnGo.OnClick) runs only after the program-block prefix of HandlersOrder (Application.Run at
 /// HandlersOrder.dpr:17) -- name heuristic, OnCreate family excluded'.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.HappensBefore.TSolver.JudgeUse (DRagLint.Query.HappensBefore.pas)</para>
+/// <para>Calls: ExtractFileName, Format</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HbReliedText(const pOrder: THbHandlerOrder): string;  // dl:ok unused-public-symbol@8e3c -- REVIEWED 2026-11-17 v152 HBEVORD: consumer is the solver hook (INT handover H-EVORD in DRagLint.Query.HappensBefore) and the harness
 
 /// <summary>The "why not SET" text of a use whose root is an ordered handler entered with the bit
@@ -158,6 +335,12 @@ function HbReliedText(const pOrder: THbHandlerOrder): string;  // dl:ok unused-p
 /// <param name="pOrder">An Ordered handler order.</param>
 /// <param name="pTarget">The target's display name (e.g. 'GLate').</param>
 /// <returns>One line naming the handler, its bindings, the program and the Application.Run statement.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.HappensBefore.TSolver.RootReasons (DRagLint.Query.HappensBefore.pas)</para>
+/// <para>Calls: ExtractFileName, Format</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HbPrefixMissText(const pOrder: THbHandlerOrder; const pTarget: string): string;  // dl:ok unused-public-symbol@ffa6 -- REVIEWED 2026-11-17 v152 HBEVORD: consumer is the solver hook (INT handover H-EVORD in DRagLint.Query.HappensBefore)
 
 implementation

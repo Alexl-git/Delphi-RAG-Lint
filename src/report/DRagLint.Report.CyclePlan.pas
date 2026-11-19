@@ -102,7 +102,7 @@ type
   /// without extension) and is owned by the caller; the renderer only reads
   /// them.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.CycleToJson (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.IntfEdgeCount (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RunAll (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RunCycleFixGroups (DRagLint.CLI.CycleFix.pas) (+23 more)</para>
+  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.CycleToJson (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.IntfEdgeCount (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RunAll (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RunCycleFixGroups (DRagLint.CLI.CycleFix.pas) (+29 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.CycleFix, DRagLint.Report.CycleHub, DRagLint.Report.CycleHubSurface, DRagLint.Report.CyclePlan</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -136,7 +136,7 @@ type
   /// constructs, whose constructor inversion is outside its closed whitelist; the reason names the line). Line is 0 when the
   /// refusal has no single line (an edge, a unit).
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.AnchorRefusal (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.MakeRefusal (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.MechanisabilityGate (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.StaleRefusals (DRagLint.CLI.CycleFix.pas) (+15 more)</para>
+  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.AnchorRefusal (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.MakeRefusal (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.MechanisabilityGate (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.StaleRefusals (DRagLint.CLI.CycleFix.pas) (+17 more)</para>
   /// <para>Used in units: DRagLint.CLI.CycleFix, DRagLint.Report.CyclePlan</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -193,8 +193,8 @@ type
   /// <summary>A unit file the plan creates.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Report.CyclePlan.pas) ?, DRagLint.Report.CyclePlan.TCyclePlanner.BuildView (DRagLint.Report.CyclePlan.pas)</para>
-  /// <para>Used in units: DRagLint.Report.CyclePlan</para>
+  /// <para>Used by: declaration (DRagLint.Report.CyclePlan.pas) ?, DRagLint.CLI.CycleFix.R3View (DRagLint.CLI.CycleFix.pas) ?, DRagLint.Report.CyclePlan.TCyclePlanner.BuildView (DRagLint.Report.CyclePlan.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.CycleFix, DRagLint.Report.CyclePlan</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TPlanNewUnit = record
@@ -234,7 +234,7 @@ type
   /// <remarks>
   /// Built by VisitCyclePlans from the planner's TCycleFixPlan; it owns nothing.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.MechanisabilityGate (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.RerunAfterReindex (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.StaleRefusals (DRagLint.CLI.CycleFix.pas) ?, DRagLint.Report.CyclePlan.TCyclePlanner.BuildView (DRagLint.Report.CyclePlan.pas) (+25 more)</para>
+  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.MechanisabilityGate (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.R3View (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RerunAfterReindex (DRagLint.CLI.CycleFix.pas), DRagLint.Report.CyclePlan.TCyclePlanner.BuildView (DRagLint.Report.CyclePlan.pas) (+26 more)</para>
   /// <para>Used in units: DRagLint.CLI.CycleFix, DRagLint.Report.CyclePlan</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -377,7 +377,7 @@ type
   /// <returns>True when the hook built the group's fix object.</returns>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Report.CyclePlan.pas)</para>
+  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas), declaration (DRagLint.Report.CyclePlan.pas), DRagLint.CLI.CycleFix.HubSurfaceFixHook (DRagLint.CLI.CycleFix.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCycleFixHook = reference to function(pIndex: Integer; out pFix: TJSONObject): Boolean;
@@ -400,7 +400,7 @@ function SourceEncodingOf(const pBytes: TBytes): TEncoding;
 /// <returns>The text without the BOM.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.TRepairFile.Create (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.NarrowParam.BuildGateFiles (DRagLint.Refactor.NarrowParam.pas), DRagLint.Refactor.RedundantCast.BuildGateFiles (DRagLint.Refactor.RedundantCast.pas), DRagLint.Refactor.RedundantCast.TMaskedSource.Create (DRagLint.Refactor.RedundantCast.pas) (+2 more)</para>
+/// <para>Called from: DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.TRepairFile.Create (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.NarrowParam.BuildGateFiles (DRagLint.Refactor.NarrowParam.pas), DRagLint.Refactor.NarrowParam.BuildNarrowEdits (DRagLint.Refactor.NarrowParam.pas), DRagLint.Refactor.RedundantCast.BuildGateFiles (DRagLint.Refactor.RedundantCast.pas) (+3 more)</para>
 /// <para>Calls: DRagLint.Report.CyclePlan.SourceEncodingOf</para>
 /// <para>Returns: TEncoding.UTF8.GetString(pBytes, Length(TEncoding.UTF8.GetPreamble), Length(pBytes) - Length(TEncoding.UTF8.GetPreamble)); TEncoding.ANSI.GetString(pBytes)</para>
 /// <para>Mutates: pEncoding (out)</para>
@@ -415,7 +415,7 @@ function DecodeSource(const pBytes: TBytes; out pEncoding: TEncoding): string;
 /// <returns>The bytes, with the UTF-8 BOM first when the encoding is UTF-8.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.TRepairFile.Save (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.ExtractInterface.RunExtractInterface (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.LazyInit.RunLazyInit (DRagLint.Refactor.LazyInit.pas), DRagLint.Refactor.NarrowParam.BuildGateFiles (DRagLint.Refactor.NarrowParam.pas) (+2 more)</para>
+/// <para>Called from: DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.TRepairFile.Save (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.ExtractInterface.RunExtractInterface (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.LazyInit.RunLazyInit (DRagLint.Refactor.LazyInit.pas), DRagLint.Refactor.NarrowParam.BuildGateFiles (DRagLint.Refactor.NarrowParam.pas) (+3 more)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function EncodeSource(const pText: string; pEncoding: TEncoding): TBytes;
@@ -632,7 +632,7 @@ function CycleSymbolsByFile(const pGraph: TCycleGraph; const pStore: ISymbolStor
 /// <returns>The rows the store returns; read only when they come from the memo.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Report.CycleHub.TGroupFacts.LoadSymbolsAndRefs (DRagLint.Report.CycleHub.pas), DRagLint.Report.CycleHubSurface.THubSurfacePlanner.CollectKeepers (DRagLint.Report.CycleHubSurface.pas), DRagLint.Report.CyclePlan.TCyclePlanner.GetFile (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Called from: DRagLint.Report.CycleHub.TGroupFacts.LoadSymbolsAndRefs (DRagLint.Report.CycleHub.pas), DRagLint.Report.CycleHubSurface.THubSurfacePlanner.CollectKeepers (DRagLint.Report.CycleHubSurface.pas), DRagLint.Report.CycleHubSurface.THubSurfacePlanner.VarArgSites (DRagLint.Report.CycleHubSurface.pas), DRagLint.Report.CyclePlan.TCyclePlanner.GetFile (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.NeedsOf (DRagLint.Report.CyclePlan.pas)</para>
 /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile, DRagLint.Report.CyclePlan.ICycleReadMemo.RefsFromFile</para>
 /// <para>Returns: if pGraph.Reads &lt;&gt; nil then pGraph.Reads.RefsFromFile(pFid)</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile"/>

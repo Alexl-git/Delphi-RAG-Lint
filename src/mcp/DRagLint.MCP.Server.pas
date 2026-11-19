@@ -24,12 +24,11 @@ type
   // Newline-delimited JSON-RPC 2.0 server speaking MCP-2024-11-05 over stdio.
   // Holds one open ISymbolStore for the lifetime of the session.
   /// <summary><!-- drag-lint:auto sum -->Newline-delimited JSON-RPC 2.0 server speaking
-  /// MCP-2024-11-05 over stdio. Holds its databases open for the lifetime of the
-  /// session: the first (the project) and, since v151, every further one (the
-  /// platform's library sections).</summary>
+  /// MCP-2024-11-05 over stdio. Holds one open ISymbolStore for the lifetime of the
+  /// session.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+  /// <para>Used by: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
   /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -64,7 +63,7 @@ type
       /// TSQLiteSymbolStore.Create(ADbPath, True).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.Create (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.ResolveStore (DRagLint.MCP.Server.pas)</para>
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.Create (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.ResolveStore (DRagLint.MCP.Server.pas)</para>
       /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent, DRagLint.Storage.Schema.IsSchemaReadable, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, Format</para>
       /// <para>Mutates: AError (out)</para>
       /// <para>Touches: file system</para>
@@ -84,7 +83,7 @@ type
       /// FreshnessNote(Rep, ADbPath).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.ResolveStore (DRagLint.MCP.Server.pas)</para>
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.ResolveStore (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.StoreForQName (DRagLint.MCP.Server.pas)</para>
       /// <para>Calls: DRagLint.Index.Freshness.FreshnessNote, DRagLint.Index.Freshness.ProbeIndexFreshness, GetEnvironmentVariable, SameText, StrToUInt64Def</para>
       /// <para>Reads: FProbeDb, FProbeTick, FProbeNote   Writes: FProbeDb, FProbeTick, FProbeNote</para>
       /// <seealso cref="DRagLint.Index.Freshness.FreshnessNote"/>
@@ -108,7 +107,7 @@ type
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.DispatchToolsCall"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindCallersText"/>
-      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatDocAsJson"/>
+      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindSymbolsInAll"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function NoStoreMessage: string;
@@ -122,7 +121,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
       /// <para>Calls: Copy, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByNameWithContext, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.MCP.Server.TMCPServer.FormatReferences, DRagLint.MCP.Server.TMCPServer.FormatReferencesWithContext, DRagLint.Query.Callers.CollapseRefsAtSameSite, DRagLint.Query.Callers.DropRefsThatCannotBeCallers, DRagLint.Query.Callers.ResolvedCallersForName, Format, IntToStr, LastDelimiter, LowerCase</para>
-      /// <para>Complexity: 16 (cyclomatic, outer body), 89 lines (full implementation)</para>
+      /// <para>Complexity: 19 (cyclomatic, outer body), 89 lines (full implementation)</para>
       /// <para>Reads: FStore</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByNameWithContext"/>
@@ -136,19 +135,20 @@ type
       /// exception becomes an isError reply instead of ending the server.</summary>
       /// <param name="AId"><!-- drag-lint:auto type -->const TJSONValue</param>
       /// <param name="AParams"><!-- drag-lint:auto type -->const TJSONObject</param>
+      /// <exception cref="ESchemaUnreadable"><!-- drag-lint:auto exc -->via DRagLint.Storage.SQLite.TSQLiteSymbolStore.CreateReadable: :</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
-      /// <para>Calls: Default, DRagLint.Context.Bundler.TContextBundler.Build, DRagLint.Context.Bundler.TContextBundler.RenderJson, DRagLint.Core.Interfaces.ISymbolStore.FindByDocTag, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsFuzzy, DRagLint.Core.Interfaces.ISymbolStore.FindTransitiveCallers, DRagLint.Core.Interfaces.ISymbolStore.FindUndocumented, DRagLint.Core.Interfaces.ISymbolStore.GetClassSurface (+56 more)</para>
-      /// <para>Complexity: 132 (cyclomatic, outer body), 581 lines (full implementation)</para>
-      /// <para>Reads: FDbPaths, FStore, FLinter, FCallNote   Writes: FCallNote</para>
-      /// <para>Catches: EImplementorsTarget (swallowed)</para>
+      /// <para>Calls: Default, DRagLint.Context.Bundler.TContextBundler.Build, DRagLint.Context.Bundler.TContextBundler.RenderJson, DRagLint.Core.Interfaces.ISymbolStore.FindByDocTag, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.FindTransitiveCallers, DRagLint.Core.Interfaces.ISymbolStore.FindUndocumented, DRagLint.Core.Interfaces.ISymbolStore.GetClassSurface, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolSlice (+64 more)</para>
+      /// <para>Complexity: 166 (cyclomatic, outer body), 675 lines (full implementation)</para>
+      /// <para>Reads: FDbPaths, FStore, FLinter, FMoreStores, FCallNote   Writes: FCallNote</para>
+      /// <para>Catches: EHbUsage (swallowed); EImplementorsTarget (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.Build"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.RenderJson"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindByDocTag"/>
-      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindTransitiveCallers"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DispatchToolsCall(const AId: TJSONValue; const AParams: TJSONObject);
@@ -163,7 +163,7 @@ type
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.DispatchToolsCall"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindCallersText"/>
-      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatDocAsJson"/>
+      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindSymbolsInAll"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SendRaw(const AText: string);
@@ -256,7 +256,7 @@ type
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.DispatchToolsCall"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindCallersText"/>
-      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatDocAsJson"/>
+      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindSymbolsInAll"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ToolDescriptor(const AName, ADesc: string; const ASchemaJSON: string): TJSONObject     ;
@@ -271,7 +271,7 @@ type
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.DispatchToolsCall"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindCallersText"/>
-      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatDocAsJson"/>
+      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindSymbolsInAll"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function TextContent(const AText: string): TJSONArray                                           ;
@@ -321,7 +321,7 @@ type
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.DispatchToolsCall"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindCallersText"/>
-      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatDocAsJson"/>
+      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindSymbolsInAll"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FormatFindings  (const AFindings: TArray<TLintFinding>): string;
@@ -450,7 +450,7 @@ type
       /// FLastStoreError); FStore.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.StoreForQName (DRagLint.MCP.Server.pas)</para>
       /// <para>Calls: DRagLint.MCP.Server.TMCPServer.NoteFor, DRagLint.MCP.Server.TMCPServer.OpenStore</para>
       /// <para>Reads: FLastStoreError, FStore, FDbPaths   Writes: FCallNote</para>
       /// <para>Pure</para>
@@ -469,9 +469,22 @@ type
       /// <param name="AArgs">The tools/call arguments; may be nil.</param>
       /// <param name="AQName">The qualified name the tool asks about.</param>
       /// <returns>The store to answer from; nil only when no database is served.</returns>
-      /// <remarks>Sets FCallNote to the freshness note of the store it returns. Only
+      /// <remarks>
+      /// Sets FCallNote to the freshness note of the store it returns. Only
       /// declaration questions use it (doc, surface, slice, bundle); call-graph
-      /// questions stay on the first database, which holds the project's call sites.</remarks>
+      /// questions stay on the first database, which holds the project's call sites.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.MCP.Server.TMCPServer.NoteFor, DRagLint.MCP.Server.TMCPServer.ResolveStore</para>
+      /// <para>Returns: ResolveStore(AArgs); FMoreStores[I]</para>
+      /// <para>Reads: FMoreStores, FMorePaths   Writes: FCallNote</para>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
+      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.NoteFor"/>
+      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.ResolveStore"/>
+      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
+      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function StoreForQName(const AArgs: TJSONObject; const AQName: string): ISymbolStore;
       /// <summary>v151 SERVE (OQ3): find_symbol over EVERY served database, first
       /// database first, then each further one in order. Exact name (or qname) first;
@@ -483,6 +496,20 @@ type
       /// <param name="AFiles">Out: each symbol's file, resolved in ITS database
       /// (file ids are per database), same length as the result.</param>
       /// <returns>The concatenated symbols; empty when nothing matches.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsFuzzy, DRagLint.MCP.Server.TMCPServer.FindSymbolsInAll.Add</para>
+      /// <para>Returns: Syms</para>
+      /// <para>Reads: FMoreStores, FStore</para>
+      /// <para>Mutates: AFiles (out)</para>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsFuzzy"/>
+      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindSymbolsInAll.Add"/>
+      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function FindSymbolsInAll(const AName, AQName: string; AFuzzyCap: Integer; out AFiles: TArray<string>): TArray<TSymbol>;
     public
       /// <summary>Opens EVERY database of ADbPaths read-only (v151 SERVE, OQ3): the
@@ -494,7 +521,7 @@ type
       /// <param name="ADbPaths"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+      /// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
       /// <para>Calls: DRagLint.Lint.Linter.TLinter.Create, DRagLint.MCP.Server.TMCPServer.OpenStore, Flush, Format, SameText, Writeln</para>
       /// <para>constructor</para>
       /// <para>Reads: FDbPaths, FStoreError, FStore, FMoreStores, FMorePaths   Writes: FDbPaths, FStore, FMoreStores, FMorePaths, FLinter</para>
@@ -508,13 +535,13 @@ type
       constructor Create(const ADbPaths: TArray<string>);
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Reads: FLinter   Writes: FStore</para>
+      /// <para>Reads: FLinter   Writes: FMoreStores, FStore</para>
       /// <para>Directives: override</para>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.DispatchToolsCall"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindCallersText"/>
+      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindSymbolsInAll"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatDocAsJson"/>
-      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatFindings"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       destructor Destroy; override;

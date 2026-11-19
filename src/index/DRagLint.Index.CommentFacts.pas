@@ -19,6 +19,13 @@ uses
 /// path: a Pascal source (.pas, .dpr, .dpk, .inc, .pp, .lpr).</summary>
 /// <param name="AFilePath">Full path or bare file name; only the extension is read.</param>
 /// <returns>False for every other extension (.dfm, .sql, ...).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Index.CommentFacts.ExtractCommentFacts (DRagLint.Index.CommentFacts.pas)</para>
+/// <para>Calls: ExtractFileExt, MatchText</para>
+/// <para>Returns: MatchText(Ext, COMMENT_FACT_EXTS)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsCommentFactsFile(const AFilePath: string): Boolean;  // dl:ok unused-public-symbol@8666 -- public on purpose: the parity harness (tests\fixtures\comment-facts-151) and future table readers pick files by it
 
 /// <summary>The comment rows of one file, in source order.</summary>
@@ -36,7 +43,8 @@ function IsCommentFactsFile(const AFilePath: string): Boolean;  // dl:ok unused-
 /// (`(* { } *)` is ONE row). An unterminated comment runs to the end of the
 /// text. A line comment ends before its CR / LF. Kind is `///` for three or
 /// more slashes (as TDocCommentScanner reads them), else the opener.</returns>
-/// <remarks>Anchors, decided after the lexing pass:
+/// <remarks>
+/// Anchors, decided after the lexing pass:
 /// <para>`end-of-line` -- code precedes the comment on its line; the anchor is
 /// the first symbol (lowest array index) declared on that line, else the
 /// innermost routine whose implementation body holds the line, else none.</para>
@@ -52,7 +60,18 @@ function IsCommentFactsFile(const AFilePath: string): Boolean;  // dl:ok unused-
 /// routine).</para>
 /// <para>`block` -- any other own-line comment; no anchor.</para>
 /// Line breaks: CRLF, a lone LF and a lone CR each end a line (the
-/// TDocCommentScanner rule). Col is 1-based in UTF-8 bytes. Pure; thread-safe.</remarks>
+/// TDocCommentScanner rule). Col is 1-based in UTF-8 bytes. Pure; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas)</para>
+/// <para>Calls: Copy, Default, DocRegionInGapWindow, DRagLint.Index.CommentFacts.ExtractCommentFacts.DeclBelow, DRagLint.Index.CommentFacts.ExtractCommentFacts.NoteDecl, DRagLint.Index.CommentFacts.IsCommentFactsFile, DRagLint.Index.CommentFacts.LexComments, DRagLint.Index.CommentFacts.LineOf, DRagLint.Index.CommentFacts.LineStarts, DRagLint.Index.CommentFacts.Utf8Len, InRange</para>
+/// <para>Complexity: 23 (cyclomatic, outer body), 121 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Index.CommentFacts.ExtractCommentFacts.DeclBelow"/>
+/// <seealso cref="DRagLint.Index.CommentFacts.ExtractCommentFacts.NoteDecl"/>
+/// <seealso cref="DRagLint.Index.CommentFacts.IsCommentFactsFile"/>
+/// <seealso cref="DRagLint.Index.CommentFacts.LexComments"/>
+/// <seealso cref="DRagLint.Index.CommentFacts.LineOf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ExtractCommentFacts(const AFilePath, AText: string;
   const ASymbols: TArray<TSymbol>): TArray<TCommentFactRow>;
 

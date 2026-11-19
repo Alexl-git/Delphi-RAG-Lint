@@ -64,8 +64,8 @@ type
   /// Stateless; every method is a class function. Reads nothing but
   /// its arguments -- no file system, no database.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.CollectWikiTopics (DRagLint.CLI.pas), DRagLint.CLI.DoWiki (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build.MatchWikiTopics (DRagLint.Context.Bundler.pas), DRagLint.Hover.Renderer.RenderHoverMarkdown (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverPlain (DRagLint.Hover.Renderer.pas) (+1 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Context.Bundler, DRagLint.Hover.Renderer</para>
+  /// <para>Used by: DRagLint.CLI.Wiki.CollectWikiTopics (DRagLint.CLI.Wiki.pas), DRagLint.CLI.Wiki.DoWiki (DRagLint.CLI.Wiki.pas), DRagLint.Context.Bundler.TContextBundler.Build.MatchWikiTopics (DRagLint.Context.Bundler.pas), DRagLint.Hover.Renderer.RenderHoverMarkdown (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverPlain (DRagLint.Hover.Renderer.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.CLI.Wiki, DRagLint.Context.Bundler, DRagLint.Hover.Renderer</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TWikiParser = class
@@ -107,7 +107,7 @@ type
       /// the colon contributes nothing. Reporting bad input is
       /// <c>wiki --check</c>'s job, not the parser's.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.CollectWikiTopics (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build.MatchWikiTopics (DRagLint.Context.Bundler.pas), DRagLint.Hover.Renderer.WikiIndicatorLines (DRagLint.Hover.Renderer.pas)</para>
+      /// <para>Called from: DRagLint.CLI.Wiki.CollectWikiTopics (DRagLint.CLI.Wiki.pas), DRagLint.Context.Bundler.TContextBundler.Build.MatchWikiTopics (DRagLint.Context.Bundler.pas), DRagLint.Hover.Renderer.WikiIndicatorLines (DRagLint.Hover.Renderer.pas)</para>
       /// <para>Calls: DRagLint.Doc.Wiki.TWikiParser.Walk</para>
       /// <para>Returns: Walk(ARaw, AOwnerQName, AOwnerKind, AFilePath, ADocStartLine, nil)</para>
       /// <para>Pure</para>
@@ -168,7 +168,7 @@ type
       /// containment test answers nothing for exactly the phrasing this
       /// feature exists to accept.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoWiki (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build.MatchWikiTopics (DRagLint.Context.Bundler.pas)</para>
+      /// <para>Called from: DRagLint.CLI.Wiki.DoWiki (DRagLint.CLI.Wiki.pas), DRagLint.Context.Bundler.TContextBundler.Build.MatchWikiTopics (DRagLint.Context.Bundler.pas)</para>
       /// <para>Calls: DRagLint.Doc.Wiki.TWikiParser.ContainsWholeWord, LowerCase, Pos, StartsStr, Trim</para>
       /// <para>Returns: 0; S</para>
       /// <para>Complexity: 11 (cyclomatic, outer body), 25 lines (full implementation)</para>
@@ -196,7 +196,7 @@ type
       /// whose guard pins the same rule -- one ordering convention, not
       /// two.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoWiki (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build.MatchWikiTopics (DRagLint.Context.Bundler.pas)</para>
+      /// <para>Called from: DRagLint.CLI.Wiki.DoWiki (DRagLint.CLI.Wiki.pas), DRagLint.Context.Bundler.TContextBundler.Build.MatchWikiTopics (DRagLint.Context.Bundler.pas)</para>
       /// <para>Calls: CompareText</para>
       /// <para>Returns: Length(ANameA) - Length(ANameB); CompareText(ANameA, ANameB)</para>
       /// <para>Pure</para>

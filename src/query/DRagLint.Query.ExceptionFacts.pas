@@ -11,10 +11,16 @@ uses
 
 type
   /// <summary>One raise or handler site, with the type it names.</summary>
-  /// <remarks>Via says how the type is known: 'bound' (the row's symbol_id), 'handler' (the
+  /// <remarks>
+  /// Via says how the type is known: 'bound' (the row's symbol_id), 'handler' (the
   /// enclosing on..do), 'local' (a local var or param of the routine), 'name' (a unique indexed
   /// type of that spelling), 'spelled' (the source names it, the DB does not hold it),
-  /// 'unknown' (`raise MakeError(..)`, a `raise;` under a bare except), '' on handles-all.</remarks>
+  /// 'unknown' (`raise MakeError(..)`, a `raise;` under a bare except), '' on handles-all.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.ExceptionFacts.pas) ?, DRagLint.LSP.Server.TLSPServer.ComputeExceptionFactsAt (DRagLint.LSP.Server.pas) ?, DRagLint.LSP.Server.TLSPServer.ComputeExceptionLenses (DRagLint.LSP.Server.pas) ?, DRagLint.Query.ExceptionFacts.FactsWhereIn (DRagLint.Query.ExceptionFacts.pas), DRagLint.Query.ExceptionFacts.FillType (DRagLint.Query.ExceptionFacts.pas) ? (+10 more)</para>
+  /// <para>Used in units: DRagLint.LSP.Server, DRagLint.Query.ExceptionFacts</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TExceptionFact = record
     Action   : string ;
     TypeName : string ;
@@ -35,6 +41,15 @@ type
 /// <param name="pTypeName">A type, bare or qualified; '' to select by routine. Exact, no ancestry:
 /// `on E: Exception` is not listed under EFoo.</param>
 /// <returns>The sites, by routine, line and column.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoExceptionFacts (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+/// <para>Calls: DRagLint.Query.ExceptionFacts.FactsWhere, DRagLint.Query.ExceptionFacts.RoutineWhere</para>
+/// <para>Returns: FactsWhere(pDbPath, RoutineWhere(pRoutine), pTypeName)</para>
+/// <seealso cref="DRagLint.Query.ExceptionFacts.FactsWhere"/>
+/// <seealso cref="DRagLint.Query.ExceptionFacts.RoutineWhere"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ExceptionFactsOf(const pDbPath, pRoutine, pTypeName: string): TArray<TExceptionFact>;
 
 /// <summary>ExceptionFactsOf over an index the CALLER keeps open: same query, same type rules,
@@ -43,9 +58,18 @@ function ExceptionFactsOf(const pDbPath, pRoutine, pTypeName: string): TArray<TE
 /// <param name="pRoutine">As ExceptionFactsOf.</param>
 /// <param name="pTypeName">As ExceptionFactsOf.</param>
 /// <returns>As ExceptionFactsOf -- the same rows for the same database.</returns>
-/// <remarks>151 CF (LX-5 hover cost): the LSP hover asks this for every routine it shows, and
+/// <remarks>
+/// 151 CF (LX-5 hover cost): the LSP hover asks this for every routine it shows, and
 /// opening the store (TChartsIndex.Create) per hover was most of ~9 ms per call on a CLIENT copy.
-/// One caller thread per index.</remarks>
+/// One caller thread per index.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Server.TLSPServer.ExceptionFactLines (DRagLint.LSP.Server.pas)</para>
+/// <para>Calls: DRagLint.Query.ExceptionFacts.FactsWhereIn, DRagLint.Query.ExceptionFacts.RoutineWhere</para>
+/// <para>Returns: FactsWhereIn(pIndex, RoutineWhere(pRoutine), pTypeName)</para>
+/// <seealso cref="DRagLint.Query.ExceptionFacts.FactsWhereIn"/>
+/// <seealso cref="DRagLint.Query.ExceptionFacts.RoutineWhere"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ExceptionFactsOfIndex(const pIndex: TChartsIndex; const pRoutine, pTypeName: string): TArray<TExceptionFact>;
 
 /// <summary>The exception facts of every routine in one file: the raise / handle sites whose
@@ -53,8 +77,16 @@ function ExceptionFactsOfIndex(const pIndex: TChartsIndex; const pRoutine, pType
 /// <param name="pDbPath">An existing index. Opened read-only.</param>
 /// <param name="pFilePath">The file as the index stores it; compared without case.</param>
 /// <returns>The sites; empty for a file the index does not hold.</returns>
-/// <remarks>The editor surfaces (LSP code lens) read this; same query, same type rules as
-/// ExceptionFactsOf, so the lens and `exception-facts --target cannot disagree.</remarks>
+/// <remarks>
+/// The editor surfaces (LSP code lens) read this; same query, same type rules as
+/// ExceptionFactsOf, so the lens and `exception-facts --target cannot disagree.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeExceptionFactsAt (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeExceptionLenses (DRagLint.LSP.Server.pas)</para>
+/// <para>Calls: DRagLint.Query.ExceptionFacts.FactsWhere, QuotedStr</para>
+/// <para>Returns: FactsWhere(pDbPath, ' AND r.file_id IN (SELECT id FROM files WHERE LOWER(path) = LOWER(' + QuotedStr(pFilePath) + '))', '')</para>
+/// <seealso cref="DRagLint.Query.ExceptionFacts.FactsWhere"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ExceptionFactsOfFile(const pDbPath, pFilePath: string): TArray<TExceptionFact>;
 
 /// <summary>The hover fact line of one routine: 'Raises: EFoo (bound), EBar (spelled)'.</summary>
@@ -62,21 +94,51 @@ function ExceptionFactsOfFile(const pDbPath, pFilePath: string): TArray<TExcepti
 /// <returns>One line naming each raised type once (raise, raise-expr and reraise sites), in
 /// source order, each with the Via of its first site; a site whose type is not known reads
 /// 'unknown'. '' when the routine raises nothing.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Server.TLSPServer.ExceptionFactLines (DRagLint.LSP.Server.pas)</para>
+/// <para>Calls: DRagLint.Query.ExceptionFacts.IsRaiseAction, DRagLint.Query.ExceptionFacts.TypeKey</para>
+/// <para>Returns: if Parts.Count = 0 then ''</para>
+/// <seealso cref="DRagLint.Query.ExceptionFacts.IsRaiseAction"/>
+/// <seealso cref="DRagLint.Query.ExceptionFacts.TypeKey"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ExceptionRaisesLine(const pFacts: TArray<TExceptionFact>): string;
 
 /// <summary>The code lens title of one routine: 'raises 2 types, handles 1 type'.</summary>
 /// <param name="pFacts">The facts of ONE routine.</param>
 /// <returns>Distinct raised types and distinct handled types (a bare except counts as one),
 /// either part omitted when zero; '' when both are zero.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeExceptionLenses (DRagLint.LSP.Server.pas)</para>
+/// <para>Calls: DRagLint.Query.ExceptionFacts.ExceptionLensTitle.Counted, DRagLint.Query.ExceptionFacts.IsRaiseAction, DRagLint.Query.ExceptionFacts.TypeKey, Format</para>
+/// <seealso cref="DRagLint.Query.ExceptionFacts.ExceptionLensTitle.Counted"/>
+/// <seealso cref="DRagLint.Query.ExceptionFacts.IsRaiseAction"/>
+/// <seealso cref="DRagLint.Query.ExceptionFacts.TypeKey"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ExceptionLensTitle(const pFacts: TArray<TExceptionFact>): string;
 
 /// <summary>The facts as JSON: {"facts":[...],"count":N}.</summary>
 /// <param name="pFacts">The rows to render.</param>
 /// <returns>The JSON text.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoExceptionFacts (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+/// <para>Returns: Root.ToJSON</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ExceptionFactsJson(const pFacts: TArray<TExceptionFact>): string;
 
 /// <summary>Prints one line per fact, then a count.</summary>
 /// <param name="pFacts">The rows to print.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoExceptionFacts (DRagLint.CLI.pas)</para>
+/// <para>Calls: Format, Writeln</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure WriteExceptionFacts(const pFacts: TArray<TExceptionFact>);
 
 implementation

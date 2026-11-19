@@ -48,6 +48,11 @@ const
 type
   /// <summary>What a hoverBundle request should compute, decided by the
   /// session's deferred-hover slot.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.LSP.Deferred.pas), DRagLint.LSP.Deferred.TDeferredHoverSlot.Decide (DRagLint.LSP.Deferred.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDeferredHoverDecision = (
     dhdFull,     { no deferral: the whole answer in one reply (batch callers, old clients) }
     dhdFast,     { the announced first step: fast sections + DEFERRED_PLACEHOLDER }
@@ -64,51 +69,123 @@ type
   /// caller (requests served during a yield run on that same thread).</para>
   /// <para>Keys are opaque strings built by HoverKey; two requests mean the
   /// same position exactly when their keys are equal.</para>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.LSP.Deferred.pas), declaration (DRagLint.LSP.Server.pas), DRagLint.LSP.Deferred.NewDeferredHoverSlot (DRagLint.LSP.Deferred.pas), DRagLint.LSP.Server.TLSPServer.DeferredHover (DRagLint.LSP.Server.pas)</para>
+  /// <para>Used in units: DRagLint.LSP.Deferred, DRagLint.LSP.Server</para>
+  /// <para>Implemented by: TDeferredHoverSlot</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   IDeferredHoverSlot = interface
     ['{6C1F4B7E-2D57-4E0B-9A6E-1F3B0C8D5A21}']
     /// <summary>Records a client's announcement that the next hoverBundle at
     /// AKey may be answered in two steps. Supersedes any other position.</summary>
     /// <param name="AKey">HoverKey of the announced position.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleDeferHover (DRagLint.LSP.Server.pas)</para>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.Abandoned"/>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.BeginComplete"/>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.CancelRequest"/>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.Decide"/>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.EndComplete"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Announce(const AKey: string);
     /// <summary>Decides how a hoverBundle at AKey is answered and advances
     /// the slot: announced -> dhdFast (armed); armed -> dhdComplete; anything
     /// else -> dhdFull. A request for a different position forgets the slot
     /// but does NOT abandon a running second step: only an announcement
     /// (Announce) or CancelRequest does.</summary>
-    /// <remarks>Why: the client that announced cancels its own request before
+    /// <param name="AKey">HoverKey of the request's position.</param>
+    /// <returns>The decision for this request.</returns>
+    /// <remarks>
+    /// Why: the client that announced cancels its own request before
     /// it announces the next position, so the RequestCancelled reply reaches a
     /// dropped callback. An unannounced request elsewhere (the menu hover)
     /// says nothing about the announcing client, whose callback is still live
-    /// and would read the error reply as an engine without hoverBundle.</remarks>
-    /// <param name="AKey">HoverKey of the request's position.</param>
-    /// <returns>The decision for this request.</returns>
+    /// and would read the error reply as an engine without hoverBundle.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas)</para>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.Abandoned"/>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.Announce"/>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.BeginComplete"/>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.CancelRequest"/>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.EndComplete"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Decide(const AKey: string): TDeferredHoverDecision;
     /// <summary>Marks the start of a dhdComplete computation answering
     /// request AId (the JSON text of the id).</summary>
     /// <param name="AId">The request id, as JSON text.</param>
     /// <param name="AKey">The position being completed.</param>
     /// <returns>The run's serial (&gt; 0); pass it to Abandoned and EndComplete.</returns>
-    /// <remarks>A second step started while another runs (possible only
-    /// inside a yield) supersedes it: the older serial reads Abandoned.</remarks>
+    /// <remarks>
+    /// A second step started while another runs (possible only
+    /// inside a yield) supersedes it: the older serial reads Abandoned.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas)</para>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.Abandoned"/>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.Announce"/>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.CancelRequest"/>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.Decide"/>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.EndComplete"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function BeginComplete(const AId, AKey: string): Integer;
     /// <summary>Ends run ASerial (finished or abandoned); a stale serial is
     /// ignored, so a superseded run never clears the newer one.</summary>
     /// <param name="ASerial">The serial BeginComplete returned.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas)</para>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.Abandoned"/>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.Announce"/>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.BeginComplete"/>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.CancelRequest"/>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.Decide"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure EndComplete(ASerial: Integer);
     /// <summary>$/cancelRequest: abandons the running second step when AId
     /// is its request id; any other id is ignored.</summary>
     /// <param name="AId">The cancelled request id, as JSON text.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleHoverCancel (DRagLint.LSP.Server.pas)</para>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.Abandoned"/>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.Announce"/>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.BeginComplete"/>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.Decide"/>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.EndComplete"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CancelRequest(const AId: string);
     /// <summary>True once run ASerial must stop: cancelled by id, superseded
     /// by an announcement of another position, or replaced by a newer run.</summary>
     /// <param name="ASerial">The serial BeginComplete returned.</param>
     /// <returns>Whether that computation was abandoned.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HoverStillWanted (DRagLint.LSP.Server.pas)</para>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.Announce"/>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.BeginComplete"/>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.CancelRequest"/>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.Decide"/>
+    /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.EndComplete"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Abandoned(ASerial: Integer): Boolean;
   end;
 
 /// <summary>Creates an idle deferred-hover slot.</summary>
 /// <returns>A new slot; reference-counted, the caller holds the only reference.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Server.TLSPServer.DeferredHover (DRagLint.LSP.Server.pas)</para>
+/// <para>Returns: TDeferredHoverSlot.Create</para>
+/// <para>Owns returned: new (caller owns)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function NewDeferredHoverSlot: IDeferredHoverSlot;
 
 /// <summary>The slot key of a hover position.</summary>
@@ -116,11 +193,25 @@ function NewDeferredHoverSlot: IDeferredHoverSlot;
 /// <param name="ALine0">0-based line.</param>
 /// <param name="ACol0">0-based column.</param>
 /// <returns>A string equal for exactly the same position.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleDeferHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas)</para>
+/// <para>Calls: AnsiLowerCase, Format</para>
+/// <para>Returns: Format('%s|%d|%d', [AnsiLowerCase(APath), ALine0, ACol0])</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HoverKey(const APath: string; ALine0, ACol0: Integer): string;
 
 /// <summary>Milliseconds of injected slow work (ENV_TEST_HOVER_SLOW_MS), or 0
 /// when the switch is unset or not a positive integer.</summary>
 /// <returns>The injected delay in ms.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Server.TLSPServer.HoverSlowWork (DRagLint.LSP.Server.pas)</para>
+/// <para>Calls: GetEnvironmentVariable, StrToIntDef</para>
+/// <para>Returns: StrToIntDef(GetEnvironmentVariable(ENV_TEST_HOVER_SLOW_MS), 0); 0</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function InjectedHoverSlowMs: Integer;
 
 /// <summary>When ENV_HOVER_TIMING is '1', writes the time since ASw started as
@@ -129,6 +220,14 @@ function InjectedHoverSlowMs: Integer;
 /// time consecutive sections.</summary>
 /// <param name="ASw">The section stopwatch; restarted on return.</param>
 /// <param name="ASection">Section name (no spaces).</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas)</para>
+/// <para>Calls: DRagLint.LSP.Deferred.ReportHoverTiming</para>
+/// <para>Mutates: ASw (var)</para>
+/// <seealso cref="DRagLint.LSP.Deferred.ReportHoverTiming"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure LapHoverTiming(var ASw: TStopwatch; const ASection: string);
 
 implementation

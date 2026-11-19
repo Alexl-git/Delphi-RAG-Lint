@@ -29,6 +29,11 @@ uses
 type
   /// <summary>Field / parameter data types the assistant distinguishes (the names of
   /// Data.DB TFieldType, without a Data.DB dependency).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.FieldRepo.ParamArray.pas) ?, declaration (DRagLint.FieldRepo.ParamArray.Prepare.pas) ?, DRagLint.FieldRepo.ParamArray.PATypeFromDfmToken (DRagLint.FieldRepo.ParamArray.pas), DRagLint.FieldRepo.ParamArray.PATypeName (DRagLint.FieldRepo.ParamArray.pas) ?, DRagLint.FieldRepo.ParamArray.Prepare.TPrepareRun.ParamDataLines (DRagLint.FieldRepo.ParamArray.Prepare.pas) ? (+8 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPAFieldType = (pftUnknown, pftString, pftWideString, pftFixedChar, pftFixedWideChar,
     pftMemo, pftWideMemo, pftFmtMemo, pftOraClob, pftOraInterval, pftLargeint, pftSmallint,
     pftInteger, pftWord, pftShortint, pftAutoInc, pftByte, pftBytes, pftVarBytes, pftBlob,
@@ -38,6 +43,12 @@ type
 
   /// <summary>One source field (Name = component identifier used in the code, FieldName =
   /// the matching key) or one query parameter (Name only; FieldName is ignored).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.FieldRepo.ParamArray.pas), DRagLint.FieldRepo.ParamArray.AddPairLine (DRagLint.FieldRepo.ParamArray.pas)</para>
+  /// <para>Used in units: DRagLint.FieldRepo.ParamArray</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPAColumn = record
     Name: string;
     FieldName: string;
@@ -45,23 +56,52 @@ type
   end;
 
   /// <summary>A list of columns.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.FieldRepo.ParamArray.pas), DRagLint.CLI.RepoParamArray.AnalyseUnit (DRagLint.CLI.RepoParamArray.pas), DRagLint.FieldRepo.ParamArray.AddColumn (DRagLint.FieldRepo.ParamArray.pas), DRagLint.FieldRepo.ParamArray.PickNamed (DRagLint.FieldRepo.ParamArray.pas), DRagLint.FieldRepo.ParamArray.RememberComponent (DRagLint.FieldRepo.ParamArray.pas) (+6 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPAColumns = TArray<TPAColumn>;
 
   /// <summary>Emission options.</summary>
-  /// <remarks>StepSize is the array size per Execute; ProgressForm names the loader form
-  /// whose NRECS / cxlDone / prbRecords / IBD the original block drove ('' = omit).</remarks>
+  /// <remarks>
+  /// StepSize is the array size per Execute; ProgressForm names the loader form
+  /// whose NRECS / cxlDone / prbRecords / IBD the original block drove ('' = omit).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.RepoParamArray.pas), declaration (DRagLint.FieldRepo.ParamArray.pas), DRagLint.FieldRepo.ParamArray.AddTail (DRagLint.FieldRepo.ParamArray.pas), DRagLint.FieldRepo.ParamArray.PABuildBlock (DRagLint.FieldRepo.ParamArray.pas), DRagLint.FieldRepo.ParamArray.PADefaultOptions (DRagLint.FieldRepo.ParamArray.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.CLI.RepoParamArray, DRagLint.FieldRepo.ParamArray</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPAOptions = record
     StepSize: Integer;
     ProgressForm: string;
   end;
 
   /// <summary>Compile gate: returns True when the candidate unit text compiles.</summary>
+  /// <param name="pUnitText"><!-- drag-lint:auto type -->const string</param>
+  /// <returns><!-- drag-lint:auto type -->Boolean</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.FieldRepo.ParamArray.pas), DRagLint.CLI.RepoParamArray.AnalyseUnit (DRagLint.CLI.RepoParamArray.pas), DRagLint.FieldRepo.ParamArray.PAApplyPlan (DRagLint.FieldRepo.ParamArray.pas), DRagLint.FieldRepo.ParamArray.PARunProject (DRagLint.FieldRepo.ParamArray.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPAGate = reference to function(const pUnitText: string): Boolean;
 
   /// <summary>Outcome of applying a plan to one unit.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.FieldRepo.ParamArray.pas), DRagLint.CLI.RepoParamArray.AnalyseUnit (DRagLint.CLI.RepoParamArray.pas), DRagLint.FieldRepo.ParamArray.PAApplyPlan (DRagLint.FieldRepo.ParamArray.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPAStatus = (pasApplied, pasRefusedByGate, pasNoInsertPoint, pasNoBlock, pasExcluded);
 
   /// <summary>One unit given to the project assistant.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.FieldRepo.ParamArray.pas), DRagLint.FieldRepo.ParamArray.PARunProject (DRagLint.FieldRepo.ParamArray.pas)</para>
+  /// <para>Used in units: DRagLint.FieldRepo.ParamArray</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPAUnitInput = record
     UnitName: string;
     Source: string;
@@ -69,6 +109,12 @@ type
   end;
 
   /// <summary>Result for one unit of a project run.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.FieldRepo.ParamArray.pas)</para>
+  /// <para>Used in units: DRagLint.FieldRepo.ParamArray</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPAUnitResult = record
     UnitName: string;
     Status: TPAStatus;
@@ -78,36 +124,84 @@ type
   end;
 
   /// <summary>Results of a project run, in input order.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.FieldRepo.ParamArray.pas), DRagLint.FieldRepo.ParamArray.PARunProject (DRagLint.FieldRepo.ParamArray.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPAUnitResults = TArray<TPAUnitResult>;
 
 /// <summary>Default options: STEPSIZE 20000, no loader-form lines.</summary>
 /// <returns>The default TPAOptions.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RepoParamArray.ReadOptions (DRagLint.CLI.RepoParamArray.pas)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PADefaultOptions: TPAOptions;
 
 /// <summary>Data.DB style display name of a type ('Integer', 'TimeStamp', ...).</summary>
 /// <param name="pType">The type.</param>
 /// <returns>The display name.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.FieldRepo.ParamArray.AddPairLine (DRagLint.FieldRepo.ParamArray.pas), DRagLint.FieldRepo.ParamArray.PABuildBlock (DRagLint.FieldRepo.ParamArray.pas)</para>
+/// <para>Returns: PA_TYPE_NAMES[pType]</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PATypeName(pType: TPAFieldType): string;
 
 /// <summary>Collapses a type to its family (port of GeneralTypeOf): two types with the
 /// same family are assignable without conversion.</summary>
 /// <param name="pType">The type.</param>
 /// <returns>The family representative.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.FieldRepo.ParamArray.AddPairLine (DRagLint.FieldRepo.ParamArray.pas), DRagLint.FieldRepo.ParamArray.MissingValue (DRagLint.FieldRepo.ParamArray.pas), DRagLint.FieldRepo.ParamArray.Prepare.TPrepareRun.ParamDataLines (DRagLint.FieldRepo.ParamArray.Prepare.pas)</para>
+/// <para>Returns: pftString; pftInteger; pftByte; pftBlob; pftFloat; pftTimeStamp; pType; pftVariant</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PAGeneralType(pType: TPAFieldType): TPAFieldType;
 
 /// <summary>Source-field accessor property (port of BDEFieldAccessor), e.g. 'AsInteger'.</summary>
 /// <param name="pType">The field type.</param>
 /// <returns>The accessor property name.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.FieldRepo.ParamArray.AddPairLine (DRagLint.FieldRepo.ParamArray.pas)</para>
+/// <para>Returns: 'AsString'; 'AsInteger'; 'AsLargeInt'; 'AsFloat'; 'AsCurrency'; 'AsBcd'; 'AsFMTBcd'; 'AsBoolean'; 'AsDate'; 'AsTime'; 'AsDateTime'; 'AsDateTimeOffset'; 'AsByte'; 'AsBlob'; 'AsStream'; 'AsGUID'; 'AsVariant'</para>
+/// <para>Complexity: 17 (cyclomatic, outer body), 39 lines (full implementation)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PASourceAccessor(pType: TPAFieldType): string;
 
 /// <summary>Param-array accessor property (port of FDParamArrayAccessor), e.g. 'AsIntegers'.</summary>
 /// <param name="pType">The param type.</param>
 /// <returns>The array accessor property name.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.FieldRepo.ParamArray.AddPairLine (DRagLint.FieldRepo.ParamArray.pas), DRagLint.FieldRepo.ParamArray.PABuildBlock (DRagLint.FieldRepo.ParamArray.pas)</para>
+/// <para>Returns: 'AsWideStrings'; 'AsIntegers'; 'AsBytes'; 'AsLargeInts'; 'AsFloats'; 'AsCurrencys'; 'AsBcds'; 'AsFMTBcds'; 'AsBooleans'; 'AsDates'; 'AsSQLTimeIntervals'; 'AsSQLTimeStamps'; 'AsSQLTimeStampOffsets'; 'AsBlobs'; 'AsStreams'; 'AsGUIDs'; 'AsVariants'</para>
+/// <para>Complexity: 17 (cyclomatic, outer body), 39 lines (full implementation)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PAParamArrayAccessor(pType: TPAFieldType): string;
 
 /// <summary>Maps a Data.DB class name or 'ftXxx' token from a DFM to a type.</summary>
 /// <param name="pToken">Field class ('TIntegerField') or data type ('ftInteger').</param>
 /// <returns>The type, or pftUnknown when not recognised.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.FieldRepo.ParamArray.PADiscoverNamed (DRagLint.FieldRepo.ParamArray.pas), DRagLint.FieldRepo.ParamArray.Prepare.TPrepareRun.ParamDataLines (DRagLint.FieldRepo.ParamArray.Prepare.pas)</para>
+/// <para>Calls: Copy, SameText</para>
+/// <para>Returns: FIELD_CLASSES[LIdx].Typ; LType; pftUnknown</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PATypeFromDfmToken(const pToken: string): TPAFieldType;
 
 /// <summary>Reads the last TTable's fields and the last parameterised TFDQuery's params
@@ -118,6 +212,14 @@ function PATypeFromDfmToken(const pToken: string): TPAFieldType;
 /// <param name="pSrc">Out: table fields in DFM order.</param>
 /// <param name="pDst">Out: query params in DFM order.</param>
 /// <returns>True when both a table and a parameterised query were found.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.FieldRepo.ParamArray.PARunProject (DRagLint.FieldRepo.ParamArray.pas)</para>
+/// <para>Calls: DRagLint.FieldRepo.ParamArray.PADiscoverNamed</para>
+/// <para>Returns: PADiscoverNamed(pDfm, '', '', pQueryName, pTableName, pSrc, pDst)</para>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.PADiscoverNamed"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PADiscoverFromDfm(const pDfm: string; out pQueryName, pTableName: string;
   out pSrc, pDst: TPAColumns): Boolean;
 
@@ -132,6 +234,20 @@ function PADiscoverFromDfm(const pDfm: string; out pQueryName, pTableName: strin
 /// <param name="pDst">Out: query params in DFM order.</param>
 /// <returns>True when both components were found; a named component that is absent gives
 /// False (never a fallback to the heuristic).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RepoParamArray.AnalyseUnit (DRagLint.CLI.RepoParamArray.pas), DRagLint.FieldRepo.ParamArray.PADiscoverFromDfm (DRagLint.FieldRepo.ParamArray.pas)</para>
+/// <para>Calls: Copy, DRagLint.FieldRepo.ParamArray.AddColumn, DRagLint.FieldRepo.ParamArray.PATypeFromDfmToken, DRagLint.FieldRepo.ParamArray.PickNamed, DRagLint.FieldRepo.ParamArray.RememberComponent, DRagLint.FieldRepo.ParamArray.UnquoteValue, EndsStr, Pos, SameText, StartsText, Trim</para>
+/// <para>Returns: (LCurTable &lt;&gt; '') and (LGoodQuery &lt;&gt; '')</para>
+/// <para>Complexity: 37 (cyclomatic, outer body), 134 lines (full implementation)</para>
+/// <para>Mutates: pQueryName (out), pTableName (out), pSrc (out), pDst (out)</para>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.AddColumn"/>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.PATypeFromDfmToken"/>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.PickNamed"/>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.RememberComponent"/>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.UnquoteValue"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PADiscoverNamed(const pDfm, pWantQuery, pWantTable: string; out pQueryName, pTableName: string;
   out pSrc, pDst: TPAColumns): Boolean;
 
@@ -139,6 +255,11 @@ function PADiscoverNamed(const pDfm, pWantQuery, pWantTable: string; out pQueryN
 /// '// MISSING PARAMS', '#### MISSING FIELDS').</summary>
 /// <param name="pBlock">Block from PABuildBlock.</param>
 /// <returns>True when at least one marker line is present.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: ContainsStr</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PABlockHasMarkers(const pBlock: string): Boolean;
 
 /// <summary>Builds the Array-DML loop for one query/table pair (port of the assistant's
@@ -152,10 +273,24 @@ function PABlockHasMarkers(const pBlock: string): Boolean;
 /// <param name="pError">Out: reason when False ('Query has no parameters.',
 /// 'Table and / or Query is missing.' or a duplicate-name message).</param>
 /// <returns>True when a block was produced.</returns>
-/// <remarks>Matching: names upper-cased and sorted; pass 1 exact, pass 2 the query param
+/// <remarks>
+/// Matching: names upper-cased and sorted; pass 1 exact, pass 2 the query param
 /// contains the field name. Unmatched params follow "// MISSING PARAMS", unmatched
 /// fields "#### MISSING FIELDS ####"; an unassignable pair is emitted as a
-/// "##### TYPE MISMATCH #####" line plus a commented assignment.</remarks>
+/// "##### TYPE MISMATCH #####" line plus a commented assignment.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RepoParamArray.AnalyseUnit (DRagLint.CLI.RepoParamArray.pas), DRagLint.FieldRepo.ParamArray.PARunProject (DRagLint.FieldRepo.ParamArray.pas)</para>
+/// <para>Calls: DRagLint.FieldRepo.ParamArray.AddPairLine, DRagLint.FieldRepo.ParamArray.AddTail, DRagLint.FieldRepo.ParamArray.MatchColumns, DRagLint.FieldRepo.ParamArray.MissingValue, DRagLint.FieldRepo.ParamArray.PAParamArrayAccessor, DRagLint.FieldRepo.ParamArray.PATypeName, DRagLint.FieldRepo.ParamArray.SortedIndices, Format, TrimRight, UpperCase</para>
+/// <para>Returns: False; True</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 80 lines (full implementation)</para>
+/// <para>Mutates: pBlock (out), pError (out)</para>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.AddPairLine"/>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.AddTail"/>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.MatchColumns"/>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.MissingValue"/>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.PAParamArrayAccessor"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PABuildBlock(const pQueryName, pTableName: string; const pSrc, pDst: TPAColumns;
   const pOpts: TPAOptions; out pBlock, pError: string): Boolean;
 
@@ -164,6 +299,16 @@ function PABuildBlock(const pQueryName, pTableName: string; const pSrc, pDst: TP
 /// <param name="pSource">Current unit text.</param>
 /// <param name="pBlock">Block from PABuildBlock.</param>
 /// <returns>The diff text, or '' when the unit has no insertion point.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RepoParamArray.AnalyseUnit (DRagLint.CLI.RepoParamArray.pas), DRagLint.FieldRepo.ParamArray.PARunProject (DRagLint.FieldRepo.ParamArray.pas)</para>
+/// <para>Calls: Copy, DRagLint.FieldRepo.ParamArray.CountLines, DRagLint.FieldRepo.ParamArray.FindInsertPos, DRagLint.FieldRepo.ParamArray.InsertText, Format</para>
+/// <para>Returns: ''; LOut.Text</para>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.CountLines"/>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.FindInsertPos"/>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.InsertText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PABuildPlan(const pUnitName, pSource, pBlock: string): string;
 
 /// <summary>Applies the block as a braced comment before the last 'end.', but only when
@@ -173,6 +318,16 @@ function PABuildPlan(const pUnitName, pSource, pBlock: string): string;
 /// <param name="pGate">Compile gate; called exactly once with the candidate text.</param>
 /// <param name="pNewSource">Out: the candidate when applied, else pSource unchanged.</param>
 /// <returns>pasApplied, pasRefusedByGate or pasNoInsertPoint.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RepoParamArray.AnalyseUnit (DRagLint.CLI.RepoParamArray.pas), DRagLint.FieldRepo.ParamArray.PARunProject (DRagLint.FieldRepo.ParamArray.pas)</para>
+/// <para>Calls: Copy, DRagLint.FieldRepo.ParamArray.FindInsertPos, DRagLint.FieldRepo.ParamArray.InsertText, pGate</para>
+/// <para>Returns: pasNoInsertPoint; pasRefusedByGate; pasApplied</para>
+/// <para>Mutates: pNewSource (out)</para>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.FindInsertPos"/>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.InsertText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PAApplyPlan(const pSource, pBlock: string; const pGate: TPAGate;
   out pNewSource: string): TPAStatus;
 
@@ -180,6 +335,13 @@ function PAApplyPlan(const pSource, pBlock: string; const pGate: TPAGate;
 /// 'u' (any case) and it is not on the exclusion list.</summary>
 /// <param name="pModuleName">Unit name without extension.</param>
 /// <returns>True when the unit is processed.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RepoParamArray.CollectUnits (DRagLint.CLI.RepoParamArray.pas), DRagLint.FieldRepo.ParamArray.PARunProject (DRagLint.FieldRepo.ParamArray.pas)</para>
+/// <para>Calls: SameText, StartsText</para>
+/// <para>Returns: (pModuleName &lt;&gt; '') and StartsText('u', pModuleName); False</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PAProjectEligible(const pModuleName: string): Boolean;
 
 /// <summary>Project assistant: for every eligible unit discovers columns from its DFM,
@@ -188,6 +350,16 @@ function PAProjectEligible(const pModuleName: string): Boolean;
 /// <param name="pOpts">Emission options.</param>
 /// <param name="pGate">Compile gate (see PAApplyPlan).</param>
 /// <returns>One result per input unit; a unit with no table/query is pasNoBlock.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: DRagLint.FieldRepo.ParamArray.PAApplyPlan, DRagLint.FieldRepo.ParamArray.PABuildBlock, DRagLint.FieldRepo.ParamArray.PABuildPlan, DRagLint.FieldRepo.ParamArray.PADiscoverFromDfm, DRagLint.FieldRepo.ParamArray.PAProjectEligible</para>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.PAApplyPlan"/>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.PABuildBlock"/>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.PABuildPlan"/>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.PADiscoverFromDfm"/>
+/// <seealso cref="DRagLint.FieldRepo.ParamArray.PAProjectEligible"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PARunProject(const pUnits: array of TPAUnitInput; const pOpts: TPAOptions;
   const pGate: TPAGate): TPAUnitResults;
 

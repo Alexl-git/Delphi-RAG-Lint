@@ -42,7 +42,19 @@ const
 /// <param name="ACtx">The file; Store / LibStore may be nil, the file rules then use the unit's own
 /// declarations only (a class tree that leaves the unit is unknown and the cast rule stays silent).</param>
 /// <returns>Findings in document order per rule; nil when the file is clean or does not parse.</returns>
-/// <remarks>Stateless between calls; not thread-safe within one call (one scan object per call).</remarks>
+/// <remarks>
+/// Stateless between calls; not thread-safe within one call (one scan object per call).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.TYP.TV151TYPRules.CheckFile (DRagLint.V151.TYP.pas)</para>
+/// <para>Calls: DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.V151.Api.TV151FileCtx.Wants, DRagLint.V151.TYP.Support.TTypScan.Create, DRagLint.V151.TYP.Support.TTypScan.Run, TreeSitter.TTSTree.RootNode</para>
+/// <para>Returns: nil; Scan.Run</para>
+/// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+/// <seealso cref="DRagLint.V151.Api.TV151FileCtx.Wants"/>
+/// <seealso cref="DRagLint.V151.TYP.Support.TTypScan.Create"/>
+/// <seealso cref="DRagLint.V151.TYP.Support.TTypScan.Run"/>
+/// <seealso cref="TreeSitter.TTSTree.RootNode"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TypCheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>;
 
 implementation

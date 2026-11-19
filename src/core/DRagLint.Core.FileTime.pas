@@ -82,7 +82,7 @@ function NowUtc: TDateTime;
 /// RTL's Now printed started HH:MM one hour ahead of the real clock for the whole day (1.41 DST-LOGSTAMP;
 /// pinned by tests\autotest\run_cli141_followups.ps1). Thread-safe.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply.PerformApplyWrites (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas) (+1 more)</para>
+/// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.ConvertApply.DoConvertApply.PerformApplyWrites (DRagLint.CLI.ConvertApply.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.RunCommand (DRagLint.CLI.pas) (+1 more)</para>
 /// <para>Calls: GetSystemTime, SystemTimeToDateTime, SystemTimeToTzSpecificLocalTime</para>
 /// <para>Returns: if SystemTimeToTzSpecificLocalTime(nil, UtcST, LocalST) then SystemTimeToDateTime(LocalST)</para>
 /// <!-- drag-lint:auto END -->
@@ -94,7 +94,7 @@ function NowLocal: TDateTime;
 /// <remarks>
 /// Thread-safe.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.CommitIndexerFingerprint (DRagLint.CLI.pas), DRagLint.CLI.DoImportLog (DRagLint.CLI.pas), DRagLint.CLI.FinishLibraryResolve (DRagLint.CLI.pas), DRagLint.CLI.OpenInObsidian (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas) (+4 more)</para>
+/// <para>Called from: DRagLint.CLI.CommitIndexerFingerprint (DRagLint.CLI.pas), DRagLint.CLI.Export.DoImportLog (DRagLint.CLI.Export.pas), DRagLint.CLI.Export.OpenInObsidian (DRagLint.CLI.Export.pas), DRagLint.CLI.FinishLibraryResolve (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas) (+4 more)</para>
 /// <para>Calls: DRagLint.Core.FileTime.FileTimeToUnix, GetSystemTimeAsFileTime</para>
 /// <para>Returns: FileTimeToUnix(Stamp)</para>
 /// <seealso cref="DRagLint.Core.FileTime.FileTimeToUnix"/>

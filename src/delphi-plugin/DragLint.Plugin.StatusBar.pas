@@ -107,7 +107,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DragLint.Plugin.StatusBar.SetDragLintNote (DragLint.Plugin.StatusBar.pas), DragLint.Plugin.StatusBar.TDragLintStatusBar.HandleTimer (DragLint.Plugin.StatusBar.pas)</para>
     /// <para>Calls: DragLint.Plugin.StatusBar.TDragLintStatusBar.ApplyTaskLines, IntToStr</para>
-    /// <para>Complexity: 10 (cyclomatic, outer body), 59 lines (full implementation)</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 59 lines (full implementation)</para>
     /// <para>Reads: FStateLbl, FBeat, FBar, FDepthLbl, FCancel</para>
     /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.ApplyTaskLines"/>
     /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.Create"/>
@@ -211,7 +211,7 @@ const
 /// <para>STATED PLAINLY: the strip is docked in the drag-lint dock window, so
 /// the note is visible when that window is. Main thread only; guarded.</para>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.Editor.AnnounceHoverStart (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.DoCompletion (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeGoToDefinition (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeHover (DragLint.Plugin.Editor.pas) (+20 more)</para>
+/// <para>Called from: DragLint.Plugin.Editor.AnnounceHoverStart (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.DoCompletion (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeGoToDefinition (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeHover (DragLint.Plugin.Editor.pas) (+21 more)</para>
 /// <para>Calls: DragLint.Plugin.JobQueue.JobQueue, DragLint.Plugin.JobQueue.TDragLintJobQueue.GetState, DragLint.Plugin.StatusBar.TDragLintStatusBar.ApplyState</para>
 /// <para>Catches: Exception (empty)</para>
 /// <seealso cref="DragLint.Plugin.JobQueue.JobQueue"/>

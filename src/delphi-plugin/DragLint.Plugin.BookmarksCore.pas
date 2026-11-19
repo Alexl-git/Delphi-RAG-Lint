@@ -12,6 +12,12 @@ interface
 
 type
   /// <summary>One `dl:bk` anchor as `bookmarks --json` reports it.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DragLint.Plugin.Bookmarks.InvokeBookmarksGoto (DragLint.Plugin.Bookmarks.pas) ?, DragLint.Plugin.Bookmarks.InvokeBookmarksList (DragLint.Plugin.Bookmarks.pas) ?, DragLint.Plugin.Bookmarks.Jump (DragLint.Plugin.Bookmarks.pas) ?, DragLint.Plugin.Bookmarks.ListThen (DragLint.Plugin.Bookmarks.pas) ?, DragLint.Plugin.BookmarksCore.ParseBookmarkRows (DragLint.Plugin.BookmarksCore.pas) (+2 more)</para>
+  /// <para>Used in units: DragLint.Plugin.Bookmarks, DragLint.Plugin.BookmarksCore</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TBookmarkRow = record
     /// <summary>Absolute path of the unit.</summary>
     FilePath: string;
@@ -26,6 +32,12 @@ type
   end;
 
   /// <summary>The counts a bookmarks-strip or bookmarks-restore --json object carries.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.BookmarksCore.pas) ?, DragLint.Plugin.Bookmarks.InvokeBookmarksRestore (DragLint.Plugin.Bookmarks.pas) ?, DragLint.Plugin.Bookmarks.InvokeBookmarksStrip (DragLint.Plugin.Bookmarks.pas) ?, DragLint.Plugin.BookmarksCore.ParseBookmarkVerbCounts (DragLint.Plugin.BookmarksCore.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.Bookmarks, DragLint.Plugin.BookmarksCore</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TBookmarkVerbCounts = record
     /// <summary>strip: anchors found (stripped, or would be).</summary>
     Count   : Integer;
@@ -44,6 +56,12 @@ type
 /// <param name="AIn">The unit (or folder) to list.</param>
 /// <param name="ACode">'' lists every anchor; else only the one with this number / CODE.</param>
 /// <returns>The full command line.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Bookmarks.ListThen (DragLint.Plugin.Bookmarks.pas)</para>
+/// <para>Calls: Format</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BookmarksListCmdLine(const AExe, AIn, ACode: string): string;
 
 /// <summary>`bookmarks-strip --in <unit> --output <sidecar> [--apply] --json`.</summary>
@@ -52,6 +70,12 @@ function BookmarksListCmdLine(const AExe, AIn, ACode: string): string;
 /// <param name="ASidecar">The sidecar to write; the verb never overwrites an existing one.</param>
 /// <param name="AApply">False = dry run (writes nothing).</param>
 /// <returns>The full command line.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Bookmarks.InvokeBookmarksStrip (DragLint.Plugin.Bookmarks.pas)</para>
+/// <para>Calls: Format</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BookmarksStripCmdLine(const AExe, AIn, ASidecar: string; AApply: Boolean): string;
 
 /// <summary>`bookmarks-restore --from <sidecar> [--apply] --json`.</summary>
@@ -59,20 +83,44 @@ function BookmarksStripCmdLine(const AExe, AIn, ASidecar: string; AApply: Boolea
 /// <param name="ASidecar">A sidecar bookmarks-strip wrote.</param>
 /// <param name="AApply">False = dry run (writes nothing).</param>
 /// <returns>The full command line.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Bookmarks.InvokeBookmarksRestore (DragLint.Plugin.Bookmarks.pas)</para>
+/// <para>Calls: Format</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BookmarksRestoreCmdLine(const AExe, ASidecar: string; AApply: Boolean): string;
 
 /// <summary>Reads the JSON array `bookmarks --json` prints.</summary>
 /// <param name="AOutput">stdout and stderr interleaved; text before the first '[' is ignored.</param>
 /// <param name="ARows">Receives the rows; empty on False.</param>
 /// <returns>False when no array could be read (an error text, not JSON).</returns>
-/// <remarks>Pure; never raises.</remarks>
+/// <remarks>
+/// Pure; never raises.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Bookmarks.ListThen (DragLint.Plugin.Bookmarks.pas)</para>
+/// <para>Calls: Default, DragLint.Plugin.BookmarksCore.JsonFrom, TJSONArray, TJSONObject</para>
+/// <para>Returns: V is TJSONArray</para>
+/// <para>Mutates: ARows (out)</para>
+/// <seealso cref="DragLint.Plugin.BookmarksCore.JsonFrom"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseBookmarkRows(const AOutput: string; out ARows: TArray<TBookmarkRow>): Boolean;
 
 /// <summary>Reads the JSON object bookmarks-strip / bookmarks-restore print.</summary>
 /// <param name="AOutput">stdout and stderr interleaved; text before the first '{' is ignored.</param>
 /// <param name="ACounts">Receives the counts; all 0 on False.</param>
 /// <returns>False when no object could be read.</returns>
-/// <remarks>Pure; never raises.</remarks>
+/// <remarks>
+/// Pure; never raises.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Bookmarks.InvokeBookmarksRestore (DragLint.Plugin.Bookmarks.pas), DragLint.Plugin.Bookmarks.InvokeBookmarksStrip (DragLint.Plugin.Bookmarks.pas)</para>
+/// <para>Calls: Default, DragLint.Plugin.BookmarksCore.JsonFrom, SameText, TJSONObject</para>
+/// <para>Returns: V is TJSONObject</para>
+/// <para>Mutates: ACounts (out)</para>
+/// <seealso cref="DragLint.Plugin.BookmarksCore.JsonFrom"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseBookmarkVerbCounts(const AOutput: string; out ACounts: TBookmarkVerbCounts): Boolean;
 
 /// <summary>Where the IDE writes a unit's strip sidecar.</summary>
@@ -81,19 +129,40 @@ function ParseBookmarkVerbCounts(const AOutput: string; out ACounts: TBookmarkVe
 /// <param name="ANow">The time stamp in the name, so a second strip never meets the
 /// verb's refuse-to-overwrite.</param>
 /// <returns>`<ALocalAppData>\drag-lint\bookmarks\<unit name>-yyyymmdd-hhnnss.json`.</returns>
-/// <remarks>Per user and outside the repo: a sidecar holds the personal marks a
+/// <remarks>
+/// Per user and outside the repo: a sidecar holds the personal marks a
 /// strip took out of a file (DECISION-2026-10-28-comment-anchors), so it is never
-/// committed.</remarks>
+/// committed.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Bookmarks.InvokeBookmarksStrip (DragLint.Plugin.Bookmarks.pas)</para>
+/// <para>Calls: ChangeFileExt, DragLint.Plugin.BookmarksCore.BookmarkSidecarFolder, ExtractFileName, FormatDateTime</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DragLint.Plugin.BookmarksCore.BookmarkSidecarFolder"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BookmarkSidecarPath(const ALocalAppData, APas: string; ANow: TDateTime): string;
 
 /// <summary>The folder BookmarkSidecarPath writes into.</summary>
 /// <param name="ALocalAppData">%LOCALAPPDATA%.</param>
 /// <returns>`<ALocalAppData>\drag-lint\bookmarks`.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Bookmarks.SidecarFolder (DragLint.Plugin.Bookmarks.pas), DragLint.Plugin.BookmarksCore.BookmarkSidecarPath (DragLint.Plugin.BookmarksCore.pas)</para>
+/// <para>Returns: TPath.Combine(ALocalAppData, SIDECAR_SUBDIR)</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BookmarkSidecarFolder(const ALocalAppData: string): string;
 
 /// <summary>One line of the IDE's pick list for a row.</summary>
 /// <param name="ARow">The anchor.</param>
 /// <returns>`bk3  line 12` for a user mark, `bk:CODE  line 12  -- reason` for a tagged one.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Bookmarks.InvokeBookmarksList (DragLint.Plugin.Bookmarks.pas)</para>
+/// <para>Calls: Format, SameText</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BookmarkRowText(const ARow: TBookmarkRow): string;
 
 implementation

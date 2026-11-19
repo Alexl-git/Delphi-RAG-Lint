@@ -52,13 +52,13 @@ uses
 /// again.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
-/// <para>Calls: DragLint.Plugin.FanOut.Log, DragLint.Plugin.FanOut.MessageServices, DragLint.Plugin.FanOut.StartFanOutRun, DragLint.Plugin.FanOut.TFanOutTicker.OnTick, DragLint.Plugin.FanOutState.TFanOutEpisode.Create, DragLint.Plugin.FanOutState.TTreeCompileTrigger.Reset</para>
+/// <para>Calls: DragLint.Plugin.FanOut.Log, DragLint.Plugin.FanOut.MessageServices, DragLint.Plugin.FanOut.StartFanOutRun, DragLint.Plugin.FanOutState.TFanOutEpisode.Create, DragLint.Plugin.FanOutState.TTreeCompileTrigger.Reset</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <seealso cref="DragLint.Plugin.FanOut.Log"/>
 /// <seealso cref="DragLint.Plugin.FanOut.MessageServices"/>
 /// <seealso cref="DragLint.Plugin.FanOut.StartFanOutRun"/>
-/// <seealso cref="DragLint.Plugin.FanOut.TFanOutTicker.OnTick"/>
 /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Create"/>
+/// <seealso cref="DragLint.Plugin.FanOutState.TTreeCompileTrigger.Reset"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure StartFanOut;

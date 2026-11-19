@@ -11,6 +11,12 @@ interface
 
 type
   /// <summary>One component of the designer selection.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.ConvertLaunch.pas), declaration (DragLint.Plugin.ConvertRequest.pas), DragLint.Plugin.ConvertLaunch.ReadSelection (DragLint.Plugin.ConvertLaunch.pas), DragLint.Plugin.ConvertRequest.SelectionWithoutRoot (DragLint.Plugin.ConvertRequest.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.ConvertLaunch, DragLint.Plugin.ConvertRequest</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TConvertComponent = record
     /// <summary>The component's Name on the form.</summary>
     Name    : string;
@@ -19,6 +25,12 @@ type
   end;
 
   /// <summary>What a convert-request/1 document says.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.ConvertRequest.pas) ?, DragLint.Plugin.ConvertLaunch.HandOff (DragLint.Plugin.ConvertLaunch.pas), DragLint.Plugin.ConvertRequest.BuildConvertRequestJson (DragLint.Plugin.ConvertRequest.pas) ?</para>
+  /// <para>Used in units: DragLint.Plugin.ConvertLaunch, DragLint.Plugin.ConvertRequest</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TConvertRequestFields = record
     /// <summary>selected or form.</summary>
     Scope      : string;
@@ -44,24 +56,51 @@ type
 /// <param name="pSelection">The selection, designer order.</param>
 /// <param name="pRootName">The Name of the root component (case-insensitive).</param>
 /// <returns>The rest, same order; empty when only the root was selected.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.ConvertLaunch.ReadSelection (DragLint.Plugin.ConvertLaunch.pas)</para>
+/// <para>Calls: SameText</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SelectionWithoutRoot(const pSelection: TArray<TConvertComponent>; const pRootName: string): TArray<TConvertComponent>;
 
 /// <summary>Builds a convert-request/1 document.</summary>
 /// <param name="pFields">What the document says.</param>
 /// <returns>The JSON text; '' when Components is empty, so an empty selection cannot
 /// produce a request the editor would refuse with a less useful message.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.ConvertLaunch.HandOff (DragLint.Plugin.ConvertLaunch.pas)</para>
+/// <para>Calls: ChangeFileExt, FormatDateTime</para>
+/// <para>Returns: ''; Doc.ToJSON</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildConvertRequestJson(const pFields: TConvertRequestFields): string;
 
 /// <summary>The folder requests live in.</summary>
 /// <param name="pLocalAppData">%LOCALAPPDATA%. Not TEMP: TEMP is per-process, and the IDE
 /// and a shell resolve it differently.</param>
 /// <returns>...\drag-lint\convert-requests, no trailing delimiter.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.ConvertLaunch.RequestsFolder (DragLint.Plugin.ConvertLaunch.pas)</para>
+/// <para>Returns: TPath.Combine(TPath.Combine(pLocalAppData, 'drag-lint'), 'convert-requests')</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ConvertRequestsFolder(const pLocalAppData: string): string;
 
 /// <summary>A request's file name.</summary>
 /// <param name="pNow">The time to stamp.</param>
 /// <param name="pPid">The IDE's process id.</param>
 /// <returns>yyyymmdd-hhnnss-pid.json</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.ConvertLaunch.HandOff (DragLint.Plugin.ConvertLaunch.pas)</para>
+/// <para>Calls: FormatDateTime, IntToStr</para>
+/// <para>Returns: FormatDateTime('yyyymmdd"-"hhnnss', pNow) + '-' + IntToStr(pPid) + REQUEST_EXT</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ConvertRequestFileName(pNow: TDateTime; pPid: Integer): string;
 
 /// <summary>Deletes the .json files in a folder older than a number of days.</summary>
@@ -69,13 +108,27 @@ function ConvertRequestFileName(pNow: TDateTime; pPid: Integer): string;
 /// <param name="pOlderThanDays">Age limit against the file's last write time.</param>
 /// <param name="pNow">The current time.</param>
 /// <returns>How many files were deleted.</returns>
-/// <remarks>A file that cannot be deleted stays and is not counted: pruning must never
-/// stop a hand-off. Only this folder, never recursive.</remarks>
+/// <remarks>
+/// A file that cannot be deleted stays and is not counted: pruning must never
+/// stop a hand-off. Only this folder, never recursive.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.ConvertLaunch.HandOff (DragLint.Plugin.ConvertLaunch.pas)</para>
+/// <para>Calls: DaysBetween</para>
+/// <para>Catches: EInOutError (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PruneConvertRequests(const pFolder: string; pOlderThanDays: Integer; pNow: TDateTime): Integer;
 
 /// <summary>The editor's convert_request capability.</summary>
 /// <param name="pJson">The text of the --write-capabilities file.</param>
 /// <returns>The value, or 0 for garbage, another schema or a missing key.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.ConvertLaunch.WithProbedEditor (DragLint.Plugin.ConvertLaunch.pas)</para>
+/// <para>Returns: 0</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseEditorCapabilities(const pJson: string): Integer;
 
 /// <summary>The command line that opens the editor.</summary>
@@ -85,6 +138,13 @@ function ParseEditorCapabilities(const pJson: string): Integer;
 /// <param name="pProjectDb">The index for --project-db; '' leaves the flag out.</param>
 /// <param name="pPlatform">Win32 or Win64.</param>
 /// <returns>The full command line; no .rules argument, the Convert tab needs no book.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.ConvertLaunch.HandOff (DragLint.Plugin.ConvertLaunch.pas), DragLint.Plugin.ConvertLaunch.InvokeOpenConversionEditor (DragLint.Plugin.ConvertLaunch.pas)</para>
+/// <para>Calls: DragLint.Plugin.ConvertRequest.EditorPlatformArg, Format</para>
+/// <seealso cref="DragLint.Plugin.ConvertRequest.EditorPlatformArg"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ConvertLaunchCommand(const pEditor, pRequestFile, pPas, pProjectDb, pPlatform: string): string;
 
 implementation

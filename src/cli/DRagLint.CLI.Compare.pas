@@ -14,10 +14,25 @@ uses
 /// <param name="AArgs">The parsed command line; see the verb's lines in --help.</param>
 /// <returns>0 same, 1 differences, 2 usage or setup error, 3 stale index (also 2 for a bad usage,
 /// and 2 for any exception raised inside the verb: ERROR: &lt;class&gt;: &lt;message&gt;).</returns>
-/// <remarks>Output: text or JSON to stdout (or --output), HTML always to a file whose path is printed.
+/// <remarks>
+/// Output: text or JSON to stdout (or --output), HTML always to a file whose path is printed.
 /// The new run never accepts a stale index. The old chart's temp SVG copy is deleted on every path,
 /// and an exception while reporting an exception still ends in one ERROR line and exit 2.
-/// Not thread-safe (it may rewrite a unit for --update-doc).</remarks>
+/// Not thread-safe (it may rewrite a unit for --update-doc).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.Charts.Compare.RunCompare, DRagLint.Charts.Producer.Delphi.ProducerForCompare, DRagLint.CLI.Compare.CompareChooseSource, DRagLint.CLI.Compare.CompareDropTempSvg, DRagLint.CLI.Compare.CompareEmit, DRagLint.CLI.Compare.CompareIsSnapshotOnly, DRagLint.CLI.Compare.CompareProduceOptions, DRagLint.CLI.Compare.CompareRefuse, DRagLint.CLI.Compare.CompareShowPage, DRagLint.CLI.Compare.CompareTakeSnapshot, DRagLint.CLI.Compare.CompareUsageProblem, LowerCase, MatchStr, Writeln</para>
+/// <para>Returns: CompareRefuse(AArgs, 'text', COMPARE_EXIT_SETUP, '--format must be text, json or html', True); CompareEmit(AArgs, Req, RunCompare(Req), Fmt); COMPARE_EXIT_SETUP; CompareRefuse(ToStdout, Fmt, COMPARE_EXIT_SETUP, E.ClassName + ': ' + E.Message, False)</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 66 lines (full implementation)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Charts.Compare.RunCompare"/>
+/// <seealso cref="DRagLint.Charts.Producer.Delphi.ProducerForCompare"/>
+/// <seealso cref="DRagLint.CLI.Compare.CompareChooseSource"/>
+/// <seealso cref="DRagLint.CLI.Compare.CompareDropTempSvg"/>
+/// <seealso cref="DRagLint.CLI.Compare.CompareEmit"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoCompare(const AArgs: TArgs): Integer;
 
 implementation

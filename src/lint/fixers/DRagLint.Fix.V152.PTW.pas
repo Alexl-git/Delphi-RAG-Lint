@@ -15,8 +15,13 @@ uses
 /// <summary>Hands the platform library store to the parameter-type-too-wide autofix for one fix run.</summary>
 /// <param name="pLib">The library store, or nil. Without it a chain or member the project does not declare (VCL,
 /// RTL ancestors) is unproved and that finding's fix is declined, as the rule itself would decline it.</param>
-/// <remarks>Set by the CLI around BuildAutofixEdits and cleared (nil) after it. The caller keeps ownership of the
-/// store. Not thread-safe; call from the run thread only.</remarks>
+/// <remarks>
+/// Set by the CLI around BuildAutofixEdits and cleared (nil) after it. The caller keeps ownership of the
+/// store. Not thread-safe; call from the run thread only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure SetPtwFixLibrary(const pLib: ISymbolStore);
 
 implementation

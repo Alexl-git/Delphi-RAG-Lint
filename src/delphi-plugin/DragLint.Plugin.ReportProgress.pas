@@ -43,6 +43,11 @@ type
   /// <summary>Receives the elapsed whole seconds of a report run, on the main
   /// thread.</summary>
   /// <param name="pElapsedSec">Seconds since Start, rounded down.</param>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.ReportProgress.pas), DragLint.Plugin.ReportProgress.TReportProgressRun.Create (DragLint.Plugin.ReportProgress.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TReportProgressEvent = reference to procedure(pElapsedSec: Integer);
 
   /// <summary>One report run: a single engine child off the main thread, with
@@ -50,6 +55,10 @@ type
   /// <remarks>
   /// Main thread only. The owner frees it; freeing it cancels a run in flight
   /// (TCliRunSlot.Destroy), so pOnDone never reaches a dead owner.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.ReportProgress.pas) ?, DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CreateRun (DragLint.Plugin.ReportProgress.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.ReportProgress</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TReportProgressRun = class
   private
@@ -60,6 +69,22 @@ type
     FOnDone    : TCliRunDone;
     FStartTick : UInt64;
     FCancelled : Boolean;
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: (FSlot &lt;&gt; nil) and
+    /// FSlot.Running.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CancelRun (DragLint.Plugin.ReportProgress.pas), DragLint.Plugin.ReportProgress.TReportProgressRun.Cancel (DragLint.Plugin.ReportProgress.pas), DragLint.Plugin.ReportProgress.TReportProgressRun.Tick (DragLint.Plugin.ReportProgress.pas)</para>
+    /// <para>Used in (via property Running): DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CancelRun (DragLint.Plugin.ReportProgress.pas) [r], DragLint.Plugin.ReportProgress.TReportProgressRun.Cancel (DragLint.Plugin.ReportProgress.pas) [r], DragLint.Plugin.ReportProgress.TReportProgressRun.Tick (DragLint.Plugin.ReportProgress.pas) [r]</para>
+    /// <para>Calls: DragLint.Plugin.CliAsync.TCliRunSlot.GetRunning</para>
+    /// <para>Reads: FSlot</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DragLint.Plugin.CliAsync.TCliRunSlot.GetRunning"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.Cancel"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.Create"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.Destroy"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.ElapsedSec"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function GetRunning: Boolean;
   public
     /// <summary>Prepares a run; nothing is spawned until Start.</summary>
@@ -69,23 +94,97 @@ type
     /// seconds on every Tick while the run is in flight; may be nil.</param>
     /// <param name="pOnDone">Called at most once, on the main thread, with the
     /// child's exit code and output; never after Cancel.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CreateRun (DragLint.Plugin.ReportProgress.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FSlot, FCmdLine, FStallMs, FOnProgress, FOnDone</para>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.Cancel"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.Destroy"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.ElapsedSec"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.GetRunning"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.Start"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(const pCmdLine: string; pStallMs: Integer; const pOnProgress: TReportProgressEvent;
       const pOnDone: TCliRunDone);
     /// <summary>Cancels a run in flight and frees the slot.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: FreeAndNil</para>
+    /// <para>Reads: FSlot</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.Cancel"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.Create"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.ElapsedSec"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.GetRunning"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.Start"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>Starts the child off the main thread and reports 0 s.</summary>
-    /// <remarks>Never waits: returns before the child is spawned.</remarks>
+    /// <remarks>
+    /// Never waits: returns before the child is spawned.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.About.StartBackgroundSelfInfoFetch (DragLint.Plugin.About.pas) ?, DragLint.Plugin.Editor.RunCompileDiagnoseAsync (DragLint.Plugin.Editor.pas) ?, DragLint.Plugin.Editor.RunFullCompileSweepAsync (DragLint.Plugin.Editor.pas) ?, DragLint.Plugin.Editor.RunGhostCheckAsync (DragLint.Plugin.Editor.pas) ?, DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CreateRun (DragLint.Plugin.ReportProgress.pas) (+3 more)</para>
+    /// <para>Calls: DragLint.Plugin.CliAsync.TCliRunSlot.Start, FOnProgress</para>
+    /// <para>Reads: FOnDone, FCmdLine, FStallMs, FSlot, FOnProgress   Writes: FCancelled, FStartTick</para>
+    /// <seealso cref="DragLint.Plugin.CliAsync.TCliRunSlot.Start"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.Cancel"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.Create"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.Destroy"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.ElapsedSec"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Start;
     /// <summary>Reports the elapsed seconds while the run is in flight; silent
     /// once it answered or was cancelled.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.HandleTick (DragLint.Plugin.ReportProgress.pas)</para>
+    /// <para>Calls: DragLint.Plugin.ReportProgress.TReportProgressRun.ElapsedSec, DragLint.Plugin.ReportProgress.TReportProgressRun.GetRunning, FOnProgress</para>
+    /// <para>Reads: FOnProgress</para>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.ElapsedSec"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.GetRunning"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.Cancel"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.Create"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Tick;
     /// <summary>Stops the run: its child tree is killed and pOnDone is never
     /// called, even when the answer was already on its way. A no-op when nothing
     /// runs.</summary>
-    /// <remarks>Never waits for the kill; it returns at once.</remarks>
+    /// <remarks>
+    /// Never waits for the kill; it returns at once.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CancelRun (DragLint.Plugin.ReportProgress.pas)</para>
+    /// <para>Calls: DragLint.Plugin.CliAsync.TCliRunSlot.Cancel, DragLint.Plugin.ReportProgress.TReportProgressRun.GetRunning</para>
+    /// <para>Reads: FSlot   Writes: FCancelled</para>
+    /// <seealso cref="DragLint.Plugin.CliAsync.TCliRunSlot.Cancel"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.GetRunning"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.Create"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.Destroy"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.ElapsedSec"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Cancel;
     /// <summary>Whole seconds since Start.</summary>
     /// <returns>0 before Start.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.ReportProgress.TReportProgressRun.Tick (DragLint.Plugin.ReportProgress.pas)</para>
+    /// <para>Calls: Integer</para>
+    /// <para>Returns: if FStartTick = 0 then 0</para>
+    /// <para>Reads: FStartTick</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.Cancel"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.Create"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.Destroy"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.GetRunning"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.Start"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ElapsedSec: Integer;
     /// <summary>True from Start until the answer is about to be delivered or the
     /// run was cancelled.</summary>
@@ -101,6 +200,10 @@ type
   /// cancels the run and calls pOnCancelled once; a finished run hides the window,
   /// calls pOnDone once and releases the window. The window never shows a partial
   /// answer.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.ReportProgress.pas) ?, DragLint.Plugin.Editor.RunGraphStage (DragLint.Plugin.Editor.pas), DragLint.Plugin.ReportProgress.initialization (DragLint.Plugin.ReportProgress.pas) ?, DragLint.Plugin.Reports.StartReport (DragLint.Plugin.Reports.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.Editor, DragLint.Plugin.ReportProgress, DragLint.Plugin.Reports</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDragLintReportProgressForm = class(TForm)
   private
@@ -111,12 +214,88 @@ type
     FTimer      : TTimer;
     FOnDone     : TCliRunDone;
     FOnCancelled: TProc;
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CreateRun (DragLint.Plugin.ReportProgress.pas)</para>
+    /// <para>Calls: DragLint.Plugin.ReportProgress.TReportProgressRun.Tick</para>
+    /// <para>Reads: FRun</para>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.Tick"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CancelRun"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CreateRun"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.Destroy"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.DoClose"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure HandleTick(Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CreateRun (DragLint.Plugin.ReportProgress.pas)</para>
+    /// <para>Calls: DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CancelRun</para>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CancelRun"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CreateRun"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.Destroy"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.DoClose"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.GetStateText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure HandleCancel(Sender: TObject);
+    /// <param name="pSec"><!-- drag-lint:auto type -->Integer</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CreateRun (DragLint.Plugin.ReportProgress.pas)</para>
+    /// <para>Calls: DragLint.Plugin.ReportProgress.ReportProgressCaption</para>
+    /// <para>Reads: FStateLbl, FTitle</para>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.ReportProgressCaption"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CancelRun"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CreateRun"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.Destroy"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.DoClose"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure ShowElapsed(pSec: Integer);
+    /// <param name="pExit"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="pOutput"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CreateRun (DragLint.Plugin.ReportProgress.pas)</para>
+    /// <para>Calls: Done</para>
+    /// <para>Reads: FTimer, FOnDone   Writes: FOnDone</para>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CancelRun"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CreateRun"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.Destroy"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.DoClose"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.GetStateText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure RunDone(pExit: Integer; const pOutput: string);
+    /// <returns><!-- drag-lint:auto -->string -- Observed: FStateLbl.Caption.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FStateLbl</para>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CancelRun"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CreateRun"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.Destroy"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.DoClose"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.HandleCancel"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function GetStateText: string;
   protected
+    /// <param name="Action"><!-- drag-lint:auto type -->var TCloseAction</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CancelRun</para>
+    /// <para>Mutates: Action (var)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CancelRun"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CreateRun"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.Destroy"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.GetStateText"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.HandleCancel"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure DoClose(var Action: TCloseAction); override;
   public
     /// <summary>Builds the window and starts the run; the caller shows it.</summary>
@@ -128,14 +307,51 @@ type
     /// the window is hidden; never after a cancel.</param>
     /// <param name="pOnCancelled">Called once when the user cancels or closes the
     /// window mid-run; may be nil.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.Editor.RunGraphStage (DragLint.Plugin.Editor.pas), DragLint.Plugin.Reports.StartReport (DragLint.Plugin.Reports.pas)</para>
+    /// <para>Calls: CreateNew, DragLint.Plugin.ReportProgress.TReportProgressRun.Create, DragLint.Plugin.ReportProgress.TReportProgressRun.Start</para>
+    /// <para>constructor</para>
+    /// <para>Reads: FStateLbl, FBar, FTimer, FRun   Writes: FTitle, FOnDone, FOnCancelled, FStateLbl, FBar, FTimer, FRun</para>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.Create"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.Start"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CancelRun"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.Destroy"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.DoClose"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor CreateRun(AOwner: TComponent; const pTitle, pCmdLine: string; pStallMs: Integer;
       const pOnDone: TCliRunDone; const pOnCancelled: TProc);
     /// <summary>Cancels a run in flight (without calling pOnCancelled) and
     /// forgets the window.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: FreeAndNil</para>
+    /// <para>Reads: FRun</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CancelRun"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CreateRun"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.DoClose"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.GetStateText"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.HandleCancel"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>What the Cancel button does: stops the run, calls pOnCancelled
     /// once, closes the window. A no-op once the run answered or was
     /// cancelled.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.DoClose (DragLint.Plugin.ReportProgress.pas), DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.HandleCancel (DragLint.Plugin.ReportProgress.pas)</para>
+    /// <para>Calls: Cancelled, DragLint.Plugin.ReportProgress.TReportProgressRun.Cancel, DragLint.Plugin.ReportProgress.TReportProgressRun.GetRunning</para>
+    /// <para>Reads: FRun, FTimer, FOnCancelled   Writes: FOnCancelled, FOnDone</para>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.Cancel"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TReportProgressRun.GetRunning"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.CreateRun"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.Destroy"/>
+    /// <seealso cref="DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.DoClose"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CancelRun;
     /// <summary>The run this window shows.</summary>
     property Run: TReportProgressRun read FRun;
@@ -149,7 +365,14 @@ type
 /// <param name="pTitle">What is computed.</param>
 /// <param name="pElapsedSec">Whole seconds since the run started.</param>
 /// <returns>pTitle, a line break, then 'Computing... N s elapsed'.</returns>
-/// <remarks>Pure.</remarks>
+/// <remarks>
+/// Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.ReportProgress.TDragLintReportProgressForm.ShowElapsed (DragLint.Plugin.ReportProgress.pas)</para>
+/// <para>Calls: Format</para>
+/// <para>Returns: pTitle + sLineBreak + Format('Computing... %d s elapsed', [pElapsedSec])</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReportProgressCaption(const pTitle: string; pElapsedSec: Integer): string;  // dl:ok unused-public-symbol@6d80 -- public as the test seam: ReportProgressTests F13 pins the caption
 
 implementation

@@ -63,7 +63,7 @@ const
 /// <para>Called from: [drag-lint]DRagLint.Charts.AskVerb.FormatAskAnswer (DRagLint.Charts.AskVerb.pas), [drag-lint]DRagLint.Charts.Compare.UpdateDoc (DRagLint.Charts.Compare.pas), [dclDragLintWizard]DragLint.Plugin.ReportText.FormatReportAsDocInsight (DragLint.Plugin.ReportText.pas)</para>
 /// <para>Calls: DRagLint.Charts.DocInsight.EmitWrapped, DRagLint.Charts.DocInsight.RemoveAutodocMarker, DRagLint.Charts.DocInsight.RenderAnswerLine, DRagLint.Charts.DocInsight.ScrubLine, DRagLint.Charts.DocInsight.SplitAnswerLines, DRagLint.Charts.DocInsight.XmlEscape, Format, FormatDateTime, Trim, TrimRight</para>
 /// <para>Returns: RemoveAutodocMarker(SB.ToString)</para>
-/// <para>Complexity: 10 (cyclomatic, outer body), 56 lines (full implementation)</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 56 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Charts.DocInsight.EmitWrapped"/>
 /// <seealso cref="DRagLint.Charts.DocInsight.RemoveAutodocMarker"/>
 /// <seealso cref="DRagLint.Charts.DocInsight.RenderAnswerLine"/>

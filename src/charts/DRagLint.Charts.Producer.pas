@@ -21,7 +21,7 @@ type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.Charts.Compare.pas) ?, declaration (DRagLint.Charts.Producer.Delphi.pas) ?, DRagLint.Charts.Producer.DefaultProduceOptions (DRagLint.Charts.Producer.pas), DRagLint.Charts.Producer.Delphi.PairedIndexes (DRagLint.Charts.Producer.Delphi.pas) ?, DRagLint.Charts.Producer.Delphi.TDelphiProducer.AnswersInProcess (DRagLint.Charts.Producer.Delphi.pas) ? (+5 more)</para>
-  /// <para>Used in units: DRagLint.Charts.Compare, DRagLint.Charts.Producer, DRagLint.Charts.Producer.Delphi, DRagLint.CLI</para>
+  /// <para>Used in units: DRagLint.Charts.Compare, DRagLint.Charts.Producer, DRagLint.Charts.Producer.Delphi, DRagLint.CLI.Compare</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TProduceOptions = record
@@ -90,7 +90,7 @@ type
     /// reason. Never raises for a refusal or a missing tool.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas) ?, DRagLint.Charts.Compare.LoadOldIndexSide (DRagLint.Charts.Compare.pas), DRagLint.Charts.Compare.ProduceNewSide (DRagLint.Charts.Compare.pas), DRagLint.CLI.CompareTakeSnapshot (DRagLint.CLI.pas) ?</para>
+    /// <para>Called from: DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas) ?, DRagLint.Charts.Compare.LoadOldIndexSide (DRagLint.Charts.Compare.pas), DRagLint.Charts.Compare.ProduceNewSide (DRagLint.Charts.Compare.pas), DRagLint.CLI.Compare.CompareTakeSnapshot (DRagLint.CLI.Compare.pas) ?</para>
     /// <seealso cref="DRagLint.Charts.Producer.IReportProducer.Describe"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
@@ -104,7 +104,7 @@ type
 /// <returns>No override, AllowStale False, EnginePath = the running executable, ScriptPath ''.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas), DRagLint.CLI.CompareProduceOptions (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas), DRagLint.CLI.Compare.CompareProduceOptions (DRagLint.CLI.Compare.pas)</para>
 /// <para>Calls: Default, ParamStr</para>
 /// <para>Returns: Default(TProduceOptions)</para>
 /// <!-- drag-lint:auto END -->

@@ -14,19 +14,43 @@ interface
 /// begin and end besides white space and comments, or declares locals / is asm. False for an
 /// empty body, and also when the file is unreadable or the implementation is not found
 /// (no code can be proven).</returns>
-/// <remarks>Ruling B2: a DFM-bound handler WITH code needs a doc comment, an EMPTY one does not.
-/// The scan is textual (comments skipped), so it needs no index.</remarks>
+/// <remarks>
+/// Ruling B2: a DFM-bound handler WITH code needs a doc comment, an EMPTY one does not.
+/// The scan is textual (comments skipped), so it needs no index.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.DocRules.TDocLintRules.RunMissingDoc (DRagLint.Lint.DocRules.pas)</para>
+/// <para>Calls: DRagLint.V152.DOCPOL.Support.BodyHasCode, FileExists</para>
+/// <para>Returns: False</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <seealso cref="DRagLint.V152.DOCPOL.Support.BodyHasCode"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MethodImplHasCode(const AFilePath, AMethodName: string): Boolean;
 
 /// <summary>True when a doc summary is a template placeholder, not a description.</summary>
 /// <param name="ASummary">The summary text of a doc comment (managed-marker comments tolerated).</param>
 /// <returns>True for text that opens with "Summary here" (any case); False for an empty or real summary.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V152.DOCPOL.TV152DOCPOLRules.CheckFile (DRagLint.V152.DOCPOL.pas)</para>
+/// <para>Calls: DRagLint.V152.DOCPOL.Support.CleanSummary</para>
+/// <para>Returns: TRegEx.IsMatch(CleanSummary(ASummary), '^summary\s+here\b', [roIgnoreCase])</para>
+/// <seealso cref="DRagLint.V152.DOCPOL.Support.CleanSummary"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsPlaceholderSummary(const ASummary: string): Boolean;
 
 /// <summary>True when a doc summary opens like a declaration (procedure Foo(...), function Bar: T ...).</summary>
 /// <param name="ASummary">The summary text of a doc comment.</param>
 /// <returns>True when the first words are a declaration keyword, an identifier and then one of ( : ; =.
 /// Prose such as "Function that returns ..." is not matched.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V152.DOCPOL.TV152DOCPOLRules.CheckFile (DRagLint.V152.DOCPOL.pas)</para>
+/// <para>Calls: DRagLint.V152.DOCPOL.Support.CleanSummary</para>
+/// <seealso cref="DRagLint.V152.DOCPOL.Support.CleanSummary"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SummaryOpensWithDeclaration(const ASummary: string): Boolean;
 
 implementation

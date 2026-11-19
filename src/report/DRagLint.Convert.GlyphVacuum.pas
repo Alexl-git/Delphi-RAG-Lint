@@ -21,8 +21,8 @@ type
   /// empty rather than guessed. Append merges into an existing OutDir keyed on
   /// (dfm_path, object_path, property); a re-scan is idempotent.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.GlyphVacuum.pas) ?, DRagLint.CLI.DoGlyphVacuum (DRagLint.CLI.pas), DRagLint.Convert.GlyphVacuum.RunGlyphVacuum (DRagLint.Convert.GlyphVacuum.pas) ?</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.GlyphVacuum</para>
+  /// <para>Used by: declaration (DRagLint.Convert.GlyphVacuum.pas) ?, DRagLint.CLI.Convert.DoGlyphVacuum (DRagLint.CLI.Convert.pas), DRagLint.Convert.GlyphVacuum.RunGlyphVacuum (DRagLint.Convert.GlyphVacuum.pas) ?</para>
+  /// <para>Used in units: DRagLint.CLI.Convert, DRagLint.Convert.GlyphVacuum</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TGlyphVacuumOptions = record
@@ -35,8 +35,8 @@ type
   /// <summary>The counts the CLI prints as its one summary line.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.GlyphVacuum.pas) ?, DRagLint.CLI.DoGlyphVacuum (DRagLint.CLI.pas) ?, DRagLint.Convert.GlyphVacuum.RunGlyphVacuum (DRagLint.Convert.GlyphVacuum.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.GlyphVacuum</para>
+  /// <para>Used by: declaration (DRagLint.Convert.GlyphVacuum.pas) ?, DRagLint.CLI.Convert.DoGlyphVacuum (DRagLint.CLI.Convert.pas) ?, DRagLint.Convert.GlyphVacuum.RunGlyphVacuum (DRagLint.Convert.GlyphVacuum.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.Convert, DRagLint.Convert.GlyphVacuum</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TGlyphVacuumSummary = record
@@ -96,7 +96,7 @@ type
 /// Graphics = 0.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoGlyphVacuum (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.Convert.DoGlyphVacuum (DRagLint.CLI.Convert.pas)</para>
 /// <para>Calls: Default, DRagLint.Convert.GlyphVacuum.CompareRowsForWrite, DRagLint.Convert.GlyphVacuum.HarvestFile, DRagLint.Convert.GlyphVacuum.LoadExistingRows, DRagLint.Convert.GlyphVacuum.RowKey, DRagLint.Convert.GlyphVacuum.RowLine, DRagLint.Convert.GlyphVacuum.WriteClassesTsv, DRagLint.Convert.GlyphVacuum.WriteGalleryHtml, DRagLint.Convert.GlyphVacuum.WriteSkippedTsv, DRagLint.Convert.GlyphVacuum.WriteUtf8NoBom</para>
 /// <para>Returns: False; True</para>
 /// <para>Catches: Exception (swallowed)</para>

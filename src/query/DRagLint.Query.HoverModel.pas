@@ -39,8 +39,8 @@ type
   /// rendered markdown from a separately mined list could contradict the JSON
   /// its own model produces.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Query.HoverModel.pas) ?, DRagLint.CLI.DoHover (DRagLint.CLI.pas) ?, DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas) ?, DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Server, DRagLint.Query.HoverModel</para>
+  /// <para>Used by: declaration (DRagLint.Query.HoverModel.pas) ?, DRagLint.CLI.Hover.DoHover (DRagLint.CLI.Hover.pas) ?, DRagLint.LSP.Server.HoverSetByLines (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas) ?, DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.CLI.Hover, DRagLint.LSP.Server, DRagLint.Query.HoverModel</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   THoverAssembly = record
@@ -64,11 +64,21 @@ type
 
   /// <summary>An optional hover section the caller can leave out (v152: the fast first step of a
   /// deferred hover skips the slow ones).</summary>
-  /// <remarks>hskImplementors = the 'Implemented by:' line (ImplementingMethodsOf; seconds on an
+  /// <remarks>
+  /// hskImplementors = the 'Implemented by:' line (ImplementingMethodsOf; seconds on an
   /// interface method with many implementors -- ASYNC's measurement). hskSetBy = the check-init writer
-  /// list (ruling HB2), which is computed only together with the facts anyway.</remarks>
+  /// list (ruling HB2), which is computed only together with the facts anyway.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.HoverModel.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THoverSkip = (hskImplementors, hskSetBy);
   /// <summary>The sections AssembleHover leaves out; [] (the default) computes all of them.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.HoverModel.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THoverSkips = set of THoverSkip;
 
 const
@@ -118,10 +128,10 @@ const
 /// v152 HBHOVER (ruling HB2): with AWithFacts, a unit variable / class var / field also gets the
 /// check-init writer list (AttachHoverSetBy): Model.SetByJson plus 'Init:' / 'Set by:' fact lines.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas)</para>
-/// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Doc.Facts.FormatHoverCalledFromLine, DRagLint.Doc.Facts.TDocFactsBuilder.Build, DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines, DRagLint.Doc.Regions.TDocRegions.FormatUsedInLines (+15 more)</para>
+/// <para>Called from: DRagLint.CLI.Hover.DoHover (DRagLint.CLI.Hover.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas)</para>
+/// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Doc.Facts.FormatHoverCalledFromLine, DRagLint.Doc.Facts.TDocFactsBuilder.Build, DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines, DRagLint.Doc.Regions.TDocRegions.FormatUsedInLines (+16 more)</para>
 /// <para>Returns: Default(THoverAssembly)</para>
-/// <para>Complexity: 29 (cyclomatic, outer body), 169 lines (full implementation)</para>
+/// <para>Complexity: 32 (cyclomatic, outer body), 176 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc"/>
@@ -154,6 +164,17 @@ function AssembleHover(const AStore: ISymbolStore; const ASym: TSymbol;
 /// <para>Cached per index file + write time + QName + budget, so a re-hover is free and a reindex
 /// recomputes. Thread-safe: one lock serialises CheckInit (whose parse cache is not thread-safe)
 /// and the cache. LSP: call it in the deferred second step only (it can take a solve).</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Server.HoverSetByLines (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
+/// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.DbPath, DRagLint.Core.Model.JsonEscape, DRagLint.Query.HappensBefore.CheckInit, DRagLint.Query.HoverModel.BuildSetBy, DRagLint.Query.HoverModel.SetByMaxRoutines, DRagLint.Query.HoverModel.SetByMaxSeconds, FloatToStr, Format, FormatDateTime, LowerCase</para>
+/// <para>Catches: EHbUsage (swallowed); Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.DbPath"/>
+/// <seealso cref="DRagLint.Core.Model.JsonEscape"/>
+/// <seealso cref="DRagLint.Query.HappensBefore.CheckInit"/>
+/// <seealso cref="DRagLint.Query.HoverModel.BuildSetBy"/>
+/// <seealso cref="DRagLint.Query.HoverModel.SetByMaxRoutines"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure AttachHoverSetBy(const AStore: ISymbolStore; const ASym: TSymbol; var AAsm: THoverAssembly;
   ASpentSeconds: Double = 0);

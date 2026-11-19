@@ -22,21 +22,59 @@ uses
 type
   /// <summary>Answers `textDocument/documentHighlight` and advertises
   /// documentHighlightProvider.</summary>
-  /// <remarks>Stateless; registered from this unit's initialization. Lines and
-  /// characters in the reply are 0-based.</remarks>
+  /// <remarks>
+  /// Stateless; registered from this unit's initialization. Lines and
+  /// characters in the reply are 0-based.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.LSP.Feature.DocumentHighlight.initialization (DRagLint.LSP.Feature.DocumentHighlight.pas)</para>
+  /// <para>Used in units: DRagLint.LSP.Feature.DocumentHighlight</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TLspDocumentHighlightFeature = class(TLspFeature)
   public
     /// <summary>The method this feature answers.</summary>
     /// <returns>['textDocument/documentHighlight'].</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Returns: [HIGHLIGHT_METHOD]</para>
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Methods</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.DocumentHighlight.TLspDocumentHighlightFeature.AddCapabilities"/>
+    /// <seealso cref="DRagLint.LSP.Feature.DocumentHighlight.TLspDocumentHighlightFeature.Handle"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Methods: TArray<string>; override;
     /// <summary>Adds `documentHighlightProvider: true`.</summary>
     /// <param name="ACaps">initialize.result.capabilities under construction.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.AddCapabilities</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.DocumentHighlight.TLspDocumentHighlightFeature.Handle"/>
+    /// <seealso cref="DRagLint.LSP.Feature.DocumentHighlight.TLspDocumentHighlightFeature.Methods"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure AddCapabilities(ACaps: TJSONObject); override;
     /// <summary>Replies a DocumentHighlight[] ({range, kind: 1}), ordered by position.</summary>
     /// <param name="ACtx">The server surface.</param>
     /// <param name="AMethod">textDocument/documentHighlight.</param>
     /// <param name="AId">The request id; a notification gets no reply.</param>
     /// <param name="AParams">textDocument + position; a missing field answers [].</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DRagLint.LSP.Context.ILspServerContext.FileFromUri, DRagLint.LSP.Context.ILspServerContext.References, DRagLint.LSP.Context.ILspServerContext.Reply, DRagLint.LSP.HierarchyUtil.HierIntField, SameText</para>
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Handle</para>
+    /// <para>Complexity: 17 (cyclomatic, outer body), 67 lines (full implementation)</para>
+    /// <para>Catches: Exception (re-raise)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.References"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Reply"/>
+    /// <seealso cref="DRagLint.LSP.HierarchyUtil.HierIntField"/>
+    /// <seealso cref="DRagLint.LSP.Feature.DocumentHighlight.TLspDocumentHighlightFeature.AddCapabilities"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Handle(const ACtx: ILspServerContext; const AMethod: string; const AId: TJSONValue; const AParams: TJSONObject); override;
   end;
 

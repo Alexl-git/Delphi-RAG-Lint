@@ -14,6 +14,12 @@ uses
 
 type
   /// <summary>One `#include &lt;X.hpp&gt;` line of a C++Builder header.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Index.UsesRecoverWrite.pas), DRagLint.CLI.UsesRecover.ParseHppIncludes (DRagLint.CLI.UsesRecover.pas), DRagLint.Index.UsesRecoverWrite.HeaderRow (DRagLint.Index.UsesRecoverWrite.pas), DRagLint.Index.UsesRecoverWrite.ParseHppIncludeLines (DRagLint.Index.UsesRecoverWrite.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.UsesRecover, DRagLint.Index.UsesRecoverWrite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THppInclude = record
     UnitName: string;  // X as written
     Line    : Integer; // 1-based line of the #include
@@ -22,6 +28,12 @@ type
   end;
 
   /// <summary>One recovered unit to store: its canonical name and the header it came from.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Index.UsesRecoverWrite.pas), DRagLint.CLI.UsesRecover.ApplyRecovered (DRagLint.CLI.UsesRecover.pas), DRagLint.Index.UsesRecoverWrite.HeaderRow (DRagLint.Index.UsesRecoverWrite.pas), DRagLint.Index.UsesRecoverWrite.WriteRecoveredHeaders (DRagLint.Index.UsesRecoverWrite.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.UsesRecover, DRagLint.Index.UsesRecoverWrite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRecoveredHeader = record
     UnitName  : string;
     HeaderPath: string;
@@ -31,11 +43,23 @@ type
 /// <param name="pText">The whole .hpp text.</param>
 /// <returns>One entry per `#include &lt;X.hpp&gt;` or `#include "X.hpp"` line, with its position;
 /// other includes are skipped. No #if evaluation (headers are trusted as generated).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.UsesRecover.ParseHppIncludes (DRagLint.CLI.UsesRecover.pas), DRagLint.Index.UsesRecoverWrite.HeaderRow (DRagLint.Index.UsesRecoverWrite.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseHppIncludeLines(const pText: string): TArray<THppInclude>;
 
 /// <summary>True for System and SysInit, which every unit uses implicitly; uses-recover drops them.</summary>
 /// <param name="pName">A unit name.</param>
 /// <returns>True when pName is System or SysInit (case-insensitive).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.UsesRecover.TUsesRecoverRun.Recover (DRagLint.CLI.UsesRecover.pas), DRagLint.Index.UsesRecoverWrite.HeaderRow (DRagLint.Index.UsesRecoverWrite.pas)</para>
+/// <para>Calls: SameText</para>
+/// <para>Returns: SameText(pName, 'System') or SameText(pName, 'SysInit')</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsImplicitUnit(const pName: string): Boolean;
 
 /// <summary>Stores the recovered headers in pStore and re-runs the unit-uses resolve pass.</summary>
@@ -45,9 +69,20 @@ function IsImplicitUnit(const pName: string): Boolean;
 /// <returns>The number of header files rows written.</returns>
 /// <exception cref="Exception">A header that cannot be read, or any SQLite error (the row
 /// transaction is rolled back; see TSQLiteSymbolStore.ReplaceHeaderUnits).</exception>
-/// <remarks>Idempotent: the same pHeaders give the same rows. Each header's rows are its
+/// <remarks>
+/// Idempotent: the same pHeaders give the same rows. Each header's rows are its
 /// includes minus System, SysInit and the unit itself -- exactly the read verb's edges. Not
-/// thread-safe.</remarks>
+/// thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.UsesRecover.ApplyRecovered (DRagLint.CLI.UsesRecover.pas)</para>
+/// <para>Calls: DRagLint.Index.UsesRecoverWrite.HeaderRow, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ReplaceHeaderUnits, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveUnitUseTargets</para>
+/// <para>Returns: Length(LRows)</para>
+/// <para>Mutates: pUsesRows (out)</para>
+/// <seealso cref="DRagLint.Index.UsesRecoverWrite.HeaderRow"/>
+/// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.ReplaceHeaderUnits"/>
+/// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveUnitUseTargets"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function WriteRecoveredHeaders(const pStore: TSQLiteSymbolStore; const pHeaders: TArray<TRecoveredHeader>;
   out pUsesRows: Integer): Integer;
 

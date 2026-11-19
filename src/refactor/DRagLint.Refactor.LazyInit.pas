@@ -13,6 +13,12 @@ uses
 
 type
   /// <summary>The flags of one `lazy-init` run.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.LazyInit.pas) ?, DRagLint.CLI.DoLazyInit (DRagLint.CLI.pas), DRagLint.Refactor.LazyInit.PlanSection (DRagLint.Refactor.LazyInit.pas) ?, DRagLint.Refactor.LazyInit.RunLazyInit (DRagLint.Refactor.LazyInit.pas) ?</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Refactor.LazyInit</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TLazyInitOptions = record
     /// <summary>--unit: the unit's name; '' with All.</summary>
     UnitName: string;
@@ -46,7 +52,8 @@ type
 /// <param name="pOpts">The flags.</param>
 /// <returns>0: plan (a refusal included, named in it), or applied and built. 1: --apply refused or a gate refused, the project is
 /// unchanged. 2: bad flags, no such unit, or a rollback that failed.</returns>
-/// <remarks>Refusals, in this order: include-file, stale-file, outside-roots, no-section, ifdef-around-section, empty-section,
+/// <remarks>
+/// Refusals, in this order: include-file, stale-file, outside-roots, no-section, ifdef-around-section, empty-section,
 /// include-in-section, unbalanced-ifdef, name-taken. The plan's lazy_candidate is true for a global the section writes that is
 /// declared in the implementation section and read by no other unit: a later phase could rewrite it inside one file.
 /// The run-once guard is a plain Boolean: the section, on one thread, is the routine's only caller in this phase.
@@ -58,7 +65,20 @@ type
 /// keeps no call, and finalization runs its body only when the work ran. Not thread-safe: the guard stays a plain Boolean set
 /// before the work (a re-entrant call returns at once); a unit first used from two threads at once must call the routine from
 /// the application's start instead. Effects other units rely on without touching the globals (a registration, a print) move
-/// with the work: the plan lists every statement so the reader can see them.</para></remarks>
+/// with the work: the plan lists every statement so the reader can see them.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoLazyInit (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.Lint.InitSections.CollectHeavyInitialization, DRagLint.Project.OwnRoots.TOwnRoots.Load, DRagLint.Refactor.LazyInit.FindUnit, DRagLint.Refactor.LazyInit.PlanJson, DRagLint.Refactor.LazyInit.PlanSection, DRagLint.Refactor.LazyInit.PrintPlanText, DRagLint.Refactor.LazyInit.RunLazyInit.Fail, DRagLint.Refactor.VerbShape.ApplyOneFileThroughScratch, DRagLint.Report.CyclePlan.EncodeSource (+7 more)</para>
+/// <para>Returns: CExitOk; CExitRefused; if Gate.RollbackFailed then CExitError</para>
+/// <para>Complexity: 25 (cyclomatic, outer body), 91 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Lint.InitSections.CollectHeavyInitialization"/>
+/// <seealso cref="DRagLint.Project.OwnRoots.TOwnRoots.Load"/>
+/// <seealso cref="DRagLint.Refactor.LazyInit.FindUnit"/>
+/// <seealso cref="DRagLint.Refactor.LazyInit.PlanJson"/>
+/// <seealso cref="DRagLint.Refactor.LazyInit.PlanSection"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunLazyInit(const pStore: ISymbolStore; const pOpts: TLazyInitOptions): Integer;
 
 implementation

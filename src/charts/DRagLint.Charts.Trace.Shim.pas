@@ -177,7 +177,7 @@ function ShimTokens(const pStripped: TArray<string>; pFrom, pTo: Integer): TArra
 /// <para>Called from: DRagLint.Charts.Trace.Calc.CalcConditions (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.GuardCondition (DRagLint.Charts.Trace.Walk.pas)</para>
 /// <para>Calls: Copy, Default, DRagLint.Charts.Source.PsTrim, DRagLint.Charts.Trace.Shim.AddTokens, DRagLint.Charts.Trace.Shim.NewShimUnknown, DRagLint.Charts.Trace.Shim.ResolveShimStatement, Max</para>
 /// <para>Returns: NewShimUnknown(X, 'is outside the file'); NewShimUnknown(X, 'is not an Exit in this copy of the file'); NewShimUnknown(X, 'shares its line with another Exit'); ResolveShimStatement(X, X.TokCount, pExitLine, pExitLine)</para>
-/// <para>Complexity: 14 (cyclomatic, outer body), 55 lines (full implementation)</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 55 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Charts.Source.PsTrim"/>
 /// <seealso cref="DRagLint.Charts.Trace.Shim.AddTokens"/>
 /// <seealso cref="DRagLint.Charts.Trace.Shim.NewShimUnknown"/>
@@ -200,6 +200,7 @@ function GuardConditionFromLines(const pRaw, pStripped: TArray<string>; pExitLin
 /// <para>Called from: DRagLint.Charts.Trace.Calc.CalcConditions.ChainOf (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Shim.EnclosingChainFromLines (DRagLint.Charts.Trace.Shim.pas)</para>
 /// <para>Calls: Default, DRagLint.Charts.Trace.Shim.NewShimUnknown, DRagLint.Charts.Trace.Shim.ResolveShimStatement, DRagLint.Charts.Trace.Shim.ShimTokens, Max, Min, SameStr</para>
 /// <para>Returns: NewShimUnknown(X, 'is outside the file'); ResolveShimStatement(X, X.TokCount, pLine, pLine)</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 30 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Charts.Trace.Shim.NewShimUnknown"/>
 /// <seealso cref="DRagLint.Charts.Trace.Shim.ResolveShimStatement"/>
 /// <seealso cref="DRagLint.Charts.Trace.Shim.ShimTokens"/>
@@ -239,7 +240,7 @@ function EnclosingChainFromLines(const pRaw, pStripped: TArray<string>; pLine, p
 /// <para>Called from: DRagLint.Charts.Trace.Walk.TRoutineWalk.ReadGuards (DRagLint.Charts.Trace.Walk.pas)</para>
 /// <para>Calls: Copy, Default, DRagLint.Charts.Trace.Shim.IsIn, Min, SameStr</para>
 /// <para>Returns: Default(TGuardSpan)</para>
-/// <para>Complexity: 13 (cyclomatic, outer body), 65 lines (full implementation)</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 65 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Charts.Trace.Shim.IsIn"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -272,7 +273,7 @@ function InShimCondition(const pG: TShimResult; pLine, pCol: Integer): Boolean;
 /// <para>Called from: DRagLint.Charts.Trace.Calc.FindCalcWrites (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Calc.ResolveCalcRead (DRagLint.Charts.Trace.Calc.pas)</para>
 /// <para>Calls: Copy, Default, DRagLint.Charts.Trace.Shim.IsIn, Min</para>
 /// <para>Returns: Default(TStatementSpan)</para>
-/// <para>Complexity: 22 (cyclomatic, outer body), 78 lines (full implementation)</para>
+/// <para>Complexity: 24 (cyclomatic, outer body), 78 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Charts.Trace.Shim.IsIn"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -303,6 +304,7 @@ function InStatementRhs(const pSp: TStatementSpan; pLine, pCol0: Integer): Boole
 /// <para>Called from: DRagLint.Charts.Trace.Calc.FindCalcWrites (DRagLint.Charts.Trace.Calc.pas)</para>
 /// <para>Calls: CharInSet</para>
 /// <para>Returns: -1; if P &lt; E then P + 1</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 14 lines (full implementation)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ReceiverStart(const pS: string; pMemberCol: Integer): Integer;

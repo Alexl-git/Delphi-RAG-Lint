@@ -31,7 +31,21 @@ uses
 /// the cap are COUNTED, not fetched into the answer, and `total_rows` is null
 /// when the time cap stopped that count. A truncated JSON or --output answer
 /// also prints one NOTE on stderr; the text grid says it in its footer.
-/// Pinned by tests\autotest\run_sql_json_cap_reported.ps1.</remarks>
+/// Pinned by tests\autotest\run_sql_json_cap_reported.ps1.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Common.AddStalenessPairs, DRagLint.CLI.Common.ExplicitDbsExist, DRagLint.CLI.Common.WriteStdoutDocument, DRagLint.CLI.Sql.DoSql.CellJson, DRagLint.CLI.Sql.DoSql.CellText, DRagLint.CLI.Sql.SqlTotalRowsPhrase, DRagLint.Core.OutputEncoding.WriteOutputFile, DRagLint.Sql.Guarded.IsSingleStatement, DRagLint.Sql.Guarded.TSqlGuard.Create, DRagLint.Sql.Guarded.TSqlGuard.ElapsedMs (+8 more)</para>
+/// <para>Returns: 2; 1; 0</para>
+/// <para>Complexity: 53 (cyclomatic, outer body), 384 lines (full implementation)</para>
+/// <para>Catches: ESqlGuardError (swallowed); Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.AddStalenessPairs"/>
+/// <seealso cref="DRagLint.CLI.Common.ExplicitDbsExist"/>
+/// <seealso cref="DRagLint.CLI.Common.WriteStdoutDocument"/>
+/// <seealso cref="DRagLint.CLI.Sql.DoSql.CellJson"/>
+/// <seealso cref="DRagLint.CLI.Sql.DoSql.CellText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoSql(const AArgs: TArgs): Integer;
 
 implementation

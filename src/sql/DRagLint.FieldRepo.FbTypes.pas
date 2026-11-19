@@ -17,7 +17,13 @@ const
 
 type
   /// <summary>One dictionary entry: the key and the two strings TableTools maps it to.</summary>
-  /// <remarks>Key = RDB$FIELD_TYPE, or RDB$FIELD_TYPE + FB_SUBTYPE_ADD for sub_type 1.</remarks>
+  /// <remarks>
+  /// Key = RDB$FIELD_TYPE, or RDB$FIELD_TYPE + FB_SUBTYPE_ADD for sub_type 1.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.FieldRepo.FbTypes.pas) ?, DRagLint.FieldRepo.FbTypes.Entry (DRagLint.FieldRepo.FbTypes.pas) ?, DRagLint.FieldRepo.FbTypes.FbTypeEntries (DRagLint.FieldRepo.FbTypes.pas) ?, DRagLint.FieldRepo.FbTypes.FindEntry (DRagLint.FieldRepo.FbTypes.pas), DRagLint.FieldRepo.FbTypes.TryFbFieldAccessor (DRagLint.FieldRepo.FbTypes.pas) ? (+1 more)</para>
+  /// <para>Used in units: DRagLint.FieldRepo.FbTypes</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFbTypeEntry = record
     Key: Integer;
     Accessor: string;
@@ -27,6 +33,14 @@ type
 /// <summary>Every entry of the TableTools dictionaries, in key order.</summary>
 /// <returns>20 entries: codes 7, 8, 10, 12, 13, 14, 16, 23..29, 35, 37, 261 and the
 /// sub_type-1 keys of 14, 37 and 261.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.FieldRepo.FbTypes.FindEntry (DRagLint.FieldRepo.FbTypes.pas)</para>
+/// <para>Calls: DRagLint.FieldRepo.FbTypes.Entry</para>
+/// <para>Effect-free (proven)</para>
+/// <seealso cref="DRagLint.FieldRepo.FbTypes.Entry"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FbTypeEntries: TArray<TFbTypeEntry>;  // dl:ok unused-public-symbol@0d37 -- consumed by SchemaSeedTests and lane TTGEN
 
 /// <summary>The TField accessor TableTools writes into FIELD_AS_TYPE ('AsInteger' ...).</summary>
@@ -35,6 +49,15 @@ function FbTypeEntries: TArray<TFbTypeEntry>;  // dl:ok unused-public-symbol@0d3
 /// <param name="pAccessor">The accessor; '' when the result is False.</param>
 /// <returns>False when the sub_type is not 0 or 1 or the key has no entry (TableTools
 /// raised in both cases).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.FieldRepo.SchemaSeed.TSeedRun.UpdateFields (DRagLint.FieldRepo.SchemaSeed.pas)</para>
+/// <para>Calls: DRagLint.FieldRepo.FbTypes.FindEntry</para>
+/// <para>Returns: FindEntry(pType, pSubType, Item)</para>
+/// <para>Mutates: pAccessor (out)</para>
+/// <seealso cref="DRagLint.FieldRepo.FbTypes.FindEntry"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TryFbFieldAccessor(pType, pSubType: Integer; out pAccessor: string): Boolean;
 
 /// <summary>The Delphi type TableTools writes into VAR_TYPE ('integer', 'string' ...).</summary>
@@ -44,6 +67,15 @@ function TryFbFieldAccessor(pType, pSubType: Integer; out pAccessor: string): Bo
 /// length 1) maps to 'Byte' instead of 'TBytes'.</param>
 /// <param name="pVarType">The Delphi type; '' when the result is False.</param>
 /// <returns>False under the same conditions as TryFbFieldAccessor.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.FieldRepo.SchemaSeed.TSeedRun.UpdateFields (DRagLint.FieldRepo.SchemaSeed.pas)</para>
+/// <para>Calls: DRagLint.FieldRepo.FbTypes.FindEntry</para>
+/// <para>Returns: FindEntry(pType, pSubType, Item)</para>
+/// <para>Mutates: pVarType (out)</para>
+/// <seealso cref="DRagLint.FieldRepo.FbTypes.FindEntry"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TryFbFieldVarType(pType, pSubType, pLength: Integer; out pVarType: string): Boolean;
 
 implementation

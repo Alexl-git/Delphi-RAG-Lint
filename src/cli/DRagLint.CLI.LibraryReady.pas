@@ -62,7 +62,7 @@ type
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.ComputeInfoIndexVerdict (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.EvaluateLibraryGate (DRagLint.CLI.pas), DRagLint.CLI.PlanLibraryResolve (DRagLint.CLI.pas)</para>
-/// <para>Returns: 'ready'; 'missing'; 'unreadable'; 'schema-old'; 'rebuilding'; 'stale-extractor'</para>
+/// <para>Returns: 'ready'; 'missing'; 'unreadable'; 'schema-old'; 'rebuilding'; 'stale-extractor'; 'newer-than-engine'; 'never-completed'</para>
 /// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

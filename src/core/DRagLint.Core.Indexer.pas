@@ -42,7 +42,13 @@ type
 
   /// <summary>152c RINC2: the progress / DIAG report of an include file whose parse has a tree
   /// error, held by a folder walk until every host of the walk has stored its include sites.</summary>
-  /// <remarks>Owned by TIndexer (FDeferredIncs); a value type, no lifetime.</remarks>
+  /// <remarks>
+  /// Owned by TIndexer (FDeferredIncs); a value type, no lifetime.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas)</para>
+  /// <para>Used in units: DRagLint.Core.Indexer</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDeferredIncReport = record
     Path   : string        ;
     Symbols: Integer       ;
@@ -52,7 +58,13 @@ type
 
   /// <summary>1.52 EXTINC (owner ruling B9i): one inclusion of an include met while a host was
   /// parsed this run -- the host and the include's bytes as the host's preprocess left them.</summary>
-  /// <remarks>A value type held in TIndexer.FIncContexts.</remarks>
+  /// <remarks>
+  /// A value type held in TIndexer.FIncContexts.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.CollectIncVariants (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.Create/3 (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.RememberIncludeSites (DRagLint.Core.Indexer.pas)</para>
+  /// <para>Used in units: DRagLint.Core.Indexer</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TIncInclusion = record
     HostPath: string;
     Bytes   : TBytes;
@@ -60,7 +72,13 @@ type
 
   /// <summary>1.52 EXTINC: one DISTINCT define context of an include -- its bytes, their SHA-256
   /// and every host whose inclusion produced them (the include is parsed once per context).</summary>
-  /// <remarks>A value type; built per include parse by TIndexer.CollectIncVariants.</remarks>
+  /// <remarks>
+  /// A value type; built per include parse by TIndexer.CollectIncVariants.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.IncVariantRows (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.ParseIncVariants (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.CollectIncVariants (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.CollectIncVariants.AddCtx (DRagLint.Core.Indexer.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.Core.Indexer</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TIncVariantCtx = record
     Bytes: TBytes;
     Sha  : string;
@@ -156,14 +174,14 @@ type
       /// <param name="AError"><!-- drag-lint:auto type -->const Exception</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas)</para>
+      /// <para>Called from: DRagLint.Core.Indexer.TIndexer.HostIncContexts (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas)</para>
       /// <para>Calls: Format, Writeln</para>
       /// <para>Reads: FPreprocessFellBack   Writes: FPreprocessFellBack</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.FailedFiles"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure LogPreprocessFallbackOnce(const AFilePath: string; const AError: Exception);
@@ -183,8 +201,8 @@ type
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.SetFileIncludes"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure RememberIncludeSites(const AHostPath: string; const ASites: TArray<TPPIncludeSite>);
@@ -198,12 +216,40 @@ type
       /// stored context hash still names the bytes a skipped host would produce.</param>
       /// <returns>One entry per distinct context, ordered by its first host path; hosts with
       /// equal bytes share an entry.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas)</para>
+      /// <para>Calls: CompareText, DRagLint.Core.Indexer.TIndexer.CollectIncVariants.AddCtx, DRagLint.Core.Indexer.TIndexer.HostIncContexts, DRagLint.Core.Interfaces.ISymbolStore.GetIncVariantHosts, IncCtxSha, LowerCase, SameText</para>
+      /// <para>Returns: L.ToArray</para>
+      /// <para>Reads: FStore</para>
+      /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants.AddCtx"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.HostIncContexts"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetIncVariantHosts"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function CollectIncVariants(const AIncPath: string; const ARun: TList<TIncInclusion>; AStoredValid: Boolean): TArray<TIncVariantCtx>;
       /// <summary>1.52 EXTINC: the include's bytes as AHostPath's preprocess leaves them, one entry
       /// per inclusion of AIncKey in that host.</summary>
       /// <param name="AHostPath">A host the run did not parse.</param>
       /// <param name="AIncKey">Lowercase full path of the include.</param>
       /// <returns>The context bytes; empty when the host cannot be read or preprocessed.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Core.Indexer.TIndexer.CollectIncVariants (DRagLint.Core.Indexer.pas)</para>
+      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Core.Indexer.TIndexer.LogPreprocessFallbackOnce, DRagLint.Preprocess.PreprocessReport, DRagLint.Preprocess.Types.TPPOptionsDefault, SameText</para>
+      /// <para>Reads: FProfile, FIncSearchPaths</para>
+      /// <para>Catches: Exception (swallowed)</para>
+      /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.LogPreprocessFallbackOnce"/>
+      /// <seealso cref="DRagLint.Preprocess.PreprocessReport"/>
+      /// <seealso cref="DRagLint.Preprocess.Types.TPPOptionsDefault"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function HostIncContexts(const AHostPath, AIncKey: string): TArray<TBytes>;
       /// <param name="AExtension"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->IParser -- Observed: nil.</returns>
@@ -216,8 +262,8 @@ type
       /// <seealso cref="DRagLint.Core.Interfaces.IParser.FileExtensions"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ParserFor(const AExtension: string): IParser;
@@ -227,14 +273,14 @@ type
       /// <param name="AErrors"><!-- drag-lint:auto type -->Integer</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas)</para>
+      /// <para>Called from: DRagLint.Core.Indexer.TIndexer.ReportFileDiagnostics (DRagLint.Core.Indexer.pas)</para>
       /// <para>Calls: DRagLint.Core.ControlChannel.BeatProgress, DRagLint.Core.Indexer.HumanDuration, Format, Writeln</para>
       /// <para>Reads: FProgressTotal, FProgressWatch, FProgressDone   Writes: FProgressDone</para>
       /// <seealso cref="DRagLint.Core.ControlChannel.BeatProgress"/>
       /// <seealso cref="DRagLint.Core.Indexer.HumanDuration"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ReportProgress(const APath: string; ASymbols, ARefs, AErrors: Integer);
@@ -245,9 +291,34 @@ type
       /// <param name="ASymbols">Symbols the parse emitted.</param>
       /// <param name="ARefs">References the parse emitted.</param>
       /// <param name="ADiags">The parse's diagnostics.</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Core.Indexer.TIndexer.FlushDeferredIncReports (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas)</para>
+      /// <para>Calls: DRagLint.Core.Indexer.TIndexer.ReportProgress, DRagLint.Core.Interfaces.ISymbolStore.IncludeIsUsesFragment, ExtractFileExt, SameText, Writeln</para>
+      /// <para>Reads: FStore   Writes: FParseErrorFiles</para>
+      /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ReportProgress"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.IncludeIsUsesFragment"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure ReportFileDiagnostics(const AFilePath: string; ASymbols, ARefs: Integer; const ADiags: TArray<string>);
       /// <summary>152c RINC2: reports every include held in FDeferredIncs (ReportFileDiagnostics)
       /// and empties it.</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFolder (DRagLint.Core.Indexer.pas)</para>
+      /// <para>Calls: DRagLint.Core.Indexer.TIndexer.ReportFileDiagnostics</para>
+      /// <para>Reads: FDeferredIncs   Writes: FDeferredIncs</para>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ReportFileDiagnostics"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure FlushDeferredIncReports;
       /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
@@ -259,9 +330,9 @@ type
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.FailedFiles"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function IsUnderExcludeRoot  (const APath: string): Boolean;
@@ -278,7 +349,7 @@ type
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IsUnderExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ShouldPruneDir      (const ADir : string): Boolean;
@@ -298,9 +369,9 @@ type
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.FailedFiles"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function SqlFileAllowedFilter(const APath: string): Boolean;
@@ -321,9 +392,9 @@ type
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.FailedFiles"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveEnclosingSymbolId(const ASymbols: TArray<TSymbol>;
@@ -344,9 +415,9 @@ type
       /// <para>Effect-free (proven)</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.FailedFiles"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function SliceBodyLines(const ALines: TArray<string>; AFromLine, AToLine: Integer): TArray<string>;
@@ -381,9 +452,9 @@ type
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.FailedFiles"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function Intern(const A: TArray<string>): TArray<string>;
@@ -402,8 +473,8 @@ type
       /// <seealso cref="DRagLint.Core.Interfaces.TWalkFilter.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(const AStore: ISymbolStore; const AParsers: TArray<IParser>; const ADocConfig: TDocConfig); overload;
@@ -421,7 +492,7 @@ type
       /// <seealso cref="DRagLint.Core.Model.DefaultDocConfig"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(const AStore: ISymbolStore; const AParsers: TArray<IParser>); overload;
@@ -431,9 +502,9 @@ type
       /// <para>Directives: override</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.FailedFiles"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       destructor Destroy; override;
@@ -441,14 +512,14 @@ type
       /// <param name="ARecursive"><!-- drag-lint:auto type -->Boolean = True</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: DRagLint.Core.Indexer.TIndexer.WalkAndIndex, Format, Writeln</para>
+      /// <para>Calls: DRagLint.Core.Indexer.TIndexer.FlushDeferredIncReports, DRagLint.Core.Indexer.TIndexer.WalkAndIndex, Format, Writeln</para>
       /// <para>Implements: DRagLint.Core.Interfaces.IIndexer.IndexFolder</para>
-      /// <para>Reads: FProgressTotal   Writes: FProgressTotal, FProgressDone, FCountOnly, FProgressWatch</para>
+      /// <para>Reads: FProgressTotal, FDeferIncReports   Writes: FProgressTotal, FProgressDone, FCountOnly, FProgressWatch, FDeferIncReports</para>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.FlushDeferredIncReports"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.WalkAndIndex"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure IndexFolder(const APath: string; ARecursive: Boolean = True);
@@ -464,7 +535,7 @@ type
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFileBody"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure IndexFile(const AFilePath: string);
@@ -477,9 +548,9 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
-      /// <para>Calls: ChangeFileExt, DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Core.FileTime.FileMTimeUnix, DRagLint.Core.Indexer.BuildContainingLineMap, DRagLint.Core.Indexer.BuildEnclosingLineMap, DRagLint.Core.Indexer.BuildPpDirectiveRows, DRagLint.Core.Indexer.FindDocRegionAbove, DRagLint.Core.Indexer.HasBinaryDfmHeader, DRagLint.Core.Indexer.PaintDocOwner, DRagLint.Core.Indexer.PreferBodyRoutine (+64 more)</para>
-      /// <para>Complexity: 97 (cyclomatic, outer body), 625 lines (full implementation)</para>
-      /// <para>Reads: FVisitedKeys, FVisited, FWalkFilter, FResumeFingerprint, FStore, FIncludeContext, FPreprocessEnabled, FIncContexts (+6 more)   Writes: FSkippedUpToDate, FParsedFiles, FParseErrorFiles, FFailedFiles</para>
+      /// <para>Calls: ChangeFileExt, DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Core.FileTime.FileMTimeUnix, DRagLint.Core.Indexer.BuildContainingLineMap, DRagLint.Core.Indexer.BuildEnclosingLineMap, DRagLint.Core.Indexer.BuildPpDirectiveRows, DRagLint.Core.Indexer.FindDocRegionAbove, DRagLint.Core.Indexer.HasBinaryDfmHeader, DRagLint.Core.Indexer.IncVariantEnclosingMaps, DRagLint.Core.Indexer.IncVariantRows (+76 more)</para>
+      /// <para>Complexity: 118 (cyclomatic, outer body), 671 lines (full implementation)</para>
+      /// <para>Reads: FVisitedKeys, FVisited, FWalkFilter, FResumeFingerprint, FStore, FIncludeContext, FPreprocessEnabled, FIncContexts (+8 more)   Writes: FSkippedUpToDate, FParsedFiles, FDeferredIncs, FFailedFiles</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
@@ -498,9 +569,9 @@ type
       /// <para>Effect-free (proven)</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.FailedFiles"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function SkippedUpToDate: Integer;
@@ -514,9 +585,9 @@ type
       /// <para>Effect-free (proven)</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.FailedFiles"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ParsedFiles: Integer;
@@ -531,9 +602,9 @@ type
       /// <para>Effect-free (proven)</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FailedFiles: Integer;
@@ -546,9 +617,9 @@ type
       /// <para>Effect-free (proven)</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.FailedFiles"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ParseErrorFiles: Integer;
@@ -561,9 +632,9 @@ type
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.FailedFiles"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function VisitedFiles: TArray<string>;
@@ -575,10 +646,10 @@ type
       /// <para>Reads: FExcludeRoots</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.FailedFiles"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.IndexFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure AddExcludeRoot(const APath: string);
@@ -589,9 +660,9 @@ type
       /// <para>Writes: FForceReparse</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.FailedFiles"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetForceReparse(AValue: Boolean);
@@ -604,9 +675,9 @@ type
       /// <para>Writes: FResumeFingerprint</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.FailedFiles"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetResumeFingerprint(const AFingerprint: string);
@@ -619,8 +690,8 @@ type
       /// <seealso cref="DRagLint.Index.IgnoreFiles.TIgnoreStack.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetWalkFilter(const AFilter: TWalkFilter);
@@ -634,8 +705,8 @@ type
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.SetPreprocess"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetPreprocess(AEnabled: Boolean; const AProfile: TDefineProfile);
@@ -650,9 +721,9 @@ type
       /// <para>Reads: FIncContexts   Writes: FIncludeContext, FIncSearchPaths</para>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.AddExcludeRoot"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts"/>
+      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.CollectIncVariants"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Destroy"/>
-      /// <seealso cref="DRagLint.Core.Indexer.TIndexer.FailedFiles"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetIncludeContext(AEnabled: Boolean; const ASearchPaths: TArray<string>);

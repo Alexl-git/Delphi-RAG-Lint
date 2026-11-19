@@ -122,8 +122,8 @@ type
   /// Reads only; the store's own memoize write-back (TPropMemberResolver) is
   /// unchanged. Not thread-safe.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ConvertClassIn (DRagLint.CLI.pas), DRagLint.CLI.DoConvertScaffold (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.TConvertTreeCache.CacheFor (DRagLint.Convert.Apply.pas), DRagLint.Convert.PropCache.BuildPropTree (DRagLint.Convert.PropCache.pas) (+5 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.PropCache</para>
+  /// <para>Used by: DRagLint.CLI.Convert.ConvertClassIn (DRagLint.CLI.Convert.pas), DRagLint.CLI.Convert.DoConvertScaffold (DRagLint.CLI.Convert.pas), DRagLint.CLI.Convert.DoConvertValidate (DRagLint.CLI.Convert.pas) ?, DRagLint.Convert.Apply.TConvertTreeCache.CacheFor (DRagLint.Convert.Apply.pas), DRagLint.Convert.PropCache.BuildPropTree (DRagLint.Convert.PropCache.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.CLI.Convert, DRagLint.Convert.Apply, DRagLint.Convert.PropCache</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TPropMemberCache = class
@@ -173,7 +173,7 @@ type
     /// written.</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.ConvertClassIn (DRagLint.CLI.pas), DRagLint.CLI.DoConvertScaffold (DRagLint.CLI.pas), DRagLint.Convert.Apply.TConvertTreeCache.CacheFor (DRagLint.Convert.Apply.pas), DRagLint.Convert.PropCache.BuildPropTree (DRagLint.Convert.PropCache.pas)</para>
+    /// <para>Called from: DRagLint.CLI.Convert.ConvertClassIn (DRagLint.CLI.Convert.pas), DRagLint.CLI.Convert.DoConvertScaffold (DRagLint.CLI.Convert.pas), DRagLint.Convert.Apply.TConvertTreeCache.CacheFor (DRagLint.Convert.Apply.pas), DRagLint.Convert.PropCache.BuildPropTree (DRagLint.Convert.PropCache.pas)</para>
     /// <para>Calls: DRagLint.Convert.PropTree.TPropMemberResolver.Create</para>
     /// <para>constructor</para>
     /// <para>Writes: FResolver, FIdByQName, FById, FSymById, FOnProgress, FProgressMs</para>
@@ -206,7 +206,7 @@ type
     /// Cached by class id: each class is resolved once per cache, an
     /// unresolved name is remembered too.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.ConvertClassIn (DRagLint.CLI.pas), DRagLint.Convert.PropCache.TClassRef.RootType (DRagLint.Convert.PropCache.pas), DRagLint.Convert.PropCache.TPropMemberCache.BuildTree (DRagLint.Convert.PropCache.pas), DRagLint.Convert.PropCache.TPropMemberCache.ResolvePathEx (DRagLint.Convert.PropCache.pas)</para>
+    /// <para>Called from: DRagLint.CLI.Convert.ConvertClassIn (DRagLint.CLI.Convert.pas), DRagLint.Convert.PropCache.TClassRef.RootType (DRagLint.Convert.PropCache.pas), DRagLint.Convert.PropCache.TPropMemberCache.BuildTree (DRagLint.Convert.PropCache.pas), DRagLint.Convert.PropCache.TPropMemberCache.ResolvePathEx (DRagLint.Convert.PropCache.pas)</para>
     /// <para>Calls: Default, DRagLint.Convert.PropCache.TPropMemberCache.MembersOfId, DRagLint.Convert.PropCache.TPropMemberCache.MembersOfSym, DRagLint.Convert.PropTree.TPropMemberResolver.ResolveClassByQName, Trim, UpperCase</para>
     /// <para>Returns: MembersOfSym(Sym)</para>
     /// <para>Reads: FIdByQName, FResolver</para>
@@ -328,7 +328,7 @@ type
     /// TPropTreeProgress snapshot at most once per interval (the first after
     /// one full interval), on this thread; the tree itself is unaffected.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoConvertScaffold (DRagLint.CLI.pas), DRagLint.Convert.PropCache.BuildPropTree (DRagLint.Convert.PropCache.pas)</para>
+    /// <para>Called from: DRagLint.CLI.Convert.DoConvertScaffold (DRagLint.CLI.Convert.pas), DRagLint.Convert.PropCache.BuildPropTree (DRagLint.Convert.PropCache.pas)</para>
     /// <para>Calls: Default, DRagLint.Convert.PropCache.TPropMemberCache.BuildTree.Emit, DRagLint.Convert.PropCache.TPropMemberCache.BuildTree.Expand, DRagLint.Convert.PropCache.TPropMemberCache.MembersOf, FOnProgress, IsDescendable, LowerCase, MembersOfId, Tick</para>
     /// <para>Returns: Default(TPropTree)</para>
     /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.BuildTree.Emit"/>
@@ -351,8 +351,8 @@ type
   /// query then answers absent and RootType is ''. The record does not own
   /// Cache.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ConvertClassIn (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas) ?, DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas) ?, DRagLint.CLI.DoConvertValidate.ClassFor (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.TConvertTreeCache.ClassFor (DRagLint.Convert.Apply.pas) (+13 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules</para>
+  /// <para>Used by: DRagLint.CLI.Convert.ConvertClassIn (DRagLint.CLI.Convert.pas), DRagLint.CLI.Convert.DoConvertReemit (DRagLint.CLI.Convert.pas) ?, DRagLint.CLI.Convert.DoConvertValidate (DRagLint.CLI.Convert.pas) ?, DRagLint.CLI.Convert.DoConvertValidate.ClassFor (DRagLint.CLI.Convert.pas) ?, DRagLint.Convert.Apply.TConvertTreeCache.ClassFor (DRagLint.Convert.Apply.pas) (+13 more)</para>
+  /// <para>Used in units: DRagLint.CLI.Convert, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TClassRef = record
@@ -527,7 +527,7 @@ type
 /// Borrows AStore; performs no I/O of its own.
 /// Not thread-safe with respect to concurrent mutation of the store.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoPropTree (DRagLint.CLI.pas), DRagLint.Convert.GlyphVacuum.FactsFor (DRagLint.Convert.GlyphVacuum.pas)</para>
+/// <para>Called from: DRagLint.CLI.Convert.DoPropTree (DRagLint.CLI.Convert.pas), DRagLint.Convert.GlyphVacuum.FactsFor (DRagLint.Convert.GlyphVacuum.pas)</para>
 /// <para>Calls: DRagLint.Convert.PropCache.TPropMemberCache.BuildTree, DRagLint.Convert.PropCache.TPropMemberCache.Create</para>
 /// <para>Returns: Cache.BuildTree(AClassQName, AOpts.Depth)</para>
 /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.BuildTree"/>

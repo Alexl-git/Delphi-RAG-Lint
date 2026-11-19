@@ -13,6 +13,12 @@ uses
 
 type
   /// <summary>One class whose method bodies are not in declaration order.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.STY.Support.pas), DRagLint.V151.STY.Support.StyFindMethodOrder (DRagLint.V151.STY.Support.pas), DRagLint.V151.STY.TV151STYRules.CheckFile (DRagLint.V151.STY.pas)</para>
+  /// <para>Used in units: DRagLint.V151.STY, DRagLint.V151.STY.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TStyOrderHit = record
     /// <summary>Class or record name as declared.</summary>
     TypeName  : string;
@@ -25,17 +31,45 @@ type
 /// <summary>Replaces comments (//, braces, paren-star) and string literals by spaces.</summary>
 /// <param name="ASrc">Pascal source text.</param>
 /// <returns>Text of identical length and identical line breaks, so offsets and line numbers still match ASrc.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.STY.TV151STYRules.CheckFile (DRagLint.V151.STY.pas)</para>
+/// <para>Calls: DRagLint.V151.STY.Support.StyMaskSource.Blank, Min, PChar, SetString</para>
+/// <para>Complexity: 25 (cyclomatic, outer body), 59 lines (full implementation)</para>
+/// <seealso cref="DRagLint.V151.STY.Support.StyMaskSource.Blank"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function StyMaskSource(const ASrc: string): string;
 
 /// <summary>Finds classes/records of the interface section whose method bodies in the implementation section are not in declaration order.</summary>
 /// <param name="AMasked">Output of StyMaskSource.</param>
 /// <returns>At most one hit per type (its first out-of-order body); empty when the unit has no implementation section.</returns>
-/// <remarks>Overloads are paired by occurrence (k-th body of a name with the k-th declaration of that name). A type with fewer than two declared methods is skipped. Nested types (A.B.M) are skipped.</remarks>
+/// <remarks>
+/// Overloads are paired by occurrence (k-th body of a name with the k-th declaration of that name). A type with fewer than two declared methods is skipped. Nested types (A.B.M) are skipped.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.STY.TV151STYRules.CheckFile (DRagLint.V151.STY.pas)</para>
+/// <para>Calls: Copy, DRagLint.V151.STY.Support.CollectDecls, DRagLint.V151.STY.Support.ImplementationStart, DRagLint.V151.STY.Support.LineOf, DRagLint.V151.STY.Support.NthDecl, LowerCase, SameText</para>
+/// <para>Returns: nil; Res.ToArray</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 81 lines (full implementation)</para>
+/// <seealso cref="DRagLint.V151.STY.Support.CollectDecls"/>
+/// <seealso cref="DRagLint.V151.STY.Support.ImplementationStart"/>
+/// <seealso cref="DRagLint.V151.STY.Support.LineOf"/>
+/// <seealso cref="DRagLint.V151.STY.Support.NthDecl"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function StyFindMethodOrder(const AMasked: string): TArray<TStyOrderHit>;
 
 /// <summary>Lines of Application.ProcessMessages calls inside an event handler (a routine with a Sender: TObject parameter) that holds no loop keyword before the call.</summary>
 /// <param name="AMasked">Output of StyMaskSource.</param>
 /// <returns>1-based lines; calls under a loop are left to the loop rule so a call is never reported twice.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.STY.TV151STYRules.CheckFile (DRagLint.V151.STY.pas)</para>
+/// <para>Calls: Copy, DRagLint.V151.STY.Support.LineOf</para>
+/// <para>Returns: nil; Res.ToArray</para>
+/// <seealso cref="DRagLint.V151.STY.Support.LineOf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function StyFindHandlerProcessMessages(const AMasked: string): TArray<Integer>;
 
 implementation

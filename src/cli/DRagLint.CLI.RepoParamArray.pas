@@ -15,7 +15,8 @@ interface
 /// <param name="pJson">--json: one JSON object on stdout instead of the text lines.</param>
 /// <returns>0 = every processed unit planned / applied; 1 = a unit refused, no block in single
 /// mode, or the gate rolled back; 2 = bad flags, write failure, or a baseline that does not build.</returns>
-/// <remarks>The other flags are read from the command line here (the dispatch signature is FRAME's):
+/// <remarks>
+/// The other flags are read from the command line here (the dispatch signature is FRAME's):
 /// --dfm, --query, --table, --step-size, --progress-form, --prepare-queries, --plan, --apply, --all,
 /// --only, --no-backup, --platform, --rsvars, --build-timeout. No flag: the block is printed to stdout.
 /// --plan prints the unified diff and writes nothing; --apply writes through the compile gate
@@ -25,7 +26,19 @@ interface
 /// update object / schema adapter are renamed ZZZ*, persistent fields removed, the unit's component
 /// declarations edited to match). --plan then shows the .dfm and .pas diffs and --apply writes both
 /// files through the same gate; without --plan / --apply nothing is written.
-/// Not thread-safe; main thread only (it opens the gate's control channel).</remarks>
+/// Not thread-safe; main thread only (it opens the gate's control channel).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Repo.RunRepoVerb (DRagLint.CLI.Repo.pas)</para>
+/// <para>Calls: Default, DRagLint.CLI.RepoParamArray.AnalyseUnit, DRagLint.CLI.RepoParamArray.ApplyAll, DRagLint.CLI.RepoParamArray.CollectUnits, DRagLint.CLI.RepoParamArray.ExitCodeOf, DRagLint.CLI.RepoParamArray.PrintJson, DRagLint.CLI.RepoParamArray.PrintText, DRagLint.CLI.RepoParamArray.ReadOptions, DRagLint.Refactor.CompileGate.CloseGateStandDown, DRagLint.Refactor.CompileGate.OpenGateStandDown, Writeln</para>
+/// <para>Returns: ExitCodeOf(O, Units, Gate); EXIT_USAGE</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <seealso cref="DRagLint.CLI.RepoParamArray.AnalyseUnit"/>
+/// <seealso cref="DRagLint.CLI.RepoParamArray.ApplyAll"/>
+/// <seealso cref="DRagLint.CLI.RepoParamArray.CollectUnits"/>
+/// <seealso cref="DRagLint.CLI.RepoParamArray.ExitCodeOf"/>
+/// <seealso cref="DRagLint.CLI.RepoParamArray.PrintJson"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunGenParamArray(const pProject, pInFile: string; pJson: Boolean): Integer;
 
 implementation

@@ -20,16 +20,34 @@ const
 
 type
   /// <summary>Cross-unit pass of ui-call-in-console-or-service (owner ruling 2026-11-17: follow calls into other units).</summary>
-  /// <remarks>Source-text based like the v151 per-file rule: a routine is matched by its simple name,
+  /// <remarks>
+  /// Source-text based like the v151 per-file rule: a routine is matched by its simple name,
   /// restricted to the units the console program uses (transitively), so a same-named routine in an
   /// unused unit never matches. Only stand-alone routines are followed (a method call needs a receiver
-  /// type, which text alone cannot give). Stateless; class methods only.</remarks>
+  /// type, which text alone cannot give). Stateless; class methods only.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.V152.APP2.TV152APP2Rules.CheckProject (DRagLint.V152.APP2.pas)</para>
+  /// <para>Used in units: DRagLint.V152.APP2</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TApp2CrossUnit = class
   public
     /// <summary>Reports, in every console program of the project, each call of a dialog-showing routine declared in another unit.</summary>
     /// <param name="AFilePaths">Every file of the run; programs are the .dpr files, units the .pas files.</param>
     /// <param name="AProjectPath">The --project file, or '' for a database-wide run; when set, only the program with that base name is checked.</param>
     /// <returns>One warning per call, located in the program file; nil when there is none.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas) ?, DRagLint.V152.APP2.TV152APP2Rules.CheckProject (DRagLint.V152.APP2.pas)</para>
+    /// <para>Calls: DRagLint.V151.APP.Support.ReadAppSource, DRagLint.V151.APP.Support.TAppSrc.Create, DRagLint.V152.APP2.Support.CheckProgram, DRagLint.V152.APP2.Support.UnitOf, ExtractFileExt, SameText</para>
+    /// <para>Returns: nil; Acc.ToArray</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.APP.Support.ReadAppSource"/>
+    /// <seealso cref="DRagLint.V151.APP.Support.TAppSrc.Create"/>
+    /// <seealso cref="DRagLint.V152.APP2.Support.CheckProgram"/>
+    /// <seealso cref="DRagLint.V152.APP2.Support.UnitOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Run(const AFilePaths: TArray<string>; const AProjectPath: string): TArray<TLintFinding>; static;
   end;
 

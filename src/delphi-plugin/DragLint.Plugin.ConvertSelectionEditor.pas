@@ -20,6 +20,12 @@ const
   CONVERT_VERB_ALL_OF_TYPE = 'drag-lint: Convert All of This Type on the Form...';
 
 /// <summary>Registers the selection editor. Called once from the wizard's Register.</summary>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Wizard.Register (DragLint.Plugin.Wizard.pas)</para>
+/// <para>Calls: RegisterSelectionEditor</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RegisterConvertSelectionEditor;
 
 implementation

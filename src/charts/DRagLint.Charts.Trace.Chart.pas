@@ -98,7 +98,7 @@ type
     /// <returns>The default caps.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.AskVerb.AskCommandOf (DRagLint.Charts.AskVerb.pas) ?, DRagLint.Charts.AskVerb.ParseAskArgs (DRagLint.Charts.AskVerb.pas) ?, DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas) ?, DRagLint.Charts.AskVerb.TAskRun.ResolveOthers (DRagLint.Charts.AskVerb.pas) ?, DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Emit (DRagLint.Charts.Q.RoundTrip.pas) (+83 more)</para>
+    /// <para>Called from: DRagLint.Charts.AskVerb.AskCommandOf (DRagLint.Charts.AskVerb.pas) ?, DRagLint.Charts.AskVerb.ParseAskArgs (DRagLint.Charts.AskVerb.pas) ?, DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas) ?, DRagLint.Charts.AskVerb.TAskRun.ResolveOthers (DRagLint.Charts.AskVerb.pas) ?, DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Emit (DRagLint.Charts.Q.RoundTrip.pas) (+62 more)</para>
     /// <para>Effect-free (proven)</para>
     /// <para>Directives: static</para>
     /// <!-- drag-lint:auto END -->
@@ -272,7 +272,7 @@ function FormatChartNumbers(const pNums: TArray<Integer>): string;
 /// <para>Called from: DRagLint.Charts.Trace.Chart.TChartBuilder.WalkSteps (DRagLint.Charts.Trace.Chart.pas)</para>
 /// <para>Calls: DRagLint.Charts.Trace.Chart.ChartSqlAnchor, DRagLint.Charts.Trace.Chart.Two</para>
 /// <para>Returns: if X then LANE_PIPE; LANE_CLIENT</para>
-/// <para>Complexity: 11 (cyclomatic, outer body), 27 lines (full implementation)</para>
+/// <para>Complexity: 18 (cyclomatic, outer body), 27 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Charts.Trace.Chart.ChartSqlAnchor"/>
 /// <seealso cref="DRagLint.Charts.Trace.Chart.Two"/>
 /// <!-- drag-lint:auto END -->

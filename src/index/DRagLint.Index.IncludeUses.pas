@@ -41,12 +41,21 @@ uses
 /// implementation, otherwise interface.</param>
 /// <returns>One TUnitUse per entry, FileId -1, OriginPath and IncludeLine set,
 /// coordinates inside the .inc; empty when no site carries a uses clause.</returns>
-/// <remarks>The include text is parsed once, wrapped as a synthetic unit
+/// <remarks>
+/// The include text is parsed once, wrapped as a synthetic unit
 /// (unit, interface, body, implementation, end.) so the body starts on line 3;
 /// lines are shifted back by 2. A site whose text has no `uses` word is
 /// skipped without a parse. Parse errors in the include are tolerated: every
 /// entry the parser still produced inside the body is kept. Pure apart from
-/// the parse; thread-safe if AParser is.</remarks>
+/// the parse; thread-safe if AParser is.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: DRagLint.Index.IncludeUses.ExtractIncludeUses/5</para>
+/// <para>Returns: ExtractIncludeUses(ASites, AParser, AHostPath, AImplementationLine, nil)</para>
+/// <para>Overload 1 of 2</para>
+/// <para>Directives: overload</para>
+/// <seealso cref="DRagLint.Index.IncludeUses.ExtractIncludeUses"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ExtractIncludeUses(const ASites: TArray<TPPIncludeSite>; const AParser: IParser;
   const AHostPath: string; AImplementationLine: Integer): TArray<TUnitUse>; overload;
 
@@ -55,6 +64,14 @@ function ExtractIncludeUses(const ASites: TArray<TPPIncludeSite>; const AParser:
 /// <param name="AText">The include text.</param>
 /// <returns>True iff a standalone `uses` token occurs (comments not excluded:
 /// a false positive only costs one parse).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Index.IncludeUses.ExtractIncludeUses/5 (DRagLint.Index.IncludeUses.pas)</para>
+/// <para>Calls: DRagLint.Index.IncludeUses.IsIdentChar, LowerCase, Pos</para>
+/// <para>Returns: True; False</para>
+/// <seealso cref="DRagLint.Index.IncludeUses.IsIdentChar"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HasUsesWord(const AText: string): Boolean;
 
 /// <summary>149 EX2 (F4): finds the depth-0 include sites that stand IN a uses
@@ -79,6 +96,16 @@ function HasUsesWord(const AText: string): Boolean;
 /// host token before it (whitespace and brace / paren-star comments skipped)
 /// is the word `uses` or a comma. Offset identity holds: the patch replaces
 /// spaces only, and a site whose blanked span is not all spaces is left alone.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas)</para>
+/// <para>Calls: Copy, DRagLint.Index.IncludeUses.DirectiveEnd, DRagLint.Index.IncludeUses.FollowsUsesOrComma, DRagLint.Index.IncludeUses.LastSignificantChar, DRagLint.Index.IncludeUses.OffsetOf, StringOfChar</para>
+/// <para>Complexity: 13 (cyclomatic, outer body), 34 lines (full implementation)</para>
+/// <para>Mutates: AParseBytes (var)</para>
+/// <seealso cref="DRagLint.Index.IncludeUses.DirectiveEnd"/>
+/// <seealso cref="DRagLint.Index.IncludeUses.FollowsUsesOrComma"/>
+/// <seealso cref="DRagLint.Index.IncludeUses.LastSignificantChar"/>
+/// <seealso cref="DRagLint.Index.IncludeUses.OffsetOf"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function MarkUsesListIncludes(const ASites: TArray<TPPIncludeSite>; const ARaw: TBytes;
   var AParseBytes: TBytes): TArray<Boolean>;
@@ -89,8 +116,16 @@ function MarkUsesListIncludes(const ASites: TArray<TPPIncludeSite>; const ARaw: 
 /// <param name="AInUses">Its result.</param>
 /// <param name="AParseBytes">The UTF-8 bytes the host was parsed from (site byte columns -> character columns).</param>
 /// <param name="AUses">The host's parsed uses entries; filtered in place.</param>
-/// <remarks>An entry is dropped when it starts at a marked site's directive
-/// position and its name starts with DLINC.</remarks>
+/// <remarks>
+/// An entry is dropped when it starts at a marked site's directive
+/// position and its name starts with DLINC.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas)</para>
+/// <para>Calls: DRagLint.Index.IncludeUses.HostCharCol, StartsText</para>
+/// <para>Mutates: AUses (var)</para>
+/// <seealso cref="DRagLint.Index.IncludeUses.HostCharCol"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure DropIncludePlaceholders(const ASites: TArray<TPPIncludeSite>; const AInUses: TArray<Boolean>;
   const AParseBytes: TBytes; var AUses: TArray<TUnitUse>);
 
@@ -102,11 +137,26 @@ procedure DropIncludePlaceholders(const ASites: TArray<TPPIncludeSite>; const AI
 /// <param name="AImplementationLine">As for the 4-arg overload.</param>
 /// <param name="AInUses">MarkUsesListIncludes' flags; nil = none marked.</param>
 /// <returns>As for the 4-arg overload.</returns>
-/// <remarks>A marked site's text is an entry LIST, not a clause: it is parsed as
+/// <remarks>
+/// A marked site's text is an entry LIST, not a clause: it is parsed as
 /// `uses ` + text, with a closing `;` (after a placeholder entry when the text
 /// ends with a comma) on a line of its own, which the body-line filter drops.
 /// Columns on the include's first line are shifted back by the `uses ` prefix.
-/// Unmarked sites behave as in the 4-arg overload.</remarks>
+/// Unmarked sites behave as in the 4-arg overload.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas), DRagLint.Index.IncludeUses.ExtractIncludeUses/4 (DRagLint.Index.IncludeUses.pas)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.IParser.Parse, DRagLint.Index.IncludeUses.HasUsesWord, DRagLint.Index.IncludeUses.HostSection, DRagLint.Index.IncludeUses.LastSignificantChar, DRagLint.Index.IncludeUses.LineCount</para>
+/// <para>Returns: Rows.ToArray</para>
+/// <para>Overload 2 of 2</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 56 lines (full implementation)</para>
+/// <para>Directives: overload</para>
+/// <seealso cref="DRagLint.Core.Interfaces.IParser.Parse"/>
+/// <seealso cref="DRagLint.Index.IncludeUses.HasUsesWord"/>
+/// <seealso cref="DRagLint.Index.IncludeUses.HostSection"/>
+/// <seealso cref="DRagLint.Index.IncludeUses.LastSignificantChar"/>
+/// <seealso cref="DRagLint.Index.IncludeUses.LineCount"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ExtractIncludeUses(const ASites: TArray<TPPIncludeSite>; const AParser: IParser;
   const AHostPath: string; AImplementationLine: Integer; const AInUses: TArray<Boolean>): TArray<TUnitUse>; overload;
 
@@ -116,6 +166,14 @@ function ExtractIncludeUses(const ASites: TArray<TPPIncludeSite>; const AParser:
 /// <param name="AHostPath">The host path (picks program / package sections).</param>
 /// <param name="AImplementationLine">The host's TParseResult.ImplementationLine.</param>
 /// <returns>One row per site, same order. Section is set for depth 0 only.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas)</para>
+/// <para>Calls: Default, DRagLint.Core.Model.UnitUseSectionToStr, DRagLint.Index.IncludeUses.HostSection</para>
+/// <seealso cref="DRagLint.Core.Model.UnitUseSectionToStr"/>
+/// <seealso cref="DRagLint.Index.IncludeUses.HostSection"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildFileIncludeRows(const ASites: TArray<TPPIncludeSite>; const AInUses: TArray<Boolean>;
   const AHostPath: string; AImplementationLine: Integer): TArray<TFileIncludeRow>;
 
@@ -128,7 +186,8 @@ function BuildFileIncludeRows(const ASites: TArray<TPPIncludeSite>; const AInUse
 /// <param name="AHostBytes">The host bytes the parser saw (preprocessed).</param>
 /// <param name="ASymbols">The host's parsed symbols; the Directives of each
 /// skEnum is rewritten in place. Other kinds are untouched.</param>
-/// <remarks>The parser reads the switch from the host text only, where every
+/// <remarks>
+/// The parser reads the switch from the host text only, where every
 /// include directive is blanked. Here each depth-0 include contributes ONE
 /// switch at its directive's host position: the state its own text -- and its
 /// nested includes, at their positions inside it -- leaves behind. An include
@@ -136,7 +195,18 @@ function BuildFileIncludeRows(const ASites: TArray<TPPIncludeSite>; const AInUse
 /// parser's answer stands untouched (the common case costs one byte scan per
 /// include). Inactive includes and inactive branches inside an include never
 /// reach here: the preprocessor reports no site for the first and blanks the
-/// second. Pure; thread-safe.</remarks>
+/// second. Pure; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas)</para>
+/// <para>Calls: DRagLint.Core.Encoding.Utf8ByteColToCharCol, DRagLint.Index.IncludeUses.HostCharCol, DRagLint.Index.IncludeUses.IncludeEffect, DRagLint.Index.IncludeUses.LineColOf, DRagLint.Parser.Delphi13.ScanScopedEnumSwitches</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 58 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Core.Encoding.Utf8ByteColToCharCol"/>
+/// <seealso cref="DRagLint.Index.IncludeUses.HostCharCol"/>
+/// <seealso cref="DRagLint.Index.IncludeUses.IncludeEffect"/>
+/// <seealso cref="DRagLint.Index.IncludeUses.LineColOf"/>
+/// <seealso cref="DRagLint.Parser.Delphi13.ScanScopedEnumSwitches"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ApplyIncludeScopedEnums(const ASites: TArray<TPPIncludeSite>;
   const AHostBytes: TBytes; var ASymbols: TArray<TSymbol>);
 

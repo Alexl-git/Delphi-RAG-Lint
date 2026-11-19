@@ -452,14 +452,27 @@ const
 /// AFound; 0 = no schema_meta, i.e. not a drag-lint index).</param>
 /// <returns>True for [SCHEMA_READ_MIN, SCHEMA_VERSION] and for a NEWER index
 /// (readable as before; writers refuse it separately).</returns>
-/// <remarks>The read gate. IsSchemaCurrent (AFound >= SCHEMA_VERSION) stays the
-/// "no migration pending" test for writers. Pure; thread-safe.</remarks>
+/// <remarks>
+/// The read gate. IsSchemaCurrent (AFound >= SCHEMA_VERSION) stays the
+/// "no migration pending" test for writers. Pure; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CheckInit.DbUsable (DRagLint.CLI.CheckInit.pas), DRagLint.CLI.Common.AnyDbSchemaCurrent (DRagLint.CLI.Common.pas), DRagLint.CLI.Common.OpenReadOnlyStore (DRagLint.CLI.Common.pas), DRagLint.CLI.LibraryReady.ProbeLibraryReadiness (DRagLint.CLI.LibraryReady.pas), DRagLint.CLI.OpenLibraryStoreIfCurrent (DRagLint.CLI.pas) (+11 more)</para>
+/// <para>Returns: AFound &gt;= SCHEMA_READ_MIN</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsSchemaReadable(AFound: Integer): Boolean;
 
 /// <summary>The one refusal text for an index this engine will not read.</summary>
 /// <param name="AFound">The stored schema_version (0 = not a drag-lint index).</param>
 /// <returns>'index schema vN is older than this engine reads (vMIN..vCUR); re-index it'
 /// -- the same words at every opener, so a guard can match them.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Common.OpenReadOnlyStore (DRagLint.CLI.Common.pas), DRagLint.CLI.OpenLibraryStores (DRagLint.CLI.pas), DRagLint.CLI.UsesRecover.LoadSourceNames (DRagLint.CLI.UsesRecover.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.CreateReadable (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.OpenReadable (DRagLint.Storage.SQLite.pas) (+1 more)</para>
+/// <para>Calls: Format</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SchemaUnreadableReason(AFound: Integer): string;
 
 /// <summary>One line for the `schema` verb: the engine's schema, the range it
@@ -467,6 +480,15 @@ function SchemaUnreadableReason(AFound: Integer): string;
 /// <param name="AFound">The index's stored schema_version.</param>
 /// <returns>'engine schema vCUR reads vMIN..vCUR: ' + current / 'vN readable by vCUR;
 /// re-index to write' / NEWER / the SchemaUnreadableReason text.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Schema.DoSchema (DRagLint.CLI.Schema.pas)</para>
+/// <para>Calls: DRagLint.Storage.Schema.IsSchemaReadable, DRagLint.Storage.Schema.SchemaUnreadableReason, Format</para>
+/// <para>Returns: Format('engine schema v%d reads v%d..v%d: ', [SCHEMA_VERSION, SCHEMA_READ_MIN, SCHEMA_VERSION])</para>
+/// <seealso cref="DRagLint.Storage.Schema.IsSchemaReadable"/>
+/// <seealso cref="DRagLint.Storage.Schema.SchemaUnreadableReason"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SchemaCompatLine(AFound: Integer): string;
 
 implementation

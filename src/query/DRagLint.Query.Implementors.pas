@@ -68,8 +68,8 @@ type
   /// Arrays are empty, never absent. LibraryImplementors is -1 when no library
   /// store was given.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Query.Implementors.pas) ?, DRagLint.Charts.Q.Implementors.Emit (DRagLint.Charts.Q.Implementors.pas) ?, DRagLint.CLI.DoImplementors (DRagLint.CLI.pas) ?, DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas) ?, DRagLint.Query.Implementors.BuildImplementorsReport (DRagLint.Query.Implementors.pas) (+10 more)</para>
-  /// <para>Used in units: DRagLint.Charts.Q.Implementors, DRagLint.CLI, DRagLint.MCP.Server, DRagLint.Query.Implementors</para>
+  /// <para>Used by: declaration (DRagLint.Query.Implementors.pas) ?, DRagLint.Charts.Q.Implementors.Emit (DRagLint.Charts.Q.Implementors.pas) ?, DRagLint.CLI.Wiring.DoImplementors (DRagLint.CLI.Wiring.pas) ?, DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas) ?, DRagLint.Query.Implementors.BuildImplementorsReport (DRagLint.Query.Implementors.pas) (+10 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Q.Implementors, DRagLint.CLI.Wiring, DRagLint.MCP.Server, DRagLint.Query.Implementors</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TImplementorsReport = record
@@ -88,8 +88,8 @@ type
   /// <summary>Report options.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Query.Implementors.pas) ?, DRagLint.Charts.Q.Implementors.Emit (DRagLint.Charts.Q.Implementors.pas), DRagLint.CLI.DoImplementors (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas), DRagLint.Query.Implementors.TImplementorsOptions.Defaults (DRagLint.Query.Implementors.pas) (+5 more)</para>
-  /// <para>Used in units: DRagLint.Charts.Q.Implementors, DRagLint.CLI, DRagLint.MCP.Server, DRagLint.Query.Implementors</para>
+  /// <para>Used by: declaration (DRagLint.Query.Implementors.pas) ?, DRagLint.Charts.Q.Implementors.Emit (DRagLint.Charts.Q.Implementors.pas), DRagLint.CLI.Wiring.DoImplementors (DRagLint.CLI.Wiring.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas), DRagLint.Query.Implementors.TImplementorsOptions.Defaults (DRagLint.Query.Implementors.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Q.Implementors, DRagLint.CLI.Wiring, DRagLint.MCP.Server, DRagLint.Query.Implementors</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TImplementorsOptions = record
@@ -101,7 +101,7 @@ type
     /// <returns>The default options.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.Q.Implementors.Emit (DRagLint.Charts.Q.Implementors.pas), DRagLint.CLI.DoImplementors (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+    /// <para>Called from: DRagLint.Charts.Q.Implementors.Emit (DRagLint.Charts.Q.Implementors.pas), DRagLint.CLI.Wiring.DoImplementors (DRagLint.CLI.Wiring.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
     /// <para>Calls: Default</para>
     /// <para>Returns: Default(TImplementorsOptions)</para>
     /// <para>Effect-free (proven)</para>
@@ -114,8 +114,8 @@ type
   /// <summary>The target names nothing the report can answer, or several symbols.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Charts.Q.Implementors.Emit (DRagLint.Charts.Q.Implementors.pas) ?, DRagLint.CLI.DoImplementors (DRagLint.CLI.pas) ?, DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas) ?, DRagLint.Query.Implementors.BuildImplementorsReport (DRagLint.Query.Implementors.pas)</para>
-  /// <para>Used in units: DRagLint.Charts.Q.Implementors, DRagLint.CLI, DRagLint.MCP.Server, DRagLint.Query.Implementors</para>
+  /// <para>Used by: DRagLint.Charts.Q.Implementors.Emit (DRagLint.Charts.Q.Implementors.pas) ?, DRagLint.CLI.Wiring.DoImplementors (DRagLint.CLI.Wiring.pas) ?, DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas) ?, DRagLint.Query.Implementors.BuildImplementorsReport (DRagLint.Query.Implementors.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Q.Implementors, DRagLint.CLI.Wiring, DRagLint.MCP.Server, DRagLint.Query.Implementors</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   EImplementorsTarget = class(Exception)
@@ -150,7 +150,7 @@ type
 /// <remarks>
 /// Read-only. Not thread-safe; call from the store's owning thread.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Q.Implementors.Emit (DRagLint.Charts.Q.Implementors.pas), DRagLint.CLI.DoImplementors (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+/// <para>Called from: DRagLint.Charts.Q.Implementors.Emit (DRagLint.Charts.Q.Implementors.pas), DRagLint.CLI.Wiring.DoImplementors (DRagLint.CLI.Wiring.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
 /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Query.Implementors.AddLibrary, DRagLint.Query.Implementors.AddSitesOf, DRagLint.Query.Implementors.EImplementorsTarget.CreateFor, DRagLint.Query.Implementors.IsRoutineKind, DRagLint.Query.Implementors.KindText, DRagLint.Query.Implementors.ReportClass, DRagLint.Query.Implementors.ReportImplementor, DRagLint.Query.Implementors.ReportInterface, DRagLint.Query.Implementors.ReportMember, DRagLint.Query.Implementors.TargetCandidates, DRagLint.Query.Implementors.TCtx.Create, DRagLint.Query.Implementors.TCtx.FilePathOf</para>
 /// <para>Returns: Default(TImplementorsReport)</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
@@ -171,7 +171,7 @@ function BuildImplementorsReport(const pStore: ISymbolStore; const pTarget: stri
 /// <remarks>
 /// Backs LSP textDocument/implementation and the code lens count.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.LSP.Feature.ImplDecl.AddInterfaceImplementations (DRagLint.LSP.Feature.ImplDecl.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas), DRagLint.Query.Implementors.ImplementorCountsForFile (DRagLint.Query.Implementors.pas)</para>
+/// <para>Called from: DRagLint.LSP.Feature.ImplDecl.AddInterfaceImplementations (DRagLint.LSP.Feature.ImplDecl.pas), DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.LoadAnswers (DRagLint.Query.HappensBefore.Roots.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas), DRagLint.Query.Implementors.ImplementorCountsForFile (DRagLint.Query.Implementors.pas)</para>
 /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Query.Implementors.AnswerFor, DRagLint.Query.Implementors.ImplementingClassesOfCtx, DRagLint.Query.Implementors.IsRoutineKind, DRagLint.Query.Implementors.TCtx.Create</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
@@ -224,7 +224,7 @@ function ImplementorCountsForFile(const pStores: TArray<ISymbolStore>; const pPa
 /// <returns>A new object; the caller owns it.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoImplementors (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+/// <para>Called from: DRagLint.CLI.Wiring.DoImplementors (DRagLint.CLI.Wiring.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
 /// <para>Calls: DRagLint.Query.Implementors.RowJson</para>
 /// <para>Returns: TJSONObject.Create</para>
 /// <para>Catches: Exception (re-raise)</para>
@@ -238,9 +238,10 @@ function ImplementorsReportToJson(const pReport: TImplementorsReport): TJSONObje
 /// <returns>CRLF-separated lines.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoImplementors (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.Wiring.DoImplementors (DRagLint.CLI.Wiring.pas)</para>
 /// <para>Calls: DRagLint.Query.Implementors.Bare, DRagLint.Query.Implementors.HowText, DRagLint.Query.Implementors.Loc, DRagLint.Query.Implementors.Short</para>
 /// <para>Returns: Sb.ToString</para>
+/// <para>Complexity: 13 (cyclomatic, outer body), 44 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Query.Implementors.Bare"/>
 /// <seealso cref="DRagLint.Query.Implementors.HowText"/>
 /// <seealso cref="DRagLint.Query.Implementors.Loc"/>
@@ -260,9 +261,10 @@ function ImplementorsReportToText(const pReport: TImplementorsReport): string;
 /// Columns left to right: target, implementing classes, answering methods,
 /// then (sites present) the calling routines.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Q.Implementors.Emit (DRagLint.Charts.Q.Implementors.pas), DRagLint.CLI.DoImplementors (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.Charts.Q.Implementors.Emit (DRagLint.Charts.Q.Implementors.pas), DRagLint.CLI.Wiring.DoImplementors (DRagLint.CLI.Wiring.pas)</para>
 /// <para>Calls: DRagLint.Query.Implementors.Bare, DRagLint.Query.Implementors.ChartId, DRagLint.Query.Implementors.ImplementorsReportToChart.Edge, DRagLint.Query.Implementors.ImplementorsReportToChart.Node, DRagLint.Query.Implementors.Short, ExtractFileName, pHref, Xml</para>
 /// <para>Returns: Sb.ToString</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 63 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Query.Implementors.Bare"/>
 /// <seealso cref="DRagLint.Query.Implementors.ChartId"/>
 /// <seealso cref="DRagLint.Query.Implementors.ImplementorsReportToChart.Edge"/>

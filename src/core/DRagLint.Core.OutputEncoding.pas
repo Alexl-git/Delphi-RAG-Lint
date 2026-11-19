@@ -35,7 +35,7 @@ type
   /// <summary>The byte encoding the engine writes to stdout and stderr.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: [dclDragLintWizard,drag-lint]declaration (DRagLint.Core.OutputEncoding.pas), [drag-lint]DRagLint.CLI.LoadConfigDefaults (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ParseArgs (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Run (DRagLint.CLI.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.OutputEncoding.CurrentOutputEncoding (DRagLint.Core.OutputEncoding.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.OutputEncoding.InstallOutputEncoding (DRagLint.Core.OutputEncoding.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.OutputEncoding.OutputEncodingName (DRagLint.Core.OutputEncoding.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.OutputEncoding.OutputEncodingOnCommandLine (DRagLint.Core.OutputEncoding.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.OutputEncoding.TryParseOutputEncoding (DRagLint.Core.OutputEncoding.pas)</para>
+  /// <para>Used by: [dclDragLintWizard,drag-lint]declaration (DRagLint.Core.OutputEncoding.pas), [drag-lint]DRagLint.CLI.LoadConfigDefaults (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ParseArgs (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.RunCommand (DRagLint.CLI.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.OutputEncoding.CurrentOutputEncoding (DRagLint.Core.OutputEncoding.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.OutputEncoding.InstallOutputEncoding (DRagLint.Core.OutputEncoding.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.OutputEncoding.OutputEncodingName (DRagLint.Core.OutputEncoding.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.OutputEncoding.OutputEncodingOnCommandLine (DRagLint.Core.OutputEncoding.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.OutputEncoding.TryParseOutputEncoding (DRagLint.Core.OutputEncoding.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TOutputEncoding = (oeAscii, oeUtf8, oeUtf16);
@@ -115,7 +115,7 @@ function EncodeForOutput(const pText: string): TBytes;
 /// the mode they were written under. Call from the main thread, before any
 /// worker thread writes to Output or ErrOutput. Idempotent.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.LoadConfigDefaults (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.LoadConfigDefaults (DRagLint.CLI.pas), DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
 /// <para>Calls: DRagLint.Core.OutputEncoding.EnsureOpen, DRagLint.Core.OutputEncoding.InstallOn, Flush, TTextRec</para>
 /// <seealso cref="DRagLint.Core.OutputEncoding.EnsureOpen"/>
 /// <seealso cref="DRagLint.Core.OutputEncoding.InstallOn"/>
@@ -144,7 +144,7 @@ function CurrentOutputEncoding: TOutputEncoding;
 /// <returns>True when the switch is present (valid or not).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
 /// <para>Calls: DRagLint.Core.OutputEncoding.TryParseOutputEncoding, ParamStr, SameText</para>
 /// <para>Returns: False; True</para>
 /// <para>Mutates: pEncoding (out), pValue (out)</para>
@@ -163,7 +163,7 @@ function OutputEncodingOnCommandLine(out pEncoding: TOutputEncoding; out pValue:
 /// and characters were lost so far in this run, a "lossy_output":N member is added
 /// as its first member.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoArchDiagram (DRagLint.CLI.pas), DRagLint.CLI.DoButterfly (DRagLint.CLI.pas), DRagLint.CLI.DoConvertScaffold (DRagLint.CLI.pas), DRagLint.CLI.DoDepsReport (DRagLint.CLI.pas), DRagLint.CLI.DoExportEnums (DRagLint.CLI.pas) (+12 more)</para>
+/// <para>Called from: DRagLint.CLI.CallGraph.DoButterfly (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.CallGraph.DoReverseCallTree.EmitRendering (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.Convert.DoConvertScaffold (DRagLint.CLI.Convert.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.EmitFindingsDoc (DRagLint.CLI.pas)</para>
 /// <para>Calls: Copy, DRagLint.Core.OutputEncoding.EncodeForOutput, IntToStr</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Core.OutputEncoding.EncodeForOutput"/>

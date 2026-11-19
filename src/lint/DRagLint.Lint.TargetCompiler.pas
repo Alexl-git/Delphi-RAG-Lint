@@ -215,6 +215,7 @@ function CompilerDisplayName(pVersion: Integer): string;
 /// <para>Called from: DRagLint.CLI.ApplyPreprocessCompilerVersion (DRagLint.CLI.pas), DRagLint.CLI.ApplyRunTargetCompiler (DRagLint.CLI.pas), DRagLint.CLI.ApplySectionCompilerVersion (DRagLint.CLI.pas), DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.TargetGateFor (DRagLint.LSP.Server.pas) (+1 more)</para>
 /// <para>Calls: ChangeFileExt, DRagLint.Lint.TargetCompiler.AutoAssumesLegacyCompiler, DRagLint.Lint.TargetCompiler.ParseCompilerToken, DRagLint.Lint.TargetCompiler.ProjectVersionToCompiler, DRagLint.Lint.TargetCompiler.ReadDprojProjectVersion, ExtractFileExt, Format, MatchText, SameText, Trim</para>
 /// <para>Returns: ParseCompilerToken(Tok, pVersion, pError); False; True</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 50 lines (full implementation)</para>
 /// <para>Mutates: pVersion (out), pError (out)</para>
 /// <seealso cref="DRagLint.Lint.TargetCompiler.AutoAssumesLegacyCompiler"/>
 /// <seealso cref="DRagLint.Lint.TargetCompiler.ParseCompilerToken"/>

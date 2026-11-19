@@ -239,7 +239,7 @@ function ParseCycleFixOutcome(const AText: string): TCycleFixOutcome;
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.FinishFix (DragLint.Plugin.UsesDepsFrame.pas)</para>
 /// <para>Calls: Format, SameText</para>
-/// <para>Complexity: 12 (cyclomatic, outer body), 31 lines (full implementation)</para>
+/// <para>Complexity: 13 (cyclomatic, outer body), 31 lines (full implementation)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function DescribeCycleFixOutcome(const AOutcome: TCycleFixOutcome): string;

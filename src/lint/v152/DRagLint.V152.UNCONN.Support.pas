@@ -19,15 +19,27 @@ uses
 
 type
   /// <summary>Lower-case identifier -> number of occurrences in one source text.</summary>
-  /// <remarks>Counts every identifier-shaped token, including those inside string
+  /// <remarks>
+  /// Counts every identifier-shaped token, including those inside string
   /// literals and comments: a name in `FindComponent('btnOk')` or in a comment counts
-  /// as a use. Over-counting only silences a finding, never adds one.</remarks>
+  /// as a use. Over-counting only silences a finding, never adds one.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V152.UNCONN.Support.pas) ?, DRagLint.V152.UNCONN.CheckHanging (DRagLint.V152.UNCONN.pas) ?, DRagLint.V152.UNCONN.CheckUnconnected (DRagLint.V152.UNCONN.pas) ?, DRagLint.V152.UNCONN.Support.UcCountIdents (DRagLint.V152.UNCONN.Support.pas), DRagLint.V152.UNCONN.Support.UcIdentCount (DRagLint.V152.UNCONN.Support.pas) ? (+1 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUcIdentCounts = TDictionary<string, Integer>;
 
 /// <summary>True when AClass is a control class with a default event that ruling D12
 /// reports (buttons, menu and toolbar items, check / radio boxes, edits, combos, lists).</summary>
 /// <param name="AClass">The .dfm class name, e.g. TButton; compared case-insensitively.</param>
 /// <returns>False for every passive class (labels, panels, bevels, layout items ...).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V152.UNCONN.CheckUnconnected (DRagLint.V152.UNCONN.pas)</para>
+/// <para>Calls: LowerCase</para>
+/// <para>Returns: False</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UcIsDefaultEventClass(const AClass: string): Boolean;
 
 /// <summary>True when node AIndex of ADfm is wired inside its own form file, or is a
@@ -41,17 +53,43 @@ function UcIsDefaultEventClass(const AClass: string): Boolean;
 /// a node with child nodes (a sub-menu); a separator menu item (Caption '-') or tool button
 /// (Style tbsSeparator / tbsDivider); and a node named by another node's LiveBindings
 /// property (Control, Component, SourceComponent, ControlComponent).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V152.UNCONN.CheckUnconnected (DRagLint.V152.UNCONN.pas)</para>
+/// <para>Calls: DRagLint.V151.DFMA.Support.LastSegment, DRagLint.V152.UNCONN.Support.OwnPropsWire, SameText, Trim</para>
+/// <para>Returns: False</para>
+/// <seealso cref="DRagLint.V151.DFMA.Support.LastSegment"/>
+/// <seealso cref="DRagLint.V152.UNCONN.Support.OwnPropsWire"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UcNodeWiredInDfm(const ADfm: TDfmDoc; AIndex: Integer; const ALines: TArray<string>): Boolean;
 
 /// <summary>Counts the identifier tokens of AText.</summary>
 /// <param name="AText">Source text of a unit (any decoding that keeps ASCII intact).</param>
 /// <returns>A new dictionary keyed by the lower-case identifier; the caller frees it.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V152.UNCONN.TV152UNCONNRules.CheckDfm (DRagLint.V152.UNCONN.pas)</para>
+/// <para>Calls: CharInSet, Copy, DRagLint.V152.UNCONN.Support.IsIdentChar, LowerCase</para>
+/// <para>Returns: TUcIdentCounts.Create</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 22 lines (full implementation)</para>
+/// <para>Owns returned: new (caller owns)</para>
+/// <seealso cref="DRagLint.V152.UNCONN.Support.IsIdentChar"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UcCountIdents(const AText: string): TUcIdentCounts;
 
 /// <summary>Number of occurrences of AName in ACounts (0 when absent).</summary>
 /// <param name="ACounts">Counts from UcCountIdents; must not be nil.</param>
 /// <param name="AName">Identifier; compared case-insensitively.</param>
 /// <returns>The count.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V152.UNCONN.CheckHanging (DRagLint.V152.UNCONN.pas), DRagLint.V152.UNCONN.CheckUnconnected (DRagLint.V152.UNCONN.pas)</para>
+/// <para>Calls: LowerCase</para>
+/// <para>Returns: 0</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UcIdentCount(const ACounts: TUcIdentCounts; const AName: string): Integer;
 
 /// <summary>For each name, True when the project index holds at least one reference
@@ -60,8 +98,15 @@ function UcIdentCount(const ACounts: TUcIdentCounts; const AName: string): Integ
 /// <param name="AStore">Project index; must not be nil.</param>
 /// <param name="ANames">Names to look up; one indexed query for all of them.</param>
 /// <returns>One flag per name, same order.</returns>
-/// <remarks>By name, not by resolved symbol: a homonym anywhere in the project counts as
-/// a use. That keeps both rules on the silent side when resolution is incomplete.</remarks>
+/// <remarks>
+/// By name, not by resolved symbol: a homonym anywhere in the project counts as
+/// a use. That keeps both rules on the silent side when resolution is incomplete.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V152.UNCONN.UsedInIndex (DRagLint.V152.UNCONN.pas)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.CountCallerSitesByNames</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CountCallerSitesByNames"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UcNamesReferenced(const AStore: ISymbolStore; const ANames: TArray<string>): TArray<Boolean>;
 
 implementation

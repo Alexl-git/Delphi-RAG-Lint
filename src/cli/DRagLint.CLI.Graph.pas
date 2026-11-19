@@ -13,23 +13,72 @@ uses
 /// <summary>drag-lint graph: the unit-level dependency graph in Graphviz DOT or Mermaid, one edge per referring -> defining file, weighted by reference count.</summary>
 /// <param name="AArgs">--db and --format dot|mermaid.</param>
 /// <returns>0 on success; nonzero on a usage error or a missing index.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: ChangeFileExt, CharInSet, DRagLint.CLI.Graph.DoGraph.GraphJsonOrHtml, DRagLint.CLI.Graph.DoGraph.SanitizeId, DRagLint.CLI.Graph.DoGraph.UnitName, DRagLint.Core.Model.JsonEscape, DRagLint.Core.OutputEncoding.WriteOutputFile, DRagLint.Storage.FileMembership.ConnectReadOnly, ExtractFileName, GraphTextNodesHtml (+6 more)</para>
+/// <para>Returns: 2; 0</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 137 lines (full implementation)</para>
+/// <para>SQL: reads FILES, REFS, SYMBOLS</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Graph.DoGraph.GraphJsonOrHtml"/>
+/// <seealso cref="DRagLint.CLI.Graph.DoGraph.SanitizeId"/>
+/// <seealso cref="DRagLint.CLI.Graph.DoGraph.UnitName"/>
+/// <seealso cref="DRagLint.Core.Model.JsonEscape"/>
+/// <seealso cref="DRagLint.Core.OutputEncoding.WriteOutputFile"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoGraph(const AArgs: TArgs): Integer;
 
 /// <summary>drag-lint arch-diagram --db D [--output F] [--json]: one self-contained HTML layer diagram of
 /// the project's units by folder, or its model as JSON. Spec 2026-11-06-archify-layer-diagrams.</summary>
 /// <param name="AArgs">Parsed CLI args.</param>
 /// <returns>0 when written; 2 on a missing or stale DB, or an index with no units.</returns>
-/// <remarks>Read-only. Same DB, same bytes: nothing in the output depends on the clock.</remarks>
+/// <remarks>
+/// Read-only. Same DB, same bytes: nothing in the output depends on the clock.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Charts.ArchDiagram.ArchDiagramHtml, DRagLint.Charts.ArchDiagram.ArchModelJson, DRagLint.Charts.ArchDiagram.BuildArchModel, DRagLint.CLI.Common.ExplicitDbsExist, DRagLint.CLI.Common.NoDbResolved, DRagLint.CLI.Common.OpenReadOnlyStore, DRagLint.CLI.Common.StaleDbRefusesRun, DRagLint.Core.OutputEncoding.WriteOutputFile, Writeln</para>
+/// <para>Returns: 2; 0</para>
+/// <para>Catches: EArchDiagram (swallowed)</para>
+/// <seealso cref="DRagLint.Charts.ArchDiagram.ArchDiagramHtml"/>
+/// <seealso cref="DRagLint.Charts.ArchDiagram.ArchModelJson"/>
+/// <seealso cref="DRagLint.Charts.ArchDiagram.BuildArchModel"/>
+/// <seealso cref="DRagLint.CLI.Common.ExplicitDbsExist"/>
+/// <seealso cref="DRagLint.CLI.Common.NoDbResolved"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoArchDiagram(const AArgs: TArgs): Integer;
 
 /// <summary>drag-lint diff --db old --db new: symbols added, removed and signature-changed between two indexes, by qualified name.</summary>
 /// <param name="AArgs">Two --db paths, old first.</param>
 /// <returns>0; 2 without two --db or when one is missing.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Storage.FileMembership.ConnectReadOnly, Format, Writeln</para>
+/// <para>Returns: 0</para>
+/// <para>Complexity: 13 (cyclomatic, outer body), 104 lines (full implementation)</para>
+/// <para>SQL: reads SYMBOLS</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Storage.FileMembership.ConnectReadOnly"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoDiff(const AArgs: TArgs): Integer;
 
 /// <summary>`drag-lint todos`: the task-marker comments of the .pas / .dpr / .dpk files (the six tags are listed beside the implementation), with file:line:col and an optional author tag; no index needed.</summary>
 /// <param name="AArgs">The path to scan and --json.</param>
 /// <returns>0 on success; nonzero on a usage error.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: Copy, Default, Format, StringReplace, Trim, UpperCase, Writeln</para>
+/// <para>Returns: 0</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 108 lines (full implementation)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoTodos(const AArgs: TArgs): Integer;
 
 implementation

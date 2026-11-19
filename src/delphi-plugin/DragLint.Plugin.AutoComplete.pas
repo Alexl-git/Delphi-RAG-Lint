@@ -23,7 +23,7 @@ interface
 procedure StartAutoComplete;
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.Editor.UnregisterDragLintMenu (DragLint.Plugin.Editor.pas), initialization/finalization (DragLint.Plugin.AutoComplete.pas)</para>
+/// <para>Called from: DragLint.Plugin.AutoComplete.finalization (DragLint.Plugin.AutoComplete.pas), DragLint.Plugin.Editor.UnregisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
 /// <para>Calls: FreeAndNil</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

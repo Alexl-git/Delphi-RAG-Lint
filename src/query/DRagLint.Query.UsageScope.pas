@@ -24,16 +24,27 @@ uses
 
 type
   /// <summary>The scope of one Find Usages question.</summary>
-  /// <remarks>usSymbol = the bound declaration in this project (default);
+  /// <remarks>
+  /// usSymbol = the bound declaration in this project (default);
   /// usProject = the name in this project; usGroup = the name in the project
-  /// group; usEverywhere = the name in every indexed database.</remarks>
+  /// group; usEverywhere = the name in every indexed database.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.LSP.Server.pas) ?, DRagLint.CLI.DoUsages (DRagLint.CLI.pas) ?, DRagLint.LSP.Server.TLSPServer.ExtraScopeStores (DRagLint.LSP.Server.pas) ?, DRagLint.Query.UsageScope.TryParseUsageScope (DRagLint.Query.UsageScope.pas), DRagLint.Query.UsageScope.UsageScopeChoices (DRagLint.Query.UsageScope.pas) (+7 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUsageScope = (usSymbol, usProject, usGroup, usEverywhere);
 
   /// <summary>What a Find Usages question is bound to in ONE store.</summary>
-  /// <remarks>Bound = False means nothing was bound: the caller answers by name
+  /// <remarks>
+  /// Bound = False means nothing was bound: the caller answers by name
   /// (scope project) and says so. When Bound, either HasDecl (Decl is a
   /// declaration of that store) or QName is a library target the store records
-  /// as refs.external_target (no declaration in a project index).</remarks>
+  /// as refs.external_target (no declaration in a project index).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoUsages (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleUsages (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.UsagesText (DRagLint.MCP.Server.pas), DRagLint.Query.UsageScope.BindUsageAt (DRagLint.Query.UsageScope.pas), DRagLint.Query.UsageScope.DeclBinding (DRagLint.Query.UsageScope.pas) (+3 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Server, DRagLint.MCP.Server, DRagLint.Query.UsageScope</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUsageBinding = record
     /// <summary>The bare identifier asked about, e.g. 'Run'.</summary>
     Ident: string;
@@ -64,10 +75,24 @@ const
 /// the IDE captions ('This symbol', ...) are accepted too.</param>
 /// <param name="AScope">Receives the scope on True; USAGE_SCOPE_DEFAULT otherwise.</param>
 /// <returns>True when AText names a scope. '' is not a scope (False).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoUsages (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.ApplyUsageSettings (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleUsages (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+/// <para>Calls: SameText, Trim</para>
+/// <para>Returns: True; False</para>
+/// <para>Mutates: AScope (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TryParseUsageScope(const AText: string; out AScope: TUsageScope): Boolean;
 
 /// <summary>The scope words joined for a message: 'symbol|project|group|everywhere'.</summary>
 /// <returns>The four words, '|'-separated, in enum order.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoUsages (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.ApplyUsageSettings (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleUsages (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UsageScopeChoices: string;
 
 /// <summary>Binds the identifier at a source position to what the resolver bound
@@ -81,8 +106,21 @@ function UsageScopeChoices: string;
 /// refs.symbol_id declaration, else to its external target. With no reference
 /// there, a declaration of AIdent in AFile whose declaration, forward or
 /// implementation header line is ALine1 is bound. Otherwise Bound = False.</returns>
-/// <remarks>Uses the index's own binding (refs.symbol_id), the same one the
-/// symbol-scope filter reads, so the cursor's symbol and its usage set agree.</remarks>
+/// <remarks>
+/// Uses the index's own binding (refs.symbol_id), the same one the
+/// symbol-scope filter reads, so the cursor's symbol and its usage set agree.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoUsages (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.AddBoundReferences (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleUsages (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.UsagesText (DRagLint.MCP.Server.pas)</para>
+/// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Query.UsageScope.DeclBinding</para>
+/// <para>Returns: Default(TUsageBinding); DeclBinding(AIdent, D)</para>
+/// <para>Complexity: 17 (cyclomatic, outer body), 30 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
+/// <seealso cref="DRagLint.Query.UsageScope.DeclBinding"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BindUsageAt(const AStore: ISymbolStore; const AFile, AIdent: string; ALine1, ACol1: Integer): TUsageBinding;
 
 /// <summary>The identifier at a 1-based position of a source file (a position
@@ -91,6 +129,15 @@ function BindUsageAt(const AStore: ISymbolStore; const AFile, AIdent: string; AL
 /// <param name="ALine1">1-based line.</param>
 /// <param name="ACol1">1-based column; 0 or less = the first identifier on the line.</param>
 /// <returns>The identifier, or '' when the file, line or column has none.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoUsages (DRagLint.CLI.pas), DRagLint.MCP.Server.UsagesText (DRagLint.MCP.Server.pas)</para>
+/// <para>Calls: CharInSet, DRagLint.Resolver.TypeAt.TTypeAtResolver.ExtractTokenAt</para>
+/// <para>Returns: ''; TTypeAtResolver.ExtractTokenAt(Text, Col, PrecedingDot, Lhs)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Resolver.TypeAt.TTypeAtResolver.ExtractTokenAt"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IdentifierAtFilePosition(const AFile: string; ALine1, ACol1: Integer): string;
 
 /// <summary>The usage rows of a binding: the refs the resolver bound to it.</summary>
@@ -99,6 +146,15 @@ function IdentifierAtFilePosition(const AFile: string; ALine1, ACol1: Integer): 
 /// <param name="ADecls">Receives the declaration rows to report: [Decl] or empty.</param>
 /// <returns>DRagLint.Query.Callers.UsageRefsForName over the bound name and
 /// declaration -- unbound and other same-named rows are left out.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoUsages (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.AddBoundReferences (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleUsages (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.UsagesText (DRagLint.MCP.Server.pas)</para>
+/// <para>Calls: DRagLint.Query.Callers.UsageRefsForName</para>
+/// <para>Returns: nil; UsageRefsForName(AStore, QName, ADecls)</para>
+/// <para>Mutates: ADecls (out)</para>
+/// <seealso cref="DRagLint.Query.Callers.UsageRefsForName"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BoundUsageRefs(const AStore: ISymbolStore; const ABinding: TUsageBinding;
   out ADecls: TArray<TSymbol>): TArray<TReference>;
 
@@ -116,6 +172,21 @@ function BoundUsageRefs(const AStore: ISymbolStore; const ABinding: TUsageBindin
 /// &lt;project folder&gt;\_D-RAG\&lt;base&gt;.sqlite) that exists. usEverywhere:
 /// AProjectDbs plus every existing database the manifest selects for the
 /// platform. Case-insensitive duplicates are dropped.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoUsages (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.ExtraScopeStores (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.UsagesText (DRagLint.MCP.Server.pas)</para>
+/// <para>Calls: Default, DRagLint.Index.DbSelect.TDbSelect.Resolve, DRagLint.Index.Manifest.TManifestIO.Load, DRagLint.Project.Resolver.TProjectResolver.Create, DRagLint.Query.UsageScope.AddUnique, DRagLint.Query.UsageScope.GroupMemberDb, DRagLint.Query.UsageScope.GroupProjectFiles, DRagLint.Query.UsageScope.UsageScopeExcludesLibraries, DRagLint.Query.UsageScope.WithoutLibraryDbs, ExtractFilePath, ParamStr</para>
+/// <para>Returns: nil</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Mutates: ANote (out)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Index.DbSelect.TDbSelect.Resolve"/>
+/// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
+/// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+/// <seealso cref="DRagLint.Query.UsageScope.AddUnique"/>
+/// <seealso cref="DRagLint.Query.UsageScope.GroupMemberDb"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UsageScopeDbs(AScope: TUsageScope; const AProjectDbs: TArray<string>;
   const AGroupFile, APlatform: string; out ANote: string): TArray<string>;
 
@@ -123,6 +194,13 @@ function UsageScopeDbs(AScope: TUsageScope; const AProjectDbs: TArray<string>;
 /// the convention the LSP's caller scoping has always used)?</summary>
 /// <param name="APath">A database path; only its file name is read.</param>
 /// <returns>True when the file name starts with 'library-' (case-insensitive).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeReferences (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleUsages (DRagLint.LSP.Server.pas), DRagLint.Query.UsageScope.WithoutLibraryDbs (DRagLint.Query.UsageScope.pas)</para>
+/// <para>Calls: ExtractFileName, StartsText</para>
+/// <para>Returns: StartsText('library-', ExtractFileName(APath))</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsLibraryDbPath(const APath: string): Boolean;
 
 /// <summary>Does AScope answer from this project's own index only? symbol and project do
@@ -130,6 +208,13 @@ function IsLibraryDbPath(const APath: string): Boolean;
 /// read every database they name.</summary>
 /// <param name="AScope">The scope answered.</param>
 /// <returns>True for usSymbol and usProject.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleUsages (DRagLint.LSP.Server.pas), DRagLint.Query.UsageScope.UsageScopeDbs (DRagLint.Query.UsageScope.pas)</para>
+/// <para>Returns: AScope in [usSymbol, usProject]</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UsageScopeExcludesLibraries(AScope: TUsageScope): Boolean;
 
 /// <summary>APaths without the library databases (IsLibraryDbPath), for a scope that
@@ -137,6 +222,13 @@ function UsageScopeExcludesLibraries(AScope: TUsageScope): Boolean;
 /// <param name="APaths">The databases a question was given, in order.</param>
 /// <returns>The non-library paths in order; APaths unchanged when every one is a library
 /// (a library asked alone is still answered) or none is.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoUsages (DRagLint.CLI.pas), DRagLint.Query.UsageScope.UsageScopeDbs (DRagLint.Query.UsageScope.pas)</para>
+/// <para>Calls: DRagLint.Query.UsageScope.IsLibraryDbPath</para>
+/// <seealso cref="DRagLint.Query.UsageScope.IsLibraryDbPath"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function WithoutLibraryDbs(const APaths: TArray<string>): TArray<string>;
 
 

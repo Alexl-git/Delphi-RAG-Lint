@@ -103,6 +103,16 @@ function ApplyTolerances(var ABytes: TBytes): Integer;
 /// misinterpret. The grammar fix proper belongs to tree-sitter-delphi13; this
 /// is the in-repo neutralisation until it lands. The harvested literal text
 /// loses exactly the blanked characters. Thread-safe (no shared state).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Preprocess.PreprocessWithSites (DRagLint.Preprocess.pas)</para>
+/// <para>Calls: Copy, DRagLint.Preprocess.Tolerance.BlankMultiline, DRagLint.Preprocess.Tolerance.FindMultilineClose, DRagLint.Preprocess.Tolerance.QuoteRunAt, DRagLint.Preprocess.Tolerance.RestOfLineBlank, DRagLint.Preprocess.Tolerance.SkipNonCode, DRagLint.Preprocess.Tolerance.SkipOrdinaryString, Odd</para>
+/// <para>Returns: AUtf8; Copy(AUtf8)</para>
+/// <seealso cref="DRagLint.Preprocess.Tolerance.BlankMultiline"/>
+/// <seealso cref="DRagLint.Preprocess.Tolerance.FindMultilineClose"/>
+/// <seealso cref="DRagLint.Preprocess.Tolerance.QuoteRunAt"/>
+/// <seealso cref="DRagLint.Preprocess.Tolerance.RestOfLineBlank"/>
+/// <seealso cref="DRagLint.Preprocess.Tolerance.SkipNonCode"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function NeutralizeMultilineStrings(const AUtf8: TBytes): TBytes;
 

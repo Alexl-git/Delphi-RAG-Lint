@@ -29,11 +29,22 @@ uses
 
 type
   /// <summary>What an ordered root is.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.HappensBefore.Roots.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THbRootKind = (hrkInitialization, hrkProgramBlock);
 
   /// <summary>One link of an ordered root chain.</summary>
-  /// <remarks>SymbolId is the initialization section symbol (hrkInitialization) or the program symbol
-  /// (hrkProgramBlock). UnitName is '' for the program block.</remarks>
+  /// <remarks>
+  /// SymbolId is the initialization section symbol (hrkInitialization) or the program symbol
+  /// (hrkProgramBlock). UnitName is '' for the program block.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.HappensBefore.Roots.pas) ?, DRagLint.Query.HappensBefore.Roots.LoadRoots (DRagLint.Query.HappensBefore.Roots.pas)</para>
+  /// <para>Used in units: DRagLint.Query.HappensBefore.Roots</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THbOrderedRoot = record
     Kind: THbRootKind;
     SymbolId: Int64;
@@ -44,10 +55,16 @@ type
   end;
 
   /// <summary>The ordered root chain of one program (spec 5.2).</summary>
-  /// <remarks>Roots run first to last. A unit without an initialization section is not a link (it runs
+  /// <remarks>
+  /// Roots run first to last. A unit without an initialization section is not a link (it runs
   /// nothing); the program block is the last link when the program symbol is indexed. Unreliable: some uses
   /// entry that decides the order is conditional or include-borne (reason code unreliable-order); the
-  /// chain is the order of the indexed configuration and UnreliableReason names the first such site.</remarks>
+  /// chain is the order of the indexed configuration and UnreliableReason names the first such site.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.HappensBefore.Roots.pas) ?, DRagLint.Query.HappensBefore.Roots.LoadRoots (DRagLint.Query.HappensBefore.Roots.pas)</para>
+  /// <para>Used in units: DRagLint.Query.HappensBefore.Roots</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THbRootChain = record
     ProgramFileId: Int64;
     ProgramName: string;
@@ -57,16 +74,27 @@ type
   end;
 
   /// <summary>Every ordered root chain of the index, one per program file.</summary>
-  /// <remarks>Empty Chains: the index holds no program (a package or a unit set); every initialization
-  /// section is then unordered and the solver must not rely on any order.</remarks>
+  /// <remarks>
+  /// Empty Chains: the index holds no program (a package or a unit set); every initialization
+  /// section is then unordered and the solver must not rely on any order.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.HappensBefore.Roots.pas) ?, DRagLint.Query.HappensBefore.Roots.LoadRoots (DRagLint.Query.HappensBefore.Roots.pas)</para>
+  /// <para>Used in units: DRagLint.Query.HappensBefore.Roots</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THbRoots = record
     Chains: TArray<THbRootChain>;
   end;
 
   /// <summary>Why a routine is an unordered root (spec 5.2). Literals: EscapeClassCode.</summary>
-  /// <remarks>hecNone = not escaped: it runs only when its callers run (or it is an ordered root, or an
+  /// <remarks>
+  /// hecNone = not escaped: it runs only when its callers run (or it is an ordered root, or an
   /// override reached through its bases). The order is the order IsEscaped tests them; the first that holds
-  /// is reported.</remarks>
+  /// is reported.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.HappensBefore.Roots.pas), DRagLint.Query.HappensBefore.Roots.EscapeClassCode (DRagLint.Query.HappensBefore.Roots.pas), DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.ClassOf (DRagLint.Query.HappensBefore.Roots.pas), DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.DeclaredClassOf (DRagLint.Query.HappensBefore.Roots.pas), DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.MemberClassOf (DRagLint.Query.HappensBefore.Roots.pas) (+1 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THbEscapeClass = (hecNone, hecFinalization, hecClassCtorDtor, hecDfmEvent, hecMessageHandler,
     hecThreadExecute, hecExported, hecInterfaceMethod, hecPublished, hecAddressTaken, hecZeroCallers);
 
@@ -85,19 +113,177 @@ type
     FFileIds: TDictionary<string, Int64>;
     FStopCheck: TFunc<Boolean>;
     procedure LoadAnswers;
+    /// <summary><!-- drag-lint:auto sum -->True when pName descends from TThread (the
+    /// descendant set is loaded on the first question).</summary>
+    /// <param name="pName"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed:
+    /// FThreadClasses.Contains(LowerCase(pName)).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.MemberClassOf (DRagLint.Query.HappensBefore.Roots.pas)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, LowerCase</para>
+    /// <para>Reads: FThreadsLoaded, FStore, FThreadClasses   Writes: FThreadsLoaded</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.ClassOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.Create"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.DeclaredClassOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsThreadClass(const pName: string): Boolean;
+    /// <param name="pSym"><!-- drag-lint:auto type -->const TSymbol</param>
+    /// <returns><!-- drag-lint:auto -->TSymbol -- Observed: Default(TSymbol); P.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.MemberClassOf (DRagLint.Query.HappensBefore.Roots.pas)</para>
+    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById</para>
+    /// <para>Reads: FStore</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.ClassOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.Create"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.DeclaredClassOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ParentClassOf(const pSym: TSymbol): TSymbol;
+    /// <summary><!-- drag-lint:auto sum -->files.id of an indexed path (0 when the index
+    /// holds no symbol in it); cached per path.</summary>
+    /// <param name="pPath"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Int64 -- Observed: 0; S.FileId.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.IsCallRefAt (DRagLint.Query.HappensBefore.Roots.pas)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, LowerCase</para>
+    /// <para>Reads: FFileIds, FStore</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.ClassOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.Create"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.DeclaredClassOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function FileIdOf(const pPath: string): Int64;
+    /// <summary><!-- drag-lint:auto sum -->True when an `exports` clause names pSym: a
+    /// REF_KIND_EXPORT ref bound to it (1.52 EXTGAPS2). Before 1.52 the entry was a
+    /// 'call' ref with a call edge and this read the clause back from the source text.</summary>
+    /// <param name="pSym"><!-- drag-lint:auto type -->const TSymbol</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.ScanCallers (DRagLint.Query.HappensBefore.Roots.pas)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindReferencesTo, SameText</para>
+    /// <para>Reads: FStore</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindReferencesTo"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.ClassOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.Create"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.DeclaredClassOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsExportedByClause(const pSym: TSymbol): Boolean;
+    /// <param name="pSym"><!-- drag-lint:auto type -->const TSymbol</param>
+    /// <param name="pCaller"><!-- drag-lint:auto type -->const TResolvedCaller</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.ScanCallers (DRagLint.Query.HappensBefore.Roots.pas)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindRefsNamingInFiles, DRagLint.Query.HappensBefore.Roots.ReturnsValue, DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.FileIdOf, LowerCase, SameText</para>
+    /// <para>Reads: FStore</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindRefsNamingInFiles"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.ReturnsValue"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.FileIdOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.ClassOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsCallRefAt(const pSym: TSymbol; const pCaller: TResolvedCaller): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->True when some site calls pSym for real.
+    /// pAddressTaken: some site names it as a value (a callback edge, a bound non-call
+    /// ref, or an edge on a non-call ref). pExported: an `exports` clause names it.</summary>
+    /// <param name="pSym"><!-- drag-lint:auto type -->const TSymbol</param>
+    /// <param name="pAddressTaken"><!-- drag-lint:auto type -->out Boolean</param>
+    /// <param name="pExported"><!-- drag-lint:auto type -->out Boolean</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.ClassOf (DRagLint.Query.HappensBefore.Roots.pas)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.IsCallRefAt, DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.IsExportedByClause, SameText</para>
+    /// <para>Reads: FStore</para>
+    /// <para>Mutates: pAddressTaken (out), pExported (out)</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.IsCallRefAt"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.IsExportedByClause"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.ClassOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ScanCallers(const pSym: TSymbol; out pAddressTaken, pExported: Boolean): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->The classes that need only the symbol row and
+    /// its facts: finalization, class ctor/dtor, DFM event, message handler, then
+    /// MemberClassOf.</summary>
+    /// <param name="pSym"><!-- drag-lint:auto type -->const TSymbol</param>
+    /// <returns><!-- drag-lint:auto -->THbEscapeClass -- Observed: if pSym.Kind =
+    /// skFinalization then hecFinalization.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.ClassOf (DRagLint.Query.HappensBefore.Roots.pas)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetSymbolFacts, DRagLint.Query.HappensBefore.Roots.HasWord, DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.MemberClassOf</para>
+    /// <para>Reads: FStore</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolFacts"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.HasWord"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.MemberClassOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.ClassOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function DeclaredClassOf(const pSym: TSymbol): THbEscapeClass;
+    /// <summary><!-- drag-lint:auto sum -->A plain routine: exported by directive or not
+    /// escaped by declaration. A method: thread Execute, interface answer, published (the
+    /// unlabelled leading section counts as published).</summary>
+    /// <param name="pSym"><!-- drag-lint:auto type -->const TSymbol</param>
+    /// <returns><!-- drag-lint:auto -->THbEscapeClass -- Observed: if
+    /// FAnswers.Contains(pSym.Id) then hecInterfaceMethod.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.DeclaredClassOf (DRagLint.Query.HappensBefore.Roots.pas)</para>
+    /// <para>Calls: DRagLint.Query.HappensBefore.Roots.HasWord, DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.IsThreadClass, DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.LoadAnswers, DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.ParentClassOf, SameText, Trim</para>
+    /// <para>Reads: FAnswers</para>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.HasWord"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.IsThreadClass"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.LoadAnswers"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.ParentClassOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.ClassOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function MemberClassOf(const pSym: TSymbol): THbEscapeClass;
   public
     /// <summary>Creates a classifier over pStore.</summary>
     /// <param name="pStore">The project index; must not be nil.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Query.HappensBefore.Receiver.TRecvSolver.Create (DRagLint.Query.HappensBefore.Receiver.pas), DRagLint.Query.HappensBefore.Roots.EscapeClassOf (DRagLint.Query.HappensBefore.Roots.pas), DRagLint.Query.HappensBefore.TSolver.Create (DRagLint.Query.HappensBefore.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FStore, FAnswers, FThreadClasses, FFileIds</para>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.ClassOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.DeclaredClassOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.Destroy"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.FileIdOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.IsCallRefAt"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(const pStore: ISymbolStore);
     /// <summary>Frees the caches.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FFileIds, FThreadClasses, FAnswers</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.ClassOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.Create"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.DeclaredClassOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.FileIdOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.IsCallRefAt"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>v152 HOVERCAP: asked once per interface while the interface-answer set loads (the classifier's
     /// one whole-index walk, ~2.5 s on the drag-lint index); True ends the walk with the set PARTIAL.</summary>
@@ -110,11 +296,24 @@ type
     /// <returns>hecNone for an ordered root (initialization, program block), an override with a base, a
     /// routine with at least one real call and no other escape, or an unknown id; else the first escape
     /// class that holds.</returns>
-    /// <remarks>A routine passed as a value (call_edges confidence 'callback', a bound non-call ref such as
+    /// <remarks>
+    /// A routine passed as a value (call_edges confidence 'callback', a bound non-call ref such as
     /// `@Proc`, or a call edge whose ref is no `call` ref, as the index records `OnX := H.Handler`) is
     /// hecAddressTaken. A routine named in an `exports` clause (or carrying the `export` directive) is
     /// hecExported; the clause entry is its REF_KIND_EXPORT ref (1.52). The leading unlabelled section of a class is treated as
-    /// published (under $M+ it is; the index cannot tell $M+), which can only add escapes, never hide one.</remarks>
+    /// published (under $M+ it is; the index cannot tell $M+), which can only add escapes, never hide one.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Query.HappensBefore.Receiver.TRecvSolver.OnlyAfterConstruction (DRagLint.Query.HappensBefore.Receiver.pas), DRagLint.Query.HappensBefore.Receiver.TRecvSolver.ProveCallers (DRagLint.Query.HappensBefore.Receiver.pas), DRagLint.Query.HappensBefore.Roots.EscapeClassOf (DRagLint.Query.HappensBefore.Roots.pas), DRagLint.Query.HappensBefore.TSolver.IsRoot (DRagLint.Query.HappensBefore.pas), DRagLint.Query.HappensBefore.TSolver.JudgeUse (DRagLint.Query.HappensBefore.pas) (+1 more)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindDispatchLinks, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.DeclaredClassOf, DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.ScanCallers</para>
+    /// <para>Returns: hecNone; DeclaredClassOf(S); hecExported; hecAddressTaken; hecZeroCallers</para>
+    /// <para>Reads: FStore</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindDispatchLinks"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.DeclaredClassOf"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.ScanCallers"/>
+    /// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ClassOf(pRoutineId: Int64): THbEscapeClass;
   end;
 
@@ -122,7 +321,15 @@ type
 /// <param name="pStore">The project index; nil yields no chains.</param>
 /// <returns>One chain per program file, in ProgramInitOrders order; each chain lists the initialization
 /// sections in the order init-order-hazard computes, then the program block.</returns>
-/// <remarks>Read-only. Not thread-safe; reads the index once per call, nothing is cached.</remarks>
+/// <remarks>
+/// Read-only. Not thread-safe; reads the index once per call, nothing is cached.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.HappensBefore.TSolver.LoadPrograms (DRagLint.Query.HappensBefore.pas)</para>
+/// <para>Calls: Default, DRagLint.Lint.InitSections.ProgramInitOrders</para>
+/// <para>Returns: Default(THbRoots)</para>
+/// <seealso cref="DRagLint.Lint.InitSections.ProgramInitOrders"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LoadRoots(const pStore: ISymbolStore): THbRoots;  // dl:ok unused-public-symbol@a866 -- REVIEWED 2026-11-17 v152 HBROOTS: check-init roots API for lanes HBSOLVER / HBEVORD (merge after HBROOTS); today only tests\fixtures\happens-before\roots-harness\RootsHarness.dpr calls it
 
 /// <summary>The ordered root chains of init orders a caller already holds (LoadRoots without the walk).</summary>
@@ -148,19 +355,42 @@ function HbCachedInitOrders(const pStore: ISymbolStore; const pStop: TFunc<Boole
 /// <param name="pStore">The project index; must not be nil.</param>
 /// <param name="pRoutineId">symbols.id of the routine.</param>
 /// <returns>EscapeClassOf(...) &lt;&gt; hecNone.</returns>
-/// <remarks>Builds a classifier per call; a caller judging many routines keeps one THbEscapeClassifier.</remarks>
+/// <remarks>
+/// Builds a classifier per call; a caller judging many routines keeps one THbEscapeClassifier.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: DRagLint.Query.HappensBefore.Roots.EscapeClassOf</para>
+/// <para>Returns: EscapeClassOf(pStore, pRoutineId) &lt;&gt; hecNone</para>
+/// <seealso cref="DRagLint.Query.HappensBefore.Roots.EscapeClassOf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsEscaped(const pStore: ISymbolStore; pRoutineId: Int64): Boolean;  // dl:ok unused-public-symbol@4d67 -- REVIEWED 2026-11-17 v152 HBROOTS: check-init roots API for lanes HBSOLVER / HBEVORD (merge after HBROOTS); today only tests\fixtures\happens-before\roots-harness\RootsHarness.dpr calls it
 
 /// <summary>The escape class of one routine (see THbEscapeClassifier.ClassOf).</summary>
 /// <param name="pStore">The project index; must not be nil.</param>
 /// <param name="pRoutineId">symbols.id of the routine.</param>
 /// <returns>The first escape class that holds, or hecNone.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.HappensBefore.Roots.IsEscaped (DRagLint.Query.HappensBefore.Roots.pas)</para>
+/// <para>Calls: DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.ClassOf, DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.Create</para>
+/// <para>Returns: C.ClassOf(pRoutineId)</para>
+/// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.ClassOf"/>
+/// <seealso cref="DRagLint.Query.HappensBefore.Roots.THbEscapeClassifier.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function EscapeClassOf(const pStore: ISymbolStore; pRoutineId: Int64): THbEscapeClass;  // dl:ok unused-public-symbol@9889 -- REVIEWED 2026-11-17 v152 HBROOTS: check-init roots API for lanes HBSOLVER / HBEVORD (merge after HBROOTS); today only tests\fixtures\happens-before\roots-harness\RootsHarness.dpr calls it
 
 /// <summary>The literal of an escape class: none, finalization, class-ctor-dtor, dfm-event,
 /// message-handler, thread-execute, exported, interface-method, published, address-taken, zero-callers.</summary>
 /// <param name="pClass">The escape class.</param>
 /// <returns>The literal used in JSON and in --explain text.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.HappensBefore.Receiver.TRecvSolver.OnlyAfterConstruction (DRagLint.Query.HappensBefore.Receiver.pas), DRagLint.Query.HappensBefore.Receiver.TRecvSolver.ProveCallers (DRagLint.Query.HappensBefore.Receiver.pas), DRagLint.Query.HappensBefore.TSolver.IsRoot (DRagLint.Query.HappensBefore.pas), DRagLint.Query.HappensBefore.TSolver.RootReasons (DRagLint.Query.HappensBefore.pas)</para>
+/// <para>Returns: ESCAPE_CODES[pClass]</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function EscapeClassCode(pClass: THbEscapeClass): string;  // dl:ok unused-public-symbol@fe2b -- REVIEWED 2026-11-17 v152 HBROOTS: check-init roots API for lanes HBSOLVER / HBEVORD (merge after HBROOTS); today only tests\fixtures\happens-before\roots-harness\RootsHarness.dpr calls it
 
 implementation

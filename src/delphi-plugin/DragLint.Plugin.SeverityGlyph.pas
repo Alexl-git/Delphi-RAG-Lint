@@ -186,7 +186,7 @@ type
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.SeverityGlyph.StructureGlyphImages (DragLint.Plugin.SeverityGlyph.pas)</para>
-/// <para>Returns: KG_FOLDER_FILL; KG_UNIT_FILL; KG_CLASS_FILL; KG_INTERFACE_FILL; KG_RECORD_FILL; KG_ENUM_FILL</para>
+/// <para>Returns: KG_FOLDER_FILL; KG_UNIT_FILL; KG_CLASS_FILL; KG_INTERFACE_FILL; KG_RECORD_FILL; KG_ENUM_FILL; KG_ROUTINE_FILL; KG_PROPERTY_FILL; KG_CONST_FILL; KG_DATA_FILL; KG_SQL_FILL; KG_OTHER_FILL</para>
 /// <para>Complexity: 12 (cyclomatic, outer body), 16 lines (full implementation)</para>
 /// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->

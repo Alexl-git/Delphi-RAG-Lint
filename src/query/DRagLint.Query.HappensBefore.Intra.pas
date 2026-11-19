@@ -41,7 +41,13 @@ uses
 
 type
   /// <summary>The answer for one QUERY site of <see cref="SolveRoutine"/>.</summary>
-  /// <remarks>Done is a MUST answer: False means "not proven", never "proven unset".</remarks>
+  /// <remarks>
+  /// Done is a MUST answer: False means "not proven", never "proven unset".
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.HappensBefore.Intra.pas) ?, declaration (DRagLint.Query.HappensBefore.pas) ?, DRagLint.Query.HappensBefore.TSolver.JudgeUse (DRagLint.Query.HappensBefore.pas) ?, DRagLint.Query.HappensBefore.TSolver.PrefixDone (DRagLint.Query.HappensBefore.pas) ?, DRagLint.Query.HappensBefore.TSolver.StateAt (DRagLint.Query.HappensBefore.pas)</para>
+  /// <para>Used in units: DRagLint.Query.HappensBefore, DRagLint.Query.HappensBefore.Intra</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THbQueryState = record
     /// <summary>The query site as passed in.</summary>
     Site: THbSite;
@@ -56,6 +62,12 @@ type
   end;
 
   /// <summary>Result of <see cref="SolveRoutine"/>: the bit before each query and at normal exit.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Query.HappensBefore.Fields.TFieldSolver.Solve (DRagLint.Query.HappensBefore.Fields.pas), DRagLint.Query.HappensBefore.Intra.SolveRoutine (DRagLint.Query.HappensBefore.Intra.pas), DRagLint.Query.HappensBefore.Receiver.TRecvSolver.Solve (DRagLint.Query.HappensBefore.Receiver.pas), DRagLint.Query.HappensBefore.TopLevelSolve (DRagLint.Query.HappensBefore.pas), DRagLint.Query.HappensBefore.TSolver.RawSolve (DRagLint.Query.HappensBefore.pas) (+9 more)</para>
+  /// <para>Used in units: DRagLint.Query.HappensBefore, DRagLint.Query.HappensBefore.Fields, DRagLint.Query.HappensBefore.Intra, DRagLint.Query.HappensBefore.Receiver</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THbRoutineState = record
     /// <summary>The routine asked about (symbols.id).</summary>
     RoutineId: Int64;
@@ -84,8 +96,20 @@ type
 /// <param name="pEntryDone">The bit on routine entry (False = MustA question).</param>
 /// <returns>The state just before each query and at normal exit; never raises for a missing
 /// routine (Found = False).</returns>
-/// <remarks>Parses through TAstParseCache (the cache owns the tree; not thread-safe, like the cache).
-/// Every doubt answers False: a wrong True is a wrong SET.</remarks>
+/// <remarks>
+/// Parses through TAstParseCache (the cache owns the tree; not thread-safe, like the cache).
+/// Every doubt answers False: a wrong True is a wrong SET.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.HappensBefore.Fields.TFieldSolver.Solve (DRagLint.Query.HappensBefore.Fields.pas), DRagLint.Query.HappensBefore.Receiver.TRecvSolver.Solve (DRagLint.Query.HappensBefore.Receiver.pas), DRagLint.Query.HappensBefore.TSolver.RawSolve (DRagLint.Query.HappensBefore.pas)</para>
+/// <para>Calls: Default, DRagLint.Analysis.Cfg.TCfgBuilder.Build, DRagLint.Query.HappensBefore.Intra.LocateDefProc, DRagLint.Query.HappensBefore.Intra.TIntraSolver.Create, DRagLint.Query.HappensBefore.Intra.TIntraSolver.Run, TreeSitter.TTSNodeHelper.IsNull</para>
+/// <para>Returns: Default(THbRoutineState)</para>
+/// <seealso cref="DRagLint.Analysis.Cfg.TCfgBuilder.Build"/>
+/// <seealso cref="DRagLint.Query.HappensBefore.Intra.LocateDefProc"/>
+/// <seealso cref="DRagLint.Query.HappensBefore.Intra.TIntraSolver.Create"/>
+/// <seealso cref="DRagLint.Query.HappensBefore.Intra.TIntraSolver.Run"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SolveRoutine(const pStore: ISymbolStore; pRoutineId: Int64; const pMarks, pQueries: TArray<THbSite>;
   pEntryDone: Boolean): THbRoutineState;
 
@@ -95,8 +119,20 @@ function SolveRoutine(const pStore: ISymbolStore; pRoutineId: Int64; const pMark
 /// <param name="pSite">1-based line and column; Col &lt;= 0 means "the whole line": the node only has to
 /// intersect that line.</param>
 /// <returns>True when the site is at or after the node start and before its end.</returns>
-/// <remarks>pSrc = the bytes the tree was parsed from: node byte columns are mapped to the index's
-/// CHARACTER columns (1.52 EXTGAPS2) before they are compared with pSite.</remarks>
+/// <remarks>
+/// pSrc = the bytes the tree was parsed from: node byte columns are mapped to the index's
+/// CHARACTER columns (1.52 EXTGAPS2) before they are compared with pSite.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.HappensBefore.Intra.TIntraSolver.ApplyMarks (DRagLint.Query.HappensBefore.Intra.pas), DRagLint.Query.HappensBefore.Intra.TIntraSolver.Occurrences (DRagLint.Query.HappensBefore.Intra.pas), DRagLint.Query.HappensBefore.Intra.TIntraSolver.Run (DRagLint.Query.HappensBefore.Intra.pas), DRagLint.Query.HappensBefore.Intra.WalkTo (DRagLint.Query.HappensBefore.Intra.pas), DRagLint.Query.HappensBefore.MarkIsMust (DRagLint.Query.HappensBefore.pas) (+1 more)</para>
+/// <para>Calls: DRagLint.Core.Encoding.Utf8ByteColToCharCol, InRange, Integer, TreeSitter.TTSNodeHelper.EndByte, TreeSitter.TTSNodeHelper.EndPoint, TreeSitter.TTSNodeHelper.StartByte, TreeSitter.TTSNodeHelper.StartPoint</para>
+/// <para>Returns: AfterStart and BeforeEnd</para>
+/// <seealso cref="DRagLint.Core.Encoding.Utf8ByteColToCharCol"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.EndByte"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.EndPoint"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.StartByte"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.StartPoint"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HbNodeContains(const pSrc: TBytes; const pNode: TTSNode; const pSite: THbSite): Boolean;
 
 /// <summary>Walks from pItem down to the node that holds pSite and tells whether the site runs every
@@ -108,8 +144,17 @@ function HbNodeContains(const pSrc: TBytes; const pNode: TTSNode; const pSite: T
 /// there.</param>
 /// <returns>True when the site may NOT run when pItem runs: it sits under the right operand of a
 /// short-circuit `and` / `or`, or under an if-expression branch.</returns>
-/// <remarks>Shared by the CFG solver (SolveRoutine) and the top-level solver of
-/// DRagLint.Query.HappensBefore, so both apply the same cuts. Pure; no allocation beyond strings.</remarks>
+/// <remarks>
+/// Shared by the CFG solver (SolveRoutine) and the top-level solver of
+/// DRagLint.Query.HappensBefore, so both apply the same cuts. Pure; no allocation beyond strings.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.HappensBefore.Intra.TIntraSolver.PathTo (DRagLint.Query.HappensBefore.Intra.pas), DRagLint.Query.HappensBefore.MarkIsMust (DRagLint.Query.HappensBefore.pas), DRagLint.Query.HappensBefore.TopLevelSolve (DRagLint.Query.HappensBefore.pas)</para>
+/// <para>Calls: Default, DRagLint.Query.HappensBefore.Intra.WalkTo</para>
+/// <para>Returns: Path.Guarded</para>
+/// <para>Mutates: pInLambda (out)</para>
+/// <seealso cref="DRagLint.Query.HappensBefore.Intra.WalkTo"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HbSiteGuarded(const pSrc: TBytes; const pItem: TTSNode; const pSite: THbSite;
   out pInLambda: Boolean): Boolean;
 

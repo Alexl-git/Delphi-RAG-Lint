@@ -14,8 +14,8 @@ type
   /// empty at the depth cap or when a node is a cycle re-encounter.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Charts.Q.Butterfly.Flatten (DRagLint.Charts.Q.Butterfly.pas) ?, DRagLint.Charts.Q.WhoCalls.ExpandCallers (DRagLint.Charts.Q.WhoCalls.pas) ?, DRagLint.CLI.DoReverseCallTree.RenderNodeText (DRagLint.CLI.pas) ?, DRagLint.Report.RCallTree.BuildForwardCallTree.Expand (DRagLint.Report.RCallTree.pas), DRagLint.Report.RCallTree.BuildReverseCallTree.Expand (DRagLint.Report.RCallTree.pas) (+6 more)</para>
-  /// <para>Used in units: DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.WhoCalls, DRagLint.CLI, DRagLint.Report.RCallTree</para>
+  /// <para>Used by: DRagLint.Charts.Q.Butterfly.Flatten (DRagLint.Charts.Q.Butterfly.pas) ?, DRagLint.Charts.Q.WhoCalls.ExpandCallers (DRagLint.Charts.Q.WhoCalls.pas) ?, DRagLint.CLI.CallGraph.DoReverseCallTree.RenderNodeText (DRagLint.CLI.CallGraph.pas) ?, DRagLint.Report.RCallTree.BuildForwardCallTree.Expand (DRagLint.Report.RCallTree.pas), DRagLint.Report.RCallTree.BuildReverseCallTree.Expand (DRagLint.Report.RCallTree.pas) (+6 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.WhoCalls, DRagLint.CLI.CallGraph, DRagLint.Report.RCallTree</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRCallNode = record
@@ -30,8 +30,8 @@ type
   /// <summary>Whole-tree totals.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Report.RCallTree.pas) ?, DRagLint.CLI.DoButterfly.BuildSummaryJson (DRagLint.CLI.pas) ?, DRagLint.CLI.DoReverseCallTree.BuildSummaryJson (DRagLint.CLI.pas) ?, DRagLint.Report.RCallTree.BuildForwardCallTree (DRagLint.Report.RCallTree.pas), DRagLint.Report.RCallTree.BuildReverseCallTree (DRagLint.Report.RCallTree.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Report.RCallTree</para>
+  /// <para>Used by: declaration (DRagLint.Report.RCallTree.pas) ?, DRagLint.CLI.CallGraph.DoButterfly.BuildSummaryJson (DRagLint.CLI.CallGraph.pas) ?, DRagLint.CLI.CallGraph.DoReverseCallTree.BuildSummaryJson (DRagLint.CLI.CallGraph.pas) ?, DRagLint.Report.RCallTree.BuildForwardCallTree (DRagLint.Report.RCallTree.pas), DRagLint.Report.RCallTree.BuildReverseCallTree (DRagLint.Report.RCallTree.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.CallGraph, DRagLint.Report.RCallTree</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRCallSummary = record
@@ -44,8 +44,8 @@ type
   /// <summary>The reverse call tree rooted at a symbol, plus summary totals.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Report.RCallTree.pas), DRagLint.CLI.DoButterfly (DRagLint.CLI.pas), DRagLint.CLI.DoButterfly.BuildTreeJson (DRagLint.CLI.pas), DRagLint.CLI.DoReverseCallTree (DRagLint.CLI.pas), DRagLint.CLI.DoReverseCallTree.BuildTreeJson (DRagLint.CLI.pas) (+2 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Report.RCallTree</para>
+  /// <para>Used by: declaration (DRagLint.Report.RCallTree.pas), DRagLint.CLI.CallGraph.DoButterfly (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.CallGraph.DoButterfly.BuildTreeJson (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.CallGraph.DoReverseCallTree (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.CallGraph.DoReverseCallTree.BuildTreeJson (DRagLint.CLI.CallGraph.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.CLI.CallGraph, DRagLint.Report.RCallTree</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRCallTree = record
@@ -56,8 +56,8 @@ type
   /// <summary>Tuning knobs for BuildReverseCallTree.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Report.RCallTree.pas) ?, DRagLint.Charts.Q.Butterfly.Emit (DRagLint.Charts.Q.Butterfly.pas), DRagLint.Charts.Q.WhoCalls.EmitTree (DRagLint.Charts.Q.WhoCalls.pas), DRagLint.CLI.DoButterfly (DRagLint.CLI.pas) ?, DRagLint.CLI.DoReverseCallTree (DRagLint.CLI.pas) ? (+2 more)</para>
-  /// <para>Used in units: DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.WhoCalls, DRagLint.CLI, DRagLint.Report.RCallTree</para>
+  /// <para>Used by: declaration (DRagLint.Report.RCallTree.pas) ?, DRagLint.Charts.Q.Butterfly.Emit (DRagLint.Charts.Q.Butterfly.pas), DRagLint.Charts.Q.WhoCalls.EmitTree (DRagLint.Charts.Q.WhoCalls.pas), DRagLint.CLI.CallGraph.DoButterfly (DRagLint.CLI.CallGraph.pas) ?, DRagLint.CLI.CallGraph.DoReverseCallTree (DRagLint.CLI.CallGraph.pas) ? (+2 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.WhoCalls, DRagLint.CLI.CallGraph, DRagLint.Report.RCallTree</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRCallOptions = record
@@ -75,7 +75,7 @@ type
 /// <returns>The tree + summary. Root.Site is ''.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Q.Butterfly.Emit (DRagLint.Charts.Q.Butterfly.pas), DRagLint.Charts.Q.WhoCalls.EmitTree (DRagLint.Charts.Q.WhoCalls.pas), DRagLint.CLI.DoButterfly (DRagLint.CLI.pas), DRagLint.CLI.DoReverseCallTree (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.Charts.Q.Butterfly.Emit (DRagLint.Charts.Q.Butterfly.pas), DRagLint.Charts.Q.WhoCalls.EmitTree (DRagLint.Charts.Q.WhoCalls.pas), DRagLint.CLI.CallGraph.DoButterfly (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.CallGraph.DoReverseCallTree (DRagLint.CLI.CallGraph.pas)</para>
 /// <para>Calls: Copy, Default, DRagLint.Report.RCallTree.BuildReverseCallTree.Expand, Format, LastDelimiter, StrToIntDef</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Report.RCallTree.BuildReverseCallTree.Expand"/>
@@ -98,7 +98,7 @@ function BuildReverseCallTree(const AStore: ISymbolStore; ARootId: Int64;
 /// <returns>The tree + summary. Root.Site is ''.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Q.Butterfly.Emit (DRagLint.Charts.Q.Butterfly.pas), DRagLint.Charts.Q.WhoCalls.EmitTree (DRagLint.Charts.Q.WhoCalls.pas), DRagLint.CLI.DoButterfly (DRagLint.CLI.pas), DRagLint.CLI.DoReverseCallTree (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.Charts.Q.Butterfly.Emit (DRagLint.Charts.Q.Butterfly.pas), DRagLint.Charts.Q.WhoCalls.EmitTree (DRagLint.Charts.Q.WhoCalls.pas), DRagLint.CLI.CallGraph.DoButterfly (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.CallGraph.DoReverseCallTree (DRagLint.CLI.CallGraph.pas)</para>
 /// <para>Calls: Default, DRagLint.Report.RCallTree.BuildForwardCallTree.Expand</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Report.RCallTree.BuildForwardCallTree.Expand"/>

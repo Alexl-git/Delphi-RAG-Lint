@@ -120,7 +120,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Query.Callers.pas), DRagLint.Charts.MemberAccess.HitsOf (DRagLint.Charts.MemberAccess.pas), DRagLint.CLI.DoImpact (DRagLint.CLI.pas), DRagLint.LSP.Server.HoverResolvedCallers (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.TMCPServer.FindCallersText (DRagLint.MCP.Server.pas) (+3 more)</para>
+  /// <para>Used by: declaration (DRagLint.Query.Callers.pas), DRagLint.Charts.MemberAccess.HitsOf (DRagLint.Charts.MemberAccess.pas), DRagLint.CLI.Wiring.DoImpact (DRagLint.CLI.Wiring.pas), DRagLint.LSP.Server.HoverResolvedCallers (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.TMCPServer.FindCallersText (DRagLint.MCP.Server.pas) (+3 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TQueryCallerRows = TArray<TQueryCallerRow>;
@@ -145,7 +145,7 @@ type
     /// <param name="AKind"><!-- drag-lint:auto type -->const string</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas) ?, DRagLint.Charts.ArchDiagram.DiagramSvg (DRagLint.Charts.ArchDiagram.pas) ?, DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.PrintReferenceLines (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.RenderJson (DRagLint.Context.Bundler.pas) (+699 more)</para>
+    /// <para>Called from: DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas) ?, DRagLint.Charts.ArchDiagram.DiagramSvg (DRagLint.Charts.ArchDiagram.pas) ?, DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.PrintReferenceLines (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.RenderJson (DRagLint.Context.Bundler.pas) (+839 more)</para>
     /// <para>Writes: Exact, Ambiguous, External, NameOnly</para>
     /// <seealso cref="DRagLint.Query.Callers.TResolutionTally.ToText"/>
     /// <!-- drag-lint:auto END -->
@@ -172,7 +172,7 @@ type
 /// edge); 'exact' for every other stored edge ('certain').</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoFindCallees (DRagLint.CLI.pas), DRagLint.Query.Callers.MemberUsersForName.AddRows (DRagLint.Query.Callers.pas), DRagLint.Query.Callers.RowOfCaller (DRagLint.Query.Callers.pas)</para>
+/// <para>Called from: DRagLint.CLI.CallGraph.DoFindCallees (DRagLint.CLI.CallGraph.pas), DRagLint.Query.Callers.MemberUsersForName.AddRows (DRagLint.Query.Callers.pas), DRagLint.Query.Callers.RowOfCaller (DRagLint.Query.Callers.pas)</para>
 /// <para>Calls: SameText</para>
 /// <para>Returns: RESOLUTION_AMBIGUOUS; RESOLUTION_NAME_ONLY; RESOLUTION_EXACT</para>
 /// <!-- drag-lint:auto END -->
@@ -243,7 +243,7 @@ function ResolvedCallersForName(const AStore: ISymbolStore; const AName: string;
 /// edge's confidence is ViaEdge, and an 'ambiguous' edge is marked by the
 /// renderers.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoImpact (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas), DRagLint.LSP.Server.HoverResolvedCallers (DRagLint.LSP.Server.pas), DRagLint.Query.Callers.ResolvedCallersForName (DRagLint.Query.Callers.pas), DRagLint.Query.CrossImpact.AnswerLocalDispatch (DRagLint.Query.CrossImpact.pas) (+1 more)</para>
+/// <para>Called from: DRagLint.CLI.Wiring.DoImpact (DRagLint.CLI.Wiring.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas), DRagLint.LSP.Server.HoverResolvedCallers (DRagLint.LSP.Server.pas), DRagLint.Query.Callers.ResolvedCallersForName (DRagLint.Query.Callers.pas), DRagLint.Query.CrossImpact.AnswerLocalDispatch (DRagLint.Query.CrossImpact.pas) (+1 more)</para>
 /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindDispatchLinks, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Query.Callers.RowOfCaller</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindDispatchLinks"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers"/>
@@ -296,10 +296,12 @@ function NameCallersForName(const AStore: ISymbolStore; const AName: string; ACo
 /// 1.51.1 INC2 (B10): a ref inside a multi-host code include that one host binds to a queried
 /// declaration (ISymbolStore.GetHostBoundRefIds) IS kept, with that declaration as SymbolId.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoUsages (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleUsages (DRagLint.LSP.Server.pas)</para>
-/// <para>Calls: Copy, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Query.Callers.DropMemberAccessUnderCall, LastDelimiter</para>
-/// <para>Returns: DropMemberAccessUnderCall(Kept.ToArray)</para>
+/// <para>Called from: DRagLint.CLI.DoUsages (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.AddBoundReferences (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleUsages (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.UsagesText (DRagLint.MCP.Server.pas), DRagLint.Query.UsageScope.BoundUsageRefs (DRagLint.Query.UsageScope.pas)</para>
+/// <para>Calls: Copy, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.GetHostBoundRefIds, DRagLint.Query.Callers.DefaultIndexRefsOf, DRagLint.Query.Callers.DropMemberAccessUnderCall, LastDelimiter, SameText</para>
+/// <para>Returns: DropMemberAccessUnderCall(Kept.ToArray) + DefaultIndexRefsOf(AStore, ADecls)</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetHostBoundRefIds"/>
+/// <seealso cref="DRagLint.Query.Callers.DefaultIndexRefsOf"/>
 /// <seealso cref="DRagLint.Query.Callers.DropMemberAccessUnderCall"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -321,7 +323,7 @@ function UsageRefsForName(const AStore: ISymbolStore; const AName: string; const
 /// routine, or unbound, is untouched. Shared by the CLI verb and the LSP
 /// draglint/usages reply. Pinned by run_refs_142_shapes.ps1.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoUsages.GroupFor (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleUsages.GroupFor (DRagLint.LSP.Server.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoUsages.GroupFor (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleUsages.GroupFor (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.UsagesText (DRagLint.MCP.Server.pas)</para>
 /// <para>Calls: DRagLint.Query.Callers.UsageBucketOf</para>
 /// <para>Returns: UsageBucketOf(ARef)</para>
 /// <para>Effect-free (proven)</para>
@@ -453,7 +455,7 @@ type
 /// 12 lines long, and a site the source no longer matches (stale file).
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoUsagesReadersWriters (DRagLint.CLI.pas)</para>
-/// <para>Calls: AccessorSymbol, AddAccessorRows, AddRows, DeclaredAccessors, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Query.Callers.MemberUsersForName.GatherMember, DRagLint.Query.Callers.MemberUsersForName.GatherProperty, DRagLint.Query.Callers.ReadLinesOrNothing (+6 more)</para>
+/// <para>Calls: AccessorSymbol, AddAccessorRows, AddRows, DeclaredAccessors, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Query.Callers.MemberUsersForName.GatherMember, DRagLint.Query.Callers.MemberUsersForName.GatherProperty, DRagLint.Query.Callers.ReadLinesOrNothing (+7 more)</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
 /// <seealso cref="DRagLint.Query.Callers.MemberUsersForName.GatherMember"/>
@@ -483,23 +485,44 @@ function UnboundUsersForName(const AStore: ISymbolStore; const AName: string): T
 type
   /// <summary>The direction(s) a moded member-access site is listed under, the way
   /// `usages --rw` lists it.</summary>
-  /// <remarks>The index stores the whole argument of Inc/Dec and of a var / out
+  /// <remarks>
+  /// The index stores the whole argument of Inc/Dec and of a var / out
   /// parameter as a READ; this folds those back the way MemberUsersForName does, so the
   /// autodoc / hover 'Used in:' line (Doc.Facts) and `usages --rw` give one site one
   /// direction. Caches source lines and verdicts for its lifetime: one per query, not
-  /// thread-safe.</remarks>
+  /// thread-safe.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.Callers.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build.AddUseRows (DRagLint.Doc.Facts.pas), DRagLint.Query.Callers.NewUseDirections (DRagLint.Query.Callers.pas), DRagLint.Query.Callers.SetterArgWriteEchoes (DRagLint.Query.Callers.pas)</para>
+  /// <para>Used in units: DRagLint.Doc.Facts, DRagLint.Query.Callers</para>
+  /// <para>Implemented by: TUseDirections</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   IUseDirections = interface
     ['{6B0F2C9E-4C1D-4E7A-9A51-2D7C3E8B1F04}']
     /// <summary>The directions of one resolved site.</summary>
     /// <param name="ARC">A site with Mode, FullPath, CallSiteLine and CallSiteCol.</param>
     /// <returns>['write'] for an Inc/Dec or out argument, ['read', 'write'] for a var
     /// argument, else [ARC.Mode]. Only a stored 'read' is classified.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build.AddUseRows (DRagLint.Doc.Facts.pas), DRagLint.Query.Callers.SetterArgWriteEchoes (DRagLint.Query.Callers.pas)</para>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ModesOf(const ARC: TResolvedCaller): TArray<string>;
   end;
 
 /// <summary>A new IUseDirections over one store.</summary>
 /// <param name="AStore">The store the classified sites come from; must not be nil.</param>
 /// <returns>A reference-counted classifier; drop it when the query is done.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build.AddArgWriteEchoes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build.AddUseRows (DRagLint.Doc.Facts.pas)</para>
+/// <para>Calls: DRagLint.Query.Callers.TUseDirections.Create</para>
+/// <para>Returns: TUseDirections.Create(AStore)</para>
+/// <para>Owns returned: new (caller owns)</para>
+/// <seealso cref="DRagLint.Query.Callers.TUseDirections.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function NewUseDirections(const AStore: ISymbolStore): IUseDirections;
 
 /// <summary>The setter echo rows the index cannot store: sites of a property whose WRITE
@@ -512,8 +535,20 @@ function NewUseDirections(const AStore: ISymbolStore): IUseDirections;
 /// <param name="ADirs">The direction classifier of the query (NewUseDirections over AStore).</param>
 /// <returns>One TAccessorEchoUse per such site: MemberName = the property's name and
 /// Caller.Mode = 'write', the direction `usages --rw` gives the setter for it.</returns>
-/// <remarks>Reads the declaring file of ASetter once (the property's accessor names; see
-/// MemberUsersForName) and, through ADirs, the files of the stored-read sites.</remarks>
+/// <remarks>
+/// Reads the declaring file of ASetter once (the property's accessor names; see
+/// MemberUsersForName) and, through ADirs, the files of the stored-read sites.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build.AddArgWriteEchoes (DRagLint.Doc.Facts.pas)</para>
+/// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Query.Callers.DeclaredAccessors, DRagLint.Query.Callers.IUseDirections.ModesOf, DRagLint.Query.Callers.ReadLinesOrNothing, SameText</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 29 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <seealso cref="DRagLint.Query.Callers.DeclaredAccessors"/>
+/// <seealso cref="DRagLint.Query.Callers.IUseDirections.ModesOf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SetterArgWriteEchoes(const AStore: ISymbolStore; const ASetter: TSymbol;
   const ADirs: IUseDirections): TArray<TAccessorEchoUse>;
 
@@ -531,7 +566,7 @@ function SetterArgWriteEchoes(const AStore: ISymbolStore; const ASetter: TSymbol
 /// <remarks>
 /// Text only: strings are skipped, comments are not parsed; looks back at most 12 lines.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Query.Callers.TArgClassifier.Classify (DRagLint.Query.Callers.pas), DRagLint.Storage.SQLite.PersistArgUses (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Called from: DRagLint.Query.Callers.TArgClassifier.Classify (DRagLint.Query.Callers.pas), DRagLint.Storage.SQLite.PersistArgUses (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.PersistGlobalArgWrites (DRagLint.Storage.SQLite.pas)</para>
 /// <para>Calls: CharInSet, DRagLint.Query.Callers.ArgumentEndsAt, DRagLint.Query.Callers.CalleeBefore, DRagLint.Query.Callers.CharAtPos, DRagLint.Query.Callers.IsIdentChar, DRagLint.Query.Callers.SkipReceiverBack, DRagLint.Query.Callers.StepBack, DRagLint.Query.Callers.WalkToOpenParen, InRange, Max</para>
 /// <para>Returns: False; CharInSet(CharAtPos(ALines, L, C), ['(', ','])</para>
 /// <para>Complexity: 11 (cyclomatic, outer body), 21 lines (full implementation)</para>
@@ -552,10 +587,10 @@ function LocateArgument(const ALines: TArray<string>; ALine, ACol: Integer;
 /// <returns>'var' | 'out' | 'const' | 'in' | '' (by value, or past the list).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Query.Callers.TArgClassifier.Classify (DRagLint.Query.Callers.pas), DRagLint.Storage.SQLite.PersistArgUses (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Called from: DRagLint.Query.Callers.TArgClassifier.Classify (DRagLint.Query.Callers.pas), DRagLint.Storage.SQLite.PersistArgUses (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.PersistGlobalArgWrites (DRagLint.Storage.SQLite.pas)</para>
 /// <para>Calls: CharInSet, Copy, LowerCase, Pos, Trim</para>
 /// <para>Returns: ''</para>
-/// <para>Complexity: 17 (cyclomatic, outer body), 40 lines (full implementation)</para>
+/// <para>Complexity: 18 (cyclomatic, outer body), 40 lines (full implementation)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ParamModeAt(const ASig: string; AIndex: Integer): string;

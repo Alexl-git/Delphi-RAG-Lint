@@ -23,6 +23,13 @@ const
 type
   /// <summary>Maps a system colour (clWindow, clWindowText, ...) to the colour
   /// the active theme paints it with.</summary>
+  /// <param name="AColor"><!-- drag-lint:auto type -->TColor</param>
+  /// <returns><!-- drag-lint:auto type -->TColor</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.PlugUiCore.pas), DragLint.Plugin.PlugUiCore.UsageRowColors (DragLint.Plugin.PlugUiCore.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TColorMapper = reference to function(AColor: TColor): TColor;
 
 /// <summary>True when the rules list must be refilled for the new search text.</summary>
@@ -31,6 +38,13 @@ type
 /// <param name="AHasData">False while no catalog is loaded (nothing to refill).</param>
 /// <returns>False when nothing is loaded or the trimmed text did not change
 /// (e.g. only a trailing space was typed).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.SearchTimerTick (DragLint.Plugin.LintOptionsFrame.pas)</para>
+/// <para>Calls: Trim</para>
+/// <para>Returns: AHasData and (Trim(ANewText) &lt;&gt; AAppliedTrim)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SearchRefillNeeded(const AAppliedTrim, ANewText: string; AHasData: Boolean): Boolean;
 
 /// <summary>Colours for one caller row of the Find Usages tree.</summary>
@@ -40,16 +54,37 @@ function SearchRefillNeeded(const AAppliedTrim, ANewText: string; AHasData: Bool
 /// <param name="AText">Plain text colour.</param>
 /// <param name="AMatch">Colour of the highlighted symbol (bold); readable
 /// against ABack on both light and dark themes.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.UsagesForm.TDragLintUsagesForm.TreeAdvancedCustomDrawItem (DragLint.Plugin.UsagesForm.pas)</para>
+/// <para>Calls: AMap, DRagLint.Hover.Contrast.EnsureReadable</para>
+/// <para>Mutates: ABack (out), AText (out), AMatch (out)</para>
+/// <seealso cref="DRagLint.Hover.Contrast.EnsureReadable"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure UsageRowColors(ASelected: Boolean; const AMap: TColorMapper; out ABack, AText, AMatch: TColor);
 
 /// <summary>One line of the Lint Options "Overrides" list for a rule_overrides entry.</summary>
 /// <param name="AOverride">The entry (project-wide disable and/or excluded units).</param>
 /// <returns>'rule - off for the project (reason, date)' and/or 'rule - off in unit a, b'.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.LintOptionsFrame.TOverridesDialog.Fill (DragLint.Plugin.LintOptionsFrame.pas)</para>
+/// <para>Calls: Trim</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RuleOverrideCaption(const AOverride: TRuleOverride): string;
 
 /// <summary>Caption of the Lint Options button that opens the overrides list.</summary>
 /// <param name="ACount">How many rule_overrides entries the active config holds.</param>
 /// <returns>'Overrides...' for none, else 'Overrides (N)...'.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.BuildControls (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.UpdateOverridesButton (DragLint.Plugin.LintOptionsFrame.pas)</para>
+/// <para>Calls: Format, SearchRefillNeeded</para>
+/// <para>Returns: if ACount &gt; 0 then Format('Overrides (%d)...', [ACount])</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function OverridesButtonCaption(ACount: Integer): string;
 
 implementation
