@@ -261,7 +261,7 @@ $o3 = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.Se
 $null = & { $ErrorActionPreference = 'Continue'; & cmd /c "echo e1 1>&2" 2>$err }
 "ERRFILE-BARE-HAS-RECORD-TEXT " + ([IO.File]::ReadAllText($err) -match 'CategoryInfo|NativeCommandError')
 [IO.File]::Delete($err)
-$p4 = Start-Process cmd -ArgumentList '/c', 'exit 3' -NoNewWindow -PassThru; $null = $p4.Handle
+$p4 = Start-Process cmd -ArgumentList '/c', 'ping -n 2 127.0.0.1 >nul & exit 3' -NoNewWindow -PassThru; $null = $p4.Handle
 $null = $p4.WaitForExit(30000)
 "EXIT-FIXED [" + $p4.ExitCode + "]"
 '@
