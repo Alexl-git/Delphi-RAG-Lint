@@ -62,7 +62,7 @@ function New-Case([string]$Tag, [string]$ImplUse, [string]$IntfExtra) {
 function Invoke-Engine([string[]]$Arguments, [string]$Tag) {
   $o = Join-Path $WorkDir "$Tag.out"; $e = Join-Path $WorkDir "$Tag.err"
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
-    -ArgumentList $Arguments -RedirectStandardOutput $o -RedirectStandardError $e
+    -ArgumentList $Arguments -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   return @{ Exit = $p.ExitCode; Out = [IO.File]::ReadAllText($o); File = $o }
 }
 
@@ -78,7 +78,7 @@ function Index-Case([string]$Root, [string]$Tag) {
 function Get-Refusals([string]$Root, [string]$Db, [string]$Tag) {
   $js = Invoke-Engine @('cycles', '--fix', '--build-timeout', '1800', '--project', ('"' + (Join-Path $Root 'IntfMoveDown.dproj') + '"'), '--db', ('"' + $Db + '"'),
     '--no-compile', '--format', 'json') "$Tag-fix"
-  try { return @(($js.Out | ConvertFrom-Json).cycles | ForEach-Object { $_.refusals }) } catch { Check "$Tag fix json parses" $false $js.Out; return @() }
+  try { return @(($js.Out | ConvertFrom-Json | ForEach-Object { $_ }).cycles | ForEach-Object { $_.refusals }) } catch { Check "$Tag fix json parses" $false $js.Out; return @() }
 }
 
 function Invoke-Build([string]$Root) {

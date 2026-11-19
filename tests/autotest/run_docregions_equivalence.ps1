@@ -58,7 +58,7 @@ function Run([string]$Exe, [string]$Tag, [string[]]$ArgList) {
   $out = Join-Path $WorkDir "$Tag.out"
   $err = Join-Path $WorkDir "$Tag.err"
   $q = $ArgList | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }
-  $p = Start-Process -FilePath $Exe -ArgumentList $q -RedirectStandardOutput $out -RedirectStandardError $err -Wait -NoNewWindow -PassThru
+  $p = Start-Process -FilePath $Exe -ArgumentList $q -RedirectStandardOutput $out -RedirectStandardError $err -Wait -NoNewWindow -PassThru; $null = $p.Handle
   $b = [IO.File]::ReadAllBytes($out)
   $h = [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($b)).Replace('-', '')
   @{ Sha = $h; Len = $b.Length; Exit = $p.ExitCode; Path = $out }

@@ -164,7 +164,7 @@ function Split-Frames([byte[]]$b) {
 # The reply for request $id: Frame, Json (hashtable), HasResult.
 function ReplyOf([byte[]]$b, [int]$id) {
   foreach ($f in (Split-Frames $b)) {
-    try { $j = $f.Body | ConvertFrom-Json -AsHashtable } catch { continue }
+    try { $j = $f.Body | ConvertFrom-Json -AsHashtable | ForEach-Object { $_ } } catch { continue }
     if ($j -and $j.ContainsKey('id') -and ($j['id'] -eq $id) -and -not $j.ContainsKey('method')) {
       return [pscustomobject]@{ Frame = $f; Json = $j; HasResult = $j.ContainsKey('result') }
     }
@@ -174,7 +174,7 @@ function ReplyOf([byte[]]$b, [int]$id) {
 function CountReplies([byte[]]$b, [int]$id) {
   $n = 0
   foreach ($f in (Split-Frames $b)) {
-    try { $j = $f.Body | ConvertFrom-Json -AsHashtable } catch { continue }
+    try { $j = $f.Body | ConvertFrom-Json -AsHashtable | ForEach-Object { $_ } } catch { continue }
     if ($j -and $j.ContainsKey('id') -and ($j['id'] -eq $id) -and -not $j.ContainsKey('method')) { $n++ }
   }
   return $n

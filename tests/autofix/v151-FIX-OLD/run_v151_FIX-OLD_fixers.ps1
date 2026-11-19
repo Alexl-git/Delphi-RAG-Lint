@@ -52,7 +52,7 @@ function Count-Findings([string]$Db, [string]$Unit, [string]$Rule, [string[]]$Ex
   else { $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint --in $Unit --db $Db --rule $Rule --json @Extra 2>$null } | Out-String }
   $t = $raw.Trim()
   if (-not $t.StartsWith('[')) { return -1 }
-  $rows = @($t | ConvertFrom-Json)
+  $rows = @(($t | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   return @($rows | Where-Object { $_.rule -eq $Rule -or $_.rule_id -eq $Rule -or $_.id -eq $Rule }).Count
 }
 function Build-Project([string]$Dir) {
@@ -69,7 +69,7 @@ foreach ($c in $cases) {
   $spec  = @(Get-Content (Join-Path $c.FullName 'case.txt'))
   $rule  = $spec[0].Trim()
   $leave = if ($spec.Count -gt 1 -and $spec[1].Trim() -ne '') { [int]$spec[1] } else { 0 }
-  $extra = if ($spec.Count -gt 2 -and $spec[2].Trim() -ne '') { @($spec[2].Trim() -split ' ') } else { @() }
+  $extra = @(if ($spec.Count -gt 2 -and $spec[2].Trim() -ne '') { @($spec[2].Trim() -split ' ') } else { @() })
   if ($extra -contains 'library') {
     if (-not (Test-Path $LibraryDb)) { Write-Host "SKIP $($c.Name): no platform library ($LibraryDb)" -ForegroundColor Yellow; continue }
     $extra = @($extra | Where-Object { $_ -ne 'library' }) + @('--library-db', $LibraryDb)

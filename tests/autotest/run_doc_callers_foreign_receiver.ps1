@@ -272,7 +272,7 @@ end.
   # and make its not-listed check vacuous.
   function Get-Called([string]$QName) {
     $errFile = Join-Path $WorkDir 'doc.err'
-    $out = (& { $ErrorActionPreference = 'Continue'; & $Exe document --qname $QName --db $db 2>$errFile }) -join "`n"
+    $out = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe document --qname $QName --db $db 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }) -join "`n"
     $err = if (Test-Path $errFile) { [System.IO.File]::ReadAllText($errFile) } else { '' }
     $called = ([regex]::Match($out, 'Called from:[^<]*')).Value
     Write-Host ("  {0}: {1}" -f $QName, $called) -ForegroundColor DarkGray

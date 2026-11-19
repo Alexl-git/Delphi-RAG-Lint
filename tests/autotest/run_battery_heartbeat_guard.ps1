@@ -102,7 +102,7 @@ function Invoke-Battery([string]$Tag, [string]$Beat) {
         '-HeartbeatMin', $Beat,
         '-LogDir', (Join-Path $tmp "logs_$Tag")
       ) -WorkingDirectory $arena -PassThru -Wait `
-        -RedirectStandardOutput $out -RedirectStandardError "$out.err" -WindowStyle Hidden
+        -RedirectStandardOutput $out -RedirectStandardError "$out.err" -WindowStyle Hidden; $null = $p.Handle
   return [pscustomobject]@{
     Text = (Get-Content -LiteralPath $out -Raw -ErrorAction SilentlyContinue)
     Exit = $p.ExitCode

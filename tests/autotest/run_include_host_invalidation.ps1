@@ -39,7 +39,7 @@ function Index([string]$tag) {
 function IncRows() {
   Push-Location $WorkDir
   try { $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query "SELECT u.unit_name FROM unit_uses u JOIN files f ON f.id = u.file_id WHERE f.path LIKE '%IncB.pas' AND u.origin_path IS NOT NULL" --json 2>$null } | Out-String } finally { Pop-Location }
-  try { return ,@((($j | ConvertFrom-Json).rows) | ForEach-Object { $_[0] }) } catch { return ,@() }
+  try { return ,@((($j | ConvertFrom-Json | ForEach-Object { $_ }).rows) | ForEach-Object { $_[0] }) } catch { return ,@() }
 }
 
 $null = Index 'first'

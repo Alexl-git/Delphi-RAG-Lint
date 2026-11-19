@@ -19,7 +19,7 @@ foreach ($f in 'division-by-zero-literal', 'large-magic-number-v1511', 'large-ma
 # division-by-zero-literal message must not claim an integer div/mod is covered.
 $exe = (Resolve-Path $Exe).Path
 $raw = & { $ErrorActionPreference = 'Continue'; & $exe lint (Join-Path $repo 'tests\lint\division-by-zero-literal.pas') --rule division-by-zero-literal --json 2>$null }
-$msg = (($raw | ConvertFrom-Json) | Select-Object -First 1).message
+$msg = (($raw | ConvertFrom-Json | ForEach-Object { $_ }) | Select-Object -First 1).message
 if ($msg -match "float") { Write-Host "PASS  message names the float / division form" } else { Write-Host "FAIL  message: $msg" -ForegroundColor Red; $fail++ }
 if ($fail -gt 0) { Write-Host "FAILED: $fail" -ForegroundColor Red; exit 1 }
 Write-Host "ALL PASS"

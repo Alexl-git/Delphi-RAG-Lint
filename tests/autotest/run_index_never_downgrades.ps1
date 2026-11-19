@@ -100,7 +100,7 @@ function SidecarBytes([string]$Db) {
 # ---- the engine's own extractor version, from the BUILT exe -----------------
 $info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>&1 | ForEach-Object { "$_" } } | Where-Object { "$_" -like '{*' } | Select-Object -First 1)
 $engineVer = ''
-try { $engineVer = [string](($info | ConvertFrom-Json).extractor_version) } catch { $engineVer = '' }
+try { $engineVer = [string](($info | ConvertFrom-Json | ForEach-Object { $_ }).extractor_version) } catch { $engineVer = '' }
 Check 'V0 info --json reports the extractor version' ($engineVer -match '^\d+\.\d+\.\d+') "extractor_version=$engineVer"
 if ($engineVer -notmatch '^\d+\.\d+\.\d+') { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 

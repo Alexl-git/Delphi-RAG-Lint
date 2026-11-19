@@ -53,7 +53,7 @@ function Read-Frames([string]$Out) {
     $start = $i + $m.Index + $m.Length
     $len = [int]$m.Groups[1].Value
     if ($start + $len -gt $Out.Length) { break }
-    $res += ($Out.Substring($start, $len) | ConvertFrom-Json)
+    $res += ($Out.Substring($start, $len) | ConvertFrom-Json | ForEach-Object { $_ })
     $i = $start + $len
   }
   return $res
@@ -76,14 +76,14 @@ function Run-Session($Extra) {
 function Empty-For($pubs, $u) { @($pubs | Where-Object { $_.uri -ceq $u -and @($_.diagnostics).Count -eq 0 }).Count }
 
 Write-Host 'CASE A: didClose clears' -ForegroundColor Cyan
-$a = Run-Session @(@{ jsonrpc='2.0'; method='textDocument/didClose'; params=@{ textDocument=@{ uri=$uri } } })
+$a = @(Run-Session @(@{ jsonrpc='2.0'; method='textDocument/didClose'; params=@{ textDocument=@{ uri=$uri } } }))
 Check 'PC: didOpen publishes a non-empty diagnostics array' (@($a | Where-Object { @($_.diagnostics).Count -ge 1 }).Count -ge 1) "publishes=$($a.Count)"
 Check 'A: didClose publishes an empty array for the same uri' ((Empty-For $a $uri) -ge 1)
 Write-Host 'CASE B: didChangeWatchedFiles Deleted clears' -ForegroundColor Cyan
-$b = Run-Session @(@{ jsonrpc='2.0'; method='workspace/didChangeWatchedFiles'; params=@{ changes=@(@{ uri=$uri; type=3 }) } })
+$b = @(Run-Session @(@{ jsonrpc='2.0'; method='workspace/didChangeWatchedFiles'; params=@{ changes=@(@{ uri=$uri; type=3 }) } }))
 Check 'B: type 3 publishes an empty array for the same uri' ((Empty-For $b $uri) -ge 1)
 Write-Host 'CASE NEG: Changed (type 2) does not clear' -ForegroundColor Cyan
-$n = Run-Session @(@{ jsonrpc='2.0'; method='workspace/didChangeWatchedFiles'; params=@{ changes=@(@{ uri=$uri; type=2 }) } })
+$n = @(Run-Session @(@{ jsonrpc='2.0'; method='workspace/didChangeWatchedFiles'; params=@{ changes=@(@{ uri=$uri; type=2 }) } }))
 Check 'NEG: type 2 publishes no empty array' ((Empty-For $n $uri) -eq 0)
 
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

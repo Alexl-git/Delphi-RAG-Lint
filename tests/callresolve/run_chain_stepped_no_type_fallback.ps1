@@ -89,7 +89,7 @@ Push-Location C:\TEMP
 Check 'V index built' (Test-Path $db) $db
 $raw = & $exePath sql --db $db --json --limit 200 --query "SELECT r.receiver_text, r.name_text, coalesce(e.confidence,''), coalesce(s.qualified_name,'') FROM refs r LEFT JOIN call_edges e ON e.ref_id = r.id LEFT JOIN symbols s ON s.id = e.target_symbol_id WHERE r.kind = 'call' AND r.name_text = 'Run'" | Out-String
 Pop-Location
-$j = $raw | ConvertFrom-Json
+$j = $raw | ConvertFrom-Json | ForEach-Object { $_ }
 $rows = foreach ($r in $j.rows) { [pscustomobject]@{ Rcv=[string]$r[0]; Name=[string]$r[1]; Conf=[string]$r[2]; Target=[string]$r[3] } }
 Check "V the three Run sites were read ($(@($rows).Count))" (@($rows).Count -eq 3) $raw
 function Site($rcv){ @($rows | Where-Object { $_.Rcv -eq $rcv }) | Select-Object -First 1 }

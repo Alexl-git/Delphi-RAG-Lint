@@ -34,9 +34,9 @@ function New-Project([string]$Name) {
   return @{ Dir = $d; Db = $db; Proj = (Join-Path $d 'NarrowParam.dproj'); Use = (Join-Path $d 'NpUse.pas') }
 }
 function Run-Json($P, [string[]]$More) {
-  $o = & { $ErrorActionPreference = 'Continue'; & $Exe narrow-param --db $P.Db --project $P.Proj --library-db none --format json @More 2> (Join-Path $Tmp 'run.err') }
+  $o = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath((Join-Path $Tmp 'run.err')); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe narrow-param --db $P.Db --project $P.Proj --library-db none --format json @More 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   $script:LastExit = $LASTEXITCODE
-  return (($o -join "`n") | ConvertFrom-Json)
+  return (($o -join "`n") | ConvertFrom-Json | ForEach-Object { $_ })
 }
 function Tree-Hash([string]$Dir) {
   return (Get-ChildItem $Dir -Recurse -File | Where-Object { $_.Extension -notin '.sqlite', '.dcu', '.exe', '.rsm', '.map', '.drc', '.sqlite-wal', '.sqlite-shm', '.res', '.identcache', '.local' -and $_.FullName -notmatch '\\Win64\\|\\__history\\' } |

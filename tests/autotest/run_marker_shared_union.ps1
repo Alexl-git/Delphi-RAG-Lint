@@ -276,7 +276,7 @@ try {
   Check '10c. ...and the run says so' ($jo -match '(?im)--shared-db.*junk\.sqlite')
 
   $jsonOut = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbA --shared-db $dbB --json 2>$null }
-  $doc = ($jsonOut | Out-String) | ConvertFrom-Json
+  $doc = ($jsonOut | Out-String) | ConvertFrom-Json | ForEach-Object { $_ }
   $goneRows = @($doc | Where-Object { $_.rule -eq 'review-marker-unused' -and $_.file_path -match 'gone\.pas' })
   Check '11. --json: stdout stays one document and carries the verdict' ($goneRows.Count -ge 1) "rows=$($doc.Count)"
 

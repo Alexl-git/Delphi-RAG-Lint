@@ -85,12 +85,12 @@ function Run-Fix([hashtable]$D, [string[]]$Extra, [hashtable]$Env = @{}, [bool]$
   if ($Json) { $a += @('--format', 'json') }
   foreach ($k in $Env.Keys) { Set-Item "Env:$k" $Env[$k] }
   try {
-    $out = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$errf } | Out-String)
+    $out = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errf); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe @a 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
     $code = $LASTEXITCODE
   } finally { foreach ($k in $Env.Keys) { Remove-Item "Env:$k" -ErrorAction SilentlyContinue } }
   $err = if (Test-Path $errf) { [IO.File]::ReadAllText($errf) } else { '' }
   $j = $null
-  if ($Json) { try { $j = $out | ConvertFrom-Json } catch { $j = $null } }
+  if ($Json) { try { $j = $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $j = $null } }
   return @{ Exit = $code; Out = $out; Err = $err; Json = $j; Log = '' }
 }
 function Cycles-Text($D) { return (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --db $D.Db 2>$null } | Out-String) }

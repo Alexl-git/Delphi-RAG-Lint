@@ -220,7 +220,7 @@ $lines = @('@echo off', ('call "{0}"' -f $rs), ('cd /d "{0}"' -f $WorkDir),
   ('dcc64 -B -NSSystem;Winapi;Vcl -E"{0}" -N0"{0}\dcu" CheckInitMenuCheck.dpr' -f $WorkDir), 'echo BUILD_EXITCODE=%ERRORLEVEL%')
 [IO.File]::WriteAllText($bat, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 $buildLog = Join-Path $WorkDir 'build.log'
-$null = Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $buildLog -NoNewWindow -Wait -PassThru
+$null = Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $buildLog -NoNewWindow -Wait -PassThru; $null = $null.Handle
 $buildOut = [IO.File]::ReadAllText($buildLog)
 if ($buildOut -notmatch 'BUILD_EXITCODE=0') {
   Write-Host 'FAIL: headless check did not compile' -ForegroundColor Red
@@ -234,7 +234,7 @@ if ($rc -ne 0) { Bad "headless check exit $rc" }
 if ($out -notmatch '(\d+) passed, 0 failed') { Bad 'no pass/fail summary from the headless check' }
 
 # ---- registry entry: FULL ide-menu path + editor right-click caption ----
-$entry = Get-Content (Join-Path $repo 'features\entries\check-init.json') -Raw | ConvertFrom-Json
+$entry = Get-Content (Join-Path $repo 'features\entries\check-init.json') -Raw | ConvertFrom-Json | ForEach-Object { $_ }
 $menu = @($entry.surfaces | Where-Object type -eq 'ide-menu' | ForEach-Object { $_.path })
 $ctx  = @($entry.surfaces | Where-Object { ($_.type -eq 'ide-context') -and ($_.host -eq 'Editor') } | ForEach-Object { $_.caption })
 if ($menu -contains "drag-lint > Analyze > $caption") { Ok 'entry: ide-menu path' } else { Bad "entry lacks ide-menu path 'drag-lint > Analyze > $caption' (has: $($menu -join '; '))" }

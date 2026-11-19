@@ -206,7 +206,7 @@ $oldTemp = $env:TEMP; $oldTmp = $env:TMP
 try {
   $env:TEMP = $tmpRoot; $env:TMP = $tmpRoot
   $p = Start-Process -FilePath $exePath -ArgumentList @('lint', $snap, '--stand-in-for', $real, '--db', $db, '--rules-dir', $rules) `
-         -NoNewWindow -PassThru -Wait -RedirectStandardOutput (Join-Path $WorkDir 'b8.out') -RedirectStandardError (Join-Path $WorkDir 'b8.err')
+         -NoNewWindow -PassThru -Wait -RedirectStandardOutput (Join-Path $WorkDir 'b8.out') -RedirectStandardError (Join-Path $WorkDir 'b8.err'); $null = $p.Handle
 } finally { $env:TEMP = $oldTemp; $env:TMP = $oldTmp }
 $ownDir = Join-Path $tmpRoot ("drag-lint-standin-{0}" -f $p.Id)
 Check 'B8  CONTROL: the stand-in run produced findings (it really materialised)' `

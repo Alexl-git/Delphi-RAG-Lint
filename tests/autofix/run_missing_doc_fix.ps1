@@ -73,7 +73,7 @@ try {
   $rawL = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --config $cfg --json 2>$null }) -join "`n"
   $aS = $rawL.IndexOf('['); $aE = $rawL.LastIndexOf(']')
   $findings = @()
-  if ($aS -ge 0 -and $aE -gt $aS) { $findings = @(ConvertFrom-Json $rawL.Substring($aS, $aE - $aS + 1)) }
+  if ($aS -ge 0 -and $aE -gt $aS) { $findings = @((ConvertFrom-Json $rawL.Substring($aS, $aE - $aS + 1) | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   $md = @($findings | Where-Object { $_.rule -eq 'missing-doc' -and $_.start_line -eq $L })
   Check 'A0 missing-doc finding present on the Undocumented line (25)' ($md.Count -ge 1)
 
@@ -134,7 +134,7 @@ try {
   $rawB = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --config $cfg --json 2>$null }) -join "`n"
   $bS = $rawB.IndexOf('['); $bE = $rawB.LastIndexOf(']')
   $findingsB = @()
-  if ($bS -ge 0 -and $bE -gt $bS) { $findingsB = @(ConvertFrom-Json $rawB.Substring($bS, $bE - $bS + 1)) }
+  if ($bS -ge 0 -and $bE -gt $bS) { $findingsB = @((ConvertFrom-Json $rawB.Substring($bS, $bE - $bS + 1) | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   $mdB = @($findingsB | Where-Object { $_.rule -eq 'missing-doc' -and $_.start_line -eq $L })
   Check 'B1 no missing-doc finding on the now-documented decl (idempotent)' ($mdB.Count -eq 0)
   $before2 = [IO.File]::ReadAllText($target)
@@ -183,7 +183,7 @@ try {
 
   # ---- Part D: rules --json fixable ---------------------------------------
   $rj = & { $ErrorActionPreference = 'Continue'; & $exePath rules --json 2>$null } | Out-String
-  $ro = $rj | ConvertFrom-Json
+  $ro = $rj | ConvertFrom-Json | ForEach-Object { $_ }
   $byId = @{}; foreach($r in $ro.rules){ $byId[$r.id] = $r }
   Check 'D1 missing-doc fixable=true' ($byId['missing-doc'].fixable -eq $true)
 } finally { Pop-Location }

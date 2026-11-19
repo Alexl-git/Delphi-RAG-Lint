@@ -78,7 +78,7 @@ try {
   $m = [regex]::Match($page, '(?s)<script type="application/json" id="graph">(.*?)</script>')
   Check 'model-embedded' $m.Success
   $model = $null
-  try { $model = $m.Groups[1].Value | ConvertFrom-Json } catch { }
+  try { $model = $m.Groups[1].Value | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   Check 'schema' ($model.schema -eq 'drag-lint.arch/1') "schema=$($model.schema)"
   Check 'counts' (($model.units -eq 8) -and (@($model.zones).Count -eq 7)) "units=$($model.units) zones=$(@($model.zones).Count)"
 
@@ -122,7 +122,7 @@ try {
     $probe = Join-Path $Work 'probe.html'; $dom = Join-Path $Work 'dom.html'
     $js = '<script>zone(M.zones.findIndex(function(z){return z.name==="core"}));var a=P.textContent;edge(M.edges.findIndex(function(e){return e.kind==="back"}));document.title="PANEL|"+a+"|"+P.textContent+"|"+document.querySelectorAll("#d .edge.dim").length;</script></body>'
     [IO.File]::WriteAllText($probe, $page.Replace('</body>', $js), [Text.Encoding]::ASCII)
-    $b = Start-Process $edge -ArgumentList '--headless=new', '--disable-gpu', "--user-data-dir=$Work\edge", '--dump-dom', ('file:///' + $probe.Replace('\', '/')) -RedirectStandardOutput $dom -PassThru
+    $b = Start-Process $edge -ArgumentList '--headless=new', '--disable-gpu', "--user-data-dir=$Work\edge", '--dump-dom', ('file:///' + $probe.Replace('\', '/')) -RedirectStandardOutput $dom -PassThru; $null = $b.Handle
     # Edge's children outlive the process started here and hold the file: read it shared, until complete
     $text = ''; $until = (Get-Date).AddSeconds(120)
     while ((Get-Date) -lt $until -and -not $text.Contains('</html>')) {

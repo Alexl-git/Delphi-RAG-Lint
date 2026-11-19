@@ -62,7 +62,7 @@ function IndexedExtU([string]$tag, [string[]]$extra) {
   $code = $LASTEXITCODE
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query 'SELECT path FROM files' --json 2>$null }) -join "`n"
   $paths = @()
-  try { $paths = @(($raw | ConvertFrom-Json).rows | ForEach-Object { $_[0] }) } catch { }
+  try { $paths = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }).rows | ForEach-Object { $_[0] }) } catch { }
   [pscustomobject]@{ Exit = $code; Paths = $paths; ExtU = (@($paths | Where-Object { $_ -match '\\ext\\ExtU\.pas$' }).Count -gt 0)
                      Noted = ($out -match '(?s)NOTE: --exclude-under.*\\ext\\ExtU\.pas') }
 }

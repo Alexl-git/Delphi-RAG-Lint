@@ -26,7 +26,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 function Parse-Findings([string[]]$Raw) {
   $txt = ($Raw -join "`n"); $b = $txt.IndexOf('[')
-  $out = @(); if ($b -ge 0) { try { $out = @($txt.Substring($b) | ConvertFrom-Json) } catch { $out = @() } }
+  $out = @(); if ($b -ge 0) { try { $out = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $out = @() } }
   if ($null -eq $out) { $out = @() }
   return ,@($out)
 }
@@ -51,7 +51,7 @@ try {
   $mine  = @(Marker $file 'CONTROL-DISM-RECV')
   Check 'fixture has triggers and controls' (($bare.Count -eq 1) -and ($recv.Count -eq 1) -and ($owner.Count -eq 1) -and ($mine.Count -eq 1)) ''
 
-  $with = Lines (Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $file --db $db --config $cfg --json 2>$null }))
+  $with = @(Lines (Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $file --db $db --config $cfg --json 2>$null })))
   $want = @($bare + $recv | Sort-Object)
   Check 'with the index: exactly the TRIGGER lines fire (Obj.Sleep and Mine.LoadFromFile silent)' (($with -join ',') -eq ($want -join ',')) "got [$($with -join ',')] want [$($want -join ',')]"
 
@@ -62,16 +62,16 @@ try {
   python $py $noTypes 'DROP TABLE ref_types'
   $gone = @(& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $noTypes --query "SELECT name FROM sqlite_master WHERE name = 'ref_types'" 2>&1 | ForEach-Object { "$_" } }) -join ' '
   Check 'the control DB really has no ref_types' ($gone -match '\b0 row') $gone
-  $r1 = Lines (Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $file --db $noTypes --config $cfg --json 2>$null }))
+  $r1 = @(Lines (Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $file --db $noTypes --config $cfg --json 2>$null })))
   $w1 = @($bare)
   Check 'no ref_types (index older than 1.44): the binding still silences Obj.Sleep, RECV is not added' (($r1 -join ',') -eq ($w1 -join ',')) "got [$($r1 -join ',')] want [$($w1 -join ',')]"
   $old = Join-Path $scratch 'old.sqlite'
   Copy-Item $db $old
   python $py $old 'DROP TABLE ref_types' 'UPDATE refs SET symbol_id = NULL'
-  $without = Lines (Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $file --db $old --config $cfg --json 2>$null }))
+  $without = @(Lines (Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $file --db $old --config $cfg --json 2>$null })))
   $today = @($bare + $owner | Sort-Object)
   Check 'no ref_types and no bound refs: textual answer as today' (($without -join ',') -eq ($today -join ',')) "got [$($without -join ',')] want [$($today -join ',')]"
-  $noidx = Lines (Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $file --config $cfg --json 2>$null }))
+  $noidx = @(Lines (Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $file --config $cfg --json 2>$null })))
   Check 'no --db: textual answer as today' (($noidx -join ',') -eq ($today -join ',')) "got [$($noidx -join ',')] want [$($today -join ',')]"
 }
 finally {

@@ -111,7 +111,7 @@ foreach ($enc in @(@{ N = 'cp1252'; E = $Cp1252 }, @{ N = 'utf8'; E = $Utf8 })) 
   $db = Join-Path $d 'c.sqlite'
   & { $ErrorActionPreference = 'Continue'; & $Exe index $d --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $f --db $db --enable magic-literal,multiple-statements-per-line,commented-out-code --json 2>$null } | Out-String
-  $all = @(); try { $all = @($raw | ConvertFrom-Json) } catch { $all = @() }
+  $all = @(); try { $all = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $all = @() }
   Check "C0 ($($enc.N)): lint --json answered" ($all.Count -ge 10) "count=$($all.Count)"
   foreach ($c in $Cases) {
     $hit = @($all | Where-Object { ([int]$_.start_line -eq $c.L) -and ($_.rule -eq $c.R) })
@@ -180,7 +180,7 @@ $dbD = Join-Path $dD 'd.sqlite'
 & { $ErrorActionPreference = 'Continue'; & $Exe index $dD --db $dbD 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $q = "SELECT l.kind, l.text, l.start_line, l.start_col, l.end_col FROM string_literals l JOIN files f ON f.id = l.file_id WHERE f.path LIKE '%.dfm' ORDER BY l.start_line"
 $rawD = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $dbD --query $q --json 2>$null } | Out-String
-$rowsD = @(); try { $jD = $rawD | ConvertFrom-Json; $rowsD = @($jD.rows) } catch { $rowsD = @() }
+$rowsD = @(); try { $jD = $rawD | ConvertFrom-Json | ForEach-Object { $_ }; $rowsD = @($jD.rows) } catch { $rowsD = @() }
 function DRow([int]$Line, [string]$Kind) { return ,@($rowsD | Where-Object { ([int]$_[2] -eq $Line) -and ($_[0] -eq $Kind) }) }
 foreach ($c in @(
     @{ L = 3; K = 'dfm-type'; S = 20; E = 26; W = 'TLabel after the non-ASCII object name' },
@@ -205,7 +205,7 @@ WriteText $main $mt $Cp1252
 $dbH = Join-Path $dH 'h.sqlite'
 & { $ErrorActionPreference = 'Continue'; & $Exe index $dH --db $dbH 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $rawH = & { $ErrorActionPreference = 'Continue'; & $Exe check-init hoData.GCfg --db $dbH --json 2>$null } | Out-String
-$jH = $null; try { $jH = $rawH | ConvertFrom-Json } catch { $jH = $null }
+$jH = $null; try { $jH = $rawH | ConvertFrom-Json | ForEach-Object { $_ } } catch { $jH = $null }
 $useLine = [Array]::IndexOf((ReadLines $main), "  {$Eacute$Eacute$Eacute} Tag:= GCfg;  // USE-CLICK") + 1
 $u = @(@($jH.uses) | Where-Object { ((Split-Path $_.file -Leaf) -eq 'hoMain.pas') -and ([int]$_.line -eq $useLine) })
 Check "H1 the read after non-ASCII text (hoMain.pas:$useLine) is at character column 15" (($u.Count -eq 1) -and ([int]$u[0].col -eq 15)) "got $(if ($u.Count) { $u[0].col } else { 'none' })"

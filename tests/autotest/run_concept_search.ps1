@@ -74,7 +74,7 @@ function Index() { return Run @('index', '--project', $Proj, '--db', $Db) }
 function Concept([string]$Words, [string[]]$More = @()) {
   $r = Run (@('query', '--concept', $Words, '--db', $Db, '--json') + $More)
   $j = $null
-  try { $j = $r.Out | ConvertFrom-Json } catch { }
+  try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   $r['Json'] = $j
   return $r
 }

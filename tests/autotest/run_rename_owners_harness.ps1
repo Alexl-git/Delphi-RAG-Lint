@@ -158,7 +158,7 @@ WriteAscii $batPath @(
   "dcc64 -CC $uArgs -E`"$outDir`" -N0`"$outDir`" RenameOwnersHarness.dpr"
   'echo BUILD_EXITCODE=%ERRORLEVEL%')
 $null = Start-Process cmd.exe -ArgumentList "/c", "`"$batPath`"" `
-          -RedirectStandardOutput $logPath -RedirectStandardError "$logPath.err" -NoNewWindow -Wait -PassThru
+          -RedirectStandardOutput $logPath -RedirectStandardError "$logPath.err" -NoNewWindow -Wait -PassThru; $null = $null.Handle
 $log = Get-Content $logPath -Raw -ErrorAction SilentlyContinue
 $buildOk = ($log -match 'BUILD_EXITCODE=0') -and ($log -notmatch 'Error:')
 $errLines = ($log -split "`r?`n" | Where-Object { $_ -match 'Error|Fatal' } | Select-Object -First 4) -join ' | '

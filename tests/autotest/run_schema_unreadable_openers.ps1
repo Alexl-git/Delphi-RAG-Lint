@@ -180,11 +180,11 @@ c.close()
   }
   $sj = Suo-Run @('schema', '--json', '--db', $e0)
   $sjOk = $false
-  try { $o = ($sj.Out -replace '(?s)^[^{]*', '') | ConvertFrom-Json; $sjOk = ($o.stale -eq $false) -and ($o.stale_files -eq 0) } catch { $sjOk = $false }
+  try { $o = ($sj.Out -replace '(?s)^[^{]*', '') | ConvertFrom-Json | ForEach-Object { $_ }; $sjOk = ($o.stale -eq $false) -and ($o.stale_files -eq 0) } catch { $sjOk = $false }
   Suo-Check 'E3' ($sjOk -and ($sj.Code -eq 0) -and -not (Suo-Av $sj.Out)) "schema --json (JSON probes) on the 0-byte index: parses, stale=false, no AV (exit $($sj.Code))"
   $qj = Suo-Run @('sql', '--json', '--query', 'SELECT 1 AS x', '--db', $em)
   $qjOk = $false
-  try { $o = ($qj.Out -replace '(?s)^[^{]*', '') | ConvertFrom-Json; $qjOk = ($o.stale -eq $false) -and ($o.row_count -eq 1) } catch { $qjOk = $false }
+  try { $o = ($qj.Out -replace '(?s)^[^{]*', '') | ConvertFrom-Json | ForEach-Object { $_ }; $qjOk = ($o.stale -eq $false) -and ($o.row_count -eq 1) } catch { $qjOk = $false }
   Suo-Check 'E4' ($qjOk -and ($qj.Code -eq 0) -and -not (Suo-Av $qj.Out)) "sql --json (JSON probes) on the schema_meta-only index: parses, stale=false, no AV (exit $($qj.Code))"
   $untouched = ((Get-Item $e0).Length -eq 0) -and -not (Test-Path "$e0-wal") -and -not (Test-Path "$e0-shm")
   Suo-Check 'E5' $untouched "the 0-byte index is not written (still 0 bytes, no -wal/-shm)"

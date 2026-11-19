@@ -177,14 +177,14 @@ function Compare-RegSnapshot([string[]]$Before, [string[]]$After) {
 }
 # SELF-TEST of the comparison on synthetic snapshots -- the live key is never
 # modified to prove the guard can fire.
-$stEqual   = Compare-RegSnapshot @('A=String:1', 'B=DWord:0') @('A=String:1', 'B=DWord:0')
-$stEmpty   = Compare-RegSnapshot @() @()
-$stChanged = Compare-RegSnapshot @('A=String:1', 'B=DWord:0') @('A=String:1', 'B=DWord:1')
-$stAdded   = Compare-RegSnapshot @() @('A=String:1')
+$stEqual   = @(Compare-RegSnapshot @('A=String:1', 'B=DWord:0') @('A=String:1', 'B=DWord:0'))
+$stEmpty   = @(Compare-RegSnapshot @() @())
+$stChanged = @(Compare-RegSnapshot @('A=String:1', 'B=DWord:0') @('A=String:1', 'B=DWord:1'))
+$stAdded   = @(Compare-RegSnapshot @() @('A=String:1'))
 Check 'SELF-TEST: registry comparison (equal=pass, empty=pass, changed value=fail, added value=fail)' `
   (($stEqual.Count -eq 0) -and ($stEmpty.Count -eq 0) -and ($stChanged.Count -eq 2) -and ($stAdded.Count -eq 1)) `
   ("equal={0} empty={1} changed={2} added={3}" -f $stEqual.Count, $stEmpty.Count, $stChanged.Count, $stAdded.Count)
-$liveBefore = Get-RegSnapshot $LiveRegKey
+$liveBefore = @(Get-RegSnapshot $LiveRegKey)
 
 # RESTORE ON A DIFFERENCE (1.20.4 #4b-5). Detecting a change to the owner's
 # settings is not enough: the owner's IDE then runs on whatever a fixture left
@@ -214,13 +214,13 @@ try {
   New-Item -Path $stPs -Force | Out-Null
   New-ItemProperty -Path $stPs -Name 'A' -Value '1' -PropertyType String -Force | Out-Null
   New-ItemProperty -Path $stPs -Name 'B' -Value 0 -PropertyType DWord -Force | Out-Null
-  $stSnap0   = Get-RegSnapshot $stPs
+  $stSnap0   = @(Get-RegSnapshot $stPs)
   $stHad     = Export-RegKeyBackup $stReg $stFile
   New-ItemProperty -Path $stPs -Name 'A' -Value '2' -PropertyType String -Force | Out-Null
   New-ItemProperty -Path $stPs -Name 'C' -Value 'x' -PropertyType String -Force | Out-Null
-  $stDirty   = (Compare-RegSnapshot $stSnap0 (Get-RegSnapshot $stPs)).Count
+  $stDirty   = (@(Compare-RegSnapshot $stSnap0 (@(Get-RegSnapshot $stPs)))).Count
   Restore-RegKeyBackup $stReg $stFile $stHad
-  $stRestored = (Compare-RegSnapshot $stSnap0 (Get-RegSnapshot $stPs)).Count
+  $stRestored = (@(Compare-RegSnapshot $stSnap0 (@(Get-RegSnapshot $stPs)))).Count
   # key absent before the run, created by it: restore must remove it
   [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree('Software\drag-lint\DelphiPlugin.RestoreSelfTest', $false)
   $stHadNone = Export-RegKeyBackup $stReg $stFile
@@ -252,7 +252,7 @@ function Get-SrcDcuSnapshot {
     ForEach-Object { '{0}|{1}|{2}' -f $_.FullName.Substring($src.Length + 1), $_.LastWriteTimeUtc.Ticks, $_.Length } |
     Sort-Object)
 }
-$dcuBefore = Get-SrcDcuSnapshot
+$dcuBefore = @(Get-SrcDcuSnapshot)
 
 $ran = 0
 foreach ($name in ($Fixtures + $RootDrivers)) {
@@ -269,7 +269,7 @@ foreach ($name in ($Fixtures + $RootDrivers)) {
   }
   $lg = Join-Path $env:TEMP ("drag-lint-legacy-{0}-{1}.log" -f $name, $PID)
   $p  = Start-Process cmd.exe -ArgumentList '/c', $bat -WorkingDirectory $repoRoot `
-                      -PassThru -NoNewWindow -RedirectStandardOutput $lg -RedirectStandardError "$lg.err"
+                      -PassThru -NoNewWindow -RedirectStandardOutput $lg -RedirectStandardError "$lg.err"; $null = $p.Handle
   if (-not $p.WaitForExit($PerFixtureTimeoutSec * 1000)) {
     try { $p.Kill() } catch { }
     Check $name $false ("TIMEOUT after {0}s" -f $PerFixtureTimeoutSec)
@@ -304,16 +304,16 @@ foreach ($name in ($Fixtures + $RootDrivers)) {
 }
 Remove-Item Env:\EXE -ErrorAction SilentlyContinue
 
-$liveDiff = Compare-RegSnapshot $liveBefore (Get-RegSnapshot $LiveRegKey)
+$liveDiff = @(Compare-RegSnapshot $liveBefore (@(Get-RegSnapshot $LiveRegKey)))
 $liveNote = ''
 if ($liveDiff.Count -gt 0) {
   Restore-RegKeyBackup 'HKCU\Software\drag-lint\DelphiPlugin' $liveBackupFile $liveExisted
-  $left = (Compare-RegSnapshot $liveBefore (Get-RegSnapshot $LiveRegKey)).Count
+  $left = (@(Compare-RegSnapshot $liveBefore (@(Get-RegSnapshot $LiveRegKey)))).Count
   $liveNote = if ($left -eq 0) { ' [RESTORED from the pre-run export]' } else { " [RESTORE INCOMPLETE: $left difference(s) remain]" }
 }
 if (Test-Path -LiteralPath $liveBackupFile) { [IO.File]::Delete($liveBackupFile) }
 Check 'owner plugin settings untouched' ($liveDiff.Count -eq 0) (($liveDiff -join '; ') + $liveNote)
-$dcuDiff = Compare-RegSnapshot $dcuBefore (Get-SrcDcuSnapshot)
+$dcuDiff = @(Compare-RegSnapshot $dcuBefore (@(Get-SrcDcuSnapshot)))
 Check 'no fixture wrote a DCU under src\' ($dcuDiff.Count -eq 0) `
   ("{0} change(s): {1}" -f $dcuDiff.Count, (($dcuDiff | Select-Object -First 5) -join '; '))
 if (Test-Path $TestRegKey) {

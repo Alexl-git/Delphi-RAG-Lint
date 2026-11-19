@@ -50,7 +50,7 @@ if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: index exit $LASTEXITCODE" -Foregro
 function Rows([string]$q) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query $q --json --limit 500 2>$null }
   if ($LASTEXITCODE -ne 0) { return ,@() }
-  $j = ($raw | Where-Object { $_ -notmatch '^\(loaded' }) -join "`n" | ConvertFrom-Json
+  $j = ($raw | Where-Object { $_ -notmatch '^\(loaded' }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
   return ,@($j.rows)
 }
 function FileLike([string]$name) { "f.path LIKE '%\$name'" }

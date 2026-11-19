@@ -34,7 +34,7 @@ try {
   Check 'control: lint without --fix has no lint-all --fix note' (-not ([IO.File]::ReadAllText($errNo) -match 'lint-all --fix')) ([IO.File]::ReadAllText($errNo))
 
   $js = (& { $ErrorActionPreference = 'Continue'; & $exePath lint $u --fix --json 2>$null } | Out-String)
-  $ok = $true; try { $null = $js | ConvertFrom-Json } catch { $ok = $false }
+  $ok = $true; try { $null = $js | ConvertFrom-Json | ForEach-Object { $_ } } catch { $ok = $false }
   Check 'lint --fix --json: stdout is still JSON' $ok $js
 } finally {
   if (Test-Path -LiteralPath $scratch) { [IO.Directory]::Delete($scratch, $true) }

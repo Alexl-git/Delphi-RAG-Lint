@@ -78,7 +78,7 @@ try {
   $acRaw  = & { $ErrorActionPreference = 'Continue'; & $exePath ambiguous-calls --file $target --json --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   $acExit = $LASTEXITCODE
   Check 'ambiguous-calls exits 0' ($acExit -eq 0) $acRaw
-  $rows = @($acRaw | ConvertFrom-Json)
+  $rows = @(($acRaw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   $encl = @($rows | ForEach-Object { $_.enclosing_qname })
   Check 'CONTROL: ambiguous-calls produced the expected positive row (absence below is meaningful)' `
     ($encl -contains 'callsitekind.TDriver.CallsUnknown') $acRaw

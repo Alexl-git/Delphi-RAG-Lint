@@ -196,7 +196,7 @@ $lines = @('@echo off', ('call "{0}"' -f $rs), ('cd /d "{0}"' -f $WorkDir),
   ('dcc64 -B -NSSystem;Winapi;Vcl -E"{0}" -N0"{0}\dcu" Cmd152Check.dpr' -f $WorkDir), 'echo BUILD_EXITCODE=%ERRORLEVEL%')
 [IO.File]::WriteAllText($bat, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 $buildLog = Join-Path $WorkDir 'build.log'
-$null = Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $buildLog -NoNewWindow -Wait -PassThru
+$null = Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $buildLog -NoNewWindow -Wait -PassThru; $null = $null.Handle
 $buildOut = [IO.File]::ReadAllText($buildLog)
 if ($buildOut -notmatch 'BUILD_EXITCODE=0') {
   Write-Host 'FAIL: headless check did not compile' -ForegroundColor Red

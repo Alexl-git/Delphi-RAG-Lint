@@ -72,7 +72,7 @@ $Exe = (Resolve-Path $Exe).Path
 if (Test-Path $WorkDir) { Remove-Item -Recurse -Force $WorkDir }
 New-Item -ItemType Directory $WorkDir | Out-Null
 
-$info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n" | ConvertFrom-Json
+$info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 Write-Host ("engine: extractor={0} exe={1}" -f $info.extractor_version, $Exe) -ForegroundColor Cyan
 
 function Write-Ascii([string]$Path, [string]$Body) {
@@ -121,7 +121,7 @@ Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 function Get-HoverFacts([string]$QName) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname $QName --db $db --format json 2>$null }) -join "`n"
   if ([string]::IsNullOrWhiteSpace($raw)) { return @() }
-  return @(($raw | ConvertFrom-Json).facts)
+  return @(($raw | ConvertFrom-Json | ForEach-Object { $_ }).facts)
 }
 function Get-DirectivesFact([string[]]$Facts) {
   return @($Facts | Where-Object { $_ -match '^\s*Directives:' }) | Select-Object -First 1
@@ -130,9 +130,9 @@ function Get-DirectivesFact([string[]]$Facts) {
 # --- surface 1: hover ---------------------------------------------------------
 Write-Host ''
 Write-Host 'SURFACE 1: CLI hover' -ForegroundColor Cyan
-$hovVirtual = Get-DirectivesFact (Get-HoverFacts 'uHov.THovKit.MVirtual')
-$hovCombo   = Get-DirectivesFact (Get-HoverFacts 'uHov.THovKit.MCombo')
-$hovPlain   = Get-DirectivesFact (Get-HoverFacts 'uHov.THovKit.MPlain')
+$hovVirtual = Get-DirectivesFact (@(Get-HoverFacts 'uHov.THovKit.MVirtual'))
+$hovCombo   = Get-DirectivesFact (@(Get-HoverFacts 'uHov.THovKit.MCombo'))
+$hovPlain   = Get-DirectivesFact (@(Get-HoverFacts 'uHov.THovKit.MPlain'))
 
 Check "hover MVirtual HAS a Directives fact" ($null -ne $hovVirtual) "got: $(if ($null -eq $hovVirtual) { 'ABSENT' } else { $hovVirtual })"
 Check "hover MCombo   HAS a Directives fact" ($null -ne $hovCombo)   "got: $(if ($null -eq $hovCombo)   { 'ABSENT' } else { $hovCombo })"

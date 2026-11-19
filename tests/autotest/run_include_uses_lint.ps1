@@ -39,7 +39,7 @@ function Run([string[]]$a) {
   try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null } | Out-String } finally { Pop-Location }
   return $o
 }
-function Findings([string]$json) { try { return ,@($json | ConvertFrom-Json) } catch { return ,@() } }
+function Findings([string]$json) { try { return ,@(($json | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { return ,@() } }
 
 $db = Join-Path $WorkDir 'includeuses.sqlite'
 $null = Run @('index', '--project', (Join-Path $iu 'IncUsesX.dproj'), '--db', $db, '--library-db', 'none')

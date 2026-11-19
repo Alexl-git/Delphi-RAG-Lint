@@ -139,7 +139,7 @@ JOIN symbols tgt ON tgt.id = ce.target_symbol_id
 WHERE r.kind = 'call' AND r.name_text IN ('FindInfo', 'Show')
 "@
 $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --query $q 2>$null }
-$doc = ($raw | Where-Object { $_ -notmatch '^\(loaded defaults' }) -join "`n" | ConvertFrom-Json
+$doc = ($raw | Where-Object { $_ -notmatch '^\(loaded defaults' }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 # sql --json rows are POSITIONAL arrays: map them onto the column names.
 $cols = @($doc.columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
 $edges = @(foreach ($row in @($doc.rows)) {

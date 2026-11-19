@@ -55,7 +55,7 @@ function Ask($p, $id, $method, $params) {
   $p.StandardInput.Flush()
   $t = $p.StandardOutput.ReadLineAsync()
   if (-not $t.Wait(30000)) { throw "no answer to $method" }
-  $t.Result | ConvertFrom-Json
+  $t.Result | ConvertFrom-Json | ForEach-Object { $_ }
 }
 function Open-Session($db) {
   $p = Start-Serve $db

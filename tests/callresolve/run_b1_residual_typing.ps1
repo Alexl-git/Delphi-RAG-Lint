@@ -111,7 +111,7 @@ $ev = @($idxOut -split "`r?`n" | Where-Object { $_ -match 'enum-values' })
 Check 'W1  the enum-values reconciliation agrees (a record-field initializer is not an enum value)' ((@($ev | Where-Object { $_ -match 'WARNING' }).Count -eq 0) -and (@($ev | Where-Object { $_ -match 'resolver and store agree' }).Count -eq 1)) ($ev -join ' | ')
 
 function Sql([string]$Q) {
-  $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --limit 1000 --query $Q 2>$null } | ConvertFrom-Json
+  $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --limit 1000 --query $Q 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
   if ($null -eq $j) { return ,@() }
   $cols = @($j.columns | ForEach-Object { $_.name })
   $out = @()

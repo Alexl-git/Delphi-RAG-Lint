@@ -249,7 +249,7 @@ function ApplyTo([string]$Unit, [string]$Rules, [string[]]$Extra = @()) {
 function Json([string]$s) {
   $a = $s.IndexOf('{'); $b = $s.LastIndexOf('}')
   if ($a -lt 0 -or $b -le $a) { return $null }
-  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json) } catch { return $null }
+  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function Items([string]$File) { return ([regex]::Matches([IO.File]::ReadAllText((P $File)), '(?m)^\s*item\s*$')).Count }
 

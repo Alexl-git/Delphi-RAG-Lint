@@ -165,7 +165,7 @@ $symJson = Join-Path $WorkDir 'dfmsyms.json'
 & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --format json --output $symJson `
   --query "SELECT s.kind, s.signature FROM symbols s JOIN files f ON f.id = s.file_id WHERE f.path LIKE '%.dfm'" 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $sigs = @()
-if (Test-Path $symJson) { $sigs = @((Get-Content $symJson -Raw | ConvertFrom-Json).rows | ForEach-Object { $_[1] }) }
+if (Test-Path $symJson) { $sigs = @((Get-Content $symJson -Raw | ConvertFrom-Json | ForEach-Object { $_ }).rows | ForEach-Object { $_[1] }) }
 Check 'control: the .dfm component symbol carries TMyWidget in `signature`' `
   ($sigs -contains 'TMyWidget') ("signatures=" + ($sigs -join ','))
 

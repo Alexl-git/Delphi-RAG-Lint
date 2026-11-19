@@ -107,7 +107,7 @@ function Run-Exe([string[]]$ArgList, [hashtable]$EnvVars) {
 # One scenario: python holds the lock HoldMs; optional fake beat; the victim reindexes.
 function Run-Case([string]$Mode, [string]$DbField) {
   $out = Join-Path $WorkDir "perp-$Mode.out"
-  $hp = Start-Process python -ArgumentList @('-I', $perp, $db, 'BusyUnit1.pas', '--hold-ms', "$HoldMs") -PassThru -NoNewWindow -RedirectStandardOutput $out
+  $hp = Start-Process python -ArgumentList @('-I', $perp, $db, 'BusyUnit1.pas', '--hold-ms', "$HoldMs") -PassThru -NoNewWindow -RedirectStandardOutput $out; $null = $hp.Handle
   $sw = [System.Diagnostics.Stopwatch]::StartNew()
   while (((-not (Test-Path $out)) -or ((Get-Content $out -Raw) -notmatch 'READY')) -and $sw.ElapsedMilliseconds -lt 10000) { Start-Sleep -Milliseconds 100 }
   $fake = $null

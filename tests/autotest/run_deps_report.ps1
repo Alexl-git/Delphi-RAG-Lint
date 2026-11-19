@@ -162,7 +162,7 @@ try {
 
 $rep = $null
 try {
-  $rep = $jsonRaw1 | ConvertFrom-Json
+  $rep = $jsonRaw1 | ConvertFrom-Json | ForEach-Object { $_ }
 } catch {
   Check 'deps-report --json parses as JSON' $false "parse error: $($_.Exception.Message); raw=$jsonRaw1"
 }
@@ -241,7 +241,7 @@ Write-Host 'deps-report --edges --format json (flat edge list)' -ForegroundColor
 $edgesRaw = (& $Exe deps-report --db $db --edges --format json) -join "`n"
 $edgesRep = $null
 try {
-  $edgesRep = $edgesRaw | ConvertFrom-Json
+  $edgesRep = $edgesRaw | ConvertFrom-Json | ForEach-Object { $_ }
 } catch {
   Check 'deps-report --edges --json parses as JSON' $false "parse error: $($_.Exception.Message); raw=$edgesRaw"
 }

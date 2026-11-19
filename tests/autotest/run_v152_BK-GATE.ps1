@@ -33,7 +33,7 @@ $Tmp = Join-Path $env:TEMP ('bkgate_' + [guid]::NewGuid().ToString('N').Substrin
 Push-Location $Tmp
 $PingHost = '127.{0}.{1}.{2}' -f (Get-Random -Min 2 -Max 250), (Get-Random -Min 2 -Max 250), (Get-Random -Min 2 -Max 250)
 function Parked { return @(Get-CimInstance Win32_Process -Filter "Name = 'PING.EXE' OR Name = 'ping.exe'" | Where-Object { "$($_.CommandLine)" -match [regex]::Escape($PingHost) }) }
-function Stop-Parked { foreach ($p in (Parked)) { try { [Diagnostics.Process]::GetProcessById([int]$p.ProcessId).Kill() } catch { } } }
+function Stop-Parked { foreach ($p in (@(Parked))) { try { [Diagnostics.Process]::GetProcessById([int]$p.ProcessId).Kill() } catch { } } }
 function Tree-Hash([string]$Dir) {
   return (Get-ChildItem $Dir -Recurse -File | Where-Object { $_.Name -ne 'nul' -and $_.Extension -notin '.sqlite', '.dcu', '.exe', '.rsm', '.map', '.drc', '.sqlite-wal', '.sqlite-shm', '.res', '.identcache', '.local', '.flag', '.log', '.err', '.out' -and $_.FullName -notmatch '\\Win64\\|\\Win32\\|\\__history\\|\\__recovery\\' } |
       Sort-Object FullName | ForEach-Object { "$($_.Name)|$((Get-FileHash $_.FullName -Algorithm SHA1).Hash)" }) -join "`n"
@@ -80,7 +80,7 @@ try {
     [IO.File]::WriteAllText($bat, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
     $a = @('extract-method', '--file', $P.Basic, '--from-line', "$($P.From)", '--to-line', "$($P.From + 1)", '--name', 'Extracted', '--apply', '--db', $P.Db, '--rsvars', $bat, '--build-timeout', '600')
     $q = ($a | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' '
-    $run = Start-Process -FilePath $Exe -ArgumentList $q -RedirectStandardOutput (Join-Path $Tmp 'b21.out') -RedirectStandardError (Join-Path $Tmp 'b21.err') -WorkingDirectory $Tmp -NoNewWindow -PassThru
+    $run = Start-Process -FilePath $Exe -ArgumentList $q -RedirectStandardOutput (Join-Path $Tmp 'b21.out') -RedirectStandardError (Join-Path $Tmp 'b21.err') -WorkingDirectory $Tmp -NoNewWindow -PassThru; $null = $run.Handle
     $parked = Wait-For { (Test-Path $flag) -or $run.HasExited } 300
     $isParked = $parked -and (Test-Path $flag) -and -not $run.HasExited
     Check 'S0 setup: the after-build parked' $isParked

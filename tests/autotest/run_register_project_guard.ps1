@@ -151,7 +151,7 @@ Check 'apply reports the section as registered' ($app -match 'registered section
 Check 'BOTH copies changed' (((Sha $M64) -ne $before64) -and ((Sha $M32) -ne $before64))
 Check 'and they are still byte-identical to each other' ((Sha $M64) -eq (Sha $M32)) 'a split manifest is the defect this guards'
 
-$j = Get-Content $M64 -Raw | ConvertFrom-Json
+$j = Get-Content $M64 -Raw | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'the new section is present' (@($j.indexes.sections | Where-Object { $_.name -eq 'Thing' }).Count -eq 1)
 Check 'the pre-existing section survived' (@($j.indexes.sections | Where-Object { $_.name -eq 'AlreadyOwned' }).Count -eq 1)
 # The writer edits the JSON rather than re-serialising the parsed record. A

@@ -110,7 +110,7 @@ Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 # sql --json rows are POSITIONAL arrays: map them onto columns[].name.
 function Q([string]$Sql) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --query $Sql 2>$null } | Out-String
-  $j = $raw | ConvertFrom-Json
+  $j = $raw | ConvertFrom-Json | ForEach-Object { $_ }
   $names = @($j.columns | ForEach-Object { $_.name })
   $out = @()
   foreach ($r in @($j.rows)) {

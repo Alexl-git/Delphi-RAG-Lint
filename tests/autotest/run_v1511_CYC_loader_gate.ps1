@@ -56,7 +56,7 @@ try {
     $common = @('cycles', '--fix', '--hub-surface', '--project', $dproj, '--db', $db, '--library-db', $LibraryDb, '--platform', 'win32', '--cycle', '1')
     $dry = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @common --no-compile --format text 2>$null } | Out-String); $dryCode = $LASTEXITCODE
     $errFile = Join-Path $WorkDir 'apply.err'
-    $app = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @common --apply --rsvars $wrap --build-timeout 1800 --format text 2> $errFile } | Out-String); $appCode = $LASTEXITCODE
+    $app = ($null | & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); $input | & $Exe @common --apply --rsvars $wrap --build-timeout 1800 --format text 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String); $appCode = $LASTEXITCODE
     $err = if (Test-Path $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
   } finally { Pop-Location }
   Check 'l0 dry run: R3 plans the 78-unit group, 76 spokes, the group breaks, mechanical   (RED on 1.51.0: exit 2)' (($dryCode -eq 0) -and

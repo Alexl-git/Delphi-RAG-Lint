@@ -87,11 +87,11 @@ function Get-PlanText([string]$Db, [string]$RunDir) {
   try {
     $p = Start-Process -FilePath $Exe -WorkingDirectory $RunDir -NoNewWindow -Wait -PassThru `
       -ArgumentList (@('cycles', '--db', ('"' + $Db + '"'), '--edges', '--causes', '--plan', '--format', 'text') + $LibArgs) `
-      -RedirectStandardOutput $outFile -RedirectStandardError (Join-Path $WorkDir 'plan-stderr.txt')
+      -RedirectStandardOutput $outFile -RedirectStandardError (Join-Path $WorkDir 'plan-stderr.txt'); $null = $p.Handle
   } finally {
     $env:DRAGLINT_TEST_DUMP_PLAN = $null
   }
-  $dump = if (Test-Path $dumpFile) { @([IO.File]::ReadAllLines($dumpFile) | Where-Object { $_ -ne '' }) } else { @() }
+  $dump = @(if (Test-Path $dumpFile) { @([IO.File]::ReadAllLines($dumpFile) | Where-Object { $_ -ne '' }) } else { @() })
   return @{ Exit = $p.ExitCode; Text = $Ascii.GetString([IO.File]::ReadAllBytes($outFile)); Dump = $dump }
 }
 

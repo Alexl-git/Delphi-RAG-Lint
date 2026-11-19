@@ -109,7 +109,7 @@ function P([string]$n) { return (Join-Path $WorkDir $n) }
 function Json([string]$s) {
   $a = $s.IndexOf('{'); $b = $s.LastIndexOf('}')
   if ($a -lt 0 -or $b -le $a) { return $null }
-  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json) } catch { return $null }
+  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function ErrLines([string]$s) { return ,@($s -split "`n" | Where-Object { $_ -match '^\s*line \d+: ' -and $_ -notmatch 'warning:' }) }
 
@@ -751,7 +751,7 @@ end
         $f = @((Join-Path $OldDumpDir "$q.d6.json"), (Join-Path $OldDumpDir "$q.d4.json"), (Join-Path $OldDumpDir "$q.d2.json")) | Where-Object { (Test-Path $_) -and ((Get-Item $_).Length -gt 0) } | Select-Object -First 1
         $map = $null
         if ($f) {
-          $js = Get-Content -Raw $f | ConvertFrom-Json
+          $js = Get-Content -Raw $f | ConvertFrom-Json | ForEach-Object { $_ }
           $map = @{}
           foreach ($n in $js.properties) { if (-not $map.ContainsKey($n.path.ToLower())) { $map[$n.path.ToLower()] = $n } }
         }
@@ -797,7 +797,7 @@ end
           $checks.Add(@($ln, 'to', $Matches[1], @($b)))
         } elseif ($L -match '^#mapping\s+(\S+)\s+#(when|else)\b(.*)$') {
           $name = $Matches[1]; $rest = $Matches[3]
-          $bs = if ($applies.ContainsKey($name)) { $applies[$name] } elseif ($b -gt 0) { @($b) } else { @() }
+          $bs = @(if ($applies.ContainsKey($name)) { $applies[$name] } elseif ($b -gt 0) { @($b) } else { @() })
           if ($Matches[2] -eq 'when' -and $rest -match '^\s*(\S+)\s*=') { $checks.Add(@($ln, 'from', $Matches[1], $bs)) }
           if ($rest -match '->\s*(.+)$') { foreach ($set in $Matches[1].Split(',')) { if ($set.Trim() -match '^(\S+)') { $checks.Add(@($ln, 'to', $Matches[1], $bs)) } } }
         }

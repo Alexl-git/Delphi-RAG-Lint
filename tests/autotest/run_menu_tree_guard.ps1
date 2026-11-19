@@ -70,7 +70,7 @@ $want = Get-Rows (Get-Content "$fx\expected-paths.txt" -Raw) $false
 Check 'golden has rows' ($want.Count -ge 10) "($($want.Count))"
 
 # --- paths, cell by cell ---
-$paths = (& { $ErrorActionPreference = 'Continue'; & $Exe menu-tree --project $proj --db $db --format paths 2> "$WorkDir\paths.err" } | Out-String)
+$paths = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath("$WorkDir\paths.err"); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe menu-tree --project $proj --db $db --format paths 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
 Check 'menu-tree --format paths exits 0' ($LASTEXITCODE -eq 0) "(exit $LASTEXITCODE)"
 $got = Get-Rows $paths $true
 $bad = Compare-Rows $want $got
@@ -83,10 +83,10 @@ $ctl = Compare-Rows $seeded $got
 Check 'positive control: a one-cell golden edit is reported' ($ctl.Count -eq 1) "($($ctl.Count) mismatch(es))"
 
 # --- json ---
-$jsonText = (& { $ErrorActionPreference = 'Continue'; & $Exe menu-tree --project $proj --db $db --format json 2> "$WorkDir\json.err" } | Out-String)
+$jsonText = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath("$WorkDir\json.err"); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe menu-tree --project $proj --db $db --format json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
 $jsonExit = $LASTEXITCODE
 $j = $null
-try { $j = $jsonText | ConvertFrom-Json } catch { $j = $null }
+try { $j = $jsonText | ConvertFrom-Json | ForEach-Object { $_ } } catch { $j = $null }
 Check 'menu-tree --format json exits 0 and parses' (($jsonExit -eq 0) -and ($null -ne $j)) "(exit $jsonExit)"
 Check 'json schema = menu-tree/1' ($null -ne $j -and $j.schema -eq 'menu-tree/1') "(got [$($j.schema)])"
 # external: TFixtureForm.mnuTools + the four MT.TwoClass field roots (TFirstMenu/TSecondMenu x FMenu/FPopup)

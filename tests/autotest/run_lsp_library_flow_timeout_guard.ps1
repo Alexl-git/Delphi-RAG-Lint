@@ -110,7 +110,7 @@ function LspOpen([string]$PasFile, [string]$Db, [string]$Tag) {
   $in = Join-Path $dir 'in.txt'; $so = Join-Path $dir 'out.txt'; $se = Join-Path $dir 'err.txt'
   [IO.File]::WriteAllText($in, ($msgs -join ''), (New-Object Text.UTF8Encoding($false)))
   $p = Start-Process $exePath -ArgumentList @('lsp', '--db', ('"' + $Db + '"'), '--full-rules') -WorkingDirectory $WorkDir `
-         -RedirectStandardInput $in -RedirectStandardOutput $so -RedirectStandardError $se -NoNewWindow -Wait -PassThru
+         -RedirectStandardInput $in -RedirectStandardOutput $so -RedirectStandardError $se -NoNewWindow -Wait -PassThru; $null = $p.Handle
   $out = [IO.File]::ReadAllText($so); $err = [IO.File]::ReadAllText($se)
   $codes = @([regex]::Matches($out, '"code":"([a-z0-9\-]+)"') | ForEach-Object { $_.Groups[1].Value })
   $cost = ([regex]::Matches($err, 'full-rules[^\r\n]*') | ForEach-Object Value) -join ' | '

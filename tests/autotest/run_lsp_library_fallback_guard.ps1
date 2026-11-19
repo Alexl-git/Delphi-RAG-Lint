@@ -132,7 +132,7 @@ function Run-Case([string]$Tag, [string[]]$Dbs, [hashtable]$Defaults) {
   $raw = [IO.File]::ReadAllText($outF)
   $hover = ''; $notice = ''
   foreach ($m in [regex]::Matches($raw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $m.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $m.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 2 -and $null -ne $o.result) { $hover = [string]$o.result.contents.value }
     if ($o.method -eq 'draglint/context') { $notice += [string]$o.params.notice + ' ' }
   }

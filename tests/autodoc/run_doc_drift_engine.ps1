@@ -52,7 +52,7 @@ function Get-Drift($qname) {
   $rows = @()
   foreach ($ln in $out) {
     $t = $ln.Trim()
-    if ($t.StartsWith('{')) { $rows += ($t | ConvertFrom-Json) }
+    if ($t.StartsWith('{')) { $rows += ($t | ConvertFrom-Json | ForEach-Object { $_ }) }
   }
   return ,$rows
 }

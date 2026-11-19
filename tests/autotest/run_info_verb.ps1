@@ -14,7 +14,7 @@ $fail = 0
 function Check($c,$m){ if(-not $c){Write-Host "FAIL: $m";$script:fail++}else{Write-Host "PASS: $m"} }
 
 $json = & $exe info --json
-$o = $json | ConvertFrom-Json
+$o = $json | ConvertFrom-Json | ForEach-Object { $_ }
 Check ($o.schema -eq 'info/1') 'schema is info/1'
 Check ($o.name -eq 'drag-lint') 'name is drag-lint'
 Check ($o.version -and $o.version.Length -ge 3) 'version present'
@@ -85,7 +85,7 @@ try {
       $a = @('info', '--json'); foreach ($d in $dbs) { $a += @('--db', $d) }
       $j = (& { $ErrorActionPreference = 'Continue'; & $exe @a 2>$null }) -join "`n"
       $i = $j.IndexOf('{'); if ($i -lt 0) { return @() }
-      return @(($j.Substring($i) | ConvertFrom-Json).indexes)
+      return @(($j.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }).indexes)
     }
     function TextOut([string[]]$dbs) {
       $a = @('info'); foreach ($d in $dbs) { $a += @('--db', $d) }
@@ -93,7 +93,7 @@ try {
     }
 
     # current + missing in ONE call: --db is repeatable in text mode as in JSON.
-    $jr = JsonIdx @($db, $missing)
+    $jr = @(JsonIdx @($db, $missing))
     $t  = TextOut @($db, $missing)
     Check ($LASTEXITCODE -eq 0) 'info --db (text) exits 0'
     Check (($jr.Count -eq 2) -and ($jr[0].verdict -eq 'current') -and ($jr[1].verdict -eq 'missing')) `
@@ -134,7 +134,7 @@ public static class DlInfoVerbSqlite {
       $old = $rfp -replace '^r=[^;]+;', 'r=0.0.1-alpha;'
       $rc = [DlInfoVerbSqlite]::Exec($sqliteDll, $db, "UPDATE schema_meta SET value='$old' WHERE key='resolver_fingerprint'")
       Check ($rc -eq 0) "FIXTURE: older resolver stamp planted (sqlite rc=$rc)"
-      $jo = JsonIdx @($db)
+      $jo = @(JsonIdx @($db))
       $to = TextOut @($db)
       Check (($jo.Count -eq 1) -and ($jo[0].verdict -eq 'resolve-owed') -and $jo[0].remedy) `
         "FIXTURE: planted older resolver stamp reads resolve-owed with a remedy (got '$($jo[0].verdict)')"

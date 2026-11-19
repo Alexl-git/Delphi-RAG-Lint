@@ -147,7 +147,7 @@ function HoverDefLine([string]$QName) {
   $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname $QName --db $db --format json 2>&1 | ForEach-Object { "$_" } }) |
            ForEach-Object { "$_" } | Where-Object { $_.TrimStart().StartsWith('{') }
   if (-not $raw) { return '<no json>' }
-  return ([string]($raw | Select-Object -First 1) | ConvertFrom-Json).def_line
+  return ([string]($raw | Select-Object -First 1) | ConvertFrom-Json | ForEach-Object { $_ }).def_line
 }
 # The engine's own stub predicate, transcribed (see the suite header).
 $stubTerm = "kind IN ('class','interface') AND COALESCE(TRIM(heritage),'')='' AND end_line<=start_line"

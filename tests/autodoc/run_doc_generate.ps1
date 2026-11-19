@@ -44,7 +44,7 @@ try {
   # Dry-run first: file must NOT change, action=created.
   $before = [IO.File]::ReadAllBytes($target)
   $j = & { $ErrorActionPreference = 'Continue'; & $exePath document --qname doc_generate.Add --db $db --json 2>$null } | Out-String
-  $o = $null; try { $o = ($j | ConvertFrom-Json) } catch { $o = $null }
+  $o = $null; try { $o = ($j | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $o = $null }
   Check 'dry-run: json action = created' ($null -ne $o -and $o.action -eq 'created')
   Check 'dry-run: json applied = false'  ($null -ne $o -and $o.applied -eq $false)
   $after = [IO.File]::ReadAllBytes($target)

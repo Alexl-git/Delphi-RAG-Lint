@@ -63,7 +63,7 @@ function MaxLineLen([string]$Path) {
 }
 function Get-Indent([string]$s) { return $s.Substring(0, $s.Length - $s.TrimStart().Length) }
 function DriftCount([string]$Json) {
-  try { return @(ConvertFrom-Json $Json | Where-Object { $_.rule -eq 'doc-drift' }).Count } catch { return -1 }
+  try { return @(ConvertFrom-Json $Json | ForEach-Object { $_ } | Where-Object { $_.rule -eq 'doc-drift' }).Count } catch { return -1 }
 }
 # The contiguous /// run directly above the first line matching $declPattern, RAW.
 function Get-Block([string[]]$lines, [string]$declPattern) {
@@ -131,7 +131,7 @@ end.
 Write-Ascii $d1 "program K;`n`n{`$APPTYPE CONSOLE}`n`nuses Keep in 'Keep.pas';`n`nbegin`nend.`n"
 $c = @(); foreach ($i in 1..3) { $c += Cycle $d1 $b1 $u1 'Keep.KeepDirect' }
 Check 'K1: document --apply exits 0 on every cycle' ((@($c | Where-Object { $_.Code -ne 0 }).Count) -eq 0) (($c | ForEach-Object { "$($_.Action)/$($_.Edits)" }) -join ' ')
-$blk = Get-Block ([IO.File]::ReadAllLines($u1)) '^procedure KeepDirect;'
+$blk = @(Get-Block ([IO.File]::ReadAllLines($u1)) '^procedure KeepDirect;')
 Check 'K1: POSITIVE CONTROL -- the block is still there and was written by the engine' (($blk.Count -ge 2) -and (($blk -join "`n") -match 'drag-lint:auto')) ($blk -join ' | ')
 $bad = @($blk | Where-Object { (Get-Indent $_) -cne '  ' })
 Check 'K1: EVERY /// line of the block sits at exactly two spaces' (($blk.Count -gt 0) -and ($bad.Count -eq 0)) ($blk -join ' | ')
@@ -140,7 +140,7 @@ $null = Run @('index', '--project', $d1, '--db', $b1)
 Check 'K1: lint --rule doc-drift reports 0' ((DriftCount (RunJson @('lint', $u1, '--db', $b1, '--rule', 'doc-drift', '--project-rules', '--json'))) -eq 0)
 
 $cm = @(); foreach ($i in 1..2) { $cm += Cycle $d1 $b1 $u1 'Keep.TMixed.MixedMember' }
-$blkm = Get-Block ([IO.File]::ReadAllLines($u1)) '^    procedure MixedMember;'
+$blkm = @(Get-Block ([IO.File]::ReadAllLines($u1)) '^    procedure MixedMember;')
 $badm = @($blkm | Where-Object { (Get-Indent $_) -cne '    ' })
 Check 'K2: a mixed-indent block lands at the DECLARATION indent (four spaces)' (($blkm.Count -gt 0) -and ($badm.Count -eq 0)) ($blkm -join ' | ')
 Check 'K2: the next cycle is a no-op' ($cm[1].Edits -eq 0) "$($cm[1].Action)/$($cm[1].Edits)"
@@ -157,7 +157,7 @@ Write-Ascii $d3 "program K3;`n`n{`$APPTYPE CONSOLE}`n`nuses S2 in 'S2.pas', Call
 $null = Run @('index', '--project', $d3, '--db', $db3)
 $r = Run @('document', '--unit', $u3, '--db', $db3, '--apply', '--no-backup')
 $l3 = [IO.File]::ReadAllLines($u3)
-$blk3 = Get-Block $l3 '^type TC = class end;'
+$blk3 = @(Get-Block $l3 '^type TC = class end;')
 $bad3 = @($blk3 | Where-Object { (Get-Indent $_) -cne '  ' })
 Check 'K3: POSITIVE CONTROL -- the block is wrapped over several lines' ($blk3.Count -gt 4) "$($blk3.Count) lines; $(LastLine $r.Out)"
 Check 'K3: EVERY /// line keeps two spaces' (($blk3.Count -gt 0) -and ($bad3.Count -eq 0)) ($blk3 -join ' | ').Substring(0, [Math]::Min(200, ($blk3 -join ' | ').Length))

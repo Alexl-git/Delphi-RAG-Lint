@@ -47,7 +47,7 @@ try {
   $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index (Join-Path $WorkDir 'lib') --db $Lib --library-db none *> "$Lib.log" }
   $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index $Src --db $Db --library-db none *> "$Db.log" }
   $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe rename --kind symbol --name uTok.TToken.Text --to Caption --db $Db --library-db $Lib --plan --json 2>$null } | Out-String)
-  $j = $null; try { $j = $o | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $o | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   Check 'b0 the plan is JSON' ($null -ne $j) $o
   $ref = @($j.refusals)
   $castLines = @((LineOf 'kEdit : TEdit('), (LineOf 'kCombo: TComboBox('), (LineOf 'AValue:= TEdit('), (LineOf 'AValue:= TComboBox('))

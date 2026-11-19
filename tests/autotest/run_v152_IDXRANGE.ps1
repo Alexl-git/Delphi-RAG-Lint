@@ -43,11 +43,11 @@ function Assert($name, $cond) {
   if ($cond) { Write-Host "PASS  $name" } else { Write-Host "FAIL  $name" -ForegroundColor Red; $script:fail++ }
 }
 function Lint([string]$path, [string]$cfg, [switch]$NoNarrow) {
-  $a = if ($NoNarrow) { @('lint', $path, '--json') } else { @('lint', $path, '--rule', $rule, '--json') }
+  $a = @(if ($NoNarrow) { @('lint', $path, '--json') } else { @('lint', $path, '--rule', $rule, '--json') })
   if ($cfg) { $a += @('--config', $cfg) }
   $raw = & { $ErrorActionPreference = 'Continue'; & $exe @a 2>$null }
   $r = @()
-  try { $r = @($raw | ConvertFrom-Json) } catch { $r = @() }
+  try { $r = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $r = @() }
   return ,@($r | Where-Object { $_ -and $_.rule -eq $rule })
 }
 
@@ -80,7 +80,7 @@ Assert "positive control: config enables it without --rule (got $($onFull.Count)
 Assert "default ON: the same findings without any config (got $($dflt.Count))" ($dflt.Count -eq $nExpected)
 
 # 4: catalogue
-$cat = (& { $ErrorActionPreference = 'Continue'; & $exe rules --json 2>$null } | ConvertFrom-Json).rules | Where-Object { $_.id -eq $rule }
+$cat = (& { $ErrorActionPreference = 'Continue'; & $exe rules --json 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }).rules | Where-Object { $_.id -eq $rule }
 Assert "rules --json lists the rule" ($null -ne $cat)
 Assert "default_enabled true (owner C3; BK-RULEFP)" ($cat.default_enabled -eq $true)
 Assert "fixable true" ($cat.fixable -eq $true)

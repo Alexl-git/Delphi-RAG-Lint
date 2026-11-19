@@ -202,7 +202,7 @@ end.
 function Invoke-Json([string[]]$DragArgs) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe @DragArgs 2>$null }) -join "`n"
   if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
-  return $raw | ConvertFrom-Json
+  return $raw | ConvertFrom-Json | ForEach-Object { $_ }
 }
 
 function Build-Db([string]$Name, [hashtable]$Files) {

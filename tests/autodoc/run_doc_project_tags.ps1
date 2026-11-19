@@ -394,8 +394,9 @@ Check 'NAME: no entry is ever tagged with the DB file name' (([IO.File]::ReadAll
 # deleting the row from a scratch copy.
 $dbL = Join-Path $root 'LegacyName.sqlite'
 Copy-Item -LiteralPath $dbX -Destination $dbL
-python -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute(`"DELETE FROM schema_meta WHERE key='project_tag'`"); c.commit(); print(c.execute(`"SELECT COUNT(*) FROM schema_meta WHERE key='project_tag'`").fetchone()[0]); c.close()" $dbL | Out-Null
-$left = python -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); print(c.execute(`"SELECT COUNT(*) FROM schema_meta WHERE key='project_tag'`").fetchone()[0]); c.close()" $dbL
+# No embedded double quotes in -c: Windows PowerShell 5.1 passes them to a native exe unescaped.
+python -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('DELETE FROM schema_meta WHERE key=?', ('project_tag',)); c.commit(); print(c.execute('SELECT COUNT(*) FROM schema_meta WHERE key=?', ('project_tag',)).fetchone()[0]); c.close()" $dbL | Out-Null
+$left = python -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); print(c.execute('SELECT COUNT(*) FROM schema_meta WHERE key=?', ('project_tag',)).fetchone()[0]); c.close()" $dbL
 Check 'FALLBACK setup: the copy has no project_tag row' ("$left".Trim() -eq '0') "rows=$left"
 $r = Run @('document', '--unit', $uShared, '--db', $dbL, '--apply', '--no-backup')
 $cf = CalledFrom (Shared)

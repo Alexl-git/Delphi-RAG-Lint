@@ -245,12 +245,12 @@ Check 'SANITY: project fixture indexed (index --project)' ($LASTEXITCODE -eq 0 -
 $UNITS  = @('uCycA.pas','uCycB.pas','uG1.pas','uG2.pas','uEnum.pas','uHelp.pas','uRts.pas')
 $CACHED = @('circular-uses','enum-helper-separate-units','duplicate-global-decl')
 
-function Rows($json) { @(if ($json -and $json.Trim()) { $json | ConvertFrom-Json } else { @() }) }
+function Rows($json) { @(if ($json -and $json.Trim()) { $json | ConvertFrom-Json | ForEach-Object { $_ } } else { @() }) }
 function Tuples($rows) { @($rows | ForEach-Object { '{0}|{1}|{2}|{3}|{4}|{5}' -f $_.rule, $_.severity, ([IO.Path]::GetFileName($_.file_path)), $_.start_line, $_.start_col, $_.message } | Sort-Object) }
 function LintOne($leaf, [string[]]$extra = @()) {
   $errF = Join-Path $WorkDir 'one.err'
   $env:DRAGLINT_PROFILE = '1'
-  $j = & { $ErrorActionPreference = 'Continue'; & $exePath lint (Join-Path $proj $leaf) --db $db --library-db $lib --rules-dir $rules --json @extra 2>$errF } | Out-String
+  $j = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errF); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath lint (Join-Path $proj $leaf) --db $db --library-db $lib --rules-dir $rules --json @extra 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String
   $env:DRAGLINT_PROFILE = $null
   [pscustomobject]@{ Rows = (Rows $j); Prof = (Get-Content $errF -Raw) }
 }

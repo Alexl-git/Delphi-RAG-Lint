@@ -106,14 +106,14 @@ $so = Join-Path $WorkDir 'out.txt'
 $se = Join-Path $WorkDir 'err.txt'
 $p = Start-Process $Exe -ArgumentList 'serve','--db',$DbPath -WorkingDirectory $WorkDir `
        -RedirectStandardInput $reqFile -RedirectStandardOutput $so -RedirectStandardError $se `
-       -NoNewWindow -Wait -PassThru
+       -NoNewWindow -Wait -PassThru; $null = $p.Handle
 Check 'serve exited cleanly' ($p.ExitCode -eq 0) "exit=$($p.ExitCode)"
 
 $resp = @{}
 foreach ($ln in (Get-Content $so)) {
   $t = $ln.Trim()
   if ($t -eq '') { continue }
-  try { $o = $t | ConvertFrom-Json } catch { continue }
+  try { $o = $t | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
   if (HasProp $o 'id') { $resp[[string]$o.id] = $o }
 }
 Check 'got a reply for every request that carried an id' ($resp.Count -eq 7) "replies=$($resp.Count)"

@@ -70,7 +70,7 @@ try {
   Check 'b3 line 35 untouched' ((LineOf $B.Unit 35) -eq 'Take(AWalk as TObject);') (LineOf $B.Unit 35)
   $bat = Join-Path $Tmp 'b.bat'
   [IO.File]::WriteAllText($bat, "@echo off`r`ncall `"$Rsvars`"`r`ncd /D `"$($B.Dir)`"`r`nmsbuild /t:Build /p:Config=Debug /p:Platform=Win64 /v:minimal GfDemo.dproj`r`n", [Text.Encoding]::ASCII)
-  $p = Start-Process -Wait -PassThru -NoNewWindow -FilePath cmd.exe -ArgumentList '/c', $bat -RedirectStandardOutput (Join-Path $Tmp 'b.out')
+  $p = Start-Process -Wait -PassThru -NoNewWindow -FilePath cmd.exe -ArgumentList '/c', $bat -RedirectStandardOutput (Join-Path $Tmp 'b.out'); $null = $p.Handle
   Check 'b4 written project builds' ($p.ExitCode -eq 0) "msbuild exit $($p.ExitCode)"
   # c: positive control, gate opted out = the break is written
   $Cc = New-Case 'c'

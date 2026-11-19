@@ -16,17 +16,17 @@ $fail = 0
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
   if ($Ok) { Write-Host "PASS $Name" } else { Write-Host "FAIL $Name $Detail" -ForegroundColor Red; $script:fail++ }
 }
-$all = (& { $ErrorActionPreference = 'Continue'; & $exePath rules --json 2>$null } | Out-String | ConvertFrom-Json)
+$all = (& { $ErrorActionPreference = 'Continue'; & $exePath rules --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ })
 Check 'control: rules --json lists more than 100 rules' (@($all.rules).Count -gt 100) "$(@($all.rules).Count)"
 
-$one = (& { $ErrorActionPreference = 'Continue'; & $exePath rules --rule threadvar-managed --json 2>$null } | Out-String | ConvertFrom-Json)
+$one = (& { $ErrorActionPreference = 'Continue'; & $exePath rules --rule threadvar-managed --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ })
 Check 'rules --rule <id> --json: exactly that rule' ((@($one.rules).Count -eq 1) -and ($one.rules[0].id -eq 'threadvar-managed')) "$(@($one.rules).Count)"
 Check 'rules --rule <id> --json: summary.total = 1' ($one.summary.total -eq 1) "$($one.summary.total)"
 
 $txt = (& { $ErrorActionPreference = 'Continue'; & $exePath rules --rule threadvar-managed 2>&1 | ForEach-Object { "$_" } } | Out-String)
 Check 'rules --rule <id> text: 1 rule, the id is listed' (($txt -match '(?m)^1 rules across 1 categories') -and ($txt -match '(?m)^\s+threadvar-managed\s')) $txt
 
-$two = (& { $ErrorActionPreference = 'Continue'; & $exePath rules --rule 'dictionary-get-without-check,threadvar-managed' --json 2>$null } | Out-String | ConvertFrom-Json)
+$two = (& { $ErrorActionPreference = 'Continue'; & $exePath rules --rule 'dictionary-get-without-check,threadvar-managed' --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ })
 $ids = @($two.rules | ForEach-Object { $_.id } | Sort-Object)
 Check 'rules --rule a,b --json: both, nothing else' (($ids -join ',') -eq 'dictionary-get-without-check,threadvar-managed') ($ids -join ',')
 

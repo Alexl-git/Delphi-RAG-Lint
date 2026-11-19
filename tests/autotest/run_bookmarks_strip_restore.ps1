@@ -31,7 +31,7 @@ function Same($a, $b) { [Convert]::ToBase64String($a) -eq [Convert]::ToBase64Str
 function Latin1 { [Text.Encoding]::GetEncoding(28591) }
 function Put($p, $text) { [IO.File]::WriteAllBytes($p, (Latin1).GetBytes($text)) }
 function Get($p) { (Latin1).GetString([IO.File]::ReadAllBytes($p)) }
-function Json($o) { try { $o | Out-String | ConvertFrom-Json } catch { $null } }
+function Json($o) { try { $o | Out-String | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null } }
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe"; exit 2 }
 $Exe = (Resolve-Path $Exe).Path
 [IO.Directory]::CreateDirectory($WorkDir) | Out-Null

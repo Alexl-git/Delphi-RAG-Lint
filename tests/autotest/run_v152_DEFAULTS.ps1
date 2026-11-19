@@ -34,7 +34,7 @@ $pas = Join-Path $fx 'UBars.pas'; $dfm = Join-Path $fx 'UBars.dfm'
 $r = 'form-object-without-field'
 
 # 1. defaults
-$rules = (& { $ErrorActionPreference = 'Continue'; & $exe rules --json 2>$null }) -join "`n" | ConvertFrom-Json
+$rules = (& { $ErrorActionPreference = 'Continue'; & $exe rules --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 $rl = if ($rules -is [array]) { $rules } else { $rules.rules }
 foreach ($id in 'dataset-edit-without-post', 'foreign-form-control-access', 'form-object-without-field') {
   $x = $rl | Where-Object { $_.id -eq $id }
@@ -50,7 +50,7 @@ function Lines([string]$cfg) {
   if ($cfg) { $a += @('--config', $cfg) }
   $raw = (& { $ErrorActionPreference = 'Continue'; & $exe @a 2>$null }) -join "`n"
   if ($raw.Trim() -eq '') { return @() }
-  @($raw | ConvertFrom-Json | Where-Object { $_.rule -eq $r } | ForEach-Object { "$($_.start_line)" })
+  @($raw | ConvertFrom-Json | ForEach-Object { $_ } | Where-Object { $_.rule -eq $r } | ForEach-Object { "$($_.start_line)" })
 }
 function LineOf($pat) { $l = [IO.File]::ReadAllLines($dfm); for ($i = 0; $i -lt $l.Count; $i++) { if ($l[$i] -match $pat) { return $i + 1 } }; -1 }
 function Cfg($json) { $p = Join-Path $box ("c" + [guid]::NewGuid().ToString('N').Substring(0, 6) + '.json'); [IO.File]::WriteAllText($p, $json); $p }
@@ -58,20 +58,20 @@ $lLabel = "$(LineOf 'object Label1\b')"; $lBtn = "$(LineOf 'object dxBarButton2\
 $noList = Cfg '{"form_object_without_field": {"use_default_list": false}}'
 
 [IO.File]::WriteAllText($listFile, "# test list`r`nTLabel`r`n")
-$g = Lines $null
+$g = @(Lines $null)
 Check 'list has TLabel: Label1 silent' (-not ($g -contains $lLabel)) ($g -join ' ')
 Check 'list has TLabel: dxBarButton2 (not listed) still fires (positive control)' ($g -contains $lBtn) ($g -join ' ')
-$g = Lines $noList
+$g = @(Lines $noList)
 Check 'use_default_list false: Label1 fires' ($g -contains $lLabel) ($g -join ' ')
 [IO.File]::WriteAllText($listFile, "# test list`r`n")
-$g = Lines $null
+$g = @(Lines $null)
 Check 'TLabel removed from list: Label1 fires' ($g -contains $lLabel) ($g -join ' ')
 [IO.File]::WriteAllText($listFile, "TdxBarB*`r`n")
-$g = Lines $null
+$g = @(Lines $null)
 Check 'wildcard TdxBarB*: dxBarButton2 silent' (-not ($g -contains $lBtn)) ($g -join ' ')
 Check 'wildcard TdxBarB*: Label1 fires' ($g -contains $lLabel) ($g -join ' ')
 [IO.File]::WriteAllText($listFile, "")
-$g = Lines (Cfg '{"form_object_without_field": {"exempt_classes": ["tlabel"]}}')
+$g = @(Lines (Cfg '{"form_object_without_field": {"exempt_classes": ["tlabel"]}}'))
 Check 'project exempt_classes tlabel (case-insensitive): Label1 silent' (-not ($g -contains $lLabel)) ($g -join ' ')
 Check 'project exempt_classes: dxBarButton2 fires' ($g -contains $lBtn) ($g -join ' ')
 

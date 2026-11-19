@@ -118,7 +118,7 @@ print(t)
   # an index in [READ_MIN, SCHEMA_VERSION] is READ, not skipped (run_schema_read_compat.ps1). A pre-150
   # exe has no key -> one version old, as before.
   $sj = (& { $ErrorActionPreference = 'Continue'; & $exePath schema --db $lib --format json 2>&1 | ForEach-Object { "$_" } } | Out-String)
-  $sj = $sj.Substring($sj.IndexOf('{')) | ConvertFrom-Json
+  $sj = $sj.Substring($sj.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ }
   $target = if ($null -ne $sj.engine_schema_read_min) { [int]$sj.engine_schema_read_min - 1 } else { [int]$sj.schema_version - 1 }
   $old = & $py -I $stamp $lib "$target"
   Write-Host "library stamped schema v$old"

@@ -135,7 +135,7 @@ try {
   & { $ErrorActionPreference = 'Continue'; & $exePath index $sJson --db $dbJ 2>$null } | Out-Null
   $rj = & { $ErrorActionPreference = 'Continue'; & $exePath document --project $dprJ --db $dbJ --json 2>$null } | Out-String
   $ecj = $LASTEXITCODE
-  $oj = $null; try { $oj = ($rj | ConvertFrom-Json) } catch { $oj = $null }
+  $oj = $null; try { $oj = ($rj | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $oj = $null }
   # Aggregated over unitA (Alpha, Beta, Noop) + unitB (TWidget, Compute) = 5 public
   # interface-section documentable decls; facts-only keeps Alpha, Beta, Compute = 3.
   Check 'json: exit 0'            ($ecj -eq 0)

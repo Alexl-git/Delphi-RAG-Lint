@@ -141,7 +141,7 @@ try {
       -ArgumentList @('index', '--project', (Join-Path $proj 'App.dpr'), '--db', $db, '--watch', '--interval', '600') `
       -PassThru -WindowStyle Hidden `
       -RedirectStandardOutput (Join-Path $WorkDir 'watch.out') `
-      -RedirectStandardError  (Join-Path $WorkDir 'watch.err')
+      -RedirectStandardError  (Join-Path $WorkDir 'watch.err'); $null = $watcher.Handle
 
   # Completion signal: the engine's stdout is block-buffered and the process
   # never exits, so the 'Done.' trailer never reaches the redirect file --

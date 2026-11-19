@@ -180,7 +180,7 @@ function Resolve-In([string]$File, [string]$Proj) {
   if ($Proj) { $a += @('--project',$Proj) }
   $o = Join-Path $WorkDir 'o.txt'
   $e = Join-Path $WorkDir 'e.txt'
-  $p = Start-Process -FilePath $Exe -ArgumentList $a -NoNewWindow -Wait -PassThru -RedirectStandardOutput $o -RedirectStandardError $e
+  $p = Start-Process -FilePath $Exe -ArgumentList $a -NoNewWindow -Wait -PassThru -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   ,@(Get-Content -LiteralPath $o -ErrorAction SilentlyContinue | Where-Object { $_.Trim() -ne '' })
 }
 

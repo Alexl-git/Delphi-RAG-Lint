@@ -35,7 +35,7 @@ function Tree-Hash([string]$Dir) {
 function Build-Project([string]$Proj, [string]$Tmp) {
   $bat = Join-Path $Tmp ([guid]::NewGuid().ToString('N') + '.bat')
   [IO.File]::WriteAllText($bat, "@echo off`r`ncall `"$Rsvars`"`r`ncd /d `"$(Split-Path $Proj)`"`r`nmsbuild /t:Build /p:Config=Debug /p:Platform=Win64 /v:minimal `"$(Split-Path $Proj -Leaf)`"`r`nexit /b %ERRORLEVEL%`r`n", [Text.Encoding]::ASCII)
-  $p = Start-Process -Wait -PassThru -NoNewWindow cmd.exe -ArgumentList "/c `"$bat`"" -RedirectStandardOutput "$bat.log" -RedirectStandardError "$bat.err"
+  $p = Start-Process -Wait -PassThru -NoNewWindow cmd.exe -ArgumentList "/c `"$bat`"" -RedirectStandardOutput "$bat.log" -RedirectStandardError "$bat.err"; $null = $p.Handle
   return $p.ExitCode
 }
 function Bare-Lf([string]$Path) {
@@ -59,10 +59,10 @@ function New-Project([string]$Name) {
   return $P
 }
 function Run-Json($P, [string[]]$More) {
-  $o = & { $ErrorActionPreference = 'Continue'; & $Exe extract-interface --db $P.Db --project $P.Proj --library-db none --format json @More 2> (Join-Path $Tmp 'run.err') }
+  $o = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath((Join-Path $Tmp 'run.err')); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe extract-interface --db $P.Db --project $P.Proj --library-db none --format json @More 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   $script:LastExit = $LASTEXITCODE
   $script:LastErr = [IO.File]::ReadAllText((Join-Path $Tmp 'run.err'))
-  try { return (($o -join "`n") | ConvertFrom-Json) } catch { return $null }
+  try { return (($o -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function Read-Markers([string]$Path) {
   $list = @()

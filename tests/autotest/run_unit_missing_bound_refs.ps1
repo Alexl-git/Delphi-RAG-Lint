@@ -193,7 +193,7 @@ function LintOf([string]$unit) {
 function BoundCount([string]$unit, [string]$name) {
   # sql --json rows are POSITIONAL arrays
   $q = "select count(*) from refs r join files f on f.id=r.file_id where f.path like '%$unit' and r.name_text='$name' and r.symbol_id>0"
-  $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query $q --json 2>&1 | ForEach-Object { "$_" } } | Out-String | ConvertFrom-Json
+  $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query $q --json 2>&1 | ForEach-Object { "$_" } } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }
   [int]$j.rows[0][0]
 }
 Push-Location C:\TEMP

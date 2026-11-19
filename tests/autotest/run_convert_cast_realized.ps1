@@ -228,7 +228,7 @@ function ApplyJson([string]$Rules) {
   finally { Pop-Location }
   $line = ($raw -split "`n" | Where-Object { $_.TrimStart().StartsWith('{') } | Select-Object -First 1)
   if (-not $line) { return @{ Raw = $raw; J = $null } }
-  try { return @{ Raw = $raw; J = ($line | ConvertFrom-Json) } } catch { return @{ Raw = $raw; J = $null } }
+  try { return @{ Raw = $raw; J = ($line | ConvertFrom-Json | ForEach-Object { $_ }) } } catch { return @{ Raw = $raw; J = $null } }
 }
 function KindsOf($r) { if ($r.J -and $r.J.items) { return @($r.J.items | ForEach-Object { $_.kind }) } else { return @() } }
 function TextOfKind($r,[string]$k) {
@@ -253,7 +253,7 @@ $good = ApplyJson $rulesGood
 $site = @(if ($good.J) { $good.J.items | Where-Object { $_.kind -eq 'cast-not-applied' -and $_.instance -eq 'btn1' } })
 Check 'T1 a cast WITH a pas template is refused at its access site: one cast-not-applied for btn1, line 21' `
       (($site.Count -eq 1) -and ($site[0].line -eq 21) -and ($site[0].field -eq 'warnings') -and ($site[0].file -like '*MyForm.pas')) `
-      ("kinds: " + ((KindsOf $good) -join ', ') + "`n" + ($site | ConvertTo-Json -Depth 4))
+      ("kinds: " + ((@(KindsOf $good)) -join ', ') + "`n" + ($site | ConvertTo-Json -Depth 4))
 
 Check 'T2 the refusal names the file, line, instance and cast, and says to convert the site by hand' `
       (($site.Count -eq 1) -and ($site[0].text -match 'MyForm\.pas:21 btn1\.Picture') -and ($site[0].text -match ': AssignGraphic') -and
@@ -265,14 +265,14 @@ Check 'T2b no rendered template reaches the report' `
       ("a rendered or raw template leaked: " + (TextOfKind $good 'cast-not-applied'))
 
 Check 'T3 the retired kind cast-applied is never emitted' `
-      (-not ((KindsOf $good) -contains 'cast-applied')) `
-      ("kinds: " + ((KindsOf $good) -join ', '))
+      (-not ((@(KindsOf $good)) -contains 'cast-applied')) `
+      ("kinds: " + ((@(KindsOf $good)) -join ', '))
 
 # ---- OUTCOME 2: cast resolves, NO pas template ------------------------------
 $noPas = ApplyJson $rulesNoPas
 Check 'T4 a cast with NO pas template is still refused' `
-      ((KindsOf $noPas) -contains 'cast-not-applied') `
-      ("kinds: " + ((KindsOf $noPas) -join ', '))
+      ((@(KindsOf $noPas)) -contains 'cast-not-applied') `
+      ("kinds: " + ((@(KindsOf $noPas)) -join ', '))
 
 Check 'T4b and the message says the cast was FOUND but carries no template' `
       ((TextOfKind $noPas 'cast-not-applied') -match '(?i)no pas template|found .*no .*template|carries no') `
@@ -281,8 +281,8 @@ Check 'T4b and the message says the cast was FOUND but carries no template' `
 # ---- OUTCOME 3: cast name resolves to nothing -------------------------------
 $unknown = ApplyJson $rulesUnknown
 Check 'T5 an UNRESOLVED cast name is refused' `
-      ((KindsOf $unknown) -contains 'cast-not-applied') `
-      ("kinds: " + ((KindsOf $unknown) -join ', '))
+      ((@(KindsOf $unknown)) -contains 'cast-not-applied') `
+      ("kinds: " + ((@(KindsOf $unknown)) -join ', '))
 
 Check 'T5b DISCRIMINATION the unresolved message is NOT the no-template message' `
       (-not ((TextOfKind $unknown 'cast-not-applied') -match '(?i)no pas template|carries no')) `
@@ -359,7 +359,7 @@ function ApplyTwo([string]$Rules) {
   finally { Pop-Location }
   $line = ($raw -split "`n" | Where-Object { $_.TrimStart().StartsWith('{') } | Select-Object -First 1)
   if (-not $line) { return @{ Raw = $raw; J = $null } }
-  try { return @{ Raw = $raw; J = ($line | ConvertFrom-Json) } } catch { return @{ Raw = $raw; J = $null } }
+  try { return @{ Raw = $raw; J = ($line | ConvertFrom-Json | ForEach-Object { $_ }) } } catch { return @{ Raw = $raw; J = $null } }
 }
 $two = ApplyTwo $rulesGood
 $notes2 = (($two.J.reemit_notes + $two.J.warnings + $two.J.todos) -join ' || ')
@@ -510,7 +510,7 @@ Check 'W6b ... while the .dfm half of the cast still converted (positive control
 
 # ---- K the editor's gate ----------------------------------------------------
 $info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n"
-$ij = $null; try { $ij = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json } catch {}
+$ij = $null; try { $ij = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'K info --json: capabilities.cast_site_refusal is true' (($null -ne $ij) -and ($ij.capabilities.cast_site_refusal -eq $true)) ''
 
 Write-Host ''

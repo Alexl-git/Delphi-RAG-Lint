@@ -65,7 +65,7 @@ try {
     $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null }) -join "`n"
     $i = $o.IndexOf('{'); $j = $o.LastIndexOf('}')
     if ($i -lt 0 -or $j -le $i) { return $null }
-    try { return ($o.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
+    try { return ($o.Substring($i, $j - $i + 1) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
   }
   function StripLine([string]$t) { return ($t -replace '^line \d+: ', '') }
   # Engine 1.36 echoes BOOK line numbers inside item text ("at line(s) 421, 424", "under #link at line 420")

@@ -244,7 +244,7 @@ try {
   $exit = $LASTEXITCODE
 } finally { Pop-Location }
 $doc = $null
-try { $doc = $raw | ConvertFrom-Json } catch { }
+try { $doc = $raw | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'lint-all --json parses' ($null -ne $doc) "exit=$exit raw=$($raw.Substring(0,[Math]::Min(600,$raw.Length)))"
 if ($null -eq $doc) { Write-Host 'run_duplicate_global_decl_library_tier: FAIL' -ForegroundColor Red; exit 1 }
 
@@ -288,10 +288,10 @@ Write-Host ''
 Write-Host '=== without a library store the tier is off, the project tier is not ===' -ForegroundColor Cyan
 Push-Location $proj
 try { $raw2 = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $projDb --quiet --json 2>$null }) -join "`n" } finally { Pop-Location }
-$doc2 = $null; try { $doc2 = $raw2 | ConvertFrom-Json } catch { }
+$doc2 = $null; try { $doc2 = $raw2 | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'project-only lint-all parses' ($null -ne $doc2) ''
 if ($null -ne $doc2) {
-  $all2 = if ($doc2.PSObject.Properties['findings']) { @($doc2.findings) } else { @($doc2) }
+  $all2 = @(if ($doc2.PSObject.Properties['findings']) { @($doc2.findings) } else { @($doc2) })
   $dup2 = @($all2 | Where-Object { ($_.rule -eq 'duplicate-global-decl' -or $_.rule_id -eq 'duplicate-global-decl' -or $_.ruleId -eq 'duplicate-global-decl') })
   # NOTE: lint-all may still resolve the MACHINE's real library index through the
   # manifest when only one --db is given, so this control asserts only that the

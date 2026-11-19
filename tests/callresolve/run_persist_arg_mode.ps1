@@ -127,7 +127,7 @@ try {
 Check 'V the fixture index was built' (Test-Path $db) $db
 
 function Sql([string]$Q) {
-  $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --limit 1000 --query $Q 2>$null } | ConvertFrom-Json
+  $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --limit 1000 --query $Q 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
   if ($null -eq $j) { return ,@() }
   $cols = @($j.columns | ForEach-Object { $_.name })
   $out = @()
@@ -157,7 +157,7 @@ function UsagesRw([string]$Name) {
   return $raw
 }
 function ArgsOf($json, [string]$Side) {
-  $o = $json | ConvertFrom-Json
+  $o = $json | ConvertFrom-Json | ForEach-Object { $_ }
   $rows = @()
   foreach ($t in @($o.targets)) { foreach ($r in @($t.$Side)) { $rows += ("{0}:{1}" -f $r.line, $r.arg) } }
   return ($rows | Sort-Object) -join ' '

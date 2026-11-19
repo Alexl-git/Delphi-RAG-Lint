@@ -88,7 +88,7 @@ function UnusedLines([string[]]$CmdArgs) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe @CmdArgs 2>$null } | ForEach-Object { "$_" }) -join "`n"
   $start = $raw.IndexOf('[')
   if ($start -lt 0) { return ,@() }
-  $rows = @($raw.Substring($start) | ConvertFrom-Json)
+  $rows = @(($raw.Substring($start) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   return ,@($rows | Where-Object { $_.rule -eq 'review-marker-unused' } | ForEach-Object { [int]$_.start_line })
 }
 

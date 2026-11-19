@@ -220,7 +220,7 @@ function Ancestors([string]$Name) {
   $json = JsonFrom $raw
   $names = @()
   if ($json) {
-    $o = $json | ConvertFrom-Json
+    $o = $json | ConvertFrom-Json | ForEach-Object { $_ }
     $names = @(@($o.ancestors) | ForEach-Object { $_.name })
   }
   return @{ Code = $code; Names = $names; Raw = ($raw -join ' | ') }
@@ -233,7 +233,7 @@ function Descends([string]$Name, [string]$Of) {
   $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query ancestors --name $Name --of $Of --json --db $db 2>$null }) | ForEach-Object { "$_" }
   $json = JsonFrom $raw
   if (-not $json) { return $null }
-  return [bool](($json | ConvertFrom-Json).is_descendant)
+  return [bool](($json | ConvertFrom-Json | ForEach-Object { $_ }).is_descendant)
 }
 
 # The engine's own stub predicate, transcribed (IsStub / IsForwardDeclClass).

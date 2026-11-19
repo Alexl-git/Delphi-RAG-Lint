@@ -47,7 +47,7 @@ function Bound([int]$line, [string]$name, [int]$minCol = 0) {
        "WHERE f.path LIKE '%\uMicXBase.pas' AND r.start_line=$line AND r.name_text='$name' AND r.kind='type_use' AND r.start_col>=$minCol"
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query $q --json --limit 50 2>$null }
   if ($LASTEXITCODE -ne 0) { return '<sql failed>' }
-  $j = ($raw | Where-Object { $_ -notmatch '^\(loaded' }) -join "`n" | ConvertFrom-Json
+  $j = ($raw | Where-Object { $_ -notmatch '^\(loaded' }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
   $rows = @($j.rows)
   if ($rows.Count -ne 1) { return "<$($rows.Count) refs>" }
   return [string]$rows[0][0]

@@ -193,7 +193,7 @@ function RunJson([string[]]$ExtraArgs) {
     # The engine prints a defaults banner on some paths; take the JSON object only.
     $i = $raw.IndexOf('{')
     if ($i -ge 0) {
-      try { $doc = ($raw.Substring($i) | ConvertFrom-Json); if ($try -gt 1) { Write-Host "  [NOTE] engine answered only on attempt $try (load flake)" -ForegroundColor Yellow }; return $doc } catch { }
+      try { $doc = ($raw.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }); if ($try -gt 1) { Write-Host "  [NOTE] engine answered only on attempt $try (load flake)" -ForegroundColor Yellow }; return $doc } catch { }
     }
     Start-Sleep -Milliseconds 500
   }
@@ -266,7 +266,7 @@ Check '4b and every real candidate is deselected' `
 # ---------------------------------------------------------------------------
 $clean = (& { $ErrorActionPreference = 'Continue'; & $exePath uses-fix (Join-Path $src 'uKeepMe.pas') --project $proj --db $db --format json 2>$null } | Out-String)
 $ci = $clean.IndexOf('{')
-$cleanJson = if ($ci -ge 0) { try { $clean.Substring($ci) | ConvertFrom-Json } catch { $null } } else { $null }
+$cleanJson = if ($ci -ge 0) { try { $clean.Substring($ci) | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null } } else { $null }
 Check '5 "nothing to change" still emits JSON' `
   (($null -ne $cleanJson) -and ($cleanJson.schema -eq 'uses-fix/1')) `
   'an empty stdout makes "nothing to do" indistinguishable from a crash'
@@ -280,7 +280,7 @@ Check '5 "nothing to change" still emits JSON' `
 $keep = Join-Path $src 'uKeepMe.pas'
 $rawA = (& { $ErrorActionPreference = 'Continue'; & $exePath uses-fix $keep --project $proj --db $db --apply --format json 2>$null } | Out-String)
 $ai = $rawA.IndexOf('{')
-$applyJson = if ($ai -ge 0) { try { $rawA.Substring($ai) | ConvertFrom-Json } catch { $null } } else { $null }
+$applyJson = if ($ai -ge 0) { try { $rawA.Substring($ai) | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null } } else { $null }
 Check '7a --apply with nothing to change still emits JSON' ($null -ne $applyJson) 'no document'
 Check '7b and reports applied=false, because nothing was written' `
   ($applyJson.applied -eq $false) "applied=$($applyJson.applied)"
@@ -303,7 +303,7 @@ Check '8 the counts object carries deselected' `
 #      Silence there makes a mistyped command look like an answer.
 # ---------------------------------------------------------------------------
 $sweepErr = Join-Path $scratch 'sweep.err'
-& { $ErrorActionPreference = 'Continue'; & $exePath uses-fix --project $proj --db $db --only uMoveMe --format json 2>$sweepErr } | Out-Null
+& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($sweepErr); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath uses-fix --project $proj --db $db --only uMoveMe --format json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-Null
 $sweepNote = if (Test-Path $sweepErr) { Get-Content $sweepErr -Raw } else { '' }
 Check '9a the sweep says --only does not apply to it' `
   ($sweepNote -match '--only applies to') "stderr was:`n$sweepNote"

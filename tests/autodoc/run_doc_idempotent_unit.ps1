@@ -58,7 +58,7 @@ try {
 
   # --- pass A: document the whole unit ---
   $a = & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply --json 2>$null } | Out-String
-  $oa = $null; try { $oa = ($a | ConvertFrom-Json) } catch { $oa = $null }
+  $oa = $null; try { $oa = ($a | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $oa = $null }
   Check 'passA: produced edits' ($null -ne $oa -and [int]$oa.edits -gt 0)
   $bytesA = [IO.File]::ReadAllBytes($target)
   Get-ChildItem $scratch -Filter *.bak | Remove-Item -Force -ErrorAction SilentlyContinue
@@ -68,7 +68,7 @@ try {
 
   # --- pass B: DRY RUN. This is the gate. ---
   $b = & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --json 2>$null } | Out-String
-  $ob = $null; try { $ob = ($b | ConvertFrom-Json) } catch { $ob = $null }
+  $ob = $null; try { $ob = ($b | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $ob = $null }
   Check 'passB parsed'            ($null -ne $ob)
   Check 'GATE passB: edits = 0 (reproducible)' ($null -ne $ob -and [int]$ob.edits -eq 0)
 

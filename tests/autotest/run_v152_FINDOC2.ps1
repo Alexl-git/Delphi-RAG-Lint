@@ -85,12 +85,12 @@ function New-Fixture([string]$Root) {
 function Run($Fx, [string[]]$A) {
   $errFile = Join-Path $WorkDir ("err-{0}.txt" -f [guid]::NewGuid().ToString('N'))
   Push-Location $Fx.Root
-  try { $out = & { $ErrorActionPreference = 'Continue'; & $Exe @A --db $Fx.Db 2>$errFile } | Out-String; $code = $LASTEXITCODE }
+  try { $out = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe @A --db $Fx.Db 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String; $code = $LASTEXITCODE }
   finally { Pop-Location }
   [pscustomobject]@{ Out = $out; Err = [IO.File]::ReadAllText($errFile); Code = $code }
 }
 function Parse-One([string]$Text) {
-  try { return ($Text | ConvertFrom-Json -ErrorAction Stop) } catch { return $null }
+  try { return ($Text | ConvertFrom-Json -ErrorAction Stop | ForEach-Object { $_ }) } catch { return $null }
 }
 # Shift every line of a unit down: N comment lines right after 'implementation'.
 function Shift-Impl([string]$Path, [int]$N) {
@@ -154,7 +154,7 @@ try {
   foreach ($mode in @('qname', 'unit')) {
     $fx = New-Fixture (Join-Path $WorkDir "d2$mode")
     [IO.File]::WriteAllText($fx.App, "{ shifted }`r`n" + [IO.File]::ReadAllText($fx.App), [Text.Encoding]::ASCII)
-    $sel = if ($mode -eq 'qname') { @('--qname', 'uApp.AppDo') } else { @('--unit', $fx.App) }
+    $sel = @(if ($mode -eq 'qname') { @('--qname', 'uApp.AppDo') } else { @('--unit', $fx.App) })
     $c = Run $fx (@('document') + $sel + @('--apply', '--json', '--no-backup'))
     $cj = Parse-One $c.Out
     Check "D2-JSON --$mode stdout parses as ONE JSON document" ($null -ne $cj) "out=$(($c.Out -split "`r?`n" | Select-Object -First 2) -join ' | ')"

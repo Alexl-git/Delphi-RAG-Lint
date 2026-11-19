@@ -104,7 +104,7 @@ function ParseJson($lines) {
   $raw = ($lines | ForEach-Object { "$_" }) -join "`n"
   $i = $raw.IndexOf('{')
   if ($i -lt 0) { return $null }
-  try { return ($raw.Substring($i) | ConvertFrom-Json) } catch { return $null }
+  try { return ($raw.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function WritersText($arr) { if ($null -eq $arr -or @($arr).Count -eq 0) { return '[]' }; return (ConvertTo-Json -InputObject @($arr) -Compress -Depth 8) }
 function CheckInitRaw($exe, $qn, $secs) {
@@ -218,7 +218,7 @@ $merr = Join-Path $WorkDir 'serve.err'
 $env:DRAGLINT_PROFILE = '1'
 try { $mout = $mreq | & { $ErrorActionPreference = 'Continue'; $input | & $Exe serve --db $copy 2>$merr } | Out-String } finally { $env:DRAGLINT_PROFILE = $null }
 $mrep = @{}
-foreach ($ln in ($mout -split "`n")) { try { $o = $ln.Trim() | ConvertFrom-Json; if ($o.id) { $mrep[[int]$o.id] = $o } } catch { } }
+foreach ($ln in ($mout -split "`n")) { try { $o = $ln.Trim() | ConvertFrom-Json | ForEach-Object { $_ }; if ($o.id) { $mrep[[int]$o.id] = $o } } catch { } }
 $profLines = @(([IO.File]::ReadAllText($merr) -split "`r?`n") | Where-Object { $_ -match 'CHECK-INIT PROFILE' })
 Check 'C1 serve prints one CHECK-INIT PROFILE line per check_init' ($profLines.Count -eq 2) ("{0} line(s)" -f $profLines.Count)
 $p2 = if ($profLines.Count -ge 2) { $profLines[1] } else { '' }

@@ -34,10 +34,10 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 function Run-LintAll([string]$Rule) {
   $sw = [Diagnostics.Stopwatch]::StartNew()
   $errF = Join-Path $script:scratch ("err-" + ($Rule -replace '[^a-z]', '') + ".txt")
-  $out = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $script:dbc --rule $Rule --json 2> $errF } | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errF); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath lint-all --db $script:dbc --rule $Rule --json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String
   $sw.Stop()
   $rows = @()
-  if ($out.Trim() -ne '') { $rows = @($out | ConvertFrom-Json) }
+  if ($out.Trim() -ne '') { $rows = @(($out | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   $keys = @($rows | ForEach-Object { '{0}:{1}:{2}' -f $_.rule, $_.file_path, $_.start_line } | Sort-Object)
   [pscustomobject]@{ Secs = $sw.Elapsed.TotalSeconds; Keys = $keys; Err = [IO.File]::ReadAllText($errF) }
 }

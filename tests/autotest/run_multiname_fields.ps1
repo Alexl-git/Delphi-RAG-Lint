@@ -105,7 +105,7 @@ Write-Host "engine: $ver exe=$Exe"
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 $json = & { $ErrorActionPreference = 'Continue'; & $Exe sql --query "select kind, qualified_name, start_line, start_col, signature from symbols where kind in ('field','var') order by start_line, start_col" --db $db --json 2>$null } | Out-String
-$doc = $json | ConvertFrom-Json
+$doc = $json | ConvertFrom-Json | ForEach-Object { $_ }
 $cols = @($doc.columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
 $rows = foreach ($r in $doc.rows) {
   $o = [ordered]@{}
@@ -143,12 +143,12 @@ $fieldCount = @($rows | Where-Object { $_.kind -eq 'field' }).Count
 Check 'exactly 21 field rows (no duplicates)' ($fieldCount -eq 21) "got: $fieldCount"
 
 # Positive control on params (already per-name before the fix).
-$pj = & { $ErrorActionPreference = 'Continue'; & $Exe sql --query "select count(*) from symbols where kind='param' and qualified_name like 'MultiNameFix.TCls.Run.%'" --db $db --json 2>$null } | Out-String | ConvertFrom-Json
+$pj = & { $ErrorActionPreference = 'Continue'; & $Exe sql --query "select count(*) from symbols where kind='param' and qualified_name like 'MultiNameFix.TCls.Run.%'" --db $db --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'params X1,X2,S1,S2 = 4 rows' ([int]$pj.rows[0][0] -ge 4) ("got: " + $pj.rows[0][0])
 
 # Refs: a usage of a later name lands on a declaration.
 foreach ($n in 'A2', 'A3', 'FB', 'FG2') {
-  $u = & { $ErrorActionPreference = 'Continue'; & $Exe usages --name $n --db $db --json 2>$null } | Out-String | ConvertFrom-Json
+  $u = & { $ErrorActionPreference = 'Continue'; & $Exe usages --name $n --db $db --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }
   $uses = @($u.reads).Count + @($u.writes).Count
   Check "usages $n has 1 declaration and >=1 use" ((@($u.declarations).Count -eq 1) -and ($uses -ge 1)) ("decl=" + @($u.declarations).Count + " uses=$uses")
 }

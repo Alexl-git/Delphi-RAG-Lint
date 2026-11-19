@@ -32,7 +32,7 @@ try {
   if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: no fixture DB" -ForegroundColor Red; exit 2 }
   $errFile = Join-Path $WorkDir 'lint-all.err'
   $env:DRAGLINT_PROFILE = '1'
-  try { & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --json 2> $errFile } | Out-Null } finally { $env:DRAGLINT_PROFILE = $null }
+  try { & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe lint-all --db $db --json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-Null } finally { $env:DRAGLINT_PROFILE = $null }
   $err = [IO.File]::ReadAllText($errFile)
   $i = $err.IndexOf('PROJECT-RULES BREAKDOWN')
   Check 'the profile prints the project-rules breakdown' ($i -ge 0)

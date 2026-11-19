@@ -82,7 +82,7 @@ $tmpE = "$tmpO.err"
 function RunOut([string[]]$a) {
   $p = Start-Process -FilePath $script:Exe -ArgumentList $a -NoNewWindow -PassThru `
         -WorkingDirectory $script:NeutralCwd `
-        -RedirectStandardOutput $script:tmpO -RedirectStandardError $script:tmpE
+        -RedirectStandardOutput $script:tmpO -RedirectStandardError $script:tmpE; $null = $p.Handle
   if (-not $p.WaitForExit(120000)) { try { $p.Kill($true) } catch { }; return @{ C = -1; O = '(timed out)' } }
   $o = ((Get-Content -LiteralPath $script:tmpO -Raw -ErrorAction SilentlyContinue) + '') +
        ((Get-Content -LiteralPath $script:tmpE -Raw -ErrorAction SilentlyContinue) + '')

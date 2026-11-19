@@ -87,7 +87,7 @@ try {
         (Test-Path $manifest) $manifest
   if (-not (Test-Path $manifest)) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 
-  $mf     = Get-Content $manifest -Raw | ConvertFrom-Json
+  $mf     = Get-Content $manifest -Raw | ConvertFrom-Json | ForEach-Object { $_ }
   $outDir = $mf.indexes.outDir
 
   foreach ($plat in @('Win32','Win64')) {

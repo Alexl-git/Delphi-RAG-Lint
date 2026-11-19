@@ -143,7 +143,7 @@ $CM = @('too-many-children','deep-inheritance','high-response','high-coupling','
         'middle-man','fan-out','fan-in','instability','feature-envy')
 $FILES = [ordered]@{ 'uBase.pas' = 10; 'uKids.pas' = 11; 'uHub.pas' = 1; 'uUsers.pas' = 21; 'uEmpty.pas' = 0 }
 
-function Rows($json) { @(if ($json.Trim()) { $json | ConvertFrom-Json } else { @() }) }
+function Rows($json) { @(if ($json.Trim()) { $json | ConvertFrom-Json | ForEach-Object { $_ } } else { @() }) }
 function CmTuples($rows, $fileAbs) {
   @($rows | Where-Object { $CM -contains $_.rule -and
                            $_.file_path.ToLowerInvariant() -eq $fileAbs.ToLowerInvariant() } |
@@ -156,7 +156,7 @@ $env:DRAGLINT_PROFILE = '1'
 foreach ($mode in @(@{ Name = 'defaults'; Args = @() }, @{ Name = '--enable fan-in'; Args = @('--enable','fan-in') })) {
   $tag     = $mode.Name
   $allErr  = Join-Path $WorkDir 'all.err'
-  $allRows = Rows (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rules-dir $rules --json @($mode.Args) 2>$allErr } | Out-String)
+  $allRows = Rows (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($allErr); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath lint-all --db $db --rules-dir $rules --json @($mode.Args) 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
   $allProf = Get-Content $allErr -Raw
   $allIds  = @($allRows | Where-Object { $CM -contains $_.rule } | ForEach-Object { $_.rule } | Sort-Object -Unique)
 
@@ -175,7 +175,7 @@ foreach ($mode in @(@{ Name = 'defaults'; Args = @() }, @{ Name = '--enable fan-
   foreach ($leaf in $FILES.Keys) {
     $abs     = Join-Path $proj $leaf
     $oneErr  = Join-Path $WorkDir 'one.err'
-    $oneRows = Rows (& { $ErrorActionPreference = 'Continue'; & $exePath lint $abs --db $db --rules-dir $rules --json @($mode.Args) 2>$oneErr } | Out-String)
+    $oneRows = Rows (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($oneErr); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath lint $abs --db $db --rules-dir $rules --json @($mode.Args) 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
     $oneProf = Get-Content $oneErr -Raw
     $want    = @(CmTuples $allRows $abs)
     $got     = @(CmTuples $oneRows $abs)
@@ -224,9 +224,9 @@ function UnusedOnHub($rows) { @($rows | Where-Object { $_.rule -like 'review-mar
                                 ForEach-Object { '{0}:{1} {2}' -f $_.rule, $_.start_line, $_.message }) }
 $env:DRAGLINT_PROFILE = '1'
 $mAllErr  = Join-Path $WorkDir 'mall.err'
-$mAllRows = Rows (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rules-dir $rules --json 2>$mAllErr } | Out-String)
+$mAllRows = Rows (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($mAllErr); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath lint-all --db $db --rules-dir $rules --json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
 $mOneErr  = Join-Path $WorkDir 'mone.err'
-$mOneRows = Rows (& { $ErrorActionPreference = 'Continue'; & $exePath lint $hubAbs --db $db --rules-dir $rules --json 2>$mOneErr } | Out-String)
+$mOneRows = Rows (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($mOneErr); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath lint $hubAbs --db $db --rules-dir $rules --json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
 $env:DRAGLINT_PROFILE = $null
 $ua = @(UnusedOnHub $mAllRows | Where-Object { $_ -like 'review-marker-unused*' -or $_ -like 'review-marker-stale*' })
 $uo = @(UnusedOnHub $mOneRows | Where-Object { $_ -like 'review-marker-unused*' -or $_ -like 'review-marker-stale*' })

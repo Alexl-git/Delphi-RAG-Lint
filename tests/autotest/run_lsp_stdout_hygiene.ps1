@@ -120,7 +120,7 @@ $se = Join-Path $WorkDir 'err.txt'
 # STRING in dragLint.databases produces precisely this command line.
 $p = Start-Process $Exe -ArgumentList 'lsp','--db' -WorkingDirectory $WorkDir `
        -RedirectStandardInput $init -RedirectStandardOutput $so -RedirectStandardError $se `
-       -NoNewWindow -Wait -PassThru
+       -NoNewWindow -Wait -PassThru; $null = $p.Handle
 $out = (Get-Content $so -Raw); if ($null -eq $out) { $out = '' }
 $err = (Get-Content $se -Raw); if ($null -eq $err) { $err = '' }
 

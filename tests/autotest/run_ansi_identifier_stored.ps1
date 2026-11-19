@@ -38,7 +38,7 @@ try {
   & { $ErrorActionPreference = 'Continue'; & $exePath index "$WorkDir\src" --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'V the fixture index was built' (Test-Path $db)
   $json = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --query "select name, hex(name) as h from symbols where name in ('PlainName') or name like 'Gr%e' or name like 'Z%hler'" 2>$null }) -join "`n"
-  $doc = $json.Substring($json.IndexOf('{')) | ConvertFrom-Json
+  $doc = $json.Substring($json.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ }
   $rows = @($doc.rows | ForEach-Object { ,@($_) })   # positional rows: [name, hex]
   $hexes = @($rows | ForEach-Object { [string]$_[1] })
   Check 'V2 POSITIVE CONTROL the ASCII symbol PlainName is stored' ($hexes -contains '506C61696E4E616D65') ($hexes -join ',')

@@ -105,7 +105,7 @@ out['src_join_total'] = c.execute("select count(*) from data_flows where src_kin
 print(json.dumps(out))
 '@ | Set-Content $pyFile -Encoding ascii
 
-function Read-Facts { (& python $pyFile $db $probe) -join "`n" | ConvertFrom-Json }
+function Read-Facts { (& python $pyFile $db $probe) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ } }
 $r = Read-Facts
 $Rw = $r.rows
 $M = $r.markers

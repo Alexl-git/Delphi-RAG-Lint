@@ -273,7 +273,7 @@ Check 'moved-depth exit 0' ($script:LastExit -eq 0) "out=$o2"
 # Asserted against the PARSED `dfm` field, not the raw output: the raw output is
 # JSON, where every newline is the two characters \r\n, so an anchored multiline
 # regex over it can never match and would pass whatever the emitter did.
-$d2 = (ConvertFrom-Json $o2).dfm
+$d2 = (ConvertFrom-Json $o2 | ForEach-Object { $_ }).dfm
 Check 'moved-depth writes the DOTTED path Style.Active.Font.Size' `
       ($d2 -match 'Style\.Active\.Font\.Size\s*=\s*12') "dfm=$d2"
 Check 'moved-depth emits NO classless object header' `
@@ -449,7 +449,7 @@ $o17 = Reemit $b17 $r17 'ReemitFix.TFromC' 'ReemitFix.TToC'
 # `default-rule-superseded` since 2026-09-08 and is asserted in
 # run_convert_apply.ps1 phase 7. The labels below name the concept, not the kind.
 Check 'default-superseded exit 0' ($script:LastExit -eq 0) "out=$o17"
-$j17 = $o17 | ConvertFrom-Json
+$j17 = $o17 | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'default-superseded keeps the SOURCE value Text = ''Hi''' `
   ($j17.dfm -match "Text\s*=\s*'Hi'") "dfm=$($j17.dfm)"
 Check 'default-superseded does NOT write the #default value into the DFM' `
@@ -482,7 +482,7 @@ $b18 = "object C1: TFromC`r`n  Caption = 'Hi'`r`nend`r`n"
 $r18 = "#convert TFromC -> TToC`r`n#link Text <- Caption`r`n#default Enabled = False`r`n"
 $o18 = Reemit $b18 $r18 'ReemitFix.TFromC' 'ReemitFix.TToC'
 Check 'T-only #default exit 0' ($script:LastExit -eq 0) "out=$o18"
-$j18 = $o18 | ConvertFrom-Json
+$j18 = $o18 | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'T-only #default still fires (Enabled = False)' `
   ($j18.dfm -match 'Enabled\s*=\s*False') "dfm=$($j18.dfm)"
 Check 'T-only #default keeps the linked Text = ''Hi''' `
@@ -496,7 +496,7 @@ $b19 = "object C1: TFromC`r`n  Hint = 'x'`r`nend`r`n"
 $r19 = "#convert TFromC -> TToC`r`n#link Text <- Caption`r`n#default Text = 'Zzz'`r`n"
 $o19 = Reemit $b19 $r19 'ReemitFix.TFromC' 'ReemitFix.TToC'
 Check 'absent-source #default exit 0' ($script:LastExit -eq 0) "out=$o19"
-$j19 = $o19 | ConvertFrom-Json
+$j19 = $o19 | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'absent-source #default fires (Text = ''Zzz'')' `
   ($j19.dfm -match "Text\s*=\s*'Zzz'") "dfm=$($j19.dfm)"
 Check 'absent-source #default reports nothing superseded' `
@@ -516,7 +516,7 @@ $b20 = "object C1: TFromC`r`n  object Font: TFont2`r`n    Size = 12`r`n  end`r`n
 $r20 = "#convert TFromC -> TToC`r`n#link Style.Active.Font.Size <- Font.Size`r`n#default Style.Active.Font.Size = 99`r`n"
 $o20 = Reemit $b20 $r20 'ReemitFix.TFromC' 'ReemitFix.TToC'
 Check 'dotted default-superseded exit 0' ($script:LastExit -eq 0) "out=$o20"
-$j20 = $o20 | ConvertFrom-Json
+$j20 = $o20 | ConvertFrom-Json | ForEach-Object { $_ }
 $ds20 = @($j20.report.defaultsSuperseded | Where-Object { $null -ne $_ })
 $d20  = if ($ds20.Count -gt 0) { $ds20[0] } else { $null }
 Check 'dotted: the carried Size = 12 survives' ($j20.dfm -match 'Size\s*=\s*12') "dfm=$($j20.dfm)"
@@ -533,7 +533,7 @@ $b21 = "object C1: TFromC`r`nend`r`n"
 $r21 = "#convert TFromC -> TToC`r`n#default Style.Active.Font.Size = 99`r`n"
 $o21 = Reemit $b21 $r21 'ReemitFix.TFromC' 'ReemitFix.TToC'
 Check 'dotted control exit 0' ($script:LastExit -eq 0) "out=$o21"
-$j21 = $o21 | ConvertFrom-Json
+$j21 = $o21 | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'dotted control: the #default fires (Size = 99)' `
   ($j21.dfm -match 'Size\s*=\s*99') "dfm=$($j21.dfm)"
 # CORRECTED 2026-09-16 -- see case 2. The intermediates are a PATH, not blocks;
@@ -566,7 +566,7 @@ $rDef = "#mapping DM from ReemitFix.TDefMode to ReemitFix.TToD`r`n" +
 $b22 = "object C1: TFromD`r`nend`r`n"
 $o22 = Reemit $b22 $rDef 'ReemitFix.TFromD' 'ReemitFix.TToD'
 Check 'sparse mapping exit 0' ($script:LastExit -eq 0) "out=$o22"
-$j22 = $o22 | ConvertFrom-Json
+$j22 = $o22 | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'sparse mapping: the #when fires on the resolved default (Mode2 = dmB)' `
   ($j22.dfm -match 'Mode2\s*=\s*dmB') "dfm=$($j22.dfm)"
 Check 'sparse mapping: no absent-source note is reported' `
@@ -583,7 +583,7 @@ $rPlain = "#mapping PM from ReemitFix.TDefMode to ReemitFix.TToD`r`n" +
 $b23 = "object C1: TFromD`r`nend`r`n"
 $o23 = Reemit $b23 $rPlain 'ReemitFix.TFromD' 'ReemitFix.TToD'
 Check 'no-default-clause exit 0' ($script:LastExit -eq 0) "out=$o23"
-$j23 = $o23 | ConvertFrom-Json
+$j23 = $o23 | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'no-default-clause: NOTHING is invented for Plain2' `
   (-not ($j23.dfm -match 'Plain2')) "dfm=$($j23.dfm)"
 Check 'no-default-clause: the absent-source note still fires, and says why' `
@@ -596,7 +596,7 @@ $b24 = "object C1: TFromD`r`nend`r`n"
 $r24 = "#convert TFromD -> TToD`r`n#link Mode2 <- Mode`r`n"
 $o24 = Reemit $b24 $r24 'ReemitFix.TFromD' 'ReemitFix.TToD'
 Check 'link-default exit 0' ($script:LastExit -eq 0) "out=$o24"
-$j24 = $o24 | ConvertFrom-Json
+$j24 = $o24 | ConvertFrom-Json | ForEach-Object { $_ }
 $dr24 = @($j24.report.defaultsResolved | Where-Object { $null -ne $_ })
 Check 'link-default: F''s resolved default is written (Mode2 = dmA)' `
   ($j24.dfm -match 'Mode2\s*=\s*dmA') "dfm=$($j24.dfm)"
@@ -619,7 +619,7 @@ $b25 = "object C1: TFromD`r`nend`r`n"
 $r25 = "#convert TFromD -> TToD`r`n#link Same2 <- Same`r`n"
 $o25 = Reemit $b25 $r25 'ReemitFix.TFromD' 'ReemitFix.TToD'
 Check 'explicit-emit exit 0' ($script:LastExit -eq 0) "out=$o25"
-$j25 = $o25 | ConvertFrom-Json
+$j25 = $o25 | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'explicit-emit: written even though it equals T''s own default' `
   ($j25.dfm -match 'Same2\s*=\s*True') "dfm=$($j25.dfm)"
 
@@ -630,7 +630,7 @@ $b26 = "object C1: TFromD`r`nend`r`n"
 $r26 = "#convert TFromD -> TToD`r`n#link Plain2 <- Plain`r`n"
 $o26 = Reemit $b26 $r26 'ReemitFix.TFromD' 'ReemitFix.TToD'
 Check 'unresolved-note exit 0' ($script:LastExit -eq 0) "out=$o26"
-$j26 = $o26 | ConvertFrom-Json
+$j26 = $o26 | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'unresolved-note: nothing is invented for Plain2' `
   (-not ($j26.dfm -match 'Plain2')) "dfm=$($j26.dfm)"
 Check 'unresolved-note: the note names the offending property' `
@@ -657,7 +657,7 @@ $r27 = "#convert TFromD -> TToD`r`n#link Mode2 <- Mode`r`n" +
        "#convert TOldColD -> TNewColD`r`n#link Width <- Width`r`n#link Shown <- Visible`r`n"
 $o27 = Reemit $b27 $r27 'ReemitFix.TFromD' 'ReemitFix.TToD'
 Check 'owned-part exit 0' ($script:LastExit -eq 0) "out=$o27"
-$j27 = $o27 | ConvertFrom-Json
+$j27 = $o27 | ConvertFrom-Json | ForEach-Object { $_ }
 $col27 = [regex]::Match($j27.dfm, '(?s)object Col1: TNewColD(.*?)\r?\n  end')
 $col27Body = if ($col27.Success) { $col27.Groups[1].Value } else { '' }
 Check 'owned-part: the part block was located' ($col27Body -ne '') "dfm=$($j27.dfm)"
@@ -681,7 +681,7 @@ $b28 = "object C1: TFromD`r`nend`r`n"
 $r28 = "#convert TFromD -> TToD`r`n#link Anchors2 <- Anchors`r`n"
 $o28 = Reemit $b28 $r28 'ReemitFix.TFromD' 'ReemitFix.TToD'
 Check 'set-default exit 0' ($script:LastExit -eq 0) "out=$o28"
-$j28 = $o28 | ConvertFrom-Json
+$j28 = $o28 | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'set-default: the whole set literal is emitted, not a truncated prefix' `
   ($j28.dfm -match '(?m)^\s*Anchors2\s*=\s*\[odA, odB\]\s*$') "dfm=$($j28.dfm)"
 
@@ -693,7 +693,7 @@ $b29 = "object C1: TFromD`r`nend`r`n"
 $r29 = "#convert TFromD -> TToD`r`n#link Guarded2 <- Guarded`r`n"
 $o29 = Reemit $b29 $r29 'ReemitFix.TFromD' 'ReemitFix.TToD'
 Check 'stored-veto exit 0' ($script:LastExit -eq 0) "out=$o29"
-$j29 = $o29 | ConvertFrom-Json
+$j29 = $o29 | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'stored-veto: nothing is carried for a conditionally-stored source' `
   (-not ($j29.dfm -match 'Guarded2')) "dfm=$($j29.dfm)"
 Check 'stored-veto: it is REPORTED as unresolved rather than dropped in silence' `
@@ -706,7 +706,7 @@ Check 'stored-veto: it is REPORTED as unresolved rather than dropped in silence'
 $r29b = "#convert TFromD -> TToD`r`n#link Guarded2 <- Guarded`r`n" +
         "#convert TOldColD -> TNewColD`r`n#link Guarded2 <- Guarded`r`n#link Guarded2 <- Guarded`r`n"
 $o29b = Reemit $b29 $r29b 'ReemitFix.TFromD' 'ReemitFix.TToD'
-$j29b = $o29b | ConvertFrom-Json
+$j29b = $o29b | ConvertFrom-Json | ForEach-Object { $_ }
 $div29b = @(@($j29b.report.notes) | Where-Object { $_ -match 'may diverge' }) -join ' | '
 Check 'diverge-dedup: CONTROL -- the note still fires and names Guarded' ($div29b -match 'Guarded') "notes=$($j29b.report.notes -join ' | ')"
 Check 'diverge-dedup: Guarded is named exactly ONCE although three #links name it' `
@@ -718,7 +718,7 @@ Check 'diverge-dedup: Guarded is named exactly ONCE although three #links name i
 # dataset event as "may diverge" -- noise that buried the real entry.
 $r29c = "#convert TFromD -> TToD`r`n#link Name <- Name`r`n#link OnPing <- OnPing`r`n#link Guarded2 <- Guarded`r`n"
 $o29c = Reemit $b29 $r29c 'ReemitFix.TFromD' 'ReemitFix.TToD'
-$j29c = $o29c | ConvertFrom-Json
+$j29c = $o29c | ConvertFrom-Json | ForEach-Object { $_ }
 $div29c = @(@($j29c.report.notes) | Where-Object { $_ -match 'may diverge' }) -join ' | '
 Check 'diverge-identity: CONTROL -- the note still names Guarded' ($div29c -match '\bGuarded\b') "notes=$($j29c.report.notes -join ' | ')"
 Check 'diverge-identity: Name is not listed' (-not ($div29c -match '\bName\b')) "note=$div29c"
@@ -731,7 +731,7 @@ $b30 = "object C1: TFromD`r`nend`r`n"
 $r30 = "#convert TFromD -> TToD`r`n#link Mode2 <- Mode`r`n#remove Mode`r`n"
 $o30 = Reemit $b30 $r30 'ReemitFix.TFromD' 'ReemitFix.TToD'
 Check 'remove-beats-default exit 0' ($script:LastExit -eq 0) "out=$o30"
-$j30 = $o30 | ConvertFrom-Json
+$j30 = $o30 | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'remove-beats-default: the removed property is not resurrected' `
   (-not ($j30.dfm -match 'Mode2')) "dfm=$($j30.dfm)"
 
@@ -766,7 +766,7 @@ $rCast      = "#convert TFromD -> TToD`r`n#link Mode3 <- Mode : ModeCast`r`n"
 $b31 = "object C1: TFromD`r`n  Mode = dmB`r`nend`r`n"
 $o31 = ReemitCast $b31 $rCast $castMapped 'ReemitFix.TFromD' 'ReemitFix.TToD'
 Check 'enum-cast exit 0' ($script:LastExit -eq 0) "out=$o31"
-$j31 = $o31 | ConvertFrom-Json
+$j31 = $o31 | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'enum-cast: the value is translated to the TARGET member (xmB)' `
   ($j31.dfm -match 'Mode3\s*=\s*xmB') "dfm=$($j31.dfm)"
 Check 'enum-cast: the SOURCE member name is not copied through' `
@@ -780,7 +780,7 @@ Check 'enum-cast: nothing reported unmapped' `
 $b32 = "object C1: TFromD`r`n  Mode = dmC`r`nend`r`n"
 $o32 = ReemitCast $b32 $rCast $castMapped 'ReemitFix.TFromD' 'ReemitFix.TToD'
 Check 'enum-cast-unmapped exit 0' ($script:LastExit -eq 0) "out=$o32"
-$j32 = $o32 | ConvertFrom-Json
+$j32 = $o32 | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'enum-cast-unmapped: NOTHING is written for the untranslatable value' `
   (-not ($j32.dfm -match 'Mode3')) "dfm=$($j32.dfm)"
 $eu32 = @($j32.report.enumUnmapped | Where-Object { $null -ne $_ })
@@ -793,7 +793,7 @@ Check 'enum-cast-unmapped: it carries the #link rule line (2)' `
 # 33: the same unmapped value, with an `else`. The fallback fires.
 $o33 = ReemitCast $b32 $rCast $castElse 'ReemitFix.TFromD' 'ReemitFix.TToD'
 Check 'enum-cast-else exit 0' ($script:LastExit -eq 0) "out=$o33"
-$j33 = $o33 | ConvertFrom-Json
+$j33 = $o33 | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'enum-cast-else: the fallback member is written (xmC)' `
   ($j33.dfm -match 'Mode3\s*=\s*xmC') "dfm=$($j33.dfm)"
 Check 'enum-cast-else: nothing reported unmapped' `
@@ -806,7 +806,7 @@ Check 'enum-cast-else: nothing reported unmapped' `
 $rUnknown = "#convert TFromD -> TToD`r`n#link Mode3 <- Mode : NoSuchCast`r`n"
 $o34 = ReemitCast $b31 $rUnknown $castMapped 'ReemitFix.TFromD' 'ReemitFix.TToD'
 Check 'enum-cast-unknown exit 0' ($script:LastExit -eq 0) "out=$o34"
-$j34 = $o34 | ConvertFrom-Json
+$j34 = $o34 | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'enum-cast-unknown: an unknown cast passes the value through verbatim' `
   ($j34.dfm -match 'Mode3\s*=\s*dmB') "dfm=$($j34.dfm)"
 Check 'enum-cast-unknown: and reports nothing unmapped' `

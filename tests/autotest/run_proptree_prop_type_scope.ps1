@@ -500,7 +500,7 @@ function Get-Tree([string]$QName) {
     $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe proptree --qname $QName --format json --db $db --no-write-back 2>$null }) -join "`n"
   } finally { Pop-Location }
   if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
-  return ($raw | ConvertFrom-Json)
+  return ($raw | ConvertFrom-Json | ForEach-Object { $_ })
 }
 function Get-Leaf($Tree, [string]$Path) {
   if ($null -eq $Tree) { return $null }

@@ -146,7 +146,7 @@ $beforeBytes = [IO.File]::ReadAllBytes($file)
 & { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $rj = & { $ErrorActionPreference = 'Continue'; & $Exe document --unit $file --db $db --apply --no-backup --json 2>$null } | Out-String
 $ecj = $LASTEXITCODE
-$oj = $null; try { $oj = ($rj | ConvertFrom-Json) } catch { $oj = $null }
+$oj = $null; try { $oj = ($rj | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $oj = $null }
 Check 'second apply: exit 0' ($ecj -eq 0) "ec=$ecj"
 Check 'second apply: json parsed' ($null -ne $oj) $rj
 Check 'second apply: edits = 0 (daUnchanged for both overloads)' `

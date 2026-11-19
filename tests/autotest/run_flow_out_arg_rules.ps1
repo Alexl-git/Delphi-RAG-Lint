@@ -230,7 +230,7 @@ end.
 
   function Findings([string]$Json) {
     $i = $Json.IndexOf('['); if ($i -lt 0) { return ,@() }
-    $a = @($Json.Substring($i) | ConvertFrom-Json)
+    $a = @(($Json.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
     $o = @()
     foreach ($f in $a) {
       $m = [regex]::Match([string]$f.message, '"([^"]+)"')

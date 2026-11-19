@@ -91,7 +91,7 @@ function Invoke-SharedUnit {
   # assertion failed while the engine was answering correctly).
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null }
   $txt = ($raw | ForEach-Object { $_.ToString() }) -join "`n"
-  try { return $txt | ConvertFrom-Json }
+  try { return $txt | ConvertFrom-Json | ForEach-Object { $_ } }
   catch { Write-Host "  (unparseable output) $txt" -ForegroundColor DarkYellow; return $null }
 }
 

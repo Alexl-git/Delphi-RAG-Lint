@@ -110,7 +110,7 @@ if (Test-Path $projDb) { Remove-Item $projDb -Force -ErrorAction SilentlyContinu
 function FileCount($db) {
   $j = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --query 'SELECT COUNT(*) AS n FROM files' --db $db --json 2>$null }) -join "`n"
   $i = $j.IndexOf('{'); if ($i -lt 0) { return -1 }
-  try { return [int](($j.Substring($i) | ConvertFrom-Json).rows[0][0]) } catch { return -1 }
+  try { return [int](($j.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }).rows[0][0]) } catch { return -1 }
 }
 
 Write-Host '== a folder target is valid only for a LIBRARY database ==' -ForegroundColor Cyan

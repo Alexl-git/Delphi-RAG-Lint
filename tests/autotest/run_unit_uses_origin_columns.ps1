@@ -42,7 +42,7 @@ function Index([string]$exe, [string]$db) {
 function Sql([string]$db, [string]$q) {
   Push-Location $WorkDir
   try { $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query $q --json 2>$null } | Out-String } finally { Pop-Location }
-  try { $o = $j | ConvertFrom-Json } catch { $o = $null }
+  try { $o = $j | ConvertFrom-Json | ForEach-Object { $_ } } catch { $o = $null }
   if ($null -eq $o -or $null -eq $o.columns) { return ,@() }
   $names = @($o.columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
   $rows = @()
@@ -52,7 +52,7 @@ function Sql([string]$db, [string]$q) {
 function HasColumns([string]$db) {
   Push-Location $WorkDir
   try { $j = & { $ErrorActionPreference = 'Continue'; & $Exe schema --db $db --format json 2>$null } | Out-String } finally { Pop-Location }
-  $t = ($j | ConvertFrom-Json).tables | Where-Object { $_.name -eq 'unit_uses' }
+  $t = ($j | ConvertFrom-Json | ForEach-Object { $_ }).tables | Where-Object { $_.name -eq 'unit_uses' }
   return @($t.columns | Where-Object { $_.name -in @('origin_path', 'include_line') }).Count
 }
 

@@ -53,7 +53,7 @@ try {
   $o = & { $ErrorActionPreference = 'Continue'; & $Exe bookmarks --in $src --json 2>&1 | ForEach-Object { "$_" } }
   $code = $LASTEXITCODE
   $rows = $null
-  try { $rows = @($o | Out-String | ConvertFrom-Json) } catch { }
+  try { $rows = @(($o | Out-String | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { }
   Check 'list: exit 0' ($code -eq 0) "exit=$code"
   Check 'list: exactly 4 anchors (bare array, raw shape)' ($rows -and $rows.Count -eq 4) ("count=" + @($rows).Count + ' raw=' + (($o | Out-String).Trim().Substring(0, [Math]::Min(120, ($o | Out-String).Trim().Length))))
   if ($rows -and $rows.Count -eq 4) {
@@ -64,7 +64,7 @@ try {
   }
 
   $o = & { $ErrorActionPreference = 'Continue'; & $Exe bookmarks --in $src --name a7k3qx --json 2>&1 | ForEach-Object { "$_" } }
-  $f = @($o | Out-String | ConvertFrom-Json)
+  $f = @(($o | Out-String | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Check 'find: tagged code is case-insensitive, one hit at line 7' ($LASTEXITCODE -eq 0 -and $f.Count -eq 1 -and $f[0].line -eq 7)
   $null = & { $ErrorActionPreference = 'Continue'; & $Exe bookmarks --in $src --name 99 2>&1 | ForEach-Object { "$_" } }
   Check 'find: no hit exits 3' ($LASTEXITCODE -eq 3) "exit=$LASTEXITCODE"

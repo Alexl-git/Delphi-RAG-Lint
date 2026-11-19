@@ -166,7 +166,7 @@ try {
   function Sql([string]$q) {
     $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n"
     if ([string]::IsNullOrWhiteSpace($j)) { return ,@() }
-    try { $o = $j | ConvertFrom-Json } catch { return ,@() }
+    try { $o = $j | ConvertFrom-Json | ForEach-Object { $_ } } catch { return ,@() }
     $cols = @($o.columns | ForEach-Object { $_.name })
     $out = @()
     foreach ($r in @($o.rows)) {

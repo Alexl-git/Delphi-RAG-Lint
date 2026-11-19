@@ -28,7 +28,7 @@ $dry = (& { $ErrorActionPreference = 'Continue'; & $exe extract-method --file $b
 Assert "dry-run preview mentions the new method name" ($dry -match 'Extracted')
 
 # ----- --json: parseable edit array -----
-$json = & { $ErrorActionPreference = 'Continue'; & $exe extract-method --file $basic --from-line 8 --to-line 9 --name Extracted --json 2>$null } | ConvertFrom-Json
+$json = & { $ErrorActionPreference = 'Continue'; & $exe extract-method --file $basic --from-line 8 --to-line 9 --name Extracted --json 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
 Assert "json edit set non-empty" ($json.Count -ge 1)
 Assert "json edit has file/line/text fields" ($null -ne $json[0].file -and $null -ne $json[0].line -and $null -ne $json[0].text)
 

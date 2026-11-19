@@ -143,9 +143,9 @@ function SleepLines([string]$Path) {
   return @($out | Sort-Object -Unique)
 }
 
-$firedVcl      = SleepLines $vclUnit
-$firedDfm      = SleepLines $dfmUnit
-$firedHeadless = SleepLines $headlessUnit
+$firedVcl      = @(SleepLines $vclUnit)
+$firedDfm      = @(SleepLines $dfmUnit)
+$firedHeadless = @(SleepLines $headlessUnit)
 
 Write-Host ''
 Write-Host 'POSITIVE CONTROL -- the rule must still fire on VCL code' -ForegroundColor Cyan

@@ -64,7 +64,7 @@ $listReq = Join-Path $WorkDir 'list.jsonl'
   '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' + "`n"), [Text.Encoding]::ASCII)
 $out = (Get-Content $listReq | & { $ErrorActionPreference = 'Continue'; $input | & $Exe serve --db $db 2>$null } | Out-String)
 $tools = @()
-foreach ($ln in ($out -split "`n")) { try { $o = $ln.Trim() | ConvertFrom-Json; if ($o.id -eq 2) { $tools = @($o.result.tools) } } catch { } }
+foreach ($ln in ($out -split "`n")) { try { $o = $ln.Trim() | ConvertFrom-Json | ForEach-Object { $_ }; if ($o.id -eq 2) { $tools = @($o.result.tools) } } catch { } }
 Check 'tools/list answers' ($tools.Count -gt 0) "count=$($tools.Count)"
 
 # Pass 2: call every tool with arguments derived from its inputSchema.
@@ -101,7 +101,7 @@ $callReq = Join-Path $WorkDir 'calls.jsonl'
 $out2 = (Get-Content $callReq | & { $ErrorActionPreference = 'Continue'; $input | & $Exe serve --db $db 2>$null } | Out-String)
 $answered = 0; $ok = 0
 foreach ($ln in ($out2 -split "`n")) {
-  try { $o = $ln.Trim() | ConvertFrom-Json } catch { continue }
+  try { $o = $ln.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
   if ($o.id -gt 100) { $answered++; if ($null -eq $o.error -and -not [bool]$o.result.isError) { $ok++ } }
 }
 Check 'R1 every call got an answer' ($answered -eq $called) "answered=$answered called=$called ok=$ok"

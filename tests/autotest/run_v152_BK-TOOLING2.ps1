@@ -47,7 +47,7 @@ foreach ($k in $keys) {
 function Get-CliSubs([string]$Verb) {
   $subs = @()
   foreach ($f in Get-ChildItem (Join-Path $Repo 'features\entries') -Filter *.json) {
-    $j = Get-Content -LiteralPath $f.FullName -Raw | ConvertFrom-Json
+    $j = Get-Content -LiteralPath $f.FullName -Raw | ConvertFrom-Json | ForEach-Object { $_ }
     foreach ($s in @($j.surfaces)) {
       if (($s.type -eq 'cli') -and ($s.verb -eq $Verb) -and $s.sub) { $subs += $s.sub }
     }

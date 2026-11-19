@@ -74,7 +74,7 @@ function Session([string[]]$frames) {
     -RedirectStandardError (Join-Path $WorkDir 'err.txt') -NoNewWindow -Wait | Out-Null
   $res = @{ diags = @(); byId = @{} }
   foreach ($mm in [regex]::Matches([IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json -AsHashtable } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json -AsHashtable | ForEach-Object { $_ } } catch { continue }
     if ($o['method'] -eq 'textDocument/publishDiagnostics' -and "$($o['params']['uri'])" -match 'uFx\.pas$') { $res.diags = @($o['params']['diagnostics']) }
     elseif ($o.ContainsKey('id')) { $res.byId[[int]$o['id']] = $o }
   }
@@ -107,7 +107,7 @@ $hexLine = LineOf $body 'Result:= $Ff'
 $oneDiag = @($hexDiags | Where-Object { $_['range']['start']['line'] -eq $hexLine })
 $r = Session @((OpenFrame $body), (ActionFrame 11 $hexLine $oneDiag))
 $reply = $r.byId[11]
-$ti = Titles $reply
+$ti = @(Titles $reply)
 Write-Host "  titles: $($ti -join ' | ')"
 Check 'Fix: mixed-case-hex still offered (unchanged title)' ($null -ne (ActOf $reply 'Fix: mixed-case-hex'))
 $ruleAll = ActOf $reply 'drag-lint: fix all mixed-case-hex in file'
@@ -131,7 +131,7 @@ if ($all) {
   $copy = Join-Path $WorkDir 'applied.pas'
   [IO.File]::WriteAllText($copy, $applied, [Text.ASCIIEncoding]::new())
   $ea = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-  $relint = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $copy --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json
+  $relint = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $copy --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
   $ErrorActionPreference = $ea
   $gone = @($relint | Where-Object { $_.rule -in 'mixed-case-hex', 'length-zero-compare' }).Count
   Check 're-lint: the three findings are gone' ($gone -eq 0) "left=$gone"
@@ -143,12 +143,12 @@ Check 'quiet line, no only: no fix-all action' (-not (@(Titles $rq.byId[12]) -ma
 # context.only = source.fixAll on the same quiet line: the source action is offered.
 $ro = Session @((OpenFrame $body), (ActionFrame 13 $quiet @() 'source.fixAll'))
 $srcAct = ActOf $ro.byId[13] 'drag-lint: fix all fixable in file'
-Check 'only=source.fixAll on a quiet line: fix-all source action offered' ($null -ne $srcAct) ("titles=$((Titles $ro.byId[13]) -join ' | ')")
+Check 'only=source.fixAll on a quiet line: fix-all source action offered' ($null -ne $srcAct) ("titles=$((@(Titles $ro.byId[13])) -join ' | ')")
 Check 'only=source.fixAll: kind source.fixAll.drag-lint' ($srcAct -and $srcAct['kind'] -eq 'source.fixAll.drag-lint')
 
 Write-Host ''
 Write-Host '(extension) package.json contributes.menus' -ForegroundColor Cyan
-$pkg = Get-Content (Join-Path $PSScriptRoot '..\..\editors\vscode\drag-lint\package.json') -Raw | ConvertFrom-Json
+$pkg = Get-Content (Join-Path $PSScriptRoot '..\..\editors\vscode\drag-lint\package.json') -Raw | ConvertFrom-Json | ForEach-Object { $_ }
 $declared = @($pkg.contributes.commands | ForEach-Object { $_.command })
 foreach ($menu in 'editor/context', 'problems/context') {
   $items = @($pkg.contributes.menus.$menu)

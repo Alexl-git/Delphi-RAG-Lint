@@ -35,7 +35,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 function Parse-Findings([string[]]$Raw) {
   $txt = ($Raw -join "`n"); $b = $txt.IndexOf('[')
-  $out = @(); if ($b -ge 0) { try { $out = @($txt.Substring($b) | ConvertFrom-Json) } catch { $out = @() } }
+  $out = @(); if ($b -ge 0) { try { $out = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $out = @() } }
   if ($null -eq $out) { $out = @() }
   return ,@($out)
 }
@@ -87,12 +87,12 @@ try {
     $wantOn  = @($always + $only | Sort-Object)
     $wantOff = @($always + $silenced | Sort-Object)
     Check "$rule fixture has an ALWAYS line and a CONTROL line" (($always.Count -gt 0) -and ($control.Count -gt 0)) ''
-    Check "$rule lint-all with ref_types: ALWAYS + ORACLE-ONLY" ((@(Lines $withFacts $rule) -join ',') -eq ($wantOn -join ',')) "got [$((Lines $withFacts $rule) -join ',')] want [$($wantOn -join ',')]"
-    Check "$rule lint <file> --db with ref_types: ALWAYS + ORACLE-ONLY" ((@(Lines $oneFile $rule) -join ',') -eq ($wantOn -join ',')) "got [$((Lines $oneFile $rule) -join ',')] want [$($wantOn -join ',')]"
+    Check "$rule lint-all with ref_types: ALWAYS + ORACLE-ONLY" ((@(Lines $withFacts $rule) -join ',') -eq ($wantOn -join ',')) "got [$((@(Lines $withFacts $rule)) -join ',')] want [$($wantOn -join ',')]"
+    Check "$rule lint <file> --db with ref_types: ALWAYS + ORACLE-ONLY" ((@(Lines $oneFile $rule) -join ',') -eq ($wantOn -join ',')) "got [$((@(Lines $oneFile $rule)) -join ',')] want [$($wantOn -join ',')]"
     $wantNoTable = if ($r.AncestryOnly) { $wantOn } else { $wantOff }   # sleep-in-vcl reads type_ancestors, not ref_types
-    Check "$rule lint-all, ref_types table dropped" ((@(Lines $noTable $rule) -join ',') -eq ($wantNoTable -join ',')) "got [$((Lines $noTable $rule) -join ',')] want [$($wantNoTable -join ',')]"
-    Check "$rule lint-all, ref_types dropped and type_ancestors emptied: as before (ALWAYS + SILENCED)" ((@(Lines $noAnc $rule) -join ',') -eq ($wantOff -join ',')) "got [$((Lines $noAnc $rule) -join ',')] want [$($wantOff -join ',')]"
-    Check "$rule lint <file>, no index: as before (ALWAYS + SILENCED)" ((@(Lines $noIndex $rule) -join ',') -eq ($wantOff -join ',')) "got [$((Lines $noIndex $rule) -join ',')] want [$($wantOff -join ',')]"
+    Check "$rule lint-all, ref_types table dropped" ((@(Lines $noTable $rule) -join ',') -eq ($wantNoTable -join ',')) "got [$((@(Lines $noTable $rule)) -join ',')] want [$($wantNoTable -join ',')]"
+    Check "$rule lint-all, ref_types dropped and type_ancestors emptied: as before (ALWAYS + SILENCED)" ((@(Lines $noAnc $rule) -join ',') -eq ($wantOff -join ',')) "got [$((@(Lines $noAnc $rule)) -join ',')] want [$($wantOff -join ',')]"
+    Check "$rule lint <file>, no index: as before (ALWAYS + SILENCED)" ((@(Lines $noIndex $rule) -join ',') -eq ($wantOff -join ',')) "got [$((@(Lines $noIndex $rule)) -join ',')] want [$($wantOff -join ',')]"
   }
 } finally {
   if (Test-Path $scratch) { [System.IO.Directory]::Delete($scratch, $true) }

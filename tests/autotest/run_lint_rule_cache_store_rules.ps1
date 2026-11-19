@@ -51,7 +51,7 @@ try {
 
     function Lint-Rows {
       $j = & { $ErrorActionPreference = 'Continue'; & $exePath lint $unit --db $db --json 2>$null }
-      $a = @($j | Out-String | ConvertFrom-Json)
+      $a = @(($j | Out-String | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
       return ,@($a | ForEach-Object { '{0}|{1}|{2}|{3}' -f $_.rule, $_.start_line, $_.start_col, $_.message } | Sort-Object)
     }
 
@@ -72,7 +72,7 @@ try {
 
     $cf = @(Get-ChildItem $cache -Filter 'rules-*.json' -File)
     $held = @()
-    if ($cf.Count -eq 1) { $held = @((Get-Content $cf[0].FullName -Raw | ConvertFrom-Json).rules) }
+    if ($cf.Count -eq 1) { $held = @((Get-Content $cf[0].FullName -Raw | ConvertFrom-Json | ForEach-Object { $_ }).rules) }
     Check 'C2  one cache file written' ($cf.Count -eq 1) "files=$($cf.Count)"
     foreach ($r in 'enum-ordinal-persisted', 'dfm-event-handler-missing') {
       Check "C2  the cache holds $r" ($held -contains $r) ("holds: " + ($held -join ','))

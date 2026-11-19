@@ -192,7 +192,7 @@ Write-Host 'Scenario A: an abnormally-killed index leaves a COMPLETE log' -Foreg
 
 $p = Start-Process -FilePath $Exe `
        -ArgumentList 'index', "`"$srcDir`"", '--db', "`"$db`"" `
-       -NoNewWindow -PassThru -RedirectStandardOutput $log -RedirectStandardError $err
+       -NoNewWindow -PassThru -RedirectStandardOutput $log -RedirectStandardError $err; $null = $p.Handle
 
 # Wait until output is well past the first 128-byte buffer, so the samples are
 # taken inside the per-file progress loop rather than during start-up.

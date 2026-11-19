@@ -145,7 +145,7 @@ function FileHash($fx, [string]$Leaf) {
 function Edit-Set($fx) {
   $r = Run-Rename $fx ($RenArgs + '--json')
   $edits = @()
-  try { $edits = @(($r.Out -split "`n" | Where-Object { $_ -notmatch '^drag-lint: note:' -and $_ -notmatch '^\(loaded' }) -join "`n" | ConvertFrom-Json) } catch { }
+  try { $edits = @((($r.Out -split "`n" | Where-Object { $_ -notmatch '^drag-lint: note:' -and $_ -notmatch '^\(loaded' }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { }
   [pscustomobject]@{
     Exit = $r.Exit
     Out  = $r.Out
@@ -162,7 +162,7 @@ $sq = "SELECT r.start_line AS l, r.symbol_id AS s FROM refs r JOIN files f ON f.
       "WHERE f.path LIKE '%Unit3.pas' AND r.name_text = 'Process' ORDER BY r.start_line"
 $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $j.Db --json --query $sq 2>$null }) -join "`n"
 $rows = @()
-try { $rows = @(($raw | ConvertFrom-Json).rows) } catch { }
+try { $rows = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }).rows) } catch { }
 $unbound17 = (@($rows | Where-Object { $_[0] -eq 17 }).Count -gt 0) -and (@($rows | Where-Object { $_[0] -eq 17 -and $_[1] }).Count -eq 0)
 $bound16   = @($rows | Where-Object { $_[0] -eq 16 -and $_[1] }).Count -gt 0
 Check 'precondition: Unit3.pas:16 A.Process is bound'          $bound16   "rows=$(@($rows | ForEach-Object { $_ -join '/' }) -join ';')"

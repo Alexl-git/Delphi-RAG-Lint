@@ -64,7 +64,7 @@ function Run-Fix($P, [string[]]$Extra, [bool]$Json = $true) {
   if ($Json) { $a += @('--format', 'json') }
   Push-Location $WorkDir
   try { $out = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @a 2>$null } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
-  $j = $null; if ($Json) { try { $j = $out | ConvertFrom-Json } catch { } }
+  $j = $null; if ($Json) { try { $j = $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { } }
   return @{ Exit = $code; Out = $out; Json = $j }
 }
 function Kinds($r) {

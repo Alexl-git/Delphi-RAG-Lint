@@ -69,7 +69,7 @@ function Get-ExactCount([string]$db, [string]$name) {
   $out = & { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --db $db --json 2>$null }
   $joined = ($out -join "`n").Trim()
   if ($joined -eq '' -or $joined -eq '[]') { return 0 }
-  try { $arr = $joined | ConvertFrom-Json } catch { return 0 }
+  try { $arr = $joined | ConvertFrom-Json | ForEach-Object { $_ } } catch { return 0 }
   if ($null -eq $arr) { return 0 }
   # ConvertFrom-Json returns a single object (not an array) for a 1-element list.
   $items = @($arr)

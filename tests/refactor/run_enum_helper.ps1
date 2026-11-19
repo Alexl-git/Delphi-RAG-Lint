@@ -113,7 +113,7 @@ function Test-Compiles($PasFile) {
 }
 
 # ----- create-enum-helper --json: action=built, edits count -----
-$json1 = & { $ErrorActionPreference = 'Continue'; & $exe create-enum-helper --qname TColor --db $dbSimple --json 2>$null } | ConvertFrom-Json
+$json1 = & { $ErrorActionPreference = 'Continue'; & $exe create-enum-helper --qname TColor --db $dbSimple --json 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
 Assert "create-enum-helper json: action=built"      ($json1.action -eq 'built')
 Assert "create-enum-helper json: qname/file present" ($json1.qname -eq 'TColor' -and $null -ne $json1.file)
 Assert "create-enum-helper json: edits count = 2"    ($json1.edits -eq 2)
@@ -140,7 +140,7 @@ Assert "create-enum-helper apply result compiles (dcc64)" (Test-Compiles $applyP
 # ----- idempotency: reindex the applied file, run again -> action=exists, NO change -----
 & { $ErrorActionPreference = 'Continue'; & $exe index $applyPas --db $dbApply 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $beforeSecondRun = Get-Content $applyPas -Raw
-$json2 = & { $ErrorActionPreference = 'Continue'; & $exe create-enum-helper --qname TColor --db $dbApply --apply --no-compile-gate --no-backup --json 2>$null } | ConvertFrom-Json
+$json2 = & { $ErrorActionPreference = 'Continue'; & $exe create-enum-helper --qname TColor --db $dbApply --apply --no-compile-gate --no-backup --json 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
 Assert "idempotent 2nd run: action=exists"   ($json2.action -eq 'exists')
 Assert "idempotent 2nd run: applied=false"   ($json2.applied -eq $false)
 Assert "idempotent 2nd run: nonzero exit"    ($LASTEXITCODE -ne 0)
@@ -150,13 +150,13 @@ Assert "idempotent 2nd run: file byte-identical (no change)" ($afterSecondRun -c
 # ----- refuse: helper already exists (already_has_helper.pas fixture) -----
 & { $ErrorActionPreference = 'Continue'; & $exe create-enum-helper --qname TStatus --db $dbAlready --json 2>$null } | Out-Null
 Assert "refuse (exists fixture): nonzero exit" ($LASTEXITCODE -ne 0)
-$existsJson = & { $ErrorActionPreference = 'Continue'; & $exe create-enum-helper --qname TStatus --db $dbAlready --json 2>$null } | ConvertFrom-Json
+$existsJson = & { $ErrorActionPreference = 'Continue'; & $exe create-enum-helper --qname TStatus --db $dbAlready --json 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
 Assert "refuse (exists fixture): action=exists" ($existsJson.action -eq 'exists')
 
 # ----- refuse: no implementation section (no_impl_fragment.pas has TFlag, no 'implementation' keyword) -----
 $noImplErr = (& { $ErrorActionPreference = 'Continue'; & $exe create-enum-helper --qname TFlag --db $dbNoImpl 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Assert "refuse (no-impl fixture): nonzero exit" ($LASTEXITCODE -ne 0)
-$noImplJson = & { $ErrorActionPreference = 'Continue'; & $exe create-enum-helper --qname TFlag --db $dbNoImpl --json 2>$null } | ConvertFrom-Json
+$noImplJson = & { $ErrorActionPreference = 'Continue'; & $exe create-enum-helper --qname TFlag --db $dbNoImpl --json 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
 Assert "refuse (no-impl fixture): action=no_impl_section" ($noImplJson.action -eq 'no_impl_section')
 Assert "refuse (no-impl fixture): message mentions implementation" ($noImplErr -match 'implementation')
 
@@ -191,7 +191,7 @@ Assert "tostring=case: emits case statement" ($caseDry -match 'case Self of')
 Assert "tostring=case: no RTTI GetEnumName"   (-not ($caseDry -match 'GetEnumName'))
 
 # ----- helpers-of: existing helper (already_has_helper.pas) -----
-$hoJson = & { $ErrorActionPreference = 'Continue'; & $exe helpers-of TStatus --db $dbAlready --json 2>$null } | ConvertFrom-Json
+$hoJson = & { $ErrorActionPreference = 'Continue'; & $exe helpers-of TStatus --db $dbAlready --json 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
 Assert "helpers-of json: at least one edge" ($hoJson.Count -ge 1)
 Assert "helpers-of json: helper/target/unit fields" ($null -ne $hoJson[0].helper -and $hoJson[0].target -eq 'TStatus' -and $null -ne $hoJson[0].unit)
 
@@ -199,7 +199,7 @@ $hoText = (& { $ErrorActionPreference = 'Continue'; & $exe helpers-of TStatus --
 Assert "helpers-of text: mentions TStatusHelper" ($hoText -match 'TStatusHelper')
 
 # ----- helpers-of: no helper -> empty result, exit 0 -----
-$hoNone = & { $ErrorActionPreference = 'Continue'; & $exe helpers-of TColor --db $dbSimple --json 2>$null } | ConvertFrom-Json
+$hoNone = & { $ErrorActionPreference = 'Continue'; & $exe helpers-of TColor --db $dbSimple --json 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
 Assert "helpers-of json: no edges for TColor in simple db" (($null -eq $hoNone) -or ($hoNone.Count -eq 0))
 Assert "helpers-of: exit 0 even with zero edges" ($LASTEXITCODE -eq 0)
 
@@ -279,7 +279,7 @@ Assert "case3 negative_ordinal: generated helper block has no source-ordinal lit
 # via the v0.92 preprocessor); no stRegion/stEndregion-style bogus members.
 $dbDoc = Join-Path $WorkDir "doc_interleaved.sqlite"
 & { $ErrorActionPreference = 'Continue'; & $exe index (Join-Path $dir "doc_interleaved.pas") --db $dbDoc 2>&1 | ForEach-Object { "$_" } } | Out-Null
-$docJson = & { $ErrorActionPreference = 'Continue'; & $exe create-enum-helper --qname TStage --db $dbDoc --json 2>$null } | ConvertFrom-Json
+$docJson = & { $ErrorActionPreference = 'Continue'; & $exe create-enum-helper --qname TStage --db $dbDoc --json 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
 Assert "case5 doc_interleaved: action=built" ($docJson.action -eq 'built')
 $docDry = (& { $ErrorActionPreference = 'Continue'; & $exe create-enum-helper --qname TStage --db $dbDoc 2>$null }) -join "`n"
 Assert "case5 doc_interleaved: FromByte has stPending arm" ($docDry -match 'Ord\(stPending\):\s*Result\s*:=\s*stPending;')

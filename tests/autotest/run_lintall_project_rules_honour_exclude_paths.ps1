@@ -240,7 +240,7 @@ Write-Host 'POSITIVE CONTROL: with exclude_paths EMPTY the vendored file DOES re
 # the real defect sit behind a reassuring "skipped by exclude_paths" banner.
 $outOff = Join-Path $WorkDir 'off.txt'
 $null   = Lint-Run $cfgOff $outOff
-$vOff   = Vendor-Findings $outOff
+$vOff   = @(Vendor-Findings $outOff)
 Check 'vendored file produces project-wide findings when NOT excluded' `
   ($vOff.Count -gt 0) ("{0} finding(s)" -f $vOff.Count)
 if ($vOff.Count -eq 0) {
@@ -251,7 +251,7 @@ Write-Host ''
 Write-Host 'THE ASSERTION: with exclude_paths SET, no vendored finding survives' -ForegroundColor Cyan
 $outOn = Join-Path $WorkDir 'on.txt'
 $oOn   = Lint-Run $cfgOn $outOn
-$vOn   = Vendor-Findings $outOn
+$vOn   = @(Vendor-Findings $outOn)
 Check 'no finding is reported against an excluded path' `
   ($vOn.Count -eq 0) ("{0} leaked: {1}" -f $vOn.Count, (($vOn | Select-Object -First 3) -join ' | '))
 
@@ -307,7 +307,7 @@ Write-Host ''
 Write-Host 'LIVE CONTROL: the owned file is still reported in the SAME run' -ForegroundColor Cyan
 # If the fix over-reached and killed the project-wide pass outright, the
 # assertion above would pass and this one fails.
-$oOwned = Owned-Findings $outOn
+$oOwned = @(Owned-Findings $outOn)
 Check 'owned file still produces project-wide findings with exclude_paths set' `
   ($oOwned.Count -gt 0) ("{0} finding(s)" -f $oOwned.Count)
 

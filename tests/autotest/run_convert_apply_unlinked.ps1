@@ -242,7 +242,7 @@ Write-Host '=== 2. json: counts keyed by (source type, property) + unlinked[] ==
 $j = Invoke-Apply @('--format', 'json') $rulesPath
 Check 'json exits 0' ($j.Exit -eq 0) "exit=$($j.Exit)"
 $doc = $null
-try { $doc = $j.Raw | ConvertFrom-Json } catch { }
+try { $doc = $j.Raw | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'json parses' ($null -ne $doc) "raw=$($j.Raw)"
 if ($null -ne $doc) {
   Check 'unlinked_source_properties = 3 (rows, keyed by source type + property; step 1 said 2)' ($doc.unlinked_source_properties -eq 3) "got=$($doc.unlinked_source_properties)"
@@ -268,7 +268,7 @@ Check 'quiet dry-run exits 0' ($q.Exit -eq 0) "exit=$($q.Exit)"
 Check 'no unlinked warning line in text' (-not ($q.Raw -match 'no #link carries it')) "raw=$($q.Raw)"
 $qj = Invoke-Apply @('--no-warn-unlinked', '--format', 'json') $rulesPath
 $qdoc = $null
-try { $qdoc = $qj.Raw | ConvertFrom-Json } catch { }
+try { $qdoc = $qj.Raw | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'quiet json parses' ($null -ne $qdoc) "raw=$($qj.Raw)"
 if ($null -ne $qdoc) {
   Check 'quiet json still counts 3 rows / 4 sites' ($qdoc.unlinked_source_properties -eq 3 -and $qdoc.unlinked_source_property_sites -eq 4) "got=$($qdoc.unlinked_source_properties)/$($qdoc.unlinked_source_property_sites)"
@@ -281,7 +281,7 @@ Write-Host ''
 Write-Host '=== 4. #ignore acknowledges a drop: it leaves the count ===' -ForegroundColor Cyan
 $g = Invoke-Apply @('--format', 'json') $ignorePath
 $gdoc = $null
-try { $gdoc = $g.Raw | ConvertFrom-Json } catch { }
+try { $gdoc = $g.Raw | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'ignore json parses' ($null -ne $gdoc) "raw=$($g.Raw)"
 if ($null -ne $gdoc) {
   Check '#ignore Hint: 2 rows / 3 sites' ($gdoc.unlinked_source_properties -eq 2 -and $gdoc.unlinked_source_property_sites -eq 3) "got=$($gdoc.unlinked_source_properties)/$($gdoc.unlinked_source_property_sites)"

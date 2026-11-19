@@ -63,7 +63,7 @@ $runOne = {
   if ($Exe -ne '') { $a += @('-Exe', $Exe) }
   $p = Start-Process pwsh -ArgumentList $a -WorkingDirectory $cwd -PassThru -WindowStyle Hidden `
          -RedirectStandardOutput (Join-Path $Root ([IO.Path]::GetFileName($Script) + '.out')) `
-         -RedirectStandardError  (Join-Path $Root ([IO.Path]::GetFileName($Script) + '.err'))
+         -RedirectStandardError  (Join-Path $Root ([IO.Path]::GetFileName($Script) + '.err')); $null = $p.Handle
   if (-not $p.WaitForExit($TimeoutSec * 1000)) { try { $p.Kill($true) } catch { } }
   $left = @(Get-ChildItem -LiteralPath $cwd -Recurse -Force -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName.Substring($cwd.Length + 1) })
   [pscustomobject]@{ Guard = [IO.Path]::GetFileName($Script); Left = $left }

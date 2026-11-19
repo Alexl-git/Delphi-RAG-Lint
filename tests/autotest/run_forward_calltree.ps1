@@ -108,7 +108,7 @@ Check 'reverse-calltree --direction callees exits 0' ($rctExit -eq 0) "exit=$rct
 
 $tree = $null
 try {
-  $tree = $jsonRaw | ConvertFrom-Json
+  $tree = $jsonRaw | ConvertFrom-Json | ForEach-Object { $_ }
 } catch {
   Check 'reverse-calltree --direction callees --json parses as JSON' $false "parse error: $($_.Exception.Message); raw=$jsonRaw"
 }
@@ -151,7 +151,7 @@ Check 'default direction exits 0' ($defExit -eq 0) "exit=$defExit"
 
 $defTree = $null
 try {
-  $defTree = $defRaw | ConvertFrom-Json
+  $defTree = $defRaw | ConvertFrom-Json | ForEach-Object { $_ }
 } catch {
   Check 'default direction --json parses as JSON' $false "parse error: $($_.Exception.Message); raw=$defRaw"
 }

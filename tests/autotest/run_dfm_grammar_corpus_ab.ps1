@@ -150,7 +150,7 @@ else {
     else { Write-Host "  note: corpus root missing, skipped: $r" -ForegroundColor DarkGray }
   })
 }
-$controls = if ($NoControl) { @() } else { @($ControlDfm | Where-Object { $_ } | ForEach-Object { (Resolve-Path -LiteralPath $_).Path }) }
+$controls = @(if ($NoControl) { @() } else { @($ControlDfm | Where-Object { $_ } | ForEach-Object { (Resolve-Path -LiteralPath $_).Path }) })
 if ($corpus.Count -eq 0) { Write-Host 'FATAL: empty corpus (no root / manifest file found)' -ForegroundColor Red; exit 2 }
 $list = Join-Path $OutDir 'list.txt'
 [IO.File]::WriteAllLines($list, [string[]]($corpus + $controls))

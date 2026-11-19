@@ -152,7 +152,7 @@ try {
 
   # sql --json rows are POSITIONAL arrays: [0]=name, [1]=kind, [2]=count.
   $q = "select r.name_text, r.kind, count(*) from refs r join files f on f.id = r.file_id where f.path like '%uExprIf.pas' group by r.name_text, r.kind"
-  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n" | ConvertFrom-Json
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
   $byName = @{}
   foreach ($row in $j.rows) {
     $nm = ([string]$row[0]).ToLowerInvariant()

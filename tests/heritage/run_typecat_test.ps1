@@ -19,7 +19,7 @@ function Categ($typeName) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $exe query typecat --name $typeName --db $db --json 2>$null } | Out-String)
   $idx = $raw.IndexOf('{')
   if ($idx -lt 0) { return '<no-json>' }
-  $o = $raw.Substring($idx) | ConvertFrom-Json
+  $o = $raw.Substring($idx) | ConvertFrom-Json | ForEach-Object { $_ }
   return [string]$o.category
 }
 

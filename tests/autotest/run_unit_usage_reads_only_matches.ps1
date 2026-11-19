@@ -104,13 +104,13 @@ Check 'SANITY: fixture indexed' ($LASTEXITCODE -eq 0) $idx
 
 $errF = Join-Path $WorkDir 'uu.err'
 $env:DRAGLINT_PROFILE = '1'
-$json = & { $ErrorActionPreference = 'Continue'; & $exePath query unit-usage --unit uLib --db $db --json 2>$errF } | Out-String
+$json = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errF); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath query unit-usage --unit uLib --db $db --json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String
 $env:DRAGLINT_PROFILE = $null
 $prof = Get-Content $errF -Raw
 $read = if ($prof -match 'unit-usage: (\d+) ref\(s\) read from (\d+) importing file') { [int]$Matches[1] } else { -1 }
 Check 'U1 the refs read are only those naming an export (not the 60 unrelated calls)' (($read -ge 3) -and ($read -le 6)) "profile: $prof"
 
-$rows = @(try { $json | ConvertFrom-Json } catch { @() })
+$rows = @(try { $json | ConvertFrom-Json | ForEach-Object { $_ } } catch { @() })
 $u = @($rows | Where-Object { $_.file -match 'uUser\.pas$' })
 Check 'U2 the answer: uUser references uLib through 2 exports' (($u.Count -eq 1) -and ($u[0].referenced -eq $true) -and ($u[0].exports_used -eq 2) -and ($u[0].ref_count -ge 3)) $json
 }

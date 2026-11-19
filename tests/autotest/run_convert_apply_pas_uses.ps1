@@ -241,7 +241,7 @@ function Run([string]$Unit, [string]$Rules, [string[]]$Extra = @()) {
   $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null }) -join "`n"
   $code = $LASTEXITCODE
   $j = $null
-  if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {} }
+  if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {} }
   return [pscustomobject]@{ Code = $code; Out = $o; J = $j }
 }
 function J([string]$Unit, [string]$Rules, [string[]]$Extra = @()) { return Run $Unit $Rules (@('--format', 'json') + $Extra) }
@@ -334,7 +334,7 @@ W 'x.rules' "#convert TAOld -> TANew`n"
 & { $ErrorActionPreference = 'Continue'; & $Exe index (P 'xlib') --db (P 'xlib.sqlite') 2>&1 | ForEach-Object { "$_" } } | Out-Null
 & { $ErrorActionPreference = 'Continue'; & $Exe index --project (P 'xapp\P.dpr') --db (P 'xapp.sqlite') 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $xo = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'xapp\AF.pas') --rules (P 'x.rules') --db (P 'xapp.sqlite') --db (P 'xlib.sqlite') --format json 2>$null }) -join "`n"
-$xr = [pscustomobject]@{ J = $null }; try { $xr.J = $xo.Substring($xo.IndexOf('{')) | ConvertFrom-Json } catch {}
+$xr = [pscustomobject]@{ J = $null }; try { $xr.J = $xo.Substring($xo.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 $x = Row $xr 'a1' 'XTag'
 Check 'X1 an ancestor declared in ANOTHER --db: a1.XTag -- same-name, declared_in TXRoot, declaring_unit LibX, line 20' `
   (($null -ne $x) -and ($x.status -eq 'same-name') -and ($x.declared_in -eq 'TXRoot') -and ($x.declaring_unit -eq 'LibX') -and ($x.kind -eq 'property') -and ((Lines $x) -eq '20')) $xo
@@ -408,7 +408,7 @@ Check 'C0 premise: the library holds BOTH TLabels and the FMX one comes first (a
   ($c0 -match '(?s)FMX\.StdCtrls\.TLabel.*Vcl\.StdCtrls\.TLabel') $c0
 function CRun([string]$Unit, [string]$Rules) {
   $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P "capp\$Unit.pas") --rules (P $Rules) --db (P 'capp.sqlite') --db (P 'clib.sqlite') --format json 2>$null }) -join "`n"
-  $r = [pscustomobject]@{ J = $null; Out = $o }; try { $r.J = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {}
+  $r = [pscustomobject]@{ J = $null; Out = $o }; try { $r.J = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
   return $r
 }
 function IsVcl($x, [string]$Kind) {
@@ -456,7 +456,7 @@ Check 'C10 every member row carries a resolution (X1''s cross-db ancestor too)' 
 
 # ---- capability -------------------------------------------------------------
 $info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n"
-$ij = $null; try { $ij = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json } catch {}
+$ij = $null; try { $ij = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'K info --json: capabilities.pas_uses is true' (($null -ne $ij) -and ($ij.capabilities.pas_uses -eq $true)) ''
 Check 'K2 info --json: capabilities.pas_uses_resolution is true' (($null -ne $ij) -and ($ij.capabilities.pas_uses_resolution -eq $true)) ''
 

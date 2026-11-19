@@ -48,7 +48,7 @@ $NewKinds = "'raise','raise-expr','reraise','handle','handle-all'"
 
 function Invoke-Sql([string]$EngineExe, [string]$Db, [string]$Query) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $EngineExe sql --query $Query --db $Db --json 2>$null }) -join "`n"
-  $env = $raw | ConvertFrom-Json
+  $env = $raw | ConvertFrom-Json | ForEach-Object { $_ }
   $names = @($env.columns | ForEach-Object { $_.name })
   $out = foreach ($r in $env.rows) {
     $o = [ordered]@{}

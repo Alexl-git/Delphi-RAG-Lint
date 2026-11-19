@@ -57,7 +57,7 @@ function Invoke-Engine([string]$Copy, [string[]]$EngineArgs, [hashtable]$Vars = 
   }
 }
 function Get-Ignore([string]$Path) {
-  try { $j = [IO.File]::ReadAllText($Path) | ConvertFrom-Json } catch { return "unparsable" }
+  try { $j = [IO.File]::ReadAllText($Path) | ConvertFrom-Json | ForEach-Object { $_ } } catch { return "unparsable" }
   return "$($j.settings.ignoreLocalConfig)"
 }
 function Test-NoDefaults([string]$Copy, [hashtable]$Vars = @{}) { return ((Invoke-Engine $Copy @('--version') $Vars).Out -notmatch 'loaded defaults from') }

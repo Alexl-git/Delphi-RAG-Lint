@@ -40,7 +40,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
   if ($Ok) { Write-Host "PASS $Name" } else { Write-Host "FAIL $Name $Detail"; $script:Fail++ }
 }
 function Rows([string]$Db, [string]$Query) {
-  $J = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query $Query --json 2>$null }) -join "`n" | ConvertFrom-Json
+  $J = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query $Query --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
   $Names = @($J.columns | ForEach-Object { $_.name })
   $Out = @()
   foreach ($R in @($J.rows)) {
@@ -77,7 +77,7 @@ try {
 
   $G = (& { $ErrorActionPreference = 'Continue'; & $Exe graph --db $Db --format json 2>$null }) -join "`n"
   $GJ = $null
-  try { $GJ = $G.Substring($G.IndexOf('{')) | ConvertFrom-Json } catch { }
+  try { $GJ = $G.Substring($G.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   $TN = @(); $TE = @()
   if ($GJ) { $TN = @($GJ.text_nodes); $TE = @($GJ.text_edges) }
   Check '7b graph json has the README text nodes' (@($TN | Where-Object { $_.file -eq 'README.md' -and $_.line -eq 6 }).Count -eq 1) ("got: " + $G.Substring(0, [Math]::Min(400, $G.Length)))
@@ -108,7 +108,7 @@ try {
 
   $LJ = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --json 2>$null }) -join "`n"
   $LA = @()
-  try { $LA = @($LJ.Substring($LJ.IndexOf('[')) | ConvertFrom-Json) } catch { }
+  try { $LA = @(($LJ.Substring($LJ.IndexOf('[')) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { }
   Check '9 control: lint-all anchors no finding in a .md' (@($LA | Where-Object { $_.file_path -like '*.md' }).Count -eq 0) ("findings: " + $LA.Count)
 }
 finally {

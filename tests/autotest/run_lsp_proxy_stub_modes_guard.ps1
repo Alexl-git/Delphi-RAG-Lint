@@ -160,7 +160,7 @@ Check 'no preamble in scripted mode' (-not ((Ascii $sc.Out) -match 'STUB-PREAMBL
 Check 'three responses (initialized is a notification: dropped)' ($frames.Count -eq 3) ("frames=$($frames.Count) out=$(Ascii $sc.Out)")
 $byId = @{}
 foreach ($f in $frames) {
-  try { $j = $f.Body | ConvertFrom-Json -AsHashtable; $byId[[string]$j['id']] = $f } catch { }
+  try { $j = $f.Body | ConvertFrom-Json -AsHashtable | ForEach-Object { $_ }; $byId[[string]$j['id']] = $f } catch { }
 }
 $allLen = ($frames.Count -gt 0) -and (@($frames | Where-Object { $_.Declared -ne [System.Text.Encoding]::UTF8.GetByteCount($_.Body) -or $_.Actual -ne $_.Declared }).Count -eq 0)
 Check 'every response has a correct Content-Length' $allLen ''

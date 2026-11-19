@@ -29,7 +29,7 @@ function Check([string]$Name, [bool]$Ok) {
 function Lint([string[]]$LintArgs) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all @LintArgs --format json 2>$null }
   $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
-  $f = @(); if ($b -ge 0) { try { $f = @($txt.Substring($b) | ConvertFrom-Json) } catch { $f = @() } }
+  $f = @(); if ($b -ge 0) { try { $f = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $f = @() } }
   return ,@($f | Where-Object { $_.rule -eq $Rule })
 }
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
@@ -72,7 +72,7 @@ try {
   Check 'negative: no library index -> silent' ($nolib.Count -eq 0)
 
   $one = & { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $WorkDir 'proj\uOpaque.pas') --db $db --library-db $lib --rule $Rule --json 2>$null }
-  $oneF = @(($one -join "`n") | ConvertFrom-Json) | Where-Object { $_.rule -eq $Rule }
+  $oneF = @((($one -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) | Where-Object { $_.rule -eq $Rule }
   Check 'lint <file> --library-db: the same two findings' (@($oneF).Count -eq 2)
 
   $dbx = Join-Path $WorkDir 'fxlib.sqlite'

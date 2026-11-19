@@ -95,10 +95,10 @@ $r = Run 'MUse' 'note'
 Check 'N only #note and raw lines : exit 1, "no #convert block"' (($r.Code -eq 1) -and ($r.Out -match 'no #convert block') -and (NotOld $r)) $r.Out
 
 $r = Run 'MUse' 'empty' @('--format', 'json')
-$j = $null; try { $j = $r.Out.Substring($r.Out.IndexOf('{')) | ConvertFrom-Json } catch {}
+$j = $null; try { $j = $r.Out.Substring($r.Out.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'J JSON, no .dfm, single unit: a document, ok false, refused false, the sentence in error' (($null -ne $j) -and ($j.ok -eq $false) -and ($j.refused -eq $false) -and ($j.error -match 'holds no rules')) $r.Out
 $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'MUse.pas') --unit (P 'MForm.pas') --rules (P 'empty.rules') --db $db --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
-$j = $null; try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {}
+$j = $null; try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'J batch: both units carry the sentence' (($null -ne $j) -and (@($j.units | Where-Object { $_.error -match 'holds no rules' }).Count -eq 2)) $o
 
 # ---- controls -----------------------------------------------------------------

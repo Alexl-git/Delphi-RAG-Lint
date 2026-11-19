@@ -49,7 +49,7 @@ function FixAll($C, [string]$Rule, [string[]]$Extra) {
 }
 function Fires($C,[string]$Rule, [string[]]$Extra) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $C.File --db $C.Db --rule $Rule --json @Extra 2>$null } | Out-String
-  try { return @(@($raw | ConvertFrom-Json) | Where-Object { $_.rule -eq $Rule }).Count } catch { return -1 }
+  try { return @(@(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) | Where-Object { $_.rule -eq $Rule }).Count } catch { return -1 }
 }
 
 # 1. overloaded private method: the impl header is ambiguous
@@ -126,7 +126,7 @@ function AllRows($C, [string]$Rule, [string]$FileName, [string]$Needle) {
   Push-Location $C.Dir
   try { $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $C.Db --rule $Rule --json 2>$null } | Out-String } finally { Pop-Location }
   try {
-    return @(@($raw | ConvertFrom-Json) | Where-Object {
+    return @(@(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) | Where-Object {
       $_.rule -eq $Rule -and ([IO.Path]::GetFileName($_.file_path) -eq $FileName) -and $_.message.Contains($Needle) }).Count
   } catch { return -1 }
 }

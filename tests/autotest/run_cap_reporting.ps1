@@ -92,14 +92,14 @@ function Run-Ctx([string[]]$Extra) { (& { $ErrorActionPreference = 'Continue'; &
 $m = Run-Ctx @('--max-callers', '3', '--format', 'markdown')
 Check 'T1 context header says `3 of 7`'                      ($m -match '## Callers \(3 of 7\)') (($m -split "`n" | Where-Object { $_ -match 'Callers' }) -join ' | ')
 Check 'T1b context prints the omitted note with the rerun hint' ($m -match '-- 4 omitted by cap 3; rerun with --max-callers 7') ''
-$j = (Run-Ctx @('--max-callers', '3', '--format', 'json')) | ConvertFrom-Json
+$j = (Run-Ctx @('--max-callers', '3', '--format', 'json')) | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'T1c context --format json: omitted = 4'               ($j.omitted -eq 4) "omitted=$($j.omitted)"
 Check 'T1d context --format json: cap = 3 (and caller_count stays 3)' (($j.cap -eq 3) -and ($j.caller_count -eq 3)) "cap=$($j.cap) caller_count=$($j.caller_count)"
 
 # ---- P1: positive control, cap not reached -----------------------------------
 $m2 = Run-Ctx @('--max-callers', '50', '--format', 'markdown')
 Check 'P1 POSITIVE CONTROL: --max-callers 50 prints `Callers (7)` and no omitted line' (($m2 -match '## Callers \(7\)') -and -not ($m2 -match 'omitted')) (($m2 -split "`n" | Where-Object { $_ -match 'Callers|omitted' }) -join ' | ')
-$j2 = (Run-Ctx @('--max-callers', '50', '--format', 'json')) | ConvertFrom-Json
+$j2 = (Run-Ctx @('--max-callers', '50', '--format', 'json')) | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'P1b POSITIVE CONTROL: JSON omitted = 0, cap = 50'     (($j2.omitted -eq 0) -and ($j2.cap -eq 50)) "omitted=$($j2.omitted) cap=$($j2.cap)"
 
 # ---- T2: query --text --limit 2 -----------------------------------------------
@@ -115,9 +115,9 @@ Check 'T2c POSITIVE CONTROL: --limit 50 prints no omitted line' (-not (($full -j
 
 # ---- T3: query --text --json keeps stdout a bare array ------------------------
 $jj = (& { $ErrorActionPreference = 'Continue'; & $exePath query --text zzcapphrase --db $db --limit 2 --json 2>$null }) -join "`n"
-$arr = $jj | ConvertFrom-Json
+$arr = $jj | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'T3 query --text --json stdout stays a parseable array of 2' (@($arr).Count -eq 2) $jj.Substring(0, [Math]::Min(120, $jj.Length))
-$errF = Join-Path $WorkDir "err.txt"; & { $ErrorActionPreference = 'Continue'; & $exePath query --text zzcapphrase --db $db --limit 2 --json 2>$errF } | Out-Null; $err = (Get-Content $errF) -join "`n"
+$errF = Join-Path $WorkDir "err.txt"; & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errF); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath query --text zzcapphrase --db $db --limit 2 --json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-Null; $err = (Get-Content $errF) -join "`n"
 Check 'T3b the note goes to stderr under --json'            ($err -match 'omitted by cap 2') $err
 
 # ---- T4: top --limit 1 ---------------------------------------------------------

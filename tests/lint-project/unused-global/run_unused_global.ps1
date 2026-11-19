@@ -38,7 +38,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 function Parse-Findings([string[]]$Raw) {
   $txt = ($Raw -join "`n"); $b = $txt.IndexOf('[')
-  $out = @(); if ($b -ge 0) { try { $out = @($txt.Substring($b) | ConvertFrom-Json) } catch { $out = @() } }
+  $out = @(); if ($b -ge 0) { try { $out = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $out = @() } }
   if ($null -eq $out) { $out = @() }
   return ,@($out)
 }
@@ -65,8 +65,8 @@ Check 'run 1 is not vacuous (lint-all returned findings)' ($all.Count -gt 0) "to
 $a = @($all | Where-Object { $_.rule -eq $Rule })
 $a | ForEach-Object { Write-Host ("    {0}:{1} {2}" -f (Split-Path $_.file_path -Leaf), $_.start_line, $_.message) }
 Check 'run 1 ON by default: exactly 8 findings' ($a.Count -eq 8) "count=$($a.Count)"
-foreach ($t in $triggers) { $l = LineOf $t; Check "$t fires" ((At $a $l).Count -eq 1) "line=$l" }
-foreach ($c in $controls) { $l = LineOf $c; Check "$c stays silent" ((At $a $l).Count -eq 0) "line=$l" }
+foreach ($t in $triggers) { $l = LineOf $t; Check "$t fires" ((@(At $a $l)).Count -eq 1) "line=$l" }
+foreach ($c in $controls) { $l = LineOf $c; Check "$c stays silent" ((@(At $a $l)).Count -eq 0) "line=$l" }
 
 # RUN 2 -- --rule narrows to the rule; --disable turns it off
 $r2 = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json --rule $Rule 2>$null })
@@ -90,9 +90,9 @@ Swap (Join-Path $scratch 'src\uUnusedGlobalUser.pas') 'N:= GIntfOtherUnit;' 'N:=
 $r3 = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json --rule $Rule 2>$null })
 $c3 = @($r3 | Where-Object { $_.rule -eq $Rule })
 foreach ($c in @('CONTROL-IMPL-NESTED', 'CONTROL-IMPL-INIT', 'CONTROL-IMPL-VIATYPED', 'CONTROL-INTF-OTHERUNIT', 'CONTROL-IMPL-ROUTINE-CALLED')) {
-  Check "run 3 lone use removed -> $c fires" ((At $c3 (LineOf $c)).Count -eq 1)
+  Check "run 3 lone use removed -> $c fires" ((@(At $c3 (LineOf $c))).Count -eq 1)
 }
-Check 'run 3 still-used symbols stay silent' ((At $c3 (LineOf 'CONTROL-IMPL-READ')).Count -eq 0 -and (At $c3 (LineOf 'CONTROL-INTF-OWNIMPL')).Count -eq 0)
+Check 'run 3 still-used symbols stay silent' ((@(At $c3 (LineOf 'CONTROL-IMPL-READ'))).Count -eq 0 -and (@(At $c3 (LineOf 'CONTROL-INTF-OWNIMPL'))).Count -eq 0)
 }
 finally {
   if (Test-Path $scratch) { try { [System.IO.Directory]::Delete($scratch, $true) } catch { } }

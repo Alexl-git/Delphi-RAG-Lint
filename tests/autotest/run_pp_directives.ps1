@@ -103,7 +103,7 @@ function Sql-Rows([string]$Db, [string]$Q) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --query $Q --db $Db --json 2>$null }) -join "`n"
   $s = $raw.IndexOf('{')
   if ($s -lt 0) { return $null }
-  $o = $raw.Substring($s) | ConvertFrom-Json
+  $o = $raw.Substring($s) | ConvertFrom-Json | ForEach-Object { $_ }
   return ,@($o.rows)
 }
 function Lint-All([string]$Db, [string]$Rule, [hashtable]$Env = @{}) {
@@ -120,7 +120,7 @@ function Lint-All([string]$Db, [string]$Rule, [hashtable]$Env = @{}) {
     foreach ($k in $Env.Keys) { [Environment]::SetEnvironmentVariable($k, $null) }
   }
   $start = $raw.IndexOf('[')
-  $arr = if ($start -ge 0) { @($raw.Substring($start) | ConvertFrom-Json) } else { @() }
+  $arr = @(if ($start -ge 0) { @(($raw.Substring($start) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } else { @() })
   $f = @($arr | Where-Object { $_.rule -eq $Rule } | ForEach-Object {
     '{0}:{1}:{2} {3}' -f (Split-Path $_.file_path -Leaf), $_.start_line, $_.start_col, $_.message })
   return [pscustomobject]@{ Findings = $f; Text = ($f -join "`n"); Trace = $trace }
@@ -137,7 +137,7 @@ $expRows = @(
   '0|i||5|1|-1|-1', '1|ifdef|EUREKALOG|6|1|0|0', '2|define|LOCALDEF|7|1|0|0', '3|undef|GONE|9|1|0|1',
   '4|ifdef|EUREKALGO|14|1|1|0', '5|ifndef|LOCALDEF|16|1|2|0', '6|if||17|1|3|0', '7|elseif||18|1|3|1',
   '8|ifdef|NOWHERED|22|3|4|0')
-$got = if ($rows) { @($rows | ForEach-Object { ($_ | ForEach-Object { "$_" }) -join '|' }) } else { @() }
+$got = @(if ($rows) { @($rows | ForEach-Object { ($_ | ForEach-Object { "$_" }) -join '|' }) } else { @() })
 foreach ($g in $got) { Write-Host "    $g" -ForegroundColor DarkGray }
 Check 'the 9 expected rows (directive, symbol, line, col, region, branch)' ((($got -join ';') -eq ($expRows -join ';'))) ''
 $u2 = Sql-Rows $db "SELECT COUNT(*) FROM pp_directives d JOIN files f ON f.id = d.file_id WHERE f.path LIKE '%U2.pas'"

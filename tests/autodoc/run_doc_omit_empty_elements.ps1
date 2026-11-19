@@ -169,7 +169,7 @@ Check 'once settled, further index+apply passes are byte-identical' `
 # <param>, and an undocumented one is reported at WARNING -- not papered over,
 # and not left as a hint that is easy to ignore forever.
 $lint = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --json 2>$null }
-$find = @(); try { $find = ($lint -join "`n" | ConvertFrom-Json) } catch { $find = @() }
+$find = @(); try { $find = ($lint -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $find = @() }
 $nd = @($find | Where-Object { $_.rule -eq 'doc-param-no-description' })
 # v(2026-08-10): AOther is TYPED, so it now carries 'const Integer' as its body
 # and this rule correctly stays silent on it -- that is the 574-finding drop on

@@ -115,12 +115,12 @@ function Get-Plan($P) {
 function Get-CausesJson($P) {
   Push-Location $WorkDir
   try { $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe cycles --causes --format json --project $P.Dproj --db $P.Db --library-db none 2>$null } | Out-String) } finally { Pop-Location }
-  try { return ($o | ConvertFrom-Json) } catch { return $null }
+  try { return ($o | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function Run-Fix($P) {
   Push-Location $WorkDir
   try { $out = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe cycles --fix --apply --build-timeout 1800 --project $P.Dproj --db $P.Db --library-db none --format json 2>$null } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
-  $j = $null; try { $j = $out | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   $k = @(); $r = @()
   foreach ($c in @($j.cycles)) { foreach ($x in @($c.refusals)) { if ($x) { $k += $x.kind; $r += "$($x.kind): $($x.reason)" } } }
   foreach ($x in @($j.refusals)) { if ($x) { $k += $x.kind; $r += "$($x.kind): $($x.reason)" } }
@@ -155,8 +155,8 @@ function Test-ConsumerFirst([string]$Tag, [string[]]$Order, [scriptblock]$Patch)
   $out1 = Invoke-Program $P
   Write-Host "      untouched run: $(($out0 -split "`r?`n") -join ' / ')" -ForegroundColor DarkGray
   Write-Host "      applied run:   $(($out1 -split "`r?`n") -join ' / ')" -ForegroundColor DarkGray
-  $i0 = (Get-Lines $out0 'init') -join ','; $i1 = (Get-Lines $out1 'init') -join ','
-  $f0 = (Get-Lines $out0 'fin') -join ','; $f1 = (Get-Lines $out1 'fin') -join ','
+  $i0 = (@(Get-Lines $out0 'init')) -join ','; $i1 = (@(Get-Lines $out1 'init')) -join ','
+  $f0 = (@(Get-Lines $out0 'fin')) -join ','; $f1 = (@(Get-Lines $out1 'fin')) -join ','
   Check "$Tag.7 the applied program keeps its init order [$i1] = [$i0] and fin order [$f1] = [$f0]" (($leaf.Count -eq 1) -and ($i0 -ne '') -and ($i0 -eq $i1) -and ($f0 -eq $f1) -and ([array]::IndexOf(@($i0 -split ','), 'FP3A') -lt [array]::IndexOf(@($i0 -split ','), 'FP3B'))) "before=[$out0] after=[$out1]"
   Check "$Tag.8 stdout byte-identical; FP3B's name already empty at FP3A's finalization before and after" ($b1.Ok -and ($leaf.Count -eq 1) -and ($out0 -ne '<no exe>') -and ($out1 -ceq $out0) -and ($out0 -match '(?m)\[b\] a stopped name=\r?$')) "before=[$out0] after=[$out1]"
 }

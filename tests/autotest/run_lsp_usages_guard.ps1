@@ -126,7 +126,7 @@ try {
   # take the object's own span rather than "everything from the first brace".
   $cliJson = $cliRaw.Substring($cliRaw.IndexOf('{'))
   $cliJson = $cliJson.Substring(0, $cliJson.LastIndexOf('}') + 1)
-  $cli = $cliJson | ConvertFrom-Json
+  $cli = $cliJson | ConvertFrom-Json | ForEach-Object { $_ }
 
   # --- the LSP's answer -----------------------------------------------------
   $inF  = Join-Path $WorkDir 'in.txt'
@@ -138,11 +138,11 @@ try {
   [System.IO.File]::WriteAllText($inF, $m, (New-Object System.Text.UTF8Encoding $false))
 
   $p = Start-Process $exePath -ArgumentList @('lsp','--db',$db) -WorkingDirectory $WorkDir `
-        -RedirectStandardInput $inF -RedirectStandardOutput $outF -NoNewWindow -Wait -PassThru
+        -RedirectStandardInput $inF -RedirectStandardOutput $outF -NoNewWindow -Wait -PassThru; $null = $p.Handle
 
   $lsp = $null
   foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 2 -and $o.result) { $lsp = $o.result }
   }
 

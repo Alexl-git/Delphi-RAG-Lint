@@ -73,7 +73,7 @@ Check 'plan: dfm diff' ($r.Out.Contains("--- a/uLoad.dfm") -and $r.Out.Contains(
 Check 'plan: pas diff' ($r.Out.Contains("--- a/uLoad.pas") -and $r.Out.Contains("-    qryFOLDERSID: TIntegerField;") -and $r.Out.Contains("+    ZZZSA1: TFDSchemaAdapter;") -and $r.Out.Contains("+{")) $r.Out
 Check 'plan: nothing written' ((Hash $w) -eq $h)
 $r = Run @('repo', 'gen-param-array', '--in', "$w\uLoad.pas", '--prepare-queries', '--plan', '--json')
-$j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
+$j = $null; try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'plan --json: prepare object' (($null -ne $j) -and ($j.units[0].prepare.queries[0] -eq 'qryFOLDERS') -and (@($j.units[0].prepare.removed_fields).Count -eq 2)) $r.Out
 
 # apply

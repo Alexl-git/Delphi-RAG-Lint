@@ -56,7 +56,7 @@ function LinkFindings([string[]]$extra) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --project $Dproj --rule unit-not-in-dpr --json @extra 2>$null }) -join "`n"
   Write-Host ('  raw[0..200]: ' + $raw.Substring(0, [Math]::Min(200, $raw.Length)))
   $arr = @()
-  try { $arr = @($raw | ConvertFrom-Json) } catch { }
+  try { $arr = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { }
   return ,$arr
 }
 
@@ -65,7 +65,7 @@ try {
   $code = $LASTEXITCODE
   $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query 'SELECT path FROM files' --json 2>$null }) -join "`n"
   $paths = @()
-  try { $paths = @(($raw | ConvertFrom-Json).rows | ForEach-Object { $_[0] }) } catch { }
+  try { $paths = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }).rows | ForEach-Object { $_[0] }) } catch { }
   Check 'E1 index exit 0 and ExtU.pas kept in the project index' ($code -eq 0 -and @($paths | Where-Object { $_ -match '\\ext\\ExtU\.pas$' }).Count -eq 1) ("exit=$code files=" + ($paths -join ', '))
   Check 'E2 index notes the closure unit kept under the excluded root' ($idxOut -match '(?s)exclude-under.*ExtU\.pas') ''
   Check 'E3 index reports the unlisted closure units UHelper and ExtU' (($idxOut -match 'unit-not-in-dpr.*"UHelper"') -and ($idxOut -match 'unit-not-in-dpr.*"ExtU"')) ''

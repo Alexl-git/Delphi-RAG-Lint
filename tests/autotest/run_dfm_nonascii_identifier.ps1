@@ -69,7 +69,7 @@ function Show([string]$s) { return ($s -replace [char]0x00DC,'<U>' -replace [cha
 function SqlRows([string]$Db, [string]$Query) {
   $o = (RunEngine @('sql', '--query', $Query, '--db', $Db, '--json', '--output-encoding', 'utf8')).Out
   $a = $o.IndexOf('{'); if ($a -lt 0) { return ,@() }
-  $j = $o.Substring($a) | ConvertFrom-Json
+  $j = $o.Substring($a) | ConvertFrom-Json | ForEach-Object { $_ }
   $names = @($j.columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
   $out = @()
   foreach ($r in @($j.rows)) {
@@ -132,7 +132,7 @@ function Apply([string]$Dir, [string]$Only) {
   $e = RunEngine @('convert-apply', '--unit', "$Dir\Form1.pas", '--rules', "$Dir\book.rules", '--db', "$Dir\fx.sqlite", '--format', 'json', '--only', $Only, '--output-encoding', 'utf8')
   $o = $e.Out + "`n" + $e.Err
   $a = $o.IndexOf('{'); $b = $o.LastIndexOf('}')
-  $j = $null; if ($a -ge 0 -and $b -gt $a) { try { $j = $o.Substring($a, $b - $a + 1) | ConvertFrom-Json } catch { $j = $null } }
+  $j = $null; if ($a -ge 0 -and $b -gt $a) { try { $j = $o.Substring($a, $b - $a + 1) | ConvertFrom-Json | ForEach-Object { $_ } } catch { $j = $null } }
   return [pscustomobject]@{ Code = $e.Code; Out = $o; Json = $j }
 }
 function Located($r, [string]$Name) {

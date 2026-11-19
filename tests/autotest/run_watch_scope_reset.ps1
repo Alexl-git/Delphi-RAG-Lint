@@ -109,7 +109,7 @@ try {
   # ONE log for both streams, so the stderr resolve lines land inside their tick.
   [System.IO.File]::WriteAllText($errLog, '')
   $proc = Start-Process -FilePath $env:ComSpec -ArgumentList @('/c', "`"`"$Exe`" index `"$src`" --db `"$db`" --watch --interval 1 > `"$outLog`" 2>&1`"") `
-            -PassThru -NoNewWindow
+            -PassThru -NoNewWindow; $null = $proc.Handle
   $ok1 = Wait-Done 1 120
   Check 'the first tick finished' $ok1 ''
   Start-Sleep -Milliseconds 1100

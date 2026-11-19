@@ -145,7 +145,7 @@ function ReaderWaitsForLock([string]$Label, [string[]]$VerbArgs) {
         # which would split the SQL text into separate arguments.
         $argLine = ($VerbArgs | ForEach-Object { '"' + $_ + '"' }) -join ' '
         $p = Start-Process -FilePath $Exe -ArgumentList $argLine -PassThru -NoNewWindow `
-               -RedirectStandardOutput $out -RedirectStandardError $err
+               -RedirectStandardOutput $out -RedirectStandardError $err; $null = $p.Handle
         Start-Sleep -Milliseconds $LockHoldMs
         $fs.Unlock($SHARED_FIRST, $SHARED_SIZE)
     } finally { $fs.Close() }

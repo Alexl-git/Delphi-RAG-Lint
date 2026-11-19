@@ -200,7 +200,7 @@ function Invoke-Lsp([string]$Method, [int]$Line0, [int]$Char0, [string]$Sync) {
 
   $raw = [System.IO.File]::ReadAllText($outF)
   foreach ($m in [regex]::Matches($raw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $m.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $m.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 2) { return $o }
   }
   return $null
@@ -239,7 +239,7 @@ Check 'shows the real parameter ASource' ($h -match 'ASource') "got: [$h]"
 # path cannot work at all without the overlay.
 Write-Host ''
 Write-Host 'CASE 2: completion after didChange' -ForegroundColor Cyan
-$labels = CompletionLabels (Invoke-Lsp 'textDocument/completion' $liveLine $dotCol 'change')
+$labels = @(CompletionLabels (Invoke-Lsp 'textDocument/completion' $liveLine $dotCol 'change'))
 Check 'completion returns items at the unsaved dot' ($labels.Count -gt 0) "count=$($labels.Count)"
 Check 'offers Assign'             ($labels -contains 'Assign')             "got: $($labels -join ',')"
 Check 'offers AlreadySavedMethod' ($labels -contains 'AlreadySavedMethod') "got: $($labels -join ',')"
@@ -264,7 +264,7 @@ Start-Process $Exe -ArgumentList @('lsp', '--db', $db) -WorkingDirectory $WorkDi
 $capRaw = [System.IO.File]::ReadAllText($outF)
 $syncVal = $null
 foreach ($m in [regex]::Matches($capRaw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-  try { $o = $m.Value.Trim() | ConvertFrom-Json } catch { continue }
+  try { $o = $m.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
   if ($o.id -eq 1 -and $o.result) { $syncVal = $o.result.capabilities.textDocumentSync }
 }
 Check 'capabilities carry textDocumentSync' ($null -ne $syncVal) "got: [$syncVal]"

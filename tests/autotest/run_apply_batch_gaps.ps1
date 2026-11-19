@@ -69,21 +69,21 @@ function Run([string[]]$Units, [string[]]$Extra = @()) {
   $a = @('convert-apply')
   foreach ($u in $Units) { $a += @('--unit', (P $u)) }
   $a += @('--rules', (P 'mixed.rules'), '--db', $db, '--format', 'json') + $Extra
-  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2> $errFile }) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe @a 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }) -join "`n"
   $code = $LASTEXITCODE
   $e = if (Test-Path $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
   $j = $null
-  try { $j = $o | ConvertFrom-Json } catch { $j = $null }
+  try { $j = $o | ConvertFrom-Json | ForEach-Object { $_ } } catch { $j = $null }
   return [pscustomobject]@{ Code = $code; Out = $o; Err = $e; J = $j }
 }
 function ProgressLines([string]$s) {
-  return @($s -split "`r?`n" | Where-Object { $_ -match '^\{"progress":' } | ForEach-Object { ($_ | ConvertFrom-Json).progress })
+  return @($s -split "`r?`n" | Where-Object { $_ -match '^\{"progress":' } | ForEach-Object { ($_ | ConvertFrom-Json | ForEach-Object { $_ }).progress })
 }
 $PRECOND = 'not covered by any supplied --db'
 
 # ---- capability -------------------------------------------------------------
 $ij = $null
-try { $ij = ((& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n") | ConvertFrom-Json } catch { $ij = $null }
+try { $ij = ((& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n") | ConvertFrom-Json | ForEach-Object { $_ } } catch { $ij = $null }
 Check 'C1 info --json: capabilities.batch_progress is JSON true' `
   (($null -ne $ij) -and ($ij.capabilities.batch_progress -is [bool]) -and ($ij.capabilities.batch_progress -eq $true)) `
   "capabilities = $(if ($ij) { $ij.capabilities | ConvertTo-Json -Compress } else { '<no json>' })"

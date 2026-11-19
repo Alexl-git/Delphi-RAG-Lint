@@ -45,7 +45,7 @@ function Frame($o) { $j = $o | ConvertTo-Json -Compress -Depth 10; "Content-Leng
 $q = "SELECT f.path, s.start_line, s.name FROM symbols s JOIN files f ON f.id = s.file_id " +
      "WHERE s.kind IN ('method','function','procedure') AND f.path LIKE '$PathLike' AND s.start_line > 0 ORDER BY s.id LIMIT $(4 * $N)"
 $raw = (& { $ErrorActionPreference = 'Continue'; & $ExeA sql --query $q --db $DbPath --json 2>$null }) -join "`n"
-$j = $raw | ConvertFrom-Json
+$j = $raw | ConvertFrom-Json | ForEach-Object { $_ }
 $cache = @{}; $pos = [System.Collections.Generic.List[object]]::new()
 foreach ($row in $j.rows) {
   $path = [string]$row[0]; $ln = [int]$row[1] - 1; $name = [string]$row[2]
@@ -77,7 +77,7 @@ function Invoke-HoverSession([string]$Exe, [string[]]$Extra, [int]$Count, [strin
   $ms = $sw.Elapsed.TotalMilliseconds
   $answered = 0; $bytes = 0; $vals = @{}
   foreach ($mm in [regex]::Matches([IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($null -eq $o.id -or [int]$o.id -lt 1000) { continue }
     $v = if ($null -ne $o.result -and $null -ne $o.result.contents) { [string]$o.result.contents.value } else { '' }
     if ($v.Length -gt 0) { $answered++; $bytes += $v.Length }

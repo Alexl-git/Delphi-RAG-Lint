@@ -763,7 +763,7 @@ function ApplyTo([string[]]$Units, [string]$Rules, [string[]]$Extra = @()) {
 function Json([string]$s) {
   $a = $s.IndexOf('{'); $b = $s.LastIndexOf('}')
   if ($a -lt 0 -or $b -le $a) { return $null }
-  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json) } catch { return $null }
+  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function Inh($j, [string]$Name) { return @($j.inherited | Where-Object { $_.name -eq $Name }) }
 function Block([string]$Text, [string]$Header) {
@@ -786,16 +786,16 @@ $j = Json $r.Out
 Check 'A1 RChild dry run: exit 0, ok' (($r.Code -eq 0) -and ($null -ne $j) -and $j.ok) $r.Out
 $keys = if ($j -and @($j.inherited).Count -gt 0) { (@($j.inherited)[0].PSObject.Properties.Name) -join ',' } else { '' }
 Check 'A2 inherited[] keys: the six N1 keys, then action' ($keys -eq 'name,type,line,ancestor_unit,ancestor_state,reason,action') $keys
-$b = Inh $j 'rbtn'
+$b = @(Inh $j 'rbtn')
 Check 'A3 rbtn: ancestor RBase (two levels up), converted, action retyped' `
   (($b.Count -eq 1) -and ($b[0].ancestor_unit -eq 'RBase') -and ($b[0].ancestor_state -eq 'converted') -and ($b[0].action -eq 'retyped') -and ($b[0].type -eq 'TSrcA')) ($b | ConvertTo-Json -Compress)
-$n = Inh $j 'rnest'
+$n = @(Inh $j 'rnest')
 Check 'A4 nested rnest (inside inherited rpnl): retyped' (($n.Count -eq 1) -and ($n[0].action -eq 'retyped')) ($n | ConvertTo-Json -Compress)
-$f = Inh $j 'fb'
+$f = @(Inh $j 'fb')
 Check 'A5 inline frame child fb: ancestor RFrame, retyped' (($f.Count -eq 1) -and ($f[0].ancestor_unit -eq 'RFrame') -and ($f[0].action -eq 'retyped')) ($f | ConvertTo-Json -Compress)
-$u = Inh $j 'ubtn'
+$u = @(Inh $j 'ubtn')
 Check 'A6 ubtn (ancestor still TSrcA): unconverted, action skipped' (($u.Count -eq 1) -and ($u[0].ancestor_state -eq 'unconverted') -and ($u[0].action -eq 'skipped')) ($u | ConvertTo-Json -Compress)
-$c = Inh $j 'rcode'
+$c = @(Inh $j 'rcode')
 Check 'A7 rcode (code-only use, N2a): action code, ancestor RBase, converted, line = its first code reference' `
   (($c.Count -eq 1) -and ($c[0].action -eq 'code') -and ($c[0].ancestor_unit -eq 'RBase') -and ($c[0].ancestor_state -eq 'converted') -and ($c[0].line -eq 22)) ($c | ConvertTo-Json -Compress)
 $rk = @($j.items | Where-Object { $_.kind -eq 'inherited-instance-retyped' })
@@ -838,7 +838,7 @@ Check 'B10 own field retyped and LibB added to the INTERFACE uses (C13 a)' `
 # ---- N2a: a code-only descendant -------------------------------------------------
 $r = ApplyTo @('RCode.pas') 'retype.rules' @('--format', 'json')
 $j = Json $r.Out
-$c = if ($j) { Inh $j 'rcode' } else { @() }
+$c = @(if ($j) { Inh $j 'rcode' } else { @() })
 Check 'C1 RCode (no own instance, no .dfm re-open): exit 0, ok, component_part applied, rcode action code' `
   (($r.Code -eq 0) -and ($null -ne $j) -and $j.ok -and ($j.component_part -eq 'applied') -and ($c.Count -eq 1) -and ($c[0].action -eq 'code')) $r.Out
 Check 'C2 two access sites rewritten' (@($j.access_sites).Count -eq 2) ($j.access_sites -join ' | ')
@@ -955,7 +955,7 @@ if (-not (Test-Path $py)) {
 } else {
   $old = P 'old-resolver.sqlite'
   Copy-Item $db $old -Force
-  & $py -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute(""UPDATE schema_meta SET value='r=1.11.0-alpha;schema=23' WHERE key='resolver_fingerprint'""); c.commit(); c.close()" $old
+  & $py -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('UPDATE schema_meta SET value=? WHERE key=?', ('r=1.11.0-alpha;schema=23', 'resolver_fingerprint')); c.commit(); c.close()" $old
   $hp = (Get-FileHash (P 'RScope.pas')).Hash
   $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'RScope.pas') --rules (P 'retype.rules') --db $old --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"; $kc = $LASTEXITCODE
   $kj = Json $o
@@ -965,7 +965,7 @@ if (-not (Test-Path $py)) {
   $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'RScope.pas') --rules (P 'retype.rules') --db $old --apply --no-backup 2>&1 | ForEach-Object { "$_" } }) -join "`n"; $kc = $LASTEXITCODE
   Check 'K2 --apply on it: REFUSED (exit 1, one REFUSED: line), the unit byte-identical' `
     (($kc -eq 1) -and ($o -match '(?m)^REFUSED: .*edges were derived by resolver 1\.11\.0-alpha') -and ((Get-FileHash (P 'RScope.pas')).Hash -eq $hp)) $o
-  & $py -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute(""DELETE FROM schema_meta WHERE key='resolver_fingerprint'""); c.commit(); c.close()" $old
+  & $py -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('DELETE FROM schema_meta WHERE key=?', ('resolver_fingerprint',)); c.commit(); c.close()" $old
   $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'RScope.pas') --rules (P 'retype.rules') --db $old --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"; $kc = $LASTEXITCODE
   $kj = Json $o
   Check 'K3 a DB with NO resolver stamp is refused the same way ("resolver (none)")' `
@@ -1012,7 +1012,7 @@ Check 'LOAD1 every .dfm --apply wrote LOADS (text -> binary -> text -> binary)' 
 # ---- UNCONVERTED ancestor, code only (1.26.7) ----------------------------------------
 $r = ApplyTo @('RUnconv.pas') 'retype.rules' @('--format', 'json')
 $j = Json $r.Out
-$uu = if ($j) { @($j.inherited | Where-Object { $_.name -eq 'ubtn' }) } else { @() }
+$uu = @(if ($j) { @($j.inherited | Where-Object { $_.name -eq 'ubtn' }) } else { @() })
 Check 'U1 a code-only use of an UNCONVERTED ancestor field (two levels up): one entry, action skipped, state unconverted, reason "ancestor not converted", line 19, ancestor RBase' `
   (($r.Code -eq 0) -and ($uu.Count -eq 1) -and ($uu[0].action -eq 'skipped') -and ($uu[0].ancestor_state -eq 'unconverted') -and `
    ($uu[0].reason -eq 'ancestor not converted') -and ($uu[0].line -eq 19) -and ($uu[0].ancestor_unit -eq 'RBase') -and ($uu[0].type -eq 'TSrcA')) ($r.Out)

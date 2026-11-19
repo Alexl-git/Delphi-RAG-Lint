@@ -26,17 +26,17 @@ function Findings([string]$Case, [string[]]$Extra) {
   & { $ErrorActionPreference = 'Continue'; & $Exe index $d --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule random-without-randomize --json @Extra 2>$null }
   $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
-  $f = @(); if ($b -ge 0) { try { $f = @($txt.Substring($b) | ConvertFrom-Json) } catch { $f = @() } }
+  $f = @(); if ($b -ge 0) { try { $f = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $f = @() } }
   return @($f | Where-Object { $_.rule -eq 'random-without-randomize' })
 }
 try {
-  $u = Findings 'unseeded' @('--enable', 'random-without-randomize')
+  $u = @(Findings 'unseeded' @('--enable', 'random-without-randomize'))
   Check 'unseeded: exactly one finding' ($u.Count -eq 1)
   # positive-control: random-without-randomize
   Check 'unseeded: at uDice.pas:11' (($u.Count -eq 1) -and ($u[0].file_path -match 'uDice\.pas$') -and ([int]$u[0].start_line -eq 11))
-  $s = Findings 'seeded' @('--enable', 'random-without-randomize')
+  $s = @(Findings 'seeded' @('--enable', 'random-without-randomize'))
   Check 'seeded (Randomize in another unit): silent' ($s.Count -eq 0)
-  $x = Findings 'unseeded' @('--disable', 'random-without-randomize')
+  $x = @(Findings 'unseeded' @('--disable', 'random-without-randomize'))
   Check 'positive control: disabled rule reports nothing' ($x.Count -eq 0)
 } finally { [IO.Directory]::Delete($WorkDir, $true) }
 Write-Host ''

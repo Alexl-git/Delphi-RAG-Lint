@@ -48,7 +48,7 @@ Set-Location -LiteralPath $WorkDir
 
 $PingHost = '127.{0}.{1}.{2}' -f (Get-Random -Min 2 -Max 250), (Get-Random -Min 2 -Max 250), (Get-Random -Min 2 -Max 250)
 function Parked { return @(Get-CimInstance Win32_Process -Filter "Name = 'PING.EXE' OR Name = 'ping.exe'" | Where-Object { "$($_.CommandLine)" -match [regex]::Escape($PingHost) }) }
-function Stop-Parked { foreach ($p in (Parked)) { try { [Diagnostics.Process]::GetProcessById([int]$p.ProcessId).Kill() } catch { } } }
+function Stop-Parked { foreach ($p in (@(Parked))) { try { [Diagnostics.Process]::GetProcessById([int]$p.ProcessId).Kill() } catch { } } }
 function Remove-Scratch {
   Set-Location -LiteralPath $env:TEMP
   for ($i = 0; ($i -lt 20) -and (Test-Path -LiteralPath $WorkDir); $i++) {
@@ -111,8 +111,8 @@ Write-Host '== cycles --fix parked in its baseline build' -ForegroundColor Cyan
 $a = @('cycles', '--fix', '--project', $Dproj, '--db', $Db, '--library-db', $Lib, '--unit', 'demogageport', '--format', 'json', '--rsvars', $Fake)
 $q = ($a | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' '
 $Out = Join-Path $WorkDir 'run.out'; $Err = Join-Path $WorkDir 'run.err'
-$run = Start-Process -FilePath $Exe -ArgumentList $q -RedirectStandardOutput $Out -RedirectStandardError $Err -NoNewWindow -PassThru
-$parked = Wait-For { ((Parked).Count -gt 0) -or $run.HasExited } 120
+$run = Start-Process -FilePath $Exe -ArgumentList $q -RedirectStandardOutput $Out -RedirectStandardError $Err -NoNewWindow -PassThru; $null = $run.Handle
+$parked = Wait-For { ((@(Parked)).Count -gt 0) -or $run.HasExited } 120
 Check 'setup: the baseline build parked' ($parked -and -not $run.HasExited) ("exited=" + $run.HasExited + ' ' + (Read-Text $Out) + (Read-Text $Err))
 
 $leaf = BeatLeaf $run.Id
@@ -130,8 +130,8 @@ $sd = (& { $ErrorActionPreference = 'Continue'; & $Exe shutdown --db $Db --wait 
 $exited = Wait-For { $run.HasExited } 60
 if (-not $exited) { try { $run.Kill($true) } catch { }; $run.WaitForExit(10000) | Out-Null }
 $text = Read-Text $Out
-Check 'P3 shutdown cancels: exit 1, cancelled, the parked build tree is gone' ($exited -and ($run.ExitCode -eq 1) -and ($text -match 'cancelled') -and ((Parked).Count -eq 0)) ("exit=" + $run.ExitCode + " parked=" + (Parked).Count + " shutdown: $sd out: $text")
-$doc = $null; try { $doc = $text | ConvertFrom-Json } catch { }
+Check 'P3 shutdown cancels: exit 1, cancelled, the parked build tree is gone' ($exited -and ($run.ExitCode -eq 1) -and ($text -match 'cancelled') -and ((@(Parked)).Count -eq 0)) ("exit=" + $run.ExitCode + " parked=" + (@(Parked)).Count + " shutdown: $sd out: $text")
+$doc = $null; try { $doc = $text | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'P4 stdout is one cycle-fix/1 document (no progress on stdout)' (($null -ne $doc) -and ($doc.schema -eq 'cycle-fix/1') -and ($text -notmatch 'cycles --fix: baseline build --')) $text
 Stop-Parked
 

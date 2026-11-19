@@ -112,7 +112,7 @@ function Invoke-Watched([string]$Tag, [string[]]$ExtraArgs) {
     $argList = @('ghost-check', $dprojPath, '--overlays', $manifest, '--platform', 'win64', '--format', 'json') + $ExtraArgs
     $out = Join-Path $WorkDir "$Tag.out"
     $p = Start-Process $exePath -ArgumentList $argList -WorkingDirectory $WorkDir -NoNewWindow -PassThru -Wait `
-           -RedirectStandardOutput $out -RedirectStandardError "$out.err"
+           -RedirectStandardOutput $out -RedirectStandardError "$out.err"; $null = $p.Handle
     Start-Sleep -Milliseconds 400      # let queued watcher events drain
     $events = @(Get-Event -SourceIdentifier "$srcId.*" -ErrorAction SilentlyContinue)
     $n = $events.Count

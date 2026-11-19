@@ -162,7 +162,7 @@ try {
 
     $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name $c.Name --resolved --json --db $db 2>$null }) -join "`n"
     $b = $raw.IndexOf('[')
-    $rows = @(); if ($b -ge 0) { $rows = @($raw.Substring($b) | ConvertFrom-Json) }
+    $rows = @(); if ($b -ge 0) { $rows = @(($raw.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
     $mine = @($rows | Where-Object {
       ([string]$_.caller_qname).EndsWith($c.Caller) -and
       (($null -eq $c.Conf) -or ($_.confidence -eq $c.Conf)) -and

@@ -113,7 +113,7 @@ function Run-Fix($P) {
   $a = @('cycles', '--fix', '--apply', '--build-timeout', '1800', '--project', $P.Dproj, '--db', $P.Db, '--library-db', $Lib, '--format', 'json')
   Push-Location $WorkDir
   try { $out = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @a 2>$null } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
-  $j = $null; try { $j = $out | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   $k = @(); foreach ($c in @($j.cycles)) { foreach ($x in @($c.refusals)) { if ($x) { $k += "$($x.kind): $($x.reason)" } } }
   return @{ Exit = $code; Out = $out; Kinds = $k }
 }

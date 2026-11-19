@@ -84,17 +84,17 @@ $db = Join-Path $dir 'fx.sqlite'
 & { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 Write-Host 'B-27a: a short literal is not ranked out of a small --limit' -ForegroundColor Cyan
-$r = Q @('--text', 'null', '--limit', '3')
+$r = @(Q @('--text', 'null', '--limit', '3'))
 Check '--limit 3 returns the null literal' (@($r | Where-Object { $_ -match '\[pas/literal\]\s+null\s' }).Count -ge 1) ($r -join ' | ')
 
 Write-Host 'B-27b: a Pascal-quoted --substring query matches the unquoted stored text' -ForegroundColor Cyan
-$r = Q @('--text', "'null'", '--substring', '--limit', '10')
+$r = @(Q @('--text', "'null'", '--substring', '--limit', '10'))
 Check "--substring 'null' returns the literal" (@($r | Where-Object { $_ -match 'bLiteral\.pas.*\[pas/literal\]' }).Count -eq 1) ($r -join ' | ')
 
 Write-Host 'Positive controls' -ForegroundColor Cyan
-$r = Q @('--text', 'null', '--limit', '100')
+$r = @(Q @('--text', 'null', '--limit', '100'))
 Check 'unlimited: 5 comments + 1 literal = 6 rows' ($r.Count -eq 6) ("count=" + $r.Count)
-$r = Q @('--text', 'null', '--kind', 'comment', '--limit', '100')
+$r = @(Q @('--text', 'null', '--kind', 'comment', '--limit', '100'))
 Check '--kind comment: 5 rows, all comments' (($r.Count -eq 5) -and (@($r | Where-Object { $_ -notmatch '\[pas/comment\]' }).Count -eq 0)) ($r -join ' | ')
 
 Write-Host ''

@@ -58,7 +58,7 @@ try {
     } else {
       $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe rename --kind symbol --name 'NlA.Outer.R' --to RCount --db $Db --library-db none --plan --json 2>$null } | Out-String)
     }
-    $j = $null; try { $j = $o | ConvertFrom-Json } catch { }
+    $j = $null; try { $j = $o | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
     $Got = @($j.edits | ForEach-Object { [int]$_.line })
     Check "$form n0 plan parsed" ($null -ne $j) $o
     $BadV = @($Got | Where-Object { $OwnVar -contains $_ })

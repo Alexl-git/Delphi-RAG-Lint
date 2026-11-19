@@ -204,7 +204,7 @@ function J([string[]]$Dbs) {
   foreach ($d in $Dbs) { $a += @('--db', $d) }
   $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null }) -join "`n"
   $code = $LASTEXITCODE
-  $j = $null; try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {}
+  $j = $null; try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
   return [pscustomobject]@{ Code = $code; Out = $o; J = $j }
 }
 function Row($r, [string]$Member) {

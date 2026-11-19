@@ -147,10 +147,10 @@ function RunEngine([string[]]$EngineArgs) {
 # lint --json is a bare array (rule, file_path, start_line, message ...); stderr kept apart.
 function LintApp {
   $errFile = Join-Path $scratch 'lint.err'
-  $json = & { $ErrorActionPreference = 'Continue'; & $exePath lint $app --db $db --project-rules --json 2> $errFile } | Out-String
+  $json = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath lint $app --db $db --project-rules --json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String
   $arr = @()
   $s = $json.IndexOf('[')
-  if ($s -ge 0) { $arr = @($json.Substring($s) | ConvertFrom-Json) }
+  if ($s -ge 0) { $arr = @(($json.Substring($s) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   return [pscustomobject]@{ Findings = $arr; Err = (Get-Content $errFile -Raw) + '' }
 }
 # lint --json carries no symbol name: a finding belongs to routine $Sym when its
@@ -164,7 +164,7 @@ function SymLines([string]$Sym) {
   return @(($first + 1), ($decl + 1))
 }
 function Has($Findings, [string]$Rule, [string]$Sym) {
-  $r = SymLines $Sym
+  $r = @(SymLines $Sym)
   return @($Findings | Where-Object { $_.rule -eq $Rule -and $_.start_line -ge $r[0] -and $_.start_line -le $r[1] }).Count -gt 0
 }
 function Reindex { $r = RunEngine @('index','--project',$dpr,'--db',$db); if ($r.Code -ne 0) { throw "fixture index failed: $($r.Text)" } }

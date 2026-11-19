@@ -32,7 +32,7 @@ function Check($n, $ok, $d = '') {
 # runs the exe, returns @{ Exit; Out; Err } with the streams kept apart
 function Run($exeArgs) {
   $o = [IO.Path]::GetTempFileName(); $e = [IO.Path]::GetTempFileName()
-  $p = Start-Process -FilePath $Exe -ArgumentList $exeArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput $o -RedirectStandardError $e
+  $p = Start-Process -FilePath $Exe -ArgumentList $exeArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   $r = @{ Exit = $p.ExitCode; Out = [IO.File]::ReadAllText($o); Err = [IO.File]::ReadAllText($e) }
   [IO.File]::Delete($o); [IO.File]::Delete($e)
   return $r
@@ -40,7 +40,7 @@ function Run($exeArgs) {
 function ErrObj($text) {
   # the first stderr line that parses as a JSON object with an "error" member
   foreach ($l in ($text -split "`r?`n")) {
-    if ($l.StartsWith('{')) { try { $j = $l | ConvertFrom-Json; if ($j.error) { return $j } } catch { } }
+    if ($l.StartsWith('{')) { try { $j = $l | ConvertFrom-Json | ForEach-Object { $_ }; if ($j.error) { return $j } } catch { } }
   }
   return $null
 }
@@ -116,7 +116,7 @@ $r = RunEnv @('compare', '--old', $cvOld, '--db', $cvDb)
 Check 'compare stale, text: exit 3, an error[stale-index]: line' (($r.Exit -eq 3) -and ($r.Err -match '(?m)^error\[stale-index\]: compare: ')) "exit=$($r.Exit) err=$($r.Err)"
 $r = RunEnv @('compare', '--old', $cvOld, '--db', $cvDb, '--format', 'json')
 $j = ErrObj $r.Err
-$env1 = $null; try { $env1 = $r.Out | ConvertFrom-Json } catch { }
+$env1 = $null; try { $env1 = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'compare stale, --format json: exit 3, stderr JSON error=stale-index' (($r.Exit -eq 3) -and ($null -ne $j) -and ($j.error -eq 'stale-index')) "exit=$($r.Exit) err=$($r.Err)"
 Check 'compare stale, --format json: the compare/1 envelope still parses on stdout' (($null -ne $env1) -and ($env1.exit_code -eq 3)) $r.Out
 

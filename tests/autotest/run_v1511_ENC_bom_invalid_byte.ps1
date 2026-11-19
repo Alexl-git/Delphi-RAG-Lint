@@ -16,7 +16,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail='') {
     if (-not $Ok) { $script:Failed = $true }
 }
 # No -DbPath: lint the loose file with no --db (read-only; the battery passes neither flag).
-$DbArgs = if ($DbPath) { @('--db', $DbPath) } else { @() }
+$DbArgs = @(if ($DbPath) { @('--db', $DbPath) } else { @() })
 if (-not $Exe -or -not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe"; exit 2 }
 New-Item -ItemType Directory -Force $WorkDir | Out-Null
 $f = Join-Path $WorkDir 'BomBad.pas'

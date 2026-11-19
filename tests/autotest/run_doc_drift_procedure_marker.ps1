@@ -63,7 +63,7 @@ $lines = @(
 [IO.File]::WriteAllText($src, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 
 function DriftAt($rows, [int]$line) { @($rows | Where-Object { $_.rule -eq 'doc-drift' -and $_.start_line -eq $line }) }
-function RowsOf([string]$o) { $r = @(); try { $r = @($o | ConvertFrom-Json) } catch { $r = @() }; return ,$r }
+function RowsOf([string]$o) { $r = @(); try { $r = @(($o | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $r = @() }; return ,$r }
 
 Push-Location $WorkDir
 try {

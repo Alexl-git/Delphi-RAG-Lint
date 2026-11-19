@@ -47,7 +47,7 @@ try {
   }
   foreach ($verb in $runs.Keys) {
     $p = Start-Process -FilePath $exePath -ArgumentList $runs[$verb] -WorkingDirectory $scratch -NoNewWindow -PassThru `
-           -RedirectStandardOutput $oF -RedirectStandardError $eF
+           -RedirectStandardOutput $oF -RedirectStandardError $eF; $null = $p.Handle
     if (-not $p.WaitForExit(60000)) { try { $p.Kill($true) } catch { }; Check "$verb finished" $false 'timed out'; continue }
     $o = (Get-Content -LiteralPath $oF -Raw -ErrorAction SilentlyContinue) + ''
     $e = (Get-Content -LiteralPath $eF -Raw -ErrorAction SilentlyContinue) + ''

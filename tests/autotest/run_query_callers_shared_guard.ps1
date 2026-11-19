@@ -171,7 +171,7 @@ function ResolvedJson([string]$name) {
 $jsonRaw = ResolvedJson 'ApplyDelta'
 Check 'json: a balanced array is emitted' ($null -ne $jsonRaw)
 if ($null -ne $jsonRaw) {
-  $rows = @($jsonRaw | ConvertFrom-Json)
+  $rows = @(($jsonRaw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Check 'json: exactly one resolved caller' ($rows.Count -eq 1) "count=$($rows.Count)"
   if ($rows.Count -ge 1) {
     $r = $rows[0]
@@ -229,13 +229,13 @@ Check 'OVERLOADS: both literal-argument call sites resolve certain (argument sha
 
 $ovJson = ResolvedJson 'Pick'
 if ($null -ne $ovJson) {
-  $ovRows = @($ovJson | ConvertFrom-Json)
+  $ovRows = @(($ovJson | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Check 'OVERLOADS: both call sites survive into json' ($ovRows.Count -eq 2) "count=$($ovRows.Count)"
 }
 
 $cbJson = ResolvedJson 'A_Predicate'
 if ($null -ne $cbJson) {
-  $cbRows = @($cbJson | ConvertFrom-Json)
+  $cbRows = @(($cbJson | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   $cbOnly = @($cbRows | Where-Object { $_.confidence -eq 'callback' })
   Check 'CONTROL json: the callback row survives with confidence=callback' ($cbOnly.Count -gt 0) `
     "confidences=$(($cbRows | ForEach-Object { $_.confidence }) -join ',')"

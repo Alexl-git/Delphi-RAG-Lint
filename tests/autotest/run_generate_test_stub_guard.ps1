@@ -139,7 +139,7 @@ function CompileUnit([string]$path, [string]$tag) {
     'echo BUILD_EXITCODE=%ERRORLEVEL%'
   ) -join "`r`n")
   [System.IO.File]::WriteAllText($bat, $body, [System.Text.Encoding]::ASCII)
-  $null = Start-Process cmd.exe -ArgumentList "/c","`"$bat`"" -RedirectStandardOutput $log -RedirectStandardError "$log.err" -NoNewWindow -Wait -PassThru
+  $null = Start-Process cmd.exe -ArgumentList "/c","`"$bat`"" -RedirectStandardOutput $log -RedirectStandardError "$log.err" -NoNewWindow -Wait -PassThru; $null = $null.Handle
   $out = Get-Content $log -Raw -ErrorAction SilentlyContinue
   return [pscustomobject]@{
     Ok  = ($out -match 'BUILD_EXITCODE=0') -and ($out -notmatch '\bError\b')

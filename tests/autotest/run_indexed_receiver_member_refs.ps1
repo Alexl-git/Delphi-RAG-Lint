@@ -204,7 +204,7 @@ try {
 
   # sql --json rows are POSITIONAL arrays: [0]=file, [1]=name, [2]=kind, [3]=line, [4]=receiver.
   $q = "select f.path, r.name_text, r.kind, r.start_line, coalesce(r.receiver_text, '') from refs r join files f on f.id = r.file_id"
-  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n" | ConvertFrom-Json
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
   $rows = @(foreach ($row in $j.rows) {
     [pscustomobject]@{ File = [IO.Path]::GetFileNameWithoutExtension([string]$row[0]); Name = [string]$row[1]
                        Kind = [string]$row[2]; Line = [int]$row[3]; Rcv = [string]$row[4] } })

@@ -24,13 +24,13 @@ try {
   $exp = Join-Path $fxDir 'basic.fixed.pas'
   $tgt = Join-Path $scratch 'basic.pas'
   Copy-Item $src $tgt -Force
-  $before = & { $ErrorActionPreference = 'Continue'; & $exePath lint $tgt --enable boolean-assign-if --json 2>$null } | Out-String | ConvertFrom-Json
+  $before = & { $ErrorActionPreference = 'Continue'; & $exePath lint $tgt --enable boolean-assign-if --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }
   Check 'control: unfixed fixture reports boolean-assign-if x4' (@($before | Where-Object { $_.rule -eq 'boolean-assign-if' }).Count -eq 4)
   & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $tgt --fix --apply --no-backup --enable boolean-assign-if 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $got = [IO.File]::ReadAllText($tgt) -replace "`r`n", "`n"
   $want = [IO.File]::ReadAllText($exp) -replace "`r`n", "`n"
   Check 'applied bytes equal the expected fixed unit' ($got -eq $want)
-  $after = & { $ErrorActionPreference = 'Continue'; & $exePath lint $tgt --enable boolean-assign-if --json 2>$null } | Out-String | ConvertFrom-Json
+  $after = & { $ErrorActionPreference = 'Continue'; & $exePath lint $tgt --enable boolean-assign-if --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }
   Check 'fixed unit no longer reports the rule' (@($after | Where-Object { $_.rule -eq 'boolean-assign-if' }).Count -eq 0)
   $dcc = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\dcc64.exe'
   if (Test-Path $dcc) {

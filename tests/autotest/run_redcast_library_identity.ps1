@@ -70,14 +70,14 @@ try {
   $flat = @($want.Values)
   Check 'L3 control: the markers hold FIX, NONE and REFUSE' (($flat -contains 'FIX') -and ($flat -contains 'NONE') -and (@($flat | Where-Object { $_ -like 'REFUSE*' }).Count -ge 2)) ($flat -join ' ')
 
-  $o = & { $ErrorActionPreference = 'Continue'; & $Exe lint --fix --fix-rule redundant-cast --db $db --project $proj --library-db $lib --format json 2> (Join-Path $Tmp 'plan.err') }
-  $plan = (($o -join "`n") | ConvertFrom-Json)
+  $o = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath((Join-Path $Tmp 'plan.err')); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe lint --fix --fix-rule redundant-cast --db $db --project $proj --library-db $lib --format json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
+  $plan = (($o -join "`n") | ConvertFrom-Json | ForEach-Object { $_ })
   $got = Outcomes $plan
   $bad = Compare-Map $want $got
   Check 'D1 every marked line gets its outcome with the library' ($bad.Count -eq 0) ("`n    " + ($bad -join "`n    "))
 
-  $o2 = & { $ErrorActionPreference = 'Continue'; & $Exe lint --fix --fix-rule redundant-cast --db $db --project $proj --library-db none --format json 2> (Join-Path $Tmp 'plan2.err') }
-  $plan2 = (($o2 -join "`n") | ConvertFrom-Json)
+  $o2 = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath((Join-Path $Tmp 'plan2.err')); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe lint --fix --fix-rule redundant-cast --db $db --project $proj --library-db none --format json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
+  $plan2 = (($o2 -join "`n") | ConvertFrom-Json | ForEach-Object { $_ })
   $lcLine = @($want.Keys | Where-Object { $want[$_] -eq 'FIX' } | Sort-Object)[0]
   $g2 = Outcomes $plan2
   Check 'L1 control: without the library the class cast is refused type-not-indexed' ($g2[[int]$lcLine] -eq 'REFUSE type-not-indexed') "$($g2[[int]$lcLine])"

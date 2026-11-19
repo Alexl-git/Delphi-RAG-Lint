@@ -40,7 +40,7 @@ $db = "$scratch\fx.sqlite"
 $o = & { $ErrorActionPreference = 'Continue'; & $exePath index --project "$scratch\App.dpr" --db $db 2>&1 | ForEach-Object { "$_" } }
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path $db)) { Write-Host "FATAL: fixture did not index: $($o | Select-Object -Last 2)" -ForegroundColor Red; Get-ExeStartFailureHint $LASTEXITCODE | Write-Host; exit 2 }
 
-$catalog = @(((& { $ErrorActionPreference = 'Continue'; & $exePath rules --json 2>$null }) -join "`n" | ConvertFrom-Json).rules.id)
+$catalog = @(((& { $ErrorActionPreference = 'Continue'; & $exePath rules --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }).rules.id)
 Check '1 catalog is real' ($catalog.Count -gt 100) "count=$($catalog.Count)"
 
 function Missing([string[]]$lines) {
@@ -51,23 +51,23 @@ function Missing([string[]]$lines) {
 
 $out = @(& { $ErrorActionPreference = 'Continue'; & $exePath lint --project "$scratch\App.dpr" --rule help --db $db 2>$null }); $code = $LASTEXITCODE
 Check '2a lint --project --rule help: exit 0' ($code -eq 0) "exit=$code"
-$m = Missing $out
+$m = @(Missing $out)
 Check '2b no catalog rule omitted' ($m.Count -eq 0) "missing $($m.Count): $($m | Select-Object -First 5)"
 $text = $out -join "`n"
 $ixProject = $text.IndexOf('unit-not-in-library'); $ixRest = $text.IndexOf('need a unit')
 Check '3 project-level rules apart, before the rest' (($ixProject -ge 0) -and ($ixRest -gt $ixProject) -and ($text.IndexOf('unit-not-in-dpr') -lt $ixRest)) "project=$ixProject rest=$ixRest"
 
 $out = @(& { $ErrorActionPreference = 'Continue'; & $exePath lint "$scratch\uA.pas" --rule help --db $db 2>$null }); $code = $LASTEXITCODE
-$m = Missing $out
+$m = @(Missing $out)
 Check '4 lint <file> --rule help' (($code -eq 0) -and ($m.Count -eq 0)) "exit=$code missing $($m.Count)"
 
 $out = @(& { $ErrorActionPreference = 'Continue'; & $exePath lint-project --db $db --rule help 2>$null }); $code = $LASTEXITCODE
-$m = Missing $out
+$m = @(Missing $out)
 Check '5 lint-project --rule help' (($code -eq 0) -and ($m.Count -eq 0)) "exit=$code missing $($m.Count)"
 
 $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath lint --project "$scratch\App.dpr" --rule help --json --db $db 2>$null }) -join "`n"
-$doc = try { $raw | ConvertFrom-Json } catch { $null }
-$diff = if ($doc) { @(Compare-Object @($doc.rules) $catalog) } else { @('no document') }
+$doc = try { $raw | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
+$diff = @(if ($doc) { @(Compare-Object @($doc.rules) $catalog) } else { @('no document') })
 Check '6 --json rules[] = catalog' ($diff.Count -eq 0) "diff $($diff.Count) raw=$($raw.Substring(0, [Math]::Min(80, $raw.Length)))"
 
 & { $ErrorActionPreference = 'Continue'; & $exePath lint "$scratch\uA.pas" --rule no-such-rule --db $db *> $null }

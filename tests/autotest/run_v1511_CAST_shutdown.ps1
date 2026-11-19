@@ -15,7 +15,7 @@ if ($missing.Count -gt 0) {
 $fail = 0
 function Test-One([string]$Name, [string[]]$VerbArgs) {
   $log = Join-Path $env:TEMP ("cast-shutdown-$Name-" + [guid]::NewGuid().ToString('N') + '.log')
-  $p = Start-Process -FilePath $Engine -ArgumentList $VerbArgs -PassThru -NoNewWindow -RedirectStandardOutput $log -RedirectStandardError "$log.err"
+  $p = Start-Process -FilePath $Engine -ArgumentList $VerbArgs -PassThru -NoNewWindow -RedirectStandardOutput $log -RedirectStandardError "$log.err"; $null = $p.Handle
   try {
     # Send the shutdown as soon as the control channel is up: retry every 0.5 s until an engine holds the DB.
     $reached = $false

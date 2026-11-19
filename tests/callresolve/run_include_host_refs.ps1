@@ -40,7 +40,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 function Invoke-Rows([string]$Db, [string]$Query) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $Db --json --query $Query 2>$null }) -join "`n"
-  $j = $raw | ConvertFrom-Json
+  $j = $raw | ConvertFrom-Json | ForEach-Object { $_ }
   $cols = @($j.columns | ForEach-Object { $_.name })
   $out = @()
   foreach ($r in @($j.rows)) {
@@ -68,7 +68,7 @@ try {
     return @($rows | Where-Object { (Split-Path $_.src -Leaf) -eq $Src -and $_.line -eq $Line -and $_.name -eq $Name -and $_.kind -eq $Kind })
   }
   function Target([string]$Src, [int]$Line, [string]$Name, [string]$Kind) {
-    $h = Hit $Src $Line $Name $Kind
+    $h = @(Hit $Src $Line $Name $Kind)
     if ($h.Count -ne 1) { return "<$($h.Count) refs>" }
     if ($h[0].target -eq '') { return '' }
     return ('{0}:{1}' -f (Split-Path $h[0].target -Leaf), $h[0].tline)
@@ -90,7 +90,7 @@ try {
   Expect 'single host: UProc (routine of a unit the host uses)' $h 9 'UProc' 'call' 'IncHostU.pas:5'
   Expect 'single host: THost (var type in a free routine)' $h 14 'THost' 'type_use' 'IncHostH.pas:9'
   Expect 'single host: THost (THost.Create receiver)' $h 16 'THost' 'read' 'IncHostH.pas:9'
-  $hp = Hit $h 6 'HostProc' 'call'
+  $hp = @(Hit $h 6 'HostProc' 'call')
   Check 'single host: HostProc has its call edge' (($hp.Count -eq 1) -and ($hp[0].edges -eq 1)) "$($hp.edges)"
   $run = Invoke-Rows $db ("SELECT s.kind AS kind, s.impl_start_line AS a, s.impl_end_line AS b FROM symbols s JOIN files f ON f.id = s.file_id " +
                           "WHERE f.path LIKE '%IncHostH_impl.inc' AND s.qualified_name = 'THost.Run'")

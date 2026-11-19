@@ -412,7 +412,7 @@ end.
   & python $py $old
   $gone = @(& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $old --query "SELECT name FROM sqlite_master WHERE name = 'ref_types'" 2>&1 | ForEach-Object { "$_" } }) -join ' '
   Check 'SETUP the control DB really has no ref_types' ($gone -match '\b0 row') $gone
-  $rows = ((& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "SELECT count(*) AS n FROM ref_types" --json 2>&1 | ForEach-Object { "$_" } } | Out-String) | ConvertFrom-Json).rows[0][0]
+  $rows = ((& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "SELECT count(*) AS n FROM ref_types" --json 2>&1 | ForEach-Object { "$_" } } | Out-String) | ConvertFrom-Json | ForEach-Object { $_ }).rows[0][0]
   Check 'SETUP the DB has ref_types rows' ([int]$rows -gt 0) $rows
 
   Push-Location $WorkDir

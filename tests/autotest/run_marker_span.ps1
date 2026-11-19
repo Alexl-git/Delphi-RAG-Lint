@@ -252,7 +252,7 @@ function RtLines($pattern) {
 }
 
 # 1. The reported line is read out of the report, exactly as an operator would.
-$rtConcat = RtLines 'concat-in-loop'
+$rtConcat = @(RtLines 'concat-in-loop')
 Check 'the wrapped concat fires before annotation' ($rtConcat.Count -eq 1) "got: $($rtConcat -join ', ')"
 $rtLine = if ($rtConcat.Count -ge 1) { $rtConcat[0] } else { 0 }
 
@@ -269,11 +269,11 @@ Check 'the fixture really is a WRAPPED statement (anchor line has no ";")' `
 & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $rtDir 'App.dpr') --db $rtDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 Check 'after allow --fix-line <reported line>, the finding is SUPPRESSED' `
-  ((RtLines 'concat-in-loop').Count -eq 0) `
+  ((@(RtLines 'concat-in-loop')).Count -eq 0) `
   'the marker the writer produced is not one the checker accepts -- writer and checker disagree again'
-Check 'and no review-marker-unused appeared' ((RtLines 'review-marker-unused').Count -eq 0) `
+Check 'and no review-marker-unused appeared' ((@(RtLines 'review-marker-unused')).Count -eq 0) `
   'the marker landed somewhere the checker does not associate with the finding'
-Check 'and no review-marker-stale appeared' ((RtLines 'review-marker-stale').Count -eq 0) `
+Check 'and no review-marker-stale appeared' ((@(RtLines 'review-marker-stale')).Count -eq 0) `
   'the hash the writer recorded is not the hash the checker computes'
 
 Write-Host ''

@@ -120,7 +120,7 @@ function RunJson([string[]]$ExtraArgs) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath @a 2>$null } | Out-String)
   $i = $raw.IndexOf('{')
   if ($i -lt 0) { return $null }
-  try { return ($raw.Substring($i) | ConvertFrom-Json) } catch { return $null }
+  try { return ($raw.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function ItemOf($J, [string]$Name) { @($J.items | Where-Object { $_.unit -eq $Name }) }
 

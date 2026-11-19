@@ -115,7 +115,7 @@ end.
 
     $lspById = @{}
     foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-      try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+      try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
       if ($o.id -ge 10 -and $o.result) { $lspById[[int]$o.id] = $o.result }
     }
 
@@ -124,7 +124,7 @@ end.
       $cliRaw  = (& { $ErrorActionPreference = 'Continue'; & $exePath usages --name Compute --width $w --db $db --format json 2>$null } | Out-String)
       $cliJson = $cliRaw.Substring($cliRaw.IndexOf('{'))
       $cliJson = $cliJson.Substring(0, $cliJson.LastIndexOf('}') + 1)
-      $cli = $cliJson | ConvertFrom-Json
+      $cli = $cliJson | ConvertFrom-Json | ForEach-Object { $_ }
       $lsp = $lspById[10 + $i]
 
       $cliImp = @($cli.impact).Count

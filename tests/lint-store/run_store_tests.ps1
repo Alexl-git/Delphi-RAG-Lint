@@ -68,7 +68,7 @@ function Parse-Findings($raw) {
   $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
   if ($b -lt 0) { return @() }
   try {
-    $r = ($txt.Substring($b) | ConvertFrom-Json)
+    $r = ($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ })
     if ($null -eq $r) { return @() }
     return @($r)
   } catch { return @() }
@@ -86,7 +86,7 @@ foreach ($case in $cases) {
   $mode = "check-ast"; $subject = $null
   if (Test-Path $caseFile) {
     try {
-      $cj = Get-Content $caseFile -Raw | ConvertFrom-Json
+      $cj = Get-Content $caseFile -Raw | ConvertFrom-Json | ForEach-Object { $_ }
       if ($cj.mode)    { $mode = $cj.mode }
       if ($cj.subject) { $subject = $cj.subject }
     } catch {}
@@ -104,7 +104,7 @@ foreach ($case in $cases) {
     $args = @("lint-all","--db",$db,"--json")
     if (Test-Path $cfgFile) { $args += @("--config",$cfgFile) }
     $raw = & { $ErrorActionPreference = 'Continue'; & $exePath @args 2>$null } @args
-    foreach ($f in (Parse-Findings $raw)) {
+    foreach ($f in (@(Parse-Findings $raw))) {
       $fp = if ($f.file_path) { $f.file_path } else { $f.file }
       $fn = if ($fp) { Split-Path $fp -Leaf } else { "" }
       $findings += [pscustomobject]@{ rule=$f.rule; line=$f.start_line; file=$fn }
@@ -116,7 +116,7 @@ foreach ($case in $cases) {
       $args = @("check-ast",$pas.FullName,"--db",$db,"--format","json")
       if (Test-Path $cfgFile) { $args += @("--config",$cfgFile) }
       $raw = & { $ErrorActionPreference = 'Continue'; & $exePath @args 2>$null } @args
-      foreach ($f in (Parse-Findings $raw)) {
+      foreach ($f in (@(Parse-Findings $raw))) {
         $findings += [pscustomobject]@{ rule=$f.rule; line=$f.start_line; file=$pas.Name }
       }
     }

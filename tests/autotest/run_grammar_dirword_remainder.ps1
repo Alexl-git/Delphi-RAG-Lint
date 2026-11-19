@@ -67,7 +67,7 @@ function Get-ParseFindings([string]$Dir, [string]$Db) {
   try {
     foreach ($r in 'parser-error', 'syntax-error') {
       $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $Dir --db $Db --rule $r --json 2>$null } | Out-String
-      try { $all += @($raw | ConvertFrom-Json) } catch {}
+      try { $all += @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch {}
     }
   } finally { Pop-Location }
   return @($all | Where-Object { $_.rule -in 'parser-error', 'syntax-error' })
@@ -91,10 +91,10 @@ try {
   Check 'index exits 0 (good)' ((Build-Db $good $gdb) -eq 0)
   Check 'index exits 0 (bad)' ((Build-Db $bad $bdb) -eq 0)
 
-  $badHits = Get-ParseFindings $bad $bdb
+  $badHits = @(Get-ParseFindings $bad $bdb)
   Check 'CONTROL broken twin raises parser-error/syntax-error' ($badHits.Count -gt 0) "count=$($badHits.Count)"
 
-  $hits = Get-ParseFindings $good $gdb
+  $hits = @(Get-ParseFindings $good $gdb)
   Check 'ASSERT zero parser-error/syntax-error over the directive-word set' ($hits.Count -eq 0) `
     ("count={0} {1}" -f $hits.Count, (($hits | ForEach-Object { '{0}:L{1}' -f [IO.Path]::GetFileNameWithoutExtension($_.file_path), $_.start_line }) -join ','))
 
@@ -103,7 +103,7 @@ try {
     $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $gdb --query "SELECT f.path, s.name FROM symbols s JOIN files f ON f.id = s.file_id" --json 2>$null } | Out-String
   } finally { Pop-Location }
   $rows = @()
-  try { $rows = @(($j | ConvertFrom-Json).rows) } catch {}
+  try { $rows = @(($j | ConvertFrom-Json | ForEach-Object { $_ }).rows) } catch {}
   foreach ($k in $cases.Keys) {
     $mine = @($rows | Where-Object { [IO.Path]::GetFileNameWithoutExtension([string]$_[0]) -eq $k } | ForEach-Object { [string]$_[1] })
     $want = @($cases[$k][2])

@@ -72,8 +72,8 @@ $env:PATH = (Split-Path $Exe -Parent) + ';' + $env:PATH
 Write-Host 'Running the legacy .bat doctest chain against the current engine' -ForegroundColor Cyan
 $p = Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', $driver `
                    -Wait -NoNewWindow -PassThru `
-                   -RedirectStandardOutput $log -RedirectStandardError "$log.err"
-$out = if (Test-Path $log) { Get-Content $log } else { @() }
+                   -RedirectStandardOutput $log -RedirectStandardError "$log.err"; $null = $p.Handle
+$out = @(if (Test-Path $log) { Get-Content $log } else { @() })
 Remove-Item Env:\EXE -ErrorAction SilentlyContinue
 
 $sections = @($out | Where-Object { $_ -match '^=== T\d+' })

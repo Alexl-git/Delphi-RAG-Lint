@@ -34,13 +34,13 @@ function Findings($file, $rule, [string]$db = "") {
   if ($db -ne "") { $cmd += @('--db', $db) }
   $raw = & { $ErrorActionPreference = 'Continue'; & $exe @cmd 2>$null }
   $arr = @()
-  try { $arr = @($raw | ConvertFrom-Json) } catch { $arr = @() }
+  try { $arr = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $arr = @() }
   return @($arr | Where-Object { $_ -ne $null -and $_.rule -eq $rule })
 }
 function HasLine($f, $line) { return @($f | Where-Object { $_.start_line -eq $line }).Count -gt 0 }
 
 # --- 1. catalog ---
-$rules = & { $ErrorActionPreference = 'Continue'; & $exe rules --json 2>$null } | ConvertFrom-Json
+$rules = & { $ErrorActionPreference = 'Continue'; & $exe rules --json 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
 $all = if ($rules.rules) { $rules.rules } else { $rules }
 foreach ($id in 'unconnected-control', 'hanging-handler') {
   $r = @($all | Where-Object { $_.id -eq $id })
@@ -53,7 +53,7 @@ foreach ($id in 'unconnected-control', 'hanging-handler') {
 
 # --- 2. single-unit fixtures (text evidence) ---
 $uc = Join-Path $repo 'tests\lint\unconnected-control.pas'
-$f = Findings $uc 'unconnected-control'
+$f = @(Findings $uc 'unconnected-control')
 foreach ($n in 'btnUcDead', 'chkUcDead', 'edtUcDead', 'bbUcDead', 'mnuUcDead') {
   Assert "uc hit $n" (HasLine $f (LineOf $uc "^\s+$n\s*:"))
 }
@@ -62,7 +62,7 @@ foreach ($n in 'btnUcBound', 'btnUcAction', 'btnUcModal', 'btnUcCode', 'chkUcRea
 }
 Assert "uc exactly 5 findings" ($f.Count -eq 5)
 $hh = Join-Path $repo 'tests\lint\hanging-handler.pas'
-$f = Findings $hh 'hanging-handler'
+$f = @(Findings $hh 'hanging-handler')
 foreach ($n in 'hhUnboundClick', 'hhOrphanKeyPress') {
   Assert "hh hit $n" (HasLine $f (LineOf $hh "^procedure THhForm\.$n\b"))
 }
@@ -80,8 +80,8 @@ $db = Join-Path $work 'xu.sqlite'
 Assert "cross-unit index built" (Test-Path $db)
 $base = Join-Path $work 'XuBase.pas'
 $child = Join-Path $work 'XuChild.pas'
-$fu = Findings $base 'unconnected-control' $db
-$fh = Findings $base 'hanging-handler' $db
+$fu = @(Findings $base 'unconnected-control' $db)
+$fh = @(Findings $base 'hanging-handler' $db)
 Assert "xu hit btnXuDead (index)" (HasLine $fu (LineOf $base '^\s+btnXuDead\s*:'))
 Assert "xu twin btnXuBound silent (index)" (-not (HasLine $fu (LineOf $base '^\s+btnXuBound\s*:')))
 Assert "xu btnXuRemote silent: referenced from XuUser (index)" (-not (HasLine $fu (LineOf $base '^\s+btnXuRemote\s*:')))
@@ -89,12 +89,12 @@ Assert "xu hit xuDeadHandler (index)" (HasLine $fh (LineOf $base '^procedure TXu
 Assert "xu xuChildBound silent: bound in XuChild.dfm (index)" (-not (HasLine $fh (LineOf $base '^procedure TXuBase\.xuChildBound\b')))
 Assert "xu xuRemoteAssigned silent: assigned in XuUser (index)" (-not (HasLine $fh (LineOf $base '^procedure TXuBase\.xuRemoteAssigned\b')))
 Assert "xu twin btnXuBoundClick silent (index)" (-not (HasLine $fh (LineOf $base '^procedure TXuBase\.btnXuBoundClick\b')))
-$fc = Findings $child 'unconnected-control' $db
+$fc = @(Findings $child 'unconnected-control' $db)
 Assert "xu child: inherited btnXuDead not reported again, btnXuChild bound" ($fc.Count -eq 0)
 
 # --- 4. positive control: the same unit without the index ---
-$nu = Findings $base 'unconnected-control'
-$nh = Findings $base 'hanging-handler'
+$nu = @(Findings $base 'unconnected-control')
+$nh = @(Findings $base 'hanging-handler')
 Assert "control: btnXuRemote fires without the index" (HasLine $nu (LineOf $base '^\s+btnXuRemote\s*:'))
 Assert "control: xuChildBound fires without the index" (HasLine $nh (LineOf $base '^procedure TXuBase\.xuChildBound\b'))
 Assert "control: xuRemoteAssigned fires without the index" (HasLine $nh (LineOf $base '^procedure TXuBase\.xuRemoteAssigned\b'))

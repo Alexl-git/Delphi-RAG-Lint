@@ -114,7 +114,7 @@ $err = Join-Path $WorkDir 'e.txt'
 function RunSplit() {
   $p = Start-Process -FilePath $exePath `
         -ArgumentList @('lint-all','--db',$db,'--rules-dir',$rules) `
-        -NoNewWindow -Wait -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
+        -NoNewWindow -Wait -PassThru -RedirectStandardOutput $out -RedirectStandardError $err; $null = $p.Handle
   return @{
     Code = $p.ExitCode
     Out  = (Get-Content -LiteralPath $out -Raw -ErrorAction SilentlyContinue)

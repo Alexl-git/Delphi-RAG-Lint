@@ -21,11 +21,11 @@ function Check($n, $ok, $d) {
 $exePath = (Resolve-Path $Exe).Path
 $fx = Join-Path $PSScriptRoot 'fixtures\v1511-V151F'
 function Lines($file, $rule, [string[]]$extra) {
-  $ra = if ($extra.Count -gt 0) { @("--rule", $rule) + $extra } else { @() }
+  $ra = @(if ($extra.Count -gt 0) { @("--rule", $rule) + $extra } else { @() })
   $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint $file --json @ra 2>$null }
   $t = ($raw -join "`n").Trim()
   if ($t -eq '') { return @() }
-  try { $j = @($t | ConvertFrom-Json) } catch { return @() }
+  try { $j = @(($t | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { return @() }
   return @($j | Where-Object { $_.rule -eq $rule } | ForEach-Object { "$([IO.Path]::GetFileName($_.file_path)):$($_.start_line)" })
 }
 function LineOf($file, $pat) {
@@ -37,20 +37,20 @@ function LineOf($file, $pat) {
 # T03
 $pas = Join-Path $fx 't03\UBars.pas'; $dfm = Join-Path $fx 't03\UBars.dfm'
 $r = 'form-object-without-field'
-$got = Lines $pas $r @('--enable', $r)
+$got = @(Lines $pas $r @('--enable', $r))
 Write-Host ("T03 got: " + ($got -join ' '))
 foreach ($n in 'Label1', 'dxBarButton2') { $l = LineOf $dfm "object $n\b"; Check "T03 fires for $n" ($got -contains "UBars.dfm:$l") }
 foreach ($n in 'dxBarManager1', 'dxBarButton1', 'dxLayoutItem1') { $l = LineOf $dfm "object $n\b"; Check "T03 silent for $n" (-not ($got -contains "UBars.dfm:$l")) }
-Check 'T03 positive control: rule not enabled -> no finding' ((Lines $pas $r @()).Count -eq 0)
+Check 'T03 positive control: rule not enabled -> no finding' ((@(Lines $pas $r @())).Count -eq 0)
 
 # T04
 $pas = Join-Path $fx 't04\UEd.pas'
 $r = 'dataset-edit-without-post'
-$got = Lines $pas $r @('--enable', $r)
+$got = @(Lines $pas $r @('--enable', $r))
 Write-Host ("T04 got: " + ($got -join ' '))
 $hit = LineOf $pas '\{HIT\}'; $ok = LineOf $pas '\{OK\}'
 Check 'T04 fires on the lone Edit' ($got -contains "UEd.pas:$hit")
 Check 'T04 silent when posted in another routine' (-not ($got -contains "UEd.pas:$ok"))
-Check 'T04 positive control: rule not enabled -> no finding' ((Lines $pas $r @()).Count -eq 0)
+Check 'T04 positive control: rule not enabled -> no finding' ((@(Lines $pas $r @())).Count -eq 0)
 
 if ($script:fail) { Write-Host 'RESULT: FAIL'; exit 1 } else { Write-Host 'RESULT: PASS' }

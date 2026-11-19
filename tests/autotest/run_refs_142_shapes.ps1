@@ -167,7 +167,7 @@ foreach ($k in $units.Keys) {
 
 function Usages($name) {
   $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath usages --name $name --db $db --json 2>$null }) -join "`n"
-  try { return $raw | ConvertFrom-Json } catch { return $null }
+  try { return $raw | ConvertFrom-Json | ForEach-Object { $_ } } catch { return $null }
 }
 function Lines($arr, $file) {
   @($arr | Where-Object { [IO.Path]::GetFileNameWithoutExtension([string]$_.file) -eq $file } | ForEach-Object { [int]$_.line })
@@ -181,7 +181,7 @@ try {
   # sql --json rows are POSITIONAL arrays: [0]=file, [1]=name, [2]=kind, [3]=line, [4]=receiver, [5]=symbol kind.
   $q = "select f.path, r.name_text, r.kind, r.start_line, coalesce(r.receiver_text, ''), coalesce(s.kind, '') " +
        "from refs r join files f on f.id = r.file_id left join symbols s on s.id = r.symbol_id"
-  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n" | ConvertFrom-Json
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
   $rows = @(foreach ($row in $j.rows) {
     [pscustomobject]@{ File = [IO.Path]::GetFileNameWithoutExtension([string]$row[0]); Name = [string]$row[1]
                        Kind = [string]$row[2]; Line = [int]$row[3]; Rcv = [string]$row[4]; SymKind = [string]$row[5] } })

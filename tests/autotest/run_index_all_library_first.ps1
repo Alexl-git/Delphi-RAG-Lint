@@ -71,7 +71,7 @@ try {
     $iLib = $txt.IndexOf('[Library['); $iP64 = $txt.IndexOf('[Proj64]'); $iPNo = $txt.IndexOf('[ProjNo]')
     Check 'dry-run: all three sections planned' (($iLib -ge 0) -and ($iP64 -ge 0) -and ($iPNo -ge 0)) $txt
     Check 'dry-run (text): library listed before both project sections' (($iLib -ge 0) -and ($iLib -lt $iP64) -and ($iLib -lt $iPNo)) $txt
-    $j = ((& { $ErrorActionPreference = 'Continue'; & $exe index --all --dry-run --json 2>&1 | ForEach-Object { "$_" } }) -join "`n"); $j = $j.Substring($j.IndexOf('{')) | ConvertFrom-Json
+    $j = ((& { $ErrorActionPreference = 'Continue'; & $exe index --all --dry-run --json 2>&1 | ForEach-Object { "$_" } }) -join "`n"); $j = $j.Substring($j.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ }
     $names = @($j.sections | ForEach-Object { $_.name })
     Check 'dry-run (json): first section is the library' ($names.Count -ge 3 -and $names[0] -eq 'Library') ($names -join ',')
     $txt = (& { $ErrorActionPreference = 'Continue'; & $exe index --all --dry-run --only Proj64 2>&1 | ForEach-Object { "$_" } } | Out-String)

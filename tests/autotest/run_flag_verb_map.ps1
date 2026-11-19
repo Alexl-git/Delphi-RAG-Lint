@@ -399,13 +399,13 @@ Check 'alias table present' (Test-Path -LiteralPath $aliasPath) $aliasPath
 $AliasOf = @{}
 $tableGroups = @()
 if (Test-Path -LiteralPath $aliasPath) {
-  foreach ($row in @((Get-Content -LiteralPath $aliasPath -Raw | ConvertFrom-Json).aliases)) {
+  foreach ($row in @((Get-Content -LiteralPath $aliasPath -Raw | ConvertFrom-Json | ForEach-Object { $_ }).aliases)) {
     foreach ($a in @($row.aliases)) { $AliasOf[[string]$a] = [string]$row.canonical }
     $tableGroups += ,(@(@($row.canonical) + @($row.aliases) | Sort-Object) -join ' ')
   }
 }
 $tableGroups = @($tableGroups | Sort-Object -Unique)
-$parserGroups = Get-ParserAliasGroups -CliText ([IO.File]::ReadAllText($Cli))
+$parserGroups = @(Get-ParserAliasGroups -CliText ([IO.File]::ReadAllText($Cli)))
 Check 'alias groups read from the parser (else the two-way check below is vacuous)' ($parserGroups.Count -ge 4) `
   ("($($parserGroups.Count) group(s)): " + ($parserGroups -join ' | '))
 $grpDiff = @(Compare-Object -ReferenceObject $parserGroups -DifferenceObject $tableGroups |

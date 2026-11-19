@@ -110,7 +110,7 @@ function IndexAll([string]$Mode = '') {
   } finally { Pop-Location }
 }
 function Tag {
-  $j = & { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --query "SELECT value FROM schema_meta WHERE key = 'project_tag'" 2>$null } | ConvertFrom-Json
+  $j = & { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --query "SELECT value FROM schema_meta WHERE key = 'project_tag'" 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
   if ($null -eq $j -or $j.rows.Count -eq 0) { return '' }
   return [string]$j.rows[0][0]
 }

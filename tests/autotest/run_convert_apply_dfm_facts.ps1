@@ -315,7 +315,7 @@ function Run-Apply([string]$Unit, [bool]$Off, [string]$Db) {
   if ($Off) { $env:DRAGLINT_NO_FILE_FACTS = '1' } else { $env:DRAGLINT_NO_FILE_FACTS = $null }
   try {
     $p = Start-Process -FilePath $Exe -ArgumentList @('convert-apply', '--unit', (P "$Unit.pas"), '--rules', (P 'plain.rules'), '--db', $Db, '--format', 'json') `
-      -NoNewWindow -Wait -PassThru -RedirectStandardOutput $o -RedirectStandardError $e
+      -NoNewWindow -Wait -PassThru -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   } finally {
     $env:DRAGLINT_DEBUG = $null
     $env:DRAGLINT_NO_FILE_FACTS = $null

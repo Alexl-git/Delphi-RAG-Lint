@@ -56,7 +56,7 @@ function Invoke-Sql([string]$Query) {
   Push-Location $WorkDir
   try { $raw = $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe sql --db $Db --query $Query --json --limit 0 2>$null } } finally { Pop-Location }
   if ($LASTEXITCODE -ne 0) { throw "sql failed: $Query" }
-  $j = ($raw | Where-Object { $_ -notmatch '^\(loaded' }) -join "`n" | ConvertFrom-Json
+  $j = ($raw | Where-Object { $_ -notmatch '^\(loaded' }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
   $list = [System.Collections.Generic.List[object]]::new()
   foreach ($r in $j.rows) { $list.Add($r) }
   return ,$list

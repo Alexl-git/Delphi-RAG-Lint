@@ -53,7 +53,7 @@ function Run-Fix($Case, [string[]]$Extra, [hashtable]$Env = @{}) {
       --library-db none --format json @Extra 2>$null } | Out-String)
     $code = $LASTEXITCODE
   } finally { foreach ($k in $Env.Keys) { Remove-Item "Env:$k" -ErrorAction SilentlyContinue } }
-  $j = try { $out | ConvertFrom-Json } catch { $null }
+  $j = try { $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
   return @{ Exit = $code; Out = $out; Json = $j }
 }
 function Get-Kinds($R) { if ($R.Json -and $R.Json.cycles) { return @($R.Json.cycles[0].refusals | ForEach-Object { $_.kind }) } else { return @() } }
@@ -64,21 +64,21 @@ try {
   $m = New-Stale 'main' $true
   $r = Run-Fix $m @('--apply')
   Check 'main exit 0' ($r.Exit -eq 0) "exit $($r.Exit) out: $($r.Out)"
-  Check 'main no stale-file refusal' ((Get-Kinds $r) -notcontains 'stale-file') $r.Out
+  Check 'main no stale-file refusal' ((@(Get-Kinds $r)) -notcontains 'stale-file') $r.Out
   Check 'main reindex_before.status = ok, files >= 1' ($r.Json -and $r.Json.reindex_before.status -eq 'ok' -and $r.Json.reindex_before.files -ge 1) $r.Out
   Check 'main the plan was applied (a new unit exists in the copy)' (@(Get-ChildItem $m.Dir -Filter 'DemoLogger.*.pas').Count -ge 1 -or @(Get-ChildItem $m.Dir -Filter '*Untangle*.pas').Count -ge 1 -or $r.Json.cycles[0].written -gt 0) $r.Out
 
   Write-Host '== controls' -ForegroundColor Cyan
   $c1 = New-Stale 'c1' $true
   $r = Run-Fix $c1 @()
-  Check 'control 1 dry run: exit 1, stale-file, no reindex_before' ($r.Exit -eq 1 -and (Get-Kinds $r) -contains 'stale-file' -and -not ($r.Json -and $r.Json.reindex_before)) "exit $($r.Exit) $($r.Out)"
+  Check 'control 1 dry run: exit 1, stale-file, no reindex_before' ($r.Exit -eq 1 -and (@(Get-Kinds $r)) -contains 'stale-file' -and -not ($r.Json -and $r.Json.reindex_before)) "exit $($r.Exit) $($r.Out)"
   $c2 = New-Stale 'c2' $true
   $r = Run-Fix $c2 @('--apply', '--no-reindex')
-  Check 'control 2 --no-reindex: exit 1, stale-file' ($r.Exit -eq 1 -and (Get-Kinds $r) -contains 'stale-file') "exit $($r.Exit) $($r.Out)"
+  Check 'control 2 --no-reindex: exit 1, stale-file' ($r.Exit -eq 1 -and (@(Get-Kinds $r)) -contains 'stale-file') "exit $($r.Exit) $($r.Out)"
   $c3 = New-Stale 'c3' $true
   $r = Run-Fix $c3 @('--apply') @{ DRAGLINT_CYCLEFIX_REINDEXED = '1' }
   Check 'control 3 second pass: exit 1, stale-file "still stale after a re-index"' `
-    ($r.Exit -eq 1 -and (Get-Kinds $r) -contains 'stale-file' -and $r.Out -match 'still stale after a re-index') "exit $($r.Exit) $($r.Out)"
+    ($r.Exit -eq 1 -and (@(Get-Kinds $r)) -contains 'stale-file' -and $r.Out -match 'still stale after a re-index') "exit $($r.Exit) $($r.Out)"
   $c4 = New-Stale 'c4' $false
   $r = Run-Fix $c4 @('--apply')
   Check 'control 4 untouched copy: no reindex_before' ($r.Json -and -not $r.Json.reindex_before) "exit $($r.Exit) $($r.Out)"

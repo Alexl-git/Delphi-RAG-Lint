@@ -180,14 +180,14 @@ Check 'I: loads EMPTY (no merge)' (($i.LOADERR -eq '') -and ($i.SECTIONS -eq '0'
 Check 'I: SAVED=1' ($i.SAVED -eq '1') "REASON='$($i.REASON)'"
 $iText = if (Test-Path -LiteralPath $iTarget) { [IO.File]::ReadAllText($iTarget) } else { '<missing>' }
 Check 'I: the new global file holds none of the local sections' (($iText -ne '<missing>') -and ($iText -notmatch 'LocalOnly')) "file='$($iText -replace '\s+', ' ')'"
-Check 'I: nothing was edited, so the new file holds no key at all (no zeroed docs block)' (($iText -ne '<missing>') -and ((@(($iText | ConvertFrom-Json).PSObject.Properties)).Count -eq 0)) "file='$($iText -replace '\s+', ' ')'"
+Check 'I: nothing was edited, so the new file holds no key at all (no zeroed docs block)' (($iText -ne '<missing>') -and ((@(($iText | ConvertFrom-Json | ForEach-Object { $_ }).PSObject.Properties)).Count -eq 0)) "file='$($iText -replace '\s+', ' ')'"
 Check 'I: the local file is unchanged' ((Get-Sha $iLocalFile) -eq $iLocalSha)
 
 # --- J..N: Save writes only what the user edited --------------------------------
 # Measured on 1.31.4: an unchanged Save of a valid file rewrote it from the
 # parser's model -- "_comment", "scan", settings.futureKnob and a section's
 # "_note" were dropped, and every defaulted key was added.
-function Read-Json([string]$Path) { [IO.File]::ReadAllText($Path) | ConvertFrom-Json }
+function Read-Json([string]$Path) { [IO.File]::ReadAllText($Path) | ConvertFrom-Json | ForEach-Object { $_ } }
 function Get-Section($Json, [string]$Name) { @($Json.indexes.sections | Where-Object { $_.name -eq $Name }) }
 $keysText = '{"_comment":"keep me","settings":{"maxJobs":2,"futureKnob":7},"indexes":{"sections":[{"name":"Good","include":["C:\\x\\Good.dproj"],"_note":"mine"},{"name":"Other","include":["C:\\x\\Other.dproj"],"_note":"theirs"}]},"scan":{"x":1}}'
 function New-KeysFile([string]$Name) { $p = "$WorkDir\$Name"; [IO.File]::WriteAllText($p, $keysText, [Text.Encoding]::ASCII); $p }
@@ -384,7 +384,7 @@ if ($guiOk) {
     $gJson = "$WorkDir\g.json"
     [IO.File]::WriteAllText($gJson, $badLeafText, [Text.Encoding]::ASCII)
     $gBefore = Get-Sha $gJson
-    $gp = Start-Process $gui -ArgumentList '--config', "`"$gJson`"" -PassThru
+    $gp = Start-Process $gui -ArgumentList '--config', "`"$gJson`"" -PassThru; $null = $gp.Handle
     $script:GuiProcs += $gp
     try {
         $dlg = Wait-Dialog $gp.Id 10000
@@ -463,7 +463,7 @@ if ($guiOk) {
     # --- H: positive control -- a good file ---------------------------------------
     $hJson = "$WorkDir\h.json"
     [IO.File]::WriteAllText($hJson, $goodText, [Text.Encoding]::ASCII)
-    $hp = Start-Process $gui -ArgumentList '--config', "`"$hJson`"" -PassThru
+    $hp = Start-Process $gui -ArgumentList '--config', "`"$hJson`"" -PassThru; $null = $hp.Handle
     $script:GuiProcs += $hp
     try {
         $hMain = Wait-MainForm $hp.Id 10000

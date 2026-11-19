@@ -84,7 +84,7 @@ Check 'incremental reindex exits 0' ($LASTEXITCODE -eq 0)
 
 $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath lint $owner --db $db --rule doc-drift --project-rules --json 2>$null }) -join "`n"
 $arr = @()
-if ($raw.IndexOf('[') -ge 0) { $arr = @($raw.Substring($raw.IndexOf('[')) | ConvertFrom-Json) }
+if ($raw.IndexOf('[') -ge 0) { $arr = @(($raw.Substring($raw.IndexOf('[')) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
 Check "doc-drift after incremental reindex is 0 (got $($arr.Count))" ($arr.Count -eq 0)
 
 $dry = (& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $owner --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"

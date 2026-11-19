@@ -26,7 +26,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 function Parse-Findings([string[]]$Raw) {
   $txt = ($Raw -join "`n"); $b = $txt.IndexOf('[')
-  $out = @(); if ($b -ge 0) { try { $out = @($txt.Substring($b) | ConvertFrom-Json) } catch { $out = @() } }
+  $out = @(); if ($b -ge 0) { try { $out = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $out = @() } }
   if ($null -eq $out) { $out = @() }
   return ,@($out)
 }
@@ -61,14 +61,14 @@ try {
   CheckRule $db $src 'is-never-true' 'NEVER'
   $offNever = @((Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json 2>$null })) | Where-Object { $_.rule -eq 'is-never-true' })
   Check 'a plain lint-all: is-never-true stays OFF' ($offNever.Count -eq 0) "$($offNever.Count) finding(s)"
-  $catalog = & { $ErrorActionPreference = 'Continue'; & $exePath rules --json 2>$null } | Out-String | ConvertFrom-Json
+  $catalog = & { $ErrorActionPreference = 'Continue'; & $exePath rules --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }
   $never = @($(if ($catalog.rules) { $catalog.rules } else { $catalog }) | Where-Object { $_.id -eq 'is-never-true' })
   Check 'rules --json: is-never-true is default_enabled false' ($never.Count -eq 1 -and $never[0].default_enabled -eq $false) "count=$($never.Count)"
   # The fact itself, raw: sql --json rows are positional, column 0 of the only row.
-  $sealedRow = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "SELECT directives FROM symbols WHERE name = 'TRtSealed'" --json 2>$null } | Out-String | ConvertFrom-Json).rows
+  $sealedRow = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "SELECT directives FROM symbols WHERE name = 'TRtSealed'" --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }).rows
   Check 'the parser records sealed on the class symbol' (@($sealedRow).Count -eq 1 -and $sealedRow[0][0] -eq 'sealed') "rows: $($sealedRow | ConvertTo-Json -Compress)"
-  $openRow = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "SELECT directives FROM symbols WHERE name = 'TRtOpen'" --json 2>$null } | Out-String | ConvertFrom-Json).rows
-  $absRow = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "SELECT count(*) FROM symbols WHERE qualified_name LIKE '%.NeverAbsolute.B'" --json 2>$null } | Out-String | ConvertFrom-Json).rows
+  $openRow = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "SELECT directives FROM symbols WHERE name = 'TRtOpen'" --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }).rows
+  $absRow = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "SELECT count(*) FROM symbols WHERE qualified_name LIKE '%.NeverAbsolute.B'" --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }).rows
   Check 'absolute: its target is one local, not a second one of the alias type' ([int]$absRow[0][0] -eq 1) "count=$($absRow[0][0])"
   Check 'and nothing on an open class' (@($openRow).Count -eq 1 -and "$($openRow[0][0])" -eq '') "rows: $($openRow | ConvertTo-Json -Compress)"
 

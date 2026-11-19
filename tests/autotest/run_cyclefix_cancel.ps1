@@ -76,7 +76,7 @@ Copy-Item $LibraryDb $Lib -Force
 # A loopback address no other process pings: the parked build is found by it, and only it.
 $PingHost = '127.{0}.{1}.{2}' -f (Get-Random -Min 2 -Max 250), (Get-Random -Min 2 -Max 250), (Get-Random -Min 2 -Max 250)
 function Parked { return @(Get-CimInstance Win32_Process -Filter "Name = 'PING.EXE' OR Name = 'ping.exe'" | Where-Object { "$($_.CommandLine)" -match [regex]::Escape($PingHost) }) }
-function Stop-Parked { foreach ($p in (Parked)) { try { [Diagnostics.Process]::GetProcessById([int]$p.ProcessId).Kill() } catch { } } }
+function Stop-Parked { foreach ($p in (@(Parked))) { try { [Diagnostics.Process]::GetProcessById([int]$p.ProcessId).Kill() } catch { } } }
 
 function Copy-Tree([string]$From, [string]$To) {
   New-Item -ItemType Directory -Force $To | Out-Null
@@ -113,7 +113,7 @@ function Start-Fix([hashtable]$D, [string[]]$Extra, [string]$Tag) {
   $a = @('cycles', '--fix', '--project', $D.Dproj, '--db', $D.Db, '--library-db', $Lib, '--format', 'json') + $Extra
   $q = ($a | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' '
   $out = Join-Path $WorkDir "$Tag.out"; $err = Join-Path $WorkDir "$Tag.err"
-  $p = Start-Process -FilePath $Exe -ArgumentList $q -RedirectStandardOutput $out -RedirectStandardError $err -NoNewWindow -PassThru
+  $p = Start-Process -FilePath $Exe -ArgumentList $q -RedirectStandardOutput $out -RedirectStandardError $err -NoNewWindow -PassThru; $null = $p.Handle
   return @{ P = $p; Out = $out; Err = $err }
 }
 function Wait-For([scriptblock]$Cond, [int]$Seconds) {
@@ -139,7 +139,7 @@ $fake = New-FakeRsvars 'c' $C.Proj 'after'
 $run = Start-Fix $C @('--unit', 'demogageport', '--apply', '--build-timeout', '600', '--rsvars', $fake.Bat) 'c'
 $parked = Wait-For { (Test-Path $fake.Flag) -or $run.P.HasExited } 240
 Check 'setup: the after-build parked (the run reached it)' ($parked -and (Test-Path $fake.Flag) -and -not $run.P.HasExited) ("exited=" + $run.P.HasExited + ' ' + (Read-Text $run.Out) + (Read-Text $run.Err))
-$bck = Backups $C.Proj
+$bck = @(Backups $C.Proj)
 $changed = @($srcBefore.Keys | Where-Object { (Test-Path (Join-Path $C.Proj $_)) -and ((Get-FileSha (Join-Path $C.Proj $_)) -ne $srcBefore[$_]) })
 Check 'c1 the edits are on disk when the cancel is sent (mid-apply)' (($bck.Count -gt 0) -and ($changed.Count -gt 0)) ("backups=" + $bck.Count + ' changed=' + ($changed -join ','))
 # each backup, as it is mid-run: <File>.<ext>.BCK<n> holds the pre-run bytes of <File>.<ext>
@@ -161,7 +161,7 @@ foreach ($k in $bckSha.Keys) { $srcAfter[$k] = if (Test-Path (Join-Path $C.Proj 
 $bad = @($bckSha.Keys | Where-Object { $srcAfter[$_] -ne $bckSha[$_] })
 Check 'c5 every source is byte-identical to its backup (as captured mid-run)' (($bckSha.Count -gt 0) -and ($bad.Count -eq 0)) ("differ: " + ($bad -join ','))
 Check 'c6 the tree is byte-identical to before (no new leaf, no .BCK, no recovery.txt)' ((Get-TreeHash $C.Proj) -eq $before) (Get-TreeHash $C.Proj)
-Check 'c7 the parked build is gone (the engine killed its own build tree)' ((Parked).Count -eq 0) ("still alive: " + ((Parked | ForEach-Object ProcessId) -join ','))
+Check 'c7 the parked build is gone (the engine killed its own build tree)' ((@(Parked)).Count -eq 0) ("still alive: " + ((Parked | ForEach-Object ProcessId) -join ','))
 Stop-Parked
 
 # ---------------------------------------------------------------- (c-text) the text verdict of a cancelled run
@@ -188,7 +188,7 @@ $fakeT = New-FakeRsvars 't' $T.Proj 'always'
 $runT = Start-Fix $T @('--unit', 'demogageport', '--apply', '--build-timeout', '3', '--rsvars', $fakeT.Bat) 't'
 $exitedT = Wait-For { $runT.P.HasExited } 60
 if (-not $exitedT) { try { $runT.P.Kill($true) } catch { } ; $runT.P.WaitForExit(10000) | Out-Null }
-$jT = $null; try { $jT = (Read-Text $runT.Out) | ConvertFrom-Json } catch { }
+$jT = $null; try { $jT = (Read-Text $runT.Out) | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 # a baseline refusal is the run's own (top-level refusals[]), not a cycle's
 $kindT = if ($jT) { "$(@($jT.refusals)[0].kind)" } else { '' }
 Check 't1 exit 1 with refusal build-timeout within 60 s' ($exitedT -and ($runT.P.ExitCode -eq 1) -and ($kindT -eq 'build-timeout')) ("exited=$exitedT exit=" + $runT.P.ExitCode + " kind=$kindT " + (Read-Text $runT.Out) + (Read-Text $runT.Err))
@@ -198,7 +198,7 @@ Stop-Parked
 # ---------------------------------------------------------------- (v) a bad value
 Write-Host '== (v) --build-timeout with a bad value' -ForegroundColor Cyan
 $errV = Join-Path $WorkDir 'v.err'
-$outV = (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --project $T.Dproj --db $T.Db --library-db $Lib --build-timeout 2m 2>$errV } | Out-String)
+$outV = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errV); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe cycles --fix --project $T.Dproj --db $T.Db --library-db $Lib --build-timeout 2m 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
 $codeV = $LASTEXITCODE
 $allV = $outV + (Read-Text $errV)
 Check 'v1 exit 2 and the message names --build-timeout' (($codeV -eq 2) -and ($allV -match '--build-timeout')) "exit=$codeV $allV"

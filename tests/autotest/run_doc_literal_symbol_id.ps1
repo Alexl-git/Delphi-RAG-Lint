@@ -126,7 +126,7 @@ function OwnerOf([string]$Word) {
        "LEFT JOIN symbols s ON s.id = sl.symbol_id WHERE sl.text LIKE '%$Word%'"
   $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --query $q --db $db --json 2>$null }) -join "`n"
   if (-not $raw.Trim()) { return '<no output>' }
-  $d = $raw | ConvertFrom-Json
+  $d = $raw | ConvertFrom-Json | ForEach-Object { $_ }
   $rows = @($d.rows)
   if ($rows.Count -ne 1) { return "<$($rows.Count) rows>" }
   return [string]$rows[0][0]

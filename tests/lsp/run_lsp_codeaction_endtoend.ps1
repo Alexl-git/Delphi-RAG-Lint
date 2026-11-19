@@ -163,7 +163,7 @@ try {
         "no framed response within ${TimeoutMs}ms -- stderr: $(Get-StderrSnippet)"
 
   if ($null -ne $initRaw) {
-    $init = $initRaw | ConvertFrom-Json
+    $init = $initRaw | ConvertFrom-Json | ForEach-Object { $_ }
     Check 'E2 it advertises codeActionProvider' `
           (($true -eq $init.result.capabilities.codeActionProvider) -or (@($init.result.capabilities.codeActionProvider.codeActionKinds) -contains 'quickfix')) `
           "capabilities.codeActionProvider = $($init.result.capabilities.codeActionProvider)"
@@ -191,7 +191,7 @@ try {
       while ($true) {
         $frame = Receive-Lsp
         if ($null -eq $frame) { return $null }
-        if ($null -ne ($frame | ConvertFrom-Json).id) { return $frame }
+        if ($null -ne ($frame | ConvertFrom-Json | ForEach-Object { $_ }).id) { return $frame }
       }
     }
 
@@ -199,7 +199,7 @@ try {
     $raw = Request-CodeAction 'drag-lint'
     $ok3 = $false; $why3 = 'no response'
     if ($null -ne $raw) {
-      $resp = $raw | ConvertFrom-Json
+      $resp = $raw | ConvertFrom-Json | ForEach-Object { $_ }
       $actions = @($resp.result)
       if ($actions.Count -gt 0 -and $null -ne $actions[0]) {
         $changes = $actions[0].edit.changes
@@ -216,7 +216,7 @@ try {
     $raw4 = Request-CodeAction 'some-other-linter'
     $ok4 = $false; $why4 = 'no response'
     if ($null -ne $raw4) {
-      $resp4   = $raw4 | ConvertFrom-Json
+      $resp4   = $raw4 | ConvertFrom-Json | ForEach-Object { $_ }
       $actions4 = @($resp4.result | Where-Object { $null -ne $_ })
       $ok4  = ($actions4.Count -eq 0)
       $why4 = "expected no actions, got $($actions4.Count): $raw4"

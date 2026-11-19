@@ -143,12 +143,12 @@ function Invoke-Serve([string[]]$Requests, [string]$Tag, [string]$Db = $db) {
   $all = @('{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}') + $Requests
   [IO.File]::WriteAllText($in, (($all -join "`n") + "`n"), [Text.Encoding]::ASCII)
   $p = Start-Process $exePath -ArgumentList 'serve', '--db', "`"$Db`"" -WorkingDirectory $WorkDir `
-         -RedirectStandardInput $in -RedirectStandardOutput $out -RedirectStandardError $err -NoNewWindow -PassThru
+         -RedirectStandardInput $in -RedirectStandardOutput $out -RedirectStandardError $err -NoNewWindow -PassThru; $null = $p.Handle
   if (-not $p.WaitForExit(60000)) { $p.Kill(); }
   $replies = @{}
   foreach ($line in (Get-Content $out -ErrorAction SilentlyContinue)) {
     if ($line.Trim() -eq '') { continue }
-    try { $j = $line | ConvertFrom-Json } catch { continue }
+    try { $j = $line | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($null -ne $j.id) { $replies[[string]$j.id] = $j }
   }
   $replies
@@ -179,11 +179,11 @@ Check 'M1 the CLI''s find-callers --resolved no longer calls the local''s read a
 Check 'M3 a tool that raises answers isError true' ($r['4'] -and $r['4'].result.isError -eq $true) ($r['4'] | ConvertTo-Json -Depth 6 -Compress)
 Check 'M3 ... and the server still answers the next call' ((Text $r['5']) -match 'Helper') (Text $r['5'])
 $t6 = Text $r['6']
-$j6 = try { $t6 | ConvertFrom-Json } catch { $null }
+$j6 = try { $t6 | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
 Check 'M6 (#32) get_context_bundle returns the slice, not only its count' ($j6 -and ($j6.PSObject.Properties.Name -contains 'slice') -and @($j6.slice | Where-Object { $_ }).Count -gt 0 -and (@($j6.slice | ForEach-Object { $_.text }) -join ' ') -match 'A\.Run') $t6
 Check 'M6 ... and keeps the summary keys' ($j6 -and $j6.resolved -eq $true -and $null -ne $j6.slice_chunks) $t6
 $c6 = (& { $ErrorActionPreference = 'Continue'; & $exePath context --task 'modify uUse.CallA' --format json --db $db 2>$null } | Out-String)
-$k6 = try { $c6 | ConvertFrom-Json } catch { $null }
+$k6 = try { $c6 | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
 Check 'M6 the CLI context --format json carries the same content' ($k6 -and ($k6.PSObject.Properties.Name -contains 'slice') -and @($k6.slice | Where-Object { $_ }).Count -gt 0) $c6
 
 # --- M4: old schema, refused and not migrated -------------------------------------
@@ -218,12 +218,12 @@ Check 'M7 SANITY: rename fixture indexed' ($LASTEXITCODE -eq 0) $idx7
 $lib7 = Join-Path $src7 'uLib.pas'; $use7 = Join-Path $src7 'uUse.pas'
 $dbHash = (Get-FileHash $db7 -Algorithm SHA256).Hash
 $r7d = Invoke-Serve @((Call 1 'rename_symbol' @{ qname = 'uLib.Helper'; to = 'HelperRenamed'; dry_run = $true })) 'm7d' $db7
-$j7d = try { (Text $r7d['1']) | ConvertFrom-Json } catch { $null }
+$j7d = try { (Text $r7d['1']) | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
 Check 'M7 control: the dry run lists edits and applies none' ($j7d -and $j7d.applied -eq $false -and @($j7d.edits).Count -ge 2) (Text $r7d['1'])
 Check 'M7 control: ... and the sources are untouched' (-not (Select-String -Path $lib7, $use7 -Pattern 'HelperRenamed' -Quiet)) ''
 $r7 = Invoke-Serve @((Call 1 'rename_symbol' @{ qname = 'uLib.Helper'; to = 'HelperRenamed'; dry_run = $false })) 'm7' $db7
 $t7 = Text $r7['1']
-$j7 = try { $t7 | ConvertFrom-Json } catch { $null }
+$j7 = try { $t7 | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
 Check 'M7 rename_symbol dry_run=false answers applied, no error' ($r7['1'] -and -not $r7['1'].error -and $r7['1'].result.isError -ne $true -and $j7 -and $j7.applied -eq $true -and -not $j7.error -and $j7.files_touched -ge 2) ($r7['1'] | ConvertTo-Json -Depth 6 -Compress)
 Check 'M7 ... the declaring unit is rewritten' ((Get-Content $lib7 -Raw) -match 'procedure HelperRenamed;' -and (Get-Content $lib7 -Raw) -notmatch '\bHelper;') (Get-Content $lib7 -Raw)
 Check 'M7 ... and so is the calling unit' ((Get-Content $use7 -Raw) -match 'then HelperRenamed;') (Get-Content $use7 -Raw)

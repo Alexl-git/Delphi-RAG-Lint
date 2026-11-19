@@ -39,7 +39,7 @@ try {
   Check 'D02: index <dir> Done line counts the broken file (parse-errors=1)' ($o2 -match '(?m)^Done\. Files: \d+,.*parse-errors=1\b') $o2
 
   # D01 -- info text vs info --json
-  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath info --json 2>$null } | Out-String | ConvertFrom-Json)
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath info --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ })
   $t = (& { $ErrorActionPreference = 'Continue'; & $exePath info --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check 'D01: info text prints the extractor version (= info --json)' ($t -match ("(?m)^extractor: " + [regex]::Escape($j.extractor_version) + '\b')) $t
   Check 'D01: info text prints the resolver version (= info --json)' ($t -match ("(?m)^resolver: " + [regex]::Escape($j.resolver_version) + '\b')) $t

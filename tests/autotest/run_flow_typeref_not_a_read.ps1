@@ -146,7 +146,7 @@ Check 'located the probe lines' `
   "k1=$k1Read types=$($typeLines -join ',') k2read=$k2RealRead k4=$k4Read"
 
 $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file --json 2>$null }
-$all = @($raw | ConvertFrom-Json)
+$all = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 $uba = @($all | Where-Object { $_.rule -eq 'used-before-assignment' })
 $hit = @($uba | ForEach-Object { $_.start_line })
 Write-Host ("  fired on lines: {0}" -f ($hit -join ', ')) -ForegroundColor DarkGray

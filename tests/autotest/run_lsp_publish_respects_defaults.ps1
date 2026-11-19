@@ -118,7 +118,7 @@ function PublishedCodes([string]$PasFile, [string]$Tag) {
   [System.IO.File]::WriteAllText($in, ($msgs -join ''), (New-Object System.Text.UTF8Encoding($false)))
   $p = Start-Process $Exe -ArgumentList 'lsp' -WorkingDirectory $dir `
          -RedirectStandardInput $in -RedirectStandardOutput $so -RedirectStandardError $se `
-         -NoNewWindow -Wait -PassThru
+         -NoNewWindow -Wait -PassThru; $null = $p.Handle
   $out = ''
   if (Test-Path $so) { $out = [System.IO.File]::ReadAllText($so) }
   $codes = @([regex]::Matches($out, '"code":"([a-z0-9\-]+)"') | ForEach-Object { $_.Groups[1].Value })
@@ -228,7 +228,7 @@ Write-Host 'CATALOGUE: `rules --json` agrees with the engine' -ForegroundColor C
 $ids = @([regex]::Match($catTxt, "BUILTIN_RULES_OFF_BY_DEFAULT_CORE\s*:\s*TArray<string>\s*=\s*\[(?<b>[^\]]*)\]").Groups['b'].Value |
          ForEach-Object { [regex]::Matches($_, "'([a-z0-9\-]+)'") } | ForEach-Object { $_.Groups[1].Value })
 Check 'the constant parsed out of the catalog source is non-empty' ($ids.Count -ge 10) "ids=$($ids.Count)"
-$catalogJson = (& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null }) -join "`n" | ConvertFrom-Json
+$catalogJson = (& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 $rows = if ($catalogJson.rules) { $catalogJson.rules } else { $catalogJson }
 $onAnyway = @($rows | Where-Object { $ids -contains $_.id -and $_.default_enabled } | ForEach-Object { "$($_.id)($($_.source))" })
 $seen     = @($rows | Where-Object { $ids -contains $_.id } | ForEach-Object { $_.id })

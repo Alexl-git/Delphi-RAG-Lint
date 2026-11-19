@@ -195,7 +195,7 @@ try {
 
   # The rule must be in the catalog AND enabled, or lint-all silently skips it
   # while `lint` still fires -- two surfaces disagreeing about one input.
-  $cat = (& { $ErrorActionPreference = 'Continue'; & $exePath rules --json 2>$null } | Out-String | ConvertFrom-Json)
+  $cat = (& { $ErrorActionPreference = 'Continue'; & $exePath rules --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ })
   $rs  = if ($cat.rules) { $cat.rules } else { $cat }
   $me  = $rs | Where-Object { $_.id -eq 'stat-gated-destructive' }
   Check 'CAT the rule is in the catalog'        ([bool]$me) 'rules --json does not list it'

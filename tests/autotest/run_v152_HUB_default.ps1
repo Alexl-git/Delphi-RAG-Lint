@@ -74,11 +74,11 @@ function Invoke-Cycles($P, [string[]]$A) {
   $a = @('cycles', '--db', $P.Db, '--library-db', 'none') + $A
   $errFile = "$($P.Root).c$script:N.$([guid]::NewGuid().ToString('N').Substring(0,6)).err"
   Push-Location $WorkDir
-  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @a 2> $errFile } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
+  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); $input | & $Exe @a 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
   $err = if (Test-Path $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
   $norm = $out.Replace($P.Root, '<P>').Replace(($P.Root -replace '\\', '\\'), '<P>').Replace($P.Db, '<DB>').Replace(($P.Db -replace '\\', '\\'), '<DB>') -replace 'draglint_cyclefix_\d+', 'draglint_cyclefix_N'
   $doc = $null
-  if ($A -contains 'json') { try { $doc = $out | ConvertFrom-Json } catch { $doc = $null } }
+  if ($A -contains 'json') { try { $doc = $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $doc = $null } }
   return @{ Exit = $code; Out = $out; Norm = $norm; Err = $err; Doc = $doc }
 }
 function FixArgs($P, [string[]]$Extra) {

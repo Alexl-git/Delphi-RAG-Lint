@@ -88,7 +88,7 @@ try {
                       Items = $items; Names = $names }
         }
         $sel = Get-Selectable $o
-        $dups = if ($sel) { @($sel.Names | Group-Object | Where-Object { $_.Count -gt 1 } | ForEach-Object Name) } else { @('<no list>') }
+        $dups = @(if ($sel) { @($sel.Names | Group-Object | Where-Object { $_.Count -gt 1 } | ForEach-Object Name) } else { @('<no list>') })
         Check 'no section name appears twice in the selectable list' ($dups.Count -eq 0) ("dups=" + ($dups -join ','))
         Check 'the selectable count is the number of distinct names' `
               ($sel -and ($sel.Count -eq @($sel.Names | Select-Object -Unique).Count)) ("count=" + $(if ($sel) { $sel.Count }) + " names=" + $(if ($sel) { $sel.Names.Count }))

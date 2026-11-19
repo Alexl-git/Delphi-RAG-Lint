@@ -34,7 +34,7 @@ function Invoke-Driver([string]$Tag, [int]$Jobs) {
   $out = Join-Path $tmp "$Tag.log"
   $p = Start-Process pwsh -ArgumentList @('-NoProfile', '-NonInteractive', '-File', (Join-Path $tmp 'tests\run_battery.ps1'),
         '-SkipPrepare', '-TimeoutSec', '2', '-Jobs', $Jobs, '-HeartbeatMin', '0', '-LogDir', (Join-Path $tmp "logs_$Tag")) `
-        -WorkingDirectory $tmp -PassThru -Wait -RedirectStandardOutput $out -RedirectStandardError "$out.err" -WindowStyle Hidden
+        -WorkingDirectory $tmp -PassThru -Wait -RedirectStandardOutput $out -RedirectStandardError "$out.err" -WindowStyle Hidden; $null = $p.Handle
   [pscustomobject]@{ Text = (Get-Content -LiteralPath $out -Raw); Exit = $p.ExitCode }
 }
 $par = Invoke-Driver 'par' 2

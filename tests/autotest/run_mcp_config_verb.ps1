@@ -118,10 +118,10 @@ $RealCcd = $(if ($PrevCcd) { Join-Path $PrevCcd '.claude.json' } else { '' })
 $RealBefore = @{
   ClaudePrint = Get-Print $RealClaude; ClaudeServers = Get-ServersText $RealClaude
   VSCodePrint = Get-Print $RealVSCode; CursorPrint = Get-Print $RealCursor
-  ClaudeSibs  = (Get-Siblings $RealClaude) -join '|'; VSCodeSibs = (Get-Siblings $RealVSCode) -join '|'
+  ClaudeSibs  = (@(Get-Siblings $RealClaude)) -join '|'; VSCodeSibs = (@(Get-Siblings $RealVSCode)) -join '|'
   CcdPrint    = $(if ($RealCcd) { Get-Print $RealCcd } else { '' })
   CcdServers  = $(if ($RealCcd) { Get-ServersText $RealCcd } else { '' })
-  CcdSibs     = $(if ($RealCcd) { (Get-Siblings $RealCcd) -join '|' } else { '' })
+  CcdSibs     = $(if ($RealCcd) { (@(Get-Siblings $RealCcd)) -join '|' } else { '' })
 }
 Remove-Item Env:\CLAUDE_CONFIG_DIR -ErrorAction SilentlyContinue
 
@@ -142,7 +142,7 @@ function Invoke-McpConfig([string[]]$A) {
     throw "GUARD BUG: CLAUDE_CONFIG_DIR points outside the scratch folder"
   }
   $errFile = Join-Path $Work 'stderr.txt'
-  $out = & { $ErrorActionPreference = 'Continue'; & $Exe mcp-config @A 2> $errFile }
+  $out = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe mcp-config @A 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   $code = $LASTEXITCODE
   [pscustomobject]@{ Code = $code; Out = (@($out) -join "`n"); Err = [IO.File]::ReadAllText($errFile) }
 }
@@ -438,7 +438,7 @@ Check-Parity 'MC-ALL-SKIP' $r 'skipped,skipped,skipped' $null $null
   $r = Invoke-McpConfig @('--cursor', '--home-dir', $ch, '--appdata-dir', $ea, '--engine', $Eng, '--db', $Db1, '--remove', '--dry-run')
   Check 'MC-CURSOR-DRYRUN-REMOVE' (($r.Code -eq 0) -and ((Get-Actions $r.Out) -join ',') -ceq 'would-removed' -and ((Get-Hash $cf) -eq $before)) "$((Get-Actions $r.Out) -join ',')"
   $r = Invoke-McpConfig @('--cursor', '--home-dir', $ch, '--appdata-dir', $ea, '--engine', $Eng, '--json', '--remove')
-  $j = $(try { @($r.Out | ConvertFrom-Json -NoEnumerate) } catch { @() })
+  $j = $(try { @(($r.Out | ConvertFrom-Json -NoEnumerate) | ForEach-Object { $_ }) } catch { @() })
   $ok = ($r.Code -eq 0) -and ($j.Count -eq 1) -and ($j[0].Count -eq 1) -and ($j[0][0].Target -eq 'Cursor') -and ($j[0][0].Action -eq 'removed') -and
         ($j[0][0].Path -eq $cf) -and ($j[0][0].Error -eq '') -and ($j[0][0].ExitCode -eq 0)
   Check 'MC-CURSOR-JSON-REMOVE' $ok "out=$($r.Out)"
@@ -451,7 +451,7 @@ Check-Parity 'MC-ALL-SKIP' $r 'skipped,skipped,skipped' $null $null
   Check 'MC-ENGINE' (($r.Code -eq 0) -and ($cmd -ieq $Exe)) "command=$cmd"
   $p = Set-Pair 'json.json' (Get-Fixture 'empty-object.json')
   $r = Invoke-McpConfig @('--vscode', '--config-path', $p.E, '--engine', $Eng, '--json')
-  $j = $(try { @($r.Out | ConvertFrom-Json -NoEnumerate) } catch { @() })
+  $j = $(try { @(($r.Out | ConvertFrom-Json -NoEnumerate) | ForEach-Object { $_ }) } catch { @() })
   $ok = ($r.Code -eq 0) -and ($j.Count -eq 1) -and ($j[0].Count -eq 1)
   if ($ok) {
     $o = $j[0][0]
@@ -471,11 +471,11 @@ Check-Parity 'MC-ALL-SKIP' $r 'skipped,skipped,skipped' $null $null
     Check 'MC-REAL-CLAUDE' ((Get-ServersText $RealClaude) -ceq $RealBefore.ClaudeServers) `
       "$RealClaude changed during the run (a running Claude Code session rewrites it); its mcpServers object is identical"
   }
-  Check 'MC-REAL-NOSIBLINGS' ((((Get-Siblings $RealClaude) -join '|') -eq $RealBefore.ClaudeSibs) -and (((Get-Siblings $RealVSCode) -join '|') -eq $RealBefore.VSCodeSibs)) `
+  Check 'MC-REAL-NOSIBLINGS' ((((@(Get-Siblings $RealClaude)) -join '|') -eq $RealBefore.ClaudeSibs) -and (((@(Get-Siblings $RealVSCode)) -join '|') -eq $RealBefore.VSCodeSibs)) `
     'no .bak-* / .tmp-* appeared beside the real files'
   if ($RealCcd) {
     $okCcd = ((Get-Print $RealCcd) -eq $RealBefore.CcdPrint) -or ((Get-ServersText $RealCcd) -ceq $RealBefore.CcdServers)
-    Check 'MC-REAL-CCD' ($okCcd -and (((Get-Siblings $RealCcd) -join '|') -eq $RealBefore.CcdSibs)) `
+    Check 'MC-REAL-CCD' ($okCcd -and (((@(Get-Siblings $RealCcd)) -join '|') -eq $RealBefore.CcdSibs)) `
       "$RealCcd (your CLAUDE_CONFIG_DIR) unchanged or its mcpServers identical; no .bak-*/.tmp-* beside it"
   }
   Remove-Item -LiteralPath $Work -Recurse -Force -ErrorAction SilentlyContinue

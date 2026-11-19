@@ -42,7 +42,7 @@ function Write-Ascii([string]$Path, [string]$Body) {
 function Invoke-Dl([string]$Cwd, [string[]]$Arguments) {
   $o = "$WorkDir\o.txt"; $e = "$WorkDir\e.txt"
   $p = Start-Process -FilePath $Exe -ArgumentList $Arguments -NoNewWindow -Wait -PassThru -WorkingDirectory $Cwd `
-         -RedirectStandardOutput $o -RedirectStandardError $e
+         -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   [pscustomobject]@{
     Exit = $p.ExitCode
     Out  = [IO.File]::ReadAllText($o)

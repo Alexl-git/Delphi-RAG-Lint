@@ -299,7 +299,7 @@ Write-Host ''
 Write-Host 'JSON agrees with the text output' -ForegroundColor Cyan
 $json = (& { $ErrorActionPreference = 'Continue'; & $Exe query unit-usage --unit A.Lib --db $db --json 2>&1 | ForEach-Object { "$_" } } | Where-Object { "$_" -match '^\[' } | Select-Object -First 1)
 $parsed = $null
-try { $parsed = @($json | ConvertFrom-Json) } catch { }
+try { $parsed = @(($json | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { }
 Check '--json emits a parseable array' ($null -ne $parsed) "$json"
 if ($null -ne $parsed) {
   Check '--json lists the same file count' ($parsed.Count -eq $a.Count) "json=$($parsed.Count) text=$($a.Count)"

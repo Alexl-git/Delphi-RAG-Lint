@@ -94,7 +94,7 @@ function Num($row, [string]$f) {
 Write-Host ''
 Write-Host 'CASE A: outline --json impl_start_line / impl_end_line / end_line' -ForegroundColor Cyan
 $oj = @()
-try { $oj = @((& { $ErrorActionPreference = 'Continue'; & $Exe outline --file $unit --db $db --format json 2>$null } | Out-String) | ConvertFrom-Json) } catch { }
+try { $oj = @(((& { $ErrorActionPreference = 'Continue'; & $Exe outline --file $unit --db $db --format json 2>$null } | Out-String) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { }
 $oB = @($oj | Where-Object { $_.qname -eq 'ImplLines.TBox.Bump' })[0]
 $oT = @($oj | Where-Object { $_.qname -eq 'ImplLines.TBox.Total' })[0]
 $oF = @($oj | Where-Object { $_.qname -eq 'ImplLines.TBox.FCount' })[0]

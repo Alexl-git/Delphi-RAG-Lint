@@ -232,7 +232,7 @@ end.
     while ($lsp.Now -lt $deadline) {
       $m = $lsp.Next([Math]::Max(1, [int]($deadline - $lsp.Now)))
       if ($null -eq $m) { continue }
-      $script:Seen.Add([pscustomobject]@{ o = ($m.Json | ConvertFrom-Json); ms = $m.Ms })
+      $script:Seen.Add([pscustomobject]@{ o = ($m.Json | ConvertFrom-Json | ForEach-Object { $_ }); ms = $m.Ms })
     }
   }
   function WaitId($id, $ms) {
@@ -242,7 +242,7 @@ end.
       if ($hit.Count -gt 0) { return $hit[0] }
       $m = $lsp.Next(50)
       if ($null -eq $m) { continue }
-      $script:Seen.Add([pscustomobject]@{ o = ($m.Json | ConvertFrom-Json); ms = $m.Ms })
+      $script:Seen.Add([pscustomobject]@{ o = ($m.Json | ConvertFrom-Json | ForEach-Object { $_ }); ms = $m.Ms })
     }
     return $null
   }
@@ -289,7 +289,7 @@ end.
     $fA = Join-Path $WorkDir 'v1.md'; $fB = Join-Path $WorkDir 'v2.md'
     [IO.File]::WriteAllText($fA, (HoverMd $r1)); [IO.File]::WriteAllText($fB, (HoverMd $r2))
     $js = "const d=require('$($dhLib -replace '\\','/')');const fs=require('fs');const a=fs.readFileSync(process.argv[1],'utf8'),b=fs.readFileSync(process.argv[2],'utf8');const s=d.fastPart(a);process.stdout.write(JSON.stringify({shown:s,rest:d.remainder(s,b)}));"
-    $split = & node -e $js $fA $fB | ConvertFrom-Json
+    $split = & node -e $js $fA $fB | ConvertFrom-Json | ForEach-Object { $_ }
     Check 'R1 fast part shown: no placeholder, footer kept' (-not $split.shown.Contains($PLACEHOLDER) -and $split.shown -match 'context:') $split.shown
     Check 'R1 companion part: the Called from fact, no footer repeated' ($split.rest -match 'Called from' -and $split.rest -notmatch 'context:') $split.rest
   } else { Check 'R1 lib\deferredhover.js + node present' $false '' }
@@ -339,7 +339,7 @@ end.
   $isDis = @($all | ForEach-Object { $null -ne $_.command -and $_.command.command -eq 'drag-lint.disableRule' })
   $firstDis = [Array]::IndexOf($isDis, $true); $lastOther = [Array]::LastIndexOf($isDis, $false)
   Check 'A1 the disable actions come LAST (Fix finding applies the first quickfix)' ($firstDis -ge 0 -and $lastOther -ge 0 -and $firstDis -gt $lastOther) ("order=" + (($all | ForEach-Object { $_.title }) -join ' | '))
-  $a0 = if ($acts.Count -gt 0) { $acts[0].command.arguments } else { @() }
+  $a0 = @(if ($acts.Count -gt 0) { $acts[0].command.arguments } else { @() })
   Check 'A1 arguments are [rule, scope, file, line(1-based)]' ($a0.Count -eq 4 -and $a0[0] -eq 'empty-except' -and ([string]$a0[2]) -ieq $file -and [int]$a0[3] -eq ($pE.line + 1)) ("args=" + ($a0 -join ' | '))
 
   $lsp.Send((J @{ jsonrpc = '2.0'; id = 2; method = 'shutdown'; params = @{} }))
@@ -371,13 +371,13 @@ end.
       $libJs = ($lib -replace '\\', '/')
       foreach ($sc in 'unit', 'project') {
         $js = "const d=require('$libJs');process.stdout.write(JSON.stringify(d.buildArgs({rule:'empty-except',scope:'$sc',file:process.argv[1],line:5,reason:'lane test'})));"
-        $argv = (& node -e $js $file | ConvertFrom-Json)
+        $argv = (& node -e $js $file | ConvertFrom-Json | ForEach-Object { $_ })
         $out = & { $ErrorActionPreference = 'Continue'; & $Exe @argv 2>&1 | ForEach-Object { "$_" } } | Out-String
         $code = $LASTEXITCODE
         $cfg = [IO.File]::ReadAllText((Join-Path $WorkDir 'drag-lint-lint.json'))
         $want = if ($sc -eq 'unit') { '"exclude_units"\s*:\s*\[\s*"uVsHover"' } else { '"enabled"\s*:\s*false' }
         Check "E1 $sc scope: the engine accepts the extension's argv (exit 0) and writes the override" ($code -eq 0 -and $cfg -match $want) ("argv=" + ($argv -join ' ') + " exit=$code out=$out cfg=$cfg")
-        $parsed = & node -e "const d=require('$libJs');const r=d.describeResult(process.argv[1], 0);process.stdout.write(JSON.stringify(r));" $out | ConvertFrom-Json
+        $parsed = & node -e "const d=require('$libJs');const r=d.describeResult(process.argv[1], 0);process.stdout.write(JSON.stringify(r));" $out | ConvertFrom-Json | ForEach-Object { $_ }
         Check "E1 $sc scope: describeResult reads the engine's --json answer as done" ($parsed.ok -eq $true -and [string]$parsed.message -ne '') ($parsed | ConvertTo-Json -Compress)
       }
     }

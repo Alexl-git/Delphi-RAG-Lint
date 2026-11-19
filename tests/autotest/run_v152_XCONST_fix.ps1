@@ -112,10 +112,10 @@ function Build($C) {
   if (-not $HaveDcc) { Write-Host '  skip build (no rsvars.bat)' -ForegroundColor Yellow; return 0 }
   $bat = Join-Path $C.Dir 'b.bat'
   [IO.File]::WriteAllText($bat, "@echo off`r`ncall `"$Rsvars`"`r`ncd /D `"$($C.Dir)`"`r`nmsbuild /t:Build /p:Config=Debug /p:Platform=Win64 /v:minimal GfDemo.dproj`r`n", [Text.Encoding]::ASCII)
-  $p = Start-Process -Wait -PassThru -NoNewWindow -FilePath cmd.exe -ArgumentList '/c', $bat -RedirectStandardOutput (Join-Path $C.Dir 'b.out')
+  $p = Start-Process -Wait -PassThru -NoNewWindow -FilePath cmd.exe -ArgumentList '/c', $bat -RedirectStandardOutput (Join-Path $C.Dir 'b.out'); $null = $p.Handle
   return $p.ExitCode
 }
-$Gate = if ($HaveDcc) { @('--compile-gate') } else { @('--no-compile-gate') }
+$Gate = @(if ($HaveDcc) { @('--compile-gate') } else { @('--no-compile-gate') })
 $LNum = LineNo 'xc-num'; $LNum2 = LineNo 'xc-num2'; $LDbl = LineNo 'xc-double'; $LWord = LineNo 'xc-word'
 $LStr = LineNo 'xc-str'; $LIface = LineNo 'xc-iface'
 try {
@@ -183,7 +183,7 @@ try {
   Check 'f2 batch wrote no constant' ((CountOf $F.Unit 'cCount5000') -eq 0)
 
   # g: catalog
-  $j = (& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null } | Out-String | ConvertFrom-Json).rules
+  $j = (& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }).rules
   $xc = $j | Where-Object { $_.id -eq 'extract-constant' }
   Check 'g1 extract-constant declared' ($null -ne $xc)
   Check 'g2 extract-constant OFF by default' (($null -ne $xc) -and (-not $xc.default_enabled))

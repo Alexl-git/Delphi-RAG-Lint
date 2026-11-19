@@ -87,7 +87,7 @@ end.
 function Run-In([string]$cwd, [string[]]$argv, [int]$timeoutSec = 90) {
   $o = Join-Path $WorkDir 'out.txt'; $e = Join-Path $WorkDir 'err.txt'
   $p = Start-Process $Exe -ArgumentList $argv -WorkingDirectory $cwd `
-         -PassThru -NoNewWindow -RedirectStandardOutput $o -RedirectStandardError $e
+         -PassThru -NoNewWindow -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   if (-not $p.WaitForExit($timeoutSec * 1000)) { try { $p.Kill() } catch { }; return [pscustomobject]@{ Code = -1; Text = 'TIMEOUT' } }
   $t = ((Get-Content $o -Raw -ErrorAction SilentlyContinue) + "`n" + (Get-Content $e -Raw -ErrorAction SilentlyContinue))
   return [pscustomobject]@{ Code = $p.ExitCode; Text = $t }

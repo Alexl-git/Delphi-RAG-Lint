@@ -69,7 +69,7 @@ try {
 
   # --- json: nested tree. ---
   $jsonOut = & { $ErrorActionPreference = 'Continue'; & $exePath callgraph --qname StepA --direction callees --depth 2 --json --db $db 2>$null } | Out-String
-  $obj = $jsonOut | ConvertFrom-Json
+  $obj = $jsonOut | ConvertFrom-Json | ForEach-Object { $_ }
   Check 'json root qname = TChain.StepA'          ($obj.qname -eq 'callchain.TChain.StepA')
   Check 'json root has 1 child'                   (@($obj.children).Count -eq 1)
   Check 'json child = TChainB.StepB'              ($obj.children[0].qname -eq 'callchain.TChainB.StepB')

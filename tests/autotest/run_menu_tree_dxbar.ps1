@@ -78,7 +78,7 @@ Check 'menu-tree --help lists --with-dfm' ($help -match '--with-dfm')
 # --- paths, cell by cell ---
 $want = Get-Rows (Get-Content "$fx\expected-paths.txt" -Raw) $false
 Check 'golden has rows' ($want.Count -ge 15) "($($want.Count))"
-$paths = (& { $ErrorActionPreference = 'Continue'; & $Exe menu-tree --project $proj --db $db --with-dfm --format paths 2> "$WorkDir\paths.err" } | Out-String)
+$paths = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath("$WorkDir\paths.err"); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe menu-tree --project $proj --db $db --with-dfm --format paths 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
 Check 'menu-tree --with-dfm --format paths exits 0' ($LASTEXITCODE -eq 0) "(exit $LASTEXITCODE) $(Get-Content "$WorkDir\paths.err" -Raw)"
 $got = Get-Rows $paths $true
 $bad = Compare-Rows $want $got
@@ -91,9 +91,9 @@ $ctl = Compare-Rows $seeded $got
 Check 'positive control: a one-cell golden edit is reported' ($ctl.Count -ge 1) "($($ctl.Count) mismatch(es))"
 
 # --- json: kinds, separators, idents, notes ---
-$jsonText = (& { $ErrorActionPreference = 'Continue'; & $Exe menu-tree --project $proj --db $db --with-dfm --format json 2> "$WorkDir\json.err" } | Out-String)
+$jsonText = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath("$WorkDir\json.err"); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe menu-tree --project $proj --db $db --with-dfm --format json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
 $j = $null
-try { $j = $jsonText | ConvertFrom-Json } catch { $j = $null }
+try { $j = $jsonText | ConvertFrom-Json | ForEach-Object { $_ } } catch { $j = $null }
 Check 'json exits 0 and parses' ($null -ne $j)
 $roots = @($j.roots)
 function RootOf([string]$Ident) { $roots | Where-Object { $_.ident -ceq $Ident } | Select-Object -First 1 }
@@ -148,9 +148,9 @@ Check 'NOTE unlinked bar item btnOrphan' (@($notes | Where-Object { $_ -match 'u
 Check 'NOTE dynamic caption' (@($notes | Where-Object { $_ -match '^dynamic caption' }).Count -ge 1)
 
 # --- flag off: the walker's code links stay external roots ---
-$offText = (& { $ErrorActionPreference = 'Continue'; & $Exe menu-tree --project $proj --db $db --format json 2> "$WorkDir\off.err" } | Out-String)
+$offText = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath("$WorkDir\off.err"); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe menu-tree --project $proj --db $db --format json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
 $off = $null
-try { $off = $offText | ConvertFrom-Json } catch { $off = $null }
+try { $off = $offText | ConvertFrom-Json | ForEach-Object { $_ } } catch { $off = $null }
 $offIds = @($off.external | ForEach-Object { $_.ident })
 Check 'flag off: no dfm roots' ($null -ne $off -and @($off.roots).Count -eq 0) "($(@($off.roots).Count) roots)"
 Check 'flag off: popGrid and barLists are external roots (form fields: keyed TfrmMain9.<field>)' (($offIds -ccontains 'TfrmMain9.popGrid') -and ($offIds -ccontains 'TfrmMain9.barLists')) ($offIds -join ',')

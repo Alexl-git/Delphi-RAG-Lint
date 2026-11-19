@@ -227,7 +227,7 @@ function Get-CompletionLabels([string[]]$Dbs) {
   $labels = @()
   $script:LastDetails = @{}
   foreach ($m in [regex]::Matches($raw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $m.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $m.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 2 -and $o.result) {
       foreach ($it in $o.result.items) { $labels += $it.label; $script:LastDetails[$it.label] = $it.detail }
     }

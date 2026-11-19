@@ -40,7 +40,7 @@ $unitPath = Join-Path $Root 'src\delphi-plugin\DragLint.Plugin.ConvertSelectionE
 $wizard = [IO.File]::ReadAllText((Join-Path $Root 'src\delphi-plugin\DragLint.Plugin.Wizard.pas'))
 $dpk    = [IO.File]::ReadAllText((Join-Path $Root 'src\delphi-plugin\dclDragLintWizard.dpk'))
 $unit   = if (Test-Path $unitPath) { [IO.File]::ReadAllText($unitPath) } else { '' }
-$entry  = Get-Content (Join-Path $Root 'features\entries\convert-components.json') -Raw | ConvertFrom-Json
+$entry  = Get-Content (Join-Path $Root 'features\entries\convert-components.json') -Raw | ConvertFrom-Json | ForEach-Object { $_ }
 
 $bad = 0
 $real = Test-Wiring $wizard $dpk $unit $entry

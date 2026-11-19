@@ -39,7 +39,7 @@ function Invoke-Index([string[]]$Extra) {
   $env:DRAGLINT_PROFILE = '1'
   $o = Join-Path $Scratch 'o.txt'; $e = Join-Path $Scratch 'e.txt'
   $args2 = @('index', "`"$src`"", '--db', "`"$db`"", '--rule-cache-warm', 'off') + $Extra
-  $p = Start-Process $Engine -ArgumentList $args2 -RedirectStandardOutput $o -RedirectStandardError $e -PassThru -WindowStyle Hidden -WorkingDirectory $Scratch
+  $p = Start-Process $Engine -ArgumentList $args2 -RedirectStandardOutput $o -RedirectStandardError $e -PassThru -WindowStyle Hidden -WorkingDirectory $Scratch; $null = $p.Handle
   [void]$p.Handle
   $p.WaitForExit()
   $env:DRAGLINT_PROFILE = ''
@@ -47,7 +47,7 @@ function Invoke-Index([string[]]$Extra) {
 }
 
 function Get-FileCount {
-  $j = (& { $ErrorActionPreference = 'Continue'; & $Engine sql --db $db --query 'select count(*) from files' --json 2>$null }) -join '' | ConvertFrom-Json
+  $j = (& { $ErrorActionPreference = 'Continue'; & $Engine sql --db $db --query 'select count(*) from files' --json 2>$null }) -join '' | ConvertFrom-Json | ForEach-Object { $_ }
   [int]$j.rows[0][0]    # sql --json rows are positional
 }
 

@@ -56,7 +56,7 @@ function Index([string]$p, [string]$db, [string]$tag, [string[]]$extra = @()) {
 function Col0([string]$db, [string]$q) {
   Push-Location $WorkDir
   try { $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query $q --json 2>$null } | Out-String } finally { Pop-Location }
-  try { return ,@((($j | ConvertFrom-Json).rows) | ForEach-Object { [string]$_[0] }) } catch { return ,@() }
+  try { return ,@((($j | ConvertFrom-Json | ForEach-Object { $_ }).rows) | ForEach-Object { [string]$_[0] }) } catch { return ,@() }
 }
 function IncLeaves([string]$db) {
   return ,@((Col0 $db "SELECT path FROM files WHERE path LIKE '%.inc'") | ForEach-Object { [IO.Path]::GetFileName($_) } | Sort-Object)

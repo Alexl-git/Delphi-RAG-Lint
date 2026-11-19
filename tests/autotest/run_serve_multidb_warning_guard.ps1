@@ -101,14 +101,14 @@ try {
   $p = Start-Process -FilePath $Exe -ArgumentList @('serve', '--db', $dbA, '--db', $dbB) `
          -RedirectStandardInput $emptyIn -RedirectStandardError $errTwo `
          -RedirectStandardOutput (Join-Path $WorkDir 'two.out') `
-         -NoNewWindow -PassThru
+         -NoNewWindow -PassThru; $null = $p.Handle
   if (-not $p.WaitForExit(30000)) { try { $p.Kill($true) } catch { } }
   $two = if (Test-Path $errTwo) { Get-Content $errTwo -Raw } else { '' }
 
   $p = Start-Process -FilePath $Exe -ArgumentList @('serve', '--db', $dbA) `
          -RedirectStandardInput $emptyIn -RedirectStandardError $errOne `
          -RedirectStandardOutput (Join-Path $WorkDir 'one.out') `
-         -NoNewWindow -PassThru
+         -NoNewWindow -PassThru; $null = $p.Handle
   if (-not $p.WaitForExit(30000)) { try { $p.Kill($true) } catch { } }
   $one = if (Test-Path $errOne) { Get-Content $errOne -Raw } else { '' }
 }

@@ -24,7 +24,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 function Parse-Findings([string[]]$Raw) {
   $txt = ($Raw -join "`n"); $b = $txt.IndexOf('[')
-  $out = @(); if ($b -ge 0) { try { $out = @($txt.Substring($b) | ConvertFrom-Json) } catch { $out = @() } }
+  $out = @(); if ($b -ge 0) { try { $out = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $out = @() } }
   if ($null -eq $out) { $out = @() }
   return ,@($out)
 }
@@ -53,11 +53,11 @@ try {
   & { $ErrorActionPreference = 'Continue'; & $exePath index $libSrc --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
   # no library slot: a call into a library routine is not followed (the old walk)
-  $noLib = RuleFindings $db @('--rule', $Rule)
+  $noLib = @(RuleFindings $db @('--rule', $Rule))
   Check 'RUN 0 without a library index the library call is silent' (@($noLib | Where-Object { $_.file_path -like '*uHiLib.pas' }).Count -eq 0) ''
 
   # positive-control: heavy-initialization
-  $hits  = RuleFindings $db @('--rule', $Rule, '--library-db', $libDb)
+  $hits  = @(RuleFindings $db @('--rule', $Rule, '--library-db', $libDb))
   $direct = LineOf (Join-Path $src 'uHiFile.pas') 'TRIGGER-DIRECT'
   $chain  = LineOf (Join-Path $src 'uHiChain.pas') 'TRIGGER-CHAIN'
   Check 'RUN 1 three findings, one per heavy section' ($hits.Count -eq 3) "$($hits.Count) finding(s)"
@@ -68,7 +68,7 @@ try {
   Check 'RUN 1 a quiet library routine stays silent' (@($hits | Where-Object { $_.file_path -like '*uHiLibQuiet.pas' }).Count -eq 0) ''
   Check 'RUN 1 nothing fires in uHiLight' (@($hits | Where-Object { $_.file_path -like '*uHiLight.pas' }).Count -eq 0) ''
 
-  $off = RuleFindings $db @('--library-db', $libDb)
+  $off = @(RuleFindings $db @('--library-db', $libDb))
   Check 'RUN 2 plain lint-all: the rule ships ON' ($off.Count -eq $hits.Count -and $hits.Count -gt 0) "$($off.Count) finding(s)"
 
   # RUN 4 (v151 HEAVYLIB): an index built WITH the library records where a call into it binds
@@ -77,7 +77,7 @@ try {
   # the same units in an index without the binding stay silent.
   $dbX = Join-Path $scratch 'x.sqlite'
   & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $dbX --library-db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
-  $bound = RuleFindings $dbX @('--rule', $Rule, '--library-db', $libDb)
+  $bound = @(RuleFindings $dbX @('--rule', $Rule, '--library-db', $libDb))
   $libVar = LineOf (Join-Path $src 'uHiLibVar.pas') 'TRIGGER-LIBVAR'
   $owner  = LineOf (Join-Path $src 'uHiLibOwner.pas') 'TRIGGER-OWNER'
   Check 'RUN 4 a library method called on a variable fires at the section call, naming the library routine' (@($bound | Where-Object { $_.file_path -like '*uHiLibVar.pas' -and [int]$_.start_line -eq $libVar -and $_.message -match 'registry \(HiLibUnit\.HiLibStep\)' }).Count -eq 1) "$($bound.Count) total"
@@ -88,14 +88,14 @@ try {
   # (drag-lint.json beside the exe), and a heavy TYPE (TRegistry) is matched by its qualified name in any library,
   # so uHiLibOwner fired on the battery engine (its manifest names library-Win32) while the lane's private engine
   # had none. The control is about the slot being EMPTY; say so.
-  $unbound = RuleFindings $dbX @('--rule', $Rule, '--library-db', 'none')
+  $unbound = @(RuleFindings $dbX @('--rule', $Rule, '--library-db', 'none'))
   Check 'RUN 4 control: without the library index both stay silent' (@($unbound | Where-Object { $_.file_path -like '*uHiLibVar.pas' -or $_.file_path -like '*uHiLibOwner.pas' }).Count -eq 0) ''
 
   $f = Join-Path $src 'uHiChain.pas'
   $t = [IO.File]::ReadAllText($f).Replace("  Boot; // TRIGGER-CHAIN", "  // no call")
   [IO.File]::WriteAllText($f, $t, [Text.Encoding]::ASCII)
   & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
-  $gone = RuleFindings $db @('--rule', $Rule, '--library-db', $libDb)
+  $gone = @(RuleFindings $db @('--rule', $Rule, '--library-db', $libDb))
   Check 'RUN 3 the section stops calling: the chain finding goes' (@($gone | Where-Object { $_.file_path -like '*uHiChain.pas' }).Count -eq 0) "$($gone.Count) total"
 } finally {
   if (Test-Path $scratch) { [System.IO.Directory]::Delete($scratch, $true) }

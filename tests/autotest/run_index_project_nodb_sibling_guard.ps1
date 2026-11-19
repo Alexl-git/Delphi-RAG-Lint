@@ -227,7 +227,7 @@ function Get-FilePaths([string]$Db) {
   # `sql --json` rows are POSITIONAL arrays -- map them onto columns[].name.
   $r = Invoke-Engine $exe1 $root @('sql', '--query', 'select path from files order by path', '--db', $Db, '--json')
   $j = $null
-  try { $j = ($r.Out | ConvertFrom-Json) } catch { return ,@() }
+  try { $j = ($r.Out | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return ,@() }
   $ix = [array]::IndexOf(@($j.columns | ForEach-Object { $_.name }), 'path')
   if ($ix -lt 0) { return ,@() }
   return ,@($j.rows | ForEach-Object { [string]$_[$ix] })
@@ -331,7 +331,7 @@ $db2 = Get-DatabaseLine $r2.Text
 Check 'index --project Hello2 exits 0' ($r2.Code -eq 0) "exit=$($r2.Code)"
 Check 'Database: names Hello2.sqlite (the project''s own _D-RAG DB)' (Test-SamePath $db2 $hello2Db) "Database=[$db2]"
 Check 'Hello2.sqlite exists' (Test-Path $hello2Db) $hello2Db
-$h2Files = if (Test-Path $hello2Db) { Get-FilePaths $hello2Db } else { @() }
+$h2Files = @(if (Test-Path $hello2Db) { Get-FilePaths $hello2Db } else { @() })
 Check 'Hello2.sqlite holds Hello2.dpr' (@($h2Files | Where-Object { $_ -match '\\hello2\.dpr$' }).Count -eq 1) ($h2Files -join ',')
 $helloFilesAfter = Get-FilePaths $helloDb
 Check 'Hello.sqlite file list is UNCHANGED' (($helloFiles -join '|') -eq ($helloFilesAfter -join '|')) ("before=[{0}] after=[{1}]" -f ($helloFiles -join ','), ($helloFilesAfter -join ','))
@@ -480,7 +480,7 @@ Check 'compile-check left Hello.sqlite alone' ($helloStamp -eq (Get-Stamp $hello
 function Get-FindingFiles([string]$Out) {
   $line = ($Out -split "`r?`n") | Where-Object { $_ -match '^\s*\[' } | Select-Object -First 1
   if (-not $line) { return ,@() }
-  return ,@((ConvertFrom-Json $line) | ForEach-Object { [string]$_.file })
+  return ,@((ConvertFrom-Json $line | ForEach-Object { $_ }) | ForEach-Object { [string]$_.file })
 }
 $files = Get-FindingFiles $cu.Out
 $bad = @($files | Where-Object { ($_ -match '(?i)\\proj\\proj\\') -or (-not (Test-Path -LiteralPath $_)) })

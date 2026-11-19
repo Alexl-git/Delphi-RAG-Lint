@@ -96,7 +96,7 @@ Check 'a DISABLED rule does NOT say none detected' (-not ($r3 -match 'none detec
 # --- 5: machine-readable output stays pure -----------------------------------
 $j = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db (Join-Path $cyc 't.sqlite') --format json 2>$null }) -join "`n"
 $si = $j.IndexOf('{'); $obj = $null
-if ($si -ge 0) { try { $obj = ($j.Substring($si) | ConvertFrom-Json) } catch { } }
+if ($si -ge 0) { try { $obj = ($j.Substring($si) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { } }
 Check 'the section did not leak into --format json' `
   (-not ($j -match 'circular unit dependencies')) ''
 

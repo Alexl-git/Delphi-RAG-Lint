@@ -110,7 +110,7 @@ print(json.dumps({
 }))
 c.close()
 '@ | Set-Content $pyDb -Encoding ascii
-function Get-Db([string]$Path) { (& python $pyDb $Path) -join "`n" | ConvertFrom-Json }
+function Get-Db([string]$Path) { (& python $pyDb $Path) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ } }
 # The leading comma is load-bearing: PowerShell ENUMERATES a returned collection,
 # so a one-row result would come back as a bare string and `[0]` would index its
 # first CHARACTER rather than the first row.
@@ -174,7 +174,7 @@ Write-Host 'Arm 2 -- migration: an already-split DB is merged on next writable o
 
 $dbC = Join-Path $WorkDir 'split_stale.sqlite'
 & { $ErrorActionPreference = 'Continue'; & $Exe index $upperRoot --db $dbC --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
-$inj = (& python $pyInject $dbC -3600) -join "`n" | ConvertFrom-Json
+$inj = (& python $pyInject $dbC -3600) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 
 $split = Get-Db $dbC
 Check 'precondition: the DB is split across two rows' ((Paths $split).Count -eq 2) `
@@ -201,7 +201,7 @@ Check 'no orphaned symbol rows survive the merge' ($merged.orphans -eq 0) "orpha
 # file on disk and re-parses it, which legitimately rewrites every other column.
 $dbD = Join-Path $WorkDir 'split_newer.sqlite'
 & { $ErrorActionPreference = 'Continue'; & $Exe index $upperRoot --db $dbD --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
-$injD = (& python $pyInject $dbD 3600) -join "`n" | ConvertFrom-Json
+$injD = (& python $pyInject $dbD 3600) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'precondition: the newer-duplicate DB is split' ((Paths (Get-Db $dbD)).Count -eq 2) ''
 & { $ErrorActionPreference = 'Continue'; & $Exe index $upperRoot --db $dbD --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $d = Get-Db $dbD

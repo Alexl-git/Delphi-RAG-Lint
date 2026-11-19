@@ -46,7 +46,7 @@ if (-not (Test-Path $LibraryDb)) { Write-Host "FATAL: platform library not found
 $LibArgs = @('--library-db', $LibraryDb)
 
 Write-Host '== rules --json: fix_opt_in is false everywhere ==' -ForegroundColor Cyan
-$rules = @((& { $ErrorActionPreference = 'Continue'; & $ExeP rules --json 2>$null } | ConvertFrom-Json).rules)
+$rules = @((& { $ErrorActionPreference = 'Continue'; & $ExeP rules --json 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }).rules)
 Check 'catalog read' ($rules.Count -gt 100) "rules=$($rules.Count)"
 Check 'O1 every rule still carries the field' (@($rules | Where-Object { $null -eq $_.PSObject.Properties['fix_opt_in'] }).Count -eq 0) ''
 Check 'O2 no rule is opt-in' (@($rules | Where-Object { $_.fix_opt_in -eq $true }).Count -eq 0) ''

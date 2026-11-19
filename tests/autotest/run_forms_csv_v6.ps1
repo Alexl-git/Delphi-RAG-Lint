@@ -262,8 +262,8 @@ foreach ($case in @(
   $out2 = "$WorkDir\forms6-$($case.Name -replace ' ', '-').csv"
   $err2 = @(& { $ErrorActionPreference = 'Continue'; & $Exe forms-csv --project "$fx\Demo6.dproj" --db $db --output $out2 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" })
   Check "$($case.Name): forms-csv exits 0" ($LASTEXITCODE -eq 0)
-  $l2 = if (Test-Path $out2) { @([IO.File]::ReadAllText($out2) -split "`r`n" | Where-Object { $_ -ne '' }) } else { @() }
-  $rows2 = if ($l2.Count -gt 2) { @($l2[1..($l2.Count - 2)] | ConvertFrom-Csv -Header ($header -split ',')) } else { @() }
+  $l2 = @(if (Test-Path $out2) { @([IO.File]::ReadAllText($out2) -split "`r`n" | Where-Object { $_ -ne '' }) } else { @() })
+  $rows2 = @(if ($l2.Count -gt 2) { @($l2[1..($l2.Count - 2)] | ConvertFrom-Csv -Header ($header -split ',')) } else { @() })
   Check "$($case.Name): CSV still has every row" ($rows2.Count -eq $rows.Count) "got $($rows2.Count)"
   $p2 = $rows2 | Where-Object { $_.Form -ceq 'frmPopup6' } | Select-Object -First 1
   Cell $p2 'Notes' $popupNote "$($case.Name): frmPopup6"

@@ -215,7 +215,7 @@ function Reset-Fx {
 }
 function Param-Plan([string]$Unit, [int]$Line, [int]$Col, [string]$To) {
   $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe rename --kind param --in (Join-Path $Src $Unit) --line $Line --col $Col --to $To --db $Db --plan --json 2>$null } | Out-String)
-  $j = $null; try { $j = $o | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $o | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   return @{ Raw = $o; Json = $j; Lines = @($j.edits | ForEach-Object { [int]$_.line }) }
 }
 function Line-Of([string]$Unit, [string]$Exact, [int]$Nth = 1) {
@@ -229,7 +229,7 @@ function Run-Engine([string[]]$A) {
 }
 function Plan-Symbol([string]$Q, [string]$To) {
   $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe rename --kind symbol --name $Q --to $To --db $Db --library-db none --plan --json 2>$null } | Out-String)
-  $j = $null; try { $j = $o | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $o | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   return @{ Raw = $o; Json = $j; Kinds = @($j.refusals | ForEach-Object { $_.kind }) }
 }
 Reset-Fx
@@ -246,7 +246,7 @@ try {
   Check 'l2 --qname --dry-run: exit 0, 4 edits' ($r.Exit -eq 0 -and $r.Out -match 'Dry run: 4 edit') $r.Out
   Check 'l2 --qname --dry-run: no refusal notes' ($r.Out -notmatch 'note:') $r.Out
   $r = Run-Engine @('rename', '--kind', 'param', '--in', $A, '--line', "$LineR", '--col', '3', '--to', 'ARect', '--db', $Db, '--plan', '--json')
-  $j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   Check 'l3 --kind param: 4 edits, 0 undecided' ($j -and @($j.edits).Count -eq 4 -and @($j.refusals).Count -eq 0) $r.Out
   $r = Run-Engine @('rename', '--qname', 'LsA.TA.Go.R', '--to', 'ARect', '--db', $Db, '--library-db', 'none')
   Check 'l3b --qname applies, exit 0' ($r.Exit -eq 0) $r.Out

@@ -89,7 +89,7 @@ function Session([string[]]$frames, [string[]]$extra = @('--full-rules')) {
     -RedirectStandardError (Join-Path $WorkDir 'err.txt') -NoNewWindow -Wait | Out-Null
   $res = @{ diags = @(); byId = @{} }
   foreach ($mm in [regex]::Matches([IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json -AsHashtable } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json -AsHashtable | ForEach-Object { $_ } } catch { continue }
     if ($o['method'] -eq 'textDocument/publishDiagnostics' -and "$($o['params']['uri'])" -match 'uFx\.pas$') { $res.diags = @($o['params']['diagnostics']) }
     elseif ($o.ContainsKey('id') -and $o['id'] -gt 10) { $res.byId[[int]$o['id']] = $o }
   }
@@ -126,8 +126,8 @@ foreach ($c in $cases) {
   $r = Session @((OpenFrame $body), (ActionFrame 11 $line $first.diags))
   $reply = $r.byId[11]
   $act = FixOf $reply $c.rule
-  Check "$($c.rule): a Fix action is offered" ($null -ne $act) ("titles=$((Titles $reply) -join ' | ')")
-  Check "$($c.rule): Mark as reviewed still there" ((Titles $reply) -contains "Mark as reviewed: $($c.rule)")
+  Check "$($c.rule): a Fix action is offered" ($null -ne $act) ("titles=$((@(Titles $reply)) -join ' | ')")
+  Check "$($c.rule): Mark as reviewed still there" ((@(Titles $reply)) -contains "Mark as reviewed: $($c.rule)")
   if ($null -eq $act) { continue }
   Check "$($c.rule): kind quickfix" ($act['kind'] -eq 'quickfix')
   $edits = $act['edit']['changes'][$uri]
@@ -146,7 +146,7 @@ foreach ($c in $cases) {
   Check "$($c.rule): byte-identical to lint --fix --apply" ($cliText -ceq $applied) ("cli=[$(($cliText -split "`r`n")[$line])] lsp=[$(($applied -split "`r`n")[$line])]")
   # Fixed means gone ($copy holds the fixed bytes: the check above).
   $ea = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-  $relint = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $copy --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json
+  $relint = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $copy --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
   $ErrorActionPreference = $ea
   Check "$($c.rule): re-lint sees it gone, and still sees the others" ((@($relint | Where-Object { $_.rule -eq $c.rule }).Count -eq 0) -and (@($relint).Count -ge 1)) ("rules=$(@($relint | ForEach-Object { $_.rule }) -join ',')")
 }
@@ -157,7 +157,7 @@ $plain = Session @(OpenFrame $body) @()
 $plainHex = @($plain.diags | Where-Object { $_['code'] -eq 'mixed-case-hex' })
 Check 'plain lsp publishes mixed-case-hex' ($plainHex.Count -eq 1) "count=$($plainHex.Count)"
 $rp = Session @((OpenFrame $body), (ActionFrame 17 (LineOf $body 'Result:= $Ff') $plain.diags)) @()
-Check 'plain lsp offers Fix: mixed-case-hex' ($null -ne (FixOf $rp.byId[17] 'mixed-case-hex')) ("titles=$((Titles $rp.byId[17]) -join ' | ')")
+Check 'plain lsp offers Fix: mixed-case-hex' ($null -ne (FixOf $rp.byId[17] 'mixed-case-hex')) ("titles=$((@(Titles $rp.byId[17])) -join ' | ')")
 
 Write-Host ''
 Write-Host '(buffer) the edit follows the buffer, and a stale span declines' -ForegroundColor Cyan
@@ -167,13 +167,13 @@ if ($hexDiag.Count -eq 1) {
   # The same line in the buffer holds other text: the diagnostic is stale.
   $staleBody = $body.Replace('Result:= $Ff', 'Result:= 255')
   $rs = Session @((OpenFrame $staleBody), (ActionFrame 12 $line $hexDiag))
-  Check 'stale span: no Fix action' ($null -eq (FixOf $rs.byId[12] 'mixed-case-hex')) ("titles=$((Titles $rs.byId[12]) -join ' | ')")
+  Check 'stale span: no Fix action' ($null -eq (FixOf $rs.byId[12] 'mixed-case-hex')) ("titles=$((@(Titles $rs.byId[12])) -join ' | ')")
   Check 'stale span: answered, no error' ($rs.byId.ContainsKey(12) -and -not $rs.byId[12].ContainsKey('error'))
   # The file on disk still has the literal, the unsaved buffer spells it another way.
   $otherBody = $body.Replace('Result:= $Ff', 'Result:= $fF')
   $ro = Session @((OpenFrame $otherBody), (ActionFrame 13 $line $hexDiag))
   $acto = FixOf $ro.byId[13] 'mixed-case-hex'
-  Check 'the buffer is what the edit reads' ($acto -and @($acto['edit']['changes'][$uri])[0]['newText'] -ceq '$FF') ("titles=$((Titles $ro.byId[13]) -join ' | ')")
+  Check 'the buffer is what the edit reads' ($acto -and @($acto['edit']['changes'][$uri])[0]['newText'] -ceq '$FF') ("titles=$((@(Titles $ro.byId[13])) -join ' | ')")
   # The requested range decides.
   $rr = Session @((OpenFrame $body), (ActionFrame 14 ($line + 1) $hexDiag))
   Check 'another line requested: no Fix action for this finding' ($null -eq (FixOf $rr.byId[14] 'mixed-case-hex'))
@@ -185,13 +185,13 @@ $line = LineOf $body 'if Str = S then Str:= Str'
 $selfDiag = @{ range=@{ start=@{ line=$line; character=2 }; end=@{ line=$line; character=20 } }; severity=2; source='drag-lint'; code='self-assignment'; message='self' }
 $riskyDiag = @{ range=@{ start=@{ line=$line; character=2 }; end=@{ line=$line; character=20 } }; severity=2; source='drag-lint'; code='bare-except'; message='risky' }
 $ra = Session @((OpenFrame $body), (ActionFrame 15 $line @($selfDiag, $riskyDiag)))
-$ta = Titles $ra.byId[15]
+$ta = @(Titles $ra.byId[15])
 Check 'POSITIVE CONTROL: Mark as reviewed offered for the unlisted rule' ($ta -contains 'Mark as reviewed: self-assignment') ("titles=$($ta -join ' | ')")
 Check 'no Fix action for a rule off the list' (-not ($ta -contains 'Fix: self-assignment'))
 Check 'no Fix action for a risky fix' (-not ($ta -contains 'Fix: bare-except'))
 $foreign = @{ range=@{ start=@{ line=$line; character=2 }; end=@{ line=$line; character=20 } }; severity=2; source='DelphiLSP'; code='mixed-case-hex'; message='not ours' }
 $rf = Session @((OpenFrame $body), (ActionFrame 16 $line @(,$foreign)))
-Check 'a diagnostic another server published: no Fix action' (-not ((Titles $rf.byId[16]) -contains 'Fix: mixed-case-hex'))
+Check 'a diagnostic another server published: no Fix action' (-not ((@(Titles $rf.byId[16])) -contains 'Fix: mixed-case-hex'))
 
 Write-Host ''
 try { [IO.Directory]::Delete($WorkDir, $true) } catch { }

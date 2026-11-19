@@ -87,7 +87,7 @@ $src = @(
 $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $pas --rule type-name-prefix --json 2>$null }
 $json = ($raw | Where-Object { $_ -notmatch '^\(loaded' }) -join "`n"
 $found = @()
-if ($json.Trim().StartsWith('[')) { $found = @($json | ConvertFrom-Json) }
+if ($json.Trim().StartsWith('[')) { $found = @(($json | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
 $lines = @($found | Where-Object { $_.rule -eq 'type-name-prefix' } | ForEach-Object { [int]$_.start_line })
 Write-Host "type-name-prefix lines: $($lines -join ',')"
 
@@ -125,7 +125,7 @@ $sdb = Join-Path $work 'store.sqlite'
 $sraw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $spas --db $sdb --library-db (Join-Path $work 'no-such-library.sqlite') --rule type-name-prefix --json 2>$null }
 $sjson = ($sraw | Where-Object { $_ -notmatch '^\(loaded' }) -join "`n"
 $sfound = @()
-if ($sjson.Trim().StartsWith('[')) { $sfound = @($sjson | ConvertFrom-Json) }
+if ($sjson.Trim().StartsWith('[')) { $sfound = @(($sjson | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
 $sf = @($sfound | Where-Object { $_.rule -eq 'type-name-prefix' })
 $slines = @($sf | ForEach-Object { [int]$_.start_line })
 Write-Host "store-backed type-name-prefix lines: $($slines -join ',')"
@@ -160,7 +160,7 @@ function ReadFindings($rawLines) {
   $j = ($rawLines | Where-Object { $_ -notmatch '^\(loaded' -and $_ -notmatch '^lint-all:' }) -join "`n"
   $b = $j.IndexOf('[')
   if ($b -lt 0) { return @() }
-  try { return @(($j.Substring($b) | ConvertFrom-Json) | Where-Object { $_.rule -eq 'type-name-prefix' }) } catch { return @() }
+  try { return @(($j.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $_.rule -eq 'type-name-prefix' }) } catch { return @() }
 }
 $asrc = [IO.File]::ReadAllLines($apas)
 function LineOfDecl([string]$name) {
@@ -181,26 +181,26 @@ function AssertSet([string]$tag, $fs) {
   }
   function None($name) { $m = @($fs | Where-Object { [int]$_.start_line -eq $L[$name] }); return @(($m.Count -eq 0), "$($m.Count) finding(s)") }
   $gap = '^Ancestor "'
-  $r = None 'EKeyViolation'; Check "$tag-B1 EKeyViolation(EDatabaseError): no finding (library hop)" $r[0] $r[1]
-  $r = One 'KeyViolation' 'info' 'the "E" prefix'; Check "$tag-B2 KeyViolation(EDatabaseError): asks E (positive control)" $r[0] $r[1]
-  $r = None 'EBase'; Check "$tag-B3a EBase(EDatabaseError): no finding" $r[0] $r[1]
-  $r = None 'EDerived'; Check "$tag-B3b EDerived(EBase): no finding (two-level chain)" $r[0] $r[1]
-  $r = One 'Widget' 'info' 'the "T" prefix'; Check "$tag-B4 Widget(TObject): asks T" $r[0] $r[1]
-  $r = One 'EWidget' 'info' 'the "T" prefix'; Check "$tag-B5 EWidget(TLibThing): asks T (E is no exemption)" $r[0] $r[1]
-  $r = One 'Foo' 'error' $gap; Check "$tag-B6 Foo(TVendorThing): one error gap finding, no prefix finding" $r[0] $r[1]
-  $r = One 'Vendor' 'error' $gap; Check "$tag-B7 Vendor(EVendorBase): one error gap finding" $r[0] $r[1]
-  $r = One 'EVendor' 'error' $gap; Check "$tag-B8 EVendor(EVendorBase): one error gap finding" $r[0] $r[1]
-  $r = One 'Plain' 'info' 'the "T" prefix'; Check "$tag-B9 Plain = class: asks T" $r[0] $r[1]
-  $r = One 'Svc' 'info' 'the "I" prefix'; Check "$tag-B10 Svc = interface: asks I" $r[0] $r[1]
-  $r = One 'Rec' 'info' '^Record .*the "T" prefix'; Check "$tag-B11 Rec = record: asks T, says Record" $r[0] $r[1]
+  $r = @(None 'EKeyViolation'); Check "$tag-B1 EKeyViolation(EDatabaseError): no finding (library hop)" $r[0] $r[1]
+  $r = @(One 'KeyViolation' 'info' 'the "E" prefix'); Check "$tag-B2 KeyViolation(EDatabaseError): asks E (positive control)" $r[0] $r[1]
+  $r = @(None 'EBase'); Check "$tag-B3a EBase(EDatabaseError): no finding" $r[0] $r[1]
+  $r = @(None 'EDerived'); Check "$tag-B3b EDerived(EBase): no finding (two-level chain)" $r[0] $r[1]
+  $r = @(One 'Widget' 'info' 'the "T" prefix'); Check "$tag-B4 Widget(TObject): asks T" $r[0] $r[1]
+  $r = @(One 'EWidget' 'info' 'the "T" prefix'); Check "$tag-B5 EWidget(TLibThing): asks T (E is no exemption)" $r[0] $r[1]
+  $r = @(One 'Foo' 'error' $gap); Check "$tag-B6 Foo(TVendorThing): one error gap finding, no prefix finding" $r[0] $r[1]
+  $r = @(One 'Vendor' 'error' $gap); Check "$tag-B7 Vendor(EVendorBase): one error gap finding" $r[0] $r[1]
+  $r = @(One 'EVendor' 'error' $gap); Check "$tag-B8 EVendor(EVendorBase): one error gap finding" $r[0] $r[1]
+  $r = @(One 'Plain' 'info' 'the "T" prefix'); Check "$tag-B9 Plain = class: asks T" $r[0] $r[1]
+  $r = @(One 'Svc' 'info' 'the "I" prefix'); Check "$tag-B10 Svc = interface: asks I" $r[0] $r[1]
+  $r = @(One 'Rec' 'info' '^Record .*the "T" prefix'); Check "$tag-B11 Rec = record: asks T, says Record" $r[0] $r[1]
   Check "$tag total finding count is 9 (nothing extra)" (@($fs).Count -eq 9) "count=$(@($fs).Count)"
 }
-$bf = ReadFindings (& { $ErrorActionPreference = 'Continue'; & $Exe lint $apas --db $appDb --library-db $libDb --rule type-name-prefix --json 2>$null })
+$bf = @(ReadFindings (& { $ErrorActionPreference = 'Continue'; & $Exe lint $apas --db $appDb --library-db $libDb --rule type-name-prefix --json 2>$null }))
 AssertSet 'B' $bf
 
 Write-Host ''
 Write-Host 'Section B-all: lint-all --db <app> --db <lib> (parity with Section B)'
-$af = ReadFindings (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $appDb --db $libDb --rule type-name-prefix --json 2>$null })
+$af = @(ReadFindings (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $appDb --db $libDb --rule type-name-prefix --json 2>$null }))
 AssertSet 'BA' $af
 
 # ---------------------------------------------------------------------------

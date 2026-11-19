@@ -90,7 +90,7 @@ function RunLsp([string]$Engine, [string]$PasFile, [string[]]$Flags, [string]$Ta
   [IO.File]::WriteAllText($in, ($msgs -join ''), (New-Object Text.UTF8Encoding($false)))
   $a = @('lsp') + $Flags
   $p = Start-Process $Engine -ArgumentList $a -WorkingDirectory $WorkDir `
-         -RedirectStandardInput $in -RedirectStandardOutput $so -RedirectStandardError $se -NoNewWindow -Wait -PassThru
+         -RedirectStandardInput $in -RedirectStandardOutput $so -RedirectStandardError $se -NoNewWindow -Wait -PassThru; $null = $p.Handle
   $out = if (Test-Path $so) { [IO.File]::ReadAllText($so) } else { '' }
   $err = if (Test-Path $se) { [IO.File]::ReadAllText($se) } else { '' }
   $codes = @([regex]::Matches($out, '"code":"([a-z0-9\-]+)"') | ForEach-Object { $_.Groups[1].Value })

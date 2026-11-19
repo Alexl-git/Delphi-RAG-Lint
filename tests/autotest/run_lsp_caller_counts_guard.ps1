@@ -128,7 +128,7 @@ function CountsFor([string]$path, [string[]]$dbs = @($db)) {
     -RedirectStandardInput $inF -RedirectStandardOutput $outF `
     -RedirectStandardError (Join-Path $WorkDir 'err.txt') -NoNewWindow -Wait | Out-Null
   foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     # ,@(...) -- PowerShell UNROLLS an empty array on return, so a correct
     # `{"counts":[]}` reply would arrive here as $null and read as 'the server
     # errored'. The comma operator is what keeps 'answered with nothing'

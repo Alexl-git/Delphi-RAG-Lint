@@ -44,7 +44,7 @@ $script:N = 0
 function Build-Lab([string]$Root) {
   $bat = "$Root.bld.bat"
   [IO.File]::WriteAllText($bat, "@echo off`r`ncall `"$RsVars`"`r`ncd /D `"$Root`"`r`nmsbuild /t:Build /p:Config=Debug /p:Platform=Win64 /v:minimal ElemRen.dproj`r`nexit /b %ERRORLEVEL%`r`n", $Ascii)
-  $p = Start-Process cmd.exe -ArgumentList "/c `"$bat`"" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$Root.bld.log" -RedirectStandardError "$Root.bld.err"
+  $p = Start-Process cmd.exe -ArgumentList "/c `"$bat`"" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$Root.bld.log" -RedirectStandardError "$Root.bld.err"; $null = $p.Handle
   return ($p.ExitCode -eq 0)
 }
 function Stdout-Of([string]$Root) {
@@ -65,7 +65,7 @@ function New-Lab {
 function Plan($P, [string]$Q, [string]$To) {
   Push-Location $WorkDir
   try { $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe rename --kind symbol --name $Q --to $To --db $P.Db --library-db $script:Lib --plan --json 2>$null } | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
-  $j = $null; try { $j = $o | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $o | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   return @{ Exit = $c; Json = $j; Out = $o; Kinds = @($j.refusals | ForEach-Object { $_.kind }); Edits = @($j.edits) }
 }
 function Apply($P, [string]$Q, [string]$To) {
@@ -77,7 +77,7 @@ function Apply($P, [string]$Q, [string]$To) {
 function Sql($P, [string]$Query) {
   Push-Location $WorkDir
   try { $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe sql --db $P.Db --query $Query --json 2>$null } | Out-String) } finally { Pop-Location }
-  $j = $null; try { $j = $o | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $o | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   if (-not $j) { return , @() }
   $names = @($j.columns | ForEach-Object { $_.name })
   $out = foreach ($r in @($j.rows)) {

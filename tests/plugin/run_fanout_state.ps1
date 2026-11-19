@@ -97,7 +97,7 @@ $lines = @(
 $buildLog = Join-Path $WorkDir 'build.log'
 $p = Start-Process cmd.exe -ArgumentList "/c","`"$bat`"" `
        -RedirectStandardOutput $buildLog -RedirectStandardError "$buildLog.err" `
-       -NoNewWindow -Wait -PassThru
+       -NoNewWindow -Wait -PassThru; $null = $p.Handle
 $buildOut = Get-Content $buildLog -Raw
 if ($buildOut -notmatch 'BUILD_EXITCODE=0') {
   Write-Host 'FATAL: compile failed' -ForegroundColor Red

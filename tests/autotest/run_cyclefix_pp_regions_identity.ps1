@@ -63,7 +63,7 @@ function Get-Plan($P, [string]$Mode, [string]$With = $Exe) {
     if ($Mode) { $env:DRAGLINT_CYCLES_PP = $Mode } else { Remove-Item Env:\DRAGLINT_CYCLES_PP -ErrorAction SilentlyContinue }
     $null = Start-Process -FilePath $With -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
       -ArgumentList @('cycles', '--plan', '--project', ('"' + $P.Dproj + '"'), '--db', ('"' + $P.Db + '"'), '--library-db', 'none') `
-      -RedirectStandardOutput $o -RedirectStandardError $e
+      -RedirectStandardOutput $o -RedirectStandardError $e; $null = $null.Handle
   } finally { if ($null -ne $old) { $env:DRAGLINT_CYCLES_PP = $old } else { Remove-Item Env:\DRAGLINT_CYCLES_PP -ErrorAction SilentlyContinue } }
   return @{ Out = [Convert]::ToBase64String([IO.File]::ReadAllBytes($o)); Text = [IO.File]::ReadAllText($o); Err = [IO.File]::ReadAllText($e) }
 }

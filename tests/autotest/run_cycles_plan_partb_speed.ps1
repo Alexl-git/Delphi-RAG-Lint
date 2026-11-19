@@ -44,7 +44,7 @@ $env:DRAGLINT_CYCLE_TIMING = '1'
 $cmdArgs = @('cycles', '--plan', '--ctor-wide', '--project', $Project, '--db', $Db)
 if (Test-Path $LibDb) { $cmdArgs += @('--library-db', $LibDb) }
 $p = Start-Process -FilePath $Exe -ArgumentList $cmdArgs -NoNewWindow -Wait -PassThru `
-  -RedirectStandardOutput $out -RedirectStandardError $err
+  -RedirectStandardOutput $out -RedirectStandardError $err; $null = $p.Handle
 [Environment]::SetEnvironmentVariable('DRAGLINT_CYCLE_TIMING', $null)
 Lane-Check ($p.ExitCode -eq 0) "cycles --plan exit code 0 (got $($p.ExitCode))"
 $plan = [IO.File]::ReadAllText($out)

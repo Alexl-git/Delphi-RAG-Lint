@@ -95,7 +95,7 @@ end.
 '@
 
 function Scalar([string]$Sql) {
-  $j = (& $Exe sql --query $Sql --db $db --json) | Out-String | ConvertFrom-Json
+  $j = (& $Exe sql --query $Sql --db $db --json) | Out-String | ConvertFrom-Json | ForEach-Object { $_ }
   return $j.rows[0][0]
 }
 

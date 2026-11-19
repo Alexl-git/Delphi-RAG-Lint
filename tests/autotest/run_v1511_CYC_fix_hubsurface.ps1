@@ -68,14 +68,14 @@ function Invoke-Fix($P, [string[]]$Extra = @(), [hashtable]$EnvVars = @{}) {
   $errFile = "$($P.Root).fix$script:N.err"
   foreach ($k in $EnvVars.Keys) { [Environment]::SetEnvironmentVariable($k, $EnvVars[$k]) }
   Push-Location $WorkDir
-  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @a 2> $errFile } | Out-String); $code = $LASTEXITCODE }
+  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); $input | & $Exe @a 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String); $code = $LASTEXITCODE }
   finally {
     Pop-Location
     foreach ($k in $EnvVars.Keys) { [Environment]::SetEnvironmentVariable($k, $null) }
   }
   $err = if (Test-Path $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
   $doc = $null
-  if ($Extra -contains 'json') { try { $doc = $out | ConvertFrom-Json } catch { $doc = $null } }
+  if ($Extra -contains 'json') { try { $doc = $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $doc = $null } }
   return @{ Exit = $code; Out = $out; Err = $err; Doc = $doc }
 }
 function Has([string]$Text, [string]$Literal) { return $Text.Contains($Literal) }
@@ -137,7 +137,7 @@ try {
 
   Push-Location $WorkDir
   try { $js = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe cycles --causes --format json --hub-surface --project $Ctl.Dproj --db $Ctl.Db --library-db none 2>$null } | Out-String); $jsCode = $LASTEXITCODE } finally { Pop-Location }
-  $fx = try { @($js | ConvertFrom-Json)[0].fix } catch { $null }
+  $fx = try { @(($js | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })[0].fix } catch { $null }
   Check 'f8 --causes json --hub-surface: the fix commands are the gated cycles --fix --hub-surface' (($jsCode -eq 0) -and ($null -ne $fx) -and
     ($fx.part -eq 'r3') -and ($fx.dry_run -match '^drag-lint cycles --fix --hub-surface --project ".*HubSurface\.dproj" --db ".*" --cycle 1$') -and
     ($fx.apply -match '^drag-lint cycles --fix --hub-surface --project .* --cycle 1 --apply$')) "exit=$jsCode $js"

@@ -52,7 +52,7 @@ function Write-Ascii([string]$Path, [string]$Body) {
 # sql --json rows are POSITIONAL arrays: map them onto columns[].name.
 function SqlRows([string]$Db, [string]$Query) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query $Query --json 2>$null } | Out-String
-  $j = $raw | ConvertFrom-Json
+  $j = $raw | ConvertFrom-Json | ForEach-Object { $_ }
   $names = @($j.columns | ForEach-Object { $_.name })
   $out = @()
   foreach ($r in @($j.rows)) {
@@ -176,7 +176,7 @@ Check 'fixture param symbols unchanged (6: Param1-3, Callback, P, Q)' ($params.C
 # --- (c) end to end: unused-unit-in-uses --------------------------------------
 $lintRaw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $prjDb --db $libDb --rule unused-unit-in-uses --json 2>$null } | Out-String
 $findings = @()
-try { $findings = @($lintRaw | ConvertFrom-Json) } catch { $findings = @() }
+try { $findings = @(($lintRaw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $findings = @() }
 $uuiu = @($findings | Where-Object { $_.rule -eq 'unused-unit-in-uses' })
 $typesHits  = @($uuiu | Where-Object { $_.message -match "'impl_only_routine_type_uses_types'" })
 $unusedHits = @($uuiu | Where-Object { $_.message -match "'impl_only_routine_type_uses_unused'" })

@@ -58,7 +58,7 @@ function Get-Line([string]$File, [string]$Text) {
 }
 function Invoke-Sql([string]$Db, [string]$Query) {
   $txt = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $Db --query $Query --json --limit 0 2>$null }) -join "`n"
-  $doc = $txt | ConvertFrom-Json
+  $doc = $txt | ConvertFrom-Json | ForEach-Object { $_ }
   $cols = @($doc.columns | ForEach-Object { $_.name })
   $out = foreach ($r in @($doc.rows)) {
     $o = [ordered]@{}

@@ -90,7 +90,7 @@ function Get-Cycles([string]$Db, [string]$Tag, [string[]]$Extra) {
   try {
     $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
       -ArgumentList (@('cycles', '--db', ('"' + $Db + '"')) + $Extra + $(if ($Extra -contains '--plan') { @('--library-db', 'none') } else { @() })) `
-      -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "cycles-$Tag.err")
+      -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "cycles-$Tag.err"); $null = $p.Handle
   } finally {
     $env:DRAGLINT_TEST_DUMP_PLAN = $null
   }

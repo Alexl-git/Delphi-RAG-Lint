@@ -88,7 +88,7 @@ Check 'index' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 # sql --json rows are POSITIONAL arrays: name_text, kind, start_line, receiver_text
 $q = "select name_text, kind, start_line, receiver_text from refs where name_text in ('M','N','K','L') order by start_line, start_col"
-$rows = @((& { $ErrorActionPreference = 'Continue'; & $exePath sql --query $q --db $db --json 2>$null } | ConvertFrom-Json).rows)
+$rows = @((& { $ErrorActionPreference = 'Continue'; & $exePath sql --query $q --db $db --json 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }).rows)
 $got = ($rows | ForEach-Object { '{0}:{1}:{2}:{3}' -f $_[0], $_[1], $_[2], $_[3] }) -join ' '
 Write-Host "  rows: $got"
 Check 'positive control F().L (G6) has one row' (@($rows | Where-Object { $_[0] -eq 'L' -and $_[2] -eq 40 }).Count -eq 1)
