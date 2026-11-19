@@ -100,7 +100,7 @@ type
       /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.ParseLoose"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      class function ParseOneline(const ARaw: string; AKind: TDocCommentKind): TParsedDoc; static;
+      class function ParseOneline(const ARaw: string): TParsedDoc; static;
       /// <param name="ARaw"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->TParsedDoc -- Observed: ParseOneline(ARaw,
       /// dckLooseLine).</returns>
@@ -184,7 +184,7 @@ type
 
       /// <param name="ARegion"><!-- drag-lint:auto type -->const TDocCommentRegion</param>
       /// <returns><!-- drag-lint:auto -->TParsedDoc -- Observed:
-      /// ParseXmlDoc(ARegion.RawText); ParseOneline(ARegion.RawText, ARegion.Kind);
+      /// ParseXmlDoc(ARegion.RawText); ParseOneline(ARegion.RawText);
       /// ParsePasDoc(ARegion.RawText); ParseLoose (ARegion.RawText).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -963,7 +963,7 @@ begin
   end; // try
 end; // begin
 
-class function TDocCommentParser.ParseOneline(const ARaw: string; AKind: TDocCommentKind): TParsedDoc;
+class function TDocCommentParser.ParseOneline(const ARaw: string): TParsedDoc;
 var
   Lines: TArray<string>;
   Acc  : TStringBuilder;
@@ -1038,7 +1038,7 @@ begin
   end;
 
   // Treat like oneline
-  Result:= ParseOneline(ARaw, dckLooseLine);
+  Result:= ParseOneline(ARaw);
   Result.Format:= dfLoose;
 end; // function
 
@@ -1128,11 +1128,11 @@ begin
         // silent delete, and no worse than every OTHER unrecognized-tag
         // shape (e.g. a stray '<value>') already gets today.
         if not HasAnyRecognizedTag(Result) then
-          Result:= ParseOneline(ARegion.RawText, ARegion.Kind);
+          Result:= ParseOneline(ARegion.RawText);
       end
-      else Result:= ParseOneline(ARegion.RawText, ARegion.Kind);
+      else Result:= ParseOneline(ARegion.RawText);
     end;
-    dckDoubleSlashOne, dckTripleSlashOne: Result:= ParseOneline(ARegion.RawText, ARegion.Kind);
+    dckDoubleSlashOne, dckTripleSlashOne: Result:= ParseOneline(ARegion.RawText);
     dckPasDocCurly, dckPasDocParen : Result:= ParsePasDoc(ARegion.RawText);
     dckLooseLine  , dckLooseBlock  : Result:= ParseLoose (ARegion.RawText);
     else FillChar(Result, SizeOf(Result), 0);

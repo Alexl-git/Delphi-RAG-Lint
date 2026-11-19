@@ -291,9 +291,7 @@ function PPResolveInclude(const AName, ABaseDir: string; ANearSearch: Boolean;
 implementation
 
 uses
-  System.Types,                 // TStringDynArray (TDirectory.GetDirectories)
   System.IOUtils,
-  System.Generics.Defaults,     // default comparer for TArray.Sort<string>
   DRagLint.Preprocess.Lexer,
   DRagLint.Preprocess.Expr,
   DRagLint.Preprocess.Profile,  // dl:unit DRagLint.Preprocess.Profile accepted -- the one constant that says what the newest target is (YADF6)

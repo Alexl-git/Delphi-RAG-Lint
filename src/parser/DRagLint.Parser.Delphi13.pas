@@ -443,9 +443,7 @@ end;
 
 procedure TWalkState.EmitUnitUse(const AUnitName, AInPath: string; ASection: TUnitUseSection; const ARangeNode: TTSNode);
 var
-  U     : TUnitUse;
-  Stem  : string  ;
-  DotPos: Integer ;
+  U: TUnitUse;
 begin
   if AUnitName = '' then Exit;
   U:= Default(TUnitUse); { N-06: OriginPath '' / IncludeLine 0 = inline }
@@ -458,10 +456,6 @@ begin
   U.EndLine  := Integer(ARangeNode.EndPoint  .row   ) + 1;
   U.EndCol   := NodeEndCharCol(ARangeNode, Source);
   UsesEntries.Add(U);
-  { Suppress hint: Stem reserved for a future normalize-here path. }
-  Stem:= AUnitName;
-  DotPos:= LastDelimiter('.', Stem);
-  if DotPos > 0 then Stem:= Copy(Stem, DotPos + 1, MaxInt);
 end; // procedure
 
 procedure TWalkState.EmitRef(const AKind, ANameText: string; const ARangeNode: TTSNode; const AReceiver: string);
@@ -1781,7 +1775,7 @@ end;
 // fact into it (spec's "e.g. modifiers = 'default'") would make CLI's
 // IsValidTarget -- `Vis in ('published','public')` -- silently drop every
 // default-section member from proptree. The fact travels in its own column.
-function VisibilityOfSection(const ANode: TTSNode; const ASource: TBytes; out AExplicit: Boolean): string;
+function VisibilityOfSection(const ANode: TTSNode; out AExplicit: Boolean): string;
 var
   i       : Integer;
   C       : TTSNode;
@@ -3896,7 +3890,7 @@ begin
   if NodeType = 'declSection' then
   begin
     var SecExplicit: Boolean;
-    AState.CurrentVisibility := VisibilityOfSection(ANode, AState.Source, SecExplicit);
+    AState.CurrentVisibility := VisibilityOfSection(ANode, SecExplicit);
     AState.CurrentVisExplicit:= SecExplicit;
     for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
     Exit;
