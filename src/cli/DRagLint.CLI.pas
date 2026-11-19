@@ -322,7 +322,7 @@ const
   /// tests\autotest\run_help_env_table.ps1: every quoted 'DRAGLINT_*' literal
   /// under src\ must be a Name here and --help must print every Name. A new
   /// variable is added HERE in the same change, or that guard fails.</remarks>
-  ENV_VARS_HELP: array[0..85] of TEnvVarHelp = (
+  ENV_VARS_HELP: array[0..87] of TEnvVarHelp = (
     (Name: 'DRAGLINT_BUSY_TIMEOUT_MS';                Purpose: 'writer busy timeout in ms (overrides the built-in default; a non-negative integer)'),
     (Name: 'DRAGLINT_CHARTS_ALLOW_LIVE_DB';           Purpose: 'charts: lets CloneDb accept a non-clone (live) database'),
     (Name: 'DRAGLINT_CHARTS_DIR';                     Purpose: 'charts: folder of the charts scripts'),
@@ -361,6 +361,7 @@ const
     (Name: 'DRAGLINT_NO_AUTOCREATE';                  Purpose: '1 = a query verb never builds a missing project index on first use'),
     (Name: 'DRAGLINT_NO_CLOSURE_CACHE';               Purpose: 'any value makes index --project walk the compile closure cold: no stored unit scan is read or written (A/B)'),
     (Name: 'DRAGLINT_NO_FILE_FACTS';                  Purpose: 'forces the text read of a .dfm instead of the stored file facts'),
+    (Name: 'DRAGLINT_NO_SCOPED_PURITY';               Purpose: 'any value makes the purity stage re-derive every routine, also after a scoped resolve pass (A/B)'),
     (Name: 'DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE';     Purpose: '1|on|yes|true switches off the scoped receiver closure of the resolve pass (A/B)'),
     (Name: 'DRAGLINT_NO_SCOPED_RESOLVE';              Purpose: 'any value switches the scoped resolve pass off (whole-database A/B)'),
     (Name: 'DRAGLINT_PEER_TRACE';                     Purpose: 'path of a file that receives a trace of every sibling remap (unset = no trace)'),
@@ -394,6 +395,7 @@ const
     (Name: 'DRAGLINT_TEST_METRIC_ALGO_BUMP';          Purpose: 'test hook: bumps the routine-metric marker hash version'),
     (Name: 'DRAGLINT_TEST_REINDEX_TIMEOUT_MS';       Purpose: 'test hook: reindex timeout'),
     (Name: 'DRAGLINT_TEST_CLOSURE_CACHE_NO_INCLUDES'; Purpose: 'test hook: a stored closure scan is validated by the unit stamp only, not its include files (an unsound key)'),
+    (Name: 'DRAGLINT_TEST_PURITY_SEEDS_ONLY';         Purpose: 'test hook: 1 = a scoped purity run does not follow its seeds to their callers (an unsound scope)'),
     (Name: 'DRAGLINT_TEST_RESOLVE_DELAY_MS';          Purpose: 'test hook: delay in the resolve pass'),
     (Name: 'DRAGLINT_TEST_SCRATCH_PID';               Purpose: 'test hook: scratch-folder owner pid'),
     (Name: 'DRAGLINT_TEST_STORE_CLOSE_GRACE_MS';      Purpose: 'test hook: store-close grace period'),
@@ -5488,6 +5490,25 @@ begin
   end;
 end;
 
+{ INCR18 step 4: the library effects store as the scoped purity run identifies it -- the path,
+  and the size and write time of the database file and of its -wal (a library index that was
+  written since shows in one of the two). }
+function PurityLibraryStamp(const ALibPath: string): string;
+  function FileStamp(const APath: string): string;
+  var
+    SR: TSearchRec;
+  begin
+    if FindFirst(APath, faAnyFile, SR) <> 0 then Exit('-');
+    try
+      Result:= Format('%d|%s', [SR.Size, FormatDateTime('yyyymmddhhnnsszzz', SR.TimeStamp)]);
+    finally
+      FindClose(SR);
+    end;
+  end;
+begin
+  Result:= LowerCase(ALibPath) + '|' + FileStamp(ALibPath) + '|' + FileStamp(ALibPath + '-wal');
+end;
+
 procedure RunPurityStage(const AStore: ISymbolStore);
 begin
   var LibPath: string:= PurityLibraryPath(AStore);
@@ -5495,7 +5516,12 @@ begin
   begin
     var Ok: Boolean;
     var Lib: ISymbolStore:= OpenReadOnlyStore(LibPath, Ok, True);
-    if Ok then TPurityStage.LibraryEffects:= Lib
+    if Ok then
+    begin
+      TPurityStage.LibraryEffects:= Lib;
+      { INCR18 step 4: what a scoped purity run compares with the previous run's library. }
+      TPurityStage.LibraryEffectsStamp:= PurityLibraryStamp(LibPath);
+    end
     else Writeln(ErrOutput, 'NOTE: purity: the library for effects could not be opened: ', LibPath);
     TPurityStage.LibraryEffectsTrustFree:= GetEnvironmentVariable('DRAGLINT_LIBRARY_EFFECTS_TRUST') = '1';
   end;
@@ -5503,6 +5529,7 @@ begin
     TPurityStage.Run(AStore);
   finally
     TPurityStage.LibraryEffects:= nil;
+    TPurityStage.LibraryEffectsStamp:= '';
     TPurityStage.LibraryEffectsTrustFree:= False;
   end;
 end;

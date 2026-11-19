@@ -32,6 +32,17 @@
   DRAGLINT_TEST_CLOSURE_CACHE_NO_INCLUDES=1 (unit stamp only, the key main declined) must
   leave a stale closure and diff rows on the nested-include edit.
 
+  PART 1c (step 4, scoped purity; an 8-unit fixture): after a scoped resolve pass the purity
+  stage re-derives only what the pass can have moved and keeps every other stored verdict.
+  Edits: a callee gains a global write (callers two files away must flip), a called routine is
+  withdrawn, a base class gains a field a descendant writes, a body edit that moves no verdict,
+  a procedural type appears (the run must fall back to the whole database and say why). Per edit
+  S (scoped purity) = P (DRAGLINT_NO_SCOPED_PURITY) = F (fresh full index), 0 diff rows over
+  symbol_facts and every other table. POSITIVE CONTROL: the seam
+  DRAGLINT_TEST_PURITY_SEEDS_ONLY=1 (callers not followed) must leave a stale verdict and diff
+  rows. Part 1 and Part 2 assert the same equality on their own edits: their S run now runs
+  purity scoped and their W run whole.
+
   PART 2 (drag-lint's own CLI project; OPT-IN with -Dl -- the battery's run_*.ps1 discovery runs
   this script without arguments, and Part 2 costs a full index plus four whole-database resolves,
   30 minutes and more): a copy of src\ is indexed in full, then
@@ -375,6 +386,9 @@ try {
 
     Check "$($sc.Name): run S took the SCOPED path" ($outS -match 'starting SCOPED pass') ($outS -split "`n" | Select-String 'calls ' | Select-Object -First 4 | Out-String)
     Check "$($sc.Name): run W took the WHOLE-DB path" ($outW -match 'starting WHOLE-DB pass') ''
+    # Step 4: S also ran the purity stage SCOPED and W ran it whole, so the two 0-row diffs below
+    # compare scoped purity with whole purity and with a full reindex (symbol_facts included).
+    Check "$($sc.Name): run S re-derived a purity scope, run W every routine" ($outS -match 'resolve: purity scope -- \d+ of \d+ routine\(s\) re-derived' -and $outW -notmatch 'resolve: purity scope -- \d+ of') ($outS -split "`n" | Select-String 'purity' | Out-String)
     $d = Compare-Db $dbS $dbW
     Check "$($sc.Name): scoped = whole-database resolve (0 diff rows)" $d.Same $d.Text
     $d = Compare-Db $dbS $dbF
@@ -389,6 +403,316 @@ try {
       $d = Compare-Db $dbC $dbW
       Check "$($sc.Name): POSITIVE CONTROL -- a files-only scope (test seam) took the SCOPED path" ($outC -match 'starting SCOPED pass') ''
       Check "$($sc.Name): POSITIVE CONTROL -- a files-only scope shows diff rows" (-not $d.Same -and $d.Code -eq 1) "index_db_diff exit $($d.Code): the diff cannot see a lost edge`n      $($d.Text)"
+    }
+    [System.IO.File]::Copy($keep, $file, $true)
+  }
+} finally { Pop-Location }
+
+# ------------------------------------------------------------------ PART 1c: scoped purity (step 4)
+# After a SCOPED call-target pass the purity stage re-derives only what that pass can have moved
+# (the rewritten files' routines, the routines around a ref whose binding changed, the methods of
+# a class whose own or inherited members can have moved, and every transitive caller) and keeps
+# every other stored verdict. Per edit, three databases from the same edited tree:
+#   S  scoped resolve + scoped purity       P  scoped resolve + DRAGLINT_NO_SCOPED_PURITY=1
+#   F  fresh full index
+# Required: S = P and S = F, 0 diff rows (index_db_diff compares symbol_facts.effect_free /
+# effect_summary / effect_witness with every other table). POSITIVE CONTROL: the test seam
+# DRAGLINT_TEST_PURITY_SEEDS_ONLY=1 (seeds re-derived, callers not followed) must show diff rows.
+$psrc = Join-Path $scratch 'src_pur'
+New-Item -ItemType Directory -Path $psrc | Out-Null
+
+Write-Ascii (Join-Path $psrc 'uPurA.pas') @'
+unit uPurA;
+
+interface
+
+var
+  GCount: Integer;
+
+function Leaf(AValue: Integer): Integer;
+function Mid(AValue: Integer): Integer;
+function Gone(AValue: Integer): Integer;
+
+implementation
+
+function Leaf(AValue: Integer): Integer;
+begin
+  Result := AValue + 1;
+end;
+
+function Mid(AValue: Integer): Integer;
+begin
+  Result := Leaf(AValue) * 2;
+end;
+
+function Gone(AValue: Integer): Integer;
+begin
+  GCount := AValue;
+  Result := AValue;
+end;
+
+end.
+'@
+
+Write-Ascii (Join-Path $psrc 'uPurB.pas') @'
+unit uPurB;
+
+interface
+
+function Top(AValue: Integer): Integer;
+function Over(AValue: Integer): Integer;
+function UsesGone(AValue: Integer): Integer;
+function Apart(AValue: Integer): Integer;
+
+implementation
+
+uses
+  uPurA;
+
+function Top(AValue: Integer): Integer;
+begin
+  Result := Mid(AValue) + 1;
+end;
+
+function Over(AValue: Integer): Integer;
+begin
+  Result := Top(AValue) + 1;
+end;
+
+function UsesGone(AValue: Integer): Integer;
+begin
+  Result := Gone(AValue);
+end;
+
+function Apart(AValue: Integer): Integer;
+begin
+  Result := AValue * 3;
+end;
+
+end.
+'@
+
+Write-Ascii (Join-Path $psrc 'uPurC.pas') @'
+unit uPurC;
+
+interface
+
+function Far(AValue: Integer): Integer;
+
+implementation
+
+uses
+  uPurB;
+
+function Far(AValue: Integer): Integer;
+begin
+  Result := Over(AValue);
+end;
+
+end.
+'@
+
+# A call cycle in a file the edits never touch: its witnesses must come out the same text
+# whether the cycle is re-derived alone (scoped) or with everything else (whole).
+Write-Ascii (Join-Path $psrc 'uPurCyc.pas') @'
+unit uPurCyc;
+
+interface
+
+function Ping(AValue: Integer): Integer;
+function Pong(AValue: Integer): Integer;
+
+implementation
+
+uses
+  uPurA;
+
+function Ping(AValue: Integer): Integer;
+begin
+  if AValue > 0 then Result := Pong(AValue - 1)
+  else Result := 0;
+end;
+
+function Pong(AValue: Integer): Integer;
+begin
+  if AValue > 0 then Result := Ping(AValue - 1)
+  else Result := Leaf(AValue);
+end;
+
+end.
+'@
+
+Write-Ascii (Join-Path $psrc 'uPurBase.pas') @'
+unit uPurBase;
+
+interface
+
+type
+  TPurBase = class
+  private
+    FSeen: Integer;
+  public
+    function Seen: Integer;
+  end;
+
+implementation
+
+function TPurBase.Seen: Integer;
+begin
+  Result := FSeen;
+end;
+
+end.
+'@
+
+Write-Ascii (Join-Path $psrc 'uPurKid.pas') @'
+unit uPurKid;
+
+interface
+
+uses
+  uPurBase;
+
+type
+  TPurKid = class(TPurBase)
+  public
+    procedure Work;
+  end;
+
+procedure DriveKid(AKid: TPurKid);
+
+implementation
+
+var
+  Extra: Integer;
+
+procedure TPurKid.Work;
+begin
+  Extra := 1;
+end;
+
+procedure DriveKid(AKid: TPurKid);
+begin
+  AKid.Work;
+end;
+
+end.
+'@
+
+Write-Ascii (Join-Path $psrc 'uPurT.pas') @'
+unit uPurT;
+
+interface
+
+type
+  THook = Integer;
+
+implementation
+
+end.
+'@
+
+Write-Ascii (Join-Path $psrc 'uPurP.pas') @'
+unit uPurP;
+
+interface
+
+uses
+  uPurT;
+
+var
+  Hook: THook;
+
+procedure CallHook;
+
+implementation
+
+procedure CallHook;
+var
+  Kept: THook;
+begin
+  Kept := Hook;
+  if Kept = Hook then Exit;
+end;
+
+end.
+'@
+
+$NOSCOPEDPURITY = @{ DRAGLINT_NO_SCOPED_PURITY = '1' }
+$SEEDSONLY      = @{ DRAGLINT_TEST_PURITY_SEEDS_ONLY = '1' }
+$SCOPE_LINE     = 'resolve: purity scope -- (\d+) of (\d+) routine\(s\) re-derived'
+
+# The effect_free value of the one routine named $name (-1 = no such row / NULL).
+function Get-EffectFree($db, $name) {
+  $o = Invoke-Engine @('sql', '--query', "SELECT ifnull(sf.effect_free, -1) AS e FROM symbol_facts sf JOIN symbols s ON s.id = sf.symbol_id WHERE s.name = '$name'", '--db', $db, '--json') $null
+  if ($o -match '"rows"\s*:\s*\[\s*\[\s*(-?\d+)') { return [int]$Matches[1] }
+  return -1
+}
+
+# name, file, find, replace; Whole = the run must fall back to the whole database and say why;
+# Small = the scope must be smaller than the database; Control = run the seeds-only seam too;
+# Flip = a routine of ANOTHER file whose verdict the edit must move (effect-free 1 -> 0).
+$purScenarios = @(
+  @{ Name = 'PUR a callee gains a global write'; File = 'uPurA.pas'; Find = '  Result := AValue + 1;'; Repl = "  GCount := AValue;`r`n  Result := AValue + 1;"; Control = $true; Flip = 'Far'; Small = $true },
+  @{ Name = 'PUR a called routine is withdrawn'; File = 'uPurA.pas'; Find = 'Gone'; Repl = 'Gone2'; Small = $true },
+  @{ Name = 'PUR a base class gains a field a descendant writes'; File = 'uPurBase.pas'; Find = '    FSeen: Integer;'; Repl = "    FSeen: Integer;`r`n    Extra: Integer;"; Small = $true; FullGap = 'symbol_facts.writes_fields of the descendant is filled by the facts-inherited pass of a file''s own parse, and the descendant was not re-parsed' },
+  @{ Name = 'PUR a body edit that moves no verdict'; File = 'uPurC.pas'; Find = 'Result := Over(AValue);'; Repl = 'Result := Over(AValue) + 0;'; Small = $true },
+  @{ Name = 'PUR a procedural type appears'; File = 'uPurT.pas'; Find = 'THook = Integer;'; Repl = 'THook = procedure;'; Whole = $true }
+)
+
+Push-Location C:\TEMP
+try {
+  $dbPur = Join-Path $scratch 'pur_base.sqlite'
+  $outBase = Invoke-Engine @('index', $psrc, '--db', $dbPur) $null
+  Check 'PUR SANITY: the full index of the fixture ran purity over the whole database (no scope line)' ($outBase -match 'resolve: purity -- \d+ routine' -and $outBase -notmatch 'resolve: purity scope') ($outBase -split "`n" | Select-String 'purity' | Out-String)
+  Check 'PUR SANITY: Far is effect-free and UsesGone is not, before any edit' ((Get-EffectFree $dbPur 'Far') -eq 1 -and (Get-EffectFree $dbPur 'UsesGone') -eq 0) "Far=$(Get-EffectFree $dbPur 'Far') UsesGone=$(Get-EffectFree $dbPur 'UsesGone')"
+
+  foreach ($sc in $purScenarios) {
+    $file = Join-Path $psrc $sc.File
+    $keep = Join-Path $scratch ($sc.File + '.orig')
+    [System.IO.File]::Copy($file, $keep, $true)
+    $text = [System.IO.File]::ReadAllText($file)
+    if (-not $text.Contains($sc.Find)) { Check "$($sc.Name): the edit applies" $false "no '$($sc.Find)' in $($sc.File)"; continue }
+    Write-Ascii $file $text.Replace($sc.Find, $sc.Repl)
+
+    $dbS = Join-Path $scratch 'ps.sqlite'; $dbP = Join-Path $scratch 'pp.sqlite'; $dbF = Join-Path $scratch 'pf.sqlite'
+    Copy-Db $dbPur $dbS; Copy-Db $dbPur $dbP; Remove-Db $dbF
+    $outS = Invoke-Engine @('index', $psrc, '--db', $dbS) $null
+    $outP = Invoke-Engine @('index', $psrc, '--db', $dbP) $NOSCOPEDPURITY
+    Invoke-Engine @('index', $psrc, '--db', $dbF) $null | Out-Null
+    $purLines = ($outS -split "`n" | Select-String 'purity|SCOPED|WHOLE' | Out-String)
+
+    Check "$($sc.Name): run S resolved SCOPED" ($outS -match 'starting SCOPED pass') $purLines
+    if ($sc.Whole) {
+      Check "$($sc.Name): run S fell back to the whole database and said why" ($outS -match 'resolve: purity scope -- whole database: the procedural type names') $purLines
+    } else {
+      $scoped = $outS -match $SCOPE_LINE
+      $n = 0; $m = 0; if ($scoped) { $n = [int]$Matches[1]; $m = [int]$Matches[2] }
+      Check "$($sc.Name): run S re-derived a purity scope" $scoped $purLines
+      if ($sc.Small) { Check "$($sc.Name): the scope is smaller than the database ($n of $m)" ($scoped -and $n -ge 1 -and $n -lt $m) $purLines }
+    }
+    Check "$($sc.Name): run P re-derived every routine (DRAGLINT_NO_SCOPED_PURITY)" ($outP -match 'resolve: purity scope -- whole database: DRAGLINT_NO_SCOPED_PURITY is set') ($outP -split "`n" | Select-String 'purity' | Out-String)
+    $d = Compare-Db $dbS $dbP
+    Check "$($sc.Name): scoped purity = whole purity (0 diff rows)" $d.Same $d.Text
+    $d = Compare-Db $dbS $dbF
+    if ($sc.FullGap) {
+      # An incremental index that differs from a full one BEFORE purity runs (the input rows
+      # differ, with scoped purity on or off: S = P above). Reported, not asserted.
+      Write-Host "[NOTE] $($sc.Name): incremental $(if ($d.Same) { '=' } else { '<>' }) full reindex -- known input gap: $($sc.FullGap)" -ForegroundColor Yellow
+    } else {
+      Check "$($sc.Name): scoped purity = full reindex (0 diff rows)" $d.Same $d.Text
+    }
+    if ($sc.Flip) {
+      Check "$($sc.Name): the verdict of $($sc.Flip), two files away, moved to not-effect-free" ((Get-EffectFree $dbS $sc.Flip) -eq 0) "effect_free=$(Get-EffectFree $dbS $sc.Flip)"
+    }
+    if ($sc.Control) {
+      $dbC = Join-Path $scratch 'pc.sqlite'
+      Copy-Db $dbPur $dbC
+      $outC = Invoke-Engine @('index', $psrc, '--db', $dbC) $SEEDSONLY
+      $d = Compare-Db $dbC $dbF
+      Check "$($sc.Name): POSITIVE CONTROL -- the seeds-only seam ran scoped" ($outC -match 'TEST SEAM DRAGLINT_TEST_PURITY_SEEDS_ONLY') ($outC -split "`n" | Select-String 'purity' | Out-String)
+      Check "$($sc.Name): POSITIVE CONTROL -- a scope that does not follow callers shows diff rows" (-not $d.Same -and $d.Code -eq 1) "index_db_diff exit $($d.Code): the diff cannot see a stale verdict`n      $($d.Text)"
+      Check "$($sc.Name): POSITIVE CONTROL -- $($sc.Flip) kept its stale effect-free verdict" ((Get-EffectFree $dbC $sc.Flip) -eq 1) "effect_free=$(Get-EffectFree $dbC $sc.Flip)"
     }
     [System.IO.File]::Copy($keep, $file, $true)
   }
@@ -823,6 +1147,8 @@ print(hit)
         $outW = Invoke-Engine @('index', '--project', $proj, '--platform', 'win32', '--db', $dbW) $WHOLE
         Check "DL $name`: run S took the SCOPED path" ($outS -match 'starting SCOPED pass') (($outS -split "`n") | Select-String 'calls ' | Select-Object -First 4 | Out-String)
         Check "DL $name`: run W took the WHOLE-DB path" ($outW -match 'starting WHOLE-DB pass') ''
+        $dlScope = (($outS -split "`n") | Select-String 'resolve: purity scope' | Select-Object -First 1 | Out-String).Trim()
+        Check "DL $name`: run S re-derived a purity scope, run W every routine [$dlScope]" ($outS -match 'resolve: purity scope -- \d+ of \d+ routine\(s\) re-derived' -and $outW -notmatch 'resolve: purity scope -- \d+ of') (($outS -split "`n") | Select-String 'purity' | Out-String)
         $d = Compare-Db $dbS $dbW
         Check "DL $name`: scoped = whole-database resolve (0 diff rows)" $d.Same $d.Text
       } finally {

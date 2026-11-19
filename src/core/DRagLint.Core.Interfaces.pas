@@ -246,6 +246,34 @@ type
     Cacheable   : Boolean;
   end;
 
+  /// <summary>INCR18 step 4: what the scoped call-target passes of one store
+  /// instance can have moved since its last purity write -- the input of the
+  /// scoped purity stage (ISymbolStore.LastCallsScope).</summary>
+  /// <remarks>
+  /// FileIds: every file a pass re-resolved because the run rewrote it.
+  /// Names: every name in the passes' name scope, lowercased (the names the
+  /// rewritten files declared before or after, plus the type widenings).
+  /// EnclosingIds: the routine around every ref whose binding a pass CHANGED
+  /// (refs.symbol_id / external_kind / external_target / receiver_text /
+  /// enclosing_symbol_id / kind, its call_edges target, its member_accesses
+  /// member or mode -- compared before and after the pass, so a ref that was
+  /// re-read and bound as before is not here), and around every ref that was
+  /// bound to a symbol of a rewritten file before the rewrite. Ids of routines
+  /// that no longer exist may be present; a reader skips them.
+  /// </remarks>
+  TCallsScope = record
+    FileIds     : TArray<Int64> ;
+    Names       : TArray<string>;
+    EnclosingIds: TArray<Int64> ;
+  end;
+
+  /// <summary>INCR18 step 4: one (calling routine, called routine) pair of the
+  /// call graph (ISymbolStore.DumpCallerTargets).</summary>
+  TCallerTarget = record
+    CallerId: Int64;
+    TargetId: Int64;
+  end;
+
   ISymbolStore = interface
     ['{6B9F8AC4-3F19-4E1A-9D38-1A2C3B7EF501}']
     /// <remarks>
@@ -3310,6 +3338,38 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function PurityNeedsRun: Boolean;
+    /// <summary>INCR18 step 4: what the call-target passes of THIS store
+    /// instance can have moved since its last PutEffectFacts.</summary>
+    /// <param name="AScope">Receives the accumulated scope; empty when the
+    /// result is False.</param>
+    /// <returns>True only when at least one call-target pass finished on this
+    /// instance since the last PutEffectFacts, every one of them ran SCOPED,
+    /// and no file was written or removed after the last of them. False means
+    /// "anything may have moved": the purity stage then re-derives every
+    /// routine.</returns>
+    /// <remarks>Reads no table: the passes collect the scope as they commit.
+    /// Same thread as the writer.</remarks>
+    function LastCallsScope(out AScope: TCallsScope): Boolean;
+    /// <summary>INCR18 step 4: the routines that hold a call_edges row whose
+    /// target is ATargetId.</summary>
+    /// <param name="ATargetId">symbols.id of the called routine.</param>
+    /// <returns>Distinct refs.enclosing_symbol_id values; empty when nothing
+    /// calls it.</returns>
+    function CallerRoutinesOf(ATargetId: Int64): TArray<Int64>;
+    /// <summary>INCR18 step 4: the whole reverse call graph, CallerRoutinesOf's
+    /// predicate for every target at once.</summary>
+    /// <returns>Distinct (caller routine, target) pairs.</returns>
+    function DumpCallerTargets: TArray<TCallerTarget>;
+    /// <summary>INCR18 step 4: DumpAllCallEdges restricted to the refs of the
+    /// given files.</summary>
+    /// <param name="AFileIds">files.id values; an empty list returns nothing.</param>
+    /// <returns>The call_edges rows whose ref lives in one of the files.</returns>
+    function DumpCallEdgesInFiles(const AFileIds: TArray<Int64>): TArray<TCallEdge>;
+    /// <summary>INCR18 step 4: DumpAllMemberAccesses restricted to the refs of
+    /// the given files.</summary>
+    /// <param name="AFileIds">files.id values; an empty list returns nothing.</param>
+    /// <returns>The member_accesses rows whose ref lives in one of the files.</returns>
+    function DumpMemberAccessesInFiles(const AFileIds: TArray<Int64>): TArray<TCallEdge>;
     /// <summary>INCR18: the compile-closure scans an earlier index run stored
     /// (table closure_cache) and the fingerprint they were stored under.</summary>
     /// <param name="AFingerprint">Receives schema_meta closure_cache_fp, '' when
