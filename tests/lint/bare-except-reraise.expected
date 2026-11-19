@@ -1,0 +1,8 @@
+# SLZ-RULE1 2026-11-19: a bare except whose LAST statement is a bare `raise`
+# swallows nothing (Rollback; raise -- Storage.SQLite.pas:8464 shape): lines 11
+# and 17 must not fire. Positive controls: a raise that is not last (22) and a
+# handler with no raise at all (28) still fire.
+bare-except 22
+bare-except 28
+!bare-except 11
+!bare-except 17

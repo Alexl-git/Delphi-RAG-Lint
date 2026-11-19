@@ -1,3 +1,13 @@
-# GetTickCount (11) fires; GetTickCount64 (12) must not
-gettickcount-wraparound 11
-!gettickcount-wraparound 12
+# GetTickCount stored for a later difference (14), used in a subtraction /
+# comparison (16), assigned through the call form (21) and as an inline-var
+# initialiser (22) fires; GetTickCount64 (15) must not.
+# SLZ-RULE1 2026-11-19: GetTickCount used only as a NAME / SEED -- a Format
+# argument (18), concatenated into a temp-dir name through a cast (19) -- is
+# not elapsed-time math and must not fire (CLI.pas:22851/27255/27322 shape).
+gettickcount-wraparound 14
+gettickcount-wraparound 16
+gettickcount-wraparound 21
+gettickcount-wraparound 22
+!gettickcount-wraparound 15
+!gettickcount-wraparound 18
+!gettickcount-wraparound 19
