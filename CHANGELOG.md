@@ -32,11 +32,17 @@ resolver 1.28.0 -> 1.29.0-alpha.
   restricts its transitive-caller CTE to container kinds (was quadratic on large indexes).
 - Hover: the 5 s cap covers the whole card, facts + `Set by` (lane HOVERCACHE): check-init init orders and interface
   answers are cached per index version in LSP / `serve`; on the drag-lint index the hover median is ~4.9 s (was 5.7 s).
+- `ifthen-to-if-expression` no longer fires on an else-if chain (lane SELFLZ; lint-tests 452/452). SELF-LOOPZERO on
+  drag-lint's own projects: main 7465 -> 6409 findings (doc-drift 982 -> 54 after autodoc on 366 units), config
+  236 -> 206, open 13 -> 4, switch 14 -> 0, plugin 2210 -> 1978.
+- Test runners under Windows PowerShell 5.1 (lane PS5STDERR): native stderr redirected under
+  `$ErrorActionPreference='Stop'` is wrapped, piped stdin is forwarded (`$input |`), ConvertFrom-Json arrays are
+  enumerated and `Start-Process -PassThru` caches the handle; guard `run_v152_PS5STDERR` (G/G2/G4/G5 + controls).
 - `allow --reason "<text>"` (INT14, for SELF-LOOPZERO's re-stamps): the text REPLACES the marker's reason, so a
   reviewer who re-read the code writes `--reason "REVIEWED <yyyy-mm-dd> <why>"` and the stamp survives the re-hash;
   it also re-stamps a marker whose hash is still current. Without `--reason` a re-hash still drops the stamp (L3).
 - `lint --fix` for `collapsible-if` wrote `end;;` when the inner body was a `begin..end` block (seen on the plugin
-  source by SELF-LOOPZERO): a multi-line template fix ending in `;` now absorbs the source's own `;` after the span.
+  source by SELF-LOOPZERO): the block capture already ends in `end;`, so an expanded fix ending in `;;` keeps one.
   Autofix fixture `collapsible-if/begin_end_body`.
 - `allow --apply` on a wrapped statement whose `dl:ok` marker sat on a continuation line (a superseded marker) moved
   the marker to the anchor line with an EMPTY reason, so the reviewer's text vanished silently (INT14 tail). The
