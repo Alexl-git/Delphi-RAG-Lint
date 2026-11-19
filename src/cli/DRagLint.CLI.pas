@@ -24486,6 +24486,8 @@ var
 { try one edit on a fresh copy, compile it, accept into Work only if it adds
     no new error vs the baseline. AKind: 'move' | 'remove'. }
   function TryEdit(const AUnitName: string; AEntryLine: Integer; const AKind: string): Boolean;
+  const
+    USESFIX_GUID_CHARS = 8; { hex chars of the GUID kept in the per-edit shadow dir name }
   var
     Trial    : TStringList        ;
     ShadowDir: string             ;
@@ -24511,7 +24513,7 @@ var
       { 1.52.1 SMALLS: a per-process, per-edit shadow dir (pid + guid), removed after the compile --
         the old fixed %TEMP%\draglint_usesfix made two concurrent uses-fix runs overwrite each other's
         copy of the unit (EFCreateError / a verdict on the other run's text). }
-      ShadowDir:= TPath.Combine(TPath.GetTempPath, Format('draglint_usesfix_%d_%s', [GetCurrentProcessId, TGUID.NewGuid.ToString.Substring(1, 8)]));
+      ShadowDir:= TPath.Combine(TPath.GetTempPath, Format('draglint_usesfix_%d_%s', [GetCurrentProcessId, Copy(TGUID.NewGuid.ToString, 2, USESFIX_GUID_CHARS)]));
       TDirectory.CreateDirectory(ShadowDir);
       try
         Trial.SaveToFile(TPath.Combine(ShadowDir, ExtractFileName(SrcPath)));
@@ -24520,8 +24522,8 @@ var
         try
           TDirectory.Delete(ShadowDir, True);
         except
-          on EInOutError do ; { best-effort scratch cleanup: a locked file must not change the verdict }
-          on EDirectoryNotFoundException do ;
+          on E: Exception do { best-effort scratch cleanup: a locked file must not change the verdict, but is told }
+            Writeln(ErrOutput, 'NOTE: uses-fix: could not remove ', ShadowDir, ': ', E.Message);
         end;
       end;
 
