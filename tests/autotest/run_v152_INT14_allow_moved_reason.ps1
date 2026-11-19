@@ -48,11 +48,11 @@ function New-Fixture([string]$Name, [string]$L1, [string]$L2) {
   return $p
 }
 function Invoke-Allow([string]$Path) {
-  $out = @(& $Exe allow $Path --fix-line 20 --fix-rule concat-in-loop --apply 2>&1 | ForEach-Object { "$_" })
+  $out = @(& { $ErrorActionPreference = 'Continue'; & $Exe allow $Path --fix-line 20 --fix-rule concat-in-loop --apply 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" })
   return @{ Out = ($out -join "`n"); Lines = [IO.File]::ReadAllLines($Path) }
 }
 function Get-Findings([string]$Path) {
-  return @(& $Exe lint $Path 2>&1 | ForEach-Object { "$_" } | Where-Object { $_ -match 'concat-in-loop|review-marker-stale' })
+  return @(& { $ErrorActionPreference = 'Continue'; & $Exe lint $Path 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" } | Where-Object { $_ -match 'concat-in-loop|review-marker-stale' })
 }
 
 # --- M1: stamped marker on the continuation line of a wrapped statement ---------------------

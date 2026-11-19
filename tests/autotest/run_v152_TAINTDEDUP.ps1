@@ -31,7 +31,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
   if ($Ok) { Write-Host "PASS  $Name" } else { Write-Host "FAIL  $Name  $Detail"; $script:fail++ }
 }
 function AllFindings([string[]]$CliArgs) {
-  $raw = & $exePath @CliArgs 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath @CliArgs 2>$null }
   $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
   $all = @(); if ($b -ge 0) { try { $all = @($txt.Substring($b) | ConvertFrom-Json) } catch { $all = @() } }
   return ,$all
@@ -43,7 +43,7 @@ try {
   $work = Join-Path $tmp 'a'; [void][IO.Directory]::CreateDirectory($work)
   [IO.File]::Copy((Join-Path $fx 'uDedup.pas'), (Join-Path $work 'uDedup.pas'), $true)
   $db = Join-Path $tmp 'a.sqlite'
-  & $exePath index $work --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $work --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $all = AllFindings @('lint-all', '--db', $db, '--json', '--quiet', '--config', $empty)
   $f = @($all | Where-Object { $_.rule -like 'taint-*' })
   $f | ForEach-Object { Write-Host ("  {0} {1}:{2}:{3} {4}" -f $_.rule, (Split-Path $_.file_path -Leaf), $_.start_line, $_.start_col, $_.message) }
@@ -84,12 +84,12 @@ try {
   [IO.File]::Copy((Join-Path $fx 'uDedup.pas'), $mkUnit, $true)
   # stamp the LOWER line first: a marker line inserted above would shift the upper one
   foreach ($ln in @($SINK_TWO, $SINK_LINE)) {
-    & $stampPath rules disable --rule taint-command-injection --scope line --in $mkUnit --line $ln --reason 'TAINTDEDUP marker check' 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $stampPath rules disable --rule taint-command-injection --scope line --in $mkUnit --line $ln --reason 'TAINTDEDUP marker check' 2>&1 | ForEach-Object { "$_" } } | Out-Null
   }
   $txt = [IO.File]::ReadAllText($mkUnit)
   Check 'marker stamped on the sink line' (([regex]::Matches($txt, 'dl:ok taint-command-injection')).Count -eq 2) 'no marker written'
   $mdb = Join-Path $tmp 'm.sqlite'
-  & $exePath index $mk --db $mdb 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $mk --db $mdb 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $mall = AllFindings @('lint-all', '--db', $mdb, '--json', '--quiet', '--config', $empty, '--enable', 'review-marker-stale,review-marker-unused')
   $mt = @($mall | Where-Object { $_.rule -like 'taint-*' })
   Check 'markers suppress both merged findings' ($mt.Count -eq 0) "got $($mt.Count)"

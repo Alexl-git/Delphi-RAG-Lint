@@ -127,20 +127,20 @@ end;
 end.
 '@ | Out-Null
   $dbA = Join-Path $scratch 'a.sqlite'
-  & $exePath index (Join-Path $scratch 'a') --db $dbA *> (Join-Path $scratch 'a-index.log')
+  & { $ErrorActionPreference = 'Continue'; & $exePath index (Join-Path $scratch 'a') --db $dbA *> (Join-Path $scratch 'a-index.log') }
   if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: index A exit $LASTEXITCODE" -ForegroundColor Red; exit 2 }
-  $mdSet = (& $exePath hover --qname uP.TCounter.SetCount --db $dbA --format md 2>$null) -join "`n"
+  $mdSet = (& { $ErrorActionPreference = 'Continue'; & $exePath hover --qname uP.TCounter.SetCount --db $dbA --format md 2>$null }) -join "`n"
   $echo = [regex]::Match($mdSet, '(?m)^.*Used in \(via property Count\):.*$').Value
   function EchoMode([string]$routine) { $m = [regex]::Match($echo, [regex]::Escape("uC.$routine (uC.pas) [") + '(r|w|rw)\]'); if ($m.Success) { $m.Groups[1].Value } else { '' } }
   Check 'A0 control: Assign (C.Count := 5) on the setter line [w]' ((EchoMode 'Assign') -eq 'w') "echo='$echo'"
   Check 'A1 Inc(C.Count): Bump on the setter line [w]' ((EchoMode 'Bump') -eq 'w') "echo='$echo'"
   Check 'A2 Take(C.Count) out argument: OutIt on the setter line [w]' ((EchoMode 'OutIt') -eq 'w') "echo='$echo'"
   Check 'A3 NEGATIVE: the read in Look is not on the setter line' (($echo -ne '') -and ((EchoMode 'Look') -eq '')) "echo='$echo'"
-  $rw = Json ((& $exePath usages --name SetCount --rw --db $dbA --json 2>$null) -join "`n")
+  $rw = Json ((& { $ErrorActionPreference = 'Continue'; & $exePath usages --name SetCount --rw --db $dbA --json 2>$null }) -join "`n")
   $writers = @(@($rw.targets) | ForEach-Object { @($_.writers) } | ForEach-Object { ([string]$_.caller -split '\.')[-1] } | Sort-Object -Unique) -join ','
   $readers = @(@($rw.targets) | ForEach-Object { @($_.readers) }).Count
   Check 'A4 usages --rw --name SetCount: writers Assign,Bump,OutIt; no reader' (($writers -eq 'Assign,Bump,OutIt') -and ($readers -eq 0)) "writers=[$writers] readers=$readers"
-  $mdProp = (& $exePath hover --qname uP.TCounter.Count --db $dbA --format md 2>$null) -join "`n"
+  $mdProp = (& { $ErrorActionPreference = 'Continue'; & $exePath hover --qname uP.TCounter.Count --db $dbA --format md 2>$null }) -join "`n"
   $used = [regex]::Match($mdProp, '(?m)^.*Used in: .*$').Value
   Check 'A5 control: property Count Used in: Bump [w], Look [r]' ($used.Contains('uC.Bump (uC.pas) [w]') -and $used.Contains('uC.Look (uC.pas) [r]')) "used='$used'"
 
@@ -154,16 +154,16 @@ end.
   Put 'lib\uLibThing.pas' "unit uLibThing;`ninterface`ntype`n  TLibThing = class`n  public`n    procedure Run;`n  end;`nprocedure LibGo;`nimplementation`nprocedure TLibThing.Run;`nbegin`nend;`nprocedure LibGo;`nvar`n  T: TLibThing;`nbegin`n  T := TLibThing.Create;`n  T.Run;`nend;`nend.`n" | Out-Null
   $dbOne = Join-Path $scratch 'one\_D-RAG\AppOne.sqlite'
   $dbLib = Join-Path $scratch 'library-Win64.sqlite'
-  & $exePath index --project $pOne --db $dbOne *> (Join-Path $scratch 'one-index.log')
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --project $pOne --db $dbOne *> (Join-Path $scratch 'one-index.log') }
   $e1 = $LASTEXITCODE
-  & $exePath index (Join-Path $scratch 'lib') --db $dbLib *> (Join-Path $scratch 'lib-index.log')
+  & { $ErrorActionPreference = 'Continue'; & $exePath index (Join-Path $scratch 'lib') --db $dbLib *> (Join-Path $scratch 'lib-index.log') }
   if ($e1 -ne 0 -or $LASTEXITCODE -ne 0) { Write-Host "FATAL: index B exit $e1/$LASTEXITCODE" -ForegroundColor Red; exit 2 }
   function RowFiles($doc) { return @(@($doc.reads) + @($doc.writes) + @($doc.calls) + @($doc.declarations) | Where-Object { $_ } | ForEach-Object { [string]$_.file }) }
-  $cli = Json ((& $exePath usages --name Run --scope project --db $dbOne --db $dbLib --json 2>$null) -join "`n")
+  $cli = Json ((& { $ErrorActionPreference = 'Continue'; & $exePath usages --name Run --scope project --db $dbOne --db $dbLib --json 2>$null }) -join "`n")
   $files = RowFiles $cli
   Check 'B0 control: CLI scope project lists the project call (uMain)' (@($files | Where-Object { $_ -like '*\one\uMain.pas' }).Count -ge 1) "files=$($files -join ';')"
   Check 'B1 CLI scope project: no library row, library db not read' ((@($files | Where-Object { $_ -like '*\lib\*' }).Count -eq 0) -and (@(@($cli.databases) | Where-Object { ([string]$_) -like '*library-*' }).Count -eq 0)) "files=$($files -join ';') dbs=$(@($cli.databases) -join ';')"
-  $cliLib = Json ((& $exePath usages --name Run --scope project --db $dbLib --json 2>$null) -join "`n")
+  $cliLib = Json ((& { $ErrorActionPreference = 'Continue'; & $exePath usages --name Run --scope project --db $dbLib --json 2>$null }) -join "`n")
   Check 'B2 control: a library db asked alone still answers' (@(RowFiles $cliLib | Where-Object { $_ -like '*\lib\*' }).Count -ge 1) "doc=$($cliLib | ConvertTo-Json -Depth 3 -Compress)"
 
   $uri = 'file:///' + ($uMain -replace '\\', '/')
@@ -295,9 +295,9 @@ end.
   Put 'mt\MtRecv.dpr' "program MtRecv;`n`nuses`n  Vcl.Menus,`n  uBag in 'uBag.pas',`n  uKid in 'uKid.pas',`n  uMenu in 'uMenu.pas';`n`nbegin`n  BuildIt(nil);`nend.`n" | Out-Null
   $pMt = Put 'mt\MtRecv.dproj' "<Project xmlns=`"http://schemas.microsoft.com/developer/msbuild/2003`">`n  <PropertyGroup>`n    <MainSource>MtRecv.dpr</MainSource>`n  </PropertyGroup>`n  <ItemGroup>`n    <DCCReference Include=`"uBag.pas`"/>`n    <DCCReference Include=`"uKid.pas`"/>`n    <DCCReference Include=`"uMenu.pas`"/>`n  </ItemGroup>`n</Project>`n"
   $dbMt = Join-Path $scratch 'mt.sqlite'
-  & $exePath index --project $pMt --db $dbMt *> (Join-Path $scratch 'mt-index.log')
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --project $pMt --db $dbMt *> (Join-Path $scratch 'mt-index.log') }
   if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: index C exit $LASTEXITCODE" -ForegroundColor Red; exit 2 }
-  $paths = (& $exePath menu-tree --project $pMt --db $dbMt 2>$null) -join "`n"   # tree text: an external root (pMain) has no --format paths row
+  $paths = (& { $ErrorActionPreference = 'Continue'; & $exePath menu-tree --project $pMt --db $dbMt 2>$null }) -join "`n"   # tree text: an external root (pMain) has no --format paths row
   Check 'C0 control: Top and Leaf present' (($paths -match '\] Top ') -and ($paths -match '\] Leaf ')) "paths=$paths"
   Check 'C1 Root.Remove(Leaf) does not walk TBag.Remove (no Bogus)' (($paths -match 'Top') -and ($paths -notmatch 'Bogus')) "paths=$paths"
   Check 'C2 K.Fill(Root) walks the inherited THelper.Fill (Good)' ($paths -match '\] Good ') "paths=$paths"
