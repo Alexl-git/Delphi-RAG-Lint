@@ -400,8 +400,8 @@
     "version": "1.52.0-alpha"
   },
   "features/find-callees.md": {
-    "hash": "dcd370cf5897088687a3bed5dd1972ddf6ed6f4b1036f9f3302666e92e8f2f6c",
-    "version": "1.51.1-alpha"
+    "hash": "7131a1999a780855387dd2ac3a144d24b3ab41319e835b2c5e31b57089e0172d",
+    "version": "1.52.0-alpha"
   },
   "features/find-dead-code.md": {
     "hash": "e93ae046a94858361553b8f33dfa442ca4fbc780b5df7ca8e4c09c26ef1c1a18",

@@ -770,12 +770,13 @@ Described in [fb-snapshot](../../docs/wiki/fb-snapshot.md).
 Lists the resolved outgoing calls of one routine, plus the library-bound ones.
 
 ```text
-drag-lint find-callees --qname <Foo.Bar> --db PATH [--db LIBRARY | --library-db LIBRARY] [--json] (resolved outgoing calls of routine X; library-bound callees are marked library)
+drag-lint find-callees --qname <Foo.Bar> | --name <bare> --db PATH [--db LIBRARY | --library-db LIBRARY] [--json] (resolved outgoing calls of routine X; --name = every routine of that bare name; library-bound callees are marked library)
 ```
 
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
 | `--qname` | `<Foo.Bar>` |  |  |
+| `--name` | `<bare>` | the bare routine name (the find-callers spelling); every routine of that name is a target |  |
 | `--db` | `PATH` |  |  |
 | `--library-db` | `LIBRARY` | the library index to bind library-bound callees against at read time (a second --db does the same) |  |
 | `--json` |  |  |  |

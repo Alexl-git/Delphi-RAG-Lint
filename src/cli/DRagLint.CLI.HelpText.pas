@@ -99,6 +99,7 @@ begin
   Writeln('                               --quiet suppresses the "(loaded defaults from ...)" stderr banner.');
   Writeln('  drag-lint query              --text "<phrase>" [--any-order|--substring] [--source pas|dfm|sql|md] [--kind <k>] [--limit N] [--db ...] [--json]');
   Writeln('       ^ searches STRING LITERALS, DFM/SQL text AND COMMENT PROSE (// { } (* *) ///).');
+  Writeln('       ^ a phrase must sit inside ONE string literal / comment: a message built as ''a '' + ''b'' over several literals (or lines) is not one phrase -- search one piece, or --any-order.');
   Writeln('         --source md: Markdown text nodes (headings, paragraphs, list items of the .md files beside a project file).');
   Writeln('         --kind literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception');
   Writeln('         narrows it; --kind literal reproduces the pre-comment behaviour exactly.');
@@ -408,7 +409,7 @@ begin
   Writeln('  drag-lint dump-refs <file> --db PATH   (diagnostic: refs + enclosing_symbol_id attribution)');
   Writeln('  drag-lint doc-drift --qname X --db PATH [--json]   (diagnostic: deterministic doc-vs-code drift findings for one symbol)');
   Writeln('  drag-lint dump-call-edges --db PATH     (diagnostic: resolved call edges: ref_id|target_qname|confidence)');
-  Writeln('  drag-lint find-callees --qname <Foo.Bar> --db PATH [--db LIBRARY | --library-db LIBRARY] [--json]   (resolved outgoing calls of routine X: one line per call SITE, so a target called N times repeats N times; distinct callees: callgraph --qname X --direction callees --depth 1)');
+  Writeln('  drag-lint find-callees --qname <Foo.Bar> | --name <bare> --db PATH [--db LIBRARY | --library-db LIBRARY] [--json]   (resolved outgoing calls of routine X; --name = every routine of that bare name, each under a # <qname> header when several: one line per call SITE, so a target called N times repeats N times; distinct callees: callgraph --qname X --direction callees --depth 1)');
   Writeln('                               library-bound callees follow, marked (library; --json rows carry external:true and via edge|oracle.');
   Writeln('                               With no library open the text ends N external (library not open) for the calls one could bind.');
   Writeln('  drag-lint ambiguous-calls [--qname <Foo.Bar>|--in <file>] --db PATH [--json]   (resolver-coverage diagnostic: unresolved/ambiguous call sites)');
@@ -726,6 +727,7 @@ begin
     Writeln('                               --quiet suppresses the "(loaded defaults from ...)" stderr banner.');
     Writeln('  drag-lint query              --text "<phrase>" [--any-order|--substring] [--source pas|dfm|sql|md] [--kind <k>] [--limit N] [--db ...] [--json]');
     Writeln('       ^ searches STRING LITERALS, DFM/SQL text AND COMMENT PROSE (// { } (* *) ///).');
+    Writeln('       ^ a phrase must sit inside ONE string literal / comment: a message built as ''a '' + ''b'' over several literals (or lines) is not one phrase -- search one piece, or --any-order.');
     Writeln('         --source md: Markdown text nodes (headings, paragraphs, list items of the .md files beside a project file).');
     Writeln('         --kind literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception');
     Writeln('         narrows it; --kind literal reproduces the pre-comment behaviour exactly.');
@@ -1331,7 +1333,7 @@ begin
   end;
   if pVerb = 'find-callees' then
   begin
-    Writeln('  drag-lint find-callees --qname <Foo.Bar> --db PATH [--db LIBRARY | --library-db LIBRARY] [--json]   (resolved outgoing calls of routine X: one line per call SITE, so a target called N times repeats N times; distinct callees: callgraph --qname X --direction callees --depth 1)');
+    Writeln('  drag-lint find-callees --qname <Foo.Bar> | --name <bare> --db PATH [--db LIBRARY | --library-db LIBRARY] [--json]   (resolved outgoing calls of routine X; --name = every routine of that bare name, each under a # <qname> header when several: one line per call SITE, so a target called N times repeats N times; distinct callees: callgraph --qname X --direction callees --depth 1)');
     Writeln('                               library-bound callees follow, marked (library; --json rows carry external:true and via edge|oracle.');
     Writeln('                               With no library open the text ends N external (library not open) for the calls one could bind.');
     Exit;

@@ -12,11 +12,16 @@
     {
       "type": "cli",
       "verb": "find-callees",
-      "usage": "drag-lint find-callees --qname <Foo.Bar> --db PATH [--db LIBRARY | --library-db LIBRARY] [--json] (resolved outgoing calls of routine X; library-bound callees are marked library)",
+      "usage": "drag-lint find-callees --qname <Foo.Bar> | --name <bare> --db PATH [--db LIBRARY | --library-db LIBRARY] [--json] (resolved outgoing calls of routine X; --name = every routine of that bare name; library-bound callees are marked library)",
       "flags": [
         {
           "name": "--qname",
           "arg": "<Foo.Bar>"
+        },
+        {
+          "name": "--name",
+          "arg": "<bare>",
+          "summary": "the bare routine name (the find-callers spelling); every routine of that name is a target"
         },
         {
           "name": "--db",
@@ -32,7 +37,7 @@
         }
       ],
       "helpOrder": 77,
-      "help": ["  drag-lint find-callees --qname <Foo.Bar> --db PATH [--db LIBRARY | --library-db LIBRARY] [--json]   (resolved outgoing calls of routine X: one line per call SITE, so a target called N times repeats N times; distinct callees: callgraph --qname X --direction callees --depth 1)", "                               library-bound callees follow, marked (library; --json rows carry external:true and via edge|oracle.", "                               With no library open the text ends N external (library not open) for the calls one could bind."]
+      "help": ["  drag-lint find-callees --qname <Foo.Bar> | --name <bare> --db PATH [--db LIBRARY | --library-db LIBRARY] [--json]   (resolved outgoing calls of routine X; --name = every routine of that bare name, each under a # <qname> header when several: one line per call SITE, so a target called N times repeats N times; distinct callees: callgraph --qname X --direction callees --depth 1)", "                               library-bound callees follow, marked (library; --json rows carry external:true and via edge|oracle.", "                               With no library open the text ends N external (library not open) for the calls one could bind."]
     },
     {
       "type": "ide-menu",
@@ -52,14 +57,18 @@
       "command": "drag-lint find-callees --qname <Foo.Bar> --db <db>"
     },
     {
+      "ask": "What does every routine called Run call?",
+      "command": "drag-lint find-callees --name Run --db <db>"
+    },
+    {
       "ask": "Can I get the outgoing calls as JSON?",
       "command": "drag-lint find-callees --qname <Foo.Bar> --db <db> --json"
     }
   ],
   "verified": {
-    "date": "2026-10-30",
+    "date": "2026-11-19",
     "by": "ENGINE",
-    "build": "1.38.0-alpha",
-    "surfaceHash": "449250a9739dc5505b5756d493f22aecd9db71a0ec9bb5a9fc37f1a7371cbad7"
+    "build": "1.52.0-alpha",
+    "surfaceHash": "b598509e1f68d0b7a2f55e5ed8b6861c2e49f3a480d75600cfba87aeb4843990"
   }
 }
