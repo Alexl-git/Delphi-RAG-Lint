@@ -1240,7 +1240,7 @@ end;
   Splitting further would thread ShadowDir, Ordered, Excluded and Acc through
   another signature to satisfy a counter -- more surface, not less complexity.
   Re-examine if the re-run grows a third exit condition. }
-function CompileDependents(const pOptions   : TLintTreeOptions;  // dl:ok deep-nesting@fcb1 -- REVIEWED 2026-09-11 see the note above
+function CompileDependents(const pOptions   : TLintTreeOptions;
                            const pPlatform  : string;
                            const pCompile   : TUnitCompiler;
                            const pClosure   : TArray<TDependentFile>;

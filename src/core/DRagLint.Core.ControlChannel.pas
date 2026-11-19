@@ -1317,7 +1317,7 @@ begin
   while (not Term) and (Length(Result) < MAX_MSG) do
   begin
     Got:= 0;
-    if not ReadFile(AHandle, Buf[0], Length(Buf), Got, nil) then Break;  // dl:ok used-before-assignment@c7b1
+    if not ReadFile(AHandle, Buf[0], Length(Buf), Got, nil) then Break;
     if Got = 0 then Break;
     I:= Length(Result);
     SetLength(Result, I + Integer(Got));

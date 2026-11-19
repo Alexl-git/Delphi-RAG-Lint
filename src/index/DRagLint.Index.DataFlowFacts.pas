@@ -671,7 +671,7 @@ begin
   FGlobals.Free;
   FFields.Free;
   FVars.Free;
-  inherited;  // dl:ok inherited-bare@246d -- destructor chaining to TObject.Destroy
+  inherited;
 end;
 
 { Registers what TRoutineVarTable.Build leaves out on purpose (a single bare inline

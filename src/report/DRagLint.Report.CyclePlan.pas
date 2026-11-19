@@ -8258,7 +8258,7 @@ begin
   else Result.Evals:= PlanImplCycle;
   try
     CapturePlan(Result);
-  except  // dl:ok bare-except@9273 -- releases the half-built plan result and re-raises; nothing is swallowed
+  except
     Result.Release;
     raise;
   end;
@@ -8872,7 +8872,7 @@ var
         begin
           { external/library unit -- a leaf, cannot be part of a cycle }
           if not pGraph.Adj.ContainsKey(W) then Continue;
-          StrongConnect(W);  // dl:ok duplicate-code@6627 -- the Tarjan pass DRagLint.Charts.Q.Cycles also runs; merging the charts query onto ComputeSccs is outside E18 T15b
+          StrongConnect(W);
           if Lowlink[W] < Lowlink[AV] then Lowlink[AV]:= Lowlink[W];
         end
         else if OnStack.ContainsKey(W) and OnStack[W] then

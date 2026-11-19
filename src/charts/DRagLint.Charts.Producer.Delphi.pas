@@ -176,31 +176,31 @@ uses
   , DRagLint.Core.Model // dl:unit DRagLint.Core.Model accepted -- the engine version the header names is the product constant itself
   , DRagLint.Charts.Question // dl:unit DRagLint.Charts.Question accepted -- the bundler defaults and Ask-Report's refusal code travel with the question types
   , DRagLint.Charts.Ask, DRagLint.Charts.Index, DRagLint.Charts.Tools, DRagLint.Charts.Pairs
-  , DRagLint.Charts.Q.TouchesTables  // dl:ok unused-unit-in-uses@5c7b -- REVIEWED 2026-10-13: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
-  , DRagLint.Charts.Q.ShownWhere  // dl:ok unused-unit-in-uses@62b1 -- REVIEWED 2026-10-13: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
-  , DRagLint.Charts.Q.Deps  // dl:ok unused-unit-in-uses@6504 -- REVIEWED 2026-10-13: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
-  , DRagLint.Charts.Q.ClassSurface  // dl:ok unused-unit-in-uses@239f -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
-  , DRagLint.Charts.Q.EventWiring  // dl:ok unused-unit-in-uses@60ca -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
-  , DRagLint.Charts.Q.TestedBy  // dl:ok unused-unit-in-uses@e105 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
-  , DRagLint.Charts.Q.ChangeImpact  // dl:ok unused-unit-in-uses@c0e0 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
-  , DRagLint.Charts.Q.CrossesBoundary  // dl:ok unused-unit-in-uses@0508 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
-  , DRagLint.Charts.Q.ProtocolTrace  // dl:ok unused-unit-in-uses@a865 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
-  , DRagLint.Charts.Q.Lifecycle  // dl:ok unused-unit-in-uses@6e60 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
-  , DRagLint.Charts.Q.Effects  // dl:ok unused-unit-in-uses@db90 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
-  , DRagLint.Charts.Q.FeedsFrom  // dl:ok unused-unit-in-uses@e7ae -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
-  , DRagLint.Charts.Q.LandsWhere  // dl:ok unused-unit-in-uses@43f8 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
-  , DRagLint.Charts.Q.Consumers  // dl:ok unused-unit-in-uses@e7fa -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
-  , DRagLint.Charts.Q.ExceptionPaths  // dl:ok unused-unit-in-uses@4e99 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
-  , DRagLint.Charts.Q.WhoCalls  // dl:ok unused-unit-in-uses@eb43 -- REVIEWED 2026-10-15: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
-  , DRagLint.Charts.Q.Butterfly  // dl:ok unused-unit-in-uses@b637 -- REVIEWED 2026-10-16: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
-  , DRagLint.Charts.Q.Hierarchy  // dl:ok unused-unit-in-uses@fe1d -- REVIEWED 2026-10-16: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
-  , DRagLint.Charts.Q.Implementors  // dl:ok unused-unit-in-uses@fef9 -- REVIEWED 2026-11-01: linked for its initialization section, which registers the implementors question (1.40) this producer answers; no symbol is referenced on purpose
-  , DRagLint.Charts.Q.Wiring  // dl:ok unused-unit-in-uses@3045 -- REVIEWED 2026-10-16: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
-  , DRagLint.Charts.Q.Path  // dl:ok unused-unit-in-uses@4462 -- REVIEWED 2026-10-17: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
-  , DRagLint.Charts.Q.Architecture  // dl:ok unused-unit-in-uses@5f81 -- REVIEWED 2026-10-17: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
-  , DRagLint.Charts.Q.Cycles  // dl:ok unused-unit-in-uses@c264 -- REVIEWED 2026-10-17: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
-  , DRagLint.Charts.Q.MemberAccess  // dl:ok unused-unit-in-uses@a96a -- REVIEWED 2026-10-17: linked for its initialization section, which registers the ported questions this producer answers; no symbol is referenced on purpose
-  , DRagLint.Charts.Q.RoundTrip  // dl:ok unused-unit-in-uses@8ca7 -- REVIEWED 2026-10-18: linked for its initialization section, which registers the round-trip question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.TouchesTables
+  , DRagLint.Charts.Q.ShownWhere
+  , DRagLint.Charts.Q.Deps
+  , DRagLint.Charts.Q.ClassSurface
+  , DRagLint.Charts.Q.EventWiring
+  , DRagLint.Charts.Q.TestedBy
+  , DRagLint.Charts.Q.ChangeImpact
+  , DRagLint.Charts.Q.CrossesBoundary
+  , DRagLint.Charts.Q.ProtocolTrace
+  , DRagLint.Charts.Q.Lifecycle
+  , DRagLint.Charts.Q.Effects
+  , DRagLint.Charts.Q.FeedsFrom
+  , DRagLint.Charts.Q.LandsWhere
+  , DRagLint.Charts.Q.Consumers
+  , DRagLint.Charts.Q.ExceptionPaths
+  , DRagLint.Charts.Q.WhoCalls
+  , DRagLint.Charts.Q.Butterfly
+  , DRagLint.Charts.Q.Hierarchy
+  , DRagLint.Charts.Q.Implementors
+  , DRagLint.Charts.Q.Wiring
+  , DRagLint.Charts.Q.Path
+  , DRagLint.Charts.Q.Architecture
+  , DRagLint.Charts.Q.Cycles
+  , DRagLint.Charts.Q.MemberAccess
+  , DRagLint.Charts.Q.RoundTrip
   ;
 
 const

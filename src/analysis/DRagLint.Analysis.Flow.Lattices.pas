@@ -1303,7 +1303,7 @@ begin
   FMultiDecl.Free;
   FByName.Free;
   FVars.Free;
-  inherited; // dl:ok inherited-bare@246d -- the destructor idiom; TObject.Destroy is the intended ancestor
+  inherited;
 end;
 
 function TRoutineVarTable.Count: Integer; begin Result := FVars.Count; end;

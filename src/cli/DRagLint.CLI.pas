@@ -1747,7 +1747,7 @@ begin
     else if A = '--no-near-search' then Result.PpNoNearSearch:= True
     // v1.2.1 port change #5: opt into the dcc-tolerance pass.
     else if A = '--tolerances' then Result.PpTolerances:= True
-    else if A = '--include-sites' then Result.PpIncludeSites:= True  // dl:ok duplicate-code@9bc8 -- REVIEWED 2026-10-24 (lint sweep b0bad3cf..HEAD): the ParseArgs boolean-flag arm shape (else if A = <flag> then Result.Field:= True); one arm per flag extends the chain by design
+    else if A = '--include-sites' then Result.PpIncludeSites:= True
     // PP-Task-7: pp-profile define-profile resolver -- the project whose config
     // defines to resolve (--platform reuses CheckPlatform, --config reuses
     // WorkspaceConfig from the shared arg handlers above).
@@ -10870,7 +10870,7 @@ var
     if not LineCache.TryGetValue(AFile, Result) then
     begin
       { B07: decode through EnsureUtf8Bytes -- a BOM file with a stray ANSI byte must not die in the strict UTF-8 reader. }
-      if TFile.Exists(AFile) then Result:= TEncoding.UTF8.GetString(EnsureUtf8Bytes(TFile.ReadAllBytes(AFile))).Replace(#13#10, #10).Split([#10]) else SetLength(Result, 0);  // dl:ok taint-path-traversal@8858 -- REVIEWED 2026-11-16: reads a file the caller named on the command line or in its own manifest; a CLI reading what its user points it at is the feature, not a traversal
+      if TFile.Exists(AFile) then Result:= TEncoding.UTF8.GetString(EnsureUtf8Bytes(TFile.ReadAllBytes(AFile))).Replace(#13#10, #10).Split([#10]) else SetLength(Result, 0);
       LineCache.Add(AFile, Result);
     end;
   end;
@@ -21951,7 +21951,7 @@ begin
   begin
     var Arr: TJSONArray:= TJSONArray.Create;
     try
-      for var Ed in pProof.Edits do // dl:ok duplicate-code@d4d6 -- the --json edit list as every refactor verb prints it; each owns its own shape
+      for var Ed in pProof.Edits do
       begin
         var O: TJSONObject:= TJSONObject.Create;
         O.AddPair('file', Ed.FilePath);

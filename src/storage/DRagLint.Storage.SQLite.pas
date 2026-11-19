@@ -6007,7 +6007,7 @@ procedure TSQLiteSymbolStore.PutFileFacts(const AToken: TFileTxToken; const AInc
           P.DataType:= if MatchText(P.Name, FF_TEXT_PARAMS) then ftWideString else ftLargeint;
         end;
         Result.Prepare;
-      except  // dl:ok bare-except@041e -- frees the half-prepared query and re-raises; nothing is swallowed
+      except
         Result.Free;
         raise;
       end;
@@ -6130,7 +6130,7 @@ begin
   begin
     Q:= Prepared(FF_DEL_ATR);
     Q.ParamByName('fid').AsLargeInt:= AToken.FileId;
-    Q.ExecSQL;  // dl:ok duplicate-code@6087 -- each optional fact table (comment_facts, attributes) has its own probe + delete + insert block over the shared FF_* prepared statements; columns differ, a generic writer would hide them
+    Q.ExecSQL;
     Q:= Prepared(FF_INS_ATR);
     for I:= 0 to High(AAttributes) do
     begin
@@ -7152,7 +7152,7 @@ begin
         QA.ExecSQL;
       end;
       FConn.Commit;
-    except // dl:ok bare-except@4bef -- rollback and RE-RAISE: nothing is swallowed, any failure must undo the wipe
+    except
       FConn.Rollback;
       raise;
     end;
@@ -14709,7 +14709,7 @@ begin
         Q.ExecSQL;
       end;
       FConn.Commit;
-    except  // dl:ok bare-except@4bef -- rollback-then-reraise: every exception must undo the partial write, and none is swallowed
+    except
       FConn.Rollback;
       raise;
     end;
@@ -15045,7 +15045,7 @@ begin
       finally
         Ins.Free;
       end; // try
-    except  // dl:ok bare-except@4bef -- rollback then RE-RAISE: nothing is swallowed, any failure must undo the partial write
+    except
       FConn.Rollback;
       raise;
     end;
@@ -17810,7 +17810,7 @@ end; // function
 
 // The shared reader behind FindDuplicateGlobalDecls and FindGlobalDeclSites:
 // runs ASQL, which must project nm/kd/fid/ln/cl/sg, into site rows.
-function TSQLiteSymbolStore.ReadDeclSiteRows(const ASQL: string): TArray<TDuplicateDeclSite>;  // dl:ok duplicate-code@f247 -- the unit's house reader shape (TFDQuery open / row loop / close), shared with FindUsesGlobalCensus and every other typed reader here; a generic reader would need a TFunc<TFDQuery, T> per record type, which is more code than the duplication it removes
+function TSQLiteSymbolStore.ReadDeclSiteRows(const ASQL: string): TArray<TDuplicateDeclSite>;
 var
   Q   : TFDQuery                   ;
   List: TList<TDuplicateDeclSite>  ;
@@ -20465,7 +20465,7 @@ begin
                 [FScopeTypesBefore.Count, FScopeTypesAfter.Count]));
 end;
 
-procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);  // dl:ok method-too-long@a1a9, cyclomatic-complexity@b54e, cognitive-complexity@fbce -- (1.51.1 INC2 added the ref_host_bindings deletes and one write call): one transaction over one resolver with shared maps; a split is its own change with its own re-resolve measurement, and lane facts (1.44) added only two calls, three counters and two log lines here (REVIEWED 2026-11-18 INT13: +1.52 EXTGAPS2 exports ref kind / var-out global writes -> 816 lines, cc 71, cog 117; still the one-transaction resolver; the split is backlog, not a sweep fix)
+procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);
 { v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
   (wipe the table, resolve in memory, batch-write in one transaction). Builds one
   TCallResolver (its name/scope maps cost O(symbols) to build ONCE), then streams
@@ -20666,7 +20666,7 @@ begin
   TReadBound     := 0;
   Streamed:= 0;
   Resolver:= TCallResolver.Create(Self, AExtraStores); // prepare name/scope maps ONCE
-  except // dl:ok bare-except@4bef -- rollback and RE-RAISE: the lock taken above must not outlive a failed set-up
+  except
     FConn.Rollback;
     raise;
   end;
@@ -21089,7 +21089,7 @@ begin
         if StaleWhere <> '' then WtSuffix:= WtSuffix + ' AND (' + StaleWhere + ')';
         FConn.ExecSQL('UPDATE refs SET symbol_id = (SELECT r2.symbol_id FROM refs r2 WHERE r2.file_id = refs.file_id ' +
           'AND r2.start_line = refs.start_line AND r2.start_col = refs.start_col AND r2.kind IN (''read'', ''member-access'') ' +
-          'AND r2.symbol_id IS NOT NULL ORDER BY r2.id LIMIT 1) WHERE refs.kind = ''' + REF_KIND_WRITE_THROUGH + '''' + WtSuffix);  // dl:ok sql-injection-concat -- REVIEWED 2026-11-17 (1.52 INT): WtSuffix is SQL this pass BUILT (the same ScopeWhere / StaleWhere predicates ResolveLibraryReadRefs appends), never user text
+          'AND r2.symbol_id IS NOT NULL ORDER BY r2.id LIMIT 1) WHERE refs.kind = ''' + REF_KIND_WRITE_THROUGH + '''' + WtSuffix);
       end;
       { 150-RS2 (2): after every member_accesses writer, before the derived streams. }
       var ArgCandidates, ArgStored: Int64;

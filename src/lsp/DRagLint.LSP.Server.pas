@@ -3052,7 +3052,7 @@ begin
   if AResult = nil then AResult:= TJSONNull.Create;
   try
     Reply:= TJSONObject.Create;
-  except  // dl:ok bare-except@5cc8 -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
+  except
     AResult.Free;
     raise;
   end;
@@ -3493,7 +3493,7 @@ begin
         SymObj.AddPair('location', LocationFromSymbol(Sym, StCur));
       end; // for
     end; // for
-  except  // dl:ok bare-except@bb6b -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
+  except
     Arr.Free;
     raise;
   end; // try
@@ -3547,7 +3547,7 @@ begin
         if (StIdx = 0) and (Length(Symbols) > 0) and EphemeralLeads(DefStores) then Break;
       end;
     end;
-  except  // dl:ok bare-except@bb6b -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
+  except
     Arr.Free;
     raise;
   end; // try
@@ -3660,7 +3660,7 @@ begin
   Arr:= TJSONArray.Create;
   try
     Path       := APath;
-    IncludeDecl:= AIncludeDecl;  // dl:ok duplicate-code@106a -- the Arr/try/IdentifierAtPosition prologue ComputeDefinition shares; both bodies were already duplicated in the pre-S0 handlers and S0 moved them verbatim
+    IncludeDecl:= AIncludeDecl;
     if Length(FStores) = 0 then Exit(Arr);
     Ident:= IdentifierAtPosition(Path, ALine0, ACol0);
     if Ident <> '' then
@@ -3720,7 +3720,7 @@ begin
           MISSING, not that the other stores' were present. }
       end;
     end;
-  except  // dl:ok bare-except@bb6b -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
+  except
     Arr.Free;
     raise;
   end; // try
@@ -5842,7 +5842,7 @@ begin
     { Wave 149 LX (D1P-149 i): the exception lens titles, one (line, title) object per routine, 0-based on the
       routine's declaration line -- the RAD Studio lens reads callerCounts, not codeLens. }
     Res.AddPair('exceptions', ComputeExceptionLenses(FileFromUri(Uri)));
-  except  // dl:ok bare-except@56ea -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
+  except
     Res.Free;
     raise;
   end;
@@ -5959,7 +5959,7 @@ begin
       O.AddPair('via'      , F.Via);
       O.AddPair('routine'  , F.Routine);
     end;
-  except  // dl:ok bare-except@041e -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
+  except
     Result.Free;
     raise;
   end;
@@ -6133,7 +6133,7 @@ begin
         Decl.Free;
       end;
     end;
-  except  // dl:ok bare-except@bb6b -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
+  except
     Arr.Free;
     raise;
   end;

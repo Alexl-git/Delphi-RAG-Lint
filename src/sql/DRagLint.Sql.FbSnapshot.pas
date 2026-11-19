@@ -382,7 +382,7 @@ begin
             QIns.ParamByName('rs'  ).AsWideString := QSrc.FieldByName('REFRESH_SQL'      ).AsString;
             QIns.ParamByName('ng'  ).AsWideString := QSrc.FieldByName('NAME_GENERATOR'   ).AsString;
             QIns.ParamByName('kf'  ).AsWideString := QSrc.FieldByName('KEY_FIELD'        ).AsString;
-            QIns.ParamByName('utn' ).AsWideString := QSrc.FieldByName('UPDATE_TABLE_NAME').AsString;  // dl:ok duplicate-code@a4b1 -- REVIEWED 2026-10-26 (extract-136 review): one column-copy loop per snapshot table; each reads its own source columns into its own insert, so the shared shape is the table list, not a helper
+            QIns.ParamByName('utn' ).AsWideString := QSrc.FieldByName('UPDATE_TABLE_NAME').AsString;
             QIns.ParamByName('uomf').AsInteger:= Ord(UpCase(string(QSrc.FieldByName('UPDATE_ONLY_MODIFIED_FIELDS').AsString + ' ')[1]) = 'T');
             QIns.ParamByName('c'  ).AsWideString := QSrc.FieldByName('CONDITIONS' ).AsString;
             QIns.ParamByName('ver').AsInteger:= QSrc.FieldByName('FIB$VERSION').AsInteger;

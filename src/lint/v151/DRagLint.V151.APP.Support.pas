@@ -607,7 +607,7 @@ begin
   FRoutines.Free;
   FToks.Free;
   FDirs.Free;
-  inherited;  // dl:ok inherited-bare@246d -- REVIEWED 2026-11-14 v151 INT: bare inherited calls the same-named ancestor method, intended
+  inherited;
 end;
 
 procedure TAppSrc.Mask;

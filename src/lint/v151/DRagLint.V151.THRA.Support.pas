@@ -655,7 +655,7 @@ end;
 
 { Tokenizer ------------------------------------------------------------- }
 
-function Tokenize(const S: string): TArray<TThrTok>;  // dl:ok deep-nesting@9caa, cyclomatic-complexity@a967, cognitive-complexity@0e50 -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
+function Tokenize(const S: string): TArray<TThrTok>;  // dl:ok cyclomatic-complexity@a967, cognitive-complexity@0e50 -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
 var
   Lst: TList<TThrTok>;
   I, N, Line, Col, StartI, StartLine, StartCol: Integer;
@@ -818,7 +818,7 @@ begin
   FTypeDefs.Free;
   FClasses.Free;
   FRoutines.Free;
-  inherited;  // dl:ok inherited-bare@246d -- REVIEWED 2026-11-13 v151 THR-A: TObject destructor chain only
+  inherited;
 end;
 
 function TThrScan.Count: Integer;
@@ -989,7 +989,7 @@ begin
   Result:= (P < 0) or (L(P) = ';') or (L(P) = 'implementation') or (L(P) = ']');
 end;
 
-function TThrScan.ParseClassDecl(AOpener: Integer): Integer;  // dl:ok deep-nesting@c943, cyclomatic-complexity@3862, cognitive-complexity@a35b -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
+function TThrScan.ParseClassDecl(AOpener: Integer): Integer;  // dl:ok cyclomatic-complexity@3862, cognitive-complexity@a35b -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
 var
   N, J, K, Depth, E, GenD: Integer;
   C: TThrClass;
@@ -1103,7 +1103,7 @@ begin
   end;
 end;
 
-function TThrScan.ParseRoutine(AKw: Integer): Integer;  // dl:ok deep-nesting@c417, cyclomatic-complexity@b56d -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
+function TThrScan.ParseRoutine(AKw: Integer): Integer;  // dl:ok cyclomatic-complexity@b56d -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
 var
   N, J, D: Integer;
   R: TThrRoutine;
@@ -1889,7 +1889,7 @@ end;
 
 { Expansion of freeonterminate-then-wait: FreeAndNil / DisposeOf ----------- }
 
-procedure ThrCheckFreeAndNilOnFreeOnTerminate(const AScan: TThrScan; const APath, AHostRuleId: string; const AOut: TList<TLintFinding>);  // dl:ok deep-nesting@5c94, cyclomatic-complexity@ec8f, cognitive-complexity@e75f -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
+procedure ThrCheckFreeAndNilOnFreeOnTerminate(const AScan: TThrScan; const APath, AHostRuleId: string; const AOut: TList<TLintFinding>);  // dl:ok cyclomatic-complexity@ec8f, cognitive-complexity@e75f -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
 var
   Idx, K, M, Q, LastTok, VarTok: Integer;
   R: TThrRoutine;

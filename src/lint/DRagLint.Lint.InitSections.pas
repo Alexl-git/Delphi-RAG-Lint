@@ -273,7 +273,7 @@ function ProgramInitOrders(const AStore: ISymbolStore; const AStop: TFunc<Boolea
 /// <seealso cref="DRagLint.Lint.InitSections.TInitGraph.ProgramFiles"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function InitializesBefore(const AStore: ISymbolStore; const AProgram, AUnitA, AUnitB: string): TInitOrderVerdict;  // dl:ok unused-public-symbol@5b89 -- REVIEWED 2026-11-17: 1.52 API for lanes HBROOTS and FINCUT (merge after INITAPI); today only tests\fixtures\v152-initapi\InitApiHarness.dpr calls it
+function InitializesBefore(const AStore: ISymbolStore; const AProgram, AUnitA, AUnitB: string): TInitOrderVerdict;
 
 implementation
 

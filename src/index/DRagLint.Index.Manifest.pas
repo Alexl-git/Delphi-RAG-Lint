@@ -2068,7 +2068,7 @@ begin
         if (V is TJSONObject) and (TJSONObject(V).GetValue('name') is TJSONString) and
           (FindSectionByName(AOld, TJSONObject(V).GetValue('name').Value) = nil) then
           Result.AddElement(TJSONValue(V.Clone));
-  except  // dl:ok bare-except@041e -- frees the half-built result object and re-raises; nothing is swallowed
+  except
     Result.Free;
     raise;
   end;
@@ -2138,7 +2138,7 @@ begin
       NewJ.Free;
       OldJ.Free;
     end;
-  except  // dl:ok bare-except@041e -- frees the half-built result object and re-raises; nothing is swallowed
+  except
     Result.Free;
     raise;
   end;

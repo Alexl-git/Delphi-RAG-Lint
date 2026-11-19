@@ -91,7 +91,7 @@ function ImportTableFromDataSet(pSource: TDataSet; pTarget: TFDConnection;  // d
 /// <seealso cref="DRagLint.FieldRepo.Schema.QuoteRepoIdent"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function ImportFromFirebird(const pConnectionString: string; pTarget: TFDConnection;  // dl:ok unused-public-symbol@2f94 -- public API; callers arrive with lane TTE (repo import-fb)
+function ImportFromFirebird(const pConnectionString: string; pTarget: TFDConnection;
   pReplace: Boolean): TArray<TRepoImportStat>;
 
 /// <summary>Opens a Firebird connection from a 'Key=Value;...' string.</summary>
@@ -118,12 +118,12 @@ uses
   System.DateUtils,
   System.Variants,
   FireDAC.Stan.Error,
-  FireDAC.Stan.Def,  // dl:ok unused-unit-in-uses@bef0 -- FireDAC driver registration
+  FireDAC.Stan.Def,
   FireDAC.Stan.Pool,
   FireDAC.Stan.Async,
   FireDAC.Stan.Param,
   FireDAC.Phys,  // dl:ok unused-unit-in-uses@55fa
-  FireDAC.Phys.FB,  // dl:ok unused-unit-in-uses@17cb
+  FireDAC.Phys.FB,
   FireDAC.DApt;
 
 const
@@ -297,8 +297,8 @@ begin
       Params.Free;
     end;
     Result.LoginPrompt := False;
-    Result.Open;  // dl:ok dataset-open-without-close@f8d5 -- returns the OPEN connection; the caller owns Close/Free
-  except  // dl:ok bare-except@041e -- frees the connection and re-raises the original exception
+    Result.Open;
+  except
     Result.Free;
     raise;
   end;
@@ -368,7 +368,7 @@ begin
       SetRepoMeta(pTarget, 'imported_at_utc', DateToISO8601(TTimeZone.Local.ToUniversalTime(Now), True));
       SetRepoMeta(pTarget, 'fb_field_info_version', FieldInfoVersion(Source));
       pTarget.Commit;
-    except  // dl:ok bare-except@46a7 -- rolls the transaction back and re-raises the original exception
+    except
       pTarget.Rollback;
       raise;
     end;

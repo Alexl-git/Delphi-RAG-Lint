@@ -13,19 +13,19 @@ interface
 implementation
 
 uses
-  DRagLint.LSP.Feature.DocumentSymbol  // dl:ok unused-unit-in-uses@b145 -- linked for its initialization (RegisterLspFeature); no identifier is referenced
-  , DRagLint.LSP.Feature.Ping  // dl:ok unused-unit-in-uses@45bf -- linked for its initialization (RegisterLspFeature); no identifier is referenced
-  , DRagLint.LSP.Feature.CodeLens  // dl:ok unused-unit-in-uses@ed85 -- linked for its initialization (RegisterLspFeature); no identifier is referenced
-  , DRagLint.LSP.Feature.ImplDecl  // dl:ok unused-unit-in-uses@5294 -- linked for its initialization (RegisterLspFeature); no identifier is referenced
-  , DRagLint.LSP.Feature.Rename  // dl:ok unused-unit-in-uses@6450 -- linked for its initialization (RegisterLspFeature); no identifier is referenced
-  , DRagLint.LSP.Feature.SemanticTokens  // dl:ok unused-unit-in-uses@e4e0 -- linked for its initialization (RegisterLspFeature); no identifier is referenced
-  , DRagLint.LSP.Feature.InlayHint  // dl:ok unused-unit-in-uses@c103 -- linked for its initialization (RegisterLspFeature); no identifier is referenced
-  , DRagLint.LSP.Feature.CallHierarchy  // dl:ok unused-unit-in-uses@b0b0 -- linked for its initialization (RegisterLspFeature); no identifier is referenced
-  , DRagLint.LSP.Feature.TypeHierarchy  // dl:ok unused-unit-in-uses@a85c -- linked for its initialization (RegisterLspFeature); no identifier is referenced
-  , DRagLint.LSP.Feature.TypeDefinition  // dl:ok unused-unit-in-uses@abd4 -- linked for its initialization (RegisterLspFeature); no identifier is referenced
-  , DRagLint.LSP.Feature.DocumentHighlight  // dl:ok unused-unit-in-uses@7468 -- linked for its initialization (RegisterLspFeature); no identifier is referenced
-  , DRagLint.LSP.Feature.FoldingRange  // dl:ok unused-unit-in-uses@38b9 -- linked for its initialization (RegisterLspFeature); no identifier is referenced
-  , DRagLint.LSP.Feature.ExecuteCommand  // dl:ok unused-unit-in-uses@91b8 -- linked for its initialization (RegisterLspFeature); no identifier is referenced
+  DRagLint.LSP.Feature.DocumentSymbol
+  , DRagLint.LSP.Feature.Ping
+  , DRagLint.LSP.Feature.CodeLens
+  , DRagLint.LSP.Feature.ImplDecl
+  , DRagLint.LSP.Feature.Rename
+  , DRagLint.LSP.Feature.SemanticTokens
+  , DRagLint.LSP.Feature.InlayHint
+  , DRagLint.LSP.Feature.CallHierarchy
+  , DRagLint.LSP.Feature.TypeHierarchy
+  , DRagLint.LSP.Feature.TypeDefinition
+  , DRagLint.LSP.Feature.DocumentHighlight
+  , DRagLint.LSP.Feature.FoldingRange
+  , DRagLint.LSP.Feature.ExecuteCommand
   ;
 
 end.

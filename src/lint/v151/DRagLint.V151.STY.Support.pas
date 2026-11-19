@@ -214,7 +214,7 @@ begin
   end;
 end;
 
-function StyFindMethodOrder(const AMasked: string): TArray<TStyOrderHit>;  // dl:ok deep-nesting@c037 -- REVIEWED 2026-11-14 v151 INT: tree walk with per-shape branches; flattening would scatter one rule
+function StyFindMethodOrder(const AMasked: string): TArray<TStyOrderHit>;
 const
   RE_TYPE = '(?im)^[ \t]*([A-Za-z_]\w*)(?:<[^>]*>)?[ \t]*=[ \t]*(?:packed[ \t]+)?(class|record|object)\b(?![ \t]*(?:of\b|;))';
   RE_BODY = '(?im)^[ \t]*(?:class[ \t]+)?(?:procedure|function|constructor|destructor)[ \t]+([A-Za-z_]\w*)(?:<[^>]*>)?\.([A-Za-z_]\w*)(?![\w.])';

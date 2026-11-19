@@ -311,7 +311,7 @@ begin
   EventBindings.Free;
   DfmObjects.Free;
   DfmProps.Free;
-  inherited;  // dl:ok inherited-bare@246d -- destructor: the only ancestor is TObject
+  inherited;
 end;
 
 function TDfmState.Emit(AKind: TSymbolKind; const AName, AQualifiedName, ASignature: string; AParentSymbolIdx: Integer; const ARangeNode: TTSNode): Integer;
