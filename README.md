@@ -369,6 +369,10 @@ The rule is the same for `document`, `lint-all`, `lint-project` and the
 exporters, so one `--db` list works across verbs: a block written by
 `document --db P --db L` is accepted by `lint-all --db P --db L`.
 
+### First install and updates: the library re-index
+
+After the first install, and after any update that bumps the extractor (1.52.1 is one: extractor 1.42.0-alpha), drag-lint re-indexes the platform libraries (Win32 and Win64) in the background. Measured on 1.52 this takes about 2.5 hours per platform and uses a lot of CPU, but the machine stays usable. Later indexing is incremental.
+
 ### Indexing the Delphi RTL/VCL libraries
 
 To build one index over everything Delphi itself knows about - the IDE's

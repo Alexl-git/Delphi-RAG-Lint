@@ -17,7 +17,7 @@ const
   /// This unit is the right home because it is the one both sides already use:
   /// DRagLint.LSP.Server uses Core.Model, and CLI uses LSP.Server, so a
   /// constant here reaches both with no new dependency and no cycle.</remarks>
-  DRAGLINT_VERSION = '1.52.0-alpha';
+  DRAGLINT_VERSION = '1.52.1-alpha';
 
   /// <summary>The identity of what this build EXTRACTS from a byte sequence.
   /// Part of the indexer fingerprint; <see cref="DRAGLINT_VERSION"/> is not.
@@ -299,7 +299,12 @@ const
       several units include (lane INC2 B10; the resolver bump fills it).
     * grammar unchanged (tree-sitter-delphi13 v1.4.12, see the 1.39.0 entry; D04). B27 (Inline /
       Library as identifiers) was not delivered by the TS session -> 1.51.2. }
-  DRAGLINT_EXTRACTOR_VERSION = '1.41.0-alpha';
+  { 1.41.0 -> 1.42.0 (2026-11-19, 1.52.1, lane/v1521-int -- ONE bump for 1.52.1):
+    * INITDEP: init_deps facts (initialization / finalization dependencies) are written by the indexer.
+    * SRC: the deferred extractor surface patch (slz-SRC) in Parser.Delphi13, Parser.DocComments, Preprocess,
+      Index.Plan, Index.DataFlowFacts, Index.DispatchResolver, Analysis.Flow.Lattices, Core.Indexer.
+    * grammar: tree-sitter-delphi13 v1.4.14 (6cbc96c; a line comment excludes its trailing CR). }
+  DRAGLINT_EXTRACTOR_VERSION = '1.42.0-alpha';
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
   /// Deliberately SEPARATE from <see cref="DRAGLINT_EXTRACTOR_VERSION"/>.</summary>
@@ -564,7 +569,10 @@ const
   /// ref_host_bindings, and an include method body binds its members per host (lane INC2 B10);
   /// reads of library symbols resolve library-first (ResolveLibraryReadRefs), paren-less library
   /// calls and function-result receivers bind (lane RES B02 / B04 / B06).</para>
-  DRAGLINT_RESOLVER_VERSION = '1.29.0-alpha';
+  /// <para>1.29.0-alpha -&gt; 1.30.0-alpha (2026-11-19, 1.52.1, rides the 1.42.0 extractor
+  /// re-parse): the compile-closure walk reuses each unit's scan (closure_cache) and a scoped
+  /// resolve pass re-derives only what it moved in the purity stage (lane INCR18, GH #18).</para>
+  DRAGLINT_RESOLVER_VERSION = '1.30.0-alpha';
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
   /// the ghost-compile journal that first created the folder.</summary>

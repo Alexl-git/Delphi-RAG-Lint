@@ -1260,4 +1260,6 @@
 #   Superseded: 1.41.0-alpha|26ec6461fed44cd14f16ae09f2e4973ff0b91fdd9a2e2ca72459b071ead3adbd
 #   Superseded (lane/v1521-int c8118a66d side): 1.41.0-alpha|7f8d87a7e4a0f18cc3d7a7f9d619572512fbe655dde10c3b16f170bce37f0e8e
 #   2026-11-19 v1521 INCR18 merge of lane/v1521-int c8118a66d: hash-only re-pin of the merged tree (both sides were hash-only re-pins, no bump).
-1.41.0-alpha|5d7a9e014d9a6744a0836c80345dd6126840b0c7862e3e5b8549cc33194a4202
+# superseded: 1.41.0-alpha|5d7a9e014d9a6744a0836c80345dd6126840b0c7862e3e5b8549cc33194a4202
+#   2026-11-19 v1521 INT bump 1.41.0 -> 1.42.0 (ONE bump for 1.52.1): INITDEP init_deps facts, SRC deferred extractor surface patch, grammar v1.4.14.
+1.42.0-alpha|c2b21956626c0cec74d9255867740e7e6bf1395a60d55a2bbc4e0b05b9b2592a
