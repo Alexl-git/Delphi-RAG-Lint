@@ -112,7 +112,10 @@ Check 'a LIBRARY helper member (System.SysUtils.TStringHelper.ToUpper) counts to
 # checks above.
 Check 'CONTROL: a genuinely unused import IS still flagged' `
   ($out -match "Unit 'uUuNoInit'") ''
-Check 'CONTROL: and so is the second one' ($out -match "Unit 'uUuWithInit'") ''
+# SLZ-RULE1 2026-11-19: uUuWithInit's section is not proven idle, so it links the unit
+# and is NOT a finding any more (was info "VERIFY BEFORE REMOVING"); see
+# run_unused_unit_init_section.ps1 for the idle-section positive control.
+Check 'a unit with a (not proven idle) initialization section is not flagged' ($out -notmatch "Unit 'uUuWithInit'") ''
 
 # ---------------------------------------------------------------------------
 Write-Host ''
@@ -121,12 +124,9 @@ $warnLine = @($out -split "`n" | Where-Object { $_ -match 'uUuNoInit'   -and $_ 
 $infoLine = @($out -split "`n" | Where-Object { $_ -match 'uUuWithInit' -and $_ -match 'unused-unit-in-uses' }) | Select-Object -First 1
 Check 'no initialization section -> warning' `
   ($null -ne $warnLine -and $warnLine -match '\[warning\]') ("matched: " + $warnLine)
-Check 'HAS an initialization section -> info' `
-  ($null -ne $infoLine -and $infoLine -match '\[info\]') ("matched: " + $infoLine)
-Check 'CONTROL: the two differ -- neither "always info" nor "always warning" passes' `
-  ($null -ne $warnLine -and $null -ne $infoLine -and $warnLine -match '\[warning\]' -and $infoLine -match '\[info\]') ''
-Check 'the info finding SAYS why it is only info' `
-  ($null -ne $infoLine -and $infoLine -match 'initialization section') ''
+Check 'HAS an initialization section -> no finding (SLZ-RULE1)' ($null -eq $infoLine) ("matched: " + $infoLine)
+Check 'the warning finding SAYS the unit has no initialization section' `
+  ($null -ne $warnLine -and $warnLine -match 'no initialization section') ''
 Check 'the warning finding does NOT repeat the old helper confession' `
   ($null -ne $warnLine -and $warnLine -notmatch 'invisible to this check') ''
 

@@ -2,15 +2,16 @@
   run_unused_unit_init_section.ps1 -- 145 lane lf: unused-unit-in-uses reads the used unit's
   initialization SECTION refs (F2) instead of treating every section as a hazard.
 
-  RULE: a used unit with an initialization section stays INFO "VERIFY BEFORE REMOVING" unless the
-  section's enclosed refs prove it idle (only the unit's own variables/constants) -> WARNING.
-  A section that references anything else stays INFO and the message NAMES what it references.
+  RULE (SLZ-RULE1 2026-11-19; was INFO "VERIFY BEFORE REMOVING"): a used unit with an
+  initialization section is NOT reported unless the section's enclosed refs prove it idle (only the
+  unit's own variables/constants) -> WARNING, dead import. A section that references anything else,
+  or one the index cannot read, links the unit for that section (FireDAC.Stan.Def / Phys.* driver
+  registration) and is never a finding -- self-LoopZero found all 13 FireDAC findings false.
   GATE: the library DB must carry the resolver that backfills section refs (1.20.0-alpha); an older
-  DB has no section refs, so an empty section would be indistinguishable from a real one -> plain INFO.
+  DB has no section refs, so an empty section is indistinguishable from a real one -> no finding.
 
-  POSITIVE CONTROLS: the idle unit must turn WARNING (fails on the old rule); the active unit must
-  name its callee (fails on the old rule); the finalization unit and the OLD-resolver library copy
-  must stay INFO (a rule that downgraded everything would pass the first check alone).
+  POSITIVE CONTROLS: the idle unit and a unit with no initialization section must still fire as
+  WARNING (a rule that suppressed everything would pass the negative checks alone).
 
   Usage: pwsh -File tests\autotest\run_unused_unit_init_section.ps1 [-Exe <new>] [-OldExe <older engine>]
 #>
@@ -104,13 +105,28 @@ finalization
 
 end.
 '@
+Write-Ascii (Join-Path $lib 'uPlain.pas') @'
+unit uPlain;
+
+interface
+
+procedure PlainExport;
+
+implementation
+
+procedure PlainExport;
+begin
+end;
+
+end.
+'@
 Write-Ascii (Join-Path $prj 'uHost.pas') @'
 unit uHost;
 
 interface
 
 uses
-  uIdleInit, uRegInit, uFinInit;
+  uIdleInit, uRegInit, uFinInit, uPlain;
 
 implementation
 
@@ -130,12 +146,12 @@ $libDb = Join-Path $WorkDir 'lib.sqlite'; $prjDb = Join-Path $WorkDir 'prj.sqlit
 & { $ErrorActionPreference = 'Continue'; & $Exe index $lib --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 & { $ErrorActionPreference = 'Continue'; & $Exe index $prj --db $prjDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $new = @(Run-Lint $Exe $libDb $prjDb 'new')
-$idle = Line $new 'uIdleInit'; $reg = Line $new 'uRegInit'; $fin = Line $new 'uFinInit'
+$idle = Line $new 'uIdleInit'; $reg = Line $new 'uRegInit'; $fin = Line $new 'uFinInit'; $plain = Line $new 'uPlain'
 Write-Host '== unused-unit-in-uses: initialization section refs ==' -ForegroundColor Cyan
-Check 'the rule fires for all three units (control: not vacuous)' (($idle -ne '') -and ($reg -ne '') -and ($fin -ne '')) "idle=$($idle.Length) reg=$($reg.Length) fin=$($fin.Length)"
-Check 'idle section (only GFlag := False) -> WARNING, dead import' (($idle -match 'warning') -and ($idle -notmatch 'VERIFY BEFORE REMOVING'))
-Check 'active section (calls RegisterThing) stays INFO and NAMES the callee' (($reg -match 'VERIFY BEFORE REMOVING') -and ($reg -match 'RegisterThing') -and ($reg -notmatch 'warning'))
-Check 'section + finalization stays plain INFO (control: not everything downgraded)' (($fin -match 'VERIFY BEFORE REMOVING') -and ($fin -notmatch 'references:'))
+Check 'POSITIVE CONTROL: no initialization section -> WARNING, dead import' (($plain -match 'warning') -and ($plain -match 'no initialization section')) "$plain"
+Check 'POSITIVE CONTROL: idle section (only GFlag := False) -> WARNING, dead import' (($idle -match 'warning') -and ($idle -match 'changes nothing')) "$idle"
+Check 'active section (calls RegisterThing) -> no finding (linked for its registration)' ($reg -eq '') "$reg"
+Check 'section + finalization -> no finding' ($fin -eq '') "$fin"
 
 # GATE: a library DB stamped by a resolver older than the section-ref backfill (1.20.0-alpha) has no
 # section refs, so its empty-looking sections must read as UNKNOWN. The stamp is lowered in a COPY
@@ -148,7 +164,7 @@ if ($py) {
   Check 'setup: copy stamped with the older resolver' ($stamp -match 'r=1\.19\.0-alpha') "$stamp"
   $old = @(Run-Lint $Exe $oldLib $prjDb 'oldlib')
   $oi = Line $old 'uIdleInit'
-  Check 'GATE: library DB from an older resolver -> unknown -> plain INFO, never WARNING' (($oi -match 'VERIFY BEFORE REMOVING') -and ($oi -notmatch 'warning') -and ($oi -notmatch 'references:'))
+  Check 'GATE: library DB from an older resolver -> section unknown -> no finding, never WARNING' ($oi -eq '') "$oi"
 } else { Write-Host '  [SKIP] old-resolver gate (no python)' -ForegroundColor Yellow }
 $none = @(Run-Lint $Exe '' $prjDb 'nolib')
 Check 'no library DB: no section finding, no crash' ((Line $none 'uIdleInit') -eq '')
