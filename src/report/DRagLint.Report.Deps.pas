@@ -218,7 +218,7 @@ function BuildDepsReport(const AStores: TArray<ISymbolStore>;
 implementation
 
 uses
-  Data.DB, FireDAC.Comp.Client,
+  FireDAC.Comp.Client,
   DRagLint.Storage.SQLite;
 
 const

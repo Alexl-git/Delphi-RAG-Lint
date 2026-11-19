@@ -208,7 +208,6 @@ begin
 
   Truncated:= False;
   TotalRows:= 0;
-  ElapsedMs:= 0;
   Failure  := '';
   Refused  := False;
   TimedOut := False;

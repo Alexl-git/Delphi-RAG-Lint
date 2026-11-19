@@ -783,15 +783,17 @@ begin
   try
     ConnectReadOnly(Conn, AArgs.DbPath); { a reader: never FireDAC's Exclusive/Delete defaults }
     Where:= '';
-    if AArgs.Name <> '' then Where:= 'WHERE UPPER(code) = ''' + UpperCase(AArgs.Name) + '''';
+    if AArgs.Name <> '' then Where:= 'WHERE UPPER(code) = :code';
     if AArgs.Rule <> '' then // reuse --rule arg as --severity filter
     begin
       if Where = '' then Where:= 'WHERE ' else Where:= Where + ' AND ';
-      Where:= Where + 'LOWER(severity) = ''' + LowerCase(AArgs.Rule) + '''';
+      Where:= Where + 'LOWER(severity) = :sev';
     end;
     Sql:= 'SELECT code, severity, raw_path, line_no, col_no, message ' + 'FROM compiler_findings ' + Where + ' ORDER BY raw_path, line_no LIMIT 500';
     Q.Connection:= Conn;
     Q.Sql.Text:= Sql;
+    if AArgs.Name <> '' then Q.ParamByName('code').AsString:= UpperCase(AArgs.Name);
+    if AArgs.Rule <> '' then Q.ParamByName('sev').AsString:= LowerCase(AArgs.Rule);
     Q.Open;
     Rows:= 0;
     while not Q.Eof do

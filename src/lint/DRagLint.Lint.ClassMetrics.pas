@@ -17,7 +17,6 @@ uses
   , System.Generics.Collections
   , System.Generics.Defaults { TComparer -- the deterministic emit order below }
   , TreeSitter
-  , TreeSitterLib
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   , DRagLint.Lint.Config

@@ -1123,6 +1123,7 @@ var
   N         : string                 ;
 begin
   Findings:= TList<TDocDriftFinding>.Create;
+  HasReturn:= False;
   try
     // The doc-comment anchor line (falls back to the decl line if the parsed doc
     // carries no position).

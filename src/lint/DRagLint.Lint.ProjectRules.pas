@@ -21,7 +21,6 @@ uses
   , System.Generics.Collections
   , System.Generics.Defaults
   , TreeSitter
-  , TreeSitterLib
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   , DRagLint.Index.Glob

@@ -18,7 +18,6 @@ uses
   , System.Classes
   , System.IOUtils
   , System  .Generics.Collections
-  , System  .Generics.Defaults
   , DRagLint.Core    .Model
   , DRagLint.Core    .Interfaces
   , DRagLint.Lint    .ProjectChecks.Parse
