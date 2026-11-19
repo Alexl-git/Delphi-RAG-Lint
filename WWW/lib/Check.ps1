@@ -17,7 +17,7 @@ function Test-SiteOutput([string]$Dir, $Config) {
         $h = [Text.Encoding]::ASCII.GetString($bytes)
         if (-not $h.Contains($Config.micronite.url)) { $problems.Add("${rel}: no micronite link") }
         if ($h -notmatch '<link rel="canonical" href="https://www\.delphi-rag-lint\.com/') { $problems.Add("${rel}: no canonical link") }
-        if ($h.Contains('{{')) { $problems.Add("${rel}: placeholder left") }
+        if ($h -match '\{\{\s*[A-Za-z]') { $problems.Add("${rel}: placeholder left") }   # a placeholder is {{name...}}; a bare {{ in prose/code is content
         # share-preview rule (owner 2026-10-20): every page but the 404 has a complete card
         if ($rel -ne '404.html') {
             $og = @{}
