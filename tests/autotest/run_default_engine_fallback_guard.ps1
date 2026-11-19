@@ -72,7 +72,7 @@ try {
       $nb = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $childFile $psr 2>&1 | ForEach-Object { "$_" } } | Out-String; $nbCode = $LASTEXITCODE
       Set-Stub $deployed $true
       $dp = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $childFile $psr 2>&1 | ForEach-Object { "$_" } } | Out-String; $dpCode = $LASTEXITCODE
-      $okFresh = ($onlyBuilt -like '*src\cli\Win64\Debug\drag-lint.exe') -and ($nbCode -eq 2) -and ($dpCode -eq 2) -and $nb.Contains('no build of this tree') -and $dp.Contains('no build of this tree')
+      $okFresh = ($onlyBuilt -like '*src\cli\Win64\Debug\drag-lint.exe') -and ($nbCode -eq 2) -and ($dpCode -eq 2) -and $nb.Contains('no build of this tree') -and $dp.Contains('no build of this tree')  # exe-freshness: absent (wildcard pattern matched against a stub path, not an exe reference)
       if (-not $okFresh) { $bad += $s.Name }
       continue
     }

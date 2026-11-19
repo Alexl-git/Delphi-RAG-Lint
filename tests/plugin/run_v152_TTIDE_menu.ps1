@@ -106,8 +106,8 @@ begin
       'changed x.pas'#13#10'repo update-orm: 0 new, 1 changed', 'summary drops diff lines');
     Check(Pos('more lines', FieldRepoRunSummary('a'#13#10'b'#13#10'c', 2)) > 0, 'summary caps the line count');
     { command line }
-    var s: string:= FieldRepoCommandLine('C:\x y\drag-lint.exe', 'refresh-schema', 'C:\p q\a.dproj', '--dry-run');
-    Check(s = '"C:\x y\drag-lint.exe" repo refresh-schema --project "C:\p q\a.dproj" --dry-run', 'command line: ' + s);
+    var s: string:= FieldRepoCommandLine('C:\x y\drag-lint.exe', 'refresh-schema', 'C:\p q\a.dproj', '--dry-run');  // # exe-freshness: absent (a fake path the command line only quotes)
+    Check(s = '"C:\x y\drag-lint.exe" repo refresh-schema --project "C:\p q\a.dproj" --dry-run', 'command line: ' + s);  // # exe-freshness: absent (a fake path the command line only quotes)
     Check(FieldRepoCommandLine('e.exe', 'info', 'a.dproj', '') = '"e.exe" repo info --project "a.dproj"', 'command line without extra');
     { masked input: the VCL InputQuery masks the edit when the prompt starts with #31 }
     Check(MaskedPrompt('Pw:') = #31 + 'Pw:', 'MaskedPrompt prefixes #31');

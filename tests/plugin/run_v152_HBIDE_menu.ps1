@@ -168,8 +168,8 @@ begin
     end;
 
     { command line for a caret position }
-    lGot:= CheckInitCommandLine('C:\x y\drag-lint.exe', 'C:\p q\UnitB.pas', 'C:\d b\App.sqlite', 14, 12);
-    Expect(lGot, '"C:\x y\drag-lint.exe" check-init --at "C:\p q\UnitB.pas:14:12" --db "C:\d b\App.sqlite" --json', 'command line');
+    lGot:= CheckInitCommandLine('C:\x y\drag-lint.exe', 'C:\p q\UnitB.pas', 'C:\d b\App.sqlite', 14, 12);  // # exe-freshness: absent (a fake path the command line only quotes)
+    Expect(lGot, '"C:\x y\drag-lint.exe" check-init --at "C:\p q\UnitB.pas:14:12" --db "C:\d b\App.sqlite" --json', 'command line');  // # exe-freshness: absent (a fake path the command line only quotes)
 
     { MAY-BE-UNSET: use, witness hops, writers, limits }
     lGot:= Render(CheckInitMessages(Load('may.json'), 1));
