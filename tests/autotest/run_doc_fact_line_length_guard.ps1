@@ -199,7 +199,8 @@ Check "E3: setup -- the stored list is ONE line over $DCC_SAFE characters" ((Max
 $null = Run @('index', '--project', $dpr, '--db', $db)
 $fs = DriftFindings (RunJson @('lint', $shared, '--db', $db, '--rule', 'doc-drift', '--project-rules', '--json'))
 Check 'E3: lint --rule doc-drift reports the over-long stored line' (($null -ne $fs) -and ($fs.Count -ge 1)) ("{0} finding(s): {1}" -f @($fs).Count, ((@($fs) | ForEach-Object { $_.message }) -join ' | '))
-$r = Run @('lint', '--file', $shared, '--db', $db, '--project-rules', '--fix', '--fix-rule', 'doc-drift', '--apply', '--no-backup')
+# 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+$r = Run @('lint', '--file', $shared, '--db', $db, '--project-rules', '--fix', '--fix-rule', 'doc-drift', '--apply', '--no-compile-gate', '--no-backup')
 Check "E3: --fix rewrites it so every line is <= $FACT_MAX" ((MaxLineLen $shared) -le $FACT_MAX) "max $(MaxLineLen $shared); $(LastLine $r.Out)"
 Check "E3: the rewritten list still holds $CALLERS entries" ((EntryCount (CalledFromLogical ([IO.File]::ReadAllLines($shared)))) -eq $CALLERS) ''
 $null = Run @('index', '--project', $dpr, '--db', $db)

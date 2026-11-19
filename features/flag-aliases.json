@@ -18,8 +18,8 @@
     },
     {
       "canonical": "--output",
-      "aliases": ["--out"],
-      "reason": "back-compat: owner ruling ENG-6 (2026-09-22/23) -- scripts that use --out keep working"
+      "aliases": ["--out", "--report"],
+      "reason": "back-compat: owner ruling ENG-6 (2026-09-22/23) -- scripts that use --out keep working; --report (1.52 SMALLS 8611fb1d1) names the lint-all report file"
     },
     {
       "canonical": "--scan-libraries-win",

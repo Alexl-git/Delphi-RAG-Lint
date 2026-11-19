@@ -190,7 +190,7 @@
         {
           "type": "cli",
           "verb": "document",
-          "usage": "drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment",
+          "usage": "drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--format json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment",
           "flags": [
             {
               "name": "--qname",
@@ -214,7 +214,7 @@
             }
           ],
           "helpOrder": 54,
-          "help": ["  drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--no-backup|--migrate-pure] [--db PATH]   - generate/repair a managed DocInsight comment", "  drag-lint document --unit <file.pas> [--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]         - document every public decl in the unit (facts-only; ONE --unit per run: a second, different --unit is exit 2)", "  drag-lint document --project <p.dpr|.dproj> [--stubs|--apply|--json|--no-backup|--include-accessors|--reindex|--document-third-party|--migrate-pure] [--db PATH]  - document every public decl the project OWNS (--reindex brackets with index: self-freshens so hover/LSP are correct immediately after)", "                                 scope: the compile closure restricted to the project's own roots (_D-RAG\\drag-lint-project.json, same declaration lint-all reads).", "                                 Vendored roots are named and skipped; --document-third-party writes to them too."]
+          "help": ["  drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--format json|--no-backup|--migrate-pure] [--db PATH]   - generate/repair a managed DocInsight comment", "  drag-lint document --unit <file.pas> [--apply|--json|--no-backup|--include-accessors|--document-third-party|--migrate-pure] [--db PATH]         - document every public decl in the unit (facts-only; ONE --unit per run: a second, different --unit is exit 2)", "  drag-lint document --project <p.dpr|.dproj> [--stubs|--apply|--json|--no-backup|--include-accessors|--reindex|--document-third-party|--migrate-pure] [--db PATH]  - document every public decl the project OWNS (--reindex brackets with index: self-freshens so hover/LSP are correct immediately after)", "                                 scope: the compile closure restricted to the project's own roots (_D-RAG\\drag-lint-project.json, same declaration lint-all reads).", "                                 Vendored roots are named and skipped; --document-third-party writes to them too."]
         }
       ],
       "audience": "both",
@@ -987,7 +987,7 @@
           "type": "cli",
           "verb": "check-init",
           "example": "drag-lint check-init UnitA.GCache --db <db> --json",
-          "usage": "drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> [--json] [--explain] [--max-routines N] [--max-seconds S]",
+          "usage": "drag-lint check-init <QName>|--qname <QName> [--at <file>:<line>[:<col>]] --db <db> [--json|--format json] [--explain] [--max-routines N] [--max-seconds S]",
           "flags": [
             {
               "name": "--at",
@@ -1012,7 +1012,7 @@
               "arg": "S"
             }
           ],
-          "help": ["  drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> [--json] [--explain] [--max-routines N] [--max-seconds S]   (is a variable or field set before every use? SET / NEVER-SET / MAY-BE-UNSET / UNKNOWN-CALLEE; exit 0 = all SET, 1 = otherwise, 2 = error)"]
+          "help": ["  drag-lint check-init <QName>|--qname <QName> [--at <file>:<line>[:<col>]] --db <db> [--json|--format json] [--explain] [--max-routines N] [--max-seconds S]   (is a variable or field set before every use? SET / NEVER-SET / MAY-BE-UNSET / UNKNOWN-CALLEE; exit 0 = all SET, 1 = otherwise, 2 = error)"]
         }
       ],
       "audience": "both",
@@ -3855,7 +3855,7 @@
         {
           "type": "cli",
           "verb": "rules",
-          "usage": "drag-lint rules disable|enable --rule <id> --scope line|unit|project [--in <F> --line <N>] --reason \"<text>\" [--project <.dproj>] [--config <drag-lint-lint.json>] [--json]   (line = a dl:ok marker on the line; unit / project = rule_overrides in the project lint config, with reason and date; enable undoes one disable)",
+          "usage": "drag-lint rules disable|enable --rule <id> --scope line|unit|project [--in <F> --line <N>] --reason \"<text>\" [--project <.dproj>] [--config <drag-lint-lint.json>] [--json|--format json]   (line = a dl:ok marker on the line; unit / project = rule_overrides in the project lint config, with reason and date; enable undoes one disable)",
           "flags": [
             {
               "name": "--rule",
@@ -3889,7 +3889,7 @@
               "name": "--json"
             }
           ],
-          "help": ["  drag-lint rules disable|enable --rule <id> --scope line|unit|project [--in <F> --line <N>] --reason \"<text>\" [--project <.dproj>] [--config <drag-lint-lint.json>] [--json]   (line = a dl:ok marker on the line; unit / project = rule_overrides in the project lint config, with reason and date; enable undoes one disable)"]
+          "help": ["  drag-lint rules disable|enable --rule <id> --scope line|unit|project [--in <F> --line <N>] --reason \"<text>\" [--project <.dproj>] [--config <drag-lint-lint.json>] [--json|--format json]   (line = a dl:ok marker on the line; unit / project = rule_overrides in the project lint config, with reason and date; enable undoes one disable)"]
         },
         {
           "type": "ide-menu",
@@ -4152,7 +4152,7 @@
         {
           "type": "cli",
           "verb": "explain",
-          "usage": "drag-lint explain <rule-id> [--json] [--rules-dir <dir>]   (what one lint rule means, why it matters, bad / good example, default, fixable, and how to suppress it; an unknown id lists the nearest ids and exits 2)",
+          "usage": "drag-lint explain <rule-id> [--json|--format json] [--rules-dir <dir>]   (what one lint rule means, why it matters, bad / good example, default, fixable, and how to suppress it; an unknown id lists the nearest ids and exits 2)",
           "flags": [
             {
               "name": "--json"
@@ -4163,7 +4163,7 @@
             }
           ],
           "helpOrder": 49,
-          "help": ["  drag-lint explain <rule-id> [--json] [--rules-dir <dir>]   (what one lint rule means, why it matters, bad / good example, default, fixable, and how to suppress it; an unknown id lists the nearest ids and exits 2)"]
+          "help": ["  drag-lint explain <rule-id> [--json|--format json] [--rules-dir <dir>]   (what one lint rule means, why it matters, bad / good example, default, fixable, and how to suppress it; an unknown id lists the nearest ids and exits 2)"]
         }
       ],
       "audience": "both",
@@ -4234,7 +4234,7 @@
         {
           "type": "cli",
           "verb": "lint-all",
-          "usage": "drag-lint lint-all [--profile <name>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output|--report <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]",
+          "usage": "drag-lint lint-all [--profile <name>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]",
           "flags": [
             {
               "name": "--db",
@@ -4286,7 +4286,7 @@
             }
           ],
           "helpOrder": 19,
-          "help": ["  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output|--report <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget]", "                               --output <file> (alias --report): the text report goes to the file (default lint-report-YYYYMMDD.txt beside --project, else beside the DB); with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).", "                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)", "                               --rule <id>[,<id>...]: RUN and report ONLY those rules (1.51.1: a comma list narrows execution and derives no --shared-db peers, as one id does); naming an OFF-by-default rule opts it in", "                               for the run (no --enable needed) -- the same contract as lint and lint-project.", "                               --quiet: suppress per-file progress lines written to stderr", "                               on a --db the manifest does not register (a copy), the dl:shared marker-peer pass is skipped with one stderr note and sibling DBs resolve to same-named copies beside --db (else could not check); --shared-db <db> still runs (1.51.1).", "                               --project <.dproj|.dpr>: report ONLY on the units that project compiles", "                               (its compile closure + their .dfm siblings). Use it when one folder holds", "                               several projects, or when the DB spans more than the project you are reviewing.", "                               taint-sql-injection / taint-command-injection / taint-path-traversal (store-backed): walk the index's data_flows", "                               facts from a catalogued source to a sink; catalogues rules\\taint-sources|sinks|propagators.json, extended by the", "                               \"taint\" object of drag-lint-lint.json: sources sinks propagators sanitizers disable max_depth lib_depth max_rounds", "                               follow_ambiguous weak_receiver_regex weak_severity_drop max_paths_per_sink second_order.", "                               --fix [--apply]: AUTOFIX every fixable finding across the whole project.", "                               DRY RUN WITHOUT --apply. This is what the Structure form's right-click", "                               \"Fix all in project\" runs. It can rewrite many files at once -- dry-run first."]
+          "help": ["  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget]", "                               --output <file>: the text report goes to the file (default lint-report-YYYYMMDD.txt beside --project, else beside the DB); with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).", "                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)", "                               --rule <id>[,<id>...]: RUN and report ONLY those rules (1.51.1: a comma list narrows execution and derives no --shared-db peers, as one id does); naming an OFF-by-default rule opts it in", "                               for the run (no --enable needed) -- the same contract as lint and lint-project.", "                               --quiet: suppress per-file progress lines written to stderr", "                               on a --db the manifest does not register (a copy), the dl:shared marker-peer pass is skipped with one stderr note and sibling DBs resolve to same-named copies beside --db (else could not check); --shared-db <db> still runs (1.51.1).", "                               --project <.dproj|.dpr>: report ONLY on the units that project compiles", "                               (its compile closure + their .dfm siblings). Use it when one folder holds", "                               several projects, or when the DB spans more than the project you are reviewing.", "                               taint-sql-injection / taint-command-injection / taint-path-traversal (store-backed): walk the index's data_flows", "                               facts from a catalogued source to a sink; catalogues rules\\taint-sources|sinks|propagators.json, extended by the", "                               \"taint\" object of drag-lint-lint.json: sources sinks propagators sanitizers disable max_depth lib_depth max_rounds", "                               follow_ambiguous weak_receiver_regex weak_severity_drop max_paths_per_sink second_order.", "                               --fix [--apply]: AUTOFIX every fixable finding across the whole project.", "                               DRY RUN WITHOUT --apply. This is what the Structure form's right-click", "                               \"Fix all in project\" runs. It can rewrite many files at once -- dry-run first."]
         }
       ],
       "audience": "both",
@@ -5920,7 +5920,7 @@
         {
           "type": "cli",
           "verb": "lint-all",
-          "usage": "drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output|--report <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget] [--no-stand-down]",
+          "usage": "drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget] [--no-stand-down]",
           "flags": [
             {
               "name": "--db",
@@ -5940,7 +5940,7 @@
             {
               "name": "--output",
               "arg": "<report.txt>",
-              "summary": "alias --report; default lint-report-YYYYMMDD.txt beside --project, else beside the DB"
+              "summary": "default lint-report-YYYYMMDD.txt beside --project, else beside the DB"
             },
             {
               "name": "--json"
@@ -6305,7 +6305,7 @@
         {
           "type": "cli",
           "verb": "lint-all",
-          "usage": "drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output|--report <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget] [--no-stand-down]",
+          "usage": "drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget] [--no-stand-down]",
           "flags": [
             {
               "name": "--db",
@@ -6980,7 +6980,7 @@
         {
           "type": "cli",
           "verb": "document",
-          "usage": "drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment",
+          "usage": "drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--format json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment",
           "flags": [
             {
               "name": "--qname",
@@ -7043,7 +7043,7 @@
         {
           "type": "cli",
           "verb": "document",
-          "usage": "drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment",
+          "usage": "drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--format json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment",
           "flags": [
             {
               "name": "--qname",
@@ -7106,7 +7106,7 @@
         {
           "type": "cli",
           "verb": "document",
-          "usage": "drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment",
+          "usage": "drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--format json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment",
           "flags": [
             {
               "name": "--qname",
@@ -7159,7 +7159,7 @@
         {
           "type": "cli",
           "verb": "document-all",
-          "usage": "drag-lint document-all [--profile <name>] [--stubs|--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH] - document every public decl in every indexed unit (no project scope)",
+          "usage": "drag-lint document-all [--profile <name>] [--stubs|--apply|--json|--format json|--no-backup|--include-accessors|--document-third-party|--migrate-pure] [--db PATH] - document every public decl in every indexed unit (no project scope)",
           "flags": [
             {
               "name": "--stubs"
@@ -7185,7 +7185,7 @@
             }
           ],
           "helpOrder": 55,
-          "help": ["  drag-lint document-all [--profile <name>] [--stubs|--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]               - document every public decl in every indexed unit (no project scope)", "     batch modes (--unit/--project/document-all) default facts-only: an empty tag is never written, <param> never gets a skeleton, and <summary> appears only when harvested from a nearby // comment; add --stubs to keep a fresh comment that has no facts block", "     batch modes also skip TRIVIAL Get*/Set* property accessors (impl body <= docs.accessor_trivial_max_lines, default 2) by default; add --include-accessors to document them too", "  drag-lint document --unit <file.pas> --strip [--apply|--no-backup] [--db PATH]   - REMOVE drag-lint-generated doc tags/blocks (marker-keyed; hand-written docs untouched)", "     --strip is also accepted on --qname/--project/document-all (strips just that symbol's doc region, or every file in scope); mutually exclusive with --stubs", "     <seealso cref> links to related symbols (callees + siblings) are emitted BY DEFAULT in every document mode;", "     --no-seealso turns them off. (--seealso is still accepted and does nothing -- it was the opt-in before it became the default.)", "     add --since [--base-dir <repoRoot>] to emit a git-derived <since> date; degrades silently when git is absent", "     @deprecated is auto-detected from the Pascal 'deprecated' directive on the decl -- no flag needed", "     --migrate-pure: regenerate a stored legacy <para>Pure</para> fact (purity v1). Without it a block whose ONLY difference is that line is left byte-identical, and doc-drift agrees", "     PROJECT TAGS: on a block reconciled across projects (dl:shared, or holding facts this index cannot see) the inbound entries -- Called from:, Used by:, Used in units:, Covered by: --", "       carry the projects that rendered them: Called from: [DataCopy,DataCopyTests]uX.Foo (uX.pas). A run adds/removes only ITS tag (the project's name, recorded in the index;", "       the DB base name for indexes built before 1.18.0); an entry goes when its set empties; untagged legacy entries keep the old rules"]
+          "help": ["  drag-lint document-all [--profile <name>] [--stubs|--apply|--json|--format json|--no-backup|--include-accessors|--document-third-party|--migrate-pure] [--db PATH]               - document every public decl in every indexed unit (no project scope)", "     batch modes (--unit/--project/document-all) default facts-only: an empty tag is never written, <param> never gets a skeleton, and <summary> appears only when harvested from a nearby // comment; add --stubs to keep a fresh comment that has no facts block", "     batch modes also skip TRIVIAL Get*/Set* property accessors (impl body <= docs.accessor_trivial_max_lines, default 2) by default; add --include-accessors to document them too", "  drag-lint document --unit <file.pas> --strip [--apply|--no-backup] [--db PATH]   - REMOVE drag-lint-generated doc tags/blocks (marker-keyed; hand-written docs untouched)", "     --strip is also accepted on --qname/--project/document-all (strips just that symbol's doc region, or every file in scope); mutually exclusive with --stubs", "     <seealso cref> links to related symbols (callees + siblings) are emitted BY DEFAULT in every document mode;", "     --no-seealso turns them off. (--seealso is still accepted and does nothing -- it was the opt-in before it became the default.)", "     add --since [--base-dir <repoRoot>] to emit a git-derived <since> date; degrades silently when git is absent", "     @deprecated is auto-detected from the Pascal 'deprecated' directive on the decl -- no flag needed", "     --migrate-pure: regenerate a stored legacy <para>Pure</para> fact (purity v1). Without it a block whose ONLY difference is that line is left byte-identical, and doc-drift agrees", "     PROJECT TAGS: on a block reconciled across projects (dl:shared, or holding facts this index cannot see) the inbound entries -- Called from:, Used by:, Used in units:, Covered by: --", "       carry the projects that rendered them: Called from: [DataCopy,DataCopyTests]uX.Foo (uX.pas). A run adds/removes only ITS tag (the project's name, recorded in the index;", "       the DB base name for indexes built before 1.18.0); an entry goes when its set empties; untagged legacy entries keep the old rules"]
         },
         {
           "type": "ide-menu",
@@ -15583,7 +15583,7 @@
             }
           ],
           "helpOrder": 110,
-          "help": ["  drag-lint repo init           (--repo <file> | --project <project file>)   (create an empty field repository; exit 1 when the file exists)", "  drag-lint repo info           (--repo <file> | --project <project file>) [--json]   (path, schema version, rows per table, DL_META keys; exit 1 when not a repository)", "  drag-lint repo import-fb      --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--replace]   (copy the FIB$ registry tables; read-only on Firebird; --replace writes a before-import text backup first; exit 1 failure, 2 schema drift)", "  drag-lint repo seed-fb        --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--dry-run]   (fill an EMPTY repository from the Firebird schema; read-only on Firebird)", "  drag-lint repo refresh-schema --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--dry-run]   (re-read the Firebird schema into a filled repository, keep hand-edited columns, mark vanished columns; --dry-run prints the diff only)", "  drag-lint repo backup         (--repo <file> | --project <project file>) [--output <file>]   (write the diffable text backup; default <repo>.txt)", "  drag-lint repo restore        --in <backup file> (--repo <file> | --project <project file>) [--replace]   (create the repository when missing; a malformed backup prints \"line <n>: ...\" and exits 2, nothing changed)", "  drag-lint repo gen-memtable   --in <csv file> [--name <Name>] [--output <file>]   (Pascal source that builds the fields of a TFDMemTable from a field-definition CSV; exit 2 on a bad CSV)", "  drag-lint repo gen-param-array (--in <unit.pas> [--dfm <file>] | --project <X.dproj> --all [--only <unit,...>]) [--query <Name>] [--table <Name>] [--step-size <n>] [--progress-form <Form>] [--prepare-queries] [--plan | --apply --project <X.dproj> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] [--json]   (FireDAC Array-DML loop from the unit's DFM, inserted as a braced comment before the final end.; no flag prints the block, --plan the diff, --apply writes through ONE compile gate; --prepare-queries first does the IDE assistant's query preparation (each SELECT TFDQuery gets its TFDUpdateSQL INSERT SQL, ObjectView=False, no CachedUpdates; update object / schema adapter renamed ZZZ*, persistent fields removed with their declarations; .dfm + .pas diffs in --plan, both written through the gate); exit 1 a unit refused or no block, 2 bad flags or a baseline that does not build)", "  drag-lint repo gen-orm        (--repo <file> | --project <project file>) --code-dir <folder> [--table <T,...>] [--apply [--no-backup]]   (new i<T>.PAS + u<T>.PAS ORM units per repository table; dry run prints the diff, --apply writes 7-bit ASCII, an existing file is first copied to <file>.BCKn; prints add to project: per new file)", "  drag-lint repo update-orm     (--repo <file> | --project <project file>) --code-dir <folder> [--server-dir <folder>] [--client-dir <folder>] [--table <T,...>] [--save-form legacy|current] [--apply [--no-backup]]   (rewrites ONLY the DB-RAD regions of the existing i/u/_SERVER/_CLIENT units, every other byte kept; --save-form legacy (default) = the FIELD_AS_TYPE parameter binding the ORM3 units carry, current = TableTools 2026-05-19 .Value / .AsWideMemo / Set1Byte / NULL-timestamp Clear)", "  drag-lint repo gen-dataservice (--repo <file> | --project <project file>) --server-dir <folder> --client-dir <folder> [--table <T,...>] [--save-form legacy|current] [--apply [--no-backup]]   (new u<T>_SERVER.PAS + u<T>_CLIENT.PAS per table and the two DI container units; prints add to project: per new file)"]
+          "help": ["  drag-lint repo init           (--repo <file> | --project <project file>)   (create an empty field repository; exit 1 when the file exists)", "  drag-lint repo info           (--repo <file> | --project <project file>) [--json|--format json]   (path, schema version, rows per table, DL_META keys; exit 1 when not a repository)", "  drag-lint repo import-fb      --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--replace]   (copy the FIB$ registry tables; read-only on Firebird; --replace writes a before-import text backup first; exit 1 failure, 2 schema drift)", "  drag-lint repo seed-fb        --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--dry-run]   (fill an EMPTY repository from the Firebird schema; read-only on Firebird)", "  drag-lint repo refresh-schema --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--dry-run]   (re-read the Firebird schema into a filled repository, keep hand-edited columns, mark vanished columns; --dry-run prints the diff only)", "  drag-lint repo backup         (--repo <file> | --project <project file>) [--output <file>]   (write the diffable text backup; default <repo>.txt)", "  drag-lint repo restore        --in <backup file> (--repo <file> | --project <project file>) [--replace]   (create the repository when missing; a malformed backup prints \"line <n>: ...\" and exits 2, nothing changed)", "  drag-lint repo gen-memtable   --in <csv file> [--name <Name>] [--output <file>]   (Pascal source that builds the fields of a TFDMemTable from a field-definition CSV; exit 2 on a bad CSV)", "  drag-lint repo gen-param-array (--in <unit.pas> [--dfm <file>] | --project <X.dproj> --all [--only <unit,...>]) [--query <Name>] [--table <Name>] [--step-size <n>] [--progress-form <Form>] [--prepare-queries] [--plan | --apply --project <X.dproj> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] [--json]   (FireDAC Array-DML loop from the unit's DFM, inserted as a braced comment before the final end.; no flag prints the block, --plan the diff, --apply writes through ONE compile gate; --prepare-queries first does the IDE assistant's query preparation (each SELECT TFDQuery gets its TFDUpdateSQL INSERT SQL, ObjectView=False, no CachedUpdates; update object / schema adapter renamed ZZZ*, persistent fields removed with their declarations; .dfm + .pas diffs in --plan, both written through the gate); exit 1 a unit refused or no block, 2 bad flags or a baseline that does not build)", "  drag-lint repo gen-orm        (--repo <file> | --project <project file>) --code-dir <folder> [--table <T,...>] [--apply [--no-backup]]   (new i<T>.PAS + u<T>.PAS ORM units per repository table; dry run prints the diff, --apply writes 7-bit ASCII, an existing file is first copied to <file>.BCKn; prints add to project: per new file)", "  drag-lint repo update-orm     (--repo <file> | --project <project file>) --code-dir <folder> [--server-dir <folder>] [--client-dir <folder>] [--table <T,...>] [--save-form legacy|current] [--apply [--no-backup]]   (rewrites ONLY the DB-RAD regions of the existing i/u/_SERVER/_CLIENT units, every other byte kept; --save-form legacy (default) = the FIELD_AS_TYPE parameter binding the ORM3 units carry, current = TableTools 2026-05-19 .Value / .AsWideMemo / Set1Byte / NULL-timestamp Clear)", "  drag-lint repo gen-dataservice (--repo <file> | --project <project file>) --server-dir <folder> --client-dir <folder> [--table <T,...>] [--save-form legacy|current] [--apply [--no-backup]]   (new u<T>_SERVER.PAS + u<T>_CLIENT.PAS per table and the two DI container units; prints add to project: per new file)"]
         }
       ],
       "audience": "both",

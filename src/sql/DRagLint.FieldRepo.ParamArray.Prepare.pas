@@ -142,7 +142,8 @@ const
 type
   EPAPrepare = class(Exception);
 
-  TDfmProp = record
+  { Not TDfmProp: that name belongs to DRagLint.V151.Dfm.Common alone (run_v152_DFMDUP_single_decl.ps1). }
+  TPrepDfmProp = record
     Name: string;
     First: Integer;
     Last: Integer;
@@ -153,7 +154,7 @@ type
     ClassName: string;
     First: Integer;
     Last: Integer;
-    Props: TArray<TDfmProp>;
+    Props: TArray<TPrepDfmProp>;
     ChildFirst: TArray<Integer>;
     ChildLast: TArray<Integer>;
   end;
@@ -301,7 +302,7 @@ function ScanObject(const pLines: TArray<string>; pFirst: Integer): TDfmObj;
 var
   LIdx, LColon, LSpace: Integer;
   LText, LHead: string;
-  LProp: TDfmProp;
+  LProp: TPrepDfmProp;
   LChild: TDfmObj;
 begin
   Result := Default(TDfmObj);
@@ -348,11 +349,11 @@ begin
   raise EPAPrepare.CreateFmt('object at line %d has no "end"', [pFirst + 1]);
 end;
 
-function FindProp(const pObj: TDfmObj; const pName: string; out pProp: TDfmProp): Boolean;
+function FindProp(const pObj: TDfmObj; const pName: string; out pProp: TPrepDfmProp): Boolean;
 var
-  LProp: TDfmProp;
+  LProp: TPrepDfmProp;
 begin
-  pProp := Default(TDfmProp);
+  pProp := Default(TPrepDfmProp);
   for LProp in pObj.Props do
     if SameText(LProp.Name, pName) then
     begin
@@ -407,7 +408,7 @@ begin
 end;
 
 { The TStrings.Text of a 'X.Strings = (' list property. }
-function DecodeStringList(const pLines: TArray<string>; const pProp: TDfmProp): string;
+function DecodeStringList(const pLines: TArray<string>; const pProp: TPrepDfmProp): string;
 var
   LIdx: Integer;
   LText: string;
@@ -555,7 +556,7 @@ end;
 
 procedure TPrepareRun.SetObjectViewFalse(const pQ: TDfmObj);
 var
-  LProp: TDfmProp;
+  LProp: TPrepDfmProp;
   LIndent, LBase: string;
   LAt: Integer;
 begin
@@ -581,7 +582,7 @@ end;
 
 procedure TPrepareRun.SwapInsertSql(const pQ, pUpd: TDfmObj; out pSql: string);
 var
-  LSqlProp, LInsProp: TDfmProp;
+  LSqlProp, LInsProp: TPrepDfmProp;
   LHasSql: Boolean;
   LAt, LIdx: Integer;
   LNew: TArray<string>;
@@ -612,7 +613,7 @@ var
   LIndent, LParam, LKey, LCls, LSize: string;
   LIdx, LPIdx: Integer;
   LField: TDfmObj;
-  LProp: TDfmProp;
+  LProp: TPrepDfmProp;
   LFieldClass, LFieldSize: TDictionary<string, string>;
   LType: TPAFieldType;
   LParams: TArray<string>;
@@ -662,7 +663,7 @@ end;
 
 procedure TPrepareRun.PrepareQuery(const pQ: TDfmObj);
 var
-  LProp: TDfmProp;
+  LProp: TPrepDfmProp;
   LTarget, LIdx: Integer;
   LSql, LRef: string;
   LSwapped: Boolean;
@@ -809,7 +810,7 @@ var
   LRoot: TDfmObj;
   LIdx, LFirst: Integer;
   LSelect: TRegEx;
-  LProp: TDfmProp;
+  LProp: TPrepDfmProp;
   LRemoved: TArray<string>;
 begin
   Result := Default(TPAPrepareResult);

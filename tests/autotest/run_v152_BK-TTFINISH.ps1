@@ -19,6 +19,10 @@
 param([string]$Exe = '',
       [string]$RepoFile = $env:DL_TEST_ORM_REPO,
       [string]$WorkDir = "$env:TEMP\drag-lint-v152-ttfinish-$PID")
+# H01-AUTOWRAP (v152 DDFIX-4, DDFIX5 pattern): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+$H01Root = $WorkDir
+try {
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
@@ -72,3 +76,4 @@ else {
 Write-Host "BK-TTFINISH: $pass passed, $fail failed"
 if ($fail) { exit 1 }
 exit 0
+} finally { Remove-WorkDir $H01Root -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

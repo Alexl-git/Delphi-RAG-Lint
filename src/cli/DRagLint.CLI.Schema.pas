@@ -103,7 +103,7 @@ var
         can notice for you -- which is the argument for the enum-derived
         treatment symbols.kind gets below. }
       AValues:= 'attribute,call,di-resolve,di-unresolved,event-binding,export,'
-              + 'handle,handle-all,member-access,property-spec,raise,raise-expr,read,record-field,reraise,'
+              + 'handle,handle-all,index-access,member-access,property-spec,raise,raise-expr,read,record-field,reraise,'
               + 'sql_table_ref,type_use,write,write-through';
     end
     else if Key = 'symbols.kind' then

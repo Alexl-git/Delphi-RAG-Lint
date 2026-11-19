@@ -248,7 +248,7 @@ Described in [Run AST Checks](features/run-ast-checks.md).
 Answers whether a variable or field is set before a given use on every execution (SET / NEVER-SET / MAY-BE-UNSET).
 
 ```text
-drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> [--json] [--explain] [--max-routines N] [--max-seconds S]
+drag-lint check-init <QName>|--qname <QName> [--at <file>:<line>[:<col>]] --db <db> [--json|--format json] [--explain] [--max-routines N] [--max-seconds S]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -562,7 +562,7 @@ Described in [doc-forget](features/doc-forget.md).
 Writes DocInsight documentation into every public declaration a project owns.
 
 ```text
-drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment
+drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--format json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -586,7 +586,7 @@ Described in:
 Documents every public declaration in every indexed unit, with no project scope.
 
 ```text
-drag-lint document-all [--profile <name>] [--stubs|--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH] - document every public decl in every indexed unit (no project scope)
+drag-lint document-all [--profile <name>] [--stubs|--apply|--json|--format json|--no-backup|--include-accessors|--document-third-party|--migrate-pure] [--db PATH] - document every public decl in every indexed unit (no project scope)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -668,7 +668,7 @@ Described in [exceptions-sync](features/exceptions-sync.md).
 Explains one lint rule in plain words: what it means, why it matters, a bad and a good example, its default, whether it can be fixed, and how to suppress it.
 
 ```text
-drag-lint explain <rule-id> [--json] [--rules-dir <dir>]   (what one lint rule means, why it matters, bad / good example, default, fixable, and how to suppress it; an unknown id lists the nearest ids and exits 2)
+drag-lint explain <rule-id> [--json|--format json] [--rules-dir <dir>]   (what one lint rule means, why it matters, bad / good example, default, fixable, and how to suppress it; an unknown id lists the nearest ids and exits 2)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1305,7 +1305,7 @@ Described in:
 Project-wide lint rule (error): a form, frame or data module whose ancestor class is declared in no project unit and not in the platform library.
 
 ```text
-drag-lint lint-all [--profile <name>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output|--report <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]
+drag-lint lint-all [--profile <name>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1872,7 +1872,7 @@ Keeps the TableTools field registry in one SQLite file per database, filled from
 ```text
 drag-lint repo <init|info|import-fb|seed-fb|refresh-schema|backup|restore|gen-memtable|gen-param-array|gen-orm|update-orm|gen-dataservice> (--repo <file> | --project <project file>) [--connection "<Firebird connection string>"] [--in <file>] [--output <file>] [--name <Name>] [--replace] [--dry-run] [--json]   (the field repository: one SQLite file per database; Firebird is only read; gen-param-array needs no repository)
 drag-lint repo init (--repo <file> | --project <project file>) (create an empty field repository; exit 1 when the file exists)
-drag-lint repo info (--repo <file> | --project <project file>) [--json] (path, schema version, rows per table, DL_META keys; exit 1 when not a repository)
+drag-lint repo info (--repo <file> | --project <project file>) [--json|--format json] (path, schema version, rows per table, DL_META keys; exit 1 when not a repository)
 drag-lint repo import-fb --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--replace] (copy the FIB$ registry tables; read-only on Firebird; --replace writes a before-import text backup first; exit 1 failure, 2 schema drift)
 drag-lint repo seed-fb --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--dry-run] (fill an EMPTY repository from the Firebird schema; read-only on Firebird)
 drag-lint repo refresh-schema --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--dry-run] (re-read the Firebird schema into a filled repository, keep hand-edited columns, mark vanished columns; --dry-run prints the diff only)
@@ -2421,6 +2421,6 @@ A verb's usage line names the canonical flag only. Each alias is accepted wherev
 | `--force-reparse` | `--no-skip` | back-compat: the first spelling of the index re-parse switch |
 | `--help` | `-h`, `-?` | convention: the short help tokens every CLI user tries first |
 | `--in` | `--file` | one input-file option (TArgs.InFile); --in is the spelling the ask verb's own parser accepts, so it is the one that works on every verb |
-| `--output` | `--out` | back-compat: owner ruling ENG-6 (2026-09-22/23) -- scripts that use --out keep working |
+| `--output` | `--out`, `--report` | back-compat: owner ruling ENG-6 (2026-09-22/23) -- scripts that use --out keep working; --report (1.52 SMALLS 8611fb1d1) names the lint-all report file |
 | `--scan-libraries-win` | `--scan-libraries` | back-compat: the spelling before --scan-libraries-all existed |
 

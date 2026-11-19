@@ -14,6 +14,10 @@ param(
   [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-missinguses-$PID"
 )
+# H01-AUTOWRAP (v152 DDFIX-4, DDFIX5 pattern): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+$H01Root = $WorkDir
+try {
 # Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
 if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
@@ -219,8 +223,8 @@ try {
   Check 'lint-all reports the same rule (impl + intf + cycle + wsMiss = 4)' (([regex]::Matches($all, 'unit-missing-from-uses')).Count -eq 4) ''
   Check 'rules --json lists the rule as fixable' ($rules -match '"id"\s*:\s*"unit-missing-from-uses"[^}]*"fixable"\s*:\s*true') ''
   Write-Host 'FIX' -ForegroundColor Cyan
-  & { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $srcDir 'uImplUse.pas') --db $db --rule unit-missing-from-uses --fix --apply --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
-  & { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $srcDir 'uIntfUse.pas') --db $db --rule unit-missing-from-uses --fix --apply --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $srcDir 'uImplUse.pas') --db $db --rule unit-missing-from-uses --fix --apply --no-compile-gate --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $srcDir 'uIntfUse.pas') --db $db --rule unit-missing-from-uses --fix --apply --no-compile-gate --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $implTxt = [IO.File]::ReadAllText((Join-Path $srcDir 'uImplUse.pas'))
   $intfTxt = [IO.File]::ReadAllText((Join-Path $srcDir 'uIntfUse.pas'))
   Check '--fix creates the implementation clause' ($implTxt.Contains("implementation`r`n`r`nuses`r`n  uCsLog;`r`nprocedure DoIt;")) ($implTxt -replace "`r`n", '\n')
@@ -229,3 +233,4 @@ try {
 } finally { Pop-Location }
 if ($script:Failed) { Write-Host 'RESULT: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'RESULT: PASS' -ForegroundColor Green; exit 0
+} finally { Remove-WorkDir $H01Root -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

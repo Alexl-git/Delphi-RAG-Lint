@@ -19,7 +19,7 @@ Read this when a finding names a rule id and you want to know what it is for bef
 ## How to run it
 
 ```text
-drag-lint explain <rule-id> [--json] [--rules-dir <dir>]   (what one lint rule means, why it matters, bad / good example, default, fixable, and how to suppress it; an unknown id lists the nearest ids and exits 2)
+drag-lint explain <rule-id> [--json|--format json] [--rules-dir <dir>]   (what one lint rule means, why it matters, bad / good example, default, fixable, and how to suppress it; an unknown id lists the nearest ids and exits 2)
 ```
 
 Full flag list: [explain in the CLI reference](../cli.md#explain).

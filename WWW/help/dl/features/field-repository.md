@@ -25,7 +25,7 @@ drag-lint repo init (--repo <file> | --project <project file>) (create an empty 
 Full flag list: [repo in the CLI reference](../cli.md#repo).
 
 ```text
-drag-lint repo info (--repo <file> | --project <project file>) [--json] (path, schema version, rows per table, DL_META keys; exit 1 when not a repository)
+drag-lint repo info (--repo <file> | --project <project file>) [--json|--format json] (path, schema version, rows per table, DL_META keys; exit 1 when not a repository)
 ```
 
 Full flag list: [repo in the CLI reference](../cli.md#repo).

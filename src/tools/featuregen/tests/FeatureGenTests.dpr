@@ -2532,7 +2532,7 @@ begin
   { FLAG lane: the alias policy (docs\CLI-FLAG-ALIASES.md) -- one generated "Flag aliases:" section, canonical-only verb lines. }
   Check('Help.FlagAliasesProcedure', Pos('procedure WriteFlagAliases;', lGen) > 0, 'WriteFlagAliases must be generated');
   Check('Help.FlagAliasesHeader', Pos('Writeln(''Flag aliases:'');', lGen) > 0, 'section header (the scanners stop the last verb block on it)');
-  Check('Help.FlagAliasRowForOutput', TRegEx.IsMatch(lGen, 'Writeln\(''  --output +also: --out''\);'), 'row: --output also: --out');
+  Check('Help.FlagAliasRowForOutput', TRegEx.IsMatch(lGen, 'Writeln\(''  --output +also: --out, --report''\);'), 'row: --output also: --out, --report');  { --report: 1.52 SMALLS }
   Check('Help.FlagAliasRowForIn', TRegEx.IsMatch(lGen, 'Writeln\(''  --in +also: --file''\);'), 'row: --in also: --file');
 end;
 

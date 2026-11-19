@@ -166,7 +166,8 @@ try {
   Check 'SANITY: the rewrite-case block is reported as doc-drift' ($repP -match 'doc-drift') $repP
 
   # === THE DEFECT: a run whose ONLY repair is a DELETION ===================
-  $outL = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $loneDb --fix --apply 2>&1 | ForEach-Object { "$_" } } | Out-String)
+  # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+  $outL = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $loneDb --fix --apply --no-compile-gate 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check 'REMOVAL run does NOT report "no fixable findings"' `
         ($outL -notmatch 'no fixable findings') `
         (($outL -split "`r?`n" | Where-Object { $_ -match 'autofix' }) -join ' / ')
@@ -180,7 +181,8 @@ try {
   # === REGRESSION GUARD on the fix itself: the ordinary rewrite still works =
   # The new count is (inserts + unpaired deletes). A bug there would either stop
   # counting rewrites or double-count them, and this is what would notice.
-  $outP = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $pairDb --fix --apply 2>&1 | ForEach-Object { "$_" } } | Out-String)
+  # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+  $outP = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $pairDb --fix --apply --no-compile-gate 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check 'REWRITE run still applies its repair' `
         ($outP -match 'autofix: applied \d+ edit') `
         (($outP -split "`r?`n" | Where-Object { $_ -match 'autofix' }) -join ' / ')

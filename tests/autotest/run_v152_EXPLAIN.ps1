@@ -1,16 +1,18 @@
 # Runner for lane EXPLAIN (1.52): `drag-lint explain <rule-id>` and multi-word `query --concept`.
 #
-# Usage: run_v152_EXPLAIN.ps1 -Exe <drag-lint.exe> [-DbPath <project.sqlite>] [-RulesDir <rules folder>]
+# Usage: run_v152_EXPLAIN.ps1 [-Exe <drag-lint.exe>] [-DbPath <project.sqlite>] [-RulesDir <rules folder>]
 #   -DbPath       a project index; enables the --concept block (skipped, and said so, without it)
 #   -RulesDir defaults to <repo>\rules (so the wiki table rows under <repo>\docs\wiki are found)
 #
 # Every negative assertion has a positive control (its known-good twin runs first or beside it).
 param(
-  [Parameter(Mandatory = $true)][string]$Exe,
+  [string]$Exe = '',
   [string]$DbPath = "",
   [string]$RulesDir = ""
 )
 $ErrorActionPreference = "Stop"
+# The battery passes no arguments: default to the repo's deployed-layout engine like every other runner.
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 if ($RulesDir -eq "") { $RulesDir = Join-Path $repo "rules" }
 $fail = 0

@@ -165,8 +165,10 @@ function Q([string]$Sql) {
   }
   return ,$out
 }
+# 1.52 EXTP adds a write-through row BESIDE the read row this runner pins (it does not replace it,
+# as the header asks); that row is EXTP's own surface (run_v152_EXTP_refs.ps1), so it is left out here.
 function FirstRef([int]$Line) {
-  $rows = Q "select r.kind, r.name_text, coalesce(r.receiver_text,'<null>') rcv, coalesce(ma.mode,'<none>') mode from refs r left join member_accesses ma on ma.ref_id = r.id where r.start_line=$Line order by r.start_col"
+  $rows = Q "select r.kind, r.name_text, coalesce(r.receiver_text,'<null>') rcv, coalesce(ma.mode,'<none>') mode from refs r left join member_accesses ma on ma.ref_id = r.id where r.start_line=$Line and r.kind <> 'write-through' order by r.start_col"
   return ,$rows
 }
 

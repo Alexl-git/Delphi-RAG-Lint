@@ -34,6 +34,9 @@ $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 Set-Location $repo
 $exePath = (Resolve-Path $Exe).Path
+# Hermetic: a machine drag-lint.json beside the exe makes lint-project scope the rule to the manifest's
+# sections, so this scratch project (in none) answers [] while lint-all answers 3 -- same on 1.51.2.
+. "$PSScriptRoot\lib\HermeticEngine.ps1"; $exePath = Get-HermeticEngine $exePath
 $Rule    = 'parameter-type-too-wide'
 $fx      = Join-Path $repo 'tests\lint\parameter-type-too-wide.project'
 $scratch = Join-Path ([IO.Path]::GetTempPath()) "draglint_v152ptw_$PID"

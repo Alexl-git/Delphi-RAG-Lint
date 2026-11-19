@@ -28,7 +28,7 @@
       "type": "cli",
       "verb": "check-init",
       "example": "drag-lint check-init UnitA.GCache --db <db> --json",
-      "usage": "drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> [--json] [--explain] [--max-routines N] [--max-seconds S]",
+      "usage": "drag-lint check-init <QName>|--qname <QName> [--at <file>:<line>[:<col>]] --db <db> [--json|--format json] [--explain] [--max-routines N] [--max-seconds S]",
       "flags": [
         {
           "name": "--at",
@@ -53,7 +53,7 @@
           "arg": "S"
         }
       ],
-      "help": ["  drag-lint check-init <QName> [--at <file>:<line>[:<col>]] --db <db> [--json] [--explain] [--max-routines N] [--max-seconds S]   (is a variable or field set before every use? SET / NEVER-SET / MAY-BE-UNSET / UNKNOWN-CALLEE; exit 0 = all SET, 1 = otherwise, 2 = error)"]
+      "help": ["  drag-lint check-init <QName>|--qname <QName> [--at <file>:<line>[:<col>]] --db <db> [--json|--format json] [--explain] [--max-routines N] [--max-seconds S]   (is a variable or field set before every use? SET / NEVER-SET / MAY-BE-UNSET / UNKNOWN-CALLEE; exit 0 = all SET, 1 = otherwise, 2 = error)"]
     }
   ],
   "audience": "both",

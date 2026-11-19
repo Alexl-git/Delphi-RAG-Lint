@@ -2552,6 +2552,7 @@ uses
   DRagLint.Symbol.Describe,  // DescribeDeclaredType: the type a hover shows for a value kind
   DRagLint.Convert.PropTree, // ClearPropertyDeclaredTypeCache: a reopened DB must not answer from old rows
   DRagLint.Diagnostics.ParseCache, // 151 CF: TAstParseCache.ApplyPreprocess -- the key of IdentTreeFor's parse cache
+  DRagLint.CLI.Wiring,  // ResolvedImpactLevels: draglint/usages walks the resolved callers the usages verb walks (GitHub #14 follow-up)
   DRagLint.LSP.Features,  // linked for its feature units' initialization (RegisterLspFeature); no identifier is referenced
   DRagLint.LSP.UsesOnSave  { KINDS_ON_SAVE: the codeActionKinds initialize advertises } // dl:unit DRagLint.LSP.UsesOnSave accepted -- KINDS_ON_SAVE and UNUSED_UNIT_RULE are the protocol kinds and rule id TUsesOnSave builds for, so they travel with it
   ;
@@ -6425,8 +6426,14 @@ begin
         AddRefRow(GroupFor(R, Decls), St.GetFilePath(R.FileId), R.StartLine, R.StartCol, R.Resolution);
       { N3WIDE (1.52): 'wide' too, as the CLI verb -- testing 'very-wide' alone made the
         IDE's Wide answer identical to Narrow (run_v152_N3WIDE.ps1). }
+      { GitHub #14 follow-up (1.52, be8a41f51): a routine walks its RESOLVED callers, as the CLI usages verb does;
+        a type or variable keeps the by-name walk. The CLI-only change left this reply on the by-name walk, so
+        wide / very-wide over the LSP undercounted (run_v152_N3WIDE.ps1 d). }
+      var WideLevels: TArray<TImpactLevel>:= nil;
+      if ((Width = 'wide') or (Width = 'very-wide'))
+        and not ResolvedImpactLevels(St, Decls, Depth, WideLevels) then WideLevels:= St.FindTransitiveCallers(Nm, Depth);
       if (Width = 'wide') or (Width = 'very-wide') then
-        for L in St.FindTransitiveCallers(Nm, Depth) do
+        for L in WideLevels do
         begin
           var IO_: TJSONObject:= TJSONObject.Create;
           IO_.AddPair('depth'  , TJSONNumber.Create(L.Depth      ));

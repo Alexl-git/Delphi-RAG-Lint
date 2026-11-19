@@ -162,7 +162,8 @@ try {
   Check 'C: non-vacuity: lint-all produced findings at all' ($f.Count -gt 0)
 
   # ---- Part D: the fixer shares the population ------------------------------
-  & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --fix --apply --no-backup 2>$null } | Out-Null
+  # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+  & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --fix --apply --no-compile-gate --no-backup 2>$null } | Out-Null
   & { $ErrorActionPreference = 'Continue'; & $Exe index $W --db $Db 2>$null } | Out-Null
   $declLine = LineOf '^\s*procedure RefreshList;'
   $lines = [IO.File]::ReadAllLines($Pas)

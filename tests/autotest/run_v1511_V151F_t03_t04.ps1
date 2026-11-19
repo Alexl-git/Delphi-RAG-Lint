@@ -4,7 +4,7 @@
       silent; a plain TLabel and a bar button whose name the unit uses by string still fire.
   T04 dataset-edit-without-post: an Edit whose dataset is posted in ANOTHER routine of the unit
       stays silent; a lone Edit still fires.
-  Both rules are enabled with --enable (their default). Positive control: no --enable = no findings.
+  Both rules are enabled with --enable (default ON since 1.52). Positive control: --disable = no findings.
   Run from a NEUTRAL CWD, pwsh 7.
 #>
 [CmdletBinding()]
@@ -21,7 +21,8 @@ function Check($n, $ok, $d) {
 $exePath = (Resolve-Path $Exe).Path
 $fx = Join-Path $PSScriptRoot 'fixtures\v1511-V151F'
 function Lines($file, $rule, [string[]]$extra) {
-  $ra = @(if ($extra.Count -gt 0) { @("--rule", $rule) + $extra } else { @() })
+  # 1.52: both rules are default ON (DEFAULTS D7), so the positive control passes --disable WITHOUT --rule.
+  $ra = @(if ($extra -contains '--disable') { $extra } elseif ($extra.Count -gt 0) { @("--rule", $rule) + $extra } else { @() })
   $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint $file --json @ra 2>$null }
   $t = ($raw -join "`n").Trim()
   if ($t -eq '') { return @() }
@@ -37,11 +38,16 @@ function LineOf($file, $pat) {
 # T03
 $pas = Join-Path $fx 't03\UBars.pas'; $dfm = Join-Path $fx 't03\UBars.dfm'
 $r = 'form-object-without-field'
-$got = @(Lines $pas $r @('--enable', $r))
+# 1.52 D3: the shipped exempt list names TdxBar* / TdxLayout*; T03 pins the 1.51.1 name-reachable skip, so it
+# runs with use_default_list false (the list itself is pinned by run_v152_DEFAULTS.ps1).
+$noList = Join-Path $env:TEMP ("v151f_t03_nolist_$PID.json")
+[IO.File]::WriteAllText($noList, '{"form_object_without_field": {"use_default_list": false}}')
+$got = @(Lines $pas $r @('--enable', $r, '--config', $noList))
 Write-Host ("T03 got: " + ($got -join ' '))
 foreach ($n in 'Label1', 'dxBarButton2') { $l = LineOf $dfm "object $n\b"; Check "T03 fires for $n" ($got -contains "UBars.dfm:$l") }
 foreach ($n in 'dxBarManager1', 'dxBarButton1', 'dxLayoutItem1') { $l = LineOf $dfm "object $n\b"; Check "T03 silent for $n" (-not ($got -contains "UBars.dfm:$l")) }
-Check 'T03 positive control: rule not enabled -> no finding' ((@(Lines $pas $r @())).Count -eq 0)
+Check 'T03 positive control: rule disabled -> no finding' ((@(Lines $pas $r @('--disable', $r, '--config', $noList))).Count -eq 0)
+[IO.File]::Delete($noList)
 
 # T04
 $pas = Join-Path $fx 't04\UEd.pas'
@@ -51,6 +57,6 @@ Write-Host ("T04 got: " + ($got -join ' '))
 $hit = LineOf $pas '\{HIT\}'; $ok = LineOf $pas '\{OK\}'
 Check 'T04 fires on the lone Edit' ($got -contains "UEd.pas:$hit")
 Check 'T04 silent when posted in another routine' (-not ($got -contains "UEd.pas:$ok"))
-Check 'T04 positive control: rule not enabled -> no finding' ((@(Lines $pas $r @())).Count -eq 0)
+Check 'T04 positive control: rule disabled -> no finding' ((@(Lines $pas $r @('--disable', $r))).Count -eq 0)
 
 if ($script:fail) { Write-Host 'RESULT: FAIL'; exit 1 } else { Write-Host 'RESULT: PASS' }

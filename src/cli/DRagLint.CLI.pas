@@ -1674,7 +1674,12 @@ begin
     end
     else if A = '--replace' then Result.Replace:= True
     else if A = '--prepare-queries' then // repo gen-param-array: DRagLint.CLI.RepoParamArray reads it from ParamStr
-    else if ((A = '--dfm') or (A = '--table') or (A = '--step-size') or (A = '--progress-form')) and (i < ParamCount) then Inc(i) // repo gen-param-array: DRagLint.CLI.RepoParamArray reads the value from ParamStr
+    { repo gen-param-array: DRagLint.CLI.RepoParamArray reads these values from ParamStr. One branch per flag: they are
+      four different options, and an OR-group reads as an alias group to run_flag_verb_map.ps1 (features\flag-aliases.json). }
+    else if (A = '--dfm') and (i < ParamCount) then Inc(i)
+    else if (A = '--table') and (i < ParamCount) then Inc(i)
+    else if (A = '--step-size') and (i < ParamCount) then Inc(i)
+    else if (A = '--progress-form') and (i < ParamCount) then Inc(i)
     else if (A = '--scope') and (i < ParamCount) then
     begin
       Inc(i);
@@ -1789,8 +1794,10 @@ begin
       Result.PathFromConfig:= False;
     end
     { 1.52 TTGEN: repo gen-orm / update-orm / gen-dataservice read these values with ParamStr (CLI.Repo) }
-    else if (Result.Command = 'repo') and ((A = '--code-dir') or (A = '--server-dir') or (A = '--client-dir')) and (i < ParamCount) then Inc(i)
-    else if (Result.Command = 'repo') and ((A = '--table') or (A = '--save-form')) and (i < ParamCount) then Inc(i)
+    else if (Result.Command = 'repo') and (A = '--code-dir') and (i < ParamCount) then Inc(i)
+    else if (Result.Command = 'repo') and (A = '--server-dir') and (i < ParamCount) then Inc(i)
+    else if (Result.Command = 'repo') and (A = '--client-dir') and (i < ParamCount) then Inc(i)
+    else if (Result.Command = 'repo') and (A = '--save-form') and (i < ParamCount) then Inc(i) { --table: the gen-param-array branch above already consumes it }
     else raise Exception.Create(UNKNOWN_ARG_PREFIX + A);
     Inc(i);
   end; // while
@@ -13568,7 +13575,16 @@ begin
     var Root: TJSONObject:= TJSONObject.Create;
     try
       { 1.52 DISRULE H2: disabled_by = 'project' or 'unit:<u1,u2>' from the config's rule_overrides }
-      var RCfg: TLintConfig:= LoadLintConfig(AArgs);
+      { Only the config's LOCATION matters to rule_overrides; --profile / --disable / --enable / --stand-in-for change the
+        enabled set, which this listing does not show, so they are not passed (run_flag_verb_map.ps1 would credit them to rules). }
+      var RArgs: TArgs:= Default(TArgs);
+      RArgs.ConfigPath:= AArgs.ConfigPath;
+      RArgs.ProjectPath:= AArgs.ProjectPath;
+      RArgs.DbPath:= AArgs.DbPath;
+      RArgs.InFile:= AArgs.InFile;
+      RArgs.Path:= AArgs.Path;
+      RArgs.RulesDir:= AArgs.RulesDir;
+      var RCfg: TLintConfig:= LoadLintConfig(RArgs);
       var Arr: TJSONArray:= TJSONArray.Create;
       for R in Cat do
       begin

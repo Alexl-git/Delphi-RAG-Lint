@@ -136,6 +136,9 @@ function Check($n, $ok, $d = '') {
   Write-Host ("  [{0}] {1} {2}" -f $s, $n, $d) -ForegroundColor (@('Red', 'Green')[[int][bool]$ok])
   if (-not $ok) { $script:Failed = $true }
 }
+# 1.52 DDFIX: an A/B harness, not a battery check -- with no -BaseDll (the battery passes none) it SKIPs (exit 77)
+# instead of FATAL; a -BaseDll that does not exist still FATALs below.
+if ([string]::IsNullOrWhiteSpace($BaseDll)) { Write-Host 'SKIP: manual A/B harness, pass -BaseDll <A\tree-sitter-dfm.dll>' -ForegroundColor Yellow; exit 77 }
 foreach ($pair in @(@('BaseDll', $BaseDll), @('LaneDll', $LaneDll), @('CoreDll', $CoreDll))) {
   if ([string]::IsNullOrWhiteSpace($pair[1]) -or -not (Test-Path -LiteralPath $pair[1])) {
     Write-Host "FATAL: -$($pair[0]) not found: '$($pair[1])'" -ForegroundColor Red; exit 2

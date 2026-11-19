@@ -1683,6 +1683,11 @@ begin
   FLines:= FSource.FileLines(FFromFid);
   for var R in pRefs do
   begin
+    { 1.52 DDFIX: a write-through row (EXTP) only DUPLICATES the read / member-access row the same
+      token already has (`Log.Text := X` adds one for Log); the surface takes that row, so the copy
+      is skipped -- taken bare it fell to erOther and refused the edge as class-ref.
+      Guard: tests\autotest\run_cyclefix_b1_memberwrite.ps1 a4. }
+    if SameText(R.Kind, REF_KIND_WRITE_THROUGH) then Continue;
     if TakeMemberAccess(R) then Continue;
     if SameText(R.Kind, 'member-access') then
     begin

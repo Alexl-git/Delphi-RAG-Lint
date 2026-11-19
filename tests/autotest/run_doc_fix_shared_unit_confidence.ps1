@@ -109,7 +109,8 @@ $dbA = Join-Path $root 'A.sqlite'
 $dbB = Join-Path $root 'B.sqlite'
 function Reindex { $null = Run @('index','--project',(Join-Path $proj 'A.dpr'),'--db',$dbA); $null = Run @('index','--project',(Join-Path $proj 'B.dpr'),'--db',$dbB) }
 function Drift($db) { $o = (Run @('lint',$uShared,'--db',$db,'--project-rules','--rule','doc-drift')).Out; $m = [regex]::Match($o, '(\d+) finding\(s\)'); if ($m.Success) { [int]$m.Groups[1].Value } else { -1 } }
-function Fix($db) { $null = Run @('lint',$uShared,'--db',$db,'--project-rules','--rule','doc-drift','--fix','--apply'); Reindex }
+# 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+function Fix($db) { $null = Run @('lint',$uShared,'--db',$db,'--project-rules','--rule','doc-drift','--fix','--apply','--no-compile-gate'); Reindex }
 function Hash { (Get-FileHash $uShared -Algorithm MD5).Hash }
 
 Reindex

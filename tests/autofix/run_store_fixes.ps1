@@ -41,11 +41,13 @@ function NewCase([string]$Name, [string[]]$Lines) {
 }
 function FixOnce($C, [string]$Rule, [string[]]$Extra) {
   Push-Location $C.Dir
-  try { & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $C.File --db $C.Db --fix --fix-rule $Rule --apply --no-backup @Extra *> (Join-Path $C.Dir '_fix.log') } } finally { Pop-Location }
+  # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+  try { & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $C.File --db $C.Db --fix --fix-rule $Rule --apply --no-compile-gate --no-backup @Extra *> (Join-Path $C.Dir '_fix.log') } } finally { Pop-Location }
 }
 function FixAll($C, [string]$Rule, [string[]]$Extra) {
   Push-Location $C.Dir
-  try { & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $C.Db --fix --fix-rule $Rule --apply --no-backup @Extra *> (Join-Path $C.Dir '_fixall.log') } } finally { Pop-Location }
+  # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+  try { & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $C.Db --fix --fix-rule $Rule --apply --no-compile-gate --no-backup @Extra *> (Join-Path $C.Dir '_fixall.log') } } finally { Pop-Location }
 }
 function Fires($C,[string]$Rule, [string[]]$Extra) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $C.File --db $C.Db --rule $Rule --json @Extra 2>$null } | Out-String

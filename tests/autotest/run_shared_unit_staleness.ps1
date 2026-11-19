@@ -442,7 +442,8 @@ Check 'no entry is duplicated in the merged list' (
 
 Check 'the --fix path starts from real drift' ((DriftCount $dbB 'MarkFix') -gt 0)
 
-& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $dbB --fix --apply --no-backup 2>$null } | Out-Null
+# 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $dbB --fix --apply --no-compile-gate --no-backup 2>$null } | Out-Null
 Reindex $dbA @($shDir)
 Reindex $dbB @($shDir)
 
@@ -454,7 +455,8 @@ Check '--fix gains this project''s caller' ($fixed -match 'BOnly') `
 Check '--fix converges under B' ((DriftCount $dbB 'MarkFix') -eq 0)
 # A's one-time adoption, through the --fix path this time (see the convergence
 # section above): it must be offered as fixable, and once applied BOTH converge.
-& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $dbA --fix --apply --no-backup 2>$null } | Out-Null
+# 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $dbA --fix --apply --no-compile-gate --no-backup 2>$null } | Out-Null
 Reindex $dbA @($shDir)
 Reindex $dbB @($shDir)
 Check '--fix converges under A too' ((DriftCount $dbA 'MarkFix') -eq 0) `

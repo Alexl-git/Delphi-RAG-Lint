@@ -123,3 +123,9 @@ local-shadows-field
 nested-with
 with-statement
 boolean-assign-if
+case-magic-numbers
+extract-constant
+index-possibly-out-of-range
+large-magic-number
+magic-literal
+parameter-type-too-wide

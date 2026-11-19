@@ -69,6 +69,11 @@ try {
   $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'run_check_init_handlers.ps1'), [ref]$null, [ref]$null)
   $pe  = $ast.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'Exe' }
   $def = if ($pe.DefaultValue) { $pe.DefaultValue.Extent.Text } else { '' }
+  # PS5RUNNERS (c92bfb2b5) moved script-path defaults into the body: `if (-not $Exe) { $Exe = ... }` counts too.
+  if ($def -eq '' -or $def -eq "''") {
+    $bm = [regex]::Match($ast.Extent.Text, '(?m)^\s*if\s*\(\s*-not\s+\$Exe\s*\)\s*\{\s*\$Exe\s*=\s*(.+?)\s*\}\s*$')
+    if ($bm.Success) { $def = $bm.Groups[1].Value }
+  }
   Check 'B46 run_check_init_handlers -Exe has a non-empty default' (($def -ne '') -and ($def -ne "''")) "default=[$def]"
 
   # ---- B28 ----------------------------------------------------------------------------------------
