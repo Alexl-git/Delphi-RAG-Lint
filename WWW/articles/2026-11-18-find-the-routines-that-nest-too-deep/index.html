@@ -1,0 +1,113 @@
+<!--article
+title: Find the Routines That Nest Too Deep
+date: 2026-11-18
+slug: find-the-routines-that-nest-too-deep
+summary: To list the Delphi routines whose control flow nests too deep, drag-lint has a rule, deep-nesting, that counts only the statements that really add a level.
+-->
+
+<div class="wrap">
+
+<header class="masthead">
+  <span class="eyebrow">Delphi tooling &middot; code quality</span>
+  <h1>Find the Routines That Nest Too Deep</h1>
+  <p class="standfirst">To list the Delphi routines whose control flow nests too deep, drag-lint has a rule, <code>deep-nesting</code>, that counts only the statements that really add a level and reports the same routines every run.</p>
+  <div class="byline">
+    <span>Delphi 13 Florence &middot; RAD Studio 37.0</span>
+    <span>As of 2026-11-18, drag-lint 1.51.2-alpha</span>
+  </div>
+</header>
+
+<div class="note">
+  <span class="nlabel">Availability</span>
+  <p>The rule exists since earlier releases; the counting change described here shipped in <strong>drag-lint 1.51.1-alpha</strong> and is in 1.51.2-alpha, the current release. Every output below is real output of 1.51.2-alpha on the small unit in section 01 (path shortened).</p>
+</div>
+
+<p>Before a refactoring we want a list: which routines are so deeply nested that nobody dares touch them? Counting leading spaces does not answer it, because indentation is a style, not a structure. <a href="https://www.htrmicronite.com">Micronite</a>, the quality and production-control software we build for manufacturers, has routines grown over many years, and this rule is how we pick the ones worth splitting first.</p>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">01 &mdash; The fixture</span>
+    <h2>One routine that nests, one that only looks it</h2>
+  </div>
+  <p><code>Walk</code> nests an <code>if</code>, a <code>for</code>, an <code>if</code>, a <code>while</code>, an <code>if</code> and a <code>case</code>. <code>Calm</code> has two <code>try..finally</code> blocks and one <code>if</code>, so it is indented deeply but does not branch deeply.</p>
+  <pre class="lex"><code>procedure Walk(pA, pB: Integer);
+...
+begin
+  S := if pA &gt; 0 then 'p' else 'n';
+  try
+    if pA &gt; 0 then
+    for I := 0 to pA do
+      if I &gt; pB then
+        while pB &gt; 0 do
+          if I = 3 then
+            case pB of
+              1: Dec(pB);
+            end;
+  finally
+    Writeln(S);
+  end;
+end;
+
+procedure Calm(pA: Integer);
+...
+begin
+  S := if pA &gt; 0 then 'p' else 'n';
+  try
+    try
+      if pA &gt; 1 then
+        Writeln(S);
+    finally
+      Writeln(S);
+    end;
+  finally
+    Writeln(S);
+  end;
+end;</code></pre>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">02 &mdash; Steps</span>
+    <h2>Ask for the rule, read the finding</h2>
+  </div>
+  <p><strong>Step 1.</strong> See what the rule is and where its limit sits.</p>
+  <pre><code>drag-lint rules --rule deep-nesting
+
+1 rules across 1 categories
+
+[complexity]
+  deep-nesting                       builtin  (info; threshold=5) [CWE-1124]</code></pre>
+  <p><strong>Step 2.</strong> Lint the unit with only that rule. Add <code>--json</code> for a machine-readable list.</p>
+  <pre><code>drag-lint lint Nest.pas --rule deep-nesting
+
+Nest.pas:10:1  [info] deep-nesting: Routine Walk nests control structures 6 deep (max 5) -- flatten with early exits or sub-routines
+1 finding(s)</code></pre>
+  <p>The JSON finding carries <code>"rule": "deep-nesting"</code>, <code>"start_line": 10</code> and <code>"metric": 6</code>, so a script can sort a whole project by depth.</p>
+  <p><strong>Step 3.</strong> Read what was <em>not</em> reported. <code>Calm</code> is absent: its two <code>try..finally</code> blocks and the if-expression in <code>S := if ... then ... else ...</code> add no level. Since 1.51.1 the rule counts control statements only: <code>if</code>, <code>case</code>, the loops, <code>with</code> and <code>try..except</code>. Before that, resource cleanup could push a routine over the limit.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">03 &mdash; Why it is repeatable</span>
+    <h2>The tree decides, not the text</h2>
+  </div>
+  <p>drag-lint parses the unit into a syntax tree and walks it; the depth is the number of control statements on the deepest path through the routine body. There is no estimate and no model involved: the same unit gives the same number on any machine, in the IDE plugin as on the command line. The finding is a node in a tree, which is why it can name the routine and the exact depth.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">04 &mdash; Limits</span>
+    <h2>What it does not see</h2>
+  </div>
+  <ul>
+    <li>The run above was a single file with no index (<code>lint</code> says so on its second line), so store-backed and project-wide rules did not run. <code>deep-nesting</code> is a built-in tree rule and does not need one.</li>
+    <li>The limit of 5 is the default and is a style choice. It measures depth, not difficulty: a flat routine can still be hard to read.</li>
+    <li>The rule has no automatic fix. Flattening needs a human decision about early exits and sub-routines.</li>
+  </ul>
+</section>
+
+<footer>
+  <p>Numbers and output measured 2026-11-18 with drag-lint 1.51.2-alpha.</p>
+</footer>
+
+</div>

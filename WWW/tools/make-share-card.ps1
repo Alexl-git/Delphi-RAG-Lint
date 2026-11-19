@@ -4,8 +4,8 @@
 param(
     [string]$Out = (Join-Path $PSScriptRoot '..\assets\share\default.png'),
     [string]$Title = 'Delphi-RAG-Lint',
-    [string]$Line1 = 'Index, query and lint Delphi code -',
-    [string]$Line2 = 'from the command line and inside RAD Studio.'
+    [string]$Line1 = 'Index, query and lint Delphi code,',
+    [string]$Line2 = 'plus a schema repository - CLI and IDE.'
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
