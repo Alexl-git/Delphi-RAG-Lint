@@ -392,7 +392,7 @@ const
     (Name: 'DRAGLINT_TEST_LINT_FILE_DELAY_MS';        Purpose: 'test hook: delay per linted file'),
     (Name: 'DRAGLINT_TEST_METRIC_ALGO_BUMP';          Purpose: 'test hook: bumps the routine-metric marker hash version'),
     (Name: 'DRAGLINT_TEST_REINDEX_TIMEOUT_MS';       Purpose: 'test hook: reindex timeout'),
-    (Name: 'DRAGLINT_TEST_CLOSURE_CACHE_NO_INCLUDES'; Purpose: 'test hook: a stored closure scan is validated by the unit stamp only, not its include files (an unsound key)'),
+    (Name: 'DRAGLINT_TEST_CC_STAMP_ONLY';             Purpose: 'test hook: a stored closure scan is validated by the unit stamp only, not its include files (an unsound key)'),
     (Name: 'DRAGLINT_TEST_PURITY_SEEDS_ONLY';         Purpose: 'test hook: 1 = a scoped purity run does not follow its seeds to their callers (an unsound scope)'),
     (Name: 'DRAGLINT_TEST_RESOLVE_DELAY_MS';          Purpose: 'test hook: delay in the resolve pass'),
     (Name: 'DRAGLINT_TEST_RULE_SLEEP_MS';              Purpose: 'test hook: ''<rule-id>=<ms>'' sleeps that long the first time a lane asks for the rule in a file'),
@@ -6442,7 +6442,7 @@ begin
         if UseClosureCache then
         begin
           Cl.EnableScanCache(DRAGLINT_VERSION + '|' + DRAGLINT_EXTRACTOR_VERSION,
-            GetEnvironmentVariable('DRAGLINT_TEST_CLOSURE_CACHE_NO_INCLUDES') <> '');
+            GetEnvironmentVariable('DRAGLINT_TEST_CC_STAMP_ONLY') <> '');
           if not AArgs.Rebuild then
           begin
             var StoredFp: string;

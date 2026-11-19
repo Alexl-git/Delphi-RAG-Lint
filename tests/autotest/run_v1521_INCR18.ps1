@@ -29,7 +29,7 @@
   a missing include created, an include deleted, a constant another unit's IF reads. Per edit
   C (cache on) = U (DRAGLINT_NO_CLOSURE_CACHE) = F (fresh full index), 0 diff rows, the closure
   really changed, and run C really reused stored scans. POSITIVE CONTROL: the seam
-  DRAGLINT_TEST_CLOSURE_CACHE_NO_INCLUDES=1 (unit stamp only, the key main declined) must
+  DRAGLINT_TEST_CC_STAMP_ONLY=1 (unit stamp only, the key main declined) must
   leave a stale closure and diff rows on the nested-include edit.
 
   PART 1c (step 4, scoped purity; an 8-unit fixture): after a scoped resolve pass the purity
@@ -728,7 +728,7 @@ try {
 #     U  base + incremental, DRAGLINT_NO_CLOSURE_CACHE (cold walk, same binary)
 #     F  a fresh full index
 # -- and C = U, C = F (0 differing rows), the closure really changed, and run C really reused
-# stored scans. POSITIVE CONTROL: the seam DRAGLINT_TEST_CLOSURE_CACHE_NO_INCLUDES=1 validates a
+# stored scans. POSITIVE CONTROL: the seam DRAGLINT_TEST_CC_STAMP_ONLY=1 validates a
 # stored scan by the unit's own stamp only (the key main declined as unsound); on the
 # nested-include edit it must leave the new unit OUT of the closure and show diff rows against F.
 # A scan that asked another unit for a constant ({$IF} on a used unit's const) is never stored.
@@ -932,7 +932,7 @@ end.
 
 $PROF    = @{ DRAGLINT_PROFILE = '1' }
 $NOCACHE = @{ DRAGLINT_PROFILE = '1'; DRAGLINT_NO_CLOSURE_CACHE = '1' }
-$NOINCS  = @{ DRAGLINT_PROFILE = '1'; DRAGLINT_TEST_CLOSURE_CACHE_NO_INCLUDES = '1' }
+$NOINCS  = @{ DRAGLINT_PROFILE = '1'; DRAGLINT_TEST_CC_STAMP_ONLY = '1' }
 # A file modified under two seconds before a walk is never stored (its stamp could repeat).
 $SETTLE_MS = 2500
 
