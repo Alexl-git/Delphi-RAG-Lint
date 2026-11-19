@@ -48,6 +48,7 @@ type
     /// <para>Calls: Config.IndexesFrame.TIndexesFrame.FlushToManifest, Config.MainForm.TMainForm.LoadManifest, Config.MainForm.TMainForm.ResolveConfigPath, Config.ManifestSession.TrySaveConfigManifest, Config.SettingsFrame.TSettingsFrame.FlushToManifest, ShowMessage</para>
     /// <para>Reads: FIndexFrame, tsIndexes, FSettingsFrame, FManifest, FLoadError, FOriginalText, FConfigPath, tsSettings   Writes: FIndexFrame, FSettingsFrame, FConfigPath</para>
     /// <para>Handles: MainForm.OnShow</para>
+    /// <para>UI thread only -- touches FIndexFrame, FSettingsFrame</para>
     /// <seealso cref="Config.IndexesFrame.TIndexesFrame.FlushToManifest"/>
     /// <seealso cref="Config.MainForm.TMainForm.LoadManifest"/>
     /// <seealso cref="Config.MainForm.TMainForm.ResolveConfigPath"/>
@@ -62,6 +63,7 @@ type
     /// <para>Calls: Config.IndexesFrame.TIndexesFrame.FlushToManifest, Config.ManifestSession.TrySaveConfigManifest, Config.SettingsFrame.TSettingsFrame.FlushToManifest, ShowMessage</para>
     /// <para>Reads: FIndexFrame, FSettingsFrame, FManifest, FLoadError, FOriginalText, FConfigPath</para>
     /// <para>Handles: btnSave.OnClick</para>
+    /// <para>UI thread only -- touches FIndexFrame, FSettingsFrame</para>
     /// <seealso cref="Config.IndexesFrame.TIndexesFrame.FlushToManifest"/>
     /// <seealso cref="Config.ManifestSession.TrySaveConfigManifest"/>
     /// <seealso cref="Config.SettingsFrame.TSettingsFrame.FlushToManifest"/>
@@ -150,6 +152,7 @@ type
     /// <para>Called from: Config.MainForm.TMainForm.LoadManifest (Config.MainForm.pas)</para>
     /// <para>Calls: Config.IndexesFrame.TIndexesFrame.BindManifest, Config.SettingsFrame.TSettingsFrame.BindManifest, PIndexManifest</para>
     /// <para>Reads: FIndexFrame, FManifest, FConfigPath, FSettingsFrame, btnSave, FLoadError, lblConfigPath</para>
+    /// <para>UI thread only -- touches FIndexFrame, FSettingsFrame</para>
     /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
     /// <seealso cref="Config.SettingsFrame.TSettingsFrame.BindManifest"/>
     /// <seealso cref="Config.MainForm.TMainForm.btnOpenClick"/>
