@@ -25,7 +25,7 @@ if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -Foreground
 $Exe = (Resolve-Path $Exe).Path
 $entry = Get-Content (Join-Path $PSScriptRoot '..\..\features\entries\menu-tree.json') -Raw | ConvertFrom-Json
 function Help([string[]]$A) {
-  $o = & $Exe @A 2>$null
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe @A 2>$null }
   return @{ Text = ($o -join "`n"); Code = $LASTEXITCODE }
 }
 foreach ($s in $entry.surfaces | Where-Object { $_.type -eq 'cli' }) {

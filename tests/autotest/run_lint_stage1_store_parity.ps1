@@ -114,14 +114,14 @@ Write-Ascii $file $fixture
 $db = Join-Path $WorkDir 'stage1.sqlite'
 
 # ABSOLUTE target -- see the header note.
-$idx = & $exePath index $WorkDir --db $db 2>&1 | Out-String
+$idx = & { $ErrorActionPreference = 'Continue'; & $exePath index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'SANITY: fixture indexed with no errors' `
       ($LASTEXITCODE -eq 0 -and $idx -notmatch '\b[1-9]\d* errors\b') $idx
 
 # The membership probe must actually have found the file, or every store-backed
 # assertion below degrades to the store-free answer and the guard tests nothing.
 $env:DRAGLINT_DEBUG = '1'
-$dbg = & $exePath lint $file --db $db --rules-dir $rules 2>&1 | Out-String
+$dbg = & { $ErrorActionPreference = 'Continue'; & $exePath lint $file --db $db --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String
 Remove-Item Env:\DRAGLINT_DEBUG
 Check 'SANITY: the per-file verb actually resolved the store for this file' `
       ($dbg -match 'store=True' -and $dbg -notmatch 'fid=0\b') `
@@ -132,7 +132,7 @@ function TypeNamePrefixHits($text, $name) {
 }
 
 # --- the per-file verb, store-backed: this is the surface the IDE spawns ------
-$perFile = & $exePath lint $file --db $db --rules-dir $rules 2>&1 | Out-String
+$perFile = & { $ErrorActionPreference = 'Continue'; & $exePath lint $file --db $db --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String
 
 Check 'A1  store-backed `lint <file> --db` does NOT report the E-prefixed exception class' `
       ((TypeNamePrefixHits $perFile 'EFoo') -eq 0) `
@@ -143,7 +143,7 @@ Check 'A2  CONTROL: the same run still reports the genuinely mis-prefixed class'
       "expected a type-name-prefix finding for Foo -- if this is red the rule died instead of getting more precise"
 
 # --- lint-all over the same file: the reference the per-file verb must match --
-$all = & $exePath lint-all --db $db --rules-dir $rules --output (Join-Path $WorkDir 'all.txt') 2>&1 | Out-String
+$all = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rules-dir $rules --output (Join-Path $WorkDir 'all.txt') 2>&1 | ForEach-Object { "$_" } } | Out-String
 $allTxt = if (Test-Path (Join-Path $WorkDir 'all.txt')) { Get-Content (Join-Path $WorkDir 'all.txt') -Raw } else { $all }
 
 Check 'A3  PARITY: lint-all agrees -- silent on EFoo, reports Foo' `
@@ -151,7 +151,7 @@ Check 'A3  PARITY: lint-all agrees -- silent on EFoo, reports Foo' `
       "lint-all EFoo=$(TypeNamePrefixHits $allTxt 'EFoo') Foo=$(TypeNamePrefixHits $allTxt 'Foo')"
 
 # --- store-FREE fallback with exception-name heuristic -------------------------
-$noStore = & $exePath lint $file --rules-dir $rules 2>&1 | Out-String
+$noStore = & { $ErrorActionPreference = 'Continue'; & $exePath lint $file --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String
 
 Check 'A4  store-free `lint <file>` does NOT report EFoo (fallback recognizes Exception name)' `
       ((TypeNamePrefixHits $noStore 'EFoo') -eq 0) `

@@ -30,7 +30,7 @@ $fx = (Resolve-Path "$PSScriptRoot\..\fixtures\cyclefix\incuses").Path
 
 function Dump([string]$file) {
   Push-Location C:\TEMP
-  try { $o = & $Exe dump-parse-uses --file $file 2>&1 | ForEach-Object { "$_" } } finally { Pop-Location }
+  try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe dump-parse-uses --file $file 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" } } finally { Pop-Location }
   return ,@($o)
 }
 function ImplLine($lines) {

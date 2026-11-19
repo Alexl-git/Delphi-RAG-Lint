@@ -208,7 +208,7 @@ end;
 end.
 '@
   $db = Join-Path $WorkDir 'vshover.sqlite'
-  & $Exe index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'fixture indexed' (Test-Path $db)
 
   $lines = [IO.File]::ReadAllLines($file)
@@ -359,7 +359,7 @@ end.
   else {
     foreach ($t in 'deferredhover', 'disablerule') {
       $tf = Join-Path $vsDir "test\$t.test.js"
-      $out = if (Test-Path $tf) { & node $tf 2>&1 | Out-String } else { 'missing' }
+      $out = if (Test-Path $tf) { & { $ErrorActionPreference = 'Continue'; & node $tf 2>&1 | ForEach-Object { "$_" } } | Out-String } else { 'missing' }
       Check "N1 $t.test.js passes" ((Test-Path $tf) -and $LASTEXITCODE -eq 0 -and $out -match 'all assertions passed') $out
     }
 
@@ -372,7 +372,7 @@ end.
       foreach ($sc in 'unit', 'project') {
         $js = "const d=require('$libJs');process.stdout.write(JSON.stringify(d.buildArgs({rule:'empty-except',scope:'$sc',file:process.argv[1],line:5,reason:'lane test'})));"
         $argv = (& node -e $js $file | ConvertFrom-Json)
-        $out = & $Exe @argv 2>&1 | Out-String
+        $out = & { $ErrorActionPreference = 'Continue'; & $Exe @argv 2>&1 | ForEach-Object { "$_" } } | Out-String
         $code = $LASTEXITCODE
         $cfg = [IO.File]::ReadAllText((Join-Path $WorkDir 'drag-lint-lint.json'))
         $want = if ($sc -eq 'unit') { '"exclude_units"\s*:\s*\[\s*"uVsHover"' } else { '"enabled"\s*:\s*false' }

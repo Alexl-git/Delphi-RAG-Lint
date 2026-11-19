@@ -84,7 +84,7 @@ $freshPas        = "$MembersDir\uWithForm.pas"
 $staleCompilePas = "$MembersDir\uNoForm.pas"
 $absentPas       = "$WorkDir\does-not-exist\uGhost.pas"
 
-$out = (& $exe $db $freshPas $staleCompilePas $absentPas 2>&1 | Out-String).Trim()
+$out = (& { $ErrorActionPreference = 'Continue'; & $exe $db $freshPas $staleCompilePas $absentPas 2>&1 | ForEach-Object { "$_" } } | Out-String).Trim()
 $lines = @($out -split "`r?`n")
 foreach ($line in $lines) {
     if ($line -match '^\s*(PASS|FAIL)\s') {

@@ -55,7 +55,7 @@ $Exe = (Resolve-Path $Exe).Path
 $Fx  = (Resolve-Path (Join-Path $PSScriptRoot 'fixtures\v152-EXTR')).Path
 
 function Invoke-Sql([string]$Db, [string]$Query) {
-  $raw = & $Exe sql --db $Db --query $Query --json --limit 0 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query $Query --json --limit 0 2>$null }
   if ($LASTEXITCODE -ne 0) { throw "sql failed on $Db" }
   $j = ($raw | Where-Object { $_ -notmatch '^\(loaded' }) -join "`n" | ConvertFrom-Json
   # A List, never a bare array: an empty or one-row result must not be unrolled or nested by @().
@@ -100,7 +100,7 @@ function One($Refs, [string]$File, [int]$Line, [string]$Kind, [string]$Name) {
 }
 function Index-Into([string]$Src, [string]$Db, [string]$Lib) {
   if (Test-Path $Db) { [IO.File]::Delete($Db) }
-  if ($Lib) { $log = & $Exe index $Src --db $Db --library-db $Lib 2>&1 } else { $log = & $Exe index $Src --db $Db 2>&1 }
+  if ($Lib) { $log = & { $ErrorActionPreference = 'Continue'; & $Exe index $Src --db $Db --library-db $Lib 2>&1 | ForEach-Object { "$_" } } } else { $log = & { $ErrorActionPreference = 'Continue'; & $Exe index $Src --db $Db 2>&1 | ForEach-Object { "$_" } } }
   if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: index $Src exit $LASTEXITCODE" -ForegroundColor Red; $log | Select-Object -Last 5; exit 2 }
 }
 
@@ -158,9 +158,9 @@ try {
 
   # ---- r1: resolve-only twice
   $full = Snap $refs
-  $null = & $Exe index $Code --db $Proj --library-db $Lib --resolve-only 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index $Code --db $Proj --library-db $Lib --resolve-only 2>&1 | ForEach-Object { "$_" } }
   $ro1  = Snap (Get-Refs $Proj)
-  $null = & $Exe index $Code --db $Proj --library-db $Lib --resolve-only 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index $Code --db $Proj --library-db $Lib --resolve-only 2>&1 | ForEach-Object { "$_" } }
   $ro2  = Snap (Get-Refs $Proj)
   $d1 = @(Compare-Object $full $ro1).Count; $d2 = @(Compare-Object $ro1 $ro2).Count
   Check 'r1 resolve-only (library) = full run' ($d1 -eq 0) "differing rows=$d1"
@@ -170,7 +170,7 @@ try {
 
   # ---- r2: resolve-only without the library keeps the external targets
   $libExt = @($refs | Where-Object { ($_.Kind -in 'call','member-access') -and $_.Ext -ne '' } | ForEach-Object { "$($_.File):$($_.Line):$($_.Col):$($_.Kind):$($_.Name)=$($_.Ext)[$($_.XKind)]" })
-  $null = & $Exe index $Code --db $Proj --resolve-only 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index $Code --db $Proj --resolve-only 2>&1 | ForEach-Object { "$_" } }
   $after = Get-Refs $Proj
   $kept  = @($after | Where-Object { ($_.Kind -in 'call','member-access') -and $_.Ext -ne '' } | ForEach-Object { "$($_.File):$($_.Line):$($_.Col):$($_.Kind):$($_.Name)=$($_.Ext)[$($_.XKind)]" })
   $lost  = @(Compare-Object $libExt $kept).Count

@@ -31,7 +31,7 @@ Put 'Conv.Backup.pas' "unit Conv.Backup;`ninterface`nimplementation`nend.`n"
 Put 'uCache_BACKUP.pas' "unit uCache_BACKUP;`ninterface`nimplementation`nend.`n"
 Push-Location C:\TEMP
 try {
-  $rep = & $Exe reconcile-project "$w\App.dpr" 2>&1 | Out-String
+  $rep = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$w\App.dpr" 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'both units reach the report as MISSING (scenario fires)' (($rep -match 'MISSING[\s\S]*Conv\.Backup') -and ($rep -match 'MISSING[\s\S]*uCache_BACKUP'))
   $stale = if ($rep -match '(?s)STALE.*?(?=SUGGESTED|\z)') { $Matches[0] } else { '' }
   Check 'a backup-shaped name stays STALE (positive control)' ($stale -match 'uCache_BACKUP')

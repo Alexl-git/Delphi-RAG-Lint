@@ -26,9 +26,9 @@ function Build-ResFixture([string]$ExePath, [string]$WorkDir) {
     NoLib = Join-Path $WorkDir 'nolib.sqlite'
     Log   = ''
   }
-  & $ExePath index (Join-Path $WorkDir 'lib') --db $r.Lib *> $null
-  $r.Log = (& $ExePath index $code --db $r.Proj --library-db $r.Lib 2>&1) -join "`n"
-  & $ExePath index $code --db $r.NoLib *> $null
+  & { $ErrorActionPreference = 'Continue'; & $ExePath index (Join-Path $WorkDir 'lib') --db $r.Lib *> $null }
+  $r.Log = (& { $ErrorActionPreference = 'Continue'; & $ExePath index $code --db $r.Proj --library-db $r.Lib 2>&1 | ForEach-Object { "$_" } }) -join "`n"
+  & { $ErrorActionPreference = 'Continue'; & $ExePath index $code --db $r.NoLib *> $null }
   return $r
 }
 
@@ -37,7 +37,7 @@ function Get-ResRefs([string]$ExePath, [string]$Db) {
        'coalesce(r.external_target, ''''), coalesce(r.external_kind, ''''), coalesce(r.symbol_id, 0), r.start_line ' +
        'from refs r join files f on f.id = r.file_id left join symbols s on s.id = r.enclosing_symbol_id ' +
        'order by f.path, r.start_line, r.start_col'
-  $j = (& $ExePath sql --query $q --db $Db --json 2>$null) -join "`n" | ConvertFrom-Json
+  $j = (& { $ErrorActionPreference = 'Continue'; & $ExePath sql --query $q --db $Db --json 2>$null }) -join "`n" | ConvertFrom-Json
   $out = @()
   foreach ($row in $j.rows) {
     $out += [pscustomobject]@{
@@ -66,7 +66,7 @@ function Find-ResRef($Refs, [string]$File, [string]$Encl, [string]$Kind, [string
 
 function Get-ResSummaries([string]$ExePath, [string]$Db) {
   $q = 'select s.qualified_name, f.effect_summary from symbols s join symbol_facts f on f.symbol_id = s.id'
-  $j = (& $ExePath sql --query $q --db $Db --json 2>$null) -join "`n" | ConvertFrom-Json
+  $j = (& { $ErrorActionPreference = 'Continue'; & $ExePath sql --query $q --db $Db --json 2>$null }) -join "`n" | ConvertFrom-Json
   $map = @{}
   foreach ($r in $j.rows) { $map[[string]$r[0]] = [string]$r[1] }
   return $map

@@ -159,7 +159,7 @@ foreach ($pair in @(
     @('DemoApp2.sqlite', 'app2\Other.pas'),
     @('DemoApp2.sqlite', 'shared\SharedHelper.pas'),
     @('TreeWide.sqlite', 'loose\Orphan.pas'))) {
-  & $Exe index (Join-Path $root $pair[1]) --db (Join-Path $WorkDir $pair[0]) *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $root $pair[1]) --db (Join-Path $WorkDir $pair[0]) *> $null }
 }
 
 $dbA = Join-Path $WorkDir 'DemoApp.sqlite'
@@ -170,8 +170,8 @@ Check 'fixture: all three indexes were built' `
 
 # Sanity: the shared unit really IS a member of both project indexes. If this
 # fails the fixture is wrong and every assertion below is meaningless.
-$qa = & $Exe query --name SharedThing --db $dbA 2>$null | Out-String
-$qb = & $Exe query --name SharedThing --db $dbB 2>$null | Out-String
+$qa = & { $ErrorActionPreference = 'Continue'; & $Exe query --name SharedThing --db $dbA 2>$null } | Out-String
+$qb = & { $ErrorActionPreference = 'Continue'; & $Exe query --name SharedThing --db $dbB 2>$null } | Out-String
 Check 'fixture: the sibling-folder unit is indexed in BOTH project DBs' `
   (($qa -match 'SharedThing') -and ($qb -match 'SharedThing')) 'membership is real, not assumed'
 

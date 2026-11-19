@@ -109,8 +109,8 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'omit.sqlite'
-& $Exe index $WorkDir --db $db --quiet 2>&1 | Out-Null
-& $Exe document --unit $unit --apply --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe document --unit $unit --apply --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $txt = Get-Content $unit -Raw
 
 Write-Host 'Prose elements with nothing to say are not written' -ForegroundColor Cyan
@@ -146,11 +146,11 @@ Write-Host 'Idempotency and drift' -ForegroundColor Cyan
 # YADF corpus the very first apply was already stable -- apply #1 and apply #2
 # produced identical files across all 12 units -- but a file that still carries
 # pre-B7 empty elements legitimately settles on the pass that removes them.)
-& $Exe index $WorkDir --db $db --quiet 2>&1 | Out-Null
-& $Exe document --unit $unit --apply --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe document --unit $unit --apply --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $settled = Get-Content $unit -Raw
-& $Exe index $WorkDir --db $db --quiet 2>&1 | Out-Null
-& $Exe document --unit $unit --apply --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe document --unit $unit --apply --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'once settled, further index+apply passes are byte-identical' `
   ((Get-Content $unit -Raw) -eq $settled)
 
@@ -168,7 +168,7 @@ Check 'once settled, further index+apply passes are byte-identical' `
 # the code, the LINTER reports what is wrong with it. So `document` writes every
 # <param>, and an undocumented one is reported at WARNING -- not papered over,
 # and not left as a hint that is easy to ignore forever.
-$lint = & $Exe lint-all --db $db --json 2>$null
+$lint = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --json 2>$null }
 $find = @(); try { $find = ($lint -join "`n" | ConvertFrom-Json) } catch { $find = @() }
 $nd = @($find | Where-Object { $_.rule -eq 'doc-param-no-description' })
 # v(2026-08-10): AOther is TYPED, so it now carries 'const Integer' as its body

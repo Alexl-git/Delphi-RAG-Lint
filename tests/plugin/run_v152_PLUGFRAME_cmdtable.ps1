@@ -60,7 +60,7 @@ $editor = [IO.File]::ReadAllText($editorPath)
 $hooks = [regex]::Matches($editor, '(?m)^[^{/\r\n]*\bBuildCmd152Menu\s*\(')
 if ($hooks.Count -ne 1) { Bad "Editor.pas has $($hooks.Count) BuildCmd152Menu calls, expected 1" } else { Ok 'Editor.pas: one BuildCmd152Menu call' }
 $menuLine = '\bAddWrappedItem\(|\bAddSeparator\(|\bAddSectionHeader\(|\.Caption\s*:='
-$base = & git -C $repo show "${BaseRef}:src/delphi-plugin/DragLint.Plugin.Editor.pas" 2>$null
+$base = & { $ErrorActionPreference = 'Continue'; & git -C $repo show "${BaseRef}:src/delphi-plugin/DragLint.Plugin.Editor.pas" 2>$null }
 if ($LASTEXITCODE -ne 0 -or -not $base) { Bad "cannot read Editor.pas at $BaseRef" }
 else {
   $was = @($base | Where-Object { $_ -match $menuLine } | ForEach-Object { $_.Trim() })
@@ -229,7 +229,7 @@ foreach ($r in $rows) {
   if ($r.After -and $editor -notmatch ("'" + [regex]::Escape($r.After) + "'")) { Bad "$($r.Id) AfterCaption '$($r.After)' not found in Editor.pas" }
 }
 
-$out = & $exe $(if ($EnabledIds.Count) { '--allow-visible' }) 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $exe $(if ($EnabledIds.Count) { '--allow-visible' }) 2>&1 | ForEach-Object { "$_" } } | Out-String
 $rc = $LASTEXITCODE
 Write-Host $out.TrimEnd()
 if ($rc -ne 0) { Bad "headless check exit $rc" }

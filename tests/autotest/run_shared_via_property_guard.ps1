@@ -119,17 +119,17 @@ Write-Ascii "$bDir\_D-RAG\drag-lint-project.json" '{ "ownRoots": [".", "../share
 $dbA = "$aDir\_D-RAG\A.sqlite"
 $dbB = "$bDir\_D-RAG\B.sqlite"
 
-function Reindex([string]$Db, [string[]]$Dirs) { foreach ($d in $Dirs) { & $Exe index $d --db $Db 2>&1 | Out-Null } }
+function Reindex([string]$Db, [string[]]$Dirs) { foreach ($d in $Dirs) { & { $ErrorActionPreference = 'Continue'; & $Exe index $d --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-Null } }
 function ReindexBoth { Reindex $dbA @($shDir); Reindex $dbB @($shDir) }
-function DocApply([string]$Db, [string]$Unit) { & $Exe document --unit (Join-Path $shDir "$Unit.pas") --db $Db --apply --no-backup 2>$null | Out-Null }
+function DocApply([string]$Db, [string]$Unit) { & { $ErrorActionPreference = 'Continue'; & $Exe document --unit (Join-Path $shDir "$Unit.pas") --db $Db --apply --no-backup 2>$null } | Out-Null }
 function DocEditCount([string]$Db, [string]$Unit) {
-  $o = ((& $Exe document --unit (Join-Path $shDir "$Unit.pas") --db $Db 2>$null) -join "`n") -replace '</?para>', ''
+  $o = ((& { $ErrorActionPreference = 'Continue'; & $Exe document --unit (Join-Path $shDir "$Unit.pas") --db $Db 2>$null }) -join "`n") -replace '</?para>', ''
   if ($o -match 'decl\(s\)[^,]*,\s*(\d+)\s*edit\(s\)') { return [int]$Matches[1] }
   if ($o -match 'nothing to document') { return 0 }
   return -1   # an output shape this guard does not know is a FAIL, never a silent 0
 }
 function DriftCount([string]$Db, [string]$Unit) {
-  $o = & $Exe lint-all --db $Db --quiet --output (Join-Path (Split-Path $Db) 'lint-report.txt') 2>$null   # --output: lint-all otherwise drops lint-report-<date>.txt into the caller's cwd (150 LN item 5)
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --quiet --output (Join-Path (Split-Path $Db) 'lint-report.txt') 2>$null }   # --output: lint-all otherwise drops lint-report-<date>.txt into the caller's cwd (150 LN item 5)
   return @($o | Select-String 'doc-drift' | Where-Object { $_.Line -match "\\$Unit\.pas:" }).Count
 }
 function ViaLine([string]$Unit, [string]$Prop) {

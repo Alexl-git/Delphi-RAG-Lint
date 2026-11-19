@@ -109,7 +109,7 @@ end.
 
 $db = Join-Path $WorkDir 'app.sqlite'
 Push-Location C:\TEMP
-& $exePath index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V index built' (Test-Path $db) $db
 $raw = & $exePath sql --db $db --json --limit 500 --query "SELECT f.path, r.start_line, coalesce(s.qualified_name,'') FROM refs r JOIN files f ON f.id = r.file_id LEFT JOIN symbols s ON s.id = r.symbol_id WHERE r.kind = 'type_use' AND r.name_text = 'TPair' ORDER BY f.path, r.start_line" | Out-String
 Pop-Location

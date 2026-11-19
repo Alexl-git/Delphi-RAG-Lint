@@ -56,7 +56,7 @@ function Run([string[]]$CmdArgs) {
   Push-Location $work
   try {
     $old = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-    $out = & $Exe @CmdArgs 2>$null | Out-String
+    $out = & { $ErrorActionPreference = 'Continue'; & $Exe @CmdArgs 2>$null } | Out-String
     $script:LastExit = $LASTEXITCODE
     $ErrorActionPreference = $old
     $out

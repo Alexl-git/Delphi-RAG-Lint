@@ -48,9 +48,9 @@ function HasEdge([string[]]$lines, [string]$qname, [string]$conf) {
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
-  $out   = & $exePath dump-call-edges --db $db 2>$null | Out-String
+  $out   = & { $ErrorActionPreference = 'Continue'; & $exePath dump-call-edges --db $db 2>$null } | Out-String
   # A real edge line is exactly `ref_id|target_qname|confidence`: an integer
   # ref id, a dotted qname, and a certain|ambiguous confidence. This shape
   # rejects usage/error text that merely contains a '|'.

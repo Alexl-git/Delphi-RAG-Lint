@@ -241,7 +241,7 @@ $expected = @('ThingMethod', 'ThingFunc', 'ThingField', 'BaseOnlyMethod')
 Write-Host ''
 Write-Host 'CASE 1: type and usage in the SAME index (pins the kind check)' -ForegroundColor Cyan
 $db1 = Join-Path $WorkDir 'both.sqlite'
-& $Exe index $WorkDir --db $db1 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db1 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'built the combined index' (Test-Path $db1)
 $got1 = Get-CompletionLabels @($db1)
 Check 'completion returned items at all' ($got1.Count -gt 0) "count=$($got1.Count)"
@@ -259,8 +259,8 @@ Write-Host 'CASE 2: type in a SEPARATE index (pins the single-store lookup)' -Fo
 $env:DRAGLINT_CONTEXT_DEFAULTS = Join-Path $WorkDir 'no-defaults.json'
 $dbT = Join-Path $WorkDir 'library-Win64.sqlite'
 $dbU = Join-Path $WorkDir 'usage.sqlite'
-& $Exe index $typesDir --db $dbT 2>&1 | Out-Null
-& $Exe index $usageDir --db $dbU 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $typesDir --db $dbT 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $usageDir --db $dbU 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'built both split indexes' ((Test-Path $dbT) -and (Test-Path $dbU))
 # usage db FIRST: it owns the file, exactly how the plugin orders project-then-library.
 $got2 = Get-CompletionLabels @($dbU, $dbT)

@@ -33,7 +33,7 @@ function LineOf([string]$File, [string]$Marker) {
   return [int]$m[0].LineNumber
 }
 function RuleFindings([string]$Db, [string[]]$Extra) {
-  $raw = & $exePath lint-all --db $Db --format json @Extra 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $Db --format json @Extra 2>$null }
   return @((Parse-Findings $raw) | Where-Object { $_.rule -eq $Rule })
 }
 function Fresh([string]$Name) {
@@ -46,7 +46,7 @@ function Fresh([string]$Name) {
 try {
   $src = Fresh 'a'
   $db = Join-Path $scratch 'a.sqlite'
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $second = Join-Path $src 'uFadSecond.pas'
 
   # positive-control: finalization-after-dependency
@@ -65,7 +65,7 @@ try {
   $t = $t.Replace("  uFadFirst in 'uFadFirst.pas',`r`n  uFadSecond in 'uFadSecond.pas';", "  uFadSecond in 'uFadSecond.pas',`r`n  uFadFirst in 'uFadFirst.pas';")
   [IO.File]::WriteAllText($dpr, $t, [Text.Encoding]::ASCII)
   $db3 = Join-Path $scratch 'b.sqlite'
-  & $exePath index $src3 --db $db3 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src3 --db $db3 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $flip = RuleFindings $db3 @('--rule', $Rule)
   Check 'RUN 3 the other .dpr order: uFadSecond is silent' (@($flip | Where-Object { $_.file_path -like '*uFadSecond.pas' }).Count -eq 0) "$($flip.Count) total"
   Check 'RUN 3 the other .dpr order: uFadFirst now fires on GSecond' (@($flip | Where-Object { $_.file_path -like '*uFadFirst.pas' -and $_.message -match 'GSecond' }).Count -eq 1) ''

@@ -39,12 +39,12 @@ $iu  = Join-Path $WorkDir 'includeuses'; Copy-Item (Resolve-Path "$PSScriptRoot\
 
 function Index([string]$dproj, [string]$db, [string[]]$extra = @()) {
   Push-Location $WorkDir
-  try { & $Exe index --project $dproj --db $db --library-db none @extra *> "$db.log" } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe index --project $dproj --db $db --library-db none @extra *> "$db.log" } } finally { Pop-Location }
   return $LASTEXITCODE
 }
 function Sql([string]$db, [string]$q) {
   Push-Location $WorkDir
-  try { $j = & $Exe sql --db $db --query $q --json 2>$null | Out-String } finally { Pop-Location }
+  try { $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query $q --json 2>$null } | Out-String } finally { Pop-Location }
   try { $o = $j | ConvertFrom-Json } catch { $o = $null }
   if ($null -eq $o -or $null -eq $o.columns) { return ,@() }
   $names = @($o.columns | ForEach-Object { $_.name })
@@ -71,8 +71,8 @@ Check 'b: IncA.pas rows are inline (origin NULL, include_line NULL)' (@($a | Whe
 
 Push-Location $WorkDir
 try {
-  $cyc = & $Exe cycles --db $db 2>$null | Out-String
-  $la  = & $Exe lint-all --db $db --rule circular-uses --json --library-db none 2>$null | Out-String
+  $cyc = & { $ErrorActionPreference = 'Continue'; & $Exe cycles --db $db 2>$null } | Out-String
+  $la  = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule circular-uses --json --library-db none 2>$null } | Out-String
 } finally { Pop-Location }
 $grp = @($cyc -split "`r?`n" | Where-Object { ($_ -match '\bIncA\b') -and ($_ -match '\bIncB\b') })
 Check 'c: cycles prints a group naming IncA and IncB' ($grp.Count -ge 1) ($cyc.Trim() -replace "`r?`n", ' | ')

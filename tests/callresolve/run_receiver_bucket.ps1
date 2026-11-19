@@ -48,16 +48,16 @@ Copy-Item $fixture $target -Force
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # --- the column exists and is POPULATED, including '' for a bare call -------
   # Sanity before the behaviour assertions: if receiver_text were NULL the filter
   # would correctly no-op (NULL = "never resolved by a v20 engine") and every
   # assertion below would pass for the WRONG reason.
-  $dump = & $exePath query --name Create --db $db --json 2>$null
+  $dump = & { $ErrorActionPreference = 'Continue'; & $exePath query --name Create --db $db --json 2>$null }
   Check 'index ran and the fixture is queryable' ($LASTEXITCODE -eq 0)
 
-  $doc = (& $exePath document --unit $target --db $db 2>$null) -join "`n"
+  $doc = (& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db 2>$null }) -join "`n"
   $calledFrom = ($doc -split "`n" | Where-Object { $_ -match 'Called from:' } | Select-Object -First 1)
   Check 'a Called from: line was generated' ($null -ne $calledFrom) $calledFrom
 

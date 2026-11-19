@@ -63,12 +63,12 @@ function BlockAbove([string]$path, [string]$declRx) {
   return ,@()
 }
 
-& $exePath index $scratch --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 Check 'fresh index exits 0' ($LASTEXITCODE -eq 0)
-$stored = (& $exePath sql --query "select f.returns_owner from symbols s join symbol_facts f on f.symbol_id=s.id where s.qualified_name='A_Owner.TOwner.Value'" --db $db 2>$null) -join ' '
+$stored = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --query "select f.returns_owner from symbols s join symbol_facts f on f.symbol_id=s.id where s.qualified_name='A_Owner.TOwner.Value'" --db $db 2>$null }) -join ' '
 Write-Host "  (info) stored returns_owner of TOwner.Value after the fresh index: $stored"
 
-& $exePath document --unit $owner --db $db --apply --no-backup 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $owner --db $db --apply --no-backup 2>$null } | Out-Null
 Check 'document --apply exits 0' ($LASTEXITCODE -eq 0)
 
 $valBlock   = BlockAbove $owner '^\s*function\s+Value\s*:'
@@ -79,15 +79,15 @@ Check 'POSITIVE CONTROL: Thing (class return) carries Owns returned: borrowed' (
 
 # Touch the unit without moving a line, so the incremental pass re-parses it.
 [IO.File]::AppendAllText($owner, "`r`n", [Text.Encoding]::ASCII)
-& $exePath index $scratch --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 Check 'incremental reindex exits 0' ($LASTEXITCODE -eq 0)
 
-$raw = (& $exePath lint $owner --db $db --rule doc-drift --project-rules --json 2>$null) -join "`n"
+$raw = (& { $ErrorActionPreference = 'Continue'; & $exePath lint $owner --db $db --rule doc-drift --project-rules --json 2>$null }) -join "`n"
 $arr = @()
 if ($raw.IndexOf('[') -ge 0) { $arr = @($raw.Substring($raw.IndexOf('[')) | ConvertFrom-Json) }
 Check "doc-drift after incremental reindex is 0 (got $($arr.Count))" ($arr.Count -eq 0)
 
-$dry = (& $exePath document --unit $owner --db $db 2>&1) -join "`n"
+$dry = (& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $owner --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'document after incremental reindex proposes no edit' (-not ($dry -match '(?m)^\s*(insert|delete)\b'))
 
 try { [IO.Directory]::Delete($scratch, $true) } catch { }

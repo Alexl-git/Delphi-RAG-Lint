@@ -31,7 +31,7 @@ $schema = (& $Exe schema --json --db $db) -join "`n"
 Check "files.last_compiled_unix column exists" ($schema -match 'last_compiled_unix') "schema had no such column"
 
 # Task 2: a hidden self-test verb exercises the new store methods on a temp db.
-$storeTest = (& $Exe test-store-freshness --db $db 2>$null) -join "`n"
+$storeTest = (& { $ErrorActionPreference = 'Continue'; & $Exe test-store-freshness --db $db 2>$null }) -join "`n"
 Check "store-freshness self-test OK" ($LASTEXITCODE -eq 0) "out=$storeTest"
 
 # Task 4: end-to-end -- a unit with an unused private method must surface H2219.
@@ -68,7 +68,7 @@ $db2 = Join-Path $WorkDir 'ff2.sqlite'
 # STDOUT ONLY. The engine writes '(loaded defaults from ...)' and 'FTS5 probe:'
 # to stderr; 2>&1 folded them into every captured string, which made the FAIL
 # detail unreadable and left the capture at the mercy of pipe-drain ordering.
-$out = (& $Exe refresh-findings --project (Join-Path $proj 'FFProj.dpr') --db $db2 --json 2>$null) -join "`n"
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe refresh-findings --project (Join-Path $proj 'FFProj.dpr') --db $db2 --json 2>$null }) -join "`n"
 Check "refresh-findings exits 0/1 (ran)" ($LASTEXITCODE -le 1) "exit=$LASTEXITCODE out=$out"
 Check "refresh-findings JSON has a mode field" ($out -match '"mode"\s*:\s*"(full|incremental|noop)"') "out=$out"
 # Assert the COMPILE first, then the STORE. These used to be one check with
@@ -80,11 +80,11 @@ Check "compile ran and produced a finding (dcc64 reachable)" `
   (($out -match '"exitCode"\s*:\s*0') -and ($out -match '"findings"\s*:\s*[1-9]')) "out=$out"
 # `query hints` reads compiler_findings directly (NOT `query --text`, which is
 # the FTS5 index over .pas/.dfm/.sql SOURCE text -- the wrong tool here).
-$dump = (& $Exe query hints --db $db2 2>$null) -join "`n"
+$dump = (& { $ErrorActionPreference = 'Continue'; & $Exe query hints --db $db2 2>$null }) -join "`n"
 Check "H2219 stored for the unused private method" ($dump -match 'NeverCalled' -or $dump -match 'H2219') "dump=$dump"
 
 # Re-running immediately afterward (files now freshly compiled) should be a noop.
-$out2 = (& $Exe refresh-findings --project (Join-Path $proj 'FFProj.dpr') --db $db2 --json 2>$null) -join "`n"
+$out2 = (& { $ErrorActionPreference = 'Continue'; & $Exe refresh-findings --project (Join-Path $proj 'FFProj.dpr') --db $db2 --json 2>$null }) -join "`n"
 Check "refresh-findings second run is a noop (nothing stale)" ($out2 -match '"mode"\s*:\s*"noop"') "out2=$out2"
 
 # Task 5: mode decision transitions. First run above was full (all stale).
@@ -92,10 +92,10 @@ Check "refresh-findings second run is a noop (nothing stale)" ($out2 -match '"mo
 Start-Sleep -Milliseconds 1100
 (Get-Item (Join-Path $proj 'UHint.pas')).LastWriteTime = Get-Date
 & $Exe index $proj --db $db2 | Out-Null   # refresh files.mtime_unix
-$m1 = (& $Exe refresh-findings --project (Join-Path $proj 'FFProj.dpr') --db $db2 --json 2>$null) -join "`n"
+$m1 = (& { $ErrorActionPreference = 'Continue'; & $Exe refresh-findings --project (Join-Path $proj 'FFProj.dpr') --db $db2 --json 2>$null }) -join "`n"
 Check "1 stale -> incremental mode" ($m1 -match '"mode"\s*:\s*"incremental"') "out=$m1"
 # No changes -> noop.
-$m2 = (& $Exe refresh-findings --project (Join-Path $proj 'FFProj.dpr') --db $db2 --json 2>$null) -join "`n"
+$m2 = (& { $ErrorActionPreference = 'Continue'; & $Exe refresh-findings --project (Join-Path $proj 'FFProj.dpr') --db $db2 --json 2>$null }) -join "`n"
 Check "0 stale after incremental -> noop mode" ($m2 -match '"mode"\s*:\s*"noop"') "out=$m2"
 
 Write-Host ''

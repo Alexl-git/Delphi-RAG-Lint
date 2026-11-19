@@ -74,7 +74,7 @@ function Frame($obj) {
   return "Content-Length: $n`r`n`r`n$j"
 }
 function CliUsages([string]$Name) {
-  $raw = (& $exePath usages --name $Name --db $db --format json 2>$null | Out-String)
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath usages --name $Name --db $db --format json 2>$null } | Out-String)
   $j = $raw.Substring($raw.IndexOf('{'))
   $j = $j.Substring(0, $j.LastIndexOf('}') + 1)
   return ($j | ConvertFrom-Json)
@@ -83,7 +83,7 @@ function Pos($r) { "$($r.file):$($r.line):$($r.col)" }
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $WorkDir --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check '1. SANITY: the index exists' (Test-Path $db)
 
   $cliE = CliUsages 'EMyFail'

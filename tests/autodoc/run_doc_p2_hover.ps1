@@ -99,12 +99,12 @@ function Get-FactLine([string]$text, [string]$label) {
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
   # --- hover BEFORE `document` -- proves Phase-2 facts are INDEX-TIME, not --
   # --- dependent on the symbol already having a doc-comment.               --
-  $hoverMd1 = (& $exePath hover --qname p2hover.TBusy.Complex --db $db --format md 2>&1) -join "`n"
+  $hoverMd1 = (& { $ErrorActionPreference = 'Continue'; & $exePath hover --qname p2hover.TBusy.Complex --db $db --format md 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'hover (pre-document) exits 0' ($LASTEXITCODE -eq 0)
 
   $hoverComplexity1 = Get-FactLine $hoverMd1 'Complexity'
@@ -123,7 +123,7 @@ try {
   Check 'hover (pre-document) shows a Reads: ... Writes: ... line' ($hoverRW1 -eq 'Reads: FCount   Writes: FCount') $hoverRW1
 
   # --- document --apply -- creates the managed block for TBusy.Complex -----
-  & $exePath document --unit $target --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply 2>$null } | Out-Null
   Check 'document --apply exits 0' ($LASTEXITCODE -eq 0)
 
   $lines = [IO.File]::ReadAllLines($target)
@@ -137,7 +137,7 @@ try {
 
   # --- hover AFTER `document` -- re-hover so the consistency comparison ----
   # --- below is against a hover call made in the SAME state as the doc.    --
-  $hoverMd2 = (& $exePath hover --qname p2hover.TBusy.Complex --db $db --format md 2>&1) -join "`n"
+  $hoverMd2 = (& { $ErrorActionPreference = 'Continue'; & $exePath hover --qname p2hover.TBusy.Complex --db $db --format md 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'hover (post-document) exits 0' ($LASTEXITCODE -eq 0)
   $hoverComplexity2 = Get-FactLine $hoverMd2 'Complexity'
   $hoverRW2          = Get-FactLine $hoverMd2 'Reads'
@@ -158,14 +158,14 @@ try {
   # --- against a stale position is exactly the bug run_doc_idempotent.ps1's --
   # --- own header comment warns about. Reindex AGAIN afterward so hover     --
   # --- picks up Echo's own just-inserted comment at ITS new position.       --
-  & $exePath index $scratch --db $db 2>$null | Out-Null
-  & $exePath document --qname p2hover.Echo --db $db --apply 2>$null | Out-Null
-  & $exePath index $scratch --db $db 2>$null | Out-Null
-  $echoPlain = (& $exePath hover --qname p2hover.Echo --db $db 2>&1) -join "`n"
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --qname p2hover.Echo --db $db --apply 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+  $echoPlain = (& { $ErrorActionPreference = 'Continue'; & $exePath hover --qname p2hover.Echo --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'Echo hover (plain) exits 0' ($LASTEXITCODE -eq 0)
-  $echoMd   = (& $exePath hover --qname p2hover.Echo --db $db --format md   2>&1) -join "`n"
+  $echoMd   = (& { $ErrorActionPreference = 'Continue'; & $exePath hover --qname p2hover.Echo --db $db --format md   2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'Echo hover (md) exits 0' ($LASTEXITCODE -eq 0)
-  $echoJson = (& $exePath hover --qname p2hover.Echo --db $db --format json 2>&1) -join "`n"
+  $echoJson = (& { $ErrorActionPreference = 'Continue'; & $exePath hover --qname p2hover.Echo --db $db --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'Echo hover (json) exits 0' ($LASTEXITCODE -eq 0)
 
   # The literal ownership token must never leak into any of the 3 formats.
@@ -207,8 +207,8 @@ try {
   # --- Idempotency-adjacent: reindex (facts are index-time) + re-hover -----
   # --- shows the SAME facts (no drift across a reindex with no source      --
   # --- change).                                                            --
-  & $exePath index $scratch --db $db 2>$null | Out-Null
-  $hoverMd3 = (& $exePath hover --qname p2hover.TBusy.Complex --db $db --format md 2>&1) -join "`n"
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+  $hoverMd3 = (& { $ErrorActionPreference = 'Continue'; & $exePath hover --qname p2hover.TBusy.Complex --db $db --format md 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'reindex + re-hover: Complexity line unchanged' ((Get-FactLine $hoverMd3 'Complexity') -eq $hoverComplexity2)
   Check 'reindex + re-hover: Reads/Writes line unchanged' ((Get-FactLine $hoverMd3 'Reads') -eq $hoverRW2)
 
@@ -235,9 +235,9 @@ try {
   $p3db  = Join-Path $p3dir 'p3.sqlite'
   Copy-Item (Join-Path $PSScriptRoot 'fixtures\docp3\mutates.pas') $p3src -Force
 
-  & $exePath index $p3dir --db $p3db 2>$null | Out-Null
-  & $exePath document --unit $p3src --db $p3db --apply 2>$null | Out-Null
-  & $exePath index $p3dir --db $p3db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $p3dir --db $p3db 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $p3src --db $p3db --apply 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $p3dir --db $p3db 2>$null } | Out-Null
 
   # The doc side: the Mutates line out of the emitted block, /// stripped.
   $docMut = ''
@@ -246,7 +246,7 @@ try {
     if ($t -match '^Mutates: (.*)$') { $docMut = $Matches[1].Trim(); break }
   }
   # The hover side: the same line out of the markdown render, bolding stripped.
-  $p3Hover = (& $exePath hover --qname mutates.FillBoth --db $p3db --format md 2>&1) -join "`n"
+  $p3Hover = (& { $ErrorActionPreference = 'Continue'; & $exePath hover --qname mutates.FillBoth --db $p3db --format md 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $hovMut  = ''
   $hm = [regex]::Match($p3Hover, '(?m)^\W*\*{0,2}Mutates:\*{0,2}\s*(.+?)\s*$')
   if ($hm.Success) { $hovMut = $hm.Groups[1].Value.Trim() }

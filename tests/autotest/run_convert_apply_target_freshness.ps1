@@ -115,12 +115,12 @@ function NewFixture([string]$Sub) {
   Write-Ascii (Join-Path $d 'Frm.dfm') $FrmDfm
   Write-Ascii (Join-Path $d 'b.rules') $Rules
   $db = Join-Path $d 'fx.sqlite'
-  $idx = & $Exe index $d --db $db 2>&1
+  $idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $d --db $db 2>&1 | ForEach-Object { "$_" } }
   if (($LASTEXITCODE -ne 0) -or -not (Test-Path $db)) { Check "V $Sub fixture index built" $false ($idx -join ' | ') }
   return $d
 }
 function Run([string]$Dir, [string[]]$Extra) {
-  $o = (& $Exe convert-apply --unit (Join-Path $Dir 'Frm.pas') --rules (Join-Path $Dir 'b.rules') --db (Join-Path $Dir 'fx.sqlite') @Extra 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (Join-Path $Dir 'Frm.pas') --rules (Join-Path $Dir 'b.rules') --db (Join-Path $Dir 'fx.sqlite') @Extra 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 function Json([string]$s) {

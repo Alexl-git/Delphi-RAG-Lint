@@ -56,14 +56,14 @@ function New-Proj([string]$Tag, [scriptblock]$Patch = $null) {
   if ($Patch) { & $Patch $root }
   $db = Join-Path $WorkDir "$Tag.sqlite"
   Push-Location $WorkDir
-  try { $null | & $Exe index --project (Join-Path $root 'F2047Clause.dproj') --db $db --library-db none *> "$db.log" } finally { Pop-Location }
+  try { $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root 'F2047Clause.dproj') --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
   return @{ Root = $root; Dproj = (Join-Path $root 'F2047Clause.dproj'); Db = $db }
 }
 function Run-Fix($P, [string[]]$Extra, [bool]$Json = $true) {
   $a = @('cycles', '--fix', '--build-timeout', '1800', '--project', $P.Dproj, '--db', $P.Db, '--library-db', 'none') + $Extra
   if ($Json) { $a += @('--format', 'json') }
   Push-Location $WorkDir
-  try { $out = ($null | & $Exe @a 2>$null | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
+  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
   $j = $null; if ($Json) { try { $j = $out | ConvertFrom-Json } catch { } }
   return @{ Exit = $code; Out = $out; Json = $j }
 }

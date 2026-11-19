@@ -36,7 +36,7 @@ try {
   }
   if (-not (Test-Path -LiteralPath $bin)) { Write-Host "FIELDREPO SEED: FAIL -- test exe not found: $bin" -ForegroundColor Red; exit 1 }
   $log = Join-Path $work 'run.log'
-  & $bin *> $log
+  & { $ErrorActionPreference = 'Continue'; & $bin *> $log }
   $code = $LASTEXITCODE
   $sum = Select-String -LiteralPath $log -Pattern '^SUMMARY ' | Select-Object -Last 1
   Select-String -LiteralPath $log -Pattern '^FAIL|^SKIP' | ForEach-Object { Write-Host "  $($_.Line)" -ForegroundColor Red }

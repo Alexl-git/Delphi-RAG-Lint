@@ -110,11 +110,11 @@ $libDb = Join-Path $scratch 'lib.sqlite'
 $projDb = Join-Path $scratch 'proj.sqlite'
 Push-Location $scratch
 try {
-  $null = & $exePath index (Join-Path $scratch 'lib') --db $libDb --library-db none 2>&1 | Out-String
-  $null = & $exePath index (Join-Path $scratch 'proj') --db $projDb --library-db none 2>&1 | Out-String
+  $null = & { $ErrorActionPreference = 'Continue'; & $exePath index (Join-Path $scratch 'lib') --db $libDb --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String
+  $null = & { $ErrorActionPreference = 'Continue'; & $exePath index (Join-Path $scratch 'proj') --db $projDb --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String
 
   function Lane-NeverRaisedIn([string]$LibArg) {
-    $raw = (& $exePath lint-all --db $projDb --rule doc-drift --library-db $LibArg --json 2>$null | Out-String)
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $projDb --rule doc-drift --library-db $LibArg --json 2>$null } | Out-String)
     $rows = @($raw | ConvertFrom-Json)
     $names = @{}
     foreach ($r in $rows) {

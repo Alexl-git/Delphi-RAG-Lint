@@ -150,13 +150,13 @@ end.
 
 $libDb = Join-Path $WorkDir 'lib.sqlite'; $appDb = Join-Path $WorkDir 'app.sqlite'
 Push-Location C:\TEMP
-& $exePath index $lib --db $libDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $lib --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V library index built' (Test-Path $libDb) $libDb
-$log = & $exePath index --project (Join-Path $app 'App.dpr') --db $appDb --library-db $libDb 2>&1 | Out-String
+$log = & { $ErrorActionPreference = 'Continue'; & $exePath index --project (Join-Path $app 'App.dpr') --db $appDb --library-db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'V app index built' (Test-Path $appDb) $appDb
 $j = & $exePath sql --db $appDb --json --limit 2000 --query "SELECT '' p, r.receiver_text, r.name_text, coalesce(r.external_target,''), coalesce(t.qualified_name,''), r.kind, coalesce(r.external_kind,'') FROM refs r LEFT JOIN call_edges c ON c.ref_id = r.id LEFT JOIN symbols t ON t.id = c.target_symbol_id WHERE r.receiver_text <> '' AND r.kind IN ('call','member-access')" | Out-String | ConvertFrom-Json
-$fc = & $exePath query find-callers --name OnClick --db $appDb --json 2>$null | Out-String
-$cx = & $exePath context --task "modify uGo.Go" --db $appDb --format markdown 2>$null | Out-String
+$fc = & { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name OnClick --db $appDb --json 2>$null } | Out-String
+$cx = & { $ErrorActionPreference = 'Continue'; & $exePath context --task "modify uGo.Go" --db $appDb --format markdown 2>$null } | Out-String
 Pop-Location
 
 $line = @($log -split "`r?`n" | Where-Object { $_ -match 'calls\s+receivers:' }) | Select-Object -First 1

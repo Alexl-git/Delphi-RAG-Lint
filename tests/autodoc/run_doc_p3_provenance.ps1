@@ -89,10 +89,10 @@ $MARK = '<!-- drag-lint:auto -->'
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
-  & $exePath document --unit $target --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply 2>$null } | Out-Null
   Check 'document --apply #1 exits 0' ($LASTEXITCODE -eq 0)
 
   $lines = ([IO.File]::ReadAllLines($target) -replace '</?para>','')
@@ -151,8 +151,8 @@ try {
   # --- both fixes at once. Reindex first -- context reads the doc comment --
   # --- via the store, same staleness trap as hover/document (see          --
   # --- run_doc_idempotent.ps1's own header comment).
-  & $exePath index $scratch --db $db 2>$null | Out-Null
-  $ctxMarked = ((& $exePath context --task 'modify provenance.Marked' --db $db --format md 2>&1) -join "`n") -replace '</?para>',''
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+  $ctxMarked = ((& { $ErrorActionPreference = 'Continue'; & $exePath context --task 'modify provenance.Marked' --db $db --format md 2>&1 | ForEach-Object { "$_" } }) -join "`n") -replace '</?para>',''
   Check 'context (Marked) exits 0' ($LASTEXITCODE -eq 0)
   Check 'T1 review fix: context markdown never leaks the AUTO_MARK ownership token' `
     ($ctxMarked -notmatch 'drag-lint:auto') $ctxMarked
@@ -165,15 +165,15 @@ try {
   Check 'T1 review fix (1b): context markdown Remarks keeps the facts TEXT with the fence markers stripped' `
     ($ctxMarked -match '\*\*Remarks:\*\* Calls: provenance\.Touch') $ctxMarked
 
-  $ctxHandWritten = ((& $exePath context --task 'modify provenance.HandWritten' --db $db --format md 2>&1) -join "`n") -replace '</?para>',''
+  $ctxHandWritten = ((& { $ErrorActionPreference = 'Continue'; & $exePath context --task 'modify provenance.HandWritten' --db $db --format md 2>&1 | ForEach-Object { "$_" } }) -join "`n") -replace '</?para>',''
   Check 'context (HandWritten) exits 0' ($LASTEXITCODE -eq 0)
   Check 'T1 review fix: context markdown never leaks the marker for hand-written content either' `
     ($ctxHandWritten -notmatch 'drag-lint:auto') $ctxHandWritten
 
   # --- Idempotency: reindex (facts are index-time) + re-apply -> no change ---
   $before = [IO.File]::ReadAllBytes($target)
-  & $exePath index $scratch --db $db 2>$null | Out-Null
-  & $exePath document --unit $target --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply 2>$null } | Out-Null
   $after = [IO.File]::ReadAllBytes($target)
   Check 'idempotent: file byte-identical after reindex + 2nd apply' ([System.Linq.Enumerable]::SequenceEqual([byte[]]$before,[byte[]]$after))
 

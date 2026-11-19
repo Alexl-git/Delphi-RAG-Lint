@@ -53,7 +53,7 @@ foreach ($v in 'DRAGLINT_STUB_PUBLISH_FILE', 'DRAGLINT_STUB_SCRIPT', 'DRAGLINT_S
 # --- the stub DelphiLSP, built like the sibling proxy guards build it -----------
 $fixtureDir = "$PSScriptRoot\fixtures\lspproxy"
 $rs = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
-$null = cmd /c "call `"$rs`" && cd /d `"$fixtureDir`" && dcc64 -CC -E`"$WorkDir\stub`" -N0`"$WorkDir\stub`" LspStubServer.dpr" 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; cmd /c "call `"$rs`" && cd /d `"$fixtureDir`" && dcc64 -CC -E`"$WorkDir\stub`" -N0`"$WorkDir\stub`" LspStubServer.dpr" 2>&1 | ForEach-Object { "$_" } }
 $stubLsp = "$WorkDir\stub\LspStubServer.exe"
 Check 'SETUP: LspStubServer.exe built' (Test-Path $stubLsp)
 
@@ -64,8 +64,8 @@ Write-Ascii "$WorkDir\A\uA.pas" (Lines @('unit uA;', 'interface', 'procedure Onl
   'procedure OnlyInA;', 'begin', '  OnlyInA;', 'end;', 'end.'))
 Write-Ascii "$WorkDir\lib\uLib.pas" (Lines @('unit uLib;', 'interface', 'procedure LibOnly;', 'implementation', 'procedure LibOnly;', 'begin', 'end;', 'end.'))
 $dbA = "$WorkDir\A.sqlite"; $dbL = "$WorkDir\library-Win64.sqlite"
-& $Exe index "$WorkDir\A" --db $dbA 2>&1 | Out-Null
-& $Exe index "$WorkDir\lib" --db $dbL 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\A" --db $dbA 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\lib" --db $dbL 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'SETUP: fixture indexes built' ((Test-Path $dbA) -and (Test-Path $dbL))
 Check 'SAFETY: the marked DB is a fixture under the work dir' ($dbA.StartsWith($WorkDir, [StringComparison]::OrdinalIgnoreCase))
 $calls = "$WorkDir\cmd\calls.txt"

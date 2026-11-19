@@ -56,7 +56,7 @@ New-Item -ItemType Directory -Force -Path $WorkDir | Out-Null
 function Fire($name, $lines) {
   $f = Join-Path $WorkDir $name
   [IO.File]::WriteAllLines($f, [string[]]$lines, (New-Object Text.ASCIIEncoding))
-  $out = & $Exe lint $f --enable multiple-statements-per-line 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $f --enable multiple-statements-per-line 2>&1 | ForEach-Object { "$_" } } | Out-String
   ,@($out -split "`r?`n" | Select-String 'multiple-statements-per-line' | ForEach-Object { $_.ToString().Trim() })
 }
 

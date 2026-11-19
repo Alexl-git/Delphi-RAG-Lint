@@ -75,7 +75,7 @@ $use = Join-Path $scratch 'uWriteUse.pas'
 $db  = Join-Path $scratch 'writes.sqlite'
 
 function Sql([string]$Query) {
-  $raw = (& $exePath sql --db $db --json --limit 1000 --query $Query 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --limit 1000 --query $Query 2>$null }) -join "`n"
   $b = $raw.IndexOf('{')
   if ($b -lt 0) { throw "sql returned no JSON for: $Query" }
   $o = $raw.Substring($b) | ConvertFrom-Json
@@ -133,7 +133,7 @@ function Check-Positives([string]$Tag, [string[]]$Skip) {
 
 Push-Location $scratch   # 150 HG: own scratch as cwd -- C:\TEMP is shared by every lane/guard (config discovery + stray files)
 try {
-  $log1 = (& $exePath index $scratch --db $db *>&1) -join "`n"
+  $log1 = (& { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db *>&1 | ForEach-Object { "$_" } }) -join "`n"
 
   # --- check 1 / 2 ----------------------------------------------------------------
   Check-Positives 'check 1' @()
@@ -172,7 +172,7 @@ try {
   if ($txt -notmatch 'GShared: Integer') { throw 'check 5 fixture edit did not apply (uWriteLib2.pas has no GClash line)' }
   [System.IO.File]::WriteAllText($lib2, $txt, [System.Text.Encoding]::ASCII)
   [System.IO.File]::SetLastWriteTimeUtc($lib2, (Get-Date).ToUniversalTime().AddSeconds(5))
-  $log2 = (& $exePath index $scratch --db $db *>&1) -join "`n"
+  $log2 = (& { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db *>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'check 5  the re-index ran a SCOPED pass' ($log2 -match 'starting SCOPED pass') ''
   $rows = WriteAt (LineOf 'W-USED-UNIT') 'GShared'
   Check 'check 5  W-USED-UNIT is now ambiguous and unbound' (($rows.Count -eq 1) -and ($null -eq $rows[0].symbol_id)) ("sid=" + $(if ($rows.Count -ge 1) { $rows[0].symbol_id } else { '<none>' }))

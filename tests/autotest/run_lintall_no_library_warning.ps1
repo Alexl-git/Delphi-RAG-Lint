@@ -29,12 +29,12 @@ try {
   $Prj = Join-Path $Tmp 'p'
   Copy-Item (Resolve-Path "$PSScriptRoot\..\fixtures\refactor\redcast").Path $Prj -Recurse
   $Db = Join-Path $Prj 'p.sqlite'
-  & $E index --project (Join-Path $Prj 'RedCast.dproj') --db $Db --library-db none *> (Join-Path $Tmp 'index.log')
+  & { $ErrorActionPreference = 'Continue'; & $E index --project (Join-Path $Prj 'RedCast.dproj') --db $Db --library-db none *> (Join-Path $Tmp 'index.log') }
   Check 'S0 the fixture indexes' ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
   $Rule = @('--rule', 'unused-global')
   function Err([string[]]$More) {
     $f = Join-Path $Tmp 'err.txt'
-    & $E lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $Db @Rule @More 1> $null 2> $f
+    & { $ErrorActionPreference = 'Continue'; & $E lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $Db @Rule @More 1> $null 2> $f }
     return [IO.File]::ReadAllText($f)
   }
   $Warn = 'no platform library for this run'

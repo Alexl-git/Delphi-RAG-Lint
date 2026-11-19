@@ -134,14 +134,14 @@ function LintRun([string[]]$Extra, [string]$EnvName) {
     # --library-db names a file that does not exist, so no run here ever opens
     # the machine's real 2 GB platform library (it degrades to project-only).
     $argv = @('lint', $pas, '--db', $db, '--library-db', (Join-Path $WorkDir 'no-library.sqlite')) + $Extra
-    return (& $Exe @argv 2>&1 | Out-String)
+    return (& { $ErrorActionPreference = 'Continue'; & $Exe @argv 2>&1 | ForEach-Object { "$_" } } | Out-String)
   } finally { [Environment]::SetEnvironmentVariable($EnvName, $old) }
 }
 function Ran([string]$Out, [string]$Name) { $Out -match ('\[lint-checker\] ' + [regex]::Escape($Name) + '\r?\n') }
 
 Push-Location C:\TEMP
 try {
-  & $Exe index --all --config $manifest --only SecNarrow --jobs 1 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $manifest --only SecNarrow --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
   if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2 }
 
   Write-Host ''
@@ -197,9 +197,9 @@ try {
   $mLines = [IO.File]::ReadAllLines($marked)
   $exceptLine = 0
   for ($i = 0; $i -lt $mLines.Count; $i++) { if ($mLines[$i].Trim() -eq 'except') { $exceptLine = $i + 1 } }
-  & $Exe allow $marked --fix-line $exceptLine --fix-rule try-except-swallowed --apply 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe allow $marked --fix-line $exceptLine --fix-rule try-except-swallowed --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'M0 FIXTURE: allow wrote a live marker' ((Get-Content $marked)[$exceptLine - 1] -match 'dl:ok try-except-swallowed@[0-9a-f]{4}') ''
-  & $Exe index --all --config $manifest --only SecNarrow --jobs 1 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $manifest --only SecNarrow --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
   # A second, EXISTING index in the library slot, so no run here opens the
   # machine's real platform library (an explicit second --db is the library).
@@ -210,7 +210,7 @@ try {
     [Environment]::SetEnvironmentVariable($EnvName, '1')
     try {
       $argv = @('lint-all', '--db', $db, '--db', $libDummy, '--output', (Join-Path $WorkDir 'rep.txt')) + $Extra
-      return (& $Exe @argv 2>&1 | Out-String)
+      return (& { $ErrorActionPreference = 'Continue'; & $Exe @argv 2>&1 | ForEach-Object { "$_" } } | Out-String)
     } finally { [Environment]::SetEnvironmentVariable($EnvName, $old) }
   }
   function ScmRulesRun([string]$Out) {
@@ -239,16 +239,16 @@ try {
   # The marker on uMarked's `except` is live and correctly hashed. Narrowing the
   # checkers to review-marker-unused skipped try-except-swallowed and reported
   # that live marker as "remove it" (it was pre-existing on `lint` since D3).
-  $rAll = & $Exe lint $marked --db $db --library-db (Join-Path $WorkDir 'no-library.sqlite') 2>&1 | Out-String
+  $rAll = & { $ErrorActionPreference = 'Continue'; & $Exe lint $marked --db $db --library-db (Join-Path $WorkDir 'no-library.sqlite') 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'R0 CONTROL: a bare lint is silent about the live marker' (-not ($rAll -match 'review-marker-unused')) ''
-  $rOne = & $Exe lint $marked --db $db --library-db (Join-Path $WorkDir 'no-library.sqlite') --rule review-marker-unused 2>&1 | Out-String
+  $rOne = & { $ErrorActionPreference = 'Continue'; & $Exe lint $marked --db $db --library-db (Join-Path $WorkDir 'no-library.sqlite') --rule review-marker-unused 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'R1 lint --rule review-marker-unused does NOT call the live marker unused' (-not ($rOne -match 'review-marker-unused:')) ''
   $raOne = LintAllRun @('--rule', 'review-marker-unused') 'DRAGLINT_DEBUG'
   Check 'R2 lint-all --rule review-marker-unused does NOT call the live marker unused' (-not ($raOne -match 'uMarked\.pas:\d+:\d+\s+\[\w+\]\s+review-marker-unused')) ''
 
   Write-Host ''
   Write-Host 'G: ids the inline `lint` gates were SHORT of now reach their checker' -ForegroundColor Cyan
-  $g1 = & $Exe lint $marked --rule local-field-prefix 2>&1 | Out-String
+  $g1 = & { $ErrorActionPreference = 'Continue'; & $Exe lint $marked --rule local-field-prefix 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'G1 lint --rule local-field-prefix reports FCount' ($g1 -match 'local-field-prefix') 'was 0: missing from the inline naming gate'
 } finally { Pop-Location }
 
@@ -265,7 +265,7 @@ function IdsIn([string]$RelPath, [string]$Rx, [string]$SpanRx = '') {
   if ($SpanRx) { $t = [regex]::Match($t, $SpanRx).Value }
   return @([regex]::Matches($t, $Rx) | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
 }
-$catalog = @((& $Exe rules --json 2>$null | Out-String | ConvertFrom-Json).rules | ForEach-Object { $_.id })
+$catalog = @((& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null } | Out-String | ConvertFrom-Json).rules | ForEach-Object { $_.id })
 Check 'D0 CONTROL: the rule catalogue parsed' ($catalog.Count -gt 100) "($($catalog.Count) rule(s))"
 
 $typeSpan = '(?s)class function TAstChecker\.CheckTypeAware\(.*?(?=\r?\nclass function TAstChecker\.)'

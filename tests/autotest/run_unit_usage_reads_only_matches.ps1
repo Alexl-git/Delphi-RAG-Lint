@@ -98,13 +98,13 @@ end.
 Write-Ascii (Join-Path $WorkDir 'P.dpr') "program P;`n`nuses`n  uLib in 'uLib.pas',`n  uOther in 'uOther.pas',`n  uUser in 'uUser.pas';`n`nbegin`nend.`n"
 $db = Join-Path $WorkDir 'p.sqlite'
 $env:DRAGLINT_RULE_CACHE = '0'
-$idx = & $exePath index --project (Join-Path $WorkDir 'P.dpr') --db $db 2>&1 | Out-String
+$idx = & { $ErrorActionPreference = 'Continue'; & $exePath index --project (Join-Path $WorkDir 'P.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 $env:DRAGLINT_RULE_CACHE = $null
 Check 'SANITY: fixture indexed' ($LASTEXITCODE -eq 0) $idx
 
 $errF = Join-Path $WorkDir 'uu.err'
 $env:DRAGLINT_PROFILE = '1'
-$json = & $exePath query unit-usage --unit uLib --db $db --json 2>$errF | Out-String
+$json = & { $ErrorActionPreference = 'Continue'; & $exePath query unit-usage --unit uLib --db $db --json 2>$errF } | Out-String
 $env:DRAGLINT_PROFILE = $null
 $prof = Get-Content $errF -Raw
 $read = if ($prof -match 'unit-usage: (\d+) ref\(s\) read from (\d+) importing file') { [int]$Matches[1] } else { -1 }

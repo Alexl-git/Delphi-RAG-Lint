@@ -121,10 +121,10 @@ function Get-Block([string]$Plan, [int]$No, [string]$Section = '') {
 
 function Index-Copy([string]$Dir, [string]$Dproj, [string]$Tag, [int]$Units) {
   $db = Join-Path $Dir "$Tag.sqlite"
-  $idx = & $Exe index --project (Join-Path $Dir $Dproj) --db $db 2>&1 | Out-String
+  $idx = & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $Dir $Dproj) --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check "${Tag}: SANITY the $Units units indexed with 0 errors" `
     (([regex]::Matches($idx, 'Demo[\w.]+\.pas\s*->\s*\d+ symbols, \d+ refs, 0 errors')).Count -eq $Units) $idx
-  $report = & $Exe cycles --db $db 2>&1 | Out-String
+  $report = & { $ErrorActionPreference = 'Continue'; & $Exe cycles --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check "${Tag}: POSITIVE CONTROL plain report finds the 4-unit group with interface coupling" `
     ($report -match '\[4 units\].*has interface coupling') $report
   return $db
@@ -243,7 +243,7 @@ try {
   $tbDir = Join-Path $WorkDir 'tiebreak'
   Copy-Tree (Join-Path $Repo 'tests\fixtures\cyclefix\tiebreak') $tbDir
   $tbDb = Join-Path $tbDir 'tiebreak.sqlite'
-  $idx = & $Exe index --project (Join-Path $tbDir 'TieBreak.dproj') --db $tbDb 2>&1 | Out-String
+  $idx = & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $tbDir 'TieBreak.dproj') --db $tbDb 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'tiebreak: SANITY the 3 units indexed with 0 errors' (([regex]::Matches($idx, 'Tie\w\.pas\s*->\s*\d+ symbols, \d+ refs, 0 errors')).Count -eq 3) $idx
   $c = Get-Cycles $tbDb 'tiebreak' @('--plan', '--library-db', ('"' + $Lib + '"'))
   $tbFix = Get-Block $c.Out 1 'Recommended fix'
@@ -255,7 +255,7 @@ try {
   $pbDir = Join-Path $WorkDir 'partbr1'
   Copy-Tree (Join-Path $Repo 'tests\fixtures\cyclefix\partbr1') $pbDir
   $pbDb = Join-Path $pbDir 'partbr1.sqlite'
-  $idx = & $Exe index --project (Join-Path $pbDir 'PartBR1.dproj') --db $pbDb 2>&1 | Out-String
+  $idx = & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $pbDir 'PartBR1.dproj') --db $pbDb 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'partbr1: SANITY the 2 units indexed with 0 errors' (([regex]::Matches($idx, 'PartB\w\.pas\s*->\s*\d+ symbols, \d+ refs, 0 errors')).Count -eq 2) $idx
   $c = Get-Cycles $pbDb 'partbr1' @('--plan', '--library-db', ('"' + $Lib + '"'))
   $pb = Get-Block $c.Out 1 'Part B'

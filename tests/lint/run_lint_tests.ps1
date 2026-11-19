@@ -67,9 +67,9 @@ foreach ($pas in $fixtures) {
   # exercised. Without it the CLI uses built-in defaults.
   $cfgFile = [IO.Path]::ChangeExtension($pas.FullName, ".config.json")
   if (Test-Path $cfgFile) {
-    $raw = & $exePath lint $pas.FullName --config $cfgFile --json 2>$null
+    $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint $pas.FullName --config $cfgFile --json 2>$null }
   } else {
-    $raw = & $exePath lint $pas.FullName --json 2>$null
+    $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint $pas.FullName --json 2>$null }
   }
   $findings = @()
   try { $findings = ($raw | ConvertFrom-Json) } catch { $findings = @() }

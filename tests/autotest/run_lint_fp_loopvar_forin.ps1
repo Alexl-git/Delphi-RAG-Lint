@@ -95,7 +95,7 @@ end.
 $unit = Join-Path $WorkDir 'fploopvar.pas'
 [System.IO.File]::WriteAllText($unit, $src, [System.Text.Encoding]::ASCII)
 
-$out = (& $Exe lint $unit --rule loop-var-after-loop 2>$null | Out-String)
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $unit --rule loop-var-after-loop 2>$null } | Out-String)
 $rebound = @([regex]::Matches($out, 'fploopvar\.pas:(2[4-9]|30):')).Count
 
 Write-Host 'False positives that must be GONE' -ForegroundColor Cyan

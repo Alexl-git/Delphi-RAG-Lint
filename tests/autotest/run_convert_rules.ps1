@@ -151,7 +151,7 @@ Write-Ascii (Join-Path $work 'PropFix.pas') $PropBody
 $db = Join-Path $WorkDir 'propfix.sqlite'
 Write-Host ''
 Write-Host 'Indexing PropFix fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 $indexExit = $LASTEXITCODE
 Check 'index exits 0' ($indexExit -eq 0) "exit=$indexExit; $($indexOut -join ' | ')"
 
@@ -252,7 +252,7 @@ Check '#convert alongside #mapping still parsed' ($mapOut -match 'TXYZToggleButt
 # ---------------------------------------------------------------------------
 Write-Host ''
 Write-Host 'convert-validate (no --rules)' -ForegroundColor Cyan
-$noRulesOut = ((& $Exe convert-validate 2>&1) -join "`n")
+$noRulesOut = ((& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate 2>&1 | ForEach-Object { "$_" } }) -join "`n")
 $noRulesExit = $LASTEXITCODE
 Check 'missing --rules exit 2' ($noRulesExit -eq 2) "exit=$noRulesExit"
 
@@ -325,7 +325,7 @@ Check 'generic target + sibling splits at the TOP-LEVEL comma only' `
 # so the message must name the mapping there.
 $undecFile = Join-Path $WorkDir 'mapping-undeclared.rules'
 Write-Ascii $undecFile "#convert A -> B`r`n#apply Nope`r`n"
-$undecOut = ((& $Exe convert-validate --rules $undecFile 2>&1) -join "`n")
+$undecOut = ((& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules $undecFile 2>&1 | ForEach-Object { "$_" } }) -join "`n")
 $undecExit = $LASTEXITCODE
 Check 'undeclared #apply exits 1' ($undecExit -eq 1) "exit=$undecExit; out=$undecOut"
 Check 'undeclared #apply names the mapping' ($undecOut -match 'Nope') "out=$undecOut"
@@ -333,7 +333,7 @@ Check 'undeclared #apply names the mapping' ($undecOut -match 'Nope') "out=$unde
 # message has to be meaningful there. Read STDOUT ONLY: the engine also writes a
 # '(loaded defaults from ...)' note to stderr, and a merged capture interleaves
 # the two nondeterministically -- asserting against the merge makes this flaky.
-$undecStdout = (& $Exe convert-validate --rules $undecFile 2>$null) -join "`n"
+$undecStdout = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules $undecFile 2>$null }) -join "`n"
 Check 'undeclared #apply says what is wrong on the FIRST stdout line' `
   (($undecStdout -split "`n" | Where-Object { $_.Trim() -ne '' } | Select-Object -First 1) -match 'undeclared mapping') `
   "stdout=$undecStdout"
@@ -343,7 +343,7 @@ Check 'undeclared #apply says what is wrong on the FIRST stdout line' `
 # #apply, or by it being broken in some unrelated way.
 $decFile = Join-Path $WorkDir 'mapping-declared.rules'
 Write-Ascii $decFile "#mapping Nope from U.TE to U.TC`r`n#convert A -> B`r`n#apply Nope`r`n"
-$decOut = ((& $Exe convert-validate --rules $decFile 2>&1) -join "`n")
+$decOut = ((& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules $decFile 2>&1 | ForEach-Object { "$_" } }) -join "`n")
 $decExit = $LASTEXITCODE
 Check 'declared #apply exits 0 (control)' ($decExit -eq 0) "exit=$decExit; out=$decOut"
 
@@ -354,23 +354,23 @@ Check 'declared #apply exits 0 (control)' ($decExit -eq 0) "exit=$decExit; out=$
 # and 'TButton ->' never appears as a type anywhere.
 $foFile = Join-Path $WorkDir 'from-only.rules'
 [IO.File]::WriteAllText($foFile, "#convert TButton -> `r`n#link Caption <- Caption`r`n", [Text.Encoding]::ASCII)
-$foOut = ((& $Exe convert-validate --rules $foFile 2>$null) -join "`n")
+$foOut = ((& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules $foFile 2>$null }) -join "`n")
 $foExit = $LASTEXITCODE
 Check 'R27a From-only #convert: exit 1 with "line 1: #convert TButton has no To type"' `
   (($foExit -eq 1) -and ($foOut -match '(?m)^line 1: #convert TButton has no To type\r?$')) "exit=$foExit; out=$foOut"
 Check 'R27b From-only #convert: no "TButton ->" anywhere in the output' (-not ($foOut -match 'TButton ->')) "out=$foOut"
-$foParsed = ((& $Exe convert-validate --rules $foFile --print-parsed 2>$null) -join "`n")
+$foParsed = ((& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules $foFile --print-parsed 2>$null }) -join "`n")
 Check 'R27c --print-parsed: From is TButton, never "TButton ->"' (-not ($foParsed -match 'TButton ->\s*->')) "out=$foParsed"
 $usFile = Join-Path $WorkDir 'useswap-only.rules'
 [IO.File]::WriteAllText($usFile, "#useswap OldU -> `r`n", [Text.Encoding]::ASCII)
-$usOut = ((& $Exe convert-validate --rules $usFile 2>$null) -join "`n")
+$usOut = ((& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules $usFile 2>$null }) -join "`n")
 $usExit = $LASTEXITCODE
 Check 'R27d #useswap with no New: exit 1 with "line 1: #useswap OldU has no replacement unit"' `
   (($usExit -eq 1) -and ($usOut -match '(?m)^line 1: #useswap OldU has no replacement unit\r?$')) "exit=$usExit; out=$usOut"
 Check 'R27e #useswap with no New: no "OldU ->" anywhere in the output' (-not ($usOut -match 'OldU ->')) "out=$usOut"
 $okFile = Join-Path $WorkDir 'convert-normal.rules'
 [IO.File]::WriteAllText($okFile, "#convert A -> B`r`n#link Caption <- Caption`r`n#useswap OldU -> NewU`r`n", [Text.Encoding]::ASCII)
-$okOut = ((& $Exe convert-validate --rules $okFile --print-parsed 2>$null) -join "`n")
+$okOut = ((& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules $okFile --print-parsed 2>$null }) -join "`n")
 $okExit = $LASTEXITCODE
 Check 'R27f control: a normal #convert A -> B and #useswap OldU -> NewU parse unchanged (exit 0)' `
   (($okExit -eq 0) -and ($okOut -match '(?m)^line 1: convert A -> B\r?$') -and ($okOut -match '(?m)^line 3: useswap OldU -> NewU\s*$')) "exit=$okExit; out=$okOut"
@@ -379,7 +379,7 @@ Check 'R27f control: a normal #convert A -> B and #useswap OldU -> NewU parse un
 # then showed 'migrate Foo -> -> '. Old must be 'Foo'; the normal form stays as is.
 $miFile = Join-Path $WorkDir 'migrate-only.rules'
 [IO.File]::WriteAllText($miFile, "#migrate Foo -> `r`n#migrate Foo -> Bar`r`n", [Text.Encoding]::ASCII)
-$miOut = ((& $Exe convert-validate --rules $miFile --print-parsed 2>$null) -join "`n")
+$miOut = ((& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules $miFile --print-parsed 2>$null }) -join "`n")
 Check 'R27g From-only #migrate: Old is Foo, never "Foo ->"' `
   (($miOut -match '(?m)^line 1: migrate Foo -> \s*$') -and -not ($miOut -match 'Foo ->\s*->')) "out=$miOut"
 Check 'R27h control: #migrate Foo -> Bar parses unchanged' ($miOut -match '(?m)^line 2: migrate Foo -> Bar\s*$') "out=$miOut"
@@ -388,11 +388,11 @@ Check 'R27h control: #migrate Foo -> Bar parses unchanged' ($miOut -match '(?m)^
 # while a rule is being authored, and rejecting it would fail the round-trip.
 $bareFile = Join-Path $WorkDir 'mapping-baredecl.rules'
 Write-Ascii $bareFile "#mapping Nope`r`n#convert A -> B`r`n#apply Nope`r`n"
-$bareOut = ((& $Exe convert-validate --rules $bareFile 2>&1) -join "`n")
+$bareOut = ((& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules $bareFile 2>&1 | ForEach-Object { "$_" } }) -join "`n")
 Check 'bare #mapping Name counts as a declaration' ($LASTEXITCODE -eq 0) "out=$bareOut"
 
 Write-Host 'convert-validate --rules <nonexistent>' -ForegroundColor Cyan
-$missOut = ((& $Exe convert-validate --rules (Join-Path $WorkDir 'does-not-exist.txt') 2>&1) -join "`n")
+$missOut = ((& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules (Join-Path $WorkDir 'does-not-exist.txt') 2>&1 | ForEach-Object { "$_" } }) -join "`n")
 $missExit = $LASTEXITCODE
 Check 'unreadable --rules exit 2' ($missExit -eq 2) "exit=$missExit"
 

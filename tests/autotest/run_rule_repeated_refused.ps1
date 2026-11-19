@@ -57,7 +57,7 @@ end.
 function LintRun([string[]]$Extra) {
   Push-Location $WorkDir
   try {
-    $out = & $Exe lint $pas @Extra 2>&1 | Out-String
+    $out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $pas @Extra 2>&1 | ForEach-Object { "$_" } } | Out-String
     return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $out }
   } finally { Pop-Location }
 }

@@ -78,7 +78,7 @@ $norm = ($FixtureBody -replace "`r`n", "`n") -replace "`n", "`r`n"
 [System.IO.File]::WriteAllText($file, $norm, [System.Text.Encoding]::ASCII)
 
 $Db = Join-Path $WorkDir 'adhoc.sqlite'
-$idx = & $Exe index $SrcDir --db $Db 2>&1 | Out-String
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $SrcDir --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-String
 $idxCode = $LASTEXITCODE
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (CLIFIX C2)
 if (-not (Test-Path $Db)) {
@@ -91,12 +91,12 @@ Write-Host ("  indexed -> {0}" -f $Db) -ForegroundColor DarkGray
 
 # The FTS tables must actually be present in an ad-hoc DB -- that is the literal
 # claim 2.7 made. `schema` reports the live table list.
-$schema = & $Exe schema --db $Db 2>&1 | Out-String
+$schema = & { $ErrorActionPreference = 'Continue'; & $Exe schema --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-String
 $hasFts = $schema -match 'text_index|fts'
 
-$hit  = & $Exe query --text $Phrase --substring --db $Db 2>&1 | Out-String
+$hit  = & { $ErrorActionPreference = 'Continue'; & $Exe query --text $Phrase --substring --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-String
 $hitRc = $LASTEXITCODE
-$miss = & $Exe query --text 'Zzyzx nonexistent phrase Qqq' --substring --db $Db 2>&1 | Out-String
+$miss = & { $ErrorActionPreference = 'Continue'; & $Exe query --text 'Zzyzx nonexistent phrase Qqq' --substring --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-String
 $missRc = $LASTEXITCODE
 
 Write-Host ''

@@ -58,7 +58,7 @@ try {
   $side = Join-Path $WorkDir 'bk.json'
 
   # 1. dry run writes nothing
-  $j = Json (& $Exe bookmarks-strip --in $dir --output $side --json 2>&1); $code = $LASTEXITCODE
+  $j = Json (& { $ErrorActionPreference = 'Continue'; & $Exe bookmarks-strip --in $dir --output $side --json 2>&1 | ForEach-Object { "$_" } }); $code = $LASTEXITCODE
   Check 'dry run: exit 0' ($code -eq 0) "exit=$code"
   Check 'dry run: count 5 in 2 files, apply false' ($j -and $j.count -eq 5 -and $j.files -eq 2 -and $j.apply -eq $false) ("raw=" + ($j | ConvertTo-Json -Compress -Depth 4))
   Check 'dry run: no sidecar, sources unchanged' (-not (Test-Path $side) -and (Same (Bytes $a) $origA) -and (Same (Bytes $b) $origB))
@@ -68,7 +68,7 @@ try {
   }
 
   # 2. strip --apply removes the anchors (positive control: the bytes must change)
-  $j = Json (& $Exe bookmarks-strip --in $dir --output $side --apply --json 2>&1); $code = $LASTEXITCODE
+  $j = Json (& { $ErrorActionPreference = 'Continue'; & $Exe bookmarks-strip --in $dir --output $side --apply --json 2>&1 | ForEach-Object { "$_" } }); $code = $LASTEXITCODE
   Check 'strip: exit 0, sidecar written' ($code -eq 0 -and (Test-Path $side)) "exit=$code"
   $sa = Get $a
   Check 'strip removed the anchors (only the string literal tag is left)' (-not (Same (Bytes $a) $origA) -and ([regex]::Matches($sa, 'dl:bk')).Count -eq 1) $sa
@@ -76,52 +76,52 @@ try {
   Check 'strip: lone-LF unit keeps LF' ((Get $b) -eq "unit uB;`nimplementation`n  X;`nend.`n")
 
   # 3. an existing sidecar is never overwritten
-  $null = & $Exe bookmarks-strip --in $dir --output $side --apply 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe bookmarks-strip --in $dir --output $side --apply 2>&1 | ForEach-Object { "$_" } }
   Check 'strip: refuses an existing sidecar (exit 1)' ($LASTEXITCODE -eq 1) "exit=$LASTEXITCODE"
-  $null = & $Exe bookmarks-strip --in $dir --apply 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe bookmarks-strip --in $dir --apply 2>&1 | ForEach-Object { "$_" } }
   Check 'strip: --apply without --output is usage (exit 1)' ($LASTEXITCODE -eq 1) "exit=$LASTEXITCODE"
 
   # 4. restore dry run writes nothing; restore --apply is byte-identical
   $stripped = Bytes $a
-  $null = & $Exe bookmarks-restore --from $side 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe bookmarks-restore --from $side 2>&1 | ForEach-Object { "$_" } }
   Check 'restore dry run: exit 0, writes nothing' ($LASTEXITCODE -eq 0 -and (Same (Bytes $a) $stripped)) "exit=$LASTEXITCODE"
-  $j = Json (& $Exe bookmarks-restore --from $side --apply --json 2>&1); $code = $LASTEXITCODE
+  $j = Json (& { $ErrorActionPreference = 'Continue'; & $Exe bookmarks-restore --from $side --apply --json 2>&1 | ForEach-Object { "$_" } }); $code = $LASTEXITCODE
   Check 'restore: exit 0, restored 5' ($code -eq 0 -and $j -and $j.restored -eq 5 -and $j.unplaced -eq 0) ("exit=$code raw=" + ($j | ConvertTo-Json -Compress -Depth 4))
   Check 'ROUND TRIP: CRLF unit byte-identical' (Same (Bytes $a) $origA)
   Check 'ROUND TRIP: LF unit byte-identical' (Same (Bytes $b) $origB)
-  $j = Json (& $Exe bookmarks-restore --from $side --apply --json 2>&1)
+  $j = Json (& { $ErrorActionPreference = 'Continue'; & $Exe bookmarks-restore --from $side --apply --json 2>&1 | ForEach-Object { "$_" } })
   Check 'restore again: already 5, bytes unchanged' ($LASTEXITCODE -eq 0 -and $j.already -eq 5 -and (Same (Bytes $a) $origA)) "exit=$LASTEXITCODE"
 
   # 5. relocation: the file was edited after the strip (2 lines added at the top)
   [IO.File]::Delete($side)
-  $null = & $Exe bookmarks-strip --in $a --output $side --apply 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe bookmarks-strip --in $a --output $side --apply 2>&1 | ForEach-Object { "$_" } }
   Put $a ("// added 1`r`n// added 2`r`n" + (Get $a))
-  $j = Json (& $Exe bookmarks-restore --from $side --apply --json 2>&1); $code = $LASTEXITCODE
+  $j = Json (& { $ErrorActionPreference = 'Continue'; & $Exe bookmarks-restore --from $side --apply --json 2>&1 | ForEach-Object { "$_" } }); $code = $LASTEXITCODE
   Check 'relocate: exit 0, anchors re-placed by their lines' ($code -eq 0 -and (Get $a) -eq ("// added 1`r`n// added 2`r`n" + $crlf)) "exit=$code"
   if ($j) { Check 'relocate: reported lines are the new ones (8,9,11,14)' ((($j.bookmarks | % { $_.line }) -join ',') -eq '8,9,11,14') ((($j.bookmarks | % { $_.line }) -join ',')) }
 
   # 6. unplaceable: the anchor line is gone -> the file is left untouched, exit 4
   Put $a $crlf
   [IO.File]::Delete($side)
-  $null = & $Exe bookmarks-strip --in $a --output $side --apply 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe bookmarks-strip --in $a --output $side --apply 2>&1 | ForEach-Object { "$_" } }
   $edited = (Get $a).Replace("  Foo;`r`n", '')
   Put $a $edited
-  $j = Json (& $Exe bookmarks-restore --from $side --apply --json 2>&1); $code = $LASTEXITCODE
+  $j = Json (& { $ErrorActionPreference = 'Continue'; & $Exe bookmarks-restore --from $side --apply --json 2>&1 | ForEach-Object { "$_" } }); $code = $LASTEXITCODE
   Check 'unplaced: exit 4, file untouched' ($code -eq 4 -and (Get $a) -eq $edited) "exit=$code"
   if ($j) { Check 'unplaced: 1 unplaced, the rest held' ($j.unplaced -eq 1 -and @($j.bookmarks | ? { $_.status -eq 'held' }).Count -eq 3) ("raw=" + ($j | ConvertTo-Json -Compress -Depth 4)) }
 
   # 7. --name strips one code only; no hit exits 3; missing path 2; missing sidecar 2
   Put $a $crlf
   [IO.File]::Delete($side)
-  $j = Json (& $Exe bookmarks-strip --in $a --name a7k3qx --output $side --apply --json 2>&1)
+  $j = Json (& { $ErrorActionPreference = 'Continue'; & $Exe bookmarks-strip --in $a --name a7k3qx --output $side --apply --json 2>&1 | ForEach-Object { "$_" } })
   Check '--name: only that anchor' ($LASTEXITCODE -eq 0 -and $j.count -eq 1 -and ([regex]::Matches((Get $a), 'dl:bk')).Count -eq 4) "exit=$LASTEXITCODE"
-  $null = & $Exe bookmarks-strip --in $a --name 77 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe bookmarks-strip --in $a --name 77 2>&1 | ForEach-Object { "$_" } }
   Check 'no hit exits 3' ($LASTEXITCODE -eq 3) "exit=$LASTEXITCODE"
-  $null = & $Exe bookmarks-strip --in (Join-Path $WorkDir 'nope.pas') 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe bookmarks-strip --in (Join-Path $WorkDir 'nope.pas') 2>&1 | ForEach-Object { "$_" } }
   Check 'missing path exits 2' ($LASTEXITCODE -eq 2) "exit=$LASTEXITCODE"
-  $null = & $Exe bookmarks-restore --from (Join-Path $WorkDir 'nope.json') 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe bookmarks-restore --from (Join-Path $WorkDir 'nope.json') 2>&1 | ForEach-Object { "$_" } }
   Check 'missing sidecar exits 2' ($LASTEXITCODE -eq 2) "exit=$LASTEXITCODE"
-  $null = & $Exe bookmarks-restore 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe bookmarks-restore 2>&1 | ForEach-Object { "$_" } }
   Check 'restore without --from exits 1' ($LASTEXITCODE -eq 1) "exit=$LASTEXITCODE"
 }
 finally { [IO.Directory]::Delete($WorkDir, $true) }

@@ -77,9 +77,9 @@ if ($Work -match '-wt\\') { Write-Host "SETUP: temp path $Work contains -wt\" -F
 $RealCopy = $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'drag-lint\Open-DragLintUri.ps1' } else { '' })
 
 function Export-RealKey([string]$To) {
-  & reg.exe query $RealKey *> $null
+  & { $ErrorActionPreference = 'Continue'; & reg.exe query $RealKey *> $null }
   if ($LASTEXITCODE -ne 0) { return $null }
-  & reg.exe export $RealKey $To /y *> $null
+  & { $ErrorActionPreference = 'Continue'; & reg.exe export $RealKey $To /y *> $null }
   if ($LASTEXITCODE -ne 0) { throw "reg export $RealKey failed" }
   [IO.File]::ReadAllBytes($To)
 }

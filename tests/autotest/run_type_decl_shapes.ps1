@@ -84,11 +84,11 @@ end.
 
 $db = Join-Path $WorkDir 'shapes.sqlite'
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($indexOut -join ' | ')"
 
 function Row([string]$Name) {
-  $raw = @(& $Exe query --name $Name --db $db --json 2>&1) | ForEach-Object { "$_" } |
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query --name $Name --db $db --json 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" } |
            Where-Object { $_ -notmatch 'loaded defaults' }
   $txt = ($raw -join "`n").Trim()
   if (-not $txt.StartsWith('[')) { return $null }

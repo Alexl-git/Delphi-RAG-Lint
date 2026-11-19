@@ -50,7 +50,7 @@ $uMain = Put 'one\uMain.pas' $mainText
 $lineA = [Array]::IndexOf(($mainText -split "`n"), '  A.Run;') + 1
 $pOne = Put 'one\AppOne.dpr' "program AppOne;`nuses uAlpha in 'uAlpha.pas', uBeta in 'uBeta.pas', uMain in 'uMain.pas';`nbegin`nend.`n"
 $db = Join-Path $scratch 'one\_D-RAG\AppOne.sqlite'
-$o = & $exePath index --project $pOne --db $db 2>&1
+$o = & { $ErrorActionPreference = 'Continue'; & $exePath index --project $pOne --db $db 2>&1 | ForEach-Object { "$_" } }
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path $db)) { Write-Host "FATAL: fixture did not index: $($o | Select-Object -Last 2)" -ForegroundColor Red; exit 2 }
 
 $uri = 'file:///' + ($uMain -replace '\\', '/')

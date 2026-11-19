@@ -25,7 +25,7 @@ function Assert($name, $cond) {
   if ($cond) { Write-Host "PASS  $name" } else { Write-Host "FAIL  $name" -ForegroundColor Red; $script:fail++ }
 }
 function Run([string]$file, [string[]]$extra) {
-  $out = & $exe lint --json --rules-dir $rulesDir @extra (Join-Path $repo "tests\lint\$file") 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $exe lint --json --rules-dir $rulesDir @extra (Join-Path $repo "tests\lint\$file") 2>$null }
   return @(($out -join "`n") | ConvertFrom-Json)
 }
 

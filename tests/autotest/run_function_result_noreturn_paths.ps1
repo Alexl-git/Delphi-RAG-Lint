@@ -213,7 +213,7 @@ end.
   # One rule per run: a repeated --rule keeps only the last one.
   $all = @()
   foreach ($r in @('function-result-not-set', 'out-param-not-set')) {
-    $raw = (& $Exe lint $fixture --rule $r --json 2>$null) -join "`n"
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture --rule $r --json 2>$null }) -join "`n"
     if ($raw.Trim()) { $all += @($raw | ConvertFrom-Json) }
   }
   $hits = @($all | Where-Object { $_.rule -eq 'function-result-not-set' -or $_.rule -eq 'out-param-not-set' })
@@ -458,7 +458,7 @@ end.
   }
   $all2 = @()
   foreach ($r in @('function-result-not-set', 'object-leak', 'write-only-local')) {
-    $raw = (& $Exe lint $fixture2 --rule $r --json 2>$null) -join "`n"
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture2 --rule $r --json 2>$null }) -join "`n"
     if ($raw.Trim()) { $all2 += @($raw | ConvertFrom-Json) }
   }
   Write-Host ("  edge findings: {0}" -f (($all2 | ForEach-Object { '{0}@{1}' -f $_.rule, $_.start_line }) -join ', ')) -ForegroundColor DarkGray

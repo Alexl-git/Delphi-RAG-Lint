@@ -73,7 +73,7 @@ end.
 $unit = Join-Path $WorkDir 'fprnsprop.pas'
 [System.IO.File]::WriteAllText($unit, $src, [System.Text.Encoding]::ASCII)
 
-$out = (& $Exe lint $unit --rule referenced-never-set 2>$null | Out-String)
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $unit --rule referenced-never-set 2>$null } | Out-String)
 
 Write-Host 'False positives that must be GONE' -ForegroundColor Cyan
 Check 'FMenus behind `write FMenus` is not reported' (-not ($out -match 'fprnsprop\.pas:8:')) ''

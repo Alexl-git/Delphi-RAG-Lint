@@ -92,7 +92,7 @@ end.
   Check 'all four fixture statements located' (@($lnForIn, $lnForTo, $lnNoLoop, $lnReset) -notcontains -1)
 
   # `lint --rule` cannot be used: its validator rejects external .scm ids.
-  $raw = (& $Exe lint $fixture --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture --json 2>$null }) -join "`n"
   $all = @($raw | ConvertFrom-Json)
   $fired = @($all | Where-Object { $_.rule -eq 'concat-in-loop' } |
     ForEach-Object { [int]$_.start_line } | Sort-Object -Unique)

@@ -37,7 +37,7 @@ if (-not $SkipBuild) {
 }
 if (-not (Test-Path -LiteralPath $bin)) { Write-Host "PARAM-ARRAY TESTS: FAIL -- test exe not found: $bin" -ForegroundColor Red; exit 1 }
 $log = Join-Path $OutDir 'run.log'
-& $bin *> $log
+& { $ErrorActionPreference = 'Continue'; & $bin *> $log }
 $code = $LASTEXITCODE
 $sum = Select-String -LiteralPath $log -Pattern '^Summary: ' | Select-Object -Last 1
 Select-String -LiteralPath $log -Pattern '^FAIL' | ForEach-Object { Write-Host "  $($_.Line)" -ForegroundColor Red }

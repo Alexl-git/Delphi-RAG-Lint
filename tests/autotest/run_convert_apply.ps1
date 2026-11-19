@@ -508,7 +508,7 @@ $castBeforeBytes = [System.IO.File]::ReadAllBytes((Join-Path $phase4 'MyForm.pas
 
 $db = Join-Path $WorkDir 'convapply.sqlite'
 Write-Host 'Indexing convert-apply fixture (all phases)' -ForegroundColor Cyan
-$indexOut = & $Exe index $WorkDir --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } }
 $indexExit = $LASTEXITCODE
 Check 'index exits 0' ($indexExit -eq 0) "exit=$indexExit; $($indexOut -join ' | ')"
 
@@ -524,7 +524,7 @@ $beforeDfmBytes = [System.IO.File]::ReadAllBytes($myFormDfmPath)
 
 Push-Location $phase1
 try {
-  $applyRaw = (& $Exe convert-apply --unit 'MyForm.pas' --rules $rulesPath --db $db 2>&1) -join "`n"
+  $applyRaw = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'MyForm.pas' --rules $rulesPath --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $applyExit = $LASTEXITCODE
 } finally { Pop-Location }
 Check 'convert-apply exits 0' ($applyExit -eq 0) "exit=$applyExit"
@@ -703,7 +703,7 @@ $p2DfmOrigBytes = [System.IO.File]::ReadAllBytes($p2Dfm)
 
 Push-Location $phase2
 try {
-  $apply1Raw = (& $Exe convert-apply --unit 'MyForm.pas' --rules $rulesPath --db $db --apply 2>&1) -join "`n"
+  $apply1Raw = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'MyForm.pas' --rules $rulesPath --db $db --apply 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $apply1Exit = $LASTEXITCODE
 } finally { Pop-Location }
 Check '--apply (1st run) exits 0' ($apply1Exit -eq 0) "exit=$apply1Exit"
@@ -807,13 +807,13 @@ Assert-AsciiCrlf $p2Dfm
 $p2PasBck1BytesBeforeRerun = [System.IO.File]::ReadAllBytes($p2PasBck1)
 Write-Ascii $p2Pas $MyFormBody
 Write-Ascii $p2Dfm $MyFormDfm
-$reindex2Out = & $Exe index $phase2 --db $db 2>&1
+$reindex2Out = & { $ErrorActionPreference = 'Continue'; & $Exe index $phase2 --db $db 2>&1 | ForEach-Object { "$_" } }
 $reindex2Exit = $LASTEXITCODE
 Check 'reindex phase2 before re-run exits 0' ($reindex2Exit -eq 0) "exit=$reindex2Exit; $($reindex2Out -join ' | ')"
 
 Push-Location $phase2
 try {
-  $apply2Raw = (& $Exe convert-apply --unit 'MyForm.pas' --rules $rulesPath --db $db --apply 2>&1) -join "`n"
+  $apply2Raw = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'MyForm.pas' --rules $rulesPath --db $db --apply 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $apply2Exit = $LASTEXITCODE
 } finally { Pop-Location }
 Check '--apply (2nd run) exits 0' ($apply2Exit -eq 0) "exit=$apply2Exit"
@@ -835,7 +835,7 @@ $p3Dfm = Join-Path $phase3 'MyForm.dfm'
 
 Push-Location $phase3
 try {
-  $apply3Raw = (& $Exe convert-apply --unit 'MyForm.pas' --rules $rulesPath --db $db --apply --no-backup 2>&1) -join "`n"
+  $apply3Raw = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'MyForm.pas' --rules $rulesPath --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $apply3Exit = $LASTEXITCODE
 } finally { Pop-Location }
 Check '--apply --no-backup exits 0' ($apply3Exit -eq 0) "exit=$apply3Exit"
@@ -881,7 +881,7 @@ Write-Host '=== Phase 4: #link with a cast is skipped on the .pas side ===' -For
 
 Push-Location $phase4
 try {
-  $castRaw = (& $Exe convert-apply --unit 'MyForm.pas' --rules $castRulesPath --db $db 2>&1) -join "`n"
+  $castRaw = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'MyForm.pas' --rules $castRulesPath --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $castExit = $LASTEXITCODE
 } finally { Pop-Location }
 Write-Host $castRaw -ForegroundColor DarkGray
@@ -937,7 +937,7 @@ Write-Host '=== Phase 5: --format json (schema apply/1) ===' -ForegroundColor Cy
 
 Push-Location $phase1
 try {
-  $jsonRaw = (& $Exe convert-apply --unit 'MyForm.pas' --rules $rulesPath --db $db --format json 2>$null) -join "`n"
+  $jsonRaw = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'MyForm.pas' --rules $rulesPath --db $db --format json 2>$null }) -join "`n"
   $jsonExit = $LASTEXITCODE
 } finally { Pop-Location }
 Check 'json: exits 0' ($jsonExit -eq 0) "exit=$jsonExit"
@@ -1022,7 +1022,7 @@ else {
 # The cast skip (Phase 4) must ALSO surface as a typed item, not only as prose.
 Push-Location $phase4
 try {
-  $castJsonRaw = (& $Exe convert-apply --unit 'MyForm.pas' --rules $castRulesPath --db $db --format json 2>$null) -join "`n"
+  $castJsonRaw = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'MyForm.pas' --rules $castRulesPath --db $db --format json 2>$null }) -join "`n"
 } finally { Pop-Location }
 $castDoc = $null
 try { $castDoc = $castJsonRaw | ConvertFrom-Json } catch { $castDoc = $null }
@@ -1055,9 +1055,9 @@ Write-Host '=== Phase 6: #apply that matches nothing (mapping-not-applied) ===' 
 
 Push-Location $phase6
 try {
-  $mapRaw  = (& $Exe convert-apply --unit 'MyForm.pas' --rules $mapRulesPath --db $db 2>&1) -join "`n"
+  $mapRaw  = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'MyForm.pas' --rules $mapRulesPath --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $mapExit = $LASTEXITCODE
-  $mapJson = (& $Exe convert-apply --unit 'MyForm.pas' --rules $mapRulesPath --db $db --format json 2>$null) -join "`n"
+  $mapJson = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'MyForm.pas' --rules $mapRulesPath --db $db --format json 2>$null }) -join "`n"
 } finally { Pop-Location }
 Write-Host $mapRaw -ForegroundColor DarkGray
 
@@ -1117,9 +1117,9 @@ Write-Host '=== Phase 7: #default superseded by a #link (default-rule-superseded
 
 Push-Location $phase7
 try {
-  $defRaw  = (& $Exe convert-apply --unit 'MyForm.pas' --rules $defRulesPath --db $db 2>&1) -join "`n"
+  $defRaw  = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'MyForm.pas' --rules $defRulesPath --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $defExit = $LASTEXITCODE
-  $defJson = (& $Exe convert-apply --unit 'MyForm.pas' --rules $defRulesPath --db $db --format json 2>$null) -join "`n"
+  $defJson = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'MyForm.pas' --rules $defRulesPath --db $db --format json 2>$null }) -join "`n"
 } finally { Pop-Location }
 Write-Host $defRaw -ForegroundColor DarkGray
 
@@ -1211,9 +1211,9 @@ Write-Host '=== Phase 8: absent-because-default is carried (default-resolved) ==
 
 Push-Location $phase8
 try {
-  $resRaw  = (& $Exe convert-apply --unit 'MyForm.pas' --rules $resolvedRulesPath --db $db 2>&1) -join "`n"
+  $resRaw  = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'MyForm.pas' --rules $resolvedRulesPath --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $resExit = $LASTEXITCODE
-  $resJson = (& $Exe convert-apply --unit 'MyForm.pas' --rules $resolvedRulesPath --db $db --format json 2>$null) -join "`n"
+  $resJson = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'MyForm.pas' --rules $resolvedRulesPath --db $db --format json 2>$null }) -join "`n"
 } finally { Pop-Location }
 Write-Host $resRaw -ForegroundColor DarkGray
 
@@ -1369,9 +1369,9 @@ Write-Host '=== Phase 9: owned-part remainders reach apply/1 exactly once ===' -
 
 Push-Location $phase9
 try {
-  $partRaw  = (& $Exe convert-apply --unit 'PartForm.pas' --rules $partRulesPath --db $db 2>&1) -join "`n"
+  $partRaw  = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'PartForm.pas' --rules $partRulesPath --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $partExit = $LASTEXITCODE
-  $partJson = (& $Exe convert-apply --unit 'PartForm.pas' --rules $partRulesPath --db $db --format json 2>$null) -join "`n"
+  $partJson = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'PartForm.pas' --rules $partRulesPath --db $db --format json 2>$null }) -join "`n"
 } finally { Pop-Location }
 Write-Host $partRaw -ForegroundColor DarkGray
 

@@ -55,10 +55,10 @@ $target = Join-Path $scratch 'uPhantomCall.pas'
 $db     = Join-Path $scratch 'phantomcall.sqlite'
 Copy-Item $fixture $target -Force
 
-& $exePath index $scratch --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
-& $exePath document --unit $target --db $db --apply 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply 2>$null } | Out-Null
 Check 'document --apply exits 0' ($LASTEXITCODE -eq 0)
 
 $lines = Get-Content $target

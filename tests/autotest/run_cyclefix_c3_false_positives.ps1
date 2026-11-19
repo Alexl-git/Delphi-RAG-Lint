@@ -57,7 +57,7 @@ function Get-Plan([string]$Fixture, [string]$Dproj, [string]$Tag, [scriptblock]$
   Copy-Tree (Join-Path $Fx $Fixture) $root
   if ($Edit) { & $Edit $root }
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  $null | & $Exe index --project (Join-Path $root $Dproj) --db $db *> (Join-Path $WorkDir "index-$Tag.log")
+  $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root $Dproj) --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
   $o = Join-Path $WorkDir "plan-$Tag.out"
   $dump = Join-Path $WorkDir "dump-$Tag.txt"
   $env:DRAGLINT_TEST_DUMP_PLAN = $dump

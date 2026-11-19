@@ -84,12 +84,12 @@ Write-Ascii "$WorkDir\other\uLoose.pas" (New-Body 'uLoose')
 $WithLine = ((Get-Content "$WorkDir\proj\uUnit.pas") | Select-String -SimpleMatch 'with X do Free').LineNumber
 $Db = "$WorkDir\proj\_D-RAG\App.sqlite"
 
-$idx = (& $Exe index --project "$WorkDir\proj\App.dproj" --db $Db 2>&1 | Out-String)
+$idx = (& { $ErrorActionPreference = 'Continue'; & $Exe index --project "$WorkDir\proj\App.dproj" --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-String)
 $files = if ($idx -match 'Files:\s*(\d+)') { [int]$Matches[1] } else { 0 }
 Check 'SETUP project index built' ($files -ge 2) "files=$files"
 
 function LintRule([string]$File, [string]$Rule, [string[]]$Extra = @()) {
-  $out = & $Exe lint $File --json --db $Db @Extra 2>$null | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $File --json --db $Db @Extra 2>$null } | Out-String
   $j = @($out | ConvertFrom-Json)
   return @($j | Where-Object { $_.rule -eq $Rule } | ForEach-Object { [int]$_.start_line })
 }

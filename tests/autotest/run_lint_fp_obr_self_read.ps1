@@ -94,7 +94,7 @@ end.
 $unit = Join-Path $WorkDir 'fpobrself.pas'
 [System.IO.File]::WriteAllText($unit, $src, [System.Text.Encoding]::ASCII)
 
-$out = (& $Exe lint $unit --rule overwrite-before-read 2>$null | Out-String)
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $unit --rule overwrite-before-read 2>$null } | Out-String)
 $fp = @([regex]::Matches($out, 'fpobrself\.pas:(2[0-9]|3[0-9]|4[0-7]):')).Count
 
 Write-Host 'False positives that must stay GONE' -ForegroundColor Cyan

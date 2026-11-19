@@ -131,7 +131,7 @@ function New-Case([string]$name) {
   $target = Join-Path $dir 'strip_wrongsymbol.pas'
   Copy-Item $fixture $target -Force
   $db = Join-Path $dir "$name.sqlite"
-  & $exePath index $dir --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $dir --db $db 2>$null } | Out-Null
   Check "${name}: index exits 0" ($LASTEXITCODE -eq 0)
   return @{ Dir = $dir; Target = $target; Db = $db }
 }
@@ -208,12 +208,12 @@ $pristine = [IO.File]::ReadAllBytes($A.Target)
 
 # Premise: each qname resolves to exactly ONE row, so nothing below can be
 # explained by a second row of the same name landing elsewhere in the file.
-$betaRows = (& $exePath query --name Beta --db $A.Db --json 2>$null) -join "`n"
+$betaRows = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name Beta --db $A.Db --json 2>$null }) -join "`n"
 Check 'A: query --name Beta exits 0' ($LASTEXITCODE -eq 0)
 Check 'A PREMISE: strip_wrongsymbol.Beta resolves to exactly ONE row' `
   ((([regex]::Matches($betaRows, '"qualified_name"\s*:\s*"strip_wrongsymbol\.Beta"')).Count) -eq 1) $betaRows
 
-$outBeta = (& $exePath document --qname strip_wrongsymbol.Beta --db $A.Db --strip --apply --json 2>$null) -join ' '
+$outBeta = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname strip_wrongsymbol.Beta --db $A.Db --strip --apply --json 2>$null }) -join ' '
 Check 'A: document --qname Beta --strip --apply exits 0' ($LASTEXITCODE -eq 0)
 
 # THE DEFECT ASSERTION. Anchored with [,}] -- the unanchored-substring shape
@@ -245,7 +245,7 @@ Check 'A CRITICAL: both declarations survive intact' `
 # the wrong reason. Stripping Alpha BY NAME must work, and must report the
 # counts Beta's run refused to claim.
 Write-Host '--- A control: the very same block IS strippable when its OWN symbol asks ---' -ForegroundColor DarkCyan
-$outAlpha = (& $exePath document --qname strip_wrongsymbol.Alpha --db $A.Db --strip --apply --json 2>$null) -join ' '
+$outAlpha = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname strip_wrongsymbol.Alpha --db $A.Db --strip --apply --json 2>$null }) -join ' '
 Check 'A CONTROL: document --qname Alpha --strip --apply exits 0' ($LASTEXITCODE -eq 0)
 Check 'A CONTROL: --qname Alpha --strip reports 1 tag, 1 block, 1 edit -- so Beta''s zeros were a REJECTION, not an unstrippable block' `
   ($outAlpha -match '"tagsRemoved":1[,}]' -and $outAlpha -match '"blocksRemoved":1[,}]' -and $outAlpha -match '"edits":1[,}]') $outAlpha
@@ -271,7 +271,7 @@ Write-Host '=== SCENARIO B: SHAPE 2 -- the one-blank-line gap the window exists 
 
 $B = New-Case 'b'
 
-$outGamma = (& $exePath document --qname strip_wrongsymbol.Gamma --db $B.Db --strip --apply --json 2>$null) -join ' '
+$outGamma = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname strip_wrongsymbol.Gamma --db $B.Db --strip --apply --json 2>$null }) -join ' '
 Check 'B: document --qname Gamma --strip --apply exits 0' ($LASTEXITCODE -eq 0)
 Check 'B CRITICAL: the one-blank-line gap is STILL stripped (1 tag, 0 blocks, 1 edit)' `
   ($outGamma -match '"tagsRemoved":1[,}]' -and $outGamma -match '"blocksRemoved":0[,}]' -and $outGamma -match '"edits":1[,}]') $outGamma
@@ -314,10 +314,10 @@ Check 'B: Epsilon''s block is UNTOUCHED (scoped strip does not leak forwards)' `
 # Idempotency: a second run over the already-stripped file changes nothing, and
 # BOTH calls are exit-checked -- a crash on either would otherwise be
 # indistinguishable from a genuine no-op to a byte comparison alone.
-& $exePath index $B.Dir --db $B.Db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $B.Dir --db $B.Db 2>$null } | Out-Null
 Check 'B IDEMPOTENT: re-index before the second strip exits 0' ($LASTEXITCODE -eq 0)
 $afterB1 = [IO.File]::ReadAllBytes($B.Target)
-& $exePath document --qname strip_wrongsymbol.Gamma --db $B.Db --strip --apply --json 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --qname strip_wrongsymbol.Gamma --db $B.Db --strip --apply --json 2>$null } | Out-Null
 Check 'B IDEMPOTENT: the second strip --apply itself exits 0' ($LASTEXITCODE -eq 0)
 $afterB2 = [IO.File]::ReadAllBytes($B.Target)
 Check 'B IDEMPOTENT: a second --qname Gamma --strip --apply is byte-identical' `
@@ -332,7 +332,7 @@ Write-Host '=== SCENARIO C: SHAPE 3 -- a two-blank-line gap is still rejected ==
 $C = New-Case 'c'
 $pristineC = [IO.File]::ReadAllBytes($C.Target)
 
-$outEps = (& $exePath document --qname strip_wrongsymbol.Epsilon --db $C.Db --strip --apply --json 2>$null) -join ' '
+$outEps = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname strip_wrongsymbol.Epsilon --db $C.Db --strip --apply --json 2>$null }) -join ' '
 Check 'C: document --qname Epsilon --strip --apply exits 0' ($LASTEXITCODE -eq 0)
 Check 'C: a TWO-blank-line gap is rejected -- zero removals (the window is one line, and stays one line)' `
   ($outEps -match '"tagsRemoved":0[,}]' -and $outEps -match '"blocksRemoved":0[,}]' -and $outEps -match '"edits":0[,}]') $outEps
@@ -350,7 +350,7 @@ Write-Host ''
 Write-Host '=== SCENARIO D: premise -- the whole-file (windowless) path strips ALL FOUR blocks ===' -ForegroundColor Cyan
 
 $D = New-Case 'd'
-$outUnit = (& $exePath document --unit $D.Target --db $D.Db --strip --apply --json 2>$null) -join ' '
+$outUnit = (& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $D.Target --db $D.Db --strip --apply --json 2>$null }) -join ' '
 Check 'D: document --unit --strip --apply exits 0' ($LASTEXITCODE -eq 0)
 Check 'D PREMISE: all four blocks ARE engine-owned -- the windowless path removes 4 tags and 1 block' `
   ($outUnit -match '"tagsRemoved":4[,}]' -and $outUnit -match '"blocksRemoved":1[,}]') $outUnit
@@ -386,7 +386,7 @@ Write-Host '=== SCENARIO E: SHAPE 4 -- a non-blank, NON-declaration gap is strip
 
 $E = New-Case 'e'
 
-$outZeta = (& $exePath document --qname strip_wrongsymbol.Zeta --db $E.Db --strip --apply --json 2>$null) -join ' '
+$outZeta = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname strip_wrongsymbol.Zeta --db $E.Db --strip --apply --json 2>$null }) -join ' '
 Check 'E: document --qname Zeta --strip --apply exits 0' ($LASTEXITCODE -eq 0)
 Check 'E CRITICAL: an ordinary-comment gap IS stripped (1 tag, 0 blocks, 1 edit) -- matching what --apply claims' `
   ($outZeta -match '"tagsRemoved":1[,}]' -and $outZeta -match '"blocksRemoved":0[,}]' -and $outZeta -match '"edits":1[,}]') $outZeta
@@ -445,9 +445,9 @@ $shapes = @(
 )
 
 foreach ($sh in $shapes) {
-  $applyOut = (& $exePath document --qname "strip_wrongsymbol.$($sh.Sym)" --db $F.Db --json 2>$null) -join ' '
+  $applyOut = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname "strip_wrongsymbol.$($sh.Sym)" --db $F.Db --json 2>$null }) -join ' '
   $applyOk  = $LASTEXITCODE -eq 0
-  $stripOut = (& $exePath document --qname "strip_wrongsymbol.$($sh.Sym)" --db $F.Db --strip --json 2>$null) -join ' '
+  $stripOut = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname "strip_wrongsymbol.$($sh.Sym)" --db $F.Db --strip --json 2>$null }) -join ' '
   $stripOk  = $LASTEXITCODE -eq 0
   Check "F: both dry runs for $($sh.Sym) exit 0" ($applyOk -and $stripOk)
 

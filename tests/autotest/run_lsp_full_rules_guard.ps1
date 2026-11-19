@@ -53,7 +53,7 @@ $LibSrc = Join-Path $WorkDir 'libsrc'; New-Item -ItemType Directory -Force $LibS
 [IO.File]::WriteAllText((Join-Path $LibSrc 'FxLib.pas'), "unit FxLib;`r`n`r`ninterface`r`n`r`nimplementation`r`n`r`nend.`r`n", [Text.Encoding]::ASCII)
 $LibDb = Join-Path $WorkDir 'library-Win64.sqlite'
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
-& $Exe index $LibSrc --db $LibDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $LibSrc --db $LibDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $idxCode = $LASTEXITCODE
 if (-not (Test-Path $LibDb)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host 'FATAL: index produced no library DB' -ForegroundColor Red; exit 2 }
 $env:DRAGLINT_CONTEXT_DEFAULTS = Join-Path $WorkDir 'context-defaults.json'
@@ -99,7 +99,7 @@ function RunLsp([string]$Engine, [string]$PasFile, [string[]]$Flags, [string]$Ta
 }
 
 Write-Host 'LSP --full-rules (opt-in, out-of-process, cost on stderr)' -ForegroundColor Cyan
-$cli = (& $Exe lint $DirtyF --json 2>&1) -join "`n"
+$cli = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $DirtyF --json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'CONTROL: `lint --json` reports missing-inherited-ctor on the fixture' ($cli -match '"missing-inherited-ctor"') ''
 
 $off = RunLsp $Exe $DirtyF @() 'off'
@@ -141,9 +141,9 @@ New-Item -ItemType Directory -Force $dbDir | Out-Null
 $UsesF = Join-Path $dbDir 'FxUses.pas'
 [IO.File]::WriteAllText($UsesF, (@('unit FxUses;','','interface','','implementation','','uses FxBase, NoSuchUnitAnywhere;','','end.') -join "`r`n") + "`r`n", [Text.Encoding]::ASCII)
 $dbFile = Join-Path $WorkDir 'fx.sqlite'
-$null = & $Exe index $dbDir --db $dbFile 2>&1
-$cliNoDb = (& $Exe lint $UsesF --json 2>&1) -join "`n"
-$cliDb   = (& $Exe lint $UsesF --db $dbFile --json 2>&1) -join "`n"
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $dbDir --db $dbFile 2>&1 | ForEach-Object { "$_" } }
+$cliNoDb = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $UsesF --json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
+$cliDb   = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $UsesF --db $dbFile --json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'CONTROL: lint --json WITHOUT --db lacks used-unit-not-resolvable' ($cliNoDb -notmatch '"used-unit-not-resolvable"') ''
 Check 'CONTROL: lint --json WITH --db reports used-unit-not-resolvable' ($cliDb -match '"used-unit-not-resolvable"') ''
 $dbOn = RunLsp $Exe $UsesF @('--db', $dbFile, '--full-rules') 'dbon'
@@ -163,7 +163,7 @@ New-Item -ItemType Directory -Force $stubDir | Out-Null
 $stubExe = Join-Path $stubDir 'FullRulesChildStub.exe'
 $stubOk = $false
 if ($csc) {
-  $null = & $csc /nologo /out:$stubExe (Join-Path $PSScriptRoot 'fixtures\lsp\FullRulesChildStub.cs') 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $csc /nologo /out:$stubExe (Join-Path $PSScriptRoot 'fixtures\lsp\FullRulesChildStub.cs') 2>&1 | ForEach-Object { "$_" } }
   $stubOk = Test-Path $stubExe
 }
 # The wait budget is a CONSTANT in the engine (LINT_CHILD_TIMEOUT_MS in DRagLint.Core.LintBudget since C13, then LSP_FULL_RULES_REAP_MS to reap the

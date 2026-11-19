@@ -36,7 +36,7 @@ New-Item -ItemType Directory $WorkDir | Out-Null
 
 # --- 1. end-to-end: index the probe fixture, assert type_helpers content ---
 $db1 = "$WorkDir\probe.sqlite"
-$idxOut = & $Exe index $FixtureDir --db $db1 2>&1
+$idxOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $FixtureDir --db $db1 2>&1 | ForEach-Object { "$_" } }
 Check 'index probe fixture exits 0' ($LASTEXITCODE -eq 0) (($idxOut | Select-Object -Last 1))
 
 $py1 = "$WorkDir\check_edges.py"
@@ -101,7 +101,7 @@ c.close()
 python $py2 $db2
 Check 'v14 fixture DB created' (($LASTEXITCODE -eq 0) -and (Test-Path $db2))
 
-$idxOut2 = & $Exe index $FixtureDir --db $db2 2>&1
+$idxOut2 = & { $ErrorActionPreference = 'Continue'; & $Exe index $FixtureDir --db $db2 2>&1 | ForEach-Object { "$_" } }
 Check 'index onto v14 db exits 0 (no "no such table/column" error)' ($LASTEXITCODE -eq 0) (($idxOut2 | Select-Object -Last 1))
 
 $py3 = "$WorkDir\check_migrated.py"

@@ -582,7 +582,7 @@ Write-Ascii (P 'plain.rules') @'
 '@
 
 $db = P 'fx.sqlite'
-$idx = & $Exe index $WorkDir --db $db 2>&1
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'V the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db)) "exit=$LASTEXITCODE; $($idx -join ' | ')"
 
 # The btnX code refs and what the resolver bound them to (E5, resolver 1.12:
@@ -590,7 +590,7 @@ Check 'V the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db
 # POSITIONAL arrays -- read them by column index.
 $q = "select f.path, r.symbol_id, s.qualified_name from refs r join files f on f.id = r.file_id " +
      "left join symbols s on s.id = r.symbol_id where r.name_text = 'btnX' and f.path like '%.pas'"
-$sq = (& $Exe sql --db $db --query $q --json 2>$null) -join "`n"
+$sq = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query $q --json 2>$null }) -join "`n"
 $sj = try { $sq | ConvertFrom-Json } catch { $null }
 function BoundOf([string]$Unit) {
   if ($null -eq $sj) { return '<no sql>' }
@@ -607,7 +607,7 @@ Check 'V3 Shadow''s btnX ref is BOUND to its OWN field, not the ancestor''s' `
 function Run([string[]]$Units, [string[]]$Extra = @()) {
   $a = @()
   foreach ($u in $Units) { $a += @('--unit', (P $u)) }
-  $o = (& $Exe convert-apply @a --rules (P 'plain.rules') --db $db @Extra 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply @a --rules (P 'plain.rules') --db $db @Extra 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 function Json([string]$s) {
@@ -728,7 +728,7 @@ Check 'G2 descendants are NOT edited (Desc1.dfm still streams btnX as TSrcA)' `
   ([IO.File]::ReadAllText((P 'Desc1.dfm')) -match 'inherited btnX: TSrcA')
 
 # ---- the capability --------------------------------------------------------
-$o = (& $Exe info --json 2>$null) -join "`n"
+$o = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n"
 $ij = Json $o
 Check 'H1 info --json: capabilities.descendant_warnings is the JSON literal true' `
   (($null -ne $ij) -and ($ij.capabilities.descendant_warnings -is [bool]) -and ($ij.capabilities.descendant_warnings -eq $true)) $o

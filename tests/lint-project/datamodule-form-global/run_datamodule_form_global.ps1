@@ -36,7 +36,7 @@ function LineOf([string]$File, [string]$Marker) {
   return [int]$m[0].LineNumber
 }
 function RuleFindings([string]$Db, [string[]]$Extra) {
-  $raw = & $exePath lint-all --db $Db --format json @Extra 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $Db --format json @Extra 2>$null }
   return @((Parse-Findings $raw) | Where-Object { $_.rule -eq $Rule })
 }
 try {
@@ -44,7 +44,7 @@ try {
   [void](New-Item -ItemType Directory -Force -Path $src)
   Copy-Item (Join-Path $PSScriptRoot '*.pas') $src
   $db = Join-Path $scratch 'dmfg.sqlite'
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $mod = Join-Path $src 'uDmfModule.pas'
 
   # positive-control: datamodule-form-global
@@ -63,15 +63,15 @@ try {
   [void](New-Item -ItemType Directory -Force -Path $libSrc)
   Copy-Item (Join-Path $PSScriptRoot 'lib\*.pas') $libSrc
   $libDb = Join-Path $scratch 'library-dmfg.sqlite'
-  & $exePath index $libSrc --db $libDb 2>&1 | Out-Null
-  $withLib = @((Parse-Findings (& $exePath lint-all --db $db --db $libDb --format json --rule $Rule 2>$null)) | Where-Object { $_.rule -eq $Rule } | ForEach-Object { [int]$_.start_line })
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $libSrc --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $withLib = @((Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --db $libDb --format json --rule $Rule 2>$null })) | Where-Object { $_.rule -eq $Rule } | ForEach-Object { [int]$_.start_line })
   $libLine = LineOf $mod 'TRIGGER-LIB'
   Check 'RUN 4 with the library: the form on a library base class fires' ($withLib -contains $libLine) "got [$($withLib -join ',')] want $libLine"
   Check 'RUN 1 without the library: that form is unknown and silent' ($lines -notcontains $libLine) ''
 
   $t = [IO.File]::ReadAllText($mod).Replace('class(TDataModule)', 'class(TObject)')
   [IO.File]::WriteAllText($mod, $t, [Text.Encoding]::ASCII)
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $gone = RuleFindings $db @('--rule', $Rule)
   Check 'RUN 3 no TDataModule in the unit: the same reads are silent' ($gone.Count -eq 0) "$($gone.Count) finding(s)"
 } finally {

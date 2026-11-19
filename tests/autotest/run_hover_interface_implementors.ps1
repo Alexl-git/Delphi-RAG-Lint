@@ -124,21 +124,21 @@ end.
 "@
 
 $db = Join-Path $WorkDir 'fx.sqlite'
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the fixture index was built' (Test-Path $db) $db
 
 # The call operator, NOT Start-Process -ArgumentList: Start-Process does not
 # quote arguments containing spaces, and a mangled argument produces output that
 # looks exactly like the missing-fact this guard hunts.
 function Hover([string]$QName, [string]$Fmt = 'md') {
-  return ((& $exePath hover --qname $QName --db $db --format $Fmt 2>$null) -join "`r`n")
+  return ((& { $ErrorActionPreference = 'Continue'; & $exePath hover --qname $QName --db $db --format $Fmt 2>$null }) -join "`r`n")
 }
 
 # ---- V2 POSITIVE CONTROL: the data really is in the fixture index -----------
 # Without this, every assertion below could fail because the FIXTURE is wrong
 # rather than because the FEATURE is missing -- the failure mode that cost a
 # session on the doc-facts fixture.
-$desc = ((& $exePath query descendants --of 'IWorker' --db $db 2>$null) -join ' ')
+$desc = ((& { $ErrorActionPreference = 'Continue'; & $exePath query descendants --of 'IWorker' --db $db 2>$null }) -join ' ')
 Check 'V2 POSITIVE CONTROL the index knows TWorkerAlpha descends from IWorker' `
       ($desc -match 'TWorkerAlpha') `
       "query descendants --of IWorker returned: '$desc' -- the fixture, not the feature, is broken"

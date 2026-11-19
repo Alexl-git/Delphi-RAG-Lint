@@ -80,7 +80,7 @@ function New-Demo([string]$Tag) {
   $proj = Join-Path $WorkDir "$Tag-proj"
   Copy-Tree $Demo $proj
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project (Join-Path $proj 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "$Tag-index.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $proj 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "$Tag-index.log") }
   return @{ Proj = $proj; Dproj = (Join-Path $proj 'CircularDemo.dproj'); Db = $db }
 }
 function Run-Fix([hashtable]$D, [string[]]$Extra, [hashtable]$Env = @{}, [bool]$Json = $true) {
@@ -89,7 +89,7 @@ function Run-Fix([hashtable]$D, [string[]]$Extra, [hashtable]$Env = @{}, [bool]$
   if ($Json) { $a += @('--format', 'json') }
   foreach ($k in $Env.Keys) { Set-Item "Env:$k" $Env[$k] }
   try {
-    $out = (& $Exe @a 2>$errf | Out-String)
+    $out = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$errf } | Out-String)
     $code = $LASTEXITCODE
   } finally { foreach ($k in $Env.Keys) { Remove-Item "Env:$k" -ErrorAction SilentlyContinue } }
   $err = if (Test-Path $errf) { [IO.File]::ReadAllText($errf) } else { '' }
@@ -117,7 +117,7 @@ Check 'a: recovery.txt written' (Test-Path (Join-Path $A.Proj 'recovery.txt')) '
 Check 'a: compile.status = ok' ($cy.compile.status -eq 'ok') ($cy.compile | ConvertTo-Json -Compress -Depth 4)
 Check 'a: reindex.status = done' ($cy.reindex.status -eq 'done') ($cy.reindex | ConvertTo-Json -Compress)
 Check 'a: verified = true' ($cy.verified -eq $true) "verified=$($cy.verified) reason=$($cy.verify_reason)`npredicted:`n$($cy.predicted)`nactual:`n$($cy.actual)"
-$cyc = (& $Exe cycles --db $A.Db 2>$null | Out-String)
+$cyc = (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --db $A.Db 2>$null } | Out-String)
 Check 'a: cycles on the re-indexed DB prints 2 groups' ($cyc -match '(?m)^2 circular unit group\(s\) found:') $cyc
 Check 'a: ok = true, exit_code 0' (($r.Json.ok -eq $true) -and ($r.Json.exit_code -eq 0)) $r.Out
 
@@ -187,7 +187,7 @@ Write-Host '== (g) re-index target guard' -ForegroundColor Cyan
 $G = @{ Proj = (Join-Path $WorkDir 'g-proj'); Db = (Join-Path $WorkDir 'g-dir.sqlite') }
 Copy-Tree $Demo $G.Proj
 $G.Dproj = Join-Path $G.Proj 'CircularDemo.dproj'
-& $Exe index $G.Proj --db $G.Db *> (Join-Path $WorkDir 'g-index.log')
+& { $ErrorActionPreference = 'Continue'; & $Exe index $G.Proj --db $G.Db *> (Join-Path $WorkDir 'g-index.log') }
 $dbG = Get-FileSha $G.Db
 $r = Run-Fix $G @('--unit', 'demogageport', '--apply')
 $cy = Cy $r
@@ -213,7 +213,7 @@ function New-BomDemo([string]$Tag) {
   [IO.File]::WriteAllText($rec, "[2020-01-01 00:00:00] an earlier run`r`n", [Text.Encoding]::ASCII)
   foreach ($f in Get-ChildItem $proj -File) { $f.LastWriteTimeUtc = [datetime]::new(2021, 3, 4, 5, 6, 7, [DateTimeKind]::Utc) }
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project (Join-Path $proj 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "$Tag-index.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $proj 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "$Tag-index.log") }
   return @{ Proj = $proj; Dproj = (Join-Path $proj 'CircularDemo.dproj'); Db = $db }
 }
 $I = New-BomDemo 'i'
@@ -245,7 +245,7 @@ try {
   $kp = Join-Path $outRoot 'k-proj'
   Copy-Tree $Demo $kp
   $K = @{ Proj = $kp; Dproj = (Join-Path $kp 'CircularDemo.dproj'); Db = (Join-Path $outRoot 'k.sqlite') }
-  & $Exe index --project $K.Dproj --db $K.Db *> (Join-Path $WorkDir 'k-index.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $K.Dproj --db $K.Db *> (Join-Path $WorkDir 'k-index.log') }
   $r = Run-Fix $K @('--unit', 'demogageport', '--apply', '--no-reindex') @{ DRAGLINT_TEST_FAIL_WRITE_AT = '1' }
   Check 'k: outside TEMP the seam is ignored: exit 0, 5 files written' (($r.Exit -eq 0) -and (@((Cy $r).written).Count -eq 5)) "exit=$($r.Exit) $($r.Out)"
 } finally {

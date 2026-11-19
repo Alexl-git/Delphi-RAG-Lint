@@ -61,7 +61,7 @@ foreach ($case in @('roots-order', 'roots-conditional', 'roots-escaped')) { Copy
 $db = Join-Path $WorkDir 'roots.sqlite'
 Push-Location $WorkDir
 try {
-  & $exePath index $src --db $db *> (Join-Path $WorkDir 'index.log')
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db *> (Join-Path $WorkDir 'index.log') }
   if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: index exit $LASTEXITCODE (see $WorkDir\index.log)"; Write-Host 'RESULT: FAIL'; exit 2 }
 
   . (Join-Path $repo 'tests\autotest\lib\CliBuildPaths.ps1')
@@ -90,7 +90,7 @@ try {
     'EscUnit.TEscHolder.GetCount'     = 'none'
     'EscUnit.NoSuchRoutine'           = '<missing>'
   }
-  $raw = @(& $h $db @($esc.Keys) 2>&1 | ForEach-Object { "$_" })
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $h $db @($esc.Keys) 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" })
   $raw | ForEach-Object { Write-Host "  raw: $_" }
   function Chain([string]$Prog) {
     $r = @($raw | Where-Object { $_ -like "CHAIN|$Prog|*" })
@@ -109,7 +109,7 @@ try {
   Check (($o[4] -eq $want) -and ($o[2] -eq '0')) "c1 roots-order chain C,B,A,D + program block, reliable (got '$($o -join '|')')"
 
   # c2: second engine call -- the order init-order-hazard walks
-  $lj = (& $exePath lint-all --db $db --rule init-order-hazard --json 2>$null) -join "`n"
+  $lj = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rule init-order-hazard --json 2>$null }) -join "`n"
   Write-Host "  lint raw: $($lj.Substring(0, [Math]::Min(600, $lj.Length)))"
   $lint = @($lj | ConvertFrom-Json)
   function Hazard([string]$File, [string]$Later, [string]$Earlier) {

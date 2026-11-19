@@ -301,7 +301,7 @@ implementation
 end.
 '@
 $db = P 'fx.sqlite'
-$null = & $Exe index $fx --db $db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'fixture: index built' (Test-Path $db) "db=$db"
 # Make it stale: the freshness note goes to STDERR on every open from now on.
 [System.IO.File]::AppendAllText((Join-Path $fx 'OutFix.pas'), "// touched after indexing`r`n")
@@ -400,13 +400,13 @@ Write-Ascii (Join-Path $ex 'r.rules') "#convert EdFix.TSrcComp -> EdFix.TDstComp
 Write-Ascii (Join-Path $ex 'blk.txt') "object S1: TSrcComp`n  Caption = 'x'`nend`n"
 Write-Ascii (Join-Path $ex '.drag-lint.json') '{"docs":{}}'
 $exDb = Join-Path $ex 'ex.sqlite'
-$null = & $Exe index $ex --db $exDb 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $ex --db $exDb 2>&1 | ForEach-Object { "$_" } }
 # convert-apply --apply edits the unit: it runs on its own indexed copy, one per engine run.
 function ApplyCopy([string]$Tag) {
   $dir = Join-Path $ex $Tag
   New-Item -ItemType Directory $dir -Force | Out-Null
   Copy-Item (Join-Path $ex 'EdFix.pas') $dir -Force
-  $null = & $Exe index $dir --db (Join-Path $dir 'c.sqlite') 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db (Join-Path $dir 'c.sqlite') 2>&1 | ForEach-Object { "$_" } }
   return (Join-Path $dir 'EdFix.pas')
 }
 function RunRawIn([string]$Cwd, [string]$E, [string[]]$A) {
@@ -572,7 +572,7 @@ exit $answer.Code
   foreach ($rn in $runners) {
     $before = if (Test-Path $shimLog) { @(Get-Content $shimLog).Count } else { 0 }
     $rw = P ("w-" + $rn.BaseName)
-    $null = & pwsh -NoProfile -File $rn.FullName -Exe $shimCmd -WorkDir $rw *>&1
+    $null = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $rn.FullName -Exe $shimCmd -WorkDir $rw *>&1 | ForEach-Object { "$_" } }
     $rc = $LASTEXITCODE
     $after = if (Test-Path $shimLog) { @(Get-Content $shimLog).Count } else { 0 }
     Write-Host ("      {0}: {1} compared case(s), runner exit {2} (informational)" -f $rn.Name, ($after - $before), $rc) -ForegroundColor DarkGray

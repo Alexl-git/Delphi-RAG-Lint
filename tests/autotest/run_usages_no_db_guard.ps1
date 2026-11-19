@@ -52,11 +52,11 @@ $empty = Join-Path $WorkDir 'cwd'
 New-Item -ItemType Directory -Force $empty | Out-Null
 Push-Location $empty
 try {
-  $o1 = (& $Exe usages --name Callee 2>&1 | ForEach-Object { "$_" }) -join "`n"; $c1 = $LASTEXITCODE
+  $o1 = (& { $ErrorActionPreference = 'Continue'; & $Exe usages --name Callee 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n"; $c1 = $LASTEXITCODE
   Check '1 usages without a database exits 2' ($c1 -eq 2) "exit=$c1"
   Check '1 usages names the missing database' ($o1 -match 'database not found') ($o1 -replace "`n", ' | ')
   Check '1 usages prints no zero summary' ($o1 -notmatch 'calls:\s*0')
-  $o2 = (& $Exe usages --name Callee --db $db 2>&1 | ForEach-Object { "$_" }) -join "`n"; $c2 = $LASTEXITCODE
+  $o2 = (& { $ErrorActionPreference = 'Continue'; & $Exe usages --name Callee --db $db 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n"; $c2 = $LASTEXITCODE
   Check '2 CONTROL usages with --db exits 0' ($c2 -eq 0) "exit=$c2"
   Check '2 CONTROL usages with --db finds the call' ($o2 -match 'calls:\s*[1-9]') ($o2 -replace "`n", ' | ')
   $bare = Join-Path $WorkDir 'bare'
@@ -64,11 +64,11 @@ try {
   Copy-Item -LiteralPath $Exe -Destination $bare
   Get-ChildItem -LiteralPath (Split-Path $Exe) -Filter '*.dll' | Copy-Item -Destination $bare
   $bareExe = Join-Path $bare (Split-Path $Exe -Leaf)
-  $o3 = (& $bareExe query find-callers --name Callee 2>&1 | ForEach-Object { "$_" }) -join "`n"
+  $o3 = (& { $ErrorActionPreference = 'Continue'; & $bareExe query find-callers --name Callee 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n"
   Check '3 CONTROL find-callers with no manifest also says database not found' ($o3 -match 'database not found') ($o3 -replace "`n", ' | ')
   $manifest = @{ indexes = @{ sections = @( @{ name = 'Fix'; include = @($src); db = $db } ) } } | ConvertTo-Json -Depth 6
   [IO.File]::WriteAllText((Join-Path $bare 'drag-lint.json'), $manifest, (New-Object System.Text.ASCIIEncoding))
-  $o4 = (& $bareExe query find-callers --name Callee 2>&1 | ForEach-Object { "$_" }) -join "`n"; $c4 = $LASTEXITCODE
+  $o4 = (& { $ErrorActionPreference = 'Continue'; & $bareExe query find-callers --name Callee 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n"; $c4 = $LASTEXITCODE
   Check '4 CONTROL find-callers with a manifest answers without --db' (($c4 -eq 0) -and ($o4 -match 'Caller')) "exit=$c4 $($o4 -replace "`n", ' | ')"
 } finally { Pop-Location }
 [IO.Directory]::Delete($WorkDir, $true)

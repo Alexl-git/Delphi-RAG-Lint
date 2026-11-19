@@ -77,9 +77,9 @@ foreach ($k in $files.Keys) {
 }
 
 $db = Join-Path $WorkDir 'fx.sqlite'
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'index exits 0' ($LASTEXITCODE -eq 0)
-$out = & $Exe lint-all --project (Join-Path $WorkDir 'AlphaProj.dproj') --db $db 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --project (Join-Path $WorkDir 'AlphaProj.dproj') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 
 $shared = ($out -split "`n" | Where-Object { $_ -match 'SharedOrphan' }) -join ' '
 $solo   = ($out -split "`n" | Where-Object { $_ -match 'SoloOrphan'   }) -join ' '

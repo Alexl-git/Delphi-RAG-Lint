@@ -83,7 +83,7 @@ function Set-Text([string]$Path, [string]$Text) {
 }
 
 function Invoke-Index([string]$Dproj, [string]$Db, [string]$Tag) {
-  & $Exe index --project $Dproj --db $Db *> (Join-Path $WorkDir "index-$Tag.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $Dproj --db $Db *> (Join-Path $WorkDir "index-$Tag.log") }
   return $LASTEXITCODE
 }
 
@@ -179,7 +179,7 @@ function Get-Predicted([string[]]$Blk) {
 }
 
 function Invoke-Follow([string]$PlanFile, [int]$Cycle, [string]$Root) {
-  $fo = & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $PlanFile -Cycle $Cycle -Root $Root 2>&1 | Out-String
+  $fo = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $PlanFile -Cycle $Cycle -Root $Root 2>&1 | ForEach-Object { "$_" } } | Out-String
   return @{ Exit = $LASTEXITCODE; Text = ($fo.Trim() -replace "`r?`n", ' | ') }
 }
 
@@ -226,7 +226,7 @@ try {
   New-Item -ItemType Directory -Force $stubDir | Out-Null
   Set-Text (Join-Path $stubDir 'R2Stub.pas') "unit R2Stub;`n`ninterface`n`nimplementation`n`nend.`n"
   $Stub = Join-Path $WorkDir 'stub-library.sqlite'
-  & $Exe index $stubDir --db $Stub *> (Join-Path $WorkDir 'index-stub.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $stubDir --db $Stub *> (Join-Path $WorkDir 'index-stub.log') }
   Check 's1 a stub library (one empty unit) was indexed' (($LASTEXITCODE -eq 0) -and (Test-Path $Stub)) "exit=$LASTEXITCODE"
 
   # --- (a) the demo, cycle 2 -----------------------------------------------------------------

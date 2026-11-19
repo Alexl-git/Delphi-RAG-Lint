@@ -26,7 +26,7 @@ $want = @('xt_lib.TLibStream.Read','xt_lib.TLibDefs.Add','xt_lib.TLibBase.Base')
 
 # find-callees --json is a bare array; library rows carry external=true.
 function Callees([string[]]$CliArgs) {
-  $raw = (& $exePath find-callees --qname xt_app.Go @CliArgs --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath find-callees --qname xt_app.Go @CliArgs --json 2>$null }) -join "`n"
   $b = $raw.IndexOf('['); if ($b -lt 0) { return ,@() }
   return ,@($raw.Substring($b) | ConvertFrom-Json)
 }
@@ -40,11 +40,11 @@ try {
   $libDb = Join-Path $scratch 'lib.sqlite'; $appDb = Join-Path $scratch 'app.sqlite'; $appxDb = Join-Path $scratch 'appx.sqlite'
   Push-Location C:\TEMP
   try {
-    & $exePath index $libDir --db $libDb 2>$null | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $libDir --db $libDb 2>$null } | Out-Null
     Check 'library index built' ($LASTEXITCODE -eq 0)
-    & $exePath index $appDir --db $appDb 2>$null | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $appDir --db $appDb 2>$null } | Out-Null
     Check 'app index built (no library)' ($LASTEXITCODE -eq 0)
-    & $exePath index $appDir --db $appxDb --library-db $libDb 2>$null | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $appDir --db $appxDb --library-db $libDb 2>$null } | Out-Null
     Check 'appx index built (--library-db)' ($LASTEXITCODE -eq 0)
 
     # ---- 1. stored edge: appx alone ----
@@ -53,7 +53,7 @@ try {
     foreach ($q in $want) { Check "appx: $q listed via edge" (@($ext | Where-Object { $_.target_qname -ceq $q -and $_.via -eq 'edge' }).Count -gt 0) }
     Check 'appx: P4 xt_app.TAppStream.Own is a normal resolved callee' (@($a | Where-Object { $_.target_qname -ceq 'xt_app.TAppStream.Own' -and -not $_.external }).Count -gt 0)
     Check 'appx CONTROL: TOtherLib.Add never listed' (@($ext | Where-Object { $_.target_qname -like '*TOtherLib*' }).Count -eq 0)
-    $t = (& $exePath find-callees --qname xt_app.Go --db $appxDb 2>&1 | Out-String)
+    $t = (& { $ErrorActionPreference = 'Continue'; & $exePath find-callees --qname xt_app.Go --db $appxDb 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'appx: text marks the library callee "(library"' (($t -match 'Read') -and ($t -match '\(library')) $t
 
     # ---- 2. oracle: app has no library, the library is named at read time ----
@@ -63,14 +63,14 @@ try {
       Check "oracle [$($form[2])]: P4 still a normal resolved callee" (@($o | Where-Object { $_.target_qname -ceq 'xt_app.TAppStream.Own' -and -not $_.external }).Count -gt 0)
       Check "oracle [$($form[2])] CONTROL: TOtherLib.Add never listed" (@($oe | Where-Object { $_.target_qname -like '*TOtherLib*' }).Count -eq 0)
     }
-    $to = (& $exePath find-callees --qname xt_app.Go --db $appDb --db $libDb 2>&1 | Out-String)
+    $to = (& { $ErrorActionPreference = 'Continue'; & $exePath find-callees --qname xt_app.Go --db $appDb --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'oracle: text marks "(library, resolved now)"' ($to -match '\(library, resolved now\)') $to
 
     # ---- 3. no library open: nothing external, and the text says what it could not see ----
     $n = Callees @('--db',$appDb)
     Check 'no library: no external rows' ((ExtRows $n).Count -eq 0)
     Check 'no library: P4 still a normal resolved callee' (@($n | Where-Object { $_.target_qname -ceq 'xt_app.TAppStream.Own' }).Count -gt 0)
-    $tn = (& $exePath find-callees --qname xt_app.Go --db $appDb 2>&1 | Out-String)
+    $tn = (& { $ErrorActionPreference = 'Continue'; & $exePath find-callees --qname xt_app.Go --db $appDb 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'no library: text says "M external (library not open)" with M > 0' (($tn -match '(\d+) external \(library not open\)') -and ([int]$Matches[1] -gt 0)) $tn
     Check 'no library: text has no "(library," marker' ($tn -notmatch '\(library,')
   } finally { Pop-Location }

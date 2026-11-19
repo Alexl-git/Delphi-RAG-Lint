@@ -67,9 +67,9 @@ function RowsOf([string]$o) { $r = @(); try { $r = @($o | ConvertFrom-Json) } ca
 
 Push-Location $WorkDir
 try {
-  & $Exe index $WorkDir --db $db --library-db none 2>&1 | Out-Null
-  $la = (& $Exe lint-all --db $db --json --library-db none 2>$null | Out-String)
-  $lo = (& $Exe lint $src --db $db --project-rules --format json --library-db none 2>$null | Out-String)
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $la = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --json --library-db none 2>$null } | Out-String)
+  $lo = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $src --db $db --project-rules --format json --library-db none 2>$null } | Out-String)
   foreach ($scope in @(@{ N = 'lint-all'; O = $la }, @{ N = 'lint'; O = $lo })) {
     $rows = RowsOf $scope.O
     $n = $scope.N

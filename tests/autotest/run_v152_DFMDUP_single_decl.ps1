@@ -47,7 +47,7 @@ foreach ($f in $files) {
 }
 Assert "no converter unit uses the old TDfmNode name (offenders: $($clash -join ', '))" ($clash.Count -eq 0)
 if ($Exe -ne "" -and $Db -ne "") {
-  $out = & $Exe query --name TDfmNode --exact --db $Db 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe query --name TDfmNode --exact --db $Db 2>$null }
   $hits = @($out | Where-Object { $_ -match 'TDfmNode' })
   Assert "index: query --name TDfmNode --exact = 1 declaration (got $($hits.Count))" ($hits.Count -eq 1)
 }

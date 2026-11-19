@@ -83,14 +83,14 @@ Write-Ascii "$WorkDir\proj\uUnit.pas" ("unit uUnit;`r`ninterface`r`n{`$IFDEF MYF
 Write-Ascii "$WorkDir\folder\uLoose.pas" "unit uLoose;`r`ninterface`r`nprocedure LooseProc;`r`nimplementation`r`nprocedure LooseProc; begin end;`r`nend.`r`n"
 
 function IndexProj([string[]]$Extra = @()) {
-  return (& $Exe index --project $Dproj --db $Db @Extra 2>&1 | ForEach-Object { "$_" }) -join "`n"
+  return (& { $ErrorActionPreference = 'Continue'; & $Exe index --project $Dproj --db $Db @Extra 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n"
 }
 function Fp([string]$Database) {
-  $j = & $Exe sql --query "SELECT value FROM schema_meta WHERE key='indexer_fingerprint'" --db $Database --json 2>$null | Out-String
+  $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --query "SELECT value FROM schema_meta WHERE key='indexer_fingerprint'" --db $Database --json 2>$null } | Out-String
   try { return [string](($j | ConvertFrom-Json).rows[0][0]) } catch { return "<unparsed: $j>" }
 }
 function Cnt([string]$Name) {
-  $o = & $Exe query --name $Name --db $Db --exact --json 2>$null | Out-String
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe query --name $Name --db $Db --exact --json 2>$null } | Out-String
   try {
     $x = $o | ConvertFrom-Json
     if ($null -eq $x) { return 0 } else { return @($x).Count }
@@ -125,7 +125,7 @@ Check 'd same fingerprint as a' ($fp -eq $fpDebug)
 
 # ---- e: FOLDER db has no cfg limb ----
 $FDb = "$WorkDir\folder\folder.sqlite"
-& $Exe index "$WorkDir\folder" --db $FDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\folder" --db $FDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $ffp = Fp $FDb
 Check 'e folder fingerprint has NO cfg limb' ($ffp -match '^v=[^;]+;schema=\d+;pp=1;plat=win32$') $ffp
 

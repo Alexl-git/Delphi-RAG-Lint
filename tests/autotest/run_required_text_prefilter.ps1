@@ -142,8 +142,8 @@ function HitsIn([string]$Out, [string]$File) {
 Push-Location C:\TEMP
 try {
   $db  = Join-Path $scratch 'idx.sqlite'
-  & $exePath index $scratch --db $db 2>&1 | Out-Null
-  $out = (& $exePath lint-all --db $db --quiet 2>&1 | Out-String)
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $out = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String)
 
   # --- THE POINT OF THE SUITE ---------------------------------------------
   Check 'the paren-LESS form is still reported (the only form ORM3 actually has)' `

@@ -83,7 +83,7 @@ $calls = Join-Path $root 'tests\calls.sqlite'
 if ((-not $Only) -or ($Only -contains 'calls')) { Need $calls 'tests\calls.sqlite' {
   if (Test-Path -LiteralPath $Exe) {
     if (Test-Path -LiteralPath $calls) { [IO.File]::Delete($calls) }
-    $null = & $Exe index (Join-Path $root 'tests\fixtures\Calls.pas') --db $calls 2>&1
+    $null = & { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $root 'tests\fixtures\Calls.pas') --db $calls 2>&1 | ForEach-Object { "$_" } }
   } else { Say "  engine not built: $Exe (run build\build_draglint_win64.bat)" }
 } }
 
@@ -129,7 +129,7 @@ if (-not $SkipSelfIndex) {
   Need $self 'src\cli\_D-RAG\drag-lint.sqlite (self-index)' {
     if (Test-Path -LiteralPath $Exe) {
       New-Item -ItemType Directory -Force -Path (Split-Path $self) | Out-Null
-      $o = & $Exe index --project (Join-Path $root 'src\cli\drag-lint.dproj') --db $self 2>&1 | Out-String
+      $o = & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root 'src\cli\drag-lint.dproj') --db $self 2>&1 | ForEach-Object { "$_" } } | Out-String
       if (-not (Test-Path -LiteralPath $self)) { Say ('  engine output tail: ' + (($o -split "`n" | Select-Object -Last 3) -join ' | ')) }
     } else { Say "  engine not built: $Exe" }
   }
@@ -140,7 +140,7 @@ if (-not $SkipSelfIndex) {
   if (Test-Path -LiteralPath $Exe) {
     New-Item -ItemType Directory -Force -Path (Split-Path $plug) | Out-Null
     Say 'refreshing src\delphi-plugin\_D-RAG\dclDragLintWizard.sqlite (plugin self-index, incremental)'
-    $o = & $Exe index --project (Join-Path $root 'src\delphi-plugin\dclDragLintWizard.dproj') --db $plug 2>&1 | Out-String
+    $o = & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root 'src\delphi-plugin\dclDragLintWizard.dproj') --db $plug 2>&1 | ForEach-Object { "$_" } } | Out-String
     if (-not (Test-Path -LiteralPath $plug)) { Say ('  engine output tail: ' + (($o -split "`n" | Select-Object -Last 3) -join ' | ')) }
   } else { Say "  engine not built: $Exe" }
   if (Test-Path -LiteralPath $plug) { Say 'ok      plugin self-index' }

@@ -50,10 +50,10 @@ if (-not (Test-Path -LiteralPath $WorkDir)) { New-Item -ItemType Directory -Path
 $db = Join-Path $WorkDir 'plugin.sqlite'
 
 Write-Host '== v152 INT-MENUTREE: Cmd152 rows in menu-tree =='
-& $Exe index --project $dproj --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project $dproj --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'index the plugin project' ($LASTEXITCODE -eq 0) "(exit $LASTEXITCODE)"
 
-$pathsText = & $Exe menu-tree --project $dproj --db $db --format paths 2>&1 | Out-String
+$pathsText = & { $ErrorActionPreference = 'Continue'; & $Exe menu-tree --project $dproj --db $db --format paths 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'menu-tree --format paths ran' ($LASTEXITCODE -eq 0) "(exit $LASTEXITCODE)"
 $rows = @{}
 foreach ($line in ($pathsText -split "`r?`n")) {
@@ -100,7 +100,7 @@ foreach ($cap in @('Verify All Callers Pass an In-Range Index...', 'Param Array 
 }
 
 # ---- one submenu per caption: rows find the existing submenu, they never duplicate it ----
-$json = & $Exe menu-tree --project $dproj --db $db --format json 2>$null | Out-String
+$json = & { $ErrorActionPreference = 'Continue'; & $Exe menu-tree --project $dproj --db $db --format json 2>$null } | Out-String
 $doc = $json | ConvertFrom-Json
 $root = @($doc.roots) | Where-Object { $_.caption -eq 'drag-lint' } | Select-Object -First 1
 Check 'json: drag-lint root parsed' ($null -ne $root)
@@ -120,7 +120,7 @@ Check "json: 'Code Quality' keeps its static items AND gains the table rows" (($
 if (-not $SkipFeatureGen) {
     . (Join-Path $repo 'tools\featuregen-ensure.ps1')
     $fg = Get-FeatureGenExe -Repo $repo
-    $chk = & $fg check --level full --repo $repo --engine $Exe 2>&1 | Out-String
+    $chk = & { $ErrorActionPreference = 'Continue'; & $fg check --level full --repo $repo --engine $Exe 2>&1 | ForEach-Object { "$_" } } | Out-String
     $cLines = @($chk -split "`r?`n" | Where-Object { $_ -match '^\s*C: ' })
     Check 'control: featuregen check C ran' ($cLines.Count -gt 0) "($($cLines.Count) C lines)"
     foreach ($s in @('This symbol', 'Project', 'Group', 'Everywhere')) {

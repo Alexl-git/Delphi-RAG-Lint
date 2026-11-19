@@ -82,13 +82,13 @@ function New-Fixture([string]$Root) {
     'begin', "  Writeln(AppDo('x'));", 'end.')
   Write-Ascii (Join-Path $app '_D-RAG\drag-lint-project.json') @('{ "ownRoots": ["."] }')
   $db = Join-Path $app '_D-RAG\App.sqlite'
-  $null = & $Exe index --project (Join-Path $app 'App.dpr') --db $db 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $app 'App.dpr') --db $db 2>&1 | ForEach-Object { "$_" } }
   [pscustomobject]@{ App = $app; Db = $db; Proj = (Join-Path $app 'App.dpr')
     Vendor = (Join-Path $vendor 'uVendor.pas'); Own = (Join-Path $app 'uApp.pas') }
 }
 function Run-Doc($Fx, [string[]]$DocArgs) {
   Push-Location $Fx.App
-  try { & $Exe @DocArgs --db $Fx.Db --apply --no-backup 2>&1 | Out-String }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe @DocArgs --db $Fx.Db --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-String }
   finally { Pop-Location }
 }
 function Has-Engine([string]$Path) { ([IO.File]::ReadAllText($Path)) -match 'drag-lint:auto' }
@@ -96,7 +96,7 @@ function Has-Engine([string]$Path) { ([IO.File]::ReadAllText($Path)) -match 'dra
 try {
   Write-Host 'ITEM 3: document-all / --unit honour ownRoots (DOCAPPLY FOUND 4)' -ForegroundColor Cyan
   $fx = New-Fixture (Join-Path $WorkDir 'own')
-  $q = & $Exe query --name VendorLen --db $fx.Db 2>&1 | Out-String
+  $q = & { $ErrorActionPreference = 'Continue'; & $Exe query --name VendorLen --db $fx.Db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'setup: uVendor is indexed (excluding it is a real decision)' ($q -match 'VendorLen')
   $vBefore = [IO.File]::ReadAllText($fx.Vendor)
 
@@ -117,7 +117,7 @@ try {
   $null = Run-Doc $fx @('document', '--unit', $fx.Vendor, '--document-third-party')
   Check 'OWN-HATCH --unit --document-third-party writes the vendored unit' (Has-Engine $fx.Vendor)
   [IO.File]::WriteAllText($fx.Vendor, $vBefore, [Text.Encoding]::ASCII)
-  $null = & $Exe index --project $fx.Proj --db $fx.Db 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index --project $fx.Proj --db $fx.Db 2>&1 | ForEach-Object { "$_" } }
   $null = Run-Doc $fx @('document-all', '--document-third-party')
   Check 'OWN-HATCH document-all --document-third-party writes the vendored unit' (Has-Engine $fx.Vendor)
 
@@ -135,7 +135,7 @@ try {
   (Get-Item $fx.Own).LastWriteTimeUtc = $stamp
   $errFile = Join-Path $WorkDir 'json-stderr.txt'
   Push-Location $fx.App
-  try { $out = & $Exe document --project $fx.Proj --db $fx.Db --json 2>$errFile | Out-String }
+  try { $out = & { $ErrorActionPreference = 'Continue'; & $Exe document --project $fx.Proj --db $fx.Db --json 2>$errFile } | Out-String }
   finally { Pop-Location }
   $err = [IO.File]::ReadAllText($errFile)
   Check 'JSON-CTRL the tamper rescan fired (WARN on stderr)' ($err -match 'disagree with the source text') ''
@@ -154,7 +154,7 @@ try {
   $fx = New-Fixture (Join-Path $WorkDir 'qname')
   $qc = "select s.name, sf.cyclomatic from symbol_facts sf join symbols s on s.id = sf.symbol_id join files f on f.id = s.file_id where f.path like '%uApp.pas' and s.name in ('CheckN','AppDo') order by s.name"
   function Cyclo($F) {
-    $j = & $Exe sql --query $qc --db $F.Db --json 2>$null | Out-String | ConvertFrom-Json
+    $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --query $qc --db $F.Db --json 2>$null } | Out-String | ConvertFrom-Json
     ($j.rows | ForEach-Object { '{0}={1}' -f $_[0], $_[1] }) -join ','
   }
   $c0 = Cyclo $fx
@@ -162,7 +162,7 @@ try {
   $txt = [IO.File]::ReadAllText($fx.Own)
   [IO.File]::WriteAllText($fx.Own, "{ shifted }`r`n" + $txt, [Text.Encoding]::ASCII)
   Push-Location $fx.App
-  try { $o = & $Exe document --qname uApp.AppDo --db $fx.Db --apply --no-backup 2>&1 | Out-String }
+  try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe document --qname uApp.AppDo --db $fx.Db --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-String }
   finally { Pop-Location }
   Check 'QNAME-CTRL the D-2 retry reindexed in-process' ($o -match 'reindexing and retrying once') (($o -split "`r?`n" | Where-Object { $_ -match '^doc:' } | Select-Object -First 1))
   Check 'QNAME-CTRL the apply wrote the unit' (Has-Engine $fx.Own)

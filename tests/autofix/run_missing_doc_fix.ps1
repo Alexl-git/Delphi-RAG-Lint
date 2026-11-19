@@ -67,10 +67,10 @@ $cfg = Join-Path $scratch 'missfix.config.json'
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # Sanity: a missing-doc finding is reported on the Undocumented line (15).
-  $rawL = (& $exePath lint-all --db $db --config $cfg --json 2>$null) -join "`n"
+  $rawL = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --config $cfg --json 2>$null }) -join "`n"
   $aS = $rawL.IndexOf('['); $aE = $rawL.LastIndexOf(']')
   $findings = @()
   if ($aS -ge 0 -and $aE -gt $aS) { $findings = @(ConvertFrom-Json $rawL.Substring($aS, $aE - $aS + 1)) }
@@ -82,7 +82,7 @@ try {
   # --config (the same "enabled":["missing-doc"] used for the sanity lint above) --
   # otherwise ShouldKeep drops the finding before the --fix block builds edits.
   # --fix-rule NARROWS the surviving set; it does not re-enable a disabled rule.
-  & $exePath lint-all --db $db --config $cfg --fix --fix-line $L --fix-rule missing-doc --apply --no-backup 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --config $cfg --fix --fix-line $L --fix-rule missing-doc --apply --no-backup 2>$null } | Out-Null
   $txt = [IO.File]::ReadAllText($target)
   # A1 = something was inserted AT ALL (safe whole-file: the fixture's own
   # header uses '//', it carries no '///' line of its own).
@@ -130,8 +130,8 @@ try {
   Check 'A5 comment carries a Called-from fact (CallsIt)' ($block -match 'Called from:.*missfix\.CallsIt')
 
   # --- Part B: IDEMPOTENT -- re-index, 2nd single-fix is a no-op (decl now documented) ---
-  & $exePath index $scratch --db $db 2>$null | Out-Null
-  $rawB = (& $exePath lint-all --db $db --config $cfg --json 2>$null) -join "`n"
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+  $rawB = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --config $cfg --json 2>$null }) -join "`n"
   $bS = $rawB.IndexOf('['); $bE = $rawB.LastIndexOf(']')
   $findingsB = @()
   if ($bS -ge 0 -and $bE -gt $bS) { $findingsB = @(ConvertFrom-Json $rawB.Substring($bS, $bE - $bS + 1)) }
@@ -141,7 +141,7 @@ try {
   # opt missing-doc in again (OFF by default -- ADF Task 13); the decl is now
   # documented so this is a no-op regardless, but the finding must survive to reach
   # the --fix block for the no-op path to be genuinely exercised.
-  & $exePath lint-all --db $db --config $cfg --fix --fix-line $L --fix-rule missing-doc --apply --no-backup 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --config $cfg --fix --fix-line $L --fix-rule missing-doc --apply --no-backup 2>$null } | Out-Null
   $after2 = [IO.File]::ReadAllText($target)
   Check 'B2 2nd single-fix is byte-identical (no-op)' ($before2 -eq $after2)
 
@@ -157,7 +157,7 @@ try {
   # moves Undocumented's prototype out of the interface in a blanket batch (CallsIt is its only caller), which
   # broke the byte-identity below for a reason unrelated to missing-doc. C2 is about missing-doc's exclusion.
   '{ "enabled": ["missing-doc"], "disabled": ["unused-public-symbol"] }' | Set-Content -Path $cfgB -Encoding ascii -NoNewline
-  & $exePath index $scratchB --db $dbB 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratchB --db $dbB 2>$null } | Out-Null
 
   $beforeBatch = [IO.File]::ReadAllText($targetB)
   # v(ADP3 T3d2 review round 1, minor 6): the C1/C2 fold below rests on this
@@ -168,7 +168,7 @@ try {
   # make the fold's own reasoning false.
   Check 'FIXTURE: the pristine fixture carries no drag-lint marker' (-not $beforeBatch.Contains('<!-- drag-lint:auto BEGIN -->'))
   # blanket batch: --fix with NO --fix-line / --fix-rule narrowing.
-  & $exePath lint-all --db $dbB --config $cfgB --fix --apply --no-backup 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbB --config $cfgB --fix --apply --no-backup 2>$null } | Out-Null
   $afterBatch = [IO.File]::ReadAllText($targetB)
   # v(ADP3 T3d2): C1 used to be its own check probing for the managed-block
   # marker (a v(ADP3 T3) fix -- the ORIGINAL probe, '<param name="Value">', had
@@ -182,7 +182,7 @@ try {
   Check 'C2 Undocumented decl unchanged by the blanket batch, INCLUDING no doc-comment marker inserted (single-fix-only excluded)' ($beforeBatch -eq $afterBatch)
 
   # ---- Part D: rules --json fixable ---------------------------------------
-  $rj = & $exePath rules --json 2>$null | Out-String
+  $rj = & { $ErrorActionPreference = 'Continue'; & $exePath rules --json 2>$null } | Out-String
   $ro = $rj | ConvertFrom-Json
   $byId = @{}; foreach($r in $ro.rules){ $byId[$r.id] = $r }
   Check 'D1 missing-doc fixable=true' ($byId['missing-doc'].fixable -eq $true)

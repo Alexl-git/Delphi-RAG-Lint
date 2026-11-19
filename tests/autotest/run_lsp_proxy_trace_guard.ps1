@@ -84,7 +84,7 @@ $fixtureDir = "$PSScriptRoot\fixtures\lspproxy"
 $outDir     = Join-Path $WorkDir 'stub'
 New-Item -ItemType Directory $outDir | Out-Null
 $rs = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
-$null = cmd /c "call `"$rs`" && cd /d `"$fixtureDir`" && dcc64 -CC -E`"$outDir`" -N0`"$outDir`" LspStubServer.dpr" 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; cmd /c "call `"$rs`" && cd /d `"$fixtureDir`" && dcc64 -CC -E`"$outDir`" -N0`"$outDir`" LspStubServer.dpr" 2>&1 | ForEach-Object { "$_" } }
 $stub = "$outDir\LspStubServer.exe"
 Check 'LspStubServer.exe built' (Test-Path $stub) $stub
 if (-not (Test-Path $stub)) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }

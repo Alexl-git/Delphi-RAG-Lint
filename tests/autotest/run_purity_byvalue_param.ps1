@@ -141,7 +141,7 @@ end.
 '@
 $db = Join-Path $WorkDir 'App.sqlite'
 Push-Location C:\TEMP
-& $exePath index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the fixture index was built' (Test-Path $db) $db
 
 $j = & $exePath sql --db $db --json --query "SELECT s.name, f.effect_free, f.effect_summary, f.effect_witness FROM symbols s JOIN symbol_facts f ON f.symbol_id = s.id WHERE s.kind IN ('procedure','method') AND f.effect_free IS NOT NULL" | Out-String | ConvertFrom-Json

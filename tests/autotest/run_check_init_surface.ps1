@@ -79,12 +79,12 @@ end.
 $unitPath = Join-Path $work 'HbCfg.pas'
 
 $db = Join-Path $WorkDir 'surface.sqlite'
-$null = & $Exe index $work --db $db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 function Run-Verb([string[]]$VerbArgs) {
   $errFile = Join-Path $WorkDir 'stderr.txt'
-  $out = & $Exe check-init @VerbArgs 2> $errFile
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe check-init @VerbArgs 2> $errFile }
   return [pscustomobject]@{ Exit = $LASTEXITCODE; Out = (@($out) -join "`n"); Err = ((Get-Content $errFile -Raw) + '') }
 }
 

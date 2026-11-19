@@ -56,7 +56,7 @@ function Profile([string]$dproj, [string]$platform, [string]$config) {
   $cliArgs = @('pp-profile', '--dproj', $dproj)
   if ($platform) { $cliArgs += @('--platform', $platform) }
   if ($config)   { $cliArgs += @('--config',   $config)   }
-  $out = & $exePath @cliArgs 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath @cliArgs 2>$null }
   return @($out | ForEach-Object { $_.Trim().ToLower() } | Where-Object { $_ -ne '' })
 }
 
@@ -160,7 +160,7 @@ try {
   # DprojEffectiveDefines / the config chain, so its define list and cfg alias
   # must agree with pp-profile on the replace and custom-config fixtures.
   function Facts([string]$dproj, [string]$platform, [string]$config) {
-    $raw = (& $exePath project-facts --dproj $dproj --platform $platform --config $config --json 2>$null) -join "`n"
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath project-facts --dproj $dproj --platform $platform --config $config --json 2>$null }) -join "`n"
     $i = $raw.IndexOf('{'); if ($i -lt 0) { return $null }
     return ($raw.Substring($i) | ConvertFrom-Json)
   }

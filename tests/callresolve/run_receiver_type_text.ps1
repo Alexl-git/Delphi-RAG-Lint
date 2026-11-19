@@ -33,7 +33,7 @@ try {
 
   # sql --json rows are POSITIONAL arrays: map them onto columns[].name.
   function Q([string]$Db,[string]$Query) {
-    $raw = (& $exePath sql --db $Db --json --limit 5000 --query $Query 2>$null) -join "`n"
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $Db --json --limit 5000 --query $Query 2>$null }) -join "`n"
     $b = $raw.IndexOf('{'); if ($b -lt 0) { throw "sql returned no JSON for: $Query" }
     $o = $raw.Substring($b) | ConvertFrom-Json
     $names = @($o.columns | ForEach-Object { $_.name }); $out = @()
@@ -61,11 +61,11 @@ try {
 
   Push-Location C:\TEMP
   try {
-    & $exePath index $libDir --db $libDb 2>$null | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $libDir --db $libDb 2>$null } | Out-Null
     Check 'library index built' ($LASTEXITCODE -eq 0)
 
     # ---- Part A: project only ----
-    $outA = & $exePath index $appDir --db $dbA 2>&1 | Out-String
+    $outA = & { $ErrorActionPreference = 'Continue'; & $exePath index $appDir --db $dbA 2>&1 | ForEach-Object { "$_" } } | Out-String
     Check 'A: app index built' ($LASTEXITCODE -eq 0)
     $a = Q $dbA $refSql
     foreach ($s in $sites) {
@@ -77,7 +77,7 @@ try {
     Check 'A: stats line shows no-store' ($outA -match 'no-store')
 
     # ---- Part B: with the library ----
-    $outB = & $exePath index $appDir --db $dbB --library-db $libDb 2>&1 | Out-String
+    $outB = & { $ErrorActionPreference = 'Continue'; & $exePath index $appDir --db $dbB --library-db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-String
     Check 'B: app index built with --library-db' ($LASTEXITCODE -eq 0)
     $b = Q $dbB $refSql
     foreach ($s in $sites) {
@@ -96,8 +96,8 @@ try {
 
     # ---- idempotency + provenance ----
     $dump1 = (Q $dbB 'select id, receiver_type_text, external_target from refs order by id' | ForEach-Object { "$($_.id)|$($_.receiver_type_text)|$($_.external_target)" }) -join "`n"
-    & $exePath index $appDir --db $dbB --library-db $libDb --resolve-only 2>&1 | Out-Null
-    & $exePath index $appDir --db $dbB --library-db $libDb --resolve-only 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $appDir --db $dbB --library-db $libDb --resolve-only 2>&1 | ForEach-Object { "$_" } } | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $appDir --db $dbB --library-db $libDb --resolve-only 2>&1 | ForEach-Object { "$_" } } | Out-Null
     $dump2 = (Q $dbB 'select id, receiver_type_text, external_target from refs order by id' | ForEach-Object { "$($_.id)|$($_.receiver_type_text)|$($_.external_target)" }) -join "`n"
     Check 'B: --resolve-only twice is idempotent' (($dump1.Length -gt 0) -and ($dump1 -ceq $dump2))
     $meta = Q $dbB "select value from schema_meta where key = 'external_stores'"

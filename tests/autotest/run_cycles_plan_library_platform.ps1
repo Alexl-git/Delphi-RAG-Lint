@@ -74,8 +74,8 @@ try {
   $p32 = New-Project 'w32' 'Win32'
   $p64 = New-Project 'w64' 'Win64'
   $db32 = Join-Path $WorkDir 'w32.sqlite'; $db64 = Join-Path $WorkDir 'w64.sqlite'
-  & $EngExe index --project $p32 --db $db32 *> (Join-Path $WorkDir 'index-w32.log')
-  & $EngExe index --project $p64 --db $db64 *> (Join-Path $WorkDir 'index-w64.log')
+  & { $ErrorActionPreference = 'Continue'; & $EngExe index --project $p32 --db $db32 *> (Join-Path $WorkDir 'index-w32.log') }
+  & { $ErrorActionPreference = 'Continue'; & $EngExe index --project $p64 --db $db64 *> (Join-Path $WorkDir 'index-w64.log') }
   if (-not (Test-Path $db32) -or -not (Test-Path $db64)) { Write-Host 'FATAL: fixture index failed' -ForegroundColor Red; exit 2 }
   $L32 = Join-Path $libs 'library-Win32.sqlite'; $L64 = Join-Path $libs 'library-Win64.sqlite'
   Copy-Item $db32 $L32; Copy-Item $db32 $L64

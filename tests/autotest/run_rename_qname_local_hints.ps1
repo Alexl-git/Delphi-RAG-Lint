@@ -109,30 +109,30 @@ end.
 $db = Join-Path $WorkDir 'fx.sqlite'
 Push-Location $WorkDir
 try {
-  & $Exe index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Write-Host 'Local target: no foreign unresolved-reference notes' -ForegroundColor Cyan
-  $o = (& $Exe rename --qname Unit1.TA.Go.R --to ARect --db $db --dry-run 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe rename --qname Unit1.TA.Go.R --to ARect --db $db --dry-run 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'local rename exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE out=$o"
   Check 'local rename finds the edits' ($o -match 'Dry run: [1-9]') $o
   Check 'no unresolved-reference note for a routine-local target' ($o -notmatch 'unresolved reference') $o
-  $o = (& $Exe rename --qname Unit1.TA.Go.K --to Limit --db $db --dry-run 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe rename --qname Unit1.TA.Go.K --to Limit --db $db --dry-run 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'local CONST rename exits 0 with edits' (($LASTEXITCODE -eq 0) -and ($o -match 'Dry run: [1-9]')) $o
   Check 'no unresolved-reference note for a local const' ($o -notmatch 'unresolved reference') $o
   Write-Host 'Bare name: message says to qualify, lists candidates' -ForegroundColor Cyan
-  $o = (& $Exe rename --qname R --to ARect --db $db --dry-run 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe rename --qname R --to ARect --db $db --dry-run 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'bare name exits 1' ($LASTEXITCODE -eq 1) "exit=$LASTEXITCODE"
   Check 'message keeps the No edits computed prefix' ($o -match 'No edits computed for R') $o
   Check 'message says to qualify' ($o -match 'qualif') $o
   Check 'message lists the local candidate qname' ($o -match 'Unit1\.TA\.Go\.R') $o
   Check 'message lists the field candidate qname' ($o -match 'Unit2\.TB\.R') $o
   Write-Host 'Ranking: candidates from the asking file first' -ForegroundColor Cyan
-  $o = (& $Exe rename --qname R --to ARect --in (Join-Path $src 'Unit2.pas') --db $db --dry-run 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe rename --qname R --to ARect --in (Join-Path $src 'Unit2.pas') --db $db --dry-run 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $i2 = $o.IndexOf('Unit2.TB.R'); $i1 = $o.IndexOf('Unit1.TA.Go.R')
   Check 'asking file Unit2: its own candidate is listed before Unit1''s' (($i2 -ge 0) -and ($i1 -ge 0) -and ($i2 -lt $i1)) $o
-  $o = (& $Exe rename --qname R --to ARect --db $db --dry-run 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe rename --qname R --to ARect --db $db --dry-run 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'no --in: alphabetical (Unit1 before Unit2)' (($o.IndexOf('Unit1.TA.Go.R') -ge 0) -and ($o.IndexOf('Unit1.TA.Go.R') -lt $o.IndexOf('Unit2.TB.R'))) $o
   Write-Host 'Unknown qualified name: no candidates, original message' -ForegroundColor Cyan
-  $o = (& $Exe rename --qname Unit1.TA.Nope --to X --db $db --dry-run 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe rename --qname Unit1.TA.Nope --to X --db $db --dry-run 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'unknown qname exits 1' ($LASTEXITCODE -eq 1) "exit=$LASTEXITCODE"
   Check 'unknown qname message intact' ($o -match 'No edits computed for Unit1\.TA\.Nope \(symbol may not exist\)') $o
 } finally { Pop-Location }

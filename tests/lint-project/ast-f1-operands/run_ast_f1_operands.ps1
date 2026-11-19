@@ -47,22 +47,22 @@ try {
   Copy-Item (Join-Path $PSScriptRoot '*.pas') $src
   $file = Join-Path $src 'uAfHost.pas'
   $db = Join-Path $scratch 'af.sqlite'
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $old = Join-Path $scratch 'old.sqlite'
   Copy-Item $db $old
   $py = Join-Path $scratch 'strip.py'
   $stmt = 'DR' + 'OP TABLE ref_types'
   [IO.File]::WriteAllText($py, "import sqlite3, sys`nc = sqlite3.connect(sys.argv[1])`nc.execute('$stmt')`nc.commit()`nc.close()`n")
   python $py $old
-  $gone = @(& $exePath sql --db $old --query "SELECT name FROM sqlite_master WHERE name = 'ref_types'" 2>&1) -join ' '
+  $gone = @(& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $old --query "SELECT name FROM sqlite_master WHERE name = 'ref_types'" 2>&1 | ForEach-Object { "$_" } }) -join ' '
   Check 'the control DB really has no ref_types' ($gone -match '\b0 row') $gone
-  $have = @(& $exePath sql --db $db --query "SELECT name FROM sqlite_master WHERE name = 'ref_types'" 2>&1) -join ' '
+  $have = @(& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "SELECT name FROM sqlite_master WHERE name = 'ref_types'" 2>&1 | ForEach-Object { "$_" } }) -join ' '
   Check 'the fixture DB has the ref_types table' ($have -match '\b1 row') $have
 
   $ruleArgs = @('--enable', 'string-equality-comparison,exhaustive-enum-case,interface-object-mixing,mutable-global-variable')
-  $on  = Parse-Findings (& $exePath lint-all --db $db --format json @ruleArgs 2>$null)
-  $off = Parse-Findings (& $exePath lint-all --db $old --format json @ruleArgs 2>$null)
-  $nod = Parse-Findings (& $exePath lint $file --format json @ruleArgs 2>$null)
+  $on  = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json @ruleArgs 2>$null })
+  $off = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $old --format json @ruleArgs 2>$null })
+  $nod = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $file --format json @ruleArgs 2>$null })
 
   foreach ($r in $Rules.Keys) {
     $tag = $Rules[$r]
@@ -93,7 +93,7 @@ try {
   Check 'dataset-open with the table: only the TRIGGER-DSOPEN lines' ((@(DsLines $on) -join ',') -eq ($dTrig -join ',')) "got [$(@(DsLines $on) -join ',')] want [$($dTrig -join ',')]"
   Check 'dataset-open has a trigger and a control in the fixture' (($dTrig.Count -gt 0) -and ($dCtl.Count -gt 0))
   Check 'dataset-open without the table: today, the CONTROL lines are reported too' ((@(DsLines $off) -join ',') -eq ($dAll -join ',')) "got [$(@(DsLines $off) -join ',')]"
-  $nodDs = Parse-Findings (& $exePath lint (Join-Path $src 'uAfDs.pas') --format json 2>$null)
+  $nodDs = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint (Join-Path $src 'uAfDs.pas') --format json 2>$null })
   Check 'dataset-open without an index: today, the CONTROL lines are reported too' ((@(DsLines $nodDs) -join ',') -eq ($dAll -join ',')) "got [$(@(DsLines $nodDs) -join ',')]"  # row 20, interface-object-mixing: a non-reference-counted class aliased into an interface is no dual handle
   $mFile = Join-Path $src 'uAfMix.pas'
   $mTrig = @(Markers $mFile 'TRIGGER-MIX'); $mCtl = @(Markers $mFile 'CONTROL-MIX')
@@ -113,7 +113,7 @@ try {
   $py2 = Join-Path $scratch 'nosec.py'
   [IO.File]::WriteAllText($py2, "import sqlite3, sys`nc = sqlite3.connect(sys.argv[1])`nc.execute('UPDATE refs SET enclosing_symbol_id = NULL')`nc.commit()`nc.close()`n")
   python $py2 $noSec
-  $nsF = Parse-Findings (& $exePath lint-all --db $noSec --format json @ruleArgs 2>$null)
+  $nsF = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $noSec --format json @ruleArgs 2>$null })
   Check 'mutable-global-variable with no section attribution (enclosing_symbol_id NULL): today, the CONTROL line is reported too' ((@(GlobLines $nsF) -join ',') -eq ($gAll -join ',')) "got [$(@(GlobLines $nsF) -join ',')]"} finally {
   if (Test-Path $scratch) { [System.IO.Directory]::Delete($scratch, $true) }
 }

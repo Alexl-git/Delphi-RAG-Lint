@@ -24,12 +24,12 @@ try {
   [IO.File]::WriteAllText("$src\uA.pas", "unit uA;`r`ninterface`r`nimplementation`r`nend.`r`n", [Text.Encoding]::ASCII)
   Push-Location C:\TEMP
   try {
-    $a = (& $engExe index "$root\proj" 2>&1 | Out-String)
+    $a = (& { $ErrorActionPreference = 'Continue'; & $engExe index "$root\proj" 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'a: Database: line present' ($a -match '(?m)^Database: ') $a
     Check 'a: names the new database' ($a -match '\(new database: this file does not exist yet') $a
-    $b = (& $engExe index "$root\proj" 2>&1 | Out-String)
+    $b = (& { $ErrorActionPreference = 'Continue'; & $engExe index "$root\proj" 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'b: second run (DB exists) does not say new' ($b -notmatch 'new database:') $b
-    $c = (& $engExe index "$root\proj" --db "$root\named.sqlite" 2>&1 | Out-String)
+    $c = (& { $ErrorActionPreference = 'Continue'; & $engExe index "$root\proj" --db "$root\named.sqlite" 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'c: explicit --db to a new file is not announced' (($c -match '(?m)^Database: ') -and ($c -notmatch 'new database:')) $c
   } finally { Pop-Location }
 } finally { if (Test-Path -LiteralPath $root) { [IO.Directory]::Delete($root, $true) } }

@@ -43,7 +43,7 @@ function Prepare([string]$Name, [switch]$Inline) {
   }
   $db = Join-Path $WorkDir ($Name + '.sqlite')
   Push-Location $WorkDir
-  try { & $Exe index --project (Join-Path $root 'IncludeClause.dproj') --db $db --library-db none *> "$db.log" } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root 'IncludeClause.dproj') --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
   Check "$Name indexed" ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
   return @{ Root = $root; Db = $db }
 }
@@ -70,14 +70,14 @@ Check 'b: verdict refused' ($plan.Dump -match 'verdict=refused') $plan.Dump.Trim
 Check 'b: refusal kind uses-in-include' ($plan.Dump -match 'refusals=[^\t]*\buses-in-include\b') $plan.Dump.Trim()
 $dproj = Join-Path $i.Root 'IncludeClause.dproj'
 Push-Location $WorkDir
-try { $dry = & $Exe cycles --fix --project $dproj --db $i.Db --unit cfalpha --no-compile --format json --library-db none 2>$null | Out-String; $dryRc = $LASTEXITCODE } finally { Pop-Location }
+try { $dry = & { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --project $dproj --db $i.Db --unit cfalpha --no-compile --format json --library-db none 2>$null } | Out-String; $dryRc = $LASTEXITCODE } finally { Pop-Location }
 Check 'b: --fix dry run exits 1 (refused)' ($dryRc -eq 1) "rc=$dryRc"
 $ref = @(); try { $ref = @(($dry | ConvertFrom-Json).cycles | ForEach-Object { $_.refusals } | Where-Object { $_.kind -eq 'uses-in-include' }) } catch { }
 Check 'b: the cycle-fix/1 JSON has a uses-in-include refusal at CfAlpha.pas line 13' (($ref.Count -eq 1) -and ($ref[0].line -eq 13) -and ($ref[0].file -like '*CfAlpha.pas')) "n=$($ref.Count)"
 
 $before = Hashes $i.Root
 Push-Location $WorkDir
-try { $fx = & $Exe cycles --fix --project $dproj --db $i.Db --unit cfalpha --apply --library-db none 2>&1 | Out-String; $fxRc = $LASTEXITCODE } finally { Pop-Location }
+try { $fx = & { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --project $dproj --db $i.Db --unit cfalpha --apply --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String; $fxRc = $LASTEXITCODE } finally { Pop-Location }
 Check 'c: cycles --fix --apply exits 1 (refused)' ($fxRc -eq 1) "rc=$fxRc"
 Check 'c: cycles --fix --apply names uses-in-include' ($fx -match 'uses-in-include') ''
 Check 'c: every source byte-identical after --apply' ((Hashes $i.Root) -eq $before) ''

@@ -102,7 +102,7 @@ function Write-Ascii([string]$Path, [string]$Text) {
 # assertions below read the FILE, so a crash would otherwise be invisible until
 # a pin happened to trip over it.
 function Invoke-Engine([string]$Label, [string[]]$EngineArgs) {
-  $out = (& $Exe @EngineArgs 2>&1 | Out-String)
+  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe @EngineArgs 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $code = $LASTEXITCODE
   Check "ENGINE: $Label exits 0" ($code -eq 0) ("exit=$code " + (($out -split "`r?`n" | Where-Object { $_ -ne '' } | Select-Object -Last 1)))
 }

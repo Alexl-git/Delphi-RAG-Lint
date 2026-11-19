@@ -68,17 +68,17 @@ New-Item -ItemType Directory "$fx\_D-RAG" | Out-Null
 [IO.File]::WriteAllText("$fx\_D-RAG\drag-lint-project.json", '{ "ownRoots": ["."] }')
 $proj = "$fx\Demo9.dproj"
 $db   = "$WorkDir\fixture9.sqlite"
-& $Exe index $fx --db $db *> "$WorkDir\index.log"
+& { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db *> "$WorkDir\index.log" }
 if ($LASTEXITCODE -ne 0) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: fixture index failed (exit $LASTEXITCODE)" -ForegroundColor Red; exit 2 }
 
 # --- help names the flag ---
-$help = (& $Exe menu-tree --help 2>&1 | Out-String)
+$help = (& { $ErrorActionPreference = 'Continue'; & $Exe menu-tree --help 2>&1 | ForEach-Object { "$_" } } | Out-String)
 Check 'menu-tree --help lists --with-dfm' ($help -match '--with-dfm')
 
 # --- paths, cell by cell ---
 $want = Get-Rows (Get-Content "$fx\expected-paths.txt" -Raw) $false
 Check 'golden has rows' ($want.Count -ge 15) "($($want.Count))"
-$paths = (& $Exe menu-tree --project $proj --db $db --with-dfm --format paths 2> "$WorkDir\paths.err" | Out-String)
+$paths = (& { $ErrorActionPreference = 'Continue'; & $Exe menu-tree --project $proj --db $db --with-dfm --format paths 2> "$WorkDir\paths.err" } | Out-String)
 Check 'menu-tree --with-dfm --format paths exits 0' ($LASTEXITCODE -eq 0) "(exit $LASTEXITCODE) $(Get-Content "$WorkDir\paths.err" -Raw)"
 $got = Get-Rows $paths $true
 $bad = Compare-Rows $want $got
@@ -91,7 +91,7 @@ $ctl = Compare-Rows $seeded $got
 Check 'positive control: a one-cell golden edit is reported' ($ctl.Count -ge 1) "($($ctl.Count) mismatch(es))"
 
 # --- json: kinds, separators, idents, notes ---
-$jsonText = (& $Exe menu-tree --project $proj --db $db --with-dfm --format json 2> "$WorkDir\json.err" | Out-String)
+$jsonText = (& { $ErrorActionPreference = 'Continue'; & $Exe menu-tree --project $proj --db $db --with-dfm --format json 2> "$WorkDir\json.err" } | Out-String)
 $j = $null
 try { $j = $jsonText | ConvertFrom-Json } catch { $j = $null }
 Check 'json exits 0 and parses' ($null -ne $j)
@@ -148,7 +148,7 @@ Check 'NOTE unlinked bar item btnOrphan' (@($notes | Where-Object { $_ -match 'u
 Check 'NOTE dynamic caption' (@($notes | Where-Object { $_ -match '^dynamic caption' }).Count -ge 1)
 
 # --- flag off: the walker's code links stay external roots ---
-$offText = (& $Exe menu-tree --project $proj --db $db --format json 2> "$WorkDir\off.err" | Out-String)
+$offText = (& { $ErrorActionPreference = 'Continue'; & $Exe menu-tree --project $proj --db $db --format json 2> "$WorkDir\off.err" } | Out-String)
 $off = $null
 try { $off = $offText | ConvertFrom-Json } catch { $off = $null }
 $offIds = @($off.external | ForEach-Object { $_.ident })
@@ -157,7 +157,7 @@ Check 'flag off: popGrid and barLists are external roots (form fields: keyed Tfr
 
 # --- stale .dfm: exit 3 ---
 [IO.File]::AppendAllText("$fx\uMain9.dfm", "`r`n")
-& $Exe menu-tree --project $proj --db $db --with-dfm --format paths *> "$WorkDir\stale.out"
+& { $ErrorActionPreference = 'Continue'; & $Exe menu-tree --project $proj --db $db --with-dfm --format paths *> "$WorkDir\stale.out" }
 $staleExit = $LASTEXITCODE
 $staleOut  = Get-Content "$WorkDir\stale.out" -Raw
 # exit 3 alone is not enough: an unknown-argument failure also exits 3

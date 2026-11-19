@@ -20,16 +20,16 @@ function Check($n, $ok, $d) {
 $exe = (Resolve-Path $Exe).Path
 $root = (Resolve-Path "$PSScriptRoot\..\..").Path
 
-$help = (& $exe --help 2>&1 | Out-String)
+$help = (& { $ErrorActionPreference = 'Continue'; & $exe --help 2>&1 | ForEach-Object { "$_" } } | Out-String)
 Check 'help lists stop-now' ($help -match '(?m)^\s*drag-lint stop-now\b')
 Check 'help does not list shutdown as a verb' ($help -notmatch '(?m)^\s*drag-lint shutdown\b')
 
-$a = (& $exe stop-now --dry-run 2>&1 | Out-String); $ra = $LASTEXITCODE
-$b = (& $exe shutdown --dry-run 2>&1 | Out-String); $rb = $LASTEXITCODE
+$a = (& { $ErrorActionPreference = 'Continue'; & $exe stop-now --dry-run 2>&1 | ForEach-Object { "$_" } } | Out-String); $ra = $LASTEXITCODE
+$b = (& { $ErrorActionPreference = 'Continue'; & $exe shutdown --dry-run 2>&1 | ForEach-Object { "$_" } } | Out-String); $rb = $LASTEXITCODE
 Check 'stop-now --dry-run exits 0' ($ra -eq 0) "exit=$ra out=$a"
 Check 'shutdown --dry-run (alias) exits 0' ($rb -eq 0) "exit=$rb out=$b"
 Check 'neither says unknown command' (($a + $b) -notmatch '(?i)unknown|unrecognized') "$a $b"
-$ha = (& $exe stop-now --help 2>&1 | Out-String)
+$ha = (& { $ErrorActionPreference = 'Continue'; & $exe stop-now --help 2>&1 | ForEach-Object { "$_" } } | Out-String)
 Check 'stop-now --help is the verb help' ($ha -match 'drag-lint stop-now' -and $ha -match 'NAMED PIPE') $ha
 
 foreach ($f in 'build\stage-engine.ps1', 'build\pack-lint-release.ps1') {

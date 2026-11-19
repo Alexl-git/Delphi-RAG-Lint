@@ -88,7 +88,7 @@ try {
     }
     $errFile = Join-Path $WorkDir 'stderr.txt'
     Push-Location $E64
-    try { $out = & $Eng init @A 2> $errFile; $code = $LASTEXITCODE } finally { Pop-Location }
+    try { $out = & { $ErrorActionPreference = 'Continue'; & $Eng init @A 2> $errFile }; $code = $LASTEXITCODE } finally { Pop-Location }
     [pscustomobject]@{ Code = $code; Out = (@($out) -join "`n"); Err = [IO.File]::ReadAllText($errFile) }
   }
 

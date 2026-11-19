@@ -44,7 +44,7 @@ function Check($n,$ok,$d){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok
 $exePath = (Resolve-Path $Exe).Path
 
 function RunExe([string[]]$ExeArgs) {
-  $o = (& $exePath @ExeArgs 2>&1 | Out-String)
+  $o = (& { $ErrorActionPreference = 'Continue'; & $exePath @ExeArgs 2>&1 | ForEach-Object { "$_" } } | Out-String)
   return @{ Out = $o; Code = $LASTEXITCODE }
 }
 

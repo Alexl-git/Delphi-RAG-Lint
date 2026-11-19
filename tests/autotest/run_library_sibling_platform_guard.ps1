@@ -104,7 +104,7 @@ Check 'registry lists platforms (independent expectation source)' ($registered.C
 # engine rather than of its own invocation.
 $config = Join-Path (Resolve-Path "$PSScriptRoot\..\..").Path 'third_party\dll-win64\drag-lint.json'
 if (-not (Test-Path $config)) { Write-Host "FATAL: manifest not found: $config" -ForegroundColor Red; exit 2 }
-$out = & $Exe index --all --config $config --dry-run 2>$null
+$out = & { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $config --dry-run 2>$null }
 $text = $out -join "`n"
 
 $sections = @()

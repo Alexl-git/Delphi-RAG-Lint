@@ -75,20 +75,20 @@ function New-Proj([string]$Fix, [string]$Name, [scriptblock]$Patch = $null) {
   if ($Patch) { & $Patch $root }
   $db = "$root.sqlite"
   Push-Location $WorkDir
-  try { $null | & $Exe index --project (Join-Path $root "$Name.dproj") --db $db --library-db none *> "$db.log" } finally { Pop-Location }
+  try { $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root "$Name.dproj") --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
   return @{ Root = $root; Dproj = (Join-Path $root "$Name.dproj"); Db = $db; Name = $Name }
 }
 function Get-HubPlan($P, [string[]]$Extra = @(), [string]$Lib = 'none') {
   $a = @('cycles', '--plan', '--hub-surface', '--db', $P.Db, '--library-db', $Lib) + $Extra
   Push-Location $WorkDir
-  try { $out = ($null | & $Exe @a 2>&1 | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
+  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
   return @{ Exit = $code; Out = $out }
 }
 function Get-Cycles($P) {
   Push-Location $WorkDir
   try {
-    $null | & $Exe index --project $P.Dproj --db $P.Db --library-db none *> "$($P.Db).relog"
-    return ($null | & $Exe cycles --db $P.Db --library-db none 2>$null | Out-String)
+    $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project $P.Dproj --db $P.Db --library-db none *> "$($P.Db).relog" }
+    return ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --db $P.Db --library-db none 2>$null } | Out-String)
   } finally { Pop-Location }
 }
 function Invoke-Build($P) {
@@ -117,8 +117,8 @@ try {
   $P0 = New-Proj 'hubsurface' 'HubSurface'
   Push-Location $WorkDir
   try {
-    $def = ($null | & $Exe cycles --plan --db $P0.Db --library-db none 2>&1 | Out-String)
-    $off = ($null | & $Exe cycles --plan --no-hub-surface --db $P0.Db --library-db none 2>&1 | Out-String); $offCode = $LASTEXITCODE
+    $def = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --plan --db $P0.Db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String)
+    $off = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --plan --no-hub-surface --db $P0.Db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String); $offCode = $LASTEXITCODE
   } finally { Pop-Location }
   Check 'h0 control: --plan --no-hub-surface prints no R3 block, the planner''s own plan' (($offCode -eq 0) -and ($off -notmatch 'recipe R3') -and ($off -match '(?i)group|cycle')) $off
   Check 'h0b default: --plan asks R3 first -- the hub group gets R3 in place of Part A, and the way back is named   (RED on 1.50.0: the planner''s plan)' ((Has $def '# Cycle refactoring playbook') -and (Has $def '## Group 1 (4 units): hub-shaped -- recipe R3 in place of Part A / Part B') -and (Has $def '- prediction: the group breaks') -and (Has $def 'cycles --plan --no-hub-surface') -and ($def.Replace($off, '') -ne '') -and ($def -ne $off)) $def
@@ -252,9 +252,9 @@ try {
   Check 'q2 control: a knot R3 refuses gets the note and the planner''s own plan' ((Has $o '- group 1: hub-surface recipe R3 refused: not-hub-shaped') -and ($o -match '## Cycle 1:')) $o
   Push-Location $WorkDir
   try {
-    $js = ($null | & $Exe cycles --causes --format json --hub-surface --db $P0.Db --library-db none 2>$null | Out-String); $jsCode = $LASTEXITCODE
-    $jd = ($null | & $Exe cycles --causes --format json --no-hub-surface --db $P0.Db --library-db none 2>$null | Out-String)
-    $null | & $Exe cycles --format json --hub-surface --db $P0.Db --library-db none *> $null; $badCode = $LASTEXITCODE
+    $js = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --causes --format json --hub-surface --db $P0.Db --library-db none 2>$null } | Out-String); $jsCode = $LASTEXITCODE
+    $jd = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --causes --format json --no-hub-surface --db $P0.Db --library-db none 2>$null } | Out-String)
+    $null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --format json --hub-surface --db $P0.Db --library-db none *> $null }; $badCode = $LASTEXITCODE
   } finally { Pop-Location }
   $fx = $null; try { $fx = ($js | ConvertFrom-Json)[0].fix } catch { }
   Check 'q3 --causes --format json --hub-surface: the fix object is R3''s (part r3, available, 3 cut edges, its commands)   (RED on 1.48.0: exit 2)' (($jsCode -eq 0) -and ($null -ne $fx) -and ($fx.part -eq 'r3') -and ($fx.recipe -eq 'hub-surface') -and ($fx.available -eq $true) -and (@($fx.edges).Count -eq 3) -and ($fx.apply -match '--hub-surface .*--cycle 1 --apply$')) "exit=$jsCode $js"
@@ -266,12 +266,12 @@ try {
   $p0h = Get-SrcHash $P0.Root
   Push-Location $WorkDir
   try {
-    $kd = ($null | & $Exe cycles --plan --db $K.Db --library-db none 2>&1 | Out-String)
-    $ko = ($null | & $Exe cycles --plan --no-hub-surface --db $K.Db --library-db none 2>&1 | Out-String)
-    $wd = ($null | & $Exe cycles --plan --db $W.Db --library-db none 2>&1 | Out-String)
-    $wo = ($null | & $Exe cycles --plan --no-hub-surface --db $W.Db --library-db none 2>&1 | Out-String)
-    $null | & $Exe cycles --plan --hub-surface --no-hub-surface --db $P0.Db --library-db none *> $null; $bothCode = $LASTEXITCODE
-    $ap = ($null | & $Exe cycles --plan --apply --cycle 1 --no-hub-surface --db $P0.Db --library-db none 2>&1 | Out-String)
+    $kd = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --plan --db $K.Db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String)
+    $ko = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --plan --no-hub-surface --db $K.Db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String)
+    $wd = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --plan --db $W.Db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String)
+    $wo = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --plan --no-hub-surface --db $W.Db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String)
+    $null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --plan --hub-surface --no-hub-surface --db $P0.Db --library-db none *> $null }; $bothCode = $LASTEXITCODE
+    $ap = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --plan --apply --cycle 1 --no-hub-surface --db $P0.Db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String)
   } finally { Pop-Location }
   Check 'd1 default, a knot R3 refuses: no note, byte-identical to --no-hub-surface' (($kd -eq $ko) -and ($kd -notmatch 'recipe R3') -and ($kd -match '## Cycle 1:')) $kd
   $wh = (Get-HubPlan $W).Out

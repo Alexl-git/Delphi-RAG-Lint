@@ -67,12 +67,12 @@ foreach ($f in 'CvUse.pas', 'CvUse.dfm', 'CvWarn.pas', 'CvWarn.dfm', 'CvImpl.pas
 function Restore { foreach ($k in $orig.Keys) { [IO.File]::WriteAllBytes((P $k), $orig[$k]) } }
 
 $db = P 'fx.sqlite'
-function Reindex { & $Exe index $WorkDir --db $db 2>&1 | Out-Null }
+function Reindex { & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null }
 Reindex
 Check 'V the fixture index was built' (Test-Path $db)
 
 function Apply([string]$Unit, [string]$Rules, [string[]]$Extra = @()) {
-  $o = (& $Exe @(@('convert-apply', '--unit', (P $Unit), '--rules', (P $Rules), '--db', $db) + $Extra) 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @(@('convert-apply', '--unit', (P $Unit), '--rules', (P $Rules), '--db', $db) + $Extra) 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $j = $null
   if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {} }
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o; J = $j }

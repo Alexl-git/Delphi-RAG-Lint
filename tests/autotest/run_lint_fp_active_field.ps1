@@ -71,7 +71,7 @@ end.
 $unit = Join-Path $WorkDir 'fpactive.pas'
 [System.IO.File]::WriteAllText($unit, $src, [System.Text.Encoding]::ASCII)
 
-$out = (& $Exe lint $unit --rule dataset-open-without-close 2>$null | Out-String)
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $unit --rule dataset-open-without-close 2>$null } | Out-String)
 
 Write-Host 'False positive that must be GONE' -ForegroundColor Cyan
 Check 'a plain Active field on a class declared in the file is not a dataset' `

@@ -155,14 +155,14 @@ end.
   W $Dir 'SForm.dfm' (($d -join "`n") + "`n")
   W $Dir 'P.dpr' "program P;`n`nuses`n  LibTbl, SForm;`n`nbegin`nend.`n"
   W $Dir 's.rules' "#convert TOldTable -> TNewTable`n$Link`n"
-  & $Exe index --project (Join-Path $Dir 'P.dpr') --db (Join-Path $Dir 'fx.sqlite') 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $Dir 'P.dpr') --db (Join-Path $Dir 'fx.sqlite') 2>&1 | ForEach-Object { "$_" } } | Out-Null
 }
 $main = Join-Path $WorkDir 'main'; Fixture $main '#link TableName <- TableName : StripDB'
 $ctl  = Join-Path $WorkDir 'ctl';  Fixture $ctl  '#link TableName <- TableName'
 
 function Run([string]$Dir, [string[]]$Extra = @(), [string]$Castlib = $ShippedCastlib) {
   $a = @('convert-apply', '--unit', (Join-Path $Dir 'SForm.pas'), '--rules', (Join-Path $Dir 's.rules'), '--db', (Join-Path $Dir 'fx.sqlite'), '--castlib', $Castlib) + $Extra
-  $o = (& $Exe @a 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $code = $LASTEXITCODE
   $j = $null
   if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {} }
@@ -214,7 +214,7 @@ Check 'A2 .pas: the three literals rewritten, escaping kept; the concatenation, 
    $pas.Contains("  t2.TableName := 'Pre' + 'X.db';") -and $pas.Contains('  S := t1.TableName;') -and $pas.Contains("  t3.TableName := 'A.dbf';")) $pas
 
 # ---- idempotence: a second run changes nothing ------------------------------
-& $Exe index --project (Join-Path $main 'P.dpr') --db (Join-Path $main 'fx.sqlite') 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $main 'P.dpr') --db (Join-Path $main 'fx.sqlite') 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $h1 = (Get-FileHash (Join-Path $main 'SForm.pas')).Hash + (Get-FileHash (Join-Path $main 'SForm.dfm')).Hash
 $a2 = Run $main @('--apply', '--no-backup', '--no-reindex')
 $h2 = (Get-FileHash (Join-Path $main 'SForm.pas')).Hash + (Get-FileHash (Join-Path $main 'SForm.dfm')).Hash
@@ -307,8 +307,8 @@ $ed += 'end'
 W $edge 'EForm.dfm' (($ed -join "`n") + "`n")
 W $edge 'P.dpr' "program P;`n`nuses`n  LibTbl, EForm;`n`nbegin`nend.`n"
 W $edge 's.rules' "#convert TOldTable -> TNewTable`n#link TableName <- TableName : StripDB`n"
-& $Exe index --project (Join-Path $edge 'P.dpr') --db (Join-Path $edge 'fx.sqlite') 2>&1 | Out-Null
-$eo = (& $Exe convert-apply --unit (Join-Path $edge 'EForm.pas') --rules (Join-Path $edge 's.rules') --db (Join-Path $edge 'fx.sqlite') --castlib $ShippedCastlib --format json 2>&1) -join "`n"
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $edge 'P.dpr') --db (Join-Path $edge 'fx.sqlite') 2>&1 | ForEach-Object { "$_" } } | Out-Null
+$eo = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (Join-Path $edge 'EForm.pas') --rules (Join-Path $edge 's.rules') --db (Join-Path $edge 'fx.sqlite') --castlib $ShippedCastlib --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 $er = [pscustomobject]@{ Code = $LASTEXITCODE; Out = $eo; J = $null }
 try { $er.J = $eo.Substring($eo.IndexOf('{')) | ConvertFrom-Json } catch {}
 $ePas = @(Items $er 'value-cast-applied' | Where-Object { $_.file -like '*.pas' })
@@ -331,7 +331,7 @@ $eDfmApp = @(Items $er 'value-cast-applied' | Where-Object { $_.file -like '*.df
 Check 'E8 .dfm: a MULTI-LINE value (e1) and a #nn char-code value (e2) are value-cast-check, not rewritten; e3..e9 are applied' `
   ((@($eDfmChk | Where-Object { $_.instance -eq 'e1' }).Count -eq 1) -and (@($eDfmChk | Where-Object { $_.instance -eq 'e2' }).Count -eq 1) -and
    ($eDfmChk.Count -eq 2) -and ($eDfmApp.Count -eq 7) -and (@($eDfmApp | Where-Object { $_.instance -in 'e1','e2' }).Count -eq 0)) (Show (@($eDfmChk) + @($eDfmApp)))
-$ea = (& $Exe convert-apply --unit (Join-Path $edge 'EForm.pas') --rules (Join-Path $edge 's.rules') --db (Join-Path $edge 'fx.sqlite') --castlib $ShippedCastlib --apply --no-backup --no-reindex 2>&1) -join "`n"
+$ea = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (Join-Path $edge 'EForm.pas') --rules (Join-Path $edge 's.rules') --db (Join-Path $edge 'fx.sqlite') --castlib $ShippedCastlib --apply --no-backup --no-reindex 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 $eaCode = $LASTEXITCODE
 $eDfm = [IO.File]::ReadAllText((Join-Path $edge 'EForm.dfm'))
 $ePasTxt = [IO.File]::ReadAllText((Join-Path $edge 'EForm.pas'))
@@ -360,7 +360,7 @@ Check 'B1 identical .dfm bytes and identical .pas bytes (apart from the extra li
    ((Get-FileHash (Join-Path $ba 'SForm.dfm')).Hash -eq (Get-FileHash (Join-Path $bb 'SForm.dfm')).Hash)) ($baR.Out + "`n" + $bbR.Out)
 
 # ---- capability -------------------------------------------------------------
-$info = (& $Exe info --json 2>$null) -join "`n"
+$info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n"
 $ij = $null; try { $ij = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json } catch {}
 Check 'K info --json: capabilities.value_cast_strip_db is true' (($null -ne $ij) -and ($ij.capabilities.value_cast_strip_db -eq $true)) ''
 

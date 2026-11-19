@@ -201,7 +201,7 @@ $before = Concept 'apply row changes'
 $beforeTop = Qn $before 0
 Check 'control: query works (exit 0, rank 1 ApplyRowDelta) before dropping the tables' (($before.Exit -eq 0) -and ($beforeTop -like '*TDeltaPipe.ApplyRowDelta')) (Brief $before)
 
-$py = & python -I $DropPy $Db 2>&1
+$py = & { $ErrorActionPreference = 'Continue'; & python -I $DropPy $Db 2>&1 | ForEach-Object { "$_" } }
 $pyExit = $LASTEXITCODE
 Check 'drop symbol_search, symbol_search_fts and their triggers (python helper)' (($pyExit -eq 0) -and ("$py" -match 'DROPPED')) "exit=$pyExit $py"
 

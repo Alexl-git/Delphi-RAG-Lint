@@ -126,7 +126,7 @@ Write-Ascii $file $fixture
 
 Push-Location C:\TEMP
 try {
-  $out = (& $exePath lint $file --rules-dir $rules 2>&1 | Out-String)
+  $out = (& { $ErrorActionPreference = 'Continue'; & $exePath lint $file --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $srcLines = [System.IO.File]::ReadAllLines($file)
   $rows = @()
   foreach ($l in ($out -split "`r?`n")) {

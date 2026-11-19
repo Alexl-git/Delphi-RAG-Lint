@@ -234,7 +234,7 @@ end.
   [IO.File]::WriteAllText("$WorkDir\uChainB.pas", ($b -replace "`r?`n", "`r`n") + "`r`n")
   $db = "$WorkDir\t.sqlite"
   Push-Location $WorkDir
-  try { & $Exe index $WorkDir --db $db *>&1 | Out-Null } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db *>&1 | ForEach-Object { "$_" } } | Out-Null } finally { Pop-Location }
   Check 'index ran' (Test-Path $db)
 
   $q = "select e.qualified_name as encl, r.kind, r.name_text as name, r.receiver_text as rcv, " +

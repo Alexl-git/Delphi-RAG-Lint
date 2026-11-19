@@ -92,7 +92,7 @@ $norm = $FixtureBody -replace "`r`n", "`n" -replace "`n", "`r`n"
 
 Push-Location $WorkDir
 try {
-  $indexOut = & $Exe index $dir --db $db 2>&1
+  $indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db $db 2>&1 | ForEach-Object { "$_" } }
   $indexExit = $LASTEXITCODE
 } finally { Pop-Location }
 Check 'index exits 0' ($indexExit -eq 0) "exit=$indexExit; $($indexOut | Select-Object -Last 1)"

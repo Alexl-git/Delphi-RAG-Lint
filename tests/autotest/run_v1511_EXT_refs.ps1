@@ -57,7 +57,7 @@ function Get-Line([string]$File, [string]$Text) {
   return $hit.LineNumber
 }
 function Invoke-Sql([string]$Db, [string]$Query) {
-  $txt = (& $exePath sql --db $Db --query $Query --json --limit 0 2>$null) -join "`n"
+  $txt = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $Db --query $Query --json --limit 0 2>$null }) -join "`n"
   $doc = $txt | ConvertFrom-Json
   $cols = @($doc.columns | ForEach-Object { $_.name })
   $out = foreach ($r in @($doc.rows)) {
@@ -74,7 +74,7 @@ $dir = Join-Path $tmp 'fx'
 [IO.Directory]::CreateDirectory($dir) | Out-Null
 foreach ($f in Get-ChildItem $fxDir -File -Filter *.pas) { [IO.File]::Copy($f.FullName, (Join-Path $dir $f.Name)) }
 $db = Join-Path $tmp 'fx.sqlite'
-$log = (& $exePath index $dir --db $db --library-db none 2>&1) -join "`n"
+$log = (& { $ErrorActionPreference = 'Continue'; & $exePath index $dir --db $db --library-db none 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 
 $all = Invoke-Sql $db @"
 select f.path path, r.id id, r.start_line line, r.start_col col, r.kind kind, r.name_text name,

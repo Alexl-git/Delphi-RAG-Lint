@@ -84,7 +84,7 @@ function Invoke-Program([string]$Dproj) {
 }
 function Invoke-Index([string]$Dproj, [string]$Tag) {
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project $Dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $Dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
   return $db
 }
 function Get-Plan([string]$Dproj, [string]$Tag) {
@@ -106,7 +106,7 @@ function Invoke-Apply([string]$Dproj, [string]$Tag) {
 }
 function Get-CyclesText([string]$Dproj, [string]$Tag) {
   $db = Invoke-Index $Dproj $Tag
-  return ((& $Exe cycles --db $db 2>&1) | Out-String)
+  return ((& { $ErrorActionPreference = 'Continue'; & $Exe cycles --db $db 2>&1 | ForEach-Object { "$_" } }) | Out-String)
 }
 function Get-Refusal([string]$Plan) { (([regex]::Match($Plan, '(?m)^.*refused:.*$').Value) -replace '^(.{0,300}).*$', '$1') }
 $Mech = { param($pt) $pt.Contains('**Constructor inversion:** `TW4Worker.') -and -not $pt.Contains('Fix it: not available') }

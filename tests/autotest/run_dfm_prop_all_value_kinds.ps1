@@ -86,7 +86,7 @@ $Exe = (Resolve-Path $Exe).Path
 if (Test-Path $WorkDir) { Remove-Item -Recurse -Force $WorkDir }
 New-Item -ItemType Directory $WorkDir | Out-Null
 
-$info = (& $Exe info --json 2>$null) -join "`n" | ConvertFrom-Json
+$info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n" | ConvertFrom-Json
 Write-Host ("engine: extractor={0} exe={1}" -f $info.extractor_version, $Exe) -ForegroundColor Cyan
 
 function Write-Ascii([string]$Path, [string]$Body) {
@@ -129,11 +129,11 @@ end
 "@
 
 $db = Join-Path $WorkDir 'dfm.sqlite'
-$null = & $Exe index $work --db $db 2>$null
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>$null }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 function Count-Text([string]$Phrase) {
-  $raw = (& $Exe query --text $Phrase --source dfm --db $db --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe query --text $Phrase --source dfm --db $db --json 2>$null }) -join "`n"
   if ([string]::IsNullOrWhiteSpace($raw)) { return 0 }
   try { return @($raw | ConvertFrom-Json).Count } catch { return 0 }
 }

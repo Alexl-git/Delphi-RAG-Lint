@@ -108,14 +108,14 @@ end.
 
 $db    = Join-Path $WorkDir 'app.sqlite'
 $probe = Join-Path $WorkDir 'uProbe.pas'
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 $names = 'TUsedInDecl,TUsedInCreate,TUsedAsAncestor,TNeverUsed,TOnlyInComment,TOnlyInLiteral'
 # STDOUT ONLY. The '(loaded defaults ...)' banner goes to stderr, which is
 # correct -- merging the streams here would corrupt the document and blame the
 # verb for the test's own mistake. Asserting on raw stdout is also what keeps
 # this honest if a human line ever DOES land in the JSON.
-$json  = & $Exe query type-usage --in $probe --names $names --db $db --json 2>$null | Out-String
+$json  = & { $ErrorActionPreference = 'Continue'; & $Exe query type-usage --in $probe --names $names --db $db --json 2>$null } | Out-String
 $rows  = $null
 try { $rows = $json | ConvertFrom-Json } catch {}
 Check 'JSON output parses' ($null -ne $rows) (($json -split "`r?`n" | Select-Object -First 1))
@@ -152,19 +152,19 @@ Check 'construction contributes a member-access kind' `
 
 Write-Host ''
 Write-Host 'Text output and error paths' -ForegroundColor Cyan
-$txt = & $Exe query type-usage --in $probe --names 'TUsedInDecl,TNeverUsed' --db $db 2>&1 | Out-String
+$txt = & { $ErrorActionPreference = 'Continue'; & $Exe query type-usage --in $probe --names 'TUsedInDecl,TNeverUsed' --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'text output marks the referenced one' ($txt -match 'TUsedInDecl\s+REFERENCED')
 Check 'text output states the name-keyed limitation' ($txt -match 'name-keyed')
 
-& $Exe query type-usage --in $probe --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe query type-usage --in $probe --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'missing --names exits 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
-& $Exe query type-usage --names 'TUsedInDecl' --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe query type-usage --names 'TUsedInDecl' --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'missing --in exits 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
 
 # --names-file is the practical form once the list is an RTL surface.
 $nf = Join-Path $WorkDir 'names.txt'
 Write-Ascii $nf "# comment lines and blanks are skipped`r`n`r`nTUsedInDecl`r`nTNeverUsed`r`n"
-$jf = & $Exe query type-usage --in $probe --names-file $nf --db $db --json 2>$null | Out-String
+$jf = & { $ErrorActionPreference = 'Continue'; & $Exe query type-usage --in $probe --names-file $nf --db $db --json 2>$null } | Out-String
 $rf = $null; try { $rf = $jf | ConvertFrom-Json } catch {}
 Check '--names-file is read (and # / blank lines skipped)' `
   (($null -ne $rf) -and ($rf.Count -eq 2) -and (($rf | Where-Object { $_.name -eq 'TUsedInDecl' }).referenced -eq $true)) `

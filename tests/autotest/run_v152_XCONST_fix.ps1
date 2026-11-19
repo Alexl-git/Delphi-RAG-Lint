@@ -90,7 +90,7 @@ function New-Case([string]$Tag) {
   Copy-Item $Fx $d -Recurse
   [IO.File]::WriteAllText((Join-Path $d 'GfUnit.pas'), $UnitText, [Text.Encoding]::ASCII)
   $db = Join-Path $d 'p.sqlite'
-  & $Exe index --project (Join-Path $d 'GfDemo.dproj') --db $db --library-db none *> (Join-Path $Tmp "$Tag.index.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $d 'GfDemo.dproj') --db $db --library-db none *> (Join-Path $Tmp "$Tag.index.log") }
   if ($LASTEXITCODE -ne 0) { throw "index $Tag exit $LASTEXITCODE" }
   return @{ Dir = $d; Db = $db; Proj = (Join-Path $d 'GfDemo.dproj'); Unit = (Join-Path $d 'GfUnit.pas') }
 }
@@ -101,7 +101,7 @@ function LineNo([string]$Marker) {
 }
 function Fix($C, [string]$Rule, [int]$Line, [string[]]$Extra) {
   $a = @('lint', '--in', $C.Unit, '--db', $C.Db, '--enable', $Rule, '--fix', '--fix-rule', $Rule, '--fix-line', "$Line", '--no-backup', '--rsvars', $Rsvars) + $Extra
-  $out = & $Exe @a 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } } | Out-String
   return @{ Code = $LASTEXITCODE; Out = $out }
 }
 function Hash($p) { return (Get-FileHash $p -Algorithm SHA1).Hash }
@@ -178,12 +178,12 @@ try {
 
   # f: manual only -- a batch --fix (no --fix-rule) leaves the file alone and says why
   $F = New-Case 'f'; $hf = Hash $F.Unit
-  $r = & $Exe lint --in $F.Unit --db $F.Db --enable magic-literal --fix --apply --no-backup --no-compile-gate 2>&1 | Out-String
+  $r = & { $ErrorActionPreference = 'Continue'; & $Exe lint --in $F.Unit --db $F.Db --enable magic-literal --fix --apply --no-backup --no-compile-gate 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'f1 batch withholds the manual fix' ($r -match 'manual only fix.*magic-literal') $r
   Check 'f2 batch wrote no constant' ((CountOf $F.Unit 'cCount5000') -eq 0)
 
   # g: catalog
-  $j = (& $Exe rules --json 2>$null | Out-String | ConvertFrom-Json).rules
+  $j = (& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null } | Out-String | ConvertFrom-Json).rules
   $xc = $j | Where-Object { $_.id -eq 'extract-constant' }
   Check 'g1 extract-constant declared' ($null -ne $xc)
   Check 'g2 extract-constant OFF by default' (($null -ne $xc) -and (-not $xc.default_enabled))

@@ -17,7 +17,7 @@ if (-not $Log) { $Log = Join-Path $root 'stats\draglint-usage.log' }
 # stats\ is untracked: a lane worktree has no live log. Fall back (READ-ONLY: the report only
 # reads it) to the main checkout's log, found through git's common dir, not a hard-coded path.
 if (-not $explicitLog -and -not (Test-Path $Log)) {
-  $common = (& git -C $root rev-parse --path-format=absolute --git-common-dir 2>$null)
+  $common = (& { $ErrorActionPreference = 'Continue'; & git -C $root rev-parse --path-format=absolute --git-common-dir 2>$null })
   if ($LASTEXITCODE -eq 0 -and $common) {
     $mainLog = Join-Path (Split-Path -Parent $common) 'stats\draglint-usage.log'
     if (Test-Path $mainLog) { Write-Host "note: worktree has no stats log; reading the main checkout's $mainLog"; $Log = $mainLog }
@@ -54,9 +54,9 @@ $out = Join-Path $tmp 'out.log'
 & node $append --log $out --what "a`tb`nc" --units 2 --avoided 500 --tool grep --used 40
 $lines = @([IO.File]::ReadAllLines($out))
 Check ($lines.Count -eq 1 -and $lines[0].Split("`t").Count -eq 7 -and $lines[0].EndsWith('cons-v1')) 'append: good row = 7 fields, one line, tabs/newlines sanitised'
-$null = & node $append --log $out --what w --units 2 --avoided 500 --tool 4000 --used 40 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & node $append --log $out --what w --units 2 --avoided 500 --tool 4000 --used 40 2>&1 | ForEach-Object { "$_" } }
 Check ($LASTEXITCODE -eq 2) 'append: numeric tool refused (exit 2)'
-$null = & node $append --log $out --what w --units '~2' --avoided 500 --tool grep --used 40 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & node $append --log $out --what w --units '~2' --avoided 500 --tool grep --used 40 2>&1 | ForEach-Object { "$_" } }
 Check ($LASTEXITCODE -eq 2) 'append: ~N number refused (exit 2)'
 Check (@([IO.File]::ReadAllLines($out)).Count -eq 1) 'append: refused calls wrote nothing'
 

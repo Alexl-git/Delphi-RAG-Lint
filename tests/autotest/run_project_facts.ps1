@@ -139,7 +139,7 @@ end.
 '@
 
 function Facts([string]$Dproj, [string]$Plat, [string]$Cfg, [string[]]$Extra = @()) {
-  $o = & $exePath project-facts --dproj $Dproj --platform $Plat --config $Cfg @Extra 2>$null
+  $o = & { $ErrorActionPreference = 'Continue'; & $exePath project-facts --dproj $Dproj --platform $Plat --config $Cfg @Extra 2>$null }
   return [pscustomobject]@{ Exit = $LASTEXITCODE; Text = ($o -join "`n") }
 }
 function DefineLine([string]$Text, [string]$Name) {
@@ -186,7 +186,7 @@ Check 'T6 --json imports have kinds' (@($j.imports | Where-Object { $_.kind -eq 
 
 # ---- T7 --db referenced by ---------------------------------------------------
 $db = Join-Path $WorkDir 'App.sqlite'
-& $exePath index --project $dpr --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index --project $dpr --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $r4 = Facts $app 'win64' 'Release' @('--db', $db)
 Check 'T7 --db lists uLog.pas as referencing ExceptionLog7' ($r4.Text -match 'uLog\.pas\s+\(ExceptionLog7\)') $r4.Text
 Check 'T7b and not uPlain.pas' ($r4.Text -notmatch 'uPlain\.pas') ''

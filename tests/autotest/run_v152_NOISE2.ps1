@@ -34,7 +34,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 
 Push-Location ([IO.Path]::GetTempPath())
-try { $Out = & $Exe lint $Fixture --rules-dir $Rules --json 2>$null } finally { Pop-Location }
+try { $Out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $Fixture --rules-dir $Rules --json 2>$null } } finally { Pop-Location }
 $Txt = ($Out -join "`n")
 $All = if ($Txt.Trim() -eq '') { @() } else { @($Txt | ConvertFrom-Json) }
 # lint --json is a bare array; the line field is start_line (never .line)

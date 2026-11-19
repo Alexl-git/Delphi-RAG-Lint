@@ -41,7 +41,7 @@ function Assert($name, $cond) {
   if ($cond) { Write-Host "PASS  $name" } else { Write-Host "FAIL  $name" -ForegroundColor Red; $script:fail++ }
 }
 
-$json = & $exePath rules --json --rules-dir $rulesDir 2>$null | ConvertFrom-Json
+$json = & { $ErrorActionPreference = 'Continue'; & $exePath rules --json --rules-dir $rulesDir 2>$null } | ConvertFrom-Json
 Assert 'rules --json has a rules array' ($null -ne $json.rules)
 
 $md = $json.rules | Where-Object { $_.id -eq 'missing-doc' } | Select-Object -First 1

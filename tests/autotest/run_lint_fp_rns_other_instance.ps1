@@ -95,7 +95,7 @@ end.
 $unit = Join-Path $WorkDir 'fprnsother.pas'
 [System.IO.File]::WriteAllText($unit, $src, [System.Text.Encoding]::ASCII)
 
-$out = (& $Exe lint $unit --rule referenced-never-set 2>$null | Out-String)
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $unit --rule referenced-never-set 2>$null } | Out-String)
 
 Write-Host 'False positives that must be GONE' -ForegroundColor Cyan
 Check 'TNode.FParent written via a parameter of the same class is not reported' `

@@ -121,14 +121,14 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'via.sqlite'
-& $Exe index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' (Test-Path $db)
 
 $IMPL  = 'uViaWork.TWorker.DoWork'
 $IFACE = 'uViaWork.IWorker.DoWork'
 $DIRECT = 'uViaWork.TWorker.Direct'
 
-$jraw = (& $Exe query find-callers --name DoWork --resolved --json --db $db 2>$null) -join "`n"
+$jraw = (& { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name DoWork --resolved --json --db $db 2>$null }) -join "`n"
 $fc = @($jraw.Substring($jraw.IndexOf('[')) | ConvertFrom-Json)
 $fcImpl = @($fc | Where-Object { $_.target_qname -eq $IMPL })
 $N = $fcImpl.Count

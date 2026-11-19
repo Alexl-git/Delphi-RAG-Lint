@@ -77,7 +77,7 @@ function New-Fixture([string]$Name, [string]$IncBody) {
   Write-Ascii (Join-Path $src 'body.inc')  $IncBody
   $db = Join-Path $dir 'idx.sqlite'
   Push-Location $dir
-  try { & $Exe index $src --db $db 2>&1 | Out-Null } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null } finally { Pop-Location }
   Check "$Name index exits 0" ($LASTEXITCODE -eq 0)
   [pscustomobject]@{ Dir = $dir; Db = $db }
 }

@@ -39,7 +39,7 @@ function Parse-Findings([string[]]$Raw) {
 }
 function Findings([string[]]$Dbs, [string[]]$Extra = @('--rule', $Rule)) {
   $args2 = @(); foreach ($d in $Dbs) { $args2 += @('--db', $d) }
-  return @((Parse-Findings (& $exePath lint-all @args2 --format json @Extra 2>$null)) | Where-Object { $_.rule -eq $Rule })
+  return @((Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all @args2 --format json @Extra 2>$null })) | Where-Object { $_.rule -eq $Rule })
 }
 function Pos($F) { return '{0}:{1}' -f [IO.Path]::GetFileName($F.file_path), [int]$F.start_line }
 function MarkerLines([string]$Dir, [string]$Prefix) {
@@ -56,9 +56,9 @@ try {
   $db  = Join-Path $scratch 'tt.sqlite'
   $lib = Join-Path $scratch 'lib.sqlite'
   $own = Join-Path $scratch 'own.sqlite'
-  & $exePath index (Join-Path $scratch 'lib') --db $lib 2>&1 | Out-Null
-  & $exePath index $src --db $db 2>&1 | Out-Null
-  & $exePath index (Join-Path $scratch 'own') --db $own 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index (Join-Path $scratch 'lib') --db $lib 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index (Join-Path $scratch 'own') --db $own 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
   # positive-control: ui-access-in-thread-typed
   $found = @(Findings @($db, $lib))
@@ -90,15 +90,15 @@ try {
   Check 'a constructed thread class: a warning, no label' (($built.Count -eq 1) -and ($built[0].message -notmatch 'never constructed') -and ($built[0].severity -eq 'warning')) "$($built[0].severity): $($built[0].message)"
 
   # ON by default since 1.47 (owner ruling a9).
-  $plain = @((Parse-Findings (& $exePath lint-all --db $db --db $lib --format json 2>$null)) | Where-Object { $_.rule -eq $Rule })
+  $plain = @((Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --db $lib --format json 2>$null })) | Where-Object { $_.rule -eq $Rule })
   Check 'a plain lint-all: the rule ships ON' ($plain.Count -eq $want.Count) "$($plain.Count) of $($want.Count)"
-  $disabled = @((Parse-Findings (& $exePath lint-all --db $db --db $lib --format json --disable $Rule 2>$null)) | Where-Object { $_.rule -eq $Rule })
+  $disabled = @((Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --db $lib --format json --disable $Rule 2>$null })) | Where-Object { $_.rule -eq $Rule })
   Check '--disable switches it off' ($disabled.Count -eq 0) "$($disabled.Count) finding(s)"
   $enabled = @(Findings @($db, $lib) @('--enable', $Rule))
   Check '--enable switches it on' ($enabled.Count -eq $want.Count) "$($enabled.Count) of $($want.Count)"
 
   $oneFile = Join-Path $src 'uTtThreads.pas'
-  $one = @((Parse-Findings (& $exePath lint $oneFile --db $db --library-db $lib --format json --rule $Rule 2>$null)) | Where-Object { $_.rule -eq $Rule })
+  $one = @((Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $oneFile --db $db --library-db $lib --format json --rule $Rule 2>$null })) | Where-Object { $_.rule -eq $Rule })
   $wantOne = @($want | Where-Object { $_ -like 'uTtThreads*' })
   Check 'lint <file> --rule answers that file only' (@($one | ForEach-Object { Pos $_ } | Sort-Object) -join ',' -eq ($wantOne -join ',')) "$($one.Count) of $($wantOne.Count)"
 
@@ -107,7 +107,7 @@ try {
   $py = Join-Path $scratch 'drop.py'
   [IO.File]::WriteAllText($py, "import sqlite3, sys`nc = sqlite3.connect(sys.argv[1])`nc.execute('DROP TABLE ref_types')`nc.commit()`nc.close()`n")
   python $py $old
-  $tableGone = @(& $exePath sql --db $old --query "SELECT name FROM sqlite_master WHERE name = 'ref_types'" 2>&1) -join ' '
+  $tableGone = @(& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $old --query "SELECT name FROM sqlite_master WHERE name = 'ref_types'" 2>&1 | ForEach-Object { "$_" } }) -join ' '
   Check 'the control DB really has no ref_types' ($tableGone -match '\b0 row') $tableGone
   $oldHits = @(Findings @($old, $lib))
   Check 'no ref_types table (an index older than 1.44): the rule answers nothing' ($oldHits.Count -eq 0) "$($oldHits.Count) finding(s)"

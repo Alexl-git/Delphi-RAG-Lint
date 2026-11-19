@@ -50,17 +50,17 @@ $orig  = [IO.File]::ReadAllBytes($unit)
 # two index roots: the old platform alone, and today's platform + the application
 $oldHome = Join-Path $WorkDir 'oldplat'
 [IO.Directory]::Move((Join-Path $WorkDir 'old'), $oldHome)
-& $Exe index $oldHome --db $oldDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $oldHome --db $oldDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $project = Join-Path $WorkDir 'project'
 [void][IO.Directory]::CreateDirectory($project)
 [IO.Directory]::Move((Join-Path $WorkDir 'cur'), (Join-Path $project 'cur'))
 [IO.Directory]::Move((Join-Path $WorkDir 'app'), (Join-Path $project 'app'))
 $unit = Join-Path $project 'app\EnumUser.pas'
-& $Exe index $project --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $project --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V both fixture indexes were built' ((Test-Path $oldDb) -and (Test-Path $db))
 
 function Apply([string]$Rules, [string[]]$Extra = @()) {
-  $o = (& $Exe @(@('convert-apply', '--unit', $unit, '--rules', (Join-Path $WorkDir $Rules), '--db', $db) + $Extra) 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @(@('convert-apply', '--unit', $unit, '--rules', (Join-Path $WorkDir $Rules), '--db', $db) + $Extra) 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $code = $LASTEXITCODE
   $j = $null
   if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {} }
@@ -125,7 +125,7 @@ Check 'A6 ... the old-platform index was not written' (((Get-Item $oldDb).LastWr
 $r = Apply 'enum.rules' @('--old-platform-db', (Join-Path $WorkDir 'nosuch.sqlite'), '--apply', '--no-backup', '--no-reindex')
 Check 'R1 a missing old-platform index: exit 2, it says so' (($r.Code -eq 2) -and ($r.Out -match '--old-platform-db')) $r.Out
 Check 'R2 ... and nothing was written' ([IO.File]::ReadAllText($unit, [Text.Encoding]::ASCII).Contains('C:= pcrSQLWait;'))
-$info = (& $Exe info --json --db $db 2>&1) -join "`n"
+$info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 $ij = $null; try { $ij = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json } catch {}
 Check 'G1 info capability old_platform_enum_map' ($ij.capabilities.old_platform_enum_map -eq $true) $info.Substring(0,[Math]::Min(300,$info.Length))
 

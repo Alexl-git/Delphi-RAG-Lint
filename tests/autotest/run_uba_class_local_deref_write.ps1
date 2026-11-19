@@ -160,10 +160,10 @@ $ln = [ordered]@{
 Check 'all fixture statements located' (@($ln.Values) -notcontains -1) (($ln.Values) -join ',')
 
 $projDb = Join-Path $WorkDir 'proj.sqlite'
-& $Exe index $projSrc --db $projDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $projSrc --db $projDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'index built' (Test-Path $projDb)
 
-$json = (& $Exe lint-all --db $projDb --rule used-before-assignment --json 2>$null) -join "`n"
+$json = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $projDb --rule used-before-assignment --json 2>$null }) -join "`n"
 $arr  = @($json | ConvertFrom-Json)
 $uba  = @{}
 foreach ($f in $arr) {

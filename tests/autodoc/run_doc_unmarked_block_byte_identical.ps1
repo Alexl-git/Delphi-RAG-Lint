@@ -158,10 +158,10 @@ function Test-OrderedExactLines([string[]]$hay, [string[]]$needles) {
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db --quiet 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db --quiet 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
-  & $exePath document --unit $src --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $src --db $db --apply 2>$null } | Out-Null
   Check 'document --apply exits 0' ($LASTEXITCODE -eq 0)
   $md5First = Get-FileMd5 $src
   $text  = [IO.File]::ReadAllText($src)
@@ -198,8 +198,8 @@ try {
     (-not ($text -match '<param name="Count"><!--')) $text
 
   # --- idempotency ----------------------------------------------------------
-  & $exePath index $scratch --db $db --quiet 2>$null | Out-Null
-  & $exePath document --unit $src --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db --quiet 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $src --db $db --apply 2>$null } | Out-Null
   Check 'IDEMPOTENT: reindex + a second --apply is byte-identical' `
     ((Get-FileMd5 $src) -eq $md5First) ("first=$md5First second=" + (Get-FileMd5 $src))
 
@@ -208,7 +208,7 @@ try {
   # run ... leaves every other byte alone". With the author's lines carried
   # through verbatim, that inverse is now testable against the original file
   # rather than against a normalised copy of it.
-  & $exePath document --unit $src --db $db --strip --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $src --db $db --strip --apply 2>$null } | Out-Null
   Check 'document --strip --apply exits 0' ($LASTEXITCODE -eq 0)
   $stripped = [IO.File]::ReadAllLines($src)
   $origLines = $original -split "`r?`n"

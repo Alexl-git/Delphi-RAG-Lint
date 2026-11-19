@@ -141,7 +141,7 @@ function Invoke-Program([string]$Dproj) {
 }
 function Invoke-Index([string]$Dproj, [string]$Tag) {
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project $Dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $Dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
   return $db
 }
 function Get-Plan([string]$Dproj, [string]$Tag) {

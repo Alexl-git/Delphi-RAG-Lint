@@ -76,7 +76,7 @@ try {
   # ============================================================
   # (a) DEFAULT: preprocess ON, Win64 built-in profile. Per-config narrowing.
   # ============================================================
-  $ppOut = & $exePath selftest closure --project $proj --platform win64 2>$null
+  $ppOut = & { $ErrorActionPreference = 'Continue'; & $exePath selftest closure --project $proj --platform win64 2>$null }
   Check 'DEFAULT: selftest closure exited 0 (preprocess wired into the closure)' ($LASTEXITCODE -eq 0)
 
   $ppWin   = Get-LeafCount $ppOut 'Win64Only.pas'
@@ -88,7 +88,7 @@ try {
   # ============================================================
   # (b) NO-PREPROC: --no-preprocess reverts to the OLD all-branch behaviour.
   # ============================================================
-  $rawOut = & $exePath selftest closure --project $proj --platform win64 --no-preprocess 2>$null
+  $rawOut = & { $ErrorActionPreference = 'Continue'; & $exePath selftest closure --project $proj --platform win64 --no-preprocess 2>$null }
   Check 'NO-PREPROC: selftest closure exited 0' ($LASTEXITCODE -eq 0)
 
   $rawWin   = Get-LeafCount $rawOut 'Win64Only.pas'

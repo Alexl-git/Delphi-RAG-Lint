@@ -71,8 +71,8 @@ $unit = @(
 [IO.File]::WriteAllText((Join-Path $src 'ImplDoc.pas'), $unit + "`r`n", [Text.Encoding]::ASCII)
 
 $db = Join-Path $WorkDir 'impl.sqlite'
-& $Exe index $src --db $db *> $null
-$out = (& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --enable missing-doc 2>&1 | Out-String)
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db *> $null }
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --enable missing-doc 2>&1 | ForEach-Object { "$_" } } | Out-String)
 $md = ($out -split "`r?`n") | Where-Object { $_ -match 'missing-doc' -and $_ -match "Public declaration" }
 $joined = $md -join "`n"
 Check 'positive control: interface routine PubNoDocFn reported' ($joined -match "'PubNoDocFn'")

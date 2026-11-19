@@ -53,7 +53,7 @@ try {
   Write-Ascii (Join-Path $eng 'drag-lint.json') $manifest
 
   function Q([string]$Db,[string]$Query) {
-    $raw = (& $exe sql --db $Db --json --limit 5000 --query $Query 2>$null) -join "`n"
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $exe sql --db $Db --json --limit 5000 --query $Query 2>$null }) -join "`n"
     $b = $raw.IndexOf('{'); if ($b -lt 0) { return ,@() }
     $j = $raw.Substring($b) | ConvertFrom-Json
     return ,@($j.rows)
@@ -62,28 +62,28 @@ try {
   Push-Location C:\TEMP
   try {
     $libDb = Join-Path $out 'library-Win64.sqlite'
-    & $exe index $lib --db $libDb --platform Win64 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exe index $lib --db $libDb --platform Win64 2>&1 | ForEach-Object { "$_" } } | Out-Null
     Check 'library index built at the manifest library path' ((Test-Path $libDb) -and ($LASTEXITCODE -eq 0))
 
     # 1. default OFF
-    $txt = (& $exe index --all --only AppOff 2>&1 | Out-String)
+    $txt = (& { $ErrorActionPreference = 'Continue'; & $exe index --all --only AppOff 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'AppOff: section indexed' (Test-Path (Join-Path $out 'appoff.sqlite')) $txt
     Check 'OFF: no library opened' ($txt -notmatch '\+ library-db')
     Check 'OFF: external_target NULL on every row' ((Q (Join-Path $out 'appoff.sqlite') $extCount)[0][0] -eq 0)
 
     # 2. ON via index --all
-    $txt = (& $exe index --all --only AppOn 2>&1 | Out-String)
+    $txt = (& { $ErrorActionPreference = 'Continue'; & $exe index --all --only AppOn 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'AppOn: section indexed' (Test-Path (Join-Path $out 'appon.sqlite')) $txt
     Check 'ON (--all): the platform library is opened' ($txt -match '\+ library-db .*library-Win64\.sqlite') $txt
     Check 'ON (--all): sites bind (external_target filled)' ((Q (Join-Path $out 'appon.sqlite') $extCount)[0][0] -gt 0)
 
     # 3. ON via index --project
-    $txt = (& $exe index --project (Join-Path $app 'App.dpr') 2>&1 | Out-String)
+    $txt = (& { $ErrorActionPreference = 'Continue'; & $exe index --project (Join-Path $app 'App.dpr') 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'ON (--project): the platform library is opened' ($txt -match '\+ library-db .*library-Win64\.sqlite') $txt
     Check 'ON (--project): sites bind (external_target filled)' ((Q (Join-Path $out 'projon.sqlite') $extCount)[0][0] -gt 0)
 
     # 4. an explicit --library-db wins: opened exactly once
-    $txt = (& $exe index --project (Join-Path $app 'App.dpr') --library-db $libDb --resolve-only 2>&1 | Out-String)
+    $txt = (& { $ErrorActionPreference = 'Continue'; & $exe index --project (Join-Path $app 'App.dpr') --library-db $libDb --resolve-only 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'explicit --library-db: opened once, not twice' (([regex]::Matches($txt,'\+ library-db')).Count -eq 1) $txt
   } finally { Pop-Location }
 } finally {

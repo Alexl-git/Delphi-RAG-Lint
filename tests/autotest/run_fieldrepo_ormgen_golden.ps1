@@ -57,7 +57,7 @@ if (-not $SkipBuild) {
 }
 if (-not (Test-Path -LiteralPath $bin)) { Write-Host "ORMGEN: FAIL -- test exe not found: $bin" -ForegroundColor Red; exit 1 }
 $log = Join-Path $Work 'unit.log'
-& $bin *> $log
+& { $ErrorActionPreference = 'Continue'; & $bin *> $log }
 $code = $LASTEXITCODE
 $sum = Select-String -LiteralPath $log -Pattern '^SUMMARY ' | Select-Object -Last 1
 Select-String -LiteralPath $log -Pattern '^FAIL' | ForEach-Object { Write-Host "  $($_.Line)" -ForegroundColor Red }
@@ -76,7 +76,7 @@ if ($RepoFile -eq '' -and [string]::IsNullOrWhiteSpace($Connection)) {
 } else {
   if ($RepoFile -eq '') {
     $RepoFile = Join-Path $Work 'dev-import.dlrepo'
-    $imp = & $bin --import $Connection $RepoFile 2>&1
+    $imp = & { $ErrorActionPreference = 'Continue'; & $bin --import $Connection $RepoFile 2>&1 | ForEach-Object { "$_" } }
     if ($LASTEXITCODE -ne 0) { Write-Host "ORMGEN GOLDEN: FAIL -- import failed: $imp" -ForegroundColor Red; exit 1 }
     Write-Host "  $($imp | Select-Object -Last 1)"
   }

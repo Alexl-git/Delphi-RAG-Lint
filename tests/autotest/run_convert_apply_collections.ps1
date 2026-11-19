@@ -239,11 +239,11 @@ Write-Ascii (P 'idx.rules') @'
 '@
 
 $db = P 'fx.sqlite'
-$idx = & $Exe index $WorkDir --db $db 2>&1
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'V the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db)) "exit=$LASTEXITCODE; $($idx -join ' | ')"
 
 function ApplyTo([string]$Unit, [string]$Rules, [string[]]$Extra = @()) {
-  $o = (& $Exe convert-apply --unit (P $Unit) --rules (P $Rules) --db $db @Extra 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P $Unit) --rules (P $Rules) --db $db @Extra 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 function Json([string]$s) {

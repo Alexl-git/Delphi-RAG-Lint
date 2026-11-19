@@ -78,17 +78,17 @@ $hiddenDecl = 10
 $callSite   = 21
 
 $db = Join-Path $WorkDir 'where.sqlite'
-& $Exe index $src --db $db --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'precondition: index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 $esc = [regex]::Escape($unit)
 
 Write-Host 'query --name (text)' -ForegroundColor Cyan
-$q = @(& $Exe query --name Target --db $db --exact 2>$null)
+$q = @(& { $ErrorActionPreference = 'Continue'; & $Exe query --name Target --db $db --exact 2>$null })
 $row = @($q | Where-Object { $_ -match 'uWhere\.Target' })
 Check 'the row is present' ($row.Count -eq 1) "rows: $($q -join ' | ')"
 Check 'ASSERT: the row names (full path:declaration line)' `
   (($row.Count -eq 1) -and ($row[0] -match ('\(' + $esc + ':' + $targetDecl + '\)'))) "got: $row"
-$qi = @(& $Exe query --name Hidden --db $db --exact 2>$null) | Where-Object { $_ -match 'uWhere\.Hidden' }
+$qi = @(& { $ErrorActionPreference = 'Continue'; & $Exe query --name Hidden --db $db --exact 2>$null }) | Where-Object { $_ -match 'uWhere\.Hidden' }
 Check 'CONTROL: the location sits BEFORE the [impl-only] suffix, which stays at the end' `
   (($qi -match ('\(' + $esc + ':' + $hiddenDecl + '\)')) -and ($qi -match '\[impl-only\]\s*$')) "got: $qi"
 
@@ -98,7 +98,7 @@ Write-Host 'find-callers --resolved (Q-RESOLVED-PATH, owner ruling D1 2026-11-03
 # (2026-10-30), ACCEPTED by owner ruling D1 (2026-11-03): `path` is the full path and sits BEFORE
 # `resolution`, which stays the LAST key (XERJ item 3, run_query_callers_shared_guard.ps1);
 # `file` stays the bare name the diffs key on; the text row names the full path.
-$j = (& $Exe query find-callers --name Target --resolved --json --db $db 2>$null) -join "`n"
+$j = (& { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name Target --resolved --json --db $db 2>$null }) -join "`n"
 $rows = @(ConvertFrom-Json -InputObject $j)
 Check 'one resolved caller' ($rows.Count -eq 1) "json: $j"
 if ($rows.Count -eq 1) {
@@ -108,13 +108,13 @@ if ($rows.Count -eq 1) {
   Check 'CONTROL: `resolution` is still the LAST key and `path` sits before it' `
     (($names[-1] -eq 'resolution') -and ($names.IndexOf('path') -ge 0) -and ($names.IndexOf('path') -lt $names.IndexOf('resolution'))) "keys=$($names -join ',')"
 }
-$t = (& $Exe query find-callers --name Target --resolved --db $db 2>$null) -join "`n"
+$t = (& { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name Target --resolved --db $db 2>$null }) -join "`n"
 Check 'ASSERT: the text row prints (full path:site line)' ($t -match ('\(' + $esc + ':' + $callSite + '\)')) "got: $t"
 Write-Host ''
 Write-Host 'MCP find_symbol' -ForegroundColor Cyan
 $req = Join-Path $WorkDir 'mcp.json'
 Write-Ascii $req ('{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"find_symbol","arguments":{"name":"Target"}}}' + "`n")
-$mcp = (Get-Content -Raw $req | & $Exe serve --db $db 2>$null) -join "`n"
+$mcp = (Get-Content -Raw $req | & { $ErrorActionPreference = 'Continue'; & $Exe serve --db $db 2>$null }) -join "`n"
 $text = ''
 try { $text = ((ConvertFrom-Json -InputObject (@($mcp -split "`n" | Where-Object { $_ -match '"id":1' })[0])).result.content[0].text) } catch {}
 Check 'find_symbol answered' ($text -match 'uWhere\.Target') "raw: $mcp"

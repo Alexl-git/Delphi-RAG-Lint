@@ -40,9 +40,9 @@ Copy-Item $fixture $target -Force
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
-  $ap = & $exePath document --qname doc_stale_param.Handle --db $db --apply 2>$null | Out-String
+  $ap = & { $ErrorActionPreference = 'Continue'; & $exePath document --qname doc_stale_param.Handle --db $db --apply 2>$null } | Out-String
   Check 'apply: reports extended' ($ap -match 'doc: extended -- \d+ edit\(s\) applied')
 
   $txt = [IO.File]::ReadAllText($target)

@@ -39,7 +39,7 @@ $env:DRAGLINT_PROFILE = '1'
 try {
   foreach ($i in 1..3) {
     $sw = [Diagnostics.Stopwatch]::StartNew()
-    $out = & $Exe lint $fixture --json --rules-dir $rulesDir 2>&1 | ForEach-Object { "$_" }
+    $out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture --json --rules-dir $rulesDir 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }
     $total = [Math]::Min($total, $sw.Elapsed.TotalSeconds)
     $l = $out | Where-Object { $_ -match '^\[rule-load\] (\d+) rules compiled: wall ([\d.]+) s, cpu-sum ([\d.]+) s' } | Select-Object -First 1
     if ($l -and ($l -match '^\[rule-load\] (\d+) rules compiled: wall ([\d.]+) s, cpu-sum ([\d.]+) s')) {
@@ -66,7 +66,7 @@ $bad = Join-Path ([IO.Path]::GetTempPath()) ("dl-ruleload-" + [Guid]::NewGuid().
 Copy-Item (Join-Path $rulesDir 'bare-except.*') $bad
 Copy-Item (Join-Path $rulesDir 'bare-except.*') (Join-Path $bad 'sub')
 [IO.File]::WriteAllText((Join-Path $bad 'zz-broken.scm'), "((exprCall (nosuchnode)) @warn`r`n")
-$bo = (& $Exe lint $fixture --rules-dir $bad 2>&1 | ForEach-Object { "$_" }) -join "`n"
+$bo = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture --rules-dir $bad 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n"
 Check 'broken .scm reported as RULE-LOAD-FAIL' ($bo -match 'RULE-LOAD-FAIL .*zz-broken\.scm: tree-sitter query compile failed') ''
 Check 'duplicate .scm reported as RULE-DUPLICATE-ID' ($bo -match 'RULE-DUPLICATE-ID bare-except') ''
 Check 'no crash after a failed rule load' (($bo -notmatch 'FATAL') -and ($bo -match '\d+ finding\(s\)')) ''
@@ -85,7 +85,7 @@ $after = @()
 $env:DRAGLINT_PROFILE = '1'
 try {
   foreach ($fx in $sample) {
-    $o = & $Exe lint $fx.FullName --rules-dir $rulesDir 2>&1 | ForEach-Object { "$_" }
+    $o = & { $ErrorActionPreference = 'Continue'; & $Exe lint $fx.FullName --rules-dir $rulesDir 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }
     $m = $o | Where-Object { $_ -match '\[lint-phase\] after-checkers\s+([\d.]+) s' } | Select-Object -First 1
     if ($m -and ($m -match '\[lint-phase\] after-checkers\s+([\d.]+) s')) { $after += [double]$Matches[1] }
   }

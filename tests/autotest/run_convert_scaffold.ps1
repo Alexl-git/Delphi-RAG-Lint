@@ -101,7 +101,7 @@ Write-Ascii (Join-Path $work 'ConvFix.pas') $FixBody
 
 $db = Join-Path $WorkDir 'convfix.sqlite'
 Write-Host 'Indexing ConvFix fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 $indexExit = $LASTEXITCODE
 Check 'index exits 0' ($indexExit -eq 0) "exit=$indexExit; $($indexOut -join ' | ')"
 
@@ -136,7 +136,7 @@ Check 'DROPPED note for Gone' ($scafRaw -match '#note\s+DROPPED\s+Gone') "raw=$s
 Write-Host ''
 Write-Host 'convert-scaffold --out (write file), then convert-validate round-trip' -ForegroundColor Cyan
 $emitted = Join-Path $WorkDir 'emitted-rules.txt'
-$outOut = & $Exe convert-scaffold --from 'ConvFix.TFrom' --to 'ConvFix.TTo' --out $emitted --db $db 2>&1
+$outOut = & { $ErrorActionPreference = 'Continue'; & $Exe convert-scaffold --from 'ConvFix.TFrom' --to 'ConvFix.TTo' --out $emitted --db $db 2>&1 | ForEach-Object { "$_" } }
 $outExit = $LASTEXITCODE
 Check 'scaffold --out exits 0' ($outExit -eq 0) "exit=$outExit; $($outOut -join ' | ')"
 Check 'emitted file exists' (Test-Path $emitted) "path=$emitted"
@@ -153,12 +153,12 @@ Check 'round-trip convert-validate exits 0' ($valExit -eq 0) "exit=$valExit; out
 # ---------------------------------------------------------------------------
 Write-Host ''
 Write-Host 'convert-scaffold (no --from/--to)' -ForegroundColor Cyan
-$noArgsOut = ((& $Exe convert-scaffold 2>&1) -join "`n")
+$noArgsOut = ((& { $ErrorActionPreference = 'Continue'; & $Exe convert-scaffold 2>&1 | ForEach-Object { "$_" } }) -join "`n")
 $noArgsExit = $LASTEXITCODE
 Check 'missing --from/--to exit 2' ($noArgsExit -eq 2) "exit=$noArgsExit"
 
 Write-Host 'convert-scaffold --from <bogus> --to ConvFix.TTo' -ForegroundColor Cyan
-$badFromOut = ((& $Exe convert-scaffold --from 'ConvFix.TNope' --to 'ConvFix.TTo' --db $db 2>&1) -join "`n")
+$badFromOut = ((& { $ErrorActionPreference = 'Continue'; & $Exe convert-scaffold --from 'ConvFix.TNope' --to 'ConvFix.TTo' --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n")
 $badFromExit = $LASTEXITCODE
 Check 'unresolved --from exit 1' ($badFromExit -eq 1) "exit=$badFromExit"
 Check 'unresolved --from names the type' ($badFromOut -match 'ConvFix\.TNope') "out=$badFromOut"

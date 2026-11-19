@@ -162,9 +162,9 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'nested.sqlite'
-& $Exe index $WorkDir --db $db --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
-$out = & $Exe document --qname 'nested.Outer' --db $db 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $Exe document --qname 'nested.Outer' --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 $ret = ($out -split "`r?`n" | Where-Object { $_ -match '<returns>' }) -join ' '
 Write-Host "  rendered: $($ret.Trim())" -ForegroundColor DarkGray
 Write-Host ''

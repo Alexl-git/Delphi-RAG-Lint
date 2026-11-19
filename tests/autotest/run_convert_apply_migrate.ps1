@@ -60,12 +60,12 @@ $dfmOrig = @{}
 foreach ($u in 'MigForm', 'CtlForm', 'DlForm', 'WithForm') { $dfmOrig[$u] = [IO.File]::ReadAllBytes((P "$u.dfm")) }
 
 $db = P 'fx.sqlite'
-function Reindex { & $Exe index $WorkDir --db $db 2>&1 | Out-Null }
+function Reindex { & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null }
 Reindex
 Check 'V the fixture index was built' (Test-Path $db)
 
 function Apply([string]$Unit, [string]$Rules, [string[]]$Extra = @()) {
-  $o = (& $Exe @(@('convert-apply', '--unit', (P $Unit), '--rules', (P $Rules), '--db', $db) + $Extra) 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @(@('convert-apply', '--unit', (P $Unit), '--rules', (P $Rules), '--db', $db) + $Extra) 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $j = $null
   if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {} }
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o; J = $j }
@@ -73,7 +73,7 @@ function Apply([string]$Unit, [string]$Rules, [string[]]$Extra = @()) {
 function Kinds($j, [string]$k) { if ($null -eq $j) { return @() }; return @($j.items | Where-Object { $_.kind -eq $k }) }
 
 # ---- capability ------------------------------------------------------------
-$info = $null; try { $info = ((& $Exe info --json 2>$null) -join "`n") | ConvertFrom-Json } catch {}
+$info = $null; try { $info = ((& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n") | ConvertFrom-Json } catch {}
 Check 'K1 info --json capabilities.migrate_members is the JSON literal true' (($null -ne $info) -and ($info.capabilities.migrate_members -is [bool]) -and $info.capabilities.migrate_members)
 
 # ---- rename: dry run JSON -----------------------------------------------------

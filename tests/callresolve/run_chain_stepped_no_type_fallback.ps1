@@ -85,7 +85,7 @@ end.
 
 $db = Join-Path $WorkDir 'k7.sqlite'
 Push-Location C:\TEMP
-& $exePath index --project (Join-Path $WorkDir 'K7.dpr') --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index --project (Join-Path $WorkDir 'K7.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V index built' (Test-Path $db) $db
 $raw = & $exePath sql --db $db --json --limit 200 --query "SELECT r.receiver_text, r.name_text, coalesce(e.confidence,''), coalesce(s.qualified_name,'') FROM refs r LEFT JOIN call_edges e ON e.ref_id = r.id LEFT JOIN symbols s ON s.id = e.target_symbol_id WHERE r.kind = 'call' AND r.name_text = 'Run'" | Out-String
 Pop-Location

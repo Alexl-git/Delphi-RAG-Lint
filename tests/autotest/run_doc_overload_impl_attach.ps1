@@ -120,7 +120,7 @@ $db   = Join-Path $dir 'fx.sqlite'
 Write-Fixture $file
 
 Write-Host 'Indexing fixture (FRESH db, current exe)' -ForegroundColor Cyan
-$indexOut = & $Exe index $dir --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db $db 2>&1 | ForEach-Object { "$_" } }
 $indexExit = $LASTEXITCODE
 Check 'index exits 0' ($indexExit -eq 0) "exit=$indexExit; $($indexOut | Select-Object -Last 1)"
 
@@ -173,7 +173,7 @@ if ($got.ContainsKey($byStrSig)) {
 # --- 2. Secondary (end-to-end): document --unit mines the RIGHT expression per overload. ---
 Write-Host ''
 Write-Host 'document --unit --apply: mined <returns> attaches to the right overload' -ForegroundColor Cyan
-& $Exe document --unit $file --db $db --apply --no-backup 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe document --unit $file --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $docExit = $LASTEXITCODE
 Check 'document --unit exit 0' ($docExit -eq 0) "ec=$docExit"
 

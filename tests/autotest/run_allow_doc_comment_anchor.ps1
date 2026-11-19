@@ -60,7 +60,7 @@ $lines = @(
 [IO.File]::WriteAllText($src, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 
 function LintAll {
-  $o = (& $Exe lint-all --db $db --json --library-db none 2>$null | Out-String)
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --json --library-db none 2>$null } | Out-String)
   $r = @(); try { $r = @($o | ConvertFrom-Json) } catch { $r = @() }
   return @{ Out = $o; Rows = $r }
 }
@@ -68,12 +68,12 @@ function DriftAt($rows, [int]$line) { @($rows | Where-Object { $_.rule -eq 'doc-
 
 Push-Location $WorkDir
 try {
-  & $Exe index $WorkDir --db $db --library-db none 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $before = LintAll
   Check 'SANITY: lint-all reports doc-drift on Wrong at its /// line 11' ((DriftAt $before.Rows 11).Count -ge 1) $before.Out
   Check 'SANITY: lint-all reports doc-drift on Wrong2 at its /// line 15' ((DriftAt $before.Rows 15).Count -ge 1) $before.Out
 
-  $al = & $Exe allow $src --fix-line 11 --fix-rule doc-drift --apply --db $db --library-db none 2>&1 | Out-String
+  $al = & { $ErrorActionPreference = 'Continue'; & $Exe allow $src --fix-line 11 --fix-rule doc-drift --apply --db $db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'A: allow on the /// line exits 0' ($LASTEXITCODE -eq 0) $al
   $after = [IO.File]::ReadAllLines($src)
   Check 'B: doc-comment line 11 byte-identical' ($after[10] -ceq $lines[10]) $after[10]
@@ -86,13 +86,13 @@ try {
   Check 'C: lint-all: the marker is neither unused nor stale' (@($r.Rows | Where-Object { $_.rule -like 'review-marker-*' }).Count -eq 0) $r.Out
   Check 'D: POSITIVE CONTROL Wrong2 still reports doc-drift at line 15' ((DriftAt $r.Rows 15).Count -ge 1) $r.Out
 
-  $lo = (& $Exe lint $src --db $db --project-rules --format json --library-db none 2>$null | Out-String)
+  $lo = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $src --db $db --project-rules --format json --library-db none 2>$null } | Out-String)
   $lr = @(); try { $lr = @($lo | ConvertFrom-Json) } catch { $lr = @() }
   Check 'E: lint <file> --project-rules: no doc-drift on Wrong' ((DriftAt $lr 11).Count -eq 0) $lo
   Check 'E: lint <file> --project-rules: Wrong2 still reports' ((DriftAt $lr 15).Count -ge 1) $lo
 
   $snap = [IO.File]::ReadAllText($src)
-  $bl = & $Exe allow $src --fix-line 14 --fix-rule doc-drift --apply --db $db --library-db none 2>&1 | Out-String
+  $bl = & { $ErrorActionPreference = 'Continue'; & $Exe allow $src --fix-line 14 --fix-rule doc-drift --apply --db $db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'F: CONTROL a blank line is still refused (exit 1)' ($LASTEXITCODE -eq 1) $bl
   Check 'F: ... and the file is untouched' ([IO.File]::ReadAllText($src) -ceq $snap) ''
 } finally {

@@ -166,7 +166,7 @@ foreach ($k in $units.Keys) {
 }
 
 function Usages($name) {
-  $raw = (& $exePath usages --name $name --db $db --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath usages --name $name --db $db --json 2>$null }) -join "`n"
   try { return $raw | ConvertFrom-Json } catch { return $null }
 }
 function Lines($arr, $file) {
@@ -175,13 +175,13 @@ function Lines($arr, $file) {
 
 Push-Location $env:TEMP
 try {
-  & $exePath index $work --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $work --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
   # sql --json rows are POSITIONAL arrays: [0]=file, [1]=name, [2]=kind, [3]=line, [4]=receiver, [5]=symbol kind.
   $q = "select f.path, r.name_text, r.kind, r.start_line, coalesce(r.receiver_text, ''), coalesce(s.kind, '') " +
        "from refs r join files f on f.id = r.file_id left join symbols s on s.id = r.symbol_id"
-  $j = (& $exePath sql --db $db --query $q --json 2>$null) -join "`n" | ConvertFrom-Json
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n" | ConvertFrom-Json
   $rows = @(foreach ($row in $j.rows) {
     [pscustomobject]@{ File = [IO.Path]::GetFileNameWithoutExtension([string]$row[0]); Name = [string]$row[1]
                        Kind = [string]$row[2]; Line = [int]$row[3]; Rcv = [string]$row[4]; SymKind = [string]$row[5] } })
@@ -219,7 +219,7 @@ try {
   Write-Host 'uses-audit (the symptom both gap lines recorded):' -ForegroundColor Cyan
   $au = @{}
   foreach ($k in 'uPrMove', 'uPrConst', 'uPrRefFn') {
-    $au[$k] = (& $exePath uses-audit (Join-Path $work "$k.pas") --db $db 2>$null | Out-String)
+    $au[$k] = (& { $ErrorActionPreference = 'Continue'; & $exePath uses-audit (Join-Path $work "$k.pas") --db $db 2>$null } | Out-String)
   }
   Check 'CONTROL: uPrMove (uPrA used only in implementation) IS a MOVE candidate' ($au['uPrMove'] -match 'uPrA\s+--.*MOVE') ($au['uPrMove'].Trim() -replace "`r?`n", ' | ')
   Check 'uPrConst (VERSION = PR_VERSION) is NOT a MOVE candidate' ($au['uPrConst'] -notmatch 'uPrA\s+--.*MOVE') ($au['uPrConst'].Trim() -replace "`r?`n", ' | ')

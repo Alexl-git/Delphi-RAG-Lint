@@ -63,10 +63,10 @@ function NoopHasDoc($file) {
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # --- facts-only default: project-wide scope documents both units ---
-  & $exePath document --project $dpr --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --project $dpr --db $db --apply 2>$null } | Out-Null
   Check 'project apply: exit 0' ($LASTEXITCODE -eq 0)
 
   $srcA = [IO.File]::ReadAllText($uA)
@@ -83,8 +83,8 @@ try {
 
   # --- idempotency: a second --project --apply leaves every file byte-identical ---
   $beforeA = [IO.File]::ReadAllBytes($uA); $beforeB = [IO.File]::ReadAllBytes($uB)
-  & $exePath index $scratch --db $db 2>$null | Out-Null
-  & $exePath document --project $dpr --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --project $dpr --db $db --apply 2>$null } | Out-Null
   $afterA = [IO.File]::ReadAllBytes($uA); $afterB = [IO.File]::ReadAllBytes($uB)
   Check 'idempotent: unitA byte-identical on 2nd run' ([System.Linq.Enumerable]::SequenceEqual([byte[]]$beforeA,[byte[]]$afterA))
   Check 'idempotent: unitB byte-identical on 2nd run' ([System.Linq.Enumerable]::SequenceEqual([byte[]]$beforeB,[byte[]]$afterB))
@@ -97,8 +97,8 @@ try {
   $dprS = Join-Path $sStub 'main.dpr'
   $uAS  = Join-Path $sStub 'unitA.pas'
   $dbS  = Join-Path $sStub 'docproj.sqlite'
-  & $exePath index $sStub --db $dbS 2>$null | Out-Null
-  & $exePath document --project $dprS --db $dbS --stubs --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $sStub --db $dbS 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --project $dprS --db $dbS --stubs --apply 2>$null } | Out-Null
   Check 'stubs project apply: exit 0' ($LASTEXITCODE -eq 0)
   $srcAS = [IO.File]::ReadAllText($uAS)
   # v(ADP3 T3): Noop has NOTHING to say (no params, no return, no facts, no
@@ -119,8 +119,8 @@ try {
   $uAA = Join-Path $sAll 'unitA.pas'
   $uBA = Join-Path $sAll 'unitB.pas'
   $dbA = Join-Path $sAll 'docproj.sqlite'
-  & $exePath index $sAll --db $dbA 2>$null | Out-Null
-  & $exePath document-all --db $dbA --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $sAll --db $dbA 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document-all --db $dbA --apply 2>$null } | Out-Null
   Check 'document-all: exit 0' ($LASTEXITCODE -eq 0)
   Check 'document-all: unitA documented' ([IO.File]::ReadAllText($uAA) -match '<!-- drag-lint:auto BEGIN -->')
   Check 'document-all: unitB documented' ([IO.File]::ReadAllText($uBA) -match '<!-- drag-lint:auto BEGIN -->')
@@ -132,8 +132,8 @@ try {
   Copy-Item (Join-Path $fixDir '*') $sJson -Force
   $dprJ = Join-Path $sJson 'main.dpr'
   $dbJ  = Join-Path $sJson 'docproj.sqlite'
-  & $exePath index $sJson --db $dbJ 2>$null | Out-Null
-  $rj = & $exePath document --project $dprJ --db $dbJ --json 2>$null | Out-String
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $sJson --db $dbJ 2>$null } | Out-Null
+  $rj = & { $ErrorActionPreference = 'Continue'; & $exePath document --project $dprJ --db $dbJ --json 2>$null } | Out-String
   $ecj = $LASTEXITCODE
   $oj = $null; try { $oj = ($rj | ConvertFrom-Json) } catch { $oj = $null }
   # Aggregated over unitA (Alpha, Beta, Noop) + unitB (TWidget, Compute) = 5 public

@@ -46,9 +46,9 @@ $db = Join-Path $scratch 'cap.sqlite'
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
-  $out = (& $exePath document --qname cap_target.Target --db $db 2>$null | Out-String) -replace '</?para>',''
+  $out = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname cap_target.Target --db $db 2>$null } | Out-String) -replace '</?para>',''
   # Grab the single "Called from:" line.
   $line = ($out -split "`r?`n" | Where-Object { $_ -match 'Called from:' } | Select-Object -First 1)
   Check 'preview: a "Called from:" line is present' ($null -ne $line -and $line -ne '')
@@ -64,7 +64,7 @@ try {
   Check 'cap: Caller06 NOT shown (past cap)' (-not ($line -match 'cap_callers\.Caller06\b'))
 
   # Also confirm the JSON dry-run classifies it as created (facts non-empty).
-  $j = & $exePath document --qname cap_target.Target --db $db --json 2>$null | Out-String
+  $j = & { $ErrorActionPreference = 'Continue'; & $exePath document --qname cap_target.Target --db $db --json 2>$null } | Out-String
   $o = $null; try { $o = ($j | ConvertFrom-Json) } catch { $o = $null }
   Check 'json: action = created' ($null -ne $o -and $o.action -eq 'created')
 } finally { Pop-Location }

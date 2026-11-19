@@ -13,7 +13,7 @@ $db  = Join-Path $env:TEMP "objleak_interproc_$PID.sqlite"
 if (Test-Path $db) { Remove-Item $db -Force }
 
 & $exePath index $dir --db $db | Out-Null
-$raw = & $exePath check-ast (Join-Path $dir "callers.pas") --db $db --format json 2>$null
+$raw = & { $ErrorActionPreference = 'Continue'; & $exePath check-ast (Join-Path $dir "callers.pas") --db $db --format json 2>$null }
 # the CLI prints a few preamble lines (FTS5 probe / loaded defaults) before the
 # JSON array -- slice from the first '[' so ConvertFrom-Json sees only JSON.
 $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')

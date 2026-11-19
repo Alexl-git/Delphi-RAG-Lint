@@ -22,7 +22,7 @@ function Assert-Fix($fixtureName, $L, $R, $expect, $tag) {
   Push-Location C:\TEMP
   try {
     $fixArgs = @('lint','--file',$target,'--fix','--fix-line',$L,'--fix-rule',$R,'--json','--apply')
-    $raw = & $exePath @fixArgs 2>$null | Out-String
+    $raw = & { $ErrorActionPreference = 'Continue'; & $exePath @fixArgs 2>$null } | Out-String
     $arr = $null; try { $arr = ($raw | ConvertFrom-Json) } catch { $arr = $null }
     if ($null -ne $arr -and $arr -isnot [System.Array]) { $arr = @($arr) }
     $t = $null; if ($null -ne $arr) { $t = $arr | Where-Object { $_.rule -eq $R } | Select-Object -First 1 }

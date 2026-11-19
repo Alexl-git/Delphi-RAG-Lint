@@ -259,7 +259,7 @@ $db    = Join-Path $WorkDir 'projscope.sqlite'
 Write-Host 'Resolved scan scope (index --project --dry-run)' -ForegroundColor Cyan
 # 2>&1 yields ErrorRecord objects for the stderr lines; ToString() them so the
 # path-line regex and .Trim() below see plain strings.
-$dry = @((& $Exe index --project $dproj --db $db --platform Win64 --dry-run --quiet 2>&1) |
+$dry = @((& { $ErrorActionPreference = 'Continue'; & $Exe index --project $dproj --db $db --platform Win64 --dry-run --quiet 2>&1 | ForEach-Object { "$_" } }) |
          ForEach-Object { $_.ToString() })
 $dryExit = $LASTEXITCODE
 Check 'index --project --dry-run exits 0' ($dryExit -eq 0) "exit=$dryExit"
@@ -294,7 +294,7 @@ if ($script:Failed) {
 # ---------------------------------------------------------------------------
 Write-Host ''
 Write-Host 'Real index' -ForegroundColor Cyan
-$idx = & $Exe index --project $dproj --db $db --platform Win64 --quiet 2>&1
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index --project $dproj --db $db --platform Win64 --quiet 2>&1 | ForEach-Object { "$_" } }
 $idxExit = $LASTEXITCODE
 Check 'index --project exits 0' ($idxExit -eq 0) "exit=$idxExit; $(($idx | Select-Object -Last 2) -join ' | ')"
 

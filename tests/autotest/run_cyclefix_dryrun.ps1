@@ -69,7 +69,7 @@ function Copy-Tree([string]$From, [string]$To) {
 }
 function Index-Copy([string]$Dir, [string]$Tag) {
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  $idx = & $Exe index --project (Join-Path $Dir 'CircularDemo.dproj') --db $db 2>&1 | Out-String
+  $idx = & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $Dir 'CircularDemo.dproj') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check "${Tag}: SANITY the 10 units indexed with 0 errors" `
     (([regex]::Matches($idx, 'Demo[\w.]+\.pas\s*->\s*\d+ symbols, \d+ refs, 0 errors')).Count -eq 10) $idx
   return $db
@@ -78,7 +78,7 @@ function Index-Copy([string]$Dir, [string]$Tag) {
 function Run-Fix([string]$Dir, [string]$Db, [string[]]$Extra, [bool]$Json = $true, [string]$Dproj = 'CircularDemo.dproj') {
   $a = @('cycles', '--fix', '--build-timeout', '1800', '--project', (Join-Path $Dir $Dproj), '--db', $Db) + $Extra
   if ($Json) { $a += @('--format', 'json') }
-  $out = (& $Exe @a 2>$null | Out-String)
+  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null } | Out-String)
   $code = $LASTEXITCODE
   $j = $null
   if ($Json) { try { $j = $out | ConvertFrom-Json } catch { $j = $null } }
@@ -126,7 +126,7 @@ try {
   } else { Write-Host '  SKIP b: no platform library DB on disk' -ForegroundColor Yellow }
 
   Write-Host '== (c) --fix without --project' -ForegroundColor Cyan
-  $out = (& $Exe cycles --fix --build-timeout 1800 --db $db --library-db none 2>&1 | Out-String)
+  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --build-timeout 1800 --db $db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check 'c: exit 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
   Check 'c: names --project' ($out.Contains('cycles --fix needs --project <X.dproj>')) $out
 
@@ -181,7 +181,7 @@ try {
   $fx = Join-Path $WorkDir 'ifdef'
   Copy-Tree (Join-Path $Repo 'tests\fixtures\cyclefix\ifdefclause') $fx
   $fdb = Join-Path $WorkDir 'ifdef.sqlite'
-  $fidx = & $Exe index --project (Join-Path $fx 'IfdefClause.dproj') --db $fdb 2>&1 | Out-String
+  $fidx = & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $fx 'IfdefClause.dproj') --db $fdb 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'i: SANITY ifdefclause indexed with 0 errors' ($fidx -match ', 0 errors' -and $fidx -notmatch '[1-9]\d* errors') $fidx
   $r = Run-Fix $fx $fdb @('--cycle', '1', '--no-compile', '--library-db', 'none') $true 'IfdefClause.dproj'
   $c = if ($r.Json) { $r.Json.cycles[0] } else { $null }

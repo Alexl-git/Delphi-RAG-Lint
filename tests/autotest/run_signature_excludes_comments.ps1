@@ -33,9 +33,9 @@ try {
   $db = Join-Path $WorkDir 's.sqlite'
   Push-Location $WorkDir
   try {
-    $null = & $Exe index $fx --db $db --library-db none 2>&1 | Out-String
-    $j = & $Exe sql --db $db --json --query "SELECT name, signature FROM symbols WHERE name IN ('MethodWithComment','MethodWithBlock','LineCommented','BlockCommented','DefaultValued','TProcWithBlock','ArrConst')" 2>$null | Out-String
-    $hover = & $Exe hover --qname uSigComment.LineCommented --db $db --format md 2>&1 | Out-String
+    $null = & { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String
+    $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --query "SELECT name, signature FROM symbols WHERE name IN ('MethodWithComment','MethodWithBlock','LineCommented','BlockCommented','DefaultValued','TProcWithBlock','ArrConst')" 2>$null } | Out-String
+    $hover = & { $ErrorActionPreference = 'Continue'; & $Exe hover --qname uSigComment.LineCommented --db $db --format md 2>&1 | ForEach-Object { "$_" } } | Out-String
   } finally { Pop-Location }
   # sql --json rows are POSITIONAL arrays: [0]=name, [1]=signature.
   $rows = @((($j | ConvertFrom-Json).rows) | ForEach-Object { ,@([string]$_[0], [string]$_[1]) })

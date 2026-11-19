@@ -434,7 +434,7 @@ end.
 
 $db = Join-Path $WorkDir 'uses.sqlite'
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($indexOut -join ' | ')"
 
 # --- Probe: for one used unit name, what file (if any) did the index resolve? ----
@@ -637,7 +637,7 @@ Check "N: stored helper edge TKitHelper -> TDfmRec resolves to DFKIT.PAS" ($nEdg
 Write-Host ''
 Write-Host 'idempotency: a second index pass over the same tree' -ForegroundColor Cyan
 $before = @($script:AllNames | ForEach-Object { Get-Use $_ })
-$null = & $Exe index $work --db $db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 $after  = @($script:AllNames | ForEach-Object { Get-Use $_ })
 Check "re-indexing leaves every target_file_id unchanged" (($before -join ';') -eq ($after -join ';')) `
   "before=$($before -join ' ; ') after=$($after -join ' ; ')"
@@ -663,7 +663,7 @@ print('poisoned')
 $null = python $script:PyPoison $db
 Check "fixture sanity: the poison took (Ns.Alpha now points at Plain.pas)" ((Get-Use 'Ns.Alpha') -like '*|SET|Plain.pas') "row=$(Get-Use 'Ns.Alpha')"
 Check "fixture sanity: the poison took (Gamma now has a target at all)"    ((Get-Use 'Gamma')    -like '*|SET|Plain.pas') "row=$(Get-Use 'Gamma')"
-$null = & $Exe index $work --db $db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 $r1 = Get-Use 'Ns.Alpha'
 $r2 = Get-Use 'Gamma'
 Check "repair: a WRONG target is corrected by the next pass" ($r1 -like '*|SET|Ns.Alpha.pas') `

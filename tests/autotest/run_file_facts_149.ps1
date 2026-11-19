@@ -47,7 +47,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 # One SELECT -> array of PSCustomObject (columns by name). A failed query
 # (e.g. no such table on an older engine) returns an EMPTY array.
 function Lane-Sql([string]$Db, [string]$Query) {
-  $raw = & $Exe sql --query $Query --db $Db --json 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --query $Query --db $Db --json 2>$null }
   if ($LASTEXITCODE -ne 0 -or -not $raw) { return }
   try { $j = ($raw -join "`n") | ConvertFrom-Json } catch { return }
   $cols = @($j.columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
@@ -61,8 +61,8 @@ function Lane-Sql([string]$Db, [string]$Query) {
 }
 
 Write-Host "run_file_facts_149: engine $Exe" -ForegroundColor Cyan
-& $Exe index (Join-Path $fx 'facts')   --db $dbFacts *> (Join-Path $work 'index-facts.log')
-& $Exe index (Join-Path $fx 'control') --db $dbCtl   *> (Join-Path $work 'index-control.log')
+& { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $fx 'facts')   --db $dbFacts *> (Join-Path $work 'index-facts.log') }
+& { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $fx 'control') --db $dbCtl   *> (Join-Path $work 'index-control.log') }
 
 # 149 INT: the tables are ADDITIVE (created by Migrate, probed by HasFileFacts); SCHEMA_VERSION stays 23.
 $tabs = @(Lane-Sql $dbFacts "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('file_includes', 'dfm_objects', 'pp_regions')")
@@ -84,7 +84,7 @@ if ($incA.Count -eq 2) {
   Check 'F4 file_includes: uses-list include = interface, in_uses 1, line 6' (("$($incA[0].inc_path)" -like '*\FfIncUses.inc') -and ($incA[0].section -eq 'interface') -and ($incA[0].in_uses -eq 1) -and ($incA[0].host_line -eq 6) -and ($incA[0].depth -eq 0)) ''
   Check 'F4 file_includes: defines include = implementation, in_uses 0' (("$($incA[1].inc_path)" -like '*\FfDefs.inc') -and ($incA[1].section -eq 'implementation') -and ($incA[1].in_uses -eq 0)) ''
 }
-$cyc = (& $Exe cycles --db $dbFacts 2>&1) -join "`n"
+$cyc = (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --db $dbFacts 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'F4 cycles sees FfIncA <-> FfIncB' (($cyc -match '(?i)ffinca') -and ($cyc -match '(?i)ffincb')) ''
 
 # ---- F5 ---------------------------------------------------------------------

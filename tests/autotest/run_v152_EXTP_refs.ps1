@@ -64,7 +64,7 @@ function Get-Col([string]$File, [string]$Text, [string]$Token) {
   return $m.Index + 1
 }
 function Invoke-Sql([string]$Db, [string]$Query) {
-  $txt = (& $exePath sql --db $Db --query $Query --json --limit 0 2>$null) -join "`n"
+  $txt = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $Db --query $Query --json --limit 0 2>$null }) -join "`n"
   $doc = $txt | ConvertFrom-Json
   $cols = @($doc.columns | ForEach-Object { $_.name })
   $out = foreach ($r in @($doc.rows)) {
@@ -81,7 +81,7 @@ $dir = Join-Path $tmp 'fx'
 [IO.Directory]::CreateDirectory($dir) | Out-Null
 foreach ($f in Get-ChildItem $fxDir -File -Filter *.pas) { [IO.File]::Copy($f.FullName, (Join-Path $dir $f.Name)) }
 $db = Join-Path $tmp 'fx.sqlite'
-$log = (& $exePath index $dir --db $db --library-db none 2>&1) -join "`n"
+$log = (& { $ErrorActionPreference = 'Continue'; & $exePath index $dir --db $db --library-db none 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 
 $all = Invoke-Sql $db @"
 select f.path path, r.id id, r.start_line line, r.start_col col, r.kind kind, r.name_text name,
@@ -100,7 +100,7 @@ function Refs([string]$LineText, [string]$Name, [string]$Kind = '') {
 }
 function Show($Rows) { return (@($Rows | ForEach-Object { "$($_.kind)@$($_.line):$($_.col)->$($_.target)" }) -join ' | ') }
 function Lint([string]$Rule) {
-  $txt = (& $exePath lint-all --db $db --enable $Rule --rule $Rule --json 2>$null) -join "`n"
+  $txt = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --enable $Rule --rule $Rule --json 2>$null }) -join "`n"
   $start = $txt.IndexOf('[')
   if ($start -lt 0) { return , @() }
   return , @(($txt.Substring($start) | ConvertFrom-Json) | Where-Object { $_.rule -eq $Rule })
@@ -122,7 +122,7 @@ $script:Pending = 0
 if (($w1Root.Count -eq 1) -and ($w1Root[0].target -eq 'uPProbe.TPProbe.edtF1')) { Check 'W1b write-through of the root is bound to the field' $true }
 elseif (($w1Root.Count -eq 1) -and ([string]::IsNullOrEmpty($w1Root[0].target))) { Check 'W1b write-through of the root is bound to the field' $false (Show $w1Root) }
 else { Check 'W1b write-through of the root is bound to the field' $false (Show $w1Root) }
-$uText = (& $exePath usages --name edtF1 --db $db 2>$null) -join "`n"
+$uText = (& { $ErrorActionPreference = 'Continue'; & $exePath usages --name edtF1 --db $db 2>$null }) -join "`n"
 $uW = [regex]::Match($uText, 'writes: (\d+)'); $uC = [regex]::Match($uText, 'calls: (\d+)')
 Write-Host "      raw usages: $(($uText -split "`n" | Where-Object { $_ -match 'reads:' }) -join '')"
 if ($uW.Success -and ([int]$uW.Groups[1].Value -ge 1) -and ([int]$uC.Groups[1].Value -eq 0)) { Check 'W5 usages --name edtF1 reports the write through the chain' $true }

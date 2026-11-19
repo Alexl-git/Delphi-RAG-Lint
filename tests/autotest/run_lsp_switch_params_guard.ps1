@@ -73,7 +73,7 @@ Set-Content -LiteralPath $fakeExe -Value 'not a real exe' -Encoding Ascii
 $wanted = 'lsp --proxy --delphilsp-exe C:\x\DelphiLSP.exe'
 
 try {
-  $onOut = & $Exe --delphi --on --exe $fakeExe --params $wanted --reg-root $regRoot 2>&1 | Out-String
+  $onOut = & { $ErrorActionPreference = 'Continue'; & $Exe --delphi --on --exe $fakeExe --params $wanted --reg-root $regRoot 2>&1 | ForEach-Object { "$_" } } | Out-String
   $onExit = $LASTEXITCODE
 
   Write-Host ''
@@ -106,7 +106,7 @@ try {
   Check 'the same entry also recorded the --exe path (value FileName)' `
     ($exePath -eq $fakeExe) "got: '$exePath'"
 
-  $offOut = & $Exe --delphi --off --exe $fakeExe --reg-root $regRoot --backup-dir $env:TEMP 2>&1 | Out-String
+  $offOut = & { $ErrorActionPreference = 'Continue'; & $Exe --delphi --off --exe $fakeExe --reg-root $regRoot --backup-dir $env:TEMP 2>&1 | ForEach-Object { "$_" } } | Out-String
   $left = @(Get-ChildItem -Path $hkcu -ErrorAction SilentlyContinue)
   Check '--off removes the entry again' ($left.Count -eq 0) `
     "entries left: $($left.Count)"

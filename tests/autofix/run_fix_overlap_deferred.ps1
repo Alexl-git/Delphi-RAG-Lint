@@ -37,7 +37,7 @@ function Check([string]$what, [bool]$ok, [string]$detail = '') {
 }
 function Compiles([string]$dir, [string]$unit) {
   if (-not (Test-Path $Rsvars)) { Write-Host "SKIP  compile: no rsvars.bat" -ForegroundColor Yellow; return $true }
-  $out = cmd /c "call `"$Rsvars`" >nul && cd /d `"$dir`" && dcc64 -M -Q -NSSystem;Winapi;Vcl -NU`"$dir`" `"$unit`"" 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; cmd /c "call `"$Rsvars`" >nul && cd /d `"$dir`" && dcc64 -M -Q -NSSystem;Winapi;Vcl -NU`"$dir`" `"$unit`"" 2>&1 | ForEach-Object { "$_" } } | Out-String
   return -not ($out -match '(?m)\b(Error|Fatal)\b|[EF]\d{4}')
 }
 function Rows([string]$raw) { $r = @(); try { $r = @($raw | ConvertFrom-Json) } catch { $r = @() }; return ,@($r) }
@@ -56,7 +56,7 @@ $pair  = @('uppercase-compare', 'redundant-parentheses')
 
 Push-Location $env:TEMP
 try {
-  $r1 = Rows (& $exePath lint --file $pas --fix --apply --no-backup --json 2>$null | Out-String)
+  $r1 = Rows (& { $ErrorActionPreference = 'Continue'; & $exePath lint --file $pas --fix --apply --no-backup --json 2>$null } | Out-String)
   $onA = @($r1 | Where-Object { $_.line -eq $lineA -and $pair -contains $_.rule })
   $app = @($onA | Where-Object { $_.applied -eq $true })
   $def = @($onA | Where-Object { $_.deferred -eq $true -and $_.applied -eq $false })
@@ -68,7 +68,7 @@ try {
 
   if ($def.Count -eq 1) {
     $deferredRule = $def[0].rule
-    $r2 = Rows (& $exePath lint --file $pas --fix --apply --no-backup --json 2>$null | Out-String)
+    $r2 = Rows (& { $ErrorActionPreference = 'Continue'; & $exePath lint --file $pas --fix --apply --no-backup --json 2>$null } | Out-String)
     $got = @($r2 | Where-Object { $_.rule -eq $deferredRule -and $_.applied -eq $true })
     $after2 = [IO.File]::ReadAllLines($pas)[$lineA - 1]
     Check "c3 pass 2 applies the deferred $deferredRule ('$after2')" ($got.Count -ge 1)

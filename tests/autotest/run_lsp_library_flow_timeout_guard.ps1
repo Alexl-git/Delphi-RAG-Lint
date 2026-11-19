@@ -88,13 +88,13 @@ $fx     = Join-Path $src 'uFlowFx.pas'
 $libDb  = Join-Path $WorkDir 'library-Fixture.sqlite'
 $projDb = Join-Path $WorkDir 'Fixture.sqlite'
 foreach ($d in $libDb, $projDb) {
-  $idx = & $exePath index $src --db $d 2>&1 | Out-String
+  $idx = & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $d 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check "SANITY: fixture indexed into $(Split-Path $d -Leaf)" ($LASTEXITCODE -eq 0) $idx
 }
 
 function LintDbg($db) {
   $env:DRAGLINT_DEBUG = '1'
-  try { & $exePath lint $fx --db $db --rules-dir $rules 2>&1 | Out-String }
+  try { & { $ErrorActionPreference = 'Continue'; & $exePath lint $fx --db $db --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String }
   finally { Remove-Item Env:\DRAGLINT_DEBUG }
 }
 function Frame($obj) { $j = $obj | ConvertTo-Json -Depth 20 -Compress; "Content-Length: $([Text.Encoding]::UTF8.GetByteCount($j))`r`n`r`n$j" }

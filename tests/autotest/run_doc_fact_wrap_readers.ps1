@@ -103,7 +103,7 @@ function Write-Ascii([string]$Path, [string]$Text) {
   $norm = $Text -replace "`r`n", "`n" -replace "`n", "`r`n"
   [System.IO.File]::WriteAllText($Path, $norm, [System.Text.Encoding]::ASCII)
 }
-function Run([string[]]$xs) { $o = & $Exe @xs 2>&1 | Out-String; [pscustomobject]@{ Out = $o; Code = $LASTEXITCODE } }
+function Run([string[]]$xs) { $o = & { $ErrorActionPreference = 'Continue'; & $Exe @xs 2>&1 | ForEach-Object { "$_" } } | Out-String; [pscustomobject]@{ Out = $o; Code = $LASTEXITCODE } }
 
 # The comment block directly above the declaration matching $DeclPat.
 function BlockAbove([string]$DeclPat) {

@@ -61,7 +61,7 @@ function MakeUnit([string]$Dir, [string]$Unit, [string[]]$Body) {
 function DupCount([string]$Dir, [string]$Unit) {
   $Pas = Join-Path $Dir "$Unit.pas"
   Push-Location $Dir
-  try { $Out = & $Exe lint $Pas --json 2>$null } finally { Pop-Location }
+  try { $Out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $Pas --json 2>$null } } finally { Pop-Location }
   $Txt = ($Out -join "`n")
   if ($Txt.Trim() -eq '') { return 0 }
   $J = $Txt | ConvertFrom-Json

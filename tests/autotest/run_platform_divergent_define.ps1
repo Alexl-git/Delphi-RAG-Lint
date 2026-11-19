@@ -107,7 +107,7 @@ function New-Case([string]$Name, [hashtable]$Defs, [string]$Unit, [string]$Confi
 
 $rule = 'platform-divergent-define'
 function Get-Findings([string[]]$LintArgs) {
-  $raw = (& $Exe @LintArgs --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe @LintArgs --json 2>$null }) -join "`n"
   $start = $raw.IndexOf('[')
   if ($start -lt 0) { return ,@() }
   $arr = $raw.Substring($start) | ConvertFrom-Json
@@ -169,7 +169,7 @@ $f = Lint-Case $n; Check '(g) a compiler built-in (CPUX86) in one platform group
 Write-Host ''
 Write-Host 'lint-all over an index of the RED project -- the same single finding' -ForegroundColor Cyan
 $db = Join-Path $red 'p.sqlite'
-& $Exe index --project (Join-Path $red 'P.dproj') --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $red 'P.dproj') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $la = Get-Findings @('lint-all', '--db', $db, '--project', (Join-Path $red 'P.dproj'), '--rule', $rule)
 foreach ($x in $la) { Write-Host ("    {0}:{1} {2}" -f (Split-Path $x.file_path -Leaf), $x.start_line, $x.message) -ForegroundColor DarkGray }
 Check 'lint-all: exactly 1 finding, in U.pas line 7' (($la.Count -eq 1) -and ((Split-Path $la[0].file_path -Leaf) -eq 'U.pas') -and ($la[0].start_line -eq 7)) "count=$($la.Count)"

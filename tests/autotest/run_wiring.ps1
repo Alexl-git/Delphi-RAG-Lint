@@ -40,7 +40,7 @@ function Check([string]$Name, [bool]$Ok) {
 
 function Run([string[]]$DragArgs) {
   # invoke the exe, drop the defaults banner, return joined stdout
-  (& $Exe @DragArgs 2>$null | Where-Object { $_ -notmatch 'loaded defaults' }) -join "`n"
+  (& { $ErrorActionPreference = 'Continue'; & $Exe @DragArgs 2>$null } | Where-Object { $_ -notmatch 'loaded defaults' }) -join "`n"
 }
 
 if (-not (Test-Path $Exe)) { Write-Host "exe not found: $Exe" -ForegroundColor Red; exit 2 }
@@ -75,7 +75,7 @@ Check 'DFM: TfrmWire.Button1Click event handler'   ($o -match '"handler"\s*:\s*"
 # --- MCP get_wiring (stdio JSON-RPC round-trip; same builder as the CLI) ---
 $init = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
 $call = '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_wiring","arguments":{"qname":"ImcSTATIONS"}}}'
-$mcp  = "$init`n$call" | & $Exe serve --db $db 2>$null | Out-String
+$mcp  = "$init`n$call" | & { $ErrorActionPreference = 'Continue'; & $Exe serve --db $db 2>$null } | Out-String
 Check 'MCP: get_wiring returns TmcSTATIONS'         ($mcp -match 'TmcSTATIONS')
 
 Write-Host ""

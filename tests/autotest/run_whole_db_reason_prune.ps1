@@ -61,7 +61,7 @@ function Reset-Fixture([string]$db) {
   if (Test-Path $src) { [System.IO.Directory]::Delete($src, $true) }
   New-Item -ItemType Directory $src | Out-Null
   1..9 | ForEach-Object { Emit-Unit $_ }
-  $null = & $Exe index $src --db $db 2>&1 | Out-String
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 }
 function Get-Why([string]$out) { (($out -split "`n") | Where-Object { $_ -match 'whole database because' }) -join ' ' }
 
@@ -72,7 +72,7 @@ try {
   $db1 = Join-Path $WorkDir 'r1.sqlite'
   Reset-Fixture $db1
   6..9 | ForEach-Object { [System.IO.File]::Delete((Join-Path $src "uP$_.pas")) }
-  $o1 = & $Exe index $src --db $db1 2>&1 | Out-String
+  $o1 = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db1 2>&1 | ForEach-Object { "$_" } } | Out-String
   $w1 = Get-Why $o1
   Check 'R1a the prune happened (4 files removed)' ($o1 -match 'removed 4 file') ''
   Check 'R1b the share reason fired' ($w1 -match 'more than one file in three') $w1
@@ -86,7 +86,7 @@ try {
   Start-Sleep -Milliseconds 1100
   Emit-Unit 1 '  ;'
   7..9 | ForEach-Object { [System.IO.File]::Delete((Join-Path $src "uP$_.pas")) }
-  $w2 = Get-Why (& $Exe index $src --db $db2 2>&1 | Out-String)
+  $w2 = Get-Why (& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db2 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check 'R2 1 written: 0 new, 1 changed; 3 removed' ($w2 -match '\b1 written: 0 new, 1 changed; 3 removed') $w2
 
   Write-Host ''
@@ -95,7 +95,7 @@ try {
   Reset-Fixture $db3
   Start-Sleep -Milliseconds 1100
   1..4 | ForEach-Object { Emit-Unit $_ '  ;' }
-  $w3 = Get-Why (& $Exe index $src --db $db3 2>&1 | Out-String)
+  $w3 = Get-Why (& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db3 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check 'R3 rewrote more than one file in three (4 written: 0 new, 4 changed' `
     (($w3 -match 'rewrote more than one file in three \(4 written: 0 new, 4 changed, of 9') -and -not ($w3 -match 'removed')) $w3
 }

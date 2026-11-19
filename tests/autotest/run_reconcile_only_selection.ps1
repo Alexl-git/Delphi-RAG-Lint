@@ -68,7 +68,7 @@ Write-Host '== reconcile-project --only (partial, reviewed apply) ==' -Foregroun
 #      is measuring a different fixture and the numbers stop meaning anything.
 # ---------------------------------------------------------------------------
 FreshCopy
-$all = & $Exe reconcile-project "$work\App.dpr" 2>&1 | Out-String
+$all = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$work\App.dpr" 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check '1 baseline: three units are MISSING' `
   ($all -match 'MISSING \(3\)') `
   "got: $(($all -split "`n" | Select-String 'MISSING').Line)"
@@ -82,7 +82,7 @@ Check '1 baseline: three units are MISSING' `
 # run_reconcile.ps1 caught it instead.
 # A feature guard that only ever exercises its own flag cannot see what the flag
 # broke for everyone else.
-$plainJson = & $Exe reconcile-project "$work\App.dpr" --json 2>$null | Out-String
+$plainJson = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$work\App.dpr" --json 2>$null } | Out-String
 $plainOk = $null
 try { $plainOk = $plainJson | ConvertFrom-Json } catch { $plainOk = $null }
 Check '1b --json WITHOUT --only still works (regression: AV on the common path)' `
@@ -92,7 +92,7 @@ Check '1b --json WITHOUT --only still works (regression: AV on the common path)'
 # ---------------------------------------------------------------------------
 # 2 -- A DRY RUN WITH --only PREVIEWS EXACTLY ONE.
 # ---------------------------------------------------------------------------
-$one = & $Exe reconcile-project "$work\App.dpr" --only uHelper 2>&1 | Out-String
+$one = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$work\App.dpr" --only uHelper 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check '2a --only narrows MISSING to the selected unit' `
   ($one -match 'MISSING \(1\)') `
   "got: $(($one -split "`n" | Select-String 'MISSING').Line)"
@@ -127,7 +127,7 @@ Check '2d and STALE is deliberately NOT filtered (advisory, not actionable)' `
 #      exists for; 3b is what was impossible before the flag.
 # ---------------------------------------------------------------------------
 FreshCopy
-& $Exe reconcile-project "$work\App.dpr" --only uHelper --apply 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$work\App.dpr" --only uHelper --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check '3 apply with --only exits 0' ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
 $dpr = Get-Content "$work\App.dpr" -Raw
 Check '3a the selected unit WAS added' `
@@ -146,7 +146,7 @@ Check '3c the .dproj moved in step with the .dpr' `
 #      assertion 3b passes just as well on an apply that writes NOTHING.
 # ---------------------------------------------------------------------------
 FreshCopy
-& $Exe reconcile-project "$work\App.dpr" --apply 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$work\App.dpr" --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $dprAll = Get-Content "$work\App.dpr" -Raw
 Check '4 positive control: no --only still adds all three' `
   (($dprAll -match 'uHelper') -and ($dprAll -match 'uFoo_OLD_20230828') -and
@@ -158,7 +158,7 @@ Check '4 positive control: no --only still adds all three' `
 #      reporting a cheerful success. Silence here would read as "applied".
 # ---------------------------------------------------------------------------
 FreshCopy
-$none = & $Exe reconcile-project "$work\App.dpr" --only NoSuchUnitHere --apply 2>&1 | Out-String
+$none = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$work\App.dpr" --only NoSuchUnitHere --apply 2>&1 | ForEach-Object { "$_" } } | Out-String
 $dprNone = Get-Content "$work\App.dpr" -Raw
 Check '5a an unmatched --only writes nothing' `
   (($dprNone -notmatch 'uHelper') -and ($dprNone -notmatch 'uFoo_OLD_20230828')) `
@@ -171,7 +171,7 @@ Check '5b and it names what it could not match' `
 # 6 -- MULTI-SELECT. The tab passes a comma-separated list of ticked units.
 # ---------------------------------------------------------------------------
 FreshCopy
-& $Exe reconcile-project "$work\App.dpr" --only "uHelper,uData_20240101" --apply 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$work\App.dpr" --only "uHelper,uData_20240101" --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $dpr2 = Get-Content "$work\App.dpr" -Raw
 Check '6 a comma-separated selection applies exactly those' `
   (($dpr2 -match 'uHelper') -and ($dpr2 -match 'uData_20240101') -and
@@ -183,7 +183,7 @@ Check '6 a comma-separated selection applies exactly those' `
 #      from one query and passed back to another must not depend on casing.
 # ---------------------------------------------------------------------------
 FreshCopy
-& $Exe reconcile-project "$work\App.dpr" --only "UHELPER" --apply 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$work\App.dpr" --only "UHELPER" --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $dpr3 = Get-Content "$work\App.dpr" -Raw
 Check '7 --only matches unit names case-insensitively' `
   ($dpr3 -match 'uHelper\s+in\s+''uHelper\.pas''') `
@@ -197,7 +197,7 @@ Check '7 --only matches unit names case-insensitively' `
 #      Checks 1-7 all read TEXT, so none of them could see it.
 # ---------------------------------------------------------------------------
 FreshCopy
-$jsonOut = & $Exe reconcile-project "$work\App.dpr" --only NoSuchUnitHere --json 2>$null | Out-String
+$jsonOut = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$work\App.dpr" --only NoSuchUnitHere --json 2>$null } | Out-String
 $parsed = $null
 try { $parsed = $jsonOut | ConvertFrom-Json } catch { $parsed = $null }
 Check '8a --only with --json still emits parseable JSON' `
@@ -208,7 +208,7 @@ Check '8b and the unmatched name is IN the document' `
   'a stdout-only caller must learn of a typo without reading stderr'
 # POSITIVE CONTROL: a selection that matches must NOT invent an unmatched entry.
 FreshCopy
-$jsonOk = & $Exe reconcile-project "$work\App.dpr" --only uHelper --json 2>$null | Out-String
+$jsonOk = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$work\App.dpr" --only uHelper --json 2>$null } | Out-String
 $parsedOk = $null
 try { $parsedOk = $jsonOk | ConvertFrom-Json } catch { $parsedOk = $null }
 # `unmatched` is OMITTED entirely when everything matched, so the document's

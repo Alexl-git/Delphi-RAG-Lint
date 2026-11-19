@@ -23,7 +23,7 @@ $f = Join-Path $WorkDir 'BomBad.pas'
 $lines = [Text.Encoding]::ASCII.GetBytes("unit BomBad;`r`n`r`ninterface`r`n`r`nimplementation`r`n`r`n// x")
 $bytes = [byte[]](0xEF,0xBB,0xBF) + $lines + [byte[]](0xE9) + [Text.Encoding]::ASCII.GetBytes("y`r`n`r`nend.`r`n")
 [IO.File]::WriteAllBytes($f, $bytes)
-$out = (& $Exe lint $f @DbArgs 2>&1 | Out-String)
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $f @DbArgs 2>&1 | ForEach-Object { "$_" } } | Out-String)
 $code = $LASTEXITCODE
 Check 'no FATAL / EEncodingError' (($out -notmatch 'FATAL') -and ($out -notmatch 'EEncodingError')) ($out.Substring(0,[Math]::Min(120,$out.Length)))
 Check 'exit code 0 or 1' (($code -eq 0) -or ($code -eq 1)) "exit=$code"

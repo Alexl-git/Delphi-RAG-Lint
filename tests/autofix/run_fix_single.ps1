@@ -54,7 +54,7 @@ function Invoke-FixChecks($form, $tag) {
   if (Test-Path $bak) { Remove-Item $bak -Force }
   $before = [IO.File]::ReadAllText($target)
   $pvArgs = (TargetArgs $form) + @('--fix','--fix-line',$L,'--fix-rule',$Rule,'--json')
-  $raw = & $exePath @pvArgs 2>$null | Out-String
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath @pvArgs 2>$null } | Out-String
   $arr = $null
   try { $arr = ($raw | ConvertFrom-Json) } catch { $arr = $null }
   # Normalize to array
@@ -78,7 +78,7 @@ function Invoke-FixChecks($form, $tag) {
   Copy-Item $fixture $target -Force
   if (Test-Path $bak) { Remove-Item $bak -Force }
   $apArgs = (TargetArgs $form) + @('--fix','--fix-line',$L,'--fix-rule',$Rule,'--json','--apply')
-  $raw2 = & $exePath @apArgs 2>$null | Out-String
+  $raw2 = & { $ErrorActionPreference = 'Continue'; & $exePath @apArgs 2>$null } | Out-String
   $arr2 = $null
   try { $arr2 = ($raw2 | ConvertFrom-Json) } catch { $arr2 = $null }
   if ($null -ne $arr2 -and $arr2 -isnot [System.Array]) { $arr2 = @($arr2) }

@@ -56,13 +56,13 @@ try {
   function Copy-Fixture([string]$Name) {
     $d = Join-Path $WorkDir $Name
     Copy-Item (Join-Path $root 'tests\autotest\fixtures\bdesplit') $d -Recurse
-    & $Exe index $d --db "$d.sqlite" 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $Exe index $d --db "$d.sqlite" 2>&1 | ForEach-Object { "$_" } } | Out-Null
     return $d
   }
   function Apply([string]$Dir, [string]$Rules, [switch]$Write) {
     $a = @('convert-apply', '--unit', (Join-Path $Dir 'BdeSplitForm.pas'), '--rules', $Rules, '--db', "$Dir.sqlite", '--db', $LibDb, '--no-reindex', '--json')
     if ($Write) { $a += '--apply' }
-    $o = (& $Exe @a 2>$null) -join "`n"
+    $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null }) -join "`n"
     $i = $o.IndexOf('{'); $j = $o.LastIndexOf('}')
     if ($i -lt 0 -or $j -le $i) { return $null }
     try { return ($o.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
@@ -158,7 +158,7 @@ try {
   function Run-Sequence([string]$Name, [string[]]$Books) {
     $d = Copy-Fixture $Name
     foreach ($b in $Books) {
-      & $Exe index $d --db "$d.sqlite" 2>&1 | Out-Null
+      & { $ErrorActionPreference = 'Continue'; & $Exe index $d --db "$d.sqlite" 2>&1 | ForEach-Object { "$_" } } | Out-Null
       $r = Apply $d $b -Write
       if (-not ($r -and $r.ok)) { return $null }
     }

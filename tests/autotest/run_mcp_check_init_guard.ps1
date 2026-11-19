@@ -68,13 +68,13 @@ end.
 $pas = Join-Path $work 'HbCfg.pas'
 [IO.File]::WriteAllText($pas, $unit, [Text.Encoding]::ASCII)
 $db = Join-Path $WorkDir 'ci.sqlite'
-$null = & $Exe index $work --db $db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 $at = "$pas`:15:3"
-$cliT = ((& $Exe check-init HbCfg.GCount --db $db --json 2>$null) -join "`n").Trim()
-$cliA = ((& $Exe check-init --at $at --db $db --json 2>$null) -join "`n").Trim()
-$cliO = ((& $Exe check-init HbCfg.GOther --db $db --json 2>$null) -join "`n").Trim()
+$cliT = ((& { $ErrorActionPreference = 'Continue'; & $Exe check-init HbCfg.GCount --db $db --json 2>$null }) -join "`n").Trim()
+$cliA = ((& { $ErrorActionPreference = 'Continue'; & $Exe check-init --at $at --db $db --json 2>$null }) -join "`n").Trim()
+$cliO = ((& { $ErrorActionPreference = 'Continue'; & $Exe check-init HbCfg.GOther --db $db --json 2>$null }) -join "`n").Trim()
 Check 'control: the CLI answers (non-empty JSON)' ($cliT -ne '' -and $cliA -ne '' -and $cliO -ne '')
 
 function Q($o) { ($o | ConvertTo-Json -Compress -Depth 6) }
@@ -89,7 +89,7 @@ $req = @(
   (Q @{ jsonrpc='2.0'; id=8; method='tools/call'; params=@{ name='check_init'; arguments=@{ target='HbCfg.GCount'; max_seconds=0.000001 } } }),
   (Q @{ jsonrpc='2.0'; id=9; method='tools/call'; params=@{ name='check_init'; arguments=@{ target='HbCfg.GCount'; max_seconds=-1 } } })
 ) -join "`n"
-$mcp = $req | & $Exe serve --db $db 2>$null | Out-String
+$mcp = $req | & { $ErrorActionPreference = 'Continue'; & $Exe serve --db $db 2>$null } | Out-String
 $rep = @{}
 foreach ($ln in ($mcp -split "`n")) { try { $o = $ln.Trim() | ConvertFrom-Json; if ($o.id) { $rep[[int]$o.id] = $o } } catch { } }
 $tools = @($rep[2].result.tools)

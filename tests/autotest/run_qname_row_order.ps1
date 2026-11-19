@@ -127,7 +127,7 @@ end.
 
 $db = Join-Path $WorkDir 'ord.sqlite'
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($indexOut -join ' | ')"
 
 # --- Probes. ----------------------------------------------------------------------
@@ -144,7 +144,7 @@ function Sql([string]$Q) { return ((python $script:PySql $db $Q) -join "`n").Tri
 function HoverDefLine([string]$QName) {
   # ToString() rather than a String method: 2>&1 folds stderr in as ErrorRecord
   # objects, and calling .TrimStart() on one of those is a runtime error.
-  $raw = @(& $Exe hover --qname $QName --db $db --format json 2>&1) |
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname $QName --db $db --format json 2>&1 | ForEach-Object { "$_" } }) |
            ForEach-Object { "$_" } | Where-Object { $_.TrimStart().StartsWith('{') }
   if (-not $raw) { return '<no json>' }
   return ([string]($raw | Select-Object -First 1) | ConvertFrom-Json).def_line

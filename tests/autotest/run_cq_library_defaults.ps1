@@ -62,8 +62,8 @@ try {
   $fileA = Join-Path $src 'uCycA.pas'
   $prefixDb = Join-Path $WorkDir 'library-Fixture.sqlite'
   $sectionDb = Join-Path $out 'stdlib.sqlite'
-  foreach ($d in $prefixDb, $sectionDb) { $null = & $exe index $src --db $d 2>&1; Check "SANITY: indexed $(Split-Path $d -Leaf)" ($LASTEXITCODE -eq 0) }
-  function LintDbg($db) { $env:DRAGLINT_DEBUG = '1'; try { & $exe lint $fileA --db $db 2>&1 | Out-String } finally { Remove-Item Env:\DRAGLINT_DEBUG } }
+  foreach ($d in $prefixDb, $sectionDb) { $null = & { $ErrorActionPreference = 'Continue'; & $exe index $src --db $d 2>&1 | ForEach-Object { "$_" } }; Check "SANITY: indexed $(Split-Path $d -Leaf)" ($LASTEXITCODE -eq 0) }
+  function LintDbg($db) { $env:DRAGLINT_DEBUG = '1'; try { & { $ErrorActionPreference = 'Continue'; & $exe lint $fileA --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String } finally { Remove-Item Env:\DRAGLINT_DEBUG } }
   $p = LintDbg $prefixDb
   Check 'A1  project DB named library-*.sqlite (no section): project-rules pass runs' ($p -match '\[lint-checker\] project-rules') ''
   Check 'A1b same: circular-uses is reported' ($p -match '\] circular-uses:') ''
@@ -78,10 +78,10 @@ try {
   Write-Ascii "$fx\lib\FMX.Edit.pas" "unit FMX.Edit;`ninterface`ntype`n  TEdit = class end;`nimplementation`nend.`n"
   Write-Ascii "$fx\vcl\uVclApp.pas" "unit uVclApp;`ninterface`nuses`n  Vcl.StdCtrls;`nimplementation`nend.`n"
   $pairDb = Join-Path $out 'library-Pair.sqlite'; $vclDb = Join-Path $WorkDir 'vcl.sqlite'
-  $null = & $exe index "$fx\lib" --db $pairDb 2>&1; $null = & $exe index "$fx\vcl" --db $vclDb 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $exe index "$fx\lib" --db $pairDb 2>&1 | ForEach-Object { "$_" } }; $null = & { $ErrorActionPreference = 'Continue'; & $exe index "$fx\vcl" --db $vclDb 2>&1 | ForEach-Object { "$_" } }
   function TEditOrder($dbs) {
     $a = @('query', '--name', 'TEdit', '--json', '--quiet'); foreach ($d in $dbs) { $a += @('--db', $d) }
-    $raw = (@(& $exe @a 2>&1) | ForEach-Object { "$_" } | Where-Object { -not $_.TrimStart().StartsWith('(') }) -join "`n"
+    $raw = (@(& { $ErrorActionPreference = 'Continue'; & $exe @a 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" } | Where-Object { -not $_.TrimStart().StartsWith('(') }) -join "`n"
     if (-not $raw.Trim()) { return @() }
     return @(($raw | ConvertFrom-Json) | ForEach-Object { $_.qualified_name })
   }
@@ -99,11 +99,11 @@ try {
   $fxr = (Resolve-Path "$PSScriptRoot\..\fixtures\refactor\redcastlib").Path
   $d = Join-Path $WorkDir 'rc'; Copy-Item $fxr $d -Recurse
   $lib = Join-Path $out 'library-Win32.sqlite'; $db = Join-Path $d 'p.sqlite'; $proj = Join-Path $d 'RcLib.dproj'
-  $null = & $exe index (Join-Path $d 'lib') --db $lib --library-db none 2>&1; Check 'SANITY B: library indexed' ($LASTEXITCODE -eq 0)
-  $null = & $exe index --project $proj --db $db --library-db $lib 2>&1; Check 'SANITY B: project indexed' ($LASTEXITCODE -eq 0)
+  $null = & { $ErrorActionPreference = 'Continue'; & $exe index (Join-Path $d 'lib') --db $lib --library-db none 2>&1 | ForEach-Object { "$_" } }; Check 'SANITY B: library indexed' ($LASTEXITCODE -eq 0)
+  $null = & { $ErrorActionPreference = 'Continue'; & $exe index --project $proj --db $db --library-db $lib 2>&1 | ForEach-Object { "$_" } }; Check 'SANITY B: project indexed' ($LASTEXITCODE -eq 0)
   function Plan($extra) {
     $e = Join-Path $WorkDir 'plan.err'
-    $o = & $exe lint --fix --fix-rule redundant-cast --db $db --project $proj --platform win32 --format json @extra 2> $e
+    $o = & { $ErrorActionPreference = 'Continue'; & $exe lint --fix --fix-rule redundant-cast --db $db --project $proj --platform win32 --format json @extra 2> $e }
     $pl = $null; try { $pl = ($o -join "`n") | ConvertFrom-Json } catch { }
     [pscustomobject]@{ Plan = $pl; Err = [string](Get-Content $e -Raw -ErrorAction SilentlyContinue) }
   }

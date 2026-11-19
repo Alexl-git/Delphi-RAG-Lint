@@ -56,18 +56,18 @@ foreach ($fx in 'solve-callchain', 'solve-unknown') {
   $src = Join-Path $WorkDir $fx
   Copy-Item -Recurse -Force (Join-Path $FixRoot $fx) $src
   $db = Join-Path $WorkDir "$fx.sqlite"
-  $null = & $Exe index $src --db $db 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } }
   if (-not (Test-Path -LiteralPath $db)) { Write-Host "FATAL: index failed for $fx" -ForegroundColor Red; exit 2 }
   $dbs[$fx] = $db
 }
 
 function HoverJson($qn, $db) {
-  $raw = (& $Exe hover --qname $qn --db $db --format json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname $qn --db $db --format json 2>$null }) -join "`n"
   try { return ($raw | ConvertFrom-Json) } catch { Write-Host "    raw hover: $raw"; return $null }
 }
-function HoverText($qn, $db, $fmt) { return ((& $Exe hover --qname $qn --db $db --format $fmt 2>$null) -join "`n") }
+function HoverText($qn, $db, $fmt) { return ((& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname $qn --db $db --format $fmt 2>$null }) -join "`n") }
 function CheckInitJson($qn, $db) {
-  $raw = (& $Exe check-init $qn --db $db --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe check-init $qn --db $db --json 2>$null }) -join "`n"
   try { return ($raw | ConvertFrom-Json) } catch { Write-Host "    raw check-init: $raw"; return $null }
 }
 function Has($obj, $name) { return ($null -ne $obj) -and ($obj.PSObject.Properties.Name -contains $name) }

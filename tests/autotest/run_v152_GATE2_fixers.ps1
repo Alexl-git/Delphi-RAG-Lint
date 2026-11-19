@@ -51,7 +51,7 @@ function New-Fx([string]$Tag, [switch]$Dirty, [switch]$Clash, [switch]$DragDb) {
   [IO.File]::WriteAllText($dpr, [IO.File]::ReadAllText($dpr).Replace("NpUse in 'NpUse.pas';", "NpUse in 'NpUse.pas',`r`n  Basic in 'Basic.pas';"), [Text.Encoding]::ASCII)
   if ($Dirty) { $np = Join-Path $d 'NpRoot.pas'; [IO.File]::WriteAllText($np, "this is not pascal`r`n" + [IO.File]::ReadAllText($np), [Text.Encoding]::ASCII) }
   $db = if ($DragDb) { [IO.Directory]::CreateDirectory((Join-Path $d '_D-RAG')) | Out-Null; Join-Path $d '_D-RAG\NarrowParam.sqlite' } else { Join-Path $d 'p.sqlite' }
-  & $Exe index --project (Join-Path $d 'NarrowParam.dproj') --db $db --library-db none *> (Join-Path $Tmp "$Tag.index.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $d 'NarrowParam.dproj') --db $db --library-db none *> (Join-Path $Tmp "$Tag.index.log") }
   if ($LASTEXITCODE -ne 0) { throw "index $Tag exit $LASTEXITCODE" }
   $lines = $t -split "`r`n"
   $from = ([Array]::FindIndex($lines, [Predicate[string]] { param($l) $l -match 't := a \+ 1' })) + 1
@@ -59,7 +59,7 @@ function New-Fx([string]$Tag, [switch]$Dirty, [switch]$Clash, [switch]$DragDb) {
 }
 function Em($P) { return @('extract-method', '--file', $P.Basic, '--from-line', "$($P.From)", '--to-line', "$($P.From + 1)", '--name', 'Extracted', '--apply', '--rsvars', $Rsvars) }
 function Run([string[]]$CliArgs) {
-  $out = (& $Exe @CliArgs 2>&1 | Out-String)
+  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe @CliArgs 2>&1 | ForEach-Object { "$_" } } | Out-String)
   return @{ Code = $LASTEXITCODE; Out = $out }
 }
 # Off the project: a .dproj / .dpr that no longer names Basic.pas, so no project builds it.

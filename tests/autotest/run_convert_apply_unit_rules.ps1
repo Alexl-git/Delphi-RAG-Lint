@@ -63,11 +63,11 @@ New-Item -ItemType Directory $WorkDir -Force | Out-Null
 Copy-Item (Join-Path $PSScriptRoot 'fixtures\unitrules\*') $WorkDir
 
 $db = Join-Path $WorkDir 'fx.sqlite'
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the fixture index was built' (Test-Path $db)
 
 function Run([string[]]$ArgList) {
-  $o = (& $Exe @ArgList 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @ArgList 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 function P([string]$n) { return (Join-Path $WorkDir $n) }
@@ -370,7 +370,7 @@ Check 'Z5 GhostForm.pas and GhostForm.dfm are byte-identical after Z1-Z4' (((Has
 # positive control: close the index gap (write GhostLib.pas, reindex) and the
 # SAME book converts -- the refusal was about the index, not the book.
 Copy-Item (P 'GhostLib.pas.txt') (P 'GhostLib.pas')
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $r = Apply 'GhostForm.pas' 'ghost.rules' @('--apply', '--no-backup', '--format', 'json')
 $j = Json $r.Out
 $t = Text 'GhostForm.pas'

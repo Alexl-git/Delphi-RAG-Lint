@@ -121,7 +121,7 @@ function Test-Decided([string]$Tag, [string]$ImplUse, [string]$IntfExtra, [strin
   $work = Join-Path $WorkDir "$Tag-followed"
   New-Item -ItemType Directory -Force $work | Out-Null
   Get-ChildItem $root -File | Where-Object { $_.Extension -in '.pas', '.dpr', '.dproj' } | ForEach-Object { Copy-Item $_.FullName (Join-Path $work $_.Name) -Force }
-  $fo = & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $pl.File -Cycle 1 -Root $work 2>&1 | Out-String
+  $fo = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $pl.File -Cycle 1 -Root $work 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check "$Tag d5 the follower applies cycle 1 (exit 0)" ($LASTEXITCODE -eq 0) ($fo.Trim() -replace "`r?`n", ' | ')
   $at = [IO.File]::ReadAllText((Join-Path $work 'Alpha.pas'))
   $implAt = [regex]::Match($at, '(?m)^implementation\b').Index

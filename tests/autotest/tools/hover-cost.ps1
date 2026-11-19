@@ -44,7 +44,7 @@ function Frame($o) { $j = $o | ConvertTo-Json -Compress -Depth 10; "Content-Leng
 
 $q = "SELECT f.path, s.start_line, s.name FROM symbols s JOIN files f ON f.id = s.file_id " +
      "WHERE s.kind IN ('method','function','procedure') AND f.path LIKE '$PathLike' AND s.start_line > 0 ORDER BY s.id LIMIT $(4 * $N)"
-$raw = (& $ExeA sql --query $q --db $DbPath --json 2>$null) -join "`n"
+$raw = (& { $ErrorActionPreference = 'Continue'; & $ExeA sql --query $q --db $DbPath --json 2>$null }) -join "`n"
 $j = $raw | ConvertFrom-Json
 $cache = @{}; $pos = [System.Collections.Generic.List[object]]::new()
 foreach ($row in $j.rows) {
@@ -87,8 +87,8 @@ function Invoke-HoverSession([string]$Exe, [string[]]$Extra, [int]$Count, [strin
 }
 
 $arms = @(
-  [pscustomobject]@{ Name = "A $(((& $ExeA --version 2>$null) | Select-Object -Last 1))"; Exe = $ExeA; Extra = @() },
-  [pscustomobject]@{ Name = "B $(((& $ExeB --version 2>$null) | Select-Object -Last 1)) $($ExtraB -join ' ')"; Exe = $ExeB; Extra = $ExtraB }
+  [pscustomobject]@{ Name = "A $(((& { $ErrorActionPreference = 'Continue'; & $ExeA --version 2>$null }) | Select-Object -Last 1))"; Exe = $ExeA; Extra = @() },
+  [pscustomobject]@{ Name = "B $(((& { $ErrorActionPreference = 'Continue'; & $ExeB --version 2>$null }) | Select-Object -Last 1)) $($ExtraB -join ' ')"; Exe = $ExeB; Extra = $ExtraB }
 )
 $bad = $false
 foreach ($arm in $arms) {

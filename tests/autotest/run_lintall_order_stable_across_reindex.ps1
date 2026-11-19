@@ -86,8 +86,8 @@ $db = Join-Path $scratch 'order.sqlite'
 
 Push-Location C:\TEMP
 try {
-  & $exePath index (Join-Path $scratch 'src') --db $db 2>&1 | Out-Null
-  $out1 = (& $exePath lint-all --db $db --quiet 2>$null | Out-String)
+  & { $ErrorActionPreference = 'Continue'; & $exePath index (Join-Path $scratch 'src') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $out1 = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --quiet 2>$null } | Out-String)
 
   $n = ([regex]::Matches($out1, 'too-many-children')).Count
   Check 'POSITIVE CONTROL: the fixture trips class-metrics in many files' ($n -ge 25) `
@@ -111,8 +111,8 @@ try {
   # --force-reparse rewrites every file, which is what reassigns the symbol ids
   # the old emit order depended on. Without it the ids are untouched and the
   # comparison could not fail even against the unfixed build.
-  & $exePath index (Join-Path $scratch 'src') --db $db --force-reparse 2>&1 | Out-Null
-  $out2 = (& $exePath lint-all --db $db --quiet 2>$null | Out-String)
+  & { $ErrorActionPreference = 'Continue'; & $exePath index (Join-Path $scratch 'src') --db $db --force-reparse 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $out2 = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --quiet 2>$null } | Out-String)
 
   Check 'lint-all output is byte-identical across a reindex' ($out1 -ceq $out2) `
         $(if ($out1 -ceq $out2) { '' } else {

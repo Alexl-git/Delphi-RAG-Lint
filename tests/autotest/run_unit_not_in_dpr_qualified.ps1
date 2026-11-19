@@ -135,7 +135,7 @@ Write-Ascii (Join-Path $WorkDir 'P.dproj') @'
 '@
 
 $db = Join-Path $WorkDir 'p.sqlite'
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $out = (& $Exe lint --project (Join-Path $WorkDir 'P.dproj') --rule unit-not-in-dpr) -join "`n"
 Write-Host ''
 foreach ($l in ($out -split "`n" | Select-String 'unit-not-in-dpr')) { Write-Host ("  " + $l) -ForegroundColor DarkGray }

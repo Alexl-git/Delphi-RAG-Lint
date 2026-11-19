@@ -175,7 +175,7 @@ LEFT JOIN symbols es ON es.id = e.target_symbol_id
 ORDER BY f.path, r.start_line, r.start_col, r.name_text, 1
 '@
 function Lane-Dump([string]$Db) {
-  $j = & $exePath sql --query $dumpSql --db $Db --json --limit 1000000 2>$null | Out-String
+  $j = & { $ErrorActionPreference = 'Continue'; & $exePath sql --query $dumpSql --db $Db --json --limit 1000000 2>$null } | Out-String
   $o = $j.Substring($j.IndexOf('{')) | ConvertFrom-Json
   return (@($o.rows | ForEach-Object { [string]$_[0] }) -join "`n") -replace [regex]::Escape($scratch), '<S>'
 }
@@ -199,7 +199,7 @@ JOIN files f ON f.id = r.file_id
 ORDER BY 1
 '@
 function Lane-DumpDerived([string]$Db) {
-  $j = & $exePath sql --query $derivedSql --db $Db --json --limit 1000000 2>$null | Out-String
+  $j = & { $ErrorActionPreference = 'Continue'; & $exePath sql --query $derivedSql --db $Db --json --limit 1000000 2>$null } | Out-String
   $o = $j.Substring($j.IndexOf('{')) | ConvertFrom-Json
   return (@($o.rows | ForEach-Object { [string]$_[0] }) -join "`n") -replace [regex]::Escape($scratch), '<S>'
 }
@@ -214,15 +214,15 @@ function Lane-CompareDerived([string]$Tag, [string]$Scoped, [string]$Whole) {
 function Lane-Index([string]$Db, [bool]$WithLib, [bool]$Whole) {
   [Environment]::SetEnvironmentVariable('DRAGLINT_NO_SCOPED_RESOLVE', $(if ($Whole) { '1' } else { $null }))
   try {
-    if ($WithLib) { return (& $exePath index $src --db $Db --library-db $libDb 2>&1 | Out-String) }
-    return (& $exePath index $src --db $Db 2>&1 | Out-String)
+    if ($WithLib) { return (& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $Db --library-db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-String) }
+    return (& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-String)
   } finally { [Environment]::SetEnvironmentVariable('DRAGLINT_NO_SCOPED_RESOLVE', $null) }
 }
 function Lane-Touch([string]$Tag) { Write-Ascii (Join-Path $src 'uEdit.pas') ($editText + "{ $Tag }`n") }
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $lib --db $libDb 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $lib --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $base = Join-Path $scratch 'base.sqlite'
   $o0 = Lane-Index $base $true $false
   Check 'SETUP: the first run with the library binds it (library: + resolve ran)' ($o0 -match 'library-db') $o0
@@ -269,7 +269,7 @@ try {
   $s2 = Join-Path $scratch 's2.sqlite'; Copy-Item $s1 $s2
   Start-Sleep -Seconds 2   # indexed_at_unix has 1-second resolution
   Write-Ascii (Join-Path $lib 'uLib.pas') ($libText + "{ re-indexed }`n")
-  & $exePath index $lib --db $libDb 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $lib --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Lane-Touch 's2'
   $oS2 = Lane-Index $s2 $true $false
   Check 'S2: a re-indexed library sends the pass WHOLE, naming the library change' `

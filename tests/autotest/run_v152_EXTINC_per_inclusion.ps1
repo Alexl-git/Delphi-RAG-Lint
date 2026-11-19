@@ -40,7 +40,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
   if ($Ok) { $script:pass++ } else { $script:fail++ }
 }
 function Invoke-Json([string[]]$CliArgs) {
-  $raw = (& $exePath @CliArgs 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath @CliArgs 2>$null }) -join "`n"
   $a = $raw.IndexOf('['); $o = $raw.IndexOf('{')
   $i = if ($a -ge 0 -and ($o -lt 0 -or $a -lt $o)) { $a } else { $o }
   if ($i -lt 0) { return ,@() }
@@ -57,7 +57,7 @@ function IncSigs([string]$Db, [string]$Name, [string]$IncLeaf) {
 # find-callers --resolved text: "  <Target>:" then "    <Caller>  (<path>:<line>)  [...]" lines.
 # Returns the include sites ("ExBody.inc:4") listed under $Target.
 function ResolvedSites([string]$Db, [string]$Name, [string]$Target) {
-  $lines = @(& $exePath query find-callers --name $Name --db $Db --resolved 2>$null)
+  $lines = @(& { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name $Name --db $Db --resolved 2>$null })
   $cur = ''; $out = @()
   foreach ($l in $lines) {
     if ($l -match '^\s{2}(\S+):\s*$') { $cur = $Matches[1]; continue }
@@ -72,7 +72,7 @@ try {
   Copy-Item (Join-Path $repo 'tests\autotest\fixtures\v152-EXTINC\*') $fx
   $db = Join-Path $scratch 'ex.sqlite'
   # A PROJECT index: only it parses an .inc in its includer's define context.
-  & $exePath index --project (Join-Path $fx 'ExProj.dpr') --db $db --library-db none 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --project (Join-Path $fx 'ExProj.dpr') --db $db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'index exit 0' ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
 
   # ---- T: two hosts, different define, two symbol types ----

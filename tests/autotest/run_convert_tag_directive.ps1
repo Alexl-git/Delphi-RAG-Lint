@@ -93,7 +93,7 @@ if ($WorkDir -eq '') {
 }
 New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
 
-$infoRaw = (& $exePath info --json 2>$null) -join "`n"
+$infoRaw = (& { $ErrorActionPreference = 'Continue'; & $exePath info --json 2>$null }) -join "`n"
 $engineVersion = '(unknown)'
 try {
   $line = ($infoRaw -split "`n" | Where-Object { $_.Trim().StartsWith('{') } | Select-Object -First 1)
@@ -112,7 +112,7 @@ function Write-Rules([string]$Name, [string[]]$Lines) {
 # Runs convert-validate and returns exit code, combined output, and the parsed
 # rule count from the `parsed N rule(s)` line (-1 when it is not printed).
 function Validate([string]$Path) {
-  $out  = & $exePath convert-validate --rules $Path --print-parsed 2>&1
+  $out  = & { $ErrorActionPreference = 'Continue'; & $exePath convert-validate --rules $Path --print-parsed 2>&1 | ForEach-Object { "$_" } }
   $code = $LASTEXITCODE
   $text = ($out | Out-String)
   $n = -1

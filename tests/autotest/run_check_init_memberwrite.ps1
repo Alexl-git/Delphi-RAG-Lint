@@ -26,11 +26,11 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 
 Copy-Item (Join-Path $repo 'tests\fixtures\happens-before\events-memberwrite\*') $work -Force
 $db = Join-Path $work 'mw.sqlite'
-& $exePath index $work --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $work --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' (Test-Path $db)
 
 function Answer([string]$Target) {
-  $raw = & $exePath check-init $Target --db $db --json 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath check-init $Target --db $db --json 2>$null }
   return (($raw | Out-String) | ConvertFrom-Json)
 }
 function HasSiteLine($Rows, [int]$Line) { return @($Rows | Where-Object { $_.file -like '*mwData.pas' -and $_.line -eq $Line }).Count -gt 0 }

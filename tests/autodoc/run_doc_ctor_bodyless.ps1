@@ -127,7 +127,7 @@ end.
 # array of nulls, which makes every "reports nothing" assertion pass VACUOUSLY.
 # That is exactly how this test first went green against an unfixed engine.
 function Get-Drift($qname) {
-  $out = & $exePath doc-drift --qname $qname --db $db --json 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath doc-drift --qname $qname --db $db --json 2>$null }
   $rows = @()
   foreach ($ln in $out) { $t = "$ln".Trim(); if ($t.StartsWith('{')) { $rows += ($t | ConvertFrom-Json) } }
   return ,$rows
@@ -136,7 +136,7 @@ function Messages($rows) { return @($rows | ForEach-Object { $_.detail }) }
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db --quiet 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db --quiet 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
   # =========================================================================
@@ -172,7 +172,7 @@ try {
   # =========================================================================
   # PHASE 2 -- the engine's own output, and the constructor marker it writes.
   # =========================================================================
-  & $exePath document --unit $src --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $src --db $db --apply 2>$null } | Out-Null
   Check 'document --apply exits 0' ($LASTEXITCODE -eq 0)
   $md5First = Get-FileMd5 $src
   $text = [IO.File]::ReadAllText($src)
@@ -218,8 +218,8 @@ try {
     ($text -match '<exception cref="EDatabaseError">Raised when the delete cannot be applied\.</exception>') $text
 
   # === idempotency ==========================================================
-  & $exePath index $scratch --db $db --quiet 2>$null | Out-Null
-  & $exePath document --unit $src --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db --quiet 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $src --db $db --apply 2>$null } | Out-Null
   Check 'IDEMPOTENT: reindex + a second --apply is byte-identical' `
     ((Get-FileMd5 $src) -eq $md5First) ("first=$md5First second=" + (Get-FileMd5 $src))
 

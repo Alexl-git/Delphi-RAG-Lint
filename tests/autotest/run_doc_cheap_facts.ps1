@@ -185,8 +185,8 @@ $file = Join-Path $dir 'uCheapFacts.pas'
 $db   = Join-Path $dir 'fx.sqlite'
 Write-Fixture $file
 
-& $Exe index $dir --db $db 2>&1 | Out-Null
-& $Exe document --unit $file --db $db --apply --no-backup 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe document --unit $file --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $ec = $LASTEXITCODE
 Check 'document --unit exit 0' ($ec -eq 0) "ec=$ec"
 

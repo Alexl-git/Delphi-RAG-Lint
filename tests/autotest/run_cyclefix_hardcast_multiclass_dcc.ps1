@@ -84,7 +84,7 @@ function New-Case([string]$Tag, [string]$Case) {
   & $Cases[$Case] $root
   $db = "$root.sqlite"
   Push-Location $WorkDir
-  try { $null | & $Exe index --project (Join-Path $root 'MemberWrite.dproj') --db $db --library-db $Lib *> "$db.log" } finally { Pop-Location }
+  try { $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root 'MemberWrite.dproj') --db $db --library-db $Lib *> "$db.log" } } finally { Pop-Location }
   return @{ Root = $root; Dproj = (Join-Path $root 'MemberWrite.dproj'); Db = $db; Name = 'MemberWrite' }
 }
 function Invoke-Build($P) {
@@ -107,12 +107,12 @@ function Invoke-Program($P) {
 }
 function Get-Plan($P) {
   Push-Location $WorkDir
-  try { return ($null | & $Exe cycles --plan --project $P.Dproj --db $P.Db --library-db $Lib 2>$null | Out-String) } finally { Pop-Location }
+  try { return ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --plan --project $P.Dproj --db $P.Db --library-db $Lib 2>$null } | Out-String) } finally { Pop-Location }
 }
 function Run-Fix($P) {
   $a = @('cycles', '--fix', '--apply', '--build-timeout', '1800', '--project', $P.Dproj, '--db', $P.Db, '--library-db', $Lib, '--format', 'json')
   Push-Location $WorkDir
-  try { $out = ($null | & $Exe @a 2>$null | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
+  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
   $j = $null; try { $j = $out | ConvertFrom-Json } catch { }
   $k = @(); foreach ($c in @($j.cycles)) { foreach ($x in @($c.refusals)) { if ($x) { $k += "$($x.kind): $($x.reason)" } } }
   return @{ Exit = $code; Out = $out; Kinds = $k }
@@ -134,8 +134,8 @@ function Test-Accepted([string]$Tag, [string[]]$Ifaces, [string]$NoClass, [strin
   Check "$Tag.3 the applied copy builds (independent msbuild); stdout + stderr byte-identical" ($b1.Ok -and ($out0 -ne '<no exe>') -and ($out1 -ceq $out0)) "$($b1.Errors) before=[$out0] after=[$out1]"
   $ui = (([IO.File]::ReadAllText((Join-Path $P.Root 'DemoUIConnect.pas'), $Ascii) -split "`r?`n") | ForEach-Object { $_ -replace '//.*$', '' -replace "'[^']*'", "''" }) -join "`n"
   Check "$Tag.4 the consumer code names no class of the edge" ($ui -notmatch $NoClass) $ui
-  $null | & $Exe index --project $P.Dproj --db $P.Db --library-db $Lib *> "$($P.Db).relog"
-  $left = ($null | & $Exe cycles --db $P.Db --library-db none 2>$null | Out-String)
+  $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project $P.Dproj --db $P.Db --library-db $Lib *> "$($P.Db).relog" }
+  $left = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --db $P.Db --library-db none 2>$null } | Out-String)
   Check "$Tag.5 no cycle after a re-index" ($left -match 'No circular unit dependencies found\.') $left
   return $P
 }

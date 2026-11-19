@@ -200,7 +200,7 @@ end.
 # CWD dependency. The engine writes '(loaded defaults from ...)' to stderr during
 # these very commands.
 function Invoke-Json([string[]]$DragArgs) {
-  $raw = (& $Exe @DragArgs 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe @DragArgs 2>$null }) -join "`n"
   if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
   return $raw | ConvertFrom-Json
 }
@@ -209,7 +209,7 @@ function Build-Db([string]$Name, [hashtable]$Files) {
   $work = Join-Path $WorkDir $Name
   foreach ($rel in $Files.Keys) { Write-Ascii (Join-Path $work $rel) $Files[$rel] }
   $db = Join-Path $WorkDir "$Name.sqlite"
-  $out = & $Exe index $work --db $db 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>$null }
   Check "$Name`: index exits 0" ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($out -join ' | ')"
   return $db
 }

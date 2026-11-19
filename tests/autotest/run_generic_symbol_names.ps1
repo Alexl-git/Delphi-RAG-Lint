@@ -189,18 +189,18 @@ $db = Join-Path $scratch 'gn.sqlite'
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db --quiet 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db --quiet 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
   function Get-Rows([string]$name) {
-    $j = (& $exePath query --name $name --db $db --json --exact 2>$null) -join "`n"
+    $j = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --db $db --json --exact 2>$null }) -join "`n"
     try { return ,@($j | ConvertFrom-Json) } catch { return ,@() }
   }
   # `sql --json` returns columns[] + POSITIONAL rows[][]; map each row onto its
   # column names so the assertions can say $row.n / $row.t / $row.ancestor_name.
   # A failed query (stderr dropped, empty stdout) is an EMPTY array, not @($null).
   function Sql([string]$q) {
-    $j = (& $exePath sql --db $db --query $q --json 2>$null) -join "`n"
+    $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n"
     if ([string]::IsNullOrWhiteSpace($j)) { return ,@() }
     try { $o = $j | ConvertFrom-Json } catch { return ,@() }
     $cols = @($o.columns | ForEach-Object { $_.name })
@@ -258,18 +258,18 @@ try {
   Check 'G5/G9 gnC.TNoArgs (TObjectList, no args, two uses-named candidates) stays unresolved' (($r5.Count -eq 1) -and ($null -eq $r5[0].id)) "id=$($r5[0].id)"
 
   # --- G7: query input carrying <...> matches ---------------------------------
-  $q7 = (& $exePath query --name 'TList<T>' --db $db --json --exact 2>$null) -join "`n"
+  $q7 = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name 'TList<T>' --db $db --json --exact 2>$null }) -join "`n"
   $rows7 = @(); try { $rows7 = @($q7 | ConvertFrom-Json) } catch { }
   Check 'G7 query --name "TList<T>" finds gnB.TList (arity-preferred)' (($rows7.Count -ge 1) -and (@($rows7 | ? { $_.qualified_name -eq 'gnB.TList' }).Count -eq 1)) "rows=$($rows7.Count)"
 
   # --- G8: display assembles name<params>; json carries the field -------------
-  $txt = (& $exePath query --name TPair --db $db --exact 2>$null) -join "`n"
+  $txt = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name TPair --db $db --exact 2>$null }) -join "`n"
   Check 'G8 text table shows TPair<K, V>' ($txt -match 'TPair<K, V>')
-  $anc = (& $exePath query ancestors --name TWithArgs --db $db 2>$null) -join "`n"
+  $anc = (& { $ErrorActionPreference = 'Continue'; & $exePath query ancestors --name TWithArgs --db $db 2>$null }) -join "`n"
   Check 'G8 ancestors climbs TWithArgs -> TObjectList<T: class> -> TList<T>' (($anc -match 'TObjectList<T: class>') -and ($anc -match 'TList<T>')) "out=$anc"
   # B2 (v23 sweep): the JSON row carries the edge's type args as WRITTEN. The
   # first hop of TWithArgs is `TObjectList<TPlain>`, so type_args = 'TPlain'.
-  $ancJ = (& $exePath query ancestors --name TWithArgs --db $db --json 2>$null) -join "`n"
+  $ancJ = (& { $ErrorActionPreference = 'Continue'; & $exePath query ancestors --name TWithArgs --db $db --json 2>$null }) -join "`n"
   $ancRows = @(); try { $ancRows = @(($ancJ | ConvertFrom-Json).ancestors) } catch { }
   Check 'B2 ancestors --json first hop carries type_args = TPlain' (($ancRows.Count -ge 1) -and ($ancRows[0].type_args -eq 'TPlain')) "row0=$($ancRows[0] | ConvertTo-Json -Compress)"
 
@@ -290,22 +290,22 @@ try {
   Check 'A4 control: gnC.TWrongArity (TImport<IUnknown>, 1 arg vs arity 2) stays UNRESOLVED' (($rC.Count -eq 1) -and ($null -eq $rC[0].id)) "id=$($rC[0].id)"
 
   # --- G7 per-segment strip: 'Unit.TClass<T>.Method' finds the METHOD (#3) ----
-  $q3 = (& $exePath query --name 'gnB.TBinder.BindAs<T>' --db $db --json --exact 2>$null) -join "`n"
+  $q3 = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name 'gnB.TBinder.BindAs<T>' --db $db --json --exact 2>$null }) -join "`n"
   $rows3 = @(); try { $rows3 = @($q3 | ConvertFrom-Json) } catch { }
   Check 'Q1 query --name "gnB.TBinder.BindAs<T>" returns the METHOD row (gnB.TBinder.BindAs), not the class' (($rows3.Count -eq 1) -and ($rows3[0].qualified_name -eq 'gnB.TBinder.BindAs') -and ($rows3[0].kind -notmatch '(?i)class')) "rows=$($rows3.Count) qn=$($rows3[0].qualified_name) kind=$($rows3[0].kind)"
   # The discriminating input: the <...> sits on a MIDDLE segment. The old
   # first-'<'/last-'>' split dropped '.Add' and returned the CLASS.
-  $q3m = (& $exePath query --name 'gnB.TList<T>.Add' --db $db --json --exact 2>$null) -join "`n"
+  $q3m = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name 'gnB.TList<T>.Add' --db $db --json --exact 2>$null }) -join "`n"
   $rows3m = @(); try { $rows3m = @($q3m | ConvertFrom-Json) } catch { }
   Check 'Q1 query --name "gnB.TList<T>.Add" returns the METHOD gnB.TList.Add (per-segment strip), not the class' (($rows3m.Count -eq 1) -and ($rows3m[0].qualified_name -eq 'gnB.TList.Add') -and ($rows3m[0].kind -notmatch '(?i)class')) "rows=$($rows3m.Count) qn=$($rows3m[0].qualified_name) kind=$($rows3m[0].kind)"
   # R2 (batch residue): the BY-NAME lookup used to single-split the whole
   # input -- 'TList<T>.Add' became bare 'TList' + params 'T' and answered the
   # CLASS. It now strips per dotted segment and matches the LAST segment's
   # bare name ('Add'), kept to rows whose qualified name ends with the path.
-  $q3n = (& $exePath query --name 'TList<T>.Add' --db $db --json --exact 2>$null) -join "`n"
+  $q3n = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name 'TList<T>.Add' --db $db --json --exact 2>$null }) -join "`n"
   $rows3n = @(); try { $rows3n = @($q3n | ConvertFrom-Json) } catch { }
   Check 'R2 query --name "TList<T>.Add" (no unit) returns the METHOD gnB.TList.Add via the by-name path, not the class' (($rows3n.Count -eq 1) -and ($rows3n[0].qualified_name -eq 'gnB.TList.Add') -and ($rows3n[0].kind -notmatch '(?i)class')) "rows=$($rows3n.Count) qn=$($rows3n[0].qualified_name) kind=$($rows3n[0].kind)"
-  $q3c = (& $exePath query --name 'gnB.TList<T>' --db $db --json --exact 2>$null) -join "`n"
+  $q3c = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name 'gnB.TList<T>' --db $db --json --exact 2>$null }) -join "`n"
   $rows3c = @(); try { $rows3c = @($q3c | ConvertFrom-Json) } catch { }
   Check 'Q2 query --name "gnB.TList<T>" still returns the class gnB.TList' (($rows3c.Count -eq 1) -and ($rows3c[0].qualified_name -eq 'gnB.TList') -and ($rows3c[0].kind -match '(?i)class')) "rows=$($rows3c.Count) qn=$($rows3c[0].qualified_name) kind=$($rows3c[0].kind)"
 
@@ -319,14 +319,14 @@ try {
   # verbatim lookup finds nothing; fdb05c9d ran it first and answered zero.
   # The probe is `unit-usage`, NOT `query --name`: the latter retries by
   # qualified name on a miss (CLI, INBOX 2.4) and passed on the broken build.
-  $qd = (& $exePath query unit-usage --unit 'gn.Dotted' --db $db --json 2>$null) -join "`n"
+  $qd = (& { $ErrorActionPreference = 'Continue'; & $exePath query unit-usage --unit 'gn.Dotted' --db $db --json 2>$null }) -join "`n"
   $qdExit = $LASTEXITCODE
   $rowsD = @(); try { $rowsD = @($qd | ConvertFrom-Json) } catch { }
   # exports_known is the tell: the importer list comes from unit_uses, but the
   # export surface comes from FindSymbolsByExactName('gn.Dotted') -- broken,
   # it degrades to exports_known:false with no referenced verdict.
   Check 'D1 query unit-usage --unit "gn.Dotted" resolves the UNIT by its verbatim dotted name: gnD.pas listed with exports_known:true and referenced:true' (($qdExit -eq 0) -and ($rowsD.Count -eq 1) -and ($rowsD[0].file -match '(?i)\\gnD\.pas$') -and ($rowsD[0].exports_known -eq $true) -and ($rowsD[0].referenced -eq $true)) "exit=$qdExit rows=$($rowsD.Count) file=$($rowsD[0].file) exports_known=$($rowsD[0].exports_known) referenced=$($rowsD[0].referenced)"
-  $qdc = (& $exePath query --name 'gn.Dotted.TDotted' --db $db --json --exact 2>$null) -join "`n"
+  $qdc = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name 'gn.Dotted.TDotted' --db $db --json --exact 2>$null }) -join "`n"
   $rowsDC = @(); try { $rowsDC = @($qdc | ConvertFrom-Json) } catch { }
   Check 'D1 query --name "gn.Dotted.TDotted" returns the CLASS gn.Dotted.TDotted (per-segment fallback still reaches it)' (($rowsDC.Count -eq 1) -and ($rowsDC[0].qualified_name -eq 'gn.Dotted.TDotted') -and ($rowsDC[0].kind -match '(?i)class')) "rows=$($rowsDC.Count) qn=$($rowsDC[0].qualified_name) kind=$($rowsDC[0].kind)"
 

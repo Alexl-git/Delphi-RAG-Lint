@@ -12,13 +12,13 @@ $script = Join-Path $PSScriptRoot '..\..\build\check-thirdparty-head.ps1'
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ("tph-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
 $dir = Join-Path $tmp 'third_party\dll-win64'
 [IO.Directory]::CreateDirectory($dir) | Out-Null
-function Run { $out = & pwsh -NoProfile -File $script -Root $tmp 2>&1 | Out-String; return @($LASTEXITCODE, $out) }
+function Run { $out = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $script -Root $tmp 2>&1 | ForEach-Object { "$_" } } | Out-String; return @($LASTEXITCODE, $out) }
 try {
-  $null = & git -C $tmp init -q 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & git -C $tmp init -q 2>&1 | ForEach-Object { "$_" } }
   $null = & git -C $tmp config user.email t@t; $null = & git -C $tmp config user.name t
   [IO.File]::WriteAllBytes("$dir\x.dll", [byte[]](1, 2, 3, 4))
   [IO.File]::WriteAllBytes("$dir\p.bpl", [byte[]](1))
-  $null = & git -C $tmp add -A 2>&1; $null = & git -C $tmp commit -qm base 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & git -C $tmp add -A 2>&1 | ForEach-Object { "$_" } }; $null = & { $ErrorActionPreference = 'Continue'; & git -C $tmp commit -qm base 2>&1 | ForEach-Object { "$_" } }
   $r = Run; Check 'clean tree exits 0' ($r[0] -eq 0) $r[1]
   [IO.File]::WriteAllBytes("$dir\p.bpl", [byte[]](9, 9))
   $r = Run; Check 'drifted BPL is ignored' ($r[0] -eq 0) $r[1]
@@ -31,7 +31,7 @@ try {
   $env:DRAGLINT_ALLOW_DLL_DRIFT = $null
   [IO.File]::Delete("$dir\x.dll")
   $r = Run; Check 'deleted DLL exits 1' ($r[0] -eq 1) $r[1]
-  $r = & pwsh -NoProfile -File $script -Root ([IO.Path]::GetTempPath()) 2>&1 | Out-String
+  $r = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $script -Root ([IO.Path]::GetTempPath()) 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'not a work tree exits 2' ($LASTEXITCODE -eq 2) $r
 } finally {
   $env:DRAGLINT_ALLOW_DLL_DRIFT = $null

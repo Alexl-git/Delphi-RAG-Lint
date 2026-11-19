@@ -40,9 +40,9 @@ Copy-Item $fixture $target -Force
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
-  & $exePath document --qname calledfrom.TAlpha.Run --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --qname calledfrom.TAlpha.Run --db $db --apply 2>$null } | Out-Null
   Check 'apply: .bak written' (Test-Path "$target.bak")
 
   $txt = [IO.File]::ReadAllText($target)

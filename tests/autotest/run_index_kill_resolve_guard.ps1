@@ -87,7 +87,7 @@ function Index-AndKill([string]$Db, [string]$Pattern, [int]$Times, [hashtable]$E
   return ($hit -and $alive)
 }
 function Sql-Rows([string]$Db, [string]$Query) {
-  $out = & $Exe sql --db $Db --json --limit 1000000 --query $Query 2>$null | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --json --limit 1000000 --query $Query 2>$null } | Out-String
   $j = $out | ConvertFrom-Json
   return , @($j.rows | ForEach-Object { , @($_) })
 }

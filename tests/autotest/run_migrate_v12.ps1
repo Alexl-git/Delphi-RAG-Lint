@@ -65,7 +65,7 @@ python $py $db
 Check 'v12 fixture DB created' (($LASTEXITCODE -eq 0) -and (Test-Path $db))
 
 # --- 1. index into the old DB must migrate + succeed (self-heal path) ---
-$idxOut = & $Exe index $FixtureDir --db $db 2>&1
+$idxOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $FixtureDir --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index onto v12 db exits 0' ($LASTEXITCODE -eq 0) (($idxOut | Select-Object -Last 1))
 
 # --- 2. column must now exist, schema stamped v13+ ---
@@ -85,7 +85,7 @@ Check 'idx_refs_enclosing created'      ($state[2] -eq 'True')
 
 # --- 3. forms-csv against the migrated DB must succeed (user scenario) ---
 $out = "$WorkDir\forms.csv"
-& $Exe forms-csv --project "$FixtureDir\Demo.dproj" --db $db --out $out 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe forms-csv --project "$FixtureDir\Demo.dproj" --db $db --out $out 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'forms-csv exits 0' ($LASTEXITCODE -eq 0)
 Check 'csv exists' (Test-Path $out)
 
@@ -98,7 +98,7 @@ Check 'csv exists' (Test-Path $out)
 # FAILS on the 1.49.0-alpha base (it migrates and exits 0).
 $db2 = "$WorkDir\v12b.sqlite"
 python $py $db2
-$fc2 = (& $Exe forms-csv --project "$FixtureDir\Demo.dproj" --db $db2 --out "$WorkDir\forms2.csv" 2>&1 | Out-String)
+$fc2 = (& { $ErrorActionPreference = 'Continue'; & $Exe forms-csv --project "$FixtureDir\Demo.dproj" --db $db2 --out "$WorkDir\forms2.csv" 2>&1 | ForEach-Object { "$_" } } | Out-String)
 $fc2Exit = $LASTEXITCODE
 Check 'forms-csv directly on v12 db is refused (exit <> 0)' ($fc2Exit -ne 0) "exit=$fc2Exit"
 Check 'forms-csv directly on v12 db names the reason (older than this engine reads; re-index it)' ($fc2 -match 'v12 is older than this engine reads' -and $fc2 -match 're-index it') $fc2.Trim()

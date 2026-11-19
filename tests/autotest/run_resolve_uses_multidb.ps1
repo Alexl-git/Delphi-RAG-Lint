@@ -110,7 +110,7 @@ $projDb = Join-Path $WorkDir 'proj.sqlite'
 
 Write-Host 'Indexing fixtures' -ForegroundColor Cyan
 foreach ($pair in @(@($libSrc, $libDb), @($projSrc, $projDb))) {
-  $out = & $Exe index $pair[0] --db $pair[1] --quiet 2>&1
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe index $pair[0] --db $pair[1] --quiet 2>&1 | ForEach-Object { "$_" } }
   Check ("index {0}" -f (Split-Path $pair[1] -Leaf)) ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($out -join ' | ')"
 }
 
@@ -120,7 +120,7 @@ $stranger = Join-Path $projSrc 'StrangerUnit.pas'
 function ResolveUses([string]$InFile, [string[]]$Dbs) {
   $dbArgs = @()
   foreach ($d in $Dbs) { $dbArgs += '--db'; $dbArgs += $d }
-  $out = @(& $Exe resolve-uses --name MAGIC_CONST --in $InFile @dbArgs --quiet 2>&1) | ForEach-Object { "$_" }
+  $out = @(& { $ErrorActionPreference = 'Continue'; & $Exe resolve-uses --name MAGIC_CONST --in $InFile @dbArgs --quiet 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" }
   $script:LastExit = $LASTEXITCODE
   return ($out -join "`n")
 }
@@ -167,7 +167,7 @@ Write-Host ''
 Write-Host 'control' -ForegroundColor Cyan
 
 $dbArgs = @('--db', $libDb, '--db', $projDb)
-$rNone = @(& $Exe resolve-uses --name ZZZ_NoSuchSymbol @dbArgs --quiet 2>&1) | ForEach-Object { "$_" }
+$rNone = @(& { $ErrorActionPreference = 'Continue'; & $Exe resolve-uses --name ZZZ_NoSuchSymbol @dbArgs --quiet 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" }
 $noneExit = $LASTEXITCODE
 Check 'control: an absent symbol still reports "No unit" and exits 1' `
   ((($rNone -join "`n") -match 'No unit') -and ($noneExit -eq 1)) "exit=$noneExit; $($rNone -join "`n")"

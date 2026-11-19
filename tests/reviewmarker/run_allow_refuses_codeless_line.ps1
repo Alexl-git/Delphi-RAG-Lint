@@ -100,7 +100,7 @@ Check 'fixture lines located' (($docLine -gt 0) -and ($codeLine -gt 0)) "doc=$do
 # `allow` writes there and leaves the doc comment byte-identical. The defect this
 # file exists for -- dl:ok text inside a doc comment -- must still be impossible.
 $beforeLines = [System.IO.File]::ReadAllLines($fixture)
-$out = & $Exe allow $fixture --fix-line $docLine --fix-rule doc-drift --apply 2>&1
+$out = & { $ErrorActionPreference = 'Continue'; & $Exe allow $fixture --fix-line $docLine --fix-rule doc-drift --apply 2>&1 | ForEach-Object { "$_" } }
 $rc  = $LASTEXITCODE
 $after = [System.IO.File]::ReadAllText($fixture)
 $afterLines = [System.IO.File]::ReadAllLines($fixture)
@@ -119,7 +119,7 @@ $trailing = Join-Path $WorkDir 'Trailing.pas'
 [System.IO.File]::WriteAllText($trailing, ($norm.TrimEnd() + "`r`n/// <summary>Dangling: documents nothing.</summary>"), [System.Text.Encoding]::ASCII)
 $tLine = [System.IO.File]::ReadAllLines($trailing).Count
 $before = [System.IO.File]::ReadAllText($trailing)
-$out = & $Exe allow $trailing --fix-line $tLine --fix-rule doc-drift --apply 2>&1
+$out = & { $ErrorActionPreference = 'Continue'; & $Exe allow $trailing --fix-line $tLine --fix-rule doc-drift --apply 2>&1 | ForEach-Object { "$_" } }
 $rc  = $LASTEXITCODE
 $after = [System.IO.File]::ReadAllText($trailing)
 Check '1b a trailing /// line is refused (non-zero exit)' ($rc -ne 0) "got $rc"
@@ -129,14 +129,14 @@ Check '1b no dl:ok was written into the doc comment' (-not ($after -match '///.*
 
 # --- 2. a blank line is the same class and must also be refused --------------
 $before = [System.IO.File]::ReadAllText($fixture)
-& $Exe allow $fixture --fix-line $blankLine --fix-rule doc-drift --apply 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe allow $fixture --fix-line $blankLine --fix-rule doc-drift --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $rc = $LASTEXITCODE
 Check '2 a blank line is refused' ($rc -ne 0) "got $rc"
 Check '2 the file is byte-identical' ($before -eq ([System.IO.File]::ReadAllText($fixture)))
 
 # --- 3. POSITIVE CONTROL: a real code line MUST still be written -------------
 # Without this, every assertion above passes with `allow --apply` simply broken.
-$out = & $Exe allow $fixture --fix-line $codeLine --fix-rule magic-literal --apply 2>&1
+$out = & { $ErrorActionPreference = 'Continue'; & $Exe allow $fixture --fix-line $codeLine --fix-rule magic-literal --apply 2>&1 | ForEach-Object { "$_" } }
 $rc  = $LASTEXITCODE
 $after = [System.IO.File]::ReadAllLines($fixture)
 Check '3 POSITIVE CONTROL: a code line is accepted' ($rc -eq 0) "got $rc"

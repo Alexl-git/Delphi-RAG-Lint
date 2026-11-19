@@ -51,11 +51,11 @@ Write-Ascii "$WorkDir\lib\uLib.pas" (Lines @('unit uLib;', 'interface', 'procedu
 Write-Ascii "$WorkDir\S\S.dpr" (Lines @('program S;', 'uses uShared;', 'begin', 'end.'))
 
 $dbA = "$WorkDir\A.sqlite"; $dbB = "$WorkDir\B.sqlite"; $dbL = "$WorkDir\library-Win64.sqlite"
-& $Exe index "$WorkDir\S" --db $dbA 2>&1 | Out-Null
-& $Exe index "$WorkDir\A" --db $dbA 2>&1 | Out-Null
-& $Exe index "$WorkDir\S" --db $dbB 2>&1 | Out-Null
-& $Exe index "$WorkDir\B" --db $dbB 2>&1 | Out-Null
-& $Exe index "$WorkDir\lib" --db $dbL 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\S" --db $dbA 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\A" --db $dbA 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\S" --db $dbB 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\B" --db $dbB 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\lib" --db $dbL 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'SETUP: three fixture indexes built' ((Test-Path $dbA) -and (Test-Path $dbB) -and (Test-Path $dbL))
 Write-Ascii "$WorkDir\S\S.dlcontext.json" ((@{ schema = 1; project = "$WorkDir\S\S.dpr"; platform = 'Win64'; config = 'Debug'
   projectDb = $dbB; source = @{ file = "$WorkDir\S\S.dpr"; sha1 = '' } } | ConvertTo-Json -Depth 5))

@@ -51,7 +51,7 @@ $db = Join-Path $WorkDir 'v13.sqlite'
 Push-Location C:\TEMP
 try {
     # --- 0. build a real (v14) index with the CURRENT D5 exe -----------------
-    & $exePath index $srcDir --db $db 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $srcDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
     Check 'seed index (current exe) exits 0' ($LASTEXITCODE -eq 0)
     Check 'seed db created' (Test-Path $db)
 
@@ -90,7 +90,7 @@ print(ver, tbl is None)
     # This is the realistic upgrade path: opening the store re-runs SCHEMA_DDL
     # (Migrate) THEN re-parses + ResolveCallTargets, so call_edges is both
     # created and repopulated in one step.
-    $idxOut = & $exePath index $srcDir --db $db 2>&1
+    $idxOut = & { $ErrorActionPreference = 'Continue'; & $exePath index $srcDir --db $db 2>&1 | ForEach-Object { "$_" } }
     Check 'migrate reindex exits 0' ($LASTEXITCODE -eq 0) (($idxOut | Select-Object -Last 1))
 
     # --- 4. assert the upgrade ------------------------------------------------
@@ -121,7 +121,7 @@ print(ver, tbl is not None, idx_target is not None, idx_ref is not None, cnt, ",
     Check 'AFTER: call_edges has expected columns'  ($state[5] -eq $expectedCols) "(got: $($state[5]))"
 
     # --- 5. sanity: a resolved-callers query works against the migrated db ---
-    $callersOut = & $exePath query find-callers --name Run --resolved --db $db 2>&1
+    $callersOut = & { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name Run --resolved --db $db 2>&1 | ForEach-Object { "$_" } }
     Check 'find-callers --resolved exits 0 on migrated db' ($LASTEXITCODE -eq 0)
 } finally { Pop-Location }
 

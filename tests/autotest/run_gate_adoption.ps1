@@ -45,7 +45,7 @@ function New-Project([string]$Fixture, [string]$Dproj, [string]$Tag) {
   $d = Join-Path $Tmp $Tag
   Copy-Item (Join-Path $Fx $Fixture) $d -Recurse
   $db = Join-Path $d 'p.sqlite'
-  & $Exe index --project (Join-Path $d $Dproj) --db $db --library-db none *> (Join-Path $Tmp "$Tag.index.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $d $Dproj) --db $db --library-db none *> (Join-Path $Tmp "$Tag.index.log") }
   if ($LASTEXITCODE -ne 0) { throw "index $Tag exit $LASTEXITCODE" }
   return @{ Dir = $d; Db = $db; Proj = (Join-Path $d $Dproj) }
 }
@@ -68,7 +68,7 @@ function Cancel-Run([string]$Tag, $P, [string[]]$Args_) {
   $run = Start-Process -FilePath $Exe -ArgumentList $q -RedirectStandardOutput (Join-Path $Tmp "$Tag.out") -RedirectStandardError (Join-Path $Tmp "$Tag.err") -NoNewWindow -PassThru
   $parked = Wait-For { (Test-Path $fake.Flag) -or $run.HasExited } 300
   if (-not ($parked -and (Test-Path $fake.Flag) -and -not $run.HasExited)) { try { $run.Kill() } catch { }; Stop-Parked; return @{ Parked = $false; Exit = $null } }
-  $null = & $Exe shutdown --db $P.Db --wait 60 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe shutdown --db $P.Db --wait 60 2>&1 | ForEach-Object { "$_" } }
   $ended = Wait-For { $run.HasExited } 60
   $code = if ($ended) { $run.ExitCode } else { try { $run.Kill() } catch { }; $null }
   $left = (Parked).Count
@@ -99,13 +99,13 @@ try {
   $U = New-Project 'unwith' 'UwDemo.dproj' 'uw'
   $uBefore = Tree-Hash $U.Dir
   $uFile = Join-Path $U.Dir 'UwCases.pas'
-  $viaUnwith = (& $Exe unwith --db $U.Db --library-db none --in $uFile --plan 2>&1) -join "`n"
+  $viaUnwith = (& { $ErrorActionPreference = 'Continue'; & $Exe unwith --db $U.Db --library-db none --in $uFile --plan 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $uCode = $LASTEXITCODE
-  $viaLint = (& $Exe lint --fix --fix-rule with-statement --db $U.Db --library-db none --in $uFile 2>&1) -join "`n"
+  $viaLint = (& { $ErrorActionPreference = 'Continue'; & $Exe lint --fix --fix-rule with-statement --db $U.Db --library-db none --in $uFile 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $lCode = $LASTEXITCODE
   Check 'U0 control: the unwith plan is a real plan (not an error)' (($uCode -eq 0) -and ($viaUnwith.Length -gt 40)) "exit $uCode; $viaUnwith"
   Check 'U1 lint --fix --fix-rule with-statement prints the same plan, same exit' (($lCode -eq $uCode) -and ($viaLint -ceq $viaUnwith)) "exit $lCode; $viaLint"
-  & $Exe lint --fix --fix-rule with-statement --apply --db $U.Db --library-db none --in $uFile *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe lint --fix --fix-rule with-statement --apply --db $U.Db --library-db none --in $uFile *> $null }
   Check 'U2 --apply without --project exits 2 (the gate needs a project), like unwith' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
   Check 'U3 nothing was written' ((Tree-Hash $U.Dir) -ceq $uBefore)
 
@@ -120,7 +120,7 @@ try {
     $dpr = Join-Path $P.Dir 'NarrowParam.dpr'
     [IO.File]::WriteAllText($dpr, [IO.File]::ReadAllText($dpr).Replace("NpUse in 'NpUse.pas';", "NpUse in 'NpUse.pas',`r`n  Basic in 'Basic.pas';"), [Text.Encoding]::ASCII)
     if ($Dirty) { $np = Join-Path $P.Dir 'NpRoot.pas'; [IO.File]::WriteAllText($np, "this is not pascal`r`n" + [IO.File]::ReadAllText($np), [Text.Encoding]::ASCII) }
-    & $Exe index --project $P.Proj --db $P.Db --library-db none *> (Join-Path $Tmp "$Tag.reindex.log")
+    & { $ErrorActionPreference = 'Continue'; & $Exe index --project $P.Proj --db $P.Db --library-db none *> (Join-Path $Tmp "$Tag.reindex.log") }
     $P.Basic = $b
     return $P
   }
@@ -131,25 +131,25 @@ try {
   $emLines = $g0 -split "`r?`n"
   $from = ([Array]::FindIndex($emLines, [Predicate[string]] { param($l) $l -match 't := a \+ 1' })) + 1
   $em = @('extract-method', '--from-line', "$from", '--to-line', "$($from + 1)", '--name', 'Extracted', '--apply')
-  $null = & $Exe @em --file $G.Basic --project $G.Proj --rsvars $Rsvars 2>$null
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe @em --file $G.Basic --project $G.Proj --rsvars $Rsvars 2>$null }
   $g1 = [IO.File]::ReadAllText($G.Basic)
   Check 'G1 gated, clean project: exit 0, the method was extracted, a .BCK backup was made' (($LASTEXITCODE -eq 0) -and ($g1 -match 'procedure Extracted') -and (@(Get-ChildItem $G.Dir -Filter 'Basic.pas.BCK*').Count -ge 1)) "exit $LASTEXITCODE"
   # dirty baseline, gated: refused, nothing written
   $D = New-Gated 'g2' $true
   $dBefore = Tree-Hash $D.Dir
-  $dErr = (& $Exe @em --file $D.Basic --project $D.Proj --rsvars $Rsvars 2>&1 | Out-String)
+  $dErr = (& { $ErrorActionPreference = 'Continue'; & $Exe @em --file $D.Basic --project $D.Proj --rsvars $Rsvars 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check 'G2 gated, project does not build: exit 1, REFUSED (dirty-baseline)' (($LASTEXITCODE -eq 1) -and ($dErr -match 'REFUSED \(dirty-baseline\)')) "exit $LASTEXITCODE; $dErr"
   Check 'G3 nothing was written' ((Tree-Hash $D.Dir) -ceq $dBefore)
   # control: no --project on the same project = the old, ungated write
-  $null = & $Exe @em --file $D.Basic --no-compile-gate 2>$null
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe @em --file $D.Basic --no-compile-gate 2>$null }
   Check 'G4 control: --no-compile-gate writes unbuilt (1.52 GATE2: the gate is the default)' (($LASTEXITCODE -eq 0) -and ([IO.File]::ReadAllText($D.Basic) -match 'procedure Extracted'))
 
   $E = New-Gated 'e1' $true
   $eBefore = Tree-Hash $E.Dir
-  $eErr = (& $Exe create-enum-helper --qname Basic.TColor --db $E.Db --library-db none --project $E.Proj --rsvars $Rsvars --apply 2>&1 | Out-String)
+  $eErr = (& { $ErrorActionPreference = 'Continue'; & $Exe create-enum-helper --qname Basic.TColor --db $E.Db --library-db none --project $E.Proj --rsvars $Rsvars --apply 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check 'E1 control: the enum is found and a helper is planned' ($eErr -notmatch 'not_found|REFUSED: .*not found') $eErr
   Check 'E2 gated, project does not build: exit 1, REFUSED (dirty-baseline), nothing written' (($LASTEXITCODE -eq 1) -and ($eErr -match 'REFUSED \(dirty-baseline\)') -and ((Tree-Hash $E.Dir) -ceq $eBefore)) "exit $LASTEXITCODE; $eErr"
-  $null = & $Exe create-enum-helper --qname Basic.TColor --db $E.Db --library-db none --apply --no-compile-gate 2>$null
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe create-enum-helper --qname Basic.TColor --db $E.Db --library-db none --apply --no-compile-gate 2>$null }
   Check 'E3 control: --no-compile-gate writes the helper unbuilt (1.52 GATE2)' (($LASTEXITCODE -eq 0) -and ((Tree-Hash $E.Dir) -cne $eBefore))
 }
 finally {

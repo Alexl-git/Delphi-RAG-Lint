@@ -17,7 +17,7 @@ function Check($n, $ok) { if ($ok) { Write-Host "  [PASS] $n" -ForegroundColor G
 $node = (Get-Command node -ErrorAction SilentlyContinue)
 Check 'node available' ($null -ne $node)
 if ($node) {
-  $out = & node (Join-Path $Dir 'test\plannedstop.test.js') 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & node (Join-Path $Dir 'test\plannedstop.test.js') 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'plannedstop.test.js passes' ($LASTEXITCODE -eq 0 -and $out -match 'all assertions passed')
 }
 $ext = [IO.File]::ReadAllText((Join-Path $Dir 'extension.js'))

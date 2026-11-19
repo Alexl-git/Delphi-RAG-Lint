@@ -206,18 +206,18 @@ end
 '@
 
 $db = P 'fx.sqlite'
-$idx = & $Exe index $fx --db $db 2>&1
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'fx the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db)) "exit=$LASTEXITCODE; $($idx -join ' | ')"
 
 function Pt([string[]]$A) {
-  $o = (& $Exe proptree --qname DeepFix.TDeep --no-write-back --json --db $db @A 2>$null) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe proptree --qname DeepFix.TDeep --no-write-back --json --db $db @A 2>$null }) -join "`n"
   $code = $LASTEXITCODE
   $j = Json $o
   $paths = if ($j) { @($j.properties | ForEach-Object { [string]$_.path }) } else { @() }
   return [pscustomobject]@{ Code = $code; Out = $o; J = $j; Paths = $paths; Max = (MaxSegs $paths) }
 }
 function Run([string[]]$A) {
-  $o = (& $Exe @A 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @A 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 
@@ -299,7 +299,7 @@ $g = Book 'g.rules' "#depth 1`n#convert DeepFix.TDeep -> DeepFix.TDeep2, DeepFix
 $r = Run @('convert-validate', '--rules', $g, '--from', 'DeepFix.TDeep', '--to', 'DeepFix.TDeep2', '--db', $db)
 Check 'g1 convert-validate: #depth 1 still validates a 3-segment #link, exit 0' `
   (($r.Code -eq 0) -and ($r.Out -match '(?m)^OK') -and -not ($r.Out -match 'not found')) $r.Out
-$o = (& $Exe convert-apply --unit (Join-Path $fx 'DeepForm.pas') --rules $g --db $db --format json 2>$null) -join "`n"
+$o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (Join-Path $fx 'DeepForm.pas') --rules $g --db $db --format json 2>$null }) -join "`n"
 $code = $LASTEXITCODE
 $j = Json $o
 Check 'g2 convert-apply dry run: #depth 1 book with a 3-segment #link is ok, exit 0' `

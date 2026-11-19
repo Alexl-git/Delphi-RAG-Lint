@@ -39,7 +39,7 @@ function New-Copy([string]$Name) {
 }
 function Run([string[]]$CliArgs) {
   $o = Join-Path $WorkDir 'o.txt'; $e = Join-Path $WorkDir 'e.txt'
-  & $Exe @CliArgs > $o 2> $e
+  & { $ErrorActionPreference = 'Continue'; & $Exe @CliArgs > $o 2> $e }
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = [IO.File]::ReadAllText($o); Err = [IO.File]::ReadAllText($e) }
 }
 function Hash([string]$Dir) {

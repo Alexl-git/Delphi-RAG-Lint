@@ -69,9 +69,9 @@ $srcForms = "$PSScriptRoot\..\..\src\forms"
 $hard = @(Get-ChildItem -LiteralPath $srcForms -Filter '*.pas' | Select-String -Pattern 'frmgridlayout|TGridMenuPopup|KnownPopupForms')
 Check 'no hard-coded popup form in src\forms' ($hard.Count -eq 0) (($hard | ForEach-Object { "$($_.Filename):$($_.LineNumber)" }) -join ' ')
 
-& $Exe index $fx --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'index fixture exits 0' ($LASTEXITCODE -eq 0)
-$err = @(& $Exe forms-csv --project "$fx\Demo6.dproj" --db $db --output $out 2>&1 | ForEach-Object { "$_" })
+$err = @(& { $ErrorActionPreference = 'Continue'; & $Exe forms-csv --project "$fx\Demo6.dproj" --db $db --output $out 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" })
 Check 'forms-csv exits 0' ($LASTEXITCODE -eq 0)
 Check 'popupForms: entry without form skipped on stderr' (@($err | Where-Object { $_ -match 'entry has no "form"' }).Count -eq 1) ($err -join ' | ')
 Check 'popupForms: non-string form skipped on stderr' (@($err | Where-Object { $_ -match '"form" is not a string' }).Count -eq 1) ($err -join ' | ')
@@ -260,7 +260,7 @@ foreach ($case in @(
     @{ Name = 'no popupForms key';   Json = '{ "ownRoots": ["."] }';         WantErr = $false })) {
   [IO.File]::WriteAllText("$fx\_D-RAG\drag-lint-project.json", $case.Json)
   $out2 = "$WorkDir\forms6-$($case.Name -replace ' ', '-').csv"
-  $err2 = @(& $Exe forms-csv --project "$fx\Demo6.dproj" --db $db --output $out2 2>&1 | ForEach-Object { "$_" })
+  $err2 = @(& { $ErrorActionPreference = 'Continue'; & $Exe forms-csv --project "$fx\Demo6.dproj" --db $db --output $out2 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" })
   Check "$($case.Name): forms-csv exits 0" ($LASTEXITCODE -eq 0)
   $l2 = if (Test-Path $out2) { @([IO.File]::ReadAllText($out2) -split "`r`n" | Where-Object { $_ -ne '' }) } else { @() }
   $rows2 = if ($l2.Count -gt 2) { @($l2[1..($l2.Count - 2)] | ConvertFrom-Csv -Header ($header -split ',')) } else { @() }

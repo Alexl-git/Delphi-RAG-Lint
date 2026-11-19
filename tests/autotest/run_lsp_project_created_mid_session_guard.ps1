@@ -52,7 +52,7 @@ $kept = "$R\kept\uKept.pas";  WriteAnsi $kept (PasText 'uKept')
 WriteAnsi "$R\kept\Kept.dproj" (DprojText 'uKept.pas')
 WriteAnsi "$WorkDir\lib\uLib.pas" (PasText 'uLib')
 $db = "$WorkDir\library-Win64.sqlite"
-& $Exe index "$WorkDir\lib" --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\lib" --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 $psi = [Diagnostics.ProcessStartInfo]::new($Exe)
 foreach ($a in @('lsp', '--db', $db)) { $psi.ArgumentList.Add($a) }

@@ -41,7 +41,7 @@ function RunCase([string]$name, [string]$marker, [string[]]$extra) {
   WriteAnsi (Join-Path $d 'Legacy.dpr') "program Legacy;`r`n`r`nuses`r`n  uLegacy in 'uLegacy.pas';`r`n`r`nbegin`r`nend.`r`n"
   WriteAnsi (Join-Path $d 'Legacy.dproj') (DprojText $marker)
   $ea = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-  $out = & $Exe pp-profile --in (Join-Path $d 'uLegacy.pas') @extra 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe pp-profile --in (Join-Path $d 'uLegacy.pas') @extra 2>$null }
   $ErrorActionPreference = $ea
   return @($out)
 }

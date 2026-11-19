@@ -105,7 +105,7 @@ end.
 $file = Join-Path $WorkDir 'uUbaShadow.pas'
 [System.IO.File]::WriteAllText($file, (($Fixture -replace "`r`n","`n") -replace "`n","`r`n"), [System.Text.Encoding]::ASCII)
 
-$out = & $Exe lint $file --rules-dir $RulesDir 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file --rules-dir $RulesDir 2>&1 | ForEach-Object { "$_" } } | Out-String
 $uba = @($out -split "`r?`n" | Where-Object { $_ -match 'used-before-assignment:' })
 function At([int]$Line) { @($uba | Where-Object { $_ -match (':{0}:\d+\s' -f $Line) }) }
 

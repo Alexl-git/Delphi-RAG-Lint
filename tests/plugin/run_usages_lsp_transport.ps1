@@ -41,9 +41,9 @@ try {
   $pas = @('unit UQ;','interface','type','  TUq = class','    FValue: Integer;','    procedure Touch;','  end;','implementation','procedure TUq.Touch;','begin','  FValue:= FValue + 1;','end;','end.') -join "`r`n"
   [IO.File]::WriteAllText((Join-Path $src 'UQ.pas'), $pas, [Text.Encoding]::ASCII)
   $db = Join-Path $work 'uq.sqlite'
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $name = 'FValue'
-  $cli = (& $exePath usages --name $name --db $db --json 2>$null) -join "`n" | ConvertFrom-Json
+  $cli = (& { $ErrorActionPreference = 'Continue'; & $exePath usages --name $name --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json
 
   # ---- one real LSP session
   $psi = [Diagnostics.ProcessStartInfo]::new($exePath, "lsp --db `"$db`"")
@@ -121,7 +121,7 @@ try {
   $log = Join-Path $work 'build.log'
   Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $log -RedirectStandardError "$log.err" -NoNewWindow -Wait
   Check 'UsagesQueryTests compiles' ((Get-Content $log -Raw) -match 'BUILD_EXITCODE=0')
-  $out = & (Join-Path $work 'UsagesQueryTests.exe') --reply $replyFile $name 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & (Join-Path $work 'UsagesQueryTests.exe') --reply $replyFile $name 2>&1 | ForEach-Object { "$_" } } | Out-String
   Write-Host $out.TrimEnd()
   Check 'the pure reader passes, real envelope included' (($LASTEXITCODE -eq 0) -and ($out -match '\d+ passed, 0 failed'))
 

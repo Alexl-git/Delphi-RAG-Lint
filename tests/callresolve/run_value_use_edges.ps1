@@ -99,7 +99,7 @@ end.
 
 $db = Join-Path $WorkDir 'app.sqlite'
 Push-Location C:\TEMP
-$idxOut = & $exePath index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | Out-String
+$idxOut = & { $ErrorActionPreference = 'Continue'; & $exePath index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'V index built' (Test-Path $db) $db
 $raw = & $exePath sql --db $db --json --limit 500 --query "SELECT f.path, r.start_line, r.kind, r.name_text, CASE WHEN r.symbol_id IS NULL THEN 0 ELSE 1 END, coalesce(m.mode,''), coalesce(t.qualified_name,'') FROM refs r JOIN files f ON f.id = r.file_id LEFT JOIN member_accesses m ON m.ref_id = r.id LEFT JOIN symbols t ON t.id = m.receiver_type_symbol_id WHERE r.kind IN ('read','write','member-access') ORDER BY f.path, r.start_line" | Out-String
 Pop-Location

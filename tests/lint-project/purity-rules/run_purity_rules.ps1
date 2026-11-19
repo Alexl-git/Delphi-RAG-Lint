@@ -67,7 +67,7 @@ function MsgOf([object[]]$Findings, [string]$Needle) {
 
 # '<effect_summary> ~ <effect_witness>' of one routine, from the index. sql --json rows are positional.
 function StoredFact([string]$Name) {
-  $sqlDoc = (& $exePath sql --db $db --json --query "select f.effect_summary, f.effect_witness from symbol_facts f join symbols s on s.id = f.symbol_id where s.name = '$Name'" 2>$null) -join "`n" | ConvertFrom-Json
+  $sqlDoc = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --query "select f.effect_summary, f.effect_witness from symbol_facts f join symbols s on s.id = f.symbol_id where s.name = '$Name'" 2>$null }) -join "`n" | ConvertFrom-Json
   if (@($sqlDoc.rows).Count -ne 1) { return '' }
   return ('{0} ~ {1}' -f $sqlDoc.rows[0][0], $sqlDoc.rows[0][1])
 }
@@ -82,18 +82,18 @@ $stmtLine = (Select-String -LiteralPath $fixture -Pattern '^\s*Twice\(3\);' | Se
 $wrapLine = (Select-String -LiteralPath $fixture -Pattern '^\s*Twice\(6\);' | Select-Object -First 1).LineNumber
 
 Write-Host "RUN 1: bare lint-all ($RuleDiscard ON by default, $RuleQuery OFF)..."
-$f0 = Parse-Findings (& $exePath lint-all --db $db --format json 2>$null)
+$f0 = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json 2>$null })
 $d0   = @($f0 | Where-Object { $_.rule -eq $RuleDiscard })
 $off1 = @($f0 | Where-Object { $_.rule -eq $RuleQuery   }).Count
 Write-Host ("  run 1: {0} finding(s) total; {1}={2}, {3}={4}" -f $f0.Count, $RuleDiscard, $d0.Count, $RuleQuery, $off1)
 
 Write-Host "RUN 3: lint-all --disable $RuleDiscard (the ON rule can still be turned off)..."
-$f3 = Parse-Findings (& $exePath lint-all --db $db --format json --disable $RuleDiscard 2>$null)
+$f3 = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json --disable $RuleDiscard 2>$null })
 $off3 = @($f3 | Where-Object { $_.rule -eq $RuleDiscard }).Count
 Write-Host ("  run 3: {0} finding(s) total; {1}={2}" -f $f3.Count, $RuleDiscard, $off3)
 
 Write-Host "RUN 2: lint-all --enable <both ids>..."
-$f = Parse-Findings (& $exePath lint-all --db $db --format json --enable "$RuleDiscard,$RuleQuery" 2>$null)
+$f = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json --enable "$RuleDiscard,$RuleQuery" 2>$null })
 $d = @($f | Where-Object { $_.rule -eq $RuleDiscard })
 $q = @($f | Where-Object { $_.rule -eq $RuleQuery   })
 Write-Host "  $RuleDiscard findings:"

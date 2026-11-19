@@ -39,11 +39,11 @@ New-Item -ItemType Directory -Path $src -Force | Out-Null
 $ErrorActionPreference = 'Continue'  # a native stderr note is not an error (PS 5.1)
 Copy-Item "$here\..\fixtures\ifrpt\IfFix.pas" $src
 $db = Join-Path $WorkDir 'fx.sqlite'
-& $exePath index $src --db $db *> (Join-Path $WorkDir 'index.log')
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db *> (Join-Path $WorkDir 'index.log') }
 Check 'fixture indexed' ($LASTEXITCODE -eq 0 -and (Test-Path $db)) "exit $LASTEXITCODE"
 
 function Ifr([string[]]$a) {
-  $out = & $exePath implementors @a --db $db 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath implementors @a --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   return [pscustomobject]@{ Exit = $LASTEXITCODE; Text = $out }
 }
 function IfrJson([string[]]$a) {
@@ -164,18 +164,18 @@ Check 'L2 draglint/callerCounts carries implementors (plugin lens)' ($ccI.Count 
 
 # ---- A1: the `ask implementors` chart (same engine; rows parsed from its anchored labels) ----
 $askOut = Join-Path $WorkDir 'ask'
-$a = & $exePath ask implementors --target IJob.Execute --db $db --plain --out-root $askOut --allow-stale 2>&1 | Out-String
+$a = & { $ErrorActionPreference = 'Continue'; & $exePath ask implementors --target IJob.Execute --db $db --plain --out-root $askOut --allow-stale 2>&1 | ForEach-Object { "$_" } } | Out-String
 $aExit = $LASTEXITCODE
 Check 'A1 ask implementors: exit 0, 7 implementors, rows anchored (RunJob, TOverJob.Execute)' ($aExit -eq 0 -and
   $a -match 'CHART implementors IJob\.Execute -- 7 implementors' -and $a -match 'TRenamedJob\.RunJob @IfFix\.pas:\d+' -and $a -match 'TOverJob\.Execute @IfFix\.pas:\d+') $a
-$a = & $exePath ask implementors --target INoSuchThing --db $db --plain --out-root $askOut --allow-stale 2>&1 | Out-String
+$a = & { $ErrorActionPreference = 'Continue'; & $exePath ask implementors --target INoSuchThing --db $db --plain --out-root $askOut --allow-stale 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'A1 control: an unknown target is refused (exit 1)' ($LASTEXITCODE -eq 1) $a
 # ---- M1/M2: MCP get_implementors (same engine) and the corrected get_wiring text ----
 $init = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
 $list = '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
 $call = '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_implementors","arguments":{"qname":"IJob.Execute"}}}'
 $bad  = '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"get_implementors","arguments":{"qname":"INoSuchThing"}}}'
-$mcp  = "$init`n$list`n$call`n$bad" | & $exePath serve --db $db 2>$null | Out-String
+$mcp  = "$init`n$list`n$call`n$bad" | & { $ErrorActionPreference = 'Continue'; & $exePath serve --db $db 2>$null } | Out-String
 $rep  = @{}
 foreach ($ln in ($mcp -split "`n")) { try { $o = $ln.Trim() | ConvertFrom-Json; if ($o.id) { $rep[[int]$o.id] = $o } } catch { } }
 $tools = @($rep[2].result.tools)
@@ -189,7 +189,7 @@ Check 'M2 control: unknown target is an error, not an empty answer' ($null -ne $
 
 # ---- T8: the real CLI index, read-only (skipped when absent) ----
 if (Test-Path $RealDb) {
-  $out = & $exePath implementors --target DRagLint.Core.Interfaces.IParser.Parse --db $RealDb --json 2>$null | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath implementors --target DRagLint.Core.Interfaces.IParser.Parse --db $RealDb --json 2>$null } | Out-String
   $j = $null; try { $j = $out | ConvertFrom-Json } catch { }
   $n = (Names $j.implementors 'class') -join ','
   Check 'T8 src\cli: IParser.Parse -> the four parsers (TMarkdownParser since 1.47, Markdown text nodes)' ($n -eq 'TDelphi13Parser,TDFMParser,TFirebirdSqlParser,TMarkdownParser') $n

@@ -228,7 +228,7 @@ foreach ($k in $expect.Keys) {
   if (-not $r) { Bad "table lacks $k"; continue }
   if ($r.Shape -ne $expect[$k]) { Bad "$k is $($r.Shape), expected $($expect[$k])" }
 }
-$out = & $exe 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $exe 2>&1 | ForEach-Object { "$_" } } | Out-String
 $rc = $LASTEXITCODE
 Write-Host $out.TrimEnd()
 if ($rc -ne 0) { Bad "headless check exit $rc" }

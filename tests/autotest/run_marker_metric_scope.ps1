@@ -97,11 +97,11 @@ $SELFASG_LINE = 23  # `B:= B;`
 function Write-Probe([string]$Text) { [System.IO.File]::WriteAllText($pas, $Text + "`r`n", [System.Text.Encoding]::ASCII) }
 function Lint([string[]]$Extra) {
   $a = @('lint', $pas) + $Extra
-  $o = & $Exe @a 2>$errFile
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$errFile }
   [pscustomobject]@{ Out = (($o | Out-String) -replace "`r`n", "`n"); Code = $LASTEXITCODE }
 }
 function Allow([int]$Line, [string]$Rule) {
-  $o = & $Exe allow $pas '--fix-line' $Line '--fix-rule' $Rule '--apply' 2>$errFile
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe allow $pas '--fix-line' $Line '--fix-rule' $Rule '--apply' 2>$errFile }
   [pscustomobject]@{ Out = (($o | Out-String) -replace "`r`n", "`n"); Code = $LASTEXITCODE }
 }
 function Markers { @(Get-Content -LiteralPath $pas | Where-Object { $_ -match 'dl:ok' }) }

@@ -217,7 +217,7 @@ foreach ($sd in @(@($stemDotted, 'uE'), @($stemBare, 'uF'))) {
 
 function CycleMessage([string]$Dir, [string]$DbName) {
   $db = Join-Path $WorkDir $DbName
-  & $Exe index $Dir --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $Dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   return ((& $Exe lint-project --db $db --rule circular-uses) -join "`n")
 }
 

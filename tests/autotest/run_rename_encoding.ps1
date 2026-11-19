@@ -75,13 +75,13 @@ function New-Fixture([string]$Name, [byte[]]$Bytes) {
   [IO.File]::WriteAllBytes($pas, $Bytes)
   $db = Join-Path $dir 'idx.sqlite'
   Push-Location $dir
-  try { & $Exe index $src --db $db 2>&1 | Out-Null } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null } finally { Pop-Location }
   Check "$Name index exits 0" ($LASTEXITCODE -eq 0)
   [pscustomobject]@{ Dir = $dir; Pas = $pas; Db = $db }
 }
 function Run-Rename($fx, [string[]]$RenameArgs) {
   Push-Location $fx.Dir
-  try { $o = & $Exe rename --kind symbol --name Unit1.Compute @RenameArgs --db $fx.Db 2>$null } finally { Pop-Location }
+  try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe rename --kind symbol --name Unit1.Compute @RenameArgs --db $fx.Db 2>$null } } finally { Pop-Location }
   [pscustomobject]@{ Exit = $LASTEXITCODE; Out = ($o -join "`n") }
 }
 # Every edit's (line, col, len(old)) slice of the DECODED file must be old.

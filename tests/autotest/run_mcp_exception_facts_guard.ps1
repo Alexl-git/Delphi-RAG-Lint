@@ -39,11 +39,11 @@ $work = Join-Path $WorkDir 'fixture'
 New-Item -ItemType Directory $work | Out-Null
 Copy-Item (Join-Path $FixtureDir '*.pas'), (Join-Path $FixtureDir '*.dpr') $work
 $db = Join-Path $WorkDir 'facts.sqlite'
-$null = & $Exe index $work --db $db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
-$cliT = ((& $Exe exception-facts --target TypeFacts.Stamp --db $db --json 2>$null) -join "`n").Trim()
-$cliN = ((& $Exe exception-facts --name ELocal --db $db --json 2>$null) -join "`n").Trim()
+$cliT = ((& { $ErrorActionPreference = 'Continue'; & $Exe exception-facts --target TypeFacts.Stamp --db $db --json 2>$null }) -join "`n").Trim()
+$cliN = ((& { $ErrorActionPreference = 'Continue'; & $Exe exception-facts --name ELocal --db $db --json 2>$null }) -join "`n").Trim()
 Check 'control: the CLI answers (non-empty, count > 0)' (($cliT | ConvertFrom-Json).count -gt 0 -and ($cliN | ConvertFrom-Json).count -gt 0)
 
 $req = @(
@@ -55,7 +55,7 @@ $req = @(
   '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"get_exception_facts","arguments":{"target":"A","name":"B"}}}',
   '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"get_exception_facts","arguments":{"target":"NoSuchRoutine"}}}'
 ) -join "`n"
-$mcp = $req | & $Exe serve --db $db 2>$null | Out-String
+$mcp = $req | & { $ErrorActionPreference = 'Continue'; & $Exe serve --db $db 2>$null } | Out-String
 $rep = @{}
 foreach ($ln in ($mcp -split "`n")) { try { $o = $ln.Trim() | ConvertFrom-Json; if ($o.id) { $rep[[int]$o.id] = $o } } catch { } }
 $tools = @($rep[2].result.tools)

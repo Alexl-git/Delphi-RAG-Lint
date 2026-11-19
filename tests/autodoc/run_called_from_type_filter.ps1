@@ -31,9 +31,9 @@ try {
   $db = Join-Path $scratch 'cf.sqlite'
   Push-Location C:\TEMP
   try {
-    & $exePath index $scratch --db $db 2>$null | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
     Check 'index built' ($LASTEXITCODE -eq 0)
-    $doc = (& $exePath document --unit (Join-Path $scratch 'ctf.pas') --db $db 2>$null) -join "`n"
+    $doc = (& { $ErrorActionPreference = 'Continue'; & $exePath document --unit (Join-Path $scratch 'ctf.pas') --db $db 2>$null }) -join "`n"
     # the Called from: line belongs to TMine.Add: the doc block that follows `TMine = class` ... find it by its callers
     $lines = @($doc -split "`n" | Where-Object { $_ -match 'Called from:' -and $_ -match 'RealMine' })
     Check 'a Called from: line naming RealMine exists' ($lines.Count -eq 1) ($lines -join ' | ')

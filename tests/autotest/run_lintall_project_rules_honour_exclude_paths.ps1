@@ -208,11 +208,11 @@ Write-Ascii $cfgOff '{ "exclude_paths": [], "enabled": ["global-only-uses-edge",
 
 $db    = Join-Path $drag 'app.sqlite'
 $proj  = Join-Path $app 'App.dpr'
-& $Exe index $repo --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $repo --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 function Lint-Run([string]$Cfg, [string]$OutFile) {
   Push-Location $repo
-  try { & $Exe lint-all --project $proj --db $db --config $Cfg --output $OutFile 2>&1 | Out-String }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --project $proj --db $db --config $Cfg --output $OutFile 2>&1 | ForEach-Object { "$_" } } | Out-String }
   finally { Pop-Location }
 }
 function Vendor-Findings([string]$OutFile) {
@@ -225,7 +225,7 @@ function Owned-Findings([string]$OutFile) {
 }
 
 Write-Host 'PRECONDITION: the vendored unit is indexed' -ForegroundColor Cyan
-$q = & $Exe query --name ts_query_cursor_new --db $db 2>&1 | Out-String
+$q = & { $ErrorActionPreference = 'Continue'; & $Exe query --name ts_query_cursor_new --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 $inIndex = $q -match 'ts_query_cursor_new'
 Check 'uVendor is indexed (so excluding it is a real decision)' $inIndex
 if (-not $inIndex) {

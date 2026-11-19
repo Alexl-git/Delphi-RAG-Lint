@@ -25,7 +25,7 @@ $Exe  = (Resolve-Path $Exe).Path
 $root = Join-Path ([System.IO.Path]::GetTempPath()) ("dl-refusecap-" + [Guid]::NewGuid().ToString('N').Substring(0,8))
 New-Item -ItemType Directory -Force -Path $root | Out-Null
 function Lane-WriteAscii($path, $lines) { [IO.File]::WriteAllText($path, (($lines -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding)) }
-function Lane-Run([string[]]$xs) { $o = & $Exe @xs 2>&1 | Out-String; [pscustomobject]@{ Out = $o; Code = $LASTEXITCODE } }
+function Lane-Run([string[]]$xs) { $o = & { $ErrorActionPreference = 'Continue'; & $Exe @xs 2>&1 | ForEach-Object { "$_" } } | Out-String; [pscustomobject]@{ Out = $o; Code = $LASTEXITCODE } }
 Lane-WriteAscii (Join-Path $root 'uB.pas') @('unit uB;','interface','procedure Q;','procedure S;','implementation','procedure Q; begin end;','procedure S; begin end;','end.')
 $ua = Join-Path $root 'uA.pas'
 Lane-WriteAscii $ua @('unit uA;','interface','uses uB;',

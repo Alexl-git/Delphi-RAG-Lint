@@ -145,7 +145,7 @@ WriteAnsi $appFile $diskText
 $bufferText = $diskText -replace '  Src := nil;', '  Thing.Assign(Src);'
 
 $db = Join-Path $WorkDir 'live.sqlite'
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'built the fixture index' (Test-Path $db)
 
 # Positions are 0-based for LSP.

@@ -143,7 +143,7 @@ Run-Stage 'CLI smoke' {
     # the 'FTS5 probe: ...' line to *stderr*; `2>&1` merged them into the same
     # pipeline, where the interleaving order is not deterministic. Every check
     # below scans stdout, so stderr must not be folded into it.
-    $verOut = & $Exe --version 2>$null
+    $verOut = & { $ErrorActionPreference = 'Continue'; & $Exe --version 2>$null }
     $t0.Stop()
     # v0.48: join to a scalar -- `$array -match` returns the matching ELEMENTS
     # (an array), which broke the [bool] $Ok param. Join first.
@@ -155,37 +155,37 @@ Run-Stage 'CLI smoke' {
     # STDOUT ONLY, and scan the WHOLE output: 'Symbols: N' is not guaranteed to
     # be the last stdout line, and taking -Last 1 of a stderr-merged stream is
     # how this check used to read the FTS5 probe line instead of the summary.
-    $indexOut = (& $Exe index $FixtureDir --db $db 2>$null | Out-String)
+    $indexOut = (& { $ErrorActionPreference = 'Continue'; & $Exe index $FixtureDir --db $db 2>$null } | Out-String)
     $t1.Stop()
     $indexTail = (($indexOut -split "`r?`n" | Where-Object { $_.Trim() -ne '' } | Select-Object -Last 1))
     Write-Check 'index fixture exits 0' ($LASTEXITCODE -eq 0) $indexTail $t1.Elapsed.TotalMilliseconds
     Write-Check 'index reports >= 1 symbol' ([bool]($indexOut -match 'Symbols:\s*[1-9]\d*')) $indexTail
 
     $t2 = [Diagnostics.Stopwatch]::StartNew()
-    $qOut = & $Exe query --name KnownMethod --db $db 2>&1
+    $qOut = & { $ErrorActionPreference = 'Continue'; & $Exe query --name KnownMethod --db $db 2>&1 | ForEach-Object { "$_" } }
     $t2.Stop()
     Write-Check 'query KnownMethod returns 1+ match' (($qOut | Select-String 'KnownMethod' -Quiet) -eq $true) "($($qOut.Count) lines)" $t2.Elapsed.TotalMilliseconds
 
     $t3 = [Diagnostics.Stopwatch]::StartNew()
-    $fcOut = & $Exe query find-callers --name KnownMethod --db $db 2>&1
+    $fcOut = & { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name KnownMethod --db $db 2>&1 | ForEach-Object { "$_" } }
     $t3.Stop()
     Write-Check 'find-callers KnownMethod returns 1+ ref' (($fcOut | Select-String 'KnownMethod|SampleUnit' -Quiet) -eq $true) "($($fcOut.Count) lines)" $t3.Elapsed.TotalMilliseconds
 
     # v0.48: implementation-only free routine (ImplOnlyHelper) is now indexed.
     # Before v0.48 these returned 0 matches (interface-decl-is-source dedup
     # skipped routines defined only in the implementation section).
-    $ioOut = & $Exe query --name ImplOnlyHelper --db $db 2>&1
+    $ioOut = & { $ErrorActionPreference = 'Continue'; & $Exe query --name ImplOnlyHelper --db $db 2>&1 | ForEach-Object { "$_" } }
     Write-Check 'query ImplOnlyHelper (impl-only routine) returns a match' (($ioOut | Select-String 'ImplOnlyHelper' -Quiet) -eq $true) "($($ioOut.Count) lines)"
-    $iofcOut = & $Exe query find-callers --name ImplOnlyHelper --db $db 2>&1
+    $iofcOut = & { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name ImplOnlyHelper --db $db 2>&1 | ForEach-Object { "$_" } }
     Write-Check 'find-callers ImplOnlyHelper returns a ref' (($iofcOut | Select-String 'ImplOnlyHelper|SampleUnit' -Quiet) -eq $true) "($($iofcOut.Count) lines)"
 
     # v0.48 / schema v9: the routine's body line-range is stored (impl_start_line > 0).
-    $ioJson = (& $Exe query --name ImplOnlyHelper --db $db --json 2>&1) | Out-String
+    $ioJson = (& { $ErrorActionPreference = 'Continue'; & $Exe query --name ImplOnlyHelper --db $db --json 2>&1 | ForEach-Object { "$_" } }) | Out-String
     $implOk = [bool]($ioJson -match '"impl_start_line":\s*([1-9]\d*)')
     Write-Check 'ImplOnlyHelper has a body range (impl_start_line > 0)' $implOk "impl_start_line=$($Matches[1])"
 
     $t4 = [Diagnostics.Stopwatch]::StartNew()
-    $hovOut = & $Exe hover --qname SampleUnit.TKnownClass.KnownMethod --db $db 2>&1
+    $hovOut = & { $ErrorActionPreference = 'Continue'; & $Exe hover --qname SampleUnit.TKnownClass.KnownMethod --db $db 2>&1 | ForEach-Object { "$_" } }
     $t4.Stop()
     Write-Check 'hover KnownMethod returns text' (($hovOut | Measure-Object -Character).Characters -gt 0) "($(($hovOut | Measure-Object -Character).Characters) chars)" $t4.Elapsed.TotalMilliseconds
 
@@ -193,9 +193,9 @@ Run-Stage 'CLI smoke' {
     # a second sqlite (different file path), pass both --db flags, expect
     # results to be merged (at least 1 match each = 2+ total).
     $db2 = "$WorkDir\fixture2.sqlite"
-    & $Exe index $FixtureDir --db $db2 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $Exe index $FixtureDir --db $db2 2>&1 | ForEach-Object { "$_" } } | Out-Null
     $t5 = [Diagnostics.Stopwatch]::StartNew()
-    $mdbOut = & $Exe query --name KnownMethod --db $db --db $db2 2>&1
+    $mdbOut = & { $ErrorActionPreference = 'Continue'; & $Exe query --name KnownMethod --db $db --db $db2 2>&1 | ForEach-Object { "$_" } }
     $t5.Stop()
     Write-Check 'multi-DB query returns merged results' (($mdbOut | Select-String 'KnownMethod').Count -ge 2) "($(($mdbOut | Select-String 'KnownMethod').Count) KnownMethod lines)" $t5.Elapsed.TotalMilliseconds
 
@@ -204,18 +204,18 @@ Run-Stage 'CLI smoke' {
     # produces at least one symbol row.
     $sqlDb = "$WorkDir\sql.sqlite"
     $t6 = [Diagnostics.Stopwatch]::StartNew()
-    & $Exe index "$FixtureDir\sample_schema.sql" --db $sqlDb 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $Exe index "$FixtureDir\sample_schema.sql" --db $sqlDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
     $t6.Stop()
-    $tCount = (& $Exe query --name SAMPLE --db $sqlDb 2>&1 | Select-String 'sql_table').Count
+    $tCount = (& { $ErrorActionPreference = 'Continue'; & $Exe query --name SAMPLE --db $sqlDb 2>&1 | ForEach-Object { "$_" } } | Select-String 'sql_table').Count
     Write-Check 'SQL parser: sql_table SAMPLE indexed' ($tCount -ge 1) "" $t6.Elapsed.TotalMilliseconds
-    $genCount = (& $Exe query --name GEN_SAMPLE_ID --db $sqlDb 2>&1 | Select-String 'sql_generator').Count
+    $genCount = (& { $ErrorActionPreference = 'Continue'; & $Exe query --name GEN_SAMPLE_ID --db $sqlDb 2>&1 | ForEach-Object { "$_" } } | Select-String 'sql_generator').Count
     Write-Check 'SQL parser: sql_generator indexed' ($genCount -ge 1) ""
 
     # v0.40.5 Tier 3: link-orm. Re-index the Pascal fixture so its TKnownClass
     # might match a SQL table KNOWNCLASS -- not expected here (no matching
     # table), but the command should exit 0 with the report intact.
     $t7 = [Diagnostics.Stopwatch]::StartNew()
-    & $Exe link-orm --db $db --db $sqlDb 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $Exe link-orm --db $db --db $sqlDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
     $t7.Stop()
     Write-Check 'link-orm command exits 0' ($LASTEXITCODE -eq 0) "" $t7.Elapsed.TotalMilliseconds
 }

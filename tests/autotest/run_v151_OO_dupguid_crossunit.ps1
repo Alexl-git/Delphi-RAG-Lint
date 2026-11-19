@@ -86,8 +86,8 @@ implementation
 end.
 '@
 $db = Join-Path (Join-Path $proj '_D-RAG') 'p.sqlite'
-& $exePath index $proj --db $db 2>&1 | Out-Null
-$out = & $exePath lint-all --db $db --rule duplicate-interface-guid 2>$null | Out-String
+& { $ErrorActionPreference = 'Continue'; & $exePath index $proj --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+$out = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rule duplicate-interface-guid 2>$null } | Out-String
 $hits = @(($out -split "`r?`n") | Where-Object { $_ -match 'duplicate-interface-guid' })
 Check 'A1 cross-unit duplicate GUID is reported (exactly one, on the second unit)' `
   (($hits.Count -eq 1) -and ($hits[0] -match 'uB\.pas')) "hits=$($hits.Count): $($hits -join ' | ')"

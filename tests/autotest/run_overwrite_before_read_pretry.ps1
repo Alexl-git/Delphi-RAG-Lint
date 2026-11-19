@@ -275,7 +275,7 @@ Write-Host ("  anchors: " + (($rows.Keys | ForEach-Object { "$_=$($rows[$_])" })
 # FlowChecks runs on the bare per-file path, so `lint <file>` is sufficient here.
 # (Whole-index rules like doc-drift would need lint-all -- see
 # INBOX-lint-single-file-silently-omits-lint-all-rules.md.)
-$out  = & $Exe lint $file 2>&1 | Out-String
+$out  = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file 2>&1 | ForEach-Object { "$_" } } | Out-String
 $hits = @([regex]::Matches($out, 'uObrPretry\.pas:(\d+):\d+\s+\[\w+\]\s+overwrite-before-read') |
           ForEach-Object { [int]$_.Groups[1].Value })
 function Proc-Of([int]$Row) {

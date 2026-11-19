@@ -10,7 +10,7 @@ $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 Set-Location $repo
 $fail = 0
 foreach ($flt in 'field-name-prefix-lowercase-f*', 'method-pascalcase-accessor*', 'mpa_TLB*') {
-  $out = & pwsh -NoProfile -File (Join-Path $repo 'tests\lint\run_lint_tests.ps1') -Exe $Exe -Filter $flt 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $repo 'tests\lint\run_lint_tests.ps1') -Exe $Exe -Filter $flt 2>&1 | ForEach-Object { "$_" } } | Out-String
   if ($LASTEXITCODE -ne 0) { Write-Host "FAIL  $flt"; Write-Host $out; $fail++ } else { Write-Host "PASS  $flt" }
 }
 if ($fail) { exit 1 }

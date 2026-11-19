@@ -67,7 +67,7 @@ function LineOf($tag) { for ($i = 0; $i -lt $src.Count; $i++) { if ($src[$i].Con
 $LA = LineOf '{A}'; $LB = LineOf '{B}'; $LC = LineOf '{C}'; $LD = LineOf '{D}'
 
 function LintJson([string[]]$Extra) {
-  $raw = (& $Exe lint $Unit --json @Extra 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $Unit --json @Extra 2>$null }) -join "`n"
   Write-Host ('raw[0..200]: ' + $raw.Substring(0, [Math]::Min(200, $raw.Length)).Replace("`n", ' '))
   try { return @($raw | ConvertFrom-Json) } catch { Check 'lint --json parses' $false; return @() }
 }

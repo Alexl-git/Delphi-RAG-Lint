@@ -95,12 +95,12 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'flow.sqlite'
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 function RunLint([bool]$Profile) {
   Remove-Item Env:\DRAGLINT_PROFILE -ErrorAction SilentlyContinue
   if ($Profile) { $env:DRAGLINT_PROFILE = '1' }
-  try   { return (& $exePath lint-all --db $db --rules-dir $rules 2>&1 | Out-String) }
+  try   { return (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String) }
   finally { Remove-Item Env:\DRAGLINT_PROFILE -ErrorAction SilentlyContinue }
 }
 

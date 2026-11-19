@@ -134,7 +134,7 @@ $dpr   = Join-Path $app 'App.dpr'
 $dproj = Join-Path $app 'App.dproj'
 
 Push-Location $app
-try { $out = & $Exe reconcile-project $dproj --apply 2>&1 | Out-String }
+try { $out = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project $dproj --apply 2>&1 | ForEach-Object { "$_" } } | Out-String }
 finally { Pop-Location }
 
 $dprText   = Get-Content $dpr   -Raw
@@ -169,7 +169,7 @@ Check 'uHelper is inserted BEFORE uMain' `
 
 Write-Host ''
 Write-Host 'The result still parses as a project' -ForegroundColor Cyan
-$again = & $Exe reconcile-project $dproj 2>&1 | Out-String
+$again = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project $dproj 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'a second run reports MISSING (0) -- the edit was understood' `
   ($again -match 'MISSING \(0\)') `
   (($again -split "`r?`n" | Where-Object { $_ -match '^MISSING' } | Select-Object -First 1))

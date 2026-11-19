@@ -49,14 +49,14 @@ try {
   # --- fix
   $pas = Join-Path $fx 'uA.pas'
   $want = Join-Path $PSScriptRoot "..\lint-project\$rule\expected\uA.fixed.pas"
-  & $Exe lint-all --db $db --rule $rule --fix --fix-rule $rule --apply --no-backup 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule $rule --fix --fix-rule $rule --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'fix: result is byte-identical to expected\uA.fixed.pas' (Test-G8BytesEqual $pas $want)
   Check 'fix: last entry -- result is byte-identical to expected\uE.fixed.pas' (Test-G8BytesEqual (Join-Path $fx 'uE.pas') (Join-Path $PSScriptRoot "..\lint-project\$rule\expected\uE.fixed.pas"))
   foreach ($u in 'uF','uG','uH','uI','uL','uN') {
     Check ("fix: leading-comma -- result is byte-identical to expected\$u.fixed.pas") (Test-G8BytesEqual (Join-Path $fx "$u.pas") (Join-Path $PSScriptRoot "..\lint-project\$rule\expected\$u.fixed.pas"))
   }
   $before = [IO.File]::ReadAllBytes($pas)
-  & $Exe lint-all --db $db --rule $rule --fix --fix-rule $rule --apply --no-backup 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule $rule --fix --fix-rule $rule --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'fix: second run leaves the bytes unchanged' ([Linq.Enumerable]::SequenceEqual([byte[]]$before, [byte[]][IO.File]::ReadAllBytes($pas)))
   Check 'fix: reindexed fixed file no longer fires' ((Invoke-G8Index $Exe $fx $db) -eq 0 -and (Get-G8Findings $Exe $db $rule).Count -eq 0)
   # --- atomicity (lane IATOM): uJ is UTF-8; the line above the movable entry holds a non-ASCII
@@ -77,7 +77,7 @@ try {
   # atomic whole-fix property still holds: removal AND implementation insert land together, the file
   # stays valid UTF-8 and keeps its non-ASCII comment. The withdraw path of the all-or-nothing applier
   # has no uses-movable trigger left (see the CLIFIX report); cyclefix / convert-apply keep covering it.
-  $jRaw = & $Exe lint-all --db $djDb --rule $rule --fix --fix-rule $rule --apply --no-backup --json 2>$null | Out-String
+  $jRaw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $djDb --rule $rule --fix --fix-rule $rule --apply --no-backup --json 2>$null } | Out-String
   $strictU8 = New-Object Text.UTF8Encoding($false, $true)
   $jTxt8 = $null; try { $jTxt8 = $strictU8.GetString([IO.File]::ReadAllBytes($uj)) } catch { }
   Check 'utf8: the file is still valid UTF-8 and keeps its non-ASCII comment' (($null -ne $jTxt8) -and $jTxt8.Contains($nonAscii))

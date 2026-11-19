@@ -53,8 +53,8 @@ function New-Pair([string]$Tag, [string]$From, [string]$U1, [string]$U2) {
   $db = "$root.sqlite"
   Push-Location $WorkDir
   try {
-    $null | & $Exe index --project (Join-Path $root "$name.dproj") --db $db --library-db $LibraryDb *> "$db.log"
-    return ($null | & $Exe cycles --plan --project (Join-Path $root "$name.dproj") --db $db --library-db $LibraryDb 2>$null | Out-String)
+    $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root "$name.dproj") --db $db --library-db $LibraryDb *> "$db.log" }
+    return ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --plan --project (Join-Path $root "$name.dproj") --db $db --library-db $LibraryDb 2>$null } | Out-String)
   } finally { Pop-Location }
 }
 # The refusal line of class pClass: "- `TX` (class, `U.pas` line N): refused: <kind> -- <text>".

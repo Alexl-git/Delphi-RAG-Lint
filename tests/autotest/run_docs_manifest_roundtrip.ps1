@@ -137,8 +137,8 @@ New-Item -ItemType Directory $dirBase | Out-Null
 $fileBase = Join-Path $dirBase 'uRoundtrip.pas'
 $dbBase   = Join-Path $dirBase 'baseline.sqlite'
 Write-Fixture $fileBase
-& $Exe index $dirBase --db $dbBase 2>&1 | Out-Null
-& $Exe document --qname uRoundtrip.Grab --db $dbBase --apply --no-backup 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dirBase --db $dbBase 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe document --qname uRoundtrip.Grab --db $dbBase --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $textBase = Get-Content $fileBase -Raw
 $returnsBase = Get-ReturnsTag $textBase
 Check 'baseline: exactly one <returns> tag' ($returnsBase.Count -eq 1) "count=$($returnsBase.Count)"
@@ -166,10 +166,10 @@ $cfgPath = Join-Path $dirCap '.drag-lint.json'
 Check 'fixture .drag-lint.json is valid JSON' `
   ((Get-Content $cfgPath -Raw | ConvertFrom-Json) -ne $null)
 
-& $Exe index $dirCap --db $dbCap 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dirCap --db $dbCap 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Push-Location $dirCap
 try {
-  & $Exe document --qname uRoundtrip.Grab --db $dbCap --apply --no-backup 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe document --qname uRoundtrip.Grab --db $dbCap --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
 } finally {
   Pop-Location
 }

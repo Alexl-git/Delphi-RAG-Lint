@@ -47,7 +47,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 # runs menu-drift; returns @{ Exit; Text; Missing; Unregistered; Moved; Notes } (counts $null without a summary line)
 function Invoke-Drift([string]$Proj, [string]$Db, [string]$Reg) {
-    $text = (& $Exe menu-drift --project $Proj --db $Db --registry $Reg 2>&1 | Out-String)
+    $text = (& { $ErrorActionPreference = 'Continue'; & $Exe menu-drift --project $Proj --db $Db --registry $Reg 2>&1 | ForEach-Object { "$_" } } | Out-String)
     $r = @{ Exit = $LASTEXITCODE; Text = $text; Missing = $null; Unregistered = $null; Moved = $null; Notes = $null }
     $m = [regex]::Match($text, 'menu-drift: missing=(\d+) unregistered=(\d+) moved=(\d+) notes=(\d+)')
     if ($m.Success) {
@@ -64,7 +64,7 @@ function New-FixtureCopy([string]$Name) {
 }
 function Index-Copy([string]$Dir) {
     $db = "$Dir.sqlite"
-    & $Exe index --project "$Dir\MenuTreeFixture.dproj" --db $db *> "$Dir.index.log"
+    & { $ErrorActionPreference = 'Continue'; & $Exe index --project "$Dir\MenuTreeFixture.dproj" --db $db *> "$Dir.index.log" }
     if ($LASTEXITCODE -ne 0) { throw "index of $Dir failed (exit $LASTEXITCODE)" }
     return $db
 }

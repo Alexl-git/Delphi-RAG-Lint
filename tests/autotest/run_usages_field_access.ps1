@@ -60,14 +60,14 @@ function LineOf([string]$path, [string]$anchor) {
   return $hits[0]
 }
 function Sql([string]$db, [string]$q) {
-  $j = (& $exePath sql --db $db --query $q --json 2>$null) -join "`n"
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n"
   try { $o = $j | ConvertFrom-Json } catch { return ,@() }
   $cols = @($o.columns | ForEach-Object { $_.name }); $out = @()
   foreach ($r in @($o.rows)) { $h = [ordered]@{}; for ($i = 0; $i -lt $cols.Count; $i++) { $h[$cols[$i]] = @($r)[$i] }; $out += [pscustomobject]$h }
   return ,$out
 }
 function Usages([string]$db, [string]$name) {
-  $raw = (& $exePath usages --name $name --db $db --format json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath usages --name $name --db $db --format json 2>$null }) -join "`n"
   $s = $raw.IndexOf('{'); $e = $raw.LastIndexOf('}')
   if ($s -lt 0 -or $e -lt $s) { return $null }
   try { return ($raw.Substring($s, $e - $s + 1) | ConvertFrom-Json) } catch { return $null }
@@ -125,7 +125,7 @@ end.
   $db = Join-Path $scratch 'p.sqlite'
 
   Write-Host '== check 1: fixture health ==' -ForegroundColor Cyan
-  & $exePath index $scratch --db $db *> (Join-Path $scratch 'index.log')
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db *> (Join-Path $scratch 'index.log') }
   if ($LASTEXITCODE -ne 0) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index exit $LASTEXITCODE" -ForegroundColor Red; exit 2 }
   foreach ($site in @(@('uUse.pas', $R1, 'read'), @('uJob.pas', $W2, 'write'))) {
     $r = Sql $db ("SELECT s.qualified_name AS qn, ma.mode AS mode FROM refs r JOIN files f ON f.id = r.file_id " +
@@ -155,7 +155,7 @@ end.
   Check '6e bare Streaming DOES list R9 (control for 6d)' ((Has $u.reads 'uUse.pas' $R9) -or (Has $u.calls 'uUse.pas' $R9)) ''
 
   Write-Host '== check 7: text summary agrees with JSON ==' -ForegroundColor Cyan
-  $t = (& $exePath usages --name Streaming --db $db 2>$null) -join "`n"
+  $t = (& { $ErrorActionPreference = 'Continue'; & $exePath usages --name Streaming --db $db 2>$null }) -join "`n"
   $want = "reads: {0}  writes: {1}  calls: {2}" -f @($u.reads).Count, @($u.writes).Count, @($u.calls).Count
   Check '7 text counts equal JSON counts' ($t.Contains($want)) "want '$want' in: $t"
 }

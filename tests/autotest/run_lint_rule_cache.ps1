@@ -231,7 +231,7 @@ end;
 end.
 '@
 $lib = Join-Path $WorkDir 'lib.sqlite'
-$idxL = & $exePath index $libDir --db $lib 2>&1 | Out-String
+$idxL = & { $ErrorActionPreference = 'Continue'; & $exePath index $libDir --db $lib 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'SANITY: library fixture indexed' ($LASTEXITCODE -eq 0) $idxL
 
 $db   = Join-Path $WorkDir 'proj.sqlite'
@@ -239,7 +239,7 @@ $dpr  = Join-Path $proj 'Proj.dpr'
 # --rule-cache-warm wait: these checks need the warm FINISHED when index returns
 # (the default runs it in the background since 2026-10-15; that path has its own
 # suite, run_rule_cache_warm_background.ps1).
-$idxP = & $exePath index --project $dpr --db $db --library-db $lib --rule-cache-warm wait 2>&1 | Out-String
+$idxP = & { $ErrorActionPreference = 'Continue'; & $exePath index --project $dpr --db $db --library-db $lib --rule-cache-warm wait 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'SANITY: project fixture indexed (index --project)' ($LASTEXITCODE -eq 0 -and $idxP -notmatch '\b[1-9]\d* errors\b') $idxP
 
 $UNITS  = @('uCycA.pas','uCycB.pas','uG1.pas','uG2.pas','uEnum.pas','uHelp.pas','uRts.pas')
@@ -250,7 +250,7 @@ function Tuples($rows) { @($rows | ForEach-Object { '{0}|{1}|{2}|{3}|{4}|{5}' -f
 function LintOne($leaf, [string[]]$extra = @()) {
   $errF = Join-Path $WorkDir 'one.err'
   $env:DRAGLINT_PROFILE = '1'
-  $j = & $exePath lint (Join-Path $proj $leaf) --db $db --library-db $lib --rules-dir $rules --json @extra 2>$errF | Out-String
+  $j = & { $ErrorActionPreference = 'Continue'; & $exePath lint (Join-Path $proj $leaf) --db $db --library-db $lib --rules-dir $rules --json @extra 2>$errF } | Out-String
   $env:DRAGLINT_PROFILE = $null
   [pscustomobject]@{ Rows = (Rows $j); Prof = (Get-Content $errF -Raw) }
 }
@@ -268,11 +268,11 @@ function Clear-Cache {
 }
 
 # --- C0 controls ---------------------------------------------------------------
-$allRows = Rows (& $exePath lint-all --db $db --library-db $lib --rules-dir $rules --json 2>$null | Out-String)
+$allRows = Rows (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --library-db $lib --rules-dir $rules --json 2>$null } | Out-String)
 foreach ($r in $CACHED) {
   Check "C0  CONTROL: lint-all reports $r" (@($allRows | Where-Object rule -eq $r).Count -gt 0) "fixture must trigger $r or the parity checks prove nothing"
 }
-$rtsRows = Rows (& $exePath lint-all --db $db --library-db $lib --rules-dir $rules --rule repeated-type-switch --json 2>$null | Out-String)
+$rtsRows = Rows (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --library-db $lib --rules-dir $rules --rule repeated-type-switch --json 2>$null } | Out-String)
 Check 'C0  CONTROL: --rule repeated-type-switch reports it (3 distinct routines)' (@($rtsRows | Where-Object rule -eq 'repeated-type-switch').Count -gt 0) ""
 
 # --- C8 + C1(off): cache disabled ------------------------------------------------
@@ -368,7 +368,7 @@ Check 'C12 a run needing none of the cached rules writes no (empty) entry' ((Cac
 
 # --- C3/C5: edit + index --project -> warmed HIT, and the NEW answer ----------------
 Write-Ascii (Join-Path $proj 'uCycB.pas') $cycB_nocycle
-$idx3 = & $exePath index --project $dpr --db $db --library-db $lib --rule-cache-warm wait 2>&1 | Out-String
+$idx3 = & { $ErrorActionPreference = 'Continue'; & $exePath index --project $dpr --db $db --library-db $lib --rule-cache-warm wait 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'SANITY: reindex after breaking the cycle' ($LASTEXITCODE -eq 0) $idx3
 Check 'C5  index --project reports that it WARMED the cache' ($idx3 -match 'rule-cache: warmed \d+ finding') (($idx3 -split "`n" | Where-Object { $_ -match 'rule-cache|WARNING' }) -join ' / ')
 $c3 = LintOne 'uCycA.pas'
@@ -377,7 +377,7 @@ Check 'C3  ...and the broken cycle is GONE (no stale answer)' (@($c3.Rows | Wher
 
 # --- C4: a writer that does not warm (one-file index) ----------------------------------
 Write-Ascii (Join-Path $proj 'uCycB.pas') $cycB_cycle
-$idx4 = & $exePath index (Join-Path $proj 'uCycB.pas') --db $db --library-db $lib 2>&1 | Out-String
+$idx4 = & { $ErrorActionPreference = 'Continue'; & $exePath index (Join-Path $proj 'uCycB.pas') --db $db --library-db $lib 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'SANITY: one-file reindex restoring the cycle' ($LASTEXITCODE -eq 0) $idx4
 $c4 = LintOne 'uCycA.pas'
 Check 'C4  after a one-file index the next run is a MISS' ((CacheState $c4.Prof) -eq 'miss') "state: $(CacheState $c4.Prof)"

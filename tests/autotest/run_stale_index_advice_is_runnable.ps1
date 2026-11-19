@@ -77,7 +77,7 @@ $projDb = Join-Path $root 'proj.sqlite'
 $libDb  = Join-Path $root 'lib.sqlite'
 
 function Run([string[]]$xs) {
-  $o = & $Exe @xs 2>&1 | Out-String
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe @xs 2>&1 | ForEach-Object { "$_" } } | Out-String
   [pscustomobject]@{ Out = $o; Code = $LASTEXITCODE }
 }
 

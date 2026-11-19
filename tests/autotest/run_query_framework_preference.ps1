@@ -246,7 +246,7 @@ $bothDb = Join-Path $WorkDir 'bothproj.sqlite'
 
 Write-Host 'Indexing fixtures' -ForegroundColor Cyan
 foreach ($pair in @(@($libSrc, $libDb), @($vclSrc, $vclDb), @($fmxSrc, $fmxDb), @($bothSrc, $bothDb))) {
-  $out = & $Exe index $pair[0] --db $pair[1] --quiet 2>&1
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe index $pair[0] --db $pair[1] --quiet 2>&1 | ForEach-Object { "$_" } }
   Check ("index {0}" -f (Split-Path $pair[1] -Leaf)) ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($out -join ' | ')"
 }
 
@@ -257,7 +257,7 @@ foreach ($pair in @(@($libSrc, $libDb), @($vclSrc, $vclDb), @($fmxSrc, $fmxDb), 
 function QNames([string[]]$Dbs) {
   $dbArgs = @()
   foreach ($d in $Dbs) { $dbArgs += '--db'; $dbArgs += $d }
-  $raw = @(& $Exe query --name TEdit @dbArgs --json --quiet 2>&1) | ForEach-Object { "$_" }
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query --name TEdit @dbArgs --json --quiet 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" }
   $script:LastExit = $LASTEXITCODE
   $json = ($raw | Where-Object { -not $_.TrimStart().StartsWith('(') }) -join "`n"
   if (-not $json.Trim()) { return @() }
@@ -329,7 +329,7 @@ Write-Host ''
 Write-Host 'controls' -ForegroundColor Cyan
 
 # A single-row name cannot be ordered wrong, and the reorder must not disturb it.
-$one = @(& $Exe query --name TVclThing --db $libDb --db $vclDb --json --quiet 2>&1) |
+$one = @(& { $ErrorActionPreference = 'Continue'; & $Exe query --name TVclThing --db $libDb --db $vclDb --json --quiet 2>&1 | ForEach-Object { "$_" } }) |
          ForEach-Object { "$_" } | Where-Object { -not $_.TrimStart().StartsWith('(') }
 $oneExit = $LASTEXITCODE
 $oneRows = @(($one -join "`n" | ConvertFrom-Json))
@@ -338,7 +338,7 @@ Check 'control: a single-match name is unaffected and still exits 0' `
   "exit=$oneExit rows=$($oneRows.Count)"
 
 # Zero hits keeps its documented contract (exit 1), which the reorder sits after.
-& $Exe query --name TNoSuchThingAnywhere --db $libDb --db $vclDb --exact --json --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe query --name TNoSuchThingAnywhere --db $libDb --db $vclDb --exact --json --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'control: zero hits still exits 1' ($LASTEXITCODE -eq 1) "exit=$LASTEXITCODE"
 
 Write-Host ''

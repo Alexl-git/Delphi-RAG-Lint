@@ -54,7 +54,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
   else     { $script:fail++; Write-Host "  FAIL  $Name  $Detail" -ForegroundColor Red }
 }
 function Run-Exe([string[]]$CliArgs) {
-  $o = & $Exe @CliArgs 2>&1 | Out-String
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe @CliArgs 2>&1 | ForEach-Object { "$_" } } | Out-String
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 function No-Av([string]$Text) { return -not ($Text -match 'AccessViolation|Access violation') }

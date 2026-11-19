@@ -109,7 +109,7 @@ end.
     'F'           = @($lnF, $lnEnd)
   }
 
-  $raw = (& $Exe lint $fixture --rule function-result-not-set --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture --rule function-result-not-set --json 2>$null }) -join "`n"
   $all = if ($raw.Trim()) { @($raw | ConvertFrom-Json) } else { @() }
   $hits = @($all | Where-Object { $_.rule -eq 'function-result-not-set' })
   Write-Host ("  function-result-not-set fired on lines: {0}" -f (($hits | ForEach-Object { $_.start_line }) -join ', ')) -ForegroundColor DarkGray

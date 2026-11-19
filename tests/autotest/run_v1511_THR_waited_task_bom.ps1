@@ -21,7 +21,7 @@ $DbArgs = if ($DbPath) { @('--db', $DbPath) } else { @() }
 if (-not $Exe -or -not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe"; exit 2 }
 $Fix = Join-Path $PSScriptRoot 'fixtures\v1511-THR'
 function Lines([string]$File, [string]$Rule, [string[]]$Extra) {
-    $raw = (& $Exe lint $File --rule $Rule @DbArgs --json @Extra 2>$null) -join "`n"
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $File --rule $Rule @DbArgs --json @Extra 2>$null }) -join "`n"
     $arr = @()
     if ($raw.Trim().StartsWith("[")) { try { $arr = @($raw | ConvertFrom-Json) } catch { } }
     return @($arr | ForEach-Object { [int]$_.start_line })

@@ -103,10 +103,10 @@ Write-Ansi $target $FixtureSrc
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
-  $json1 = (& $exePath document --qname factsdecay.Target --db $db --apply --json 2>$null) -join "`n"
+  $json1 = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname factsdecay.Target --db $db --apply --json 2>$null }) -join "`n"
   Check 'apply #1 exits 0' ($LASTEXITCODE -eq 0)
   Check '1. apply #1: action=created' ($json1 -match '"action":"created"') $json1
   $textFirst = [IO.File]::ReadAllText($target)
@@ -119,14 +119,14 @@ try {
     "begin`r`n  // no longer calls Target -- the fact above is now stale`r`nend;"
   [System.IO.File]::WriteAllText($target, $drifted, [System.Text.Encoding]::ASCII)
 
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   Check 'reindex (post-drift) exits 0' ($LASTEXITCODE -eq 0)
 
-  $driftJson = (& $exePath doc-drift --qname factsdecay.Target --db $db --json 2>$null) -join "`n"
+  $driftJson = (& { $ErrorActionPreference = 'Continue'; & $exePath doc-drift --qname factsdecay.Target --db $db --json 2>$null }) -join "`n"
   Check '2. doc-drift reports ddFactsBlockStale' ($driftJson -match '"kind":"ddFactsBlockStale"') $driftJson
   Check '2. doc-drift reports fixable=true' ($driftJson -match '"fixable":true') $driftJson
 
-  $json2 = (& $exePath document --qname factsdecay.Target --db $db --apply --json 2>$null) -join "`n"
+  $json2 = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname factsdecay.Target --db $db --apply --json 2>$null }) -join "`n"
   Check 'apply #2 exits 0' ($LASTEXITCODE -eq 0)
   Check '3. apply #2: action=removed (D1 -- a pure deletion is not a repair)' ($json2 -match '"action":"removed"') $json2
   Check '3. apply #2: action is NOT extended (D1 -- the two are now distinguishable)' `
@@ -145,8 +145,8 @@ try {
 
   # --- 5. Idempotency at the new (comment-less) fixed point ---
   $before = [IO.File]::ReadAllBytes($target)
-  & $exePath index $scratch --db $db 2>$null | Out-Null
-  $json3 = (& $exePath document --qname factsdecay.Target --db $db --apply --json 2>$null) -join "`n"
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+  $json3 = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname factsdecay.Target --db $db --apply --json 2>$null }) -join "`n"
   Check '5. apply #3: action=unchanged' ($json3 -match '"action":"unchanged"') $json3
   Check '5. apply #3: edits=0' ($json3 -match '"edits":0') $json3
   $after = [IO.File]::ReadAllBytes($target)
@@ -166,18 +166,18 @@ try {
   $db6     = Join-Path $scratch6 'factsdecay.sqlite'
   Write-Ansi $target6 $FixtureSrc
 
-  & $exePath index $scratch6 --db $db6 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch6 --db $db6 2>$null } | Out-Null
   Check '6. text: index exits 0' ($LASTEXITCODE -eq 0)
-  $t1 = (& $exePath document --qname factsdecay.Target --db $db6 --apply 2>$null) -join "`n"
+  $t1 = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname factsdecay.Target --db $db6 --apply 2>$null }) -join "`n"
   Check '6. text: apply #1 reports created' ($t1 -match 'doc: created -- \d+ edit\(s\) applied') $t1
 
   $drifted6 = (Get-Content -Raw $target6) -replace `
     "begin\r\n  Target;\r\nend;", `
     "begin`r`n  // no longer calls Target -- the fact above is now stale`r`nend;"
   [System.IO.File]::WriteAllText($target6, $drifted6, [System.Text.Encoding]::ASCII)
-  & $exePath index $scratch6 --db $db6 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch6 --db $db6 2>$null } | Out-Null
 
-  $t2 = (& $exePath document --qname factsdecay.Target --db $db6 --apply 2>$null) -join "`n"
+  $t2 = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname factsdecay.Target --db $db6 --apply 2>$null }) -join "`n"
   Check '6. text: apply #2 reports removed, not extended (D1)' `
     ($t2 -match 'doc: removed -- 1 edit\(s\) applied') $t2
   Check '6. text: apply #2 does NOT say extended (D1)' (-not ($t2 -match 'doc: extended')) $t2

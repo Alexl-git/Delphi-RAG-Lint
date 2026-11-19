@@ -160,7 +160,7 @@ try {
   Write-Host 'CONTROL -- the same one-file change through a one-shot run' -ForegroundColor Cyan
   Start-Sleep -Milliseconds 1100
   Emit-Unit 6 '  ;'
-  $p = & $Exe index $src --db $db 2>&1 | Out-String
+  $p = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   $pann = (($p -split "`n") | Where-Object { $_ -match 'resolve: calls\s+(starting|\.\.\. whole database because)' }) -join ' / '
   Check 'P1 a one-shot run over one changed file is SCOPED' ($p -match 'starting SCOPED pass over 1 changed file') $pann
 }

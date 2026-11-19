@@ -61,7 +61,7 @@ function Src-Write([string]$Path, [string]$Text) {
   [IO.File]::WriteAllText($Path, (($Text -replace "`r`n", "`n") -replace "`n", "`r`n"), [Text.Encoding]::ASCII)
 }
 function Src-Run([string[]]$CliArgs) {
-  $o = & $exePath @CliArgs 2>&1 | Out-String
+  $o = & { $ErrorActionPreference = 'Continue'; & $exePath @CliArgs 2>&1 | ForEach-Object { "$_" } } | Out-String
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 function Src-NoAv([string]$Text) { return -not ($Text -match 'AccessViolation|Access violation') }

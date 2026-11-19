@@ -46,7 +46,7 @@ $use = Join-Path $scratch 'uEcUse.pas'
 $db  = Join-Path $scratch 'enumcasts.sqlite'
 
 function Sql([string]$Query) {
-  $raw = (& $exePath sql --db $db --json --limit 1000 --query $Query 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --limit 1000 --query $Query 2>$null }) -join "`n"
   $b = $raw.IndexOf('{')
   if ($b -lt 0) { throw "sql returned no JSON for: $Query" }
   $o = $raw.Substring($b) | ConvertFrom-Json
@@ -89,7 +89,7 @@ function CheckAll([string]$Phase) {
   }
 }
 
-$log = & $exePath index $scratch --db $db 2>&1
+$log = & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 CheckAll 'full'
 $line = @($log | Where-Object { "$_" -match 'enum-casts: (\d+) of (\d+)' })
@@ -97,7 +97,7 @@ Check 'calls-stage enum-casts: line present' ($line.Count -eq 1) "lines=$($line.
 
 # incremental: touch the using unit (append a trailing comment) and reindex
 [IO.File]::AppendAllText($use, "{ touched }`r`n", [Text.Encoding]::ASCII)
-$log2 = & $exePath index $scratch --db $db 2>&1
+$log2 = & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'incremental index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 CheckAll 'incremental'
 

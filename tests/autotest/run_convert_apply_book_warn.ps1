@@ -216,14 +216,14 @@ $Book = @'
 Write-Ascii (P 'warn.rules') $Book
 
 $db = P 'fx.sqlite'
-$idx = & $Exe index $WorkDir --db $db 2>&1
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'V the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db)) "exit=$LASTEXITCODE; $($idx -join ' | ')"
 Check 'V the load checker is available (lib\DfmLoadCheck.ps1)' (Test-DfmLoadsChecker)
 
 # ---- convert-validate ------------------------------------------------------------
-$v = (& $Exe convert-validate --rules (P 'warn.rules') --from LibS.TSrcTable --to LibT.TDstTable --db $db 2>&1) -join "`n"
+$v = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules (P 'warn.rules') --from LibS.TSrcTable --to LibT.TDstTable --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'P1 --print-parsed shows the two new directives' `
-  (((& $Exe convert-validate --rules (P 'warn.rules') --print-parsed 2>&1) -join "`n") -match 'line 8: warn IndexName "index <value> must exist' ) ''
+  (((& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules (P 'warn.rules') --print-parsed 2>&1 | ForEach-Object { "$_" } }) -join "`n") -match 'line 8: warn IndexName "index <value> must exist' ) ''
 Check 'P2 the book validates against TSrcTable -> TDstTable' ($v -match '(?m)^OK\r?$') $v
 Write-Ascii (P 'bad.rules') @'
 #convert LibS.TSrcTable -> LibT.TDstTable, LibT
@@ -235,7 +235,7 @@ Write-Ascii (P 'bad.rules') @'
 #check-ref ConnectionName NotDotted
 #check-ref ConnectionName
 '@
-$v = (& $Exe convert-validate --rules (P 'bad.rules') --from LibS.TSrcTable --to LibT.TDstTable --db $db 2>&1) -join "`n"
+$v = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules (P 'bad.rules') --from LibS.TSrcTable --to LibT.TDstTable --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'P3 exit 1 on a bad book' ($LASTEXITCODE -eq 1) $v
 Check 'P4 a #warn path naming no member is a line error' ($v -match 'line 2: warn FromPath not found in --from tree: NoSuchProp') $v
 Check 'P5 a {Prop} naming no member is a line error' ($v -match 'line 3: warn placeholder \{NoSuchProp\} not found in --from tree') $v
@@ -244,7 +244,7 @@ Check 'P7 a #check-ref ToPath naming no member is a line error' ($v -match 'line
 Check 'P8 a malformed #check-ref is a line error' (($v -match 'line 7: #check-ref target "NotDotted" is not <Class>\.<Prop>') -and ($v -match 'line 8: #check-ref needs <ToPath>')) $v
 
 # ---- convert-apply -----------------------------------------------------------------
-$o = (& $Exe convert-apply --unit (P 'WarnDM.pas') --rules (P 'warn.rules') --db $db --format json 2>&1) -join "`n"
+$o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'WarnDM.pas') --rules (P 'warn.rules') --db $db --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 $j = Json $o
 Check 'A0 dry run: apply/1 JSON, ok' (($null -ne $j) -and $j.ok) $o
 $bw = @($j.items | Where-Object kind -eq 'book-warning')
@@ -274,7 +274,7 @@ Check 'R4 a matching name in ANOTHER unit does not warn, case-insensitively (tOt
   (-not (@($pl + $dg) | Where-Object instance -eq 'tOther')) ''
 Check 'R5 no ref-not-checked when the index has .dfm facts' (@($j.items | Where-Object kind -eq 'ref-not-checked').Count -eq 0) ''
 
-$r = (& $Exe convert-apply --unit (P 'WarnDM.pas') --rules (P 'warn.rules') --db $db --apply --no-backup 2>&1) -join "`n"
+$r = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'WarnDM.pas') --rules (P 'warn.rules') --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'A1 --apply exits 0' ($LASTEXITCODE -eq 0) $r
 $t = [IO.File]::ReadAllText((P 'WarnDM.dfm'))
 Check 'A2 #warn carries nothing: no Note written, IndexName carried by its #link' `
@@ -322,16 +322,16 @@ Write-Ascii (Q 'nf.rules') @'
 #check-ref ConnectionName TSrcDb.DatabaseName
 '@
 $db2 = Q 'nf.sqlite'
-$idx = & $Exe index $Nf --db $db2 2>&1
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $Nf --db $db2 2>&1 | ForEach-Object { "$_" } }
 Check 'N0 the no-facts index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db2)) ($idx -join ' | ')
-$o = (& $Exe convert-apply --unit (Q 'NfA.pas') --unit (Q 'NfB.pas') --rules (Q 'nf.rules') --db $db2 --format json 2>&1) -join "`n"
+$o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (Q 'NfA.pas') --unit (Q 'NfB.pas') --rules (Q 'nf.rules') --db $db2 --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 $jb = Json $o
 $nc = @($jb.units | ForEach-Object { $_.items } | Where-Object kind -eq 'ref-not-checked')
 Check 'N1 ONE ref-not-checked for a 2-unit, 4-instance run' `
   (($nc.Count -eq 1) -and ($nc[0].text -eq 'line 3: warning: #check-ref not checked -- the project index holds no .dfm property facts (reindex it with this engine)')) (($nc | ConvertTo-Json -Compress) + ' || ' + $o.Substring(0, [Math]::Min(400, $o.Length)))
 Check 'N2 ... and no ref-dangling guessed instead' (@($jb.units | ForEach-Object { $_.items } | Where-Object kind -eq 'ref-dangling').Count -eq 0) ''
 
-$ij = Json ((& $Exe info --json 2>&1) -join "`n")
+$ij = Json ((& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>&1 | ForEach-Object { "$_" } }) -join "`n")
 Check 'I info --json: capabilities.book_warn and check_ref are JSON true' `
   (($null -ne $ij) -and ($ij.capabilities.book_warn -eq $true) -and ($ij.capabilities.check_ref -eq $true) -and ($ij.capabilities.book_warn -is [bool])) ''
 

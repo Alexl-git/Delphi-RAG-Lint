@@ -82,7 +82,7 @@ if (-not $buildOk -or -not (Test-Path $exe)) {
   exit 1
 }
 
-$out = & $exe 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $exe 2>&1 | ForEach-Object { "$_" } } | Out-String
 $kv = @{}
 foreach ($line in ($out -split "`r?`n")) {
   if ($line -match '^\s*([A-Za-z0-9_.]+)=(.*)$') { $kv[$matches[1]] = $matches[2].Trim() }

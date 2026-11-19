@@ -109,7 +109,7 @@ end.
 '@
 
 $db = Join-Path $WorkDir '_D-RAG\App.sqlite'
-& $Exe index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 $member = Join-Path $WorkDir 'uMember.pas'
 
@@ -126,7 +126,7 @@ Write-Host '== the lint verb and the marker meta-rules ==' -ForegroundColor Cyan
 # Establish what lint-all says, so the per-file expectation is derived from the
 # engine rather than from this script's opinion. If lint-all cannot see them
 # either, the fixture is wrong and everything below would be measuring nothing.
-$allOut = (& $Exe lint-all --db $db 2>&1)
+$allOut = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db 2>&1 | ForEach-Object { "$_" } })
 $allUnused    = RuleLines $allOut 'review-marker-unused'
 $allMalformed = RuleLines $allOut 'review-marker-malformed'
 Check 'PRECONDITION: lint-all sees an unused marker in the member' ($allUnused.Count -ge 1) `
@@ -135,7 +135,7 @@ Check 'PRECONDITION: lint-all sees a malformed marker in the member' ($allMalfor
   "lint-all found none -- the fixture does not contain the case under test"
 
 # 1 + 2. THE DEFECT: the same file, through the per-file verb.
-$fileOut = (& $Exe lint $member --db $db 2>&1)
+$fileOut = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $member --db $db 2>&1 | ForEach-Object { "$_" } })
 $fileUnused    = RuleLines $fileOut 'review-marker-unused'
 $fileMalformed = RuleLines $fileOut 'review-marker-malformed'
 
@@ -159,7 +159,7 @@ Check 'CONTROL: and the finding it covers stays suppressed' `
 
 # 4. >>> THE SCOPE ASSERTION. The directory form must report the member's
 #    markers and NOT the non-member's.
-$dirOut = (& $Exe lint $WorkDir --db $db 2>&1)
+$dirOut = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } })
 $dirText = ($dirOut | Out-String)
 Check 'lint <dir> reports the MEMBER''s unused marker' `
   ((RuleLines $dirOut 'review-marker-unused').Count -ge 1) ''

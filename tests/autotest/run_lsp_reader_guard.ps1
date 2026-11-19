@@ -140,7 +140,7 @@ $callLine  = [Array]::FindIndex($projLines, [Predicate[string]]{ param($x) $x -l
 $dotCol    = $projLines[$callLine].IndexOf('.') + 1
 
 $pristine = Join-Path $WorkDir 'pristine.sqlite'
-$o0 = (& $Exe index "$WorkDir\projsrc" --db $pristine 2>&1 | Out-String)
+$o0 = (& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\projsrc" --db $pristine 2>&1 | ForEach-Object { "$_" } } | Out-String)
 Check 'V1 fixture index exits 0' ($LASTEXITCODE -eq 0) ($o0 -split "`r?`n" | Select-Object -Last 1)
 Check 'V2 fixture has NO pending -wal' ((SidecarBytes $pristine) -eq 0) "wal bytes=$(SidecarBytes $pristine)"
 Check 'V3 fixture is WAL (header byte 18 = 2)' ((HeaderWriteVersion $pristine) -eq 2) "byte18=$(HeaderWriteVersion $pristine)"
@@ -270,7 +270,7 @@ Write-Host 'PC: POSITIVE CONTROL -- a real write (index) on the v12 file DOES mo
 $v12w = Join-Path $WorkDir 'v12-writable.sqlite'
 & python $pyV12 $v12w
 $md5w = Md5 $v12w
-$pcOut = (& $Exe index "$WorkDir\projsrc" --db $v12w 2>&1 | Out-String)
+$pcOut = (& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\projsrc" --db $v12w 2>&1 | ForEach-Object { "$_" } } | Out-String)
 Check 'PC index on the v12 file exits 0 (it migrates, as a writer should)' ($LASTEXITCODE -eq 0) ($pcOut -split "`r?`n" | Select-Object -Last 1)
 Check 'PC md5 CHANGED -- so byte-identity above is a real assertion' ((Md5 $v12w) -ne $md5w) "before=$md5w after=$(Md5 $v12w)"
 

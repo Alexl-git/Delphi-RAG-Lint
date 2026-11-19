@@ -97,7 +97,7 @@ end.
 $unit = Join-Path $dir 'UExc.pas'
 
 function Findings([string[]]$Extra) {
-  $out = (& $Exe lint $unit --rule type-name-prefix @Extra 2>$null) -join "`n"
+  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $unit --rule type-name-prefix @Extra 2>$null }) -join "`n"
   return @($out -split "`n" | Where-Object { $_ -match 'type-name-prefix' })
 }
 # The comma keeps a one-element result an array (PowerShell unrolls it otherwise).
@@ -120,7 +120,7 @@ Check '4. EX = class(Engine): unknown origin store-free, no verdict (d5c20ad3)' 
 Write-Host ''
 Write-Host '=== with --db (CONTROL) ===' -ForegroundColor Cyan
 $db = Join-Path $work 'e.sqlite'
-& $Exe index --project (Join-Path $dir 'Exc.dpr') --db $db *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $dir 'Exc.dpr') --db $db *> $null }
 $hd = Findings @('--db', $db)
 $hd | ForEach-Object { Write-Host $_ -ForegroundColor DarkGray }
 $excDb = @(foreach ($n in 'EFooError','EBarError','EAbortLike','EQual') { About $hd $n | ForEach-Object { $_ } })

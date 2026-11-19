@@ -107,7 +107,7 @@ $db  = Join-Path $WorkDir 'fresh.sqlite'
 $out = Join-Path $WorkDir 'o.txt'
 $err = Join-Path $WorkDir 'e.txt'
 
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 # Runs lint-all with stdout and stderr captured SEPARATELY -- the whole point of
 # F3 is that they do not mix, so a runner that merged them could not see it.
@@ -172,7 +172,7 @@ try {
   # ---- F6: reindexing clears it -------------------------------------------
   # The note tells the reader to reindex. If doing so does not silence it, the
   # advice is wrong and the reader learns to ignore the line.
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $healed = RunSplit
   Check 'F6 the note the fix advises actually silences it' `
         (-not ($healed.Err -match 'indexed file\(s\) changed')) `

@@ -244,7 +244,7 @@ $NeverProbe = [ordered]@{
   'lsp'      = 'LSP stdio server -- blocks on stdin'
 }
 
-$helpText  = (& $Exe --help 2>&1 | Out-String)
+$helpText  = (& { $ErrorActionPreference = 'Continue'; & $Exe --help 2>&1 | ForEach-Object { "$_" } } | Out-String)
 $helpVerbs = @(Get-HelpVerbList -HelpText $helpText)
 # Non-emptiness is the control: a help parse that yields nothing makes every
 # "is it documented?" comparison below trivially true.
@@ -408,7 +408,7 @@ Write-Host '-- check 2: rule counts' -ForegroundColor Cyan
 
 $total = 0; $fixable = 0; $defaultOn = 0
 try {
-  $cat       = (& $Exe rules --json 2>$null | Out-String) | ConvertFrom-Json
+  $cat       = (& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null } | Out-String) | ConvertFrom-Json
   $total     = [int]$cat.summary.total
   $fixable   = @($cat.rules | Where-Object { $_.fixable }).Count
   $defaultOn = @($cat.rules | Where-Object { $_.default_enabled }).Count
@@ -1323,7 +1323,7 @@ foreach ($sv in $selfParsing.Keys) {
     if ($inBlock) { [void]$svBlock.AppendLine($hl) }
   }
   $svBlockSet = Get-FlagSet $svBlock.ToString() $FlagRx
-  $svOwnSet   = Get-FlagSet (& $Exe $sv --help 2>&1 | Out-String) $FlagRx
+  $svOwnSet   = Get-FlagSet (& { $ErrorActionPreference = 'Continue'; & $Exe $sv --help 2>&1 | ForEach-Object { "$_" } } | Out-String) $FlagRx
   Check "F1v the $sv help block and its own --help were read" (($svBlockSet.Count -gt 0) -and ($svOwnSet.Count -gt 0)) `
     "block has $($svBlockSet.Count) flag(s), own help $($svOwnSet.Count) -- the block scan is broken, not the verb"
   foreach ($fl in $selfParsing[$sv]) {

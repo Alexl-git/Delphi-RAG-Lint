@@ -398,7 +398,7 @@ try {
   #    file is STILL ON DISK. This is precisely what --prune cannot catch.
   # ==========================================================================
   $dbA = Join-Path $scratch 'projA.sqlite'
-  $o = & $exePath index --project $dprojA --db $dbA --platform Win64 --quiet 2>&1
+  $o = & { $ErrorActionPreference = 'Continue'; & $exePath index --project $dprojA --db $dbA --platform Win64 --quiet 2>&1 | ForEach-Object { "$_" } }
   $rc = $LASTEXITCODE
   Check '1a. initial index of project A exits 0' ($rc -eq 0) "exit=$rc; $(($o | Select-Object -Last 2) -join ' | ')"
   $before = Snap $dbA
@@ -414,7 +414,7 @@ try {
   Check '1b. Member2.pas is still on disk' (Test-Path (Join-Path $projA 'Member2.pas')) `
     'the whole point: prune only removes files that are GONE'
 
-  $o = & $exePath index --project $dprojA --db $dbA --platform Win64 --recompile --quiet 2>&1
+  $o = & { $ErrorActionPreference = 'Continue'; & $exePath index --project $dprojA --db $dbA --platform Win64 --recompile --quiet 2>&1 | ForEach-Object { "$_" } }
   $rc = $LASTEXITCODE
   Check '1c. recompile after the scope change exits 0' ($rc -eq 0) "exit=$rc; $(($o | Select-Object -Last 2) -join ' | ')"
   Check '1c. the run REPORTS what it evicted' `
@@ -447,10 +447,10 @@ try {
   # ==========================================================================
   # 2a. separate DBs: recompiling A does not reach into B's database at all.
   $dbB = Join-Path $scratch 'projB.sqlite'
-  & $exePath index --project $dprojB --db $dbB --platform Win64 --quiet 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --project $dprojB --db $dbB --platform Win64 --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $bBefore = Snap $dbB
   Check '2a. project B indexed' (HasContent $bBefore) (Leaves $bBefore)
-  & $exePath index --project $dprojA --db $dbA --platform Win64 --recompile --quiet 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --project $dprojA --db $dbA --platform Win64 --recompile --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check '2a. recompiling A leaves B''s DB byte-for-byte unchanged' ((Snap $dbB) -eq $bBefore) `
     "before=$(Leaves $bBefore) after=$(Leaves (Snap $dbB))"
 
@@ -461,12 +461,12 @@ try {
   #     target would stamp one), then A as
   #     a project: since 1.31.2 a project scan into a DB tagged for ANOTHER project
   #     is refused, so this is the shape a legacy shared DB still carries.
-  & $exePath index (Join-Path $projB 'BUnit.pas') --db $dbBoth --platform Win64 --quiet 2>&1 | Out-Null
-  & $exePath index --project $dprojA --db $dbBoth --platform Win64 --quiet 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index (Join-Path $projB 'BUnit.pas') --db $dbBoth --platform Win64 --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --project $dprojA --db $dbBoth --platform Win64 --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $bothBefore = Snap $dbBoth
   Check '2b. the shared DB holds both projects' `
     (($bothBefore -like '*bunit.pas*') -and ($bothBefore -like '*member1.pas*')) (Leaves $bothBefore)
-  & $exePath index --project $dprojA --db $dbBoth --platform Win64 --recompile --quiet 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --project $dprojA --db $dbBoth --platform Win64 --recompile --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $bothAfter = Snap $dbBoth
   Check '2b. recompiling A did NOT evict project B from the shared DB' `
     ($bothAfter -like '*bunit.pas*') (Leaves $bothAfter)
@@ -478,7 +478,7 @@ try {
   #    left 5 `.private\` copies in the YADF index through every reindex.
   # ==========================================================================
   $dbL = Join-Path $scratch 'lib.sqlite'
-  $o = & $exePath index $lib --db $dbL --platform Win64 --quiet 2>&1
+  $o = & { $ErrorActionPreference = 'Continue'; & $exePath index $lib --db $dbL --platform Win64 --quiet 2>&1 | ForEach-Object { "$_" } }
   $rc = $LASTEXITCODE
   Check '3a. initial library index exits 0' ($rc -eq 0) "exit=$rc; $(($o | Select-Object -Last 2) -join ' | ')"
   $libBefore = Snap $dbL
@@ -488,7 +488,7 @@ try {
   $l3Before   = Rows $dbL 'symbols' 'libthree.pas'
   $ftsLBefore = FtsHits $dbL 'zzqqlibtwomarker'
 
-  $o = & $exePath index $lib --db $dbL --platform Win64 --recompile --exclude 'LibTwo.pas' --quiet 2>&1
+  $o = & { $ErrorActionPreference = 'Continue'; & $exePath index $lib --db $dbL --platform Win64 --recompile --exclude 'LibTwo.pas' --quiet 2>&1 | ForEach-Object { "$_" } }
   $rc = $LASTEXITCODE
   Check '3b. recompile with a new exclude exits 0' ($rc -eq 0) "exit=$rc; $(($o | Select-Object -Last 2) -join ' | ')"
   Check '3c. the newly excluded unit is GONE' ((Rows $dbL 'files' 'libtwo.pas') -eq '0') `
@@ -517,7 +517,7 @@ try {
   #    and no count printed by either run would reveal it.
   # ==========================================================================
   $dbPFresh = Join-Path $scratch 'projA_fresh.sqlite'
-  & $exePath index --project $dprojA --db $dbPFresh --platform Win64 --rebuild --quiet 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --project $dprojA --db $dbPFresh --platform Win64 --rebuild --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $recompiled = Snap $dbA
   $fresh      = Snap $dbPFresh
   Check '4a. PROJECT: recompile-after-eviction == a fresh rebuild' ($recompiled -eq $fresh) `
@@ -525,7 +525,7 @@ try {
   Check '4a. and the converged content is real' (HasContent $fresh) "($fresh)"
 
   $dbLFresh = Join-Path $scratch 'lib_fresh.sqlite'
-  & $exePath index $lib --db $dbLFresh --platform Win64 --rebuild --exclude 'LibTwo.pas' --quiet 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $lib --db $dbLFresh --platform Win64 --rebuild --exclude 'LibTwo.pas' --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $libRecompiled = Snap $dbL
   $libFresh      = Snap $dbLFresh
   Check '4b. LIBRARY: recompile-after-eviction == a fresh rebuild' ($libRecompiled -eq $libFresh) `
@@ -553,14 +553,14 @@ try {
 "@ | Set-Content $cfg -Encoding ascii
   $sectionDb = Join-Path $scratch "out\$mdb"
 
-  & $exePath index --all --config $cfg --only EvictSection --jobs 1 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only EvictSection --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $secBefore = Snap $sectionDb
   Check '5a. the section indexed both members' `
     (($secBefore -like '*member1.pas*') -and ($secBefore -like '*member2.pas*')) (Leaves $secBefore)
   Sentinel $sectionDb 'set' | Out-Null
 
   Write-ProjA $false  # drop Member2 again, file still on disk
-  $o = @(& $exePath index --all --config $cfg --only EvictSection --jobs 1 --recompile 2>&1)
+  $o = @(& { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only EvictSection --jobs 1 --recompile 2>&1 | ForEach-Object { "$_" } })
   $rc = $LASTEXITCODE
   Check '5b. index --all --recompile exits 0' ($rc -eq 0) "exit=$rc"
   # WITHOUT this the rest of group 5 is vacuous: a section build that deletes

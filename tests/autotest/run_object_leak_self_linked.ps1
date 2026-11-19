@@ -85,7 +85,7 @@ end.
 $file = Join-Path $WorkDir 'uOL.pas'
 [System.IO.File]::WriteAllText($file, (($Fixture -replace "`r`n","`n") -replace "`n","`r`n"), [System.Text.Encoding]::ASCII)
 
-$out = & $Exe lint $file --rules-dir $RulesDir 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file --rules-dir $RulesDir 2>&1 | ForEach-Object { "$_" } } | Out-String
 $leaked = @([regex]::Matches($out, 'object-leak: Object "(\w+)"') | ForEach-Object { $_.Groups[1].Value })
 Write-Host ("  object-leak reported for: {0}" -f ($(if ($leaked) { $leaked -join ',' } else { '(none)' }))) -ForegroundColor DarkGray
 

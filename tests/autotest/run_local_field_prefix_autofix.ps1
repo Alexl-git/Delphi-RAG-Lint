@@ -74,14 +74,14 @@ function Setup([string]$Dir, [string]$ConfigJson) {
     [System.IO.File]::WriteAllText((Join-Path $Dir 'uLFP.pas'),
         (($Fixture -replace "`r`n","`n") -replace "`n","`r`n"), [System.Text.Encoding]::ASCII)
     if ($ConfigJson) { [System.IO.File]::WriteAllText((Join-Path $Dir 'cfg.json'), $ConfigJson, [System.Text.Encoding]::ASCII) }
-    & $Exe index $Dir --db (Join-Path $Dir 'fx.sqlite') 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $Exe index $Dir --db (Join-Path $Dir 'fx.sqlite') 2>&1 | ForEach-Object { "$_" } } | Out-Null
 }
 
 # --- 1. OPTED IN: the rename happens, everywhere -----------------------------
 $optIn = Join-Path $WorkDir 'optin'
 Setup $optIn '{ "autofix": ["local-field-prefix"] }'
-& $Exe lint-all --db (Join-Path $optIn 'fx.sqlite') --rules-dir $RulesDir `
-      --config (Join-Path $optIn 'cfg.json') --rule local-field-prefix --fix --apply --no-backup 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db (Join-Path $optIn 'fx.sqlite') --rules-dir $RulesDir `
+      --config (Join-Path $optIn 'cfg.json') --rule local-field-prefix --fix --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $after = [System.IO.File]::ReadAllText((Join-Path $optIn 'uLFP.pas'))
 
 Check 'declaration renamed (FHandle -> Handle)' ($after -cmatch '(?m)^\s*Handle: Integer;')
@@ -100,8 +100,8 @@ Check 'a local stripping to a digit-leading name is left alone' ($after -cmatch 
 $noOptIn = Join-Path $WorkDir 'nooptin'
 Setup $noOptIn '{ "autofix_off": ["local-field-prefix"] }'
 $before2 = [System.IO.File]::ReadAllText((Join-Path $noOptIn 'uLFP.pas'))
-$out2 = & $Exe lint-all --db (Join-Path $noOptIn 'fx.sqlite') --rules-dir $RulesDir `
-             --config (Join-Path $noOptIn 'cfg.json') --rule local-field-prefix --fix --apply --no-backup 2>&1 | Out-String
+$out2 = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db (Join-Path $noOptIn 'fx.sqlite') --rules-dir $RulesDir `
+             --config (Join-Path $noOptIn 'cfg.json') --rule local-field-prefix --fix --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-String
 $after2 = [System.IO.File]::ReadAllText((Join-Path $noOptIn 'uLFP.pas'))
 # -ceq, NOT -eq: PowerShell string comparison is case-INSENSITIVE by default, and
 # this fix changes only letter presence/case. A case-blind compare reported an

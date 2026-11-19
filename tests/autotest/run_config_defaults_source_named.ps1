@@ -50,7 +50,7 @@ function Write-Ascii([string]$Path, [string]$Text) {
 function RunIn([string]$Dir, [string[]]$A) {
   Push-Location $Dir
   try {
-    $out = & $Exe @A 2>&1 | Out-String
+    $out = & { $ErrorActionPreference = 'Continue'; & $Exe @A 2>&1 | ForEach-Object { "$_" } } | Out-String
     return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $out }
   } finally { Pop-Location }
 }

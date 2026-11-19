@@ -40,35 +40,35 @@ foreach ($f in 'UwDemo.dpr', 'UwDemo.dproj') {
 }
 $Db = "$WorkDir\uw.sqlite"
 $env:UW_HIDDEN = ''
-$null = & $Exe index --project "$WorkDir\UwDemo.dproj" --db $Db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index --project "$WorkDir\UwDemo.dproj" --db $Db 2>&1 | ForEach-Object { "$_" } }
 if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: index failed" -ForegroundColor Red; exit 2 }
 
-$All = Last-Json (& $Exe unwith --db $Db --plan --json --library-db $LibraryDb 2>$null)
+$All = Last-Json (& { $ErrorActionPreference = 'Continue'; & $Exe unwith --db $Db --plan --json --library-db $LibraryDb 2>$null })
 $GenSites = @($All.sites | Where-Object { $_.file -like '*\gen\*' }).Count
 $CaseSites = @($All.sites | Where-Object { $_.file -like '*UwCases.pas' }).Count
 Check 'control: the plain plan holds gen\ sites' ($GenSites -ge 20) "gen sites $GenSites"
 Check 'control: the plain plan holds UwCases sites' ($CaseSites -ge 11) "case sites $CaseSites"
 
 # (b) --exclude-under
-$Ex = Last-Json (& $Exe unwith --db $Db --plan --json --library-db $LibraryDb --exclude-under "$WorkDir\gen" 2>$null)
+$Ex = Last-Json (& { $ErrorActionPreference = 'Continue'; & $Exe unwith --db $Db --plan --json --library-db $LibraryDb --exclude-under "$WorkDir\gen" 2>$null })
 Check '(b) --exclude-under drops every gen\ site' (($null -ne $Ex) -and (@($Ex.sites | Where-Object { $_.file -like '*\gen\*' }).Count -eq 0)) "left $(@($Ex.sites | Where-Object { $_.file -like '*\gen\*' }).Count)"
 Check '(b) ... and keeps the UwCases sites' (($null -ne $Ex) -and (@($Ex.sites | Where-Object { $_.file -like '*UwCases.pas' }).Count -eq $CaseSites))
 # slash forms, as the index verb accepts them
-$Ex2 = Last-Json (& $Exe unwith --db $Db --plan --json --library-db $LibraryDb --exclude-under ($WorkDir.Replace('\', '/') + '/GEN/') 2>$null)
+$Ex2 = Last-Json (& { $ErrorActionPreference = 'Continue'; & $Exe unwith --db $Db --plan --json --library-db $LibraryDb --exclude-under ($WorkDir.Replace('\', '/') + '/GEN/') 2>$null })
 Check '(b) forward slashes and case are accepted' (($null -ne $Ex2) -and (@($Ex2.sites | Where-Object { $_.file -like '*\gen\*' }).Count -eq 0))
 
 # (c) an explicit --in is never excluded
-$In = Last-Json (& $Exe unwith --db $Db --plan --json --library-db $LibraryDb --in "$WorkDir\gen\UwRefused.pas" --exclude-under "$WorkDir\gen" 2>$null)
+$In = Last-Json (& { $ErrorActionPreference = 'Continue'; & $Exe unwith --db $Db --plan --json --library-db $LibraryDb --in "$WorkDir\gen\UwRefused.pas" --exclude-under "$WorkDir\gen" 2>$null })
 Check '(c) --in under an excluded folder is still planned' (($null -ne $In) -and (@($In.sites).Count -ge 20)) "sites $(@($In.sites).Count)"
 
 # (d) a folder that matches nothing changes nothing
-$No = Last-Json (& $Exe unwith --db $Db --plan --json --library-db $LibraryDb --exclude-under "$WorkDir\nothing-here" 2>$null)
+$No = Last-Json (& { $ErrorActionPreference = 'Continue'; & $Exe unwith --db $Db --plan --json --library-db $LibraryDb --exclude-under "$WorkDir\nothing-here" 2>$null })
 Check '(d) a non-matching --exclude-under is a no-op' (($null -ne $No) -and (@($No.sites).Count -eq @($All.sites).Count)) "$(@($No.sites).Count) vs $(@($All.sites).Count)"
 
 # (a) the lint --fix route is the same verb
-$L = & $Exe lint --fix --fix-rule with-statement --db $Db --in "$WorkDir\UwCases.pas" --library-db $LibraryDb 2>$null
+$L = & { $ErrorActionPreference = 'Continue'; & $Exe lint --fix --fix-rule with-statement --db $Db --in "$WorkDir\UwCases.pas" --library-db $LibraryDb 2>$null }
 $LCode = $LASTEXITCODE
-$U = & $Exe unwith --db $Db --plan --in "$WorkDir\UwCases.pas" --library-db $LibraryDb 2>$null
+$U = & { $ErrorActionPreference = 'Continue'; & $Exe unwith --db $Db --plan --in "$WorkDir\UwCases.pas" --library-db $LibraryDb 2>$null }
 $LSum = @($L | Where-Object { $_ -match '^unwith: \d+ with statement' })
 $USum = @($U | Where-Object { $_ -match '^unwith: \d+ with statement' })
 Check '(a) lint --fix --fix-rule with-statement (no --apply) exits 0' ($LCode -eq 0) "exit $LCode"

@@ -107,9 +107,9 @@ Check 'F1 exit 1'                          ($r.Code -eq 1) "exit $($r.Code)"
 Check 'F1 ERROR line names the file on STDERR' ($r.Err -match 'ERROR indexing .*uBroken\.pas') "stderr: $($r.Err)"
 Check 'F1 ERROR line NOT on stdout'        ($r.Out -notmatch 'ERROR indexing')
 Check 'F1 Done. summary counts the failure' ($r.Out -match '(?m)^Done\. .*1 file\(s\) FAILED to index') "stdout tail: $(($r.Out -split "`n" | Select-Object -Last 3) -join ' | ')"
-$q = & $exePath query --name TuHealthyA --db $dbF --exact 2>&1 | Out-String
+$q = & { $ErrorActionPreference = 'Continue'; & $exePath query --name TuHealthyA --db $dbF --exact 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'F2 healthy sibling still indexed'   ($q -match '(?m)^class\s+TuHealthyA\b') $q
-$q = & $exePath query --name TuBroken --db $dbF --exact 2>&1 | Out-String
+$q = & { $ErrorActionPreference = 'Continue'; & $exePath query --name TuBroken --db $dbF --exact 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'F2 failed file has no rows (rolled back)' ($q -notmatch '(?m)^class\s+TuBroken\b') $q
 
 # ---- A1/A2: index --all counts the section as failed ----

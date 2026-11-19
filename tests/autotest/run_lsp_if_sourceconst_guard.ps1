@@ -64,7 +64,7 @@ function New-Fixture([string]$Name, [string]$IfBody, [string]$ElseBody) {
   Write-Ascii $f (($lines -join "`r`n") + "`r`n")
   $cl = @('unit uConsts;', 'interface', 'const', '  Ver = 3;', 'implementation', 'end.')
   Write-Ascii (Join-Path $dir 'uConsts.pas') (($cl -join "`r`n") + "`r`n")
-  & $Exe index $dir --db (Join-Path $dir 'fx.sqlite') *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db (Join-Path $dir 'fx.sqlite') *> $null }
   return $f
 }
 $Good    = '  Result := 1;'
@@ -112,7 +112,7 @@ function LspLines([string]$PasFile, [string]$Rule) {
 }
 # `lint --json` is a bare array; the line field is start_line, the id is rule.
 function CliLines([string]$PasFile, [string]$Rule, [string[]]$Extra = @()) {
-  $raw = (& $Exe lint $PasFile --json --db (Join-Path (Split-Path $PasFile) 'fx.sqlite') @Extra 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $PasFile --json --db (Join-Path (Split-Path $PasFile) 'fx.sqlite') @Extra 2>$null }) -join "`n"
   $arr = @()
   if ($raw.Trim()) { $arr = @($raw | ConvertFrom-Json) }
   return ,@($arr | Where-Object { $_.rule -eq $Rule } | ForEach-Object { [int]$_.start_line })

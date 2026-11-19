@@ -83,7 +83,7 @@ W (Join-Path $work 'uConsumer.pas') @(
   'end.')
 
 $db = Join-Path $work 'fx.sqlite'
-& $Exe index $work --db $db --rebuild *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db --rebuild *> $null }
 Check 'fixture indexed' (Test-Path $db) $db
 
 $py = Join-Path $work 'q.py'
@@ -100,7 +100,7 @@ for nm in ('Hooked','Passed','Valued','NeverUsed'):
 c.close()
 print(json.dumps(out))
 '@ | Set-Content $py -Encoding ascii
-$refs = (& python $py $db 2>$null | Out-String | ConvertFrom-Json)
+$refs = (& { $ErrorActionPreference = 'Continue'; & python $py $db 2>$null } | Out-String | ConvertFrom-Json)
 
 # 1-3 -- THE FIX. Each is a different expression position.
 Check '1 an assignment rhs records a ref (GHook := Alpha.Beta.Tools.Hooked)' `
@@ -125,7 +125,7 @@ Check '5 NEGATIVE CONTROL: a routine nobody references stays at zero refs' `
 # 6 -- the consumer that actually bit us. find-callers must SEE all three.
 $seen = 0
 foreach ($nm in 'Hooked','Passed','Valued') {
-  $fc = (& $Exe query find-callers --name $nm --db $db 2>$null | Out-String)
+  $fc = (& { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name $nm --db $db 2>$null } | Out-String)
   if ($fc -match 'uconsumer\.pas') { $seen++ }
 }
 Check '6 find-callers resolves all three qualified call sites' ($seen -eq 3) `

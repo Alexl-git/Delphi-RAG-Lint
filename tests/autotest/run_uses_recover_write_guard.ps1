@@ -45,7 +45,7 @@ $Hpp     = Join-Path $Fix 'hpp'
 $Dproj   = Join-Path $Fix 'src-alias\Probe3.dproj'
 
 function Run([string[]]$a) {
-  $out = & $Exe @a 2>$null | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null } | Out-String
   [pscustomobject]@{ Code = $LASTEXITCODE; Out = $out }
 }
 function Json($r) { try { $r.Out | ConvertFrom-Json } catch { $null } }

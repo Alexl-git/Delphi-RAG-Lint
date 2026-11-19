@@ -33,11 +33,11 @@ New-Item -ItemType Directory -Force $WorkDir | Out-Null
 $Db = Join-Path $WorkDir 'exports.sqlite'
 if (Test-Path $Db) { [IO.File]::Delete($Db) }
 
-$null = & $Exe index $Fx --db $Db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $Fx --db $Db 2>&1 | ForEach-Object { "$_" } }
 if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: index exit $LASTEXITCODE" -ForegroundColor Red; exit 2 }
 
 function Rows([string]$q) {
-  $raw = & $Exe sql --db $Db --query $q --json --limit 500 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query $q --json --limit 500 2>$null }
   if ($LASTEXITCODE -ne 0) { return ,@() }
   $j = ($raw | Where-Object { $_ -notmatch '^\(loaded' }) -join "`n" | ConvertFrom-Json
   return ,@($j.rows)
@@ -59,7 +59,7 @@ $u = Rows "SELECT COUNT(*) FROM refs WHERE name_text='X1Unused'"
 Check 'CONTROL X1Unused has no ref' ($u.Count -eq 1 -and $u[0][0] -eq 0)
 
 Push-Location $WorkDir
-try { $raw = & $Exe lint-all --db $Db --json 2>$null | Out-String } finally { Pop-Location }
+try { $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --json 2>$null } | Out-String } finally { Pop-Location }
 $f = @($raw | ConvertFrom-Json) | Where-Object { $_.rule -eq 'unused-public-symbol' }
 $fTwice  = @($f | Where-Object { $_.message -match '\bX1Twice\b' })
 $fUnused = @($f | Where-Object { $_.message -match '\bX1Unused\b' })

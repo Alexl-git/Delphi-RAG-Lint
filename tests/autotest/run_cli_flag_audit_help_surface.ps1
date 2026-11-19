@@ -30,10 +30,10 @@ function Check($n,$ok,$d){
 $exePath = (Resolve-Path $Exe).Path
 $out = Join-Path $env:TEMP "draglint_flag_audit_$PID.md"
 try {
-  & pwsh -NoProfile -File (Join-Path $PSScriptRoot '..\..\tools\cli-flag-audit.ps1') -Exe $exePath -OutFile $out *> $null
+  & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $PSScriptRoot '..\..\tools\cli-flag-audit.ps1') -Exe $exePath -OutFile $out *> $null }
   $rep = [IO.File]::ReadAllText($out)
   $t1 = $rep.Substring(0, [Math]::Max(0, $rep.IndexOf('## Table 2')))
-  $help = (& $exePath --help 2>&1 | Out-String)
+  $help = (& { $ErrorActionPreference = 'Continue'; & $exePath --help 2>&1 | ForEach-Object { "$_" } } | Out-String)
 
   Check 'V --help really documents --force32 and --size-guard-mb' `
         (($help -match '--force32') -and ($help -match '--size-guard-mb')) 'precondition gone: the flags left --help'

@@ -75,7 +75,7 @@ $lineF = [array]::IndexOf($unitLines, '{$IF DragLintBareUnknown}') + 1
 
 function Exec([string[]]$ArgList) {
   Push-Location $cwd
-  try { $o = & $Exe @ArgList 2>&1 | ForEach-Object { "$_" } } finally { Pop-Location }
+  try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe @ArgList 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" } } finally { Pop-Location }
   return @{ Code = $LASTEXITCODE; Out = ($o -join "`n") }
 }
 # sql --json rows are POSITIONAL arrays.

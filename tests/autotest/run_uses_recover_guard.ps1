@@ -45,7 +45,7 @@ $Hpp    = Join-Path $Fix 'hpp'
 $Map    = Join-Path $Fix 'map\Probe.map'
 
 function Run([string[]]$a) {
-  $out = & $Exe @a 2>$null | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null } | Out-String
   [pscustomobject]@{ Code = $LASTEXITCODE; Out = $out }
 }
 

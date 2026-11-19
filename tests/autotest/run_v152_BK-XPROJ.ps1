@@ -54,7 +54,7 @@ $P1 = Join-Path $Work 'App1\App1.dproj'
 $P2 = Join-Path $Work 'App2\App2.dproj'
 
 function Lint([string]$db, [string[]]$extra) {
-  $raw = (& $Exe lint-all --db $db --project $P1 --json --no-stand-down @extra 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --project $P1 --json --no-stand-down @extra 2>$null }) -join "`n"
   $arr = @()
   try { $arr = @($raw | ConvertFrom-Json) } catch { Write-Host ('  unparsed: ' + $raw.Substring(0, [Math]::Min(200, $raw.Length))) }
   return ,$arr
@@ -64,7 +64,7 @@ function Hits($findings, [string]$rule, [string]$word) {
 }
 function Index([string]$proj, [string]$db) {
   [IO.Directory]::CreateDirectory((Split-Path $db)) | Out-Null
-  $o = (& $Exe index --project $proj --db $db 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe index --project $proj --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   if ($LASTEXITCODE -ne 0) { Write-Host $o; throw "index failed: $proj" }
 }
 

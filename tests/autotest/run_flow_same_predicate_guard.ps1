@@ -197,7 +197,7 @@ function LineOf($pattern) {
 
 Push-Location C:\TEMP
 try {
-  $out = & $exePath lint $target 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath lint $target 2>&1 | ForEach-Object { "$_" } } | Out-String
   $ub  = @(($out -split "`r?`n") | Where-Object { $_ -match 'used-before-assignment' })
 
   Check 'SANITY: the linter ran' ($out.Trim().Length -gt 0) $out

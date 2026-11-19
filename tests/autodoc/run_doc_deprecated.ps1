@@ -38,10 +38,10 @@ Copy-Item $fixture $target -Force
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # --- first --apply ---
-  & $exePath document --unit $target --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply 2>$null } | Out-Null
   $ec1 = $LASTEXITCODE
   Check 'apply #1: exit 0' ($ec1 -eq 0)
 
@@ -75,8 +75,8 @@ try {
 
   # --- idempotency: second --apply leaves file byte-identical ---
   $before = [IO.File]::ReadAllBytes($target)
-  & $exePath index $scratch --db $db 2>$null | Out-Null
-  & $exePath document --unit $target --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply 2>$null } | Out-Null
   $after = [IO.File]::ReadAllBytes($target)
   Check 'idempotent: file byte-identical on 2nd run' ([System.Linq.Enumerable]::SequenceEqual([byte[]]$before,[byte[]]$after))
 } finally { Pop-Location }

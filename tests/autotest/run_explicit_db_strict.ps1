@@ -163,8 +163,8 @@ $convBlock = Join-Path $WorkDir 'block.txt'
 Write-Ascii $convRules "#convert TAlphaBase -> TBetaThing, uBeta`r`n"
 Write-Ascii $convBlock "object alpha1: TAlphaBase`r`n  Tag = 1`r`nend`r`n"
 
-& $exePath index $srcA --db $dbA 2>&1 | Out-Null
-& $exePath index $srcB --db $dbB 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $srcA --db $dbA 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $srcB --db $dbB 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 $out = Join-Path $WorkDir 'o.txt'
 $err = Join-Path $WorkDir 'e.txt'
@@ -389,7 +389,7 @@ function Reset-StaleDb {
   foreach ($s in @($dbV12, "$dbV12-wal", "$dbV12-shm")) {
     if (Test-Path $s) { Remove-Item $s -Force -ErrorAction SilentlyContinue }
   }
-  python $py $dbV12 $fileA (Join-Path $srcA 'uForm.pas') 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; python $py $dbV12 $fileA (Join-Path $srcA 'uForm.pas') 2>&1 | ForEach-Object { "$_" } } | Out-Null
 }
 function Get-StaleSchemaVersion {
   # 'NONE' when schema_meta is gone; the number otherwise. A migration moves it.
@@ -402,7 +402,7 @@ function Get-StaleSchemaVersion {
        '    print("ERR")' + "`n"
   $qf = Join-Path $WorkDir 'ver.py'
   Write-Ascii $qf $q
-  return (python $qf $dbV12 2>&1 | Select-Object -Last 1)
+  return (& { $ErrorActionPreference = 'Continue'; python $qf $dbV12 2>&1 | ForEach-Object { "$_" } } | Select-Object -Last 1)
 }
 
 function Get-StaleFileCount {
@@ -413,7 +413,7 @@ function Get-StaleFileCount {
                    "    print(c.execute('select count(*) from files').fetchone()[0])" + "`n" +
                    "except Exception:" + "`n" +
                    "    print('ERR')" + "`n")
-  return (python $qf $dbV12 2>&1 | Select-Object -Last 1)
+  return (& { $ErrorActionPreference = 'Continue'; python $qf $dbV12 2>&1 | ForEach-Object { "$_" } } | Select-Object -Last 1)
 }
 
 Reset-StaleDb

@@ -30,7 +30,7 @@ try {
   [IO.File]::WriteAllText((Join-Path $Sub 'P.dpr'), $dpr)
   $Db = Join-Path $Work 't.sqlite'
   Push-Location $Sub
-  try { & $Exe index . --db $Db *> $null } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe index . --db $Db *> $null } } finally { Pop-Location }
 
   $cases = @(
     @('lint', 'Foo.pas', '--db', $Db, '--json'),
@@ -77,7 +77,7 @@ try {
     Push-Location $Sub
     try {
       $ErrorActionPreference = 'Continue'
-      $text = (& $Exe @c 2>&1 | ForEach-Object { "$_" }) -join "`n"
+      $text = (& { $ErrorActionPreference = 'Continue'; & $Exe @c 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n"
       $ErrorActionPreference = 'Stop'
     } finally { Pop-Location }
     $name = 'merged ' + $c[0]

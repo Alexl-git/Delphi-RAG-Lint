@@ -65,15 +65,15 @@ try {
   $libA = Join-Path $out 'libfirst.sqlite'; $libB = Join-Path $out 'library-Win32.sqlite'
   $db = Join-Path $d 'p.sqlite'; $proj = Join-Path $d 'RcLib.dproj'
   Set-Manifest @()
-  $null = & $exe index $l1 --db $libA --library-db none 2>&1; Check 'SANITY: library A indexed' ($LASTEXITCODE -eq 0)
-  $null = & $exe index $l2 --db $libB --library-db none 2>&1; Check 'SANITY: library B indexed' ($LASTEXITCODE -eq 0)
-  $null = & $exe index --project $proj --db $db --library-db $libA --library-db $libB 2>&1; Check 'SANITY: project indexed' ($LASTEXITCODE -eq 0)
+  $null = & { $ErrorActionPreference = 'Continue'; & $exe index $l1 --db $libA --library-db none 2>&1 | ForEach-Object { "$_" } }; Check 'SANITY: library A indexed' ($LASTEXITCODE -eq 0)
+  $null = & { $ErrorActionPreference = 'Continue'; & $exe index $l2 --db $libB --library-db none 2>&1 | ForEach-Object { "$_" } }; Check 'SANITY: library B indexed' ($LASTEXITCODE -eq 0)
+  $null = & { $ErrorActionPreference = 'Continue'; & $exe index --project $proj --db $db --library-db $libA --library-db $libB 2>&1 | ForEach-Object { "$_" } }; Check 'SANITY: project indexed' ($LASTEXITCODE -eq 0)
   $use = Join-Path $d 'RcLibUse.pas'
   $castLine = (Select-String -Path $use -Pattern 'TLibCls\(LC\)').LineNumber
   $noneLine = (Select-String -Path $use -Pattern 'string\(N\)').LineNumber
   function Plan($extra) {
     $e = Join-Path $WorkDir 'plan.err'
-    $po = & $exe lint --fix --fix-rule redundant-cast --db $db --project $proj --platform win32 --format json @extra 2> $e
+    $po = & { $ErrorActionPreference = 'Continue'; & $exe lint --fix --fix-rule redundant-cast --db $db --project $proj --platform win32 --format json @extra 2> $e }
     $pl = $null; try { $pl = ($po -join "`n") | ConvertFrom-Json } catch { }
     $lines = if ($pl) { @($pl.fixes | ForEach-Object { [int]$_.line } | Sort-Object) } else { $null }
     [pscustomobject]@{ Plan = $pl; Lines = $lines; Err = [string](Get-Content $e -Raw -ErrorAction SilentlyContinue) }

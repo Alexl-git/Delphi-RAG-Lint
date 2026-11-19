@@ -87,7 +87,7 @@ $emptyIn = Join-Path $WorkDir 'empty.in'
 
 Push-Location C:\TEMP
 try {
-  & $Exe index --all --config $manifest --jobs 1 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $manifest --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
   if (-not (Test-Path $dbA) -or -not (Test-Path $dbB)) {
     $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }
     Write-Host "FATAL: index did not produce both DBs" -ForegroundColor Red; exit 2

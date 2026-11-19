@@ -48,7 +48,7 @@ function Compare-Exact([string[]]$Exp, [string[]]$Act) {
   return $true
 }
 function Get-Facts([string]$EngineExe, [string]$Db, [string[]]$Sel) {
-  $raw = (& $EngineExe exception-facts @Sel --db $Db --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $EngineExe exception-facts @Sel --db $Db --json 2>$null }) -join "`n"
   return ($raw | ConvertFrom-Json)
 }
 function Show($F) {
@@ -56,7 +56,7 @@ function Show($F) {
 }
 
 $db = Join-Path $WorkDir 'facts.sqlite'
-$null = & $Exe index $work --db $db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 # A. one routine, exact, in source order
@@ -100,15 +100,15 @@ $exc = @((Get-Facts $Exe $db @('--name', 'Exception')).facts | ForEach-Object { 
 Check 'B. no ancestry: --name Exception lists its own sites, not the raisers of its descendants' (@($exc | Where-Object { $_ -in 'TypeFacts.Thrower', 'TypeFactsB.ThrowB' }).Count -eq 0) ($exc -join ',')
 
 # C. text
-$txt = (& $Exe exception-facts --target TypeFacts.Thrower --db $db 2>$null) -join "`n"
+$txt = (& { $ErrorActionPreference = 'Continue'; & $Exe exception-facts --target TypeFacts.Thrower --db $db 2>$null }) -join "`n"
 Check 'C. text: the action, the type, the via, the count' (($txt -match 'raises\s+TypeFacts\.ELocal\s+bound\s+TypeFacts\.Thrower') -and ($txt -match '1 exception fact')) $txt
 
 # D. usage
-$null = & $Exe exception-facts --db $db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe exception-facts --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'D. neither selector exits 2' ($LASTEXITCODE -eq 2) "exit=$LASTEXITCODE"
-$null = & $Exe exception-facts --target A --name B --db $db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe exception-facts --target A --name B --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'D. both selectors exit 2' ($LASTEXITCODE -eq 2) "exit=$LASTEXITCODE"
-$null = & $Exe exception-facts --target A --db (Join-Path $WorkDir 'none.sqlite') 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe exception-facts --target A --db (Join-Path $WorkDir 'none.sqlite') 2>&1 | ForEach-Object { "$_" } }
 Check 'D. a missing DB exits non-zero' ($LASTEXITCODE -ne 0) "exit=$LASTEXITCODE"
 
 # E. controls
@@ -120,7 +120,7 @@ Check 'E. an empty answer: exit 0, count 0' (($LASTEXITCODE -eq 0) -and ($empty.
 if ($BaselineExe -ne '') {
   $BaselineExe = (Resolve-Path $BaselineExe).Path
   $db0 = Join-Path $WorkDir 'baseline.sqlite'
-  $null = & $BaselineExe index $work --db $db0 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $BaselineExe index $work --db $db0 2>&1 | ForEach-Object { "$_" } }
   $old = Get-Facts $Exe $db0 @('--target', 'TypeFacts.Stamp')
   Check 'F. a DB without the fact: the same site count' ($old.count -eq $exp.Count) "count=$($old.count)"
   $oldShow = Show $old

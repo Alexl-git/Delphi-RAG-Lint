@@ -47,7 +47,7 @@ function Get-FileMd5([string]$p) { (Get-FileHash -Algorithm MD5 -Path $p).Hash }
 # INTERFACE-section start line for $name, read back from the index via the
 # engine's own query verb (index-first: no second parser).
 function Get-DeclLine([string]$db, [string]$name) {
-  $j = (& $exePath query --name $name --db $db --json 2>$null) -join "`n"
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --db $db --json 2>$null }) -join "`n"
   $o = $null; try { $o = ($j | ConvertFrom-Json) } catch { return 0 }
   if ($null -eq $o) { return 0 }
   foreach ($r in @($o)) { if ($r.section -eq 'interface') { return [int]$r.start_line } }
@@ -99,7 +99,7 @@ $tgt = Join-Path $sc 'harvest_impl.pas'
 $db  = Join-Path $sc 'h.sqlite'
 Copy-Item $fx $tgt -Force
 
-& $exePath index $sc --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc --db $db 2>$null } | Out-Null
 
 # --- PRECONDITIONS ----------------------------------------------------------
 # Without these, every assertion below could pass against a fixture that no
@@ -115,9 +115,9 @@ Check 'PRECONDITION: all three implementation-side // comments are present' `
 # ===========================================================================
 # APPLY
 # ===========================================================================
-& $exePath document --unit $tgt --db $db --apply 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $tgt --db $db --apply 2>$null } | Out-Null
 $md5Cycle1 = Get-FileMd5 $tgt
-& $exePath index $sc --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc --db $db 2>$null } | Out-Null
 
 $post = [IO.File]::ReadAllLines($tgt)
 
@@ -167,7 +167,7 @@ Check '5. NO /// line anywhere in the implementation section' `
   "found=$(@($implLines | Where-Object { $_ -match '^\s*///' }).Count)"
 
 # --- 6. IDEMPOTENCY ---------------------------------------------------------
-& $exePath document --unit $tgt --db $db --apply 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $tgt --db $db --apply 2>$null } | Out-Null
 $md5Cycle2 = Get-FileMd5 $tgt
 Check '6. a second apply is byte-identical' ($md5Cycle1 -eq $md5Cycle2) `
   "md5 c1=$($md5Cycle1.Substring(0,8)) c2=$($md5Cycle2.Substring(0,8))"

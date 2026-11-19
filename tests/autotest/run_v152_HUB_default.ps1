@@ -66,7 +66,7 @@ function New-Proj([string]$Fix, [string]$Name, [scriptblock]$Patch = $null) {
   if ($Patch) { & $Patch $root }
   $db = "$root.sqlite"
   Push-Location $WorkDir
-  try { $null | & $Exe index --project (Join-Path $root "$Name.dproj") --db $db --library-db none *> "$db.log" } finally { Pop-Location }
+  try { $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root "$Name.dproj") --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
   return @{ Root = $root; Dproj = (Join-Path $root "$Name.dproj"); Db = $db; Name = $Name }
 }
 # One `cycles` run; stdout only (stderr apart). The project path is replaced by <P> so two twin copies compare.
@@ -74,7 +74,7 @@ function Invoke-Cycles($P, [string[]]$A) {
   $a = @('cycles', '--db', $P.Db, '--library-db', 'none') + $A
   $errFile = "$($P.Root).c$script:N.$([guid]::NewGuid().ToString('N').Substring(0,6)).err"
   Push-Location $WorkDir
-  try { $out = ($null | & $Exe @a 2> $errFile | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
+  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe @a 2> $errFile } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
   $err = if (Test-Path $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
   $norm = $out.Replace($P.Root, '<P>').Replace(($P.Root -replace '\\', '\\'), '<P>').Replace($P.Db, '<DB>').Replace(($P.Db -replace '\\', '\\'), '<DB>') -replace 'draglint_cyclefix_\d+', 'draglint_cyclefix_N'
   $doc = $null
@@ -167,7 +167,7 @@ try {
     Check 'r3b (dcc) default --fix --apply on the hub group: r3, compile ok, verified' (($hf.Exit -eq 0) -and ($null -ne $hfc) -and
       ($hfc.part -eq 'r3') -and ($hfc.compile.status -eq 'ok') -and ($hfc.verified -eq $true)) "exit=$($hf.Exit) $($hf.Out) $($hf.Err)"
   } else { Write-Host '  [SKIP] r3b: no rsvars.bat' -ForegroundColor Yellow }
-  $help = (& $Exe cycles --help 2>&1 | Out-String)
+  $help = (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --help 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $cyc = ($help -split "`r?`n" | Where-Object { $_ -match '^\s*drag-lint cycles\b' }) -join "`n"
   Check 'r4 review #4: --help names --no-hub-surface on every cycles line and says nothing of a missing compile gate / switch-by-name' (
     ($cyc -ne '') -and (@($help -split "`r?`n" | Where-Object { $_ -match '^\s*drag-lint cycles\b' -and $_ -notmatch '--no-hub-surface' }).Count -eq 0) -and

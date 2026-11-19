@@ -36,19 +36,19 @@ function NewCase([string]$Name, [string[]]$Lines) {
   [IO.File]::WriteAllText($file, ($Lines -join "`r`n") + "`r`n")
   $db = Join-Path $dir '_case.sqlite'
   Push-Location $dir
-  try { & $exePath index $dir --db $db *> (Join-Path $dir '_index.log') } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $exePath index $dir --db $db *> (Join-Path $dir '_index.log') } } finally { Pop-Location }
   return @{ File = $file; Db = $db; Dir = $dir }
 }
 function FixOnce($C, [string]$Rule, [string[]]$Extra) {
   Push-Location $C.Dir
-  try { & $exePath lint --file $C.File --db $C.Db --fix --fix-rule $Rule --apply --no-backup @Extra *> (Join-Path $C.Dir '_fix.log') } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $C.File --db $C.Db --fix --fix-rule $Rule --apply --no-backup @Extra *> (Join-Path $C.Dir '_fix.log') } } finally { Pop-Location }
 }
 function FixAll($C, [string]$Rule, [string[]]$Extra) {
   Push-Location $C.Dir
-  try { & $exePath lint-all --db $C.Db --fix --fix-rule $Rule --apply --no-backup @Extra *> (Join-Path $C.Dir '_fixall.log') } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $C.Db --fix --fix-rule $Rule --apply --no-backup @Extra *> (Join-Path $C.Dir '_fixall.log') } } finally { Pop-Location }
 }
 function Fires($C,[string]$Rule, [string[]]$Extra) {
-  $raw = & $exePath lint --file $C.File --db $C.Db --rule $Rule --json @Extra 2>$null | Out-String
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $C.File --db $C.Db --rule $Rule --json @Extra 2>$null } | Out-String
   try { return @(@($raw | ConvertFrom-Json) | Where-Object { $_.rule -eq $Rule }).Count } catch { return -1 }
 }
 
@@ -94,12 +94,12 @@ $src4 = Join-Path $PSScriptRoot 'store-fixes\discarded-effect-free-result'
 $c4 = NewCase 'pure' @('unit upure;')
 [IO.File]::Copy((Join-Path $src4 'upure.pas'), $c4.File, $true)
 Push-Location $c4.Dir
-try { & $exePath index $c4.Dir --db $c4.Db *> (Join-Path $c4.Dir '_index2.log') } finally { Pop-Location }
+try { & { $ErrorActionPreference = 'Continue'; & $exePath index $c4.Dir --db $c4.Db *> (Join-Path $c4.Dir '_index2.log') } } finally { Pop-Location }
 Check 'pure: the rule fires (positive control)' ((Fires $c4 'discarded-effect-free-result' @('--config', $cfg)) -ge 1)
 FixAll $c4 'discarded-effect-free-result' @('--config', $cfg)
 Check 'pure: lint-all --fix --apply matches upure.fixed.pas' ([IO.File]::ReadAllText($c4.File) -eq [IO.File]::ReadAllText((Join-Path $src4 'upure.fixed.pas')))
 Push-Location $c4.Dir
-try { & $exePath index $c4.Dir --db $c4.Db *> (Join-Path $c4.Dir '_reindex.log') } finally { Pop-Location }
+try { & { $ErrorActionPreference = 'Continue'; & $exePath index $c4.Dir --db $c4.Db *> (Join-Path $c4.Dir '_reindex.log') } } finally { Pop-Location }
 Check 'pure: the rule no longer fires after a reindex' ((Fires $c4 'discarded-effect-free-result' @('--config', $cfg)) -eq 0)
 
 # ---- lane A5B -------------------------------------------------------------------------------
@@ -114,17 +114,17 @@ function CopyCase([string]$Name, [string]$Id) {
   }
   $db = Join-Path $dir '_case.sqlite'
   Push-Location $dir
-  try { & $exePath index $dir --db $db *> (Join-Path $dir '_index.log') } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $exePath index $dir --db $db *> (Join-Path $dir '_index.log') } } finally { Pop-Location }
   return @{ Dir = $dir; Db = $db; Src = $src }
 }
 function Reindex($C) {
   Push-Location $C.Dir
-  try { & $exePath index $C.Dir --db $C.Db *> (Join-Path $C.Dir '_reindex.log') } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $exePath index $C.Dir --db $C.Db *> (Join-Path $C.Dir '_reindex.log') } } finally { Pop-Location }
 }
 # lint-all rows of one rule in one file whose message contains $Needle
 function AllRows($C, [string]$Rule, [string]$FileName, [string]$Needle) {
   Push-Location $C.Dir
-  try { $raw = & $exePath lint-all --db $C.Db --rule $Rule --json 2>$null | Out-String } finally { Pop-Location }
+  try { $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $C.Db --rule $Rule --json 2>$null } | Out-String } finally { Pop-Location }
   try {
     return @(@($raw | ConvertFrom-Json) | Where-Object {
       $_.rule -eq $Rule -and ([IO.Path]::GetFileName($_.file_path) -eq $FileName) -and $_.message.Contains($Needle) }).Count
@@ -183,7 +183,7 @@ $c9 = NewCase 'clsnodb' @(
   '  if X.ClassName = ''TBox'' then Result:= 1;', 'end;', '', 'end.')
 $before = [IO.File]::ReadAllText($c9.File)
 Push-Location $c9.Dir
-try { & $exePath lint --file $c9.File --fix --fix-rule classname-string-compare --apply --no-backup *> (Join-Path $c9.Dir '_fixnodb.log') } finally { Pop-Location }
+try { & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $c9.File --fix --fix-rule classname-string-compare --apply --no-backup *> (Join-Path $c9.Dir '_fixnodb.log') } } finally { Pop-Location }
 Check 'clsnodb: the rule fires (positive control)' ((Fires $c9 'classname-string-compare' @()) -ge 1)
 Check 'clsnodb: file unchanged without --db' ([IO.File]::ReadAllText($c9.File) -eq $before)
 
@@ -235,7 +235,7 @@ Check 'accstale: file unchanged on the shifted index' ([IO.File]::ReadAllText($c
 $c14 = NewCase 'emptynodb' @('unit uemptynodb;', '', 'interface', '', 'implementation', '', 'procedure Lonely;', 'begin', 'end;', '', 'end.')
 $before = [IO.File]::ReadAllText($c14.File)
 Push-Location $c14.Dir
-try { & $exePath lint --file $c14.File --fix --fix-rule empty-procedure-body --apply --no-backup *> (Join-Path $c14.Dir '_fixnodb.log') } finally { Pop-Location }
+try { & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $c14.File --fix --fix-rule empty-procedure-body --apply --no-backup *> (Join-Path $c14.Dir '_fixnodb.log') } } finally { Pop-Location }
 Check 'emptynodb: file unchanged without --db' ([IO.File]::ReadAllText($c14.File) -eq $before)
 
 Write-Host "store fixes: $pass passed, $fail failed"

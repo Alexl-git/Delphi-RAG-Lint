@@ -65,7 +65,7 @@ end.
 WriteAnsi $file $text
 $db = Join-Path $WorkDir 'fx.sqlite'
 $ea = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-& $Exe index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $ErrorActionPreference = $ea
 Check 'fixture indexed' (Test-Path $db)
 $uri = 'file:///' + ($file -replace '\\', '/')
@@ -140,13 +140,13 @@ foreach ($c in $cases) {
   $copy = Join-Path $cli 'uFx.pas'
   [IO.File]::WriteAllText($copy, $body, [Text.ASCIIEncoding]::new())
   $ea = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-  & $Exe lint --in $copy --db $db --fix --fix-line ($line + 1) --fix-rule $c.rule --apply --no-backup --no-compile-gate 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe lint --in $copy --db $db --fix --fix-line ($line + 1) --fix-rule $c.rule --apply --no-backup --no-compile-gate 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $ErrorActionPreference = $ea
   $cliText = [IO.File]::ReadAllText($copy)
   Check "$($c.rule): byte-identical to lint --fix --apply" ($cliText -ceq $applied) ("cli=[$(($cliText -split "`r`n")[$line])] lsp=[$(($applied -split "`r`n")[$line])]")
   # Fixed means gone ($copy holds the fixed bytes: the check above).
   $ea = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-  $relint = (& $Exe lint $copy --db $db --json 2>$null) -join "`n" | ConvertFrom-Json
+  $relint = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $copy --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json
   $ErrorActionPreference = $ea
   Check "$($c.rule): re-lint sees it gone, and still sees the others" ((@($relint | Where-Object { $_.rule -eq $c.rule }).Count -eq 0) -and (@($relint).Count -ge 1)) ("rules=$(@($relint | ForEach-Object { $_.rule }) -join ',')")
 }

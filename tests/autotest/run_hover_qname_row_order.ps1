@@ -122,7 +122,7 @@ end;
 end.
 '@ | Set-Content -LiteralPath $pas -Encoding ascii
 
-& $exePath index $srcDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $srcDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 # --- read rows straight out of the DB -------------------------------------
 # The DB is the only place the ROW SET is visible; the CLI shows one row by
@@ -146,7 +146,7 @@ function Get-Rows([string]$qname) {
     return @($j | ConvertFrom-Json)
 }
 function Get-HoverDefLine([string]$qname) {
-    $raw = (& $exePath hover --qname $qname --db $db --format json 2>$null) -join ''
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath hover --qname $qname --db $db --format json 2>$null }) -join ''
     $o = $null
     try { $o = ($raw -replace '\s*FTS5 probe:.*$','') | ConvertFrom-Json } catch { return -1 }
     if ($null -eq $o) { return -1 }
@@ -224,7 +224,7 @@ Check 'K29: hover --qname on an overload pair answers the row that HAS a body' `
 # ... and the body-first ordering is only useful if the body's facts come with
 # it. A row with no impl span mines no return value at all, so this separates
 # "the right row" from "a row".
-$dRaw = (& $exePath hover --qname 'qrowfix.TThing.Doubled' --db $db --format json 2>$null) -join ''
+$dRaw = (& { $ErrorActionPreference = 'Continue'; & $exePath hover --qname 'qrowfix.TThing.Doubled' --db $db --format json 2>$null }) -join ''
 $dObj = $null
 try { $dObj = ($dRaw -replace '\s*FTS5 probe:.*$','') | ConvertFrom-Json } catch {}
 Check 'K29: that row brings its body''s facts with it -- the mined return is "FValue * 2"' `

@@ -176,7 +176,7 @@ foreach ($name in $fixtures.Keys) {
 # the same shape with an ordinary method name) are unrelated to grammar
 # coverage and must not be allowed to turn this test red.
 function SyntaxFindings([string]$pas) {
-  $out = & $Exe lint $pas 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $pas 2>&1 | ForEach-Object { "$_" } } | Out-String
   $lines = @($out -split "`r?`n" | Where-Object { $_ -match '\[error\]\s+(syntax-error|parser-error)' })
   return , $lines
 }

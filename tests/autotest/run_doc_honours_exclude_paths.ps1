@@ -113,23 +113,23 @@ Write-Ascii $cfg '{ "exclude_paths": ["*\\third_party\\*"] }'
 $db   = Join-Path $drag 'app.sqlite'
 $proj = Join-Path $app 'App.dpr'
 $vfile = Join-Path $vendor 'uVendor.pas'
-& $Exe index $repo --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $repo --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 $vendorBefore = Get-Content $vfile -Raw
 
 function Doc-Run([string[]]$ExtraArgs) {
   Push-Location $repo
-  try { & $Exe @ExtraArgs --db $db --config $cfg --apply --no-backup 2>&1 | Out-String }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe @ExtraArgs --db $db --config $cfg --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-String }
   finally { Pop-Location }
 }
 
 Write-Host 'PRECONDITION: the vendored unit is in the index and in the closure' -ForegroundColor Cyan
-$files = & $Exe selftest files --db $db 2>&1 | Out-String
+$files = & { $ErrorActionPreference = 'Continue'; & $Exe selftest files --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 $inIndex = $files -match 'uVendor\.pas'
 if (-not $inIndex) {
   # Fall back to a query -- the point is only that the vendored unit IS indexed,
   # since a test that excludes a file nobody would have touched proves nothing.
-  $q = & $Exe query --name ts_query_cursor_new --db $db 2>&1 | Out-String
+  $q = & { $ErrorActionPreference = 'Continue'; & $Exe query --name ts_query_cursor_new --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   $inIndex = $q -match 'ts_query_cursor_new'
 }
 Check 'uVendor is indexed (so excluding it is a real decision)' $inIndex

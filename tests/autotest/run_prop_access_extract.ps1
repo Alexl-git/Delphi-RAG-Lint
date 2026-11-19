@@ -99,7 +99,7 @@ end.
 
 $db = Join-Path $WorkDir 'propacc.sqlite'
 Write-Host 'Indexing fixture (FRESH, so prop_access is populated by the new exe)' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 $indexExit = $LASTEXITCODE
 Check 'index exits 0' ($indexExit -eq 0) "exit=$indexExit; $($indexOut | Select-Object -Last 1)"
 

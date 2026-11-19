@@ -119,7 +119,7 @@ try {
   cmd /c "`"$exePath`" preprocess-file --file `"$(Join-Path $work 'uPlain.pas')`" > `"$plainOutFile`" 2>NUL"
   $plainOut = [IO.File]::ReadAllBytes($plainOutFile)
   Check 'uPlain preprocess-file output is byte-identical to the input' ([Linq.Enumerable]::SequenceEqual([byte[]]$plainIn, [byte[]]$plainOut)) "in=$($plainIn.Length) out=$($plainOut.Length)"
-  $pl = (& $exePath lint (Join-Path $work 'uPlain.pas') 2>&1) -join "`n"
+  $pl = (& { $ErrorActionPreference = 'Continue'; & $exePath lint (Join-Path $work 'uPlain.pas') 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'uPlain lints with no syntax/parser error' ($pl -notmatch 'syntax-error|parser-error')
 
   Write-Host 'P1 -- multi-line literals:' -ForegroundColor Cyan
@@ -132,15 +132,15 @@ try {
   $lfOut = @($mlOut | Where-Object { $_ -eq 10 }).Count
   Check 'every LF preserved' ($lfIn -eq $lfOut) "in=$lfIn out=$lfOut"
 
-  $ml = (& $exePath lint (Join-Path $work 'uMl.pas') 2>&1) -join "`n"
+  $ml = (& { $ErrorActionPreference = 'Continue'; & $exePath lint (Join-Path $work 'uMl.pas') 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'uMl lints with no syntax/parser error' ($ml -notmatch 'syntax-error|parser-error') (($ml -split "`n" | Select-String 'error') -join ' | ')
 
-  & $exePath index $work --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $work --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
-  $j = (& $exePath sql --db $db --query "select coalesce(impl_start_line, 0) from symbols where name = 'After' and kind = 'function'" --json 2>$null) -join "`n" | ConvertFrom-Json
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "select coalesce(impl_start_line, 0) from symbols where name = 'After' and kind = 'function'" --json 2>$null }) -join "`n" | ConvertFrom-Json
   $lines = @($j.rows | ForEach-Object { [int]$_[0] })
   Check 'After (the routine behind the {$IFDEF}-bearing literal) has its body at line 36' ($lines -contains 36) ("impl_start_line: " + ($lines -join ','))
-  $lit = (& $exePath sql --db $db --query "select text from string_literals where text like '%html lang%'" --json 2>$null) -join "`n" | ConvertFrom-Json
+  $lit = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "select text from string_literals where text like '%html lang%'" --json 2>$null }) -join "`n" | ConvertFrom-Json
   Check 'the Page literal text is harvested (content kept)' ($lit.row_count -ge 1) "rows=$($lit.row_count)"
 } finally { Pop-Location }
 

@@ -131,7 +131,7 @@ end.
 '@
 $db = Join-Path $WorkDir 'p.sqlite'
 $env:DRAGLINT_RULE_CACHE = '0'
-$idx = & $exePath index --project (Join-Path $src 'P.dpr') --db $db 2>&1 | Out-String
+$idx = & { $ErrorActionPreference = 'Continue'; & $exePath index --project (Join-Path $src 'P.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 $env:DRAGLINT_RULE_CACHE = $null
 Check 'SANITY: fixture indexed' ($LASTEXITCODE -eq 0) $idx
 
@@ -174,7 +174,7 @@ Check 'M1 ... and not CallB (the caller of TB.Run)' ($t1 -notmatch 'CallB') $t1
 $t2 = Text $r['2']
 Check 'M1 find_callers Run lists both real callers' (($t2 -match 'CallA') -and ($t2 -match 'CallB')) $t2
 Check 'M1 ... and not NoCall, whose LOCAL Run is written and read' ($t2 -notmatch 'NoCall') $t2
-$cli = & $exePath query find-callers --name Run --resolved --db $db 2>&1 | Out-String
+$cli = & { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name Run --resolved --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'M1 the CLI''s find-callers --resolved no longer calls the local''s read a [callback]' (($cli -match 'CallA') -and ($cli -notmatch 'NoCall[^\r\n]*\[callback\]')) $cli
 Check 'M3 a tool that raises answers isError true' ($r['4'] -and $r['4'].result.isError -eq $true) ($r['4'] | ConvertTo-Json -Depth 6 -Compress)
 Check 'M3 ... and the server still answers the next call' ((Text $r['5']) -match 'Helper') (Text $r['5'])
@@ -182,7 +182,7 @@ $t6 = Text $r['6']
 $j6 = try { $t6 | ConvertFrom-Json } catch { $null }
 Check 'M6 (#32) get_context_bundle returns the slice, not only its count' ($j6 -and ($j6.PSObject.Properties.Name -contains 'slice') -and @($j6.slice | Where-Object { $_ }).Count -gt 0 -and (@($j6.slice | ForEach-Object { $_.text }) -join ' ') -match 'A\.Run') $t6
 Check 'M6 ... and keeps the summary keys' ($j6 -and $j6.resolved -eq $true -and $null -ne $j6.slice_chunks) $t6
-$c6 = (& $exePath context --task 'modify uUse.CallA' --format json --db $db 2>$null | Out-String)
+$c6 = (& { $ErrorActionPreference = 'Continue'; & $exePath context --task 'modify uUse.CallA' --format json --db $db 2>$null } | Out-String)
 $k6 = try { $c6 | ConvertFrom-Json } catch { $null }
 Check 'M6 the CLI context --format json carries the same content' ($k6 -and ($k6.PSObject.Properties.Name -contains 'slice') -and @($k6.slice | Where-Object { $_ }).Count -gt 0) $c6
 
@@ -212,7 +212,7 @@ $src7 = Join-Path $WorkDir 'src7'
 Copy-Item $src $src7 -Recurse
 $db7 = Join-Path $WorkDir 'p7.sqlite'
 $env:DRAGLINT_RULE_CACHE = '0'
-$idx7 = & $exePath index --project (Join-Path $src7 'P.dpr') --db $db7 2>&1 | Out-String
+$idx7 = & { $ErrorActionPreference = 'Continue'; & $exePath index --project (Join-Path $src7 'P.dpr') --db $db7 2>&1 | ForEach-Object { "$_" } } | Out-String
 $env:DRAGLINT_RULE_CACHE = $null
 Check 'M7 SANITY: rename fixture indexed' ($LASTEXITCODE -eq 0) $idx7
 $lib7 = Join-Path $src7 'uLib.pas'; $use7 = Join-Path $src7 'uUse.pas'

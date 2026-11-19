@@ -73,8 +73,8 @@ function Run-Arm([string]$Name, [string]$Value, [string]$PathFile = '') {
   [Environment]::SetEnvironmentVariable('DRAGLINT_PP_TRACE', $(if ($Value -ne '') { $Value } else { $null }))
   Push-Location $cwd
   try {
-    & $Exe index --project $proj --db $db 2>>$errFile | Out-Null
-    & $Exe lint-all --db $db --project $proj --rule ifdef-undefined-symbol --json 2>>$errFile | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $Exe index --project $proj --db $db 2>>$errFile } | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --project $proj --rule ifdef-undefined-symbol --json 2>>$errFile } | Out-Null
   } finally {
     Pop-Location
     [Environment]::SetEnvironmentVariable('DRAGLINT_PP_TRACE', $null)

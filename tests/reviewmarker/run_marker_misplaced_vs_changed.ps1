@@ -94,7 +94,7 @@ function Write-Fixture($path, $lines) {
   [IO.File]::WriteAllLines($path, [string[]]$lines, (New-Object Text.ASCIIEncoding))
 }
 function Lint($path) {
-  (& $Exe lint $path --enable concat-in-loop 2>&1 | Out-String)
+  (& { $ErrorActionPreference = 'Continue'; & $Exe lint $path --enable concat-in-loop 2>&1 | ForEach-Object { "$_" } } | Out-String)
 }
 
 # ---------------------------------------------------------------------------
@@ -109,7 +109,7 @@ Check "concat-in-loop reports line $anchor" ($base -match ":${anchor}:\d+\s+\[in
 Write-Host 'CASE 1 -- a marker on the SPAN TAIL is MISPLACED, not evidence of change' -ForegroundColor Cyan
 # allow hashes the window at the line it writes to, so writing at the tail
 # produces exactly the shape found in DataCopy: a marker that can never verify.
-& $Exe allow $f --fix-line $tail --fix-rule concat-in-loop --apply *>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe allow $f --fix-line $tail --fix-rule concat-in-loop --apply *>&1 | ForEach-Object { "$_" } } | Out-Null
 $tailLine = ([IO.File]::ReadAllLines($f))[$tail - 1]
 Check 'the marker landed on the span tail' ($tailLine -match 'dl:ok concat-in-loop@') $tailLine.Trim()
 
@@ -135,7 +135,7 @@ if ($stale1) {
 Write-Host 'CASE 2 -- a marker on the ANCHOR verifies, and stays quiet' -ForegroundColor Cyan
 $f2 = Join-Path $WorkDir 'Anchor.pas'
 Write-Fixture $f2 $src
-& $Exe allow $f2 --fix-line $anchor --fix-rule concat-in-loop --apply *>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe allow $f2 --fix-line $anchor --fix-rule concat-in-loop --apply *>&1 | ForEach-Object { "$_" } } | Out-Null
 $out2 = Lint $f2
 Check 'the finding is suppressed' ($out2 -notmatch '\[info\] concat-in-loop')
 Check 'and no stale hint is raised' ($out2 -notmatch 'review-marker-stale')

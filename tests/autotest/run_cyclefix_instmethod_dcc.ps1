@@ -81,7 +81,7 @@ function Invoke-Program([string]$Dproj) {
 
 function Invoke-Cycles([string]$Dproj, [string]$Tag, [string[]]$Extra) {
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project $Dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $Dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
   $o = Join-Path $WorkDir "cycles-$Tag.out"
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
     -ArgumentList (@('cycles', '--db', ('"' + $db + '"')) + $Extra) `
@@ -106,7 +106,7 @@ try {
   Check '2 planned (exit 0) by member hand-over, the methods carried' (($plan.Exit -eq 0) -and
     $plan.Text.Contains('by **member hand-over through an extracted interface**') -and
     $plan.Text.Contains('    procedure Reset(const pCount: Integer = 1);')) "exit=$($plan.Exit)"
-  $fo = & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $plan.File -Cycle 1 -Root $work 2>&1 | Out-String
+  $fo = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $plan.File -Cycle 1 -Root $work 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check '3 the follower applies cycle 1 (exit 0)' ($LASTEXITCODE -eq 0) ($fo.Trim() -replace "`r?`n", ' | ')
   $after = Invoke-Cycles (Join-Path $work 'InstMethod.dproj') 'after' @('--library-db', 'none')
   Check '4 the cycle is gone after a re-index' ($after.Text -match 'No circular unit dependencies found\.') ($after.Text.Trim() -replace "`r?`n", ' | ')

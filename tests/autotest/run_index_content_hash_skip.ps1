@@ -34,7 +34,7 @@ foreach ($n in 'uOne','uTwo') {
 }
 $db = Join-Path $WorkDir 'h.sqlite'
 function Idx() {
-  $o = & $exePath index $src --db $db 2>&1 | Out-String
+  $o = & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   if ($o -match 'Done\. Files: (\d+),') {
     $f = [int]$Matches[1]; $u = 0
     if ($o -match 'skipped (\d+) up-to-date') { $u = [int]$Matches[1] }

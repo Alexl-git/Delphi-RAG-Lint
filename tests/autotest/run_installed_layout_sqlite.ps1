@@ -47,7 +47,7 @@ function New-Layout([string] $root, [bool] $withSqlite) {
 
 function Invoke-Engine([string] $root, [string[]] $a) {
   $exe = Join-Path $root 'drag-lint.exe'
-  $o = & $exe @a 2>&1 | Out-String
+  $o = & { $ErrorActionPreference = 'Continue'; & $exe @a 2>&1 | ForEach-Object { "$_" } } | Out-String
   [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 

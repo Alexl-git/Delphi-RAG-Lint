@@ -131,12 +131,12 @@ function New-Fixture([string]$Tag, [string[]]$Skip = @()) {
   }
   $db = Join-Path $dir 'fx.sqlite'
   Push-Location $dir
-  try { & $Exe index $src --db $db 2>&1 | Out-Null } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null } finally { Pop-Location }
   [pscustomobject]@{ Dir = $dir; Src = $src; Db = $db }
 }
 function Run-Rename($fx, [string[]]$RenameArgs) {
   Push-Location $fx.Dir
-  try { $o = & $Exe rename @RenameArgs --db $fx.Db 2>&1 } finally { Pop-Location }
+  try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe rename @RenameArgs --db $fx.Db 2>&1 | ForEach-Object { "$_" } } } finally { Pop-Location }
   [pscustomobject]@{ Exit = $LASTEXITCODE; Out = ($o -join "`n") }
 }
 function FileHash($fx, [string]$Leaf) {
@@ -160,7 +160,7 @@ $j = New-Fixture 'J'
 # Precondition: the fixture really has one bound and one unbound Process ref in Unit3.
 $sq = "SELECT r.start_line AS l, r.symbol_id AS s FROM refs r JOIN files f ON f.id = r.file_id " +
       "WHERE f.path LIKE '%Unit3.pas' AND r.name_text = 'Process' ORDER BY r.start_line"
-$raw = (& $Exe sql --db $j.Db --json --query $sq 2>$null) -join "`n"
+$raw = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $j.Db --json --query $sq 2>$null }) -join "`n"
 $rows = @()
 try { $rows = @(($raw | ConvertFrom-Json).rows) } catch { }
 $unbound17 = (@($rows | Where-Object { $_[0] -eq 17 }).Count -gt 0) -and (@($rows | Where-Object { $_[0] -eq 17 -and $_[1] }).Count -eq 0)

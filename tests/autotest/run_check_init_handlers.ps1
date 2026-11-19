@@ -162,7 +162,7 @@ try {
     New-Item -ItemType Directory -Path $d -Force | Out-Null
     Copy-Item -Path (Join-Path $FixRoot "$fx\*") -Destination $d -Force
     $db = Join-Path $WorkDir "$fx.sqlite"
-    $null = & $Exe index $d --db $db 2>&1
+    $null = & { $ErrorActionPreference = 'Continue'; & $Exe index $d --db $db 2>&1 | ForEach-Object { "$_" } }
     Check "index $fx (exit 0)" ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
     $dbs[$fx] = $db; $dirsOf[$fx] = $d
   }
@@ -171,7 +171,7 @@ try {
   $printed = $false
   $orderedSeen = 0; $unorderedSeen = 0
   foreach ($c in $ApiCases) {
-    $raw = @(& $harness --db $dbs[$c.Fix] --handler $c.Handler 2>&1)
+    $raw = @(& { $ErrorActionPreference = 'Continue'; & $harness --db $dbs[$c.Fix] --handler $c.Handler 2>&1 | ForEach-Object { "$_" } })
     if (-not $printed) { Write-Host '  -- raw harness output (first case) --'; $raw | ForEach-Object { Write-Host "    $_" }; $printed = $true }
     $rows = @($raw | Where-Object { $_ -like 'order *' })
     Check "$($c.Handler): one program row" ($rows.Count -eq 1) "rows=$($rows.Count)"
@@ -197,11 +197,11 @@ try {
   }
   Check 'positive control: the API orders some handlers and refuses others' (($orderedSeen -ge 2) -and ($unorderedSeen -ge 5)) "ordered=$orderedSeen unordered=$unorderedSeen"
   foreach ($k in $EventCases.Keys | Sort-Object) {
-    $o = @(& $harness --event $k 2>&1) -join ''
+    $o = @(& { $ErrorActionPreference = 'Continue'; & $harness --event $k 2>&1 | ForEach-Object { "$_" } }) -join ''
     Check "event $k unordered=$($EventCases[$k])" ($o -eq "event=$k unordered=$($EventCases[$k])") $o
   }
   foreach ($k in $NameCases.Keys | Sort-Object) {
-    $o = @(& $harness --name $k 2>&1) -join ''
+    $o = @(& { $ErrorActionPreference = 'Continue'; & $harness --name $k 2>&1 | ForEach-Object { "$_" } }) -join ''
     Check "name $k unordered=$($NameCases[$k])" ($o -eq "name=$k unordered=$($NameCases[$k])") $o
   }
 
@@ -212,7 +212,7 @@ try {
   } elseif ($built) {
     $first = $null; $setSeen = 0; $maySeen = 0
     foreach ($c in $Cases) {
-      $raw = & $driver --db $dbs[$c.Fix] --target $c.Target --stable 2>$null
+      $raw = & { $ErrorActionPreference = 'Continue'; & $driver --db $dbs[$c.Fix] --target $c.Target --stable 2>$null }
       $code = $LASTEXITCODE
       $text = (@($raw) -join "`n").Trim()
       if ($null -eq $first) { Write-Host '  -- raw answer (first case) --'; Write-Host "    $text" }

@@ -149,12 +149,12 @@ function LineOf([string]$Text) {
 }
 
 $db = Join-Path $WorkDir 'dotted.sqlite'
-$null = & $Exe index $work --db $db --library-db none 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db --library-db none 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 # sql --json rows are POSITIONAL arrays: map them onto columns[].name.
 function Q([string]$Sql) {
-  $raw = & $Exe sql --db $db --json --query $Sql 2>$null | Out-String
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --query $Sql 2>$null } | Out-String
   $j = $raw | ConvertFrom-Json
   $names = @($j.columns | ForEach-Object { $_.name })
   $out = @()
@@ -192,7 +192,7 @@ $leaf = $r | Where-Object { $_.kind -eq 'member-access' -and $_.name_text -eq 'K
 Check "R.Inner.K := 1; leaf 'K' has receiver 'R.Inner'" ($leaf -and $leaf.rcv -eq 'R.Inner') "got $($leaf.rcv)"
 
 Write-Host 'Lint answers on the same fixture' -ForegroundColor Cyan
-$raw = & $Exe lint $pas --db $db --json --enable used-before-assignment,overwrite-before-read,referenced-never-set,unused-local 2>$null | Out-String
+$raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $pas --db $db --json --enable used-before-assignment,overwrite-before-read,referenced-never-set,unused-local 2>$null } | Out-String
 $f = @($raw | ConvertFrom-Json)
 function Has([string]$Rule, [int]$Line) { @($f | Where-Object { $_.rule -eq $Rule -and $_.start_line -eq $Line }).Count -gt 0 }
 Check 'control: used-before-assignment fires on UseI(Y)'         (Has 'used-before-assignment' (LineOf 'UseI(Y);')) ''

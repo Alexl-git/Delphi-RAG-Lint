@@ -129,7 +129,7 @@ Check 'all six fixture call sites located' (
   @($lnSafeScheme,$lnSafeInline,$lnFileScheme,$lnBareVar,$lnExeConcat,$lnReassigned) -notcontains -1)
 
 $fired = @()
-foreach ($line in (& $Exe lint $fixture 2>$null)) {
+foreach ($line in (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture 2>$null })) {
   if ($line -match 'unsafe-shellexecute' -and $line -match ':(\d+):') { $fired += [int]$Matches[1] }
 }
 Write-Host ("  fired on lines: {0}" -f ($fired -join ', ')) -ForegroundColor DarkGray

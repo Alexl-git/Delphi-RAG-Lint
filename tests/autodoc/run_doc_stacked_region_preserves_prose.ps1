@@ -109,8 +109,8 @@ function New-Arm([string]$Name, [string]$StkUnit) {
   Write-Ascii "$root\a\AOnly.pas"    $callerUnit
   Write-Ascii "$root\a\_D-RAG\drag-lint-project.json" '{ "ownRoots": [".", "../shared"] }'
   $db = "$root\a\_D-RAG\A.sqlite"
-  & $Exe index "$root\shared" --db $db 2>&1 | Out-Null
-  & $Exe index "$root\a"      --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index "$root\shared" --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index "$root\a"      --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   [PSCustomObject]@{ Db = $db; Pas = "$root\shared\Stk.pas" }
 }
 
@@ -159,8 +159,8 @@ end.
 Write-Host 'STACKED -- two contiguous doc blocks above one declaration' -ForegroundColor Cyan
 $arm    = New-Arm 'stacked' $stacked
 $before = [System.IO.File]::ReadAllText($arm.Pas)
-$dry    = (& $Exe document --unit $arm.Pas --db $arm.Db 2>&1) -join "`n"
-& $Exe document --unit $arm.Pas --db $arm.Db --apply --no-backup 2>&1 | Out-Null
+$dry    = (& { $ErrorActionPreference = 'Continue'; & $Exe document --unit $arm.Pas --db $arm.Db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
+& { $ErrorActionPreference = 'Continue'; & $Exe document --unit $arm.Pas --db $arm.Db --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $after  = [System.IO.File]::ReadAllText($arm.Pas)
 
 Check 'the FIRST block''s authored summary survives' `
@@ -184,8 +184,8 @@ Write-Host ''
 Write-Host 'CONTROL -- the same routine with ONE block' -ForegroundColor Cyan
 $ctl       = New-Arm 'single' $single
 $ctlBefore = [System.IO.File]::ReadAllText($ctl.Pas)
-$ctlDry    = (& $Exe document --unit $ctl.Pas --db $ctl.Db 2>&1) -join "`n"
-& $Exe document --unit $ctl.Pas --db $ctl.Db --apply --no-backup 2>&1 | Out-Null
+$ctlDry    = (& { $ErrorActionPreference = 'Continue'; & $Exe document --unit $ctl.Pas --db $ctl.Db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
+& { $ErrorActionPreference = 'Continue'; & $Exe document --unit $ctl.Pas --db $ctl.Db --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $ctlAfter  = [System.IO.File]::ReadAllText($ctl.Pas)
 
 Check 'the ordinary merge wants to write' `

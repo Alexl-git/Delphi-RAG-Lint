@@ -88,7 +88,7 @@ $deepLine = ($sb.ToString() -split "`r?`n").Count
 function Run([string[]]$argv) {
   Push-Location C:\TEMP
   try {
-    $out = & $Exe @argv 2>&1 | Out-String
+    $out = & { $ErrorActionPreference = 'Continue'; & $Exe @argv 2>&1 | ForEach-Object { "$_" } } | Out-String
     return [pscustomobject]@{ Code = $LASTEXITCODE; Text = $out }
   } finally { Pop-Location }
 }

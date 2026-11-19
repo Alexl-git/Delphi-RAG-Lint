@@ -55,13 +55,13 @@ try {
   $P1 = Join-Path $X 'App1\App1.dproj'
   $Real1 = Join-Path $X 'App1\_D-RAG\App1.sqlite'
   [IO.Directory]::CreateDirectory((Split-Path $Real1)) | Out-Null
-  $o = (& $Exe index --project $P1 --db $Real1 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe index --project $P1 --db $Real1 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   if ($LASTEXITCODE -ne 0) { Write-Host $o; throw 'index App1 failed' }
   # App2 is deliberately NOT indexed: no App2\_D-RAG\App2.sqlite exists.
 
   function LintX([string]$rule) {
     $errFile = Join-Path $Work ('err-' + [guid]::NewGuid().ToString('N') + '.txt')
-    $raw = (& $Exe lint-all --db $Real1 --project $P1 --json --no-stand-down --rule $rule 2>$errFile) -join "`n"
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Real1 --project $P1 --json --no-stand-down --rule $rule 2>$errFile }) -join "`n"
     $arr = @(); try { $arr = @($raw | ConvertFrom-Json) } catch { Write-Host ('  unparsed: ' + $raw.Substring(0, [Math]::Min(200, $raw.Length))) }
     $err = if (Test-Path $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
     return [pscustomobject]@{ F = $arr; Err = $err }
@@ -129,13 +129,13 @@ end.
   $Txt = "unit uTxt;`r`ninterface`r`nimplementation`r`n// " + [char]::ConvertFromUtf32(0x1F600) + [string][char]0x200B + "x`r`n// a" + [string][char]0x200B + "x`r`nend.`r`n"
   [IO.File]::WriteAllBytes((Join-Path $C 'uTxt.pas'), $Bom + (New-Object Text.UTF8Encoding($false)).GetBytes($Txt))
   $CDb = Join-Path $Work 'c.sqlite'
-  $idx = (& $Exe index $C --db $CDb 2>&1) -join "`n"
+  $idx = (& { $ErrorActionPreference = 'Continue'; & $Exe index $C --db $CDb 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $diag = @(($idx -split "`r?`n") | Where-Object { $_ -match 'uCol\.dfm\((\d+),(\d+)\): parse error' })
   $dcol = if ($diag.Count -gt 0 -and $diag[0] -match 'uCol\.dfm\((\d+),(\d+)\)') { [int]$Matches[2] } else { -1 }
   Check 'C1 .dfm parse-error DIAG prints the character column 19 (byte column 22)' ($dcol -eq 19) ("got=$dcol line=$($diag | Select-Object -First 1)")
 
   function LintC([string]$file) {
-    $raw = (& $Exe lint (Join-Path $C $file) --db $CDb --json 2>$null) -join "`n"
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $C $file) --db $CDb --json 2>$null }) -join "`n"
     $arr = @(); try { $arr = @($raw | ConvertFrom-Json) } catch { }
     return ,$arr
   }
@@ -196,9 +196,9 @@ end.
 '@
   [IO.File]::WriteAllText((Join-Path $R 'uGen.pas'), ($Gen -replace "`r?`n", "`r`n"))
   $RDb = Join-Path $Work 'r.sqlite'
-  & $Exe index $R --db $RDb 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $R --db $RDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $q = "SELECT r.receiver_text AS rcv, s.qualified_name AS target FROM refs r LEFT JOIN symbols s ON s.id = r.symbol_id WHERE r.name_text = 'Side' AND r.receiver_text IS NOT NULL AND r.receiver_text <> ''"
-  $rawR = (& $Exe sql --db $RDb --query $q --json 2>$null) -join "`n"
+  $rawR = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $RDb --query $q --json 2>$null }) -join "`n"
   $bound = @{}
   try {
     $j = $rawR | ConvertFrom-Json

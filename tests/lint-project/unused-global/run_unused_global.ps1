@@ -49,7 +49,7 @@ function LineOf([string]$Marker) {
 }
 function At($Set, [int]$L) { return @($Set | Where-Object { [int]$_.start_line -eq $L -and (Split-Path $_.file_path -Leaf) -eq 'uUnusedGlobal.pas' }) }
 
-& $exePath index (Join-Path $scratch 'src') --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index (Join-Path $scratch 'src') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 $triggers = @('TRIGGER-INTF-CONST', 'TRIGGER-INTF-VAR', 'TRIGGER-INTF-TYPE', 'TRIGGER-IMPL-CONST',
@@ -60,7 +60,7 @@ $controls = @('CONTROL-INTF-OTHERUNIT', 'CONTROL-INTF-OWNIMPL', 'CONTROL-INTF-CL
               'CONTROL-IMPL-ROUTINE-FORWARD', 'CONTROL-INTF-ROUTINE')
 
 # RUN 1 -- default lint-all: ON by default
-$all = Parse-Findings (& $exePath lint-all --db $db --format json 2>$null)
+$all = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json 2>$null })
 Check 'run 1 is not vacuous (lint-all returned findings)' ($all.Count -gt 0) "total=$($all.Count)"
 $a = @($all | Where-Object { $_.rule -eq $Rule })
 $a | ForEach-Object { Write-Host ("    {0}:{1} {2}" -f (Split-Path $_.file_path -Leaf), $_.start_line, $_.message) }
@@ -69,9 +69,9 @@ foreach ($t in $triggers) { $l = LineOf $t; Check "$t fires" ((At $a $l).Count -
 foreach ($c in $controls) { $l = LineOf $c; Check "$c stays silent" ((At $a $l).Count -eq 0) "line=$l" }
 
 # RUN 2 -- --rule narrows to the rule; --disable turns it off
-$r2 = Parse-Findings (& $exePath lint-all --db $db --format json --rule $Rule 2>$null)
+$r2 = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json --rule $Rule 2>$null })
 Check 'run 2 --rule: same 8 findings' (@($r2 | Where-Object { $_.rule -eq $Rule }).Count -eq 8)
-$r2d = Parse-Findings (& $exePath lint-all --db $db --format json --disable $Rule 2>$null)
+$r2d = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json --disable $Rule 2>$null })
 Check 'run 2 --disable: no finding of the rule' (@($r2d | Where-Object { $_.rule -eq $Rule }).Count -eq 0) "total=$($r2d.Count)"
 
 # RUN 3 -- positive control: remove each lone use (same line count) and the symbol fires
@@ -86,8 +86,8 @@ Swap $sc 'VImplUsed:= CImplInit;' 'VImplUsed:= 0;'
 Swap $sc '(CBase, 6)' '(5, 6)'
 Swap $sc '  ImplRoutineCalled;' '  ;'
 Swap (Join-Path $scratch 'src\uUnusedGlobalUser.pas') 'N:= GIntfOtherUnit;' 'N:= 0;'
-& $exePath index (Join-Path $scratch 'src') --db $db 2>&1 | Out-Null
-$r3 = Parse-Findings (& $exePath lint-all --db $db --format json --rule $Rule 2>$null)
+& { $ErrorActionPreference = 'Continue'; & $exePath index (Join-Path $scratch 'src') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+$r3 = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json --rule $Rule 2>$null })
 $c3 = @($r3 | Where-Object { $_.rule -eq $Rule })
 foreach ($c in @('CONTROL-IMPL-NESTED', 'CONTROL-IMPL-INIT', 'CONTROL-IMPL-VIATYPED', 'CONTROL-INTF-OTHERUNIT', 'CONTROL-IMPL-ROUTINE-CALLED')) {
   Check "run 3 lone use removed -> $c fires" ((At $c3 (LineOf $c)).Count -eq 1)

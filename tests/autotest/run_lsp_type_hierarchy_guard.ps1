@@ -70,7 +70,7 @@ end.
 
 $db = Join-Path $WorkDir 'types.sqlite'
 $ea = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-& $Exe index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $ErrorActionPreference = $ea
 Check 'fixture indexed' (Test-Path $db)
 

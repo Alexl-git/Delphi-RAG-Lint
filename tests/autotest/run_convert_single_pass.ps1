@@ -111,10 +111,10 @@ function RunBook([string]$Tag, [string]$Book, [switch]$Apply) {
   NewUnit $dir
   Write-Ascii (Join-Path $dir 'x.rules') $Book
   $db = Join-Path $dir 'fx.sqlite'
-  $null = & $Exe index $dir --db $db 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db $db 2>&1 | ForEach-Object { "$_" } }
   $args2 = @('convert-apply', '--unit', (Join-Path $dir 'ChainDM.pas'), '--rules', (Join-Path $dir 'x.rules'), '--db', $db)
   if ($Apply) { $args2 += @('--apply', '--no-backup') }
-  $out = (& $Exe @args2 2>&1) -join "`n"
+  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe @args2 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return [pscustomobject]@{ Dir = $dir; Out = $out; Exit = $LASTEXITCODE
     Pas = [IO.File]::ReadAllText((Join-Path $dir 'ChainDM.pas')); Dfm = [IO.File]::ReadAllText((Join-Path $dir 'ChainDM.dfm')) }
 }
@@ -133,7 +133,7 @@ $r = RunBook 'h3a' $Chain
 Check 'H3a chain warning text (convert-apply, dry run)' `
   ($r.Out -match '(?m)^\s*line 2: warning: chain: TB is also a From type \(line 1 converts TA -> TB; single pass, TA ends as TB\)') $r.Out
 Check 'H3a ... exit code unchanged (warnings only)' ($r.Exit -eq 0) "exit=$($r.Exit)"
-$v = (& $Exe convert-validate --rules (Join-Path $r.Dir 'x.rules') 2>&1) -join "`n"
+$v = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules (Join-Path $r.Dir 'x.rules') 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'H3a chain warning text (convert-validate)' ($v -match '(?m)^\s*line 2: warning: chain: TB is also a From type') $v
 $r = RunBook 'h3b' $Dup
 Check 'H3b duplicate-From warning text' ($r.Out -match '(?m)^\s*line 2: warning: duplicate From TA \(line 1 wins\)') $r.Out

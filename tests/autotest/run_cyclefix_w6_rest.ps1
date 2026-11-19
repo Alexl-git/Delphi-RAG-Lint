@@ -56,7 +56,7 @@ function Get-Plan([string]$Fixture, [string]$Dproj, [string]$Tag, [scriptblock]$
   Copy-Tree (Join-Path $Fx $Fixture) $root
   if ($Edit) { & $Edit $root }
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  $null | & $Exe index --project (Join-Path $root $Dproj) --db $db *> (Join-Path $WorkDir "index-$Tag.log")
+  $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root $Dproj) --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
   $o = Join-Path $WorkDir "plan-$Tag.out"
   $dump = Join-Path $WorkDir "dump-$Tag.txt"
   $env:DRAGLINT_TEST_DUMP_PLAN = $dump
@@ -77,9 +77,9 @@ function Get-Plan([string]$Fixture, [string]$Dproj, [string]$Tag, [scriptblock]$
 }
 # Applies cycle 1 of a plan with the follower, re-indexes, returns the text `cycles` prints on the result.
 function Invoke-FollowAndCycles($Pl, [string]$Tag) {
-  $fo = & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $Pl.Out -Cycle 1 2>&1 | Out-String
+  $fo = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $Pl.Out -Cycle 1 2>&1 | ForEach-Object { "$_" } } | Out-String
   $db = Join-Path $WorkDir "after-$Tag.sqlite"
-  $null | & $Exe index --project $Pl.Dproj --db $db *> (Join-Path $WorkDir "index-after-$Tag.log")
+  $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project $Pl.Dproj --db $db *> (Join-Path $WorkDir "index-after-$Tag.log") }
   $o = & $Exe cycles --db $db | Out-String
   return @{ Follow = $LASTEXITCODE; Text = $fo; Cycles = $o }
 }

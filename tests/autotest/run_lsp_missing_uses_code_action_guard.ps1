@@ -161,7 +161,7 @@ $db = Join-Path $WorkDir 'app.sqlite'
 Push-Location C:\TEMP
 try {
   . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
-  & $Exe index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $idxCode = $LASTEXITCODE
   if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2 }
 
@@ -214,7 +214,7 @@ try {
     ((@('unit uAmbig;', 'interface', 'procedure DoIt;', 'implementation', 'procedure DoIt;', 'begin',
         "  CsSite.Send('x');", 'end;', 'end.') -join $crlf) + $crlf), [Text.Encoding]::ASCII)
   $db2 = Join-Path $WorkDir 'app2.sqlite'
-  & $Exe index $src2 --db $db2 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $src2 --db $db2 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $null = Get-Actions 'uAmbig.pas' $src2 $db2
   $ambDiag = @($script:LastDiags | Where-Object { ($_.code -eq 'unit-missing-from-uses') -and ($_.message -match 'uCsLog2') })
   Check 'P0 POSITIVE CONTROL: the ambiguous finding is published (names uCsLog2)' ($ambDiag.Count -ge 1) ("n=" + $ambDiag.Count)

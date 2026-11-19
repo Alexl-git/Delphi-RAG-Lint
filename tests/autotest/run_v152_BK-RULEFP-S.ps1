@@ -24,7 +24,7 @@ function WriteAscii([string]$Path, [string[]]$Lines) {
 }
 function Hits([string]$File, [string]$Rule, [string[]]$Extra = @()) {
   Push-Location (Split-Path $File)
-  try { $o = & $Exe lint $File --json --rule $Rule @Extra 2>$null } finally { Pop-Location }
+  try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe lint $File --json --rule $Rule @Extra 2>$null } } finally { Pop-Location }
   $t = ($o -join "`n").Trim()
   if ($t -eq '') { return @() }
   $j = $t | ConvertFrom-Json

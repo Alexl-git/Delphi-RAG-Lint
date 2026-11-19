@@ -139,7 +139,7 @@ end.
 
 $db = Join-Path $WorkDir 'alias.sqlite'
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($indexOut -join ' | ')"
 
 $script:PySql = Join-Path $WorkDir 'sql.py'
@@ -161,13 +161,13 @@ function JsonFrom([string[]]$Lines) {
   return ''
 }
 function Descends([string]$Name, [string]$Of) {
-  $raw = @(& $Exe query ancestors --name $Name --of $Of --json --db $db 2>$null) | ForEach-Object { "$_" }
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query ancestors --name $Name --of $Of --json --db $db 2>$null }) | ForEach-Object { "$_" }
   $json = JsonFrom $raw
   if (-not $json) { return $null }
   return [bool](($json | ConvertFrom-Json).is_descendant)
 }
 function AncestorRows([string]$Name) {
-  $raw = @(& $Exe query ancestors --name $Name --json --db $db 2>$null) | ForEach-Object { "$_" }
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query ancestors --name $Name --json --db $db 2>$null }) | ForEach-Object { "$_" }
   $json = JsonFrom $raw
   if (-not $json) { return @() }
   return @(($json | ConvertFrom-Json).ancestors)

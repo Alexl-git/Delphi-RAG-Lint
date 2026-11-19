@@ -54,7 +54,7 @@ $use = Join-Path $scratch 'uIfUse.pas'
 $db  = Join-Path $scratch 'infield.sqlite'
 
 function Sql([string]$Query) {
-  $raw = (& $exePath sql --db $db --json --limit 1000 --query $Query 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --limit 1000 --query $Query 2>$null }) -join "`n"
   $b = $raw.IndexOf('{')
   if ($b -lt 0) { throw "sql returned no JSON for: $Query" }
   $o = $raw.Substring($b) | ConvertFrom-Json
@@ -89,7 +89,7 @@ function Show($rows) { return (@($rows | ForEach-Object { "$($_.kind):sid=$($_.s
 
 Push-Location C:\TEMP
 try {
-  $log = (& $exePath index $scratch --db $db *>&1) -join "`n"
+  $log = (& { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db *>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'the fixture indexed' (Test-Path $db) ($log.Split("`n") | Select-Object -Last 3) 
 
   Write-Host '--- DEC-19: a bare field read binds the field on the enclosing class chain'

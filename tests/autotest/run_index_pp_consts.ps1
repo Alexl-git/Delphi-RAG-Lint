@@ -40,14 +40,14 @@ $main = Join-Path $fx 'app\UMain.pas'
 
 function Run([string[]]$argv, [string]$tag) {
   Push-Location $WorkDir
-  try { $o = & $Exe @argv 2>&1 | Out-String } finally { Pop-Location }
+  try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe @argv 2>&1 | ForEach-Object { "$_" } } | Out-String } finally { Pop-Location }
   [IO.File]::WriteAllText((Join-Path $WorkDir "$tag.log"), $o)
   return $o
 }
 # sql --json rows are POSITIONAL arrays (see feedback_sql_json_rows_are_positional).
 function Col0([string]$db, [string]$q) {
   Push-Location $WorkDir
-  try { $j = & $Exe sql --db $db --query $q --json 2>$null | Out-String } finally { Pop-Location }
+  try { $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query $q --json 2>$null } | Out-String } finally { Pop-Location }
   try { return ,@((($j | ConvertFrom-Json).rows) | ForEach-Object { [string]$_[0] }) } catch { return ,@() }
 }
 function IncLeaves([string]$db) {
@@ -82,7 +82,7 @@ Check 'EXT-E4: typed const from a LIBRARY unit is not a true constant -> LTYPED_
 # ---- EXT-E4: symbols.modifiers marks a TYPED constant; signatures unchanged ---------------
 function ConstRow([string]$d, [string]$n) {
   Push-Location $WorkDir
-  try { $j = & $Exe sql --db $d --json --query "SELECT COALESCE(modifiers,''), COALESCE(signature,'') FROM symbols WHERE name = '$n' AND kind = 'const'" 2>$null | Out-String } finally { Pop-Location }
+  try { $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $d --json --query "SELECT COALESCE(modifiers,''), COALESCE(signature,'') FROM symbols WHERE name = '$n' AND kind = 'const'" 2>$null } | Out-String } finally { Pop-Location }
   try { $r = @(($j | ConvertFrom-Json).rows); if ($r.Count -gt 0) { return ,@([string]$r[0][0], [string]$r[0][1]) } } catch { }
   return ,@('<none>', '<none>')
 }

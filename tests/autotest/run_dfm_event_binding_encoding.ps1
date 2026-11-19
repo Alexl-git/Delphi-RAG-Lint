@@ -39,11 +39,11 @@ $Work = Join-Path $WorkDir 'fx'
 New-Item -ItemType Directory $Work -Force | Out-Null
 Copy-Item (Join-Path $Fx '*') $Work
 $Db = Join-Path $WorkDir 'fx.sqlite'
-& $Exe index $Work --db $Db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $Work --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'index built' (Test-Path $Db)
 
 function DocOut([string]$Unit) {
-  return (& $Exe document --unit (Join-Path $Work $Unit) --db $Db --output-encoding utf8 2>&1) -join "`n"
+  return (& { $ErrorActionPreference = 'Continue'; & $Exe document --unit (Join-Path $Work $Unit) --db $Db --output-encoding utf8 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 }
 $a = DocOut 'FormAnsi.pas'
 Check 'E1 ANSI .dfm: Handles line carries the full non-ASCII object name' ($a.Contains($Want)) ("got: " + ($a -replace "`r",''))
@@ -53,8 +53,8 @@ $Work2 = Join-Path $WorkDir 'fx2'
 New-Item -ItemType Directory $Work2 -Force | Out-Null
 Copy-Item (Join-Path $Fx 'FormAnsi.pas') $Work2
 $Db2 = Join-Path $WorkDir 'fx2.sqlite'
-& $Exe index $Work2 --db $Db2 2>&1 | Out-Null
-$n = (& $Exe document --unit (Join-Path $Work2 'FormAnsi.pas') --db $Db2 --output-encoding utf8 2>&1) -join "`n"
+& { $ErrorActionPreference = 'Continue'; & $Exe index $Work2 --db $Db2 2>&1 | ForEach-Object { "$_" } } | Out-Null
+$n = (& { $ErrorActionPreference = 'Continue'; & $Exe document --unit (Join-Path $Work2 'FormAnsi.pas') --db $Db2 --output-encoding utf8 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'E3 negative control: unit without its .dfm -> no Handles line' (-not $n.Contains('Handles:')) ("got: " + ($n -replace "`r",''))
 
 if (Test-Path $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }

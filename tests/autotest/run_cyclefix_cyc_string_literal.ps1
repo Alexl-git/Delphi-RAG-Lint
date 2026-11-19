@@ -85,7 +85,7 @@ function Invoke-Program([string]$Dproj) {
 
 function Get-PlanFile([string]$Dproj, [string]$Tag) {
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project $Dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $Dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
   $o = Join-Path $WorkDir "plan-$Tag.out"
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
     -ArgumentList @('cycles', '--db', ('"' + $db + '"'), '--plan', '--library-db', ('"' + $Lib + '"')) `
@@ -145,7 +145,7 @@ try {
     $plan = Get-PlanFile (Join-Path $edit $c.Dproj) $t
     $pt = [IO.File]::ReadAllText($plan.File)
     Check "${t}1 the plan rewrites the code occurrence" ($pt.Contains($c.Code)) $c.Code
-    $fo = & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $plan.File -Cycle $c.Cycle -Root $edit 2>&1 | Out-String
+    $fo = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $plan.File -Cycle $c.Cycle -Root $edit 2>&1 | ForEach-Object { "$_" } } | Out-String
     Check "${t}1b the follower applies the cycle (exit 0)" ($LASTEXITCODE -eq 0) ($fo.Trim() -replace "`r?`n", ' | ')
     $ft = [IO.File]::ReadAllText((Join-Path $edit $c.File))
     foreach ($k in $c.Keep) { Check "${t}2 byte-identical in the followed file: $k" ($ft.Contains($k)) '' }

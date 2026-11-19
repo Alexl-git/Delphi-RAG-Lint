@@ -115,7 +115,7 @@ New-Item -ItemType Directory -Force $src | Out-Null
 $file = Join-Path $src 'uC15.pas'
 [IO.File]::WriteAllText($file, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 $db = Join-Path $WorkDir 'c15.sqlite'
-$null = & $Exe index $src --db $db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } }
 if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host 'FATAL: fixture not indexed' -ForegroundColor Red; exit 2 }
 $uri = 'file:///' + ($file -replace '\\', '/')
 $td = @{ uri = $uri }
@@ -154,7 +154,7 @@ $csc = @('Framework64', 'Framework') | ForEach-Object { Join-Path $env:WINDIR "M
 $stubDir = Join-Path $WorkDir 'stub'
 New-Item -ItemType Directory -Force $stubDir | Out-Null
 $stubExe = Join-Path $stubDir 'FullRulesChildStub.exe'
-if ($csc) { $null = & $csc /nologo /out:$stubExe (Join-Path $PSScriptRoot 'fixtures\lsp\FullRulesChildStub.cs') 2>&1 }
+if ($csc) { $null = & { $ErrorActionPreference = 'Continue'; & $csc /nologo /out:$stubExe (Join-Path $PSScriptRoot 'fixtures\lsp\FullRulesChildStub.cs') 2>&1 | ForEach-Object { "$_" } } }
 Check 'SANITY: the stub child compiled' (Test-Path $stubExe) ('csc=' + $csc)
 $projDir = Join-Path $WorkDir 'my proj'
 New-Item -ItemType Directory -Force $projDir | Out-Null

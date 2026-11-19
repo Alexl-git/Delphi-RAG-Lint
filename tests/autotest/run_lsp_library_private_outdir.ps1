@@ -50,8 +50,8 @@ $looseFile = "$WorkDir\loose\LooseUnit.pas"
 WriteAnsi $looseFile $looseText
 $DefLib = "$WorkDir\libhome\dctx-win64.sqlite"
 $projDb = "$WorkDir\proj.sqlite"
-& $Exe index "$WorkDir\libsrc"  --db $DefLib 2>&1 | Out-Null
-& $Exe index "$WorkDir\projsrc" --db $projDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\libsrc"  --db $DefLib 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\projsrc" --db $projDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'built fixture indexes' ((Test-Path $DefLib) -and (Test-Path $projDb))
 $lines = $looseText -split "`r?`n"
 $ln  = [Array]::FindIndex($lines, [Predicate[string]]{ param($x) $x -like '*LibraryOnlyRoutine(2);*' })

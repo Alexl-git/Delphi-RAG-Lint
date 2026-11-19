@@ -109,8 +109,8 @@ foreach ($enc in @(@{ N = 'cp1252'; E = $Cp1252 }, @{ N = 'utf8'; E = $Utf8 })) 
   $d = Join-Path $WorkDir "c-$($enc.N)"; New-Item -ItemType Directory $d | Out-Null
   $f = Join-Path $d 'uBk.pas'; WriteText $f $Unit $enc.E
   $db = Join-Path $d 'c.sqlite'
-  & $Exe index $d --db $db 2>&1 | Out-Null
-  $raw = & $Exe lint $f --db $db --enable magic-literal,multiple-statements-per-line,commented-out-code --json 2>$null | Out-String
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $d --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $f --db $db --enable magic-literal,multiple-statements-per-line,commented-out-code --json 2>$null } | Out-String
   $all = @(); try { $all = @($raw | ConvertFrom-Json) } catch { $all = @() }
   Check "C0 ($($enc.N)): lint --json answered" ($all.Count -ge 10) "count=$($all.Count)"
   foreach ($c in $Cases) {
@@ -130,8 +130,8 @@ foreach ($fx in @(
   $d = Join-Path $WorkDir "f-$($fx.R)"; New-Item -ItemType Directory $d | Out-Null
   $f = Join-Path $d 'uBk.pas'; WriteText $f $Unit $Cp1252
   $db = Join-Path $d 'f.sqlite'
-  & $Exe index $d --db $db 2>&1 | Out-Null
-  $o = & $Exe lint-all --db $db --rule $fx.R --enable $fx.R --fix --apply --no-compile-gate --quiet 2>&1 | Out-String
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $d --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule $fx.R --enable $fx.R --fix --apply --no-compile-gate --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String
   $ls = ReadLines $f
   Check "F $($fx.R): the non-ASCII line and its ASCII twin are both fixed" (& $fx.Ok $ls) (($ls[31..42] -join ' | ') + " :: $($o.Trim())")
   Check "F $($fx.R): the non-ASCII text survives" (@($ls | Where-Object { $_.Contains("{$Eacute$Eacute$Eacute}") }).Count -eq 6) "lines with the marker: $(@($ls | Where-Object { $_.Contains($Eacute) }).Count)"
@@ -177,9 +177,9 @@ object Frm: TFrm
 end
 '@ $Cp1252
 $dbD = Join-Path $dD 'd.sqlite'
-& $Exe index $dD --db $dbD 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dD --db $dbD 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $q = "SELECT l.kind, l.text, l.start_line, l.start_col, l.end_col FROM string_literals l JOIN files f ON f.id = l.file_id WHERE f.path LIKE '%.dfm' ORDER BY l.start_line"
-$rawD = & $Exe sql --db $dbD --query $q --json 2>$null | Out-String
+$rawD = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $dbD --query $q --json 2>$null } | Out-String
 $rowsD = @(); try { $jD = $rawD | ConvertFrom-Json; $rowsD = @($jD.rows) } catch { $rowsD = @() }
 function DRow([int]$Line, [string]$Kind) { return ,@($rowsD | Where-Object { ([int]$_[2] -eq $Line) -and ($_[0] -eq $Kind) }) }
 foreach ($c in @(
@@ -203,8 +203,8 @@ $main = Join-Path $dH 'hoMain.pas'
 $mt = $Cp1252.GetString([IO.File]::ReadAllBytes($main)).Replace('  Tag:= GCfg;  // USE-CLICK', '  {~~~} Tag:= GCfg;  // USE-CLICK')
 WriteText $main $mt $Cp1252
 $dbH = Join-Path $dH 'h.sqlite'
-& $Exe index $dH --db $dbH 2>&1 | Out-Null
-$rawH = & $Exe check-init hoData.GCfg --db $dbH --json 2>$null | Out-String
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dH --db $dbH 2>&1 | ForEach-Object { "$_" } } | Out-Null
+$rawH = & { $ErrorActionPreference = 'Continue'; & $Exe check-init hoData.GCfg --db $dbH --json 2>$null } | Out-String
 $jH = $null; try { $jH = $rawH | ConvertFrom-Json } catch { $jH = $null }
 $useLine = [Array]::IndexOf((ReadLines $main), "  {$Eacute$Eacute$Eacute} Tag:= GCfg;  // USE-CLICK") + 1
 $u = @(@($jH.uses) | Where-Object { ((Split-Path $_.file -Leaf) -eq 'hoMain.pas') -and ([int]$_.line -eq $useLine) })

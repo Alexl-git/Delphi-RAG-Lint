@@ -11,7 +11,7 @@ function Check([string]$Name,[bool]$Ok,[string]$Detail=''){
 }
 if(-not(Test-Path $Exe)){Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2}
 
-$out = (& $Exe contrast-selftest 2>&1) -join "`n"
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe contrast-selftest 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'black-on-white = 21.00' ($out -match 'BLACK_ON_WHITE=21\.00') $out
 Check 'same color = 1.00'      ($out -match 'SAME=1\.00') $out
 $dark = if($out -match 'DARKFAIL=([\d.]+)'){[double]$Matches[1]}else{99}

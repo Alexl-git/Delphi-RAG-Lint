@@ -54,7 +54,7 @@ function Copy-Tree([string]$From, [string]$To) {
 }
 function Index-Copy([string]$Dir, [string]$Dproj, [string]$Tag) {
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  $idx = & $Exe index --project (Join-Path $Dir $Dproj) --db $db 2>&1 | Out-String
+  $idx = & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $Dir $Dproj) --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check "${Tag}: SANITY the copy indexed with 0 errors" (($idx -match ', 0 errors') -and ($idx -notmatch '[1-9]\d* errors')) $idx
   return $db
 }
@@ -114,7 +114,7 @@ try {
   Check 'b2: no dry-run code cell for an unavailable fix' ((Count-Code $pn.Dot) -eq 0) ''
 
   Write-Host '== (c) POSITIVE CONTROL: a stub engine without `fix`' -ForegroundColor Cyan
-  $raw = & $Exe cycles --db $db --project $proj --format json --edges --causes --library-db none 2>$null | Out-String
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe cycles --db $db --project $proj --format json --edges --causes --library-db none 2>$null } | Out-String
   $j = @($raw | ConvertFrom-Json)
   Check 'c0: SANITY the real JSON has a fix object on all 3 cycles' (@($j | Where-Object { $_.PSObject.Properties['fix'] }).Count -eq 3) ''
   $old = @($raw | ConvertFrom-Json | ForEach-Object { $_.PSObject.Properties.Remove('fix'); $_ })
@@ -153,7 +153,7 @@ try {
     $outRoot = Join-Path $WorkDir "ask-$Tag"
     $aa = @('-NoProfile', '-File', $ask, '-Question', 'cycles', '-Target', 'project', '-DbPath', $db, '-Engine', (Join-Path $wdir 'wrap.ps1'), '-OutRoot', $outRoot, '-Plain')
     if ($WithProject) { $aa += @('-Project', $proj) }
-    $o = & pwsh @aa 2>&1 | Out-String
+    $o = & { $ErrorActionPreference = 'Continue'; & pwsh @aa 2>&1 | ForEach-Object { "$_" } } | Out-String
     $m = [regex]::Match($o, '(?m)^BUNDLE (.+?)\s*$')
     if (-not $m.Success) { return @{ Dot = ''; Out = $o } }
     return @{ Dot = [IO.File]::ReadAllText((Join-Path $m.Groups[1].Value 'graph.dot')); Out = $o }

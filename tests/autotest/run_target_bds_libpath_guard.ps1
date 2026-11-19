@@ -41,7 +41,7 @@ function WriteRegistry([string]$Path, $Tree) {
 }
 function Dl([string[]]$DlArgs, [string]$Registry) {
   $env:DRAGLINT_TEST_BDS_REGISTRY = $Registry
-  $out = & $Exe @DlArgs 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @DlArgs 2>&1 | ForEach-Object { "$_" } } | Out-String
   $env:DRAGLINT_TEST_BDS_REGISTRY = ''
   return $out
 }

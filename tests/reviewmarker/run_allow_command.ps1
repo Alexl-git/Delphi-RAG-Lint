@@ -46,7 +46,7 @@ function Write-Fixture($exceptLine) {
 }
 
 function LintRules {
-  $out = & $exe lint $src 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $exe lint $src 2>&1 | ForEach-Object { "$_" } } | Out-String
   ([regex]::Matches($out, '\[\w+\]\s+([a-z0-9-]+):')) | ForEach-Object { $_.Groups[1].Value }
 }
 
@@ -59,7 +59,7 @@ function MarkerOn($n) {
 Write-Fixture '  except'
 Check 'baseline reports try-except-swallowed' ((LintRules) -contains 'try-except-swallowed')
 $before = [IO.File]::ReadAllBytes($src)
-$dry = & $exe allow $src --fix-line 13 --fix-rule try-except-swallowed 2>&1 | Out-String
+$dry = & { $ErrorActionPreference = 'Continue'; & $exe allow $src --fix-line 13 --fix-rule try-except-swallowed 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'dry-run exits 0' ($LASTEXITCODE -eq 0)
 Check 'dry-run previews the new line' ($dry -match '\+\s+except\s+// dl:ok try-except-swallowed@[0-9a-f]{4}')
 Check 'dry-run leaves the file byte-identical' (@(Compare-Object $before ([IO.File]::ReadAllBytes($src))).Count -eq 0)
@@ -84,9 +84,9 @@ Check 're-allow of a valid marker is a byte no-op' (@(Compare-Object $stable ([I
 
 # --- refusals ---------------------------------------------------------------
 $guard = [IO.File]::ReadAllBytes($src)
-& $exe allow $src --fix-line 13 --fix-rule not-a-real-rule --apply 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exe allow $src --fix-line 13 --fix-rule not-a-real-rule --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'unknown rule id exits 2' ($LASTEXITCODE -eq 2)
-& $exe allow $src --fix-line 13 --fix-rule review-marker-stale --apply 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exe allow $src --fix-line 13 --fix-rule review-marker-stale --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'review-marker-stale cannot be allowed' ($LASTEXITCODE -eq 2)
 # L4 (2026-09-23): EVERY review-marker-* meta rule is bookkeeping about markers,
 # not a finding about code, and parser-error is the parser failing -- none of
@@ -94,12 +94,12 @@ Check 'review-marker-stale cannot be allowed' ($LASTEXITCODE -eq 2)
 # refused; the other three (and parser-error) were written as live markers.
 foreach ($meta in 'review-marker-unused','review-marker-malformed','review-marker-placeholder-hash',
                   'review-marker-reason-unreviewed','parser-error') {
-  $o = & $exe allow $src --fix-line 13 --fix-rule $meta --apply 2>&1 | Out-String
+  $o = & { $ErrorActionPreference = 'Continue'; & $exe allow $src --fix-line 13 --fix-rule $meta --apply 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check "$meta cannot be allowed (exit 2, says why)" (($LASTEXITCODE -eq 2) -and ($o -match 'cannot be allowed'))
 }
-& $exe allow $src --fix-line 999 --fix-rule try-except-swallowed --apply 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exe allow $src --fix-line 999 --fix-rule try-except-swallowed --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'line past EOF exits 2' ($LASTEXITCODE -eq 2)
-& $exe allow $src --fix-rule try-except-swallowed --apply 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exe allow $src --fix-rule try-except-swallowed --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'missing --fix-line exits 2' ($LASTEXITCODE -eq 2)
 Check 'no refusal touched the file' (@(Compare-Object $guard ([IO.File]::ReadAllBytes($src))).Count -eq 0)
 
@@ -134,7 +134,7 @@ Check 'neighbour keeps its stale hash' ($oldNeighbour -eq $newNeighbour)
 # the old `REVIEWED <date>` must NOT ride along, and the command must SAY it
 # dropped it, so the operator knows to re-stamp after actually re-reading.
 Write-Fixture '  except  // dl:ok try-except-swallowed@0bad -- REVIEWED 2026-01-05 logged upstream'
-$o = & $exe allow $src --fix-line 13 --fix-rule try-except-swallowed --apply 2>&1 | Out-String
+$o = & { $ErrorActionPreference = 'Continue'; & $exe allow $src --fix-line 13 --fix-rule try-except-swallowed --apply 2>&1 | ForEach-Object { "$_" } } | Out-String
 $l13 = (Get-Content $src)[12]
 Check 'L3 stale stamped re-allow exits 0' ($LASTEXITCODE -eq 0)
 Check 'L3 re-hash drops the old REVIEWED stamp' ($l13 -notmatch 'REVIEWED')
@@ -162,7 +162,7 @@ $l3b = [ordered]@{
 }
 foreach ($k in $l3b.Keys) {
   Write-Fixture ('  except  // dl:ok try-except-swallowed@0bad -- ' + $l3b[$k])
-  & $exe allow $src --fix-line 13 --fix-rule try-except-swallowed --apply 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exe allow $src --fix-line 13 --fix-rule try-except-swallowed --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $got = ReasonOn 13
   Check "L3b $k -> 'reason' (got '$got')" (($LASTEXITCODE -eq 0) -and ($got -ceq 'reason'))
 }
@@ -170,12 +170,12 @@ foreach ($k in $l3b.Keys) {
 # NO stamp -- but full of the separators the strip now eats next to a stamp --
 # comes back byte-identical: the separator is only taken WITH a stamp.
 Write-Fixture '  except  // dl:ok try-except-swallowed@0bad -- REVIEWED 2026-01-05 logged upstream'
-& $exe allow $src --fix-line 13 --fix-rule try-except-swallowed --apply 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exe allow $src --fix-line 13 --fix-rule try-except-swallowed --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $got = ReasonOn 13
 Check "L3b control: stamp then text -> 'logged upstream' (got '$got')" ($got -ceq 'logged upstream')
 $plainReason = 'logged upstream: see ticket 12 - owner agreed, not a leak; ok.'
 Write-Fixture ('  except  // dl:ok try-except-swallowed@0bad -- ' + $plainReason)
-& $exe allow $src --fix-line 13 --fix-rule try-except-swallowed --apply 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exe allow $src --fix-line 13 --fix-rule try-except-swallowed --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $got = ReasonOn 13
 Check "L3b control: an unstamped reason is untouched (got '$got')" ($got -ceq $plainReason)
 Check 'L3b control: ...and its marker was re-hashed' ((MarkerOn 13) -match '^try-except-swallowed@[0-9a-f]{4}$' -and (MarkerOn 13) -notmatch '@0bad')

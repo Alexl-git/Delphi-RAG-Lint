@@ -59,8 +59,8 @@ function OrphanDocLines([string]$path) {
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
-  & $exePath document --unit $target --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply 2>$null } | Out-Null
   Check 'apply #1: exit 0' ($LASTEXITCODE -eq 0)
 
   $src = [IO.File]::ReadAllText($target)
@@ -79,8 +79,8 @@ try {
   Check 'exactly one AUTO_BEGIN block'      (([regex]::Matches($src,'drag-lint:auto BEGIN')).Count -eq 1)
 
   $bytes1 = [IO.File]::ReadAllBytes($target)
-  & $exePath index $scratch --db $db 2>$null | Out-Null
-  & $exePath document --unit $target --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply 2>$null } | Out-Null
   $bytes2 = [IO.File]::ReadAllBytes($target)
   Check 'IDEMPOTENT: file bytes identical after run 2 vs run 1' `
     ([System.Linq.Enumerable]::SequenceEqual([byte[]]$bytes1,[byte[]]$bytes2))

@@ -233,19 +233,19 @@ $origBase  = P 'orig-CPBase.dfm';  Copy-Item (P 'CPBase.dfm')  $origBase
 $origChild = P 'orig-CPChild.dfm'; Copy-Item (P 'CPChild.dfm') $origChild
 
 $db = P 'fx.sqlite'
-$idx = & $Exe index $WorkDir --db $db 2>&1
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'V the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db)) "exit=$LASTEXITCODE; $($idx -join ' | ')"
 Check 'V the chain loader is available (lib\DfmChainLoad.ps1)' (Test-DfmChainLoader)
 
 function ApplyTo([string]$Unit, [string[]]$Extra = @()) {
-  $o = (& $Exe convert-apply --unit (P $Unit) --rules (P 'cp.rules') --db $db @Extra 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P $Unit) --rules (P 'cp.rules') --db $db @Extra 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 
 # ancestor first, then reindex, then the descendant
 $r = ApplyTo 'CPBase.pas' @('--apply', '--no-backup')
 Check 'A1 CPBase (ancestor) converted: exit 0, object tbl: TFDTable' (($r.Code -eq 0) -and ((Text 'CPBase.dfm') -match 'object tbl: TFDTable')) $r.Out
-$idx = & $Exe index $WorkDir --db $db 2>&1
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } }
 $r = ApplyTo 'CPChild.pas' @('--apply', '--no-backup')
 $t = Text 'CPChild.dfm'
 Check 'A2 CPChild --apply: exit 0, tbl retyped (inherited tbl: TFDTable)' (($r.Code -eq 0) -and ($t -match '(?m)^  inherited tbl: TFDTable\r?$')) ($r.Out + "`n" + $t)

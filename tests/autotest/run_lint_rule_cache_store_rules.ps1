@@ -44,13 +44,13 @@ try {
   $env:DRAGLINT_RULE_CACHE_DIR = $cache
   Push-Location $WorkDir
   try {
-    & $exePath index $src --db $db 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 } | Out-Null
     Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
     # the indexer may have warmed the cache: start every phase from an empty one
     Get-ChildItem $cache -File | ForEach-Object { [IO.File]::Delete($_.FullName) }
 
     function Lint-Rows {
-      $j = & $exePath lint $unit --db $db --json 2>$null
+      $j = & { $ErrorActionPreference = 'Continue'; & $exePath lint $unit --db $db --json 2>$null }
       $a = @($j | Out-String | ConvertFrom-Json)
       return ,@($a | ForEach-Object { '{0}|{1}|{2}|{3}' -f $_.rule, $_.start_line, $_.start_col, $_.message } | Sort-Object)
     }
@@ -64,7 +64,7 @@ try {
 
     $fill = Lint-Rows
     $env:DRAGLINT_PROFILE = '1'
-    $hitErr = & $exePath lint $unit --db $db --json 2>&1 | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | ForEach-Object { "$_" }
+    $hitErr = & { $ErrorActionPreference = 'Continue'; & $exePath lint $unit --db $db --json 2>&1 } | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | ForEach-Object { "$_" }
     $env:DRAGLINT_PROFILE = $null
     $hit = Lint-Rows
     Check 'C1  parity: cache off == filling run' ((($off -join "`n") -eq ($fill -join "`n"))) "off=$($off.Count) fill=$($fill.Count)"
@@ -88,7 +88,7 @@ try {
       $pinned = $pinned.Replace($m.Value, $new)
     }
     [IO.File]::WriteAllText($unit, $pinned, [Text.Encoding]::ASCII)
-    & $exePath index $src --db $db 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 } | Out-Null
     $after = Lint-Rows
     $env:DRAGLINT_RULE_CACHE = '0'
     $afterOff = Lint-Rows

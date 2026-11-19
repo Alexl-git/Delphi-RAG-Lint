@@ -57,10 +57,10 @@ Write-Ascii (Join-Path $withProj '.drag-lint.json') '{ "project": "C:\\nowhere\\
 Copy-Item (Join-Path $subDb 'U.pas'), (Join-Path $subDb 'r.rules') $subProj
 # a REAL index of U.pas for the positive control (built outside the tree with the file)
 $uDb = Join-Path $WorkDir 'u.sqlite'
-& $Exe index $subDb --db $uDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $subDb --db $uDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 function Run([string]$Cwd, [string[]]$A) {
   Push-Location $Cwd
-  try { $o = (& $Exe @A 2>&1 | ForEach-Object { "$_" }) -join "`n"; $script:LastExit = $LASTEXITCODE } finally { Pop-Location }
+  try { $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @A 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n"; $script:LastExit = $LASTEXITCODE } finally { Pop-Location }
   return $o
 }
 

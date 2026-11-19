@@ -26,7 +26,7 @@ if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){ if($d){Write-Host "      $d" -ForegroundColor DarkGray}; $script:fail=$true } }
-function Run([string[]]$a){ $o = & $Exe @a 2>&1; [pscustomobject]@{ Code=$LASTEXITCODE; Out=($o | ForEach-Object { "$_" }) } }
+function Run([string[]]$a){ $o = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } }; [pscustomobject]@{ Code=$LASTEXITCODE; Out=($o | ForEach-Object { "$_" }) } }
 
 $Exe = (Resolve-Path $Exe).Path
 New-Item -ItemType Directory -Force (Join-Path $WorkDir 'src') | Out-Null
@@ -67,7 +67,7 @@ try {
 
   # ---- S3 ----
   $db = Join-Path $WorkDir 'fx.sqlite'
-  $null = & $Exe index (Join-Path $WorkDir 'src') --db $db 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $WorkDir 'src') --db $db 2>&1 | ForEach-Object { "$_" } }
   $r = Run @('syntax-count','--db',$db,'--json')
   $j3 = $null; try { $j3 = ($r.Out | Where-Object { $_ -like '{*' } | Select-Object -First 1) | ConvertFrom-Json } catch {}
   Check 'S3 --db reads the index file list (same totals)' ($r.Code -eq 0 -and $j3 -and $j3.files_scanned -eq 1 -and $j3.totals.'inline-var' -eq 3 -and $j3.totals.'if-expr' -eq 1) ("exit $($r.Code): " + ($r.Out -join ' | '))

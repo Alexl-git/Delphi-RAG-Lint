@@ -133,7 +133,7 @@ try {
   # per-config assertion 2: inactive POSIX branch is ABSENT from the
   # preprocessed index (blanked, not indexed).
   # ============================================================
-  & $exePath query --name PosixOnlyProc --db $ppDb *> $null
+  & { $ErrorActionPreference = 'Continue'; & $exePath query --name PosixOnlyProc --db $ppDb *> $null }
   $posixExit = $LASTEXITCODE
   Check 'PER-CONFIG: PosixOnlyProc is ABSENT from the preprocessed index (inactive branch blanked)' ($posixExit -ne 0)
 
@@ -141,7 +141,7 @@ try {
   # per-config assertion 3: active MSWINDOWS branch IS present in the
   # preprocessed index.
   # ============================================================
-  & $exePath query --name WinOnlyProc --db $ppDb *> $null
+  & { $ErrorActionPreference = 'Continue'; & $exePath query --name WinOnlyProc --db $ppDb *> $null }
   $winExit = $LASTEXITCODE
   Check 'PER-CONFIG: WinOnlyProc IS present in the preprocessed index (active branch survives)' ($winExit -eq 0)
 

@@ -59,7 +59,7 @@ $fixture = @'
 $orig = $fixture | ConvertFrom-Json
 
 function Run-Switch([string[]]$SwitchArgs) {
-  $out = & $Exe @SwitchArgs 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @SwitchArgs 2>&1 | ForEach-Object { "$_" } } | Out-String
   return [pscustomobject]@{ Out = $out; Code = $LASTEXITCODE }
 }
 function Json-Eq($a, $b) { return (($a | ConvertTo-Json -Depth 20 -Compress) -eq ($b | ConvertTo-Json -Depth 20 -Compress)) }

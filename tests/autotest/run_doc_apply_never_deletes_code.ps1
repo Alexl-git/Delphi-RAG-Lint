@@ -116,7 +116,7 @@ end.
 "@
 
 $db = Join-Path $scratch 'g.sqlite'
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 function CodeLines([string]$Path) {
   # Every line that is NOT a /// comment -- exactly what the guard protects.
@@ -127,7 +127,7 @@ $beforeCode  = CodeLines $unit
 $beforeBytes = [System.IO.File]::ReadAllBytes($unit)
 
 Write-Host "`n--- C1: an ordinary apply still works ---" -ForegroundColor Cyan
-$out1 = & $exePath document --unit $unit --apply --no-backup --db $db 2>&1 | Out-String
+$out1 = & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $unit --apply --no-backup --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 $code1 = CodeLines $unit
 Check 'C1 the run reports edits applied' ($out1 -match 'edit\(s\) applied') ($out1.Trim())
 Check 'C1 it really wrote managed blocks' ([bool](Select-String -LiteralPath $unit -Pattern 'drag-lint:auto BEGIN' -Quiet)) 'no managed block means the run did nothing and C1 proves nothing'
@@ -176,7 +176,7 @@ end;
 
 end.
 "@
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $armedCode  = CodeLines $unit2
 $armedBytes = [System.IO.File]::ReadAllBytes($unit2)
 $unit = $unit2   # everything below asserts against the fresh unit
@@ -273,7 +273,7 @@ Check 'R control: the fixture really carries a lone CR' `
   'without an unpaired CR this case tests nothing'
 Check 'R control: the fixture has 3 packed declarations' ($rDecls -eq 3) 'the skew must have a declaration to land on'
 
-& $exePath index $srcR --db (Join-Path $scratch 'r.sqlite') 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $srcR --db (Join-Path $scratch 'r.sqlite') 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $logR = Join-Path $scratch 'lonecr.log'
 cmd /c "`"$exePath`" document --unit `"$unitR`" --apply --no-backup --db `"$(Join-Path $scratch 'r.sqlite')`" > `"$logR`" 2>&1" | Out-Null
 $codeR = $LASTEXITCODE

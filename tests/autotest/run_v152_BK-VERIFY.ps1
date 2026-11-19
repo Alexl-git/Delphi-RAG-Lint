@@ -62,10 +62,10 @@ end.
     [IO.File]::WriteAllText($u, (($Unit -replace "`r`n", "`n") -replace "`n", "`r`n"), $Ascii)
     [IO.File]::WriteAllText($dpr, "program SeamTmp;`r`nuses`r`n  uSeamTmp in 'uSeamTmp.pas';`r`nbegin`r`nend.`r`n", $Ascii)
     if (Test-Path $db) { [IO.File]::Delete($db) }
-    & $Exe index --project $dpr --db $db 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $Exe index --project $dpr --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   }
   function Fix-Line6 {
-    (& $Exe lint --file $u --db $db --fix --fix-line 6 --fix-rule const-casing --apply --no-compile-gate 2>&1 | Out-String)
+    (& { $ErrorActionPreference = 'Continue'; & $Exe lint --file $u --db $db --fix --fix-line 6 --fix-rule const-casing --apply --no-compile-gate 2>&1 | ForEach-Object { "$_" } } | Out-String)
   }
 
   # A2 first: the positive control (no seam -> refused, file untouched)
@@ -96,8 +96,8 @@ try {
   function Fix-B {
     [IO.File]::Copy($FxUnit, $ub, $true)
     if (Test-Path $dbB) { [IO.File]::Delete($dbB) }
-    & $Exe index $workB --db $dbB 2>&1 | Out-Null
-    $o = (& $Exe lint --in $ub --db $dbB --enable redundant-as-tobject --fix --fix-rule redundant-as-tobject --fix-line 27 --apply --no-backup 2>&1 | Out-String)
+    & { $ErrorActionPreference = 'Continue'; & $Exe index $workB --db $dbB 2>&1 | ForEach-Object { "$_" } } | Out-Null
+    $o = (& { $ErrorActionPreference = 'Continue'; & $Exe lint --in $ub --db $dbB --enable redundant-as-tobject --fix --fix-rule redundant-as-tobject --fix-line 27 --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-String)
     return @{ Code = $LASTEXITCODE; Out = $o; Line = ([IO.File]::ReadAllLines($ub)[26].Trim()) }
   }
   $env:DRAGLINT_RENAME_TEST_UNGATED = $null

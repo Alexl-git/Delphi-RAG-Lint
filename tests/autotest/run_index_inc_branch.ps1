@@ -50,7 +50,7 @@ $proj = Join-Path $fx 'app\IncBranch.dproj'
 
 function Run([string[]]$argv, [string]$tag) {
   Push-Location $WorkDir
-  try { $o = & $Exe @argv 2>&1 | Out-String } finally { Pop-Location }
+  try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe @argv 2>&1 | ForEach-Object { "$_" } } | Out-String } finally { Pop-Location }
   [IO.File]::WriteAllText((Join-Path $WorkDir "$tag.log"), $o)
   return $o
 }
@@ -60,7 +60,7 @@ function Index([string]$db, [string]$plat, [string]$tag, [string[]]$extra = @())
 # sql --json rows are POSITIONAL arrays (see feedback_sql_json_rows_are_positional).
 function Col0([string]$db, [string]$q) {
   Push-Location $WorkDir
-  try { $j = & $Exe sql --db $db --query $q --json 2>$null | Out-String } finally { Pop-Location }
+  try { $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query $q --json 2>$null } | Out-String } finally { Pop-Location }
   try { return ,@((($j | ConvertFrom-Json).rows) | ForEach-Object { [string]$_[0] }) } catch { return ,@() }
 }
 function IncLeaves([string]$db) {

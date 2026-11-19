@@ -58,7 +58,7 @@ function ParseJsonArray([string]$raw) {
 
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 $Exe = (Resolve-Path $Exe).Path
-Write-Host ("engine: " + (& $Exe --version 2>$null | Select-Object -First 1))
+Write-Host ("engine: " + (& { $ErrorActionPreference = 'Continue'; & $Exe --version 2>$null } | Select-Object -First 1))
 
 if (Test-Path $WorkDir) { [System.IO.Directory]::Delete($WorkDir, $true) }
 New-Item -ItemType Directory $WorkDir | Out-Null
@@ -168,47 +168,47 @@ $db    = Join-Path $WorkDir 'fw.sqlite'
 $dbRed = Join-Path $WorkDir 'fw_red.sqlite'
 Push-Location $WorkDir
 try {
-  & $Exe index $srcDir --db $db    2>&1 | Out-Null
-  & $Exe index $redDir --db $dbRed 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $srcDir --db $db    2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $redDir --db $dbRed 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'both indexes built' ((Test-Path $db) -and (Test-Path $dbRed))
 
   # ============================================================= CASE A =====
   Write-Host ''
   Write-Host 'CASE A: query --exact folds the stub into the real declaration' -ForegroundColor Cyan
-  $foo = @(ParseJsonArray ((& $Exe query --name TFoo --exact --json --db $db 2>$null | Out-String)) | Where-Object { $_.qualified_name -eq 'fwstub.TFoo' })
+  $foo = @(ParseJsonArray ((& { $ErrorActionPreference = 'Continue'; & $Exe query --name TFoo --exact --json --db $db 2>$null } | Out-String)) | Where-Object { $_.qualified_name -eq 'fwstub.TFoo' })
   Check 'S1: exactly ONE fwstub.TFoo row' ($foo.Count -eq 1) "rows=$($foo.Count)"
   if ($foo.Count -ge 1) {
     Check 'S1: the row is the REAL declaration'   ($foo[0].start_line -eq $realLine) "start_line=$($foo[0].start_line) real=$realLine"
     Check 'S1: forward_line = the stub''s line'   ($foo[0].forward_line -eq $stubLine) "forward_line=$($foo[0].forward_line) stub=$stubLine"
     Check 'S1: heritage survives (it is the real row)' ($foo[0].heritage -eq 'TObject') "heritage=$($foo[0].heritage)"
   }
-  $ifoo = @(ParseJsonArray ((& $Exe query --name IFoo --exact --json --db $db 2>$null | Out-String)) | Where-Object { $_.qualified_name -eq 'fwstub.IFoo' })
+  $ifoo = @(ParseJsonArray ((& { $ErrorActionPreference = 'Continue'; & $Exe query --name IFoo --exact --json --db $db 2>$null } | Out-String)) | Where-Object { $_.qualified_name -eq 'fwstub.IFoo' })
   Check 'S7: exactly ONE fwstub.IFoo row' ($ifoo.Count -eq 1) "rows=$($ifoo.Count)"
   if ($ifoo.Count -ge 1) {
     Check 'S7: kind interface, the real row'     (($ifoo[0].kind -eq 'interface') -and ($ifoo[0].start_line -eq $iRealLine)) "kind=$($ifoo[0].kind) start_line=$($ifoo[0].start_line)"
     Check 'S7: forward_line = the interface stub''s line' ($ifoo[0].forward_line -eq $iStubLine) "forward_line=$($ifoo[0].forward_line)"
   }
-  $only = @(ParseJsonArray ((& $Exe query --name TOnlyStub --exact --json --db $db 2>$null | Out-String)))
+  $only = @(ParseJsonArray ((& { $ErrorActionPreference = 'Continue'; & $Exe query --name TOnlyStub --exact --json --db $db 2>$null } | Out-String)))
   Check 'S2 POSITIVE CONTROL: lone TOnlyStub returned once, as a class' (($only.Count -eq 1) -and ($only[0].kind -eq 'class')) "rows=$($only.Count)"
   if ($only.Count -ge 1) { Check 'S2: no forward_line on a lone stub' (($null -eq $only[0].forward_line) -or ($only[0].forward_line -eq 0)) "forward_line=$($only[0].forward_line)" }
-  $empty = @(ParseJsonArray ((& $Exe query --name TEmpty --exact --json --db $db 2>$null | Out-String)))
+  $empty = @(ParseJsonArray ((& { $ErrorActionPreference = 'Continue'; & $Exe query --name TEmpty --exact --json --db $db 2>$null } | Out-String)))
   Check 'S3 POSITIVE CONTROL: TEmpty returned once, as a class' (($empty.Count -eq 1) -and ($empty[0].kind -eq 'class')) "rows=$($empty.Count)"
   if ($empty.Count -ge 1) { Check 'S3: no forward_line on an empty class' (($null -eq $empty[0].forward_line) -or ($empty[0].forward_line -eq 0)) }
   # qualified-name path (hover, document, refactor use this one)
-  $q = @(ParseJsonArray ((& $Exe query --qname fwstub.TFoo --exact --json --db $db 2>$null | Out-String)) | Where-Object { $_.qualified_name -eq 'fwstub.TFoo' })
+  $q = @(ParseJsonArray ((& { $ErrorActionPreference = 'Continue'; & $Exe query --qname fwstub.TFoo --exact --json --db $db 2>$null } | Out-String)) | Where-Object { $_.qualified_name -eq 'fwstub.TFoo' })
   Check 'S1 via --qname: one row, the real one, forward_line set' (($q.Count -eq 1) -and ($q[0].start_line -eq $realLine) -and ($q[0].forward_line -eq $stubLine)) "rows=$($q.Count)"
   # text table
-  $txt = (& $Exe query --name TFoo --exact --db $db 2>$null | Out-String)
+  $txt = (& { $ErrorActionPreference = 'Continue'; & $Exe query --name TFoo --exact --db $db 2>$null } | Out-String)
   $fooLines = @($txt -split "`r?`n" | Where-Object { $_ -match '\bfwstub\.TFoo\b' -and $_ -notmatch 'fwstub\.TFoo\.' })
   Check 'text: one fwstub.TFoo row' ($fooLines.Count -eq 1) "rows=$($fooLines.Count)"
   if ($fooLines.Count -ge 1) { Check "text: row ends with 'forward at line $stubLine'" ($fooLines[0] -match "forward at line $stubLine\s*$") "got: [$($fooLines[0])]" }
-  $txtEmpty = (& $Exe query --name TEmpty --exact --db $db 2>$null | Out-String)
+  $txtEmpty = (& { $ErrorActionPreference = 'Continue'; & $Exe query --name TEmpty --exact --db $db 2>$null } | Out-String)
   Check 'text: no forward marker on TEmpty' ($txtEmpty -notmatch 'forward at line')
 
   # RED CONTROL -- the real TFoo removed: the stub is now LONE and must be a class
   Write-Host ''
   Write-Host 'CASE A-red: without the real TFoo the stub is a lone stub (S2), so S1 would go red here' -ForegroundColor Cyan
-  $redFoo = @(ParseJsonArray ((& $Exe query --name TFoo --exact --json --db $dbRed 2>$null | Out-String)) | Where-Object { $_.qualified_name -eq 'fwstub.TFoo' })
+  $redFoo = @(ParseJsonArray ((& { $ErrorActionPreference = 'Continue'; & $Exe query --name TFoo --exact --json --db $dbRed 2>$null } | Out-String)) | Where-Object { $_.qualified_name -eq 'fwstub.TFoo' })
   Check 'red: one fwstub.TFoo row (the stub itself)' ($redFoo.Count -eq 1) "rows=$($redFoo.Count)"
   if ($redFoo.Count -ge 1) {
     Check 'red: it is the stub line'               ($redFoo[0].start_line -eq $stubLine)
@@ -248,14 +248,14 @@ Push-Location $WorkDir
 try {
   Write-Host ''
   Write-Host 'CASE B: hover renders the REAL declaration' -ForegroundColor Cyan
-  $hj = (& $Exe hover --qname fwstub.TFoo --db $db --format json 2>$null | Out-String)
+  $hj = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname fwstub.TFoo --db $db --format json 2>$null } | Out-String)
   $ho = $null; try { $ho = $hj.Trim() | ConvertFrom-Json } catch {}
   Check 'S4: hover --qname fwstub.TFoo answered JSON' ($null -ne $ho) "got: [$($hj.Substring(0, [Math]::Min(120, $hj.Length)))]"
   if ($ho) {
     Check 'S4: def_line is the REAL declaration, not the stub' ($ho.def_line -eq $realLine) "def_line=$($ho.def_line) real=$realLine stub=$stubLine"
     Check 'S4: kind class' ($ho.kind -eq 'class')
   }
-  $hji = (& $Exe hover --qname fwstub.IFoo --db $db --format json 2>$null | Out-String)
+  $hji = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname fwstub.IFoo --db $db --format json 2>$null } | Out-String)
   $hoi = $null; try { $hoi = $hji.Trim() | ConvertFrom-Json } catch {}
   Check 'S7: hover --qname fwstub.IFoo def_line is the real interface' (($null -ne $hoi) -and ($hoi.def_line -eq $iRealLine)) "def_line=$($hoi.def_line)"
 
@@ -286,7 +286,7 @@ Push-Location $WorkDir
 try {
   Write-Host ''
   Write-Host 'CASE C: ClassMetrics measures the real TFoo once, the stub never' -ForegroundColor Cyan
-  $la = (& $Exe lint-all --db $db --quiet 2>$null | Out-String)
+  $la = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --quiet 2>$null } | Out-String)
   $tmc = @($la -split "`r?`n" | Where-Object { $_ -match 'too-many-children' })
   Check 'S5 POSITIVE CONTROL: too-many-children fires (11 kids > threshold 10)' ($tmc.Count -ge 1) "rows=$($tmc.Count)"
   Check 'S5: it fires exactly ONCE (the target measured once)' ($tmc.Count -eq 1) "rows=$($tmc.Count)"
@@ -303,7 +303,7 @@ try {
   Write-Host ''
   Write-Host 'CASE D: outline lists both rows and tags the stub' -ForegroundColor Cyan
   $fixFile = Join-Path $srcDir 'fwstub.pas'
-  $oj = @(ParseJsonArray ((& $Exe outline --file $fixFile --db $db --format json 2>$null | Out-String)))
+  $oj = @(ParseJsonArray ((& { $ErrorActionPreference = 'Continue'; & $Exe outline --file $fixFile --db $db --format json 2>$null } | Out-String)))
   $ofoo = @($oj | Where-Object { $_.qname -eq 'fwstub.TFoo' } | Sort-Object line)
   Check 'S6: outline keeps BOTH fwstub.TFoo rows' ($ofoo.Count -eq 2) "rows=$($ofoo.Count)"
   if ($ofoo.Count -eq 2) {
@@ -316,7 +316,7 @@ try {
   Check 'S2 control: lone stub listed once, untagged' (($oonly.Count -eq 1) -and ($null -eq $oonly[0].forward_target_line))
   $oempty = @($oj | Where-Object { $_.qname -eq 'fwstub.TEmpty' })
   Check 'S3 control: empty class listed once, untagged' (($oempty.Count -eq 1) -and ($null -eq $oempty[0].forward_target_line))
-  $ot = (& $Exe outline --file $fixFile --db $db 2>$null | Out-String)
+  $ot = (& { $ErrorActionPreference = 'Continue'; & $Exe outline --file $fixFile --db $db 2>$null } | Out-String)
   $otFoo = @($ot -split "`r?`n" | Where-Object { $_ -match '\s+fwstub\.TFoo\s' })
   Check 'S6 text: two TFoo rows' ($otFoo.Count -eq 2) "rows=$($otFoo.Count)"
   Check "S6 text: the stub row ends with '[forward -> line $realLine]'" (@($otFoo | Where-Object { $_ -match "^\S+\s+fwstub\.TFoo\s+$stubLine\s+\[forward -> line $realLine\]\s*$" }).Count -eq 1) "got: [$($otFoo -join ' | ')]"
@@ -388,7 +388,7 @@ end.
   WriteAnsi $probeFile $probe
   Copy-Item (Join-Path $srcDir 'fwstub.pas') (Join-Path $probeDir 'fwstub.pas')
   $dbE = Join-Path $WorkDir 'fwprobe.sqlite'
-  & $Exe index $probeDir --db $dbE 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $probeDir --db $dbE 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'probe index built (owns the probe)' (Test-Path $dbE)
   $pl = [System.IO.File]::ReadAllLines($probeFile)
   $fooLine0 = -1; $onlyLine0 = -1

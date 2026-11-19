@@ -149,14 +149,14 @@ end.
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   Check 'fixture indexed' (Test-Path $db)
 
   # `document --qname` renders the block WITHOUT writing it, which is what we
   # want: the assertion is about what the emitter produces, not about a
   # rewrite round-trip (that is run_doc_idempotent's job).
   function DocFor([string]$QName) {
-    return (& $exePath document --qname $QName --db $db 2>$null | Out-String)
+    return (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname $QName --db $db 2>$null } | Out-String)
   }
   # The emitter WRAPS a long tag body across `/// ` continuation lines, so a
   # message can be split mid-sentence:
@@ -255,7 +255,7 @@ try {
   # MineRaises is what ddExceptionNotRaised consumes and it must be untouched:
   # a hand-written cref for a class the body never raises must still be
   # reported. Wrapped raises Exception, so a cref for ENever must fire.
-  $drift = & $exePath doc-drift --qname 'excmsg.Wrapped' --db $db --json 2>$null | Out-String
+  $drift = & { $ErrorActionPreference = 'Continue'; & $exePath doc-drift --qname 'excmsg.Wrapped' --db $db --json 2>$null } | Out-String
   Check 'doc-drift still answers for this fixture' `
     ($null -ne $drift) 'doc-drift produced nothing at all'
 

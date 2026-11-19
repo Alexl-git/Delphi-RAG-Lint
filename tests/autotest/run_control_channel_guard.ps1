@@ -268,7 +268,7 @@ $declCol   = $projLines[$declLine].IndexOf('.ProjectOwnMethod') + 3
 $uri       = 'file:///' + ($projFile -replace '\\', '/')
 
 $pristine = Join-Path $WorkDir 'pristine.sqlite'
-$o0 = (& $Exe index "$WorkDir\projsrc" --db $pristine 2>&1 | Out-String)
+$o0 = (& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\projsrc" --db $pristine 2>&1 | ForEach-Object { "$_" } } | Out-String)
 Check 'V1 fixture index exits 0' ($LASTEXITCODE -eq 0) ($o0 -split "`r?`n" | Select-Object -Last 1)
 Check 'V2 fixture is populated and WAL' ((Test-Path $pristine) -and ((Get-Item $pristine).Length -gt 4096)) ''
 
@@ -523,12 +523,12 @@ for ($i = 1; $i -le $nBig; $i++) {
 function IntegrityOk([string]$Db) {
   # sqlite3's own PRAGMA integrity_check, through Python's stdlib (the sql verb refuses PRAGMA by design).
   try {
-    $o = (& python -I -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); print(c.execute('PRAGMA integrity_check').fetchone()[0])" $Db 2>$null | Out-String).Trim()
+    $o = (& { $ErrorActionPreference = 'Continue'; & python -I -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); print(c.execute('PRAGMA integrity_check').fetchone()[0])" $Db 2>$null } | Out-String).Trim()
   } catch { return $false }
   return ($o -eq 'ok')
 }
 function FilesIn([string]$Db) {
-  $o = (& $script:Exe sql --query "SELECT count(*) AS n FROM files" --db $Db --json 2>$null | Out-String) -replace '\s', ''
+  $o = (& { $ErrorActionPreference = 'Continue'; & $script:Exe sql --query "SELECT count(*) AS n FROM files" --db $Db --json 2>$null } | Out-String) -replace '\s', ''
   if ($o -match '"rows":\[\[(\d+)\]') { return [int]$Matches[1] }
   return -1
 }$slowIdx = @{ DRAGLINT_TEST_INDEX_FILE_DELAY_MS = '200' }
@@ -588,7 +588,7 @@ function Start-FromTarget([string]$Target, [string[]]$ArgList, [string]$Tag, [ha
 }
 # -StandDownScope names this run's own database, so the test never stands down the owner's real IDE engines.
 function Run-Stager([string]$Target, [string]$Db) {
-  $o = & pwsh -NoProfile -File $stager -FreshExe $Exe -Target $Target -TimeoutSec 150 -HoldSeconds 1 -StandDownWaitSec 120 -StandDownDb $Db 2>&1 | Out-String
+  $o = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $stager -FreshExe $Exe -Target $Target -TimeoutSec 150 -HoldSeconds 1 -StandDownWaitSec 120 -StandDownDb $Db 2>&1 | ForEach-Object { "$_" } } | Out-String
   return @{ Exit = $LASTEXITCODE; Out = $o }
 }
 $stDb = Join-Path $WorkDir 'st1.sqlite'

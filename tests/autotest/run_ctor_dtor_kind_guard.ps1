@@ -108,12 +108,12 @@ $src = @(
 [System.IO.File]::WriteAllText($unit, $src + "`r`n", [System.Text.Encoding]::ASCII)
 
 $db = Join-Path $WorkDir 'ctorkinds.sqlite'
-& $Exe index $unit --db $db *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $unit --db $db *> $null }
 Check 'fixture indexed' (Test-Path $db) $db
 if (-not (Test-Path $db)) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 
 function KindOf([string]$name) {
-  $j = & $Exe query --name $name --db $db --json 2>$null | Out-String
+  $j = & { $ErrorActionPreference = 'Continue'; & $Exe query --name $name --db $db --json 2>$null } | Out-String
   $o = $null; try { $o = $j | ConvertFrom-Json } catch { }
   if ($null -eq $o) { return '<no json>' }
   $rows = @($o | Where-Object { $_.name -eq $name })

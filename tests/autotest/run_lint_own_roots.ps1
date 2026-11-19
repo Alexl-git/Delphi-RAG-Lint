@@ -2,7 +2,7 @@ try {
 $Exe = . "$PSScriptRoot\_manifest_common.ps1"
 $fx  = "$PSScriptRoot\..\fixtures\own-roots"
 
-$ur = & $Exe selftest own-roots --dir $fx 2>&1 | Out-String
+$ur = & { $ErrorActionPreference = 'Continue'; & $Exe selftest own-roots --dir $fx 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'own-roots selftest' ($ur -match 'OWNROOTS-OK')
 
 # Index the fixture project INTO its _D-RAG home, the way the real layout works.
@@ -14,7 +14,7 @@ Check 'fixture indexed' (Test-Path $db)
 $rep = Join-Path $env:TEMP "draglint_ownroots_report_$PID.txt"
 
 # 1. Bare run: vendor\ is outside the declared roots, so it is skipped and named.
-$bare = & $Exe lint-all --db $db --output $rep --quiet 2>&1 | Out-String
+$bare = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --output $rep --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String
 # ANCHORED, not MENTIONED. This asserted `-notmatch 'Vendor\.pas'` until
 # 2026-08-31, which conflated two different things: ownRoots governs which files
 # are REPORTED ON, never which files a message may name.
@@ -69,7 +69,7 @@ Check 'store rule fires on our own dead export'  ((Get-Content $rep -Raw) -match
 Check 'store rule silent on vendor dead export'  ((Get-Content $rep -Raw) -notmatch 'Vendor\.pas.*unused-public-symbol')
 
 # 3. --lint-third-party restores the old behaviour.
-$all = & $Exe lint-all --db $db --output $rep --quiet --lint-third-party 2>&1 | Out-String
+$all = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --output $rep --quiet --lint-third-party 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'third-party flag re-includes' ((Get-Content $rep -Raw) -match 'Vendor\.pas')
 Check 'clone found when included'    ((Get-Content $rep -Raw) -match 'duplicate-code')
 Check 'store rule fires on vendor when included' ((Get-Content $rep -Raw) -match 'Vendor\.pas.*unused-public-symbol')
@@ -79,7 +79,7 @@ $decl = Join-Path $fx 'proj\_D-RAG\drag-lint-project.json'
 $keep = Get-Content $decl -Raw
 try {
     Set-Content -LiteralPath $decl -Value '{ "ownRoots": [] }' -NoNewline
-    $bad = & $Exe lint-all --db $db --output $rep --quiet 2>&1 | Out-String
+    $bad = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --output $rep --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String
     Check 'empty ownRoots exits 2'   ($LASTEXITCODE -eq 2)
     Check 'empty ownRoots explains'  ($bad -match 'ownRoots')
 } finally { Set-Content -LiteralPath $decl -Value $keep -NoNewline }
@@ -125,11 +125,11 @@ try {
     $repM = Join-Path $work5 'reportM.txt'
     Push-Location $work5
     try {
-        $bareM = & $Exe lint-all --db $dbM --output $repM --quiet 2>&1 | Out-String
+        $bareM = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $dbM --output $repM --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String
         Check 'manifest fallback: vendor sibling skipped' ($bareM -notmatch 'VendorM\.pas')
         Check 'manifest fallback: skip line present' ($bareM -match "outside the project's own roots skipped")
 
-        $allM = & $Exe lint-all --db $dbM --output $repM --quiet --lint-third-party 2>&1 | Out-String
+        $allM = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $dbM --output $repM --quiet --lint-third-party 2>&1 | ForEach-Object { "$_" } } | Out-String
         Check 'manifest fallback: --lint-third-party restores vendor sibling' ((Get-Content $repM -Raw) -match 'VendorM\.pas')
     } finally { Pop-Location }
 } finally {

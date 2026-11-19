@@ -16,12 +16,12 @@ $fail = 0
 function Check($n, $ok) { if ($ok) { Write-Host "  [PASS] $n" -ForegroundColor Green } else { Write-Host "  [FAIL] $n" -ForegroundColor Red; $script:fail++ } }
 Push-Location $work
 try {
-  $null = & $Exe index . --db db.sqlite --library-db none 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index . --db db.sqlite --library-db none 2>&1 | ForEach-Object { "$_" } }
   foreach ($form in @(@('--qname'), @('--kind', 'symbol', '--qname'))) {
-    $o = (& $Exe rename @form 'RtA.Go.Tmp' --to Acc --db db.sqlite --library-db none --dry-run 2>&1 | Out-String)
+    $o = (& { $ErrorActionPreference = 'Continue'; & $Exe rename @form 'RtA.Go.Tmp' --to Acc --db db.sqlite --library-db none --dry-run 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check "local via $($form -join ' '): 5 edits incl. the inactive branch, no refusal" (($o -match 'Dry run: 5 edit') -and ($o -match 'L18:C3') -and ($o -notmatch 'refused'))
   }
-  $o = (& $Exe rename --qname RtA.Glob --to G2 --db db.sqlite --library-db none --dry-run 2>&1 | Out-String)
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe rename --qname RtA.Glob --to G2 --db db.sqlite --library-db none --dry-run 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check 'control: a unit-level variable stays refused [no-ref-occurrence]' ($o -match 'refused \[no-ref-occurrence\]')
 } finally { Pop-Location }
 if ($fail) { Write-Host "FAIL: $fail" -ForegroundColor Red; exit 1 }; Write-Host 'PASS' -ForegroundColor Green

@@ -46,7 +46,7 @@ function New-Copy([string]$Name) {
 }
 function Invoke-Index([string]$Dir) {
   $env:UW_HIDDEN = ''
-  $null = & $Exe index --project "$Dir\UwDemo.dproj" --db "$Dir\uw.sqlite" 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index --project "$Dir\UwDemo.dproj" --db "$Dir\uw.sqlite" 2>&1 | ForEach-Object { "$_" } }
   $env:UW_HIDDEN = 'hidden'
   if ($LASTEXITCODE -ne 0) { throw "index failed in $Dir" }
 }
@@ -60,7 +60,7 @@ function Build-And-Run([string]$Dir) {
   return (& $found.FullName | Out-String)
 }
 function Invoke-Fix([string]$Dir, [string[]]$Extra) {
-  $o = & $Exe lint "$Dir\UwCases.pas" --fix --db "$Dir\uw.sqlite" @Extra 2>&1 | Out-String
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe lint "$Dir\UwCases.pas" --fix --db "$Dir\uw.sqlite" @Extra 2>&1 | ForEach-Object { "$_" } } | Out-String
   $script:FixCode = $LASTEXITCODE
   return $o
 }

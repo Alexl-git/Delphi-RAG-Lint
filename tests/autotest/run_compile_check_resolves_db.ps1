@@ -71,7 +71,7 @@ W $good @('program Tiny;','','{$APPTYPE CONSOLE}','','begin',"  Writeln('hi');",
 Write-Host ''
 Write-Host 'THE FIX -- a compile with nowhere to cache still REPORTS' -ForegroundColor Cyan
 
-$out1 = (& $Exe compile-check $good --format json 2>&1 | Out-String)
+$out1 = (& { $ErrorActionPreference = 'Continue'; & $Exe compile-check $good --format json 2>&1 | ForEach-Object { "$_" } } | Out-String)
 $code1 = $LASTEXITCODE
 
 Check '1. does NOT exit 2 (the old "no --db" bail)' `
@@ -99,7 +99,7 @@ Write-Host 'CONTROLS' -ForegroundColor Cyan
 # "clean", not "inert".
 $bad = Join-Path $work 'Broken.dpr'
 W $bad @('program Broken;','','{$APPTYPE CONSOLE}','','begin','  ThisIdentifierDoesNotExist;','end.')
-$out2 = (& $Exe compile-check $bad --format json 2>&1 | Out-String)
+$out2 = (& { $ErrorActionPreference = 'Continue'; & $Exe compile-check $bad --format json 2>&1 | ForEach-Object { "$_" } } | Out-String)
 $code2 = $LASTEXITCODE
 
 Check '5. positive control: a real compile ERROR comes back as JSON' `
@@ -112,8 +112,8 @@ Check '6. positive control: an error run exits 1, so exit codes still mean somet
 # NARROWNESS. An explicit --db must still be honoured and must NOT print the
 # skip warning -- otherwise check 4 would pass for a build that ignores --db.
 $db = Join-Path $work 'cache.sqlite'
-& $Exe index $work --db $db --rebuild *> $null
-$out3 = (& $Exe compile-check $good --db $db --format json 2>&1 | Out-String)
+& { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db --rebuild *> $null }
+$out3 = (& { $ErrorActionPreference = 'Continue'; & $Exe compile-check $good --db $db --format json 2>&1 | ForEach-Object { "$_" } } | Out-String)
 
 Check '7. an explicit --db is honoured (no skip warning)' `
       ($out3 -notmatch 'no database resolved for this target') `

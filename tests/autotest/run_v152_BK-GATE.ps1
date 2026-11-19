@@ -53,14 +53,14 @@ function New-Fx([string]$Tag) {
   $dpr = Join-Path $d 'NarrowParam.dpr'
   [IO.File]::WriteAllText($dpr, [IO.File]::ReadAllText($dpr).Replace("NpUse in 'NpUse.pas';", "NpUse in 'NpUse.pas',`r`n  Basic in 'Basic.pas';"), [Text.Encoding]::ASCII)
   $db = Join-Path $d 'p.sqlite'
-  & $Exe index --project (Join-Path $d 'NarrowParam.dproj') --db $db --library-db none *> (Join-Path $Tmp "$Tag.index.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $d 'NarrowParam.dproj') --db $db --library-db none *> (Join-Path $Tmp "$Tag.index.log") }
   if ($LASTEXITCODE -ne 0) { throw "index $Tag exit $LASTEXITCODE" }
   $lines = $t -split "`r`n"
   $from = ([Array]::FindIndex($lines, [Predicate[string]] { param($l) $l -match 't := a \+ 1' })) + 1
   return @{ Dir = $d; Db = $db; Proj = (Join-Path $d 'NarrowParam.dproj'); Basic = $b; From = $from }
 }
 function Run([string[]]$CliArgs) {
-  $out = (& $Exe @CliArgs 2>&1 | Out-String)
+  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe @CliArgs 2>&1 | ForEach-Object { "$_" } } | Out-String)
   return @{ Code = $LASTEXITCODE; Out = $out }
 }
 
@@ -85,7 +85,7 @@ try {
     $isParked = $parked -and (Test-Path $flag) -and -not $run.HasExited
     Check 'S0 setup: the after-build parked' $isParked
     if ($isParked) {
-      $null = & $Exe shutdown --db $P.Db --wait 60 2>&1
+      $null = & { $ErrorActionPreference = 'Continue'; & $Exe shutdown --db $P.Db --wait 60 2>&1 | ForEach-Object { "$_" } }
       $ended = Wait-For { $run.HasExited } 60
       $code = if ($ended) { $run.ExitCode } else { try { $run.Kill() } catch { }; $null }
       Check 'S1 shutdown stops it: exit 1 (rolled back), not killed' ($code -eq 1) "exit $code"
@@ -105,7 +105,7 @@ try {
   $u = Join-Path $d 'redundant_parens.pas'
   [IO.File]::WriteAllText($u, $src, [Text.Encoding]::ASCII)
   $db = Join-Path $d 'loose.sqlite'
-  & $Exe index $d --db $db --library-db none *> (Join-Path $Tmp 'b23.index.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $d --db $db --library-db none *> (Join-Path $Tmp 'b23.index.log') }
   $fixArgs = @('lint', '--file', $u, '--db', $db, '--library-db', 'none', '--fix', '--fix-line', '7', '--fix-rule', 'redundant-parentheses', '--apply')
   $before = Tree-Hash $d
   $r = Run $fixArgs

@@ -81,7 +81,7 @@ end.
 [IO.File]::WriteAllText($fix, (($src -replace "`r`n", "`n") -replace "`n", "`r`n"), [Text.Encoding]::ASCII)
 
 $errFile = Join-Path $WorkDir 'stderr.txt'
-$out = (& $Exe lint $fix --rule public-field --rules-dir $RulesDir 2>$errFile | Out-String) -replace "`r`n", "`n"
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fix --rule public-field --rules-dir $RulesDir 2>$errFile } | Out-String) -replace "`r`n", "`n"
 $hits = @($out -split "`n" | Where-Object { $_ -match 'public-field:' })
 Write-Host ("  findings:`n    " + ($hits -join "`n    ")) -ForegroundColor DarkGray
 

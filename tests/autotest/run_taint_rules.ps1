@@ -37,7 +37,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
   if ($Ok) { Write-Host "PASS  $Name" } else { Write-Host "FAIL  $Name  $Detail"; $script:fail++ }
 }
 function TaintFindings([string[]]$CliArgs) {
-  $raw = & $exePath @CliArgs 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath @CliArgs 2>$null }
   $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
   $all = @(); if ($b -ge 0) { try { $all = @($txt.Substring($b) | ConvertFrom-Json) } catch { $all = @() } }
   return ,@($all | Where-Object { $_.rule -like 'taint-*' })
@@ -51,8 +51,8 @@ function InUnit($List, [string]$Unit) {
 
 Push-Location $env:TEMP
 try {
-  & $exePath index $fx    --db $db  2>&1 | Out-Null
-  & $exePath index $libFx --db $lib 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $fx    --db $db  2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $libFx --db $lib 2>&1 | ForEach-Object { "$_" } } | Out-Null
   # lint-all takes its library store as a SECOND --db (SplitConsumerDbs); --library-db is the
   # lint <file> switch (LintLibraryDb). Either way never the machine's real library index.
   $common = @('--db', $db, '--db', $lib, '--json', '--quiet')
@@ -65,17 +65,17 @@ try {
   $stale = Join-Path $tmp 'stale.sqlite'
   [IO.File]::Copy($db, $stale, $true)
   $emptyFlows = 'import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute("DELETE FROM data_flows"); c.commit(); print(c.execute("SELECT COUNT(*) FROM data_flows").fetchone()[0])'
-  $n = (& python -I -c $emptyFlows $stale 2>&1) -join ' '
+  $n = (& { $ErrorActionPreference = 'Continue'; & python -I -c $emptyFlows $stale 2>&1 | ForEach-Object { "$_" } }) -join ' '
   Check 'stale copy: data_flows emptied' ($n -eq '0') "python said: $n"
   $err = Join-Path $tmp 'stale.err'
-  $raw = & $exePath lint-all --db $stale --db $lib --json --quiet --config $empty 2>$err
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $stale --db $lib --json --quiet --config $empty 2>$err }
   $staleNote = (Get-Content $err -Raw) -match $staleNoteRx
   $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
   $pre = @(); if ($b -ge 0) { $pre = @($txt.Substring($b) | ConvertFrom-Json | Where-Object { $_.rule -like 'taint-*' }) }
   Check 'stale index: one note on stderr' $staleNote "expected `"$staleNoteRx`""
   Check 'stale index: no taint finding' ($pre.Count -eq 0) "got $($pre.Count)"
   $freshErr = Join-Path $tmp 'fresh.err'
-  & $exePath lint-all @common --config $empty 2>$freshErr | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all @common --config $empty 2>$freshErr } | Out-Null
   $freshNote = (Get-Content $freshErr -Raw) -match $staleNoteRx
   Check 'fresh index: no stale note (positive control)' (-not $freshNote) 'the note fired on an index the extractor filled'
 
@@ -86,20 +86,20 @@ try {
   [IO.File]::WriteAllText((Join-Path $tinyDir 'A.pas'), "unit A;`r`ninterface`r`nprocedure P1;`r`nprocedure P2;`r`nimplementation`r`nprocedure P1; begin end;`r`nprocedure P2; begin end;`r`nend.`r`n")
   [IO.File]::WriteAllText((Join-Path $tinyDir 'B.pas'), "unit B;`r`ninterface`r`nprocedure Q1;`r`nimplementation`r`nprocedure Q1; begin end;`r`nend.`r`n")
   $tinyDb = Join-Path $tmp 'tiny.sqlite'
-  & $exePath index $tinyDir --db $tinyDb 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $tinyDir --db $tinyDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $tinyErr = Join-Path $tmp 'tiny.err'
-  & $exePath lint-all --db $tinyDb --json --quiet --config $empty 2>$tinyErr | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $tinyDb --json --quiet --config $empty 2>$tinyErr } | Out-Null
   $tinyTxt = Get-Content $tinyErr -Raw
   Check 'tiny fresh index: note fires' ($tinyTxt -match $staleNoteRx) "stderr: $tinyTxt"
   Check 'tiny fresh index: note names the no-values cause' ($tinyTxt -match 'none of them passes a value') "stderr: $tinyTxt"
 
   if ($Mode -eq 'fixture') {
     # fixture mode measures the HAND rows only: drop what the extractor wrote first
-    $n = (& python -I -c $emptyFlows $db 2>&1) -join ' '
+    $n = (& { $ErrorActionPreference = 'Continue'; & python -I -c $emptyFlows $db 2>&1 | ForEach-Object { "$_" } }) -join ' '
     Check 'fixture: extractor rows cleared' ($n -eq '0') "python said: $n"
-    $n = (& python -I $rowsPy $db $fx taint 2>&1) -join ' '
+    $n = (& { $ErrorActionPreference = 'Continue'; & python -I $rowsPy $db $fx taint 2>&1 | ForEach-Object { "$_" } }) -join ' '
     Check 'fixture rows inserted (python sqlite3)' ($n -eq '50') "fixture_rows.py said: $n"
-    $n = (& python -I $rowsPy $lib $libFx minirtl 2>&1) -join ' '
+    $n = (& { $ErrorActionPreference = 'Continue'; & python -I $rowsPy $lib $libFx minirtl 2>&1 | ForEach-Object { "$_" } }) -join ' '
     Check 'mini-library rows inserted' ($n -eq '3') "fixture_rows.py said: $n"
   }
 

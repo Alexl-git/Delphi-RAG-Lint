@@ -48,7 +48,7 @@ $root = Join-Path $WorkDir 'circular-demo'
 New-Item -ItemType Directory -Force $root | Out-Null
 Get-ChildItem (Join-Path $Repo 'circular-demo') -File | ForEach-Object { Copy-Item $_.FullName (Join-Path $root $_.Name) -Force }
 $db = Join-Path $WorkDir 'demo.sqlite'
-& $Exe index --project (Join-Path $root 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir 'index1.log')
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir 'index1.log') }
 Check 'demo indexed' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 Write-Host '== (c) trailer on stderr' -ForegroundColor Cyan
@@ -68,12 +68,12 @@ Check 'b1 edge line names the routine and the interface unit' ($flat.Contains($w
 
 Write-Host '== (a) companion type after Part A' -ForegroundColor Cyan
 $before = (Get-ChildItem $root -Filter *.pas | Sort-Object Name | ForEach-Object { (Get-FileHash $_.FullName).Hash }) -join ','
-$fo = & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $p0.File -Cycle 1 -Root $root 2>&1 | Out-String
+$fo = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $p0.File -Cycle 1 -Root $root 2>&1 | ForEach-Object { "$_" } } | Out-String
 $rcA = $LASTEXITCODE
 $after = (Get-ChildItem $root -Filter *.pas | Sort-Object Name | ForEach-Object { (Get-FileHash $_.FullName).Hash }) -join ','
 Check 'Part A of cycle 1 applied (exit 0)' ($rcA -eq 0) ('exit=' + $rcA + ' ' + ($fo.Trim() -replace "`r?`n", ' | '))
 Check 'Part A changed the demo sources' ($before -ne $after)
-& $Exe index --project (Join-Path $root 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir 'index2.log')
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir 'index2.log') }
 Check 'demo re-indexed' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 $p1 = Get-Plan $db '1'
 $lines = @($p1.Out -split "`r?`n")

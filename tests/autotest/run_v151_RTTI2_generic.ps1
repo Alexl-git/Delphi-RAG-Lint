@@ -48,7 +48,7 @@ function Parse-Findings([string[]]$Raw) {
   return ,@($out)
 }
 function RuleFindings([string[]]$LintArgs) {
-  $raw = & $exePath lint-all @LintArgs --format json 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all @LintArgs --format json 2>$null }
   return ,@((Parse-Findings $raw) | Where-Object { $_.rule -eq $Rule })
 }
 function Expected([string]$File, [string]$Tag) {
@@ -74,9 +74,9 @@ try {
   Copy-Item (Join-Path $fixture 'lib\*.pas') $lib
   $db    = Join-Path $scratch 'rtti2.sqlite'
   $libDb = Join-Path $scratch 'library-rtti2.sqlite'
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'project index exits 0' ($LASTEXITCODE -eq 0)
-  & $exePath index $lib --db $libDb 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $lib --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'library index exits 0' ($LASTEXITCODE -eq 0)
   $unit    = Join-Path $src 'uRttiGeneric.pas'
   $want    = @((Expected $unit 'EXPECT') | Sort-Object)
@@ -93,7 +93,7 @@ try {
   $off = RuleFindings @('--db', $db, '--library-db', 'none')
   Check 'RUN 2 plain lint-all: the rule ships OFF' ($off.Count -eq 0) "$($off.Count) finding(s)"
 
-  $one = & $exePath lint $unit --db $db --library-db none --rule $Rule --json 2>$null
+  $one = & { $ErrorActionPreference = 'Continue'; & $exePath lint $unit --db $db --library-db none --rule $Rule --json 2>$null }
   $oneGot = KeysOf @((Parse-Findings $one) | Where-Object { $_.rule -eq $Rule })
   Check 'RUN 3 lint <file> --rule: the same findings' (($oneGot -join ' | ') -eq ($want -join ' | ')) "got [$($oneGot -join ' | ')]"
 

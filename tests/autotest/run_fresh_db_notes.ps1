@@ -125,7 +125,7 @@ try {
   Write-Host ''
   Write-Host 'CASE A -- a NEW database prints none of the four notes' -ForegroundColor Cyan
   Check 'the DB does not exist before the run' (-not (Test-Path $db)) $db
-  $a = & $Exe index $src --db $db 2>&1 | Out-String
+  $a = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'the fixture indexed' (Test-Path $db) $db
   Check 'A1 no "no resolver stamp" note'   (-not ($a -match $rxStamp)) ''
   Check 'A2 no "records no scan_type" note' (-not ($a -match $rxScan)) ''
@@ -140,9 +140,9 @@ try {
   # ---------------------------------------------------------------- CASE B ---
   Write-Host ''
   Write-Host 'CASE B -- an OLD database (stamps removed) still gets notes 1 and 2' -ForegroundColor Cyan
-  & $py $pyDrop $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $py $pyDrop $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $env:DRAGLINT_WHOLEDB_SLOW_REFS = '1'
-  try { $b = & $Exe index $src --db $db 2>&1 | Out-String }
+  try { $b = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String }
   finally { [Environment]::SetEnvironmentVariable('DRAGLINT_WHOLEDB_SLOW_REFS', $null) }
   Check 'B1 "no resolver stamp" note appears'   ($b -match $rxStamp) ''
   Check 'B2 "records no scan_type" note appears' ($b -match $rxScan) ''
@@ -156,7 +156,7 @@ try {
   Write-Host 'CASE C -- an OLD database with every file rewritten keeps the share reason' -ForegroundColor Cyan
   Start-Sleep -Milliseconds 1100
   Emit-All '  ;'
-  $c = & $Exe index $src --db $db 2>&1 | Out-String
+  $c = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   $why = ($c -split "`n" | Where-Object { $_ -match 'whole database because' }) -join ' '
   Check 'C1 the one-in-three reason appears' ($c -match $rxShare) $why
   Check 'C2 with real counts (3 written: 0 new, 3 changed)' ($c -match '3 written: 0 new, 3 changed') $why

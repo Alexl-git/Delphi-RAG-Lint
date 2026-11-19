@@ -484,13 +484,13 @@ end.
 
 $db = Join-Path $WorkDir 'climb.sqlite'
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>$null
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>$null }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($indexOut -join ' | ')"
 
 function Get-Tree([string]$QName) {
   Push-Location $WorkDir
   try {
-    $raw = (& $Exe proptree --qname $QName --format json --db $db --no-write-back 2>$null) -join "`n"
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe proptree --qname $QName --format json --db $db --no-write-back 2>$null }) -join "`n"
   } finally { Pop-Location }
   if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
   return ($raw | ConvertFrom-Json)

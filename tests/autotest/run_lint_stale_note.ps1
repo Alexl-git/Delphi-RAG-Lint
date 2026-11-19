@@ -47,10 +47,10 @@ W "$src\UC.pas" "unit UC;`n`ninterface`n`nconst`n  K = 1;`n`nimplementation`n`ne
 $db = "$WorkDir\t.sqlite"
 Push-Location $WorkDir
 try {
-  function Note([string[]]$Extra = @()) { (& $Exe lint-all --db $db --output "$WorkDir\rep.txt" @Extra 2>&1 | Out-String) }
-  function Edges { $j = & $Exe sql --db $db --query 'select count(*) as n from call_edges' --json 2>$null | Out-String | ConvertFrom-Json; [int]$j.rows[0][0] }
+  function Note([string[]]$Extra = @()) { (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --output "$WorkDir\rep.txt" @Extra 2>&1 | ForEach-Object { "$_" } } | Out-String) }
+  function Edges { $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query 'select count(*) as n from call_edges' --json 2>$null } | Out-String | ConvertFrom-Json; [int]$j.rows[0][0] }
   $phrase = 'have no call edges (stale index)'
-  & $Exe index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $e0 = Edges
   Check 'A0 fixture: the fresh index has a call edge' ($e0 -ge 1) "edges=$e0"
   $o = Note
@@ -64,18 +64,18 @@ try {
   Check 'B1 touched, edges intact' ((Edges) -ge 1) ''
   Check 'B2 touched, edges intact: no false note' (-not $o.Contains($phrase)) $o
 
-  & $Exe index $src --resolve-only --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $src --resolve-only --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'C0 the resolve pass withheld the stale file: 0 edges' ((Edges) -eq 0) "edges=$(Edges)"
   $o = Note
   Check 'C1 the note names exactly one file (UC.pas makes no call)' ($o.Contains("lint-all: 1 file(s) $phrase")) $o
   Check 'C2 the note says what to do' ($o -match 'reindex before trusting effect / caller rules') $o
 
   $errF = "$WorkDir\err.txt"
-  $out = & $Exe lint-all --db $db --json --output "$WorkDir\rep.json" 2>$errF | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --json --output "$WorkDir\rep.json" 2>$errF } | Out-String
   Check 'E1 --json: the note is on stderr' ((Get-Content $errF -Raw).Contains($phrase)) ''
   Check 'E2 --json: stdout carries no note' (-not $out.Contains($phrase)) $out
 
-  & $Exe index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $o = Note
   Check 'D1 reindex: edges are back' ((Edges) -ge 1) "edges=$(Edges)"
   Check 'D2 reindex: the note is gone' (-not $o.Contains($phrase)) $o

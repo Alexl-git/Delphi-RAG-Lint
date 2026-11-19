@@ -36,7 +36,7 @@ function IsTU-Check([string]$Id, [bool]$Ok, [string]$What) {
 
 function IsTU-Rows([int]$Line) {
   $q = "select r.name_text from refs r join files f on f.id = r.file_id where r.kind = 'type_use' and f.path like '%GA_IsType.pas' and r.start_line = $Line"
-  $j = & $exePath sql --query $q --db $db --json 2>$null | Out-String
+  $j = & { $ErrorActionPreference = 'Continue'; & $exePath sql --query $q --db $db --json 2>$null } | Out-String
   $o = $j | ConvertFrom-Json
   $names = @()
   foreach ($row in @($o.rows)) { $names += [string]$row[0] }
@@ -44,7 +44,7 @@ function IsTU-Rows([int]$Line) {
 }
 
 try {
-  & $exePath index $fx --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $fx --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "index exit $LASTEXITCODE" }
 
   $l59 = IsTU-Rows 59
@@ -57,7 +57,7 @@ try {
   IsTU-Check 'T4' (@($l59 | Where-Object { $_ -eq 'TList' }).Count -eq 1) 'L59 emits TList exactly once'
 
   $q = "select count(*) from refs r join files f on f.id = r.file_id where r.kind = 'type_use' and f.path like '%GA_IsType.pas'"
-  $o = (& $exePath sql --query $q --db $db --json 2>$null | Out-String) | ConvertFrom-Json
+  $o = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --query $q --db $db --json 2>$null } | Out-String) | ConvertFrom-Json
   IsTU-Check 'P1' ([int]$o.rows[0][0] -gt 0) 'GA_IsType.pas has type_use refs at all (positive control)'
 }
 finally {

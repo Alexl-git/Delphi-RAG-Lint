@@ -242,7 +242,7 @@ end.
   function Has($F, [string]$Rule, [string]$Name) { @($F | Where-Object { $_.rule -eq $Rule -and $_.name -eq $Name }).Count -gt 0 }
 
   $db = Join-Path $WorkDir 'fa.sqlite'
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $old = Join-Path $WorkDir 'fa-notable.sqlite'
   Copy-Item $db $old
   $py = Join-Path $WorkDir 'drop.py'
@@ -252,11 +252,11 @@ end.
   Push-Location $WorkDir
   try {
     $use = Join-Path $src 'uFaUse.pas'
-    $on   = Findings (& $exePath lint $use --db $db  --rules-dir $rules --enable $NewRules --json 2>$null | Out-String)
-    $off  = Findings (& $exePath lint $use --db $old --rules-dir $rules --enable $NewRules --json 2>$null | Out-String)
-    $dflt = Findings (& $exePath lint $use --db $db  --rules-dir $rules --json 2>$null | Out-String)
-    $bare = Findings (& $exePath lint $use --rules-dir $rules --enable $NewRules --json 2>$null | Out-String)
-    $allT = (& $exePath lint-all --db $db --rules-dir $rules --enable $NewRules --quiet 2>&1 | Out-String)
+    $on   = Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $use --db $db  --rules-dir $rules --enable $NewRules --json 2>$null } | Out-String)
+    $off  = Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $use --db $old --rules-dir $rules --enable $NewRules --json 2>$null } | Out-String)
+    $dflt = Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $use --db $db  --rules-dir $rules --json 2>$null } | Out-String)
+    $bare = Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $use --rules-dir $rules --enable $NewRules --json 2>$null } | Out-String)
+    $allT = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rules-dir $rules --enable $NewRules --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String)
   }
   finally { Pop-Location }
   Write-Host ("  {0}: {1}" -f $LO, ((Names $on $LO) -join ','))
@@ -315,7 +315,7 @@ end.
   # --rule narrows to the flow checker: LINT_GATE_FLOW has to name the ids.
   foreach ($r in $LO, $DS, $BV) {
     Push-Location $WorkDir
-    try { $nr = Findings (& $exePath lint $use --db $db --rules-dir $rules --rule $r --json 2>$null | Out-String) } finally { Pop-Location }
+    try { $nr = Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $use --db $db --rules-dir $rules --rule $r --json 2>$null } | Out-String) } finally { Pop-Location }
     Check "RULE --rule $r answers" (@($nr | Where-Object { $_.rule -eq $r }).Count -gt 0) ''
     if ($r -eq $BV) { Check "RULE --rule $r runs the by-value arm" (Has $nr $BV 'tbvDefinite') '' }
   }

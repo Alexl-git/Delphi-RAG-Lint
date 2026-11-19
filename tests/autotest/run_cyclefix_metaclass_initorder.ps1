@@ -51,8 +51,8 @@ function Get-Plan([string]$Tag, [string[]]$Order) {
   $db = "$root.sqlite"
   Push-Location $WorkDir
   try {
-    $null | & $Exe index --project $dproj --db $db --library-db $LibraryDb *> "$db.log"
-    return ($null | & $Exe cycles --plan --project $dproj --db $db --library-db $LibraryDb 2>$null | Out-String)
+    $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project $dproj --db $db --library-db $LibraryDb *> "$db.log" }
+    return ($null | & { $ErrorActionPreference = 'Continue'; & $Exe cycles --plan --project $dproj --db $db --library-db $LibraryDb 2>$null } | Out-String)
   } finally { Pop-Location }
 }
 

@@ -132,7 +132,7 @@ end.
 '@
 
 $db = Join-Path $WorkDir '_D-RAG\App.sqlite'
-& $Exe index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 # Line numbers are DERIVED from the fixture, never hardcoded: an edit above
 # would otherwise silently move the assertions onto the wrong statements.
@@ -150,7 +150,7 @@ Check 'all five fixture lines located' `
   (($lnCall -gt 0) -and ($lnParenless -gt 0) -and ($lnProcVal -gt 0) -and ($lnWrite -gt 0) -and ($lnLocalRead -gt 0)) `
   "call=$lnCall parenless=$lnParenless procval=$lnProcVal write=$lnWrite localread=$lnLocalRead"
 
-$out = (& $Exe query find-callers --name Ticks --db $db 2>&1)
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name Ticks --db $db 2>&1 | ForEach-Object { "$_" } })
 $lines = @()
 foreach ($l in $out) { if ("$l" -match 'uProbe\.pas:(\d+):') { $lines += [int]$Matches[1] } }
 $lines = @($lines | Sort-Object -Unique)
@@ -179,7 +179,7 @@ Check "the READ of that same-named local (line $lnLocalRead) is NOT listed" (-no
 # 6. >>> THE SHARED QUERY MUST STAY KIND-BLIND. `usages` groups by kind and
 #    rename rewrites every occurrence, so if the filter were pushed down into
 #    FindCallersByName both would silently lose the write.
-$usg = (& $Exe usages --name Ticks --db $db --format json 2>&1) -join "`n"
+$usg = (& { $ErrorActionPreference = 'Continue'; & $Exe usages --name Ticks --db $db --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'CONTROL: `usages` still sees the write (the shared query stayed kind-blind)' `
   ($usg -match '(?i)"?writes"?') `
   'usages lost its writes group -- the filter was pushed into the shared store query, which also breaks rename'

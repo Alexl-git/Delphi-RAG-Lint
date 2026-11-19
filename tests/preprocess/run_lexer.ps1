@@ -41,7 +41,7 @@ $chunks = @()
 
 Push-Location C:\TEMP
 try {
-  $out = & $exePath dump-pp-lex --file $fixture 2>$null | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath dump-pp-lex --file $fixture 2>$null } | Out-String
   $lines = $out -split "`r?`n" | Where-Object { $_ -ne '' }
   foreach ($ln in $lines) {
     # Split into exactly 6 fields; the value field may itself contain '|', so

@@ -108,13 +108,13 @@ end.
 Write-Ascii $u1File $Fixture
 
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-& $Exe index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'index exits 0' ($LASTEXITCODE -eq 0)
 Check 'db built' (Test-Path $db)
 
 Write-Host ''
 Write-Host 'rename --qname u1.TThing.DoIt --to DoItNow --apply' -ForegroundColor Cyan
-$out = & $Exe rename --qname u1.TThing.DoIt --to DoItNow --db $db --apply 2>&1
+$out = & { $ErrorActionPreference = 'Continue'; & $Exe rename --qname u1.TThing.DoIt --to DoItNow --db $db --apply 2>&1 | ForEach-Object { "$_" } }
 $exit = $LASTEXITCODE
 Write-Host ($out -join "`n")
 Check 'rename exits 0' ($exit -eq 0) "exit=$exit"

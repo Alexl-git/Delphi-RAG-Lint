@@ -34,7 +34,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 function Run-LintAll([string]$Rule) {
   $sw = [Diagnostics.Stopwatch]::StartNew()
   $errF = Join-Path $script:scratch ("err-" + ($Rule -replace '[^a-z]', '') + ".txt")
-  $out = & $exePath lint-all --db $script:dbc --rule $Rule --json 2> $errF | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $script:dbc --rule $Rule --json 2> $errF } | Out-String
   $sw.Stop()
   $rows = @()
   if ($out.Trim() -ne '') { $rows = @($out | ConvertFrom-Json) }
@@ -53,7 +53,7 @@ try {
   Check 'control: the union is not empty (the check can fail)' ($union.Count -gt 0) "$($union.Count)"
   $slow = [Math]::Max($a.Secs, $b.Secs)
   Check ('list run < 2 x the slower single-id run ({0:N1}s < {1:N1}s)' -f $l.Secs, (2 * $slow)) ($l.Secs -lt (2 * $slow))
-  $txt = & $exePath lint-all --db $script:dbc --rule "$RuleA,$RuleB" 2>&1 | Out-String
+  $txt = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $script:dbc --rule "$RuleA,$RuleB" 2>&1 | ForEach-Object { "$_" } } | Out-String
   # text mode prints 'lint-all: --shared-db: running <db> ...' per peer (--json is silent): a list must derive none
   Check 'list run derived no --shared-db peer (no whole lint-all of a sibling -- possibly REAL -- DB)' (-not ($txt -match 'shared-db: running')) (($txt -split "`r?`n" | Select-String 'shared-db') -join ' | ')
   Check 'text report: circular-uses is NOT REPORTED, not "none detected"' (-not ($txt -match 'none detected across')) ($txt -split "`r?`n" | Select-String 'circular|NOT REPORTED' | Out-String)

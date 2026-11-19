@@ -39,7 +39,7 @@ function New-Stale([string]$Tag, [bool]$Touch) {
   Get-ChildItem (Join-Path $Repo 'circular-demo') -File | Where-Object { $_.Extension -in '.pas', '.dpr', '.dproj' } |
     ForEach-Object { Copy-Item $_.FullName (Join-Path $d $_.Name) -Force }
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project (Join-Path $d 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "index-$Tag.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $d 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
   if ($Touch) {
     Start-Sleep -Milliseconds 1100
     [IO.File]::AppendAllText((Join-Path $d 'DemoLogger.pas'), "`r`n// edited after the index was built`r`n")
@@ -49,8 +49,8 @@ function New-Stale([string]$Tag, [bool]$Touch) {
 function Run-Fix($Case, [string[]]$Extra, [hashtable]$Env = @{}) {
   foreach ($k in $Env.Keys) { Set-Item "Env:$k" $Env[$k] }
   try {
-    $out = (& $Exe cycles --fix --build-timeout 1800 --project (Join-Path $Case.Dir 'CircularDemo.dproj') --db $Case.Db --cycle 1 `
-      --library-db none --format json @Extra 2>$null | Out-String)
+    $out = (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --build-timeout 1800 --project (Join-Path $Case.Dir 'CircularDemo.dproj') --db $Case.Db --cycle 1 `
+      --library-db none --format json @Extra 2>$null } | Out-String)
     $code = $LASTEXITCODE
   } finally { foreach ($k in $Env.Keys) { Remove-Item "Env:$k" -ErrorAction SilentlyContinue } }
   $j = try { $out | ConvertFrom-Json } catch { $null }

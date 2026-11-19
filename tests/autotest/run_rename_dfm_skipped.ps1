@@ -115,7 +115,7 @@ Write-Ascii (Join-Path $src 'Unit5.pas') (Form-Unit 'Unit5' 'TForm5' 'TComponent
 Write-BinaryDfm (Join-Path $src 'Unit5.dfm') 'TForm5' 'Form5' 'Button1Click'
 $db = Join-Path $dir 'idx.sqlite'
 Push-Location $dir
-try { & $Exe index $src --db $db 2>&1 | Out-Null } finally { Pop-Location }
+try { & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null } finally { Pop-Location }
 Check 'index exits 0' ($LASTEXITCODE -eq 0)
 # Unit4.dfm appears after indexing: on disk, not in the index.
 Write-Ascii (Join-Path $src 'Unit4.dfm') (Text-Dfm 'Form4' 'TForm4' 'inherited')
@@ -125,7 +125,7 @@ function Run-Rename([string[]]$RenameArgs) {
   Push-Location $dir
   # 150 INT4: --library-db none -- the fixture has no library, and 150 CQ (d48cf1bdc1) prints a stderr
   # 'drag-lint: NOTE: no --library-db given ...' that the case-insensitive note filter below would count.
-  try { $o = & $Exe rename @RenameArgs --db $db --library-db none 2>$errFile } finally { Pop-Location }
+  try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe rename @RenameArgs --db $db --library-db none 2>$errFile } } finally { Pop-Location }
   $code = $LASTEXITCODE
   $err = if (Test-Path $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
   [pscustomobject]@{ Exit = $code; Out = ($o -join "`n"); Err = $err }

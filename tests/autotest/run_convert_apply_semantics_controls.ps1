@@ -433,13 +433,13 @@ Write-Ascii (P 'par.rules') @'
 '@
 
 $db = P 'fx.sqlite'
-$idx = & $Exe index $WorkDir --db $db 2>&1
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'V the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db)) "exit=$LASTEXITCODE; $($idx -join ' | ')"
 Check 'V the load checker is available (lib\DfmLoadCheck.ps1)' (Test-DfmLoadsChecker)
 Check 'V the FireDAC loader is available (lib\FireDacLoad.ps1)' (Test-FireDacLoader)
 
 # ---- F4: the real FireDAC load --------------------------------------------------
-$r = (& $Exe convert-apply --unit (P 'ParDM.pas') --rules (P 'par.rules') --db $db --apply --no-backup 2>&1) -join "`n"
+$r = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'ParDM.pas') --rules (P 'par.rules') --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'F4-0 --apply exits 0' ($LASTEXITCODE -eq 0) $r
 $fd = Invoke-FireDacLoad @((P 'ParDM.dfm'))
 Check 'F4-1 the converted ParDM.dfm loads into real FireDAC classes with no reader error' `
@@ -456,10 +456,10 @@ Check 'F4-6 positive control: a malformed ParamData item (Bogus = 1) FAILS the r
   (@($fdb | Where-Object { $_ -match '^FAIL ParBad\.dfm: .*Bogus' }).Count -ge 1) ($fdb -join ' | ')
 
 # ---- F1 / F6 / F2 on ScopeDM -----------------------------------------------------
-$o = (& $Exe convert-apply --unit (P 'ScopeDM.pas') --rules (P 'scope.rules') --db $db --format json 2>&1) -join "`n"
+$o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'ScopeDM.pas') --rules (P 'scope.rules') --db $db --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 $j = $null; try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {}
 Check 'S0 dry run: apply/1 JSON, ok' (($null -ne $j) -and $j.ok) $o
-$r = (& $Exe convert-apply --unit (P 'ScopeDM.pas') --rules (P 'scope.rules') --db $db --apply --no-backup 2>&1) -join "`n"
+$r = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'ScopeDM.pas') --rules (P 'scope.rules') --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'S1 --apply exits 0' ($LASTEXITCODE -eq 0) $r
 $t  = [IO.File]::ReadAllText((P 'ScopeDM.dfm'))
 $ps = [IO.File]::ReadAllText((P 'ScopeDM.pas'))

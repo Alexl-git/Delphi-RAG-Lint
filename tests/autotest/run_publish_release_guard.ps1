@@ -47,13 +47,13 @@ Check 'POSITIVE CONTROL: a sabotaged restore is reported, never silent' ($threw 
 
 # --- the orchestrator: dry run, order, gates -----------------------------------
 $ver = [regex]::Match((Get-Content -LiteralPath (Join-Path $Repo 'src\core\DRagLint.Core.Model.pas') -Raw), "DRAGLINT_VERSION\s*=\s*'([^']+)'").Groups[1].Value
-$out = & pwsh -NoProfile -File $orch -Version $ver -DryRun 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $orch -Version $ver -DryRun 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'dry run exits 0 on the live version' ($LASTEXITCODE -eq 0) (($out -split "`n" | Select-Object -Last 2) -join ' ')
 $idx = @('build the engine', 'featuregen-gate.ps1', 'build-manual.ps1', 'run_battery.ps1', 'publish-wiki.ps1', 'Build-Installer.ps1', 'git tag') | ForEach-Object { $out.IndexOf($_) }
 Check 'dry run lists all seven steps' (@($idx | Where-Object { $_ -lt 0 }).Count -eq 0) ($idx -join ',')
 Check 'steps are in order: build, generate -Check, manual, battery, wiki, installer, tag' ((($idx | ForEach-Object { $_ }) -join ',') -eq (($idx | Sort-Object) -join ','))
 Check 'dry run says it is a dry run and ran the -Check gate' (($out -match 'DRY RUN') -and ($out -match 'feature pages: current'))
-$out = & pwsh -NoProfile -File $orch -Version '0.0.1-alpha' -DryRun 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $orch -Version '0.0.1-alpha' -DryRun 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'a version that is not DRAGLINT_VERSION stops at preflight' (($LASTEXITCODE -eq 1) -and ($out -match 'DRAGLINT_VERSION'))
 
 # --- the orchestrator end to end, on a STUB tree ------------------------------------
@@ -84,7 +84,7 @@ function New-StubTree([string]$Root) {
   Copy-Item -LiteralPath $lib -Destination (Join-Path $Root 'tools\lib\ReleaseGuard.ps1')
 }
 function Invoke-Stub([string]$Root, [string[]]$Extra) {
-  $o = & pwsh -NoProfile -File (Join-Path $Root 'tools\publish-release.ps1') -Version '9.9.9-alpha' -Repo $Root @Extra 2>&1 | Out-String
+  $o = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $Root 'tools\publish-release.ps1') -Version '9.9.9-alpha' -Repo $Root @Extra 2>&1 | ForEach-Object { "$_" } } | Out-String
   $steps = if (Test-Path -LiteralPath (Join-Path $Root 'steps.log')) { @(Get-Content -LiteralPath (Join-Path $Root 'steps.log') | ForEach-Object { $_.Trim() }) -join ',' } else { '' }
   return [pscustomobject]@{ Exit = $LASTEXITCODE; Out = $o; Steps = $steps; EngineSha = (Sha (Join-Path $Root 'third_party\dll-win64\drag-lint.exe')) }
 }
@@ -119,14 +119,14 @@ $noRemote = Join-Path $WorkDir 'no-such-wiki-repo.git'   # LOCAL and absent: a c
 $packVer = "zz-guard-$PID"
 $packRel = "C:\TEMP\rel-zz-guard-$PID"   # pack-lint-release.ps1 stages into C:\TEMP\rel-<Version>; $PID kept on this line so run_scratch_dirs_are_per_run.ps1 sees it is per run
 Write-Ascii (Join-Path $g 'fail-gate') "x`n"
-$o = & pwsh -NoProfile -File (Join-Path $g 'tools\publish-wiki.ps1') -Repo $noRemote -Work $wikiWork 2>&1 | Out-String
+$o = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $g 'tools\publish-wiki.ps1') -Repo $noRemote -Work $wikiWork 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'publish-wiki.ps1: a stale gate refuses, before any clone' (($LASTEXITCODE -eq 1) -and ($o -match 'generated pages are not current') -and ($o -notmatch 'cloning') -and -not (Test-Path -LiteralPath $wikiWork)) "exit=$LASTEXITCODE"
-$o = & pwsh -NoProfile -File (Join-Path $g 'build\pack-lint-release.ps1') -Version $packVer -SkipBuild 2>&1 | Out-String
+$o = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $g 'build\pack-lint-release.ps1') -Version $packVer -SkipBuild 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'pack-lint-release.ps1: a stale gate refuses, before anything is staged' (($LASTEXITCODE -eq 1) -and ($o -match 'PACK REFUSED') -and -not (Test-Path -LiteralPath $packRel)) "exit=$LASTEXITCODE"
 Remove-Item -LiteralPath (Join-Path $g 'fail-gate') -Force
-$o = & pwsh -NoProfile -File (Join-Path $g 'tools\publish-wiki.ps1') -Repo $noRemote -Work $wikiWork 2>&1 | Out-String
+$o = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $g 'tools\publish-wiki.ps1') -Repo $noRemote -Work $wikiWork 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'POSITIVE CONTROL: publish-wiki.ps1 passes a current gate through to the clone' (($o -match 'cloning the wiki repo') -and ($o -notmatch 'generated pages are not current')) "exit=$LASTEXITCODE"
-$o = & pwsh -NoProfile -File (Join-Path $g 'build\pack-lint-release.ps1') -Version $packVer -SkipBuild 2>&1 | Out-String
+$o = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $g 'build\pack-lint-release.ps1') -Version $packVer -SkipBuild 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'POSITIVE CONTROL: pack-lint-release.ps1 passes a current gate through to staging' (($o -match '-SkipBuild: staging') -and ($o -notmatch 'PACK REFUSED')) "exit=$LASTEXITCODE"
 
 # --- the two migrated scripts carry the gate ---------------------------------------
@@ -143,7 +143,7 @@ $gateScript = Join-Path $Repo 'tools\featuregen-gate.ps1'
 Check 'featuregen-gate.ps1 present' (Test-Path -LiteralPath $gateScript) $gateScript
 $noTool = Join-Path $WorkDir 'no-such-featuregen.exe'
 $env:FEATUREGEN_EXE = $noTool
-try { $o = & pwsh -NoProfile -File $gateScript -Repo $Repo 2>&1 | Out-String; $gateExit = $LASTEXITCODE } finally { Remove-Item Env:\FEATUREGEN_EXE -ErrorAction SilentlyContinue }
+try { $o = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $gateScript -Repo $Repo 2>&1 | ForEach-Object { "$_" } } | Out-String; $gateExit = $LASTEXITCODE } finally { Remove-Item Env:\FEATUREGEN_EXE -ErrorAction SilentlyContinue }
 Check 'POSITIVE CONTROL: a missing featuregen.exe fails the gate and names the path' (($gateExit -eq 1) -and ($o.Contains($noTool))) "exit=$gateExit"
 Write-Host ''
 if ($script:Failed) { Write-Host 'PUBLISH RELEASE GUARD: FAIL' -ForegroundColor Red; exit 1 }

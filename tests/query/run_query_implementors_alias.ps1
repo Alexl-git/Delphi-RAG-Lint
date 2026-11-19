@@ -48,7 +48,7 @@ end;
 end.
 '@
 $db = Join-Path $WorkDir 'impl.sqlite'
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 function Run([string[]]$ArgList) {
   $o = Join-Path $WorkDir 'o.txt'; $e = Join-Path $WorkDir 'e.txt'

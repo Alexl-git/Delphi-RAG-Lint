@@ -133,17 +133,17 @@ end.
 $useFile = Join-Path $src 'uPropUse.pas'
 WriteAnsi $useFile $useText
 $db = Join-Path $WorkDir 'hov.sqlite'
-$null = & $Exe index $src --db $db 2>$null
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>$null }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 function SigOf([string]$qn) {
-  $r = (& $Exe sql --db $db --json --query "select signature from symbols where qualified_name = '$qn'" 2>$null) -join "`n" | ConvertFrom-Json
+  $r = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --query "select signature from symbols where qualified_name = '$qn'" 2>$null }) -join "`n" | ConvertFrom-Json
   if ($null -eq $r.rows -or @($r.rows).Count -eq 0) { return '<no row>' }
   $v = @($r.rows)[0][0]
   if ($null -eq $v) { return '' } else { return [string]$v }
 }
 function HoverJson([string]$qn, [string[]]$extra = @()) {
-  $raw = (& $Exe hover --qname $qn --db $db --format json @extra 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname $qn --db $db --format json @extra 2>$null }) -join "`n"
   try { return ($raw | ConvertFrom-Json) } catch { return $null }
 }
 
@@ -159,10 +159,10 @@ Check 'json parses' ($null -ne $j)
 Check 'json type = string' ($j.type -eq 'string') "got: [$($j.type)]"
 Check 'json declared_in = uPropBase.TBase' ($j.declared_in -eq 'uPropBase.TBase') "got: [$($j.declared_in)]"
 Check 'json signature = string (the plugin renders signature)' ($j.signature -eq 'string') "got: [$($j.signature)]"
-$md = (& $Exe hover --qname uPropBase.TDerived.Text --db $db --format md 2>$null) -join "`n"
+$md = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname uPropBase.TDerived.Text --db $db --format md 2>$null }) -join "`n"
 Check 'md shows Text: string' ($md -match 'Text: string') "got: [$md]"
 Check 'md names the declaring ancestor' ($md -match 'declared in `?uPropBase\.TBase') "got: [$md]"
-$pl = (& $Exe hover --qname uPropBase.TDerived.Text --db $db 2>$null) -join "`n"
+$pl = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname uPropBase.TDerived.Text --db $db 2>$null }) -join "`n"
 Check 'plain shows Text: string + the ancestor' (($pl -match 'Text: string') -and ($pl -match 'declared in uPropBase\.TBase')) "got: [$pl]"
 
 Write-Host ''
@@ -184,13 +184,13 @@ Check 'NEGATIVE: a method has no type field value' ([string]::IsNullOrEmpty($jm.
 
 Write-Host ''
 Write-Host '(5)/(6) hover over the filled row' -ForegroundColor Cyan
-$null = & $Exe hover --qname uPropBase.TDerived.Text --db $db --write-back 2>$null
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe hover --qname uPropBase.TDerived.Text --db $db --write-back 2>$null }
 Check 'hover --write-back is gone (rejected)' ($LASTEXITCODE -ne 0) "exit=$LASTEXITCODE"
 $j2 = HoverJson 'uPropBase.TDerived.Text'
 Check 'second hover: type = string' ($j2.type -eq 'string') "got: [$($j2.type)]"
 Check 'second hover: still declared in uPropBase.TBase' ($j2.declared_in -eq 'uPropBase.TBase') "got: [$($j2.declared_in)]"
 Check 'second hover: signature normalised (no leading colon)' ($j2.signature -eq 'string') "got: [$($j2.signature)]"
-$md2 = (& $Exe hover --qname uPropBase.TDerived.Text --db $db --format md 2>$null) -join "`n"
+$md2 = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname uPropBase.TDerived.Text --db $db --format md 2>$null }) -join "`n"
 Check 'second hover md: no doubled colon' (($md2 -match 'Text: string') -and ($md2 -notmatch ':\s*:')) "got: [$md2]"
 
 $lines = $text -split "`r?`n"
@@ -227,7 +227,7 @@ function Invoke-Lsp([int]$Line0, [int]$Char0, [string]$file = $file) {
 Write-Host ''
 Write-Host '(7) LSP hover + hoverBundle' -ForegroundColor Cyan
 # --rebuild: the row is re-filled by the same run (no hover involved).
-$null = & $Exe index $src --db $db --rebuild 2>$null
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db --rebuild 2>$null }
 Check '--rebuild re-fills the row' ((SigOf 'uPropBase.TDerived.Text') -eq ': string') "got: [$(SigOf 'uPropBase.TDerived.Text')]"
 # The reported shape: a use site whose LHS type (TDerived) owns the bare
 # re-publication, so the hover's chosen symbol IS uPropBase.TDerived.Text.

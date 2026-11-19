@@ -39,7 +39,7 @@ function RunLint([string]$CfgJson) {
   $Cfg = Join-Path $Work 'cfg.json'
   [IO.File]::WriteAllText($Cfg, $CfgJson, [Text.Encoding]::ASCII)
   Push-Location $Work
-  try { $Out = & $Exe lint $Pas --config $Cfg --json 2>$null } finally { Pop-Location }
+  try { $Out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $Pas --config $Cfg --json 2>$null } } finally { Pop-Location }
   $Txt = ($Out -join "`n")
   if ($Txt.Trim() -eq '') { return ,@() }
   $J = $Txt | ConvertFrom-Json

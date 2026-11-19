@@ -28,7 +28,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
   if ($Ok) { Write-Host "PASS  $Name" } else { Write-Host "FAIL  $Name  $Detail"; $script:fail++ }
 }
 function Sev([string]$Database) {
-  $raw = & $exePath lint-all --db $Database --json --quiet 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $Database --json --quiet 2>$null }
   $t = $raw -join "`n"; $b = $t.IndexOf('[')
   $m = @{}
   if ($b -ge 0) { foreach ($f in @($t.Substring($b) | ConvertFrom-Json)) { if ($f.rule -eq 'taint-sql-injection') { $m[[int]$f.start_line] = $f.severity } } }
@@ -36,10 +36,10 @@ function Sev([string]$Database) {
 }
 Push-Location $env:TEMP
 try {
-  & $exePath index $fx --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $fx --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   [IO.File]::Copy($db, $bare, $true)
   $away = 'import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute("ALTER TABLE ref_types RENAME TO x_rt"); c.execute("ALTER TABLE ref_receivers RENAME TO x_rr"); c.commit(); print("ok")'
-  $n = (& python -I -c $away $bare 2>&1) -join ' '
+  $n = (& { $ErrorActionPreference = 'Continue'; & python -I -c $away $bare 2>&1 | ForEach-Object { "$_" } }) -join ' '
   Check 'no-facts copy: ref_types and ref_receivers renamed away' ($n -eq 'ok') $n
   $with = Sev $db
   Check 'F1 39 Self.FEdit.Text -> error'                 ($with[39] -eq 'error') "got $($with[39])"

@@ -68,7 +68,7 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'pp.sqlite'
-& $Exe index (Join-Path $WorkDir 'src') --db $db --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $WorkDir 'src') --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'precondition: index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 $py = Join-Path $WorkDir 'cyc.py'

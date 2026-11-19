@@ -55,7 +55,7 @@ try {
   Check 'old side produced by Ask-Report on the clone' $made "exit=$LASTEXITCODE first=[$(($txt -split "`r?`n")[0])]"
   if ($made) {
     [IO.File]::WriteAllText($old, $txt, [Text.UTF8Encoding]::new($false))
-    $out = & $Exe compare --old $old --command "who-reads -Target $Target" --db $Clone 2>&1 | Out-String
+    $out = & { $ErrorActionPreference = 'Continue'; & $Exe compare --old $old --command "who-reads -Target $Target" --db $Clone 2>&1 | ForEach-Object { "$_" } } | Out-String
     $code = $LASTEXITCODE
     if ($code -eq 3) {
       Skip 'compare reruns the question' "exit 3: the frozen clone is stale against the sources here (correct refusal, no diff). $($out.Trim())"
@@ -79,11 +79,11 @@ try {
     Check 'feeds-from old side produced by Ask-Report on the clones' $made "exit=$LASTEXITCODE first=[$(($txt -split "`r?`n")[0])]"
     if ($made) {
       [IO.File]::WriteAllText($oldFf, $txt, [Text.UTF8Encoding]::new($false))
-      $ps = & $Pwsh -NoProfile -File $Ask -Question feeds-from -Target $FfTarget -DbPath $Clone -AllowStale -Plain -Engine $Exe 2>&1 | Out-String
+      $ps = & { $ErrorActionPreference = 'Continue'; & $Pwsh -NoProfile -File $Ask -Question feeds-from -Target $FfTarget -DbPath $Clone -AllowStale -Plain -Engine $Exe 2>&1 | ForEach-Object { "$_" } } | Out-String
       $psCode = $LASTEXITCODE
       $psMsg = (($ps -split "`r?`n") | Where-Object { $_ -like 'ask-report: *' } | Select-Object -First 1) -replace '^ask-report: ', ''
       Check 'Ask-Report refuses the unpaired clone with exit 2' ($psCode -eq 2 -and $psMsg -match 'also reads the SQL-script index') "exit=$psCode`n$ps"
-      $out = & $Exe compare --old $oldFf --command "feeds-from -Target $FfTarget" --db $Clone 2>&1 | Out-String
+      $out = & { $ErrorActionPreference = 'Continue'; & $Exe compare --old $oldFf --command "feeds-from -Target $FfTarget" --db $Clone 2>&1 | ForEach-Object { "$_" } } | Out-String
       $code = $LASTEXITCODE
       Check 'compare refuses it with exit 2' ($code -eq 2) "exit=$code`n$out"
       Check 'compare names Ask-Report''s pairing refusal verbatim' ($psMsg -and $out.Contains("the new run failed (exit 2): $psMsg")) "ask-report: $psMsg`ncompare: $out"
@@ -101,7 +101,7 @@ try {
   Check 'crosses-boundary old side produced by Ask-Report on the clone (no pair)' $made "exit=$LASTEXITCODE first=[$(($txt -split "`r?`n")[0])]"
   if ($made) {
     [IO.File]::WriteAllText($oldCb, $txt, [Text.UTF8Encoding]::new($false))
-    $out = & $Exe compare --old $oldCb --command "crosses-boundary -Target $CbTarget" --db $Clone 2>&1 | Out-String
+    $out = & { $ErrorActionPreference = 'Continue'; & $Exe compare --old $oldCb --command "crosses-boundary -Target $CbTarget" --db $Clone 2>&1 | ForEach-Object { "$_" } } | Out-String
     $code = $LASTEXITCODE
     if ($code -eq 3) {
       Skip 'compare answers crosses-boundary unpaired' "exit 3: the frozen clone is stale against the sources here. $($out.Trim())"

@@ -60,7 +60,7 @@ $use = Join-Path $scratch 'uQualUse.pas'
 $db  = Join-Path $scratch 'unitqual.sqlite'
 
 function Sql([string]$Query) {
-  $raw = (& $exePath sql --db $db --json --limit 1000 --query $Query 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --limit 1000 --query $Query 2>$null }) -join "`n"
   $b = $raw.IndexOf('{')
   if ($b -lt 0) { throw "sql returned no JSON for: $Query" }
   $o = $raw.Substring($b) | ConvertFrom-Json
@@ -88,7 +88,7 @@ function EdgesAt([int]$Line, [string]$Name) {
 
 Push-Location C:\TEMP
 try {
-  $null = (& $exePath index $scratch --db $db *>&1)
+  $null = (& { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db *>&1 | ForEach-Object { "$_" } })
 
   # --- check 1: positives ---------------------------------------------------------
   $pos = @(

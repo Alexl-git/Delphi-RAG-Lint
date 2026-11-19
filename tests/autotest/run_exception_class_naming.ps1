@@ -177,13 +177,13 @@ $db = Join-Path $WorkDir 'out\raise.sqlite'
 
 Push-Location C:\TEMP
 try {
-  & $Exe index --all --config $manifest --only SecRaise --jobs 1 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $manifest --only SecRaise --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
   if (-not (Test-Path $db)) {
     $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }
     Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2
   }
-  $onOut  = & $Exe lint-all --db $db --config $cfgOn  --quiet 2>&1 | Out-String
-  $offOut = & $Exe lint-all --db $db --config $cfgOff --quiet 2>&1 | Out-String
+  $onOut  = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --config $cfgOn  --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String
+  $offOut = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --config $cfgOff --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String
 } finally { Pop-Location }
 
 Write-Host ''

@@ -41,8 +41,8 @@ try {
   $pasCopy = Join-Path $one 'RG_148.pas'
   [IO.File]::Copy($pas, $pasCopy)
   $db = Join-Path $tmp 'rg148.sqlite'
-  & $exePath index $one --db $db 2>&1 | Out-Null
-  $txt = (& $exePath lint $pasCopy --db $db --enable 'unused-private-member,syntax-error,parser-error' --json 2>$null) -join "`n"
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $one --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $txt = (& { $ErrorActionPreference = 'Continue'; & $exePath lint $pasCopy --db $db --enable 'unused-private-member,syntax-error,parser-error' --json 2>$null }) -join "`n"
   $f = if ($txt.Trim() -eq '') { @() } else { @($txt | ConvertFrom-Json) }
   $errs = @($f | Where-Object { $_.rule -eq 'syntax-error' -or $_.rule -eq 'parser-error' })
   Check 'E1 RG_148.pas parses (no syntax-error / parser-error)' ($errs.Count -eq 0) ("errors at lines " + (($errs | ForEach-Object { $_.start_line }) -join ','))

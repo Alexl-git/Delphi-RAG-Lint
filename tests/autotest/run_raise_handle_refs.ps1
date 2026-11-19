@@ -54,7 +54,7 @@ Copy-Item (Join-Path $FixtureDir 'RaiseHandle.pas'), (Join-Path $FixtureDir 'Rai
 $NewKinds = "'raise','raise-expr','reraise','handle','handle-all'"
 
 function Invoke-Sql([string]$EngineExe, [string]$Db, [string]$Query) {
-  $raw = (& $EngineExe sql --query $Query --db $Db --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $EngineExe sql --query $Query --db $Db --json 2>$null }) -join "`n"
   $env = $raw | ConvertFrom-Json
   $names = @($env.columns | ForEach-Object { $_.name })
   $out = foreach ($r in $env.rows) {
@@ -66,7 +66,7 @@ function Invoke-Sql([string]$EngineExe, [string]$Db, [string]$Query) {
 }
 
 function Index-Fixture([string]$EngineExe, [string]$Db) {
-  $o = & $EngineExe index $work --db $Db 2>&1
+  $o = & { $ErrorActionPreference = 'Continue'; & $EngineExe index $work --db $Db 2>&1 | ForEach-Object { "$_" } }
   return @{ Exit = $LASTEXITCODE; Out = ($o -join ' | ') }
 }
 
@@ -117,7 +117,7 @@ $fin = @($rows | Where-Object { $_.name_text -eq 'finally' })
 Check 'C. try..finally emits no handle-all' ($fin.Count -eq 0)
 
 # E. usages buckets (spec 5.2): raise rows -> 'raises', handle rows -> 'handles', never 'calls'
-$uRaw = (& $Exe usages --name EFoo --db $db --json 2>$null) -join "`n"
+$uRaw = (& { $ErrorActionPreference = 'Continue'; & $Exe usages --name EFoo --db $db --json 2>$null }) -join "`n"
 $u = $null
 try { $u = $uRaw | ConvertFrom-Json } catch { }
 Check 'E. usages --json parses' ($null -ne $u) $uRaw.Substring(0, [Math]::Min(200, $uRaw.Length))
@@ -132,7 +132,7 @@ if ($null -ne $u) {
   $nRd = Count-Of $u 'reads'
   Check 'E. control: the co-located read rows stay in reads (44, 83)' ($nRd -eq 2) "reads=$nRd"
 }
-$uTxt = (& $Exe usages --name EFoo --db $db 2>$null) -join "`n"
+$uTxt = (& { $ErrorActionPreference = 'Continue'; & $Exe usages --name EFoo --db $db 2>$null }) -join "`n"
 Check 'E. text usages prints raises/handles counts' ($uTxt -match 'raises: 1\s+handles: 3') $uTxt
 
 # F. exception-paths reads the facts (spec 5.1): raise/handle sites joined by refs.kind, the five
@@ -142,7 +142,7 @@ Check 'E. text usages prints raises/handles counts' ($uTxt -match 'raises: 1\s+h
 #    member-access is no longer dropped (IndexDropped 9 = 19 candidates - 4 - 6).
 function Get-ChartFields([string]$EngineExe, [string]$Db, [string]$Target, [string]$Tag) {
   $root = Join-Path $WorkDir "charts-$Tag"
-  $o = & $EngineExe ask exception-paths --target $Target --db $Db --out-root $root --plain 2>&1
+  $o = & { $ErrorActionPreference = 'Continue'; & $EngineExe ask exception-paths --target $Target --db $Db --out-root $root --plain 2>&1 | ForEach-Object { "$_" } }
   $meta = Get-ChildItem $root -Recurse -Filter meta.json -ErrorAction SilentlyContinue |
     Where-Object { $_.DirectoryName -like ('*' + ($Target -replace '\.', '_')) } | Select-Object -First 1
   if ($null -eq $meta) { Write-Host "    (no meta.json for $Target; ask said: $(($o | Select-Object -First 3) -join ' | '))"; return $null }

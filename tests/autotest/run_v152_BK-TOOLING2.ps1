@@ -68,7 +68,7 @@ Check 'B25 FeatureGenTests runs the sub-parameter harvest test' ($t -match '(?m)
 
 if ($Engine) {
   $fg = Join-Path $Repo 'src\tools\featuregen\featuregen.exe'
-  $out = & $fg check --level full --repo $Repo --engine $Engine 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $fg check --level full --repo $Repo --engine $Engine 2>&1 | ForEach-Object { "$_" } } | Out-String
   $subFails = @($out -split "`n" | Where-Object { $_ -match 'subcommand' -and $_ -match '^\s*[BC]:' })
   Check 'B25 featuregen check full: no subcommand failure' ($subFails.Count -eq 0) ($subFails -join ' | ')
 }

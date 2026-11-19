@@ -97,7 +97,7 @@ end.
 $file = Join-Path $WorkDir 'uDN.pas'
 [System.IO.File]::WriteAllText($file, (($Fixture -replace "`r`n","`n") -replace "`n","`r`n"), [System.Text.Encoding]::ASCII)
 
-$out = & $Exe lint $file --rules-dir $RulesDir 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file --rules-dir $RulesDir 2>&1 | ForEach-Object { "$_" } } | Out-String
 function DepthOf([string]$Routine) {
   $m = [regex]::Match($out, [regex]::Escape($Routine) + ' nests control structures (\d+) deep')
   if ($m.Success) { [int]$m.Groups[1].Value } else { 0 }

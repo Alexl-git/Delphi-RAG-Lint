@@ -35,7 +35,7 @@ function Check($n, $ok, $d = '') {
 }
 function W($p, $t) { [IO.File]::WriteAllText($p, (($t -replace "`r`n", "`n") -replace "`n", "`r`n"), [Text.Encoding]::ASCII) }
 function Sql($db, $q) {
-  $raw = & $Exe sql --db $db --json --query $q 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --query $q 2>$null }
   $doc = ($raw -join "`n") | ConvertFrom-Json
   $cols = @($doc.columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
   $out = foreach ($r in @($doc.rows)) {
@@ -173,7 +173,7 @@ end.
 
 $db = Join-Path $WorkDir 'bk.sqlite'
 Push-Location $WorkDir
-try { & $Exe index $src --db $db 2>&1 | Out-Null } finally { Pop-Location }
+try { & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null } finally { Pop-Location }
 Check 'index built' (Test-Path $db)
 
 Write-Host 'B08 noreturn fact'
@@ -214,7 +214,7 @@ if ($t.Count -eq 1) {
   $p = Join-Path $src 'uAttr.pas'
   W $p ((Get-Content $p -Raw) -replace '\[Hidden\]', '[Hidden2]')
   Push-Location $WorkDir
-  try { & $Exe index $src --db $db 2>&1 | Out-Null } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null } finally { Pop-Location }
   $h = Sql $db "SELECT attr_name FROM attributes WHERE attr_name LIKE 'Hidden%'"
   Check 'B09 reindex replaces rows (Hidden2 only)' (($h.Count -eq 1) -and ($h[0].attr_name -eq 'Hidden2')) "($(@($h | ForEach-Object { $_.attr_name }) -join ','))"
 }

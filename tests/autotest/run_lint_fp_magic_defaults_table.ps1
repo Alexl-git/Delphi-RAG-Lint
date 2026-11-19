@@ -70,7 +70,7 @@ end.
 $unit = Join-Path $WorkDir 'fpmagic.pas'
 [System.IO.File]::WriteAllText($unit, $src, [System.Text.Encoding]::ASCII)
 
-$out = (& $Exe lint $unit --rule magic-literal --enable magic-literal 2>$null | Out-String)
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $unit --rule magic-literal --enable magic-literal 2>$null } | Out-String)
 $table = @([regex]::Matches($out, 'fpmagic\.pas:(17|18|19):')).Count
 
 Write-Host 'False positives that must be GONE' -ForegroundColor Cyan

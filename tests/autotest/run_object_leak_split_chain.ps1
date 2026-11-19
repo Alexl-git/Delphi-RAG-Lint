@@ -86,9 +86,9 @@ $libDb = Join-Path $env:TEMP "objleak_split_lib_$PID.sqlite"
 $appDb = Join-Path $env:TEMP "objleak_split_app_$PID.sqlite"
 foreach ($d in @($libDb, $appDb)) { if (Test-Path $d) { Remove-Item $d -Force } }
 
-& $Exe index $libDir --db $libDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $libDir --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'library index exits 0' ($LASTEXITCODE -eq 0)
-& $Exe index $appDir --db $appDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $appDir --db $appDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'project index exits 0' ($LASTEXITCODE -eq 0)
 Check 'both dbs built' ((Test-Path $libDb) -and (Test-Path $appDb))
 
@@ -96,11 +96,11 @@ Check 'both dbs built' ((Test-Path $libDb) -and (Test-Path $appDb))
 # change resolved TForm inside the project db, the ancestry would no longer be
 # split and every assertion below would pass without the bridge ever running --
 # the fixture would have stopped reproducing the defect while staying green.
-$anc = & $Exe query --name TMyForm --db $appDb --json 2>$null
+$anc = & { $ErrorActionPreference = 'Continue'; & $Exe query --name TMyForm --db $appDb --json 2>$null }
 $ancTxt = ($anc -join "`n")
 Check 'precondition: fixture indexed TMyForm in the project db' ($ancTxt -match 'TMyForm')
 
-$raw = & $Exe lint $pas --db $appDb --library-db $libDb --rule object-leak --json 2>$null
+$raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $pas --db $appDb --library-db $libDb --rule object-leak --json 2>$null }
 $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
 $findings = @()
 if ($b -ge 0) { try { $findings = @(($txt.Substring($b) | ConvertFrom-Json)) } catch { $findings = @() } }

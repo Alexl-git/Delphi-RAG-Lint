@@ -75,14 +75,14 @@ $db = Join-Path $w 'c.sqlite'
 # The inferred type is the LEADING token of the stored signature: 'Integer = 7'.
 # An untyped const stores just '= <value>'.
 function SigOf([string]$Name) {
-  $j = (& $exePath query --name $Name --db $db --json 2>$null | Out-String)
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name $Name --db $db --json 2>$null } | Out-String)
   $m = [regex]::Match($j, '"signature"\s*:\s*"([^"]*)"')
   if ($m.Success) { return $m.Groups[1].Value } else { return '<none>' }
 }
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $w --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $w --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check '1. SANITY: the index exists' (Test-Path $db)
 
   $tight = SigOf 'Tight'

@@ -47,7 +47,7 @@ function Invoke-Index([string[]]$Extra) {
 }
 
 function Get-FileCount {
-  $j = (& $Engine sql --db $db --query 'select count(*) from files' --json 2>$null) -join '' | ConvertFrom-Json
+  $j = (& { $ErrorActionPreference = 'Continue'; & $Engine sql --db $db --query 'select count(*) from files' --json 2>$null }) -join '' | ConvertFrom-Json
   [int]$j.rows[0][0]    # sql --json rows are positional
 }
 

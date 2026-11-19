@@ -172,12 +172,12 @@ end.
 '@
   [IO.File]::WriteAllText((Join-Path $WorkDir 'uA.pas'), ($text -replace "`r`n", "`n" -replace "`n", "`r`n"), [Text.Encoding]::ASCII)
   $db = Join-Path $WorkDir 'bp.sqlite'
-  & $Exe index $WorkDir --db $db --quiet 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
   # Routine name -> bound target (or '-') for every call ref named Run; sql --json rows are positional.
   function Get-RunSites([string]$Db) {
     $q = "select en.name, ifnull((select group_concat(t.qualified_name) from call_edges e join symbols t on t.id=e.target_symbol_id where e.ref_id=r.id),'-') from refs r join symbols en on en.id=r.enclosing_symbol_id where r.kind='call' and r.name_text='Run' order by en.name"
-    $j = (& $Exe sql --db $Db --query $q --json 2>$null | Out-String) | ConvertFrom-Json
+    $j = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query $q --json 2>$null } | Out-String) | ConvertFrom-Json
     $h = [ordered]@{}
     foreach ($row in $j.rows) { $h[[string]$row[0]] = [string]$row[1] }
     return $h

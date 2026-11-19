@@ -23,8 +23,8 @@ function Findings([string]$Case, [string[]]$Extra) {
   New-Item -ItemType Directory -Force $d | Out-Null
   Get-ChildItem (Join-Path $src $Case) -File | ForEach-Object { Copy-Item $_.FullName $d -Force }
   $db = Join-Path $WorkDir "$Case.sqlite"
-  & $Exe index $d --db $db 2>&1 | Out-Null
-  $raw = & $Exe lint-all --db $db --rule random-without-randomize --json @Extra 2>$null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $d --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule random-without-randomize --json @Extra 2>$null }
   $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
   $f = @(); if ($b -ge 0) { try { $f = @($txt.Substring($b) | ConvertFrom-Json) } catch { $f = @() } }
   return @($f | Where-Object { $_.rule -eq 'random-without-randomize' })

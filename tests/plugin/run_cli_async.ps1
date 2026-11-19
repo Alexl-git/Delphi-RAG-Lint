@@ -64,7 +64,7 @@ if (-not (Test-Path $exe)) { Write-Host "FATAL: exe not produced: $exe" -Foregro
 
 # H06: the plugin's log writer honours DRAGLINT_PLUGIN_LOG_DIR (the log folder itself) -- never write the owner's %LOCALAPPDATA%\drag-lint\logs.
 $env:DRAGLINT_PLUGIN_LOG_DIR = Join-Path $WorkDir 'plog'
-$out = & $exe 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $exe 2>&1 | ForEach-Object { "$_" } } | Out-String
 $rc  = $LASTEXITCODE
 Write-Host $out.TrimEnd()
 

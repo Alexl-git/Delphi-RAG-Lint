@@ -127,10 +127,10 @@ end.
 '@ -replace "`r`n", "`n") -replace "`n", "`r`n"), (New-Object System.Text.ASCIIEncoding))
 
 $db = Join-Path $WorkDir 'raise.sqlite'
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' ((Test-Path $db) -and ($LASTEXITCODE -eq 0))
 
-& $Exe document --unit $pas --db $db --apply --no-backup 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe document --unit $pas --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'document --apply exits 0' ($LASTEXITCODE -eq 0)
 
 $lines = [System.IO.File]::ReadAllLines($pas)

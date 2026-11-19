@@ -39,7 +39,7 @@ New-Item -ItemType Directory "$fx\_D-RAG" | Out-Null
 [IO.File]::WriteAllText("$fx\_D-RAG\drag-lint-project.json", '{ "ownRoots": ["."] }')
 $proj = "$fx\Demo9.dproj"
 $db   = "$WorkDir\fixture9.sqlite"
-& $Exe index $fx --db $db *> "$WorkDir\index.log"
+& { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db *> "$WorkDir\index.log" }
 if ($LASTEXITCODE -ne 0) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: fixture index failed (exit $LASTEXITCODE)" -ForegroundColor Red; exit 2 }
 
 # one drift run on a registry copy edited by $Edit; returns exit, summary, parsed doc
@@ -49,7 +49,7 @@ function Run-Drift([string]$Tag, [scriptblock]$Edit, [string[]]$Extra = @(), [sw
     Copy-Item -LiteralPath "$fx\menu-registry" -Destination $reg -Recurse
     if ($Edit) { & $Edit $reg }
     $regArgs = if ($DefaultLocation) { @() } else { @('--registry', $reg) }
-    $txt = (& $Exe menu-drift --project $proj --db $db @regArgs @Extra --format json 2> "$WorkDir\$Tag.err" | Out-String)
+    $txt = (& { $ErrorActionPreference = 'Continue'; & $Exe menu-drift --project $proj --db $db @regArgs @Extra --format json 2> "$WorkDir\$Tag.err" } | Out-String)
     $code = $LASTEXITCODE
     $doc = $null
     try { $doc = $txt | ConvertFrom-Json } catch { $doc = $null }

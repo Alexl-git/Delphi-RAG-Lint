@@ -55,12 +55,12 @@ $db = Join-Path $scratch 'cyc.sqlite'
 
 Push-Location C:\TEMP
 try {
-  $idx = & $exePath index $scratch --db $db 2>&1 | Out-String
+  $idx = & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'SANITY: both fixture units indexed with no errors' `
         (($idx -match 'uCycA\.pas\s*->\s*\d+ symbols, \d+ refs, 0 errors') -and
          ($idx -match 'uCycB\.pas\s*->\s*\d+ symbols, \d+ refs, 0 errors')) $idx
 
-  $plan = & $exePath cycles --plan --library-db none --db $db 2>&1 | Out-String
+  $plan = & { $ErrorActionPreference = 'Continue'; & $exePath cycles --plan --library-db none --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 
   Check 'SANITY: the cycle is detected and is implementation-only' `
         ($plan -match 'implementation-only') $plan

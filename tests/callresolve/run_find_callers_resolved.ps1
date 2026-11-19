@@ -47,10 +47,10 @@ Copy-Item $fixture $target -Force
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # --- WITHOUT --resolved: old name-based flat list, UNCHANGED. ---
-  $plainOut = & $exePath query find-callers --name Run --db $db 2>$null | Out-String
+  $plainOut = & { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name Run --db $db 2>$null } | Out-String
   Check 'without --resolved: still returns caller(s) (name-based, unchanged)' `
     ($plainOut -match '\d+ caller\(s\)' -and $plainOut -notmatch '\d+ caller\(0\)')
   Check 'without --resolved: no target_qname grouping marker' `
@@ -59,7 +59,7 @@ try {
     ($plainOut -notmatch 'certain|ambiguous')
 
   # --- WITH --resolved --json: grouped-by-target precision proof. ---
-  $jsonOut = & $exePath query find-callers --name Run --resolved --json --db $db 2>$null | Out-String
+  $jsonOut = & { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name Run --resolved --json --db $db 2>$null } | Out-String
   Check '--resolved --json: parses as JSON array' ($null -ne $jsonOut -and $jsonOut.Trim().StartsWith('['))
   $rows = $jsonOut | ConvertFrom-Json
   Check '--resolved --json: at least 4 resolved callers (Field/Param/Local/Self+bare)' ($rows.Count -ge 4)

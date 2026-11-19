@@ -89,9 +89,9 @@ try {
       $db = Join-Path $out "$k.sqlite"
       $argv = @('index', '--project', $proj, '--db', $db)
       if ($c.arg) { $argv += @('--platform', $c.arg) }
-      $txt = (& $exe @argv 2>&1 | Out-String)
+      $txt = (& { $ErrorActionPreference = 'Continue'; & $exe @argv 2>&1 | ForEach-Object { "$_" } } | Out-String)
       $pp = [regex]::Match($txt, 'Preprocess: ON[^\r\n]*platform=([A-Za-z0-9]+)').Groups[1].Value.ToLowerInvariant()
-      $fpRow = (& $exe sql --query "select value from schema_meta where key='indexer_fingerprint'" --db $db 2>&1 | Out-String)
+      $fpRow = (& { $ErrorActionPreference = 'Continue'; & $exe sql --query "select value from schema_meta where key='indexer_fingerprint'" --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String)
       $fp = [regex]::Match($fpRow, 'plat=([A-Za-z0-9]*)').Groups[1].Value.ToLowerInvariant()
       Check "$k index Preprocess platform = $($c.want)" ($pp -eq $c.want) "(got '$pp')"
       Check "$k fingerprint plat = $($c.want)"          ($fp -eq $c.want) "(got '$fp')"
@@ -100,14 +100,14 @@ try {
     foreach ($k in 'xe','w32','w64') {
       $sec = "Sec_$k"; $secDb = Join-Path $out "sec_$k.sqlite"
       Write-Ascii (Join-Path $eng 'drag-lint.json') "{ `"settings`": { `"defaultPlatform`": `"Win32`", `"maxJobs`": 1 }, `"indexes`": { `"outDir`": `"$o`", `"sections`": [ { `"name`": `"$sec`", `"db`": `"sec_$k.sqlite`", `"include`": [`"$($projOf[$k].Replace('\','/'))`"] } ] } }"
-      & $exe index --all --only $sec 2>&1 | Out-Null
-      $fpRow = (& $exe sql --query "select value from schema_meta where key='indexer_fingerprint'" --db $secDb 2>&1 | Out-String)
+      & { $ErrorActionPreference = 'Continue'; & $exe index --all --only $sec 2>&1 | ForEach-Object { "$_" } } | Out-Null
+      $fpRow = (& { $ErrorActionPreference = 'Continue'; & $exe sql --query "select value from schema_meta where key='indexer_fingerprint'" --db $secDb 2>&1 | ForEach-Object { "$_" } } | Out-String)
       $fp = [regex]::Match($fpRow, 'plat=([A-Za-z0-9]*)').Groups[1].Value.ToLowerInvariant()
       Check "$k index --all section fingerprint plat = $($cases[$k].want)" ($fp -eq $cases[$k].want) "(got '$fp')"
     }
     foreach ($k in 'xe','w64') {
       $db = Join-Path $out "$k.sqlite"
-      $txt = (& $exe cycles --fix --project $projOf[$k] --db $db --format json 2>&1 | Out-String)
+      $txt = (& { $ErrorActionPreference = 'Continue'; & $exe cycles --fix --project $projOf[$k] --db $db --format json 2>&1 | ForEach-Object { "$_" } } | Out-String)
       $m = [regex]::Match($txt, '"platform"\s*:\s*"([^"]*)"')
       Check "$k cycles --fix JSON platform = $($cases[$k].want)" ($m.Success -and $m.Groups[1].Value -eq $cases[$k].want) "(got '$($m.Groups[1].Value)')"
     }

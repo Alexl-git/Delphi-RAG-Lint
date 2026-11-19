@@ -40,7 +40,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 
 # lint-all --json is a bare array; line field is start_line. Print raw once, then filter.
 function Get-Findings([string]$Db, [string[]]$Extra) {
-  $out = (& $Exe lint-all --db $Db --json @Extra 2>$null) -join "`n"
+  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --json @Extra 2>$null }) -join "`n"
   Write-Host ("  raw[{0}]: {1}" -f (Split-Path $Db -Leaf), $out.Substring(0, [Math]::Min(300, $out.Length)))
   if ($out.Trim() -eq '') { return @() }
   return @($out | ConvertFrom-Json | Where-Object { $_.rule -eq $Rule })
@@ -54,13 +54,13 @@ $DbC = Join-Path $WorkDir 'console.sqlite'
 $DbG = Join-Path $WorkDir 'gui.sqlite'
 Push-Location $WorkDir
 try {
-  & $Exe index (Join-Path $WorkDir 'console') --db $DbC *> (Join-Path $WorkDir 'index-console.log')
-  & $Exe index (Join-Path $WorkDir 'gui')     --db $DbG *> (Join-Path $WorkDir 'index-gui.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $WorkDir 'console') --db $DbC *> (Join-Path $WorkDir 'index-console.log') }
+  & { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $WorkDir 'gui')     --db $DbG *> (Join-Path $WorkDir 'index-gui.log') }
 
   # c0: the per-file rule is live (a console file with a direct dialog call)
   $c0 = Join-Path $WorkDir 'Direct.pas'
   [IO.File]::WriteAllText($c0, "program Direct;`r`n`r`n{`$APPTYPE CONSOLE}`r`n`r`nuses Vcl.Dialogs;`r`n`r`nbegin`r`n  ShowMessage('x');`r`nend.`r`n")
-  $d = (& $Exe lint $c0 --json 2>$null) -join "`n"
+  $d = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $c0 --json 2>$null }) -join "`n"
   $d0 = if ($d.Trim() -eq '') { @() } else { @($d | ConvertFrom-Json | Where-Object { $_.rule -eq $Rule }) }
   Check 'c0 positive control: per-file rule fires on a direct dialog call' ($d0.Count -ge 1) "raw: $d"
 

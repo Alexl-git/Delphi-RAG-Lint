@@ -320,7 +320,7 @@ function W([string]$dir, [string]$name, [string]$body) {
 # column names. A failed query (empty stdout) is an EMPTY array. The only
 # change is the leading $db parameter: this guard queries two databases.
 function Sql([string]$db, [string]$q) {
-  $j = (& $exePath sql --db $db --query $q --json 2>$null) -join "`n"
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n"
   if ([string]::IsNullOrWhiteSpace($j)) { return ,@() }
   try { $o = $j | ConvertFrom-Json } catch { return ,@() }
   $cols = @($o.columns | ForEach-Object { $_.name })
@@ -365,7 +365,7 @@ function IsNull($rows) {
   return (@($rows).Count -eq 1 -and [string]::IsNullOrEmpty([string]$rows[0].sid))
 }
 function Resolved([string]$db, [string]$name) {
-  $raw = & $exePath query find-callers --name $name --resolved --json --db $db 2>$null | Out-String
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name $name --resolved --json --db $db 2>$null } | Out-String
   if ($raw.Trim() -eq '') { return @() }
   try { return @(($raw | ConvertFrom-Json)) } catch { return @() }
 }
@@ -519,7 +519,7 @@ foreach ($k in @('A1','A2','A3','A4','A5','B1','B2','N1','N2','N3','N4','N5','N6
 
 Write-Host ''
 Write-Host '== check 1: fixture A indexes clean ==' -ForegroundColor Cyan
-$idxOut = & $exePath index $dirA --db $dbA 2>&1 | Out-String
+$idxOut = & { $ErrorActionPreference = 'Continue'; & $exePath index $dirA --db $dbA 2>&1 | ForEach-Object { "$_" } } | Out-String
 $idxExit = $LASTEXITCODE
 CheckN 1 'index exits 0' ($idxExit -eq 0) "exit=$idxExit"
 # '0 errors' as a bare -match ALSO matches "10 errors" and "20 errors" -- the
@@ -556,7 +556,7 @@ Write-Host '== check 8: E1 fence -- the unresolved-call COMPLEMENT universe is u
 # cannot quietly narrow what this fence looks for.
 $enumNames = @((Sql $dbA "SELECT DISTINCT name FROM symbols WHERE kind = 'enum_value' ORDER BY name") | ForEach-Object { $_.name })
 CheckN 8 'fixture health: the DB carries the expected enum values (fence has something to look for)' ($enumNames.Count -ge 8) ($enumNames -join ',')
-$acRaw  = (& $exePath ambiguous-calls --db $dbA --json 2>$null) -join "`n"
+$acRaw  = (& { $ErrorActionPreference = 'Continue'; & $exePath ambiguous-calls --db $dbA --json 2>$null }) -join "`n"
 $acExit = $LASTEXITCODE
 # The fence is "no enum value is named", which an EMPTY $acRaw satisfies
 # trivially -- so a failed, renamed or refused `ambiguous-calls` would report
@@ -740,7 +740,7 @@ Write-Host '   (trivial dedupe today; becomes non-trivial at task 6 when the val
 # this check asserts ONLY the dedupe, never the membership of the list (R9).
 # See the header for why the plan's and the spec's claims about this check
 # are corrected here.
-$docRaw = (& $exePath document --qname 'uEnumDecl.TCmd.cmdLoad' --db $dbA 2>$null) -join "`n"
+$docRaw = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname 'uEnumDecl.TCmd.cmdLoad' --db $dbA 2>$null }) -join "`n"
 $usedBy = @(($docRaw -split "`r?`n") | Where-Object { $_ -match 'Used by:' })
 $ubText = ($usedBy -join ' ')
 CheckN 10 'cmdLoad has a "Used by:" line at all' ($usedBy.Count -ge 1) $docRaw
@@ -751,13 +751,13 @@ CheckN 10 'cmdLoad "Used by:" carries no " ?" unverified marker' ($usedBy.Count 
 Write-Host ''
 Write-Host '== check 11: lint-tree sees a removed ENUM MEMBER (TASK 8, the LAST to go green) ==' -ForegroundColor Cyan
 $base = Join-Path $scratch 'base.json'
-& $exePath lint-tree --unit $fDecl --db $dbA --write-baseline $base --format json *> $null
+& { $ErrorActionPreference = 'Continue'; & $exePath lint-tree --unit $fDecl --db $dbA --write-baseline $base --format json *> $null }
 CheckN 11 'baseline written' (Test-Path $base) ''
 $buf = Join-Path $scratch 'uEnumDecl.buf.pas'
 $srcDecl = [IO.File]::ReadAllText($fDecl)
 [IO.File]::WriteAllText($buf, ($srcDecl -replace 'cmdLoad, ', ''), [Text.Encoding]::ASCII)
 CheckN 11 'buffer really dropped cmdLoad from TCmd' ([IO.File]::ReadAllText($buf) -match '(?m)^\s*TCmd = \(cmdDelta, cmdShadow, cmdClash\);') (([IO.File]::ReadAllText($buf) -split "`r`n" | Where-Object { $_ -match 'TCmd' }) -join ' ')
-$lt = & $exePath lint-tree --unit $fDecl --db $dbA --buffer $buf --baseline $base --format json 2>$null | Out-String
+$lt = & { $ErrorActionPreference = 'Continue'; & $exePath lint-tree --unit $fDecl --db $dbA --buffer $buf --baseline $base --format json 2>$null } | Out-String
 $lj = $null; try { $lj = $lt | ConvertFrom-Json } catch { }
 CheckN 11 'lint-tree returned JSON' ($null -ne $lj) $lt
 if ($null -ne $lj) {
@@ -797,7 +797,7 @@ Copy-Item $fDecl (Join-Path $dirB 'uEnumDecl.pas')
 Copy-Item $fDecl (Join-Path $dirB 'dup\uEnumDecl.pas')
 Copy-Item $fUse  (Join-Path $dirB 'uEnumUse.pas')
 $dbB = Join-Path $scratch 'b.sqlite'
-$idxB = & $exePath index $dirB --db $dbB 2>&1 | Out-String
+$idxB = & { $ErrorActionPreference = 'Continue'; & $exePath index $dirB --db $dbB 2>&1 | ForEach-Object { "$_" } } | Out-String
 CheckN 13 'fixture B indexes clean' (($LASTEXITCODE -eq 0) -and ($idxB -match '(?<!\d)0 errors')) "exit=$LASTEXITCODE"
 # FIXTURE HEALTH FIRST: without two identical twins, rule 0 has nothing to
 # collapse and the outcome assertion below would be vacuous.
@@ -853,7 +853,7 @@ const
 implementation
 end.
 '@
-$incOut = & $exePath index $dirA --db $dbA 2>&1 | Out-String
+$incOut = & { $ErrorActionPreference = 'Continue'; & $exePath index $dirA --db $dbA 2>&1 | ForEach-Object { "$_" } } | Out-String
 CheckN 12 'incremental index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 CheckN 12 'the calls stage ran SCOPED (a WHOLE-DB pass would mask the trap)' ($incOut -match 'starting SCOPED pass') (($incOut -split "`r?`n" | Where-Object { $_ -match 'resolve: calls' }) -join ' | ')
 $rA5b = RefRow $dbA $L.A5.f $L.A5.l 'read' 'cmdLoad'

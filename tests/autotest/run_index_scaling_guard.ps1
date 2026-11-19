@@ -68,7 +68,7 @@ function Measure-Index([int]$Lines) {
   $env:DRAGLINT_PROFILE = '1'
   try {
     $sw = [Diagnostics.Stopwatch]::StartNew()
-    $out = & $Exe index $dir --db $db 2>&1
+    $out = & { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db $db 2>&1 | ForEach-Object { "$_" } }
     $code = $LASTEXITCODE
     $sw.Stop()
   } finally {

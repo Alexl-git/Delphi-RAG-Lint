@@ -44,7 +44,7 @@ function Parse-Findings([string[]]$Raw) {
   return ,@($out)
 }
 function RuleFindings([string[]]$LintArgs) {
-  $raw = & $exePath lint-all @LintArgs --format json 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all @LintArgs --format json 2>$null }
   return ,@((Parse-Findings $raw) | Where-Object { $_.rule -eq $Rule })
 }
 # "line kind severity" keys of the tagged lines; $Tag = EXPECT or LIBONLY
@@ -71,9 +71,9 @@ try {
   Copy-Item (Join-Path $PSScriptRoot 'lib\*.pas') $lib
   $db    = Join-Path $scratch 'rtti.sqlite'
   $libDb = Join-Path $scratch 'library-rtti.sqlite'
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'project index exits 0' ($LASTEXITCODE -eq 0)
-  & $exePath index $lib --db $libDb 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $lib --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'library index exits 0' ($LASTEXITCODE -eq 0)
   $objects = Join-Path $src 'uRttiObjects.pas'
   $want    = @((Expected $objects 'EXPECT') | Sort-Object)
@@ -102,7 +102,7 @@ try {
     Write-Host '[SKIP] RUN 3 --enable: DRagLint.CLI.pas does not name the rule yet (HANDOVER CLI, lane RTTI)' -ForegroundColor Yellow
   }
 
-  $one = & $exePath lint $objects --db $db --library-db none --rule $Rule --json 2>$null
+  $one = & { $ErrorActionPreference = 'Continue'; & $exePath lint $objects --db $db --library-db none --rule $Rule --json 2>$null }
   $oneF = @((Parse-Findings $one) | Where-Object { $_.rule -eq $Rule })
   $oneGot = KeysOf $oneF
   Check 'RUN 4 lint <file> --rule: the same findings' (($oneGot -join ' | ') -eq ($want -join ' | ')) "got [$($oneGot -join ' | ')]"

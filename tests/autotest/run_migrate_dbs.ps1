@@ -12,7 +12,7 @@ try {
     $olddb = Join-Path $out 'Old-App.sqlite'
     & $Exe index $proj --db $olddb | Out-Null
     Check 'fixture index built' (Test-Path $olddb)
-    $before = & $Exe query --db $olddb --name App --json 2>$null | Out-String
+    $before = & { $ErrorActionPreference = 'Continue'; & $Exe query --db $olddb --name App --json 2>$null } | Out-String
 
     # A second, untouched folder-scan section -- purely so "dedupAgainst"
     # below names a section that actually exists (index --all's Validate
@@ -36,13 +36,13 @@ try {
     $newdb = Join-Path $proj '_D-RAG\App.sqlite'
 
     # 1. Dry run must NOT touch disk.
-    $dry = & $Exe migrate-dbs --config $cfg 2>&1 | Out-String
+    $dry = & { $ErrorActionPreference = 'Continue'; & $Exe migrate-dbs --config $cfg 2>&1 | ForEach-Object { "$_" } } | Out-String
     Check 'dry-run exits 0'          ($LASTEXITCODE -eq 0)
     Check 'dry-run names the target' ($dry -match [regex]::Escape($newdb))
     Check 'dry-run moved nothing'    ((Test-Path $olddb) -and -not (Test-Path $newdb))
 
     # 2. Apply moves the DB and its WAL siblings.
-    $app = & $Exe migrate-dbs --config $cfg --apply 2>&1 | Out-String
+    $app = & { $ErrorActionPreference = 'Continue'; & $Exe migrate-dbs --config $cfg --apply 2>&1 | ForEach-Object { "$_" } } | Out-String
     Check 'apply exits 0'        ($LASTEXITCODE -eq 0)
     Check 'db moved'             ((Test-Path $newdb) -and -not (Test-Path $olddb))
     Check 'no -wal left behind'  (-not (Test-Path "$olddb-wal"))
@@ -69,7 +69,7 @@ try {
     # script can do deterministically, so this is covered by an in-process
     # selftest instead: it forces the atomic swap itself to fail (a read-only
     # target) and asserts the original content survives completely untouched.
-    $saveAtomic = & $Exe selftest manifest-save-atomic 2>&1 | Out-String
+    $saveAtomic = & { $ErrorActionPreference = 'Continue'; & $Exe selftest manifest-save-atomic 2>&1 | ForEach-Object { "$_" } } | Out-String
     Check 'TManifestIO.Save is atomic' ($saveAtomic -match 'SAVEATOMIC-OK')
 
     # 2d. Save must write plain UTF-8, no BOM, and must not silently rewrite
@@ -91,13 +91,13 @@ try {
     Check 'Save writes CRLF line endings (no lone LF)' (-not $loneLf)
 
     # 3. The moved index still answers, and the manifest now derives the path.
-    $after = & $Exe query --db $newdb --name App --json 2>$null | Out-String
+    $after = & { $ErrorActionPreference = 'Continue'; & $Exe query --db $newdb --name App --json 2>$null } | Out-String
     Check 'moved index still answers' ($after.Trim() -eq $before.Trim())
-    $plan = & $Exe index --all --dry-run --json --config $cfg 2>$null | Out-String
+    $plan = & { $ErrorActionPreference = 'Continue'; & $Exe index --all --dry-run --json --config $cfg 2>$null } | Out-String
     Check 'manifest points at _D-RAG' ($plan -match '_D-RAG')
 
     # 4. Re-running is a no-op, not an error.
-    & $Exe migrate-dbs --config $cfg --apply 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $Exe migrate-dbs --config $cfg --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
     Check 'second apply is a no-op' ($LASTEXITCODE -eq 0)
 
     # 5. A locked DB aborts with exit 2 and names the file.
@@ -108,13 +108,13 @@ try {
                   @{ name = 'Old-App'; db = $newdb2; include = @((Join-Path $proj 'App.dproj')) } ) } }
         $cfg2 = Join-Path $work 'locked.json'
         Set-Content -LiteralPath $cfg2 -Value ($j2 | ConvertTo-Json -Depth 8)
-        $lock = & $Exe migrate-dbs --config $cfg2 --apply 2>&1 | Out-String
+        $lock = & { $ErrorActionPreference = 'Continue'; & $Exe migrate-dbs --config $cfg2 --apply 2>&1 | ForEach-Object { "$_" } } | Out-String
         Check 'locked db aborts with 2' ($LASTEXITCODE -eq 2)
         Check 'lock error names the file' ($lock -match 'App.sqlite')
 
         # A DRY RUN must always be safe, even while the same db is locked --
         # it only prints the plan, so the lock probe must not even run.
-        & $Exe migrate-dbs --config $cfg2 2>&1 | Out-Null
+        & { $ErrorActionPreference = 'Continue'; & $Exe migrate-dbs --config $cfg2 2>&1 | ForEach-Object { "$_" } } | Out-Null
         Check 'dry-run is safe while a db is locked' ($LASTEXITCODE -eq 0)
     } finally { $fs.Close() }
 
@@ -152,7 +152,7 @@ try {
         $adst = Join-Path $projA '_D-RAG\A.sqlite'
         $bdst = Join-Path $projB '_D-RAG\B.sqlite'
 
-        & $Exe migrate-dbs --config $cfg3 --apply 2>&1 | Out-Null
+        & { $ErrorActionPreference = 'Continue'; & $Exe migrate-dbs --config $cfg3 --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
         Check 'batch: overall exit is 1 (a move failed)' ($LASTEXITCODE -eq 1)
         Check 'batch: first section physically moved'    ((Test-Path $adst) -and -not (Test-Path $adb))
         Check 'batch: second section did NOT move'        (Test-Path $bdb)
@@ -164,7 +164,7 @@ try {
         Check 'batch: A on-disk manifest entry has no stale db' ([string]::IsNullOrEmpty($savedA.db))
         Check 'batch: B on-disk manifest entry unchanged (still explicit)' ($savedB.db -eq 'B.sqlite')
 
-        $planAfterBatch = & $Exe index --all --dry-run --json --config $cfg3 2>$null | Out-String
+        $planAfterBatch = & { $ErrorActionPreference = 'Continue'; & $Exe index --all --dry-run --json --config $cfg3 2>$null } | Out-String
         $planObj  = $planAfterBatch | ConvertFrom-Json
         $aSection = $planObj.sections | Where-Object { $_.name -eq 'A' }
         Check 'batch: index --all resolves A at its new home' ($aSection.db -eq $adst)
@@ -177,11 +177,11 @@ try {
         New-Item -ItemType Directory (Split-Path $bdst) -Force | Out-Null
         & $Exe index $projB --db $bdst | Out-Null
 
-        $retry = & $Exe migrate-dbs --config $cfg3 --apply 2>&1 | Out-String
+        $retry = & { $ErrorActionPreference = 'Continue'; & $Exe migrate-dbs --config $cfg3 --apply 2>&1 | ForEach-Object { "$_" } } | Out-String
         Check 'retry: exits 0'                          ($LASTEXITCODE -eq 0)
         Check 'retry: reconciles B, not "never built"'  (($retry -match 'RECONCIL') -and ($retry -notmatch 'never built'))
 
-        $planAfterRetry = & $Exe index --all --dry-run --json --config $cfg3 2>$null | Out-String
+        $planAfterRetry = & { $ErrorActionPreference = 'Continue'; & $Exe index --all --dry-run --json --config $cfg3 2>$null } | Out-String
         $planObj2 = $planAfterRetry | ConvertFrom-Json
         $bSection = $planObj2.sections | Where-Object { $_.name -eq 'B' }
         Check 'retry: index --all resolves B at its new home' ($bSection.db -eq $bdst)
@@ -211,7 +211,7 @@ try {
               ) } }
         Set-Content -LiteralPath $cfgC -Value ($jC | ConvertTo-Json -Depth 8)
 
-        $badRecon = & $Exe migrate-dbs --config $cfgC --apply 2>&1 | Out-String
+        $badRecon = & { $ErrorActionPreference = 'Continue'; & $Exe migrate-dbs --config $cfgC --apply 2>&1 | ForEach-Object { "$_" } } | Out-String
         Check 'unhealthy reconcile: refused, exit 1'        ($LASTEXITCODE -eq 1)
         # -match is case-insensitive, and the refusal message itself says
         # "NOT reconciling" -- match the exact success marker (with the
@@ -226,7 +226,7 @@ try {
         # A GENUINELY healthy database at the same path must still reconcile.
         Remove-Item -LiteralPath $cdst -Force
         & $Exe index $projC --db $cdst | Out-Null
-        $goodRecon = & $Exe migrate-dbs --config $cfgC --apply 2>&1 | Out-String
+        $goodRecon = & { $ErrorActionPreference = 'Continue'; & $Exe migrate-dbs --config $cfgC --apply 2>&1 | ForEach-Object { "$_" } } | Out-String
         Check 'healthy reconcile: exits 0'    ($LASTEXITCODE -eq 0)
         Check 'healthy reconcile: RECONCILED' ($goodRecon -match 'RECONCIL')
     } finally {
@@ -263,7 +263,7 @@ try {
               ) } }
         Set-Content -LiteralPath $cfgD -Value ($jD | ConvertTo-Json -Depth 8)
 
-        $postMove = & $Exe migrate-dbs --config $cfgD --apply 2>&1 | Out-String
+        $postMove = & { $ErrorActionPreference = 'Continue'; & $Exe migrate-dbs --config $cfgD --apply 2>&1 | ForEach-Object { "$_" } } | Out-String
         Check 'post-move failure: overall exit is 1'            ($LASTEXITCODE -eq 1)
         Check 'post-move failure: file physically moved anyway' ((Test-Path $ddst) -and -not (Test-Path $ddb))
 
@@ -281,7 +281,7 @@ try {
         # already correct, so the section is "already home" with nothing left
         # to do -- it must NOT print a false RECONCILED/OK claim for a
         # database whose .gitignore write never actually completed.
-        $retryD = & $Exe migrate-dbs --config $cfgD --apply 2>&1 | Out-String
+        $retryD = & { $ErrorActionPreference = 'Continue'; & $Exe migrate-dbs --config $cfgD --apply 2>&1 | ForEach-Object { "$_" } } | Out-String
         Check 'post-move failure retry: exits 0 (nothing left to move)' ($LASTEXITCODE -eq 0)
         Check 'post-move failure retry: no false health claim' (($retryD -notmatch 'RECONCIL') -and ($retryD -notmatch 'OK \('))
     } finally {
@@ -320,7 +320,7 @@ try {
         Set-Content -LiteralPath $cfg64 -Value ($jE | ConvertTo-Json -Depth 8)
 
         # 10a. No sibling file yet -- migrating E must not fabricate one.
-        $noSib = & $Exe migrate-dbs --config $cfg64 --apply 2>&1 | Out-String
+        $noSib = & { $ErrorActionPreference = 'Continue'; & $Exe migrate-dbs --config $cfg64 --apply 2>&1 | ForEach-Object { "$_" } } | Out-String
         Check 'pair 10a: apply exits 0'                ($LASTEXITCODE -eq 0)
         Check 'pair 10a: no sibling -- none fabricated' (-not (Test-Path $cfg32))
 
@@ -339,7 +339,7 @@ try {
             @{ name = 'F'; db = 'F.sqlite'; include = @((Join-Path $projF 'F.dproj')) })
         Set-Content -LiteralPath $cfg64 -Value ($doc64 | ConvertTo-Json -Depth 10)
 
-        $mirrorOut = & $Exe migrate-dbs --config $cfg64 --apply 2>&1 | Out-String
+        $mirrorOut = & { $ErrorActionPreference = 'Continue'; & $Exe migrate-dbs --config $cfg64 --apply 2>&1 | ForEach-Object { "$_" } } | Out-String
         Check 'pair 10b: apply exits 0' ($LASTEXITCODE -eq 0)
 
         $bytes64 = [System.IO.File]::ReadAllBytes($cfg64)

@@ -72,9 +72,9 @@ end.
   $db = Join-Path $WorkDir 'm.sqlite'
   Push-Location $WorkDir
   try {
-    $o = & $Exe index $WorkDir --db $db --library-db none --rule-cache-warm off 2>&1 | Out-String
+    $o = & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db --library-db none --rule-cache-warm off 2>&1 | ForEach-Object { "$_" } } | Out-String
     Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
-    $j = & $Exe sql --db $db --query "SELECT name FROM symbols" --json 2>$null | Out-String
+    $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query "SELECT name FROM symbols" --json 2>$null } | Out-String
   } finally { Pop-Location }
   $names = @()
   try { $names = @((($j | ConvertFrom-Json).rows) | ForEach-Object { [string]$_[0] }) } catch {}

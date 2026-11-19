@@ -39,11 +39,11 @@ Copy-Item $fixture $target -Force
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # Dry-run first: file must NOT change, action=created.
   $before = [IO.File]::ReadAllBytes($target)
-  $j = & $exePath document --qname doc_generate.Add --db $db --json 2>$null | Out-String
+  $j = & { $ErrorActionPreference = 'Continue'; & $exePath document --qname doc_generate.Add --db $db --json 2>$null } | Out-String
   $o = $null; try { $o = ($j | ConvertFrom-Json) } catch { $o = $null }
   Check 'dry-run: json action = created' ($null -ne $o -and $o.action -eq 'created')
   Check 'dry-run: json applied = false'  ($null -ne $o -and $o.applied -eq $false)
@@ -51,7 +51,7 @@ try {
   Check 'dry-run: file NOT modified' ([System.Linq.Enumerable]::SequenceEqual([byte[]]$before,[byte[]]$after))
 
   # Apply: writes the comment + a .bak.
-  $ap = & $exePath document --qname doc_generate.Add --db $db --apply 2>$null | Out-String
+  $ap = & { $ErrorActionPreference = 'Continue'; & $exePath document --qname doc_generate.Add --db $db --apply 2>$null } | Out-String
   Check 'apply: reports created + edits applied' ($ap -match 'doc: created -- \d+ edit\(s\) applied')
   Check 'apply: .bak written' (Test-Path "$target.bak")
 

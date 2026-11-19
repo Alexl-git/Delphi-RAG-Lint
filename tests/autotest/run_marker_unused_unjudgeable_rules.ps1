@@ -80,12 +80,12 @@ $pasB = Join-Path $WorkDir 'uDupB.pas'
 [IO.File]::WriteAllText($pasA, (UnitSource 'uDupA' 'StepA') + "`r`n", [Text.Encoding]::ASCII)
 [IO.File]::WriteAllText($pasB, (UnitSource 'uDupB' 'StepB') + "`r`n", [Text.Encoding]::ASCII)
 
-& $Exe index $WorkDir --db $db *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db *> $null }
 Check 'fixture indexed' ($LASTEXITCODE -eq 0) ''
 
-function LintAll { ((& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db 2>$err | Out-String) -replace "`r`n", "`n") }
+function LintAll { ((& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db 2>$err } | Out-String) -replace "`r`n", "`n") }
 function LintFile([string]$P, [switch]$NoDb) {
-  $o = if ($NoDb) { & $Exe lint $P 2>$err } else { & $Exe lint $P --db $db 2>$err }
+  $o = if ($NoDb) { & { $ErrorActionPreference = 'Continue'; & $Exe lint $P 2>$err } } else { & { $ErrorActionPreference = 'Continue'; & $Exe lint $P --db $db 2>$err } }
   (($o | Out-String) -replace "`r`n", "`n")
 }
 function Relevant([string]$Out) { (($Out -split "`n" | Where-Object { $_ -match 'review-marker|duplicate-code:|self-assignment:|unused-public-symbol:' }) -join ' || ') }

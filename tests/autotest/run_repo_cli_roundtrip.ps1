@@ -45,7 +45,7 @@ $Work = Join-Path ([IO.Path]::GetTempPath()) ('dl-repo-cli-' + [guid]::NewGuid()
 # Runs the engine; returns exit code, stdout, stderr.
 function Run([string[]]$a) {
   $errFile = Join-Path $Work ('err-' + [guid]::NewGuid().ToString('N') + '.txt')
-  $out = (& $Exe @a 2> $errFile) -join "`n"
+  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2> $errFile }) -join "`n"
   $code = $LASTEXITCODE
   $err = if (Test-Path $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
   [pscustomobject]@{ Code = $code; Out = $out; Err = $err }

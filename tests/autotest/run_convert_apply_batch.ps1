@@ -53,7 +53,7 @@ New-Item -ItemType Directory $WorkDir -Force | Out-Null
 Copy-Item (Join-Path $PSScriptRoot 'fixtures\unitrules\*') $WorkDir
 
 $db = Join-Path $WorkDir 'fx.sqlite'
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the fixture index was built' (Test-Path $db)
 
 function P([string]$n) { return (Join-Path $WorkDir $n) }
@@ -62,7 +62,7 @@ function Run([string[]]$Units, [string]$Rules, [string[]]$Extra = @()) {
   $a = @('convert-apply')
   foreach ($u in $Units) { $a += @('--unit', (P $u)) }
   $a += @('--rules', (P $Rules), '--db', $db) + $Extra
-  $o = (& $Exe @a 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 function Json([string]$s) {
@@ -78,7 +78,7 @@ function Shape($o) {
 }
 
 # ---- capability -------------------------------------------------------------
-$j = Json ((& $Exe info --json 2>&1) -join "`n")
+$j = Json ((& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>&1 | ForEach-Object { "$_" } }) -join "`n")
 Check 'C1 info --json: capabilities.batch_units is JSON true' `
   (($null -ne $j) -and ($j.capabilities.batch_units -is [bool]) -and ($j.capabilities.batch_units -eq $true)) `
   "capabilities = $(if ($j) { $j.capabilities | ConvertTo-Json -Compress } else { '<no json>' })"

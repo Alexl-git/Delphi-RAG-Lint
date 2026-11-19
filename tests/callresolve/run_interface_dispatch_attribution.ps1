@@ -100,7 +100,7 @@ end.
 
 $db = Join-Path $WorkDir 'rb5.sqlite'
 Push-Location C:\TEMP
-& $exePath index --project (Join-Path $WorkDir 'RB5.dpr') --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index --project (Join-Path $WorkDir 'RB5.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V index built' (Test-Path $db) $db
 $raw = & $exePath sql --db $db --json --limit 200 --query "SELECT r.start_line, coalesce(r.receiver_text,''), coalesce(e.confidence,''), coalesce(s.qualified_name,''), CASE WHEN r.symbol_id = e.target_symbol_id THEN 1 ELSE 0 END, coalesce(p.kind,'') FROM refs r LEFT JOIN call_edges e ON e.ref_id = r.id LEFT JOIN symbols s ON s.id = e.target_symbol_id LEFT JOIN symbols p ON p.id = s.parent_id WHERE r.kind = 'call' AND r.name_text = 'TransferFile' ORDER BY r.start_line" | Out-String
 $disp = & $exePath sql --db $db --json --limit 50 --query "SELECT i.qualified_name, d.kind FROM dispatch_edges d JOIN symbols b ON b.id = d.base_symbol_id JOIN symbols i ON i.id = d.impl_symbol_id WHERE b.qualified_name = 'uRB5.ICopy.TransferFile' ORDER BY 1" | Out-String

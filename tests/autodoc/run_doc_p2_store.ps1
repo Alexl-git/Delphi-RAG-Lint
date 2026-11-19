@@ -34,9 +34,9 @@ Copy-Item $fixture $target -Force
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
-  $out = & $exePath doc-facts-selftest --db $db 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath doc-facts-selftest --db $db 2>$null }
   $exitCode = $LASTEXITCODE
   $raw = ($out -join "`n")
 

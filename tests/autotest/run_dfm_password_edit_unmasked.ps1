@@ -37,10 +37,10 @@ try {
   # --- fix
   $dfm = Join-Path $fx 'uLogin.dfm'
   $want = Join-Path $PSScriptRoot "..\lint-project\$rule\expected\uLogin.fixed.dfm"
-  & $Exe lint-all --db $db --rule $rule --fix --fix-rule $rule --apply --no-backup 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule $rule --fix --fix-rule $rule --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'fix: result is byte-identical to expected\uLogin.fixed.dfm' (Test-G8BytesEqual $dfm $want)
   $before = [IO.File]::ReadAllBytes($dfm)
-  $txt = (& $Exe lint-all --db $db --rule $rule --fix --fix-rule $rule --apply --no-backup 2>&1 | Out-String)
+  $txt = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule $rule --fix --fix-rule $rule --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check 'fix: second run leaves the bytes unchanged' ([Linq.Enumerable]::SequenceEqual([byte[]]$before, [byte[]][IO.File]::ReadAllBytes($dfm)))
   Check 'fix: reindexed fixed file no longer fires' ((Invoke-G8Index $Exe $fx $db) -eq 0 -and (Get-G8Findings $Exe $db $rule).Count -eq 0)
 } finally { [IO.Directory]::Delete($WorkDir, $true) }

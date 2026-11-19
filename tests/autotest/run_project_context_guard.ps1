@@ -28,7 +28,7 @@ function Check([string]$name, [bool]$ok) {
   if ($ok) { Write-Host "ok   $name" } else { Write-Host "FAIL $name"; $script:fail++ }
 }
 function Run([string[]]$a) {
-  $out = & $Exe @a 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } } | Out-String
   [pscustomobject]@{ Code = $LASTEXITCODE; Out = $out }
 }
 function Defines([string]$file) { (Get-Content $file -Raw | ConvertFrom-Json).defines }

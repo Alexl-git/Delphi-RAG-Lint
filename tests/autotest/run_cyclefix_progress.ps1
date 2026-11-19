@@ -96,11 +96,11 @@ New-Item -ItemType Directory -Force $Proj | Out-Null
 Get-ChildItem $Demo -File | Where-Object { $_.Extension -in '.pas', '.dpr', '.dproj' } | ForEach-Object { Copy-Item $_.FullName (Join-Path $Proj $_.Name) -Force }
 $Dproj = Join-Path $Proj 'CircularDemo.dproj'
 $Db = Join-Path $WorkDir 'demo.sqlite'
-& $Exe index --project $Dproj --db $Db *> (Join-Path $WorkDir 'index.log')
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project $Dproj --db $Db *> (Join-Path $WorkDir 'index.log') }
 $EmptyDir = Join-Path $WorkDir 'empty'
 New-Item -ItemType Directory -Force $EmptyDir | Out-Null
 $Lib = Join-Path $WorkDir 'lib.sqlite'
-& $Exe index $EmptyDir --db $Lib *> (Join-Path $WorkDir 'lib.log')
+& { $ErrorActionPreference = 'Continue'; & $Exe index $EmptyDir --db $Lib *> (Join-Path $WorkDir 'lib.log') }
 $Fake = Join-Path $WorkDir 'rsvars.bat'
 [IO.File]::WriteAllText($Fake, ((@('@echo off', "call `"$Rsvars`"", "ping -n 600 $PingHost > nul") -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 Write-Host '== setup' -ForegroundColor Cyan
@@ -126,7 +126,7 @@ Check 'P1 stderr repeats a progress line naming the baseline build, seconds grow
 $beatOk = ($null -ne $b1) -and ($null -ne $b2) -and ($b1.Action -eq 'cycles --fix') -and ($b2.Step -match '^baseline build') -and ($b2.Seq -gt $b1.Seq)
 Check 'P2 the heartbeat says cycles --fix / baseline build and its seq advances' $beatOk ("b1=" + ($b1 | Out-String).Trim() + " b2=" + ($b2 | Out-String).Trim())
 
-$sd = (& $Exe shutdown --db $Db --wait 60 2>&1 | Out-String)
+$sd = (& { $ErrorActionPreference = 'Continue'; & $Exe shutdown --db $Db --wait 60 2>&1 | ForEach-Object { "$_" } } | Out-String)
 $exited = Wait-For { $run.HasExited } 60
 if (-not $exited) { try { $run.Kill($true) } catch { }; $run.WaitForExit(10000) | Out-Null }
 $text = Read-Text $Out

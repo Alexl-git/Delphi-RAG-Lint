@@ -196,13 +196,13 @@ W 'P.dpr' "program P;`n`nuses`n  LibBase, LibOld, LibNew, WForm;`n`nbegin`nend.`
 W 'w.rules' "#convert TPicOld -> TPicNew`n#link Caption <- Caption`n"
 
 $db = P 'fx.sqlite'
-& $Exe index --project (P 'P.dpr') --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (P 'P.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the fixture PROJECT index was built' (Test-Path $db)
 
 function J([string[]]$Dbs) {
   $a = @('convert-apply', '--unit', (P 'WForm.pas'), '--rules', (P 'w.rules'), '--format', 'json')
   foreach ($d in $Dbs) { $a += @('--db', $d) }
-  $o = (& $Exe @a 2>$null) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null }) -join "`n"
   $code = $LASTEXITCODE
   $j = $null; try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {}
   return [pscustomobject]@{ Code = $code; Out = $o; J = $j }

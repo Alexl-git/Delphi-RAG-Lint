@@ -102,7 +102,7 @@ for ($i = 0; $i -lt $lines.Count; $i++) {
 Check 'fixture yields 3 must-fire and 4 must-not-fire comments' (
   ($must.Count -eq 3) -and ($mustNot.Count -eq 4)) "$($must.Count)/$($mustNot.Count)"
 
-$out  = (& $Exe lint $fixture 2>$null)
+$out  = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture 2>$null })
 $fired = @()
 foreach ($line in $out) {
   if ("$line" -match ':(\d+):\d+\s+\[\w+\]\s+compiler-magic-comments:') { $fired += [int]$Matches[1] }

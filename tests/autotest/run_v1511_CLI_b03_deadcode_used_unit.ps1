@@ -26,8 +26,8 @@ try {
   Copy-Item (Join-Path $fx '*') $lib -Force
   [IO.File]::WriteAllText((Join-Path $lib 'uOrphanUnit.pas'), "unit uOrphanUnit;`r`n`r`ninterface`r`n`r`nimplementation`r`n`r`nend.`r`n")
   $dbL = Join-Path $scratch 'lib.sqlite'
-  & $exePath index $lib --db $dbL 2>&1 | Out-Null
-  $outL = (& $exePath find-deadcode --db $dbL 2>&1 | Out-String)
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $lib --db $dbL 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $outL = (& { $ErrorActionPreference = 'Continue'; & $exePath find-deadcode --db $dbL 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check 'library: uT2LibUnit (in T2Lib uses) is not a dead-code candidate' ($outL -notmatch '(?m)^uT2LibUnit\s+\[unit\]') $outL
   Check 'library: positive control -- the orphan unit IS listed' ($outL -match '(?m)^uOrphanUnit\s+\[unit\]') $outL
   Check 'library: the library root T2Lib is not listed' ($outL -notmatch '(?m)^T2Lib\s+\[') $outL
@@ -37,12 +37,12 @@ try {
   Copy-Item (Join-Path $fx 'uT2LibUnit.pas') $prog -Force
   [IO.File]::WriteAllText((Join-Path $prog 'P2.dpr'), "program P2;`r`n`r`nuses`r`n  uT2LibUnit in 'uT2LibUnit.pas';`r`n`r`nbegin`r`nend.`r`n")
   $dbP = Join-Path $scratch 'prog.sqlite'
-  & $exePath index $prog --db $dbP 2>&1 | Out-Null
-  $outP = (& $exePath find-deadcode --db $dbP 2>&1 | Out-String)
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $prog --db $dbP 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $outP = (& { $ErrorActionPreference = 'Continue'; & $exePath find-deadcode --db $dbP 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check 'program: uT2LibUnit (in P2 uses) is not a dead-code candidate' ($outP -notmatch '(?m)^uT2LibUnit\s+\[unit\]') $outP
   Check 'program: T2Twice (never called) is still listed' ($outP -match '(?m)^uT2LibUnit\.T2Twice\s+\[function\]') $outP
 
-  $outK = (& $exePath find-deadcode --db $dbL --kind unit 2>&1 | Out-String)
+  $outK = (& { $ErrorActionPreference = 'Continue'; & $exePath find-deadcode --db $dbL --kind unit 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check '--kind unit: only the orphan unit' (($outK -match '(?m)^uOrphanUnit\s+\[unit\]') -and ($outK -match 'Found 1 dead-code')) $outK
 } finally {
   if (Test-Path -LiteralPath $scratch) { [IO.Directory]::Delete($scratch, $true) }

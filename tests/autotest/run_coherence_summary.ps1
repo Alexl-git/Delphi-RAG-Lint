@@ -60,7 +60,7 @@ Copy-Item "$Fixture\*" $WorkDir
 $db = Join-Path $WorkDir 't.sqlite'
 
 function Reconcile([string[]]$extra = @()) {
-  $out = & $Exe reconcile-project (Join-Path $WorkDir 'App.dpr') --db $db @extra 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project (Join-Path $WorkDir 'App.dpr') --db $db @extra 2>&1 | ForEach-Object { "$_" } } | Out-String
   return $out
 }
 function Counters([string]$text) {
@@ -74,7 +74,7 @@ function Counters([string]$text) {
   }
 }
 
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 # --- run 1: nothing has ever been compiled -> compile-stale must FIRE --------
 $c1 = Counters (Reconcile)
@@ -115,7 +115,7 @@ Check 'run 3: the causes SUM to incoherent' `
 # banner into ErrorRecords, which Out-String renders with PS7 decoration --
 # extra text and extra braces after the document. That is what made the slice
 # end at 1397 instead of 1345 and fail to parse.
-$j   = (& $Exe reconcile-project (Join-Path $WorkDir 'App.dpr') --db $db --json 2>$null) -join "`n"
+$j   = (& { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project (Join-Path $WorkDir 'App.dpr') --db $db --json 2>$null }) -join "`n"
 # LastIndexOf('}') is NOT good enough: trailing banner/diagnostic text can
 # contain a brace, which makes the slice end past the document and fail to
 # parse -- measured here (ei=1397 vs a real 1345). Count depth from the first

@@ -57,7 +57,7 @@ $db = Join-Path $scratch 'leaf.sqlite'
 
 Push-Location C:\TEMP
 try {
-  $idx = & $exePath index $scratch --db $db 2>&1 | Out-String
+  $idx = & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'SANITY: both fixture units indexed with no errors' `
         (($idx -match 'uLeafDecl\.pas\s*->\s*\d+ symbols, \d+ refs, 0 errors') -and
          ($idx -match 'uLeafUse\.pas\s*->\s*\d+ symbols, \d+ refs, 0 errors')) $idx
@@ -69,8 +69,8 @@ try {
   # (uLeafUse.UseX.Child, mode write). What this sanity check is about is the
   # METHOD: it must have no resolved caller. Asserted per target, over --json,
   # with a parse fence so an empty/garbled answer cannot pass it vacuously.
-  $rcJ = & $exePath query find-callers --name Child --resolved --json --db $db 2>$null | Out-String
-  $ra = & $exePath query find-callers --name Anchor --resolved --db $db 2>&1 | Out-String
+  $rcJ = & { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name Child --resolved --json --db $db 2>$null } | Out-String
+  $ra = & { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name Anchor --resolved --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   $rcOk = $true; $rcRows = @()
   try { $rcRows = @($rcJ | ConvertFrom-Json) } catch { $rcOk = $false }
   Check 'SANITY: find-callers --name Child --resolved --json parsed' $rcOk $rcJ
@@ -90,8 +90,8 @@ try {
   # action/edits) and never the block text, so a "does not contain Called from"
   # assertion against it passes no matter what the engine generated. Read the
   # rendered edit instead.
-  $docChild  = & $exePath document --qname 'uLeafDecl.TWalker.Child'  --db $db 2>&1 | Out-String
-  $docAnchor = & $exePath document --qname 'uLeafDecl.TWalker.Anchor' --db $db 2>&1 | Out-String
+  $docChild  = & { $ErrorActionPreference = 'Continue'; & $exePath document --qname 'uLeafDecl.TWalker.Child'  --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
+  $docAnchor = & { $ErrorActionPreference = 'Continue'; & $exePath document --qname 'uLeafDecl.TWalker.Anchor' --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 
   Check 'SANITY: the generator actually produced an edit for each (not a no-op)' `
         (($docChild -match 'insert after line') -and ($docAnchor -match 'insert after line')) `

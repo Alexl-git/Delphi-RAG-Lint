@@ -120,15 +120,15 @@ end.
 function Run-Lint([string]$Engine, [string]$LibDb, [string]$PrjDb, [string]$Tag) {
   $rep = Join-Path $WorkDir "rep-$Tag.txt"
   $dbs = @('--db', $PrjDb); if ($LibDb) { $dbs += @('--db', $LibDb) }
-  & $Engine lint-all @dbs --output $rep 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Engine lint-all @dbs --output $rep 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $o = if (Test-Path $rep) { Get-Content $rep -Raw } else { '' }
   return @(($o -split "`n") | Where-Object { $_ -match 'unused-unit-in-uses' })
 }
 function Line([object[]]$Lines, [string]$Unit) { return (($Lines | Where-Object { $_ -match "'$Unit'" }) -join "`n") }
 
 $libDb = Join-Path $WorkDir 'lib.sqlite'; $prjDb = Join-Path $WorkDir 'prj.sqlite'
-& $Exe index $lib --db $libDb 2>&1 | Out-Null
-& $Exe index $prj --db $prjDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $lib --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $prj --db $prjDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $new = Run-Lint $Exe $libDb $prjDb 'new'
 $idle = Line $new 'uIdleInit'; $reg = Line $new 'uRegInit'; $fin = Line $new 'uFinInit'
 Write-Host '== unused-unit-in-uses: initialization section refs ==' -ForegroundColor Cyan

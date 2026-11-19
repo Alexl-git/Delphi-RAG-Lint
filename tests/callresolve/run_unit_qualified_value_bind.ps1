@@ -77,7 +77,7 @@ $db  = Join-Path $scratch 'unitqual.sqlite'
 
 # `sql --json` rows are POSITIONAL arrays: map each onto the column names.
 function Sql([string]$Query) {
-  $raw = (& $exePath sql --db $db --json --limit 1000 --query $Query 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --limit 1000 --query $Query 2>$null }) -join "`n"
   $b = $raw.IndexOf('{')
   if ($b -lt 0) { throw "sql returned no JSON for: $Query" }
   $o = $raw.Substring($b) | ConvertFrom-Json
@@ -111,7 +111,7 @@ function RefsAt([int]$Line, [string]$Name) {
 Push-Location C:\TEMP
 try {
   Copy-Item (Join-Path $fixDir '*.pas') $scratch
-  $idxOut = ((& $exePath index $scratch --db $db *>&1) | ForEach-Object { "$_" }) -join "`n"
+  $idxOut = ((& { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db *>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" }) -join "`n"
 
   $libLimit  = SymbolId 'Qual.Lib.GLimit'
   $libMax    = SymbolId 'Qual.Lib.CMax'
@@ -191,7 +191,7 @@ try {
           ("rows=" + (($ma | ForEach-Object { "mid=$($_.mid):mode=$($_.mode):aid=$($_.aid)" }) -join ','))
   }
   foreach ($nm in @('GLimit', 'CMax')) {
-    $raw = (& $exePath query find-callers --name $nm --resolved --json --db $db 2>$null) -join "`n"
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name $nm --resolved --json --db $db 2>$null }) -join "`n"
     Write-Host "   raw find-callers --name $nm --resolved --json: $(($raw -replace '\s+', ' '))"
     $fc  = @()
     try { $fc = @($raw | ConvertFrom-Json) } catch { $fc = @() }

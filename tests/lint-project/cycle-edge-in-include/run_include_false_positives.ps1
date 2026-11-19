@@ -42,9 +42,9 @@ function Scenario([string]$Name, [string[]]$LintArgs) {
   [void](New-Item -ItemType Directory -Force -Path $dir)
   Copy-Item (Join-Path $PSScriptRoot "$Name\*") $dir -Recurse
   $db = Join-Path $scratch "$Name.sqlite"
-  $script:indexOut[$Name] = @(& $exePath index $dir --db $db 2>&1 | ForEach-Object { "$_" })
+  $script:indexOut[$Name] = @(& { $ErrorActionPreference = 'Continue'; & $exePath index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" })
   $script:dbOf[$Name] = $db
-  $raw = & $exePath lint-all --db $db --library-db none @LintArgs --format json 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --library-db none @LintArgs --format json 2>$null }
   $parsed = Parse-Findings $raw
   return ,@($parsed)
 }
@@ -67,7 +67,7 @@ try {
     return ,@($script:indexOut[$Name] | Where-Object { $_ -match 'DIAG:' -and $_ -match [regex]::Escape($Inc) -and $_ -match 'parse error' })
   }
   function FileLintErrors([string]$Name, [string]$Inc) {
-    $raw = & $exePath lint (Join-Path (Join-Path $scratch $Name) $Inc) --db $script:dbOf[$Name] --format json 2>$null
+    $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint (Join-Path (Join-Path $scratch $Name) $Inc) --db $script:dbOf[$Name] --format json 2>$null }
     $all = Parse-Findings $raw
     return ,@($all | Where-Object { $_.rule -in @('parser-error', 'syntax-error') })
   }

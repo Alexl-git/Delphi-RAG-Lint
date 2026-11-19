@@ -60,11 +60,11 @@ try {
     [IO.File]::WriteAllText($p, $files[$k], [Text.Encoding]::ASCII)
   }
   $Db = Join-Path $Work 'arch.sqlite'
-  & $Exe index $Src --db $Db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $Src --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   if (-not (Test-Path $Db)) { Write-Host 'FATAL: index produced no DB'; exit 2 }
 
   $Html = Join-Path $Work 'arch.html'
-  $out = & $Exe arch-diagram --db $Db --output $Html 2>&1
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe arch-diagram --db $Db --output $Html 2>&1 | ForEach-Object { "$_" } }
   Check 'exit-0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
   Check 'file-written' (Test-Path $Html)
   $page = if (Test-Path $Html) { [IO.File]::ReadAllText($Html) } else { '' }
@@ -142,18 +142,18 @@ try {
   } else { Write-Host '  [SKIP] panel: no Edge on this box' }
 
   $Html2 = Join-Path $Work 'arch2.html'
-  & $Exe arch-diagram --db $Db --output $Html2 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe arch-diagram --db $Db --output $Html2 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $same = (Test-Path $Html2) -and ([IO.File]::ReadAllText($Html2) -ceq $page)
   Check 'deterministic:same-bytes' $same
 
-  $json = (& $Exe arch-diagram --db $Db --json 2>&1 | Out-String).Trim()
+  $json = (& { $ErrorActionPreference = 'Continue'; & $Exe arch-diagram --db $Db --json 2>&1 | ForEach-Object { "$_" } } | Out-String).Trim()
   Check 'json:same-model-as-page' ($json -ceq $m.Groups[1].Value.Replace('<', '<')) "len=$($json.Length)"
 
-  & $Exe arch-diagram --db (Join-Path $Work 'none.sqlite') 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe arch-diagram --db (Join-Path $Work 'none.sqlite') 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'missing-db:exit-2' ($LASTEXITCODE -eq 2) "exit=$LASTEXITCODE"
   Check 'missing-db:not-created' (-not (Test-Path (Join-Path $Work 'none.sqlite')))
 
-  $dot = (& $Exe graph --db $Db --format dot 2>&1 | Out-String)
+  $dot = (& { $ErrorActionPreference = 'Continue'; & $Exe graph --db $Db --format dot 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check 'control:graph-dot-unchanged' ($dot -match 'digraph')
 } catch {
   # a throw must fail the guard: the checks after it never ran

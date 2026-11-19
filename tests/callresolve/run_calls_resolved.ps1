@@ -45,9 +45,9 @@ Copy-Item $fixture $target -Force
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
-  & $exePath document --qname callsfacts.TDriver.DoWork --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --qname callsfacts.TDriver.DoWork --db $db --apply 2>$null } | Out-Null
   Check 'apply: .bak written' (Test-Path "$target.bak")
 
   $txt = [IO.File]::ReadAllText($target)
@@ -97,8 +97,8 @@ try {
 
   # --- IDEMPOTENCY: reindex (call_edges is rebuilt) + apply again -> byte-identical.
   $before = [IO.File]::ReadAllBytes($target)
-  & $exePath index $scratch --db $db 2>$null | Out-Null
-  & $exePath document --qname callsfacts.TDriver.DoWork --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --qname callsfacts.TDriver.DoWork --db $db --apply 2>$null } | Out-Null
   $after = [IO.File]::ReadAllBytes($target)
   Check 'idempotent: second apply is byte-identical' ([System.Linq.Enumerable]::SequenceEqual([byte[]]$before,[byte[]]$after))
 } finally { Pop-Location }

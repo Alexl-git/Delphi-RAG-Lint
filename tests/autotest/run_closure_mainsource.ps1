@@ -44,7 +44,7 @@ function WriteDproj([string]$Dir, [string]$Main) {
 }
 function Closure([string]$Dir) {
   $db = Join-Path $Scratch ("dry-" + [Guid]::NewGuid().ToString('N') + '.sqlite')
-  $raw = & $Exe index --project "$Dir\P.dproj" --db $db --library-db "$Scratch\no-library.sqlite" --dry-run 2>&1 | Out-String
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe index --project "$Dir\P.dproj" --db $db --library-db "$Scratch\no-library.sqlite" --dry-run 2>&1 | ForEach-Object { "$_" } } | Out-String
   $lines = @($raw -split "`r?`n")
   $files = @()
   $start = -1

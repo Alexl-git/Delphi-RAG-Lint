@@ -60,9 +60,9 @@ New-Item -ItemType Directory $WorkDir | Out-Null
 function Get-FormsCsv([string]$ProjDir, [string]$Tag) {
     $db  = "$WorkDir\$Tag.sqlite"
     $out = "$WorkDir\$Tag.csv"
-    & $Exe index $ProjDir --db $db 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $Exe index $ProjDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
     Check "$Tag`: index exits 0" ($LASTEXITCODE -eq 0)
-    & $Exe forms-csv --project "$ProjDir\Scrub.dproj" --db $db --out $out 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $Exe forms-csv --project "$ProjDir\Scrub.dproj" --db $db --out $out 2>&1 | ForEach-Object { "$_" } } | Out-Null
     Check "$Tag`: forms-csv exits 0" ($LASTEXITCODE -eq 0)
     Check "$Tag`: csv exists" (Test-Path $out)
     if (-not (Test-Path $out)) { return '' }

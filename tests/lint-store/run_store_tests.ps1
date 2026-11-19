@@ -95,7 +95,7 @@ foreach ($case in $cases) {
   # index the case dir into a throwaway store
   $db = Join-Path $env:TEMP ("lintstore_" + $case.Name + "_$PID.sqlite")
   if (Test-Path $db) { Remove-Item $db -Force }
-  & $exePath index $case.FullName --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $case.FullName --db $db 2>$null } | Out-Null
 
   # collect findings, each tagged with its owning .pas basename
   $findings = @()
@@ -103,7 +103,7 @@ foreach ($case in $cases) {
     $report = Join-Path $env:TEMP ("lintstore_" + $case.Name + "_$PID.report.txt")
     $args = @("lint-all","--db",$db,"--json")
     if (Test-Path $cfgFile) { $args += @("--config",$cfgFile) }
-    $raw = & $exePath @args 2>$null
+    $raw = & { $ErrorActionPreference = 'Continue'; & $exePath @args 2>$null } @args
     foreach ($f in (Parse-Findings $raw)) {
       $fp = if ($f.file_path) { $f.file_path } else { $f.file }
       $fn = if ($fp) { Split-Path $fp -Leaf } else { "" }
@@ -115,7 +115,7 @@ foreach ($case in $cases) {
     foreach ($pas in $pasFiles) {
       $args = @("check-ast",$pas.FullName,"--db",$db,"--format","json")
       if (Test-Path $cfgFile) { $args += @("--config",$cfgFile) }
-      $raw = & $exePath @args 2>$null
+      $raw = & { $ErrorActionPreference = 'Continue'; & $exePath @args 2>$null } @args
       foreach ($f in (Parse-Findings $raw)) {
         $findings += [pscustomobject]@{ rule=$f.rule; line=$f.start_line; file=$pas.Name }
       }

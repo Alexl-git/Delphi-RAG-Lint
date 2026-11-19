@@ -74,9 +74,9 @@ Write-Ascii "$WorkDir\L\L.dlcontext.json" ((@{ schema = 1; project = "$WorkDir\L
   source = @{ file = "$WorkDir\L\L.dpr"; sha1 = '' } } | ConvertTo-Json -Depth 5))
 
 $dbA = "$WorkDir\A.sqlite"; $dbB = "$WorkDir\B.sqlite"; $dbL = "$WorkDir\library-Win64.sqlite"
-& $Exe index "$WorkDir\A" --db $dbA 2>&1 | Out-Null
-& $Exe index "$WorkDir\B" --db $dbB 2>&1 | Out-Null
-& $Exe index "$WorkDir\lib" --db $dbL 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\A" --db $dbA 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\B" --db $dbB 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\lib" --db $dbL 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'SETUP: three fixture indexes built' ((Test-Path $dbA) -and (Test-Path $dbB) -and (Test-Path $dbL))
 
 function Uri($p) { 'file:///' + ($p -replace '\\', '/') }

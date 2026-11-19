@@ -80,7 +80,7 @@ $errFile = Join-Path ([IO.Path]::GetTempPath()) ("draglint-namelike-" + [Guid]::
 # 'Stop' turns that banner into an ErrorRecord, which has already corrupted a
 # JSON slice in this repo.
 function Run([string[]]$A) {
-  $out = & $Exe @A 2>$errFile
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @A 2>$errFile }
   $rc  = $LASTEXITCODE
   $err = if (Test-Path -LiteralPath $errFile) { (Get-Content -LiteralPath $errFile -Raw) } else { '' }
   if ($null -eq $err) { $err = '' }

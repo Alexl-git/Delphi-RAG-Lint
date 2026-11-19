@@ -88,7 +88,7 @@ Write-Ascii (Join-Path $work 'butterfly.pas') $ButterflyBody
 $db = Join-Path $WorkDir 'butterfly.sqlite'
 
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 $indexExit = $LASTEXITCODE
 Check 'index exits 0' ($indexExit -eq 0) "exit=$indexExit; $($indexOut -join ' | ')"
 
@@ -157,7 +157,7 @@ Check 'mermaid contains root->callee edge (Middle --> Bottom)' ($mmRaw -match '(
 
 Write-Host ''
 Write-Host 'butterfly --qname NoSuchSym (bogus qname exits 1)' -ForegroundColor Cyan
-$bogusOut = (& $Exe butterfly --qname 'NoSuchSym' --db $db 2>&1) -join "`n"
+$bogusOut = (& { $ErrorActionPreference = 'Continue'; & $Exe butterfly --qname 'NoSuchSym' --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 $bogusExit = $LASTEXITCODE
 Check 'bogus --qname exits 1' ($bogusExit -eq 1) "exit=$bogusExit; out=$bogusOut"
 

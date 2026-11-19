@@ -57,20 +57,20 @@ function Check([string]$name, [bool]$ok) {
 }
 # returns_owner per method, as 'GetLocal=borrowed;GetThing=borrowed;GetWidget=' (sorted).
 function StoredFacts() {
-  $raw = (& $exePath sql --query "select s.name, coalesce(f.returns_owner,'') from symbols s join symbol_facts f on f.symbol_id=s.id where s.qualified_name like 'A_User.TUser.Get%' order by s.name" --db $db --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --query "select s.name, coalesce(f.returns_owner,'') from symbols s join symbol_facts f on f.symbol_id=s.id where s.qualified_name like 'A_User.TUser.Get%' order by s.name" --db $db --json 2>$null }) -join "`n"
   $obj = $raw.Substring($raw.IndexOf('{')) | ConvertFrom-Json
   $parts = @()
   foreach ($r in $obj.rows) { $parts += ('{0}={1}' -f $r[0], $r[1]) }
   return ($parts -join ';')
 }
 
-& $exePath index $scratch --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 Check 'fresh index exits 0' ($LASTEXITCODE -eq 0)
 $full = StoredFacts
 Write-Host "  (info) after fresh index : $full"
 Check 'all five methods have a facts row' (($full -split ';').Count -eq 5)
 
-& $exePath document --unit $user --db $db --apply --no-backup 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $user --db $db --apply --no-backup 2>$null } | Out-Null
 Check 'document --apply exits 0' ($LASTEXITCODE -eq 0)
 
 # 152b O7: is `Owns returned:` in the /// block right above the interface
@@ -97,7 +97,7 @@ CheckShown 'fresh index'
 
 # Touch the unit without moving a line, so the incremental pass re-parses it.
 [IO.File]::AppendAllText($user, "`r`n", [Text.Encoding]::ASCII)
-& $exePath index $scratch --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 Check 'incremental reindex exits 0' ($LASTEXITCODE -eq 0)
 $incr = StoredFacts
 Write-Host "  (info) after incremental : $incr"
@@ -106,14 +106,14 @@ Check 'stored returns_owner identical in both orders' ($full -eq $incr)
 Check 'POSITIVE CONTROL: GetThing (T class, later unit) borrowed in both' (($full -match 'GetThing=borrowed') -and ($incr -match 'GetThing=borrowed'))
 Check 'POSITIVE CONTROL: GetLocal (non-T/I class, same unit) borrowed in both' (($full -match 'GetLocal=borrowed') -and ($incr -match 'GetLocal=borrowed'))
 
-$raw = (& $exePath lint $user --db $db --rule doc-drift --project-rules --json 2>$null) -join "`n"
+$raw = (& { $ErrorActionPreference = 'Continue'; & $exePath lint $user --db $db --rule doc-drift --project-rules --json 2>$null }) -join "`n"
 $arr = @()
 if ($raw.IndexOf('[') -ge 0) { $arr = @($raw.Substring($raw.IndexOf('[')) | ConvertFrom-Json) }
 Check "doc-drift after incremental reindex is 0 (got $($arr.Count))" ($arr.Count -eq 0)
 
-$dry = (& $exePath document --unit $user --db $db 2>&1) -join "`n"
+$dry = (& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $user --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'document after incremental reindex proposes no edit' (-not ($dry -match '(?m)^\s*(insert|delete)\b'))
-& $exePath document --unit $user --db $db --apply --no-backup 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $user --db $db --apply --no-backup 2>$null } | Out-Null
 CheckShown 'incremental reindex'
 
 try { [IO.Directory]::Delete($scratch, $true) } catch { }

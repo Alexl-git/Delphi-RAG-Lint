@@ -13,7 +13,7 @@ $bad = $false
 function Check([string]$N, [bool]$Ok) { if ($Ok) { Write-Host "  ok   $N" } else { $script:bad = $true; Write-Host "  FAIL $N" -ForegroundColor Red } }
 $Exe = (Resolve-Path $Exe).Path
 $fx = (Resolve-Path "$PSScriptRoot\..\lint\misleading-indentation.pas").Path
-$j = (& $Exe lint $fx --rule misleading-indentation --json 2>$null) -join "`n" | ConvertFrom-Json
+$j = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fx --rule misleading-indentation --json 2>$null }) -join "`n" | ConvertFrom-Json
 $lines = @($j | ForEach-Object { [int]$_.start_line })
 Check 'C1 control: plain-if line 11 fires (rule is on)' ($lines -contains 11)
 Check 'E1 if..else dangling statement line 56 fires' ($lines -contains 56)

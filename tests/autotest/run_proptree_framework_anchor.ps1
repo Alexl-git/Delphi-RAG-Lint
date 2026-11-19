@@ -458,13 +458,13 @@ end.
 
 $db = Join-Path $WorkDir 'anchor.sqlite'
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>$null
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>$null }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($indexOut -join ' | ')"
 
 function Get-Tree([string]$Database, [string]$QName) {
   Push-Location $WorkDir
   try {
-    $raw = (& $Exe proptree --qname $QName --format json --db $Database --no-write-back 2>$null) -join "`n"
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe proptree --qname $QName --format json --db $Database --no-write-back 2>$null }) -join "`n"
   } finally { Pop-Location }
   # Empty output must degrade to $null, not throw. ConvertFrom-Json on '' raises
   # under $ErrorActionPreference='Stop' and would abort the whole suite mid-run,

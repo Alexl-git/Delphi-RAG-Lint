@@ -35,7 +35,7 @@ Copy-Item (Join-Path $src '*') $WorkDir -Force
 $db  = Join-Path $WorkDir 'typcast.sqlite'
 $use = Join-Path $WorkDir 'uTypUse.pas'
 
-& $exePath index $WorkDir --db $db *> (Join-Path $WorkDir 'index.log')
+& { $ErrorActionPreference = 'Continue'; & $exePath index $WorkDir --db $db *> (Join-Path $WorkDir 'index.log') }
 Check 'fixture indexed' ($LASTEXITCODE -eq 0) "index exit $LASTEXITCODE"
 
 # must-fire / must-not-fire lines from the {HIT} / {OK} markers
@@ -46,7 +46,7 @@ for ($i = 0; $i -lt $lines.Count; $i++) {
   if ($lines[$i] -match '\{OK\}')  { $ok  += ($i + 1) }
 }
 
-$raw = & $exePath lint $use --db $db --rule $rule --json 2>$null
+$raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint $use --db $db --rule $rule --json 2>$null }
 $txt = ($raw -join "`n")
 Write-Host ("raw: " + $txt.Substring(0, [Math]::Min(200, $txt.Length)))
 $found = @()
@@ -56,7 +56,7 @@ foreach ($l in $hit) { Check "fires at $l" ($got -contains $l) "got: $($got -joi
 foreach ($l in $ok)  { Check "silent at $l" (-not ($got -contains $l)) "got: $($got -join ',')" }
 
 # positive control: the rule disabled must lose the must-fire lines
-$raw2 = & $exePath lint $use --db $db --rule $rule --disable $rule --json 2>$null
+$raw2 = & { $ErrorActionPreference = 'Continue'; & $exePath lint $use --db $db --rule $rule --disable $rule --json 2>$null }
 $f2 = @()
 try { $f2 = @(($raw2 -join "`n") | ConvertFrom-Json) } catch { $f2 = @() }
 $got2 = @($f2 | Where-Object { $_.rule_id -eq $rule -or $_.rule -eq $rule } | ForEach-Object { [int]$_.start_line })

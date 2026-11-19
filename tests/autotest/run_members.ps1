@@ -70,7 +70,7 @@ $withFormPas = "$DprojDir\uWithForm.pas"
 $noFormPas   = "$DprojDir\uNoForm.pas"
 $withFormDfm = "$DprojDir\uWithForm.dfm"
 
-$out = (& $exe $withFormPas $noFormPas 2>&1 | Out-String).Trim()
+$out = (& { $ErrorActionPreference = 'Continue'; & $exe $withFormPas $noFormPas 2>&1 | ForEach-Object { "$_" } } | Out-String).Trim()
 $lines = @($out -split "`r?`n")
 Check 'harness returns 2 lines' ($lines.Count -eq 2) "got $($lines.Count): $out"
 

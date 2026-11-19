@@ -180,7 +180,7 @@ $R1 = LineOf 'uUser.pas' 'R1'; $R2 = LineOf 'uUser.pas' 'R2'; $R3 = LineOf 'uUse
 $W1 = LineOf 'uUser.pas' 'W1'; $W2 = LineOf 'uUser.pas' 'W2'; $W3 = LineOf 'uUser.pas' 'W3'; $B1 = LineOf 'uUser.pas' 'B1'
 
 $db = "$scratch\fx.sqlite"
-$ixOut = & $exePath index --project "$scratch\App.dpr" --db $db 2>&1
+$ixOut = & { $ErrorActionPreference = 'Continue'; & $exePath index --project "$scratch\App.dpr" --db $db 2>&1 | ForEach-Object { "$_" } }
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path $db)) {
   Write-Host "FATAL: fixture did not index: $($ixOut | Select-Object -Last 3)" -ForegroundColor Red
   Get-ExeStartFailureHint $LASTEXITCODE | Write-Host
@@ -188,12 +188,12 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path $db)) {
 }
 
 # ---- 1: fixture health
-$health = (& $exePath sql --db $db --query "select count(*) n from member_accesses" --json 2>$null) -join "`n" | ConvertFrom-Json
+$health = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "select count(*) n from member_accesses" --json 2>$null }) -join "`n" | ConvertFrom-Json
 if ([int]$health.rows[0][0] -lt 6) { Write-Host "FATAL: fixture has too few member_accesses rows" -ForegroundColor Red; exit 2 }
 Check '1 fixture has the property access rows' $true
 
 function Rw([string]$name) {
-  $raw = (& $exePath usages --name $name --rw --json --db $db 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath usages --name $name --rw --json --db $db 2>$null }) -join "`n"
   $script:rwExit = $LASTEXITCODE
   try { return ($raw | ConvertFrom-Json) } catch { return $null }
 }
@@ -203,7 +203,7 @@ function Same($actual, [string[]]$expected) { (($actual -join ' ') -eq ((@($expe
 function T($doc, [string]$qname) { @($doc.targets | Where-Object { $_.qname -eq $qname })[0] }
 
 # ---- 2: positive control
-$plain = (& $exePath usages --name FPlain --json --db $db 2>$null) -join "`n" | ConvertFrom-Json
+$plain = (& { $ErrorActionPreference = 'Continue'; & $exePath usages --name FPlain --json --db $db 2>$null }) -join "`n" | ConvertFrom-Json
 Check '2a plain usages keeps its document' (($null -eq $plain.targets) -and ($null -ne $plain.reads)) 'plain document changed'
 $plainLines = @($plain.reads | ForEach-Object { '{0}:{1}' -f (Split-Path $_.file -Leaf), $_.line })
 Check '2b plain FPlain lacks the property site R1 (what --rw adds)' ($plainLines -notcontains "uUser.pas:$R1") "plain reads: $plainLines"
@@ -283,7 +283,7 @@ Check '12b TBar.Plain owns its own write' ((Keys $t.writers) -contains "uUser.pa
 # ---- 13: text agrees with JSON
 $doc = Rw 'TFoo.Plain'
 $t = if ($doc) { T $doc 'uProps.TFoo.Plain' } else { $null }
-$txt = (& $exePath usages --name TFoo.Plain --rw --db $db 2>$null) -join "`n"
+$txt = (& { $ErrorActionPreference = 'Continue'; & $exePath usages --name TFoo.Plain --rw --db $db 2>$null }) -join "`n"
 Check '13a text counts = JSON' (($txt -match ('readers \({0}\)' -f @($t.readers).Count)) -and ($txt -match ('writers \({0}\)' -f @($t.writers).Count))) "text: $txt"
 Check '13b text names the site and the route' ($txt -match ('uUser\.pas:{0}.*property' -f $R1)) "text: $txt"
 
@@ -312,7 +312,7 @@ $t = T (Rw 'TArgs.FUnr') 'uArgs.TArgs.FUnr'
 Check '20 argument of an UNRESOLVED call stays a reader (not guessed)' ((SameL (RowLines $t.readers) @($A5)) -and (@($t.writers).Count -eq 0)) "r=$(RowLines $t.readers) w=$(RowLines $t.writers)"
 $t = T (Rw 'TArgs.FLong') 'uArgs.TArgs.FLong'
 Check '21 var argument inside a longer expression (FLong + 1) stays a reader' ((SameL (RowLines $t.readers) @($A7)) -and (@($t.writers).Count -eq 0)) "r=$(RowLines $t.readers) w=$(RowLines $t.writers)"
-$txt = (& $exePath usages --name TArgs.FVar --rw --db $db 2>$null) -join "`n"
+$txt = (& { $ErrorActionPreference = 'Continue'; & $exePath usages --name TArgs.FVar --rw --db $db 2>$null }) -join "`n"
 Check '22 text names the argument kind and the note states the coverage' (($txt -match '\[arg var-arg\]') -and ($txt -match 'RESOLVED call')) "text: $txt"
 
 [IO.Directory]::Delete($scratch, $true)

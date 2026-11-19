@@ -56,8 +56,8 @@ try {
   $db     = Join-Path $scratch 'docsee.sqlite'
   Copy-Item $fixture $target -Force
 
-  & $exePath index $scratch --db $db 2>$null | Out-Null
-  & $exePath document --unit $target --db $db --apply --seealso 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply --seealso 2>$null } | Out-Null
   $ec1 = $LASTEXITCODE
   Check 'apply #1 (--seealso): exit 0' ($ec1 -eq 0)
 
@@ -80,8 +80,8 @@ try {
 
   # --- idempotency: second --apply --seealso leaves file byte-identical ---
   $before = [IO.File]::ReadAllBytes($target)
-  & $exePath index $scratch --db $db 2>$null | Out-Null
-  & $exePath document --unit $target --db $db --apply --seealso 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply --seealso 2>$null } | Out-Null
   $after = [IO.File]::ReadAllBytes($target)
   Check 'idempotent: file byte-identical on 2nd --seealso run' ([System.Linq.Enumerable]::SequenceEqual([byte[]]$before,[byte[]]$after))
 
@@ -100,8 +100,8 @@ try {
   $db2     = Join-Path $scratch2 'docsee_off.sqlite'
   Copy-Item $fixture $target2 -Force
 
-  & $exePath index $scratch2 --db $db2 2>$null | Out-Null
-  & $exePath document --unit $target2 --db $db2 --apply --no-seealso 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch2 --db $db2 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target2 --db $db2 --apply --no-seealso 2>$null } | Out-Null
   $ec2 = $LASTEXITCODE
   Check 'apply (--no-seealso): exit 0' ($ec2 -eq 0)
 

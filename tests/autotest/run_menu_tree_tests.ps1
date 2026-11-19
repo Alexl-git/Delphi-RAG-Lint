@@ -34,7 +34,7 @@ $fixture  = (Resolve-Path $FixtureDir).Path
 
 # --- scratch fixture DB, and the renamed-helper copy (control 4) ---
 $db = "$WorkDir\fixture.sqlite"
-& $Exe index --project "$fixture\MenuTreeFixture.dproj" --db $db *> "$WorkDir\index.log"
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project "$fixture\MenuTreeFixture.dproj" --db $db *> "$WorkDir\index.log" }
 if ($LASTEXITCODE -ne 0) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: fixture index failed (exit $LASTEXITCODE), see $WorkDir\index.log" -ForegroundColor Red; exit 2 }
 $renamed = "$WorkDir\renamed"
 Copy-Item -LiteralPath $fixture -Destination $renamed -Recurse
@@ -44,14 +44,14 @@ $txt2 = [regex]::Replace($txt, '\bAddItem\b', 'PutItem')
 if ($txt2 -eq $txt) { Write-Host 'FATAL: rename control changed nothing' -ForegroundColor Red; exit 2 }
 [IO.File]::WriteAllText($b, $txt2, [Text.ASCIIEncoding]::new())
 $dbRenamed = "$WorkDir\renamed.sqlite"
-& $Exe index --project "$renamed\MenuTreeFixture.dproj" --db $dbRenamed *> "$WorkDir\index-renamed.log"
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project "$renamed\MenuTreeFixture.dproj" --db $dbRenamed *> "$WorkDir\index-renamed.log" }
 if ($LASTEXITCODE -ne 0) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: renamed-copy index failed (exit $LASTEXITCODE)" -ForegroundColor Red; exit 2 }
 
 # --- dxBar (formsmap-v9): a scratch copy, and one with the bar helper renamed ---
 $v9 = "$WorkDir\v9"
 Copy-Item -LiteralPath (Resolve-Path "$PSScriptRoot\..\fixtures\formsmap-v9").Path -Destination $v9 -Recurse
 $dbV9 = "$WorkDir\v9.sqlite"
-& $Exe index --project "$v9\Demo9.dproj" --db $dbV9 *> "$WorkDir\index-v9.log"
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project "$v9\Demo9.dproj" --db $dbV9 *> "$WorkDir\index-v9.log" }
 if ($LASTEXITCODE -ne 0) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: v9 fixture index failed (exit $LASTEXITCODE)" -ForegroundColor Red; exit 2 }
 $v9r = "$WorkDir\v9renamed"
 Copy-Item -LiteralPath $v9 -Destination $v9r -Recurse
@@ -65,7 +65,7 @@ foreach ($u in 'uBarUtils9.pas', 'uMain9.pas') {
 }
 if (-not $renamedAny) { Write-Host 'FATAL: v9 rename control changed nothing' -ForegroundColor Red; exit 2 }
 $dbV9r = "$WorkDir\v9renamed.sqlite"
-& $Exe index --project "$v9r\Demo9.dproj" --db $dbV9r *> "$WorkDir\index-v9r.log"
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project "$v9r\Demo9.dproj" --db $dbV9r *> "$WorkDir\index-v9r.log" }
 if ($LASTEXITCODE -ne 0) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: v9 renamed index failed (exit $LASTEXITCODE)" -ForegroundColor Red; exit 2 }
 
 # --- build the test exe ---
@@ -96,7 +96,7 @@ if (($log -notmatch 'BUILD_EXITCODE=0') -or ($log -match 'Error:') -or -not (Tes
 Copy-TreeSitterDlls -Dest $outDir | Out-Null
 
 # --- run ---
-$out = @(& $testExe $db $fixture $dbRenamed $dbV9 $v9 $dbV9r $v9r 2>&1 | ForEach-Object { "$_" })
+$out = @(& { $ErrorActionPreference = 'Continue'; & $testExe $db $fixture $dbRenamed $dbV9 $v9 $dbV9r $v9r 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" })
 $code = $LASTEXITCODE
 $out | ForEach-Object { Write-Host $_ }
 $last = ($out | Where-Object { $_ -match '^menutree-tests:' } | Select-Object -Last 1)

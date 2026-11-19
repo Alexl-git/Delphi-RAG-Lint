@@ -132,7 +132,7 @@ end.
 [System.IO.File]::WriteAllText((Join-Path $WorkDir 'withext.pas'), $src, [System.Text.Encoding]::ASCII)
 
 $db = Join-Path $WorkDir 'withext.sqlite'
-& $Exe index $WorkDir --db $db --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 $py = Join-Path $WorkDir 'refs.py'
 @'

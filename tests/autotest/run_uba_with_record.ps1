@@ -134,8 +134,8 @@ $db  = Join-Path $drag 'app.sqlite'
 $src = Join-Path $app 'uWith.pas'
 Push-Location $env:TEMP
 try {
-  & $Exe index $app --db $db 2>&1 | Out-Null
-  $out  = & $Exe lint $src --db $db 2>&1 | Out-String
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $app --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $out  = & { $ErrorActionPreference = 'Continue'; & $Exe lint $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 } finally { Pop-Location }
 $uba = @($out -split "`r?`n" | Where-Object { $_ -match 'used-before-assignment' })
 $srcLines = [System.IO.File]::ReadAllLines($src)

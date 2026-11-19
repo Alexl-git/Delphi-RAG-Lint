@@ -42,7 +42,7 @@ function Frame($obj) {
 }
 # The plugin's view: the text report, parsed the way TryParseFindingLine reads it.
 function IdeKeys([string]$Pas, [string]$Db) {
-  $keys = foreach ($l in (& $Exe lint $Pas --db $Db 2>$null)) {
+  $keys = foreach ($l in (& { $ErrorActionPreference = 'Continue'; & $Exe lint $Pas --db $Db 2>$null })) {
     $m = [regex]::Match([string]$l, ':(\d+):\d+\s+\[\w+\]\s+([a-z0-9\-]+):\s(.*)$')
     if ($m.Success) { '{0}|{1}|{2}' -f $m.Groups[1].Value, $m.Groups[2].Value, $m.Groups[3].Value.Trim() }
   }
@@ -104,7 +104,7 @@ $NoMarker = Join-Path $NoMarkerDir 'FxParity.pas'
 $Db = Join-Path $WorkDir 'fx.sqlite'
 $env:DRAGLINT_CONTEXT_DEFAULTS = Join-Path $WorkDir 'context-defaults.json'
 [IO.File]::WriteAllText($env:DRAGLINT_CONTEXT_DEFAULTS, '{}', (New-Object Text.UTF8Encoding($false)))
-& $Exe index $Src --db $Db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $Src --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 if (-not (Test-Path $Db)) { Write-Host 'FATAL: index produced no DB' -ForegroundColor Red; exit 2 }
 
 Write-Host 'G0: IDE live lint vs LSP Problems tab, same file, same DB' -ForegroundColor Cyan

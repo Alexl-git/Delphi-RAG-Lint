@@ -22,9 +22,9 @@ New-Item -ItemType Directory -Path $tmp | Out-Null
 Copy-Item "$src\*.pas" $tmp
 '{}' | Set-Content -Encoding ascii (Join-Path $tmp 'drag-lint.json')
 $db = Join-Path $tmp 'idxfp.sqlite'
-& $exe index $tmp --db $db *> $null
+& { $ErrorActionPreference = 'Continue'; & $exe index $tmp --db $db *> $null }
 $unit = Join-Path $tmp 'IdxFp.pas'
-$raw = & $exe lint $unit --db $db --rule $rule --json 2>$null
+$raw = & { $ErrorActionPreference = 'Continue'; & $exe lint $unit --db $db --rule $rule --json 2>$null }
 $f = @()
 try { $f = @(($raw | ConvertFrom-Json) | Where-Object { $_ -and $_.rule -eq $rule }) } catch { $f = @() }
 
@@ -48,11 +48,11 @@ foreach ($r in 'MarkAfterBad', 'PickSxBad', 'NssFromBad', 'TryParseBad', 'Target
 }
 
 # default ON: no --rule, no config
-$raw2 = & $exe lint $unit --db $db --json 2>$null
+$raw2 = & { $ErrorActionPreference = 'Continue'; & $exe lint $unit --db $db --json 2>$null }
 $d = @()
 try { $d = @(($raw2 | ConvertFrom-Json) | Where-Object { $_ -and $_.rule -eq $rule }) } catch { $d = @() }
 Assert "default ON: the rule runs without a config (got $($d.Count), narrowed $($f.Count))" (($d.Count -eq $f.Count) -and ($f.Count -gt 0))
-$rj = (& $exe rules --json 2>$null | ConvertFrom-Json).rules
+$rj = (& { $ErrorActionPreference = 'Continue'; & $exe rules --json 2>$null } | ConvertFrom-Json).rules
 $ent = @($rj | Where-Object { $_.id -eq $rule })[0]
 Assert "rules --json: default_enabled true" ($ent -and $ent.default_enabled -eq $true)
 

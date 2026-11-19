@@ -103,7 +103,7 @@ function WriteAscii($path, $lines) {
   [IO.File]::WriteAllText($path, (($lines -join $crlf) + $crlf), (New-Object Text.ASCIIEncoding))
 }
 function Run([string[]]$xs) {
-  $o = & $Exe @xs 2>&1 | Out-String
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe @xs 2>&1 | ForEach-Object { "$_" } } | Out-String
   [pscustomobject]@{ Out = $o; Code = $LASTEXITCODE }
 }
 # The /// block directly above the first line matching $declPat, joined.

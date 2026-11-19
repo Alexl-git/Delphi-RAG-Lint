@@ -84,7 +84,7 @@ function New-Case([string]$Tag, [scriptblock]$Edit, [hashtable]$Extra) {
 # The plan text of case root pRoot.
 function Get-Plan([string]$Root, [string]$Tag) {
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project (Join-Path $Root 'Demo.dproj') --db $db *> (Join-Path $WorkDir "index-$Tag.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $Root 'Demo.dproj') --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
   $o = Join-Path $WorkDir "plan-$Tag.out"
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
     -ArgumentList @('cycles', '--db', ('"' + $db + '"'), '--plan', '--library-db', 'none') `

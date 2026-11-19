@@ -132,20 +132,20 @@ $db = Join-Path $WorkDir 'out\sc.sqlite'
 
 Push-Location C:\TEMP
 try {
-  $idxOut = & $Exe index --all --config $manifest --only SecSc --jobs 1 2>&1 | Out-String
+  $idxOut = & { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $manifest --only SecSc --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-String
   if (-not (Test-Path $db)) {
     $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }
     Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2
   }
-  $facts = & $Exe sql --db $db --query ("select name || '=' || coalesce(directives, '') from symbols " +
-                                        "where kind = 'enum' order by name") 2>&1 | Out-String
-  $binds = & $Exe sql --db $db --query ("select 'L' || r.start_line || '|' || r.name_text || '|' || " +
+  $facts = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query ("select name || '=' || coalesce(directives, '') from symbols " +
+                                        "where kind = 'enum' order by name") 2>&1 | ForEach-Object { "$_" } } | Out-String
+  $binds = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query ("select 'L' || r.start_line || '|' || r.name_text || '|' || " +
                                         "coalesce(s.kind || ':' || s.qualified_name, 'NULL') " +
                                         "from refs r join files f on f.id = r.file_id " +
                                         "left join symbols s on s.id = r.symbol_id " +
                                         "where f.path like '%uScUse.pas' and r.kind = 'read' " +
-                                        "and r.start_line between 10 and 19") 2>&1 | Out-String
-  $lintOut = & $Exe lint-all --db $db --quiet 2>&1 | Out-String
+                                        "and r.start_line between 10 and 19") 2>&1 | ForEach-Object { "$_" } } | Out-String
+  $lintOut = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String
 } finally { Pop-Location }
 
 function FactOf([string]$type) {
@@ -179,20 +179,20 @@ Check 'L12 bare cpOne binds to the unscoped value' ((BindOf 12 'cpOne') -eq 'enu
 Check 'L16 bare coOne binds (switched OFF by include)' ((BindOf 16 'coOne') -eq 'enum_value:uScTypes.TScIncOff.coOne') (BindOf 16 'coOne')
 Check 'L18 bare cdOne binds (include in an inactive branch)' ((BindOf 18 'cdOne') -eq 'enum_value:uScTypes.TScIncDead.cdOne') (BindOf 18 'cdOne')
 Check 'L19 bare cxOne binds (switch inactive inside the include)' ((BindOf 19 'cxOne') -eq 'enum_value:uScTypes.TScDeadIn.cxOne') (BindOf 19 'cxOne')
-$q = & $Exe sql --db $db --query ("select count(*) from refs r join symbols s on s.id = r.symbol_id " +
+$q = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query ("select count(*) from refs r join symbols s on s.id = r.symbol_id " +
                                   "join files f on f.id = r.file_id where f.path like '%uScUse.pas' " +
-                                  "and s.qualified_name in ('uScTypes.TScScoped.csTwo', 'uScTypes.TScInc.ciTwo')") 2>&1 | Out-String
+                                  "and s.qualified_name in ('uScTypes.TScScoped.csTwo', 'uScTypes.TScInc.ciTwo')") 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'L11/L14 qualified scoped values are bound (both)' ($q -match '(?m)^\s*2\s*$') ($q.Trim() -replace '\s+', ' ')
 # 150-RB2-b (v152 VOPEN): a qualified SCOPED value read (rung 3c) is a use edge -- a
 # member_accesses 'read' row whose receiver is the enum -- and the store counts it on the
 # enum-values line as Shape B (WrittenValues), not as a call edge. The two row checks are
 # RED on the 2026-11-07 engine (identity only, no row); the Shape B count is a CONTROL
 # (green on both: the count predates the row).
-$ma = & $Exe sql --db $db --query ("select 'L' || r.start_line || '|' || r.name_text || '|' || m.mode || '|' || " +
+$ma = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query ("select 'L' || r.start_line || '|' || r.name_text || '|' || m.mode || '|' || " +
                                    "coalesce(t.qualified_name, 'NULL') from refs r join files f on f.id = r.file_id " +
                                    "join member_accesses m on m.ref_id = r.id " +
                                    "left join symbols t on t.id = m.receiver_type_symbol_id " +
-                                   "where f.path like '%uScUse.pas' and r.start_line in (11, 14)") 2>&1 | Out-String
+                                   "where f.path like '%uScUse.pas' and r.start_line in (11, 14)") 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'L11 TScScoped.csTwo -> member_accesses read, receiver uScTypes.TScScoped' ($ma -match '(?m)^\s*L11\|csTwo\|read\|uScTypes\.TScScoped\s*$') ($ma.Trim() -replace '\s+', ' ')
 Check 'L14 TScInc.ciTwo -> member_accesses read, receiver uScTypes.TScInc' ($ma -match '(?m)^\s*L14\|ciTwo\|read\|uScTypes\.TScInc\s*$') ($ma.Trim() -replace '\s+', ' ')
 $evAll = (@(($idxOut -split "`r?`n") | Where-Object { $_ -match 'enum-values:' }) -join ' ')
@@ -202,10 +202,10 @@ Check 'WrittenValues: the store counts both qualified reads as Shape B (2), reso
 Write-Host ''
 Write-Host 'NO WRONG EDGE' -ForegroundColor Cyan
 Check 'L17 bare ccOne binds to the CONST, not the scoped value' ((BindOf 17 'ccOne') -eq 'const:uScTypes.ccOne') (BindOf 17 'ccOne')
-$wrong = & $Exe sql --db $db --query ("select count(*) from refs r join symbols v on v.id = r.symbol_id " +
+$wrong = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query ("select count(*) from refs r join symbols v on v.id = r.symbol_id " +
                                       "join symbols e on e.id = v.parent_id " +
                                       "where v.kind = 'enum_value' and coalesce(r.receiver_text, '') = '' " +
-                                      "and e.directives = 'scopedenums'") 2>&1 | Out-String
+                                      "and e.directives = 'scopedenums'") 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'no bare ref anywhere is bound to a scoped value' ($wrong -match '(?m)^\s*0\s*$') ($wrong.Trim() -replace '\s+', ' ')
 $evLn = (@(($idxOut -split "`r?`n") | Where-Object { $_ -match 'enum-values:' }) -join ' ')
 $gotScoped = if ($evLn -match 'scoped \(bare form unreachable\) (\d+)') { [int]$Matches[1] } else { -1 }

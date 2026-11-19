@@ -154,15 +154,15 @@ Write-Ascii $rules @'
 $dbA   = Join-Path $WorkDir 'dbA.sqlite'
 $dbB   = Join-Path $WorkDir 'dbB.sqlite'
 $dbApp = Join-Path $WorkDir 'dbApp.sqlite'
-& $Exe index $libA --db $dbA   2>&1 | Out-Null
-& $Exe index $libB --db $dbB   2>&1 | Out-Null
-& $Exe index $app  --db $dbApp 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $libA --db $dbA   2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $libB --db $dbB   2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $app  --db $dbApp 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the three fixture indexes were built' `
       ((Test-Path $dbA) -and (Test-Path $dbB) -and (Test-Path $dbApp))
 
 function Apply([string[]]$Dbs) {
   Push-Location $app
-  try { return ((& $Exe convert-apply --unit 'MyForm.pas' --rules $rules @Dbs 2>&1) -join "`n") }
+  try { return ((& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'MyForm.pas' --rules $rules @Dbs 2>&1 | ForEach-Object { "$_" } }) -join "`n") }
   finally { Pop-Location }
 }
 

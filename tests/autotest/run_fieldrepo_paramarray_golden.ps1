@@ -31,7 +31,7 @@ $copy = Join-Path $WorkDir 'corpus'
 [IO.Directory]::CreateDirectory($copy) | Out-Null
 foreach ($pat in '*.pas', '*.dfm', '*.dproj', '*.dpr') { Copy-Item (Join-Path $Corpus $pat) $copy -Force }
 
-$out = & $Exe repo gen-param-array --project "$copy\Loader2019.dproj" --all --plan --json --progress-form $ProgressForm 2>"$WorkDir\err.txt"
+$out = & { $ErrorActionPreference = 'Continue'; & $Exe repo gen-param-array --project "$copy\Loader2019.dproj" --all --plan --json --progress-form $ProgressForm 2>"$WorkDir\err.txt" }
 $j = ($out | Where-Object { $_ -like '{*' } | Select-Object -Last 1) | ConvertFrom-Json
 if ($null -eq $j) { Write-Host 'FATAL: no JSON from the verb' -ForegroundColor Red; exit 1 }
 

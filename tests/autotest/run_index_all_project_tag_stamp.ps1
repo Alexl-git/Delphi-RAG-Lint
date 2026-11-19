@@ -105,12 +105,12 @@ function IndexAll([string]$Mode = '') {
   try {
     $argv = @('index', '--all', '--only', $SECTION)
     if ($Mode) { $argv += $Mode }
-    $o = (& $exePath @argv 2>&1 | ForEach-Object { "$_" }) -join "`n"
+    $o = (& { $ErrorActionPreference = 'Continue'; & $exePath @argv 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n"
     return [pscustomobject]@{ Exit = $LASTEXITCODE; Out = $o }
   } finally { Pop-Location }
 }
 function Tag {
-  $j = & $exePath sql --db $db --json --query "SELECT value FROM schema_meta WHERE key = 'project_tag'" 2>$null | ConvertFrom-Json
+  $j = & { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --query "SELECT value FROM schema_meta WHERE key = 'project_tag'" 2>$null } | ConvertFrom-Json
   if ($null -eq $j -or $j.rows.Count -eq 0) { return '' }
   return [string]$j.rows[0][0]
 }

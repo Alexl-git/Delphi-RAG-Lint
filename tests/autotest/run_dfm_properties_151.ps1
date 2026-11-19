@@ -87,7 +87,7 @@ function Esc([string]$S) {
 }
 # sql --json rows are POSITIONAL arrays: map them onto columns[].name.
 function Sql([string]$Db, [string]$Query) {
-  $raw = & $Exe sql --db $Db --query $Query --json 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query $Query --json 2>$null }
   try { $doc = ($raw -join "`n") | ConvertFrom-Json } catch { return }  # no table (base engine): no rows
   if ($null -eq $doc -or $null -eq $doc.rows -or $null -eq $doc.columns) { return }
   $cols = @($doc.columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
@@ -141,7 +141,7 @@ function Forms-Csv([string]$Db, [string]$Proj, [bool]$Off, [string]$Tag, [string
 function Index-Dir([string]$Dir, [string]$Db, [string]$UseExe = $Exe) {
   New-Item -ItemType Directory -Force (Join-Path $Dir '_D-RAG') | Out-Null
   [IO.File]::WriteAllText((Join-Path $Dir '_D-RAG\drag-lint-project.json'), '{ "ownRoots": ["."] }')
-  & $UseExe index $Dir --db $Db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $UseExe index $Dir --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $LASTEXITCODE
 }
 

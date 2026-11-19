@@ -52,11 +52,11 @@ try {
   $db = Join-Path $WorkDir 'loader.sqlite'
   Push-Location $WorkDir
   try {
-    $null | & $Exe index --project $dproj --db $db --library-db $LibraryDb *> "$db.log"
+    $null | & { $ErrorActionPreference = 'Continue'; & $Exe index --project $dproj --db $db --library-db $LibraryDb *> "$db.log" }
     $common = @('cycles', '--fix', '--hub-surface', '--project', $dproj, '--db', $db, '--library-db', $LibraryDb, '--platform', 'win32', '--cycle', '1')
-    $dry = ($null | & $Exe @common --no-compile --format text 2>$null | Out-String); $dryCode = $LASTEXITCODE
+    $dry = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe @common --no-compile --format text 2>$null } | Out-String); $dryCode = $LASTEXITCODE
     $errFile = Join-Path $WorkDir 'apply.err'
-    $app = ($null | & $Exe @common --apply --rsvars $wrap --build-timeout 1800 --format text 2> $errFile | Out-String); $appCode = $LASTEXITCODE
+    $app = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe @common --apply --rsvars $wrap --build-timeout 1800 --format text 2> $errFile } | Out-String); $appCode = $LASTEXITCODE
     $err = if (Test-Path $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
   } finally { Pop-Location }
   Check 'l0 dry run: R3 plans the 78-unit group, 76 spokes, the group breaks, mechanical   (RED on 1.51.0: exit 2)' (($dryCode -eq 0) -and

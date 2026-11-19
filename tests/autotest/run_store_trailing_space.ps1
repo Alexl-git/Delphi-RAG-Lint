@@ -44,7 +44,7 @@ $proj = Join-Path $fix 'TS152.dproj'
 $db   = Join-Path $WorkDir 'ts152.sqlite'
 
 function SqlRows([string]$Query) {
-  $raw = & $Exe sql --db $db --query $Query --json 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query $Query --json 2>$null }
   if ($LASTEXITCODE -ne 0) { return ,@() }
   $j = ($raw -join "`n") | ConvertFrom-Json
   return ,@($j.rows)
@@ -61,7 +61,7 @@ try {
   $pasText = [IO.File]::ReadAllText((Join-Path $fix 'uTS152Main.pas'))
   Check 'K0 fixture has padded values' ($dfmText.Contains("Caption = 'OGP  '") -and $dfmText.Contains("Hint = 'tail '") -and $pasText.Contains("'Pad  '"))
 
-  & $Exe index --project $proj --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $proj --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'A0 index exits 0' ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
 
   $n = StoredLen "SELECT count(*) FROM dfm_properties"
@@ -85,9 +85,9 @@ try {
   $v = if ($r.Count -eq 1) { [string]$r[0][0] } else { '<none>' }
   Check 'B1 sql --json fetches tail+space' ($v -ceq 'tail ') "got [$v]"
 
-  $on = (& $Exe menu-tree --project $proj --db $db --with-dfm --format paths 2>$null) -join "`n"
+  $on = (& { $ErrorActionPreference = 'Continue'; & $Exe menu-tree --project $proj --db $db --with-dfm --format paths 2>$null }) -join "`n"
   $env:DRAGLINT_NO_FILE_FACTS = '1'
-  try { $off = (& $Exe menu-tree --project $proj --db $db --with-dfm --format paths 2>$null) -join "`n" }
+  try { $off = (& { $ErrorActionPreference = 'Continue'; & $Exe menu-tree --project $proj --db $db --with-dfm --format paths 2>$null }) -join "`n" }
   finally { $env:DRAGLINT_NO_FILE_FACTS = $null }
   Check 'C0 menu-tree text path shows OGP+2 spaces' ($off.Contains("Main menu > OGP  `t")) 'text readers lost the value'
   Check 'C1 menu-tree --with-dfm table == text' (($on.Length -gt 0) -and ($on -ceq $off)) "table:[$on] text:[$off]"

@@ -69,7 +69,7 @@ if ($buildOut -notmatch 'BUILD_EXITCODE=0') {
 $exe = Join-Path $WorkDir ([System.IO.Path]::GetFileNameWithoutExtension($DprName) + '.exe')
 if (-not (Test-Path $exe)) { Write-Host "FATAL: exe not produced: $exe" -ForegroundColor Red; exit 2 }
 
-$out = & $exe 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $exe 2>&1 | ForEach-Object { "$_" } } | Out-String
 $rc  = $LASTEXITCODE
 Write-Host $out.TrimEnd()
 

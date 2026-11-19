@@ -116,12 +116,12 @@ end.
 
 function Get-Block([string]$qname, [string[]]$extraArgs) {
   $argv = @('document','--qname',$qname,'--db',$db) + $extraArgs
-  return (((& $exePath @argv 2>$null) -join "`n") -replace '</?para>','')
+  return (((& { $ErrorActionPreference = 'Continue'; & $exePath @argv 2>$null }) -join "`n") -replace '</?para>','')
 }
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db --quiet 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db --quiet 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
   # ---- (4) recursion -------------------------------------------------------

@@ -44,14 +44,14 @@ try {
     'implementation','','end.')
 
   $db = Join-Path $work 'fx.sqlite'
-  & $exePath index $work --db $db --rebuild *> $null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $work --db $db --rebuild *> $null }
   Check 'SANITY fixture indexed' (Test-Path $db) $db
 
   function AncOf([string]$cls) {
     $q = "SELECT COALESCE(ta.ancestor_symbol_id, 0), COALESCE(a.qualified_name, '') FROM type_ancestors ta " +
          "JOIN symbols s ON s.id = ta.symbol_id LEFT JOIN symbols a ON a.id = ta.ancestor_symbol_id " +
          "WHERE s.name = '$cls' AND ta.ordinal = 0"
-    $j = (& $exePath sql --db $db --query $q --json 2>$null | Out-String) | ConvertFrom-Json
+    $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null } | Out-String) | ConvertFrom-Json
     if ($null -eq $j -or $null -eq $j.rows -or $j.rows.Count -eq 0) { return $null }
     return ,@($j.rows[0])
   }

@@ -37,11 +37,11 @@ New-Item -ItemType Directory -Force $WorkDir | Out-Null
 $Db = Join-Path $WorkDir 'dprcalls.sqlite'
 if (Test-Path $Db) { [IO.File]::Delete($Db) }
 
-$null = & $Exe index $Fx --db $Db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $Fx --db $Db 2>&1 | ForEach-Object { "$_" } }
 if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: index exit $LASTEXITCODE" -ForegroundColor Red; exit 2 }
 
 function Rows([string]$q) {
-  $raw = & $Exe sql --db $Db --query $q --json --limit 500 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query $q --json --limit 500 2>$null }
   if ($LASTEXITCODE -ne 0) { return ,@() }
   $j = ($raw | Where-Object { $_ -notmatch '^\(loaded' }) -join "`n" | ConvertFrom-Json
   return ,@($j.rows)
@@ -62,7 +62,7 @@ $t = Target 'X4Lib.dpr'  23 'X4LibAdd';     Check 'A2 library main-block call bo
 $x = Rows ("SELECT s.qualified_name, (SELECT COUNT(*) FROM call_edges ce WHERE ce.ref_id=r.id) FROM refs r JOIN files f ON f.id=r.file_id " +
            "LEFT JOIN symbols s ON s.id=r.symbol_id WHERE f.path LIKE '%\X4Lib.dpr' AND r.start_line=20 AND r.name_text='X4LibAdd' AND r.kind='export'")
 Check 'A3 library exports entry bound to X4Lib.X4LibAdd, no call edge' (($x.Count -eq 1) -and ($x[0][0] -eq 'X4Lib.X4LibAdd') -and ($x[0][1] -eq 0)) "rows=$($x.Count)"
-$fc = (& $Exe query find-callers --name X4ProgHelper --db $Db 2>$null) -join "`n"
+$fc = (& { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name X4ProgHelper --db $Db 2>$null }) -join "`n"
 Check 'A4 find-callers X4ProgHelper: exact caller at X4Prog.dpr:25' (($fc -match 'X4Prog\.dpr:25:') -and ($fc -match '1 caller\(s\) \(1 exact\)')) ($fc -split "`n" | Select-Object -Last 1)
 
 $t = Target 'X4Prog.dpr' 16 'X4ProgLocal'; Check 'CONTROL in-routine call still bound to X4Prog.X4ProgLocal' ($t -eq 'X4Prog.X4ProgLocal') "target=$t"
@@ -71,7 +71,7 @@ $d = Rows "SELECT COUNT(*) FROM call_edges ce JOIN symbols s ON s.id=ce.target_s
 Check 'CONTROL no call edge targets X4ProgDead / X4LibDead' ($d.Count -eq 1 -and $d[0][0] -eq 0)
 
 # find-deadcode prints `<qname>  [<kind>]  <path>:<line>` per candidate (no --json).
-$dead = @(& $Exe find-deadcode --db $Db 2>$null | Where-Object { $_ -match '\s\[\w+\]\s' } | ForEach-Object { ($_ -split '\s+')[0] })
+$dead = @(& { $ErrorActionPreference = 'Continue'; & $Exe find-deadcode --db $Db 2>$null } | Where-Object { $_ -match '\s\[\w+\]\s' } | ForEach-Object { ($_ -split '\s+')[0] })
 Check 'B1 find-deadcode does not list the program root X4Prog' ($dead -notcontains 'X4Prog') ($dead -join ', ')
 Check 'B1 find-deadcode does not list the library root X4Lib'  ($dead -notcontains 'X4Lib')  ($dead -join ', ')
 $live = @($dead | Where-Object { $_ -in 'X4Prog.X4ProgHelper','X4Prog.X4ProgLocal','X4Lib.X4LibAdd' })

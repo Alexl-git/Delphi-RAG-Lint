@@ -167,10 +167,10 @@ $md5Orig = Get-FileMd5 $src
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db --quiet 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db --quiet 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
-  & $exePath document --unit $src --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $src --db $db --apply 2>$null } | Out-Null
   Check 'document --apply exits 0' ($LASTEXITCODE -eq 0)
   $md5First = Get-FileMd5 $src
   $text = [IO.File]::ReadAllText($src)
@@ -217,8 +217,8 @@ try {
     (-not ($b -match '<exception')) $b
 
   # --- idempotency ----------------------------------------------------------
-  & $exePath index $scratch --db $db --quiet 2>$null | Out-Null
-  & $exePath document --unit $src --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db --quiet 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $src --db $db --apply 2>$null } | Out-Null
   Check 'IDEMPOTENT: reindex + a second --apply is byte-identical' `
     ((Get-FileMd5 $src) -eq $md5First) ("first=$md5First second=" + (Get-FileMd5 $src))
 
@@ -230,7 +230,7 @@ try {
   # file must be the original bytes again. This is what proves the generated
   # <exception> tags -- AUTO_MARK (no message) and AUTO_EXC (message) alike --
   # are recognised by the stripper; before 2026-09-15 it knew neither opener.
-  & $exePath document --unit $src --db $db --strip --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $src --db $db --strip --apply 2>$null } | Out-Null
   Check 'document --strip --apply exits 0' ($LASTEXITCODE -eq 0)
   Check 'INVERSE: strip(apply(original)) is byte-identical to the original' `
     ((Get-FileMd5 $src) -eq $md5Orig) ("orig=$md5Orig strip=" + (Get-FileMd5 $src))

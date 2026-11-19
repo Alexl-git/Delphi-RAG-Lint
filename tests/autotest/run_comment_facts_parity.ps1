@@ -60,7 +60,7 @@ Check 'P1 CommentFactsParity.dpr builds (dcc64)' $built $(if ($built) { '' } els
 if (-not $built) { Write-Host "run_comment_facts_parity: 0 passed, 1 failed (build log $log)" -ForegroundColor Red; exit 1 }
 
 function Run-Harness([string[]]$HArgs) {
-  $out = & $exe @HArgs 2>&1 | ForEach-Object { "$_" }
+  $out = & { $ErrorActionPreference = 'Continue'; & $exe @HArgs 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }
   [pscustomobject]@{ Rc = $LASTEXITCODE; Lines = @($out); Summary = (@($out) | Where-Object { $_ -like 'SUMMARY *' } | Select-Object -Last 1) }
 }
 function Summary-Field([string]$Summary, [string]$Name) {

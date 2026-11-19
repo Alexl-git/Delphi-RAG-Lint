@@ -36,7 +36,7 @@ $iu  = Join-Path $WorkDir 'includeuses'; Copy-Item (Resolve-Path "$PSScriptRoot\
 
 function Run([string[]]$a) {
   Push-Location $WorkDir
-  try { $o = & $Exe @a 2>$null | Out-String } finally { Pop-Location }
+  try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null } | Out-String } finally { Pop-Location }
   return $o
 }
 function Findings([string]$json) { try { return ,@($json | ConvertFrom-Json) } catch { return ,@() } }

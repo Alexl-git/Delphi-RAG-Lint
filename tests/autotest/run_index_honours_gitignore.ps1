@@ -94,7 +94,7 @@ function Q([string]$Db) { (& python $py $Db) -join "`n" | ConvertFrom-Json }
 
 Write-Host 'Default: .gitignore is honoured' -ForegroundColor Cyan
 $db1 = Join-Path $WorkDir 'default.sqlite'
-& $Exe index $WorkDir --db $db1 --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db1 --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $a = Q $db1
 Check 'the live unit IS indexed' (@($a.paths | Where-Object { $_ -notmatch '\.private' -and $_ -match 'Live\.pas$' }).Count -eq 1) `
   ($a.paths -join ' | ')
@@ -109,7 +109,7 @@ Check 'a routine that exists ONLY in the archive is absent entirely' ($a.archive
 Write-Host ''
 Write-Host 'Opt-out: --no-use-ignore restores the old behaviour' -ForegroundColor Cyan
 $db2 = Join-Path $WorkDir 'optout.sqlite'
-& $Exe index $WorkDir --db $db2 --no-use-ignore --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db2 --no-use-ignore --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $b = Q $db2
 Check 'the .private archive IS indexed when opted out' (@($b.paths | Where-Object { $_ -match '\.private' }).Count -eq 1) `
   ($b.paths -join ' | ')
@@ -119,7 +119,7 @@ Check 'and the name collision is back (proving the default is what removed it)' 
 Write-Host ''
 Write-Host '--use-ignore still parses (existing scripts must not break)' -ForegroundColor Cyan
 $db3 = Join-Path $WorkDir 'explicit.sqlite'
-$out = & $Exe index $WorkDir --db $db3 --use-ignore --quiet 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db3 --use-ignore --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String
 $c = Q $db3
 Check 'the flag is accepted and means the same as the default' `
   ((@($c.paths | Where-Object { $_ -match '\.private' }).Count -eq 0) -and ($out -notmatch 'nknown')) $out

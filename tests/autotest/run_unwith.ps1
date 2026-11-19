@@ -56,17 +56,17 @@ function New-Copy([string]$Name) {
 function Hash-Of([string]$Path) { return (Get-FileHash $Path -Algorithm SHA256).Hash }
 function Invoke-Index([string]$Dir) {
   $env:UW_HIDDEN = ''
-  $null = & $Exe index --project "$Dir\UwDemo.dproj" --db "$Dir\uw.sqlite" 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index --project "$Dir\UwDemo.dproj" --db "$Dir\uw.sqlite" 2>&1 | ForEach-Object { "$_" } }
   $env:UW_HIDDEN = 'hidden'
   if ($LASTEXITCODE -ne 0) { throw "index failed in $Dir" }
 }
 function Invoke-Plan([string]$Dir, [string]$File, [string[]]$Extra = @('--library-db', $LibraryDb)) {
-  $o = & $Exe unwith --db "$Dir\uw.sqlite" --in "$Dir\$File" --plan --json @Extra 2>$null
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe unwith --db "$Dir\uw.sqlite" --in "$Dir\$File" --plan --json @Extra 2>$null }
   return ($o | Where-Object { $_ -like '{*' } | Select-Object -Last 1) | ConvertFrom-Json
 }
 function Invoke-Apply([string]$Dir, [string]$File, [int]$Line = 0) {
   $LineArgs = if ($Line -gt 0) { @('--line', "$Line") } else { @() }
-  $o = & $Exe unwith --db "$Dir\uw.sqlite" --library-db $LibraryDb --in "$Dir\$File" @LineArgs --apply --project "$Dir\UwDemo.dproj" --json 2>$null
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe unwith --db "$Dir\uw.sqlite" --library-db $LibraryDb --in "$Dir\$File" @LineArgs --apply --project "$Dir\UwDemo.dproj" --json 2>$null }
   $script:ApplyCode = $LASTEXITCODE
   return ($o | Where-Object { $_ -like '{*' } | Select-Object -Last 1) | ConvertFrom-Json
 }
@@ -92,9 +92,9 @@ try {
   # (a) usage
   $D = New-Copy 'plan'
   Invoke-Index $D
-  $null = & $Exe unwith --db "$D\uw.sqlite" 2>$null; Check '(a) neither --plan nor --apply -> exit 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
-  $null = & $Exe unwith --db "$D\uw.sqlite" --apply 2>$null; Check '(a) --apply without --project -> exit 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
-  $null = & $Exe unwith --db "$D\uw.sqlite" --plan --line 3 2>$null; Check '(a) --line without --in -> exit 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe unwith --db "$D\uw.sqlite" 2>$null }; Check '(a) neither --plan nor --apply -> exit 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe unwith --db "$D\uw.sqlite" --apply 2>$null }; Check '(a) --apply without --project -> exit 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe unwith --db "$D\uw.sqlite" --plan --line 3 2>$null }; Check '(a) --line without --in -> exit 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
 
   # (b) every refusal, by the comment before it
   $Before = Hash-Of "$D\UwRefused.pas"
@@ -200,7 +200,7 @@ try {
   Check '(g) the program prints exactly what it printed' ($Out -ceq $Golden) "--- golden`n$Golden--- now`n$Out"
 
   # (h) second pass
-  $null = & $Exe index --project "$D\UwDemo.dproj" --db "$D\uw.sqlite" 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index --project "$D\UwDemo.dproj" --db "$D\uw.sqlite" 2>&1 | ForEach-Object { "$_" } }
   $Res = Invoke-Apply $D 'UwCases.pas'
   Check '(h) the outer with applies after a reindex' (($script:ApplyCode -eq 0) -and $Res.apply.applied) "exit $script:ApplyCode $($Res.apply.refusal): $($Res.apply.detail)"
   $S = [IO.File]::ReadAllText("$D\UwCases.pas")

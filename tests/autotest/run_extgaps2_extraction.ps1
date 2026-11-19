@@ -26,13 +26,13 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail='') {
     if ($Ok) { $script:Pass++; Write-Host "  [PASS] $Name" -ForegroundColor Green }
     else     { $script:Fail++; Write-Host "  [FAIL] $Name  $Detail" -ForegroundColor Red }
 }
-function Sql([string]$Db, [string]$Q) { ((& $Exe sql --db $Db --query $Q 2>&1) | Where-Object { $_ -notmatch '^\(loaded' -and $_ -notmatch 'row\(s\) in' -and $_.Trim() -ne '' } | Select-Object -Skip 2) -join "`n" }
+function Sql([string]$Db, [string]$Q) { ((& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query $Q 2>&1 | ForEach-Object { "$_" } }) | Where-Object { $_ -notmatch '^\(loaded' -and $_ -notmatch 'row\(s\) in' -and $_.Trim() -ne '' } | Select-Object -Skip 2) -join "`n" }
 function IndexDir([string]$Name, [hashtable]$Files) {
     $dir = Join-Path $WorkDir $Name
     New-Item -ItemType Directory -Force $dir | Out-Null
     foreach ($k in $Files.Keys) { [IO.File]::WriteAllText((Join-Path $dir $k), ($Files[$k] -replace "`r?`n", "`r`n"), [Text.UTF8Encoding]::new($false)) }
     $db = Join-Path $WorkDir "$Name.sqlite"
-    & $Exe index $dir --db $db 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
     Check "index $Name exits 0" ($LASTEXITCODE -eq 0)
     return $db
 }
@@ -129,7 +129,7 @@ Check 'HB3 Load(GName) (out) -> global GName at 35:8 <- argout 0 of Load at 35:3
 Check 'HB3 control: Show(GName) (const) and Fill(L) (a local) write no global' (-not ($g -match '(?m)^3[67]\s')) $g
 $a = Sql $x3 "select count(*) from data_flows where dst_kind='arg'"
 Check 'HB3 control: the extractor''s 3 arg rows are unchanged' ($a -match '^\s*3\s*$') $a
-& $Exe index (Join-Path $WorkDir 'argout') --db $x3 --force-reparse 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $WorkDir 'argout') --db $x3 --force-reparse 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $n = Sql $x3 "select count(*) from data_flows where dst_kind='global' and src_kind='argout'"
 Check 'HB3 a re-index re-derives the rows once (2, not 4)' ($n -match '^\s*2\s*$') $n
 

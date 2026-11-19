@@ -70,7 +70,7 @@ function W([string]$name, [string]$body) {
   [IO.File]::WriteAllText((Join-Path $scratch $name), ($body -replace "`r?`n", "`r`n"), [Text.Encoding]::ASCII)
 }
 function Sql([string]$db, [string]$q) {
-  $j = (& $exePath sql --db $db --query $q --json 2>$null) -join "`n"
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n"
   if ([string]::IsNullOrWhiteSpace($j)) { return ,@() }
   try { $o = $j | ConvertFrom-Json } catch { return ,@() }
   $cols = @($o.columns | ForEach-Object { $_.name })
@@ -93,7 +93,7 @@ function LineOf([string]$path, [string]$anchor) {
   return $hits[0]
 }
 function Resolved([string]$db, [string]$name) {
-  $raw = & $exePath query find-callers --name $name --resolved --json --db $db 2>$null | Out-String
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name $name --resolved --json --db $db 2>$null } | Out-String
   if ($raw.Trim() -eq '') { return @() }
   try { return @(($raw | ConvertFrom-Json)) } catch { return @() }
 }
@@ -180,7 +180,7 @@ end.
 
   Write-Host ''
   Write-Host '== check 1: fixture health ==' -ForegroundColor Cyan
-  $idx = & $exePath index $scratch --db $db 2>&1 | Out-String
+  $idx = & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
   Check 'index reported no parse errors' ($idx -notmatch '(?<!\d)[1-9]\d* errors') ''
   foreach ($k in $writes) {

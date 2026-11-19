@@ -144,11 +144,11 @@ c.close()
 Write-Host 'Arm 1 -- prevention: two casings, one row' -ForegroundColor Cyan
 
 $dbA = Join-Path $WorkDir 'upper_then_lower.sqlite'
-& $Exe index $upperRoot --db $dbA --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $upperRoot --db $dbA --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $a1 = Get-Db $dbA
 Check 'first index writes exactly one files row' ((Paths $a1).Count -eq 1) "rows=$((Paths $a1).Count)"
 
-& $Exe index $lowerRoot --db $dbA --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $lowerRoot --db $dbA --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $a2 = Get-Db $dbA
 Check 're-indexing under the other drive casing does NOT add a row' ((Paths $a2).Count -eq 1) `
   "rows=$((Paths $a2).Count) -> $((Paths $a2) -join ' | ')"
@@ -160,8 +160,8 @@ Check 'the stored path carries an UPPER-CASE drive letter' `
 # passes the block above and fails here: the stored row is 'c:\...' and the
 # incoming canonical 'C:\...' finds nothing to update.
 $dbB = Join-Path $WorkDir 'lower_then_upper.sqlite'
-& $Exe index $lowerRoot --db $dbB --quiet 2>&1 | Out-Null
-& $Exe index $upperRoot --db $dbB --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $lowerRoot --db $dbB --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $upperRoot --db $dbB --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $b = Get-Db $dbB
 Check 'lower-then-upper also yields one row' ((Paths $b).Count -eq 1) `
   "rows=$((Paths $b).Count) -> $((Paths $b) -join ' | ')"
@@ -173,7 +173,7 @@ Write-Host ''
 Write-Host 'Arm 2 -- migration: an already-split DB is merged on next writable open' -ForegroundColor Cyan
 
 $dbC = Join-Path $WorkDir 'split_stale.sqlite'
-& $Exe index $upperRoot --db $dbC --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $upperRoot --db $dbC --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $inj = (& python $pyInject $dbC -3600) -join "`n" | ConvertFrom-Json
 
 $split = Get-Db $dbC
@@ -182,7 +182,7 @@ Check 'precondition: the DB is split across two rows' ((Paths $split).Count -eq 
 Check 'precondition: the injected row carries its own symbol' ($split.symbols -eq 2) `
   "Routine_Casing rows=$($split.symbols)"
 
-& $Exe index $upperRoot --db $dbC --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $upperRoot --db $dbC --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $merged = Get-Db $dbC
 Check 'the split is repaired to one row' ((Paths $merged).Count -eq 1) `
   "rows=$((Paths $merged).Count) -> $((Paths $merged) -join ' | ')"
@@ -200,10 +200,10 @@ Check 'no orphaned symbol rows survive the merge' ($merged.orphans -eq 0) "orpha
 # triggers the merge goes on to notice the survivor's mtime/sha do not match the
 # file on disk and re-parses it, which legitimately rewrites every other column.
 $dbD = Join-Path $WorkDir 'split_newer.sqlite'
-& $Exe index $upperRoot --db $dbD --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $upperRoot --db $dbD --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $injD = (& python $pyInject $dbD 3600) -join "`n" | ConvertFrom-Json
 Check 'precondition: the newer-duplicate DB is split' ((Paths (Get-Db $dbD)).Count -eq 2) ''
-& $Exe index $upperRoot --db $dbD --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $upperRoot --db $dbD --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $d = Get-Db $dbD
 Check 'exactly one row survives the newer-duplicate case' ((Paths $d).Count -eq 1) `
   "rows=$((Paths $d).Count)"

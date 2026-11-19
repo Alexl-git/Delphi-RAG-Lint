@@ -316,11 +316,11 @@ if ($Include.Count -gt 0) {
 $gitHead = ''; $gitDirty = ''; $untrackedRunners = @()
 try {
   Push-Location $repoRoot
-  $gitHead = (git rev-parse --short HEAD 2>$null | Out-String).Trim()
-  $porcelain = @(git status --porcelain 2>$null)
+  $gitHead = (& { $ErrorActionPreference = 'Continue'; git rev-parse --short HEAD 2>$null } | Out-String).Trim()
+  $porcelain = @(& { $ErrorActionPreference = 'Continue'; git status --porcelain 2>$null })
   $gitDirty = if ($porcelain.Count -gt 0) { "DIRTY ($($porcelain.Count) entr(ies))" } else { 'clean' }
   $trackedSet = @{}
-  foreach ($t in @(git ls-files -- 'tests' 2>$null)) { $trackedSet[$t.ToLowerInvariant()] = $true }
+  foreach ($t in @(& { $ErrorActionPreference = 'Continue'; git ls-files -- 'tests' 2>$null })) { $trackedSet[$t.ToLowerInvariant()] = $true }
   if ($trackedSet.Count -gt 0) {
     $untrackedRunners = @($allRunners | Where-Object { -not $trackedSet.ContainsKey((RelPath $_.FullName).ToLowerInvariant()) })
   }
@@ -946,7 +946,7 @@ Write-Host ("  results: {0}" -f $csv)
 # "is it finished?". It is the LAST thing printed, so it is what a returning
 # reader sees at the bottom of the scrollback, and it states the verdict in a
 # word rather than leaving it to be inferred from three counts.
-$growthOut = (& pwsh -NoProfile -File $growthGuard -Compare $growthSnap 2>&1 | Out-String)
+$growthOut = (& { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $growthGuard -Compare $growthSnap 2>&1 | ForEach-Object { "$_" } } | Out-String)
 $growthOk = ($LASTEXITCODE -eq 0)
 Write-Host $growthOut.TrimEnd()
 if (Test-Path -LiteralPath $growthSnap) { [IO.File]::Delete($growthSnap) }

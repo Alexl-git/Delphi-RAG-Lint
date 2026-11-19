@@ -29,12 +29,12 @@ function New-Project([string]$Name) {
   $d = Join-Path $Tmp $Name
   Copy-Item $Fx $d -Recurse
   $db = Join-Path $d 'p.sqlite'
-  & $Exe index --project (Join-Path $d 'NarrowParam.dproj') --db $db --library-db none *> (Join-Path $Tmp "$Name.index.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $d 'NarrowParam.dproj') --db $db --library-db none *> (Join-Path $Tmp "$Name.index.log") }
   if ($LASTEXITCODE -ne 0) { throw "index $Name exit $LASTEXITCODE" }
   return @{ Dir = $d; Db = $db; Proj = (Join-Path $d 'NarrowParam.dproj'); Use = (Join-Path $d 'NpUse.pas') }
 }
 function Run-Json($P, [string[]]$More) {
-  $o = & $Exe narrow-param --db $P.Db --project $P.Proj --library-db none --format json @More 2> (Join-Path $Tmp 'run.err')
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe narrow-param --db $P.Db --project $P.Proj --library-db none --format json @More 2> (Join-Path $Tmp 'run.err') }
   $script:LastExit = $LASTEXITCODE
   return (($o -join "`n") | ConvertFrom-Json)
 }
@@ -92,13 +92,13 @@ try {
   Check 'D6 the plan wrote nothing' ((Tree-Hash $A.Dir) -ceq $before)
   $one = Run-Json $A @('--routine', 'NpUse.THost.ViaBase', '--param', 'pP', '--plan')
   Check 'D7 --routine narrows the scope' ((@($one.fixes).Count -eq 1) -and ($one.fixes[0].to -eq 'TBase') -and (@($one.refused).Count -eq 0))
-  $txt = (& $Exe narrow-param --db $A.Db --library-db none --all --plan 2>&1) -join "`n"
+  $txt = (& { $ErrorActionPreference = 'Continue'; & $Exe narrow-param --db $A.Db --library-db none --all --plan 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'D8 the text form names counts and refusals' (($txt -match 'can narrow') -and ($txt -match 'refused\s+\S*NpUse\.pas:\d+.*with-body --'))
 
   Write-Host 'surface'
-  & $Exe narrow-param --db $A.Db --library-db none *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe narrow-param --db $A.Db --library-db none *> $null }
   Check 'S1 no scope exits 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
-  & $Exe narrow-param --db $A.Db --library-db none --routine NpUse.THost.ViaBase --apply *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe narrow-param --db $A.Db --library-db none --routine NpUse.THost.ViaBase --apply *> $null }
   Check 'S2 --apply without --project exits 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
   $null = Run-Json $A @('--routine', 'NpUse.THost.ViaBase', '--apply', '--no-compile')
   Check 'S3 --apply --no-compile exits 2' ($script:LastExit -eq 2) "exit $script:LastExit"
@@ -123,7 +123,7 @@ try {
     $bytes = [IO.File]::ReadAllBytes($B.Use)
     $lf = 0; for ($i = 0; $i -lt $bytes.Length; $i++) { if ($bytes[$i] -eq 10 -and ($i -eq 0 -or $bytes[$i - 1] -ne 13)) { $lf++ } }
     Check 'A8 CRLF kept' ($lf -eq 0) "$lf bare LF"
-    & $Exe index --project $B.Proj --db $B.Db --library-db none *> $null
+    & { $ErrorActionPreference = 'Continue'; & $Exe index --project $B.Proj --db $B.Db --library-db none *> $null }
     $again = Run-Json $B @('--all', '--plan')
     Check 'A9 fixed point: nothing left to narrow after a re-index' (@($again.fixes).Count -eq 0) (@($again.fixes | ForEach-Object { "$($_.routine) $($_.to)" }) -join '; ')
 

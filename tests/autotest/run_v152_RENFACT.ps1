@@ -49,12 +49,12 @@ New-Item -ItemType Directory -Force $Code | Out-Null
 Copy-Item "$Fx\*" $Code
 $Db = Join-Path $WorkDir 'rf.sqlite'
 Push-Location $WorkDir
-try { $log = ($null | & $Exe index $Code --db $Db --library-db none 2>&1 | Out-String); $ec = $LASTEXITCODE } finally { Pop-Location }
+try { $log = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe index $Code --db $Db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String); $ec = $LASTEXITCODE } finally { Pop-Location }
 if ($ec -ne 0) { Write-Host "FATAL: index exit $ec" -ForegroundColor Red; $log; exit 2 }
 
 function Invoke-Sql([string]$Query) {
   Push-Location $WorkDir
-  try { $raw = $null | & $Exe sql --db $Db --query $Query --json --limit 0 2>$null } finally { Pop-Location }
+  try { $raw = $null | & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query $Query --json --limit 0 2>$null } } finally { Pop-Location }
   if ($LASTEXITCODE -ne 0) { throw "sql failed: $Query" }
   $j = ($raw | Where-Object { $_ -notmatch '^\(loaded' }) -join "`n" | ConvertFrom-Json
   $list = [System.Collections.Generic.List[object]]::new()
@@ -116,9 +116,9 @@ foreach ($c in @(
 Write-Host '--- consumers'
 Push-Location $WorkDir
 try {
-  $u = ($null | & $Exe usages --name $Items --db $Db 2>&1 | Out-String)
-  $fc = ($null | & $Exe query find-callers --name SetItem --db $Db --resolved 2>&1 | Out-String)
-  $rp = ($null | & $Exe rename --kind symbol --name $Items --to Elems --db $Db --library-db none --plan 2>&1 | Out-String)
+  $u = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe usages --name $Items --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-String)
+  $fc = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name SetItem --db $Db --resolved 2>&1 | ForEach-Object { "$_" } } | Out-String)
+  $rp = ($null | & { $ErrorActionPreference = 'Continue'; & $Exe rename --kind symbol --name $Items --to Elems --db $Db --library-db none --plan 2>&1 | ForEach-Object { "$_" } } | Out-String)
 } finally { Pop-Location }
 $reads  = if ($u -match 'reads:\s*(\d+)')  { [int]$Matches[1] } else { -1 }
 $writes = if ($u -match 'writes:\s*(\d+)') { [int]$Matches[1] } else { -1 }

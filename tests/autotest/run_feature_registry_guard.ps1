@@ -84,7 +84,7 @@ if (-not (Test-Path -LiteralPath $engine)) { Write-Host "GUARD BROKEN: engine no
 $plugDb = Join-Path $Repo 'src\delphi-plugin\_D-RAG\dclDragLintWizard.sqlite'
 # Always refresh (incremental, cheap when current): an EXISTING but stale plugin index also made menu-tree exit 3 (PLUGIN-IDX-GUARD).
 [void](New-Item -ItemType Directory -Force -Path (Split-Path -Parent $plugDb))
-& $engine index --project (Join-Path $Repo 'src\delphi-plugin\dclDragLintWizard.dproj') --db $plugDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $engine index --project (Join-Path $Repo 'src\delphi-plugin\dclDragLintWizard.dproj') --db $plugDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 if (Test-Path -LiteralPath $WorkDir) { Remove-Item -LiteralPath $WorkDir -Recurse -Force }
 New-Item -ItemType Directory -Path $WorkDir | Out-Null
 
@@ -97,22 +97,22 @@ Copy-Item -LiteralPath (Join-Path $Repo 'docs\wiki') -Destination (Join-Path $sc
 Copy-Item -LiteralPath (Join-Path $Repo 'CHANGELOG.md') -Destination $scratch
 # The scratch tree has no src\, build\ or tools\, so check A also reports the paths entries name;
 # the control therefore compares the two runs: only the seeded one may name the seeded entry.
-$clean = & $exe check --level wellformed --repo $scratch 2>&1 | Out-String
+$clean = & { $ErrorActionPreference = 'Continue'; & $exe check --level wellformed --repo $scratch 2>&1 | ForEach-Object { "$_" } } | Out-String
 if ($clean -match 'zz-guard-control') { Write-Host 'GUARD BROKEN: the unseeded scratch copy already names the control entry' -ForegroundColor Red; exit 1 }
 $seed = Join-Path $scratch 'features\entries\zz-guard-control.json'
 [IO.File]::WriteAllText($seed, "{`n  `"id`": `"zz-guard-control`",`n  `"zzUnknownKey`": 1`n}`n", [Text.Encoding]::ASCII)
-$red = & $exe check --level wellformed --repo $scratch 2>&1 | Out-String
+$red = & { $ErrorActionPreference = 'Continue'; & $exe check --level wellformed --repo $scratch 2>&1 | ForEach-Object { "$_" } } | Out-String
 if (($LASTEXITCODE -ne 1) -or ($red -notmatch 'zz-guard-control\.json')) { Write-Host "GUARD BROKEN: a seeded bad entry did not fail check A naming it (exit $LASTEXITCODE): $($red.Trim())" -ForegroundColor Red; exit 1 }
 Write-Host '  [CTRL] a seeded bad entry fails check A and is named; the unseeded copy never names it' -ForegroundColor DarkGray
 
 # ---- the real repo ----------------------------------------------------------------------
 Write-Host '-- checks A-E (check --level full)' -ForegroundColor Cyan
-$out = & $exe check --level full --repo $Repo --engine $engine 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $exe check --level full --repo $Repo --engine $engine 2>&1 | ForEach-Object { "$_" } } | Out-String
 $code = $LASTEXITCODE
 Check 'registry check A-E: no failures' ($code -eq 0) "(exit $code)"
 if ($code -ne 0) { Write-Host ($out.TrimEnd() -replace '(?m)^', '    ') -ForegroundColor Red }
 Write-Host '-- generated outputs current (build --all --check)' -ForegroundColor Cyan
-$out = & $exe build --all --check --repo $Repo --engine $engine 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $exe build --all --check --repo $Repo --engine $engine 2>&1 | ForEach-Object { "$_" } } | Out-String
 $code = $LASTEXITCODE
 Check 'every generated output is current' ($code -eq 0) "(exit $code)"
 if ($code -ne 0) { Write-Host ($out.TrimEnd() -replace '(?m)^', '    ') -ForegroundColor Red }

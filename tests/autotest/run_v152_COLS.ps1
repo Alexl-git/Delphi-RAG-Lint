@@ -94,7 +94,7 @@ end;
 end.
 '@
 $dbL = Join-Path $WorkDir 'lsp.sqlite'
-& $Exe index $srcL --db $dbL 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $srcL --db $dbL 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'L: fixture indexed' ($LASTEXITCODE -eq 0 -and (Test-Path $dbL))
 $linesL = $Cp1252.GetString([IO.File]::ReadAllBytes($fileL)) -split "`r`n"
 function LineOfL([string]$Pattern) { for ($i = 0; $i -lt $linesL.Count; $i++) { if ($linesL[$i] -match $Pattern) { return $i } }; return -1 }
@@ -188,11 +188,11 @@ end;
 end.
 '@
 $dbN = Join-Path $WorkDir 'naming.sqlite'
-& $Exe index $srcN --db $dbN 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $srcN --db $dbN 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'N: fixture indexed' ($LASTEXITCODE -eq 0)
 $cfgN = Join-Path $WorkDir 'naming.json'
 [IO.File]::WriteAllText($cfgN, '{ "autofix": ["method-pascalcase"] }')
-$outN = & $Exe lint-all --db $dbN --config $cfgN --rule method-pascalcase --fix --apply --quiet 2>&1
+$outN = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $dbN --config $cfgN --rule method-pascalcase --fix --apply --quiet 2>&1 | ForEach-Object { "$_" } }
 $textN = $Cp1252.GetString([IO.File]::ReadAllBytes($fileN))
 Check 'N1: the method after non-ASCII text is renamed (decl, impl header, call)' (
   ([regex]::Matches($textN, '\bDoIt\b')).Count -eq 3 -and -not ($textN -cmatch '\bdoIt\b')) "file now:`n$textN`nout: $($outN -join ' | ')"
@@ -232,8 +232,8 @@ end;
 end.
 '@
   $dbU = Join-Path $WorkDir 'unwith.sqlite'
-  & $Exe index $srcU --db $dbU 2>&1 | Out-Null
-  $oU = & $Exe unwith --db $dbU --library-db $LibraryDb --in $fileU --plan --json 2>&1
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $srcU --db $dbU 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $oU = & { $ErrorActionPreference = 'Continue'; & $Exe unwith --db $dbU --library-db $LibraryDb --in $fileU --plan --json 2>&1 | ForEach-Object { "$_" } }
   $jU = ($oU | Where-Object { $_ -like '{*' } | Select-Object -Last 1)
   $pU = $null; try { $pU = $jU | ConvertFrom-Json } catch { }
   $bU = @(if ($pU) { $pU.sites | ForEach-Object { $_.bindings } })

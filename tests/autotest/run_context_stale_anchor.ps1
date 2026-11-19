@@ -69,11 +69,11 @@ end.
 Write-Ascii $unit ($head + $bodies)
 
 $db = Join-Path $WorkDir 'fx.sqlite'
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the fixture index was built' (Test-Path $db) $db
 
 function Bundle([string]$Task) {
-  return ((& $exePath context --task $Task --db $db --format markdown 2>$null) -join "`r`n")
+  return ((& { $ErrorActionPreference = 'Continue'; & $exePath context --task $Task --db $db --format markdown 2>$null }) -join "`r`n")
 }
 
 # ---- P1/P2 POSITIVE CONTROLS (fresh index) --------------------------------------
@@ -112,7 +112,7 @@ Check 'T3 the refusal is a stale-anchor chunk' ($stale -match 'stale-anchor') 'n
 
 # ---- T4: an edit BELOW the target keeps its slice (no false refusal) -----------
 Write-Ascii $unit ($head + $bodies)
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Write-Ascii $unit ($head + $bodies + "`r`n// trailing comment added after indexing`r`n")
 $below = Bundle 'modify uStale.TWorker.TargetRoutine'
 Check 'T4 an edit below the target still slices the target (no false refusal)' `

@@ -216,15 +216,15 @@ $dbB   = Join-Path $WorkDir 'dbB.sqlite'
 $dbApp = Join-Path $WorkDir 'dbApp.sqlite'
 
 Write-Host 'Indexing libA -> dbA' -ForegroundColor Cyan
-$idxAOut = & $Exe index $libADir --db $dbA 2>&1
+$idxAOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $libADir --db $dbA 2>&1 | ForEach-Object { "$_" } }
 Check 'index libA exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($idxAOut -join ' | ')"
 
 Write-Host 'Indexing libB -> dbB' -ForegroundColor Cyan
-$idxBOut = & $Exe index $libBDir --db $dbB 2>&1
+$idxBOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $libBDir --db $dbB 2>&1 | ForEach-Object { "$_" } }
 Check 'index libB exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($idxBOut -join ' | ')"
 
 Write-Host 'Indexing app -> dbApp' -ForegroundColor Cyan
-$idxAppOut = & $Exe index $appDir --db $dbApp 2>&1
+$idxAppOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $appDir --db $dbApp 2>&1 | ForEach-Object { "$_" } }
 Check 'index app exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($idxAppOut -join ' | ')"
 
 # ---------------------------------------------------------------------------
@@ -235,7 +235,7 @@ Check 'index app exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($idxAppOu
 function Run-ConvertApplyCheck([string]$Label, [string]$RulesPath) {
   Push-Location $appDir
   try {
-    $raw = (& $Exe convert-apply --unit 'MyForm.pas' --rules $RulesPath --db $dbApp --db $dbA --db $dbB 2>&1) -join "`n"
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'MyForm.pas' --rules $RulesPath --db $dbApp --db $dbA --db $dbB 2>&1 | ForEach-Object { "$_" } }) -join "`n"
     $exit = $LASTEXITCODE
   } finally { Pop-Location }
   Write-Host "--- $Label output ---" -ForegroundColor DarkGray

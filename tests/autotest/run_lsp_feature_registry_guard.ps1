@@ -116,10 +116,10 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'lens.sqlite'
-& $Exe index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' (Test-Path $db)
 
-$banner = (& $Exe --version 2>$null | Select-Object -First 1)
+$banner = (& { $ErrorActionPreference = 'Continue'; & $Exe --version 2>$null } | Select-Object -First 1)
 $bannerVersion = if ($banner -match '^drag-lint\s+(\S+)') { $Matches[1] } else { '' }
 Check 'the --version banner names a version' ($bannerVersion -ne '') "banner='$banner'"
 

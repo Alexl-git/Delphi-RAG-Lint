@@ -107,18 +107,18 @@ end.
 $db = Join-Path $WorkDir 'e.sqlite'
 Push-Location C:\TEMP
 try {
-  $null = & $Exe index $src --db $db 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } }
   $code = $LASTEXITCODE
 } finally { Pop-Location }
 Check '0. index exits 0' ($code -eq 0) "exit=$code"
 
 function Get-HoverFacts([string]$QName) {
-  $raw = (& $Exe hover --qname $QName --db $db --format json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname $QName --db $db --format json 2>$null }) -join "`n"
   if ([string]::IsNullOrWhiteSpace($raw)) { return @() }
   return @(($raw | ConvertFrom-Json).facts)
 }
 function Get-HoverJson([string]$QName) {
-  $raw = (& $Exe hover --qname $QName --db $db --format json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname $QName --db $db --format json 2>$null }) -join "`n"
   if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
   return ($raw | ConvertFrom-Json)
 }
@@ -160,7 +160,7 @@ Check '12b. proven: effect_free 1, empty summary, empty witness' `
 Write-Host ''
 Write-Host 'THE MANAGED DOC BLOCK (document --apply)' -ForegroundColor Cyan
 Push-Location $src
-try { $null = & $Exe document --unit $unit --db $db --apply --no-backup 2>&1 } finally { Pop-Location }
+try { $null = & { $ErrorActionPreference = 'Continue'; & $Exe document --unit $unit --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } } } finally { Pop-Location }
 $text = [System.IO.File]::ReadAllText($unit)
 # The line keeps the slot 'Pure' held -- last of the Phase 3 lines, before
 # 'Directives:'. AddUp renders no seealso, so on ITS block the fact is the last
@@ -187,7 +187,7 @@ if (-not $py) {
   # engine's back. This is what separates "reads the column" from "recomputes
   # the old five-fact guess and happens to agree".
   $clear = "import sqlite3; c = sqlite3.connect(r'$db'); n = c.execute('UPDATE symbol_facts SET effect_free=NULL, effect_summary=NULL, effect_witness=NULL').rowcount; c.commit(); c.close(); print(n)"
-  $rows  = (& python -c $clear 2>&1) -join "`n"
+  $rows  = (& { $ErrorActionPreference = 'Continue'; & python -c $clear 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check '27a. the verdict was cleared on every facts row' ($rows.Trim() -match '^[1-9]\d*$') "rows=[$($rows.Trim())]"
   $fn = Get-HoverFacts 'uEmit.AddUp'
   Check '27b. a NULL verdict prints no effect line (and no Pure)' `

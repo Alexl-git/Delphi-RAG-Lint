@@ -44,7 +44,7 @@ function Fire-Count($C) {
 }
 function Apply-Fix($C) {
   Push-Location $C.Dir
-  try { & $Exe lint-all --db $C.Db --fix --fix-rule unused-unit-in-uses --apply --no-backup *> (Join-Path $C.Dir '_fix.log') } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $C.Db --fix --fix-rule unused-unit-in-uses --apply --no-backup *> (Join-Path $C.Dir '_fix.log') } } finally { Pop-Location }
 }
 
 $ascii = New-Case 'ascii' 'ae' 'ue'

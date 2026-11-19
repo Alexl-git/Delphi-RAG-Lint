@@ -97,10 +97,10 @@ begin
 end.
 '@
   $lib = Join-Path $tmp 'lib.sqlite'
-  & $exePath index $libDir --db $lib 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $libDir --db $lib 2>&1 | ForEach-Object { "$_" } } | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "library index exit $LASTEXITCODE" }
 
-  $outP = & $exePath index --project (Join-Path $appDir 'App.dpr') --db (Join-Path $tmp 'p1.sqlite') --library-db $lib 2>&1 | Out-String
+  $outP = & { $ErrorActionPreference = 'Continue'; & $exePath index --project (Join-Path $appDir 'App.dpr') --db (Join-Path $tmp 'p1.sqlite') --library-db $lib 2>&1 | ForEach-Object { "$_" } } | Out-String
   StaleLib-Check 'P1' (($LASTEXITCODE -eq 0) -and ($outP -match '\+ library-db')) "current-schema library is attached (exit $LASTEXITCODE)"
 
   $stamp = Join-Path $tmp 'stamp.py'
@@ -117,13 +117,13 @@ print(t)
   # 150 SC: 'stale' = below the engine's READ range (engine_schema_read_min - 1), not 'one version old':
   # an index in [READ_MIN, SCHEMA_VERSION] is READ, not skipped (run_schema_read_compat.ps1). A pre-150
   # exe has no key -> one version old, as before.
-  $sj = (& $exePath schema --db $lib --format json 2>&1 | Out-String)
+  $sj = (& { $ErrorActionPreference = 'Continue'; & $exePath schema --db $lib --format json 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $sj = $sj.Substring($sj.IndexOf('{')) | ConvertFrom-Json
   $target = if ($null -ne $sj.engine_schema_read_min) { [int]$sj.engine_schema_read_min - 1 } else { [int]$sj.schema_version - 1 }
   $old = & $py -I $stamp $lib "$target"
   Write-Host "library stamped schema v$old"
 
-  $outS = & $exePath index --project (Join-Path $appDir 'App.dpr') --db (Join-Path $tmp 's1.sqlite') --library-db $lib 2>&1 | Out-String
+  $outS = & { $ErrorActionPreference = 'Continue'; & $exePath index --project (Join-Path $appDir 'App.dpr') --db (Join-Path $tmp 's1.sqlite') --library-db $lib 2>&1 | ForEach-Object { "$_" } } | Out-String
   $codeS = $LASTEXITCODE
   StaleLib-Check 'S1' ($codeS -eq 0) "stale-schema library: index exits 0 (got $codeS)"
   StaleLib-Check 'S2' (($outS -match 'library-db skipped') -and ($outS -match 'schema')) 'the skip names the library and its schema'

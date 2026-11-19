@@ -135,7 +135,7 @@ end.
 '@
 
 $db  = Join-Path $WorkDir 'cm.sqlite'
-$idx = & $exePath index $proj --db $db 2>&1 | Out-String
+$idx = & { $ErrorActionPreference = 'Continue'; & $exePath index $proj --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'SANITY: fixture indexed with no errors' `
       ($LASTEXITCODE -eq 0 -and $idx -notmatch '\b[1-9]\d* errors\b') $idx
 
@@ -156,7 +156,7 @@ $env:DRAGLINT_PROFILE = '1'
 foreach ($mode in @(@{ Name = 'defaults'; Args = @() }, @{ Name = '--enable fan-in'; Args = @('--enable','fan-in') })) {
   $tag     = $mode.Name
   $allErr  = Join-Path $WorkDir 'all.err'
-  $allRows = Rows (& $exePath lint-all --db $db --rules-dir $rules --json @($mode.Args) 2>$allErr | Out-String)
+  $allRows = Rows (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rules-dir $rules --json @($mode.Args) 2>$allErr } | Out-String)
   $allProf = Get-Content $allErr -Raw
   $allIds  = @($allRows | Where-Object { $CM -contains $_.rule } | ForEach-Object { $_.rule } | Sort-Object -Unique)
 
@@ -175,7 +175,7 @@ foreach ($mode in @(@{ Name = 'defaults'; Args = @() }, @{ Name = '--enable fan-
   foreach ($leaf in $FILES.Keys) {
     $abs     = Join-Path $proj $leaf
     $oneErr  = Join-Path $WorkDir 'one.err'
-    $oneRows = Rows (& $exePath lint $abs --db $db --rules-dir $rules --json @($mode.Args) 2>$oneErr | Out-String)
+    $oneRows = Rows (& { $ErrorActionPreference = 'Continue'; & $exePath lint $abs --db $db --rules-dir $rules --json @($mode.Args) 2>$oneErr } | Out-String)
     $oneProf = Get-Content $oneErr -Raw
     $want    = @(CmTuples $allRows $abs)
     $got     = @(CmTuples $oneRows $abs)
@@ -192,7 +192,7 @@ foreach ($mode in @(@{ Name = 'defaults'; Args = @() }, @{ Name = '--enable fan-
 $env:DRAGLINT_PROFILE = $null
 
 $hubAbs  = Join-Path $proj 'uHub.pas'
-$ruleRows = Rows (& $exePath lint $hubAbs --db $db --rules-dir $rules --rule fan-in --json 2>$null | Out-String)
+$ruleRows = Rows (& { $ErrorActionPreference = 'Continue'; & $exePath lint $hubAbs --db $db --rules-dir $rules --rule fan-in --json 2>$null } | Out-String)
 $ruleGot  = @(CmTuples $ruleRows $hubAbs)
 Check 'P4  --rule fan-in (OFF by default) still computes it: THub reported, Ca 21' `
       (($ruleGot.Count -eq 1) -and ($ruleGot[0] -match 'THub is referenced by 21 other classes')) `
@@ -217,16 +217,16 @@ implementation
 
 end.
 '@
-$idx2 = & $exePath index $proj --db $db 2>&1 | Out-String
+$idx2 = & { $ErrorActionPreference = 'Continue'; & $exePath index $proj --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'SANITY: marker fixture re-indexed' ($LASTEXITCODE -eq 0) $idx2
 
 function UnusedOnHub($rows) { @($rows | Where-Object { $_.rule -like 'review-marker-*' -and $_.file_path -like '*uHub.pas' } |
                                 ForEach-Object { '{0}:{1} {2}' -f $_.rule, $_.start_line, $_.message }) }
 $env:DRAGLINT_PROFILE = '1'
 $mAllErr  = Join-Path $WorkDir 'mall.err'
-$mAllRows = Rows (& $exePath lint-all --db $db --rules-dir $rules --json 2>$mAllErr | Out-String)
+$mAllRows = Rows (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rules-dir $rules --json 2>$mAllErr } | Out-String)
 $mOneErr  = Join-Path $WorkDir 'mone.err'
-$mOneRows = Rows (& $exePath lint $hubAbs --db $db --rules-dir $rules --json 2>$mOneErr | Out-String)
+$mOneRows = Rows (& { $ErrorActionPreference = 'Continue'; & $exePath lint $hubAbs --db $db --rules-dir $rules --json 2>$mOneErr } | Out-String)
 $env:DRAGLINT_PROFILE = $null
 $ua = @(UnusedOnHub $mAllRows | Where-Object { $_ -like 'review-marker-unused*' -or $_ -like 'review-marker-stale*' })
 $uo = @(UnusedOnHub $mOneRows | Where-Object { $_ -like 'review-marker-unused*' -or $_ -like 'review-marker-stale*' })

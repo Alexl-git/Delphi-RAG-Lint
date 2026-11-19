@@ -162,7 +162,7 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'uu.sqlite'
-$idx = & $Exe index $work --db $db 2>&1
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "$($idx | Select-Object -Last 1)"
 
 function UsageCount([string]$File) {

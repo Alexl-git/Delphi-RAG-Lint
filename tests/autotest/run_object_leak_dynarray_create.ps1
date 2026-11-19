@@ -93,7 +93,7 @@ end.
 
 Push-Location C:\TEMP
 try {
-  $out = & $exePath lint $target 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath lint $target 2>&1 | ForEach-Object { "$_" } } | Out-String
   $leaks = @(($out -split "`r?`n") | Where-Object { $_ -match 'object-leak' })
   Check 'SANITY: the linter ran and produced output' ($out.Trim().Length -gt 0) $out
 

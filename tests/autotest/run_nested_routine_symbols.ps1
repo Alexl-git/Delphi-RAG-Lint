@@ -184,11 +184,11 @@ $db = Join-Path $scratch 'nestsyms.sqlite'
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db --quiet 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db --quiet 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
   function Get-Rows([string]$name) {
-    $j = (& $exePath query --name $name --db $db --json 2>$null) -join "`n"
+    $j = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --db $db --json 2>$null }) -join "`n"
     try { return @($j | ConvertFrom-Json) } catch { return @() }
   }
 
@@ -220,7 +220,7 @@ try {
   # exactly what Doc.Batch's Section='interface' gate admits -- the three
   # interface decls -- so a nested routine leaking into the public surface shows
   # up here as 4, 5 or 6 and nowhere else.
-  $docJson = (& $exePath document --unit (Join-Path $scratch 'nestsyms.pas') --db $db --json 2>$null) -join "`n"
+  $docJson = (& { $ErrorActionPreference = 'Continue'; & $exePath document --unit (Join-Path $scratch 'nestsyms.pas') --db $db --json 2>$null }) -join "`n"
   $dc = -1; try { $dc = ([int](($docJson | ConvertFrom-Json).declCount)) } catch { }
   Check 'document --unit public surface is still exactly the 3 interface decls' ($dc -eq 3) `
     "declCount=$dc -- a nested routine leaking into the public surface raises this"
@@ -230,7 +230,7 @@ try {
   # the assertions below named fields ($_.name, $_.qualified_name, $_.n).
   # The `,@()` / `,$out` form keeps a 0/1-element result an array.
   function Sql([string]$q) {
-    $j = (& $exePath sql --db $db --query $q --json 2>$null) -join "`n"
+    $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n"
     if ([string]::IsNullOrWhiteSpace($j)) { return ,@() }
     try { $o = $j | ConvertFrom-Json } catch { return ,@() }
     $cols = @($o.columns | ForEach-Object { $_.name })

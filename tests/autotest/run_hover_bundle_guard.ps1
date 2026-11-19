@@ -165,7 +165,7 @@ $SrcFile = Join-Path $SrcDir 'uBundleFix.pas'
 WriteAnsi $SrcFile $Fixture
 
 $Db = Join-Path $WorkDir 'fix.sqlite'
-& $Exe index $SrcDir --db $Db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $SrcDir --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $idxCode = $LASTEXITCODE
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (CLIFIX C2)
 if (-not (Test-Path $Db)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host 'FATAL: index produced no DB' -ForegroundColor Red; exit 2 }
@@ -234,7 +234,7 @@ Check 'bundle.markdown is byte-identical to textDocument/hover' ($bundle.markdow
 Check 'bundle.qname resolved to the method' ($bundle.qname -match 'TWorker\.ApplyDelta') "qname=$($bundle.qname)"
 
 # ---- R6: model field-identical to `hover --qname --format json` -----------
-$cliHoverRaw = & $Exe hover --qname $bundle.qname --db $Db --format json 2>$null | Out-String
+$cliHoverRaw = & { $ErrorActionPreference = 'Continue'; & $Exe hover --qname $bundle.qname --db $Db --format json 2>$null } | Out-String
 $cliHover = $null
 $mObj = [regex]::Match($cliHoverRaw, '\{.*\}', 'Singleline')
 if ($mObj.Success) { try { $cliHover = $mObj.Value | ConvertFrom-Json } catch { $cliHover = $null } }
@@ -253,7 +253,7 @@ if ($null -ne $cliHover) {
 
 # ---- R1/R4: resolvedCallers agree with `find-callers --resolved` ----------
 function CliResolved([string]$name) {
-  $raw = & $Exe query find-callers --name $name --resolved --json --db $Db 2>$null | Out-String
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name $name --resolved --json --db $Db 2>$null } | Out-String
   $m = [regex]::Match($raw, '\[.*\]', 'Singleline')
   if (-not $m.Success) { return @() }
   try { return @($m.Value | ConvertFrom-Json) } catch { return @() }

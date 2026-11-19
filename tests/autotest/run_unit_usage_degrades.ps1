@@ -59,7 +59,7 @@ Copy-Item (Join-Path $srcDir '*.pas') $fixDir
 $db      = Join-Path $WorkDir 'unitusage.sqlite'
 $errFile = Join-Path $WorkDir 'stderr.txt'
 
-& $Exe index $fixDir --db $db 2>$errFile | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $fixDir --db $db 2>$errFile } | Out-Null
 if ($LASTEXITCODE -ne 0) {
   $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }
   Write-Host "FATAL: indexing the fixture failed ($LASTEXITCODE)" -ForegroundColor Red
@@ -68,7 +68,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 function Ask([string[]]$A) {
-  $out = & $Exe @A 2>$errFile
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @A 2>$errFile }
   [pscustomobject]@{ Out = (($out | Out-String) -replace "`r`n", "`n"); Code = $LASTEXITCODE }
 }
 
@@ -129,7 +129,7 @@ Check 'and still says so' ($none.Out -match 'no interface-section symbols found'
 # DOCS-IN-SYNC: --help used to state the old behaviour flatly.
 Write-Host ''
 Write-Host '-- DOCS-IN-SYNC: the banner no longer claims a flat exit 2' -ForegroundColor Cyan
-$help = (& $Exe --help 2>$null | Out-String)
+$help = (& { $ErrorActionPreference = 'Continue'; & $Exe --help 2>$null } | Out-String)
 Check 'the banner mentions unit-usage at all (scan is not vacuous)' ($help -match 'unit-usage') ''
 Check 'it does not still say the project DB alone exits 2' `
   ($help -notmatch 'with the project DB alone it exits 2') `

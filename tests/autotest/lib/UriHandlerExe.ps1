@@ -14,7 +14,7 @@ function Initialize-UriHandlerExe {
   $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
   $cands = New-Object System.Collections.Generic.List[string]
   $cands.Add((Join-Path $repo 'third_party\dll-win64\drag-lint-open.exe'))
-  $common = & git -C $repo rev-parse --path-format=absolute --git-common-dir 2>$null
+  $common = & { $ErrorActionPreference = 'Continue'; & git -C $repo rev-parse --path-format=absolute --git-common-dir 2>$null }
   if ($LASTEXITCODE -eq 0 -and $common) {
     $main = Split-Path -Parent ($common | Select-Object -First 1)
     $cands.Add((Join-Path $main 'src\tools\uri-handler\Win64\Debug\drag-lint-open.exe'))

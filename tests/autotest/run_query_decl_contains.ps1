@@ -127,16 +127,16 @@ end.
 
 Write-Ascii "$WorkDir\Decl.pas" $unit
 $db = "$WorkDir\_D-RAG\Decl.sqlite"
-& $Exe index "$WorkDir" --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir" --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 Write-Host '1. MATCH -- the declaring line is searchable' -ForegroundColor Cyan
-$out = (& $Exe query find --decl-contains 'stored IsColorStored' --kind property --db $db 2>&1) -join "`n"
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe query find --decl-contains 'stored IsColorStored' --kind property --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 $rc  = $LASTEXITCODE
 Check 'the `stored` clause finds TReal.Color' ($out -match 'TReal\.Color') $out
 Check 'exit 0 when there are matches' ($rc -eq 0) "exit=$rc"
 Check 'the declaration itself is printed as evidence' ($out -match 'property Color: TColor read FColor')
 
-$out2 = (& $Exe query find --decl-contains 'default clWindow' --kind property --db $db 2>&1) -join "`n"
+$out2 = (& { $ErrorActionPreference = 'Continue'; & $Exe query find --decl-contains 'default clWindow' --kind property --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'the `default` clause finds it too' ($out2 -match 'TReal\.Color')
 
 Write-Host ''
@@ -154,7 +154,7 @@ Check 'FIXTURE: the string-literal decoy is present in the source' ($src -match 
 
 Write-Host ''
 Write-Host '3. NARROWING -- a bare --decl-contains refuses' -ForegroundColor Cyan
-$bare = (& $Exe query find --decl-contains 'stored IsColorStored' --db $db 2>&1) -join "`n"
+$bare = (& { $ErrorActionPreference = 'Continue'; & $Exe query find --decl-contains 'stored IsColorStored' --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 $brc  = $LASTEXITCODE
 Check 'exit 2, not a silent full scan' ($brc -eq 2) "exit=$brc"
 Check 'and it NAMES the flags that would narrow it' `
@@ -162,7 +162,7 @@ Check 'and it NAMES the flags that would narrow it' `
 
 Write-Host ''
 Write-Host '4. NEGATIVE -- a phrase in no declaration exits 1' -ForegroundColor Cyan
-$none = (& $Exe query find --decl-contains 'stored IsNeverStored' --kind property --db $db 2>&1) -join "`n"
+$none = (& { $ErrorActionPreference = 'Continue'; & $Exe query find --decl-contains 'stored IsNeverStored' --kind property --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 $nrc  = $LASTEXITCODE
 Check 'exit 1 when nothing matches' ($nrc -eq 1) "exit=$nrc"
 Check 'and it says so rather than printing nothing' ($none -match '0 match\(es\)')
@@ -170,7 +170,7 @@ Check 'and it says so rather than printing nothing' ($none -match '0 match\(es\)
 Write-Host ''
 Write-Host '5. LIBRARY -- the note''s own query' -ForegroundColor Cyan
 if (Test-Path $LibDb) {
-  $lib = (& $Exe query find --decl-contains 'stored IsFontStored' --kind property --db $LibDb 2>&1) -join "`n"
+  $lib = (& { $ErrorActionPreference = 'Continue'; & $Exe query find --decl-contains 'stored IsFontStored' --kind property --db $LibDb 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'library-Win32 answers the query that sent two readers to grep' `
     ($lib -match 'stored IsFontStored') (($lib -split "`n" | Select-String 'match\(es\) in') -join '')
   Check 'and the answer is not truncated' (-not ($lib -match 'INCOMPLETE'))

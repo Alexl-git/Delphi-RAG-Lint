@@ -123,10 +123,10 @@ $src = @(
 $pas = Join-Path $WorkDir 'uLeakOwner.pas'
 [IO.File]::WriteAllText($pas, $src + "`r`n", [Text.Encoding]::ASCII)
 
-$out = @(& $Exe lint $pas --rule object-leak 2>$null)
+$out = @(& { $ErrorActionPreference = 'Continue'; & $Exe lint $pas --rule object-leak 2>$null })
 $flagged = @($out | Where-Object { $_ -match 'object-leak: Object "(\w+)"' } | ForEach-Object { [regex]::Match($_, 'Object "(\w+)"').Groups[1].Value.ToLower() } | Sort-Object -Unique)
 Write-Host ("  flagged (store-free): [{0}]" -f ($flagged -join ', ')) -ForegroundColor DarkGray
-Check 'the run is store-free (the lint says no index covers the file)' (@((& $Exe lint $pas --rule object-leak 2>&1) | Where-Object { "$_" -match 'no index covers this file' }).Count -ge 1)
+Check 'the run is store-free (the lint says no index covers the file)' (@((& { $ErrorActionPreference = 'Continue'; & $Exe lint $pas --rule object-leak 2>&1 | ForEach-Object { "$_" } }) | Where-Object { "$_" -match 'no index covers this file' }).Count -ge 1)
 
 Write-Host ''
 Write-Host 'owner idiom -> ownership transfer, no finding' -ForegroundColor Cyan

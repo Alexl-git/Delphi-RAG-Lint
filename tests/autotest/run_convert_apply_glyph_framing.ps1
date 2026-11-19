@@ -217,9 +217,9 @@ Write-Ascii $rules @'
 '@
 
 $dbA = Join-Path $WorkDir 'dbA.sqlite'; $dbB = Join-Path $WorkDir 'dbB.sqlite'; $dbApp = Join-Path $WorkDir 'dbApp.sqlite'
-& $Exe index $libA --db $dbA   2>&1 | Out-Null
-& $Exe index $libB --db $dbB   2>&1 | Out-Null
-& $Exe index $app  --db $dbApp 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $libA --db $dbA   2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $libB --db $dbB   2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $app  --db $dbApp 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V1 the three fixture indexes were built' ((Test-Path $dbA) -and (Test-Path $dbB) -and (Test-Path $dbApp))
 
 # ---- D0: the ORIGINAL payloads are what the VCL reader reads ----------------
@@ -230,7 +230,7 @@ Check 'D0 POSITIVE CONTROL the hand-built TPicture payloads decode in the VCL (b
 
 function ApplyRun([string]$Dir, [string]$Db, [string]$Castlib, [string[]]$Extra) {
   Push-Location $Dir
-  try { $raw = (& $Exe convert-apply --unit 'GlyphForm.pas' --rules $rules --castlib $Castlib --db $Db --db $dbA --db $dbB @Extra 2>&1) -join "`n"; $ec = $LASTEXITCODE }
+  try { $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'GlyphForm.pas' --rules $rules --castlib $Castlib --db $Db --db $dbA --db $dbB @Extra 2>&1 | ForEach-Object { "$_" } }) -join "`n"; $ec = $LASTEXITCODE }
   finally { Pop-Location }
   $line = ($raw -split "`n" | Where-Object { $_.TrimStart().StartsWith('{') } | Select-Object -First 1)
   $j = $null; if ($line) { try { $j = $line | ConvertFrom-Json } catch { } }
@@ -261,7 +261,7 @@ $appW = Join-Path $WorkDir 'appw'
 New-Item -ItemType Directory $appW -Force | Out-Null
 Copy-Item (Join-Path $app 'GlyphForm.pas'), (Join-Path $app 'GlyphForm.dfm') $appW -Force
 $dbW = Join-Path $WorkDir 'dbW.sqlite'
-& $Exe index $appW --db $dbW 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $appW --db $dbW 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $w = ApplyRun $appW $dbW $castDecl @('--apply')
 $wDfm = Join-Path $appW 'GlyphForm.dfm'
 $written = [IO.File]::ReadAllText($wDfm)

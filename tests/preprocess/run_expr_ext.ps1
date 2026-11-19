@@ -21,7 +21,7 @@ function EvalExpr([string]$expr, [string[]]$defines, [string[]]$numeric) {
   $cliArgs = @('dump-pp-eval', '--expr', $expr)
   foreach ($d in $defines) { $cliArgs += @('--define', $d) }
   foreach ($v in $numeric) { $cliArgs += @('--numeric', $v) }
-  return (& $exePath @cliArgs 2>$null | Out-String).Trim().ToLower()
+  return (& { $ErrorActionPreference = 'Continue'; & $exePath @cliArgs 2>$null } | Out-String).Trim().ToLower()
 }
 function T([string]$expr, [string]$want, [string[]]$defines = @(), [string[]]$numeric = @()) {
   $got = EvalExpr $expr $defines $numeric

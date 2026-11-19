@@ -38,7 +38,7 @@ try {
   [IO.File]::WriteAllText((Join-Path $fx "Enc$odd.pas"), $src, [Text.Encoding]::ASCII)
   $db = Join-Path $WorkDir 'e.sqlite'
   Push-Location $fx
-  try { & $Exe index . --db $db --quiet *> $null } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe index . --db $db --quiet *> $null } } finally { Pop-Location }
   $BS = [string][char]92
   $esc = $BS + 'u00e9' + $BS + 'u0434'
   $u8  = [Text.Encoding]::UTF8.GetBytes($odd)
@@ -54,7 +54,7 @@ try {
       $f = Join-Path $WorkDir ('o-' + ($v.n -replace '\W', '_') + "-$mode.out")
       $al = @($v.a) + @('--output', $f)
       if ($mode -ne 'default') { $al += @('--output-encoding', $mode) }
-      $null = & $Exe @al 2>$null
+      $null = & { $ErrorActionPreference = 'Continue'; & $Exe @al 2>$null }
       $nm = "$($v.n) --output [$mode]"
       if (-not (Test-Path -LiteralPath $f)) { Check "$nm : file written" $false; continue }
       $b = [IO.File]::ReadAllBytes($f)

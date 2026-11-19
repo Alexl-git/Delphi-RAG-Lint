@@ -130,10 +130,10 @@ Write-Fixture $file
 '{ "docs": { "max_return_cases": 6, "max_callers": 5 } }' |
   Set-Content (Join-Path $dir '.drag-lint.json') -Encoding ascii
 
-& $Exe index $dir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Push-Location $dir
 try {
-  & $Exe document --qname uRetCap.Grab --db $db --apply --no-backup 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe document --qname uRetCap.Grab --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
 } finally {
   Pop-Location
 }
