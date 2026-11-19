@@ -17,13 +17,16 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_syntax_count_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){ if($d){Write-Host "      $d" -ForegroundColor DarkGray}; $script:fail=$true } }
-function Run([string[]]$a){ $o = & $Exe @a 2>&1; [pscustomobject]@{ Code=$LASTEXITCODE; Out=($o | ForEach-Object { "$_" }) } }
+function Run([string[]]$a){ $o = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } }; [pscustomobject]@{ Code=$LASTEXITCODE; Out=($o | ForEach-Object { "$_" }) } }
 
 $Exe = (Resolve-Path $Exe).Path
 New-Item -ItemType Directory -Force (Join-Path $WorkDir 'src') | Out-Null
@@ -49,7 +52,7 @@ Push-Location $WorkDir
 try {
   # ---- S1 ----
   $r = Run @('syntax-count','--in',$fx,'--json')
-  $j = $null; try { $j = ($r.Out | Where-Object { $_ -like '{*' } | Select-Object -First 1) | ConvertFrom-Json } catch {}
+  $j = $null; try { $j = ($r.Out | Where-Object { $_ -like '{*' } | Select-Object -First 1) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
   Check 'S1 --in --json exits 0' ($r.Code -eq 0) ("exit $($r.Code): " + ($r.Out -join ' | '))
   $bad = @(); if ($j) { foreach ($k in $want.Keys) { if ($j.totals.$k -ne $want[$k]) { $bad += "$k=$($j.totals.$k) want $($want[$k])" } } } else { $bad += 'no JSON' }
   Check 'S1 totals per feature (decoys excluded)' ($bad.Count -eq 0) ($bad -join '; ')
@@ -57,16 +60,16 @@ try {
 
   # ---- S2 ----
   $r = Run @('syntax-count','--in',$fx,'--feature','is-not,not-in','--hits','--json')
-  $j2 = $null; try { $j2 = ($r.Out | Where-Object { $_ -like '{*' } | Select-Object -First 1) | ConvertFrom-Json } catch {}
+  $j2 = $null; try { $j2 = ($r.Out | Where-Object { $_ -like '{*' } | Select-Object -First 1) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
   Check 'S2 --feature keeps only the named totals' ($j2 -and @($j2.totals.PSObject.Properties).Count -eq 2 -and $j2.totals.'is-not' -eq 1) ($r.Out -join ' | ')
   $isnot = @($j2.hits | Where-Object { $_.feature -eq 'is-not' })
   Check 'S2 --hits: is-not at line 9' ($isnot.Count -eq 1 -and $isnot[0].line -eq 9) (($j2.hits | ConvertTo-Json -Compress))
 
   # ---- S3 ----
   $db = Join-Path $WorkDir 'fx.sqlite'
-  $null = & $Exe index (Join-Path $WorkDir 'src') --db $db 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $WorkDir 'src') --db $db 2>&1 | ForEach-Object { "$_" } }
   $r = Run @('syntax-count','--db',$db,'--json')
-  $j3 = $null; try { $j3 = ($r.Out | Where-Object { $_ -like '{*' } | Select-Object -First 1) | ConvertFrom-Json } catch {}
+  $j3 = $null; try { $j3 = ($r.Out | Where-Object { $_ -like '{*' } | Select-Object -First 1) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
   Check 'S3 --db reads the index file list (same totals)' ($r.Code -eq 0 -and $j3 -and $j3.files_scanned -eq 1 -and $j3.totals.'inline-var' -eq 3 -and $j3.totals.'if-expr' -eq 1) ("exit $($r.Code): " + ($r.Out -join ' | '))
 
   # ---- S4 ----

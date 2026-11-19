@@ -17,6 +17,16 @@ uses
 /// ResolveCallTargets pass populates call_edges with the right resolutions.</summary>
 /// <param name="AArgs">Parsed CLI args; DbPath is the index to dump.</param>
 /// <returns>0 on success, 2 on usage error / missing or stale db.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Common.OpenReadOnlyStore, DRagLint.Core.Interfaces.ISymbolStore.DumpAllCallEdges, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, FileExists, Format, Writeln</para>
+/// <para>Returns: 0</para>
+/// <seealso cref="DRagLint.CLI.Common.OpenReadOnlyStore"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.DumpAllCallEdges"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoDumpCallEdges(const AArgs: TArgs): Integer;
 
 /// <summary>The library index find-callees opens beside the project index (item 4).</summary>
@@ -25,8 +35,18 @@ function DoDumpCallEdges(const AArgs: TArgs): Integer;
 /// manifest-classified library was named first.</param>
 /// <returns>An explicit --library-db (never 'none'), else a second --db that is not the
 /// project DB, else ''. Existence is not checked here; the caller degrades to "not open".</returns>
-/// <remarks>Never reads the manifest to GUESS a library: opening one nobody named would make
-/// the answer depend on a machine-level setting (the 2026-10-25 no-attach ruling).</remarks>
+/// <remarks>
+/// Never reads the manifest to GUESS a library: opening one nobody named would make
+/// the answer depend on a machine-level setting (the 2026-10-25 no-attach ruling).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CallGraph.DoFindCallees (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.DoContext (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Common.SplitConsumerDbs, ExpandFileName, SameText</para>
+/// <para>Returns: ''; Lib; AArgs.LibraryDbs[0]</para>
+/// <para>Mutates: AProjectDb (var)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.SplitConsumerDbs"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindCalleesLibraryDb(const AArgs: TArgs; var AProjectDb: string): string;
 
 /// <summary>v14 (D5 T9): drag-lint find-callees --qname X [--json] --db PATH
@@ -42,9 +62,9 @@ function FindCalleesLibraryDb(const AArgs: TArgs; var AProjectDb: string): strin
 /// library open the text ends "M external (library not open)" for the sites a
 /// library could bind.</summary>
 /// <param name="AArgs">Parsed CLI args; QName is the calling routine, DbPath the index.</param>
-/// <returns>0 when the store opened OK and --qname resolved to at least one symbol
-/// (even with zero callees); 1 if --qname does not resolve to any symbol; 2 on
-/// usage error / missing or stale db.</returns>
+/// <returns>0 when --qname resolved and at least one callee (resolved or external) was found;
+/// 1 if --qname does not resolve to any symbol OR it calls nothing (GitHub #17, 1.52 -- an empty
+/// answer, as query find-callers); 2 on usage error / missing or stale db.</returns>
 function DoFindCallees(const AArgs: TArgs): Integer;
 
 /// <summary>v14 (D5 T9): drag-lint ambiguous-calls [--qname X|--file F] [--json]
@@ -60,6 +80,15 @@ function DoFindCallees(const AArgs: TArgs): Integer;
 /// the query, DbPath is the index.</param>
 /// <returns>0 whenever the store opened OK, regardless of result count (empty
 /// is a valid answer); 2 on usage error / missing or stale db.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Common.OpenReadOnlyStore, DRagLint.Core.Interfaces.ISymbolStore.GetAmbiguousCalls, FileExists, Format, Writeln</para>
+/// <para>Returns: 0</para>
+/// <seealso cref="DRagLint.CLI.Common.OpenReadOnlyStore"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAmbiguousCalls"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoAmbiguousCalls(const AArgs: TArgs): Integer;
 
 /// <summary>v14 (D5 T11): drag-lint call-path --from A --to B [--max-depth N]
@@ -81,6 +110,19 @@ function DoAmbiguousCalls(const AArgs: TArgs): Integer;
 /// but no path exists within --max-depth; 2 on usage error / missing or
 /// unreadable db (store-open failure) / an endpoint that resolves to no
 /// symbol.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.CallGraph.ResolveEndpointIds, DRagLint.CLI.Common.OpenReadOnlyStore, DRagLint.CLI.Common.ReportNotFound, DRagLint.Core.Interfaces.ISymbolStore.FindDispatchLinks, DRagLint.Core.Interfaces.ISymbolStore.GetCallEdgesFromSymbol, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, FileExists, Format, Writeln</para>
+/// <para>Returns: 1; 0</para>
+/// <para>Complexity: 30 (cyclomatic, outer body), 149 lines (full implementation)</para>
+/// <seealso cref="DRagLint.CLI.CallGraph.ResolveEndpointIds"/>
+/// <seealso cref="DRagLint.CLI.Common.OpenReadOnlyStore"/>
+/// <seealso cref="DRagLint.CLI.Common.ReportNotFound"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindDispatchLinks"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetCallEdgesFromSymbol"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoCallPath(const AArgs: TArgs): Integer;
 
 /// <summary>v14 (D5 T11): drag-lint callgraph --qname X [--direction
@@ -100,6 +142,19 @@ function DoCallPath(const AArgs: TArgs): Integer;
 /// symbol; 1 if --qname does not resolve to any symbol; 2 on usage error /
 /// missing or unreadable db (store-open failure) / a bad --direction
 /// value.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.CallGraph.BuildCallGraphJson, DRagLint.CLI.CallGraph.RenderCallGraphText, DRagLint.CLI.CallGraph.ResolveEndpointIds, DRagLint.CLI.Common.AddStalenessPairs, DRagLint.CLI.Common.OpenReadOnlyStore, DRagLint.CLI.Common.ReportNotFound, FileExists, Format, LowerCase, Trim, Writeln</para>
+/// <para>Returns: 2; 0</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 72 lines (full implementation)</para>
+/// <seealso cref="DRagLint.CLI.CallGraph.BuildCallGraphJson"/>
+/// <seealso cref="DRagLint.CLI.CallGraph.RenderCallGraphText"/>
+/// <seealso cref="DRagLint.CLI.CallGraph.ResolveEndpointIds"/>
+/// <seealso cref="DRagLint.CLI.Common.AddStalenessPairs"/>
+/// <seealso cref="DRagLint.CLI.Common.OpenReadOnlyStore"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoCallGraph(const AArgs: TArgs): Integer;
 
 /// <summary>drag-lint reverse-calltree --qname X [--direction callers|callees] [--depth N]
@@ -119,6 +174,20 @@ function DoCallGraph(const AArgs: TArgs): Integer;
 /// <param name="AArgs">QName=root, Direction=callers|callees (default callers),
 /// Depth=tree depth (default 3), Format/AsJson=output, DbPath/DbPaths=index(es).</param>
 /// <returns>0 ok; 1 qname unresolved in every DB; 2 usage error / no readable db (an explicit --db that is missing or stale is exit 2).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: BuildNodeJson, BuildSummaryJson, CharInSet, DRagLint.CLI.CallGraph.DoReverseCallTree.BuildTreeJson, DRagLint.CLI.CallGraph.DoReverseCallTree.EmitRendering, DRagLint.CLI.CallGraph.DoReverseCallTree.RenderNodeChart, DRagLint.CLI.CallGraph.DoReverseCallTree.RenderNodeText, DRagLint.CLI.CallGraph.ResolveEndpointIds, DRagLint.CLI.Common.AddStalenessPairs, DRagLint.CLI.Common.ExplicitDbsExist (+13 more)</para>
+/// <para>Returns: 1; 0</para>
+/// <para>Complexity: 29 (cyclomatic, outer body), 230 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.CallGraph.DoReverseCallTree.BuildTreeJson"/>
+/// <seealso cref="DRagLint.CLI.CallGraph.DoReverseCallTree.EmitRendering"/>
+/// <seealso cref="DRagLint.CLI.CallGraph.DoReverseCallTree.RenderNodeChart"/>
+/// <seealso cref="DRagLint.CLI.CallGraph.DoReverseCallTree.RenderNodeText"/>
+/// <seealso cref="DRagLint.CLI.CallGraph.ResolveEndpointIds"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoReverseCallTree(const AArgs: TArgs): Integer;
 
 /// <summary>drag-lint butterfly --qname X [--depth N] [--format dot|mermaid|text|json]
@@ -143,6 +212,20 @@ function DoReverseCallTree(const AArgs: TArgs): Integer;
 /// Output=optional file path (else stdout), DbPath/DbPaths=index(es).</param>
 /// <returns>0 ok (even with zero callers and/or zero callees -- still a valid
 /// 1-node chart); 1 qname unresolved in every DB; 2 usage error / no readable db (an explicit --db that is missing or stale is exit 2).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: BuildNodeJson, BuildSummaryJson, CharInSet, DRagLint.CLI.CallGraph.DoButterfly.BuildTreeJson, DRagLint.CLI.CallGraph.DoButterfly.RenderNodeChart, DRagLint.CLI.CallGraph.DoButterfly.RenderNodeText, DRagLint.CLI.CallGraph.ResolveEndpointIds, DRagLint.CLI.Common.AddStalenessPairs, DRagLint.CLI.Common.ExplicitDbsExist, DRagLint.CLI.Common.OpenReadOnlyStore (+12 more)</para>
+/// <para>Returns: 1; 0</para>
+/// <para>Complexity: 22 (cyclomatic, outer body), 229 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.CallGraph.DoButterfly.BuildTreeJson"/>
+/// <seealso cref="DRagLint.CLI.CallGraph.DoButterfly.RenderNodeChart"/>
+/// <seealso cref="DRagLint.CLI.CallGraph.DoButterfly.RenderNodeText"/>
+/// <seealso cref="DRagLint.CLI.CallGraph.ResolveEndpointIds"/>
+/// <seealso cref="DRagLint.CLI.Common.AddStalenessPairs"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoButterfly(const AArgs: TArgs): Integer;
 
 implementation
@@ -344,7 +427,9 @@ begin
     JOut.Free;
     Oracle.Free;
   end; // try
-  Result:= 0;
+  { GitHub #17 (owner ruling 1.52): no callee at all is an EMPTY answer -- exit 1, as
+    query find-callers. An external callee whose library is not open still counts. }
+  Result:= if (Total = 0) and (Ext.Listed = 0) and (Ext.NotOpen = 0) then 1 else 0;
 end; // function
 
 function DoAmbiguousCalls(const AArgs: TArgs): Integer;

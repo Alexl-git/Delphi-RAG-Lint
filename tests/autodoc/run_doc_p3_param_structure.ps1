@@ -34,7 +34,10 @@
   Runs from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Continue'
@@ -91,7 +94,7 @@ $tgt = Join-Path $sc 'paramdoc.pas'
 $db  = Join-Path $sc 'p.sqlite'
 Copy-Item $fx $tgt -Force
 
-& $exePath index $sc --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc --db $db 2>$null } | Out-Null
 
 # --- PRECONDITIONS ----------------------------------------------------------
 $pre = [IO.File]::ReadAllLines($tgt)
@@ -105,7 +108,7 @@ Check 'PRECONDITION: the parameter-list comments the harvest reads are present i
 # ===========================================================================
 # APPLY (cycle 1)
 # ===========================================================================
-& $exePath document --unit $tgt --db $db --apply --no-backup 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $tgt --db $db --apply --no-backup 2>$null } | Out-Null
 $md5Cycle1 = Get-FileMd5 $tgt
 $lines = [IO.File]::ReadAllLines($tgt)
 
@@ -162,8 +165,8 @@ Check 'D-4: a hand-written <param> body is preserved on the first apply' `
 # ===========================================================================
 # APPLY (cycle 2) -- "never overwritten" is a claim about the SECOND run.
 # ===========================================================================
-& $exePath index $sc --db $db 2>$null | Out-Null
-& $exePath document --unit $tgt --db $db --apply --no-backup 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc --db $db 2>$null } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $tgt --db $db --apply --no-backup 2>$null } | Out-Null
 $md5Cycle2 = Get-FileMd5 $tgt
 Check 'IDEMPOTENT: a second --apply after a reindex is byte-identical' ($md5Cycle1 -eq $md5Cycle2) `
   "md5_1=$md5Cycle1 md5_2=$md5Cycle2"
@@ -179,7 +182,7 @@ Check 'D-4 (de-vacuator): the hand-written summary beside it also survived' `
 # ===========================================================================
 # PHASE A4 -- doc-drift must accept the generated form.
 # ===========================================================================
-$drift = (& $exePath lint-all $sc --db $db --rule doc-drift 2>&1) | ForEach-Object { "$_" }
+$drift = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all $sc --db $db --rule doc-drift 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" }
 $missing = @($drift | Where-Object { $_ -match 'has no <param> tag' })
 Check 'A4: doc-drift reports NO "has no <param> tag" for a file document just wrote' `
   ($missing.Count -eq 0) (($missing | Select-Object -First 5) -join ' | ')
@@ -193,8 +196,8 @@ $extra = [IO.File]::ReadAllLines($tgt) | ForEach-Object {
 $sw = New-Object System.IO.StreamWriter($tgt, $false, [Text.Encoding]::ASCII)
 foreach ($l in $extra) { $sw.Write($l); $sw.Write("`r`n") }
 $sw.Close()
-& $exePath index $sc --db $db 2>$null | Out-Null
-$drift2 = (& $exePath lint-all $sc --db $db --rule doc-drift 2>&1) | ForEach-Object { "$_" }
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc --db $db 2>$null } | Out-Null
+$drift2 = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all $sc --db $db --rule doc-drift 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" }
 Check 'A4 (de-vacuator): a param with NO tag is still reported -- the rule still fires' `
   (@($drift2 | Where-Object { $_ -match 'AThird' -and $_ -match 'has no <param> tag' }).Count -ge 1) `
   (($drift2 | Where-Object { $_ -match 'doc-drift' } | Select-Object -First 5) -join ' | ')

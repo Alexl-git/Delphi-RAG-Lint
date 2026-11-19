@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup><MainSource>App2.dpr</MainSource><Config Condition="'$(Config)'==''">Debug</Config><Base>true</Base></PropertyGroup>
+  <ItemGroup>
+    <DelphiCompile Include="App2.dpr"><MainSource>MainSource</MainSource></DelphiCompile>
+    <DCCReference Include="..\App1\UShared.pas"/>
+    <DCCReference Include="UApp2.pas"/>
+  </ItemGroup>
+</Project>

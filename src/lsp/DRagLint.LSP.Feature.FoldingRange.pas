@@ -24,21 +24,59 @@ uses
 type
   /// <summary>Answers `textDocument/foldingRange` and advertises
   /// foldingRangeProvider.</summary>
-  /// <remarks>Stateless; registered from this unit's initialization. Lines in the
-  /// reply are 0-based.</remarks>
+  /// <remarks>
+  /// Stateless; registered from this unit's initialization. Lines in the
+  /// reply are 0-based.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.LSP.Feature.FoldingRange.initialization (DRagLint.LSP.Feature.FoldingRange.pas)</para>
+  /// <para>Used in units: DRagLint.LSP.Feature.FoldingRange</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TLspFoldingRangeFeature = class(TLspFeature)
   public
     /// <summary>The method this feature answers.</summary>
     /// <returns>['textDocument/foldingRange'].</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Returns: [FOLD_METHOD]</para>
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Methods</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.FoldingRange.TLspFoldingRangeFeature.AddCapabilities"/>
+    /// <seealso cref="DRagLint.LSP.Feature.FoldingRange.TLspFoldingRangeFeature.Handle"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Methods: TArray<string>; override;
     /// <summary>Adds `foldingRangeProvider: true`.</summary>
     /// <param name="ACaps">initialize.result.capabilities under construction.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.AddCapabilities</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.FoldingRange.TLspFoldingRangeFeature.Handle"/>
+    /// <seealso cref="DRagLint.LSP.Feature.FoldingRange.TLspFoldingRangeFeature.Methods"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure AddCapabilities(ACaps: TJSONObject); override;
     /// <summary>Replies a FoldingRange[] ({startLine, endLine[, kind]}) ordered by start line.</summary>
     /// <param name="ACtx">The server surface.</param>
     /// <param name="AMethod">textDocument/foldingRange.</param>
     /// <param name="AId">The request id; a notification gets no reply.</param>
     /// <param name="AParams">{textDocument}; a missing field answers [].</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadBytes, DRagLint.LSP.Context.ILspServerContext.FileFromUri, DRagLint.LSP.Context.ILspServerContext.Reply, DRagLint.LSP.Feature.FoldingRange.WalkFolds, DRagLint.LSP.SyntaxTree.ParseDelphiUtf8, DRagLint.Preprocess.Types.NormalizeLoneCR, TreeSitter.TTSTree.RootNode</para>
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Handle</para>
+    /// <para>Complexity: 10 (cyclomatic, outer body), 44 lines (full implementation)</para>
+    /// <para>Catches: Exception (re-raise)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
+    /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Readable"/>
+    /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.ReadBytes"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Reply"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Handle(const ACtx: ILspServerContext; const AMethod: string; const AId: TJSONValue; const AParams: TJSONObject); override;
   end;
 

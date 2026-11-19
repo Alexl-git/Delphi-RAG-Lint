@@ -43,9 +43,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-lsp-c9-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
@@ -105,7 +108,7 @@ New-Item -ItemType Directory -Force $src | Out-Null
 $file = Join-Path $src 'uPpC9.pas'
 [System.IO.File]::WriteAllText($file, (($lines -join "`r`n") + "`r`n"), [System.Text.Encoding]::ASCII)
 $db = Join-Path $WorkDir 'c9.sqlite'
-& $Exe index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host 'FATAL: fixture not indexed' -ForegroundColor Red; exit 2 }
 
 # ---------- LSP plumbing ----------
@@ -139,7 +142,7 @@ function LspSession([string[]]$Extra) {
     if (-not $mm.Success) { break }
     $start = $i + $mm.Index + $mm.Length; $len = [int]$mm.Groups[1].Value
     if ($start + $len -gt $out.Length) { break }
-    $o = $out.Substring($start, $len) | ConvertFrom-Json
+    $o = $out.Substring($start, $len) | ConvertFrom-Json | ForEach-Object { $_ }
     if ($null -ne $o.id -and [int]$o.id -gt 10) { $res[[int]$o.id] = $o.result; if ($null -ne $o.error) { $res[[int]$o.id + 100] = $o.error.message } }
     $i = $start + $len
   }

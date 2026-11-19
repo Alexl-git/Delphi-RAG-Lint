@@ -47,9 +47,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$FixtureDir = "$PSScriptRoot\fixtures\stalecompile",
+  [string]$FixtureDir = '',
   [string]$WorkDir    = "$env:TEMP\drag-lint-stalecompile-guard-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $FixtureDir) { $FixtureDir = "$PSScriptRoot\fixtures\stalecompile" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -80,7 +83,7 @@ $batBody = (@(
 
 $null = Start-Process cmd.exe -ArgumentList "/c", "`"$batPath`"" `
           -RedirectStandardOutput $logPath -RedirectStandardError "$logPath.err" `
-          -NoNewWindow -Wait -PassThru
+          -NoNewWindow -Wait -PassThru; $null = $null.Handle
 $log = Get-Content $logPath -Raw -ErrorAction SilentlyContinue
 $buildOk = ($log -match 'BUILD_EXITCODE=0') -and ($log -notmatch 'Error:')
 Check 'StaleCompileHarness.dpr builds (Win64 Debug)' $buildOk `
@@ -93,7 +96,7 @@ if (-not $buildOk -or -not (Test-Path $exe)) {
   exit 1
 }
 
-$out = & $exe 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $exe 2>&1 | ForEach-Object { "$_" } } | Out-String
 $kv = @{}
 foreach ($line in ($out -split "`r?`n")) {
   if ($line -match '^\s*([A-Za-z0-9_.]+)=(.*)$') { $kv[$matches[1]] = $matches[2].Trim() }

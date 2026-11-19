@@ -50,9 +50,12 @@
 
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\draglint_resolvedbs_membership_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'
@@ -156,7 +159,7 @@ foreach ($pair in @(
     @('DemoApp2.sqlite', 'app2\Other.pas'),
     @('DemoApp2.sqlite', 'shared\SharedHelper.pas'),
     @('TreeWide.sqlite', 'loose\Orphan.pas'))) {
-  & $Exe index (Join-Path $root $pair[1]) --db (Join-Path $WorkDir $pair[0]) *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $root $pair[1]) --db (Join-Path $WorkDir $pair[0]) *> $null }
 }
 
 $dbA = Join-Path $WorkDir 'DemoApp.sqlite'
@@ -167,8 +170,8 @@ Check 'fixture: all three indexes were built' `
 
 # Sanity: the shared unit really IS a member of both project indexes. If this
 # fails the fixture is wrong and every assertion below is meaningless.
-$qa = & $Exe query --name SharedThing --db $dbA 2>$null | Out-String
-$qb = & $Exe query --name SharedThing --db $dbB 2>$null | Out-String
+$qa = & { $ErrorActionPreference = 'Continue'; & $Exe query --name SharedThing --db $dbA 2>$null } | Out-String
+$qb = & { $ErrorActionPreference = 'Continue'; & $Exe query --name SharedThing --db $dbB 2>$null } | Out-String
 Check 'fixture: the sibling-folder unit is indexed in BOTH project DBs' `
   (($qa -match 'SharedThing') -and ($qb -match 'SharedThing')) 'membership is real, not assumed'
 
@@ -177,7 +180,7 @@ function Resolve-In([string]$File, [string]$Proj) {
   if ($Proj) { $a += @('--project',$Proj) }
   $o = Join-Path $WorkDir 'o.txt'
   $e = Join-Path $WorkDir 'e.txt'
-  $p = Start-Process -FilePath $Exe -ArgumentList $a -NoNewWindow -Wait -PassThru -RedirectStandardOutput $o -RedirectStandardError $e
+  $p = Start-Process -FilePath $Exe -ArgumentList $a -NoNewWindow -Wait -PassThru -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   ,@(Get-Content -LiteralPath $o -ErrorAction SilentlyContinue | Where-Object { $_.Trim() -ne '' })
 }
 

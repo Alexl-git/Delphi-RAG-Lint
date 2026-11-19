@@ -47,9 +47,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-with-external-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -129,7 +132,7 @@ end.
 [System.IO.File]::WriteAllText((Join-Path $WorkDir 'withext.pas'), $src, [System.Text.Encoding]::ASCII)
 
 $db = Join-Path $WorkDir 'withext.sqlite'
-& $Exe index $WorkDir --db $db --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 $py = Join-Path $WorkDir 'refs.py'
 @'
@@ -152,7 +155,7 @@ out['SlotTwoOnly_call'] = n('SlotTwoOnly', 'call')
 print(json.dumps(out))
 c.close()
 '@ | Set-Content $py -Encoding ascii
-$r = (& python $py $db) -join "`n" | ConvertFrom-Json
+$r = (& python $py $db) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 
 Write-Host 'A1 -- with entity slots' -ForegroundColor Cyan
 Check 'HAZARD: bare identifier in entity slot 2 is recorded' ($r.SlotTwoOnly -ge 1) "refs=$($r.SlotTwoOnly)  -- SlotTwoOnly appears ONLY in the entity-2 slot"

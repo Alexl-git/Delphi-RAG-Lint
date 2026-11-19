@@ -32,7 +32,10 @@
   fixture -- five of six cases behaved and the one real-world shape did not.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'
@@ -126,7 +129,7 @@ Check 'all six fixture call sites located' (
   @($lnSafeScheme,$lnSafeInline,$lnFileScheme,$lnBareVar,$lnExeConcat,$lnReassigned) -notcontains -1)
 
 $fired = @()
-foreach ($line in (& $Exe lint $fixture 2>$null)) {
+foreach ($line in (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture 2>$null })) {
   if ($line -match 'unsafe-shellexecute' -and $line -match ':(\d+):') { $fired += [int]$Matches[1] }
 }
 Write-Host ("  fired on lines: {0}" -f ($fired -join ', ')) -ForegroundColor DarkGray

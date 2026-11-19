@@ -31,10 +31,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_convert_apply_inh_chain_$PID",
   [string]$RsVars  = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -415,15 +418,15 @@ function NewCase([string]$Name) {
   $d = Join-Path $WorkDir $Name
   New-Item -ItemType Directory $d -Force | Out-Null
   foreach ($k in $Fixture.Keys) { WriteAscii (Join-Path $d $k) $Fixture[$k] }
-  & $Exe index $d --db (Join-Path $d 'fx.sqlite') *> (Join-Path $d 'index.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $d --db (Join-Path $d 'fx.sqlite') *> (Join-Path $d 'index.log') }
   return $d
 }
-function Reindex([string]$D) { & $Exe index $D --db (Join-Path $D 'fx.sqlite') *>> (Join-Path $D 'index.log') }
+function Reindex([string]$D) { & { $ErrorActionPreference = 'Continue'; & $Exe index $D --db (Join-Path $D 'fx.sqlite') *>> (Join-Path $D 'index.log') } }
 function Apply([string]$D, [string[]]$Units, [string[]]$Extra = @()) {
   $a = @('convert-apply')
   foreach ($u in $Units) { $a += @('--unit', (Join-Path $D $u)) }
   $a += @('--rules', (Join-Path $D 'chain.rules'), '--db', (Join-Path $D 'fx.sqlite')) + $Extra
-  $o = (& $Exe @a 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 function Text([string]$D, [string]$F) { return [IO.File]::ReadAllText((Join-Path $D $F), [Text.Encoding]::ASCII) }
@@ -448,7 +451,7 @@ function CompileRun([string]$D, [string]$Probe) {
   $errs = @(($cl -split "`r?`n") | Where-Object { $_ -match 'Error|Fatal' })
   $ok = ($cl -match 'BUILD_EXITCODE=0') -and ($errs.Count -eq 0)
   $out = ''
-  if ($ok) { $out = (& (Join-Path $D 'bin\ChProbe.exe') 2>&1) -join "`n" }
+  if ($ok) { $out = (& { $ErrorActionPreference = 'Continue'; & (Join-Path $D 'bin\ChProbe.exe') 2>&1 | ForEach-Object { "$_" } }) -join "`n" }
   return [pscustomobject]@{ Compiled = $ok; Errors = ($errs -join ' | '); Out = $out }
 }
 function AssertConverted([string]$Tag, [string]$D) {
@@ -536,7 +539,7 @@ Check 'RD CONTROL a descendant with no redeclaration: no field edit, no field wa
 $d = NewCase 'cn'
 $before = Text $d 'ChLeaf.dfm'
 $r = Apply $d @('ChLeaf.pas') @('--format', 'json')
-$j = $null; try { $j = $r.Out.Substring($r.Out.IndexOf('{')) | ConvertFrom-Json } catch {}
+$j = $null; try { $j = $r.Out.Substring($r.Out.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 $q = @($j.inherited | Where-Object { $_.name -eq 'Q1' })
 Check 'CN CONTROL ancestor unconverted: Q1 skipped, state unconverted' (($q.Count -eq 1) -and ($q[0].action -eq 'skipped') -and ($q[0].ancestor_state -eq 'unconverted')) $r.Out
 $r = Apply $d @('ChLeaf.pas') @('--apply', '--no-backup')

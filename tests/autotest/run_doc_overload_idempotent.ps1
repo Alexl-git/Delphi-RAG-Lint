@@ -39,9 +39,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-doc-overload-idempotent-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -94,7 +97,7 @@ $file = Join-Path $dir 'uOverloadIdem.pas'
 $db   = Join-Path $dir 'fx.sqlite'
 Write-Fixture $file
 
-& $Exe index $dir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 # Finds the Nth (1-based $Occurrence) line matching $Pattern, then walks
 # upward collecting the contiguous '///' block directly above it (same
@@ -118,7 +121,7 @@ function Count-Begin([string]$Block) {
 }
 
 Write-Host 'First apply: document --unit --apply --no-backup' -ForegroundColor Cyan
-& $Exe document --unit $file --db $db --apply --no-backup 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe document --unit $file --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $ec = $LASTEXITCODE
 Check 'document --unit exit 0' ($ec -eq 0) "ec=$ec"
 
@@ -140,10 +143,10 @@ $beforeBytes = [IO.File]::ReadAllBytes($file)
 # insert a duplicate instead of recognizing daUnchanged; same requirement
 # documented in run_doc_returns.ps1 Scenario C / tests\autodoc\run_doc_idempotent.ps1.
 # Orthogonal to Bug A -- both overloads must independently survive this too.
-& $Exe index $dir --db $db 2>&1 | Out-Null
-$rj = & $Exe document --unit $file --db $db --apply --no-backup --json 2>$null | Out-String
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+$rj = & { $ErrorActionPreference = 'Continue'; & $Exe document --unit $file --db $db --apply --no-backup --json 2>$null } | Out-String
 $ecj = $LASTEXITCODE
-$oj = $null; try { $oj = ($rj | ConvertFrom-Json) } catch { $oj = $null }
+$oj = $null; try { $oj = ($rj | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $oj = $null }
 Check 'second apply: exit 0' ($ecj -eq 0) "ec=$ecj"
 Check 'second apply: json parsed' ($null -ne $oj) $rj
 Check 'second apply: edits = 0 (daUnchanged for both overloads)' `

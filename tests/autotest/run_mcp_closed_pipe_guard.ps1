@@ -12,9 +12,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-mcp-pipe-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 . (Join-Path $PSScriptRoot 'lsp_stdio_helpers.ps1')
@@ -24,7 +27,7 @@ if (Test-Path $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
 New-Item -ItemType Directory "$WorkDir\src" -Force | Out-Null
 WriteAnsi "$WorkDir\src\uA.pas" "unit uA;`r`n`r`ninterface`r`n`r`nprocedure DoA;`r`n`r`nimplementation`r`n`r`nprocedure DoA;`r`nbegin`r`nend;`r`n`r`nend.`r`n"
 $db = "$WorkDir\a.sqlite"
-& $Exe index "$WorkDir\src" --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\src" --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 $reqs = @(
   '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"guard","version":"1"}}}',

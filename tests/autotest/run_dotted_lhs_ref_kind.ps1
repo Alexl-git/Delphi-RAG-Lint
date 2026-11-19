@@ -24,9 +24,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-dotted-lhs-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -146,13 +152,13 @@ function LineOf([string]$Text) {
 }
 
 $db = Join-Path $WorkDir 'dotted.sqlite'
-$null = & $Exe index $work --db $db --library-db none 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db --library-db none 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 # sql --json rows are POSITIONAL arrays: map them onto columns[].name.
 function Q([string]$Sql) {
-  $raw = & $Exe sql --db $db --json --query $Sql 2>$null | Out-String
-  $j = $raw | ConvertFrom-Json
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --query $Sql 2>$null } | Out-String
+  $j = $raw | ConvertFrom-Json | ForEach-Object { $_ }
   $names = @($j.columns | ForEach-Object { $_.name })
   $out = @()
   foreach ($r in @($j.rows)) {
@@ -162,8 +168,10 @@ function Q([string]$Sql) {
   }
   return ,$out
 }
+# 1.52 EXTP adds a write-through row BESIDE the read row this runner pins (it does not replace it,
+# as the header asks); that row is EXTP's own surface (run_v152_EXTP_refs.ps1), so it is left out here.
 function FirstRef([int]$Line) {
-  $rows = Q "select r.kind, r.name_text, coalesce(r.receiver_text,'<null>') rcv, coalesce(ma.mode,'<none>') mode from refs r left join member_accesses ma on ma.ref_id = r.id where r.start_line=$Line order by r.start_col"
+  $rows = Q "select r.kind, r.name_text, coalesce(r.receiver_text,'<null>') rcv, coalesce(ma.mode,'<none>') mode from refs r left join member_accesses ma on ma.ref_id = r.id where r.start_line=$Line and r.kind <> 'write-through' order by r.start_col"
   return ,$rows
 }
 
@@ -189,8 +197,8 @@ $leaf = $r | Where-Object { $_.kind -eq 'member-access' -and $_.name_text -eq 'K
 Check "R.Inner.K := 1; leaf 'K' has receiver 'R.Inner'" ($leaf -and $leaf.rcv -eq 'R.Inner') "got $($leaf.rcv)"
 
 Write-Host 'Lint answers on the same fixture' -ForegroundColor Cyan
-$raw = & $Exe lint $pas --db $db --json --enable used-before-assignment,overwrite-before-read,referenced-never-set,unused-local 2>$null | Out-String
-$f = @($raw | ConvertFrom-Json)
+$raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $pas --db $db --json --enable used-before-assignment,overwrite-before-read,referenced-never-set,unused-local 2>$null } | Out-String
+$f = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 function Has([string]$Rule, [int]$Line) { @($f | Where-Object { $_.rule -eq $Rule -and $_.start_line -eq $Line }).Count -gt 0 }
 Check 'control: used-before-assignment fires on UseI(Y)'         (Has 'used-before-assignment' (LineOf 'UseI(Y);')) ''
 Check 'control: overwrite-before-read fires on the dead X := 1'   (Has 'overwrite-before-read' (LineOf 'X := 1;')) ''
@@ -211,3 +219,4 @@ exit 0
   Write-Host "FATAL: $_" -ForegroundColor Red
   exit 2
 }
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

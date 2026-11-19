@@ -34,10 +34,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\draglint_magic_date_args_$PID",
   [switch]$Quiet
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -93,12 +96,12 @@ end.
 
 Write-Host '== large-magic-number: date-constructor arguments ==' -ForegroundColor Cyan
 
-$json = (& $Exe lint $src --rule large-magic-number --json 2>$null) -join "`n"
+$json = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $src --rule large-magic-number --json 2>$null }) -join "`n"
 $i = $json.IndexOf('[')
 if ($i -lt 0) { $i = $json.IndexOf('{') }
 if ($i -lt 0) { Write-Host 'FATAL: no JSON from lint' -ForegroundColor Red; exit 2 }
 $parsed = $null
-try { $parsed = $json.Substring($i) | ConvertFrom-Json } catch { }
+try { $parsed = $json.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 if ($null -eq $parsed) { Write-Host 'FATAL: lint JSON did not parse' -ForegroundColor Red; exit 2 }
 
 $findings = @()

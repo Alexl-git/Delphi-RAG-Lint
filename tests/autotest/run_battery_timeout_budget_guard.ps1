@@ -13,7 +13,10 @@
   proving the assertion can tell the two values apart.
 #>
 [CmdletBinding()]
-param([string]$RepoRoot = "$PSScriptRoot\..\..")
+param([string]$RepoRoot = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $RepoRoot) { $RepoRoot = "$PSScriptRoot\..\.." }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -31,7 +34,7 @@ function Invoke-Driver([string]$Tag, [int]$Jobs) {
   $out = Join-Path $tmp "$Tag.log"
   $p = Start-Process pwsh -ArgumentList @('-NoProfile', '-NonInteractive', '-File', (Join-Path $tmp 'tests\run_battery.ps1'),
         '-SkipPrepare', '-TimeoutSec', '2', '-Jobs', $Jobs, '-HeartbeatMin', '0', '-LogDir', (Join-Path $tmp "logs_$Tag")) `
-        -WorkingDirectory $tmp -PassThru -Wait -RedirectStandardOutput $out -RedirectStandardError "$out.err" -WindowStyle Hidden
+        -WorkingDirectory $tmp -PassThru -Wait -RedirectStandardOutput $out -RedirectStandardError "$out.err" -WindowStyle Hidden; $null = $p.Handle
   [pscustomobject]@{ Text = (Get-Content -LiteralPath $out -Raw); Exit = $p.ExitCode }
 }
 $par = Invoke-Driver 'par' 2

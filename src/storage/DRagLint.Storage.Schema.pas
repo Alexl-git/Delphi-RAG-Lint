@@ -55,8 +55,16 @@ const
     created by Migrate and probed by its readers (HasRefHostBindings), so SCHEMA_READ_MIN stays
     23: an older index reads as before (such a ref is unbound where its hosts differ). Written
     by the calls pass only, for refs it leaves unbound on the ref; filled by the next resolve
-    of the include's refs. }
-  SCHEMA_VERSION = 26;
+    of the include's refs.
+    1.52 lane EXTINC (2026-11-17): 26 -> 27 for per-inclusion include parses (owner ruling B9i:
+    an .inc is parsed in each host's own define context, contexts need not agree): the table
+    inc_variants (include, host, variant, context hash) and the columns symbols.inc_variant /
+    refs.inc_variant (0 = in every context of the include, k = context k only). ADDITIVE:
+    created / ALTERed by Migrate (NOT NULL DEFAULT 0, so every existing row reads "every
+    context") and read only by the resolve pass, which runs on a migrated writer; probed by
+    HasIncVariants. SCHEMA_READ_MIN stays 23. Filled by the re-parse of the extractor bump
+    that ships with it (INT). }
+  SCHEMA_VERSION = 27;
 
   /// <summary>The oldest stored schema_version this engine READS without migrating
   /// (150 SC, docs\superpowers\specs\2026-11-09-schema-read-compat.md).</summary>
@@ -444,14 +452,27 @@ const
 /// AFound; 0 = no schema_meta, i.e. not a drag-lint index).</param>
 /// <returns>True for [SCHEMA_READ_MIN, SCHEMA_VERSION] and for a NEWER index
 /// (readable as before; writers refuse it separately).</returns>
-/// <remarks>The read gate. IsSchemaCurrent (AFound >= SCHEMA_VERSION) stays the
-/// "no migration pending" test for writers. Pure; thread-safe.</remarks>
+/// <remarks>
+/// The read gate. IsSchemaCurrent (AFound >= SCHEMA_VERSION) stays the
+/// "no migration pending" test for writers. Pure; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CheckInit.DbUsable (DRagLint.CLI.CheckInit.pas), DRagLint.CLI.Common.AnyDbSchemaCurrent (DRagLint.CLI.Common.pas), DRagLint.CLI.Common.OpenReadOnlyStore (DRagLint.CLI.Common.pas), DRagLint.CLI.LibraryReady.ProbeLibraryReadiness (DRagLint.CLI.LibraryReady.pas), DRagLint.CLI.OpenLibraryStoreIfCurrent (DRagLint.CLI.pas) (+11 more)</para>
+/// <para>Returns: AFound &gt;= SCHEMA_READ_MIN</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsSchemaReadable(AFound: Integer): Boolean;
 
 /// <summary>The one refusal text for an index this engine will not read.</summary>
 /// <param name="AFound">The stored schema_version (0 = not a drag-lint index).</param>
 /// <returns>'index schema vN is older than this engine reads (vMIN..vCUR); re-index it'
 /// -- the same words at every opener, so a guard can match them.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Common.OpenReadOnlyStore (DRagLint.CLI.Common.pas), DRagLint.CLI.OpenLibraryStores (DRagLint.CLI.pas), DRagLint.CLI.UsesRecover.LoadSourceNames (DRagLint.CLI.UsesRecover.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.CreateReadable (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.OpenReadable (DRagLint.Storage.SQLite.pas) (+1 more)</para>
+/// <para>Calls: Format</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SchemaUnreadableReason(AFound: Integer): string;
 
 /// <summary>One line for the `schema` verb: the engine's schema, the range it
@@ -459,6 +480,15 @@ function SchemaUnreadableReason(AFound: Integer): string;
 /// <param name="AFound">The index's stored schema_version.</param>
 /// <returns>'engine schema vCUR reads vMIN..vCUR: ' + current / 'vN readable by vCUR;
 /// re-index to write' / NEWER / the SchemaUnreadableReason text.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Schema.DoSchema (DRagLint.CLI.Schema.pas)</para>
+/// <para>Calls: DRagLint.Storage.Schema.IsSchemaReadable, DRagLint.Storage.Schema.SchemaUnreadableReason, Format</para>
+/// <para>Returns: Format('engine schema v%d reads v%d..v%d: ', [SCHEMA_VERSION, SCHEMA_READ_MIN, SCHEMA_VERSION])</para>
+/// <seealso cref="DRagLint.Storage.Schema.IsSchemaReadable"/>
+/// <seealso cref="DRagLint.Storage.Schema.SchemaUnreadableReason"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SchemaCompatLine(AFound: Integer): string;
 
 implementation

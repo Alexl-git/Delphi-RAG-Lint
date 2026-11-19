@@ -28,9 +28,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = (Join-Path ([IO.Path]::GetTempPath()) "dl-v1511-y10s-$PID")
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -67,16 +70,16 @@ try {
   $p = @{ ToolOne = (Join-Path $app 'ToolOne.dpr'); ToolTwo = (Join-Path $app 'ToolTwo.dpr') }
   $d = @{ ToolOne = (Join-Path $app '_D-RAG\ToolOne.sqlite'); ToolTwo = (Join-Path $app '_D-RAG\ToolTwo.sqlite') }
   foreach ($k in 'ToolOne', 'ToolTwo') {
-    $null = & $Exe index --project $p[$k] --db $d[$k] 2>&1
+    $null = & { $ErrorActionPreference = 'Continue'; & $Exe index --project $p[$k] --db $d[$k] 2>&1 | ForEach-Object { "$_" } }
     Check "setup: $k index built" ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
   }
   foreach ($k in 'ToolTwo', 'ToolOne', 'ToolTwo', 'ToolOne') {
-    $o = & $Exe document --project $p[$k] --db $d[$k] --apply --reindex --no-backup 2>&1 | Out-String
+    $o = & { $ErrorActionPreference = 'Continue'; & $Exe document --project $p[$k] --db $d[$k] --apply --reindex --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-String
     Write-Host ("    apply {0}: {1}" -f $k, (($o -split "`r?`n" | Where-Object { $_ -match '^doc: \d' }) -join ' '))
   }
-  foreach ($k in 'ToolOne', 'ToolTwo') { $null = & $Exe index --project $p[$k] --db $d[$k] 2>&1 }
+  foreach ($k in 'ToolOne', 'ToolTwo') { $null = & { $ErrorActionPreference = 'Continue'; & $Exe index --project $p[$k] --db $d[$k] 2>&1 | ForEach-Object { "$_" } } }
   foreach ($k in 'ToolOne', 'ToolTwo') {
-    $o = & $Exe document --project $p[$k] --db $d[$k] 2>&1 | Out-String
+    $o = & { $ErrorActionPreference = 'Continue'; & $Exe document --project $p[$k] --db $d[$k] 2>&1 | ForEach-Object { "$_" } } | Out-String
     Check "CONVERGE $k dry run has nothing to document" ($o -notmatch '(?m)^File:') (($o -split "`r?`n" | Where-Object { $_ -match '^doc: \d|^File:|^\s+(insert|delete)' } | Select-Object -First 4) -join ' ')
   }
   $st = [IO.File]::ReadAllText($shared)

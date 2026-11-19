@@ -15,9 +15,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_convert_apply_only_type_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 $script:fail = $false
@@ -107,17 +110,17 @@ W 'two.rules' @'
 #link Caption <- Caption
 '@
 $db = Join-Path $WorkDir 'fx.sqlite'
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the fixture index was built' (Test-Path $db)
 function P([string]$n) { return (Join-Path $WorkDir $n) }
 function Apply([string[]]$Extra = @()) {
-  $o = (& $Exe @(@('convert-apply', '--unit', (P 'TForm1.pas'), '--rules', (P 'two.rules'), '--db', $db, '--format', 'json') + $Extra) 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @(@('convert-apply', '--unit', (P 'TForm1.pas'), '--rules', (P 'two.rules'), '--db', $db, '--format', 'json') + $Extra) 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 function Json([string]$s) {
   $a = $s.IndexOf('{'); $b = $s.LastIndexOf('}')
   if ($a -lt 0 -or $b -le $a) { return $null }
-  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json) } catch { return $null }
+  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function Arr($v) { return ((@($v) | ForEach-Object { [string]$_ }) -join ',') }
 
@@ -147,7 +150,7 @@ Check 'T5 --only-type TSrcLbl,TNoSuch: lblOne converts, only_unmatched = [TNoSuc
 $r = Apply @('--only-type', 'TSrcLbl', '--only', 'btnOne')
 Check 'T6 --only-type with --only: exit 2' ($r.Code -eq 2) $r.Out
 
-$j = Json ((& $Exe info --json 2>&1) -join "`n")
+$j = Json ((& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>&1 | ForEach-Object { "$_" } }) -join "`n")
 Check 'T7 info --json: capabilities.only_type is JSON true' `
   (($null -ne $j) -and ($j.capabilities.only_type -is [bool]) -and ($j.capabilities.only_type -eq $true))
 
@@ -188,9 +191,9 @@ object U8Form: TU8Form
   end
 end
 "@
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 function ApplyU8([string[]]$Extra) {
-  $o = (& $Exe @(@('convert-apply', '--unit', (P 'U8Form.pas'), '--rules', (P 'two.rules'), '--db', $db, '--format', 'json') + $Extra) 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @(@('convert-apply', '--unit', (P 'U8Form.pas'), '--rules', (P 'two.rules'), '--db', $db, '--format', 'json') + $Extra) 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 $r = ApplyU8 @('--only', "btn${ue}ber"); $j = Json $r.Out

@@ -13,9 +13,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\draglint-lint-project-note-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
 function Check($n,$ok,$d){
@@ -34,7 +37,7 @@ try {
   Write-Ascii "$WorkDir\App.dpr" "program App;`r`n`r`nuses`r`n  uA in 'uA.pas';`r`n`r`nbegin`r`nend.`r`n"
   $o = "$WorkDir\o.txt"; $e = "$WorkDir\e.txt"
   $p = Start-Process -FilePath $exePath -ArgumentList @('lint', '--project', "$WorkDir\App.dpr", '--rule', 'unit-not-in-dpr') -NoNewWindow -Wait -PassThru `
-         -WorkingDirectory $WorkDir -RedirectStandardOutput $o -RedirectStandardError $e
+         -WorkingDirectory $WorkDir -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   $out = [IO.File]::ReadAllText($o); $err = [IO.File]::ReadAllText($e)
   Check 'V2 POSITIVE CONTROL the rule ran and reported a unit-not-in-dpr finding' ($out -match 'unit-not-in-dpr:') ("stdout=" + $out.Trim())
   Check 'no false "no index covers this file" claim' ($err -notmatch 'no index covers this file') ("stderr=" + $err.Trim())

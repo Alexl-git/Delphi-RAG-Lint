@@ -25,10 +25,14 @@
 # Usage: pwsh -File tests/autotest/run_referenced_never_set_receivers.ps1 [-Exe <path>]
 [CmdletBinding()]
 param(
-    [string] $Exe = $(. "$PSScriptRoot\lib\FreshEngineExe.ps1"; Get-FreshEngineExe),
-    [string] $RulesDir = "$PSScriptRoot\..\..\rules",
+    [string] $Exe = '',
+    [string] $RulesDir = '',
     [string] $WorkDir = "$env:TEMP\drag-lint-refnever-receivers-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(. "$PSScriptRoot\lib\FreshEngineExe.ps1"; Get-FreshEngineExe) }
+if (-not $RulesDir) { $RulesDir = "$PSScriptRoot\..\..\rules" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -73,7 +77,7 @@ end.
 $file = Join-Path $WorkDir 'uRNS.pas'
 [System.IO.File]::WriteAllText($file, (($Fixture -replace "`r`n","`n") -replace "`n","`r`n"), [System.Text.Encoding]::ASCII)
 
-$out = & $Exe lint $file --rules-dir $RulesDir 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file --rules-dir $RulesDir 2>&1 | ForEach-Object { "$_" } } | Out-String
 $hits = @([regex]::Matches($out, 'referenced-never-set: Field "(\w+)"') | ForEach-Object { $_.Groups[1].Value })
 Write-Host ("  reported: {0}" -f ($(if ($hits) { $hits -join ',' } else { '(none)' }))) -ForegroundColor DarkGray
 

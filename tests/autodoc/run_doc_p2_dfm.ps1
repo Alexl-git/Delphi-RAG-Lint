@@ -50,7 +50,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Continue'
@@ -95,10 +98,10 @@ function Get-HandlesValue([string]$block) {
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
-  & $exePath document --unit $targetPas --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $targetPas --db $db --apply 2>$null } | Out-Null
   Check 'document --apply #1 exits 0' ($LASTEXITCODE -eq 0)
 
   $lines = [IO.File]::ReadAllLines($targetPas)
@@ -118,8 +121,8 @@ try {
   # orthogonal 'Called from:' quirk that would otherwise make a whole-file
   # comparison flaky for a reason outside Task 6's scope.
   $beforeHandles = Get-HandlesValue $clickBlock
-  & $exePath index $scratch --db $db 2>$null | Out-Null
-  & $exePath document --unit $targetPas --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $targetPas --db $db --apply 2>$null } | Out-Null
   $linesAfter = [IO.File]::ReadAllLines($targetPas)
   $clickBlockAfter = Get-DocBlockAbove $linesAfter '^\s*procedure Button1Click\(Sender: TObject\);\s*$'
   $afterHandles = Get-HandlesValue $clickBlockAfter

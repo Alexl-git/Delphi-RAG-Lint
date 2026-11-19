@@ -13,9 +13,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-lsp-unowned-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -40,7 +43,7 @@ $looseFile = "$WorkDir\loose\uUnowned.pas"
 Write-Ascii $ownedFile $Src
 Write-Ascii $looseFile $Src
 $db = "$WorkDir\owned.sqlite"
-& $Exe index "$WorkDir\owned" --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\owned" --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'SETUP: owned index built' (Test-Path $db)
 
 function Frame($obj) {
@@ -55,7 +58,7 @@ function Read-Frames([string]$Out) {
     $start = $i + $m.Index + $m.Length
     $len = [int]$m.Groups[1].Value
     if ($start + $len -gt $Out.Length) { break }
-    $res += ($Out.Substring($start, $len) | ConvertFrom-Json)
+    $res += ($Out.Substring($start, $len) | ConvertFrom-Json | ForEach-Object { $_ })
     $i = $start + $len
   }
   return $res
@@ -79,11 +82,11 @@ function Get-Sources([string]$PasFile) {
 }
 
 Write-Host 'CASE A: owned file keeps the normal source' -ForegroundColor Cyan
-$a = Get-Sources $ownedFile
+$a = @(Get-Sources $ownedFile)
 Check 'PC: owned file publishes a with-statement finding' ($a.Count -ge 1) "sources=[$($a -join ',')]"
 Check 'A: every source is exactly "drag-lint"' ($a.Count -ge 1 -and @($a | Where-Object { $_ -ne 'drag-lint' }).Count -eq 0)
 Write-Host 'CASE B: unowned file is labelled' -ForegroundColor Cyan
-$b = Get-Sources $looseFile
+$b = @(Get-Sources $looseFile)
 Check 'PC: unowned file publishes a with-statement finding' ($b.Count -ge 1) "sources=[$($b -join ',')]"
 Check 'B: every source is "drag-lint (unowned)"' ($b.Count -ge 1 -and @($b | Where-Object { $_ -ne 'drag-lint (unowned)' }).Count -eq 0)
 

@@ -97,6 +97,9 @@ Add a second entry for the pictures, identical except:
    picture.
 6. Click any `@Blueprint4.ViewModel.pas:NNNN` in the page to land on that line
    in the IDE.
+7. The picture is large: it opens fit to width. Wheel = zoom at the cursor, drag = pan, **Fit** / **100%** / **+** / **-** buttons, key **0** = fit.
+   The steps where the trace stops (the `N unresolved` of the END TRACE line) and any `dangling:` note are amber and dashed, listed in a legend
+   above the picture; click the legend entry or the END TRACE count to jump to the step.
 
 ## From a terminal (the same thing, verified)
 

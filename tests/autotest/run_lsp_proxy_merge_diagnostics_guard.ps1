@@ -37,9 +37,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\draglint_lspproxy_mergediag_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -118,7 +121,7 @@ function Split-Frames([byte[]]$b) {
 function Publishes([byte[]]$b) {
   $res = @()
   foreach ($f in (Split-Frames $b)) {
-    try { $j = $f.Body | ConvertFrom-Json -AsHashtable } catch { continue }
+    try { $j = $f.Body | ConvertFrom-Json -AsHashtable | ForEach-Object { $_ } } catch { continue }
     if ($j -and ($j['method'] -eq 'textDocument/publishDiagnostics')) {
       $res += [pscustomobject]@{ Frame = $f; Json = $j; Sources = @($j['params']['diagnostics'] | ForEach-Object { $_['source'] }) }
     }
@@ -142,7 +145,7 @@ $fixtureDir = "$PSScriptRoot\fixtures\lspproxy"
 $outDir     = Join-Path $WorkDir 'stub'
 New-Item -ItemType Directory $outDir | Out-Null
 $rs = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
-$null = cmd /c "call `"$rs`" && cd /d `"$fixtureDir`" && dcc64 -CC -E`"$outDir`" -N0`"$outDir`" LspStubServer.dpr" 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; cmd /c "call `"$rs`" && cd /d `"$fixtureDir`" && dcc64 -CC -E`"$outDir`" -N0`"$outDir`" LspStubServer.dpr" 2>&1 | ForEach-Object { "$_" } }
 $stub = "$outDir\LspStubServer.exe"
 Check 'LspStubServer.exe built' (Test-Path $stub) $stub
 if (-not (Test-Path $stub)) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
@@ -152,8 +155,8 @@ $dirty = Join-Path $WorkDir 'Dirty.pas'
 $clean = Join-Path $WorkDir 'Clean.pas'
 [IO.File]::WriteAllText($dirty, "unit Dirty;`r`n`r`ninterface`r`n`r`nprocedure Foo;`r`n`r`nimplementation`r`n`r`nprocedure Foo;`r`nbegin`r`n  try`r`n    Foo;`r`n  except`r`n  end;`r`nend;`r`n`r`nend.`r`n", [Text.Encoding]::ASCII)
 [IO.File]::WriteAllText($clean, "unit Clean;`r`n`r`ninterface`r`n`r`nimplementation`r`n`r`nend.`r`n", [Text.Encoding]::ASCII)
-$dirtyLint = @(& $Exe lint $dirty --json 2>$null | Out-String | ConvertFrom-Json)
-$cleanLint = @(& $Exe lint $clean --json 2>$null | Out-String | ConvertFrom-Json)
+$dirtyLint = @((& { $ErrorActionPreference = 'Continue'; & $Exe lint $dirty --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
+$cleanLint = @((& { $ErrorActionPreference = 'Continue'; & $Exe lint $clean --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 Check 'positive control: the dirty fixture trips >= 1 lint finding' (@($dirtyLint | Where-Object { $_.start_line -gt 0 }).Count -ge 1) ("findings=$(@($dirtyLint | Where-Object { $_.start_line -gt 0 }).Count)")
 Check 'control: the clean fixture trips none' (@($cleanLint | Where-Object { $_.start_line -gt 0 }).Count -eq 0) ("findings=$(@($cleanLint | Where-Object { $_.start_line -gt 0 }).Count)")
 $dirtyUri = Uri $dirty

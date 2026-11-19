@@ -55,7 +55,7 @@ type
   //                             was simply never written. User ruling 2026-08-07.
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Drift.pas), DRagLint.CLI.DocDriftKindStr (DRagLint.CLI.pas), DRagLint.Doc.Drift.MakeFinding (DRagLint.Doc.Drift.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Drift.pas), declaration (DRagLint.Lint.DocRules.pas), DRagLint.CLI.DocDriftKindStr (DRagLint.CLI.pas), DRagLint.Doc.Drift.MakeFinding (DRagLint.Doc.Drift.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocDriftKind = (
@@ -93,7 +93,7 @@ type
   /// function with nothing minable is report-only. Consumers must read this
   /// field, never infer fixability from Kind.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Drift.pas), DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), DRagLint.Doc.Drift.MakeFinding (DRagLint.Doc.Drift.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/3 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas) (+2 more)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Drift.pas), DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), DRagLint.Doc.Drift.MakeFinding (DRagLint.Doc.Drift.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/3 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas) (+3 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Drift, DRagLint.Lint.DocRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -152,16 +152,16 @@ type
     /// That is what TDocFactsRenderOptions is for.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/3 (DRagLint.Doc.Drift.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)</para>
-    /// <para>Calls: ContainsText, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Drift.CalleeRaisesType, DRagLint.Doc.Drift.CollapseAllWhitespace, DRagLint.Doc.Drift.DescReadsInputOnly, DRagLint.Doc.Drift.EffectiveIndentWidth, DRagLint.Doc.Drift.EffectiveSignature, DRagLint.Doc.Drift.ExtractCodeIdents, DRagLint.Doc.Drift.ExtractCTokens, DRagLint.Doc.Drift.ExtractManagedBlockBody (+33 more)</para>
+    /// <para>Calls: ContainsText, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Drift.CalleeRaisesType, DRagLint.Doc.Drift.CollapseAllWhitespace, DRagLint.Doc.Drift.DescReadsInputOnly, DRagLint.Doc.Drift.DocParamCovers, DRagLint.Doc.Drift.DocParamTagNames, DRagLint.Doc.Drift.EffectiveIndentWidth, DRagLint.Doc.Drift.EffectiveSignature, DRagLint.Doc.Drift.ExtractCodeIdents (+35 more)</para>
     /// <para>Returns: Findings.ToArray</para>
     /// <para>Overload 1 of 2</para>
-    /// <para>Complexity: 66 (cyclomatic, outer body), 611 lines (full implementation)</para>
+    /// <para>Complexity: 66 (cyclomatic, outer body), 617 lines (full implementation)</para>
     /// <para>Directives: overload</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Drift.CalleeRaisesType"/>
     /// <seealso cref="DRagLint.Doc.Drift.CollapseAllWhitespace"/>
     /// <seealso cref="DRagLint.Doc.Drift.DescReadsInputOnly"/>
-    /// <seealso cref="DRagLint.Doc.Drift.EffectiveIndentWidth"/>
+    /// <seealso cref="DRagLint.Doc.Drift.DocParamCovers"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Analyze(const AStore: ISymbolStore; const ASym: TSymbol;
@@ -226,7 +226,7 @@ type
 implementation
 
 uses
-  System.Diagnostics, { TStopwatch -- FactsBuildTicks, see TDocDrift }
+  DRagLint.Core.Encoding, System.Diagnostics, { TStopwatch -- FactsBuildTicks, see TDocDrift }
   System.IOUtils,
   System.JSON, { TJSONArray -- BodylessContractDeclares reads exceptions_json }
   { DRagLint.Doc.Facts moved to the INTERFACE uses -- TDocFactsRenderOptions is
@@ -354,7 +354,7 @@ begin
   Result:= '';
   if (AFilePath = '') or (ALine <= 0) or (not TFile.Exists(AFilePath)) then Exit;
   try
-    Lines:= TFile.ReadAllLines(AFilePath, TEncoding.ANSI);
+    Lines:= ReadSourceFileLines(AFilePath);
   except  // dl:ok bare-except@8f3b, try-except-swallowed@8f3b -- REVIEWED 2026-11-11 (152b INT2): tolerant probe by contract ('' on any error, see the header); an unreadable file means no declaration line to compare, never an error
     Exit;
   end;
@@ -419,7 +419,7 @@ begin
     Size := TFile.GetSize(AFilePath);
     if (GLines = nil) or (GLinesPath <> AFilePath) or (GLinesSize <> Size) or (GLinesStamp <> Stamp) then
     begin
-      GLines     := TFile.ReadAllLines(AFilePath, TEncoding.ANSI);
+      GLines     := ReadSourceFileLines(AFilePath);
       GLinesPath := AFilePath;
       GLinesSize := Size;
       GLinesStamp:= Stamp;

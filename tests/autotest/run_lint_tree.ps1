@@ -33,7 +33,10 @@ and passes for the wrong reason. Case 8 asserts on the stream and the exit code.
 Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$detail=''){
@@ -89,14 +92,14 @@ $db   = Join-Path $work 'fx.sqlite'
 $unit = Join-Path $src  'uB.pas'
 $base = Join-Path $work 'uB.base.json'
 
-& $Exe index $src --db $db --rebuild *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db --rebuild *> $null }
 Check 'fixture indexed' (Test-Path $db) $db
 
 function Run-Tree([string[]]$xs){
-  $o = & $Exe lint-tree @xs --format json 2>$null
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe lint-tree @xs --format json 2>$null }
   $code = $LASTEXITCODE
   $json = $null
-  try { $json = ($o | Out-String) | ConvertFrom-Json } catch { }
+  try { $json = ($o | Out-String) | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   [pscustomobject]@{ Exit=$code; Json=$json; Raw=($o | Out-String) }
 }
 
@@ -107,13 +110,13 @@ function Run-Tree([string[]]$xs){
 $reduced = Join-Path $src 'uB.pas'
 $saved   = Get-Content $reduced -Raw
 [System.IO.File]::WriteAllText($reduced, [System.IO.File]::ReadAllText((Join-Path $buf 'uB.reduced.pas')))
-& $Exe index $src --db $db *> $null
-$la = (& $Exe lint-all --db $db --quiet 2>$null | Out-String)
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db *> $null }
+$la = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --quiet 2>$null } | Out-String)
 $staleRows = ([regex]::Matches($la, 'stale-interface-reference|no longer declares')).Count
 Check 'PREMISE: lint-all reports nothing about the broken references' ($staleRows -eq 0) `
       "if this fails, a rule now covers this and lint-tree's justification changed"
 [System.IO.File]::WriteAllText($reduced, $saved)
-& $Exe index $src --db $db *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db *> $null }
 
 # --- baseline ----------------------------------------------------------------
 $r = Run-Tree @('--unit', $unit, '--db', $db, '--write-baseline', $base)
@@ -122,7 +125,7 @@ $bytes = [System.IO.File]::ReadAllBytes($base)
 Check 'baseline has NO UTF-8 BOM' `
       (-not ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)) `
       'a Delphi reader strips it silently while every strict JSON parser fails on byte 0'
-$bj = [System.IO.File]::ReadAllText($base) | ConvertFrom-Json
+$bj = [System.IO.File]::ReadAllText($base) | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'baseline carries both version stamps' `
       ($bj.extractor_version -and $bj.schema_version -gt 0) `
       'without them a v21 baseline diffs against a v22 parse and marks every routine changed'
@@ -165,7 +168,7 @@ Check 'the delta arrays do NOT collide with the changed boolean' `
 
 # --- case 6: the ambiguity gate ----------------------------------------------
 Write-Pas (Join-Path $src 'uC.pas') @('unit uC;','','interface','','const','  BConst = 99;','','implementation','','end.')
-& $Exe index $src --db $db --rebuild *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db --rebuild *> $null }
 $base2 = Join-Path $work 'uB.base2.json'
 Run-Tree @('--unit', $unit, '--db', $db, '--write-baseline', $base2) | Out-Null
 $r2 = Run-Tree @('--unit', $unit, '--db', $db, '--buffer', (Join-Path $buf 'uB.reduced.pas'), '--baseline', $base2)
@@ -181,7 +184,7 @@ Check 'GATE routine findings are UNAFFECTED by a name collision' `
 
 # --- case 7: a baseline from another extraction is REFUSED -------------------
 $stale = Join-Path $work 'uB.stale.json'
-$sj = [System.IO.File]::ReadAllText($base2) | ConvertFrom-Json
+$sj = [System.IO.File]::ReadAllText($base2) | ConvertFrom-Json | ForEach-Object { $_ }
 $sj.extractor_version = '0.0.0-not-this-one'
 [System.IO.File]::WriteAllText($stale, ($sj | ConvertTo-Json -Depth 8), [System.Text.UTF8Encoding]::new($false))
 $r3 = Run-Tree @('--unit', $unit, '--db', $db, '--baseline', $stale)
@@ -194,7 +197,7 @@ Check 'STAMP a refused run reports no findings' ($r3.Json.findings.Count -eq 0) 
 $err = Join-Path $work 'err.txt'
 $out = Join-Path $work 'out.txt'
 $p = Start-Process -FilePath $Exe -ArgumentList 'lint-tree' -Wait -NoNewWindow -PassThru `
-      -RedirectStandardError $err -RedirectStandardOutput $out
+      -RedirectStandardError $err -RedirectStandardOutput $out; $null = $p.Handle
 $errText = Get-Content $err -Raw
 Check 'ARGS a missing --unit exits 2' ($p.ExitCode -eq 2) "exit=$($p.ExitCode)"
 Check 'ARGS the message goes to STDERR' ($errText -match 'needs --unit') `

@@ -28,10 +28,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_purity_lookup_$PID",
   [double]$MaxMsPerLookup = 0.15
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -75,13 +78,13 @@ $dpr = Join-Path $WorkDir 'App.dpr'
 $db  = Join-Path $WorkDir 'App.sqlite'
 $ref = Join-Path $WorkDir 'Ref.sqlite'
 
-& $exePath index --project $dpr --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index --project $dpr --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the fixture index was built' (Test-Path $db) $db
 
 # One-file change, then the profiled incremental run.
 [IO.File]::AppendAllText((Join-Path $WorkDir 'uGen1.pas'), "{ changed }`r`n", [Text.Encoding]::ASCII)
 $env:DRAGLINT_PROFILE = '1'
-try { $out = & $exePath index --project $dpr --db $db 2>&1 | ForEach-Object { "$_" } }
+try { $out = & { $ErrorActionPreference = 'Continue'; & $exePath index --project $dpr --db $db 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" } }
 finally { Remove-Item Env:\DRAGLINT_PROFILE -ErrorAction SilentlyContinue }
 $rx = 'symbol lookups (\d+): single-row fetches (\d+) in ([\d.]+)s, per-file preload (\d+) row\(s\) in ([\d.]+)s'
 $line = $out | Where-Object { $_ -match $rx } | Select-Object -First 1
@@ -96,10 +99,10 @@ if ($line -match $rx) {
   Check "C2 single-row fetches ($single) are at most 5% of lookups ($n) -- the per-file preload serves the rest" ($single * 20 -le $n) $line
 }
 # Equivalence: the incremental DB's verdicts equal a fresh rebuild of the same tree.
-& $exePath index --project $dpr --db $ref --rebuild 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index --project $dpr --db $ref --rebuild 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $q = "SELECT s.qualified_name, f.effect_free, f.effect_summary, f.effect_witness FROM symbols s JOIN symbol_facts f ON f.symbol_id = s.id WHERE ifnull(f.body_loc,0) > 0 ORDER BY s.qualified_name"
-$a = (& $exePath sql --db $db  --json --limit 100000 --query $q 2>$null | ConvertFrom-Json).rows | ForEach-Object { $_ -join '|' }
-$b = (& $exePath sql --db $ref --json --limit 100000 --query $q 2>$null | ConvertFrom-Json).rows | ForEach-Object { $_ -join '|' }
+$a = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db  --json --limit 100000 --query $q 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }).rows | ForEach-Object { $_ -join '|' }
+$b = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $ref --json --limit 100000 --query $q 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }).rows | ForEach-Object { $_ -join '|' }
 Check "E1 POSITIVE CONTROL both databases hold the fixture's routines ($(@($a).Count) / $(@($b).Count))" ((@($a).Count -ge ($UnitCount * $RoutineCount)) -and (@($b).Count -ge ($UnitCount * $RoutineCount))) ''
 $diff = Compare-Object @($a) @($b)
 Check "E1 incremental purity verdicts equal a --rebuild ($(@($diff).Count) differing row(s))" (@($diff).Count -eq 0) (($diff | Select-Object -First 3 | ForEach-Object { "$($_.SideIndicator) $($_.InputObject)" }) -join ' || ')

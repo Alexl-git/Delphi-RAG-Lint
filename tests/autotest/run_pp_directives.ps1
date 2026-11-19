@@ -20,10 +20,13 @@
 # Usage: pwsh -File tests/autotest/run_pp_directives.ps1 [-Exe <path>] [-BaseExe <path>]
 [CmdletBinding()]
 param(
-    [string] $Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+    [string] $Exe     = '',
     [string] $BaseExe = '',
     [string] $WorkDir = "$env:TEMP\drag-lint-pp-directives-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -97,10 +100,10 @@ $proj = Join-Path $d 'P.dproj'
 $upas = Join-Path $d 'U.pas'
 
 function Sql-Rows([string]$Db, [string]$Q) {
-  $raw = (& $Exe sql --query $Q --db $Db --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --query $Q --db $Db --json 2>$null }) -join "`n"
   $s = $raw.IndexOf('{')
   if ($s -lt 0) { return $null }
-  $o = $raw.Substring($s) | ConvertFrom-Json
+  $o = $raw.Substring($s) | ConvertFrom-Json | ForEach-Object { $_ }
   return ,@($o.rows)
 }
 function Lint-All([string]$Db, [string]$Rule, [hashtable]$Env = @{}) {
@@ -111,13 +114,13 @@ function Lint-All([string]$Db, [string]$Rule, [hashtable]$Env = @{}) {
     if (Test-Path $errFile) { [IO.File]::Delete($errFile) }
     if ($Env.ContainsKey('DRAGLINT_PP_TRACE')) { [Environment]::SetEnvironmentVariable('DRAGLINT_PP_TRACE', $errFile) }
     Push-Location $WorkDir
-    try { $raw = (& $Exe lint-all --db $Db --project $proj --rule $Rule --json 2>$null) -join "`n" } finally { Pop-Location }
+    try { $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --project $proj --rule $Rule --json 2>$null }) -join "`n" } finally { Pop-Location }
     $trace = if (Test-Path $errFile) { (Get-Content $errFile) -join "`n" } else { '' }
   } finally {
     foreach ($k in $Env.Keys) { [Environment]::SetEnvironmentVariable($k, $null) }
   }
   $start = $raw.IndexOf('[')
-  $arr = if ($start -ge 0) { @($raw.Substring($start) | ConvertFrom-Json) } else { @() }
+  $arr = @(if ($start -ge 0) { @(($raw.Substring($start) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } else { @() })
   $f = @($arr | Where-Object { $_.rule -eq $Rule } | ForEach-Object {
     '{0}:{1}:{2} {3}' -f (Split-Path $_.file_path -Leaf), $_.start_line, $_.start_col, $_.message })
   return [pscustomobject]@{ Findings = $f; Text = ($f -join "`n"); Trace = $trace }
@@ -125,7 +128,7 @@ function Lint-All([string]$Db, [string]$Rule, [hashtable]$Env = @{}) {
 
 Write-Host '(a) extractor: pp_directives rows of U.pas' -ForegroundColor Cyan
 $db = Join-Path $WorkDir 'p.sqlite'
-& $Exe index --project $proj --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project $proj --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $rows = Sql-Rows $db ("SELECT d.ordinal, d.directive, d.symbol, d.line, d.col, d.region, d.branch FROM pp_directives d " +
   "JOIN files f ON f.id = d.file_id WHERE f.path LIKE '%U.pas' ORDER BY d.ordinal")
 Check 'table exists and U.pas has rows' ($null -ne $rows -and $rows.Count -gt 0) ("rows=" + $(if ($rows) { $rows.Count } else { 'none' }))
@@ -134,7 +137,7 @@ $expRows = @(
   '0|i||5|1|-1|-1', '1|ifdef|EUREKALOG|6|1|0|0', '2|define|LOCALDEF|7|1|0|0', '3|undef|GONE|9|1|0|1',
   '4|ifdef|EUREKALGO|14|1|1|0', '5|ifndef|LOCALDEF|16|1|2|0', '6|if||17|1|3|0', '7|elseif||18|1|3|1',
   '8|ifdef|NOWHERED|22|3|4|0')
-$got = if ($rows) { @($rows | ForEach-Object { ($_ | ForEach-Object { "$_" }) -join '|' }) } else { @() }
+$got = @(if ($rows) { @($rows | ForEach-Object { ($_ | ForEach-Object { "$_" }) -join '|' }) } else { @() })
 foreach ($g in $got) { Write-Host "    $g" -ForegroundColor DarkGray }
 Check 'the 9 expected rows (directive, symbol, line, col, region, branch)' ((($got -join ';') -eq ($expRows -join ';'))) ''
 $u2 = Sql-Rows $db "SELECT COUNT(*) FROM pp_directives d JOIN files f ON f.id = d.file_id WHERE f.path LIKE '%U2.pas'"
@@ -168,7 +171,7 @@ Check 'stale U.pas -> scan fallback, same findings' ($st.Trace -match 'pp-direct
 if ($BaseExe -and (Test-Path $BaseExe)) {
   Write-Host '(c) a DB without pp_directives (indexed by -BaseExe): scan, same findings' -ForegroundColor Cyan
   $db0 = Join-Path $WorkDir 'p0.sqlite'
-  & $BaseExe index --project $proj --db $db0 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $BaseExe index --project $proj --db $db0 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $b = Lint-All $db0 'ifdef-undefined-symbol' @{ DRAGLINT_PP_TRACE = '1' }
   Check 'no table -> scan' ($b.Trace -match 'pp-directives: scan \S*U\.pas' -and $b.Trace -notmatch 'pp-directives: table') ''
   Check 'no table -> same findings' ($b.Text -eq $ifdefTable.Text) ''

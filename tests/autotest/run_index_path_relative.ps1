@@ -49,9 +49,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-path-relative-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -81,7 +84,7 @@ function Invoke-Exe([string]$Cwd, [string[]]$ExeArgs) {
   $e = Join-Path $WorkDir 'err.txt'
   $p = Start-Process -FilePath $Exe -ArgumentList $ExeArgs -WorkingDirectory $Cwd `
                      -NoNewWindow -Wait -PassThru `
-                     -RedirectStandardOutput $o -RedirectStandardError $e
+                     -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   return $p.ExitCode
 }
 
@@ -121,7 +124,7 @@ print(json.dumps({
 }))
 c.close()
 '@ | Set-Content $pyDb -Encoding ascii
-function Get-Db([string]$Path) { (& python $pyDb $Path) -join "`n" | ConvertFrom-Json }
+function Get-Db([string]$Path) { (& python $pyDb $Path) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ } }
 function Paths($d) { ,@($d.paths) }
 function Ids($d)   { ,@($d.ids)   }
 
@@ -208,7 +211,7 @@ Invoke-Exe $WorkDir @('index', 'src', '--db', $dbF, '--quiet') | Out-Null
 $qOut = Join-Path $WorkDir 'q.txt'
 $qP = Start-Process -FilePath $Exe -ArgumentList @('query', '--name', 'Routine_Relative', '--db', $dbF) `
   -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru -RedirectStandardOutput $qOut `
-  -RedirectStandardError (Join-Path $WorkDir 'q.err.txt')
+  -RedirectStandardError (Join-Path $WorkDir 'q.err.txt'); $null = $qP.Handle
 $qTxt = (Get-Content $qOut -Raw) + (Get-Content (Join-Path $WorkDir 'q.err.txt') -Raw)
 # Both controls exist so the assertion below cannot pass by SILENCE. A crashed or
 # empty `query` produces no "changed since" line either, which would read as a
@@ -226,7 +229,7 @@ Write-Host 'Arm 2 -- migration: an already-split DB is merged on next writable o
 
 $dbC = Join-Path $WorkDir 'split_stale.sqlite'
 Invoke-Exe $WorkDir @('index', $srcDir, '--db', $dbC, '--quiet') | Out-Null
-$inj = (& python $pyInject $dbC -3600 $WorkDir) -join "`n" | ConvertFrom-Json
+$inj = (& python $pyInject $dbC -3600 $WorkDir) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 
 $split = Get-Db $dbC
 Check 'precondition: the DB is split across two rows' ((Paths $split).Count -eq 2) `
@@ -250,7 +253,7 @@ Check 'no orphaned symbol rows survive the merge' ($merged.orphans -eq 0) "orpha
 # fresher one, so IT must be kept (and then re-spelled absolute).
 $dbD = Join-Path $WorkDir 'split_newer.sqlite'
 Invoke-Exe $WorkDir @('index', $srcDir, '--db', $dbD, '--quiet') | Out-Null
-$injD = (& python $pyInject $dbD 3600 $WorkDir) -join "`n" | ConvertFrom-Json
+$injD = (& python $pyInject $dbD 3600 $WorkDir) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'precondition: the newer-duplicate DB is split' ((Paths (Get-Db $dbD)).Count -eq 2) ''
 Invoke-Exe $WorkDir @('index', $srcDir, '--db', $dbD, '--quiet') | Out-Null
 $d = Get-Db $dbD

@@ -95,9 +95,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-unit-uses-targets-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -431,7 +434,7 @@ end.
 
 $db = Join-Path $WorkDir 'uses.sqlite'
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($indexOut -join ' | ')"
 
 # --- Probe: for one used unit name, what file (if any) did the index resolve? ----
@@ -479,8 +482,8 @@ function CheckSoleTarget([string]$N, [string[]]$Rows, [string]$Expect, [string]$
   Check $N $hit ("rows=" + $Rows.Count + " targets=[" + ($Rows -join '; ') + "] expected=" + $Expect + " " + $D)
 }
 function TargetsOf([string]$UnitName) {
-  return SqlRows ("SELECT DISTINCT f.path FROM unit_uses u JOIN files f ON f.id=u.target_file_id " +
-                  "WHERE LOWER(u.unit_name) = LOWER('" + $UnitName + "')")
+  return @(SqlRows ("SELECT DISTINCT f.path FROM unit_uses u JOIN files f ON f.id=u.target_file_id " +
+                  "WHERE LOWER(u.unit_name) = LOWER('" + $UnitName + "')"))
 }
 
 Write-Host ''
@@ -561,7 +564,7 @@ Write-Host 'only a .pas can be a uses target (cases I-N)' -ForegroundColor Cyan
 # I and N would then pass without the fix, silently. This check asserts the premise
 # so that becomes a loud failure instead. J/K/K2 carry the requirement regardless
 # of scan order, which is why they are the ones that must never be removed.
-$scanOrder = SqlRows "SELECT path FROM files"
+$scanOrder = @(SqlRows "SELECT path FROM files")
 $iPas = [Array]::FindIndex([string[]]$scanOrder, [Predicate[string]]{ param($p) $p -cmatch '[\\/]DFKIT\.PAS$' })
 $iDfm = [Array]::FindIndex([string[]]$scanOrder, [Predicate[string]]{ param($p) $p -cmatch '[\\/]DFKIT\.dfm$' })
 Check "I/N premise: in the resolver's own `files` scan order, DFKIT.dfm comes AFTER DFKIT.PAS" `
@@ -569,25 +572,25 @@ Check "I/N premise: in the resolver's own `files` scan order, DFKIT.dfm comes AF
   "PAS at index $iPas, dfm at index $iDfm -- if the dfm ever sorts FIRST, last-wins picks the .PAS unfiltered and cases I and N stop testing the fix (J/K/K2 still do)"
 
 CheckSoleTarget "I: 'uses DfKit' binds to DFKIT.PAS, never the DFKIT.dfm that sorts after it" `
-  (TargetsOf 'DfKit') '[\\/]DFKIT\.PAS$' `
+  (@(TargetsOf 'DfKit')) '[\\/]DFKIT\.PAS$' `
   "-- the ORM3 DFCTLIST shape ('P' 0x50 < 'd' 0x64); 16 rows in ORM3, 45 in M2022, 4 in library-Win64 are bound this way today" -CaseSensitive
 
 # SHAPE 1 -- a non-.pas as SOLE holder of the stem. Declining is the correct answer:
 # nothing indexed declares a unit of that name.
-$jRows = TargetsOf 'Shared'
+$jRows = @(TargetsOf 'Shared')
 Check "J: 'uses Shared' stays NULL -- only Shared.inc carries that stem, and an .inc declares no unit" `
   ($jRows.Count -eq 0) "targets=[$($jRows -join '; ')] -- Spring.inc holds 112 such rows in library-Win64, config.inc 15 here"
-$kRows = TargetsOf 'Prog'
+$kRows = @(TargetsOf 'Prog')
 Check "K: 'uses Prog' stays NULL -- only Prog.dpr carries that stem, and a program declares no unit" `
   ($kRows.Count -eq 0) "targets=[$($kRows -join '; ')] -- Events.dpr holds 8 such rows in library-Win64, TestRunner.dpr 4"
-$k2Rows = TargetsOf 'Pkg'
+$k2Rows = @(TargetsOf 'Pkg')
 Check "K2: 'uses Pkg' stays NULL -- only Pkg.dpk carries that stem, and a package declares no unit" `
   ($k2Rows.Count -eq 0) "targets=[$($k2Rows -join '; ')] -- Interfaces.dpk holds 22 such rows in ORM3; .dpk files carry 0 symbols in all four indexes"
 
 # The COUNTERWEIGHT: the filter must exclude by EXTENSION, case-folded, and must
 # not take an uppercase .PAS with it.
 CheckSoleTarget "L: 'uses Upper.Kit' binds to Upper.Kit.PAS -- an UPPERCASE extension is still a unit" `
-  (TargetsOf 'Upper.Kit') '[\\/]Upper\.Kit\.PAS$' `
+  (@(TargetsOf 'Upper.Kit')) '[\\/]Upper\.Kit\.PAS$' `
   "-- RED if the extension test is not case-folded: ORM3 stores 554 '.PAS' paths against 203 '.pas'" -CaseSensitive
 
 # Whole-fixture sweep. NOTE what this is: it RESTATES the rule the code applies, so
@@ -634,7 +637,7 @@ Check "N: stored helper edge TKitHelper -> TDfmRec resolves to DFKIT.PAS" ($nEdg
 Write-Host ''
 Write-Host 'idempotency: a second index pass over the same tree' -ForegroundColor Cyan
 $before = @($script:AllNames | ForEach-Object { Get-Use $_ })
-$null = & $Exe index $work --db $db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 $after  = @($script:AllNames | ForEach-Object { Get-Use $_ })
 Check "re-indexing leaves every target_file_id unchanged" (($before -join ';') -eq ($after -join ';')) `
   "before=$($before -join ' ; ') after=$($after -join ' ; ')"
@@ -660,7 +663,7 @@ print('poisoned')
 $null = python $script:PyPoison $db
 Check "fixture sanity: the poison took (Ns.Alpha now points at Plain.pas)" ((Get-Use 'Ns.Alpha') -like '*|SET|Plain.pas') "row=$(Get-Use 'Ns.Alpha')"
 Check "fixture sanity: the poison took (Gamma now has a target at all)"    ((Get-Use 'Gamma')    -like '*|SET|Plain.pas') "row=$(Get-Use 'Gamma')"
-$null = & $Exe index $work --db $db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 $r1 = Get-Use 'Ns.Alpha'
 $r2 = Get-Use 'Gamma'
 Check "repair: a WRONG target is corrected by the next pass" ($r1 -like '*|SET|Ns.Alpha.pas') `

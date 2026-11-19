@@ -31,9 +31,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-dupglobal-libtier-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -232,16 +235,16 @@ end.
 $libDb  = Join-Path $WorkDir 'library-fixture.sqlite'
 $projDb = Join-Path $WorkDir 'proj.sqlite'
 Write-Host 'Indexing library and project fixtures' -ForegroundColor Cyan
-& $Exe index $lib  --db $libDb  *> $null; Check 'library index exits 0' ($LASTEXITCODE -eq 0)
-& $Exe index $proj --db $projDb *> $null; Check 'project index exits 0' ($LASTEXITCODE -eq 0)
+& { $ErrorActionPreference = 'Continue'; & $Exe index $lib  --db $libDb  *> $null }; Check 'library index exits 0' ($LASTEXITCODE -eq 0)
+& { $ErrorActionPreference = 'Continue'; & $Exe index $proj --db $projDb *> $null }; Check 'project index exits 0' ($LASTEXITCODE -eq 0)
 
 Push-Location $proj
 try {
-  $raw = (& $Exe lint-all --db $projDb --db $libDb --quiet --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $projDb --db $libDb --quiet --json 2>$null }) -join "`n"
   $exit = $LASTEXITCODE
 } finally { Pop-Location }
 $doc = $null
-try { $doc = $raw | ConvertFrom-Json } catch { }
+try { $doc = $raw | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'lint-all --json parses' ($null -ne $doc) "exit=$exit raw=$($raw.Substring(0,[Math]::Min(600,$raw.Length)))"
 if ($null -eq $doc) { Write-Host 'run_duplicate_global_decl_library_tier: FAIL' -ForegroundColor Red; exit 1 }
 
@@ -284,11 +287,11 @@ Check 'no finding mentions a library unit the file does not use' (-not (($dup | 
 Write-Host ''
 Write-Host '=== without a library store the tier is off, the project tier is not ===' -ForegroundColor Cyan
 Push-Location $proj
-try { $raw2 = (& $Exe lint-all --db $projDb --quiet --json 2>$null) -join "`n" } finally { Pop-Location }
-$doc2 = $null; try { $doc2 = $raw2 | ConvertFrom-Json } catch { }
+try { $raw2 = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $projDb --quiet --json 2>$null }) -join "`n" } finally { Pop-Location }
+$doc2 = $null; try { $doc2 = $raw2 | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'project-only lint-all parses' ($null -ne $doc2) ''
 if ($null -ne $doc2) {
-  $all2 = if ($doc2.PSObject.Properties['findings']) { @($doc2.findings) } else { @($doc2) }
+  $all2 = @(if ($doc2.PSObject.Properties['findings']) { @($doc2.findings) } else { @($doc2) })
   $dup2 = @($all2 | Where-Object { ($_.rule -eq 'duplicate-global-decl' -or $_.rule_id -eq 'duplicate-global-decl' -or $_.ruleId -eq 'duplicate-global-decl') })
   # NOTE: lint-all may still resolve the MACHINE's real library index through the
   # manifest when only one --db is given, so this control asserts only that the

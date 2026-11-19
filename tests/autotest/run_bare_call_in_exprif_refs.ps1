@@ -38,7 +38,10 @@
   Run from a NEUTRAL CWD. pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -144,12 +147,12 @@ $norm = $unit -replace "`r`n", "`n" -replace "`n", "`r`n"
 
 Push-Location $env:TEMP
 try {
-  & $exePath index $work --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $work --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
   # sql --json rows are POSITIONAL arrays: [0]=name, [1]=kind, [2]=count.
   $q = "select r.name_text, r.kind, count(*) from refs r join files f on f.id = r.file_id where f.path like '%uExprIf.pas' group by r.name_text, r.kind"
-  $j = (& $exePath sql --db $db --query $q --json 2>$null) -join "`n" | ConvertFrom-Json
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
   $byName = @{}
   foreach ($row in $j.rows) {
     $nm = ([string]$row[0]).ToLowerInvariant()
@@ -187,7 +190,7 @@ try {
 
   Write-Host 'find-callers' -ForegroundColor Cyan
   foreach ($nm in 'StmtThen','StmtElse','NestC') {
-    $fc = (& $exePath query find-callers --name $nm --db $db 2>$null | Out-String)
+    $fc = (& { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name $nm --db $db 2>$null } | Out-String)
     Check "find-callers resolves $nm" ($fc -match 'uExprIf\.pas')
   }
 } finally { Pop-Location; Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue }

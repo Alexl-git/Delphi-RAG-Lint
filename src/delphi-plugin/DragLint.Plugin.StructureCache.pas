@@ -57,7 +57,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DragLint.Plugin.StructureCache.pas) ?, DragLint.Plugin.StructureCache.StructureCache (DragLint.Plugin.StructureCache.pas)</para>
+  /// <para>Used by: declaration (DragLint.Plugin.StructureCache.pas) ?, DragLint.Plugin.StructureCache.initialization (DragLint.Plugin.StructureCache.pas) ?, DragLint.Plugin.StructureCache.StructureCache (DragLint.Plugin.StructureCache.pas)</para>
   /// <para>Used in units: DragLint.Plugin.StructureCache</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

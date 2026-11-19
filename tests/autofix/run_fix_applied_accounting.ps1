@@ -1,5 +1,8 @@
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
@@ -15,8 +18,8 @@ try {
   # PREVIEW (no --apply): a fixable finding that WOULD produce an edit reports
   # applied=false, preview=true.
   Copy-Item $fixture $target -Force
-  $raw = & $exePath lint --file $target --fix --fix-line 12 --fix-rule redundant-not-not --json 2>$null | Out-String
-  $arr = $null; try { $arr = ($raw | ConvertFrom-Json) } catch { $arr = $null }
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $target --fix --fix-line 12 --fix-rule redundant-not-not --json 2>$null } | Out-String
+  $arr = $null; try { $arr = ($raw | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $arr = $null }
   if ($null -ne $arr -and $arr -isnot [System.Array]) { $arr = @($arr) }
   $t = $arr | Where-Object { $_.rule -eq 'redundant-not-not' } | Select-Object -First 1
   Check 'preview: finding present'  ($null -ne $t)
@@ -28,8 +31,8 @@ try {
 
   # APPLY: a fixable finding that DID produce an edit reports applied=true.
   Copy-Item $fixture $target -Force
-  $raw2 = & $exePath lint --file $target --fix --fix-line 12 --fix-rule redundant-not-not --json --apply 2>$null | Out-String
-  $arr2 = $null; try { $arr2 = ($raw2 | ConvertFrom-Json) } catch { $arr2 = $null }
+  $raw2 = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $target --fix --fix-line 12 --fix-rule redundant-not-not --json --apply 2>$null } | Out-String
+  $arr2 = $null; try { $arr2 = ($raw2 | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $arr2 = $null }
   if ($null -ne $arr2 -and $arr2 -isnot [System.Array]) { $arr2 = @($arr2) }
   $t2 = $arr2 | Where-Object { $_.rule -eq 'redundant-not-not' } | Select-Object -First 1
   if ($null -ne $t2) {
@@ -45,8 +48,8 @@ try {
   # filter off), fixable=false, and applied must be false (no edit).
   $target3 = Join-Path $scratch 'gating.pas'
   Copy-Item (Join-Path $PSScriptRoot 'fixtures\gating\gating.pas') $target3 -Force
-  $raw3 = & $exePath lint --file $target3 --fix --fix-line 12 --json --apply 2>$null | Out-String
-  $arr3 = $null; try { $arr3 = ($raw3 | ConvertFrom-Json) } catch { $arr3 = $null }
+  $raw3 = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $target3 --fix --fix-line 12 --json --apply 2>$null } | Out-String
+  $arr3 = $null; try { $arr3 = ($raw3 | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $arr3 = $null }
   if ($null -ne $arr3 -and $arr3 -isnot [System.Array]) { $arr3 = @($arr3) }
   $t3 = $arr3 | Where-Object { $_.rule -eq 'used-before-assignment' } | Select-Object -First 1
   Check 'no-edit: non-fixable finding present' ($null -ne $t3)
@@ -66,8 +69,8 @@ try {
   $dtorTxt = [IO.File]::ReadAllText($dtorSrc).Replace("implementation`r`n`r`nuses`r`n  System.SysUtils;`r`n", "implementation`r`n")
   [IO.File]::WriteAllText($dtor, $dtorTxt, [Text.Encoding]::ASCII)
   Check 'off-line: fixture has no System.SysUtils' (-not $dtorTxt.Contains('System.SysUtils'))
-  $raw4 = & $exePath lint --file $dtor --fix --fix-rule field-created-not-freed --json --apply --no-backup 2>$null | Out-String
-  $arr4 = $null; try { $arr4 = @($raw4 | ConvertFrom-Json) } catch { $arr4 = $null }
+  $raw4 = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $dtor --fix --fix-rule field-created-not-freed --json --apply --no-backup 2>$null } | Out-String
+  $arr4 = $null; try { $arr4 = @(($raw4 | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $arr4 = $null }
   $t4 = $arr4 | Where-Object { $_.rule -eq 'field-created-not-freed' } | Select-Object -First 1
   Check 'off-line: finding present' ($null -ne $t4)
   $after = [IO.File]::ReadAllText($dtor)
@@ -84,8 +87,8 @@ try {
     $tgt = Join-Path $scratch "$id-$($fx.Name)"
     Copy-Item $fx.FullName $tgt -Force
     $before = [IO.File]::ReadAllText($tgt)
-    $rawX = & $exePath lint --file $tgt --fix --fix-rule $id --json --apply --no-backup 2>$null | Out-String
-    $arrX = $null; try { $arrX = @($rawX | ConvertFrom-Json) } catch { $arrX = $null }
+    $rawX = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $tgt --fix --fix-rule $id --json --apply --no-backup 2>$null } | Out-String
+    $arrX = $null; try { $arrX = @(($rawX | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $arrX = $null }
     $appX = @($arrX | Where-Object { $_.rule -eq $id -and $_.applied -eq $true })
     Check "off-line ${id}: applied=true and the file changed" (($appX.Count -ge 1) -and ([IO.File]::ReadAllText($tgt) -ne $before))
   }

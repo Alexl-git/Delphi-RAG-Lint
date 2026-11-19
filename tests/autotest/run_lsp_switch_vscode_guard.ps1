@@ -18,9 +18,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\tools\lsp-switch\Win64\Debug\drag-lint-switch.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-switch-vscode-guard-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\tools\lsp-switch\Win64\Debug\drag-lint-switch.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -53,10 +56,10 @@ $fixture = @'
 }
 '@
 [System.IO.File]::WriteAllText($mcp, $fixture, (New-Object System.Text.UTF8Encoding($false)))
-$orig = $fixture | ConvertFrom-Json
+$orig = $fixture | ConvertFrom-Json | ForEach-Object { $_ }
 
 function Run-Switch([string[]]$SwitchArgs) {
-  $out = & $Exe @SwitchArgs 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @SwitchArgs 2>&1 | ForEach-Object { "$_" } } | Out-String
   return [pscustomobject]@{ Out = $out; Code = $LASTEXITCODE }
 }
 function Json-Eq($a, $b) { return (($a | ConvertTo-Json -Depth 20 -Compress) -eq ($b | ConvertTo-Json -Depth 20 -Compress)) }
@@ -73,11 +76,11 @@ Write-Host ''
 Write-Host 'CASE 2: --off backs up whole file, removes only delphi-lsp' -ForegroundColor Cyan
 $r = Run-Switch @('--vscode','--off','--workspace',$ws,'--assume-host-stopped')
 Check '--off exit 0' ($r.Code -eq 0) "exit=$($r.Code) $($r.Out.Trim())"
-$now = Get-Content $mcp -Raw | ConvertFrom-Json
+$now = Get-Content $mcp -Raw | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'delphi-lsp gone' (-not ($now.servers.PSObject.Properties.Name -contains 'delphi-lsp'))
 Check 'other server JSON-equal' (Json-Eq $now.servers.other $orig.servers.other)
 Check 'inputs survived' (Json-Eq $now.inputs $orig.inputs)
-$bk = Backups
+$bk = @(Backups)
 Check 'one .bak written' ($bk.Count -eq 1) "found $($bk.Count)"
 if ($bk.Count -eq 1) {
   Check 'backup name is mcp.json.draglint-yyyymmdd-hhmmss.bak' ($bk[0].Name -match '^mcp\.json\.draglint-\d{8}-\d{6}\.bak$') $bk[0].Name
@@ -88,7 +91,7 @@ Write-Host ''
 Write-Host 'CASE 3: POSITIVE CONTROL -- --off again is a no-op' -ForegroundColor Cyan
 $r = Run-Switch @('--vscode','--off','--workspace',$ws,'--assume-host-stopped')
 Check '--off again exit 1' ($r.Code -eq 1) "exit=$($r.Code)"
-Check 'no second backup' ((Backups).Count -eq 1)
+Check 'no second backup' ((@(Backups)).Count -eq 1)
 $r = Run-Switch @('--vscode','--status','--workspace',$ws,'--assume-host-stopped')
 Check 'status says absent' ($r.Out -match 'delphi-lsp: absent') $r.Out.Trim()
 
@@ -107,7 +110,7 @@ Write-Host ''
 Write-Host 'CASE 5: --on restores from the newest backup, JSON-equal' -ForegroundColor Cyan
 $r = Run-Switch @('--vscode','--on','--workspace',$ws,'--assume-host-stopped')
 Check '--on exit 0' ($r.Code -eq 0) "exit=$($r.Code) $($r.Out.Trim())"
-$now = Get-Content $mcp -Raw | ConvertFrom-Json
+$now = Get-Content $mcp -Raw | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'delphi-lsp restored JSON-equal' (Json-Eq $now.servers.'delphi-lsp' $orig.servers.'delphi-lsp')
 Check 'other still JSON-equal' (Json-Eq $now.servers.other $orig.servers.other)
 $r = Run-Switch @('--vscode','--on','--workspace',$ws,'--assume-host-stopped')
@@ -125,7 +128,7 @@ $tpl = Join-Path $WorkDir 'tpl.json'
 [System.IO.File]::WriteAllText($tpl, '{"type":"stdio","command":"C:\\y\\srv.exe","args":["q"]}', (New-Object System.Text.UTF8Encoding($false)))
 $r = Run-Switch @('--vscode','--on','--workspace',$ws2,'--template',$tpl,'--assume-host-stopped')
 Check '--on --template exit 0' ($r.Code -eq 0) "exit=$($r.Code) $($r.Out.Trim())"
-$n2 = Get-Content $mcp2 -Raw | ConvertFrom-Json
+$n2 = Get-Content $mcp2 -Raw | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'entry from template' ($n2.servers.'delphi-lsp'.command -eq 'C:\y\srv.exe')
 Check 'other kept' ($n2.servers.other.url -eq 'http://x')
 

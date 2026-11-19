@@ -68,9 +68,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string] $Exe    = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string] $DbFile = "$PSScriptRoot\..\..\src\cli\_D-RAG\drag-lint.sqlite"
+  [string] $Exe    = '',
+  [string] $DbFile = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $DbFile) { $DbFile = "$PSScriptRoot\..\..\src\cli\_D-RAG\drag-lint.sqlite" }
 
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -105,7 +109,7 @@ $errFile = Join-Path $scratch 'stderr.txt'
 # Out-String renders with decoration, which has already corrupted one JSON
 # slice in this repo by adding a stray brace.
 function Run([string[]]$SqlArgs) {
-  $out = & $Exe @SqlArgs 2>$errFile
+  $out = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe @SqlArgs 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   $rc  = $LASTEXITCODE
   $err = if (Test-Path -LiteralPath $errFile) { (Get-Content -LiteralPath $errFile -Raw) } else { '' }
   if ($null -eq $err) { $err = '' }
@@ -266,7 +270,7 @@ Check 'no cap banner when the result exactly fits' `
 
 $r = Run @('sql','--query','SELECT COUNT(*) FROM refs a, refs b, refs c','--db',$DbFile,'--timeout-ms','600')
 Check 'a cartesian join is interrupted by the time cap' `
-  (($r.Code -eq 1) -and ($r.Err -match 'time cap')) "exit $($r.Code) / $($r.Err.Trim())"
+  (($r.Code -eq 2) -and ($r.Err -match 'time cap'))  # GitHub #17 (1.52): no answer produced = exit 2, not 1 "exit $($r.Code) / $($r.Err.Trim())"
 # A timeout is not a read-only refusal, and telling the user it is sends them
 # hunting for a write they never wrote.
 Check 'the time cap does NOT report itself as a read-only refusal' `
@@ -280,7 +284,7 @@ Write-Host '-- check 5: --json' -ForegroundColor Cyan
 
 $r = Run @('sql','--query','SELECT 1 AS one','--db',$DbFile,'--json')
 $obj = $null
-try { $obj = $r.Out | ConvertFrom-Json } catch { }
+try { $obj = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'stdout is ONE valid JSON document (the banner is on stderr)' ($null -ne $obj) $r.Out
 if ($null -ne $obj) {
   Check 'it declares the stable schema sql/1' ($obj.schema -eq 'sql/1') "got $($obj.schema)"
@@ -295,7 +299,7 @@ if ($null -ne $obj) {
 
 $r = Run @('sql','--query','SELECT NULL AS n','--db',$DbFile,'--json')
 $obj = $null
-try { $obj = $r.Out | ConvertFrom-Json } catch { }
+try { $obj = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'a NULL cell is JSON null, not the string "NULL"' `
   (($null -ne $obj) -and ($null -eq $obj.rows[0][0])) ''
 

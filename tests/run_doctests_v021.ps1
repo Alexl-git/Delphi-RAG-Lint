@@ -38,8 +38,11 @@
 param(
   # Honoured because every fixture now reads `if not defined EXE set EXE=...`,
   # so the battery can point the whole suite at a specific build.
-  [string]$Exe = "$PSScriptRoot\..\third_party\dll-win64\drag-lint.exe"
+  [string]$Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -69,8 +72,8 @@ $env:PATH = (Split-Path $Exe -Parent) + ';' + $env:PATH
 Write-Host 'Running the legacy .bat doctest chain against the current engine' -ForegroundColor Cyan
 $p = Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', $driver `
                    -Wait -NoNewWindow -PassThru `
-                   -RedirectStandardOutput $log -RedirectStandardError "$log.err"
-$out = if (Test-Path $log) { Get-Content $log } else { @() }
+                   -RedirectStandardOutput $log -RedirectStandardError "$log.err"; $null = $p.Handle
+$out = @(if (Test-Path $log) { Get-Content $log } else { @() })
 Remove-Item Env:\EXE -ErrorAction SilentlyContinue
 
 $sections = @($out | Where-Object { $_ -match '^=== T\d+' })

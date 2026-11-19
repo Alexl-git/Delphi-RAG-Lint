@@ -13,9 +13,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_doc_qname_overloads_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -33,8 +36,8 @@ $u = "unit uOv;`r`n`r`ninterface`r`n`r`nfunction Fmt(const S: string): string; o
      "function Fmt(const S: string; N: Integer; out R: string): string;`r`nbegin`r`n  R:= '';`r`n  Result:= Copy(S, 1, N);`r`nend;`r`n`r`nend.`r`n"
 [IO.File]::WriteAllText($unit, $u, [Text.Encoding]::ASCII)
 $db = Join-Path $WorkDir 'fx.sqlite'
-& $exePath index $WorkDir --db $db 2>&1 | Out-Null
-$out = (& $exePath document --qname uOv.Fmt --db $db --apply --no-backup 2>&1) -join "`n"
+& { $ErrorActionPreference = 'Continue'; & $exePath index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+$out = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname uOv.Fmt --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 $code = $LASTEXITCODE
 $txt = [IO.File]::ReadAllText($unit)
 
@@ -45,9 +48,9 @@ Check 'T2 overload 2 gets its own params (N, R)' (($txt -match 'name="N"') -and 
 Check 'T3 the run exits 0' ($code -eq 0) "exit $code`: $out"
 
 # A second run is a no-op: both blocks are current.
-& $exePath index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $before = [IO.File]::ReadAllText($unit)
-& $exePath document --qname uOv.Fmt --db $db --apply --no-backup 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --qname uOv.Fmt --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'T4 a second --qname run changes nothing (idempotent)' ([IO.File]::ReadAllText($unit) -eq $before) 'second run rewrote the file'
 
 Write-Host ''

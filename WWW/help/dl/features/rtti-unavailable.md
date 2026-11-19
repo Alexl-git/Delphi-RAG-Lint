@@ -4,10 +4,10 @@ title: RTTI unavailable (lint rule)
 summary: "Project lint rule, OFF by default: declarations that lose classic or extended RTTI (typeless enums, record properties, narrowing directives, published generics)"
 product: DL
 group: linting
-order: 30036
+order: 30039
 since: 1.50.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # RTTI unavailable (lint rule)
@@ -19,7 +19,7 @@ Read this to see what rtti-unavailable reports and how generated persistence cla
 ## How to run it
 
 ```text
-drag-lint lint-all [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]
+drag-lint lint-all [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget]
 ```
 
 Example:

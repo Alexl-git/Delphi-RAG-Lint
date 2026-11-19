@@ -53,9 +53,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\draglint_test_project_scoping_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -136,8 +139,8 @@ Write-Host 'run_test_project_rule_scoping -- checks whose remedy the caller coul
 
 Push-Location C:\TEMP
 try {
-  $naming = & $Exe lint (Join-Path $WorkDir 'uTestsFixture.pas') 2>&1 | Out-String
-  $procAll = & $Exe lint (Join-Path $WorkDir 'uProcLaunch.pas')  2>&1 | Out-String
+  $naming = & { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $WorkDir 'uTestsFixture.pas') 2>&1 | ForEach-Object { "$_" } } | Out-String
+  $procAll = & { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $WorkDir 'uProcLaunch.pas')  2>&1 | ForEach-Object { "$_" } } | Out-String
 } finally { Pop-Location }
 
 # SECTION 2 ASSERTS ON unsafe-shellexecute ONLY, and must be filtered to it.

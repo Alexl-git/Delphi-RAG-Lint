@@ -37,9 +37,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -109,7 +112,7 @@ function Invoke-Watched([string]$Tag, [string[]]$ExtraArgs) {
     $argList = @('ghost-check', $dprojPath, '--overlays', $manifest, '--platform', 'win64', '--format', 'json') + $ExtraArgs
     $out = Join-Path $WorkDir "$Tag.out"
     $p = Start-Process $exePath -ArgumentList $argList -WorkingDirectory $WorkDir -NoNewWindow -PassThru -Wait `
-           -RedirectStandardOutput $out -RedirectStandardError "$out.err"
+           -RedirectStandardOutput $out -RedirectStandardError "$out.err"; $null = $p.Handle
     Start-Sleep -Milliseconds 400      # let queued watcher events drain
     $events = @(Get-Event -SourceIdentifier "$srcId.*" -ErrorAction SilentlyContinue)
     $n = $events.Count

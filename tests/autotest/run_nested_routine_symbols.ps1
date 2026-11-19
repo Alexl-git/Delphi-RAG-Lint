@@ -38,7 +38,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Continue'
@@ -181,16 +184,16 @@ $db = Join-Path $scratch 'nestsyms.sqlite'
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db --quiet 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db --quiet 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
   function Get-Rows([string]$name) {
-    $j = (& $exePath query --name $name --db $db --json 2>$null) -join "`n"
-    try { return @($j | ConvertFrom-Json) } catch { return @() }
+    $j = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --db $db --json 2>$null }) -join "`n"
+    try { return @(($j | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { return @() }
   }
 
   # --- 1. the nested routine is a symbol at all ------------------------------
-  $nh = Get-Rows 'NestedHelper'
+  $nh = @(Get-Rows 'NestedHelper')
   Check 'NestedHelper is indexed as a symbol' ($nh.Count -ge 1) "rows=$($nh.Count)"
   if ($nh.Count -ge 1) {
     Check 'NestedHelper is qualified by its enclosing routine (nestsyms.OuterOne.NestedHelper)' `
@@ -199,7 +202,7 @@ try {
   }
 
   # --- 2. THE DISCRIMINATOR: two same-named nested routines stay distinct ----
-  $tw = Get-Rows 'SharedName'
+  $tw = @(Get-Rows 'SharedName')
   Check 'both SharedName routines are indexed, not collapsed into one' ($tw.Count -eq 2) "rows=$($tw.Count)"
   if ($tw.Count -eq 2) {
     $q = @($tw | ForEach-Object { $_.qualified_name }) | Sort-Object
@@ -208,7 +211,7 @@ try {
   }
 
   # --- 3. the enclosing routines are unharmed --------------------------------
-  Check 'OuterOne is still indexed exactly once' ((Get-Rows 'OuterOne').Count -eq 1)
+  Check 'OuterOne is still indexed exactly once' ((@(Get-Rows 'OuterOne')).Count -eq 1)
 
   # --- 4. SAFETY: batch documentation must not touch a nested routine --------
   # Asserted as the public-surface COUNT, not as "the name never appears": the
@@ -217,8 +220,8 @@ try {
   # exactly what Doc.Batch's Section='interface' gate admits -- the three
   # interface decls -- so a nested routine leaking into the public surface shows
   # up here as 4, 5 or 6 and nowhere else.
-  $docJson = (& $exePath document --unit (Join-Path $scratch 'nestsyms.pas') --db $db --json 2>$null) -join "`n"
-  $dc = -1; try { $dc = ([int](($docJson | ConvertFrom-Json).declCount)) } catch { }
+  $docJson = (& { $ErrorActionPreference = 'Continue'; & $exePath document --unit (Join-Path $scratch 'nestsyms.pas') --db $db --json 2>$null }) -join "`n"
+  $dc = -1; try { $dc = ([int](($docJson | ConvertFrom-Json | ForEach-Object { $_ }).declCount)) } catch { }
   Check 'document --unit public surface is still exactly the 3 interface decls' ($dc -eq 3) `
     "declCount=$dc -- a nested routine leaking into the public surface raises this"
 
@@ -227,9 +230,9 @@ try {
   # the assertions below named fields ($_.name, $_.qualified_name, $_.n).
   # The `,@()` / `,$out` form keeps a 0/1-element result an array.
   function Sql([string]$q) {
-    $j = (& $exePath sql --db $db --query $q --json 2>$null) -join "`n"
+    $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n"
     if ([string]::IsNullOrWhiteSpace($j)) { return ,@() }
-    try { $o = $j | ConvertFrom-Json } catch { return ,@() }
+    try { $o = $j | ConvertFrom-Json | ForEach-Object { $_ } } catch { return ,@() }
     $cols = @($o.columns | ForEach-Object { $_.name })
     $out = @()
     foreach ($r in @($o.rows)) {
@@ -244,7 +247,7 @@ try {
   }
 
   # --- 5. N1: a nested routine's classic var block is extracted ---------------
-  $nl = LocalsOf 'nestsyms.OuterOne.NestedHelper'
+  $nl = @(LocalsOf 'nestsyms.OuterOne.NestedHelper')
   Check 'N1 NestedHelper has local_var NestedLocal, NestedOther' (($nl -contains 'NestedLocal') -and ($nl -contains 'NestedOther')) "locals=$($nl -join ',')"
 
   # --- 6. N2: inline var and for-var inside the nested routine ----------------
@@ -254,13 +257,13 @@ try {
   Check 'N1/N2 qualified_name is Unit.Outer.Nested.X' (($qn.Count -eq 1) -and ($qn[0].qualified_name -eq 'nestsyms.OuterOne.NestedHelper.InlineOne')) "qn=$($qn[0].qualified_name)"
 
   # --- 7. N3: NO LEAK into the enclosing routine ------------------------------
-  $ol = LocalsOf 'nestsyms.OuterOne'
+  $ol = @(LocalsOf 'nestsyms.OuterOne')
   Check 'N3 OuterOne keeps exactly its own two locals' ((($ol -join ',') -eq 'OuterLocal,ResolvedYadf')) "locals=$($ol -join ',')"
   Check 'N3 OuterOne did NOT gain NestedLocal/InlineOne/LoopVar' (-not (($ol -contains 'NestedLocal') -or ($ol -contains 'InlineOne') -or ($ol -contains 'LoopVar')))
 
   # --- 8. N4: twins keep their OWN locals -------------------------------------
-  $hl = LocalsOf 'nestsyms.TwinHost.SharedName'
-  $gl = LocalsOf 'nestsyms.TwinGuest.SharedName'
+  $hl = @(LocalsOf 'nestsyms.TwinHost.SharedName')
+  $gl = @(LocalsOf 'nestsyms.TwinGuest.SharedName')
   Check 'N4 TwinHost.SharedName has HostOnly only' (($hl -join ',') -eq 'HostOnly') "locals=$($hl -join ',')"
   Check 'N4 TwinGuest.SharedName has GuestOnly only' (($gl -join ',') -eq 'GuestOnly') "locals=$($gl -join ',')"
 

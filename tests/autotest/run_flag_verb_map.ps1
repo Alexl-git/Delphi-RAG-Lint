@@ -82,10 +82,16 @@
 #>
 [CmdletBinding()]
 param(
-  [string] $Exe  = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string] $Repo = "$PSScriptRoot\..\..",
+  [string] $Exe  = '',
+  [string] $Repo = '',
   [switch] $Report
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Repo) { $Repo = "$PSScriptRoot\..\.." }
 
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -167,7 +173,10 @@ function Get-AliasTokenRx([string]$Alias) {
 # lint-project / check-ast through the shared lint parse; those verbs now REFUSE it without --fix (exit 2,
 # run_lintfix_compilegate f) and it is not advertised in their blocks -- 3 cells of real surface. manifest
 # --dry-run and bookmarks-* --format were documented instead (3 verbs left the table).
-$BaselineCells = 101
+# 100/23 on 2026-11-19 (1.52 DDFIX-4): --report folded into the --output alias row; explain / check-init / repo info /
+# rules disable / document / document-all lines name their --format json, --qname, --document-third-party; rules --json
+# loads the lint config from its location args only. 133/44 -> 100/23.
+$BaselineCells = 100
 # 103/23 on 2026-10-29 (fix/help-out-json-138, replay of 909fc131): re-measured on main 0b8fcc65; cells unchanged, one verb left the table (24 -> 23).
 $BaselineVerbs = 23
 
@@ -349,9 +358,31 @@ Check 'a branch GUARD read is not a field binding' `
   ((@($map.FlagFields['--in-place']) -join ',') -eq 'GhostInPlace') `
   ("--in-place binds " + (@($map.FlagFields['--in-place']) -join ',') + " -- Result.Command is TESTED by that branch, not assigned")
 
+# Every flag that binds no TArgs field is NAMED here with where its value goes (1.52: the count passed 10 when the
+# repo verbs' ParamStr-read flags arrived, so the old "fewer than 10" bound became a named two-way list). A new
+# no-field flag fails until it is listed; a listed flag that starts binding a field fails until it is removed.
+$KnownNoField = [ordered]@{
+  '--case-sensitive'   = 'process-wide switch on DRagLint.Storage.SQLite'
+  '--clientProcessId'  = 'lsp: the LSP client pid, read by the server'
+  '--manifest'         = 'read from ParamStr by the manifest verbs'
+  '--output-encoding'  = 'OUTPUT_ENCODING_SWITCH, a process-wide switch'
+  '--stdio'            = 'lsp: transport token, accepted and ignored'
+  '--ctor-wide'        = 'cycles --plan / --fix: SetCycleCtorWide, process-wide'
+  '--prepare-queries'  = 'repo gen-param-array: CLI.RepoParamArray reads ParamStr'
+  '--dfm'              = 'repo gen-param-array: CLI.RepoParamArray reads ParamStr'
+  '--table'            = 'repo gen-param-array / gen-orm: read from ParamStr'
+  '--step-size'        = 'repo gen-param-array: CLI.RepoParamArray reads ParamStr'
+  '--progress-form'    = 'repo gen-param-array: CLI.RepoParamArray reads ParamStr'
+  '--code-dir'         = 'repo gen-orm / update-orm / gen-dataservice: CLI.Repo reads ParamStr'
+  '--server-dir'       = 'repo gen-orm / update-orm / gen-dataservice: CLI.Repo reads ParamStr'
+  '--client-dir'       = 'repo gen-orm / update-orm / gen-dataservice: CLI.Repo reads ParamStr'
+  '--save-form'        = 'repo gen-orm: CLI.Repo reads ParamStr'
+}
+$nfUnlisted = @($map.NoField | Where-Object { -not $KnownNoField.Contains($_) })
+$nfStale    = @($KnownNoField.Keys | Where-Object { $map.NoField -notcontains $_ })
 Check 'flags that bind no TArgs field are named, not dropped' `
-  ($map.NoField.Count -gt 0 -and $map.NoField.Count -lt 10) `
-  ("no-field flags: " + ($map.NoField -join ' '))
+  ($map.NoField.Count -gt 0 -and $nfUnlisted.Count -eq 0 -and $nfStale.Count -eq 0) `
+  ("unlisted no-field: [" + ($nfUnlisted -join ' ') + "] listed but binds a field now: [" + ($nfStale -join ' ') + "]")
 foreach ($f in $map.NoField)     { Write-Host ("      [NOTE] binds no TArgs field: {0}" -f $f) -ForegroundColor DarkGray }
 foreach ($o in $map.Orphan)      { Write-Host ("      [NOTE] positional branch (attributed to no flag): {0}" -f $o) -ForegroundColor DarkGray }
 foreach ($u in $map.Unevaluated) { Write-Host ("      [NOTE] conditional kept unevaluated (both arms): {0}" -f $u) -ForegroundColor DarkGray }
@@ -363,7 +394,7 @@ Write-Host ''
 Write-Host '-- per-verb gap vs --help' -ForegroundColor Cyan
 
 $FlagRx = '--[A-Za-z][A-Za-z0-9-]*'
-$helpText = (& $Exe --help 2>&1 | Out-String)
+$helpText = (& { $ErrorActionPreference = 'Continue'; & $Exe --help 2>&1 | ForEach-Object { "$_" } } | Out-String)
 
 # A verb's BLOCK is its `  drag-lint <verb> ...` line plus the continuation
 # lines under it, up to the next verb line or the next section header. The
@@ -393,13 +424,13 @@ Check 'alias table present' (Test-Path -LiteralPath $aliasPath) $aliasPath
 $AliasOf = @{}
 $tableGroups = @()
 if (Test-Path -LiteralPath $aliasPath) {
-  foreach ($row in @((Get-Content -LiteralPath $aliasPath -Raw | ConvertFrom-Json).aliases)) {
+  foreach ($row in @((Get-Content -LiteralPath $aliasPath -Raw | ConvertFrom-Json | ForEach-Object { $_ }).aliases)) {
     foreach ($a in @($row.aliases)) { $AliasOf[[string]$a] = [string]$row.canonical }
     $tableGroups += ,(@(@($row.canonical) + @($row.aliases) | Sort-Object) -join ' ')
   }
 }
 $tableGroups = @($tableGroups | Sort-Object -Unique)
-$parserGroups = Get-ParserAliasGroups -CliText ([IO.File]::ReadAllText($Cli))
+$parserGroups = @(Get-ParserAliasGroups -CliText ([IO.File]::ReadAllText($Cli)))
 Check 'alias groups read from the parser (else the two-way check below is vacuous)' ($parserGroups.Count -ge 4) `
   ("($($parserGroups.Count) group(s)): " + ($parserGroups -join ' | '))
 $grpDiff = @(Compare-Object -ReferenceObject $parserGroups -DifferenceObject $tableGroups |

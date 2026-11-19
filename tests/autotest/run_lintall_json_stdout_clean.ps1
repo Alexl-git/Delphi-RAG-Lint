@@ -11,9 +11,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-lintall-json-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -68,7 +71,7 @@ end.
 '@
 $db = Join-Path $fx '_D-RAG\App.sqlite'
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
-& $Exe index --project (Join-Path $fx 'App.dpr') --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $fx 'App.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $idxCode = $LASTEXITCODE
 if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2 }
 
@@ -79,7 +82,7 @@ function Run([string[]]$ArgList) {
     -RedirectStandardOutput $o -RedirectStandardError $e | Out-Null
   return @{ Out = [IO.File]::ReadAllText($o); Err = [IO.File]::ReadAllText($e) }
 }
-function Parses([string]$T) { try { $null = ConvertFrom-Json $T -Depth 100; $true } catch { $false } }
+function Parses([string]$T) { try { $null = ConvertFrom-Json $T -Depth 100 | ForEach-Object { $_ }; $true } catch { $false } }
 
 $runs = @(
   @{ n = 'lint-all --db --json';        a = @('lint-all', '--db', $db, '--json');                                 progress = $true },
@@ -93,7 +96,7 @@ foreach ($r in $runs) {
   Check "$($r.n): stdout non-empty" ($t.Length -gt 0)
   Check "$($r.n): stdout starts with [ and ends with ]" ($t.StartsWith('[') -and $t.EndsWith(']'))
   Check "$($r.n): stdout parses as JSON" (Parses $t)
-  if ($r.progress) { Check "$($r.n): stdout has findings (control)" ((ConvertFrom-Json $t -Depth 100).Count -gt 0) }
+  if ($r.progress) { Check "$($r.n): stdout has findings (control)" ((ConvertFrom-Json $t -Depth 100 | ForEach-Object { $_ }).Count -gt 0) }
   Check "$($r.n): no 'lint-all:' text on stdout" ($x.Out -notmatch 'lint-all:')
   if ($r.progress) {
     # LINTJSON-STDERR (1.40): under a JSON format the success path writes NOTHING to stderr, so a consumer that

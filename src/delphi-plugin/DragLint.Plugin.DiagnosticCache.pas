@@ -21,8 +21,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DragLint.Plugin.DiagList.pas) ?, DragLint.Plugin.DiagList.DiagClipboardLine (DragLint.Plugin.DiagList.pas) ?, DragLint.Plugin.DiagList.DiagClipboardText (DragLint.Plugin.DiagList.pas) ?, DragLint.Plugin.DiagList.DiagDisplayOrder (DragLint.Plugin.DiagList.pas) ?, DragLint.Plugin.Editor.ParseAndPushCompileOutput (DragLint.Plugin.Editor.pas) (+22 more)</para>
-  /// <para>Used in units: DragLint.Plugin.DiagList, DragLint.Plugin.DiagnosticCache, DragLint.Plugin.DockForm, DragLint.Plugin.Editor, DragLint.Plugin.EditViewNotifier, DragLint.Plugin.HoverTracker, DragLint.Plugin.MissingUses, DragLint.Plugin.StructureForm</para>
+  /// <para>Used by: declaration (DragLint.Plugin.DiagList.pas) ?, DragLint.Plugin.Cmd.DisableRule.RuleAtLine (DragLint.Plugin.Cmd.DisableRule.pas) ?, DragLint.Plugin.Cmd.FixMarker.RuleAtLine (DragLint.Plugin.Cmd.FixMarker.pas) ?, DragLint.Plugin.DiagList.DiagDisplayOrder (DragLint.Plugin.DiagList.pas) ?, DragLint.Plugin.Editor.ParseAndPushCompileOutput (DragLint.Plugin.Editor.pas) (+25 more)</para>
+  /// <para>Used in units: DragLint.Plugin.Cmd.DisableRule, DragLint.Plugin.Cmd.FixMarker, DragLint.Plugin.DiagList, DragLint.Plugin.DiagnosticCache, DragLint.Plugin.DockForm, DragLint.Plugin.Editor, DragLint.Plugin.EditViewNotifier, DragLint.Plugin.HoverTracker, DragLint.Plugin.MissingUses, DragLint.Plugin.StructureForm</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDragLintDiagnostic = record
@@ -212,7 +212,7 @@ type
       /// List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DragLint.Plugin.Editor.DLCursorUndeclaredUnitThen (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeQuickFixInlineHintUses (DragLint.Plugin.Editor.pas), DragLint.Plugin.EditViewNotifier.InvokeInlineInfo (DragLint.Plugin.EditViewNotifier.pas), DragLint.Plugin.EditViewNotifier.TDragLintEditViewNotifier.PaintLine (DragLint.Plugin.EditViewNotifier.pas), DragLint.Plugin.HoverTracker.TDragLintHoverHelper.OnTick (DragLint.Plugin.HoverTracker.pas) (+1 more)</para>
+      /// <para>Called from: DragLint.Plugin.Cmd.DisableRule.RuleAtLine (DragLint.Plugin.Cmd.DisableRule.pas), DragLint.Plugin.Cmd.FixMarker.RuleAtLine (DragLint.Plugin.Cmd.FixMarker.pas), DragLint.Plugin.Editor.DLCursorUndeclaredUnitThen (DragLint.Plugin.Editor.pas), DragLint.Plugin.EditViewNotifier.InvokeInlineInfo (DragLint.Plugin.EditViewNotifier.pas), DragLint.Plugin.EditViewNotifier.TDragLintEditViewNotifier.PaintLine (DragLint.Plugin.EditViewNotifier.pas) (+5 more)</para>
       /// <para>Calls: DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.GetForFile</para>
       /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.GetForFile"/>
       /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Clear"/>
@@ -238,7 +238,7 @@ type
 /// <returns><!-- drag-lint:auto -->TDragLintDiagnosticCache -- Observed: GCache.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.DockForm.TDragLintDockFrame.HandleWatchTimer (DragLint.Plugin.DockForm.pas), DragLint.Plugin.Editor.DLCursorUndeclaredUnitThen (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.HandleNotification (DragLint.Plugin.Editor.pas), DragLint.Plugin.EditViewNotifier.InvokeInlineInfo (DragLint.Plugin.EditViewNotifier.pas), DragLint.Plugin.EditViewNotifier.TDragLintEditViewNotifier.PaintLine (DragLint.Plugin.EditViewNotifier.pas) (+8 more)</para>
+/// <para>Called from: DragLint.Plugin.Cmd.DisableRule.RuleAtLine (DragLint.Plugin.Cmd.DisableRule.pas), DragLint.Plugin.Cmd.FixMarker.RuleAtLine (DragLint.Plugin.Cmd.FixMarker.pas), DragLint.Plugin.DockForm.TDragLintDockFrame.HandleWatchTimer (DragLint.Plugin.DockForm.pas), DragLint.Plugin.EditViewNotifier.InvokeInlineInfo (DragLint.Plugin.EditViewNotifier.pas), DragLint.Plugin.EditViewNotifier.TDragLintEditViewNotifier.PaintLine (DragLint.Plugin.EditViewNotifier.pas) (+12 more)</para>
 /// <para>Calls: DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Create</para>
 /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Create"/>
 /// <!-- drag-lint:auto END -->

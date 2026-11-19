@@ -37,9 +37,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-lsp-usages-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -112,18 +115,18 @@ function Frame($obj) {
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $WorkDir --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check '1. SANITY: the index exists' (Test-Path $db)
 
   # --- the CLI's own answer -------------------------------------------------
   # NOT 2>&1: stderr carries the banner and the FTS5 probe, and merging it
   # INTERLEAVES those lines into the middle of the pretty-printed JSON.
-  $cliRaw = (& $exePath usages --name Compute --db $db --format json 2>$null | Out-String)
+  $cliRaw = (& { $ErrorActionPreference = 'Continue'; & $exePath usages --name Compute --db $db --format json 2>$null } | Out-String)
   # The verb prints a banner line and a trailing FTS5 probe around the JSON, so
   # take the object's own span rather than "everything from the first brace".
   $cliJson = $cliRaw.Substring($cliRaw.IndexOf('{'))
   $cliJson = $cliJson.Substring(0, $cliJson.LastIndexOf('}') + 1)
-  $cli = $cliJson | ConvertFrom-Json
+  $cli = $cliJson | ConvertFrom-Json | ForEach-Object { $_ }
 
   # --- the LSP's answer -----------------------------------------------------
   $inF  = Join-Path $WorkDir 'in.txt'
@@ -135,11 +138,11 @@ try {
   [System.IO.File]::WriteAllText($inF, $m, (New-Object System.Text.UTF8Encoding $false))
 
   $p = Start-Process $exePath -ArgumentList @('lsp','--db',$db) -WorkingDirectory $WorkDir `
-        -RedirectStandardInput $inF -RedirectStandardOutput $outF -NoNewWindow -Wait -PassThru
+        -RedirectStandardInput $inF -RedirectStandardOutput $outF -NoNewWindow -Wait -PassThru; $null = $p.Handle
 
   $lsp = $null
   foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 2 -and $o.result) { $lsp = $o.result }
   }
 

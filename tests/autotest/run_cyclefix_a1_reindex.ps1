@@ -15,9 +15,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-cyclefix-a1-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }) }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -36,7 +39,7 @@ function New-Stale([string]$Tag, [bool]$Touch) {
   Get-ChildItem (Join-Path $Repo 'circular-demo') -File | Where-Object { $_.Extension -in '.pas', '.dpr', '.dproj' } |
     ForEach-Object { Copy-Item $_.FullName (Join-Path $d $_.Name) -Force }
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project (Join-Path $d 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "index-$Tag.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $d 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
   if ($Touch) {
     Start-Sleep -Milliseconds 1100
     [IO.File]::AppendAllText((Join-Path $d 'DemoLogger.pas'), "`r`n// edited after the index was built`r`n")
@@ -46,11 +49,11 @@ function New-Stale([string]$Tag, [bool]$Touch) {
 function Run-Fix($Case, [string[]]$Extra, [hashtable]$Env = @{}) {
   foreach ($k in $Env.Keys) { Set-Item "Env:$k" $Env[$k] }
   try {
-    $out = (& $Exe cycles --fix --build-timeout 1800 --project (Join-Path $Case.Dir 'CircularDemo.dproj') --db $Case.Db --cycle 1 `
-      --library-db none --format json @Extra 2>$null | Out-String)
+    $out = (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --build-timeout 1800 --project (Join-Path $Case.Dir 'CircularDemo.dproj') --db $Case.Db --cycle 1 `
+      --library-db none --format json @Extra 2>$null } | Out-String)
     $code = $LASTEXITCODE
   } finally { foreach ($k in $Env.Keys) { Remove-Item "Env:$k" -ErrorAction SilentlyContinue } }
-  $j = try { $out | ConvertFrom-Json } catch { $null }
+  $j = try { $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
   return @{ Exit = $code; Out = $out; Json = $j }
 }
 function Get-Kinds($R) { if ($R.Json -and $R.Json.cycles) { return @($R.Json.cycles[0].refusals | ForEach-Object { $_.kind }) } else { return @() } }
@@ -61,24 +64,34 @@ try {
   $m = New-Stale 'main' $true
   $r = Run-Fix $m @('--apply')
   Check 'main exit 0' ($r.Exit -eq 0) "exit $($r.Exit) out: $($r.Out)"
-  Check 'main no stale-file refusal' ((Get-Kinds $r) -notcontains 'stale-file') $r.Out
+  Check 'main no stale-file refusal' ((@(Get-Kinds $r)) -notcontains 'stale-file') $r.Out
   Check 'main reindex_before.status = ok, files >= 1' ($r.Json -and $r.Json.reindex_before.status -eq 'ok' -and $r.Json.reindex_before.files -ge 1) $r.Out
   Check 'main the plan was applied (a new unit exists in the copy)' (@(Get-ChildItem $m.Dir -Filter 'DemoLogger.*.pas').Count -ge 1 -or @(Get-ChildItem $m.Dir -Filter '*Untangle*.pas').Count -ge 1 -or $r.Json.cycles[0].written -gt 0) $r.Out
 
   Write-Host '== controls' -ForegroundColor Cyan
   $c1 = New-Stale 'c1' $true
   $r = Run-Fix $c1 @()
-  Check 'control 1 dry run: exit 1, stale-file, no reindex_before' ($r.Exit -eq 1 -and (Get-Kinds $r) -contains 'stale-file' -and -not ($r.Json -and $r.Json.reindex_before)) "exit $($r.Exit) $($r.Out)"
+  Check 'control 1 dry run: exit 1, stale-file, no reindex_before' ($r.Exit -eq 1 -and (@(Get-Kinds $r)) -contains 'stale-file' -and -not ($r.Json -and $r.Json.reindex_before)) "exit $($r.Exit) $($r.Out)"
   $c2 = New-Stale 'c2' $true
   $r = Run-Fix $c2 @('--apply', '--no-reindex')
-  Check 'control 2 --no-reindex: exit 1, stale-file' ($r.Exit -eq 1 -and (Get-Kinds $r) -contains 'stale-file') "exit $($r.Exit) $($r.Out)"
+  Check 'control 2 --no-reindex: exit 1, stale-file' ($r.Exit -eq 1 -and (@(Get-Kinds $r)) -contains 'stale-file') "exit $($r.Exit) $($r.Out)"
   $c3 = New-Stale 'c3' $true
   $r = Run-Fix $c3 @('--apply') @{ DRAGLINT_CYCLEFIX_REINDEXED = '1' }
   Check 'control 3 second pass: exit 1, stale-file "still stale after a re-index"' `
-    ($r.Exit -eq 1 -and (Get-Kinds $r) -contains 'stale-file' -and $r.Out -match 'still stale after a re-index') "exit $($r.Exit) $($r.Out)"
+    ($r.Exit -eq 1 -and (@(Get-Kinds $r)) -contains 'stale-file' -and $r.Out -match 'still stale after a re-index') "exit $($r.Exit) $($r.Out)"
   $c4 = New-Stale 'c4' $false
   $r = Run-Fix $c4 @('--apply')
   Check 'control 4 untouched copy: no reindex_before' ($r.Json -and -not $r.Json.reindex_before) "exit $($r.Exit) $($r.Out)"
+
+  # v152 DDFIX5: the A1 re-index writes reindex-before.log + rerun.out into the gate's _build scratch
+  # (C:\TEMP\draglint_cyclefix_<enginepid>_build); RunCycleFix exited before DeleteDefaultScratch, so every
+  # re-indexing --apply left that dir behind (battery TEMP GROWTH GUARD). Matched on this run's work-dir name,
+  # so a parallel runner's scratch is never counted.
+  $leaf = Split-Path $WorkDir -Leaf
+  $left = @(Get-ChildItem 'C:\TEMP' -Directory -Filter 'draglint_cyclefix_*' -ErrorAction SilentlyContinue | Where-Object {
+      $f = Join-Path $_.FullName 'reindex-before.log'; (Test-Path -LiteralPath $f) -and ([IO.File]::ReadAllText($f) -like "*$leaf*") })
+  Check 'scratch: the A1 re-index scratch (reindex-before.log, rerun.out) is deleted when the run ends' ($left.Count -eq 0) ($left.FullName -join ', ')
+  foreach ($d in $left) { [IO.Directory]::Delete($d.FullName, $true) }
 } finally {
   if (Test-Path -LiteralPath $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
 }

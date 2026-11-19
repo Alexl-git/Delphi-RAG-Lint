@@ -30,11 +30,15 @@
 [CmdletBinding()]
 param(
   [switch]$KeepWorkDir,
-  [string]$Exe         = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
-  [string]$RulesDir    = "$PSScriptRoot\..\..\rules",
+  [string]$Exe         = '',
+  [string]$RulesDir    = '',
   [string]$WorkDir     = "C:\TEMP\draglint_lsp_lib_margin_$PID",
   [int]   $StubSleepMs = 10000
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
+if (-not $RulesDir) { $RulesDir = "$PSScriptRoot\..\..\rules" }
 . "$PSScriptRoot\lib\WorkDirCleanup.ps1"
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -82,13 +86,13 @@ $fx     = Join-Path $src 'uTypeFx.pas'
 $libDb  = Join-Path $WorkDir 'library-Fixture.sqlite'
 $projDb = Join-Path $WorkDir 'Fixture.sqlite'
 foreach ($d in $libDb, $projDb) {
-  $idx = & $exePath index $src --db $d 2>&1 | Out-String
+  $idx = & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $d 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check "SANITY: fixture indexed into $(Split-Path $d -Leaf)" ($LASTEXITCODE -eq 0) $idx
 }
 
 function LintDbg($db) {
   $env:DRAGLINT_DEBUG = '1'
-  try { & $exePath lint $fx --db $db --rules-dir $rules 2>&1 | Out-String }
+  try { & { $ErrorActionPreference = 'Continue'; & $exePath lint $fx --db $db --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String }
   finally { Remove-Item Env:\DRAGLINT_DEBUG }
 }
 $lib  = LintDbg $libDb
@@ -102,12 +106,12 @@ Check 'B2b CONTROL: a project-named store reports float-equality-comparison' ($p
 # ---- B3/B4: the LSP child budget, through the test-only substitute child ----
 $csc = @('Framework64', 'Framework') | ForEach-Object { Join-Path $env:WINDIR "Microsoft.NET\$_\v4.0.30319\csc.exe" } | Where-Object { Test-Path $_ } | Select-Object -First 1
 $stubExe = Join-Path $WorkDir 'FullRulesChildStub.exe'
-if ($csc) { $null = & $csc /nologo /out:$stubExe (Join-Path $PSScriptRoot 'fixtures\lsp\FullRulesChildStub.cs') 2>&1 }
+if ($csc) { $null = & { $ErrorActionPreference = 'Continue'; & $csc /nologo /out:$stubExe (Join-Path $PSScriptRoot 'fixtures\lsp\FullRulesChildStub.cs') 2>&1 | ForEach-Object { "$_" } } }
 Check 'SANITY: the stub child compiled (csc + FullRulesChildStub.cs)' (Test-Path $stubExe) ('csc=' + $csc)
 $emitF = Join-Path $WorkDir 'emit.json'
 # The stub's answer is a REAL lint array (project store) with the rule id made synthetic,
 # so a published zz-stub-rule can only come from the substituted child.
-$arr = (& $exePath lint $fx --db $projDb --rules-dir $rules --json 2>$null) -join "`n"
+$arr = (& { $ErrorActionPreference = 'Continue'; & $exePath lint $fx --db $projDb --rules-dir $rules --json 2>$null }) -join "`n"
 Write-Ascii $emitF ($arr -replace 'float-equality-comparison', 'zz-stub-rule')
 
 function Frame($obj) { $j = $obj | ConvertTo-Json -Depth 20 -Compress; "Content-Length: $([Text.Encoding]::UTF8.GetByteCount($j))`r`n`r`n$j" }
@@ -125,7 +129,7 @@ function LspOpenStub([string]$Db, [string]$Tag) {
   $env:DRAGLINT_FULLRULES_CHILD_EXE = $stubExe; $env:STUB_MODE = 'slowemit'; $env:STUB_SLEEP_MS = "$StubSleepMs"; $env:STUB_JSON_FILE = $emitF
   try {
     $p = Start-Process $exePath -ArgumentList @('lsp', '--db', ('"' + $Db + '"'), '--full-rules') -WorkingDirectory $WorkDir `
-           -RedirectStandardInput $in -RedirectStandardOutput $so -RedirectStandardError $se -NoNewWindow -Wait -PassThru
+           -RedirectStandardInput $in -RedirectStandardOutput $so -RedirectStandardError $se -NoNewWindow -Wait -PassThru; $null = $p.Handle
   } finally {
     Remove-Item Env:DRAGLINT_FULLRULES_CHILD_EXE, Env:STUB_MODE, Env:STUB_SLEEP_MS, Env:STUB_JSON_FILE -ErrorAction SilentlyContinue
   }

@@ -15,10 +15,14 @@
 # -Exe explicitly to run against a Win32 build on purpose.
 [CmdletBinding()]
 param(
-    [string] $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-    [string] $FixtureDir = "$PSScriptRoot\..\fixtures\formsmap",
+    [string] $Exe = '',
+    [string] $FixtureDir = '',
     [string] $WorkDir = "$env:TEMP\drag-lint-formsmap-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $FixtureDir) { $FixtureDir = "$PSScriptRoot\..\fixtures\formsmap" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -33,7 +37,7 @@ if (Test-Path $WorkDir) { Remove-Item -Recurse -Force $WorkDir }
 New-Item -ItemType Directory $WorkDir | Out-Null
 $db  = "$WorkDir\fixture.sqlite"
 $out = "$WorkDir\forms.csv"
-& $Exe index $FixtureDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $FixtureDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'index fixture exits 0' ($LASTEXITCODE -eq 0)
 # K6: this call is timed so the 'no hang' check below can be an ASSERTION. It
 # used to be `Check 'no hang (script completed)' ($true)` -- a tautology that
@@ -41,7 +45,7 @@ Check 'index fixture exits 0' ($LASTEXITCODE -eq 0)
 # nothing. Reaching the line already proved the script had not hung; the literal
 # $true proved nothing at all.
 $swCsv = [System.Diagnostics.Stopwatch]::StartNew()
-& $Exe forms-csv --project "$FixtureDir\Demo.dproj" --db $db --out $out 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe forms-csv --project "$FixtureDir\Demo.dproj" --db $db --out $out 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $swCsv.Stop()
 Check 'forms-csv exits 0' ($LASTEXITCODE -eq 0)
 Check 'csv exists' (Test-Path $out)
@@ -100,9 +104,9 @@ if (Test-Path $WorkDir4) { Remove-Item -Recurse -Force $WorkDir4 }
 New-Item -ItemType Directory $WorkDir4 | Out-Null
 $db4  = "$WorkDir4\fixture4.sqlite"
 $out4 = "$WorkDir4\forms4.csv"
-& $Exe index $FixtureDir4 --db $db4 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $FixtureDir4 --db $db4 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'v4: index fixture exits 0' ($LASTEXITCODE -eq 0)
-& $Exe forms-csv --project "$FixtureDir4\Demo4.dproj" --db $db4 --out $out4 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe forms-csv --project "$FixtureDir4\Demo4.dproj" --db $db4 --out $out4 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'v4: forms-csv exits 0' ($LASTEXITCODE -eq 0)
 Check 'v4: csv exists' (Test-Path $out4)
 $csv4 = Get-Content $out4 -Raw

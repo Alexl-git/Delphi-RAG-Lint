@@ -1,6 +1,8 @@
 <#
   run_flow_out_arg_rules.ps1 -- local-only-out-arg, dead-store-before-out-arg and
   by-value-arg-before-assignment (lane 146 t1; spec docs\superpowers\specs\2026-11-06-liveness-out-args-by-value.md).
+  1.52 EX1 (owner ruling 2026-11-18): the by-value arm is FOLDED into the ON rule used-before-assignment;
+  its old id is gone. $BV below is therefore used-before-assignment, and its tbv* sites report by default.
 
   THE DEFECT. Liveness counts every call argument as a use, so `G.GetOut(X)` hides a write-only local
   and a dead store before it. The mode dispatch asks bare names only, so `G.Take(X)` hides a read of
@@ -13,10 +15,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe      = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
-  [string]$RulesDir = "$PSScriptRoot\..\..\rules",
+  [string]$Exe      = '',
+  [string]$RulesDir = '',
   [string]$WorkDir  = "C:\TEMP\draglint_flow_out_args_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
+if (-not $RulesDir) { $RulesDir = "$PSScriptRoot\..\..\rules" }
 $ErrorActionPreference = 'Stop'; $script:fail = $false
 function Check($n, $ok, $d) {
   Write-Host ("[{0}] {1}" -f (@('FAIL', 'PASS')[[int][bool]$ok]), $n)
@@ -24,8 +30,8 @@ function Check($n, $ok, $d) {
 }
 function Write-Ascii($p, $t) { [IO.File]::WriteAllText($p, (($t -replace "`r`n", "`n") -replace "`n", "`r`n"), [Text.Encoding]::ASCII) }
 
-$LO = 'local-only-out-arg'; $DS = 'dead-store-before-out-arg'; $BV = 'by-value-arg-before-assignment'
-$NewRules = "$LO,$DS,$BV"
+$LO = 'local-only-out-arg'; $DS = 'dead-store-before-out-arg'; $BV = 'used-before-assignment'
+$NewRules = "$LO,$DS"
 
 try {
   $exePath = (Resolve-Path $Exe).Path
@@ -224,7 +230,7 @@ end.
 
   function Findings([string]$Json) {
     $i = $Json.IndexOf('['); if ($i -lt 0) { return ,@() }
-    $a = @($Json.Substring($i) | ConvertFrom-Json)
+    $a = @(($Json.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
     $o = @()
     foreach ($f in $a) {
       $m = [regex]::Match([string]$f.message, '"([^"]+)"')
@@ -236,7 +242,7 @@ end.
   function Has($F, [string]$Rule, [string]$Name) { @($F | Where-Object { $_.rule -eq $Rule -and $_.name -eq $Name }).Count -gt 0 }
 
   $db = Join-Path $WorkDir 'fa.sqlite'
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $old = Join-Path $WorkDir 'fa-notable.sqlite'
   Copy-Item $db $old
   $py = Join-Path $WorkDir 'drop.py'
@@ -246,11 +252,11 @@ end.
   Push-Location $WorkDir
   try {
     $use = Join-Path $src 'uFaUse.pas'
-    $on   = Findings (& $exePath lint $use --db $db  --rules-dir $rules --enable $NewRules --json 2>$null | Out-String)
-    $off  = Findings (& $exePath lint $use --db $old --rules-dir $rules --enable $NewRules --json 2>$null | Out-String)
-    $dflt = Findings (& $exePath lint $use --db $db  --rules-dir $rules --json 2>$null | Out-String)
-    $bare = Findings (& $exePath lint $use --rules-dir $rules --enable $NewRules --json 2>$null | Out-String)
-    $allT = (& $exePath lint-all --db $db --rules-dir $rules --enable $NewRules --quiet 2>&1 | Out-String)
+    $on   = Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $use --db $db  --rules-dir $rules --enable $NewRules --json 2>$null } | Out-String)
+    $off  = Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $use --db $old --rules-dir $rules --enable $NewRules --json 2>$null } | Out-String)
+    $dflt = Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $use --db $db  --rules-dir $rules --json 2>$null } | Out-String)
+    $bare = Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $use --rules-dir $rules --enable $NewRules --json 2>$null } | Out-String)
+    $allT = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rules-dir $rules --enable $NewRules --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String)
   }
   finally { Pop-Location }
   Write-Host ("  {0}: {1}" -f $LO, ((Names $on $LO) -join ','))
@@ -278,7 +284,7 @@ end.
 
   # Controls: no c* anywhere under a new rule.
   foreach ($r in $LO, $DS, $BV) {
-    $bad = @($on | Where-Object { $_.rule -eq $r -and $_.name -like 'c*' } | ForEach-Object { $_.name })
+    $bad = @($on | Where-Object { $_.rule -eq $r -and $_.name -like 'c*' -and $_.name -ne 'cbvBare' } | ForEach-Object { $_.name })
     Check "C $r reports no control" ($bad.Count -eq 0) ($bad -join ',')
   }
   # A positive control beside the negatives: the parents still fire, and the new ids do not take them over.
@@ -289,8 +295,10 @@ end.
   Check "C $DS leaves a never-read local to $LO" (-not (Has $on $DS 'tloNever') -and (Has $on $LO 'tloNever')) ''
 
   # OFF means off, and the default run is what it was.
-  foreach ($r in $LO, $DS, $BV) { Check "OFF $r silent without --enable" (@($dflt | Where-Object { $_.rule -eq $r }).Count -eq 0) '' }
-  $same = (($on | Where-Object { $_.rule -notin $LO, $DS, $BV } | ForEach-Object { "$($_.rule):$($_.line):$($_.name)" }) -join '|') -eq (($dflt | ForEach-Object { "$($_.rule):$($_.line):$($_.name)" }) -join '|')
+  foreach ($r in $LO, $DS) { Check "OFF $r silent without --enable" (@($dflt | Where-Object { $_.rule -eq $r }).Count -eq 0) '' }
+  # 1.52 EX1: the by-value arm is ON (folded into used-before-assignment).
+  foreach ($n in 'tbvDefinite', 'tbvConst', 'tbvKid', 'tbvMay', 'tbvOuter') { Check "ON $BV $n in a default run" (Has $dflt $BV $n) '' }
+  $same = (($on | Where-Object { $_.rule -notin $LO, $DS } | ForEach-Object { "$($_.rule):$($_.line):$($_.name)" }) -join '|') -eq (($dflt | ForEach-Object { "$($_.rule):$($_.line):$($_.name)" }) -join '|')
   Check 'OFF every other rule answers the same with the new ones enabled' $same ''
 
   # Degradation: a method's mode is F1; a bare same-unit signature is not.
@@ -303,12 +311,13 @@ end.
   Check 'NOINDEX the bare dead store still reports' (Has $bare $DS 'tdsBare') ''
 
   # lint-all reaches the rules too (a checker gate list short of an id answers 0).
-  Check 'LINT-ALL reports all three' (($allT -match [regex]::Escape($LO)) -and ($allT -match [regex]::Escape($DS)) -and ($allT -match [regex]::Escape($BV))) ''
+  Check 'LINT-ALL reports all three' (($allT -match [regex]::Escape($LO)) -and ($allT -match [regex]::Escape($DS)) -and ($allT -match 'used-before-assignment: Local "tbvDefinite"')) ''
   # --rule narrows to the flow checker: LINT_GATE_FLOW has to name the ids.
   foreach ($r in $LO, $DS, $BV) {
     Push-Location $WorkDir
-    try { $nr = Findings (& $exePath lint $use --db $db --rules-dir $rules --rule $r --json 2>$null | Out-String) } finally { Pop-Location }
+    try { $nr = Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $use --db $db --rules-dir $rules --rule $r --json 2>$null } | Out-String) } finally { Pop-Location }
     Check "RULE --rule $r answers" (@($nr | Where-Object { $_.rule -eq $r }).Count -gt 0) ''
+    if ($r -eq $BV) { Check "RULE --rule $r runs the by-value arm" (Has $nr $BV 'tbvDefinite') '' }
   }
 }
 finally {

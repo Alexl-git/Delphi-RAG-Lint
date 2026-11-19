@@ -52,9 +52,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\draglint_lspproxy_mergehover_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -151,7 +154,7 @@ function Split-Frames([byte[]]$b) {
 # Kind / Value of result.contents (when it is a MarkupContent object).
 function Reply7([byte[]]$b) {
   foreach ($f in (Split-Frames $b)) {
-    try { $j = $f.Body | ConvertFrom-Json -AsHashtable } catch { continue }
+    try { $j = $f.Body | ConvertFrom-Json -AsHashtable | ForEach-Object { $_ } } catch { continue }
     if ($j -and $j.ContainsKey('id') -and ($j['id'] -eq 7) -and $j.ContainsKey('result')) {
       $r = $j['result']
       $kind = $null; $val = $null
@@ -174,7 +177,7 @@ $fixtureDir = "$PSScriptRoot\fixtures\lspproxy"
 $outDir     = Join-Path $WorkDir 'stub'
 New-Item -ItemType Directory $outDir | Out-Null
 $rs = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
-$null = cmd /c "call `"$rs`" && cd /d `"$fixtureDir`" && dcc64 -CC -E`"$outDir`" -N0`"$outDir`" LspStubServer.dpr" 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; cmd /c "call `"$rs`" && cd /d `"$fixtureDir`" && dcc64 -CC -E`"$outDir`" -N0`"$outDir`" LspStubServer.dpr" 2>&1 | ForEach-Object { "$_" } }
 $stub = "$outDir\LspStubServer.exe"
 Check 'LspStubServer.exe built' (Test-Path $stub) $stub
 if (-not (Test-Path $stub)) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
@@ -188,7 +191,7 @@ $text = (@('unit Hx;', '', 'interface', '', 'type', '  TFoo = class', '  public'
            '', 'implementation', '', 'procedure Use; var Foo: TFoo; begin', '  Foo.FIrst:= 1;', 'end;', '', 'end.', '') -join "`r`n")
 [IO.File]::WriteAllText($unit, $text, [Text.Encoding]::ASCII)
 $db = Join-Path $WorkDir 'hx.sqlite'
-& $Exe index $srcDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $srcDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'built the fixture index' (Test-Path $db)
 $uri = Uri $unit
 $didOpen = Frame ('{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"' + $uri + '","languageId":"pascal","version":1,"text":' + ($text | ConvertTo-Json) + '}}}')
@@ -293,7 +296,7 @@ $e8  = @((Utf8 $r8.Err) -split "\r?\n" | Where-Object { $_ -match 'merge-hover' 
 Check 'two position-less hovers: no merge-hover stderr line' ($e8.Count -eq 0) ("lines=$($e8.Count) err=$(Utf8 $r8.Err)")
 $m8 = Reply7 $r8.Out
 Check 'positive control: the later hover 7 in the same session still merges' ($m8 -and $m8.Value -eq ('THEIRS-MD' + $Sep + $ours)) ("value=$(Show $m8.Value)")
-$n8 = @(Split-Frames $r8.Out | ForEach-Object { try { $_.Body | ConvertFrom-Json -AsHashtable } catch { $null } } |
+$n8 = @(Split-Frames $r8.Out | ForEach-Object { try { $_.Body | ConvertFrom-Json -AsHashtable | ForEach-Object { $_ } } catch { $null } } |
         Where-Object { $_ -and $_.ContainsKey('id') -and ($_['id'] -in 5, 6) -and $_.ContainsKey('result') -and $_['result']['contents']['value'] -eq 'THEIRS-MD' })
 Check 'both position-less hovers got DelphiLSP''s reply, unmerged' ($n8.Count -eq 2) ("n=$($n8.Count)")
 
@@ -306,7 +309,7 @@ foreach ($id in 101..156) {
 }
 $qArgs = @('lsp', '--proxy', '--merge-hover', '--db', $db, '--merge-budget-ms', '4000', '--delphi-lsp', $stub)
 $r9 = Invoke-Raw $Exe $qArgs $many (Script $theirs1)
-$rep9 = @(Split-Frames $r9.Out | ForEach-Object { try { $_.Body | ConvertFrom-Json -AsHashtable } catch { $null } } |
+$rep9 = @(Split-Frames $r9.Out | ForEach-Object { try { $_.Body | ConvertFrom-Json -AsHashtable | ForEach-Object { $_ } } catch { $null } } |
           Where-Object { $_ -and $_.ContainsKey('id') -and ($_['id'] -ge 101) -and $_.ContainsKey('result') })
 $unmerged = @($rep9 | Where-Object { $_['result']['contents']['value'] -eq 'THEIRS-MD' }).Count
 Check 'all 56 hovers answered' ($rep9.Count -eq 56) ("n=$($rep9.Count)")

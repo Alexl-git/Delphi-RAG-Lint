@@ -70,9 +70,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-doc-cap-parity-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -134,7 +137,7 @@ function Set-Cap([int]$N) {
 }
 function Invoke-InDir([string[]]$DlArgs) {
   Push-Location $dir
-  try { & $Exe @DlArgs 2>&1 | Out-String } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe @DlArgs 2>&1 | ForEach-Object { "$_" } } | Out-String } finally { Pop-Location }
 }
 # doc-drift is a LINT-ALL rule, not a `lint <file>` rule: `lint uCapPar.pas`
 # reports "0 finding(s)" on the very file `lint-all` reports the drift warning
@@ -148,7 +151,7 @@ function Get-StaleCount {
 }
 
 Set-Cap 6
-& $Exe index $dir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Invoke-InDir @('document', '--qname', 'uCapPar.Grab', '--db', $db, '--apply', '--no-backup') | Out-Null
 $text = Get-Content $file -Raw
 
@@ -169,7 +172,7 @@ if ($retFactLines.Count -ne 1 -or $shownCases -ne 6) {
 
 # The file changed, so the index must be refreshed before the checker reads it
 # -- doc-drift inflates against a stale index (a full session was lost to this).
-& $Exe index $dir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 Write-Host ''
 Write-Host 'POSITIVE: at cap 6 the checker AGREES with the writer' -ForegroundColor Cyan

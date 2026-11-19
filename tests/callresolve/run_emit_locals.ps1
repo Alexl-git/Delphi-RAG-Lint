@@ -25,7 +25,10 @@
   Run from a NEUTRAL CWD (C:\TEMP) so no drag-lint-lint.json is picked up.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -46,8 +49,8 @@ Copy-Item $fixture $target -Force
 # exactly ($null when none). Matching on qname disambiguates leaf-name
 # collisions across routines. --json prints a JSON array of matched symbols.
 function LocalByQName([string]$name, [string]$qname) {
-  $j = & $exePath query --name $name --db $db --json 2>$null | Out-String
-  $arr = $null; try { $arr = ($j | ConvertFrom-Json) } catch { $arr = $null }
+  $j = & { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --db $db --json 2>$null } | Out-String
+  $arr = $null; try { $arr = ($j | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $arr = $null }
   if ($null -eq $arr) { return $null }
   foreach ($s in @($arr)) { if ($s.kind -eq 'local_var' -and $s.qualified_name -eq $qname) { return $s } }
   return $null
@@ -58,15 +61,15 @@ function LocalByQName([string]$name, [string]$qname) {
 # rather than the first -- the overload-attribution proof is that TWO distinct
 # rows exist, each carrying its own overload's Signature.
 function LocalsByQName([string]$name, [string]$qname) {
-  $j = & $exePath query --name $name --db $db --json 2>$null | Out-String
-  $arr = $null; try { $arr = ($j | ConvertFrom-Json) } catch { $arr = $null }
+  $j = & { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --db $db --json 2>$null } | Out-String
+  $arr = $null; try { $arr = ($j | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $arr = $null }
   if ($null -eq $arr) { return @() }
   return @($arr | Where-Object { $_.kind -eq 'local_var' -and $_.qualified_name -eq $qname })
 }
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # --- L: plainly-typed CLASS local -> Signature = TWorker ---
   $l = LocalByQName 'L' 'locals.TWorker.Go.L'
@@ -85,7 +88,7 @@ try {
 
   # --- OVERLOAD: two Combine(...) overloads, each with its own Tmp local, same
   # qualified_name -- must attribute to the RIGHT overload (by Signature). ---
-  $combineTmps = LocalsByQName 'Tmp' 'locals.TWorker.Combine.Tmp'
+  $combineTmps = @(LocalsByQName 'Tmp' 'locals.TWorker.Combine.Tmp')
   Check 'both Combine overloads emit their own Tmp (2 rows, same qname)' `
     ($combineTmps.Count -eq 2)
   $tmpInt    = @($combineTmps | Where-Object { $_.signature -match '^\s*Integer\s*$' })

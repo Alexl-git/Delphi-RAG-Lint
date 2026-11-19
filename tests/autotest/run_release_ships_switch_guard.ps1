@@ -11,7 +11,10 @@
   matching line removed and must FAIL; a check that cannot fail proves nothing.
 #>
 [CmdletBinding()]
-param([string]$Repo = (Resolve-Path "$PSScriptRoot\..\..").Path)
+param([string]$Repo = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Repo) { $Repo = (Resolve-Path "$PSScriptRoot\..\..").Path }
 $ErrorActionPreference = 'Stop'
 $scratch = Join-Path $env:TEMP ("rssg-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $scratch | Out-Null

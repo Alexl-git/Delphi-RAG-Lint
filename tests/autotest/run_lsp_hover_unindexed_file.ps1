@@ -50,9 +50,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-hover-unindexed-guard-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -193,18 +196,18 @@ WriteAnsi $looseFile $looseText
 $libDb  = Join-Path $WorkDir 'library-Win64.sqlite'
 $env:DRAGLINT_CONTEXT_DEFAULTS = Join-Path $WorkDir 'no-defaults.json'
 $projDb = Join-Path $WorkDir 'proj.sqlite'
-& $Exe index "$WorkDir\libsrc"  --db $libDb  2>&1 | Out-Null
-& $Exe index "$WorkDir\projsrc" --db $projDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\libsrc"  --db $libDb  2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\projsrc" --db $projDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'built both fixture indexes' ((Test-Path $libDb) -and (Test-Path $projDb))
 
 # ---- PC2: the premise -- the loose file is in NEITHER database ----
 Write-Host ''
 Write-Host 'PC2: PREMISE -- the loose unit is indexed by nothing' -ForegroundColor Cyan
-$looseInLib  = (& $Exe query --name TLooseThing --db $libDb  --json 2>&1 | Out-String)
-$looseInProj = (& $Exe query --name TLooseThing --db $projDb --json 2>&1 | Out-String)
+$looseInLib  = (& { $ErrorActionPreference = 'Continue'; & $Exe query --name TLooseThing --db $libDb  --json 2>&1 | ForEach-Object { "$_" } } | Out-String)
+$looseInProj = (& { $ErrorActionPreference = 'Continue'; & $Exe query --name TLooseThing --db $projDb --json 2>&1 | ForEach-Object { "$_" } } | Out-String)
 Check 'TLooseThing absent from the library index' ($looseInLib  -notmatch '"name"\s*:\s*"TLooseThing"')
 Check 'TLooseThing absent from the project index' ($looseInProj -notmatch '"name"\s*:\s*"TLooseThing"')
-$applyInProj = (& $Exe query --name Apply --db $projDb --json 2>&1 | Out-String)
+$applyInProj = (& { $ErrorActionPreference = 'Continue'; & $Exe query --name Apply --db $projDb --json 2>&1 | ForEach-Object { "$_" } } | Out-String)
 Check 'Apply absent from the project index (as in the real report)' ($applyInProj -notmatch '"name"\s*:\s*"Apply"')
 
 # Positions are 0-based for LSP.
@@ -248,7 +251,7 @@ function Invoke-Hover([string]$File, [int]$Line0, [int]$Char0) {
   $raw = [System.IO.File]::ReadAllText($outF)
   $script:LastRaw = $raw
   foreach ($m in [regex]::Matches($raw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $m.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $m.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 2) { if ($null -eq $o.result) { return '' } else { return [string]$o.result.contents.value } }
   }
   return '<NO REPLY>'
@@ -280,7 +283,7 @@ function Invoke-Req([string]$File, [string]$Method, $Extra, [int]$Line0, [int]$C
   $raw = [System.IO.File]::ReadAllText($outF)
   $script:LastRaw = $raw
   foreach ($m in [regex]::Matches($raw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $m.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $m.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 2) { return $o.result }
   }
   return $null

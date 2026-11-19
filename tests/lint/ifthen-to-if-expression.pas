@@ -33,4 +33,27 @@ begin
     Exit;
 end;
 
+procedure Chain(A, B: Boolean; var X: Integer);
+begin
+  if A then
+    X := 1
+  else if B then
+    X := 2
+  else
+    X := 3;
+end;
+
+procedure NestedInBranch(A, B: Boolean; var X, Y: Integer);
+begin
+  if A then
+  begin
+    if B then
+      Y := 1
+    else
+      Y := 2;
+  end
+  else
+    X := 3;
+end;
+
 end.

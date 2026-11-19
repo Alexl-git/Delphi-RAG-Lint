@@ -1,0 +1,63 @@
+{
+  "id": "v152-ptw",
+  "title": "parameter-type-too-wide ON by default, with an autofix",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.52.0-alpha",
+  "summary": "parameter-type-too-wide ships ON as a warning in lint-all / lint-project with an autofix that retypes the parameter through the compile gate",
+  "intro": "Read this when lint-all reports parameter-type-too-wide and you want to fix it, or want to know why a similar routine is not reported. The rule reports a class-typed parameter whose routine uses only members an ancestor declares; it skips library code, overrides and virtual methods, interface methods, published and form-bound event handlers and routines taken as a method pointer. The fix re-proves the finding, retypes both routine headers, adds the ancestor's unit to uses when needed, and with --compile-gate keeps the edit only when the project still builds.",
+  "wikiPage": "v152-ptw",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "example": "drag-lint lint-all --db <project.sqlite> --rule parameter-type-too-wide"
+    },
+    {
+      "type": "cli",
+      "verb": "lint",
+      "example": "drag-lint lint <unit.pas> --db <project.sqlite> --rule parameter-type-too-wide --fix --fix-rule parameter-type-too-wide --apply --project <X.dproj> --compile-gate",
+      "usage": "drag-lint lint <unit.pas> --db <db> --rule parameter-type-too-wide --fix --fix-rule parameter-type-too-wide [--fix-line <n>] --apply --project <X.dproj> [--compile-gate | --no-compile-gate] [--library-db <lib>] [--no-backup]",
+      "flags": [
+        {
+          "name": "--fix-rule",
+          "arg": "parameter-type-too-wide"
+        },
+        {
+          "name": "--fix-line",
+          "arg": "<n>"
+        },
+        {
+          "name": "--compile-gate"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "questions": [
+    {
+      "ask": "Which parameters in my project could take a narrower type?",
+      "command": "drag-lint lint-all --db <project.sqlite> --rule parameter-type-too-wide"
+    },
+    {
+      "ask": "How do I narrow one reported parameter and keep the project building?",
+      "command": "drag-lint lint <unit.pas> --db <project.sqlite> --rule parameter-type-too-wide --fix --fix-rule parameter-type-too-wide --fix-line <n> --apply --project <X.dproj> --compile-gate"
+    },
+    {
+      "ask": "Why is my event handler not reported by parameter-type-too-wide?",
+      "command": "drag-lint narrow-param --routine <QName> --plan --db <project.sqlite>"
+    }
+  ],
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-11-17",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-11-18",
+    "by": "ENGINE",
+    "build": "1.51.1-alpha",
+    "surfaceHash": "a9f2e970840854267896dd1535c929a877a8a368528e641d44496181d885d0e1"
+  }
+}

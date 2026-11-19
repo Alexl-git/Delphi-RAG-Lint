@@ -17,7 +17,10 @@
   Exit code: 0 on full pass, 1 on any failure.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -69,8 +72,8 @@ end;
 
 end.
 '@ -replace "`r`n", "`n") -replace "`n", "`r`n"), [Text.Encoding]::ASCII)
-  $raw = (& $Exe lint $u --rule confusable-identifier --json 2>$null | Out-String)
-  $hits = @(try { $raw | ConvertFrom-Json } catch { })   # an engine without the rule prints an error, not JSON
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $u --rule confusable-identifier --json 2>$null } | Out-String)
+  $hits = @(try { $raw | ConvertFrom-Json | ForEach-Object { $_ } } catch { })   # an engine without the rule prints an error, not JSON
   $lines = @($hits | ForEach-Object { $_.start_line })
   Check 'R1 the later of two consts differing only by "_" is warned (line 7), naming the first' `
     ((@($hits | Where-Object { $_.start_line -eq 7 -and $_.message -match 'StationType_Operator" \(line 6\)' }).Count -eq 1)) "lines: $($lines -join ',')"
@@ -83,7 +86,7 @@ end.
   Check 'C2 CONTROL: locals of DIFFERENT routines (q_r in Q, qr in R) are not compared' `
     (($lines -notcontains 24) -and ($lines -notcontains 31)) ''
   Check 'C3 CONTROL: a local (MaxVal) is not compared with a unit-level var (Max_Val)' ($lines -notcontains 25) ''
-  $cat = @((& $Exe rules --json 2>$null | ConvertFrom-Json).rules | Where-Object { $_.id -eq 'confusable-identifier' })
+  $cat = @((& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }).rules | Where-Object { $_.id -eq 'confusable-identifier' })
   Check 'K1 the rule is in the catalog, naming, warning, on by default' `
     (($cat.Count -eq 1) -and ($cat[0].category -eq 'naming') -and ($cat[0].default_severity -eq 'warning') -and $cat[0].default_enabled) ''
 } finally {

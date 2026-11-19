@@ -15,7 +15,10 @@
   the self-contained scan, so that scan can fail.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
 $script:Checks = 0
@@ -57,11 +60,11 @@ try {
     [IO.File]::WriteAllText($p, $files[$k], [Text.Encoding]::ASCII)
   }
   $Db = Join-Path $Work 'arch.sqlite'
-  & $Exe index $Src --db $Db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $Src --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   if (-not (Test-Path $Db)) { Write-Host 'FATAL: index produced no DB'; exit 2 }
 
   $Html = Join-Path $Work 'arch.html'
-  $out = & $Exe arch-diagram --db $Db --output $Html 2>&1
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe arch-diagram --db $Db --output $Html 2>&1 | ForEach-Object { "$_" } }
   Check 'exit-0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
   Check 'file-written' (Test-Path $Html)
   $page = if (Test-Path $Html) { [IO.File]::ReadAllText($Html) } else { '' }
@@ -75,7 +78,7 @@ try {
   $m = [regex]::Match($page, '(?s)<script type="application/json" id="graph">(.*?)</script>')
   Check 'model-embedded' $m.Success
   $model = $null
-  try { $model = $m.Groups[1].Value | ConvertFrom-Json } catch { }
+  try { $model = $m.Groups[1].Value | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   Check 'schema' ($model.schema -eq 'drag-lint.arch/1') "schema=$($model.schema)"
   Check 'counts' (($model.units -eq 8) -and (@($model.zones).Count -eq 7)) "units=$($model.units) zones=$(@($model.zones).Count)"
 
@@ -119,7 +122,7 @@ try {
     $probe = Join-Path $Work 'probe.html'; $dom = Join-Path $Work 'dom.html'
     $js = '<script>zone(M.zones.findIndex(function(z){return z.name==="core"}));var a=P.textContent;edge(M.edges.findIndex(function(e){return e.kind==="back"}));document.title="PANEL|"+a+"|"+P.textContent+"|"+document.querySelectorAll("#d .edge.dim").length;</script></body>'
     [IO.File]::WriteAllText($probe, $page.Replace('</body>', $js), [Text.Encoding]::ASCII)
-    $b = Start-Process $edge -ArgumentList '--headless=new', '--disable-gpu', "--user-data-dir=$Work\edge", '--dump-dom', ('file:///' + $probe.Replace('\', '/')) -RedirectStandardOutput $dom -PassThru
+    $b = Start-Process $edge -ArgumentList '--headless=new', '--disable-gpu', "--user-data-dir=$Work\edge", '--dump-dom', ('file:///' + $probe.Replace('\', '/')) -RedirectStandardOutput $dom -PassThru; $null = $b.Handle
     # Edge's children outlive the process started here and hold the file: read it shared, until complete
     $text = ''; $until = (Get-Date).AddSeconds(120)
     while ((Get-Date) -lt $until -and -not $text.Contains('</html>')) {
@@ -139,18 +142,18 @@ try {
   } else { Write-Host '  [SKIP] panel: no Edge on this box' }
 
   $Html2 = Join-Path $Work 'arch2.html'
-  & $Exe arch-diagram --db $Db --output $Html2 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe arch-diagram --db $Db --output $Html2 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $same = (Test-Path $Html2) -and ([IO.File]::ReadAllText($Html2) -ceq $page)
   Check 'deterministic:same-bytes' $same
 
-  $json = (& $Exe arch-diagram --db $Db --json 2>&1 | Out-String).Trim()
+  $json = (& { $ErrorActionPreference = 'Continue'; & $Exe arch-diagram --db $Db --json 2>&1 | ForEach-Object { "$_" } } | Out-String).Trim()
   Check 'json:same-model-as-page' ($json -ceq $m.Groups[1].Value.Replace('<', '<')) "len=$($json.Length)"
 
-  & $Exe arch-diagram --db (Join-Path $Work 'none.sqlite') 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe arch-diagram --db (Join-Path $Work 'none.sqlite') 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'missing-db:exit-2' ($LASTEXITCODE -eq 2) "exit=$LASTEXITCODE"
   Check 'missing-db:not-created' (-not (Test-Path (Join-Path $Work 'none.sqlite')))
 
-  $dot = (& $Exe graph --db $Db --format dot 2>&1 | Out-String)
+  $dot = (& { $ErrorActionPreference = 'Continue'; & $Exe graph --db $Db --format dot 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check 'control:graph-dot-unchanged' ($dot -match 'digraph')
 } catch {
   # a throw must fail the guard: the checks after it never ran

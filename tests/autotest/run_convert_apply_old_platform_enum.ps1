@@ -23,9 +23,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_convert_old_platform_enum_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 $script:fail = $false
@@ -47,20 +50,20 @@ $orig  = [IO.File]::ReadAllBytes($unit)
 # two index roots: the old platform alone, and today's platform + the application
 $oldHome = Join-Path $WorkDir 'oldplat'
 [IO.Directory]::Move((Join-Path $WorkDir 'old'), $oldHome)
-& $Exe index $oldHome --db $oldDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $oldHome --db $oldDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $project = Join-Path $WorkDir 'project'
 [void][IO.Directory]::CreateDirectory($project)
 [IO.Directory]::Move((Join-Path $WorkDir 'cur'), (Join-Path $project 'cur'))
 [IO.Directory]::Move((Join-Path $WorkDir 'app'), (Join-Path $project 'app'))
 $unit = Join-Path $project 'app\EnumUser.pas'
-& $Exe index $project --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $project --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V both fixture indexes were built' ((Test-Path $oldDb) -and (Test-Path $db))
 
 function Apply([string]$Rules, [string[]]$Extra = @()) {
-  $o = (& $Exe @(@('convert-apply', '--unit', $unit, '--rules', (Join-Path $WorkDir $Rules), '--db', $db) + $Extra) 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @(@('convert-apply', '--unit', $unit, '--rules', (Join-Path $WorkDir $Rules), '--db', $db) + $Extra) 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $code = $LASTEXITCODE
   $j = $null
-  if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {} }
+  if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {} }
   return [pscustomobject]@{ Code = $code; Out = $o; J = $j }
 }
 function Kinds($j, [string]$k) { if ($null -eq $j) { return @() }; return @($j.items | Where-Object { $_.kind -eq $k }) }
@@ -70,8 +73,8 @@ function Texts($items) { return (($items | ForEach-Object { "$($_.line): $($_.te
 
 # ---- positive control: no flag ------------------------------------------------
 $r  = Apply 'enum.rules' @('--format', 'json')
-$ma = Kinds $r.J 'migrate-applied'
-$mc = Kinds $r.J 'migrate-check'
+$ma = @(Kinds $r.J 'migrate-applied')
+$mc = @(Kinds $r.J 'migrate-check')
 Check 'C1 no flag: JSON parsed, exit 0' (($r.Code -eq 0) -and ($null -ne $r.J)) $r.Out
 Check 'C2 ... today''s members map by name, never by ordinal' `
   (((Applied $ma 'pcrDefault' 'ncrDefault') -eq 1) -and ((Applied $ma 'pcrAdded' 'ncrAdded') -eq 1) -and ((Applied $ma 'pcrDefault' 'ncrNone') -eq 0)) (Show $ma)
@@ -84,8 +87,8 @@ Check 'C4 ... the enum only the old platform declares: rule-level migrate-check,
 $before = (Get-Item $oldDb).LastWriteTimeUtc
 $len    = (Get-Item $oldDb).Length
 $r  = Apply 'enum.rules' @('--old-platform-db', $oldDb, '--format', 'json')
-$ma = Kinds $r.J 'migrate-applied'
-$mc = Kinds $r.J 'migrate-check'
+$ma = @(Kinds $r.J 'migrate-applied')
+$mc = @(Kinds $r.J 'migrate-check')
 Check 'F1 --old-platform-db: JSON parsed, exit 0' (($r.Code -eq 0) -and ($null -ne $r.J)) $r.Out
 Check 'F2 ... pcrSQLWait, in the old enum only, maps by name' ((Applied $ma 'pcrSQLWait' 'ncrSQLWait') -eq 1) (Show $ma)
 Check 'F3 ... pcrDefault / pcrHourGlass by name, never by ordinal (ncrNone is ordinal 0)' `
@@ -100,8 +103,8 @@ Check 'F8 ... no rule-level complaint about TGoneCursor any more' (@($mc | Where
 
 # ---- explicit member lines beat the name match ---------------------------------
 $r  = Apply 'explicit.rules' @('--old-platform-db', $oldDb, '--format', 'json')
-$ma = Kinds $r.J 'migrate-applied'
-$mc = Kinds $r.J 'migrate-check'
+$ma = @(Kinds $r.J 'migrate-applied')
+$mc = @(Kinds $r.J 'migrate-check')
 Check 'E1 explicit lines win: pcrOther -> ncrNone, pcrSQLWait -> ncrHourGlass, not ncrSQLWait' `
   (((Applied $ma 'pcrOther' 'ncrNone') -eq 1) -and ((Applied $ma 'pcrSQLWait' 'ncrHourGlass') -eq 1) -and ((Applied $ma 'pcrSQLWait' 'ncrSQLWait') -eq 0)) (Show $ma)
 Check 'E2 ... so no member warning is left' (@($mc | Where-Object { $_.text -match 'no counterpart' }).Count -eq 0) (Texts $mc)
@@ -122,8 +125,8 @@ Check 'A6 ... the old-platform index was not written' (((Get-Item $oldDb).LastWr
 $r = Apply 'enum.rules' @('--old-platform-db', (Join-Path $WorkDir 'nosuch.sqlite'), '--apply', '--no-backup', '--no-reindex')
 Check 'R1 a missing old-platform index: exit 2, it says so' (($r.Code -eq 2) -and ($r.Out -match '--old-platform-db')) $r.Out
 Check 'R2 ... and nothing was written' ([IO.File]::ReadAllText($unit, [Text.Encoding]::ASCII).Contains('C:= pcrSQLWait;'))
-$info = (& $Exe info --json --db $db 2>&1) -join "`n"
-$ij = $null; try { $ij = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json } catch {}
+$info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
+$ij = $null; try { $ij = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'G1 info capability old_platform_enum_map' ($ij.capabilities.old_platform_enum_map -eq $true) $info.Substring(0,[Math]::Min(300,$info.Length))
 
 if ($script:fail) { Write-Host 'FAILED' -ForegroundColor Red; exit 1 }

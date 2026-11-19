@@ -20,7 +20,7 @@ Each alias group has exactly one **canonical** spelling. Today's table:
 | `--force-reparse` | `--no-skip` | the first spelling of the re-parse switch |
 | `--help` | `-h`, `-?` | the short tokens every CLI user tries first |
 | `--in` | `--file` | one input-file option (`TArgs.InFile`); `--in` is the spelling the `ask` verb's own parser accepts, so it is the one that works on every verb |
-| `--output` | `--out` | ENG-6 back-compat |
+| `--output` | `--out`, `--report` | ENG-6 back-compat; `--report` since 1.52 (SMALLS: the lint-all report file) |
 | `--scan-libraries-win` | `--scan-libraries` | the spelling before `--scan-libraries-all` existed |
 
 ## The rules

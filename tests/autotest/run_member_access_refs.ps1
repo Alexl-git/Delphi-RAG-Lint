@@ -84,9 +84,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-member-access-refs-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -154,7 +157,7 @@ Write-Ascii (Join-Path $work 'u.pas') $UBody
 $db = Join-Path $WorkDir 'memberAccess.sqlite'
 
 Write-Host 'Indexing fixture (deep usage refs on by default for a project index)' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 $indexExit = $LASTEXITCODE
 Check 'index exits 0' ($indexExit -eq 0) "exit=$indexExit; $($indexOut -join ' | ')"
 
@@ -177,7 +180,7 @@ c.close()
 
 function Get-Refs([string]$Name, [string]$Kind) {
   $raw = (python $py $db $Name $Kind) -join "`n"
-  return ($raw | ConvertFrom-Json)
+  return ($raw | ConvertFrom-Json | ForEach-Object { $_ })
 }
 
 Write-Host ''
@@ -235,7 +238,7 @@ if (-not (Test-Path $floodSrc)) {
 
   $floodDb = Join-Path $floodWork 'apflood.sqlite'
   Write-Host '  Indexing ap.pas standalone (deep usage refs on by default for a project index)' -ForegroundColor Cyan
-  $floodIndexOut = & $Exe index $floodFixture --db $floodDb 2>&1
+  $floodIndexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $floodFixture --db $floodDb 2>&1 | ForEach-Object { "$_" } }
   $floodIndexExit = $LASTEXITCODE
   Check 'flood-check index exits 0' ($floodIndexExit -eq 0) "exit=$floodIndexExit; $($floodIndexOut -join ' | ')"
 
@@ -250,7 +253,7 @@ c.close()
 '@ | Set-Content $pyKind -Encoding ascii
 
   $kindCountsRaw = (python $pyKind $floodDb) -join "`n"
-  $kindCounts = $kindCountsRaw | ConvertFrom-Json
+  $kindCounts = $kindCountsRaw | ConvertFrom-Json | ForEach-Object { $_ }
   $kindMap = @{}
   foreach ($row in $kindCounts) { $kindMap[$row.kind] = $row.count }
 
@@ -289,7 +292,7 @@ print(json.dumps(rows))
 c.close()
 '@ | Set-Content $pySample -Encoding ascii
   $maSampleRaw = (python $pySample $floodDb) -join "`n"
-  $maSample = $maSampleRaw | ConvertFrom-Json
+  $maSample = $maSampleRaw | ConvertFrom-Json | ForEach-Object { $_ }
   Write-Host ("  member-access sample (first 10, for manual spot-check against ap.pas source): " + ($maSample | ConvertTo-Json -Compress)) -ForegroundColor Cyan
   Check 'flood-check: member-access sample rows carry a non-empty member name_text' `
     (@($maSample | Where-Object { [string]::IsNullOrEmpty($_.name_text) }).Count -eq 0) `

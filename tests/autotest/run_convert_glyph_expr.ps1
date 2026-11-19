@@ -45,9 +45,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-convert-glyph-expr-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 # convert-validate exits 1 on a rules error, which is the EXPECTED outcome for
@@ -78,7 +81,7 @@ function Invoke-Validate([string]$Body, [string[]]$Extra = @()) {
   $script:Seq++
   $p = Join-Path $WorkDir ("case{0:D2}.rules" -f $script:Seq)
   Write-Ascii $p $Body
-  $raw = (& $Exe convert-validate --rules $p @Extra 2>&1) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules $p @Extra 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return @{ Exit = $LASTEXITCODE; Raw = $raw }
 }
 
@@ -224,7 +227,7 @@ object MyForm: TMyForm
 end
 '@
 $db = Join-Path $WorkDir 'glyph.sqlite'
-$idx = & $Exe index $WorkDir --db $db 2>&1
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index the fixture' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($idx -join ' | ')"
 
 $gRules = Join-Path $WorkDir 'glinked.rules'
@@ -232,15 +235,15 @@ Write-Ascii $gRules "#convert GlyphLib.TSrcBtn -> GlyphLib.TDstBtn`n#link Captio
 $plainRules = Join-Path $WorkDir 'plain.rules'
 Write-Ascii $plainRules "#convert GlyphLib.TSrcBtn -> GlyphLib.TDstBtn`n#link Caption <- Caption`n#link Glyph <- Picture`n"
 
-$raw = (& $Exe convert-validate --rules $gRules --from GlyphLib.TSrcBtn --to GlyphLib.TDstBtn --db $db 2>&1) -join "`n"
+$raw = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules $gRules --from GlyphLib.TSrcBtn --to GlyphLib.TDstBtn --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'with trees: the stripped FromPath "Picture" validates against --from' `
   (($LASTEXITCODE -eq 0) -and ($raw -match '(?m)^OK\s*$')) "exit=$LASTEXITCODE raw=$raw"
 
 Push-Location $appDir
 try {
-  $raw = (& $Exe convert-apply --unit 'MyForm.pas' --rules $plainRules --db $db 2>&1) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'MyForm.pas' --rules $plainRules --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $plainExit = $LASTEXITCODE
-  $rawG = (& $Exe convert-apply --unit 'MyForm.pas' --rules $gRules --db $db 2>&1) -join "`n"
+  $rawG = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'MyForm.pas' --rules $gRules --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $gExit = $LASTEXITCODE
 } finally { Pop-Location }
 Check 'CONTROL: convert-apply converts the same book WITHOUT the G-expression' `

@@ -44,9 +44,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-qname-row-order-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -124,7 +127,7 @@ end.
 
 $db = Join-Path $WorkDir 'ord.sqlite'
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($indexOut -join ' | ')"
 
 # --- Probes. ----------------------------------------------------------------------
@@ -141,10 +144,10 @@ function Sql([string]$Q) { return ((python $script:PySql $db $Q) -join "`n").Tri
 function HoverDefLine([string]$QName) {
   # ToString() rather than a String method: 2>&1 folds stderr in as ErrorRecord
   # objects, and calling .TrimStart() on one of those is a runtime error.
-  $raw = @(& $Exe hover --qname $QName --db $db --format json 2>&1) |
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname $QName --db $db --format json 2>&1 | ForEach-Object { "$_" } }) |
            ForEach-Object { "$_" } | Where-Object { $_.TrimStart().StartsWith('{') }
   if (-not $raw) { return '<no json>' }
-  return ([string]($raw | Select-Object -First 1) | ConvertFrom-Json).def_line
+  return ([string]($raw | Select-Object -First 1) | ConvertFrom-Json | ForEach-Object { $_ }).def_line
 }
 # The engine's own stub predicate, transcribed (see the suite header).
 $stubTerm = "kind IN ('class','interface') AND COALESCE(TRIM(heritage),'')='' AND end_line<=start_line"

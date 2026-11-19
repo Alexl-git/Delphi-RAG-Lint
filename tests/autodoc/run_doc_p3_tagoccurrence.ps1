@@ -50,7 +50,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Continue'
@@ -147,7 +150,7 @@ try {
   $blocks  = @()   # $blocks[cycle-1][shape]
   $applyJson = @()
   for ($cycle = 1; $cycle -le 3; $cycle++) {
-    & $exePath index $scratch --db $db 2>$null | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
     Check "cycle $cycle : index exits 0" ($LASTEXITCODE -eq 0)
     # v(ADP3 T3k, Group 2b item 6): the --json payload used to be piped straight
     # to Out-Null. Exit codes were checked and the bytes asserted byte-exactly,
@@ -156,7 +159,7 @@ try {
     # rewrite the file with the identical bytes would report the same md5 and
     # the same exit code while doing work it must not do. Captured and asserted
     # below, the same treatment the other runners in this suite got.
-    $j = (& $exePath document --unit $target --db $db --apply --json 2>$null) -join "`n"
+    $j = (& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply --json 2>$null }) -join "`n"
     Check "cycle $cycle : document --unit --apply exits 0" ($LASTEXITCODE -eq 0)
     $applyJson += $j
     Check "cycle $cycle : --json payload is non-empty and carries an edits count" `
@@ -411,9 +414,9 @@ try {
   # =====================================================================
   # STRIP ROUND-TRIP -- this task's acceptance criterion.
   # =====================================================================
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   Check 'pre-strip index exits 0' ($LASTEXITCODE -eq 0)
-  & $exePath document --unit $target --db $db --strip --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --strip --apply 2>$null } | Out-Null
   Check 'strip --apply exits 0' ($LASTEXITCODE -eq 0)
 
   $strippedLines = ([IO.File]::ReadAllLines($target) -replace '</?para>','')

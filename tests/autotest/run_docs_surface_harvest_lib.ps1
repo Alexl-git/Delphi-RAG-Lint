@@ -12,7 +12,10 @@
   the two source-level facts about it are kept here.)
 #>
 [CmdletBinding()]
-param([string]$Repo = (Resolve-Path "$PSScriptRoot\..\..").Path)
+param([string]$Repo = '', [Parameter(Mandatory)][string]$Exe)
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Repo) { $Repo = (Resolve-Path "$PSScriptRoot\..\..").Path }   # 152 TESTS: -Exe, no default engine
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -42,6 +45,8 @@ Check 'live captions harvested (>= 40)' ($caps.Count -ge 40) "($($caps.Count))"
 Check 'a real caption is present' ($caps.Contains('About')) "'About'"
 Check 'an invented caption is absent' (-not $caps.Contains('Zz Not A Real Menu Item'))
 Check 'a Reports catalog caption is present' ($caps.Contains('Who calls this routine...'))
+# 1.52 Cmd152 table: each command keeps its caption in its own DragLint.Plugin.Cmd.<Name>.pas unit.
+Check 'a Cmd152 command-unit caption is present (Cmd.FixMarker)' ($caps.Contains('Fix with drag-lint (finding at cursor)'))
 
 # --- dialog buttons are harvested APART from menu items ----------------------
 # A '.Caption :=' on a variable declared or created as a TButton / TBitBtn /
@@ -85,16 +90,24 @@ $cmpA = Compare-HarvestSets 'ctl' @('a', 'b') @('a', 'b')
 $cmpB = Compare-HarvestSets 'ctl' @('a', 'b') @('a', 'c')
 Check 'POSITIVE CONTROL: the set comparison is equal for equal sets and names a seeded difference' ($cmpA.Equal -and (-not $cmpB.Equal) -and ($cmpB.OnlyPs -contains 'b') -and ($cmpB.OnlyPort -contains 'c'))
 . (Join-Path $Repo 'tools\featuregen-ensure.ps1')
-$engine = Join-Path $Repo 'third_party\dll-win64\drag-lint.exe'
+$engine = $Exe
 $fgExe = $null
 try { $fgExe = Get-FeatureGenExe -Repo $Repo } catch { Check 'featuregen.exe is available and current' $false $_.Exception.Message }
 if ($fgExe -and -not (Test-Path -LiteralPath $engine)) { Check 'engine available for the parity run' $false $engine; $fgExe = $null }
+# dump-live's menu-tree reads THIS checkout's plugin index (gitignored): a fresh worktree lacks it (exit 2,
+# 'project not in db') and an existing one goes stale on any plugin edit (exit 3). Refresh it incrementally,
+# exactly as run_feature_registry_guard.ps1 does (PLUGIN-IDX-GUARD); this checkout's _D-RAG only.
 if ($fgExe) {
-  $dump = @(& $fgExe dump-live --repo $Repo --engine $engine 2>&1)
+  $plugDb = Join-Path $Repo 'src\delphi-plugin\_D-RAG\dclDragLintWizard.sqlite'
+  [void](New-Item -ItemType Directory -Force -Path (Split-Path -Parent $plugDb))
+  & { $ErrorActionPreference = 'Continue'; & $engine index --project (Join-Path $Repo 'src\delphi-plugin\dclDragLintWizard.dproj') --db $plugDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
+}
+if ($fgExe) {
+  $dump = @(& { $ErrorActionPreference = 'Continue'; & $fgExe dump-live --repo $Repo --engine $engine 2>&1 | ForEach-Object { "$_" } })
   Check 'featuregen dump-live succeeds' ($LASTEXITCODE -eq 0) (($dump | Select-Object -First 3) -join ' / ')
   $portVerbs = @($dump | Where-Object { "$_" -like "verb`t*" } | ForEach-Object { ("$_" -split "`t", 2)[1] })
   $portCaps = @($dump | Where-Object { "$_" -like "caption`t*" } | ForEach-Object { ("$_" -split "`t", 2)[1] })
-  $help = (& $engine --help 2>&1 | Out-String)
+  $help = (& { $ErrorActionPreference = 'Continue'; & $engine --help 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $psVerbs = @(Get-HelpVerbList -HelpText $help)
   $psCaps = @((Get-LiveMenuCaptions -Repo $Repo -ExcludeDialogButtons))
   Check 'both harvests are non-trivial (verbs >= 20, captions >= 40)' (($psVerbs.Count -ge 20) -and ($portVerbs.Count -ge 20) -and ($psCaps.Count -ge 40) -and ($portCaps.Count -ge 40)) "(verbs ps=$($psVerbs.Count) port=$($portVerbs.Count); captions ps=$($psCaps.Count) port=$($portCaps.Count))"

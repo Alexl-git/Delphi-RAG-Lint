@@ -303,9 +303,9 @@ var
     F.Message  := AMessage;
     F.FilePath := AFile;
     F.StartLine:= Integer(P.Row) + 1;
-    F.StartCol := Integer(P.Column) + 1;
+    F.StartCol := TAstParseCache.CharCol(F.FilePath, P); { 1.52 BK-COLS2: character column }
     F.EndLine  := Integer(ANode.EndPoint.Row) + 1;
-    F.EndCol   := Integer(ANode.EndPoint.Column) + 1;
+    F.EndCol   := TAstParseCache.CharCol(F.FilePath, ANode.EndPoint); { 1.52 BK-COLS2: character column }
     Findings.Add(F);
   end;
 

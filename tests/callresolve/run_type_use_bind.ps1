@@ -25,7 +25,10 @@
   Usage: pwsh -File tests\callresolve\run_type_use_bind.ps1 [-Exe <drag-lint.exe>]
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'
@@ -46,10 +49,10 @@ $use = Join-Path $scratch 'uTuUse.pas'
 $db  = Join-Path $scratch 'typeuses.sqlite'
 
 function Sql([string]$Query) {
-  $raw = (& $exePath sql --db $db --json --limit 1000 --query $Query 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --limit 1000 --query $Query 2>$null }) -join "`n"
   $b = $raw.IndexOf('{')
   if ($b -lt 0) { throw "sql returned no JSON for: $Query" }
-  $o = $raw.Substring($b) | ConvertFrom-Json
+  $o = $raw.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }
   $names = @($o.columns | ForEach-Object { $_.name })
   $out = @()
   foreach ($r in @($o.rows)) {
@@ -71,7 +74,7 @@ function TypeUseAt([string]$Marker, [string]$Name) {
                 "AND r.start_line = $line AND r.name_text = '$Name'") | Where-Object { $_ })
 }
 
-$log = & $exePath index $scratch --db $db 2>&1
+$log = & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 $pos = @(

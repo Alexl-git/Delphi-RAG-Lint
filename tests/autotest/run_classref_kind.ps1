@@ -20,7 +20,13 @@
   Usage: pwsh -File tests\autotest\run_classref_kind.ps1 [-Exe <drag-lint.exe>]
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -38,10 +44,10 @@ Copy-Item (Join-Path $fixDir '*') $scratch
 $db = Join-Path $scratch 'classref.sqlite'
 
 function Sql([string]$Query) {
-  $raw = (& $exePath sql --db $db --json --limit 1000 --query $Query 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --limit 1000 --query $Query 2>$null }) -join "`n"
   $b = $raw.IndexOf('{')
   if ($b -lt 0) { throw "sql returned no JSON for: $Query" }
-  $o = $raw.Substring($b) | ConvertFrom-Json
+  $o = $raw.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }
   $names = @($o.columns | ForEach-Object { $_.name })
   $out = @()
   foreach ($r in @($o.rows)) {
@@ -52,7 +58,7 @@ function Sql([string]$Query) {
   return ,@($out)
 }
 
-& $exePath index $scratch --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 $cr = (Sql "SELECT id, kind, qualified_name AS q, signature AS sig, heritage AS her FROM symbols WHERE name = 'TFormClass' ORDER BY qualified_name")
@@ -84,3 +90,4 @@ exit 0
   Write-Host "FATAL: $_"
   exit 2
 }
+} finally { Remove-WorkDir $scratch -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

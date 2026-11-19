@@ -136,7 +136,7 @@ type
     /// <returns>True when the verb should exit 0.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoImpactAllProjects (DRagLint.CLI.pas), DRagLint.Query.CrossImpact.CrossImpactToJson (DRagLint.Query.CrossImpact.pas)</para>
+    /// <para>Called from: DRagLint.CLI.Wiring.DoImpactAllProjects (DRagLint.CLI.Wiring.pas), DRagLint.Query.CrossImpact.CrossImpactToJson (DRagLint.Query.CrossImpact.pas)</para>
     /// <para>Returns: Length(Declarations) &gt; 0</para>
     /// <para>Reads: Declarations, Sections</para>
     /// <para>Effect-free (proven)</para>
@@ -168,7 +168,7 @@ type
 /// database it cannot read: that is a row. Caller levels are the same name-based walk
 /// as the single-database verb, so they may include same-named other routines.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoImpactAllProjects (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.Wiring.DoImpactAllProjects (DRagLint.CLI.Wiring.pas)</para>
 /// <para>Calls: Default, DRagLint.Query.CrossImpact.AnswerSection, DRagLint.Query.CrossImpact.SectionKind, ExpandFileName, LowerCase, pRepair</para>
 /// <para>Returns: Default(TCrossImpactReport)</para>
 /// <para>Complexity: 10 (cyclomatic, outer body), 51 lines (full implementation)</para>
@@ -186,7 +186,7 @@ function BuildCrossImpact(const pPlan: TIndexPlan; const pQName: string; pDepth:
 /// The caller frees it.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoImpactAllProjects (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.Wiring.DoImpactAllProjects (DRagLint.CLI.Wiring.pas)</para>
 /// <para>Calls: DRagLint.Query.CrossImpact.StateText, DRagLint.Query.CrossImpact.TCrossImpactReport.Complete, DRagLint.Query.CrossImpact.TCrossImpactReport.Found</para>
 /// <para>Returns: TJSONObject.Create</para>
 /// <para>Owns returned: new (caller owns)</para>
@@ -203,7 +203,7 @@ function CrossImpactToJson(const pReport: TCrossImpactReport): TJSONObject;
 /// Sections that answered with no declaration and no reference share one line.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoImpactAllProjects (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.Wiring.DoImpactAllProjects (DRagLint.CLI.Wiring.pas)</para>
 /// <para>Calls: DRagLint.Query.CrossImpact.HasNothing, DRagLint.Query.CrossImpact.TCrossImpactReport.Complete, DRagLint.Query.CrossImpact.WriteSectionText, Format</para>
 /// <para>Returns: Sb.ToString</para>
 /// <seealso cref="DRagLint.Query.CrossImpact.HasNothing"/>

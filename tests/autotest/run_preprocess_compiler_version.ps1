@@ -24,9 +24,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-compiler-version-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $savedBds = $env:BDS
 try {
 $ErrorActionPreference = 'Stop'
@@ -73,11 +76,11 @@ end.
 function IndexWith([string]$Bds, [string]$Name, [string[]]$Extra = @()) {
   $env:BDS = $Bds
   $db = Join-Path $WorkDir "$Name.sqlite"
-  & $Exe index (Join-Path $WorkDir 'src') --db $db --quiet @Extra 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $WorkDir 'src') --db $db --quiet @Extra 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $code = $LASTEXITCODE
   $has = @{}
   foreach ($n in @('ModernApi', 'AncientApi', 'RioOnly', 'FlorenceOnly')) {
-    & $Exe query --name $n --db $db --exact 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $Exe query --name $n --db $db --exact 2>&1 | ForEach-Object { "$_" } } | Out-Null
     $has[$n] = ($LASTEXITCODE -eq 0)
   }
   return @{ Code = $code; Has = $has; Db = $db }

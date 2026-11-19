@@ -34,7 +34,10 @@
   Usage: pwsh -File tests\callresolve\run_interface_dispatch_consumers.ps1 [-Exe <drag-lint.exe>]
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'
@@ -59,7 +62,7 @@ function LineOf([string]$Needle) {
   throw "fixture line not found: $Needle"
 }
 
-$null = & $exePath index $scratch --db $db 2>&1 | Out-String
+$null = & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
 $IFACE = 'uIfaceCopy.ICopy.TransferFile'
@@ -74,7 +77,7 @@ $shadowLine = LineOf "MakeCopy.TransferFile('shadow');"
 $VIA = "via interface dispatch ($IFACE)"
 
 # Split the text form into per-target blocks: header `  <qname>:` then its rows.
-$txt = (& $exePath query find-callers --name TransferFile --resolved --db $db 2>$null | Out-String) -split "`r?`n"
+$txt = (& { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name TransferFile --resolved --db $db 2>$null } | Out-String) -split "`r?`n"
 $blocks = @{}; $cur = $null
 foreach ($l in $txt) {
   if ($l -match '^  (\S+):\s*$') { $cur = $Matches[1]; $blocks[$cur] = New-Object System.Collections.ArrayList; continue }
@@ -108,21 +111,21 @@ Check 'FC2 control: no class-typed line is in the via block' (@($vlImpl | Where-
 $dlO = @(LinesIn (DirectRows $OTHER))
 Check 'FC2 TOtherCopy direct = the shadowed site only' (($dlO -join ',') -eq "$shadowLine") "got=$($dlO -join ',')"
 
-$jraw = (& $exePath query find-callers --name TransferFile --resolved --json --db $db 2>$null) -join "`n"
-$j = @($jraw.Substring($jraw.IndexOf('[')) | ConvertFrom-Json)
+$jraw = (& { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name TransferFile --resolved --json --db $db 2>$null }) -join "`n"
+$j = @(($jraw.Substring($jraw.IndexOf('[')) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 $withVia = @($j | Where-Object { $_.PSObject.Properties.Name -contains 'via' })
 Check 'FC3 json: 16 via rows (8 per implementor)' ($withVia.Count -eq 16) "n=$($withVia.Count)"
 Check 'FC3 json: every via row names the interface method, kind interface' (@($withVia | Where-Object { $_.via -ne $IFACE -or $_.via_kind -ne 'interface' }).Count -eq 0)
 Check 'FC3 json: no row to the interface itself carries via' (@($j | Where-Object { $_.target_qname -eq $IFACE -and ($_.PSObject.Properties.Name -contains 'via') }).Count -eq 0)
 
-$imI = (& $exePath impact --qname $IFACE --db $db 2>&1 | Out-String)
+$imI = (& { $ErrorActionPreference = 'Continue'; & $exePath impact --qname $IFACE --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String)
 Check 'IM1 impact on the interface method lists both implementors' (($imI -match [regex]::Escape($IMPL)) -and ($imI -match [regex]::Escape($OTHER)) -and ($imI -match 'implementor')) $imI.Trim()
-$imC = (& $exePath impact --qname $IMPL --db $db 2>&1 | Out-String)
+$imC = (& { $ErrorActionPreference = 'Continue'; & $exePath impact --qname $IMPL --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String)
 Check 'IM2 impact on an implementor: via interface dispatch, 8 site(s)' ($imC -like "*${VIA}: 8 site(s)*") $imC.Trim()
-$imJ = (& $exePath impact --qname $IFACE --format json --db $db 2>&1 | Out-String)
+$imJ = (& { $ErrorActionPreference = 'Continue'; & $exePath impact --qname $IFACE --format json --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String)
 Check 'IM1 json carries an implementors array' ($imJ -match '"implementors"')
 
-$cx = (& $exePath context --task "modify TImplCopy.TransferFile" --db $db --format markdown --max-callers 20 2>$null | Out-String)
+$cx = (& { $ErrorActionPreference = 'Continue'; & $exePath context --task "modify TImplCopy.TransferFile" --db $db --format markdown --max-callers 20 2>$null } | Out-String)
 $ix = $cx.IndexOf("Callers via interface dispatch ($IFACE)")
 Check 'CX1 context has the via section' ($ix -ge 0)
 if ($ix -ge 0) {
@@ -133,11 +136,11 @@ if ($ix -ge 0) {
   Check 'CX1 control: no class-typed line in the via section' (@($got | Where-Object { $classLines -contains $_ }).Count -eq 0)
 }
 
-$cx5 = (& $exePath context --task "modify TImplCopy.TransferFile" --db $db --format markdown 2>$null | Out-String)
+$cx5 = (& { $ErrorActionPreference = 'Continue'; & $exePath context --task "modify TImplCopy.TransferFile" --db $db --format markdown 2>$null } | Out-String)
 Check 'CX2 default cap (5): header still reports the true 8 site(s)' ($cx5 -like "*Callers via interface dispatch (${IFACE}): 8 site(s)*")
-$cp = (& $exePath call-path --from uIfaceUser.ViaLocal --to $IMPL --db $db 2>$null | Out-String).Trim()
+$cp = (& { $ErrorActionPreference = 'Continue'; & $exePath call-path --from uIfaceUser.ViaLocal --to $IMPL --db $db 2>$null } | Out-String).Trim()
 Check 'CP1 interface-typed caller reaches the implementor' ($LASTEXITCODE -eq 0 -and $cp -eq "uIfaceUser.ViaLocal -> $IFACE -> $IMPL") $cp
-$cp2 = (& $exePath call-path --from uIfaceUser.ViaClass --to $OTHER --db $db 2>$null | Out-String).Trim()
+$cp2 = (& { $ErrorActionPreference = 'Continue'; & $exePath call-path --from uIfaceUser.ViaClass --to $OTHER --db $db 2>$null } | Out-String).Trim()
 Check 'CP2 control: class-typed caller does NOT reach the other implementor' ($LASTEXITCODE -eq 1) $cp2
 
 if ($script:fail) { Write-Host 'FAIL'; exit 1 } else { Write-Host 'PASS'; exit 0 }

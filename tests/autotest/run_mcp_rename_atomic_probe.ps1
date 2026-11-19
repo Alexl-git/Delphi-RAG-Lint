@@ -12,9 +12,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_mcp_atomic_probe_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'; $script:fail = $false
 $env:DRAGLINT_RENAME_TEST_UNGATED = '1' # lane 144: these fixtures do not compile; run_rename_precise.ps1 proves the gate
@@ -34,7 +37,7 @@ function New-Fixture([string]$Name) {
   Write-Ascii (Join-Path $src 'P.dpr') "program P;`r`n`r`nuses uLib, uUse;`r`n`r`nbegin`r`n  Go;`r`nend.`r`n"
   $db = Join-Path $WorkDir "$Name\p.sqlite"
   $env:DRAGLINT_RULE_CACHE = '0'
-  & $Exe index --project (Join-Path $src 'P.dpr') --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $src 'P.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $env:DRAGLINT_RULE_CACHE = $null
   [pscustomobject]@{ Src = $src; Db = $db }
 }
@@ -52,7 +55,7 @@ function Ask($p, $id, $method, $params) {
   $p.StandardInput.Flush()
   $t = $p.StandardOutput.ReadLineAsync()
   if (-not $t.Wait(30000)) { throw "no answer to $method" }
-  $t.Result | ConvertFrom-Json
+  $t.Result | ConvertFrom-Json | ForEach-Object { $_ }
 }
 function Open-Session($db) {
   $p = Start-Serve $db

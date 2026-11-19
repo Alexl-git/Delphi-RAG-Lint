@@ -83,9 +83,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\dlflush_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -189,7 +192,7 @@ Write-Host 'Scenario A: an abnormally-killed index leaves a COMPLETE log' -Foreg
 
 $p = Start-Process -FilePath $Exe `
        -ArgumentList 'index', "`"$srcDir`"", '--db', "`"$db`"" `
-       -NoNewWindow -PassThru -RedirectStandardOutput $log -RedirectStandardError $err
+       -NoNewWindow -PassThru -RedirectStandardOutput $log -RedirectStandardError $err; $null = $p.Handle
 
 # Wait until output is well past the first 128-byte buffer, so the samples are
 # taken inside the per-file progress loop rather than during start-up.

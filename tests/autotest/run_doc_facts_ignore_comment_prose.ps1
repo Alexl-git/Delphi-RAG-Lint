@@ -44,9 +44,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-doc-comment-prose-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -107,9 +110,9 @@ $norm = ($FixtureBody -replace "`r`n", "`n") -replace "`n", "`r`n"
 [System.IO.File]::WriteAllText($file, $norm, [System.Text.Encoding]::ASCII)
 
 $db = Join-Path $WorkDir 'fx.sqlite'
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Push-Location $WorkDir
-try { & $Exe document --qname uProse2.Worker --db $db --apply --no-backup 2>&1 | Out-Null }
+try { & { $ErrorActionPreference = 'Continue'; & $Exe document --qname uProse2.Worker --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null }
 finally { Pop-Location }
 
 $text = ((Get-Content $file -Raw) -replace '</?para>','')

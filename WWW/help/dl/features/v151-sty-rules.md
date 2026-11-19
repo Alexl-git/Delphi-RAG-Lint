@@ -4,10 +4,10 @@ title: Style, loop and ordering rules
 summary: Eleven style and loop lint rules (begin/end, if-chains, SetLength and repaint in loops, loop bounds, method order); five are on by default
 product: DL
 group: linting
-order: 30055
+order: 30058
 since: 1.51.0-alpha
 status: shipped
-updated: 1.51.0-alpha
+updated: 1.52.0-alpha
 ---
 
 # Style, loop and ordering rules
@@ -19,7 +19,7 @@ Read this when you want lint to flag loop and layout habits that cost time or hi
 ## How to run it
 
 ```text
-drag-lint lint <path> [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>|help] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]
+drag-lint lint <path> [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>|help] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>] [--no-budget]
 ```
 
 Full flag list: [lint in the CLI reference](../cli.md#lint).

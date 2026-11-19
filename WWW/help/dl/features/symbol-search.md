@@ -4,10 +4,10 @@ title: Symbol Search
 summary: Searches symbols by name across the indexed projects
 product: DL
 group: search-navigation
-order: 20031
+order: 20032
 since: 0.1.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # Symbol Search

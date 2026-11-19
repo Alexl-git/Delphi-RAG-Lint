@@ -10,8 +10,11 @@
 # Fix (risky): deletes the `virtual;` / `dynamic;` directive; expected\uV.fixed.pas is hand-written.
 # Usage: pwsh -File tests/autotest/run_virtual_never_overridden.ps1 [-Exe <path>]
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+param([string]$Exe = '',
       [string]$WorkDir = "$env:TEMP\drag-lint-g8-vno-$PID")
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\g8-common.ps1"
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
@@ -33,11 +36,11 @@ try {
   # --- fix
   $pas = Join-Path $fx 'uV.pas'
   $want = Join-Path $PSScriptRoot "..\lint-project\$rule\expected\uV.fixed.pas"
-  $fixArgs = @('--config', $cfg, '--fix', '--fix-rule', $rule, '--apply', '--no-backup')
-  & $Exe lint-all --db $db --rule $rule @fixArgs 2>&1 | Out-Null
+  $fixArgs = @('--config', $cfg, '--fix', '--fix-rule', $rule, '--apply', '--no-backup', '--no-compile-gate')   # BK-GATE B23: loose-folder fixture, no project to gate on
+  & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule $rule @fixArgs 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'fix: result is byte-identical to expected\uV.fixed.pas' (Test-G8BytesEqual $pas $want)
   $before = [IO.File]::ReadAllBytes($pas)
-  & $Exe lint-all --db $db --rule $rule @fixArgs 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule $rule @fixArgs 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'fix: second run leaves the bytes unchanged' ([Linq.Enumerable]::SequenceEqual([byte[]]$before, [byte[]][IO.File]::ReadAllBytes($pas)))
   Check 'fix: reindexed fixed file no longer fires' ((Invoke-G8Index $Exe $fx $db) -eq 0 -and (Get-G8Findings $Exe $db $rule @('--config', $cfg)).Count -eq 0)
   # OFF by default is only meaningful beside the positive control above.

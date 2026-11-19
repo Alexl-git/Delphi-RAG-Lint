@@ -14,7 +14,10 @@
   must be seen to FAIL, so a Test-InterfaceLoop that always returned True (or a Check that always passed) is caught.
 #>
 [CmdletBinding()]
-param([string]$Repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path)
+param([string]$Repo = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Repo) { $Repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {

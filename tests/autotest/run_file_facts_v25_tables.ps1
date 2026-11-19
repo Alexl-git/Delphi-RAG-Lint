@@ -47,9 +47,9 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 # One SELECT -> array of PSCustomObject (columns by name). A failed query
 # (e.g. no such table on an older engine) returns an EMPTY array.
 function Lane-Sql([string]$Db, [string]$Query) {
-  $raw = & $Exe sql --query $Query --db $Db --json 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --query $Query --db $Db --json 2>$null }
   if ($LASTEXITCODE -ne 0 -or -not $raw) { return }
-  try { $j = ($raw -join "`n") | ConvertFrom-Json } catch { return }
+  try { $j = ($raw -join "`n") | ConvertFrom-Json | ForEach-Object { $_ } } catch { return }
   $cols = @($j.columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
   $out = New-Object System.Collections.Generic.List[object]
   foreach ($r in @($j.rows)) {
@@ -61,7 +61,7 @@ function Lane-Sql([string]$Db, [string]$Query) {
 }
 
 Write-Host "run_file_facts_v25_tables: engine $Exe" -ForegroundColor Cyan
-& $Exe index $fx --db $db *> (Join-Path $work 'index-1.log')
+& { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db *> (Join-Path $work 'index-1.log') }
 $rc1 = $LASTEXITCODE
 $files1 = @(Lane-Sql $db "SELECT COUNT(*) AS n FROM files")
 Check 'VACUITY the fixture was indexed' (($rc1 -eq 0) -and ($files1.Count -eq 1) -and ($files1[0].n -ge 5)) "(rc $rc1, files $(if ($files1.Count) { $files1[0].n } else { '?' }))"
@@ -77,9 +77,9 @@ $want = @{
 }
 foreach ($t in 'dfm_properties', 'comment_facts') {
   # `sql` refuses PRAGMA: an empty SELECT * still reports the column list, in order.
-  $raw  = & $Exe sql --query "SELECT * FROM $t LIMIT 0" --db $db --json 2>$null
+  $raw  = & { $ErrorActionPreference = 'Continue'; & $Exe sql --query "SELECT * FROM $t LIMIT 0" --db $db --json 2>$null }
   $got  = ''
-  try { $got = (@((($raw -join "`n") | ConvertFrom-Json).columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })) -join ',' } catch { }
+  try { $got = (@((($raw -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }).columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })) -join ',' } catch { }
   Check "T2 $t columns match the spec" ($got -eq $want[$t]) "($got)"
 }
 
@@ -100,7 +100,7 @@ Check 'T5 dfm_properties: file_id CASCADE' ($ddlText -match 'dfm_properties=.*fi
 # ---- T4 ---------------------------------------------------------------------
 $touch = Get-ChildItem $fx -Recurse -Include *.pas, *.dfm | Select-Object -First 3
 foreach ($f in $touch) { [IO.File]::SetLastWriteTime($f.FullName, (Get-Date)); [IO.File]::AppendAllText($f.FullName, "`r`n") }
-& $Exe index $fx --db $db *> (Join-Path $work 'index-2.log')
+& { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db *> (Join-Path $work 'index-2.log') }
 $rc2 = $LASTEXITCODE
 $files2 = @(Lane-Sql $db "SELECT COUNT(*) AS n FROM files")
 $log2 = Get-Content (Join-Path $work 'index-2.log') -Raw

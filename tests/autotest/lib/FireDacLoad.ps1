@@ -41,5 +41,5 @@ function Test-FireDacLoader { return ($null -ne (Get-FireDacLoader)) }
 function Invoke-FireDacLoad([string[]]$Paths) {
   $exe = Get-FireDacLoader
   if ($null -eq $exe) { return @('FAIL <loader>: FireDacLoad.exe could not be built (rsvars.bat / dcc64)') }
-  return @(& $exe @Paths 2>&1 | ForEach-Object { "$_" })
+  return @(& { $ErrorActionPreference = 'Continue'; & $exe @Paths 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" })
 }

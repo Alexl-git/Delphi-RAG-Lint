@@ -4,10 +4,10 @@ title: Run Lint All (Full Report)
 summary: Runs the whole rule catalog against a project's indexed code and reports every surviving finding -- the overall project health check
 product: DL
 group: linting
-order: 30039
+order: 30042
 since: 0.61.0-alpha
 status: shipped
-updated: 1.51.0-alpha
+updated: 1.52.0-alpha
 ---
 
 # Run Lint All (Full Report)
@@ -28,12 +28,13 @@ Full flag list: [lint-all in the CLI reference](../cli.md#lint-all).
 | `--project` | `<.dproj>` |  |  |
 | `--rule` | `<id>` |  |  |
 | `--disable` |  |  |  |
-| `--output` | `<report.txt>` |  |  |
+| `--output` | `<report.txt>` | default lint-report-YYYYMMDD.txt beside --project, else beside the DB |  |
 | `--json` |  |  |  |
 | `--labels` |  |  |  |
 | `--quiet` |  | suppress per-file progress lines written to stderr |  |
 | `--lint-third-party` |  |  |  |
 | `--no-preprocess` |  |  |  |
+| `--no-stand-down` |  | measurement runs: open no stand-down channel, so a maintenance stand-down from another process cannot cut the run to PARTIAL (exit 4) |  |
 | `--shared-db` | `<db>` | another project index, repeatable: evidence for a closure-dependent dl:ok on a dl:shared unit |  |
 | `--fix` |  |  |  |
 | `--fix-naming` |  |  |  |
@@ -56,8 +57,8 @@ Full flag list: [lint-all in the CLI reference](../cli.md#lint-all).
 
 ## Details
 
-Runs the full rule catalog (423 rules, 341 on by default across 18 categories,
-125 auto-fixable) against a project's indexed code and reports every surviving
+Runs the full rule catalog (435 rules, 355 on by default across 18 categories,
+131 auto-fixable) against a project's indexed code and reports every surviving
 finding. Reach for it as the overall project health check.
 
 ### Running it from the CLI

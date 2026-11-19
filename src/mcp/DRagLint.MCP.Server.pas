@@ -24,12 +24,11 @@ type
   // Newline-delimited JSON-RPC 2.0 server speaking MCP-2024-11-05 over stdio.
   // Holds one open ISymbolStore for the lifetime of the session.
   /// <summary><!-- drag-lint:auto sum -->Newline-delimited JSON-RPC 2.0 server speaking
-  /// MCP-2024-11-05 over stdio. Holds its databases open for the lifetime of the
-  /// session: the first (the project) and, since v151, every further one (the
-  /// platform's library sections).</summary>
+  /// MCP-2024-11-05 over stdio. Holds one open ISymbolStore for the lifetime of the
+  /// session.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+  /// <para>Used by: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
   /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -64,7 +63,7 @@ type
       /// TSQLiteSymbolStore.Create(ADbPath, True).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.Create (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.ResolveStore (DRagLint.MCP.Server.pas)</para>
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.Create (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.ResolveStore (DRagLint.MCP.Server.pas)</para>
       /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent, DRagLint.Storage.Schema.IsSchemaReadable, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, Format</para>
       /// <para>Mutates: AError (out)</para>
       /// <para>Touches: file system</para>
@@ -84,7 +83,7 @@ type
       /// FreshnessNote(Rep, ADbPath).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.ResolveStore (DRagLint.MCP.Server.pas)</para>
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.ResolveStore (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.StoreForQName (DRagLint.MCP.Server.pas)</para>
       /// <para>Calls: DRagLint.Index.Freshness.FreshnessNote, DRagLint.Index.Freshness.ProbeIndexFreshness, GetEnvironmentVariable, SameText, StrToUInt64Def</para>
       /// <para>Reads: FProbeDb, FProbeTick, FProbeNote   Writes: FProbeDb, FProbeTick, FProbeNote</para>
       /// <seealso cref="DRagLint.Index.Freshness.FreshnessNote"/>
@@ -108,7 +107,7 @@ type
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.DispatchToolsCall"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindCallersText"/>
-      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatDocAsJson"/>
+      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindSymbolsInAll"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function NoStoreMessage: string;
@@ -122,7 +121,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
       /// <para>Calls: Copy, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByNameWithContext, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.MCP.Server.TMCPServer.FormatReferences, DRagLint.MCP.Server.TMCPServer.FormatReferencesWithContext, DRagLint.Query.Callers.CollapseRefsAtSameSite, DRagLint.Query.Callers.DropRefsThatCannotBeCallers, DRagLint.Query.Callers.ResolvedCallersForName, Format, IntToStr, LastDelimiter, LowerCase</para>
-      /// <para>Complexity: 16 (cyclomatic, outer body), 89 lines (full implementation)</para>
+      /// <para>Complexity: 19 (cyclomatic, outer body), 89 lines (full implementation)</para>
       /// <para>Reads: FStore</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByNameWithContext"/>
@@ -136,19 +135,20 @@ type
       /// exception becomes an isError reply instead of ending the server.</summary>
       /// <param name="AId"><!-- drag-lint:auto type -->const TJSONValue</param>
       /// <param name="AParams"><!-- drag-lint:auto type -->const TJSONObject</param>
+      /// <exception cref="ESchemaUnreadable"><!-- drag-lint:auto exc -->via DRagLint.Storage.SQLite.TSQLiteSymbolStore.CreateReadable: :</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
-      /// <para>Calls: Default, DRagLint.Context.Bundler.TContextBundler.Build, DRagLint.Context.Bundler.TContextBundler.RenderJson, DRagLint.Core.Interfaces.ISymbolStore.FindByDocTag, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsFuzzy, DRagLint.Core.Interfaces.ISymbolStore.FindTransitiveCallers, DRagLint.Core.Interfaces.ISymbolStore.FindUndocumented, DRagLint.Core.Interfaces.ISymbolStore.GetClassSurface (+56 more)</para>
-      /// <para>Complexity: 132 (cyclomatic, outer body), 581 lines (full implementation)</para>
-      /// <para>Reads: FDbPaths, FStore, FLinter, FCallNote   Writes: FCallNote</para>
-      /// <para>Catches: EImplementorsTarget (swallowed)</para>
+      /// <para>Calls: Default, DRagLint.Context.Bundler.TContextBundler.Build, DRagLint.Context.Bundler.TContextBundler.RenderJson, DRagLint.Core.Interfaces.ISymbolStore.FindByDocTag, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.FindTransitiveCallers, DRagLint.Core.Interfaces.ISymbolStore.FindUndocumented, DRagLint.Core.Interfaces.ISymbolStore.GetClassSurface, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolSlice (+64 more)</para>
+      /// <para>Complexity: 166 (cyclomatic, outer body), 675 lines (full implementation)</para>
+      /// <para>Reads: FDbPaths, FStore, FLinter, FMoreStores, FCallNote   Writes: FCallNote</para>
+      /// <para>Catches: EHbUsage (swallowed); EImplementorsTarget (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.Build"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.RenderJson"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindByDocTag"/>
-      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindTransitiveCallers"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DispatchToolsCall(const AId: TJSONValue; const AParams: TJSONObject);
@@ -163,7 +163,7 @@ type
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.DispatchToolsCall"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindCallersText"/>
-      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatDocAsJson"/>
+      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindSymbolsInAll"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SendRaw(const AText: string);
@@ -256,7 +256,7 @@ type
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.DispatchToolsCall"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindCallersText"/>
-      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatDocAsJson"/>
+      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindSymbolsInAll"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ToolDescriptor(const AName, ADesc: string; const ASchemaJSON: string): TJSONObject     ;
@@ -271,7 +271,7 @@ type
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.DispatchToolsCall"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindCallersText"/>
-      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatDocAsJson"/>
+      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindSymbolsInAll"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function TextContent(const AText: string): TJSONArray                                           ;
@@ -321,7 +321,7 @@ type
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.DispatchToolsCall"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindCallersText"/>
-      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatDocAsJson"/>
+      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindSymbolsInAll"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FormatFindings  (const AFindings: TArray<TLintFinding>): string;
@@ -450,7 +450,7 @@ type
       /// FLastStoreError); FStore.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas), DRagLint.MCP.Server.TMCPServer.StoreForQName (DRagLint.MCP.Server.pas)</para>
       /// <para>Calls: DRagLint.MCP.Server.TMCPServer.NoteFor, DRagLint.MCP.Server.TMCPServer.OpenStore</para>
       /// <para>Reads: FLastStoreError, FStore, FDbPaths   Writes: FCallNote</para>
       /// <para>Pure</para>
@@ -469,9 +469,22 @@ type
       /// <param name="AArgs">The tools/call arguments; may be nil.</param>
       /// <param name="AQName">The qualified name the tool asks about.</param>
       /// <returns>The store to answer from; nil only when no database is served.</returns>
-      /// <remarks>Sets FCallNote to the freshness note of the store it returns. Only
+      /// <remarks>
+      /// Sets FCallNote to the freshness note of the store it returns. Only
       /// declaration questions use it (doc, surface, slice, bundle); call-graph
-      /// questions stay on the first database, which holds the project's call sites.</remarks>
+      /// questions stay on the first database, which holds the project's call sites.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.MCP.Server.TMCPServer.NoteFor, DRagLint.MCP.Server.TMCPServer.ResolveStore</para>
+      /// <para>Returns: ResolveStore(AArgs); FMoreStores[I]</para>
+      /// <para>Reads: FMoreStores, FMorePaths   Writes: FCallNote</para>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
+      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.NoteFor"/>
+      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.ResolveStore"/>
+      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
+      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function StoreForQName(const AArgs: TJSONObject; const AQName: string): ISymbolStore;
       /// <summary>v151 SERVE (OQ3): find_symbol over EVERY served database, first
       /// database first, then each further one in order. Exact name (or qname) first;
@@ -483,6 +496,20 @@ type
       /// <param name="AFiles">Out: each symbol's file, resolved in ITS database
       /// (file ids are per database), same length as the result.</param>
       /// <returns>The concatenated symbols; empty when nothing matches.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsFuzzy, DRagLint.MCP.Server.TMCPServer.FindSymbolsInAll.Add</para>
+      /// <para>Returns: Syms</para>
+      /// <para>Reads: FMoreStores, FStore</para>
+      /// <para>Mutates: AFiles (out)</para>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsFuzzy"/>
+      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindSymbolsInAll.Add"/>
+      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function FindSymbolsInAll(const AName, AQName: string; AFuzzyCap: Integer; out AFiles: TArray<string>): TArray<TSymbol>;
     public
       /// <summary>Opens EVERY database of ADbPaths read-only (v151 SERVE, OQ3): the
@@ -494,7 +521,7 @@ type
       /// <param name="ADbPaths"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+      /// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
       /// <para>Calls: DRagLint.Lint.Linter.TLinter.Create, DRagLint.MCP.Server.TMCPServer.OpenStore, Flush, Format, SameText, Writeln</para>
       /// <para>constructor</para>
       /// <para>Reads: FDbPaths, FStoreError, FStore, FMoreStores, FMorePaths   Writes: FDbPaths, FStore, FMoreStores, FMorePaths, FLinter</para>
@@ -508,13 +535,13 @@ type
       constructor Create(const ADbPaths: TArray<string>);
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Reads: FLinter   Writes: FStore</para>
+      /// <para>Reads: FLinter   Writes: FMoreStores, FStore</para>
       /// <para>Directives: override</para>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.Create"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.DispatchToolsCall"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindCallersText"/>
+      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FindSymbolsInAll"/>
       /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatDocAsJson"/>
-      /// <seealso cref="DRagLint.MCP.Server.TMCPServer.FormatFindings"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       destructor Destroy; override;
@@ -545,9 +572,100 @@ uses
   , DRagLint.Doc.Regions
   , DRagLint.Query.Implementors { get_implementors (interface report, 1.40) }
   , DRagLint.Query.ExceptionFacts { get_exception_facts (wave 148 D1) }
+  , DRagLint.Query.HappensBefore.Types { check_init (1.52 HBMCP): the answer contract }
+  , DRagLint.Query.HappensBefore.Render { check_init: the same JSON as `check-init --json` }
+, DRagLint.Query.HappensBefore { check_init (1.52 HBSOLVER): CheckInit, the solver }
   , DRagLint.Query.Callers   { Gitea #31: the CLI's resolved callers and name filters }
   , DRagLint.Index.Freshness { Gitea #34: the freshness note of the store a tool reads }
+  , DRagLint.Query.UsageScope { find_usages (1.52 FUSCOPE): the four scopes, shared with the CLI and the LSP }
   ;
+
+/// <summary>The find_usages answer (1.52 FUSCOPE): the usages of a name or of the
+/// symbol at a position, in one of the four scopes, as text.</summary>
+/// <param name="AHome">The project's store; must not be nil.</param>
+/// <param name="AHomePath">Its database path ('' when unknown).</param>
+/// <param name="AName">The name; '' takes the identifier at AFile:ALine:ACol.</param>
+/// <param name="AFile">The source file of the position, or ''.</param>
+/// <param name="ALine">1-based line, 0 = no position.</param>
+/// <param name="ACol">1-based column, 0 = any on the line.</param>
+/// <param name="AScope">The scope asked for.</param>
+/// <param name="AGroup">The .groupproj scope group reads, or ''.</param>
+/// <param name="AOpen">Opens another database read-only; nil result = skipped.</param>
+/// <returns>A header naming the scope answered (and what it is bound to), a note when
+/// it is not the one asked, one line per declaration and per usage row
+/// (bucket file:line:col), and the databases read. Same rules as `usages --scope`.</returns>
+function UsagesText(const AHome: ISymbolStore; const AHomePath, AName, AFile: string; ALine, ACol: Integer;  // dl:ok too-many-parameters@3f3e -- REVIEWED 2026-11-18 FUSCOPE: the find_usages tool arguments one for one; a record would be filled at its single call site only
+  AScope: TUsageScope; const AGroup: string; const AOpen: TFunc<string, ISymbolStore>): string;
+begin
+  var Name: string:= AName;
+  var HasPos: Boolean:= (AFile <> '') and (ALine > 0);
+  if (Name = '') and HasPos then Name:= IdentifierAtFilePosition(AFile, ALine, ACol);
+  if Name = '' then Exit('find_usages: no name and no identifier at the position');
+  var Scope: TUsageScope:= AScope;
+  var Note: string:= '';
+  var B: TUsageBinding:= Default(TUsageBinding);
+  if Scope = usSymbol then
+  begin
+    if HasPos then
+    begin
+      B:= BindUsageAt(AHome, ExpandFileName(AFile), Copy(Name, LastDelimiter('.', Name) + 1, MaxInt), ALine, ACol);
+      if B.Bound and not B.HasDecl then Name:= B.QName
+      else if not B.Bound then
+      begin
+        Scope:= usProject;
+        Note:= Format('nothing is bound at %s:%d; answered scope project', [AFile, ALine]);
+      end;
+    end
+    else if not Name.Contains('.') then
+    begin
+      Scope:= usProject;
+      Note:= USAGE_NOTE_BARE_NAME;
+    end;
+  end;
+  if Scope <> usSymbol then Name:= Copy(Name, LastDelimiter('.', Name) + 1, MaxInt);
+  var Stores: TArray<ISymbolStore>:= [AHome];
+  var Paths : TArray<string>:= [AHomePath];
+  if Scope in [usGroup, usEverywhere] then
+  begin
+    var WideNote: string;
+    for var D: string in UsageScopeDbs(Scope, [AHomePath], AGroup, '', WideNote) do
+    begin
+      if SameText(D, ExpandFileName(AHomePath)) or not Assigned(AOpen) then Continue;
+      var Extra: ISymbolStore:= AOpen(D);
+      if Extra = nil then Continue;
+      Stores:= Stores + [Extra];
+      Paths := Paths + [D];
+    end;
+    if WideNote <> '' then Note:= WideNote;
+  end;
+  var SB: TStringBuilder:= TStringBuilder.Create;
+  try
+    SB.Append(Format('usages of "%s" -- scope %s', [Name, USAGE_SCOPE_NAMES[Scope]]));
+    if B.Bound then SB.Append(' (' + B.QName + ')');
+    SB.AppendLine;
+    if Note <> '' then SB.AppendLine('note: ' + Note + ' (asked ' + USAGE_SCOPE_NAMES[AScope] + ')');
+    for var I:= 0 to High(Stores) do
+    begin
+      var St: ISymbolStore:= Stores[I];
+      var Decls: TArray<TSymbol>;
+      var Refs : TArray<TReference>;
+      if (Scope = usSymbol) and B.HasDecl then Refs:= BoundUsageRefs(St, B, Decls)
+      else
+      begin
+        Decls:= St.FindSymbolsByExactName(Name);
+        Refs := UsageRefsForName(St, Name, Decls);
+      end;
+      for var D: TSymbol in Decls do
+        SB.AppendLine(Format('declaration %s  %s:%d', [D.QualifiedName, St.GetFilePath(D.FileId), D.StartLine]));
+      for var R: TReference in Refs do
+        SB.AppendLine(Format('%s  %s:%d:%d', [UsageBucketIn(R, Decls), St.GetFilePath(R.FileId), R.StartLine, R.StartCol]));
+    end;
+    SB.Append('databases: ' + string.Join('; ', Paths));
+    Result:= SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
 
 const
   { JSON-RPC 2.0 implementation-defined server error: the tool could not answer
@@ -565,7 +683,9 @@ const
     'drag-lint first: for any question about Delphi/Pascal code in this project (where a symbol is declared, '
     + 'who calls it, what a change would break, which unit to add to uses, what a message says), ask this server '
     + '(find_symbol, find_callers, get_neighbors, get_impact, get_context_bundle) BEFORE grepping or reading '
-    + 'whole files. If an answer looks short or empty, the index may be stale: say so and reindex rather than '
+    + 'whole files. Which unit to add to uses and message/caption/SQL text search have no tool here yet: use '
+    + 'the CLI (drag-lint find-unit --name X --in <file> --db <db>; drag-lint query --text "<phrase>" --db <db>). '
+    + 'If an answer looks short or empty, the index may be stale: say so and reindex rather than '
     + 'falling back to grep silently.';
 
 /// <summary>The get_neighbors answer: the call-graph neighbourhood of AQName as JSON.</summary>
@@ -794,13 +914,15 @@ begin
   Tools:= TJSONArray .Create;
 
   Tools.AddElement(ToolDescriptor(
-      'find_symbol', 'Find Delphi/Pascal symbols by exact name (with fuzzy fallback) or by ' + 'qualified name (e.g. UnitName.TClass.MethodName). Returns matching '
+      'find_symbol', 'USE FOR "where is X declared / what is its signature" -- instead of grep. '
+        + 'Find Delphi/Pascal symbols by exact name (with fuzzy fallback) or by ' + 'qualified name (e.g. UnitName.TClass.MethodName). Returns matching '
         + 'symbols with file:line:col.',
       '{"type":"object","properties":{' + '"name":{"type":"string","description":"Bare symbol name"},' + '"qname":{"type":"string","description":"Qualified name"}'
         + '},"additionalProperties":false}'));
 
   Tools.AddElement(ToolDescriptor(
-      'find_callers', 'Find the callers of a method/event-handler (bare or qualified name), resolved through the '
+      'find_callers', 'USE FOR "who calls Y" -- pass the BARE member name (Bar, not TFoo.Bar). '
+        + 'Find the callers of a method/event-handler (bare or qualified name), resolved through the '
         + 'call graph like `query find-callers --resolved`: one row per caller with file:line and confidence; a '
         + 'routine passed as a value is marked [callback]. Only when nothing resolves does it fall back to '
         + 'references by name (said so; may include homonyms). When context > 0 each result includes surrounding '
@@ -808,6 +930,20 @@ begin
       '{"type":"object","properties":{' + '"name":{"type":"string","description":"Callee/handler name"},'
         + '"context":{"type":"integer","description":"Number of surrounding source lines to include (optional, default 0)"}' + '},"required":["name"],"additionalProperties":false}'
     ));
+
+  Tools.AddElement(ToolDescriptor(
+      'find_usages', 'USE FOR "where is X used" (reads, writes, calls, type uses, ...). Scope (same words as '
+        + '`usages --scope`): symbol (default) = the declaration a position (file/line/col) or a qualified name is '
+        + 'BOUND to, in this project; project = every object of the name in this project; group = the name in every '
+        + 'project of a .groupproj; everywhere = the name in every index the manifest knows. A bare name with no '
+        + 'position binds nothing and is answered as scope project (said so).',
+      '{"type":"object","properties":{' + '"name":{"type":"string","description":"Bare or qualified name (optional when file+line are given)"},'
+        + '"file":{"type":"string","description":"Source file of the position (optional)"},'
+        + '"line":{"type":"integer","description":"1-based line of the position (optional)"},'
+        + '"col":{"type":"integer","description":"1-based column of the position (optional)"},'
+        + '"scope":{"type":"string","enum":["symbol","project","group","everywhere"],"description":"Default symbol"},'
+        + '"group":{"type":"string","description":"The .groupproj scope group reads (optional)"},'
+        + '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' + '},"additionalProperties":false}'));
 
   Tools.AddElement(ToolDescriptor(
       'lint', 'Run the linter on a file or folder. Returns each finding with rule id, ' + 'severity, file:line:col, and message. Built-in rules + any *.scm rule '
@@ -831,7 +967,7 @@ begin
         + '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' + '}}'));
 
   Tools.AddElement(ToolDescriptor(
-      'get_impact', 'Return the transitive blast-radius of a symbol: how many callers and ' + 'units are impacted at each depth level. Uses a recursive CTE over the '
+      'get_impact', 'USE FOR "what would a change to X break". Return the transitive blast-radius of a symbol: how many callers and ' + 'units are impacted at each depth level. Uses a recursive CTE over the '
         + 'refs table. Input: qualified name (last segment used for lookup) and ' + 'optional depth (default 3).',
       '{"type":"object","properties":{' + '"qname":{"type":"string","description":"Qualified symbol name (e.g. Unit.TClass.Method)"},'
         + '"depth":{"type":"integer","description":"Maximum recursion depth (optional, default 3)"},'
@@ -855,6 +991,17 @@ begin
         + '"name":{"type":"string","description":"An exception type, bare or qualified"},'
         + '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' + '}}'));
 
+  { 1.52 HBMCP: the happens-before verdict, the same answer and JSON as `check-init --json`. }
+  Tools.AddElement(ToolDescriptor(
+      'check_init', 'Is a unit variable or field set before it is used: the verdict SET, NEVER-SET or MAY-BE-UNSET for one '
+        + 'variable (target, qualified) or for the variable at a source position (at, file:line[:col]), with the routines '
+        + 'and events that set it and the reason for each use. Read-only. Returns the JSON of drag-lint check-init --json.',
+      '{"type":"object","properties":{' + '"target":{"type":"string","description":"Qualified variable or field (e.g. UnitA.GCache, UnitA.TFoo.FBar)"},'
+        + '"at":{"type":"string","description":"file:line[:col] of a use; used when target is absent"},'
+        + '"explain":{"type":"boolean","description":"Add the roots and per-use reasons (optional, default false)"},'
+        + '"max_routines":{"type":"integer","description":"Most routines analysed; 0 or absent = the default budget"},'
+        + '"max_seconds":{"type":"number","description":"Wall-clock cap in seconds; absent = 60, 0 = no cap. A capped answer is never SET (budget.timed_out)"},'
+        + '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' + '}}'));
   Tools.AddElement(ToolDescriptor(
       'get_implementors', 'The interface report: for an interface, the classes implementing it (directly, '
         + 'through a derived interface, inherited from an ancestor class, or by implements delegation); for an '
@@ -891,7 +1038,8 @@ begin
 
   Tools.AddElement(ToolDescriptor(
       'get_context_bundle',
-      'Return a curated context bundle for a symbol as JSON: the summary counts plus the content -- doc, '
+      'USE FOR "modify / understand X without reading the whole file" -- the first call before editing a symbol. '
+        + 'Return a curated context bundle for a symbol as JSON: the summary counts plus the content -- doc, '
         + 'class surface, impl slice, callers with their context and the impact summary. Useful for preparing '
         + 'minimal AI-ready context for refactoring, inspection, or deletion tasks.',
       '{"type":"object","properties":{' + '"task":{"type":"string","description":"Task description (verb qname, e.g. \"modify Foo.Bar\")"},'
@@ -931,7 +1079,7 @@ begin
 
   // v0.26: run dcc64/msbuild and return compiler findings as JSON.
   Tools.AddElement(ToolDescriptor(
-      'run_compile_check', 'Spawn dcc64 or msbuild against a .pas or .dproj file, parse the output ' + 'for H/W/E/F diagnostic lines, and return the findings as JSON. '
+      'run_compile_check', 'SLOW, NOT read-only: spawns a compiler; prefer the delphi-build recipe. Spawn dcc64 or msbuild against a .pas or .dproj file, parse the output ' + 'for H/W/E/F diagnostic lines, and return the findings as JSON. '
         + 'When db is supplied the findings are also stored in compiler_findings ' + 'for later LSP publishDiagnostics merging.',
       '{"type":"object","properties":{' + '"target":{"type":"string","description":"Absolute path to a .pas file or .dproj project"},'
         + '"msbuild_path":{"type":"string","description":"Absolute path to msbuild.exe (optional)"},'
@@ -1457,6 +1605,44 @@ begin
       if Args.GetValue('context') <> nil then CtxLines:= StrToIntDef(Args.GetValue('context').Value, 0);
       ResultText:= FindCallersText(Name, CtxLines);
     end // if
+    else if ToolName = 'find_usages' then
+    begin
+      var UStore:= ResolveStore(Args);
+      if UStore = nil then
+      begin
+        SendError(AId, JSONRPC_SERVER_ERROR, NoStoreMessage);
+        Exit;
+      end;
+      var UPath: string:= '';
+      if (Args <> nil) and (Args.GetValue('db') <> nil) then UPath:= Args.GetValue('db').Value
+      else if Length(FDbPaths) > 0 then UPath:= FDbPaths[0];
+      var UName : string:= Args.GetValue<string>('name' , '');
+      var UFile : string:= Args.GetValue<string>('file' , '');
+      var UGroup: string:= Args.GetValue<string>('group', '');
+      var ULine : Integer:= 0;
+      var UCol  : Integer:= 0;
+      if Args.GetValue('line') <> nil then ULine:= StrToIntDef(Args.GetValue('line').Value, 0);
+      if Args.GetValue('col' ) <> nil then UCol := StrToIntDef(Args.GetValue('col' ).Value, 0);
+      var UScope: TUsageScope:= USAGE_SCOPE_DEFAULT;
+      var UScopeWord: string:= Args.GetValue<string>('scope', '');
+      if (UScopeWord <> '') and not TryParseUsageScope(UScopeWord, UScope) then
+      begin
+        SendError(AId, JSONRPC_INVALID_PARAMS, 'find_usages: unknown scope "' + UScopeWord + '"; use ' + UsageScopeChoices);
+        Exit;
+      end;
+      if (UName = '') and ((UFile = '') or (ULine <= 0)) then
+      begin
+        SendError(AId, JSONRPC_INVALID_PARAMS, 'find_usages requires name, or file and line');
+        Exit;
+      end;
+      ResultText:= UsagesText(UStore, UPath, UName, UFile, ULine, UCol, UScope, UGroup,
+        function(pDb: string): ISymbolStore
+        var
+          OpenError: string;
+        begin
+          Result:= OpenStore(pDb, OpenError);
+        end);
+    end // if
     else if ToolName = 'lint' then
     begin
       if Args.GetValue('path') = nil then
@@ -1594,6 +1780,62 @@ begin
       end;
       ResolveStore(Args); { sets FCallNote: the freshness note of the store this answer reads }
       ResultText:= ExceptionFactsJson(ExceptionFactsOf(ExDb, ExTarget, ExName));
+    end // if
+    else if ToolName = 'check_init' then
+    begin
+      var CiTarget: string:= '';
+      var CiAt    : string:= '';
+      if Args.GetValue('target') <> nil then CiTarget:= Args.GetValue('target').Value;
+      if Args.GetValue('at') <> nil then CiAt:= Args.GetValue('at').Value;
+      var CiAtSite: THbSite:= Default(THbSite);
+      if (CiTarget = '') and (CiAt = '') then
+      begin
+        SendError(AId, JSONRPC_INVALID_PARAMS, 'check_init requires target or at');
+        Exit;
+      end;
+      if (CiAt <> '') and not HbParseAt(CiAt, CiAtSite) then
+      begin
+        SendError(AId, JSONRPC_INVALID_PARAMS, 'check_init: at must be file:line[:col] with line and col >= 1');
+        Exit;
+      end;
+      var CiMax:= 0;
+      if Args.GetValue('max_routines') <> nil then CiMax:= StrToIntDef(Args.GetValue('max_routines').Value, -1);
+      if CiMax < 0 then
+      begin
+        SendError(AId, JSONRPC_INVALID_PARAMS, 'check_init: max_routines needs a whole number >= 0');
+        Exit;
+      end;
+      { v152 HBFIX H3 (INT11): as check-init --max-seconds -- absent = the default cap, 0 = no cap. }
+      var CiMaxS: Double:= 0;
+      if (Args.GetValue('max_seconds') <> nil) and not (TryStrToFloat(Args.GetValue('max_seconds').Value, CiMaxS,
+        TFormatSettings.Invariant) and (CiMaxS >= 0)) then
+      begin
+        SendError(AId, JSONRPC_INVALID_PARAMS, 'check_init: max_seconds needs a number >= 0 (0 = no cap)');
+        Exit;
+      end;
+      var CiStore:= ResolveStore(Args); { sets FCallNote; the same read-only store every other tool reads }
+      if CiStore = nil then
+      begin
+        SendError(AId, JSONRPC_SERVER_ERROR, NoStoreMessage);
+        Exit;
+      end;
+      try
+        { 1.52 HBSOLVER H-CLI (applied by INT): the solver answers; the db path as in get_exception_facts. }
+        var CiDb: string:= '';
+        if Args.GetValue('db') <> nil then CiDb:= Args.GetValue('db').Value
+        else if Length(FDbPaths) > 0 then CiDb:= FDbPaths[0];
+        var CiOpts:= Default(THbOptions);
+        CiOpts.MaxRoutines:= if CiMax = 0 then HB_DEFAULT_MAX_ROUTINES else CiMax;
+        CiOpts.MaxSeconds:= if Args.GetValue('max_seconds') = nil then 0 else if CiMaxS <= 0 then -1 else CiMaxS;
+        CiOpts.Explain:= (Args.GetValue('explain') <> nil) and SameText(Args.GetValue('explain').Value, 'true');
+        ResultText:= HbAnswerJson(CheckInit(CiDb, CiTarget, CiAt, CiOpts));
+      except
+        on E: EHbUsage do
+        begin
+          SendError(AId, JSONRPC_INVALID_PARAMS, 'check_init: ' + E.Message);
+          Exit;
+        end;
+      end;
     end // if
     else if ToolName = 'get_implementors' then
     begin

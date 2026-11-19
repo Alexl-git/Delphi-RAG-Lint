@@ -36,7 +36,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -185,7 +188,7 @@ function CaptureOrderOk([string]$text) {
 
 $capOld = 0; $capNew = 0
 for ($r = 1; $r -le 5; $r++) {
-  $tOld = (& pwsh -NoProfile -File $emitter 2>&1 | Out-String)
+  $tOld = (& { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $emitter 2>&1 | ForEach-Object { "$_" } } | Out-String)
   if (CaptureOrderOk $tOld) { $capOld++ }
 
   # `> log` truncates, so the log needs no prior cleanup.

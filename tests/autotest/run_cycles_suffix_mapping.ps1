@@ -21,9 +21,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-cycles-suffix-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -39,7 +42,7 @@ $Repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 function Invoke-Engine([string[]]$Arguments, [string]$Tag) {
   $o = Join-Path $WorkDir "$Tag.out"; $e = Join-Path $WorkDir "$Tag.err"
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
-    -ArgumentList $Arguments -RedirectStandardOutput $o -RedirectStandardError $e
+    -ArgumentList $Arguments -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   return @{ Exit = $p.ExitCode; Out = [IO.File]::ReadAllText($o); Err = [IO.File]::ReadAllText($e) }
 }
 
@@ -51,8 +54,8 @@ function Measure-Both([string]$Root, [string]$Tag) {
   $li = Invoke-Engine @('lint-all', '--db', ('"' + $db + '"'), '--rule', 'circular-uses', '--json') "$Tag-lint"
   $cy = Invoke-Engine @('cycles', '--db', ('"' + $db + '"'), '--library-db', 'none', '--format', 'json') "$Tag-cycles"
   $lint = @(); $groups = @()
-  try { $lint = @($li.Out | ConvertFrom-Json | Where-Object { $_.rule -eq 'circular-uses' }) } catch { Check "$Tag lint json parses" $false $li.Out }
-  try { $groups = @($cy.Out | ConvertFrom-Json) } catch { Check "$Tag cycles json parses" $false $cy.Out }
+  try { $lint = @($li.Out | ConvertFrom-Json | ForEach-Object { $_ } | Where-Object { $_.rule -eq 'circular-uses' }) } catch { Check "$Tag lint json parses" $false $li.Out }
+  try { $groups = @(($cy.Out | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { Check "$Tag cycles json parses" $false $cy.Out }
   $qs = Invoke-Engine @('query', '--name', 'Other.Lib.SQLite', '--db', ('"' + $db + '"')) "$Tag-q"
   return @{ Lint = $lint.Count; Groups = $groups; LintMsg = (($lint | ForEach-Object { $_.message }) -join ' | '); Query = $qs.Out }
 }

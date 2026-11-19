@@ -138,6 +138,7 @@ type
     /// <returns><!-- drag-lint:auto -->Boolean -- Observed: True.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Analysis.Liveness.LiveAtBoundary (DRagLint.Analysis.Liveness.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine.CheckOutArgLiveness (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Index.DataFlowFacts.TCollector.RunCfg (DRagLint.Index.DataFlowFacts.pas)</para>
     /// <para>Calls: DRagLint.Analysis.Cfg.TCfg.BlockCount, DRagLint.Analysis.DataFlow.DataFlowRecordSolve, DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Bottom, DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Boundary, DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Direction, DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Equals, DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Join, DRagLint.Analysis.DataFlow.IDataFlowAnalysis.Transfer</para>
     /// <para>Complexity: 17 (cyclomatic, outer body), 84 lines (full implementation)</para>
     /// <para>Mutates: AIn (out), AOut (out)</para>

@@ -28,11 +28,16 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$CycSrc  = "$PSScriptRoot\..\..\docs\examples\circular-uses-demo",
-  [string]$NoCycSrc= "$PSScriptRoot\..\fixtures\reconcile",
+  [string]$Exe     = '',
+  [string]$CycSrc  = '',
+  [string]$NoCycSrc= '',
   [string]$WorkDir = "$env:TEMP\draglint_cycles_section_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $CycSrc) { $CycSrc = "$PSScriptRoot\..\..\docs\examples\circular-uses-demo" }
+if (-not $NoCycSrc) { $NoCycSrc = "$PSScriptRoot\..\fixtures\reconcile" }
 try {
 
 $ErrorActionPreference = 'Stop'
@@ -52,12 +57,12 @@ function Prep([string]$name, [string]$src) {
   $d = Join-Path $WorkDir $name
   New-Item -ItemType Directory -Force -Path $d | Out-Null
   Copy-Item "$src\*.pas" $d
-  & $Exe index $d --db (Join-Path $d 't.sqlite') 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $d --db (Join-Path $d 't.sqlite') 2>&1 | ForEach-Object { "$_" } } | Out-Null
   return $d
 }
 function Report([string]$dir, [string[]]$extra = @()) {
   $rep = Join-Path $dir 'rep.txt'
-  & $Exe lint-all --db (Join-Path $dir 't.sqlite') --output $rep @extra 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db (Join-Path $dir 't.sqlite') --output $rep @extra 2>&1 | ForEach-Object { "$_" } } | Out-Null
   if (-not (Test-Path $rep)) { return '' }
   return (Get-Content $rep -Raw)
 }
@@ -89,9 +94,9 @@ Check 'a DISABLED rule does NOT say none detected' (-not ($r3 -match 'none detec
   'this is the whole point: absence of a check must not read as success'
 
 # --- 5: machine-readable output stays pure -----------------------------------
-$j = (& $Exe lint-all --db (Join-Path $cyc 't.sqlite') --format json 2>$null) -join "`n"
+$j = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db (Join-Path $cyc 't.sqlite') --format json 2>$null }) -join "`n"
 $si = $j.IndexOf('{'); $obj = $null
-if ($si -ge 0) { try { $obj = ($j.Substring($si) | ConvertFrom-Json) } catch { } }
+if ($si -ge 0) { try { $obj = ($j.Substring($si) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { } }
 Check 'the section did not leak into --format json' `
   (-not ($j -match 'circular unit dependencies')) ''
 

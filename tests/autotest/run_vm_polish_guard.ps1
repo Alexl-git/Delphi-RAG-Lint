@@ -17,7 +17,13 @@
   Run from a neutral CWD, pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){ if($d){Write-Host "      $d" -ForegroundColor DarkGray}; $script:fail=$true } }
@@ -60,7 +66,7 @@ $db = Join-Path $scratch 't.sqlite'
 $errFile = Join-Path $scratch 'stderr.txt'
 $outFile = Join-Path $scratch 'stdout.txt'
 $p = Start-Process -FilePath $exePath -ArgumentList @('index',"`"$src`"",'--db',"`"$db`"") `
-  -RedirectStandardOutput $outFile -RedirectStandardError $errFile -NoNewWindow -Wait -PassThru
+  -RedirectStandardOutput $outFile -RedirectStandardError $errFile -NoNewWindow -Wait -PassThru; $null = $p.Handle
 $so = Get-Content -Raw $outFile; $se = Get-Content -Raw $errFile
 if (-not $so) { $so = '' }; if (-not $se) { $se = '' }
 $all = $so + "`n" + $se
@@ -71,17 +77,17 @@ Check 'V-A no "parse error" for the binary dfm' (-not ($all -match 'parse error'
 Check 'V-A2 bare TPF0 dfm: binary diagnostic names uTpfForm.dfm' ([bool]($all -match 'uTpfForm\.dfm: binary DFM \(TPF0\) -- save as Text DFM')) $all
 Check 'V-A2 bare TPF0 dfm: no parse error' (-not ($all -match 'uTpfForm\.dfm[^\r\n]*parse error')) $all
 Check 'P2 binary dfm yields no object rows' `
-  (-not ((& $exePath query --text 'HTTPServer1' --db $db --source dfm 2>&1 | Out-String) -match 'uBinForm\.dfm')) ''
+  (-not ((& { $ErrorActionPreference = 'Continue'; & $exePath query --text 'HTTPServer1' --db $db --source dfm 2>&1 | ForEach-Object { "$_" } } | Out-String) -match 'uBinForm\.dfm')) ''
 
 Write-Host "`n--- positive control ---" -ForegroundColor Cyan
 Check 'P1 text dfm indexed' `
-  ((& $exePath query --text 'text form' --db $db --source dfm 2>&1 | Out-String) -match 'uTxtForm\.dfm') $all
+  ((& { $ErrorActionPreference = 'Continue'; & $exePath query --text 'text form' --db $db --source dfm 2>&1 | ForEach-Object { "$_" } } | Out-String) -match 'uTxtForm\.dfm') $all
 Check 'P1b diagnostic names only the binary file' (-not ($all -match 'uTxtForm\.dfm[^\r\n]*(binary|parse error)')) $all
 
 Write-Host "`n--- lint / lint-all must not crash on the binary dfm ---" -ForegroundColor Cyan
-$lo = & $exePath lint (Join-Path $src 'uBinForm.dfm') --db $db 2>&1 | Out-String
+$lo = & { $ErrorActionPreference = 'Continue'; & $exePath lint (Join-Path $src 'uBinForm.dfm') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'lint <binary.dfm> does not raise' (($LASTEXITCODE -lt 2) -and -not ($lo -match 'EEncodingError|Exception')) $lo
-$la = & $exePath lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db 2>&1 | Out-String
+$la = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'lint-all over the fixture DB does not raise' (($LASTEXITCODE -lt 2) -and -not ($la -match 'EEncodingError|Exception')) $la
 Check 'lint-all control: still reports/finishes on the text dfm + pas (non-empty output)' ($la.Trim().Length -gt 0) $la
 Write-Host "`n--- V-B: FTS5 probe not on stderr ---" -ForegroundColor Cyan
@@ -90,3 +96,4 @@ Check 'V-B stderr has no "FTS5 probe: AVAILABLE"' (-not ($se -match 'FTS5 probe:
 Write-Host ''
 if ($fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green; exit 0
+} finally { Remove-WorkDir $scratch -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

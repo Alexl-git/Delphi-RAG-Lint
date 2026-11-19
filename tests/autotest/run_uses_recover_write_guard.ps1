@@ -16,9 +16,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-uses-recover-write-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -42,10 +45,10 @@ $Hpp     = Join-Path $Fix 'hpp'
 $Dproj   = Join-Path $Fix 'src-alias\Probe3.dproj'
 
 function Run([string[]]$a) {
-  $out = & $Exe @a 2>$null | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null } | Out-String
   [pscustomobject]@{ Code = $LASTEXITCODE; Out = $out }
 }
-function Json($r) { try { $r.Out | ConvertFrom-Json } catch { $null } }
+function Json($r) { try { $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null } }
 # sql --json rows are POSITIONAL arrays: map them onto columns[].name. Returns the rows UNROLLED:
 # wrap a call in @() before .Count / indexing.
 function Sql([string]$db, [string]$q) {
@@ -150,9 +153,9 @@ $r = Run @('uses-recover', '--db', $AliasDb, '--hpp-dir', $Hpp, '--library-db', 
 $j6 = Json $r
 Check '6 --project exits 0' ($r.Code -eq 0) "exit $($r.Code)"
 Check '6 with --project OldName is no longer under no_header' ($j6 -and (@($j6.no_header | Where-Object unit -eq 'OldName')).Count -eq 0) ($r.Out.Trim())
-$al = if ($j6) { @($j6.aliases | Where-Object unit -eq 'OldName') } else { @() }
+$al = @(if ($j6) { @($j6.aliases | Where-Object unit -eq 'OldName') } else { @() })
 Check '6 aliases lists OldName -> FixRtl (library)' ($al.Count -eq 1 -and $al[0].to -eq 'FixRtl' -and $al[0].status -eq 'library') ($r.Out.Trim())
-$wp = if ($j6) { @($j6.aliases | Where-Object unit -eq 'WinProcs') } else { @() }
+$wp = @(if ($j6) { @($j6.aliases | Where-Object unit -eq 'WinProcs') } else { @() })
 Check '6 Delphi-targets default alias WinProcs -> Winapi.Windows' ($wp.Count -eq 1 -and $wp[0].to -eq 'Winapi.Windows') ($r.Out.Trim())
 Check '6 control: without --project WinProcs is under no_header' ($j6a -and (@($j6a.no_header | Where-Object unit -eq 'WinProcs')).Count -eq 1)
 $r = Run @('uses-recover', '--db', $AliasDb, '--hpp-dir', $Hpp, '--project', (Join-Path $WorkDir 'nope.dproj'))

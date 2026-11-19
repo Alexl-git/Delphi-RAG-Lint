@@ -76,7 +76,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -198,8 +201,8 @@ $dbB   = Join-Path $scratch 'out\b.sqlite'
 $thing = Join-Path $scratch 'shared\thing.pas'
 
 function Reindex {
-  & $exePath index --all --config $cfg --only SecA --jobs 1 2>&1 | Out-Null
-  & $exePath index --all --config $cfg --only SecB --jobs 1 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only SecA --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only SecB --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
 }
 
 # The contiguous run of '///' lines immediately ABOVE the first line whose
@@ -222,7 +225,7 @@ try {
   Reindex
   Check '1. SANITY: both section DBs exist' ((Test-Path $dbA) -and (Test-Path $dbB))
 
-  & $exePath document --qname 'thing.TThing.DoIt' --db $dbA --db $dbB --apply --no-backup 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --qname 'thing.TThing.DoIt' --db $dbA --db $dbB --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Reindex
   $doItBlock = BlockAbove 'procedure DoIt;'
 
@@ -234,7 +237,7 @@ try {
         (($doItBlock.Trim() -ne '') -and ($doItBlock -notmatch '(?i)\bDecoy\b')) `
         'NON-EMPTY block required: absence of Decoy in an absent block proves nothing'
 
-  & $exePath document --qname 'thing.TThing.Lonely' --db $dbA --db $dbB --apply --no-backup 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --qname 'thing.TThing.Lonely' --db $dbA --db $dbB --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $lonelyBlock = BlockAbove 'procedure Lonely;'
   Check '4. POSITIVE CONTROL (b): a symbol nothing calls gets NO caller list' `
         (($lonelyBlock.Trim() -ne '') -and ($lonelyBlock -notmatch '(?i)(Called from|Used by)')) `

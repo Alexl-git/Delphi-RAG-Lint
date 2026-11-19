@@ -21,10 +21,16 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe") { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" } else { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }),
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-cyclefix-f2047-$PID",
   [string]$Rsvars  = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe") { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" } else { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }) }
 $ErrorActionPreference = 'Stop'; $script:Failed = $false; $script:Passed = 0
 function Check($n, $ok, $d = '') {
   $s = if ($ok) { 'PASS' } else { 'FAIL' }; $c = if ($ok) { 'Green' } else { 'Red' }
@@ -53,15 +59,15 @@ function New-Proj([string]$Tag, [scriptblock]$Patch = $null) {
   if ($Patch) { & $Patch $root }
   $db = Join-Path $WorkDir "$Tag.sqlite"
   Push-Location $WorkDir
-  try { $null | & $Exe index --project (Join-Path $root 'F2047Clause.dproj') --db $db --library-db none *> "$db.log" } finally { Pop-Location }
+  try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project (Join-Path $root 'F2047Clause.dproj') --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
   return @{ Root = $root; Dproj = (Join-Path $root 'F2047Clause.dproj'); Db = $db }
 }
 function Run-Fix($P, [string[]]$Extra, [bool]$Json = $true) {
   $a = @('cycles', '--fix', '--build-timeout', '1800', '--project', $P.Dproj, '--db', $P.Db, '--library-db', 'none') + $Extra
   if ($Json) { $a += @('--format', 'json') }
   Push-Location $WorkDir
-  try { $out = ($null | & $Exe @a 2>$null | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
-  $j = $null; if ($Json) { try { $j = $out | ConvertFrom-Json } catch { } }
+  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @a 2>$null } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
+  $j = $null; if ($Json) { try { $j = $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { } }
   return @{ Exit = $code; Out = $out; Json = $j }
 }
 function Kinds($r) {
@@ -128,3 +134,4 @@ Check 'e: a non-F2047 baseline error -> run-level dirty-baseline (exit 1)' (($e.
 
 if ($script:Failed) { Write-Host "run_cyclefix_f2047_baseline: FAIL ($script:Passed passed)" -ForegroundColor Red; exit 1 }
 Write-Host "run_cyclefix_f2047_baseline: PASS ($script:Passed checks)" -ForegroundColor Green; exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

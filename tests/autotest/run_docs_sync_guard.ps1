@@ -169,9 +169,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string] $Exe  = $(. "$PSScriptRoot\lib\FreshEngineExe.ps1"; Get-FreshEngineExe),
-  [string] $Repo = "$PSScriptRoot\..\.."
+  [string] $Exe  = '',
+  [string] $Repo = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(. "$PSScriptRoot\lib\FreshEngineExe.ps1"; Get-FreshEngineExe) }
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Repo) { $Repo = "$PSScriptRoot\..\.." }
 
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -215,6 +221,7 @@ Write-Host '-- check 1: verbs' -ForegroundColor Cyan
 # ASSERTED below, both directions: an entry that is no longer accepted is stale
 # and must be deleted, and an entry that HAS since been documented is stale too.
 $UndocumentedOnPurpose = [ordered]@{
+  'shutdown'            = '1.52 Q15: hidden alias of stop-now (the autonomy guard matches the old name); accepted, not advertised.'
   'selftest'            = 'umbrella self-test dispatcher (manifest-merge / glob / closure / dbselect / drift / ...). 35 references under tests\. Not a user verb.'
   'contrast-selftest'   = 'self-test for the hover contrast computation; driven by a runner under tests\.'
   'doc-facts-selftest'  = 'self-test for the doc-facts renderer; driven by runners under tests\.'
@@ -237,7 +244,7 @@ $NeverProbe = [ordered]@{
   'lsp'      = 'LSP stdio server -- blocks on stdin'
 }
 
-$helpText  = (& $Exe --help 2>&1 | Out-String)
+$helpText  = (& { $ErrorActionPreference = 'Continue'; & $Exe --help 2>&1 | ForEach-Object { "$_" } } | Out-String)
 $helpVerbs = @(Get-HelpVerbList -HelpText $helpText)
 # Non-emptiness is the control: a help parse that yields nothing makes every
 # "is it documented?" comparison below trivially true.
@@ -279,6 +286,52 @@ $nowDocumented = @($UndocumentedOnPurpose.Keys | Where-Object { $helpVerbs -cont
 Check 'no $UndocumentedOnPurpose entry has since been documented' ($nowDocumented.Count -eq 0) `
   $(if ($nowDocumented.Count -gt 0) { "now in --help, drop the entry: $($nowDocumented -join ' ')" } else { '' })
 
+# --- 1c2: no verb is described twice ----------------------------------------
+# 1.52 INT: `drag-lint cycles --db ...` printed TWO lines -- the frozen block of one registry
+# entry and the blockless usage of a second entry for the same verb (one had --hub, the
+# other --ctor-wide). A second line for the same verb + first argument whose flag set
+# overlaps the first by >= 85 % (Jaccard) is that defect; real variants (index --all vs
+# index --project, lint <path> vs lint --in) overlap far less.
+function Get-DuplicateHelpLines([string]$HelpText) {
+  $rows = foreach ($l in ($HelpText -split "`r?`n")) {
+    if ($l -match '^\s{2}drag-lint\s+([a-z][a-z0-9-]*)\s+(\S+)') {
+      [pscustomobject]@{
+        Key   = "$($Matches[1]) $($Matches[2])"
+        Flags = @([regex]::Matches($l, '--[a-z][a-z0-9-]*') | ForEach-Object Value | Sort-Object -Unique)
+      }
+    }
+  }
+  foreach ($grp in @($rows | Group-Object Key | Where-Object Count -gt 1)) {
+    $g = @($grp.Group)
+    for ($i = 0; $i -lt $g.Count; $i++) {
+      for ($j = $i + 1; $j -lt $g.Count; $j++) {
+        $common = @($g[$i].Flags | Where-Object { $g[$j].Flags -contains $_ }).Count
+        $union  = @(($g[$i].Flags + $g[$j].Flags) | Sort-Object -Unique).Count
+        if (($union -gt 0) -and (($common / $union) -ge 0.85)) { $grp.Name; break }
+      }
+    }
+  }
+}
+# Near-duplicates kept on purpose: '<verb> <first token>' -> why. Empty since 1.52 B26 merged the five
+# pre-existing pairs (document --qname, extract-method --in, format <file>, reverse-calltree --qname,
+# rules [--json]) into one registry surface each.
+$DuplicateHelpOnPurpose = [ordered]@{
+}
+# POSITIVE CONTROL: the detector must flag a planted copy of a real line, and must NOT flag
+# two real variants of one verb.
+$ctlDup = @(Get-DuplicateHelpLines ("  drag-lint cycles --db <f> [--edges] [--causes] [--hub] [--plan] [--apply] [--fix] [--format]`n" +
+                                     "  drag-lint cycles --db <f> [--edges] [--causes] [--hub] [--plan] [--apply] [--fix] [--format] [--ctor-wide]`n" +
+                                     "  drag-lint index --all [--only <s>]`n  drag-lint index --all [--rebuild] [--force]"))
+Check 'CONTROL D1 a planted near-duplicate verb line is flagged (and only it)' `
+  (($ctlDup.Count -eq 1) -and ($ctlDup[0] -eq 'cycles --db')) "($($ctlDup -join '; '))"
+$dupLines = @(Get-DuplicateHelpLines $helpText | Sort-Object -Unique)
+$dupNew   = @($dupLines | Where-Object { -not $DuplicateHelpOnPurpose.Contains($_) })
+Check 'no verb has two near-identical --help lines' ($dupNew.Count -eq 0) `
+  $(if ($dupNew.Count -gt 0) { "duplicated: $($dupNew -join ' | ') -- one registry surface per verb line" } else { "($($DuplicateHelpOnPurpose.Count) known, listed)" })
+$dupStale = @($DuplicateHelpOnPurpose.Keys | Where-Object { $dupLines -notcontains $_ })
+Check 'every $DuplicateHelpOnPurpose entry still duplicates' ($dupStale.Count -eq 0) `
+  $(if ($dupStale.Count -gt 0) { "fixed, drop the entry: $($dupStale -join ' | ')" } else { '' })
+
 # --- 1d: the live probe, covering the dispatch scan's blind spot ------------
 $probeDir = Join-Path ([System.IO.Path]::GetTempPath()) ('draglint-docs-guard-' + [Guid]::NewGuid().ToString('N'))
 [System.IO.Directory]::CreateDirectory($probeDir) | Out-Null
@@ -292,7 +345,7 @@ function Test-IsRealVerb([string]$Verb) {
   $e = $o + '.err'
   $p = Start-Process -FilePath $script:Exe -ArgumentList $Verb -WorkingDirectory $script:probeDir `
          -PassThru -WindowStyle Hidden `
-         -RedirectStandardInput $script:probeIn -RedirectStandardOutput $o -RedirectStandardError $e
+         -RedirectStandardInput $script:probeIn -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   # 60 s, not 20: under a loaded box (17 lanes) a cold start of a real verb exceeded 20 s and the kill
   # left no 'unknown command' text, which misclassified a fake token as a REAL verb. A genuinely
   # hung probe is still killed; only the allowance grew.
@@ -355,7 +408,7 @@ Write-Host '-- check 2: rule counts' -ForegroundColor Cyan
 
 $total = 0; $fixable = 0; $defaultOn = 0
 try {
-  $cat       = (& $Exe rules --json 2>$null | Out-String) | ConvertFrom-Json
+  $cat       = (& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null } | Out-String) | ConvertFrom-Json | ForEach-Object { $_ }
   $total     = [int]$cat.summary.total
   $fixable   = @($cat.rules | Where-Object { $_.fixable }).Count
   $defaultOn = @($cat.rules | Where-Object { $_.default_enabled }).Count
@@ -1270,7 +1323,7 @@ foreach ($sv in $selfParsing.Keys) {
     if ($inBlock) { [void]$svBlock.AppendLine($hl) }
   }
   $svBlockSet = Get-FlagSet $svBlock.ToString() $FlagRx
-  $svOwnSet   = Get-FlagSet (& $Exe $sv --help 2>&1 | Out-String) $FlagRx
+  $svOwnSet   = Get-FlagSet (& { $ErrorActionPreference = 'Continue'; & $Exe $sv --help 2>&1 | ForEach-Object { "$_" } } | Out-String) $FlagRx
   Check "F1v the $sv help block and its own --help were read" (($svBlockSet.Count -gt 0) -and ($svOwnSet.Count -gt 0)) `
     "block has $($svBlockSet.Count) flag(s), own help $($svOwnSet.Count) -- the block scan is broken, not the verb"
   foreach ($fl in $selfParsing[$sv]) {
@@ -1308,7 +1361,7 @@ foreach ($k in $FlagUndocumentedOnPurpose.Keys) {
 $aliasJson = Join-Path $Repo 'features\flag-aliases.json'
 $aliasSet = @()
 if (Test-Path -LiteralPath $aliasJson) {
-  $aliasSet = @((Get-Content -LiteralPath $aliasJson -Raw | ConvertFrom-Json).aliases | ForEach-Object { @($_.aliases) })
+  $aliasSet = @((Get-Content -LiteralPath $aliasJson -Raw | ConvertFrom-Json | ForEach-Object { $_ }).aliases | ForEach-Object { @($_.aliases) })
 }
 Check 'F1y the alias table is read (else the next check is vacuous)' ($aliasSet.Count -gt 0) "($($aliasSet.Count) alias(es)) $aliasJson"
 $exAlias = @($FlagUndocumentedOnPurpose.Keys | Where-Object { $aliasSet -contains $_ })

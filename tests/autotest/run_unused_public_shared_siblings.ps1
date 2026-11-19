@@ -37,9 +37,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-unused-public-siblings-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -154,7 +157,7 @@ Write-Ascii $manifest (@'
 
 Write-Host 'Indexing both projects' -ForegroundColor Cyan
 foreach ($pair in @(@($one, $dbOne), @($two, $dbTwo))) {
-  $out = & $Exe index $pair[0] --db $pair[1] --quiet 2>&1
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe index $pair[0] --db $pair[1] --quiet 2>&1 | ForEach-Object { "$_" } }
   Check ("index {0}" -f (Split-Path $pair[1] -Leaf)) ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($out -join ' | ')"
 }
 
@@ -162,16 +165,16 @@ foreach ($pair in @(@($one, $dbOne), @($two, $dbTwo))) {
 Write-Host ''
 Write-Host 'preconditions' -ForegroundColor Cyan
 
-$callsLive = @(& $Exe query find-callers --name LiveRoutine --db $dbTwo --quiet 2>&1) -join "`n"
+$callsLive = @(& { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name LiveRoutine --db $dbTwo --quiet 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'precondition: AppTwo really does reference LiveRoutine' ($callsLive -match 'AppTwoMain') $callsLive
-$callsDead = @(& $Exe query find-callers --name DeadRoutine --db $dbTwo --quiet 2>&1) -join "`n"
+$callsDead = @(& { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name DeadRoutine --db $dbTwo --quiet 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'precondition: AppTwo does NOT reference DeadRoutine' ($callsDead -notmatch 'AppTwoMain') $callsDead
 
 # --- The run under test: lint AppOne, which references neither routine. -----------
 Write-Host ''
 Write-Host 'lint AppOne -- both routines are unreferenced HERE; only AppTwo can separate them' -ForegroundColor Cyan
 
-$lint = (@(& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $dbOne --config $manifest --rules-dir "$PSScriptRoot\..\..\rules" --quiet 2>&1) |
+$lint = (@(& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $dbOne --config $manifest --rules-dir "$PSScriptRoot\..\..\rules" --quiet 2>&1 | ForEach-Object { "$_" } }) |
            ForEach-Object { "$_" }) -join "`n"
 $ups = ($lint -split "`n") | Where-Object { $_ -match 'unused-public-symbol' }
 

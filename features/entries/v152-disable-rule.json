@@ -1,0 +1,98 @@
+{
+  "id": "v152-disable-rule",
+  "title": "Disable rule (this line, this unit, this project)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.52.0-alpha",
+  "summary": "Silence one lint rule for a line (dl:ok marker), a unit or the project (rule_overrides in drag-lint-lint.json), with a reason and date; rules enable undoes it",
+  "intro": "Read this when a finding is right for most of the code but not here: disable the rule for this line, this unit or this project from the RAD Studio editor's right-click menu or with rules disable, and undo it with rules enable. Unit and project scope never write into the source.",
+  "wikiPage": "v152-disable-rule",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "rules",
+      "sub": "disable"
+    },
+    {
+      "type": "cli",
+      "verb": "rules",
+      "sub": "enable"
+    },
+    {
+      "type": "cli",
+      "verb": "rules",
+      "usage": "drag-lint rules disable|enable --rule <id> --scope line|unit|project [--in <F> --line <N>] --reason \"<text>\" [--project <.dproj>] [--config <drag-lint-lint.json>] [--json|--format json]   (line = a dl:ok marker on the line; unit / project = rule_overrides in the project lint config, with reason and date; enable undoes one disable)",
+      "flags": [
+        {
+          "name": "--rule",
+          "arg": "<id>"
+        },
+        {
+          "name": "--scope",
+          "arg": "line|unit|project"
+        },
+        {
+          "name": "--in",
+          "arg": "<F>"
+        },
+        {
+          "name": "--line",
+          "arg": "<N>"
+        },
+        {
+          "name": "--reason",
+          "arg": "<text>"
+        },
+        {
+          "name": "--project",
+          "arg": "<.dproj>"
+        },
+        {
+          "name": "--config",
+          "arg": "<drag-lint-lint.json>"
+        },
+        {
+          "name": "--json"
+        }
+      ],
+      "help": ["  drag-lint rules disable|enable --rule <id> --scope line|unit|project [--in <F> --line <N>] --reason \"<text>\" [--project <.dproj>] [--config <drag-lint-lint.json>] [--json|--format json]   (line = a dl:ok marker on the line; unit / project = rule_overrides in the project lint config, with reason and date; enable undoes one disable)"]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Code Quality > Disable Rule...",
+      "steps": ["Put the caret on a line that shows a drag-lint finding", "Choose drag-lint > Code Quality > Disable Rule...", "Pick Disable here (this line), Disable in this unit or Disable in this project", "Type a one-line reason and press OK"]
+    },
+    {
+      "type": "ide-context",
+      "host": "Editor",
+      "caption": "drag-lint > Disable Rule...",
+      "steps": ["Put the caret on a line that shows a drag-lint finding", "Right-click in the editor, open the drag-lint submenu and choose Disable Rule...", "Pick Disable here (this line), Disable in this unit or Disable in this project", "Type a one-line reason and press OK"]
+    }
+  ],
+  "audience": "both",
+  "questions": [
+    {
+      "ask": "Silence one rule on this line only, with a reason.",
+      "command": "drag-lint rules disable --rule <id> --scope line --in <U.pas> --line <N> --reason \"<why>\""
+    },
+    {
+      "ask": "Silence one rule in one unit without touching the source.",
+      "command": "drag-lint rules disable --rule <id> --scope unit --in <U.pas> --reason \"<why>\""
+    },
+    {
+      "ask": "Turn one rule off for the whole project.",
+      "command": "drag-lint rules disable --rule <id> --scope project --project <App.dproj> --reason \"<why>\""
+    },
+    {
+      "ask": "Undo a disable.",
+      "command": "drag-lint rules enable --rule <id> --scope line|unit|project [--in <U.pas> --line <N>] [--project <App.dproj>]"
+    }
+  ],
+  "verified": {
+    "date": "2026-11-17",
+    "by": "ENGINE",
+    "build": "1.51.1-alpha",
+    "surfaceHash": "ee74bfd4bee5146e02c67338d68de51d94da8cc682b39aa1f3ea6d3177107c33"
+  }
+}

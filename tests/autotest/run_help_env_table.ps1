@@ -23,9 +23,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe  = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
-  [string]$Repo = "$PSScriptRoot\..\.."
+  [string]$Exe  = '',
+  [string]$Repo = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Repo) { $Repo = "$PSScriptRoot\..\.." }
 if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 . "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe
 $ErrorActionPreference = 'Continue'
@@ -52,7 +58,7 @@ function Missing($src, $rows) { ,@($src | Where-Object { $rows -notcontains $_ }
 $src = SourceNames @(Join-Path $Repo 'src')
 Check 'E1 source scan finds the variables (non-empty answer)' ($src.Count -ge 40) "names=$($src.Count)"
 
-$help = @(& $Exe --help 2>$null)
+$help = @(& { $ErrorActionPreference = 'Continue'; & $Exe --help 2>$null })
 $at = -1
 for ($i = 0; $i -lt $help.Count; $i++) { if ($help[$i] -like 'Environment variables*') { $at = $i; break } }
 $rows = @()

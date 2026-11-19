@@ -40,10 +40,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
+  [string]$Exe     = '',
   [switch]$KeepScratch,
   [string]$WorkDir = "$env:TEMP\drag-lint-cyclefix-clause-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }) }
 # E18 T13: removes this run's scratch (WorkDir) however the run ends; kept only on failure when
 # -KeepScratch is passed (the path is printed).
 function Remove-Scratch {
@@ -78,7 +81,7 @@ function Prepare([string]$Name) {
   $db   = Join-Path $WorkDir ($Name + '.sqlite')
   if (Test-Path $db) { [IO.File]::Delete($db) }
   $proj = (Get-ChildItem $root -Filter *.dproj | Select-Object -First 1).FullName
-  & $Exe index --project $proj --db $db *> (Join-Path $WorkDir ($Name + '-index.log'))
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $proj --db $db *> (Join-Path $WorkDir ($Name + '-index.log')) }
   Check "$Name indexed" ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
   return @{ Root = $root; Db = $db }
 }
@@ -92,7 +95,7 @@ function Get-Plan([string]$Db, [string]$Tag) {
   try {
     $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
       -ArgumentList @('cycles', '--db', ('"' + $Db + '"'), '--edges', '--causes', '--plan', '--format', 'text', '--library-db', 'none') `
-      -RedirectStandardOutput $out -RedirectStandardError (Join-Path $WorkDir ($Tag + '-stderr.txt'))
+      -RedirectStandardOutput $out -RedirectStandardError (Join-Path $WorkDir ($Tag + '-stderr.txt')); $null = $p.Handle
   } finally {
     $env:DRAGLINT_TEST_DUMP_PLAN = $null
   }
@@ -108,7 +111,7 @@ function Get-FileBlock([string]$Text, [string]$File) {
 }
 
 function Get-CycleCount([string]$Db) {
-  $t = (& $Exe cycles --db $Db 2>$null | Out-String)
+  $t = (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --db $Db 2>$null } | Out-String)
   return ([regex]::Matches($t, '(?m)^\s*\d+\.\s')).Count, $t
 }
 
@@ -134,14 +137,14 @@ try {
   Check 'the comment line 16 is in no edit' ($alpha -notmatch 'CfBeta supplies the limit') ''
 
   # end to end: follow the plan on the copy, re-index, the cycle is gone
-  $fo = & pwsh -NoProfile -File $Follower -PlanFile $plan.File -Cycle 1 2>&1 | Out-String
+  $fo = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $Follower -PlanFile $plan.File -Cycle 1 2>&1 | ForEach-Object { "$_" } } | Out-String
   # every follower REFUSE exits 2 (b7fb3387), so exit 0 means every step applied
   Check 'follow-cycle-plan applies every step (exit 0)' ($LASTEXITCODE -eq 0) ($fo.Trim() -replace "`r?`n", ' | ')
   $after = [IO.File]::ReadAllText((Join-Path $c.Root 'CfAlpha.pas'))
   Check 'applied CfAlpha keeps the comment line' ($after.Contains('  // CfBeta supplies the limit')) ''
   Check 'applied CfAlpha keeps the trailing comment' ($after -match 'CfBeta\.Untangle; // why: the limit lives there') ''
   $proj = (Get-ChildItem $c.Root -Filter *.dproj | Select-Object -First 1).FullName
-  & $Exe index --project $proj --db $c.Db *> (Join-Path $WorkDir 'commentclause-reindex.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $proj --db $c.Db *> (Join-Path $WorkDir 'commentclause-reindex.log') }
   $n2, $raw2 = Get-CycleCount $c.Db
   Check 'after the plan: no cycle' ($raw2 -match 'No circular') ($raw2.Trim() -replace "`r?`n", ' | ')
 
@@ -217,18 +220,18 @@ try {
     $db = Join-Path $WorkDir ($tag + '.sqlite')
     if (Test-Path $db) { [IO.File]::Delete($db) }
     $proj = Join-Path $root 'CommentClause.dproj'
-    & $Exe index --project $proj --db $db *> (Join-Path $WorkDir ($tag + '-index.log'))
+    & { $ErrorActionPreference = 'Continue'; & $Exe index --project $proj --db $db *> (Join-Path $WorkDir ($tag + '-index.log')) }
     $n, $raw = Get-CycleCount $db
     Check "$($k.N): control -- the cycle exists before the plan" ($raw -match '(?i)cfalpha' -and $raw -notmatch 'No circular') ''
     $plan = Get-Plan $db $tag
     Check "$($k.N): verdict mechanical, no refusal" ($plan.Dump -match "verdict=mechanical`trefusals=`t") $plan.Dump.Trim()
-    $fo = & pwsh -NoProfile -File $Follower -PlanFile $plan.File -Cycle 1 2>&1 | Out-String
+    $fo = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $Follower -PlanFile $plan.File -Cycle 1 2>&1 | ForEach-Object { "$_" } } | Out-String
     Check "$($k.N): follower applies every step (exit 0)" ($LASTEXITCODE -eq 0) ($fo.Trim() -replace "`r?`n", ' | ')
     $after = [IO.File]::ReadAllText((Join-Path $root 'CfAlpha.pas'))
     $got   = [regex]::Match($after, '(?s)(?<=implementation\r\n\r\n)uses.*?;[^\r\n]*\r\n').Value
     Check "$($k.N): applied clause is exactly the expected text" ($got -ceq $k.Out) ("got [" + ($got -replace "`r`n", '\n') + "]")
     if ($k.Keep) { Check "$($k.N): the comment line survives right after the clause" $after.Contains($k.Keep) '' }
-    & $Exe index --project $proj --db $db *> (Join-Path $WorkDir ($tag + '-reindex.log'))
+    & { $ErrorActionPreference = 'Continue'; & $Exe index --project $proj --db $db *> (Join-Path $WorkDir ($tag + '-reindex.log')) }
     $n2, $raw2 = Get-CycleCount $db
     Check "$($k.N): after the plan, no cycle" ($raw2 -match 'No circular') ($raw2.Trim() -replace "`r?`n", ' | ')
   }

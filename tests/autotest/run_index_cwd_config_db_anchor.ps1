@@ -18,10 +18,16 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_idx_cfg_db_anchor_$PID",
   [switch]$Inject
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'; $script:fail = $false
 function Check($n, $ok, $d = '') {
@@ -37,7 +43,7 @@ function Stamp($p) {
 function Invoke-Engine([string]$Cwd, [string[]]$Argv) {
   $o = Join-Path $WorkDir 'out.txt'; $e = Join-Path $WorkDir 'err.txt'
   $q = @($Argv | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } })
-  $p = Start-Process $exePath -ArgumentList $q -WorkingDirectory $Cwd -PassThru -NoNewWindow -RedirectStandardOutput $o -RedirectStandardError $e
+  $p = Start-Process $exePath -ArgumentList $q -WorkingDirectory $Cwd -PassThru -NoNewWindow -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   if (-not $p.WaitForExit(180000)) { try { $p.Kill() } catch { }; return 'TIMEOUT' }
   return ([string](Get-Content $o -Raw -ErrorAction SilentlyContinue)) + "`n" + ([string](Get-Content $e -Raw -ErrorAction SilentlyContinue))
 }
@@ -91,3 +97,4 @@ Check 'A3 config db in a folder above the target is still honoured' (Test-Path $
 } finally { }
 if ($script:fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green; exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

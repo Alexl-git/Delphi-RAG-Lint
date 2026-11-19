@@ -23,7 +23,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 function Parse-Findings([string[]]$Raw) {
   $txt = ($Raw -join "`n"); $b = $txt.IndexOf('[')
-  $out = @(); if ($b -ge 0) { try { $out = @($txt.Substring($b) | ConvertFrom-Json) } catch { $out = @() } }
+  $out = @(); if ($b -ge 0) { try { $out = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $out = @() } }
   if ($null -eq $out) { $out = @() }
   return ,@($out)
 }
@@ -33,7 +33,7 @@ function LineOf([string]$File, [string]$Marker) {
   return [int]$m[0].LineNumber
 }
 function RuleFindings([string]$Db, [string[]]$Extra) {
-  $raw = & $exePath lint-all --db $Db --format json @Extra 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $Db --format json @Extra 2>$null }
   return @((Parse-Findings $raw) | Where-Object { $_.rule -eq $Rule })
 }
 function Fresh([string]$Name) {
@@ -46,17 +46,17 @@ function Fresh([string]$Name) {
 try {
   $src = Fresh 'a'
   $db = Join-Path $scratch 'a.sqlite'
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $second = Join-Path $src 'uFadSecond.pas'
 
   # positive-control: finalization-after-dependency
-  $hits  = RuleFindings $db @('--rule', $Rule)
+  $hits  = @(RuleFindings $db @('--rule', $Rule))
   $lines = @($hits | ForEach-Object { [int]$_.start_line } | Sort-Object)
   $want  = @(LineOf $second 'TRIGGER-CALL')
   Check 'RUN 1 exactly the TRIGGER line fires' (($lines -join ',') -eq ($want -join ',')) "got [$($lines -join ',')] want [$($want -join ',')]"
   Check 'RUN 1 it fires in uFadSecond, on GFirst' (@($hits | Where-Object { $_.file_path -like '*uFadSecond.pas' -and $_.message -match 'GFirst' -and $_.message -match 'fxFad\.dpr' }).Count -eq 1) ''
 
-  $off = RuleFindings $db @()
+  $off = @(RuleFindings $db @())
   Check 'RUN 2 plain lint-all: the rule ships ON' ($off.Count -eq $hits.Count -and $hits.Count -gt 0) "$($off.Count) finding(s)"
 
   $src3 = Fresh 'b'
@@ -65,8 +65,8 @@ try {
   $t = $t.Replace("  uFadFirst in 'uFadFirst.pas',`r`n  uFadSecond in 'uFadSecond.pas';", "  uFadSecond in 'uFadSecond.pas',`r`n  uFadFirst in 'uFadFirst.pas';")
   [IO.File]::WriteAllText($dpr, $t, [Text.Encoding]::ASCII)
   $db3 = Join-Path $scratch 'b.sqlite'
-  & $exePath index $src3 --db $db3 2>&1 | Out-Null
-  $flip = RuleFindings $db3 @('--rule', $Rule)
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src3 --db $db3 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $flip = @(RuleFindings $db3 @('--rule', $Rule))
   Check 'RUN 3 the other .dpr order: uFadSecond is silent' (@($flip | Where-Object { $_.file_path -like '*uFadSecond.pas' }).Count -eq 0) "$($flip.Count) total"
   Check 'RUN 3 the other .dpr order: uFadFirst now fires on GSecond' (@($flip | Where-Object { $_.file_path -like '*uFadFirst.pas' -and $_.message -match 'GSecond' }).Count -eq 1) ''
 } finally {

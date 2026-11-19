@@ -40,9 +40,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = (Join-Path ([IO.Path]::GetTempPath()) "draglint-dup-either-end-$PID")
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -146,9 +149,9 @@ WriteAscii $alpha (UnitText 'uAlpha' @('function AlphaOne(const ASource: TSource
 WriteAscii $zeta  (UnitText 'uZeta'  @('function ZetaOne(const ASource: TSourceRec): Boolean;', 'function ZetaPlus(const ASource: TSourceRec): Boolean;') `
   ((RoutineText 'ZetaOne' $TailF) + "`r`n`r`n" + (RoutineText 'ZetaPlus' $Tail)))
 
-function Reindex { & $Exe index $WorkDir --db $db *> $null }
-function LintAll { (& $Exe lint-all --db $db --quiet 2>$null) }
-function LintFile([string]$Path) { (& $Exe lint $Path --db $db 2>$null) }
+function Reindex { & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db *> $null } }
+function LintAll { (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --quiet 2>$null }) }
+function LintFile([string]$Path) { (& { $ErrorActionPreference = 'Continue'; & $Exe lint $Path --db $db 2>$null }) }
 function DupAt([string[]]$Out, [string]$File) {
   @($Out | Where-Object { $_ -match ('\\' + [regex]::Escape($File) + ':(\d+):\d+\s+\[info\] duplicate-code:') })
 }
@@ -177,7 +180,7 @@ $Lz = if ($zDup0.Count -ge 1) { LineOf $zDup0[0] 'uZeta.pas' } else { 0 }
 Check 'CONTROL a: without a marker lint-all reports uZeta:Lz' ($Lz -gt 0) "Lz=$Lz"
 
 # --- allow the per-file finding at uAlpha:L2 ---------------------------------
-$al = (& $Exe allow $alpha --fix-line $L2 --fix-rule duplicate-code --apply 2>&1) -join "`n"
+$al = (& { $ErrorActionPreference = 'Continue'; & $Exe allow $alpha --fix-line $L2 --fix-rule duplicate-code --apply 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 $markerLine = ([IO.File]::ReadAllLines($alpha))[$L2 - 1]
 Check 'allow wrote a duplicate-code marker on uAlpha:L2' ($markerLine -match 'dl:ok duplicate-code@[0-9a-f]{4}') "$markerLine :: $al"
 
@@ -218,7 +221,7 @@ Check 'CONTROL c: lint uZeta.pas alone reports no CROSS-file pair (single-file s
 # the finding comes back, the partner line gets review-marker-stale, and the
 # marker is still not called unused (it names a live finding).
 $zText = [IO.File]::ReadAllText($zeta)
-$null = & $Exe allow $zeta --fix-line $Lz --fix-rule duplicate-code --apply 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe allow $zeta --fix-line $Lz --fix-rule duplicate-code --apply 2>&1 | ForEach-Object { "$_" } }
 $anchorHash = if (([IO.File]::ReadAllLines($zeta))[$Lz - 1] -match 'dl:ok duplicate-code@([0-9a-f]{4})') { $Matches[1] } else { '' }
 [IO.File]::WriteAllText($zeta, $zText, [Text.Encoding]::ASCII)
 $partnerHash = if ($markerLine -match 'dl:ok duplicate-code@([0-9a-f]{4})') { $Matches[1] } else { '' }

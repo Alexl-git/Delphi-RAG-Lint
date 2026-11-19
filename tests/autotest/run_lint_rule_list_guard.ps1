@@ -7,16 +7,20 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe      = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
-  [string]$RulesDir = "$PSScriptRoot\..\..\rules",
+  [string]$Exe      = '',
+  [string]$RulesDir = '',
   [string]$WorkDir  = "C:\TEMP\draglint_rule_list_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
+if (-not $RulesDir) { $RulesDir = "$PSScriptRoot\..\..\rules" }
 $ErrorActionPreference = 'Stop'; $script:fail = $false
 function Check($n, $ok, $d) {
   Write-Host ("[{0}] {1}" -f (@('FAIL', 'PASS')[[int][bool]$ok]), $n)
   if (-not $ok) { if ($d) { Write-Host "      $d" }; $script:fail = $true }
 }
-function Ids($a) { @(($a | Out-String | ConvertFrom-Json) | % { $_.rule } | Sort-Object -Unique) -join ',' }
+function Ids($a) { @(($a | Out-String | ConvertFrom-Json | ForEach-Object { $_ }) | % { $_.rule } | Sort-Object -Unique) -join ',' }
 try {
   $exe = (Resolve-Path $Exe).Path; $rules = (Resolve-Path $RulesDir).Path
   $src = Join-Path $WorkDir 'src'; [void](New-Item -ItemType Directory -Path $src -Force)
@@ -36,8 +40,8 @@ end.
 '@
   [IO.File]::WriteAllText($pas, (($text -replace "`r`n", "`n") -replace "`n", "`r`n"), [Text.Encoding]::ASCII)
   $db = Join-Path $WorkDir 'g.sqlite'
-  & $exe index $src --db $db --rules-dir $rules 2>&1 | Out-Null
-  function L($more) { & $exe lint-all --db $db --rules-dir $rules --json @more 2>$null }
+  & { $ErrorActionPreference = 'Continue'; & $exe index $src --db $db --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  function L($more) { & { $ErrorActionPreference = 'Continue'; & $exe lint-all --db $db --rules-dir $rules --json @more 2>$null } }
   Check 'control: OFF rules silent by default' ((Ids (L @())) -notmatch 'magic-literal|nil-comparison')
   Check 'control: --enable finds both' ((Ids (L @('--enable', 'magic-literal,nil-comparison'))) -match 'magic-literal' )
   Check 'item1: --rule on OFF rule returns it' ((Ids (L @('--rule', 'magic-literal'))) -eq 'magic-literal')

@@ -139,8 +139,9 @@ procedure CmpCollect(const ANode: TTSNode; const AType: string; AList: TList<TTS
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.V151.CMP.TCmpRun.Emit (DRagLint.V151.CMP.pas)</para>
-/// <para>Calls: Default, Integer, TreeSitter.TTSNodeHelper.EndPoint, TreeSitter.TTSNodeHelper.StartPoint</para>
+/// <para>Calls: Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol, Integer, TreeSitter.TTSNodeHelper.EndPoint, TreeSitter.TTSNodeHelper.StartPoint</para>
 /// <para>Returns: Default(TLintFinding)</para>
+/// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol"/>
 /// <seealso cref="TreeSitter.TTSNodeHelper.EndPoint"/>
 /// <seealso cref="TreeSitter.TTSNodeHelper.StartPoint"/>
 /// <!-- drag-lint:auto END -->
@@ -224,7 +225,8 @@ procedure CmpCollectClasses(const ASrc: TBytes; const ARoot: TTSNode; AClasses: 
 implementation
 
 uses
-  System.Classes
+  DRagLint.Diagnostics.ParseCache { 1.52 BK-COLS2: TAstParseCache.CharCol }
+  , System.Classes
   , System.StrUtils
   , System.IOUtils
   ;
@@ -301,9 +303,9 @@ begin
   Result.Message  := AMessage;
   Result.FilePath := AFile;
   Result.StartLine:= Integer(AFrom.StartPoint.Row) + 1;
-  Result.StartCol := Integer(AFrom.StartPoint.Column) + 1;
+  Result.StartCol := TAstParseCache.CharCol(Result.FilePath, AFrom.StartPoint); { 1.52 BK-COLS2: character column }
   Result.EndLine  := Integer(ATo.EndPoint.Row) + 1;
-  Result.EndCol   := Integer(ATo.EndPoint.Column) + 1;
+  Result.EndCol   := TAstParseCache.CharCol(Result.FilePath, ATo.EndPoint); { 1.52 BK-COLS2: character column }
 end;
 
 function CmpIntLiteral(const AText: string; out AValue: Int64): Boolean;

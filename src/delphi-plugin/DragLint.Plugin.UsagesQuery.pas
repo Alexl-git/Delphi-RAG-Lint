@@ -14,7 +14,32 @@ uses
 /// <param name="pName">The symbol; must not be empty (the server refuses it).</param>
 /// <param name="pWidth">narrow, wide or very-wide; the CLI's --width.</param>
 /// <returns>A new object; the caller owns it.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.UsagesQuery.UsagesLspScopedParams (DragLint.Plugin.UsagesQuery.pas)</para>
+/// <para>Returns: TJSONObject.Create</para>
+/// <para>Owns returned: new (caller owns)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UsagesLspParams(const pName, pWidth: string): TJSONObject;
+
+/// <summary>The parameters of a scoped `draglint/usages` request (1.52 FUSCOPE).</summary>
+/// <param name="pName">The symbol; must not be empty.</param>
+/// <param name="pWidth">narrow, wide or very-wide.</param>
+/// <param name="pScope">symbol, project, group or everywhere; '' leaves the server default (symbol).</param>
+/// <param name="pFile">The source file of the position that binds scope symbol; '' = no position.</param>
+/// <param name="pLine">1-based line of the position.</param>
+/// <param name="pCol">1-based column of the position.</param>
+/// <returns>A new object (UsagesLspParams plus scope, file, line, col); the caller owns it.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.UsagesForm.TDragLintUsagesForm.TryLspQuery (DragLint.Plugin.UsagesForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.UsagesQuery.UsagesLspParams</para>
+/// <para>Returns: UsagesLspParams(pName, pWidth)</para>
+/// <seealso cref="DragLint.Plugin.UsagesQuery.UsagesLspParams"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function UsagesLspScopedParams(const pName, pWidth, pScope, pFile: string; pLine, pCol: Integer): TJSONObject;
 
 /// <summary>Takes the usages document out of a JSON-RPC reply envelope.</summary>
 /// <param name="pReply">The whole envelope; nil is allowed.</param>
@@ -23,6 +48,14 @@ function UsagesLspParams(const pName, pWidth: string): TJSONObject;
 /// <returns>True when the envelope carries a usages `result`. False for an error reply
 /// (an engine without the method), a missing `result` or another shape: the caller then
 /// asks the CLI, so a reply it cannot read never reads as "no usages".</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.UsagesForm.TDragLintUsagesForm.LspAnswered (DragLint.Plugin.UsagesForm.pas)</para>
+/// <para>Calls: TJSONObject</para>
+/// <para>Returns: False; True</para>
+/// <para>Mutates: pJson (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UsagesFromReply(pReply: TJSONValue; out pJson: string): Boolean;
 
 /// <summary>Tells whether a server started with pServerDbs can answer a query about pDbs.</summary>
@@ -31,9 +64,17 @@ function UsagesFromReply(pReply: TJSONValue; out pJson: string): Boolean;
 /// <returns>True when pDbs holds at least one path and every path is among pServerDbs
 /// (compared expanded, case-insensitive). False for an empty query: only the CLI can say
 /// what is wrong with a query that resolved no database.</returns>
-/// <remarks>A SUBSET, not an equal set: the Structure form asks about the unit's own
+/// <remarks>
+/// A SUBSET, not an equal set: the Structure form asks about the unit's own
 /// database and the server has that one plus its neighbours, so the answer may also
-/// list rows from those.</remarks>
+/// list rows from those.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.UsagesForm.TDragLintUsagesForm.TryLspQuery (DragLint.Plugin.UsagesForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.UsagesQuery.ServerCoversDbs.Held, ExpandFileName, SameText</para>
+/// <para>Returns: False; True</para>
+/// <seealso cref="DragLint.Plugin.UsagesQuery.ServerCoversDbs.Held"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ServerCoversDbs(const pDbs, pServerDbs: TArray<string>): Boolean;
 
 /// <summary>Tells whether a draglint/usages request in flight can no longer be answered.</summary>
@@ -44,9 +85,16 @@ function ServerCoversDbs(const pDbs, pServerDbs: TArray<string>): Boolean;
 /// <param name="pCurrentAlive">pCurrent's IsAlive; read only by the caller, and only when
 /// pCurrent = pAsked.</param>
 /// <returns>True when pId is non-zero and the asked client is not the running one, or is dead.</returns>
-/// <remarks>A stopped client runs no callback (LspClient CancelAllAsync), so without this check
+/// <remarks>
+/// A stopped client runs no callback (LspClient CancelAllAsync), so without this check
 /// the form showed "(searching...)" until Refresh. Pure; a reused address for a new client is
-/// not detected (it then waits for that client's own budget notice).</remarks>
+/// not detected (it then waits for that client's own budget notice).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.UsagesForm.TDragLintUsagesForm.LspWatchTick (DragLint.Plugin.UsagesForm.pas)</para>
+/// <para>Returns: (pId &lt;&gt; 0) and ((pAsked &lt;&gt; pCurrent) or not pCurrentAlive)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UsagesRequestOrphaned(pId: Integer; const pAsked, pCurrent: TObject; pCurrentAlive: Boolean): Boolean;
 
 implementation
@@ -66,6 +114,18 @@ begin
   Result:= TJSONObject.Create;
   Result.AddPair('name' , pName );
   Result.AddPair('width', pWidth);
+end;
+
+function UsagesLspScopedParams(const pName, pWidth, pScope, pFile: string; pLine, pCol: Integer): TJSONObject;
+begin
+  Result:= UsagesLspParams(pName, pWidth);
+  if pScope <> '' then Result.AddPair('scope', pScope);
+  if (pFile <> '') and (pLine > 0) then
+  begin
+    Result.AddPair('file', pFile);
+    Result.AddPair('line', TJSONNumber.Create(pLine));
+    Result.AddPair('col' , TJSONNumber.Create(pCol ));
+  end;
 end;
 
 function UsagesFromReply(pReply: TJSONValue; out pJson: string): Boolean;

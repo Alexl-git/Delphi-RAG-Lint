@@ -1,0 +1,10 @@
+package ImplicitPkg;
+
+requires
+  rtl;
+
+contains
+  ImplicitPkgFire in 'implicit-package-import.pas',
+  ImplicitPkgClean in 'implicit-package-import-clean.pas';
+
+end.

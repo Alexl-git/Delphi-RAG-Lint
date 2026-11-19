@@ -23,9 +23,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$Fixture = "$PSScriptRoot\fixtures\docdrift\transitive_caught.pas"
+  [string]$Exe     = '',
+  [string]$Fixture = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $Fixture) { $Fixture = "$PSScriptRoot\fixtures\docdrift\transitive_caught.pas" }
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
 function Check($n, $ok, $d = '') {
@@ -42,13 +46,13 @@ New-Item -ItemType Directory -Path $srcDir | Out-Null
 $db = Join-Path $scratch 'w.sqlite'
 try {
   Copy-Item (Resolve-Path $Fixture).Path (Join-Path $srcDir 'transitive_caught.pas') -Force
-  & $exePath index $srcDir --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $srcDir --db $db 2>$null } | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "index failed ($LASTEXITCODE)" }
 
   # `document --qname` renders the edit for an undocumented declaration; the
   # emitter may wrap a tag, so flatten continuation lines before matching.
   function DocFor([string]$Name) {
-    $raw = (& $exePath document --qname "transitive_caught.$Name" --db $db 2>$null | Out-String)
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname "transitive_caught.$Name" --db $db 2>$null } | Out-String)
     return (($raw -replace "`r?`n\s*///\s?", ' ') -replace '\s+', ' ')
   }
   $viaTag = 'cref="EBoom"><!-- drag-lint:auto exc -->via transitive_caught.Raiser'

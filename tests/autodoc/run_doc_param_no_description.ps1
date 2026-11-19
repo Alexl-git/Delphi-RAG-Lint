@@ -33,9 +33,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-param-nodesc-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -82,9 +85,9 @@ $pas = Join-Path $WorkDir 'paramnodesc.pas'
 [System.IO.File]::WriteAllText($pas, $src, [System.Text.Encoding]::ASCII)
 
 $db = Join-Path $WorkDir 'p.sqlite'
-& $Exe index $WorkDir --db $db --quiet 2>&1 | Out-Null
-& $Exe document --qname paramnodesc.Scan --db $db --apply --no-backup 2>&1 | Out-Null
-& $Exe index $WorkDir --db $db --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe document --qname paramnodesc.Scan --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 $doc = [System.IO.File]::ReadAllText($pas)
 Write-Host 'The generated block' -ForegroundColor Cyan
@@ -105,9 +108,9 @@ Check 'AFlag falls back to its DECLARED TYPE (structure that reflects the code)'
 Check 'AUntyped (no comment, no type) is the one left with an EMPTY body' `
   ($doc -match 'name="AUntyped"><!-- drag-lint:auto --></param>')
 
-$raw  = & $Exe lint-all --db $db --json 2>$null
+$raw  = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --json 2>$null }
 $find = @()
-try { $find = ($raw -join "`n" | ConvertFrom-Json) } catch { $find = @() }
+try { $find = ($raw -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $find = @() }
 if ($null -eq $find) { $find = @() }
 $nd = @($find | Where-Object { $_.rule -eq 'doc-param-no-description' })
 
@@ -134,7 +137,7 @@ Check 'it is NOT reported as doc-drift' `
 
 Write-Host ''
 Write-Host 'Rule catalogue' -ForegroundColor Cyan
-$cat = (& $Exe rules --json 2>$null) -join "`n"
+$cat = (& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null }) -join "`n"
 Check 'the rule is in the catalogue' ($cat -match 'doc-param-no-description')
 
 Write-Host ''

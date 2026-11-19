@@ -10,7 +10,10 @@
   Run with pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -20,9 +23,9 @@ function Check($n, $ok, $d = '') {
 }
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 $Exe = (Resolve-Path $Exe).Path
-$entry = Get-Content (Join-Path $PSScriptRoot '..\..\features\entries\menu-tree.json') -Raw | ConvertFrom-Json
+$entry = Get-Content (Join-Path $PSScriptRoot '..\..\features\entries\menu-tree.json') -Raw | ConvertFrom-Json | ForEach-Object { $_ }
 function Help([string[]]$A) {
-  $o = & $Exe @A 2>$null
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe @A 2>$null }
   return @{ Text = ($o -join "`n"); Code = $LASTEXITCODE }
 }
 foreach ($s in $entry.surfaces | Where-Object { $_.type -eq 'cli' }) {
@@ -39,7 +42,7 @@ foreach ($s in $entry.surfaces | Where-Object { $_.type -eq 'cli' }) {
 # each CRLF-terminated, nothing before or after -- a Contains() test above passes on a superset.
 function Get-RawStdout([string[]]$A) {
   $o = [IO.Path]::GetTempFileName(); $e = [IO.Path]::GetTempFileName()
-  $null = Start-Process -FilePath $Exe -ArgumentList $A -RedirectStandardOutput $o -RedirectStandardError $e -NoNewWindow -Wait -PassThru
+  $null = Start-Process -FilePath $Exe -ArgumentList $A -RedirectStandardOutput $o -RedirectStandardError $e -NoNewWindow -Wait -PassThru; $null = $null.Handle
   $b = [IO.File]::ReadAllBytes($o); [IO.File]::Delete($o); [IO.File]::Delete($e)
   return $b
 }

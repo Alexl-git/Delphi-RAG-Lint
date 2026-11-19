@@ -41,9 +41,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-find-unit-multidb-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -166,7 +169,7 @@ $projDb = Join-Path $WorkDir 'proj.sqlite'
 
 Write-Host 'Indexing fixtures' -ForegroundColor Cyan
 foreach ($pair in @(@($libSrc, $libDb), @($projSrc, $projDb))) {
-  $out = & $Exe index $pair[0] --db $pair[1] --quiet 2>&1
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe index $pair[0] --db $pair[1] --quiet 2>&1 | ForEach-Object { "$_" } }
   Check ("index {0}" -f (Split-Path $pair[1] -Leaf)) ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($out -join ' | ')"
 }
 
@@ -176,7 +179,7 @@ $bareFile = Join-Path $projSrc 'ProjBare.pas'
 function FindUnit([string]$Name, [string]$InFile, [string[]]$Dbs) {
   $dbArgs = @()
   foreach ($d in $Dbs) { $dbArgs += '--db'; $dbArgs += $d }
-  $out = @(& $Exe find-unit --name $Name --in $InFile @dbArgs --quiet 2>&1) | ForEach-Object { "$_" }
+  $out = @(& { $ErrorActionPreference = 'Continue'; & $Exe find-unit --name $Name --in $InFile @dbArgs --quiet 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" }
   $script:LastExit = $LASTEXITCODE
   return ($out -join "`n")
 }

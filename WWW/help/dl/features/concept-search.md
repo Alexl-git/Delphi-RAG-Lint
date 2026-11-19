@@ -4,10 +4,10 @@ title: query --concept
 summary: Ranked BM25 concept search over identifier words and doc-comment prose
 product: DL
 group: search-navigation
-order: 20004
+order: 20005
 since: 1.38.0-alpha
 status: shipped
-updated: 1.38.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # query --concept

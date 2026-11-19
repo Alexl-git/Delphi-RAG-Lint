@@ -24,7 +24,10 @@
   Usage: pwsh -File tests\autodoc\run_doc_drift_input_only.ps1 [-Exe <path>]
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'
@@ -50,12 +53,12 @@ $Db = Join-Path $W 't.sqlite'
 
 Push-Location $W
 try {
-  & $Exe index $W --db $Db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $W --db $Db 2>$null } | Out-Null
 
   # lint-all --json prints progress text around ONE array.
-  $raw = (& $Exe lint-all --db $Db --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --json 2>$null }) -join "`n"
   $a = $raw.IndexOf('['); $b = $raw.LastIndexOf(']')
-  $f = if ($a -ge 0 -and $b -gt $a) { @(ConvertFrom-Json $raw.Substring($a, $b - $a + 1)) } else { @() }
+  $f = @(if ($a -ge 0 -and $b -gt $a) { @((ConvertFrom-Json $raw.Substring($a, $b - $a + 1) | ForEach-Object { $_ }) | ForEach-Object { $_ }) } else { @() })
 
   $hits = @($f | Where-Object { $_.rule -eq 'doc-drift' -and $_.message -like '*documented as input-only*' })
   $names = @($hits | ForEach-Object {

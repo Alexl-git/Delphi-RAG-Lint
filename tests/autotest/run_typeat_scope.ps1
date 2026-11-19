@@ -18,9 +18,12 @@
 # Usage: pwsh -File tests/autotest/run_typeat_scope.ps1 [-Exe <path>]
 [CmdletBinding()]
 param(
-    [string] $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+    [string] $Exe = '',
     [string] $WorkDir = "$env:TEMP\drag-lint-typeat-scope-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -77,7 +80,7 @@ end.
 
 # --- index it ---
 $db = "$WorkDir\scope.sqlite"
-$idxOut = & $Exe index $srcDir --db $db 2>&1
+$idxOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $srcDir --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index fixture exits 0' ($LASTEXITCODE -eq 0) (($idxOut | Select-Object -Last 1))
 Check 'db created' (Test-Path $db)
 
@@ -94,7 +97,7 @@ $bodyLine = $bodyLineIdx + 1
 
 # --- signature: const N ---
 $sigCol  = $sigLineText.IndexOf('const N') + 'const '.Length + 1
-$sigOut  = (& $Exe typeat "${pas}:${sigLine}:${sigCol}" --db $db 2>&1) -join "`n"
+$sigOut  = (& { $ErrorActionPreference = 'Continue'; & $Exe typeat "${pas}:${sigLine}:${sigCol}" --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'signature N resolves to Shadow.N (not TFoo.N)' `
     ($sigOut -match 'Resolved:\s+ScopeFixture\.Shadow\.N\s*(\r|\n|$)') `
     $sigOut
@@ -104,7 +107,7 @@ Check 'signature N does NOT resolve to TFoo.N' `
 
 # --- body: N inside IntToStr(N) ---
 $bodyCol  = $bodyLineText.IndexOf('IntToStr(N)') + 'IntToStr('.Length + 1
-$bodyOut  = (& $Exe typeat "${pas}:${bodyLine}:${bodyCol}" --db $db 2>&1) -join "`n"
+$bodyOut  = (& { $ErrorActionPreference = 'Continue'; & $Exe typeat "${pas}:${bodyLine}:${bodyCol}" --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'body N resolves to Shadow.N (not TFoo.N)' `
     ($bodyOut -match 'Resolved:\s+ScopeFixture\.Shadow\.N\s*(\r|\n|$)') `
     $bodyOut
@@ -113,7 +116,7 @@ Check 'body N does NOT resolve to TFoo.N' `
     $bodyOut
 
 # --- sanity: TFoo.N itself is still directly queryable (fix must not delete it) ---
-$qOut = (& $Exe query --qname ScopeFixture.TFoo.N --db $db 2>&1) -join "`n"
+$qOut = (& { $ErrorActionPreference = 'Continue'; & $Exe query --qname ScopeFixture.TFoo.N --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'TFoo.N (the field) is still indexed' ($qOut -match 'ScopeFixture\.TFoo\.N') $qOut
 
 Write-Host ''

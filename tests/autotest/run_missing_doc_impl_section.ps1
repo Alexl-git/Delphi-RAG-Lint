@@ -10,9 +10,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-missingdoc-impl-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -68,8 +71,8 @@ $unit = @(
 [IO.File]::WriteAllText((Join-Path $src 'ImplDoc.pas'), $unit + "`r`n", [Text.Encoding]::ASCII)
 
 $db = Join-Path $WorkDir 'impl.sqlite'
-& $Exe index $src --db $db *> $null
-$out = (& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --enable missing-doc 2>&1 | Out-String)
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db *> $null }
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --enable missing-doc 2>&1 | ForEach-Object { "$_" } } | Out-String)
 $md = ($out -split "`r?`n") | Where-Object { $_ -match 'missing-doc' -and $_ -match "Public declaration" }
 $joined = $md -join "`n"
 Check 'positive control: interface routine PubNoDocFn reported' ($joined -match "'PubNoDocFn'")

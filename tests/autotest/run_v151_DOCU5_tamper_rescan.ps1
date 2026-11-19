@@ -14,7 +14,10 @@
   Run from a neutral cwd, pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$detail=''){ Write-Host ("[{0}] {1}{2}" -f (@('FAIL','PASS')[[int]$ok]),$n,$(if($detail){" -- $detail"}else{''})) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
@@ -87,7 +90,7 @@ end.
 $db = Join-Path $scratch 'fx.sqlite'; $dpr = Join-Path $scratch 'Fx.dpr'
 $core = Join-Path $scratch 'Core.pas'; $app = Join-Path $scratch 'App.pas'
 function RunEngine([string[]]$EngineArgs) {
-  $out = & $exePath @EngineArgs 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath @EngineArgs 2>&1 | ForEach-Object { "$_" } } | Out-String
   return [pscustomobject]@{ Code = $LASTEXITCODE; Text = $out }
 }
 $ix = RunEngine @('index','--project',$dpr,'--db',$db)

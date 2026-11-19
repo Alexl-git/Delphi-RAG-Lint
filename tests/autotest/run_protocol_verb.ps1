@@ -43,9 +43,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$Handler = "$PSScriptRoot\..\..\src\tools\uri-handler\Win64\Debug\drag-lint-open.exe"
+  [string]$Exe     = '',
+  [string]$Handler = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $Handler) { $Handler = "$PSScriptRoot\..\..\src\tools\uri-handler\Win64\Debug\drag-lint-open.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -73,9 +77,9 @@ if ($Work -match '-wt\\') { Write-Host "SETUP: temp path $Work contains -wt\" -F
 $RealCopy = $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'drag-lint\Open-DragLintUri.ps1' } else { '' })
 
 function Export-RealKey([string]$To) {
-  & reg.exe query $RealKey *> $null
+  & { $ErrorActionPreference = 'Continue'; & reg.exe query $RealKey *> $null }
   if ($LASTEXITCODE -ne 0) { return $null }
-  & reg.exe export $RealKey $To /y *> $null
+  & { $ErrorActionPreference = 'Continue'; & reg.exe export $RealKey $To /y *> $null }
   if ($LASTEXITCODE -ne 0) { throw "reg export $RealKey failed" }
   [IO.File]::ReadAllBytes($To)
 }
@@ -91,7 +95,7 @@ function Invoke-Protocol([string[]]$ArgList, [string]$Root = $TestRoot) {
   if ($env:DRAGLINT_PROTOCOL_TEST_ROOT -ne $Root) { throw 'test root not set -- refusing to run the verb' }
   $o = Join-Path $Work 'out.txt'; $e = Join-Path $Work 'err.txt'
   $p = Start-Process -FilePath $Exe -ArgumentList (@('protocol') + $ArgList | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) `
-         -NoNewWindow -Wait -PassThru -RedirectStandardOutput $o -RedirectStandardError $e
+         -NoNewWindow -Wait -PassThru -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   [pscustomobject]@{ Code = $p.ExitCode; Out = [IO.File]::ReadAllText($o); Err = [IO.File]::ReadAllText($e) }
 }
 function Get-Cmd { (Get-ItemProperty -LiteralPath $CmdKey -ErrorAction SilentlyContinue).'(default)' }
@@ -167,7 +171,7 @@ try {
   $r = Invoke-Protocol @('status')
   Check 'PV-REG (status ours)'  ($r.Code -eq 0 -and $r.Out -match 'draglint://: ours' -and $r.Out.Contains($expectCmd)) "exit $($r.Code)"
   $r = Invoke-Protocol @('status', '--json')
-  $j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   Check 'PV-REG (status --json)' ($r.Code -eq 0 -and $j -and $j.schema -eq 'protocol/1' -and $j.registered -eq $true -and
                                   $j.class -eq 'ours' -and $j.command -eq $expectCmd -and $j.handler -eq $good) $r.Out.Trim()
 

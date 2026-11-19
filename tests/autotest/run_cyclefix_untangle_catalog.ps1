@@ -17,9 +17,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-untangle-catalog-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }) }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -43,7 +46,7 @@ function Copy-Tree([string]$From, [string]$To) {
 
 # Indexes pDproj into pDb; returns the exit code.
 function Invoke-Index([string]$Dproj, [string]$Db, [string]$Tag) {
-  & $Exe index --project $Dproj --db $Db *> (Join-Path $WorkDir "index-$Tag.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $Dproj --db $Db *> (Join-Path $WorkDir "index-$Tag.log") }
   return $LASTEXITCODE
 }
 
@@ -52,7 +55,7 @@ function Get-Cycles([string]$Db, [string]$Tag, [string[]]$Extra) {
   $o = Join-Path $WorkDir "cycles-$Tag.out"
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
     -ArgumentList (@('cycles', '--db', ('"' + $Db + '"')) + $Extra + $(if ($Extra -contains '--plan') { @('--library-db', 'none') } else { @() })) `
-    -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "cycles-$Tag.err")
+    -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "cycles-$Tag.err"); $null = $p.Handle
   return @{ Exit = $p.ExitCode; Out = [IO.File]::ReadAllText($o); File = $o }
 }
 
@@ -151,7 +154,7 @@ try {
   $prjEd  = (Get-FileEdits $blk 'UntangleReuse.dproj') -join "`n"
   Check 'b6 the .dproj registers the two new units, not the existing one' `
     ((-not $prjEd.Contains('DemoAudit.Untangle.pas')) -and $prjEd.Contains('DemoLogger.Untangle.pas') -and $prjEd.Contains('DemoSession.Untangle.pas')) $prjEd
-  $fo = & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $pb.File -Cycle 1 -Root $rb 2>&1 | Out-String
+  $fo = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $pb.File -Cycle 1 -Root $rb 2>&1 | ForEach-Object { "$_" } } | Out-String
   $rcF = $LASTEXITCODE
   Check 'b7 the follower applies cycle 1 (exit 0)' ($rcF -eq 0) ('exit=' + $rcF + ' ' + ($fo.Trim() -replace "`r?`n", ' | '))
   $leafNow = [IO.File]::ReadAllText((Join-Path $rb 'DemoAudit.Untangle.pas'))
@@ -208,7 +211,7 @@ try {
   Check 'd2 the existing leaf is still extended (positive control: the edits are there)' $leafD.Contains('  TDemoAuditKind = (akOpen, akWork, akClose);') $leafD
   Check 'd3 no edit of DemoAudit.Untangle.pas adds DemoAudit.Untangle to its own uses' `
     (-not ($leafD -match '(?m)^\s*DemoAudit\.Untangle[;,]')) $leafD
-  $fo = & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $pd.File -Cycle 1 -Root $rd 2>&1 | Out-String
+  $fo = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $pd.File -Cycle 1 -Root $rd 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'd4 the follower applies cycle 1 (exit 0)' ($LASTEXITCODE -eq 0) ($fo.Trim() -replace "`r?`n", ' | ')
   $c2 = Invoke-Compile $rd 'UntangleReuse.dpr'
   Check 'd5 the followed tree compiles (no F2092 self-use)' $c2.Ok ($c2.Log -split "`r?`n" | Select-String 'Error|Fatal' | Select-Object -First 3)
@@ -227,7 +230,7 @@ try {
   Check 'e3 the existing leaf receives CSuMaxVia (positive control: the edits are there)' $leafE.Contains('  CSuMaxVia = 3;') $leafE
   Check 'e4 no edit of SuFacts.Untangle.pas adds SuFacts.Untangle to its own uses' `
     (-not ($leafE -match '(?m)^\s*SuFacts\.Untangle[;,]')) $leafE
-  $fe = & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $pe.File -Cycle 1 -Root $re 2>&1 | Out-String
+  $fe = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $pe.File -Cycle 1 -Root $re 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'e5 the follower applies cycle 1 (exit 0)' ($LASTEXITCODE -eq 0) ($fe.Trim() -replace "`r?`n", ' | ')
   $c3 = Invoke-Compile $re 'PartBSelfUse.dpr'
   Check 'e6 the followed tree compiles (no F2092 self-use)' $c3.Ok ($c3.Log -split "`r?`n" | Select-String 'Error|Fatal' | Select-Object -First 3)

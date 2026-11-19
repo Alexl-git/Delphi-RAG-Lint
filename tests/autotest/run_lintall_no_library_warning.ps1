@@ -6,7 +6,10 @@
   Positive control: the same run with a library, and with the choice stated, prints no warning, so the check is not
   matching a line that is always there. The engine is a COPY with no manifest beside it, in %TEMP%.
 #>
-param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 . "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG3: no machine drag-lint.json
 $ErrorActionPreference = 'Stop'
@@ -26,12 +29,12 @@ try {
   $Prj = Join-Path $Tmp 'p'
   Copy-Item (Resolve-Path "$PSScriptRoot\..\fixtures\refactor\redcast").Path $Prj -Recurse
   $Db = Join-Path $Prj 'p.sqlite'
-  & $E index --project (Join-Path $Prj 'RedCast.dproj') --db $Db --library-db none *> (Join-Path $Tmp 'index.log')
+  & { $ErrorActionPreference = 'Continue'; & $E index --project (Join-Path $Prj 'RedCast.dproj') --db $Db --library-db none *> (Join-Path $Tmp 'index.log') }
   Check 'S0 the fixture indexes' ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
   $Rule = @('--rule', 'unused-global')
   function Err([string[]]$More) {
     $f = Join-Path $Tmp 'err.txt'
-    & $E lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $Db @Rule @More 1> $null 2> $f
+    & { $ErrorActionPreference = 'Continue'; & $E lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $Db @Rule @More 1> $null 2> $f }
     return [IO.File]::ReadAllText($f)
   }
   $Warn = 'no platform library for this run'

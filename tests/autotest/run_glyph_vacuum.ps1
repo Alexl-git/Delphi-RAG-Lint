@@ -10,9 +10,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_glyph_vacuum_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 $script:fail = $false
@@ -197,7 +200,7 @@ end
 "@
 
 # ---- run ------------------------------------------------------------------------
-$o = & $Exe glyph-vacuum --root $src --out $out 2>&1 | Out-String
+$o = & { $ErrorActionPreference = 'Continue'; & $Exe glyph-vacuum --root $src --out $out 2>&1 | ForEach-Object { "$_" } } | Out-String
 $code = $LASTEXITCODE
 Write-Host "--- raw stdout ---"; Write-Host $o
 Check 'T1 exit 0 on a completed walk' ($code -eq 0) "exit=$code"
@@ -333,7 +336,7 @@ object FrmC: TFrmC
   end
 end
 "@
-$o5 = & $Exe glyph-vacuum --root $src3 --out (Join-Path $WorkDir 'out3') 2>&1 | Out-String
+$o5 = & { $ErrorActionPreference = 'Continue'; & $Exe glyph-vacuum --root $src3 --out (Join-Path $WorkDir 'out3') 2>&1 | ForEach-Object { "$_" } } | Out-String
 $r3 = (Import-Csv (Join-Path $WorkDir 'out3\instances.tsv') -Delimiter "`t")[0]
 Write-Host "--- raw positive-control row ---"; Get-Content (Join-Path $WorkDir 'out3\instances.tsv') | ForEach-Object { Write-Host $_ }
 Check 'T2 positive control: no count property -> count_value, count_effective, agree EMPTY; inferred_n still 4' ($r3.count_prop -eq '' -and $r3.count_value -eq '' -and $r3.count_effective -eq '' -and $r3.agree -eq '' -and $r3.inferred_n -eq '4') "$($r3.count_prop)/$($r3.count_value)/$($r3.count_effective)/$($r3.agree)/$($r3.inferred_n)"
@@ -355,7 +358,7 @@ object FrmD: TFrmD
 end
 "@
 $out4 = Join-Path $WorkDir 'out4'
-$o9 = & $Exe glyph-vacuum --root $src4 --out $out4 2>&1 | Out-String
+$o9 = & { $ErrorActionPreference = 'Continue'; & $Exe glyph-vacuum --root $src4 --out $out4 2>&1 | ForEach-Object { "$_" } } | Out-String
 Write-Host "--- raw stdout (dotted count run) ---"; Write-Host $o9
 $r4 = @(Import-Csv (Join-Path $out4 'instances.tsv') -Delimiter "`t")
 Write-Host "--- raw instances.tsv (dotted count run) ---"; Get-Content (Join-Path $out4 'instances.tsv') | ForEach-Object { Write-Host $_ }
@@ -432,7 +435,7 @@ $libDb = Join-Path $WorkDir 'lib.sqlite'
 & $Exe index $lib --db $libDb | Out-Null
 
 $outDb = Join-Path $WorkDir 'out-db'
-$o6 = & $Exe glyph-vacuum --root $src --out $outDb --db $libDb 2>&1 | Out-String
+$o6 = & { $ErrorActionPreference = 'Continue'; & $Exe glyph-vacuum --root $src --out $outDb --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-String
 Write-Host "--- raw stdout (db run) ---"; Write-Host $o6
 Check 'T3 db run exit 0' ($LASTEXITCODE -eq 0) $o6
 $rowsDb = Import-Csv (Join-Path $outDb 'instances.tsv') -Delimiter "`t"
@@ -444,7 +447,7 @@ Check 'T3 count_default 1 (declared on the ancestor)' ($a1d.count_default -eq '1
 Check 'T3 count_effective stays 4 when the value is present' ($a1d.count_effective -eq '4') $a1d.count_effective
 Check 'T3 TSpeedButton not in this index -> class_unit empty, count_default empty' ($icd.class_unit -eq '' -and $icd.count_default -eq '') "$($icd.class_unit)/$($icd.count_default)"
 # the default half of count_effective: same class, no value streamed
-$o7 = & $Exe glyph-vacuum --root $src3 --out (Join-Path $WorkDir 'out3-db') --db $libDb 2>&1 | Out-String
+$o7 = & { $ErrorActionPreference = 'Continue'; & $Exe glyph-vacuum --root $src3 --out (Join-Path $WorkDir 'out3-db') --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-String
 $r3d = (Import-Csv (Join-Path $WorkDir 'out3-db\instances.tsv') -Delimiter "`t")[0]
 Check 'T3 no value + declared default 1 -> count_effective 1, inferred 4, agree N, kind strip' ($r3d.count_value -eq '' -and $r3d.count_default -eq '1' -and $r3d.count_effective -eq '1' -and $r3d.agree -eq 'N' -and $r3d.kind -eq 'strip') "$($r3d.count_value)/$($r3d.count_default)/$($r3d.count_effective)/$($r3d.agree)/$($r3d.kind)"
 
@@ -473,7 +476,7 @@ if (Test-Path $cls) {
   # not redeclared, on TabcToggleBtn) -- confirmed by the raw find-callers
   # output below. CountRuntimeRefs follows the property's DeclaredIn from the
   # class's own prop tree, so TabcToggleBtn's count is the ancestor's 2, not 0.
-  $fc = & $Exe query find-callers --name Picture --resolved --db $libDb 2>&1 | Out-String
+  $fc = & { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name Picture --resolved --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-String
   Write-Host "--- raw find-callers --name Picture --resolved --db `$libDb ---"; Write-Host $fc
   Check 'T4 runtime_refs 2 (UsesBtn.pas touches Picture twice)' ($tb.runtime_refs -eq '2') $tb.runtime_refs
   $sp = $c | Where-Object { $_.component_class -eq 'TSpeedButton' }
@@ -529,7 +532,7 @@ $srcBin = Join-Path $WorkDir 'srcbin'; New-Item -ItemType Directory $srcBin -For
 [IO.File]::WriteAllBytes((Join-Path $srcBin 'FrmBin.dfm'), (New-BinaryDfm))
 [IO.File]::WriteAllText((Join-Path $srcBin 'Broken.dfm'), "this is not a dfm at all: no object block", [Text.Encoding]::ASCII)   # ParseDfmBlock returns False: no top-level object
 $outBin = Join-Path $WorkDir 'out-bin'
-$o8 = & $Exe glyph-vacuum --root $srcBin --out $outBin 2>&1 | Out-String
+$o8 = & { $ErrorActionPreference = 'Continue'; & $Exe glyph-vacuum --root $srcBin --out $outBin 2>&1 | ForEach-Object { "$_" } } | Out-String
 Write-Host "--- raw stdout (binary run) ---"; Write-Host $o8
 Write-Host "--- raw skipped.tsv ---"; Get-Content (Join-Path $outBin 'skipped.tsv') | ForEach-Object { Write-Host $_ }
 $rb = @(Import-Csv (Join-Path $outBin 'instances.tsv') -Delimiter "`t")
@@ -582,7 +585,7 @@ object FrmDot: TFrmDot
 end
 "@
 $outDot = Join-Path $WorkDir 'out-dot'
-$oDot = & $Exe glyph-vacuum --root $srcDot --out $outDot --db $libDb 2>&1 | Out-String
+$oDot = & { $ErrorActionPreference = 'Continue'; & $Exe glyph-vacuum --root $srcDot --out $outDot --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-String
 Write-Host "--- raw stdout (dotted tree-fallback run) ---"; Write-Host $oDot
 $instDot = Join-Path $outDot 'instances.tsv'
 if (Test-Path $instDot) {
@@ -591,7 +594,7 @@ if (Test-Path $instDot) {
   $dottedOk = ($rDot.count_prop -eq 'Options.NumGlyphs' -and $rDot.count_value -eq '' -and $rDot.count_default -eq '3' -and
                $rDot.count_effective -eq '3' -and $rDot.inferred_n -eq '3' -and $rDot.agree -eq 'Y')
   if (-not $dottedOk) {
-    $pt = & $Exe proptree --qname Abcbtn.TDottedBtn --db $libDb 2>&1 | Out-String
+    $pt = & { $ErrorActionPreference = 'Continue'; & $Exe proptree --qname Abcbtn.TDottedBtn --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-String
     Write-Host "--- raw proptree --qname Abcbtn.TDottedBtn --db `$libDb (NEEDS_CONTEXT) ---"; Write-Host $pt
   }
   Check 'T15 finding2: dotted tree fallback count_prop/default/effective/inferred/agree' $dottedOk "$($rDot.count_prop)/$($rDot.count_value)/$($rDot.count_default)/$($rDot.count_effective)/$($rDot.inferred_n)/$($rDot.agree)"
@@ -618,18 +621,18 @@ $e9 = [string][char]0xE9
 $nameU = 'BtnU'
 $txtU = "object FrmU: TFrmU`r`n  Caption = 'U$e9'`r`n  object $nameU`: TabcToggleBtn`r`n    NumGlyphs = 4`r`n    Picture.Data = $(ConvertTo-DfmHex $pay4)`r`n  end`r`nend`r`n"
 [IO.File]::WriteAllBytes((Join-Path $srcU 'FrmU.dfm'), ([byte[]](0xFF,0xFE) + [Text.Encoding]::Unicode.GetBytes($txtU)))
-$oU = & $Exe glyph-vacuum --root $srcU --out $outU 2>&1 | Out-String
+$oU = & { $ErrorActionPreference = 'Continue'; & $Exe glyph-vacuum --root $srcU --out $outU 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'E1 utf16 dfm: walk completes, skipped=0' ($LASTEXITCODE -eq 0 -and $oU -match 'skipped=0') $oU
-$rowsU = if (Test-Path (Join-Path $outU 'instances.tsv')) { @(Import-Csv (Join-Path $outU 'instances.tsv') -Delimiter "`t" -Encoding UTF8) } else { @() }
+$rowsU = @(if (Test-Path (Join-Path $outU 'instances.tsv')) { @(Import-Csv (Join-Path $outU 'instances.tsv') -Delimiter "`t" -Encoding UTF8) } else { @() })
 Write-Host "--- raw E1 object_path ---"; $rowsU | ForEach-Object { Write-Host ("[{0}] [{1}]" -f $_.object_path,$_.component_name) }
 Check 'E1 utf16 dfm: the file is parsed, its object row present' (@($rowsU | Where-Object { $_.object_path -ceq $nameU }).Count -eq 1) ($rowsU | ForEach-Object { $_.object_path })
 # ---- exit codes ------------------------------------------------------------------
 $empty = Join-Path $WorkDir 'empty'; New-Item -ItemType Directory $empty -Force | Out-Null
-$o2 = & $Exe glyph-vacuum --root $empty --out (Join-Path $WorkDir 'out-empty') 2>&1 | Out-String
+$o2 = & { $ErrorActionPreference = 'Continue'; & $Exe glyph-vacuum --root $empty --out (Join-Path $WorkDir 'out-empty') 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'T1 empty tree -> exit 0 and says 0 graphics' ($LASTEXITCODE -eq 0 -and $o2 -match 'graphics=0') $o2
-$o3 = & $Exe glyph-vacuum --root (Join-Path $WorkDir 'nope') --out (Join-Path $WorkDir 'out-nope') 2>&1 | Out-String
+$o3 = & { $ErrorActionPreference = 'Continue'; & $Exe glyph-vacuum --root (Join-Path $WorkDir 'nope') --out (Join-Path $WorkDir 'out-nope') 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'T1 missing root -> exit 2' ($LASTEXITCODE -eq 2) $o3
-$o4 = & $Exe glyph-vacuum --out (Join-Path $WorkDir 'out-noroot') 2>&1 | Out-String
+$o4 = & { $ErrorActionPreference = 'Continue'; & $Exe glyph-vacuum --out (Join-Path $WorkDir 'out-noroot') 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'T1 no --root -> exit 2 with usage' ($LASTEXITCODE -eq 2 -and $o4 -match 'Usage') $o4
 
 if ($script:fail) { Write-Host "RESULT: FAIL" -ForegroundColor Red; exit 1 }

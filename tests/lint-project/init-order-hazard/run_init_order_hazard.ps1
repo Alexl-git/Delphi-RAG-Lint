@@ -25,7 +25,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 function Parse-Findings([string[]]$Raw) {
   $txt = ($Raw -join "`n"); $b = $txt.IndexOf('[')
-  $out = @(); if ($b -ge 0) { try { $out = @($txt.Substring($b) | ConvertFrom-Json) } catch { $out = @() } }
+  $out = @(); if ($b -ge 0) { try { $out = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $out = @() } }
   if ($null -eq $out) { $out = @() }
   return ,@($out)
 }
@@ -35,7 +35,7 @@ function LineOf([string]$File, [string]$Marker) {
   return [int]$m[0].LineNumber
 }
 function RuleFindings([string]$Db, [string[]]$Extra) {
-  $raw = & $exePath lint-all --db $Db --format json @Extra 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $Db --format json @Extra 2>$null }
   return @((Parse-Findings $raw) | Where-Object { $_.rule -eq $Rule })
 }
 function Fresh([string]$Name) {
@@ -48,18 +48,18 @@ function Fresh([string]$Name) {
 try {
   $src = Fresh 'a'
   $db = Join-Path $scratch 'a.sqlite'
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $second = Join-Path $src 'uIohSecond.pas'
 
   # positive-control: init-order-hazard
-  $hits  = RuleFindings $db @('--rule', $Rule)
+  $hits  = @(RuleFindings $db @('--rule', $Rule))
   $lines = @($hits | Where-Object { $_.file_path -like '*uIohSecond.pas' } | ForEach-Object { [int]$_.start_line } | Sort-Object)
   $want  = @((LineOf $second 'TRIGGER-CALL'), (LineOf $second 'TRIGGER-DIRECT'), (LineOf $second 'TRIGGER-NEW') | Sort-Object)
   Check 'RUN 1 exactly the TRIGGER lines fire in uIohSecond' (($lines -join ',') -eq ($want -join ',')) "got [$($lines -join ',')] want [$($want -join ',')]"
   Check 'RUN 1 uIohFirst reads uIohSecond safely (CONTROL-SAFE)' (@($hits | Where-Object { $_.file_path -like '*uIohFirst.pas' }).Count -eq 0) ''
   Check 'RUN 1 the message names the program and the variable' (@($hits | Where-Object { $_.message -match 'GFirst' -and $_.message -match 'fxIoh\.dpr' }).Count -eq 1) ''
 
-  $off = RuleFindings $db @()
+  $off = @(RuleFindings $db @())
   Check 'RUN 2 plain lint-all: the rule ships ON' ($off.Count -eq $hits.Count -and $hits.Count -gt 0) "$($off.Count) finding(s)"
 
   $src3 = Fresh 'b'
@@ -68,16 +68,16 @@ try {
   $t = $t.Replace("  uIohFirst in 'uIohFirst.pas',`r`n  uIohSecond in 'uIohSecond.pas',", "  uIohSecond in 'uIohSecond.pas',`r`n  uIohFirst in 'uIohFirst.pas',")
   [IO.File]::WriteAllText($dpr, $t, [Text.Encoding]::ASCII)
   $db3 = Join-Path $scratch 'b.sqlite'
-  & $exePath index $src3 --db $db3 2>&1 | Out-Null
-  $flip = RuleFindings $db3 @('--rule', $Rule)
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src3 --db $db3 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $flip = @(RuleFindings $db3 @('--rule', $Rule))
   Check 'RUN 3 the other .dpr order: uIohSecond is silent' (@($flip | Where-Object { $_.file_path -like '*uIohSecond.pas' }).Count -eq 0) "$($flip.Count) total"
   Check 'RUN 3 the other .dpr order: uIohFirst now fires on GSecond' (@($flip | Where-Object { $_.file_path -like '*uIohFirst.pas' -and $_.message -match 'GSecond' }).Count -eq 1) ''
 
   $src4 = Fresh 'c'
   [IO.File]::Delete((Join-Path $src4 'fxIoh.dpr'))
   $db4 = Join-Path $scratch 'c.sqlite'
-  & $exePath index $src4 --db $db4 2>&1 | Out-Null
-  $none = RuleFindings $db4 @('--rule', $Rule)
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src4 --db $db4 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $none = @(RuleFindings $db4 @('--rule', $Rule))
   Check 'RUN 4 no .dpr: no order, no finding' ($none.Count -eq 0) "$($none.Count) finding(s)"
 } finally {
   if (Test-Path $scratch) { [System.IO.Directory]::Delete($scratch, $true) }

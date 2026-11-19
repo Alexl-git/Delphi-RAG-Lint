@@ -18,10 +18,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe      = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
-  [string]$RulesDir = "$PSScriptRoot\..\..\rules",
+  [string]$Exe      = '',
+  [string]$RulesDir = '',
   [string]$WorkDir  = "C:\TEMP\draglint_uba_typed_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
+if (-not $RulesDir) { $RulesDir = "$PSScriptRoot\..\..\rules" }
 $ErrorActionPreference = 'Stop'; $script:fail = $false
 function Check($n, $ok, $d) {
   Write-Host ("[{0}] {1}" -f (@('FAIL', 'PASS')[[int][bool]$ok]), $n)
@@ -400,23 +404,23 @@ end.
   }
 
   $db = Join-Path $WorkDir 'ut.sqlite'
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $old = Join-Path $WorkDir 'ut-notable.sqlite'
   Copy-Item $db $old
   $py = Join-Path $WorkDir 'drop.py'
   [IO.File]::WriteAllText($py, "import sqlite3, sys`nc = sqlite3.connect(sys.argv[1])`nc.execute('DROP TABLE ref_types')`nc.commit()`nc.close()`n")
   & python $py $old
-  $gone = @(& $exePath sql --db $old --query "SELECT name FROM sqlite_master WHERE name = 'ref_types'" 2>&1) -join ' '
+  $gone = @(& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $old --query "SELECT name FROM sqlite_master WHERE name = 'ref_types'" 2>&1 | ForEach-Object { "$_" } }) -join ' '
   Check 'SETUP the control DB really has no ref_types' ($gone -match '\b0 row') $gone
-  $rows = ((& $exePath sql --db $db --query "SELECT count(*) AS n FROM ref_types" --json 2>&1 | Out-String) | ConvertFrom-Json).rows[0][0]
+  $rows = ((& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "SELECT count(*) AS n FROM ref_types" --json 2>&1 | ForEach-Object { "$_" } } | Out-String) | ConvertFrom-Json | ForEach-Object { $_ }).rows[0][0]
   Check 'SETUP the DB has ref_types rows' ([int]$rows -gt 0) $rows
 
   Push-Location $WorkDir
   try {
-    $onText  = (& $exePath lint-all --db $db  --rules-dir $rules --quiet 2>&1 | Out-String)
-    $offText = (& $exePath lint-all --db $old --rules-dir $rules --quiet 2>&1 | Out-String)
+    $onText  = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db  --rules-dir $rules --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String)
+    $offText = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $old --rules-dir $rules --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String)
     # The no-index run: a bare file lint, with no --db and the DB dir not beside the source.
-    $bareText = (& $exePath lint (Join-Path $src 'uUtUse.pas') --rules-dir $rules 2>&1 | Out-String)
+    $bareText = (& { $ErrorActionPreference = 'Continue'; & $exePath lint (Join-Path $src 'uUtUse.pas') --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String)
   }
   finally { Pop-Location }
   $on = Reported $onText; $off = Reported $offText; $bare = Reported $bareText

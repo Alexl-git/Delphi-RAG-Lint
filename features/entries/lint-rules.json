@@ -12,7 +12,7 @@
     {
       "type": "cli",
       "verb": "rules",
-      "usage": "drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it)",
+      "usage": "drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rule <id>[,<id>]] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance` and needs_compiler / compat_since / target_active; --standard lists only rules labelled under it; --rule <id>[,<id>] lists only those rules, an unknown id is exit 2)",
       "flags": [
         {
           "name": "--json"
@@ -28,9 +28,21 @@
         {
           "name": "--rules-dir",
           "arg": "<dir>"
+        },
+        {
+          "name": "--project",
+          "arg": "<X.dproj>"
+        },
+        {
+          "name": "--rule",
+          "arg": "<id>"
+        },
+        {
+          "name": "--target-compiler",
+          "arg": "<ver|auto>"
         }
       ],
-      "help": ["  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]]   - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance` and needs_compiler / compat_since / target_active; --standard lists only rules labelled under it)"]
+      "help": ["  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rule <id>[,<id>]] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]]   - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance` and needs_compiler / compat_since / target_active; --standard lists only rules labelled under it; --rule <id>[,<id>] lists only those rules, an unknown id is exit 2)"]
     }
   ],
   "audience": "both",
@@ -52,9 +64,9 @@
   },
   "family": "lint-rules",
   "verified": {
-    "date": "2026-11-08",
+    "date": "2026-11-18",
     "by": "ENGINE",
-    "build": "1.50.0-alpha",
-    "surfaceHash": "705db8e60b73cfa9130304fc465e5d099d54877dbc5b0294285efffb6c50d9f0"
+    "build": "1.52.0-alpha",
+    "surfaceHash": "60804e6714e32635768d09b27014567bb22ee6302f5794f4d63812b9437b04dd"
   }
 }

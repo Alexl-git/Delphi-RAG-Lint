@@ -40,7 +40,10 @@
   Usage: pwsh -File tests\callresolve\run_parenless_call_bind.ps1 [-Exe <drag-lint.exe>]
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'
@@ -61,10 +64,10 @@ $use = Join-Path $scratch 'uParenlessUse.pas'
 $db  = Join-Path $scratch 'parenless.sqlite'
 
 function Sql([string]$Query) {
-  $raw = (& $exePath sql --db $db --json --limit 1000 --query $Query 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --limit 1000 --query $Query 2>$null }) -join "`n"
   $b = $raw.IndexOf('{')
   if ($b -lt 0) { throw "sql returned no JSON for: $Query" }
-  $o = $raw.Substring($b) | ConvertFrom-Json
+  $o = $raw.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }
   $names = @($o.columns | ForEach-Object { $_.name })
   $out = @()
   foreach ($r in @($o.rows)) {
@@ -91,7 +94,7 @@ function RefsAt([int]$Line, [string]$Name) {
 
 Push-Location C:\TEMP
 try {
-  $log1 = (& $exePath index $scratch --db $db *>&1) -join "`n"
+  $log1 = (& { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db *>&1 | ForEach-Object { "$_" } }) -join "`n"
 
   # --- check 1: fixture control -------------------------------------------------
   $stmt = RefsAt (LineOf 'POS-STMT') 'NextId'
@@ -209,9 +212,9 @@ try {
   # three parenless Driver sites NOT ALSO listed as callbacks (the double listing
   # the new edges would otherwise cause), and the genuine callback passes --
   # procedural var, procedural parameter -- still listed (positive control).
-  $fc = (& $exePath query find-callers --name NextId --resolved --db $db --json 2>$null) -join "`n"
+  $fc = (& { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name NextId --resolved --db $db --json 2>$null }) -join "`n"
   $fb = $fc.IndexOf('[')
-  $fr = @(); if ($fb -ge 0) { $fr = @($fc.Substring($fb) | ConvertFrom-Json) }
+  $fr = @(); if ($fb -ge 0) { $fr = @(($fc.Substring($fb) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   $certDriver = @($fr | Where-Object { $_.confidence -eq 'certain' -and $_.caller_qname -eq 'uParenlessUse.Driver' })
   $cbLines = @($fr | Where-Object { $_.confidence -eq 'callback' } | ForEach-Object { [int]$_.line })
   $dbl  = @(@((LineOf 'POS-ASSERT'), (LineOf 'POS-ASSIGN'), (LineOf 'POS-ARG')) | Where-Object { $cbLines -contains $_ })
@@ -225,7 +228,7 @@ try {
   $mut = $txt.Replace("procedure Driver;`r`nvar`r`n  N: Integer;", "procedure Driver;`r`nvar`r`n  N, NextId: Integer;")
   if ($mut -eq $txt) { throw 'mutation anchor not found in uParenlessUse.pas' }
   [IO.File]::WriteAllText($use, $mut, [Text.Encoding]::ASCII)
-  $log2 = (& $exePath index $scratch --db $db *>&1) -join "`n"
+  $log2 = (& { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db *>&1 | ForEach-Object { "$_" } }) -join "`n"
   $scoped = $log2 -match 'starting SCOPED pass'
   $after = @()
   foreach ($mk in 'POS-ASSERT', 'POS-ASSIGN', 'POS-ARG') {

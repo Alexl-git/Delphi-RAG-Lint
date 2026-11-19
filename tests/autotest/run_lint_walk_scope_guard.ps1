@@ -45,9 +45,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-walkscope-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
@@ -104,13 +107,13 @@ WriteAscii $manifest $mtext
 $db = Join-Path $WorkDir 'out\walk.sqlite'
 
 Push-Location C:\TEMP
-try { & $Exe index --all --config $manifest --only SecWalk --jobs 1 2>&1 | Out-Null } finally { Pop-Location }
+try { & { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $manifest --only SecWalk --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null } finally { Pop-Location }
 if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2 }
 
 # PRECONDITION. If both files landed in the index the fixture proves nothing --
 # it would be testing a walk with nothing outside it.
 Push-Location C:\TEMP
-try { $idx = (& $Exe sql --query "SELECT path FROM files" --db $db 2>$null | Out-String) } finally { Pop-Location }
+try { $idx = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --query "SELECT path FROM files" --db $db 2>$null } | Out-String) } finally { Pop-Location }
 Check 'SETUP: InClosure.pas IS in the compile closure'     ($idx -match 'InClosure\.pas') ''
 Check 'SETUP: OutOfClosure.pas is NOT in the closure' `
   (-not ($idx -match 'OutOfClosure\.pas')) `
@@ -120,7 +123,7 @@ function RunLint([string[]]$ExtraArgs, [string]$Tag) {
   $o = Join-Path $WorkDir "$Tag.out"
   $e = Join-Path $WorkDir "$Tag.err"
   $null = Start-Process -FilePath $Exe -ArgumentList $ExtraArgs -WorkingDirectory 'C:\TEMP' `
-            -Wait -NoNewWindow -PassThru -RedirectStandardOutput $o -RedirectStandardError $e
+            -Wait -NoNewWindow -PassThru -RedirectStandardOutput $o -RedirectStandardError $e; $null = $null.Handle
   return [pscustomobject]@{
     Out = [System.IO.File]::ReadAllText($o)
     Err = [System.IO.File]::ReadAllText($e)

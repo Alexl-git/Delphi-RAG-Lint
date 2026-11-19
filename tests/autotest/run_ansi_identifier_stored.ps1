@@ -13,9 +13,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\draglint-ansi-ident-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
 function Check($n,$ok,$d){
@@ -32,10 +35,10 @@ try {
           "procedure TKlasse.Gr$o${ss}e;`r`nbegin`r`nend;`r`n`r`nfunction TKlasse.Z${a}hler: Integer;`r`nbegin`r`n  Result := 1;`r`nend;`r`n`r`nprocedure TKlasse.PlainName;`r`nbegin`r`nend;`r`n`r`nend.`r`n"
   [IO.File]::WriteAllBytes("$WorkDir\src\uAnsi.pas", $enc.GetBytes($text))
   $db = "$WorkDir\a.sqlite"
-  & $exePath index "$WorkDir\src" --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index "$WorkDir\src" --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'V the fixture index was built' (Test-Path $db)
-  $json = (& $exePath sql --db $db --json --query "select name, hex(name) as h from symbols where name in ('PlainName') or name like 'Gr%e' or name like 'Z%hler'" 2>$null) -join "`n"
-  $doc = $json.Substring($json.IndexOf('{')) | ConvertFrom-Json
+  $json = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --query "select name, hex(name) as h from symbols where name in ('PlainName') or name like 'Gr%e' or name like 'Z%hler'" 2>$null }) -join "`n"
+  $doc = $json.Substring($json.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ }
   $rows = @($doc.rows | ForEach-Object { ,@($_) })   # positional rows: [name, hex]
   $hexes = @($rows | ForEach-Object { [string]$_[1] })
   Check 'V2 POSITIVE CONTROL the ASCII symbol PlainName is stored' ($hexes -contains '506C61696E4E616D65') ($hexes -join ',')

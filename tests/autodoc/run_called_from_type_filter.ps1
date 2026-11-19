@@ -15,7 +15,10 @@
   RED until the resolver lane writes refs.receiver_type_text. Run from a NEUTRAL CWD (C:\TEMP).
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d=''){ Write-Host ("[{0}] {1} {2}" -f (@('FAIL','PASS')[[int]$ok]),$n,$d) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
 $exePath = (Resolve-Path $Exe).Path
@@ -28,9 +31,9 @@ try {
   $db = Join-Path $scratch 'cf.sqlite'
   Push-Location C:\TEMP
   try {
-    & $exePath index $scratch --db $db 2>$null | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
     Check 'index built' ($LASTEXITCODE -eq 0)
-    $doc = (& $exePath document --unit (Join-Path $scratch 'ctf.pas') --db $db 2>$null) -join "`n"
+    $doc = (& { $ErrorActionPreference = 'Continue'; & $exePath document --unit (Join-Path $scratch 'ctf.pas') --db $db 2>$null }) -join "`n"
     # the Called from: line belongs to TMine.Add: the doc block that follows `TMine = class` ... find it by its callers
     $lines = @($doc -split "`n" | Where-Object { $_ -match 'Called from:' -and $_ -match 'RealMine' })
     Check 'a Called from: line naming RealMine exists' ($lines.Count -eq 1) ($lines -join ' | ')

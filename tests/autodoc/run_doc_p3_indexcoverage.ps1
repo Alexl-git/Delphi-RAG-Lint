@@ -30,9 +30,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe = '',
   [string]$Py  = 'C:\Python314\python.exe'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Continue'
@@ -92,7 +95,7 @@ $queryPyPath = Join-Path $scratch 'query.py'
 [System.IO.File]::WriteAllText($queryPyPath, $queryPy, [System.Text.Encoding]::ASCII)
 
 function Get-Row([string]$name) {
-  $out = & $Py $queryPyPath $db $name 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $Py $queryPyPath $db $name 2>$null }
   $h = @{}
   foreach ($ln in $out) {
     $m = [regex]::Match($ln, '^(\w+)=(.*)$')
@@ -103,7 +106,7 @@ function Get-Row([string]$name) {
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
   $ex = Get-Row 'ExampleOnlySymbol'

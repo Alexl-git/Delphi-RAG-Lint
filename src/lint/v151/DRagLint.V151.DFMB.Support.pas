@@ -21,7 +21,7 @@ type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.V151.DFMB.Support.pas) ?, DRagLint.V151.DFMB.Support.ParseHeader (DRagLint.V151.DFMB.Support.pas), DRagLint.V151.DFMB.Support.TDfmModel.Add (DRagLint.V151.DFMB.Support.pas) ?, DRagLint.V151.DFMB.Support.TDfmModel.Create (DRagLint.V151.DFMB.Support.pas) ?, DRagLint.V151.DFMB.Support.TDfmModel.Find (DRagLint.V151.DFMB.Support.pas) ? (+13 more)</para>
-  /// <para>Used in units: DRagLint.V151.DFMB.Support</para>
+  /// <para>Used in units: DRagLint.FieldRepo.ParamArray.Prepare, DRagLint.V151.DFMB.Support</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDfmObj = class
@@ -192,7 +192,7 @@ type
     /// <param name="AParent">Enclosing object or nil.</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.AcquireIndexLock (DRagLint.CLI.pas) ?, DRagLint.CLI.DoQueryUnitUsageProjectWide (DRagLint.CLI.pas) ?, DRagLint.CLI.ExpandProjectScope.AddOnce (DRagLint.CLI.pas) ?, DRagLint.CLI.ProjectScopeRoots.AddDir (DRagLint.CLI.pas) ?, DRagLint.V151.DFMB.Support.TDfmModel.Parse (DRagLint.V151.DFMB.Support.pas) (+53 more)</para>
+    /// <para>Called from: DRagLint.CLI.ApplyNearFilter (DRagLint.CLI.pas) ?, DRagLint.CLI.DoQueryUnitUsageProjectWide (DRagLint.CLI.pas) ?, DRagLint.CLI.ExpandProjectScope.AddOnce (DRagLint.CLI.pas) ?, DRagLint.CLI.ProjectScopeRoots.AddDir (DRagLint.CLI.pas) ?, DRagLint.V151.DFMB.Support.TDfmModel.Parse (DRagLint.V151.DFMB.Support.pas) (+37 more)</para>
     /// <para>Calls: LowerCase</para>
     /// <para>Reads: FRoots, FAll, FByName</para>
     /// <seealso cref="DRagLint.V151.DFMB.Support.TDfmModel.Create"/>
@@ -220,8 +220,8 @@ type
     /// <returns>Findings located in ADfmPath.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas) ?, DRagLint.V151.DFMB.TV151DFMBRules.CheckDfm (DRagLint.V151.DFMB.pas)</para>
-    /// <para>Calls: AWants, DRagLint.V151.DFMB.Support.CheckCircular, DRagLint.V151.DFMB.Support.CheckDisallowed, DRagLint.V151.DFMB.Support.CheckDupBinding, DRagLint.V151.DFMB.Support.CheckMasterFields, DRagLint.V151.DFMB.Support.CheckRequired, DRagLint.V151.DFMB.Support.CheckTypeMismatch, DRagLint.V151.DFMB.Support.TDfmModel.Parse</para>
+    /// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas) ?, DRagLint.V151.DFMB.TV151DFMBRules.CheckDfm (DRagLint.V151.DFMB.pas)</para>
+    /// <para>Calls: AWants, DRagLint.V151.DFMB.Support.CheckCircular, DRagLint.V151.DFMB.Support.CheckDisallowed, DRagLint.V151.DFMB.Support.CheckDupBinding, DRagLint.V151.DFMB.Support.CheckMasterFields, DRagLint.V151.DFMB.Support.CheckRequired, DRagLint.V151.DFMB.Support.CheckTypeMismatch, DRagLint.V151.DFMB.Support.CodeBoundFields, DRagLint.V151.DFMB.Support.TDfmModel.Parse</para>
     /// <para>Returns: nil; Found.ToArray</para>
     /// <para>Touches: file system</para>
     /// <para>Directives: static</para>
@@ -253,6 +253,10 @@ implementation
 uses
   System.IOUtils
   , System.StrUtils
+  , System.RegularExpressions
+  , TreeSitter
+  , DRagLint.Core.Encoding
+  , DRagLint.LSP.SyntaxTree
   ;
 
 { ---------------------------------------------------------------- model }
@@ -670,7 +674,56 @@ begin
   end;
 end;
 
-procedure CheckDupBinding(const AModel: TDfmModel; const ACfg: TLintConfig; const AFile: string; AOut: TFindingList);
+/// <summary>Adds to AOut the component named by the target of every `Comp.DataField := ..` /
+/// `Comp.DataBinding.DataField := ..` (optionally `Self.`-qualified) assignment under ANode.</summary>
+/// <param name="ANode">Subtree to walk; a null node is ignored.</param>
+/// <param name="ASrc">The UTF-8 bytes the tree was parsed from.</param>
+/// <param name="AOut">Receives lower-case component names.</param>
+/// <remarks>The target is read from the assignment node, so comments and strings never match, and a
+/// target qualified by another object (`Other.edtB.DataField`) is not this form's edtB.</remarks>
+procedure CollectDataFieldTargets(const ANode: TTSNode; const ASrc: TBytes; AOut: TDictionary<string, Boolean>);
+var
+  I  : Integer;
+  Lhs: TTSNode;
+  M  : TMatch;
+begin
+  if ANode.IsNull then Exit;
+  if ANode.NodeType = 'assignment' then
+  begin
+    Lhs:= ANode.ChildByField('lhs');
+    if not Lhs.IsNull then
+    begin
+      M:= TRegEx.Match(TEncoding.UTF8.GetString(ASrc, Integer(Lhs.StartByte), Integer(Lhs.EndByte - Lhs.StartByte)),
+        '^\s*(?:Self\s*\.\s*)?([A-Za-z_]\w*)\s*\.\s*(?:DataBinding\s*\.\s*)?DataField\s*$', [roIgnoreCase]);
+      if M.Success then AOut.AddOrSetValue(LowerCase(M.Groups[1].Value), True);
+    end;
+  end;
+  for I:= 0 to ANode.NamedChildCount - 1 do CollectDataFieldTargets(ANode.NamedChild(I), ASrc, AOut);
+end;
+
+/// <summary>Collects the components whose DataField the owning unit assigns in code.</summary>
+/// <param name="ADfmPath">Path of the form file; the paired unit is the same base name with .pas.</param>
+/// <returns>Lower-case component names assigned as Comp.DataField:= or Comp.DataBinding.DataField:= (bare or Self.-qualified); empty when there is no paired unit.</returns>
+/// <remarks>Reads only the paired unit's own source, through its syntax tree; an assignment in any other unit is deliberately not seen.</remarks>
+function CodeBoundFields(const ADfmPath: string): TDictionary<string, Boolean>;
+var
+  PasPath: string;
+  Src    : TBytes;
+  Tree   : TTSTree;
+begin
+  Result:= TDictionary<string, Boolean>.Create;
+  PasPath:= ChangeFileExt(ADfmPath, '.pas');
+  if not TFile.Exists(PasPath) then Exit;
+  Src:= EnsureUtf8Bytes(TFile.ReadAllBytes(PasPath));
+  Tree:= ParseDelphiUtf8(Src, PasPath);
+  try
+    if Tree <> nil then CollectDataFieldTargets(Tree.RootNode, Src, Result);
+  finally
+    Tree.Free;
+  end;
+end;
+procedure CheckDupBinding(const AModel: TDfmModel; const ACfg: TLintConfig; const AFile: string;
+  const ACodeBound: TDictionary<string, Boolean>; AOut: TFindingList);
 var
   First: TDictionary<string, TDfmObj>;
   O, F : TDfmObj;
@@ -683,6 +736,7 @@ begin
       if CtlKindOf(O.ClsName) = ckNone then Continue;
       if BindSource(O) = '' then Continue;
       if BindField(O) = '' then Continue;
+      if ACodeBound.ContainsKey(LowerCase(O.ObjName)) then Continue;
       if IsTrue(O.Val('ReadOnly')) or IsTrue(O.Val('Properties.ReadOnly')) or not VisibleChain(O) then Continue;
       Key:= LowerCase(BindSource(O)) + '|' + LowerCase(BindField(O));
       if First.TryGetValue(Key, F) then
@@ -949,6 +1003,7 @@ class function TDfmBChecker.Run(const ACfg: TLintConfig; const ADfmPath: string;
 var
   Model: TDfmModel;
   Found : TFindingList;
+  CodeBound: TDictionary<string, Boolean>;
 begin
   Result:= nil;
   if not TFile.Exists(ADfmPath) then Exit;
@@ -956,7 +1011,15 @@ begin
   Found:= TFindingList.Create;
   try
     if AWants(RULE_CIRCULAR) then CheckCircular(Model, ACfg, ADfmPath, Found);
-    if AWants(RULE_DUPBIND) then CheckDupBinding(Model, ACfg, ADfmPath, Found);
+    if AWants(RULE_DUPBIND) then
+    begin
+      CodeBound:= CodeBoundFields(ADfmPath);
+      try
+        CheckDupBinding(Model, ACfg, ADfmPath, CodeBound, Found);
+      finally
+        CodeBound.Free;
+      end;
+    end;
     if AWants(RULE_MASTER) then CheckMasterFields(Model, ACfg, ADfmPath, Found);
     if AWants(RULE_TYPEMISM) then CheckTypeMismatch(Model, ACfg, ADfmPath, Found);
     if AWants(RULE_REQUIRED) then CheckRequired(Model, ACfg, ADfmPath, Found);

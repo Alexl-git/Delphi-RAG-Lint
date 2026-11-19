@@ -92,7 +92,7 @@ function FreshCopy {
 # corrupted document fails the check that wanted a field rather than throwing
 # somewhere unrelated.
 function AsJson([string]$Text) {
-  try { return ($Text | ConvertFrom-Json) } catch { return $null }
+  try { return ($Text | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 
 # Key presence, not value truthiness. `$o.nosuch` is $null and so is a key
@@ -123,7 +123,7 @@ Write-Host '== reconcile-project: applied / backups / edited are the OUTCOME =='
 # 1 -- BASELINE + the dry-run document.
 # ---------------------------------------------------------------------------
 FreshCopy
-$dryRaw = & $Exe reconcile-project "$work\App.dpr" --json 2>$null | Out-String
+$dryRaw = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$work\App.dpr" --json 2>$null } | Out-String
 $dry    = AsJson $dryRaw
 
 Check '1a baseline: dry run parses and lists three MISSING units' `
@@ -141,7 +141,7 @@ Check '1b dry run: applied is present and false' `
 # ---------------------------------------------------------------------------
 # 2 -- A REAL APPLY. Positive control for everything in 3 and 4.
 # ---------------------------------------------------------------------------
-$appRaw = & $Exe reconcile-project "$work\App.dpr" --apply --json 2>$null | Out-String
+$appRaw = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$work\App.dpr" --apply --json 2>$null } | Out-String
 $app    = AsJson $appRaw
 
 Check '2a apply that writes: applied is true' `
@@ -165,7 +165,7 @@ Check '2c dry run omits backups/edited; apply carries them' `
 
 # THE PATHS MUST BE REAL. A field naming a .bak that is not on disk is worse
 # than no field: it is what a revert button would offer.
-$bakPaths   = PathList $app.backups
+$bakPaths   = @(PathList $app.backups)
 $bakAllExist = $true
 foreach ($b in $bakPaths) { if (-not (Test-Path $b)) { $bakAllExist = $false } }
 Check '2d apply: every reported backup path exists on disk' `
@@ -176,7 +176,7 @@ Check '2d apply: every reported backup path exists on disk' `
 # 3 -- THE NO-OP APPLY (case (a)): nothing MISSING, so nothing to write.
 #      This is the case the old unconditional message got wrong.
 # ---------------------------------------------------------------------------
-$againRaw = & $Exe reconcile-project "$work\App.dpr" --apply --json 2>$null | Out-String
+$againRaw = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$work\App.dpr" --apply --json 2>$null } | Out-String
 $again    = AsJson $againRaw
 
 Check '3a second apply: MISSING is now empty (the fixture really was reconciled)' `
@@ -198,7 +198,7 @@ Check '3c second apply: no backups and no edits reported' `
 #      the narrowed write, and `applied` must still be the outcome of it.
 # ---------------------------------------------------------------------------
 FreshCopy
-$onlyRaw = & $Exe reconcile-project "$work\App.dpr" --only uHelper --apply --json 2>$null | Out-String
+$onlyRaw = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$work\App.dpr" --only uHelper --apply --json 2>$null } | Out-String
 $only    = AsJson $onlyRaw
 
 Check '4a --only --apply: applied is true and files were edited' `
@@ -212,7 +212,7 @@ Check '4b --only --apply: the document reports the NARROWED missing set' `
 # The unselected units are still missing afterwards. Without this, 4a would
 # pass against an engine that ignored --only and applied everything -- which is
 # the behaviour --only exists to replace.
-$leftRaw = & $Exe reconcile-project "$work\App.dpr" --json 2>$null | Out-String
+$leftRaw = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$work\App.dpr" --json 2>$null } | Out-String
 $left    = AsJson $leftRaw
 Check '4c after a partial apply: the two unselected units are still MISSING' `
   ($null -ne $left -and (CountOf $left.missing) -eq 2 -and $left.applied -eq $false) `
@@ -224,12 +224,12 @@ Check '4c after a partial apply: the two unselected units are still MISSING' `
 #      the same result but through different code.
 # ---------------------------------------------------------------------------
 FreshCopy
-$txtApply = & $Exe reconcile-project "$work\App.dpr" --apply 2>&1 | Out-String
+$txtApply = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$work\App.dpr" --apply 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check '5a text apply that writes: names the files it updated' `
   ($txtApply -match 'Applied: updated .*App\.dpr' -and $txtApply -match 'Backup:\s+.*App\.dpr\.bak') `
   "positive control for 5b; got:`n$txtApply"
 
-$txtNoop = & $Exe reconcile-project "$work\App.dpr" --apply 2>&1 | Out-String
+$txtNoop = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$work\App.dpr" --apply 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check '5b text no-op apply: says nothing was written, not "units added"' `
   ($txtNoop -match 'nothing to write' -and $txtNoop -notmatch 'Applied: updated') `
   "the old line claimed units were added to both project files; got:`n$txtNoop"

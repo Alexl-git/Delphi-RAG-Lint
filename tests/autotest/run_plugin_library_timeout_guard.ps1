@@ -49,13 +49,13 @@ try {
   ) -join "`r`n")
   [IO.File]::WriteAllText($batPath, $batBody, [Text.Encoding]::ASCII)
   $null = Start-Process cmd.exe -ArgumentList '/c', "`"$batPath`"" `
-            -RedirectStandardOutput $logPath -RedirectStandardError "$logPath.err" -NoNewWindow -Wait -PassThru
+            -RedirectStandardOutput $logPath -RedirectStandardError "$logPath.err" -NoNewWindow -Wait -PassThru; $null = $null.Handle
   $log = Get-Content $logPath -Raw -ErrorAction SilentlyContinue
   $buildOk = ($log -match 'BUILD_EXITCODE=0') -and ($log -notmatch 'Error:')
   Check 'H   LintBudgetHarness.dpr builds (Win64)' $buildOk ((($log -split "`r?`n") | Where-Object { $_ -match 'Error|Fatal' } | Select-Object -First 4) -join ' | ')
   $exeH = "$WorkDir\LintBudgetHarness.exe"
   if ($buildOk -and (Test-Path $exeH)) {
-    $lines = @(& $exeH 2>&1 | ForEach-Object { "$_" })
+    $lines = @(& { $ErrorActionPreference = 'Continue'; & $exeH 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" })
     $code  = $LASTEXITCODE
     $pass  = @($lines | Where-Object { $_ -like 'PASS *' })
     foreach ($l in $lines) {

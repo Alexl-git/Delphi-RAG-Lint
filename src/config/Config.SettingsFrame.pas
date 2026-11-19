@@ -20,12 +20,17 @@ uses
   Vcl.ExtCtrls,
   Vcl.Dialogs,
   DRagLint.Index.Manifest,
-  DRagLint.Project.Resolver,
   Config.IndexesFrame;
 
 type
   /// <summary>Settings editor frame. Bound to the Settings block of a shared
   /// TIndexManifest pointer owned by TMainForm.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: Config.MainForm.TMainForm.FormShow (Config.MainForm.pas), declaration (Config.MainForm.pas) ?</para>
+  /// <para>Used in units: Config.MainForm</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSettingsFrame = class(TFrame)
     lblProjectsIndexing: TLabel;
     cbProjectsIndexing: TComboBox;
@@ -40,7 +45,33 @@ type
     lblEnginePath: TLabel;
     edEnginePath: TEdit;
     btnBrowseEngine: TButton;
+    /// <summary><!-- drag-lint:auto sum -->event handlers</summary>
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FOpenDialog, edEnginePath   Writes: FOpenDialog</para>
+    /// <para>Handles: btnBrowseEngine.OnClick</para>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.BindManifest"/>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.cbProjectsIndexingChange"/>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.FlushToManifest"/>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.ProjectsIndexingStr"/>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.StrToProjectsIndexing"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure btnBrowseEngineClick(Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.SettingsFrame.TSettingsFrame.FlushToManifest</para>
+    /// <para>Reads: FLoading</para>
+    /// <para>Handles: cbProjectsIndexing.OnChange</para>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.FlushToManifest"/>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.BindManifest"/>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.btnBrowseEngineClick"/>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.ProjectsIndexingStr"/>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.StrToProjectsIndexing"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure cbProjectsIndexingChange(Sender: TObject);
   private
     FManifest:   PIndexManifest;
@@ -49,11 +80,35 @@ type
     /// <summary>Convert a TProjectsIndexing ordinal to its display string.</summary>
     /// <param name="AVal">The enum value to convert.</param>
     /// <returns>Human-readable string: 'perProject', 'perGroup', or 'single'.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.SettingsFrame.TSettingsFrame.BindManifest (Config.SettingsFrame.pas)</para>
+    /// <para>Returns: 'perProject'; 'perGroup'; 'single'</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.BindManifest"/>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.btnBrowseEngineClick"/>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.cbProjectsIndexingChange"/>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.FlushToManifest"/>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.StrToProjectsIndexing"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ProjectsIndexingStr(const AVal: TProjectsIndexing): string;
     /// <summary>Parse a display string back to TProjectsIndexing.
     /// Unrecognised values return piPerProject.</summary>
     /// <param name="S">String as returned by ProjectsIndexingStr.</param>
     /// <returns>Corresponding TProjectsIndexing value.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.SettingsFrame.TSettingsFrame.FlushToManifest (Config.SettingsFrame.pas)</para>
+    /// <para>Returns: piPerGroup; piSingle; piPerProject</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.BindManifest"/>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.btnBrowseEngineClick"/>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.cbProjectsIndexingChange"/>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.FlushToManifest"/>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.ProjectsIndexingStr"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function StrToProjectsIndexing(const S: string): TProjectsIndexing;
   public
     /// <summary>Bind the frame to a manifest pointer and repopulate all controls
@@ -61,15 +116,42 @@ type
     /// cbDefaultPlatform. The pointer must remain valid for the frame's lifetime.</summary>
     /// <param name="AManifest">Pointer to the main form's working TIndexManifest.
     /// Caller owns the pointed-to record.</param>
-    /// <remarks>Not thread-safe; call from the main (UI) thread only.</remarks>
+    /// <remarks>
+    /// Not thread-safe; call from the main (UI) thread only.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.MainForm.TMainForm.PopulateFrame (Config.MainForm.pas)</para>
+    /// <para>Calls: Config.SettingsFrame.TSettingsFrame.ProjectsIndexingStr, DRagLint.Project.Resolver.TProjectResolver.Create, DRagLint.Project.Resolver.TProjectResolver.EnumRegistryPlatforms, IntToStr</para>
+    /// <para>Reads: cbProjectsIndexing, cbDefaultPlatform, edSizeGuardMB, edMaxJobs, edMaxParseFileKB, edEnginePath   Writes: FManifest, FLoading</para>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.ProjectsIndexingStr"/>
+    /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+    /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.EnumRegistryPlatforms"/>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.btnBrowseEngineClick"/>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.cbProjectsIndexingChange"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure BindManifest(AManifest: PIndexManifest);
     /// <summary>Write current control values back into the FManifest^.Settings
     /// block. Called by TMainForm before Save.</summary>
-    /// <remarks>Not thread-safe; call from the main (UI) thread only.</remarks>
+    /// <remarks>
+    /// Not thread-safe; call from the main (UI) thread only.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.MainForm.TMainForm.btnSaveClick (Config.MainForm.pas), Config.MainForm.TMainForm.FormShow (Config.MainForm.pas), Config.SettingsFrame.TSettingsFrame.cbProjectsIndexingChange (Config.SettingsFrame.pas)</para>
+    /// <para>Calls: Config.SettingsFrame.TSettingsFrame.StrToProjectsIndexing, StrToIntDef, Trim</para>
+    /// <para>Reads: FManifest, cbProjectsIndexing, cbDefaultPlatform, edSizeGuardMB, edMaxJobs, edMaxParseFileKB, edEnginePath</para>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.StrToProjectsIndexing"/>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.BindManifest"/>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.btnBrowseEngineClick"/>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.cbProjectsIndexingChange"/>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.ProjectsIndexingStr"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure FlushToManifest;
   end;
 
 implementation
+
+uses
+  DRagLint.Project.Resolver;
 
 {$R *.dfm}
 
@@ -143,10 +225,7 @@ begin
       edMaxJobs.Text        := IntToStr(AManifest^.Settings.MaxJobs);
       edMaxParseFileKB.Text := IntToStr(AManifest^.Settings.MaxParseFileKB);
 
-      if AManifest^.Settings.EnginePath <> '' then
-        edEnginePath.Text := AManifest^.Settings.EnginePath
-      else
-        edEnginePath.Text := 'auto';
+      edEnginePath.Text := if AManifest^.Settings.EnginePath <> '' then AManifest^.Settings.EnginePath else 'auto';
     end
     else
     begin

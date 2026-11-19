@@ -13,11 +13,11 @@ $db  = Join-Path $env:TEMP "objleak_interproc_$PID.sqlite"
 if (Test-Path $db) { Remove-Item $db -Force }
 
 & $exePath index $dir --db $db | Out-Null
-$raw = & $exePath check-ast (Join-Path $dir "callers.pas") --db $db --format json 2>$null
+$raw = & { $ErrorActionPreference = 'Continue'; & $exePath check-ast (Join-Path $dir "callers.pas") --db $db --format json 2>$null }
 # the CLI prints a few preamble lines (FTS5 probe / loaded defaults) before the
 # JSON array -- slice from the first '[' so ConvertFrom-Json sees only JSON.
 $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
-$f = @(); if ($b -ge 0) { try { $f = ($txt.Substring($b) | ConvertFrom-Json) } catch { $f = @() } }
+$f = @(); if ($b -ge 0) { try { $f = ($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $f = @() } }
 if ($null -eq $f) { $f = @() }
 $leaks = @($f | Where-Object { $_.rule -eq 'object-leak' })
 $leaks | ForEach-Object { Write-Host ("  object-leak:{0} [{1}]" -f $_.start_line, $_.severity) }

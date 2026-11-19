@@ -25,7 +25,10 @@
   Run from a NEUTRAL CWD (C:\TEMP) so no drag-lint-lint.json is picked up.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -44,10 +47,10 @@ Copy-Item $fixture $target -Force
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # --- WITHOUT --resolved: old name-based flat list, UNCHANGED. ---
-  $plainOut = & $exePath query find-callers --name Run --db $db 2>$null | Out-String
+  $plainOut = & { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name Run --db $db 2>$null } | Out-String
   Check 'without --resolved: still returns caller(s) (name-based, unchanged)' `
     ($plainOut -match '\d+ caller\(s\)' -and $plainOut -notmatch '\d+ caller\(0\)')
   Check 'without --resolved: no target_qname grouping marker' `
@@ -56,9 +59,9 @@ try {
     ($plainOut -notmatch 'certain|ambiguous')
 
   # --- WITH --resolved --json: grouped-by-target precision proof. ---
-  $jsonOut = & $exePath query find-callers --name Run --resolved --json --db $db 2>$null | Out-String
+  $jsonOut = & { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name Run --resolved --json --db $db 2>$null } | Out-String
   Check '--resolved --json: parses as JSON array' ($null -ne $jsonOut -and $jsonOut.Trim().StartsWith('['))
-  $rows = $jsonOut | ConvertFrom-Json
+  $rows = $jsonOut | ConvertFrom-Json | ForEach-Object { $_ }
   Check '--resolved --json: at least 4 resolved callers (Field/Param/Local/Self+bare)' ($rows.Count -ge 4)
 
   function CallersOf($target) { @($rows | Where-Object { $_.target_qname -eq $target }) }

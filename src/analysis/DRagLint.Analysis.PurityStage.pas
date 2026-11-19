@@ -25,10 +25,16 @@ uses
 type
   /// <summary>What one run counted -- printed on the `resolve: purity` line and
   /// returned for tests.</summary>
-  /// <remarks><c>Rounds</c> is the number of worklist PASSES: the visits the
+  /// <remarks>
+  /// <c>Rounds</c> is the number of worklist PASSES: the visits the
   /// fixpoint made divided by the routine count, rounded up. <c>TopUnbound</c>
   /// holds the ten commonest unbound callee names as <c>'name (count)'</c>,
-  /// lowercased, commonest first.</remarks>
+  /// lowercased, commonest first.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Analysis.PurityStage.pas) ?, DRagLint.Analysis.PurityStage.TPurityRun.Execute (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityStage.Run (DRagLint.Analysis.PurityStage.pas) ?</para>
+  /// <para>Used in units: DRagLint.Analysis.PurityStage</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPurityStats = record
     Routines       : Integer;
     EffectFree     : Integer;
@@ -42,6 +48,12 @@ type
 
   /// <summary>The stage. Stateless from the caller's side: Run builds what it
   /// needs, writes, and frees.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Analysis.PurityStage.TPurityRun.CallRef (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.LibCallee (DRagLint.Analysis.PurityStage.pas), DRagLint.Analysis.PurityStage.TPurityRun.Report (DRagLint.Analysis.PurityStage.pas), DRagLint.CLI.RunPurityStage (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.Analysis.PurityStage, DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPurityStage = class
   public
     /// <summary>Runs the whole-DB purity pass and persists the verdicts.</summary>
@@ -50,7 +62,8 @@ type
     /// <returns>Counts for the summary line.</returns>
     /// <exception cref="EInvalidOperation">Propagated from PutEffectFacts when
     /// the store has no effect_* columns (a read-only open).</exception>
-    /// <remarks>Every routine that owns a symbol_facts row with body_loc &gt; 0
+    /// <remarks>
+    /// Every routine that owns a symbol_facts row with body_loc &gt; 0
     /// receives a verdict; a routine in a file whose on-disk mtime no longer
     /// matches files.mtime_unix is `?` with the witness
     /// <c>source changed since indexing</c> (plan ruling 7); a routine in a file
@@ -59,7 +72,16 @@ type
     /// <c>no usage facts (shallow parse)</c> unless an earlier witness already
     /// names a concrete effect (146 g1). Complexity: one
     /// pass over the refs of every file plus the fixpoint, which visits each
-    /// routine once per change of a callee it depends on.</remarks>
+    /// routine once per change of a callee it depends on.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas) ?, DRagLint.CLI.RunPurityStage (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Analysis.PurityStage.TPurityRun.Create, DRagLint.Analysis.PurityStage.TPurityRun.Execute</para>
+    /// <para>Returns: R.Execute</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Analysis.PurityStage.TPurityRun.Create"/>
+    /// <seealso cref="DRagLint.Analysis.PurityStage.TPurityRun.Execute"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Run(const AStore: ISymbolStore): TPurityStats; static;
     /// <summary>E-BIND-LIB-EFFECTS: the library store whose summaries library-bound calls take.
     /// nil means a library-bound call is an unbound `?`. Set, a call whose stored external_target

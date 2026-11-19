@@ -19,7 +19,10 @@
   Run from a NEUTRAL CWD (C:\TEMP) so no drag-lint-lint.json is picked up.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -44,11 +47,11 @@ $cycDb = Join-Path $cycScratch 'cyc.sqlite'
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch    --db $db    2>$null | Out-Null
-  & $exePath index $cycScratch --db $cycDb 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch    --db $db    2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $cycScratch --db $cycDb 2>$null } | Out-Null
 
   # --- callgraph --direction callees --depth 2 over the chain. ---
-  $txt = & $exePath callgraph --qname StepA --direction callees --depth 2 --db $db 2>$null | Out-String
+  $txt = & { $ErrorActionPreference = 'Continue'; & $exePath callgraph --qname StepA --direction callees --depth 2 --db $db 2>$null } | Out-String
   $rc  = $LASTEXITCODE
   Check 'callgraph exit 0'                        ($rc -eq 0)
   Check 'tree root TChain.StepA present'          ($txt -match 'callchain\.TChain\.StepA')
@@ -57,16 +60,16 @@ try {
   Check 'depth-3 callee TChainD.StepD ABSENT (depth cap)' (-not ($txt -match 'callchain\.TChainD\.StepD'))
 
   # --- depth 3 DOES reach StepD. ---
-  $txt3 = & $exePath callgraph --qname StepA --direction callees --depth 3 --db $db 2>$null | Out-String
+  $txt3 = & { $ErrorActionPreference = 'Continue'; & $exePath callgraph --qname StepA --direction callees --depth 3 --db $db 2>$null } | Out-String
   Check 'depth-3 tree reaches TChainD.StepD'      ($txt3 -match 'callchain\.TChainD\.StepD')
 
   # --- callers direction: who reaches StepD (depth 3). ---
-  $txtC = & $exePath callgraph --qname StepD --direction callers --depth 3 --db $db 2>$null | Out-String
+  $txtC = & { $ErrorActionPreference = 'Continue'; & $exePath callgraph --qname StepD --direction callers --depth 3 --db $db 2>$null } | Out-String
   Check 'callers dir: StepC calls into StepD'     ($txtC -match 'callchain\.TChainC\.StepC')
 
   # --- json: nested tree. ---
-  $jsonOut = & $exePath callgraph --qname StepA --direction callees --depth 2 --json --db $db 2>$null | Out-String
-  $obj = $jsonOut | ConvertFrom-Json
+  $jsonOut = & { $ErrorActionPreference = 'Continue'; & $exePath callgraph --qname StepA --direction callees --depth 2 --json --db $db 2>$null } | Out-String
+  $obj = $jsonOut | ConvertFrom-Json | ForEach-Object { $_ }
   Check 'json root qname = TChain.StepA'          ($obj.qname -eq 'callchain.TChain.StepA')
   Check 'json root has 1 child'                   (@($obj.children).Count -eq 1)
   Check 'json child = TChainB.StepB'              ($obj.children[0].qname -eq 'callchain.TChainB.StepB')

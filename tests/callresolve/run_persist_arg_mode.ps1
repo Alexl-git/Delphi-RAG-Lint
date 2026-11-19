@@ -21,9 +21,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_arg_mode_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot '..\autotest\lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -120,11 +126,11 @@ end.
 $db = Join-Path $WorkDir 'App.sqlite'
 Push-Location C:\TEMP
 try {
-& $Exe index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the fixture index was built' (Test-Path $db) $db
 
 function Sql([string]$Q) {
-  $j = & $Exe sql --db $db --json --limit 1000 --query $Q 2>$null | ConvertFrom-Json
+  $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --limit 1000 --query $Q 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
   if ($null -eq $j) { return ,@() }
   $cols = @($j.columns | ForEach-Object { $_.name })
   $out = @()
@@ -150,11 +156,11 @@ foreach ($c in @(@('V1','FCount','var-arg'), @('O1','FCount','out-arg'), @('V2',
 }
 
 function UsagesRw([string]$Name) {
-  $raw = & $Exe usages --name $Name --rw --json --db $db 2>$null | Out-String
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe usages --name $Name --rw --json --db $db 2>$null } | Out-String
   return $raw
 }
 function ArgsOf($json, [string]$Side) {
-  $o = $json | ConvertFrom-Json
+  $o = $json | ConvertFrom-Json | ForEach-Object { $_ }
   $rows = @()
   foreach ($t in @($o.targets)) { foreach ($r in @($t.$Side)) { $rows += ("{0}:{1}" -f $r.line, $r.arg) } }
   return ($rows | Sort-Object) -join ' '
@@ -184,3 +190,4 @@ exit 0
   Write-Host "FATAL: $_" -ForegroundColor Red
   exit 2
 }
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

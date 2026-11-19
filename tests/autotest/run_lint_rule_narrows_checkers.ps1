@@ -28,10 +28,14 @@
   Run from a NEUTRAL CWD, pwsh 7.
 #>
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$Repo    = "$PSScriptRoot\..\..",
+  [string]$Exe     = '',
+  [string]$Repo    = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-rule-narrows-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $Repo) { $Repo = "$PSScriptRoot\..\.." }
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
@@ -130,14 +134,14 @@ function LintRun([string[]]$Extra, [string]$EnvName) {
     # --library-db names a file that does not exist, so no run here ever opens
     # the machine's real 2 GB platform library (it degrades to project-only).
     $argv = @('lint', $pas, '--db', $db, '--library-db', (Join-Path $WorkDir 'no-library.sqlite')) + $Extra
-    return (& $Exe @argv 2>&1 | Out-String)
+    return (& { $ErrorActionPreference = 'Continue'; & $Exe @argv 2>&1 | ForEach-Object { "$_" } } | Out-String)
   } finally { [Environment]::SetEnvironmentVariable($EnvName, $old) }
 }
 function Ran([string]$Out, [string]$Name) { $Out -match ('\[lint-checker\] ' + [regex]::Escape($Name) + '\r?\n') }
 
 Push-Location C:\TEMP
 try {
-  & $Exe index --all --config $manifest --only SecNarrow --jobs 1 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $manifest --only SecNarrow --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
   if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2 }
 
   Write-Host ''
@@ -193,9 +197,9 @@ try {
   $mLines = [IO.File]::ReadAllLines($marked)
   $exceptLine = 0
   for ($i = 0; $i -lt $mLines.Count; $i++) { if ($mLines[$i].Trim() -eq 'except') { $exceptLine = $i + 1 } }
-  & $Exe allow $marked --fix-line $exceptLine --fix-rule try-except-swallowed --apply 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe allow $marked --fix-line $exceptLine --fix-rule try-except-swallowed --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'M0 FIXTURE: allow wrote a live marker' ((Get-Content $marked)[$exceptLine - 1] -match 'dl:ok try-except-swallowed@[0-9a-f]{4}') ''
-  & $Exe index --all --config $manifest --only SecNarrow --jobs 1 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $manifest --only SecNarrow --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
   # A second, EXISTING index in the library slot, so no run here opens the
   # machine's real platform library (an explicit second --db is the library).
@@ -206,7 +210,7 @@ try {
     [Environment]::SetEnvironmentVariable($EnvName, '1')
     try {
       $argv = @('lint-all', '--db', $db, '--db', $libDummy, '--output', (Join-Path $WorkDir 'rep.txt')) + $Extra
-      return (& $Exe @argv 2>&1 | Out-String)
+      return (& { $ErrorActionPreference = 'Continue'; & $Exe @argv 2>&1 | ForEach-Object { "$_" } } | Out-String)
     } finally { [Environment]::SetEnvironmentVariable($EnvName, $old) }
   }
   function ScmRulesRun([string]$Out) {
@@ -235,16 +239,16 @@ try {
   # The marker on uMarked's `except` is live and correctly hashed. Narrowing the
   # checkers to review-marker-unused skipped try-except-swallowed and reported
   # that live marker as "remove it" (it was pre-existing on `lint` since D3).
-  $rAll = & $Exe lint $marked --db $db --library-db (Join-Path $WorkDir 'no-library.sqlite') 2>&1 | Out-String
+  $rAll = & { $ErrorActionPreference = 'Continue'; & $Exe lint $marked --db $db --library-db (Join-Path $WorkDir 'no-library.sqlite') 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'R0 CONTROL: a bare lint is silent about the live marker' (-not ($rAll -match 'review-marker-unused')) ''
-  $rOne = & $Exe lint $marked --db $db --library-db (Join-Path $WorkDir 'no-library.sqlite') --rule review-marker-unused 2>&1 | Out-String
+  $rOne = & { $ErrorActionPreference = 'Continue'; & $Exe lint $marked --db $db --library-db (Join-Path $WorkDir 'no-library.sqlite') --rule review-marker-unused 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'R1 lint --rule review-marker-unused does NOT call the live marker unused' (-not ($rOne -match 'review-marker-unused:')) ''
   $raOne = LintAllRun @('--rule', 'review-marker-unused') 'DRAGLINT_DEBUG'
   Check 'R2 lint-all --rule review-marker-unused does NOT call the live marker unused' (-not ($raOne -match 'uMarked\.pas:\d+:\d+\s+\[\w+\]\s+review-marker-unused')) ''
 
   Write-Host ''
   Write-Host 'G: ids the inline `lint` gates were SHORT of now reach their checker' -ForegroundColor Cyan
-  $g1 = & $Exe lint $marked --rule local-field-prefix 2>&1 | Out-String
+  $g1 = & { $ErrorActionPreference = 'Continue'; & $Exe lint $marked --rule local-field-prefix 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'G1 lint --rule local-field-prefix reports FCount' ($g1 -match 'local-field-prefix') 'was 0: missing from the inline naming gate'
 } finally { Pop-Location }
 
@@ -261,13 +265,13 @@ function IdsIn([string]$RelPath, [string]$Rx, [string]$SpanRx = '') {
   if ($SpanRx) { $t = [regex]::Match($t, $SpanRx).Value }
   return @([regex]::Matches($t, $Rx) | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
 }
-$catalog = @((& $Exe rules --json 2>$null | Out-String | ConvertFrom-Json).rules | ForEach-Object { $_.id })
+$catalog = @((& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }).rules | ForEach-Object { $_.id })
 Check 'D0 CONTROL: the rule catalogue parsed' ($catalog.Count -gt 100) "($($catalog.Count) rule(s))"
 
 $typeSpan = '(?s)class function TAstChecker\.CheckTypeAware\(.*?(?=\r?\nclass function TAstChecker\.)'
 $emitted = [ordered]@{
   'LINT_GATE_TYPE_AWARE'    = @(IdsIn 'src\diagnostics\DRagLint.Diagnostics.AstChecks.pas' "'([a-z0-9]+(?:-[a-z0-9]+)+)'" $typeSpan | Where-Object { $catalog -contains $_ })
-  'LINT_GATE_FLOW'          = IdsIn 'src\diagnostics\DRagLint.Diagnostics.FlowChecks.pas' "\bEmit\('([a-z0-9-]+)'"
+  'LINT_GATE_FLOW'          = @(IdsIn 'src\diagnostics\DRagLint.Diagnostics.FlowChecks.pas' "\bEmit\('([a-z0-9-]+)'")
   # WantRule(<CONST>) too (B-ENUM: WantRule(UNUSED_ENUM_VALUE_RULE)) -- each constant resolved to its
   # literal in src\lint\*.pas, so a gate id named through a constant is not reported as a phantom.
   'LINT_GATE_PROJECT_RULES' = @(@(IdsIn 'src\lint\DRagLint.Lint.ProjectRules.pas' "\bWantRule\('([a-z0-9-]+)'\)") + @(
@@ -275,14 +279,14 @@ $emitted = [ordered]@{
         $c = $_; Get-ChildItem (Join-Path $Repo 'src\lint') -Filter *.pas | ForEach-Object {
           [regex]::Matches([IO.File]::ReadAllText($_.FullName), "\b$c\s*=\s*'([a-z0-9-]+)'") } |
           ForEach-Object { $_.Groups[1].Value } }) | Sort-Object -Unique)
-  'LINT_GATE_CLASS_METRICS' = IdsIn 'src\lint\DRagLint.Lint.ClassMetrics.pas' "\bWantRule\('([a-z0-9-]+)'\)"
+  'LINT_GATE_CLASS_METRICS' = @(IdsIn 'src\lint\DRagLint.Lint.ClassMetrics.pas' "\bWantRule\('([a-z0-9-]+)'\)")
   # D17: the multi-id walks `lint` and `lint-all` now share. Every catalogue id
   # the checker's own unit names -- local-field-prefix and doc-orphan-block were
   # the two the old inline lists missed.
   'LINT_GATE_NAMING'        = @(IdsIn 'src\diagnostics\DRagLint.Diagnostics.NamingChecks.pas' "'([a-z0-9]+(?:-[a-z0-9]+)+)'" | Where-Object { $catalog -contains $_ })
   'LINT_GATE_DEAD_CODE'     = @(IdsIn 'src\diagnostics\DRagLint.Diagnostics.DeadCodeChecks.pas' "'([a-z0-9]+(?:-[a-z0-9]+)+)'" | Where-Object { $catalog -contains $_ })
   # taint wave T2 (2026-10-27): the three ids TTaintRules.Check emits, named by its TAINT_RULE_* constants
-  'LINT_GATE_TAINT'         = IdsIn 'src\lint\DRagLint.Lint.TaintRules.pas' "TAINT_RULE_[A-Z]+\s*=\s*'([a-z0-9-]+)'"
+  'LINT_GATE_TAINT'         = @(IdsIn 'src\lint\DRagLint.Lint.TaintRules.pas' "TAINT_RULE_[A-Z]+\s*=\s*'([a-z0-9-]+)'")
 }
 # gap-rules wave (G0): gate ids whose emitting lane has not landed. A lane deletes its own ids from this table;
 # integration leaves it empty (D3 then bites again).
@@ -290,13 +294,13 @@ $pendingEmit = [ordered]@{
   # lane G8 emptied its entry (LINT_GATE_PROJECT_RULES now emits all four of its ids)
 }
 foreach ($k in $emitted.Keys) {
-  $gate = GateList $k
+  $gate = @(GateList $k)
   $emit = @($emitted[$k])
   Check "D1 $k parsed from CLI.pas" ($gate.Count -gt 0) "($($gate.Count) id(s))"
   Check "D1 $k emit sites found" ($emit.Count -gt 0) "($($emit.Count) id(s))"
   $short = @($emit | Where-Object { $gate -notcontains $_ })
   # gap-rules wave (G0): ids already listed in a gate before their lane emits them (see $pendingEmit).
-  $gatePendingEmit = if ($pendingEmit.Contains($k)) { @($pendingEmit[$k]) } else { @() }
+  $gatePendingEmit = @(if ($pendingEmit.Contains($k)) { @($pendingEmit[$k]) } else { @() })
   $extra = @($gate | Where-Object { ($emit -notcontains $_) -and ($gatePendingEmit -notcontains $_) })
   Check "D2 $k carries every id its checker emits" ($short.Count -eq 0) `
     ("missing -> --rule answers 0 for: " + ($short -join ' '))

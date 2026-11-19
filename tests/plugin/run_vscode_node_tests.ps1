@@ -15,8 +15,11 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$TestDir = "$PSScriptRoot\..\..\editors\vscode\drag-lint\test"
+  [string]$TestDir = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $TestDir) { $TestDir = "$PSScriptRoot\..\..\editors\vscode\drag-lint\test" }
 $ErrorActionPreference = 'Continue'
 $node = Get-Command node -ErrorAction SilentlyContinue
 if (-not $node) {
@@ -30,7 +33,7 @@ if ($files.Count -eq 0) {
 }
 $failed = 0
 foreach ($f in $files) {
-  $out = & $node.Source $f.FullName 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $node.Source $f.FullName 2>&1 | ForEach-Object { "$_" } } | Out-String
   if ($LASTEXITCODE -eq 0) {
     Write-Host ("  [PASS] {0}" -f $f.Name) -ForegroundColor Green
   } else {

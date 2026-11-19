@@ -56,7 +56,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -75,11 +78,11 @@ Copy-Item $fixture $target -Force
 
 # Parse the JSON-per-line output of `doc-drift --qname X --json`.
 function Get-Drift($qname) {
-  $out = & $exePath doc-drift --qname $qname --db $db --json 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath doc-drift --qname $qname --db $db --json 2>$null }
   $rows = @()
   foreach ($ln in $out) {
     $t = $ln.Trim()
-    if ($t.StartsWith('{')) { $rows += ($t | ConvertFrom-Json) }
+    if ($t.StartsWith('{')) { $rows += ($t | ConvertFrom-Json | ForEach-Object { $_ }) }
   }
   return ,$rows
 }
@@ -98,7 +101,7 @@ function LacksEx($rows) {
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # Sanity: the engine is actually running on this fixture. Without this, every
   # "Lacks" assertion below would pass vacuously on an empty result set.
@@ -146,7 +149,7 @@ try {
   Copy-Item $osFixture (Join-Path $osDir 'transitive_osraise.pas') -Force
   $mainDb = $db; $db = Join-Path $scratch 'os.sqlite'
   try {
-    & $exePath index $osDir --db $db 2>$null | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $osDir --db $db 2>$null } | Out-Null
     $c6 = Get-Drift 'transitive_osraise.OsNone'
     Check 'OS SANITY: engine produces findings for the OS fixture' ($c6.Count -ge 1)
     Check 'RED-E: OsBare -- RaiseLastOSError justifies cref EOSError' (LacksEx (Get-Drift 'transitive_osraise.OsBare'))
@@ -157,9 +160,9 @@ try {
     Check 'CONTROL-7: AbortCref -- Abort is not in the table, EAbort STILL reported' (HasEx (Get-Drift 'transitive_osraise.AbortCref') 'EAbort')
     Check 'CONTROL-8: TShadow.Run -- resolved same-name member, EOSError STILL reported' (HasEx (Get-Drift 'transitive_osraise.TShadow.Run') 'EOSError')
     # The WRITER walks the same table: `document --qname` renders the edit.
-    $wr = (& $exePath document --qname 'transitive_osraise.OsWriter' --db $db 2>$null | Out-String)
+    $wr = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname 'transitive_osraise.OsWriter' --db $db 2>$null } | Out-String)
     Check 'WRITER-1: document adds <exception cref="EOSError"> for a Win32Check caller' ($wr -match 'exception cref="EOSError"')
-    $wa = (& $exePath document --qname 'transitive_osraise.AbortWriter' --db $db 2>$null | Out-String)
+    $wa = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname 'transitive_osraise.AbortWriter' --db $db 2>$null } | Out-String)
     Check 'WRITER-C1: document adds NO EAbort cref for an Abort caller' (-not ($wa -match 'exception cref="EAbort"'))
     Check 'WRITER-C2: the AbortWriter render is not empty (probe is live)' ($wa.Trim().Length -gt 0)
   } finally { $db = $mainDb }

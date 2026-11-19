@@ -23,9 +23,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_servewire_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n, $ok, $d) {
@@ -42,7 +45,7 @@ function Get-Wire([string]$Enc) {
   $out = Join-Path $WorkDir "out-$Enc.bin"
   $p = Start-Process -FilePath $exePath -ArgumentList @('serve', '--output-encoding', $Enc) -WorkingDirectory $WorkDir `
     -RedirectStandardInput $req -RedirectStandardOutput $out -RedirectStandardError (Join-Path $WorkDir "err-$Enc.txt") `
-    -NoNewWindow -PassThru
+    -NoNewWindow -PassThru; $null = $p.Handle
   if (-not $p.WaitForExit(30000)) { $p.Kill($true); throw "serve --output-encoding $Enc did not exit in 30 s" }
   , [System.IO.File]::ReadAllBytes($out)
 }
@@ -52,7 +55,7 @@ $text  = [System.Text.Encoding]::ASCII.GetString($ascii)
 $isAscii = -not ($ascii | Where-Object { $_ -ge 0x80 -or $_ -eq 0 })
 $oneLine = ($ascii.Length -gt 1) -and ($ascii[-1] -eq 10) -and ($ascii[-2] -ne 13) -and (($ascii | Where-Object { $_ -eq 10 }).Count -eq 1)
 $code = $null
-try { $code = ($text | ConvertFrom-Json).error.code } catch { }
+try { $code = ($text | ConvertFrom-Json | ForEach-Object { $_ }).error.code } catch { }
 Check 'S1 ascii: one LF-terminated ASCII line, a JSON-RPC -32601 reply' ($isAscii -and $oneLine -and ($code -eq -32601)) "bytes=$($ascii.Length) text=$text"
 
 foreach ($enc in 'utf8', 'utf16') {
@@ -67,7 +70,7 @@ $name = 'no_such_m' + [char]0xE9 + 'thod'
 [System.IO.File]::WriteAllText($req, '{"jsonrpc":"2.0","id":8,"method":"' + $name + '"}' + "`n", (New-Object System.Text.UTF8Encoding($false)))
 $w = Get-Wire 'ascii'
 $msg = $null
-try { $msg = ([System.Text.Encoding]::UTF8.GetString($w) | ConvertFrom-Json).error.message } catch { }
+try { $msg = ([System.Text.Encoding]::UTF8.GetString($w) | ConvertFrom-Json | ForEach-Object { $_ }).error.message } catch { }
 Check 'S4 a UTF-8 request is decoded as UTF-8 (method name echoed intact)' ($msg -ceq ('method not found: ' + $name)) "message=$msg"
 }
 catch { Write-Host "[FAIL] harness: $_" -ForegroundColor Red; $fail = $true }

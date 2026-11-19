@@ -19,11 +19,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe       = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
+  [string]$Exe       = '',
   [string]$WorkDir   = "$env:TEMP\drag-lint-cyclefix-ctorwide-$PID",
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite',
   [switch]$KeepWorkDir
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }) }
 $ErrorActionPreference = 'Stop'
 $RsVars = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 if (-not (Test-Path $RsVars)) { Write-Host 'SKIP: RAD Studio not installed' -ForegroundColor Yellow; exit 0 }
@@ -81,7 +84,7 @@ function Invoke-Program([string]$Dproj) {
 }
 function Invoke-Index([string]$Dproj, [string]$Tag) {
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project $Dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $Dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
   return $db
 }
 function Get-Plan([string]$Dproj, [string]$Tag, [string[]]$Extra) {
@@ -89,7 +92,7 @@ function Get-Plan([string]$Dproj, [string]$Tag, [string[]]$Extra) {
   $o = Join-Path $WorkDir "plan-$Tag.out"
   $null = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
     -ArgumentList (@('cycles', '--db', ('"' + $db + '"'), '--plan', '--library-db', ('"' + $Lib + '"')) + $Extra) `
-    -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "plan-$Tag.err")
+    -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "plan-$Tag.err"); $null = $null.Handle
   return [IO.File]::ReadAllText($o)
 }
 function Invoke-Apply([string]$Dproj, [string]$Tag) {
@@ -98,12 +101,12 @@ function Invoke-Apply([string]$Dproj, [string]$Tag) {
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
     -ArgumentList @('cycles', '--fix', '--apply', '--ctor-wide', '--no-backup', '--build-timeout', '600', '--cycle', '1', '--project', ('"' + $Dproj + '"'),
       '--db', ('"' + $db + '"'), '--library-db', ('"' + $Lib + '"')) `
-    -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "apply-$Tag.err")
+    -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "apply-$Tag.err"); $null = $p.Handle
   return @{ Exit = $p.ExitCode; Out = [IO.File]::ReadAllText($o); Err = [IO.File]::ReadAllText((Join-Path $WorkDir "apply-$Tag.err")) }
 }
 function Get-CyclesText([string]$Dproj, [string]$Tag) {
   $db = Invoke-Index $Dproj $Tag
-  return ((& $Exe cycles --db $db 2>&1) | Out-String)
+  return ((& { $ErrorActionPreference = 'Continue'; & $Exe cycles --db $db 2>&1 | ForEach-Object { "$_" } }) | Out-String)
 }
 $CtorRx = '\*\*Constructor inversion:\*\* `(\w+)\.'
 function Get-Sites([string]$Plan) { @([regex]::Matches($Plan, $CtorRx) | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique) }
@@ -164,7 +167,7 @@ try {
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
     -ArgumentList @('cycles', '--fix', '--apply', '--part', 'all', '--ctor-wide', '--no-backup', '--project', ('"' + (Join-Path $pa 'CtorWide.dproj') + '"'),
       '--db', ('"' + $padb + '"'), '--library-db', ('"' + $Lib + '"')) `
-    -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir 'pa.err')
+    -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir 'pa.err'); $null = $p.Handle
   Check 'pa1 --part all applies through the flag' ([IO.File]::ReadAllText((Join-Path $pa 'WideHub.pas')).Contains('NewTWideWorkerPtr(')) ("exit=$($p.ExitCode)")
   # lane 148 CY: pa1's positive control. The same --part all run WITHOUT --ctor-wide is what a child run that
   # never got the flag does; pa1's predicate must be false there, or pa1 could not fail when forwarding is lost.
@@ -178,7 +181,7 @@ try {
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
     -ArgumentList @('cycles', '--fix', '--apply', '--part', 'all', '--no-backup', '--project', ('"' + (Join-Path $pn 'CtorWide.dproj') + '"'),
       '--db', ('"' + $pndb + '"'), '--library-db', ('"' + $Lib + '"')) `
-    -RedirectStandardOutput (Join-Path $WorkDir 'pn.out') -RedirectStandardError (Join-Path $WorkDir 'pn.err')
+    -RedirectStandardOutput (Join-Path $WorkDir 'pn.out') -RedirectStandardError (Join-Path $WorkDir 'pn.err'); $null = $p.Handle
   Check 'pa0 (pa1 control) without the flag --part all does NOT apply the wide site' (-not [IO.File]::ReadAllText((Join-Path $pn 'WideHub.pas')).Contains('NewTWideWorkerPtr(')) ("exit=$($p.ExitCode)")
   Write-Host '== hub: an implementation edge hub -> module: sites apply, the cycle stays' -ForegroundColor Cyan
   $h = Join-Path $WorkDir 'hub-edit'; New-Tree $h

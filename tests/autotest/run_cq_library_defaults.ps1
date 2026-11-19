@@ -21,9 +21,12 @@
 [CmdletBinding()]
 param(
   [switch]$KeepWorkDir,
-  [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe = '',
   [string]$WorkDir = "$([IO.Path]::GetTempPath())drag-lint-cqlib-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 . "$PSScriptRoot\lib\WorkDirCleanup.ps1"
 if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 . "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG3: no machine drag-lint.json
@@ -59,8 +62,8 @@ try {
   $fileA = Join-Path $src 'uCycA.pas'
   $prefixDb = Join-Path $WorkDir 'library-Fixture.sqlite'
   $sectionDb = Join-Path $out 'stdlib.sqlite'
-  foreach ($d in $prefixDb, $sectionDb) { $null = & $exe index $src --db $d 2>&1; Check "SANITY: indexed $(Split-Path $d -Leaf)" ($LASTEXITCODE -eq 0) }
-  function LintDbg($db) { $env:DRAGLINT_DEBUG = '1'; try { & $exe lint $fileA --db $db 2>&1 | Out-String } finally { Remove-Item Env:\DRAGLINT_DEBUG } }
+  foreach ($d in $prefixDb, $sectionDb) { $null = & { $ErrorActionPreference = 'Continue'; & $exe index $src --db $d 2>&1 | ForEach-Object { "$_" } }; Check "SANITY: indexed $(Split-Path $d -Leaf)" ($LASTEXITCODE -eq 0) }
+  function LintDbg($db) { $env:DRAGLINT_DEBUG = '1'; try { & { $ErrorActionPreference = 'Continue'; & $exe lint $fileA --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String } finally { Remove-Item Env:\DRAGLINT_DEBUG } }
   $p = LintDbg $prefixDb
   Check 'A1  project DB named library-*.sqlite (no section): project-rules pass runs' ($p -match '\[lint-checker\] project-rules') ''
   Check 'A1b same: circular-uses is reported' ($p -match '\] circular-uses:') ''
@@ -75,19 +78,19 @@ try {
   Write-Ascii "$fx\lib\FMX.Edit.pas" "unit FMX.Edit;`ninterface`ntype`n  TEdit = class end;`nimplementation`nend.`n"
   Write-Ascii "$fx\vcl\uVclApp.pas" "unit uVclApp;`ninterface`nuses`n  Vcl.StdCtrls;`nimplementation`nend.`n"
   $pairDb = Join-Path $out 'library-Pair.sqlite'; $vclDb = Join-Path $WorkDir 'vcl.sqlite'
-  $null = & $exe index "$fx\lib" --db $pairDb 2>&1; $null = & $exe index "$fx\vcl" --db $vclDb 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $exe index "$fx\lib" --db $pairDb 2>&1 | ForEach-Object { "$_" } }; $null = & { $ErrorActionPreference = 'Continue'; & $exe index "$fx\vcl" --db $vclDb 2>&1 | ForEach-Object { "$_" } }
   function TEditOrder($dbs) {
     $a = @('query', '--name', 'TEdit', '--json', '--quiet'); foreach ($d in $dbs) { $a += @('--db', $d) }
-    $raw = (@(& $exe @a 2>&1) | ForEach-Object { "$_" } | Where-Object { -not $_.TrimStart().StartsWith('(') }) -join "`n"
+    $raw = (@(& { $ErrorActionPreference = 'Continue'; & $exe @a 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" } | Where-Object { -not $_.TrimStart().StartsWith('(') }) -join "`n"
     if (-not $raw.Trim()) { return @() }
-    return @(($raw | ConvertFrom-Json) | ForEach-Object { $_.qualified_name })
+    return @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_.qualified_name })
   }
-  $plain = TEditOrder @($pairDb)
+  $plain = @(TEditOrder @($pairDb))
   Check 'SANITY A3: both TEdit rows exist' ($plain.Count -ge 2) ($plain -join ',')
-  $ctx = TEditOrder @($vclDb, $pairDb)
+  $ctx = @(TEditOrder @($vclDb, $pairDb))
   Check 'A3  manifest names library-Pair as a library: the VCL project context puts Vcl.StdCtrls.TEdit first' ($ctx.Count -ge 2 -and $ctx[0] -eq 'Vcl.StdCtrls.TEdit') ($ctx -join ',')
   $stray = Join-Path $WorkDir 'library-Stray.sqlite'; Copy-Item $pairDb $stray
-  $ctx2 = TEditOrder @($vclDb, $stray)
+  $ctx2 = @(TEditOrder @($vclDb, $stray))
   Check 'A3b CONTROL: a library-*.sqlite no section names is a project DB: two project DBs give no single context (SQL order, FMX first)' ($ctx2.Count -ge 2 -and $ctx2[0] -eq 'FMX.Edit.TEdit') ($ctx2 -join ',')
 
   # ---- B: redundant-cast default library ----
@@ -96,12 +99,12 @@ try {
   $fxr = (Resolve-Path "$PSScriptRoot\..\fixtures\refactor\redcastlib").Path
   $d = Join-Path $WorkDir 'rc'; Copy-Item $fxr $d -Recurse
   $lib = Join-Path $out 'library-Win32.sqlite'; $db = Join-Path $d 'p.sqlite'; $proj = Join-Path $d 'RcLib.dproj'
-  $null = & $exe index (Join-Path $d 'lib') --db $lib --library-db none 2>&1; Check 'SANITY B: library indexed' ($LASTEXITCODE -eq 0)
-  $null = & $exe index --project $proj --db $db --library-db $lib 2>&1; Check 'SANITY B: project indexed' ($LASTEXITCODE -eq 0)
+  $null = & { $ErrorActionPreference = 'Continue'; & $exe index (Join-Path $d 'lib') --db $lib --library-db none 2>&1 | ForEach-Object { "$_" } }; Check 'SANITY B: library indexed' ($LASTEXITCODE -eq 0)
+  $null = & { $ErrorActionPreference = 'Continue'; & $exe index --project $proj --db $db --library-db $lib 2>&1 | ForEach-Object { "$_" } }; Check 'SANITY B: project indexed' ($LASTEXITCODE -eq 0)
   function Plan($extra) {
     $e = Join-Path $WorkDir 'plan.err'
-    $o = & $exe lint --fix --fix-rule redundant-cast --db $db --project $proj --platform win32 --format json @extra 2> $e
-    $pl = $null; try { $pl = ($o -join "`n") | ConvertFrom-Json } catch { }
+    $o = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($e); [IO.File]::WriteAllText($dlErrFile, ''); & $exe lint --fix --fix-rule redundant-cast --db $db --project $proj --platform win32 --format json @extra 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
+    $pl = $null; try { $pl = ($o -join "`n") | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
     [pscustomobject]@{ Plan = $pl; Err = [string](Get-Content $e -Raw -ErrorAction SilentlyContinue) }
   }
   $dflt = Plan @(); $expl = Plan @('--library-db', $lib); $none = Plan @('--library-db', 'none')

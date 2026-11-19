@@ -26,9 +26,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-concat-for-in-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -89,8 +92,8 @@ end.
   Check 'all four fixture statements located' (@($lnForIn, $lnForTo, $lnNoLoop, $lnReset) -notcontains -1)
 
   # `lint --rule` cannot be used: its validator rejects external .scm ids.
-  $raw = (& $Exe lint $fixture --json 2>$null) -join "`n"
-  $all = @($raw | ConvertFrom-Json)
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture --json 2>$null }) -join "`n"
+  $all = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   $fired = @($all | Where-Object { $_.rule -eq 'concat-in-loop' } |
     ForEach-Object { [int]$_.start_line } | Sort-Object -Unique)
   Check 'lint --json returned findings with a start_line (shape check)' (

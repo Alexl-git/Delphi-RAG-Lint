@@ -20,8 +20,11 @@
 # --fix --apply builds with identical warnings): no config and no --rule -> fires; the config still works.
 # Usage: pwsh -File tests/autotest/run_uses_movable_to_implementation.ps1 [-Exe <path>]
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+param([string]$Exe = '',
       [string]$WorkDir = "$env:TEMP\drag-lint-g8-umi-$PID")
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\g8-common.ps1"
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
@@ -46,14 +49,16 @@ try {
   # --- fix
   $pas = Join-Path $fx 'uA.pas'
   $want = Join-Path $PSScriptRoot "..\lint-project\$rule\expected\uA.fixed.pas"
-  & $Exe lint-all --db $db --rule $rule --fix --fix-rule $rule --apply --no-backup 2>&1 | Out-Null
+  # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+  & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule $rule --fix --fix-rule $rule --apply --no-compile-gate --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'fix: result is byte-identical to expected\uA.fixed.pas' (Test-G8BytesEqual $pas $want)
   Check 'fix: last entry -- result is byte-identical to expected\uE.fixed.pas' (Test-G8BytesEqual (Join-Path $fx 'uE.pas') (Join-Path $PSScriptRoot "..\lint-project\$rule\expected\uE.fixed.pas"))
   foreach ($u in 'uF','uG','uH','uI','uL','uN') {
     Check ("fix: leading-comma -- result is byte-identical to expected\$u.fixed.pas") (Test-G8BytesEqual (Join-Path $fx "$u.pas") (Join-Path $PSScriptRoot "..\lint-project\$rule\expected\$u.fixed.pas"))
   }
   $before = [IO.File]::ReadAllBytes($pas)
-  & $Exe lint-all --db $db --rule $rule --fix --fix-rule $rule --apply --no-backup 2>&1 | Out-Null
+  # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+  & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule $rule --fix --fix-rule $rule --apply --no-compile-gate --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'fix: second run leaves the bytes unchanged' ([Linq.Enumerable]::SequenceEqual([byte[]]$before, [byte[]][IO.File]::ReadAllBytes($pas)))
   Check 'fix: reindexed fixed file no longer fires' ((Invoke-G8Index $Exe $fx $db) -eq 0 -and (Get-G8Findings $Exe $db $rule).Count -eq 0)
   # --- atomicity (lane IATOM): uJ is UTF-8; the line above the movable entry holds a non-ASCII
@@ -74,14 +79,15 @@ try {
   # atomic whole-fix property still holds: removal AND implementation insert land together, the file
   # stays valid UTF-8 and keeps its non-ASCII comment. The withdraw path of the all-or-nothing applier
   # has no uses-movable trigger left (see the CLIFIX report); cyclefix / convert-apply keep covering it.
-  $jRaw = & $Exe lint-all --db $djDb --rule $rule --fix --fix-rule $rule --apply --no-backup --json 2>$null | Out-String
+  # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+  $jRaw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $djDb --rule $rule --fix --fix-rule $rule --apply --no-compile-gate --no-backup --json 2>$null } | Out-String
   $strictU8 = New-Object Text.UTF8Encoding($false, $true)
   $jTxt8 = $null; try { $jTxt8 = $strictU8.GetString([IO.File]::ReadAllBytes($uj)) } catch { }
   Check 'utf8: the file is still valid UTF-8 and keeps its non-ASCII comment' (($null -ne $jTxt8) -and $jTxt8.Contains($nonAscii))
   $jIntf = if ($jTxt8) { ($jTxt8 -split 'implementation')[0] } else { '' }
   $jImpl = if ($jTxt8) { ($jTxt8 -split 'implementation')[1] } else { '' }
   Check 'utf8: uB left the interface uses AND joined the implementation uses (whole fix, no half)' (($jIntf -notmatch '\buB\b') -and ($jImpl -match '\buB\b'))
-  $jRows = @(); $jb = $jRaw.IndexOf('['); if ($jb -ge 0) { try { $jRows = @($jRaw.Substring($jb) | ConvertFrom-Json) } catch { } }
+  $jRows = @(); $jb = $jRaw.IndexOf('['); if ($jb -ge 0) { try { $jRows = @(($jRaw.Substring($jb) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { } }
   $jRow = @($jRows | Where-Object { $_.rule -eq $rule -and ($_.file_path -match 'uJ\.pas$' -or $_.file -match 'uJ\.pas$') })
   Check 'utf8: --json row says applied, not declined' (($jRow.Count -eq 1) -and ($jRow[0].applied -eq $true) -and ($jRow[0].declined -ne $true)) $jRaw.Trim()  Check 'ON by default: no config, no --rule -> fires' ($off.Count -eq 9)
   Check 'config enabled -> fires without --rule' ($viaCfg.Count -eq 9)

@@ -19,9 +19,12 @@
 # Usage: pwsh -File tests/autotest/run_hover_multidb.ps1 [-Exe <path>]
 [CmdletBinding()]
 param(
-    [string] $Exe = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1"),
+    [string] $Exe = '',
     [string] $WorkDir = "$env:TEMP\drag-lint-hover-multidb-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1") }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -80,7 +83,7 @@ Check 'decoy dbs built' ((Test-Path $decoyDb1) -and (Test-Path $decoyDb2))
 function HoverJson([string[]]$Dbs) {
     $dbArgs = @()
     foreach ($d in $Dbs) { $dbArgs += @('--db', $d) }
-    return (& $Exe hover --qname MultiDbFixture.GrabDIB @dbArgs --format json 2>&1) -join "`n"
+    return (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname MultiDbFixture.GrabDIB @dbArgs --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 }
 
 # extract just the {...} object (mirror the plugin's slice) so trailing banners

@@ -17,9 +17,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-cycles-hub-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -34,7 +37,7 @@ $Exe = (Resolve-Path $Exe).Path
 function Invoke-Engine([string[]]$Arguments, [string]$Tag) {
   $o = Join-Path $WorkDir "$Tag.out"; $e = Join-Path $WorkDir "$Tag.err"
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
-    -ArgumentList $Arguments -RedirectStandardOutput $o -RedirectStandardError $e
+    -ArgumentList $Arguments -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   return @{ Exit = $p.ExitCode; Out = [IO.File]::ReadAllText($o); Err = [IO.File]::ReadAllText($e) }
 }
 function Write-Unit([string]$Name, [string]$Text) {
@@ -65,7 +68,7 @@ try {
 
   Write-Host '== positive controls' -ForegroundColor Cyan
   $all = Invoke-Engine @('cycles', '--db', $qdb, '--library-db', 'none', '--format', 'json') 'all'
-  $allG = @(); try { $allG = @($all.Out | ConvertFrom-Json) } catch { }
+  $allG = @(); try { $allG = @(($all.Out | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { }
   Check 'plain cycles reports both groups (star and knot)' ($allG.Count -eq 2) "groups=$($allG.Count)"
   $plain = Invoke-Engine @('cycles', '--db', $qdb, '--library-db', 'none') 'plain'
   Check 'without --hub no hub line is printed' ($plain.Exit -eq 0 -and $plain.Out -notmatch '(?m)^\s+hub |hubs: none|zero-ref edges') ''
@@ -83,7 +86,7 @@ try {
   Write-Host '== --hub json' -ForegroundColor Cyan
   $j = Invoke-Engine @('cycles', '--db', $qdb, '--library-db', 'none', '--hub', '--format', 'json') 'hubj'
   Check '--hub json exits 0' ($j.Exit -eq 0) "exit=$($j.Exit) err=$($j.Err)"
-  $g = @(); try { $g = @($j.Out | ConvertFrom-Json | Where-Object { $_ }) } catch { Check '--hub json parses' $false $j.Out }
+  $g = @(); try { $g = @($j.Out | ConvertFrom-Json | ForEach-Object { $_ } | Where-Object { $_ }) } catch { Check '--hub json parses' $false $j.Out }
   $star = @($g | Where-Object { @($_.units) -contains 'h' })
   $knot = @($g | Where-Object { @($_.units) -contains 'a' })
   Check 'json: both groups present' ($star.Count -eq 1 -and $knot.Count -eq 1) "star=$($star.Count) knot=$($knot.Count)"

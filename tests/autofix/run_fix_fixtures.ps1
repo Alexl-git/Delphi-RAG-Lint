@@ -30,7 +30,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$Filter  = '*',
   [switch]$Compile,
   [switch]$KeepScratch,
@@ -38,6 +38,9 @@ param(
   [string]$Rsvars  = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat',
   [string]$WorkDir = "$env:TEMP\drag-lint-fix-fixtures-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 # E-RENAME-OTHER-PATHS (146 r2): a naming fix runs the rename proof, and these fixtures have no library: the proof's own test seam,
 # as in run_const_casing_word_fix.ps1. The property-accessor-name case was refused (applied false) without it.
@@ -99,7 +102,7 @@ try {
       if (Test-Path (Join-Path $dir.FullName "$case.db-needed")) {
         $db = Join-Path $scr '_case.sqlite'
         Push-Location $scr
-        try { & $exePath index $scr --db $db *> (Join-Path $scr '_index.log') } finally { Pop-Location }
+        try { & { $ErrorActionPreference = 'Continue'; & $exePath index $scr --db $db *> (Join-Path $scr '_index.log') } } finally { Pop-Location }
         $extra += @('--db', $db)
       }
       $xa = Join-Path $dir.FullName "$case.extra-args"
@@ -107,22 +110,22 @@ try {
       Push-Location $scr
       try {
         # 1. apply, byte-identical
-        $raw = & $exePath lint --file $copy --fix --fix-rule $id --json --apply --no-backup @extra 2>$null | Out-String
-        $rows = @(); try { $rows = @($raw | ConvertFrom-Json) } catch { $rows = @() }
+        $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $copy --fix --fix-rule $id --json --apply --no-backup @extra 2>$null } | Out-String
+        $rows = @(); try { $rows = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $rows = @() }
         $applied = @($rows | Where-Object { $_.rule -eq $id -and $_.applied -eq $true }).Count
         Check "${tag}: --fix --apply applied >= 1 row" ($applied -ge 1) $raw.Trim()
         $same = BytesEqual ([IO.File]::ReadAllBytes($copy)) ([IO.File]::ReadAllBytes($fixed))
         Check "${tag}: result is byte-identical to $case.fixed.pas" $same $(if (-not $same) { FirstDiff $copy $fixed } else { '' })
         # a store-backed fix is re-checked against a FRESH index: the stale rows still name the deleted lines
-        if ($db) { & $exePath index $scr --db $db *> (Join-Path $scr '_reindex.log') }
+        if ($db) { & { $ErrorActionPreference = 'Continue'; & $exePath index $scr --db $db *> (Join-Path $scr '_reindex.log') } }
         # 2. idempotence
         $before = [IO.File]::ReadAllBytes($copy)
-        $txt = & $exePath lint --file $copy --fix --fix-rule $id --apply --no-backup @extra 2>&1 | Out-String
+        $txt = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $copy --fix --fix-rule $id --apply --no-backup @extra 2>&1 | ForEach-Object { "$_" } } | Out-String
         Check "${tag}: second run is a no-op ('autofix: no fixable findings')" ($txt -match 'autofix: no fixable findings') $txt.Trim()
         Check "${tag}: second run left the bytes unchanged" (BytesEqual $before ([IO.File]::ReadAllBytes($copy)))
         # 3. the rule no longer fires (a --db case was re-indexed after the fix, above)
-        $raw3 = & $exePath lint --file $copy --rule $id --json @extra 2>$null | Out-String
-        $left = -1; try { $left = @(@($raw3 | ConvertFrom-Json) | Where-Object { $_.rule -eq $id }).Count } catch { $left = -1 }
+        $raw3 = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $copy --rule $id --json @extra 2>$null } | Out-String
+        $left = -1; try { $left = @(@(($raw3 | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) | Where-Object { $_.rule -eq $id }).Count } catch { $left = -1 }
         $want = 0; $lf = Join-Path $dir.FullName "$case.leaves"; if (Test-Path $lf) { $want = [int](Get-Content $lf -Raw).Trim() }
         Check "${tag}: '$id' fires on the fixed file exactly $want time(s) (got $left)" ($left -eq $want) $raw3.Trim()
       } finally { Pop-Location }
@@ -131,7 +134,7 @@ try {
         $cdir = Join-Path $scr '_compile'
         New-Item -ItemType Directory -Force $cdir | Out-Null
         Copy-Item $fixed (Join-Path $cdir "$case.pas") -Force
-        $out = cmd /c "call `"$Rsvars`" >nul && cd /d `"$cdir`" && dcc64 -M -Q -NSSystem;Winapi;Vcl -NU`"$cdir`" `"$case.pas`"" 2>&1 | Out-String
+        $out = & { $ErrorActionPreference = 'Continue'; cmd /c "call `"$Rsvars`" >nul && cd /d `"$cdir`" && dcc64 -M -Q -NSSystem;Winapi;Vcl -NU`"$cdir`" `"$case.pas`"" 2>&1 | ForEach-Object { "$_" } } | Out-String
         $bad = ($out -match '(?m)\b(Error|Fatal)\b|[EF]\d{4}')
         Check "${tag}: $case.fixed.pas compiles (dcc64)" (-not $bad) (($out -split "`n" | Where-Object { $_ -match 'Error|Fatal|[EF]\d{4}' } | Select-Object -First 5) -join ' | ')
       }

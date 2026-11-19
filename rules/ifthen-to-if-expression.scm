@@ -7,10 +7,14 @@
 ; call form. IfThen evaluates both arguments, an if-expression only one, so the swap is only
 ; equivalent without side effects: a non-literal branch is left to ifthen-both-branches
 ; (disjoint by construction: that rule skips the both-literal call).
+; The tail of an else-if chain (if A then X := 1 else if B then X := 2 else X := 3)
+; is the else arm of another ifElse: three outcomes, not two, so it is skipped
+; (#not-parent? -- direct parent only; an if/else nested in a begin..end branch still fires).
 ((ifElse
   then: (assignment lhs: (_) @l1)
   else: (assignment lhs: (_) @l2)) @warn
-  (#eq? @l1 @l2))
+  (#eq? @l1 @l2)
+  (#not-parent? @warn "ifElse" "else"))
 
 ((assignment
   rhs: (exprCall

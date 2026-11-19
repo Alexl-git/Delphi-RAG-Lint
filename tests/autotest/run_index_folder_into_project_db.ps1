@@ -35,10 +35,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\draglint_folder_into_project_$PID",
   [switch]$Quiet
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -105,27 +108,27 @@ $projDb = Join-Path $drag 'App.sqlite'
 if (Test-Path $projDb) { Remove-Item $projDb -Force -ErrorAction SilentlyContinue }
 
 function FileCount($db) {
-  $j = (& $Exe sql --query 'SELECT COUNT(*) AS n FROM files' --db $db --json 2>$null) -join "`n"
+  $j = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --query 'SELECT COUNT(*) AS n FROM files' --db $db --json 2>$null }) -join "`n"
   $i = $j.IndexOf('{'); if ($i -lt 0) { return -1 }
-  try { return [int](($j.Substring($i) | ConvertFrom-Json).rows[0][0]) } catch { return -1 }
+  try { return [int](($j.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }).rows[0][0]) } catch { return -1 }
 }
 
 Write-Host '== a folder target is valid only for a LIBRARY database ==' -ForegroundColor Cyan
 
 # 1. POSITIVE CONTROL -- the correct project form must work, and must stamp.
-& $Exe index --project (Join-Path $proj 'App.dpr') --db $projDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $proj 'App.dpr') --db $projDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $rc1 = $LASTEXITCODE
 $n1  = FileCount $projDb
 Check 'the project form succeeds' ($rc1 -eq 0) "exit=$rc1"
 Check 'and indexes ONLY the members, not the loose unit' ($n1 -eq 3) `
   "expected 3 (App.dpr + 2 members), got $n1 -- if this is 4 the loose unit got in"
 
-$st = (& $Exe sql --query "SELECT value FROM schema_meta WHERE key='scan_type'" --db $projDb --json 2>$null) -join "`n"
+$st = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --query "SELECT value FROM schema_meta WHERE key='scan_type'" --db $projDb --json 2>$null }) -join "`n"
 Check 'and records scan_type=project' ($st -match 'project') `
   'without the stamp the refusal below falls back to the _D-RAG heuristic'
 
 # 2. THE DEFECT -- a folder into that project DB must be refused, and must not write.
-$out2 = (& $Exe index $proj --db $projDb 2>&1 | Out-String)
+$out2 = (& { $ErrorActionPreference = 'Continue'; & $Exe index $proj --db $projDb 2>&1 | ForEach-Object { "$_" } } | Out-String)
 $rc2  = $LASTEXITCODE
 $n2   = FileCount $projDb
 Check 'a FOLDER into a project DB is refused' ($rc2 -ne 0) "exit=$rc2 -- 0 means it indexed"
@@ -144,7 +147,7 @@ Check 'and the database is UNCHANGED' ($n2 -eq $n1) `
 # targets, and this guard passed anyway -- it only ever tried folders. The
 # battery found it: run_index_rebuild_recompile pollutes a project DB with one
 # out-of-root FILE on purpose, and the refusal blocked the setup.
-& $Exe index (Join-Path $proj 'uMemberA.pas') --db $projDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $proj 'uMemberA.pas') --db $projDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $rcFile = $LASTEXITCODE
 Check 'a single FILE into a project DB still works' ($rcFile -eq 0) `
   "exit=$rcFile -- refreshing one member is not a folder walk and must not be refused"
@@ -162,13 +165,13 @@ end.
 $libDb = Join-Path $libDir 'lib.sqlite'
 if (Test-Path $libDb) { Remove-Item $libDb -Force -ErrorAction SilentlyContinue }
 
-& $Exe index $libDir --db $libDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $libDir --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $rc3 = $LASTEXITCODE
 Check 'a folder into a NEW database still works' ($rc3 -eq 0) "exit=$rc3"
-$st3 = (& $Exe sql --query "SELECT value FROM schema_meta WHERE key='scan_type'" --db $libDb --json 2>$null) -join "`n"
+$st3 = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --query "SELECT value FROM schema_meta WHERE key='scan_type'" --db $libDb --json 2>$null }) -join "`n"
 Check 'and records scan_type=library' ($st3 -match 'library') ''
 
-& $Exe index $libDir --db $libDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $libDir --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'and a REPEAT folder scan of a library DB still works' ($LASTEXITCODE -eq 0) `
   'RED here means the refusal caught library databases too'
 
@@ -191,7 +194,7 @@ end.
 '@
 $anchorDb = Join-Path $anchorDir 'p.sqlite'
 if (Test-Path $anchorDb) { Remove-Item $anchorDb -Force -ErrorAction SilentlyContinue }
-& $Exe index (Join-Path $WorkDir 'anchorlike') --db $anchorDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $WorkDir 'anchorlike') --db $anchorDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'an UNSTAMPED db in a _D-RAG folder is NOT refused' ($LASTEXITCODE -eq 0) `
   'the _D-RAG path is a location convention, not proof of how the DB was built'
 

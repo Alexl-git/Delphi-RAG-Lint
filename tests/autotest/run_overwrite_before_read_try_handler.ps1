@@ -46,10 +46,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$Fixture = "$PSScriptRoot\..\lint\try-handler-reads-body-local.pas",
+  [string]$Exe     = '',
+  [string]$Fixture = '',
   [string]$WorkDir = "$env:TEMP\draglint_obr_try_handler_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $Fixture) { $Fixture = "$PSScriptRoot\..\lint\try-handler-reads-body-local.pas" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -126,9 +130,9 @@ end.
 
 $db  = Join-Path $WorkDir 'p.sqlite'
 $rep = Join-Path $WorkDir 'rep.txt'
-$idx = & $Exe index $WorkDir --db $db 2>&1 | Out-String
-& $Exe lint-all --db $db --output $rep --quiet 2>&1 | Out-Null
-$out = if (Test-Path $rep) { Get-Content $rep } else { @() }
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
+& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --output $rep --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
+$out = @(if (Test-Path $rep) { Get-Content $rep } else { @() })
 
 # Preconditions: without these, a fixture that failed to parse or index would
 # produce an empty report and satisfy every "must NOT be reported" arm by silence.

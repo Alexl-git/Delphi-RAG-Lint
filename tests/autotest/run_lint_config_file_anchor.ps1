@@ -31,10 +31,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe      = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$RulesDir = "$PSScriptRoot\..\..\rules",
+  [string]$Exe      = '',
+  [string]$RulesDir = '',
   [string]$WorkDir  = "C:\TEMP\draglint_cfg_anchor_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $RulesDir) { $RulesDir = "$PSScriptRoot\..\..\rules" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){ if($d){Write-Host "      $d" -ForegroundColor DarkGray}; $script:fail=$true } }
@@ -82,7 +86,7 @@ function RuleHits($text, $id) {
 
 Push-Location $neutral
 try {
-  $withCfg = & $exePath lint $file --rules-dir $rules 2>&1 | Out-String
+  $withCfg = & { $ErrorActionPreference = 'Continue'; & $exePath lint $file --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String
 
   Check 'C1  a config beside the FILE is honoured from an unrelated cwd' `
         ((RuleHits $withCfg 'empty-except') -eq 0) `
@@ -95,7 +99,7 @@ try {
   # POSITIVE CONTROL: take the config away and the rule must come back. Without
   # this, C1 is satisfied by a build in which empty-except simply never fires.
   Remove-Item $cfg -Force
-  $noCfg = & $exePath lint $file --rules-dir $rules 2>&1 | Out-String
+  $noCfg = & { $ErrorActionPreference = 'Continue'; & $exePath lint $file --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String
 
   Check 'C2  CONTROL: with the config REMOVED, the same run reports the rule again' `
         ((RuleHits $noCfg 'empty-except') -ge 1) `

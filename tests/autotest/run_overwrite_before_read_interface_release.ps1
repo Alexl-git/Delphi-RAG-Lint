@@ -45,9 +45,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-obr-intf-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -183,7 +186,7 @@ if (@($rows.Values | Sort-Object -Unique).Count -ne $names.Count) {
 }
 Write-Host ("  anchors: " + (($rows.Keys | ForEach-Object { "$_=$($rows[$_])" }) -join ' ')) -ForegroundColor DarkGray
 
-$out  = & $Exe lint $file 2>&1 | Out-String
+$out  = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file 2>&1 | ForEach-Object { "$_" } } | Out-String
 $hits = @([regex]::Matches($out, 'uObrIntf\.pas:(\d+):\d+\s+\[\w+\]\s+overwrite-before-read') |
           ForEach-Object { [int]$_.Groups[1].Value })
 function Proc-Of([int]$Row) {

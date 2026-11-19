@@ -17,10 +17,17 @@
 # Usage: pwsh -File tests/autotest/run_forms_csv_v8.ps1 [-Exe <path>]
 [CmdletBinding()]
 param(
-    [string] $Exe        = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-    [string] $FixtureDir = "$PSScriptRoot\..\fixtures\formsmap-v8",
+    [string] $Exe        = '',
+    [string] $FixtureDir = '',
     [string] $WorkDir    = "$env:TEMP\drag-lint-forms-csv-v8-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $FixtureDir) { $FixtureDir = "$PSScriptRoot\..\fixtures\formsmap-v8" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -44,13 +51,13 @@ Copy-Item -LiteralPath (Resolve-Path $FixtureDir).Path -Destination $fx -Recurse
 New-Item -ItemType Directory "$fx\_D-RAG" | Out-Null
 [IO.File]::WriteAllText("$fx\_D-RAG\drag-lint-project.json", '{ "ownRoots": ["."] }')
 
-& $Exe index $fx --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'index fixture exits 0' ($LASTEXITCODE -eq 0)
 
 # --- menu-tree: the external roots forms-csv consumes ---------------------
-$json = (& $Exe menu-tree --project "$fx\Demo8.dproj" --db $db --format json 2>$null) -join "`n"
+$json = (& { $ErrorActionPreference = 'Continue'; & $Exe menu-tree --project "$fx\Demo8.dproj" --db $db --format json 2>$null }) -join "`n"
 Check 'menu-tree exits 0' ($LASTEXITCODE -eq 0)
-$tree = $json | ConvertFrom-Json
+$tree = $json | ConvertFrom-Json | ForEach-Object { $_ }
 $ext  = @($tree.external)
 Check 'two external roots mnuTools, keyed TClass.mnuTools (one per form, not merged)' ((@($ext | Where-Object { $_.ident -cmatch '^Tfrm(Main|Side)8\.mnuTools$' })).Count -eq 2) "got $($ext.Count): $(($ext | ForEach-Object { "$($_.ident)@$($_.identPath)" }) -join ', ')"
 $mainExt = $ext | Where-Object { $_.identPath -like '*\uMain8.pas' } | Select-Object -First 1
@@ -64,7 +71,7 @@ $sideCaps = @($sideExt.children | ForEach-Object { $_.caption })
 Check 'side mnuTools: only Side Code' (($sideCaps -join '|') -ceq 'Side Code') ($sideCaps -join '|')
 
 # --- forms-csv v8: code-added items in "How to open" ----------------------
-& $Exe forms-csv --project "$fx\Demo8.dproj" --db $db --output $out 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe forms-csv --project "$fx\Demo8.dproj" --db $db --output $out 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'forms-csv exits 0' ($LASTEXITCODE -eq 0)
 $raw = [IO.File]::ReadAllText($out)
 $lines = @($raw -split "`r`n" | Where-Object { $_ -ne '' })
@@ -115,3 +122,4 @@ catch {
     Write-Host "GUARD BROKEN: $($_.Exception.Message)" -ForegroundColor Red
     exit 2
 }
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

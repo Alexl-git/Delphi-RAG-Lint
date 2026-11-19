@@ -22,7 +22,10 @@
   Run from a NEUTRAL CWD (C:\TEMP) so no drag-lint-lint.json is picked up.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -41,12 +44,12 @@ Copy-Item $fixture $target -Force
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # --- ambiguous-calls --file: whole-file coverage view. ---
-  $jsonOut = & $exePath ambiguous-calls --file $target --json --db $db 2>$null | Out-String
+  $jsonOut = & { $ErrorActionPreference = 'Continue'; & $exePath ambiguous-calls --file $target --json --db $db 2>$null } | Out-String
   Check '--file --json: parses as JSON array' ($null -ne $jsonOut -and $jsonOut.Trim().StartsWith('['))
-  $rows = $jsonOut | ConvertFrom-Json
+  $rows = $jsonOut | ConvertFrom-Json | ForEach-Object { $_ }
   Check '--file: at least 1 ambiguous/unverified site (CallsUnknown)' (@($rows).Count -ge 1)
 
   $encl = @($rows | ForEach-Object { $_.enclosing_qname })
@@ -60,14 +63,14 @@ try {
   Check 'CallsUnknown row carries file' ($null -ne $unknownRow.file -and $unknownRow.file -ne '')
 
   # --- ambiguous-calls --file text mode. ---
-  $txtOut = & $exePath ambiguous-calls --file $target --db $db 2>$null | Out-String
+  $txtOut = & { $ErrorActionPreference = 'Continue'; & $exePath ambiguous-calls --file $target --db $db 2>$null } | Out-String
   Check 'text mode: mentions CallsUnknown' ($txtOut -match 'CallsUnknown')
   Check 'text mode: does not mention CallsAlpha' (-not ($txtOut -match 'CallsAlpha'))
 
   # --- ambiguous-calls --qname on a FULLY-resolved scope: empty, exit 0. ---
-  $emptyJson = & $exePath ambiguous-calls --qname calledfrom.TDispatcher.CallsAlpha --json --db $db 2>$null | Out-String
+  $emptyJson = & { $ErrorActionPreference = 'Continue'; & $exePath ambiguous-calls --qname calledfrom.TDispatcher.CallsAlpha --json --db $db 2>$null } | Out-String
   $emptyExit = $LASTEXITCODE
-  $emptyRows = $emptyJson | ConvertFrom-Json
+  $emptyRows = $emptyJson | ConvertFrom-Json | ForEach-Object { $_ }
   Check 'fully-resolved scope --json: empty array' (@($emptyRows).Count -eq 0)
   Check 'fully-resolved scope: exit code 0 (empty is a valid answer)' ($emptyExit -eq 0)
 } finally { Pop-Location }

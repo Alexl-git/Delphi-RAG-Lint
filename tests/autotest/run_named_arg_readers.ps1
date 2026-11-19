@@ -11,9 +11,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-named-arg-readers-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -62,8 +65,8 @@ $pas = Join-Path $WorkDir 'uNamedArgReaders.pas'
 
 Push-Location $WorkDir
 try {
-  $raw = (& $Exe lint $pas --enable magic-literal --json 2>$null) -join "`n"
-  $rows = @($raw | ConvertFrom-Json)
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $pas --enable magic-literal --json 2>$null }) -join "`n"
+  $rows = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Check 'lint --json answered (non-empty array)' ($rows.Count -gt 0) "rows=$($rows.Count)"
   $rec = @($rows | Where-Object { $_.rule -eq 'unconditional-recursion' } | ForEach-Object { $_.start_line })
   $mag = @($rows | Where-Object { $_.rule -eq 'magic-literal' } | ForEach-Object { $_.start_line })

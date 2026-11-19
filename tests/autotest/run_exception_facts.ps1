@@ -16,10 +16,16 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe         = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe         = '',
   [string]$BaselineExe = '',
   [string]$WorkDir     = "$env:TEMP\drag-lint-exception-facts-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -45,20 +51,20 @@ function Compare-Exact([string[]]$Exp, [string[]]$Act) {
   return $true
 }
 function Get-Facts([string]$EngineExe, [string]$Db, [string[]]$Sel) {
-  $raw = (& $EngineExe exception-facts @Sel --db $Db --json 2>$null) -join "`n"
-  return ($raw | ConvertFrom-Json)
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $EngineExe exception-facts @Sel --db $Db --json 2>$null }) -join "`n"
+  return ($raw | ConvertFrom-Json | ForEach-Object { $_ })
 }
 function Show($F) {
   return @($F.facts | ForEach-Object { '{0}|{1}|{2}|{3}|{4}|{5}' -f $_.action, $_.type, $_.type_qname, $_.via, $_.line, $_.col })
 }
 
 $db = Join-Path $WorkDir 'facts.sqlite'
-$null = & $Exe index $work --db $db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 # A. one routine, exact, in source order
 $stamp = Get-Facts $Exe $db @('--target', 'TypeFacts.Stamp')
-$act = Show $stamp
+$act = @(Show $stamp)
 $exp = @(
   'handles|ELocal|TypeFacts.ELocal|bound|27|11',
   'raises-expr|ELocal|TypeFacts.ELocal|handler|27|27',
@@ -78,8 +84,8 @@ Check "A. --target TypeFacts.Stamp: exact rows ($($exp.Count))" (Compare-Exact $
 Check 'A. count field equals the rows' ($stamp.count -eq $exp.Count) "count=$($stamp.count)"
 Check 'A. routine and file on every row' (@($stamp.facts | Where-Object { $_.routine -cne 'TypeFacts.Stamp' -or $_.file -notlike '*TypeFacts.pas' }).Count -eq 0)
 $tail = Get-Facts $Exe $db @('--target', 'Stamp')
-Check 'A. the trailing part selects the same rows' (Compare-Exact $exp (Show $tail))
-$local = Show (Get-Facts $Exe $db @('--target', 'OutsideHandler'))
+Check 'A. the trailing part selects the same rows' (Compare-Exact $exp (@(Show $tail)))
+$local = @(Show (Get-Facts $Exe $db @('--target', 'OutsideHandler')))
 Check 'A. raise E outside a handler: the param type, via=local' (Compare-Exact @('raises-expr|ELocal|TypeFacts.ELocal|local|53|9') $local) ($local -join '; ')
 
 # B. one type
@@ -97,15 +103,15 @@ $exc = @((Get-Facts $Exe $db @('--name', 'Exception')).facts | ForEach-Object { 
 Check 'B. no ancestry: --name Exception lists its own sites, not the raisers of its descendants' (@($exc | Where-Object { $_ -in 'TypeFacts.Thrower', 'TypeFactsB.ThrowB' }).Count -eq 0) ($exc -join ',')
 
 # C. text
-$txt = (& $Exe exception-facts --target TypeFacts.Thrower --db $db 2>$null) -join "`n"
+$txt = (& { $ErrorActionPreference = 'Continue'; & $Exe exception-facts --target TypeFacts.Thrower --db $db 2>$null }) -join "`n"
 Check 'C. text: the action, the type, the via, the count' (($txt -match 'raises\s+TypeFacts\.ELocal\s+bound\s+TypeFacts\.Thrower') -and ($txt -match '1 exception fact')) $txt
 
 # D. usage
-$null = & $Exe exception-facts --db $db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe exception-facts --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'D. neither selector exits 2' ($LASTEXITCODE -eq 2) "exit=$LASTEXITCODE"
-$null = & $Exe exception-facts --target A --name B --db $db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe exception-facts --target A --name B --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'D. both selectors exit 2' ($LASTEXITCODE -eq 2) "exit=$LASTEXITCODE"
-$null = & $Exe exception-facts --target A --db (Join-Path $WorkDir 'none.sqlite') 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe exception-facts --target A --db (Join-Path $WorkDir 'none.sqlite') 2>&1 | ForEach-Object { "$_" } }
 Check 'D. a missing DB exits non-zero' ($LASTEXITCODE -ne 0) "exit=$LASTEXITCODE"
 
 # E. controls
@@ -117,10 +123,10 @@ Check 'E. an empty answer: exit 0, count 0' (($LASTEXITCODE -eq 0) -and ($empty.
 if ($BaselineExe -ne '') {
   $BaselineExe = (Resolve-Path $BaselineExe).Path
   $db0 = Join-Path $WorkDir 'baseline.sqlite'
-  $null = & $BaselineExe index $work --db $db0 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $BaselineExe index $work --db $db0 2>&1 | ForEach-Object { "$_" } }
   $old = Get-Facts $Exe $db0 @('--target', 'TypeFacts.Stamp')
   Check 'F. a DB without the fact: the same site count' ($old.count -eq $exp.Count) "count=$($old.count)"
-  $oldShow = Show $old
+  $oldShow = @(Show $old)
   Check 'F. a DB without the fact: the reraise reads unknown' ($oldShow -ccontains 'reraises|||unknown|29|18') ($oldShow -join '; ')
   Check 'F. a DB without the fact: nothing reads bound' (@($old.facts | Where-Object { $_.via -eq 'bound' }).Count -eq 0)
 }
@@ -132,3 +138,4 @@ exit 0
   Write-Host "FATAL: $($_.Exception.Message)" -ForegroundColor Red
   exit 2
 }
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

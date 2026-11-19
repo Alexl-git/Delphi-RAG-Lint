@@ -25,9 +25,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_score_cycles_selftest_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -50,17 +53,17 @@ foreach ($n in 'orig', 'edit') {
 $report = Join-Path $WorkDir 'report.txt'
 Push-Location (Join-Path $WorkDir 'orig')
 try {
-  & $exePath index --project 'circular-demo\CircularDemo.dproj' --db (Join-Path $WorkDir 'rep.sqlite') 2>&1 | Out-Null
-  & $exePath cycles --db (Join-Path $WorkDir 'rep.sqlite') --edges --causes --plan --format text --library-db none 2>$null |
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --project 'circular-demo\CircularDemo.dproj' --db (Join-Path $WorkDir 'rep.sqlite') 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath cycles --db (Join-Path $WorkDir 'rep.sqlite') --edges --causes --plan --format text --library-db none 2>$null } |
     Set-Content -LiteralPath $report -Encoding ascii
 } finally { Pop-Location }
 Check 'V the engine printed a plan with a checklist' ((Get-Content $report -Raw) -match 'It must print exactly:') $report
 
-$raw = pwsh -NoProfile -File $scorer -Original (Join-Path $WorkDir 'orig\circular-demo') -Edited (Join-Path $WorkDir 'edit\circular-demo') `
-         -Report $report -Project 'CircularDemo.dproj' -Exe $exePath -Json 2>$null | Out-String
+$raw = & { $ErrorActionPreference = 'Continue'; pwsh -NoProfile -File $scorer -Original (Join-Path $WorkDir 'orig\circular-demo') -Edited (Join-Path $WorkDir 'edit\circular-demo') `
+         -Report $report -Project 'CircularDemo.dproj' -Exe $exePath -Json 2>$null } | Out-String
 $rc = $LASTEXITCODE
 $j = $null
-try { $j = $raw | ConvertFrom-Json } catch { $j = $null }
+try { $j = $raw | ConvertFrom-Json | ForEach-Object { $_ } } catch { $j = $null }
 Check 'V the scorer emitted JSON' ($null -ne $j) $raw
 Check "T0 overall verdict FAIL, exit 1 (got $rc)" (($rc -eq 1) -and ($null -ne $j) -and (-not $j.pass)) ''
 Check 'T1 1-CYCLE FAILS on the untouched tree (interface coupling remains)' (($null -ne $j) -and (-not $j.'1-CYCLE'.pass)) $j.'1-CYCLE'.actual

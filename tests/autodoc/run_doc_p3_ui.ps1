@@ -26,7 +26,10 @@
   Runs from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Continue'
@@ -71,7 +74,7 @@ r = c.execute('''SELECT f.ui_affinity FROM symbols s
 if not r: print('<norow>')
 else: print('<null>' if r[0][0] is None else r[0][0])
 "@
-  return ((python -c $py 2>&1) -join ' ').Trim()
+  return ((& { $ErrorActionPreference = 'Continue'; python -c $(if ($PSVersionTable.PSVersion.Major -lt 7) { $py.Replace('"', '\"') } else { $py }) 2>&1 | ForEach-Object { "$_" } }) -join ' ').Trim()
 }
 
 Push-Location C:\TEMP
@@ -87,7 +90,7 @@ $tgt = Join-Path $sc 'ui.pas'
 $db  = Join-Path $sc 'u.sqlite'
 Copy-Item $fx $tgt -Force
 
-& $exePath index $sc --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc --db $db 2>$null } | Out-Null
 Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
 # PRECONDITION: the two arms really are distinct -- FDerived's own type must NOT
@@ -98,10 +101,10 @@ Check 'PRECONDITION: FPanel is typed with a CURATED name (direct arm)' `
 Check 'PRECONDITION: FDerived is typed TMyPanel, which is NOT a curated name (ancestry arm)' `
   (@($pre | Where-Object { $_ -match 'FDerived: TMyPanel;' }).Count -eq 1) ''
 
-& $exePath document --unit $tgt --db $db --apply 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $tgt --db $db --apply 2>$null } | Out-Null
 Check 'apply exits 0' ($LASTEXITCODE -eq 0)
 $md5Cycle1 = Get-FileMd5 $tgt
-& $exePath index $sc --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc --db $db 2>$null } | Out-Null
 
 $lines   = [IO.File]::ReadAllLines($tgt)
 $blkUi   = Get-BlockAbove $lines '^\s*procedure TouchesUi;'
@@ -144,7 +147,7 @@ Check '5. symbol_facts.ui_affinity is empty or NULL for NoUi' `
   (($storedNoUi -eq '') -or ($storedNoUi -eq '<null>') -or ($storedNoUi -eq '<norow>')) "got=[$storedNoUi]"
 
 # --- (6) idempotency. -------------------------------------------------------
-& $exePath document --unit $tgt --db $db --apply 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $tgt --db $db --apply 2>$null } | Out-Null
 Check '6. a second apply after a reindex is byte-identical' `
   ((Get-FileMd5 $tgt) -eq $md5Cycle1) ("c1=$md5Cycle1 c2=" + (Get-FileMd5 $tgt))
 

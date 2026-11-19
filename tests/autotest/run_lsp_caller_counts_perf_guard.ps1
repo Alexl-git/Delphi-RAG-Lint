@@ -30,10 +30,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe      = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe      = '',
   [string]$WorkDir  = "$env:TEMP\drag-lint-caller-counts-perf-$PID",
   [int]   $BudgetMs = 3000
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -77,7 +80,7 @@ $file = Join-Path $src 'uPerf.pas'
 WriteAnsi $file $sb.ToString()
 
 $db = Join-Path $WorkDir 'perf.sqlite'
-& $Exe index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' (Test-Path $db)
 
 $uri   = 'file:///' + ($file -replace '\\', '/')
@@ -105,7 +108,7 @@ function Session([bool]$withWork) {
   $sw.Stop()
   $replies = @()
   foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($null -ne $o.id) { $replies += $o }
   }
   return [pscustomobject]@{ Ms = $sw.ElapsedMilliseconds; Replies = $replies }
@@ -125,7 +128,7 @@ Check "callerCounts + hover cost under $BudgetMs ms over the control session" ($
 
 Write-Host ''
 Write-Host 'STILL RIGHT: the counts of a known call graph' -ForegroundColor Cyan
-$counts = if ($cc.Count -eq 1 -and $null -ne $cc[0].result) { @($cc[0].result.counts) } else { @() }
+$counts = @(if ($cc.Count -eq 1 -and $null -ne $cc[0].result) { @($cc[0].result.counts) } else { @() })
 function CountAt([string]$declPattern) {
   for ($i = 0; $i -lt $lines.Count; $i++) {
     if ($lines[$i] -match $declPattern) {

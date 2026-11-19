@@ -4,10 +4,10 @@ title: query --name-like
 summary: Case-insensitive substring search over symbol names
 product: DL
 group: search-navigation
-order: 20023
+order: 20024
 since: 1.8.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # query --name-like

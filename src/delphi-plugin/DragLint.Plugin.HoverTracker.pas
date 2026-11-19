@@ -44,7 +44,7 @@ interface
 procedure StartHoverTracker;
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.Editor.UnregisterDragLintMenu (DragLint.Plugin.Editor.pas), initialization/finalization (DragLint.Plugin.HoverTracker.pas)</para>
+/// <para>Called from: DragLint.Plugin.Editor.UnregisterDragLintMenu (DragLint.Plugin.Editor.pas), DragLint.Plugin.HoverTracker.finalization (DragLint.Plugin.HoverTracker.pas)</para>
 /// <para>Calls: FreeAndNil</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -55,6 +55,7 @@ implementation
 uses
   System.SysUtils
   , System.Classes
+  , System.JSON  { v152 ASYNC: the draglint/deferHover params }
   , Vcl.Forms
   , Vcl.Controls
   , Vcl.ExtCtrls
@@ -126,6 +127,44 @@ const
   FALLBACK_HALF_BOX = 8;
   { The dwell popup opens this far below the pointer (unchanged since v0.42). }
   POPUP_BELOW_PX = 20;
+  { v152 ASYNC (ruling B9c): the engine's deferred-hover protocol. The server's
+    copy lives in DRagLint.LSP.Deferred; the two must stay equal. }
+  DEFER_HOVER_METHOD   = 'draglint/deferHover';
+  DEFERRED_PLACEHOLDER = 'computing...';
+
+{ v152 ASYNC: True when a bundle answer is the FAST first step of a deferred
+  hover -- its facts carry the placeholder line where the slow sections go. }
+function IsDeferredFirstAnswer(const AModel: TDragLintHoverModel): Boolean;
+begin
+  Result:= False;
+  for var F in AModel.Facts do
+    if F = DEFERRED_PLACEHOLDER then Exit(True);
+end;
+
+{ v152 ASYNC: tells the engine the next hoverBundle at this position may be
+  answered in two steps. Sent on the same write queue, so it precedes the
+  request. An engine before 1.52 ignores the unknown notification and answers
+  the request whole, as before. }
+procedure AnnounceDeferredHover(AClient: TDragLintLspClient; const AUri: string; ALine0, ACol0: Integer);
+var
+  Params : TJSONObject;
+  TextDoc: TJSONObject;
+  Pos    : TJSONObject;
+begin
+  Params:= TJSONObject.Create;
+  try
+    TextDoc:= TJSONObject.Create;
+    TextDoc.AddPair('uri', AUri);
+    Params.AddPair('textDocument', TextDoc);
+    Pos:= TJSONObject.Create;
+    Pos.AddPair('line'     , TJSONNumber.Create(ALine0));
+    Pos.AddPair('character', TJSONNumber.Create(ACol0 ));
+    Params.AddPair('position', Pos);
+    AClient.Notify(DEFER_HOVER_METHOD, Params);
+  finally
+    Params.Free;
+  end;
+end;
 
 function ClassNameOf(AHwnd: HWND): string;
 var
@@ -208,6 +247,11 @@ type
       FInflightAnchor    : TDLHoverAnchor             ;
       FInflightDiags     : TArray<TDragLintDiagnostic>;
       FInflightDiagText  : string                     ;
+      { v152 ASYNC: the in-flight request is the announced FIRST step of a
+        deferred hover (its answer may be partial), or the SECOND step that
+        completes a partial popup already on screen. }
+      FInflightAnnounced : Boolean                    ;
+      FInflightSecond    : Boolean                    ;
       procedure OnTick(Sender: TObject);
       { v(session 73): editor caret line -> drag-lint panel selection. }
       procedure DriveCaretPanelSelection;
@@ -217,7 +261,10 @@ type
         const AMarkdown, AQName: string; const AModel: TDragLintHoverModel;
         const ACallers: TArray<TDragLintCallerInfo>);
       procedure OnHoverTextAnswer(AId: Integer; AStatus: TDLHoverStatus; const AMarkdown: string);
-      procedure GateAndShowInflight;
+      function  InflightGateVerdict: TDLHoverGateVerdict;
+      function  GateAndShowInflight(const AText: string; const AModel: TDragLintHoverModel;
+        const ACallers: TArray<TDragLintCallerInfo>): Boolean;
+      procedure DropAbandonedSecondStep;
       procedure ShowHoverPopup(const APos: TPoint; const AKey, ALspText: string;
         const AModel: TDragLintHoverModel; const ACallers: TArray<TDragLintCallerInfo>;
         const ADiags: TArray<TDragLintDiagnostic>; const ADiagText: string);
@@ -264,8 +311,10 @@ begin
     still the live one -- a replaced client has already dropped the callback. }
   if (FInflightId <> 0) and (FInflightClient <> nil) and (FInflightClient = CurrentLspClient) then
     FInflightClient.CancelRequest(FInflightId);
-  FInflightId    := 0;
-  FInflightClient:= nil;
+  FInflightId       := 0;
+  FInflightClient   := nil;
+  FInflightAnnounced:= False;
+  FInflightSecond   := False;
 end;
 
 procedure TDragLintHoverHelper.OnHoverBundleAnswer(AId: Integer; AStatus: TDLHoverStatus;
@@ -283,6 +332,10 @@ begin
       Exit;
     end;
     FInflightId    := 0;
+    var WasSecond: Boolean:= FInflightSecond;
+    var WasFirst : Boolean:= FInflightAnnounced;
+    FInflightAnnounced:= False;
+    FInflightSecond   := False;
     case AStatus of
       hvsUnsupported:
         begin
@@ -292,13 +345,40 @@ begin
           Exit;
         end;
     end;
+    { v152 ASYNC (ruling B9c): the FAST first step of a deferred hover. Show it
+      at once -- the 'computing...' line stands where the facts, Raises: and
+      callers will go -- and ask the same position again for the whole answer.
+      The partial answer is NOT cached: a re-dwell must never show it as final. }
+    if WasFirst and (AStatus = hvsOk) and IsDeferredFirstAnswer(AModel) then
+    begin
+      if not GateAndShowInflight(AMarkdown, AModel, ACallers) then
+      begin
+        { The pointer already moved on: no second step to cancel later. }
+        FInflightClient:= nil;
+        Exit;
+      end;
+      FInflightId:= RequestHoverBundleAsync(FInflightUri, FInflightRow, FInflightCol, OnHoverBundleAnswer);
+      FInflightSecond:= FInflightId <> 0;
+      if FInflightId = 0 then FInflightClient:= nil;
+      Exit;
+    end;
     FInflightClient   := nil;
     FLastLspKey       := FInflightKey;
     FLastLspText      := AMarkdown;
     FLastBundleOk     := AStatus = hvsOk;
     FLastBundleModel  := AModel;
     FLastBundleCallers:= ACallers;
-    GateAndShowInflight;
+    { v152 ASYNC: the whole answer replaces its partial popup IN PLACE (at the
+      dwell point) while that popup is up -- the user may be reading it, with
+      the pointer on the popup rather than on the token. }
+    if WasSecond and IsDragLintHoverVisible and (FLastShownKey = FInflightKey) then
+    begin
+      DLT('hover', 'deferred hover completed: popup updated in place');
+      ShowHoverPopup(FInflightPos, FInflightKey, FLastLspText, FLastBundleModel,
+        FLastBundleCallers, FInflightDiags, FInflightDiagText);
+      Exit;
+    end;
+    GateAndShowInflight(FLastLspText, FLastBundleModel, FLastBundleCallers);
   except
     { main-thread callback inside the IDE: never let it raise }
     on E: Exception do DLT('hover', 'bundle answer raised: ' + E.Message);
@@ -321,7 +401,7 @@ begin
     FLastBundleOk     := False;
     FLastBundleModel  := Default(TDragLintHoverModel);
     SetLength(FLastBundleCallers, 0);
-    GateAndShowInflight;
+    GateAndShowInflight(FLastLspText, FLastBundleModel, FLastBundleCallers);
   except
     on E: Exception do DLT('hover', 'text answer raised: ' + E.Message);
   end;
@@ -362,11 +442,10 @@ begin
   end;
 end;
 
-procedure TDragLintHoverHelper.GateAndShowInflight;
+function TDragLintHoverHelper.InflightGateVerdict: TDLHoverGateVerdict;
 var
   NowPt  : TPoint;
   Client : TPoint;
-  Verdict: TDLHoverGateVerdict;
   NowRow0: Integer;
   NowCol0: Integer;
 begin
@@ -374,8 +453,18 @@ begin
   Client:= NowPt;
   if FInflightAnchor.Hwnd <> 0 then ScreenToClient(FInflightAnchor.Hwnd, Client);
   PointerCellNow(NowPt, NowRow0, NowCol0);
-  Verdict:= DLHoverGate(FInflightAnchor, EditorControlAt(NowPt), Client, NowRow0, NowCol0);
-  if (Verdict <> hgvShow) or not IdeIsForeground or not LoadSettings.EnableHoverTooltip then
+  Result:= DLHoverGate(FInflightAnchor, EditorControlAt(NowPt), Client, NowRow0, NowCol0);
+end;
+
+function TDragLintHoverHelper.GateAndShowInflight(const AText: string; const AModel: TDragLintHoverModel;
+  const ACallers: TArray<TDragLintCallerInfo>): Boolean;
+var
+  NowPt  : TPoint;
+  Verdict: TDLHoverGateVerdict;
+begin
+  Verdict:= InflightGateVerdict;
+  Result:= (Verdict = hgvShow) and IdeIsForeground and LoadSettings.EnableHoverTooltip;
+  if not Result then
   begin
     DLT('hover', Format('answer discarded: gate=%d (pointer left the token / editor)', [Ord(Verdict)]));
     SetDragLintNote('');
@@ -383,8 +472,22 @@ begin
     FHintShown:= False;
     Exit;
   end;
-  ShowHoverPopup(NowPt, FInflightKey, FLastLspText, FLastBundleModel,
-    FLastBundleCallers, FInflightDiags, FInflightDiagText);
+  GetCursorPos(NowPt);
+  ShowHoverPopup(NowPt, FInflightKey, AText, AModel, ACallers, FInflightDiags, FInflightDiagText);
+end;
+
+procedure TDragLintHoverHelper.DropAbandonedSecondStep;
+begin
+  { v152 ASYNC (ruling B9c): the user moved on from a partial popup -- it was
+    dismissed AND the pointer is off its token -- so the engine stops computing
+    the rest ($/cancelRequest; it answers RequestCancelled to a dropped
+    callback). While the partial popup is up the step runs on: the user may be
+    reading it, with the pointer on the popup rather than on the token. }
+  if not FInflightSecond or (FInflightId = 0) then Exit;
+  if IsDragLintHoverVisible then Exit;
+  if InflightGateVerdict = hgvShow then Exit;
+  DLT('hover', Format('deferred hover id=%d abandoned: popup closed, pointer moved on', [FInflightId]));
+  CancelInflight;
 end;
 
 procedure TDragLintHoverHelper.ShowHoverPopup(const APos: TPoint; const AKey, ALspText: string;
@@ -554,6 +657,9 @@ begin
     FLastForegroundFail:= False;
 
     GetCursorPos(Pos);
+
+    { v152 ASYNC: a deferred hover's second step stops once the user moved on. }
+    DropAbandonedSecondStep;
 
     { v0.40.8d: must be over the editor view's form rect, not the project
       manager / structure / messages / etc. Without this the dwell fires
@@ -801,6 +907,11 @@ begin
       trip and no CLI spawn on this path any more: an engine without the bundle
       gets the plain textDocument/hover, asked only after the bundle answered
       with an error. }
+    { v152 ASYNC (ruling B9c): announce first, so the engine answers the fast
+      sections at once and the slow ones on our second ask (OnHoverBundleAnswer). }
+    FInflightAnnounced:= not HoverBundleUnsupported;
+    FInflightSecond   := False;
+    if FInflightAnnounced then AnnounceDeferredHover(Client, Uri, CaretRow, CaretCol);
     FInflightId:= if HoverBundleUnsupported then RequestHoverTextAsync(Uri, CaretRow, CaretCol, OnHoverTextAnswer)
                   else RequestHoverBundleAsync(Uri, CaretRow, CaretCol, OnHoverBundleAnswer);
     if FInflightId = 0 then

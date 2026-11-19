@@ -32,12 +32,17 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Dir = "$PSScriptRoot\..\..\editors\vscode\drag-lint",
-  [string]$DistDir = "$PSScriptRoot\..\..\dist",
+  [string]$Dir = '',
+  [string]$DistDir = '',
   [string]$UserDir = "$env:APPDATA\Code\User",
   [string]$ExtRoot = "$env:USERPROFILE\.vscode\extensions",
-  [string]$EngineExe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe"
+  [string]$EngineExe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Dir) { $Dir = "$PSScriptRoot\..\..\editors\vscode\drag-lint" }
+if (-not $DistDir) { $DistDir = "$PSScriptRoot\..\..\dist" }
+if (-not $EngineExe) { $EngineExe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -55,7 +60,7 @@ function Test-InstalledTree([string]$pUserDir, [string]$pExtRoot, [string]$pDist
   $targets = @(@{ Name = '(default)'; Json = (Join-Path $pExtRoot 'extensions.json') })
   $st = Join-Path $pUserDir 'globalStorage\storage.json'
   if (Test-Path -LiteralPath $st) {
-    $prof = (Get-Content -LiteralPath $st -Raw | ConvertFrom-Json).userDataProfiles
+    $prof = (Get-Content -LiteralPath $st -Raw | ConvertFrom-Json | ForEach-Object { $_ }).userDataProfiles
     foreach ($p in @($prof)) {
       $id = ([string]$p.location).Split('/')[-1]
       if ($id) { $targets += @{ Name = [string]$p.name; Json = (Join-Path $pUserDir "profiles\$id\extensions.json") } }
@@ -63,7 +68,7 @@ function Test-InstalledTree([string]$pUserDir, [string]$pExtRoot, [string]$pDist
   }
   foreach ($t in $targets) {
     if (-not (Test-Path -LiteralPath $t.Json)) { $notes += "$($t.Name): no extensions.json"; continue }
-    $e = @((Get-Content -LiteralPath $t.Json -Raw | ConvertFrom-Json) | Where-Object { $_.identifier.id -eq 'drag-lint.drag-lint' })
+    $e = @((Get-Content -LiteralPath $t.Json -Raw | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $_.identifier.id -eq 'drag-lint.drag-lint' })
     if ($e.Count -eq 0) { $notes += "$($t.Name): drag-lint not installed in this profile"; continue }
     $loc = [string]$e[0].location.path
     $path = $loc.TrimStart('/')
@@ -75,7 +80,7 @@ function Test-InstalledTree([string]$pUserDir, [string]$pExtRoot, [string]$pDist
 
 # O15: the "drag-lint <version>" line of an engine exe, or '' when it cannot be run.
 function Get-EngineVersion([string]$pExe) {
-  try { return ((& $pExe --version 2>&1 | Select-Object -First 1) -as [string]).Trim() } catch { return '' }
+  try { return ((& { $ErrorActionPreference = 'Continue'; & $pExe --version 2>&1 | ForEach-Object { "$_" } } | Select-Object -First 1) -as [string]).Trim() } catch { return '' }
 }
 
 # O15: Fails/Notes for the private engine copies of one VS Code user dir. A copy dir is
@@ -103,7 +108,7 @@ function Test-EngineCopies([string]$pUserDir, [string]$pDeployedExe, [string]$pE
 }
 $pkgPath = Join-Path $Dir 'package.json'
 if (-not (Test-Path $pkgPath)) { Write-Host "FATAL: not found: $pkgPath" -ForegroundColor Red; exit 2 }
-$ver = (Get-Content $pkgPath -Raw | ConvertFrom-Json).version
+$ver = (Get-Content $pkgPath -Raw | ConvertFrom-Json | ForEach-Object { $_ }).version
 
 Write-Host 'Self-test on a fake VS Code tree (RED / GREEN / missing-vsix controls)' -ForegroundColor Cyan
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ("vsixguard-" + [Guid]::NewGuid().ToString('N'))

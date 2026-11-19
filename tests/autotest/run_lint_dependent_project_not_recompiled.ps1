@@ -52,7 +52,10 @@ A PROJECT SECTION'S DB IS DERIVED, not declared -- <project folder>\_D-RAG\
 Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$detail=''){
@@ -111,14 +114,14 @@ W $cfg @(
 $skip = $false
 Push-Location $work
 try {
-  & $Exe index --all --config $cfg --jobs 1 *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $cfg --jobs 1 *> $null }
   $dbA = Join-Path $work '_D-RAG\ProjA.sqlite'
   $dbB = Join-Path $work '_D-RAG\ProjB.sqlite'
   Check 'all three fixture projects indexed' `
         ((Test-Path $dbA) -and (Test-Path $dbB) -and (Test-Path (Join-Path $work '_D-RAG\ProjC.sqlite')))
 
   # ProjB is compiled -> it gets a stamp. ProjC never is -> NULL, the silent case.
-  $rfJson  = (& $Exe refresh-findings --project (Join-Path $work 'ProjB.dproj') --db $dbB --json 2>&1 | Out-String)
+  $rfJson  = (& { $ErrorActionPreference = 'Continue'; & $Exe refresh-findings --project (Join-Path $work 'ProjB.dproj') --db $dbB --json 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $stamped = 0
   if ($rfJson -match '"stamped"\s*:\s*(\d+)') { $stamped = [int]$Matches[1] }
 
@@ -136,7 +139,7 @@ try {
 
     # Deliberately NOT reindexing A: the rule must compare against the CURRENT
     # disk mtime, and A's stored mtime is now the OLD one.
-    $out  = (& $Exe lint-all --db $dbA --config $cfg --quiet --enable dependent-project-not-recompiled 2>$null | Out-String)
+    $out  = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $dbA --config $cfg --quiet --enable dependent-project-not-recompiled 2>$null } | Out-String)
     $rows = @($out -split "`r?`n" | Where-Object { $_ -match 'dependent-project-not-recompiled' })
 
     Check 'CONTROL a stamped fixture produces at least one row' ($rows.Count -ge 1) `
@@ -170,7 +173,7 @@ try {
     # Stated plainly, because this rule shipped ON without the measurement its
     # sibling got: its 0 on ORM3 CLIENT is the GATE, not the corpus -- that
     # project has no `dl:shared` markers, so the rule had nothing to look at.
-    $outDef  = (& $Exe lint-all --db $dbA --config $cfg --quiet 2>$null | Out-String)
+    $outDef  = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $dbA --config $cfg --quiet 2>$null } | Out-String)
     $rowsDef = @($outDef -split "`r?`n" | Where-Object { $_ -match 'dependent-project-not-recompiled' -and $_ -match 'ProjB' })
     Check 'the rule is ON by default -- no --enable needed (owner ruling 2026-09-14)' `
           ($rowsDef.Count -ge 1) `
@@ -184,9 +187,9 @@ try {
     # re-stamps -- measured here, as this case failing. That is also why the rule
     # itself reads the DISK: the two clocks are genuinely different, and only one
     # of them knows when the file changed.
-    & $Exe index --all --config $cfg --only ProjB --jobs 1 *> $null
-    & $Exe refresh-findings --project (Join-Path $work 'ProjB.dproj') --db $dbB *> $null
-    $out2  = (& $Exe lint-all --db $dbA --config $cfg --quiet --enable dependent-project-not-recompiled 2>$null | Out-String)
+    & { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $cfg --only ProjB --jobs 1 *> $null }
+    & { $ErrorActionPreference = 'Continue'; & $Exe refresh-findings --project (Join-Path $work 'ProjB.dproj') --db $dbB *> $null }
+    $out2  = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $dbA --config $cfg --quiet --enable dependent-project-not-recompiled 2>$null } | Out-String)
     $rows2 = @($out2 -split "`r?`n" | Where-Object { $_ -match 'dependent-project-not-recompiled' -and $_ -match 'ProjB' })
     Check 'the finding CLEARS once that project is rebuilt' ($rows2.Count -eq 0) `
           'a finding that never clears is one people learn to ignore'

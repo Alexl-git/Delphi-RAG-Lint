@@ -1,0 +1,12 @@
+# v152 NOISE2 handover: an integer subscript (Groups[3], Params[4]) is a position, not a quantity -- large-magic-number
+# exempts exprSubscript since v1511; magic-literal now agrees. Reg(<id>, 'NAME') mirrors large-magic-number, and a
+# call with six or more numeric-literal arguments (Set4Map) is a data row. Positive controls: arithmetic (11), a
+# comparison (12), a call with two (15) and five (16) numeric arguments.
+!magic-literal 9
+!magic-literal 10
+magic-literal 11
+magic-literal 12
+!magic-literal 13
+!magic-literal 14
+magic-literal 15
+magic-literal 16

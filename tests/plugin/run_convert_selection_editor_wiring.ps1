@@ -13,7 +13,10 @@
   Usage: pwsh -File tests\plugin\run_convert_selection_editor_wiring.ps1
 #>
 [CmdletBinding()]
-param([string]$Root = (Resolve-Path "$PSScriptRoot\..\..").Path)
+param([string]$Root = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Root) { $Root = (Resolve-Path "$PSScriptRoot\..\..").Path }
 $ErrorActionPreference = 'Stop'
 
 function Get-RegisterBody([string]$Text) {
@@ -37,7 +40,7 @@ $unitPath = Join-Path $Root 'src\delphi-plugin\DragLint.Plugin.ConvertSelectionE
 $wizard = [IO.File]::ReadAllText((Join-Path $Root 'src\delphi-plugin\DragLint.Plugin.Wizard.pas'))
 $dpk    = [IO.File]::ReadAllText((Join-Path $Root 'src\delphi-plugin\dclDragLintWizard.dpk'))
 $unit   = if (Test-Path $unitPath) { [IO.File]::ReadAllText($unitPath) } else { '' }
-$entry  = Get-Content (Join-Path $Root 'features\entries\convert-components.json') -Raw | ConvertFrom-Json
+$entry  = Get-Content (Join-Path $Root 'features\entries\convert-components.json') -Raw | ConvertFrom-Json | ForEach-Object { $_ }
 
 $bad = 0
 $real = Test-Wiring $wizard $dpk $unit $entry

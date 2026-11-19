@@ -24,9 +24,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_rule_cache_store_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'; $script:fail = $false
 function Check($n,$ok,$d){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int][bool]$ok]),$n) -ForegroundColor (@('Red','Green')[[int][bool]$ok]); if(-not $ok){ if($d){Write-Host "      $d" -ForegroundColor DarkGray}; $script:fail=$true } }
 try {
@@ -41,14 +47,14 @@ try {
   $env:DRAGLINT_RULE_CACHE_DIR = $cache
   Push-Location $WorkDir
   try {
-    & $exePath index $src --db $db 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 } | Out-Null
     Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
     # the indexer may have warmed the cache: start every phase from an empty one
     Get-ChildItem $cache -File | ForEach-Object { [IO.File]::Delete($_.FullName) }
 
     function Lint-Rows {
-      $j = & $exePath lint $unit --db $db --json 2>$null
-      $a = @($j | Out-String | ConvertFrom-Json)
+      $j = & { $ErrorActionPreference = 'Continue'; & $exePath lint $unit --db $db --json 2>$null }
+      $a = @(($j | Out-String | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
       return ,@($a | ForEach-Object { '{0}|{1}|{2}|{3}' -f $_.rule, $_.start_line, $_.start_col, $_.message } | Sort-Object)
     }
 
@@ -61,7 +67,7 @@ try {
 
     $fill = Lint-Rows
     $env:DRAGLINT_PROFILE = '1'
-    $hitErr = & $exePath lint $unit --db $db --json 2>&1 | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | ForEach-Object { "$_" }
+    $hitErr = & { $ErrorActionPreference = 'Continue'; & $exePath lint $unit --db $db --json 2>&1 } | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | ForEach-Object { "$_" }
     $env:DRAGLINT_PROFILE = $null
     $hit = Lint-Rows
     Check 'C1  parity: cache off == filling run' ((($off -join "`n") -eq ($fill -join "`n"))) "off=$($off.Count) fill=$($fill.Count)"
@@ -69,7 +75,7 @@ try {
 
     $cf = @(Get-ChildItem $cache -Filter 'rules-*.json' -File)
     $held = @()
-    if ($cf.Count -eq 1) { $held = @((Get-Content $cf[0].FullName -Raw | ConvertFrom-Json).rules) }
+    if ($cf.Count -eq 1) { $held = @((Get-Content $cf[0].FullName -Raw | ConvertFrom-Json | ForEach-Object { $_ }).rules) }
     Check 'C2  one cache file written' ($cf.Count -eq 1) "files=$($cf.Count)"
     foreach ($r in 'enum-ordinal-persisted', 'dfm-event-handler-missing') {
       Check "C2  the cache holds $r" ($held -contains $r) ("holds: " + ($held -join ','))
@@ -85,7 +91,7 @@ try {
       $pinned = $pinned.Replace($m.Value, $new)
     }
     [IO.File]::WriteAllText($unit, $pinned, [Text.Encoding]::ASCII)
-    & $exePath index $src --db $db 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 } | Out-Null
     $after = Lint-Rows
     $env:DRAGLINT_RULE_CACHE = '0'
     $afterOff = Lint-Rows
@@ -100,3 +106,4 @@ try {
 }
 if ($script:fail) { Write-Host 'RESULT: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'RESULT: PASS' -ForegroundColor Green; exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

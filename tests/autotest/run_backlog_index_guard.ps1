@@ -30,9 +30,12 @@
 param(
   # Overridable so the guard can be pointed at a scratch copy -- which is how
   # its own positive control works. See SELF-TEST at the bottom.
-  [string]$Root = "$PSScriptRoot\..\..\docs",
+  [string]$Root = '',
   [switch]$Quiet
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Root) { $Root = "$PSScriptRoot\..\..\docs" }
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
 function Check($n,$ok,$d){

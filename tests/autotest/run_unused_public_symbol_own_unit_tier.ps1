@@ -11,9 +11,12 @@
 # Usage: pwsh -File tests/autotest/run_unused_public_symbol_own_unit_tier.ps1 [-Exe <path>]
 [CmdletBinding()]
 param(
-    [string] $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+    [string] $Exe = '',
     [string] $WorkDir = "$env:TEMP\drag-lint-own-unit-tier-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail='') {
@@ -27,11 +30,11 @@ New-Item -ItemType Directory -Force $WorkDir | Out-Null
 try {
   $fx = Join-Path $PSScriptRoot '..\lint-project\own-unit-tier'
   $db = Join-Path $WorkDir 'fx.sqlite'
-  & $Exe index $fx --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
-  $raw = & $Exe lint-all --db $db --rule unused-public-symbol --format json 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule unused-public-symbol --format json 2>$null }
   $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
-  $f = @(); if ($b -ge 0) { try { $f = @($txt.Substring($b) | ConvertFrom-Json) } catch { $f = @() } }
+  $f = @(); if ($b -ge 0) { try { $f = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $f = @() } }
   $f | ForEach-Object { Write-Host ("  [{0}] {1}:{2} {3}" -f $_.severity, $_.file_path, $_.start_line, $_.message) -ForegroundColor DarkGray }
   $only  = @($f | Where-Object { $_.message -match '\bOnlyInternal\b' })
   $used  = @($f | Where-Object { $_.message -match '\bUsedElsewhere\b' })

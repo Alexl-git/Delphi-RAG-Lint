@@ -33,9 +33,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-doc-drift-typedecl-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -109,18 +112,18 @@ function Write-Fixture([string]$Path) {
 }
 Write-Fixture $fixtureFile
 
-& $Exe index $srcDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $srcDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'index exits 0' ($LASTEXITCODE -eq 0)
 Check 'db built' (Test-Path $db)
 
 function Get-Findings([string]$QName) {
-  $lines = & $Exe doc-drift --qname $QName --db $db --json 2>&1
+  $lines = & { $ErrorActionPreference = 'Continue'; & $Exe doc-drift --qname $QName --db $db --json 2>&1 | ForEach-Object { "$_" } }
   $ec = $LASTEXITCODE
   $objs = @()
   foreach ($line in $lines) {
     $line = "$line".Trim()
     if ($line -eq '') { continue }
-    try { $objs += ($line | ConvertFrom-Json) } catch { }
+    try { $objs += ($line | ConvertFrom-Json | ForEach-Object { $_ }) } catch { }
   }
   return @{ Ec = $ec; Findings = $objs; Raw = ($lines -join "`n") }
 }

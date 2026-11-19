@@ -60,7 +60,7 @@ foreach ($plat in 'Win64','Win32') {
 # bare copy failed this step twice after both Release builds had succeeded.
 # stage-engine writes the ide-release hold, stops only processes running THIS
 # image, and retries. Manual equivalent: `drag-lint ide-release --seconds 900`
-# then `drag-lint shutdown --all --wait 30`.
+# then `drag-lint stop-now --all --wait 30`.
 & pwsh -NoProfile -File (Join-Path $repo "build\stage-engine.ps1") -FreshExe (Join-Path $repo "src\cli\Win64\Release\drag-lint.exe") -Target (Join-Path $repo "third_party\dll-win64\drag-lint.exe")
 if ($LASTEXITCODE -ne 0) { Write-Host "PACK STOPPED: could not stage the Win64 exe into third_party\dll-win64 (holders named above)"; exit 1 }
 
@@ -113,6 +113,7 @@ foreach ($plat in 'win64','win32') {
   Copy-Item (Join-Path $repo "rules\*.json") (Join-Path $stg "rules")
   Copy-Item (Join-Path $repo "rules\builtin-symbols.txt") (Join-Path $stg "rules")
   Copy-Item (Join-Path $repo "rules\enum-persist-sinks.txt") (Join-Path $stg "rules")
+  Copy-Item (Join-Path $repo "rules\form-object-without-field.exempt.txt") (Join-Path $stg "rules")
   Copy-Item (Join-Path $repo "rules\README.md") (Join-Path $stg "rules")
   # The IDE help line's offline feature list: the plugin reads <engine dir>\help\dl\index.json
   # first (spec 2026-10-23-ide-help-line 3.2); the website does not serve the JSON.

@@ -13,8 +13,8 @@ unit DRagLint.Report.CycleHubSurface;
 /// in the hub's initialization, the spoke's calls through the pointer; the routine's body stays in the
 /// hub. A spoke that no longer names anything else of the hub drops it from its uses: that uses edge is cut.</summary>
 /// <remarks>Since 1.51 (phase P6) the `cycles --plan` dry run asks this recipe first without the switch,
-/// for a group it predicts to break (`--no-hub-surface` = the planner's plan); writing and the
-/// `--causes --format json` fix object still need `--hub-surface` by name. The dry run writes nothing;
+/// for a group it predicts to break (`--no-hub-surface` = the planner's plan); since 1.52 (owner ruling B9b) so do
+/// writing (`--plan --apply`), `cycles --fix` and the `--causes --format json` fix object. The dry run writes nothing;
 /// `--apply` writes the new unit, the hub and the rewritten spokes (.BCK&lt;n&gt; backups unless
 /// `--no-backup`) and runs NO compile gate (149): build the project after it. Since 1.51.1 (lane v1511 CYC)
 /// `cycles --fix --hub-surface` writes the same bytes (HubSurfaceRewrite) THROUGH the compile gate: baseline build,
@@ -30,6 +30,12 @@ uses
 
 type
   /// <summary>What `cycles --plan --hub-surface` was asked for.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Report.CycleHubSurface.pas) ?, DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.Report.CycleHubSurface.RunHubSurface (DRagLint.Report.CycleHubSurface.pas) ?</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Report.CycleHubSurface</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THubSurfaceOptions = record
     /// <summary>True: write the plan of ONE group (the first that plans, or the chosen one).</summary>
     Apply: Boolean;
@@ -47,8 +53,14 @@ type
 
   /// <summary>Recipe R3's rewrite of ONE group as whole-file contents (lane v1511 CYC, T06): what
   /// `cycles --fix --hub-surface` stages, writes under backups and builds through the compile gate.</summary>
-  /// <remarks>Every byte array is the file's full new content in its own source encoding (the surface unit
-  /// in the hub's), exactly what `cycles --plan --hub-surface --apply` would write. Owns no object.</remarks>
+  /// <remarks>
+  /// Every byte array is the file's full new content in its own source encoding (the surface unit
+  /// in the hub's), exactly what `cycles --plan --hub-surface --apply` would write. Owns no object.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Report.CycleHubSurface.pas) ?, DRagLint.CLI.CycleFix.R3Refusals (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.R3View (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.StageR3 (DRagLint.CLI.CycleFix.pas) ?, DRagLint.Report.CycleHubSurface.HubSurfaceRewrite (DRagLint.Report.CycleHubSurface.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.CycleFix, DRagLint.Report.CycleHubSurface</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THubSurfaceRewrite = record
     /// <summary>True when R3 planned the group: no group refusal and at least one spoke.</summary>
     Planned: Boolean;
@@ -82,7 +94,8 @@ type
 /// <param name="pOut">Receives the plan text (markdown lines); owned by the caller.</param>
 /// <returns>0 = at least one group planned (and, with Apply, written); 1 = no group could be
 /// planned (every reason is in pOut); 2 = a file could not be written or a bad group choice.</returns>
-/// <remarks>Planned only for a group with exactly one hub, one hub global and a hub class declared
+/// <remarks>
+/// Planned only for a group with exactly one hub, one hub global and a hub class declared
 /// in the hub unit; members a spoke reads that are not plain fields or methods of that class, a
 /// `with &lt;global&gt; do`, a write to the global or a designer field, or a var-parameter use (also
 /// `FreeAndNil` / `CreateForm` / `@` of the global) refuse that spoke, never the group; Inc / Dec of an
@@ -94,7 +107,18 @@ type
 /// is refused (overloaded, unsupported-directive, signature-in-cycle, duplicate-identifier) as a whole;
 /// one a spoke names from its initialization / finalization, by address or under a shadowing
 /// declaration stays named in that spoke only (init-order, address-of, name-shadowed), which keeps
-/// that spoke's uses edge.</remarks>
+/// that spoke's uses edge.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Report.CycleHubSurface.RenderGroup, DRagLint.Report.CycleHubSurface.THubSurfacePlanner.Create, DRagLint.Report.CycleHubSurface.THubSurfacePlanner.PlanGroup, DRagLint.Report.CycleHubSurface.THubSurfacePlanner.Write, Format, MatchText</para>
+/// <para>Returns: 2; 1; 0</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 42 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Report.CycleHubSurface.RenderGroup"/>
+/// <seealso cref="DRagLint.Report.CycleHubSurface.THubSurfacePlanner.Create"/>
+/// <seealso cref="DRagLint.Report.CycleHubSurface.THubSurfacePlanner.PlanGroup"/>
+/// <seealso cref="DRagLint.Report.CycleHubSurface.THubSurfacePlanner.Write"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunHubSurface(const pStore: ISymbolStore; const pSccs: TList<TArray<string>>;
   const pGraph: TCycleGraph; const pOptions: THubSurfaceOptions; const pOut: TStrings): Integer;
 
@@ -111,7 +135,19 @@ function RunHubSurface(const pStore: ISymbolStore; const pSccs: TList<TArray<str
 /// False = the default dry run (1.51, phase P6): a group is taken only when R3 predicts that it BREAKS; any other
 /// group adds no line, so its plan is byte-identical to `--no-hub-surface`.</param>
 /// <returns>True when R3 planned the group (one hub, one global, at least one spoke) and, when not pAsked, predicts that the group breaks.</returns>
-/// <remarks>Writes nothing (a dry run); a group R3 refuses gets nothing here and the planner as before.</remarks>
+/// <remarks>
+/// Writes nothing (a dry run); a group R3 refuses gets nothing here and the planner as before.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Report.CycleHub.AnalyseCycleHubs, DRagLint.Report.CycleHub.CycleHubLines, DRagLint.Report.CycleHubSurface.RenderGroup, DRagLint.Report.CycleHubSurface.THubSurfacePlanner.Create, DRagLint.Report.CycleHubSurface.THubSurfacePlanner.PlanGroup, Format</para>
+/// <para>Returns: (Plan.Refusal = '') and (Length(Plan.Spokes) &gt; 0) and (pAsked or Plan.Breaks)</para>
+/// <seealso cref="DRagLint.Report.CycleHub.AnalyseCycleHubs"/>
+/// <seealso cref="DRagLint.Report.CycleHub.CycleHubLines"/>
+/// <seealso cref="DRagLint.Report.CycleHubSurface.RenderGroup"/>
+/// <seealso cref="DRagLint.Report.CycleHubSurface.THubSurfacePlanner.Create"/>
+/// <seealso cref="DRagLint.Report.CycleHubSurface.THubSurfacePlanner.PlanGroup"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HubSurfaceGroupLines(const pStore, pLibrary: ISymbolStore; const pGroup: TArray<string>; pIndex: Integer;
   const pGraph: TCycleGraph; const pOut: TStrings; pAsked: Boolean = True): Boolean;
 
@@ -128,6 +164,16 @@ function HubSurfaceGroupLines(const pStore, pLibrary: ISymbolStore; const pGroup
 /// <param name="pDbPath">The index path quoted in the commands.</param>
 /// <param name="pFix">Receives the object (the caller owns it) when True; nil otherwise.</param>
 /// <returns>True when R3 planned the group.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.HubSurfaceFixHook (DRagLint.CLI.CycleFix.pas)</para>
+/// <para>Calls: ChangeFileExt, DRagLint.Report.CycleHubSurface.THubSurfacePlanner.Create, DRagLint.Report.CycleHubSurface.THubSurfacePlanner.PlanGroup, ExtractFileName, Format</para>
+/// <para>Returns: (Plan.Refusal = '') and (Length(Plan.Spokes) &gt; 0)</para>
+/// <para>Mutates: pFix (out)</para>
+/// <seealso cref="DRagLint.Report.CycleHubSurface.THubSurfacePlanner.Create"/>
+/// <seealso cref="DRagLint.Report.CycleHubSurface.THubSurfacePlanner.PlanGroup"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HubSurfaceFixJson(const pStore, pLibrary: ISymbolStore; const pGroup: TArray<string>; pIndex: Integer;
   const pGraph: TCycleGraph; const pDbPath: string; out pFix: TJSONObject): Boolean;
 
@@ -139,8 +185,20 @@ function HubSurfaceFixJson(const pStore, pLibrary: ISymbolStore; const pGroup: T
 /// <param name="pIndex">1-based group number.</param>
 /// <param name="pGraph">The uses graph.</param>
 /// <returns>The rewrite; Paths / Contents / NewContent are filled only when Planned.</returns>
-/// <remarks>The same plan and the same bytes as `cycles --plan --hub-surface --apply` for that group. Reads the
-/// sources; writes nothing.</remarks>
+/// <remarks>
+/// The same plan and the same bytes as `cycles --plan --hub-surface --apply` for that group. Reads the
+/// sources; writes nothing.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.R3DefaultGroup (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RunHubSurfaceFix (DRagLint.CLI.CycleFix.pas)</para>
+/// <para>Calls: Default, DRagLint.Report.CycleHubSurface.RenderGroup, DRagLint.Report.CycleHubSurface.THubSurfacePlanner.Create, DRagLint.Report.CycleHubSurface.THubSurfacePlanner.EncodingOf, DRagLint.Report.CycleHubSurface.THubSurfacePlanner.PlanGroup, DRagLint.Report.CyclePlan.EncodeSource, Format</para>
+/// <para>Returns: Default(THubSurfaceRewrite)</para>
+/// <seealso cref="DRagLint.Report.CycleHubSurface.RenderGroup"/>
+/// <seealso cref="DRagLint.Report.CycleHubSurface.THubSurfacePlanner.Create"/>
+/// <seealso cref="DRagLint.Report.CycleHubSurface.THubSurfacePlanner.EncodingOf"/>
+/// <seealso cref="DRagLint.Report.CycleHubSurface.THubSurfacePlanner.PlanGroup"/>
+/// <seealso cref="DRagLint.Report.CyclePlan.EncodeSource"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HubSurfaceRewrite(const pStore, pLibrary: ISymbolStore; const pGroup: TArray<string>; pIndex: Integer;
   const pGraph: TCycleGraph): THubSurfaceRewrite;
 
@@ -237,6 +295,10 @@ type
     FHubIds   : TDictionary<Int64, TSymbol>;
     FEncodings: TDictionary<string, TEncoding>;  { path -> its source encoding }
     FRoutines : TDictionary<string, THubRoutine>;  { P3: lower-case routine name -> its R1 plan }
+    FArgsRead : Boolean;              { v152 HUB: FArgs is filled (once per planner) }
+    FArgs     : TArray<TCallEdge>;    { v152 HUB: every member_accesses row stored as a var / out argument }
+    FArgSites : TArray<string>;       { v152 HUB: the spoke being planned: `<line>|<member>` read through the global as one }
+    function VarArgSites(const pStem: string): TArray<string>;
     function InGroup(const pStem: string): Boolean;
     function ReadText(const pPath: string): string;
     function FindHubSymbols(var pPlan: THubGroupPlan): Boolean;
@@ -905,24 +967,27 @@ begin
       Refuse(Format('`%s`: no one-line `class(...)` heritage on line %d, or no unit end', [ExtractFileName(pPlan.HubPath), FClass.StartLine]));
       Exit;
     end;
-    Decls.Add('    private { drag-lint cycles --hub-surface: the ' + pPlan.IntfName + ' accessors }');
+    { the block takes the class's own section column (its `end;`), members two further in (v152 HUB, review #3) }
+    var Sect:= Copy(Lines[EndIdx], 1, Length(Lines[EndIdx]) - Length(TrimLeft(Lines[EndIdx])));
+    var Memb:= Sect + '  ';
+    Decls.Add(Sect + 'private { drag-lint cycles --hub-surface: the ' + pPlan.IntfName + ' accessors }');
     for var M in pPlan.Members do
     begin
       if (M.Refusal <> '') or (M.Shape = msMethod) then Continue;
-      Decls.Add(Format('      function HubGet%s: %s;', [M.Name, M.TypeText]));
+      Decls.Add(Format('%sfunction HubGet%s: %s;', [Memb, M.Name, M.TypeText]));
       Bodies.AddRange([Format('function %s.HubGet%s: %s;', [FClass.Name, M.Name, M.TypeText]), 'begin', '  Result:= ' + M.Name + ';', 'end;', '']);
       if M.Shape = msReadWrite then
       begin
-        Decls.Add(Format('      procedure HubSet%s(const pValue: %s);', [M.Name, M.TypeText]));
+        Decls.Add(Format('%sprocedure HubSet%s(const pValue: %s);', [Memb, M.Name, M.TypeText]));
         Bodies.AddRange([Format('procedure %s.HubSet%s(const pValue: %s);', [FClass.Name, M.Name, M.TypeText]), 'begin', '  ' + M.Name + ':= pValue;', 'end;', '']);
       end;
     end;
     if pPlan.AsForm then
     begin
-      Decls.Add(Format('      function HubGetAsForm: %s;', [pPlan.FormType]));
+      Decls.Add(Format('%sfunction HubGetAsForm: %s;', [Memb, pPlan.FormType]));
       Bodies.AddRange([Format('function %s.HubGetAsForm: %s;', [FClass.Name, pPlan.FormType]), 'begin', '  Result:= Self;', 'end;', '']);
     end;
-    Decls.AddRange(['    public', '      procedure AfterConstruction; override;', '      procedure BeforeDestruction; override;']);
+    Decls.AddRange([Sect + 'public', Memb + 'procedure AfterConstruction; override;', Memb + 'procedure BeforeDestruction; override;']);
     Bodies.AddRange([Format('procedure %s.AfterConstruction;', [FClass.Name]), 'begin',
       Format('  %s:= Self; { before inherited: OnCreate code that reads %0:s already sees it }', [pPlan.VarName]),
       '  inherited AfterConstruction;', 'end;', '',
@@ -1039,7 +1104,9 @@ begin
         begin
           if TryIncDec(I, MemPos + Length(Mem), Member) then Continue;
           Refuse('member-write', Format('`%s.%s` is a var parameter', [Id, Mem]), I);
-        end;
+        end
+        else if IndexText(Format('%d|%s', [LineOfPos(pText, I), LowerCase(Mem)]), FArgSites) >= 0 then
+          Refuse('member-write', Format('`%s.%s` is passed to a var / out parameter (a property cannot be: E2197)', [Id, Mem]), I);
         Emit.Append(pText, Last - 1, I - Last).Append(pPlan.VarName);
         Last:= I + Length(Id);
         Inc(pSpoke.Receivers);
@@ -1102,6 +1169,32 @@ begin
   end;
 end;
 
+{ v152 HUB (1.51.1 website review #1): the members a spoke passes through the global as a whole var / out argument
+  of a resolved call (member_accesses.accessor_kind var-arg / out-arg, 150-RS2). The interface property R3 puts in
+  their place cannot be one (dcc E2197), so RewriteReceivers refuses such a spoke at plan time instead of letting the
+  compile gate roll it back. Inc / Dec are not stored there: TryIncDec rewrites them. }
+function THubSurfacePlanner.VarArgSites(const pStem: string): TArray<string>;
+var
+  Fid: Int64;
+begin
+  Result:= nil;
+  if not FArgsRead then
+  begin
+    FArgsRead:= True;
+    for var E in FStore.DumpAllMemberAccesses do
+      if MatchText(E.AccessorKind, ['var-arg', 'out-arg']) then FArgs:= FArgs + [E];
+  end;
+  if (Length(FArgs) = 0) or not FGraph.UnitFid.TryGetValue(pStem, Fid) then Exit;
+  for var R in CycleRefsFromFile(FGraph, FStore, Fid) do
+    if SameText(R.ReceiverText, FGlobal.Name) then
+      for var E in FArgs do
+        if E.RefId = R.Id then
+        begin
+          Result:= Result + [Format('%d|%s', [R.StartLine, LowerCase(R.NameText)])];
+          Break;
+        end;
+end;
+
 function THubSurfacePlanner.PlanSpoke(const pPlan: THubGroupPlan; const pStem: string): THubSpoke;
 begin
   Result:= Default(THubSpoke);
@@ -1121,6 +1214,7 @@ begin
       Exit;
     end;
   var Text:= ReadText(Result.Path);
+  FArgSites:= VarArgSites(pStem);
   RewriteReceivers(pPlan, Result, Text);
   if Result.Refusal <> '' then Exit;
   CollectKeepers(Result);

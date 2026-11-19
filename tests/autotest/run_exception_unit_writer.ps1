@@ -93,9 +93,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-excwriter-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
@@ -250,7 +253,7 @@ $dbA  = Join-Path $projA 'out\a.sqlite'
 # nothing -- the append would never be seen and the control would pass green.
 function Reindex([string]$Manifest, [string]$Section) {
   Push-Location C:\TEMP
-  try { & $Exe index --all --config $Manifest --only $Section --jobs 1 2>&1 | Out-Null }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $Manifest --only $Section --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null }
   finally { Pop-Location }
 }
 # THE VERB MUST BE PROVEN TO HAVE RUN. When `exceptions-sync` does not exist
@@ -262,8 +265,8 @@ function Reindex([string]$Manifest, [string]$Section) {
 function Sync([string]$Db, [string]$Cfg, [switch]$Apply) {
   Push-Location C:\TEMP
   try {
-    if ($Apply) { $o = & $Exe exceptions-sync --db $Db --config $Cfg --apply 2>&1 | Out-String }
-    else        { $o = & $Exe exceptions-sync --db $Db --config $Cfg         2>&1 | Out-String }
+    if ($Apply) { $o = & { $ErrorActionPreference = 'Continue'; & $Exe exceptions-sync --db $Db --config $Cfg --apply 2>&1 | ForEach-Object { "$_" } } | Out-String }
+    else        { $o = & { $ErrorActionPreference = 'Continue'; & $Exe exceptions-sync --db $Db --config $Cfg         2>&1 | ForEach-Object { "$_" } } | Out-String }
     $code = $LASTEXITCODE
   } finally { Pop-Location }
   if ($o -match '(?m)^Usage:' -or $o -match 'drag-lint index <path>') {
@@ -429,12 +432,18 @@ Check 'RENAME: the message appears exactly ONCE in the block' ($chanCount -eq 1)
 Write-Host ''
 Write-Host 'CONTROLS 6,8 -- the CALL-SITE rewrite, which is a per-file `lint --fix`' -ForegroundColor Cyan
 $raisesPathA = Join-Path $projA 'src\uRaises.pas'
+# --no-compile-gate: since 1.52 (B23, BK-GATE 9a6259a0a) `lint --fix --apply` REFUSES a unit no
+# .dproj builds ("REFUSED (no-project) ... nothing written"), and this fixture deliberately has no
+# project. The flag is the documented way to write unbuilt; it opts out of the gate, not of the
+# rewrite under test, and run_v152_BK-GATE.ps1 owns the refusal itself (same fix as LSPCA #95).
 Push-Location C:\TEMP
 try {
-  $fixOut = & $Exe lint $raisesPathA --db $dbA --config $cfgOn `
-                   --fix --fix-rule raise-bare-exception --apply 2>&1 | Out-String
+  $fixOut = & { $ErrorActionPreference = 'Continue'; & $Exe lint $raisesPathA --db $dbA --config $cfgOn `
+                   --fix --fix-rule raise-bare-exception --apply --no-compile-gate 2>&1 | ForEach-Object { "$_" } } | Out-String
 } finally { Pop-Location }
 $src6 = [System.IO.File]::ReadAllText($raisesPathA)
+Check 'REWRITE: lint --fix --apply was not refused by the compile gate' `
+  ($fixOut -cnotmatch 'REFUSED \(') ("refusal: " + (($fixOut -split "`r?`n" | Where-Object { $_ -cmatch 'REFUSED \(' }) -join ' '))
 Check 'REWRITE: the renamed class is what the raise site now names' `
   ($src6 -match 'raise\s+EChannelBad\.Create\(') `
   'the rewrite must read the map from the UNIT, not re-derive a name'
@@ -460,7 +469,7 @@ $declCount = @([regex]::Matches($block4, '(?m)^\s*E[A-Za-z0-9]+\s*=\s*class\('))
 Check 'SKIP: the unit holds exactly 7 classes -- one per distinct literal' `
   ($declCount -eq 7) ("declared: " + $declCount + " (the no-literal raise must contribute none)")
 Push-Location C:\TEMP
-try { $lintOut = & $Exe lint-all --db $dbA --config $cfgOn --quiet 2>&1 | Out-String }
+try { $lintOut = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $dbA --config $cfgOn --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String }
 finally { Pop-Location }
 Check 'SKIP: it still produces a raise-bare-exception finding' `
   ($lintOut -match 'uRaises\.pas:\d+:.*raise-bare-exception') `
@@ -509,7 +518,7 @@ Write-Host 'CONTROL 11 -- the GENERATED unit is itself lint-clean' -ForegroundCo
 Reindex $manB 'SecB'
 Push-Location C:\TEMP
 try {
-  $genLint = & $Exe lint $madeB[0].FullName --db $dbB 2>&1 | Out-String
+  $genLint = & { $ErrorActionPreference = 'Continue'; & $Exe lint $madeB[0].FullName --db $dbB 2>&1 | ForEach-Object { "$_" } } | Out-String
 } finally { Pop-Location }
 Check 'GENERATED: the unit parses -- no parser-error, no syntax-error' `
   (-not ($genLint -match 'parser-error|syntax-error')) `
@@ -587,15 +596,15 @@ $jErr = Join-Path $WorkDir 'json.err'
 $oOut = Join-Path $WorkDir 'jsonoff.out'
 $null = Start-Process -FilePath $Exe -ArgumentList 'exceptions-sync','--db',$dbA,'--config',$cfgOn,'--json' `
          -WorkingDirectory 'C:\TEMP' -Wait -NoNewWindow -PassThru `
-         -RedirectStandardOutput $jOut -RedirectStandardError $jErr
+         -RedirectStandardOutput $jOut -RedirectStandardError $jErr; $null = $null.Handle
 $null = Start-Process -FilePath $Exe -ArgumentList 'exceptions-sync','--db',$dbA,'--config',$cfgOff,'--json' `
          -WorkingDirectory 'C:\TEMP' -Wait -NoNewWindow -PassThru `
-         -RedirectStandardOutput $oOut -RedirectStandardError (Join-Path $WorkDir 'jsonoff.err')
+         -RedirectStandardOutput $oOut -RedirectStandardError (Join-Path $WorkDir 'jsonoff.err'); $null = $null.Handle
 $jsonOut = [System.IO.File]::ReadAllText($jOut)
 $jsonErr = [System.IO.File]::ReadAllText($jErr)
 $offJson = [System.IO.File]::ReadAllText($oOut)
 $parsed = $null
-try { $parsed = $jsonOut | ConvertFrom-Json } catch { $parsed = $null }
+try { $parsed = $jsonOut | ConvertFrom-Json | ForEach-Object { $_ } } catch { $parsed = $null }
 Check 'JSON: stdout parses as one document' ($null -ne $parsed) `
   ("stdout began: " + ($jsonOut -split "`n" | Select-Object -First 1))
 Check 'JSON: no prose leaked onto stdout' `
@@ -617,7 +626,7 @@ if ($null -ne $parsed) {
     ($parsed.applied -eq $false) 'without --apply nothing was written, and the document must say so'
 }
 $offParsed = $null
-try { $offParsed = $offJson | ConvertFrom-Json } catch { $offParsed = $null }
+try { $offParsed = $offJson | ConvertFrom-Json | ForEach-Object { $_ } } catch { $offParsed = $null }
 Check 'JSON: UNCONFIGURED still emits a DOCUMENT, not prose' `
   (($null -ne $offParsed) -and ($offParsed.configured -eq $false)) `
   'an early exit that prints prose in json mode breaks the caller at the one case it most needs to detect'

@@ -5,7 +5,10 @@
   (a guard that only counted zero would pass with the note removed).
   Run from any CWD, pwsh 7.
 #>
-param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -19,7 +22,7 @@ New-Item -ItemType Directory -Path "$W\proj" | Out-Null
 [IO.File]::WriteAllText("$W\proj\App.dpr", "program App;`r`nbegin`r`nend.`r`n", [Text.Encoding]::ASCII)
 Push-Location $W
 try {
-  $err = & $Exe lint-all --project "$W\proj\App.dproj" 2>&1 | Where-Object { $_ -is [Management.Automation.ErrorRecord] -or $_ -match '^NOTE:' } | ForEach-Object { "$_" }
+  $err = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --project "$W\proj\App.dproj" 2>&1 } | Where-Object { $_ -is [Management.Automation.ErrorRecord] -or $_ -match '^NOTE:' } | ForEach-Object { "$_" }
 } finally { Pop-Location }
 $n = @($err | Where-Object { $_ -match 'no index owns' }).Count
 Check 'note printed (positive control)' ($n -ge 1) "count=$n"
@@ -35,7 +38,7 @@ implementation
 end.
 ", [Text.Encoding]::ASCII) }
 Push-Location $W
-try { $err2 = & $Exe lint "$W\proj" --project "$W\proj\App.dproj" 2>&1 | ForEach-Object { "$_" } } finally { Pop-Location }
+try { $err2 = & { $ErrorActionPreference = 'Continue'; & $Exe lint "$W\proj" --project "$W\proj\App.dproj" 2>&1 } | ForEach-Object { "$_" } } finally { Pop-Location }
 $n2 = @($err2 | Where-Object { $_ -match 'no index owns' }).Count
 Check 'folder lint --project: note printed exactly once (RED pre-fix: one per file)' ($n2 -eq 1) "count=$n2"
 [IO.Directory]::Delete($W, $true)

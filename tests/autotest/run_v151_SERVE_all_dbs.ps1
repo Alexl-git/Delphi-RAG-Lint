@@ -31,10 +31,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-v151-serve-alldbs-$PID",
   [switch]$Keep
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -152,11 +155,11 @@ $otherDb = Join-Path $WorkDir 'OUT\Other.sqlite'
 $lib1Db = Join-Path $WorkDir 'OUT\library-Win64.sqlite'
 $lib2Db = Join-Path $WorkDir 'OUT\libextra-Win64.sqlite'
 $lib3Db = Join-Path $WorkDir 'OUT\libw32-Win32.sqlite'
-& $Exe index "$WorkDir\projsrc" --db $projDb 2>&1 | Out-Null
-& $Exe index "$WorkDir\othersrc" --db $otherDb 2>&1 | Out-Null
-& $Exe index "$WorkDir\lib1src" --db $lib1Db 2>&1 | Out-Null
-& $Exe index "$WorkDir\lib2src" --db $lib2Db 2>&1 | Out-Null
-& $Exe index "$WorkDir\lib3src" --db $lib3Db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\projsrc" --db $projDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\othersrc" --db $otherDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\lib1src" --db $lib1Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\lib2src" --db $lib2Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\lib3src" --db $lib3Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'built fixture indexes' ((Test-Path $projDb) -and (Test-Path $lib1Db) -and (Test-Path $lib2Db) -and (Test-Path $lib3Db))
 
 function Section-Lib([string]$Name, [string]$Db, [string[]]$Platforms) {
@@ -188,13 +191,13 @@ function Invoke-Serve([string[]]$ServeArgs, [string[]]$Requests, [string]$Tag) {
   $env:DRAGLINT_MANIFEST = $manifest
   try {
     $p = Start-Process $Exe -ArgumentList (@('serve') + $ServeArgs) -WorkingDirectory $WorkDir `
-           -RedirectStandardInput $in -RedirectStandardOutput $out -RedirectStandardError $err -NoNewWindow -PassThru
+           -RedirectStandardInput $in -RedirectStandardOutput $out -RedirectStandardError $err -NoNewWindow -PassThru; $null = $p.Handle
     if (-not $p.WaitForExit(60000)) { $p.Kill($true) }
   } finally { $env:DRAGLINT_MANIFEST = $null }
   $replies = @{}
   foreach ($line in (Get-Content $out -ErrorAction SilentlyContinue)) {
     if ($line.Trim() -eq '') { continue }
-    try { $j = $line | ConvertFrom-Json } catch { continue }
+    try { $j = $line | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($null -ne $j.id) { $replies[[string]$j.id] = $j }
   }
   return @{ replies = $replies; err = [string](Get-Content $err -Raw -ErrorAction SilentlyContinue) }

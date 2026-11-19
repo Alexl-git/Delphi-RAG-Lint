@@ -4,10 +4,10 @@ title: Dataset and transaction lint rules
 summary: "Lint checks: dataset edited but never posted, SELECT * in SQL text, transaction committed but never rolled back, dataset loop that never advances"
 product: DL
 group: linting
-order: 30049
+order: 30052
 since: 1.51.0-alpha
 status: shipped
-updated: 1.51.0-alpha
+updated: 1.52.0-alpha
 ---
 
 # Dataset and transaction lint rules
@@ -19,7 +19,7 @@ Read this to see what the dataset and transaction rules report and what they lea
 ## How to run it
 
 ```text
-drag-lint lint <path> [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>|help] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]
+drag-lint lint <path> [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>|help] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>] [--no-budget]
 ```
 
 Example:

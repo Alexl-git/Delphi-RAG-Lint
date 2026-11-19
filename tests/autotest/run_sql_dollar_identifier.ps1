@@ -24,7 +24,10 @@
   Run from a NEUTRAL CWD. pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -145,12 +148,12 @@ $norm = $unit -replace "`r`n", "`n" -replace "`n", "`r`n"
 
 Push-Location $env:TEMP
 try {
-  & $exePath index $work --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $work --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
   # sql --json rows are POSITIONAL arrays: [0]=name, [1]=reads, [2]=writes.
   $q = "select s.name, coalesce(f.sql_reads,''), coalesce(f.sql_writes,'') from symbol_facts f join symbols s on s.id = f.symbol_id where s.kind in ('method','procedure','function')"
-  $j = (& $exePath sql --db $db --query $q --json 2>$null) -join "`n" | ConvertFrom-Json
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
   $facts = @{}
   foreach ($row in $j.rows) { $facts[[string]$row[0]] = @{ reads = [string]$row[1]; writes = [string]$row[2] } }
   Check 'facts were read for the fixture routines' ($facts.ContainsKey('PlainControl')) "rows=$($facts.Count)"

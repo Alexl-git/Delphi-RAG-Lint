@@ -24,7 +24,10 @@ Controls (each must STILL fire): the guard variable rewritten in between; `= nil
 vs `<> nil` (opposite predicates); a different variable compared with nil; a true
 unassigned read.
 #>
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -113,7 +116,7 @@ function LineOf($pattern) {
 
 Push-Location C:\TEMP
 try {
-  $out = & $exePath lint $target 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath lint $target 2>&1 | ForEach-Object { "$_" } } | Out-String
   $ub  = @(($out -split "`r?`n") | Where-Object { $_ -match 'used-before-assignment' })
   function FiredAt($ln) { return (@($ub | Where-Object { $_ -match ":$ln`:" }).Count -gt 0) }
 

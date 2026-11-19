@@ -12,7 +12,10 @@
 # controls that hold on both engines (walks never admit .md; lint never anchors
 # a finding in a .md) -- they would fail if the walk exclusion or a lint path
 # that reads every file were broken.
-param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: engine not found: $Exe"; exit 2 }
 
@@ -37,7 +40,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
   if ($Ok) { Write-Host "PASS $Name" } else { Write-Host "FAIL $Name $Detail"; $script:Fail++ }
 }
 function Rows([string]$Db, [string]$Query) {
-  $J = (& $Exe sql --db $Db --query $Query --json 2>$null) -join "`n" | ConvertFrom-Json
+  $J = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query $Query --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
   $Names = @($J.columns | ForEach-Object { $_.name })
   $Out = @()
   foreach ($R in @($J.rows)) {
@@ -50,7 +53,7 @@ function Rows([string]$Db, [string]$Query) {
 
 try {
   $Db = Join-Path $Root 'proj.sqlite'
-  & $Exe index --project (Join-Path $Src 'MdDemo.dpr') --db $Db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $Src 'MdDemo.dpr') --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   if (-not (Test-Path $Db)) { Write-Host 'FATAL: index --project produced no DB'; exit 2 }
 
   $Files = Rows $Db "SELECT path, language FROM files"
@@ -69,12 +72,12 @@ try {
   Check '5b list items are their own nodes' (@($Lits | Where-Object { $_.text -eq 'ListItemOne' }).Count -eq 1)
   Check '6 a .md in a subfolder is not admitted' (@($Files | Where-Object { $_.path -like '*deep.md' }).Count -eq 0)
 
-  $Q = (& $Exe query --text 'AfterIfdef' --source md --db $Db 2>$null) -join "`n"
+  $Q = (& { $ErrorActionPreference = 'Continue'; & $Exe query --text 'AfterIfdef' --source md --db $Db 2>$null }) -join "`n"
   Check '7a query --text --source md finds the node' ($Q -match 'README\.md:17:')
 
-  $G = (& $Exe graph --db $Db --format json 2>$null) -join "`n"
+  $G = (& { $ErrorActionPreference = 'Continue'; & $Exe graph --db $Db --format json 2>$null }) -join "`n"
   $GJ = $null
-  try { $GJ = $G.Substring($G.IndexOf('{')) | ConvertFrom-Json } catch { }
+  try { $GJ = $G.Substring($G.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   $TN = @(); $TE = @()
   if ($GJ) { $TN = @($GJ.text_nodes); $TE = @($GJ.text_edges) }
   Check '7b graph json has the README text nodes' (@($TN | Where-Object { $_.file -eq 'README.md' -and $_.line -eq 6 }).Count -eq 1) ("got: " + $G.Substring(0, [Math]::Min(400, $G.Length)))
@@ -83,7 +86,7 @@ try {
   Check '7c text_edges link `TWidget` and `uMdA` to unit uMdA' (($E1.Count -eq 1) -and ($E2.Count -eq 1)) ("edges: " + ($TE | ConvertTo-Json -Compress))
   Check '7d an unknown backticked name makes no edge' (@($TE | Where-Object { $_.name -eq 'NoSuchSymbolAnywhere' }).Count -eq 0)
   Check '7e the unit edges are still there' (@($GJ.edges).Count -ge 1)
-  $Html = (& $Exe graph --db $Db --format html 2>$null) -join "`n"
+  $Html = (& { $ErrorActionPreference = 'Continue'; & $Exe graph --db $Db --format html 2>$null }) -join "`n"
   Check '7f graph html lists the text nodes' (($Html -match 'Widget guide') -and ($Html -match 'text node'))
   # Wave 148 lane TN: the html viewer DRAWS the text layer -- note boxes, dashed
   # edges to the declaring unit, a toggle (on) and a legend. RED on B2's build
@@ -96,16 +99,16 @@ try {
   # 7k control: an index with no Markdown gets no text layer and no toggle (the
   # toggle is ON only when text nodes exist). Uses the directory DB below.
   $DirDb = Join-Path $Root 'dir.sqlite'
-  & $Exe index $Src --db $DirDb 2>&1 | Out-Null
-  $Html0 = (& $Exe graph --db $DirDb --format html 2>$null) -join "`n"
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $Src --db $DirDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $Html0 = (& { $ErrorActionPreference = 'Continue'; & $Exe graph --db $DirDb --format html 2>$null }) -join "`n"
   Check '7k control: no text nodes -> no toggle, no text layer' (($Html0 -match 'drag-lint unit graph') -and ($Html0 -notmatch 'dl-tn-toggle') -and ($Html0 -notmatch 'dl-tn-svg'))
 
   $DF = Rows $DirDb "SELECT path FROM files"
   Check '8 control: a directory walk still admits no .md' ((@($DF | Where-Object { $_.path -like '*.md' }).Count -eq 0) -and (@($DF | Where-Object { $_.path -like '*uMdA.pas' }).Count -eq 1))
 
-  $LJ = (& $Exe lint-all --db $Db --json 2>$null) -join "`n"
+  $LJ = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --json 2>$null }) -join "`n"
   $LA = @()
-  try { $LA = @($LJ.Substring($LJ.IndexOf('[')) | ConvertFrom-Json) } catch { }
+  try { $LA = @(($LJ.Substring($LJ.IndexOf('[')) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { }
   Check '9 control: lint-all anchors no finding in a .md' (@($LA | Where-Object { $_.file_path -like '*.md' }).Count -eq 0) ("findings: " + $LA.Count)
 }
 finally {

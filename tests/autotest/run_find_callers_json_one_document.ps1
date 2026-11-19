@@ -17,9 +17,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-callers-json-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -65,14 +68,14 @@ end;
 
 end.
 "@
-  & $Exe index $dir --db (Join-Path $WorkDir "$t.sqlite") --quiet 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db (Join-Path $WorkDir "$t.sqlite") --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check "precondition: index $t exits 0" ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 }
 $dbA = Join-Path $WorkDir 'A.sqlite'
 $dbB = Join-Path $WorkDir 'B.sqlite'
 
 function Run([string[]]$VerbArgs) {
-  $o = @(& $Exe @VerbArgs 2>$null) -join "`n"
+  $o = @(& { $ErrorActionPreference = 'Continue'; & $Exe @VerbArgs 2>$null }) -join "`n"
   return @{ Code = $LASTEXITCODE; Out = $o }
 }
 function Parse([string]$Text) {

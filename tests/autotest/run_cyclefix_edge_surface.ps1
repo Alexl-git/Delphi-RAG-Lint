@@ -17,9 +17,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-cycle-edge-surface-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }) }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -41,7 +44,7 @@ function New-Demo([string]$Tag) {
 }
 function Index-Demo([string]$Root, [string]$Tag) {
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project (Join-Path $Root 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "index-$Tag.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $Root 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
   Check "$Tag indexed" ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
   return $db
 }
@@ -50,9 +53,9 @@ function Get-Groups([string]$Db, [string[]]$Extra, [string]$Tag) {
   $o = Join-Path $WorkDir "cycles-$Tag.json"; $e = Join-Path $WorkDir "cycles-$Tag.err"
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
     -ArgumentList (@('cycles', '--db', ('"' + $Db + '"'), '--format', 'json') + $Extra) `
-    -RedirectStandardOutput $o -RedirectStandardError $e
+    -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   Check "cycles $Tag exit 0" ($p.ExitCode -eq 0) "exit=$($p.ExitCode)"
-  try { return ,@([IO.File]::ReadAllText($o) | ConvertFrom-Json) } catch { Check "cycles $Tag is JSON" $false $_.Exception.Message; return ,@() }
+  try { return ,@(([IO.File]::ReadAllText($o) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { Check "cycles $Tag is JSON" $false $_.Exception.Message; return ,@() }
 }
 function Find-Edge($Groups, [string]$From, [string]$To) {
   foreach ($g in $Groups) {

@@ -228,7 +228,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Continue'
@@ -277,7 +280,7 @@ try {
 
   $before = [IO.File]::ReadAllBytes($target)
 
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
   # Reindexes before applying: each --qname apply rewrites the file and shifts
@@ -289,8 +292,8 @@ try {
   # same "reindex after any change" discipline the whole tool asks of a human
   # caller, applied here between successive scoped applies to the same file.
   function Apply-One([string]$qname) {
-    & $exePath index $scratch --db $db 2>$null | Out-Null
-    return (& $exePath document --qname $qname --db $db --apply --json 2>$null) -join "`n"
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+    return (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname $qname --db $db --apply --json 2>$null }) -join "`n"
   }
 
   # --- cycle 1 ---
@@ -371,7 +374,7 @@ try {
   $afterApply1 = [IO.File]::ReadAllBytes($target)
 
   # --- cycle 2: reindex + re-apply all three -- the load-bearing 2-cycle proof ---
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   Check 're-index exits 0' ($LASTEXITCODE -eq 0)
 
   $jAll2 = Apply-One 'preserve_tags.AllTags'
@@ -407,7 +410,7 @@ try {
   # =====================================================================
   # PART 1, continued: strip round-trip
   # =====================================================================
-  & $exePath document --unit $target --db $db --strip --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --strip --apply 2>$null } | Out-Null
   Check 'strip --apply exits 0' ($LASTEXITCODE -eq 0)
 
   $afterStrip = [IO.File]::ReadAllBytes($target)
@@ -436,7 +439,7 @@ try {
   Check 'post-strip: no drag-lint:auto marker survives anywhere' `
     (-not ($finalText -match 'drag-lint:auto'))
 
-  & $exePath document --unit $target --db $db --strip --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --strip --apply 2>$null } | Out-Null
   Check 'second strip --apply exits 0' ($LASTEXITCODE -eq 0)
   $afterStrip2 = [IO.File]::ReadAllBytes($target)
   Check 'second strip --apply is a no-op (byte-identical)' `
@@ -455,18 +458,18 @@ try {
 
   Push-Location $scratch2
   try {
-    & git init -q 2>$null | Out-Null
-    & git add preserve_tags.pas 2>$null | Out-Null
-    & git -c user.name='drag-lint test' -c user.email='test@drag-lint.local' `
+    & { $ErrorActionPreference = 'Continue'; & git init -q 2>$null } | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & git add preserve_tags.pas 2>$null } | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & git -c user.name='drag-lint test' -c user.email='test@drag-lint.local' `
         -c commit.gpgsign=false commit -q -m 'fixture' `
-        --date='2021-06-01T09:00:00' 2>$null | Out-Null
+        --date='2021-06-01T09:00:00' 2>$null } | Out-Null
   } finally { Pop-Location }
 
-  & $exePath index $scratch2 --db $db2 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch2 --db $db2 2>$null } | Out-Null
   Check 'scratch2: index exits 0' ($LASTEXITCODE -eq 0)
 
   function Apply-DoA {
-    return (& $exePath document --qname preserve_tags.TSeeAlsoHost.DoA --db $db2 --seealso --since --base-dir $scratch2 --apply --json 2>$null) -join "`n"
+    return (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname preserve_tags.TSeeAlsoHost.DoA --db $db2 --seealso --since --base-dir $scratch2 --apply --json 2>$null }) -join "`n"
   }
 
   $jDoA1 = Apply-DoA
@@ -493,7 +496,7 @@ try {
 
   $afterDoA1 = [IO.File]::ReadAllBytes($target2)
 
-  & $exePath index $scratch2 --db $db2 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch2 --db $db2 2>$null } | Out-Null
   Check 'scratch2: re-index exits 0' ($LASTEXITCODE -eq 0)
 
   $jDoA2 = Apply-DoA
@@ -523,7 +526,7 @@ try {
   # reindexing, so the DB's line numbers are stale relative to the
   # now-pristine file.
   # =====================================================================
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   Check 'PART 3: re-index exits 0' ($LASTEXITCODE -eq 0)
 
   # Review round 2: applies $QName three times (Apply-One reindexes before
@@ -587,14 +590,14 @@ try {
 
   $afterNest1 = [IO.File]::ReadAllBytes($target)
 
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   $jNest2 = Apply-One 'preserve_tags.NestedTagsInSummary'
   Check 'NestedTagsInSummary apply #2 exits 0' ($LASTEXITCODE -eq 0) $jNest2
   $afterNest2 = [IO.File]::ReadAllBytes($target)
   Check 'CRITICAL 1: NestedTagsInSummary byte-identical after a 2nd apply cycle' `
     ([System.Linq.Enumerable]::SequenceEqual([byte[]]$afterNest1,[byte[]]$afterNest2))
 
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   $jNest3 = Apply-One 'preserve_tags.NestedTagsInSummary'
   Check 'NestedTagsInSummary apply #3 exits 0' ($LASTEXITCODE -eq 0) $jNest3
   $afterNest3 = [IO.File]::ReadAllBytes($target)
@@ -631,7 +634,7 @@ try {
     ($gapBlock1 -match [regex]::Escape('<deprecated>Use Rev instead; this will be removed in 2.0.</deprecated>'))
 
   $afterGap1 = [IO.File]::ReadAllBytes($target)
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   $jGap2 = Apply-One 'preserve_tags.GappedDeprecatedMessage'
   Check 'GappedDeprecatedMessage apply #2: action=unchanged (stable fixed point)' ($jGap2 -match '"action":"unchanged"') $jGap2
   $afterGap2 = [IO.File]::ReadAllBytes($target)
@@ -652,7 +655,7 @@ try {
   Check 'BareSeeOnly apply #1 exits 0' ($LASTEXITCODE -eq 0) $jSee1
 
   $afterSee1 = [IO.File]::ReadAllBytes($target)
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   $jSee2 = Apply-One 'preserve_tags.BareSeeOnly'
   Check 'BareSeeOnly apply #2: action=unchanged (stable fixed point -- WOULD be "extended" if <see> had been rewritten to <seealso>)' `
     ($jSee2 -match '"action":"unchanged"') $jSee2
@@ -700,7 +703,7 @@ try {
     ($emptyExBlock1 -match [regex]::Escape('<example></example>')) $emptyExBlock1
 
   $afterEmptyEx1 = [IO.File]::ReadAllBytes($target)
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   $jEmptyEx2 = Apply-One 'preserve_tags.EmptyExampleSurvives'
   Check 'EmptyExampleSurvives apply #2: action=unchanged (stable fixed point)' ($jEmptyEx2 -match '"action":"unchanged"') $jEmptyEx2
   $afterEmptyEx2 = [IO.File]::ReadAllBytes($target)
@@ -753,7 +756,7 @@ try {
     Check "$Label`: decl + doc-comment found (cycle 1, not fully deleted)" ($null -ne $b1 -and $b1 -ne '') $b1
     Check "$Label`: expected content survives (cycle 1)" ($b1 -match [regex]::Escape($Survives1)) $b1
 
-    & $exePath index $scratch --db $db 2>$null | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
     $j2 = Apply-One $QName
     Check "$Label apply #2 exits 0" ($LASTEXITCODE -eq 0) $j2
     $b2 = Get-DocBlockAbove ([IO.File]::ReadAllLines($target)) $DeclPattern
@@ -762,7 +765,7 @@ try {
     Check "$Label`: final/canonical content present (cycle 2)" ($b2 -match [regex]::Escape($SurvivesFinal)) $b2
     $after2 = [IO.File]::ReadAllBytes($target)
 
-    & $exePath index $scratch --db $db 2>$null | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
     $j3 = Apply-One $QName
     $after3 = [IO.File]::ReadAllBytes($target)
     Check "$Label`: byte-identical after a 3rd apply cycle (stable fixed point)" `
@@ -970,8 +973,8 @@ try {
   foreach ($rt in @(
       @{ q = 'preserve_tags.DeprecatedWithNestedReturns'; p = '^function DeprecatedWithNestedReturns: Integer;' },
       @{ q = 'preserve_tags.ExampleWithNestedRemarks'   ; p = '^procedure ExampleWithNestedRemarks;'           })) {
-    & $exePath index $scratch --db $db 2>$null | Out-Null
-    & $exePath document --qname $rt.q --db $db --strip --apply 2>$null | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath document --qname $rt.q --db $db --strip --apply 2>$null } | Out-Null
     Check "N2 (T3h) ROUND-TRIP: $($rt.q) --strip exits 0" ($LASTEXITCODE -eq 0)
     $rtNow      = Get-DocBlockAbove ([IO.File]::ReadAllLines($target)) $rt.p
     $rtPristine = Get-DocBlockAbove $pristineFixtureLines               $rt.p

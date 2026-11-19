@@ -27,9 +27,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-pp-in-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -83,7 +86,7 @@ Write-Ascii "$WorkDir\other\uLoose.pas" "unit uLoose;`r`ninterface`r`nimplementa
 
 # Run pp-profile --in; return @{ H = header hashtable; Syms = symbol list; Raw = text }.
 function PpIn([string]$File) {
-  $out = & $Exe pp-profile --in $File 2>&1 | ForEach-Object { "$_" }
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe pp-profile --in $File 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }
   $h = @{}; $syms = @(); $blank = $false
   foreach ($l in $out) {
     if ($l -match '^\(loaded defaults') { continue }
@@ -160,7 +163,7 @@ Check 'f myfeature absent'    ($r.Syms -notcontains 'myfeature')
 
 # ---- g: the --dproj path prints symbols only (no header lines) ----
 New-Dproj $Dproj 'Debug'
-$g = @(& $Exe pp-profile --dproj $Dproj --platform Win32 --config Debug 2>&1 | ForEach-Object { "$_" } |
+$g = @(& { $ErrorActionPreference = 'Continue'; & $Exe pp-profile --dproj $Dproj --platform Win32 --config Debug 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" } |
        Where-Object { $_ -notmatch '^\(loaded defaults' })
 # Lane INC2: value lines ('compilerversion=37') follow the symbols; a HEADER line is one of the --in keys.
 Check 'g no header lines'     (-not ($g | Where-Object { $_ -match '^(dproj|platform|config|source|digest)=' })) ($g -join ' ')

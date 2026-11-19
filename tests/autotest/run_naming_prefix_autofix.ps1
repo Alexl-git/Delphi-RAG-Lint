@@ -40,9 +40,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-naming-prefix-autofix-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 # E-RENAME-OTHER-PATHS: a naming fix now runs the rename proof, and these fixtures have no library: the proof's own test seam.
@@ -122,11 +125,11 @@ end.
 Write-Ascii $c1File $Case1Fixture
 '{ "autofix": ["field-name-prefix"], "naming": { "field_prefix": "F" } }' | Out-File -FilePath $c1Cfg -Encoding ascii
 
-& $Exe index $c1Src --db $c1Db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $c1Src --db $c1Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'CASE1: index exits 0' ($LASTEXITCODE -eq 0)
 Check 'CASE1: db built' (Test-Path $c1Db)
 
-$out = & $Exe lint-all --db $c1Db --config $c1Cfg --rule field-name-prefix --fix --apply --quiet 2>&1
+$out = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $c1Db --config $c1Cfg --rule field-name-prefix --fix --apply --quiet 2>&1 | ForEach-Object { "$_" } }
 Write-Host ($out -join "`n")
 
 $after = Get-Content -Raw $c1File
@@ -173,10 +176,10 @@ end.
 Write-Ascii $c2File $Case2Fixture
 '{ "autofix": ["param-name-prefix"], "naming": { "param_prefix": "p" } }' | Out-File -FilePath $c2Cfg -Encoding ascii
 
-& $Exe index $c2Src --db $c2Db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $c2Src --db $c2Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'CASE2: index exits 0' ($LASTEXITCODE -eq 0)
 
-$out2 = & $Exe lint-all --db $c2Db --config $c2Cfg --rule param-name-prefix --fix --apply --quiet 2>&1
+$out2 = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $c2Db --config $c2Cfg --rule param-name-prefix --fix --apply --quiet 2>&1 | ForEach-Object { "$_" } }
 Write-Host ($out2 -join "`n")
 
 $after2 = Get-Content -Raw $c2File
@@ -250,10 +253,10 @@ end.
 Write-Ascii $c3File $Case3Fixture
 '{ "autofix": ["type-name-prefix"], "naming": { "type_prefix": { "class": "T" } } }' | Out-File -FilePath $c3Cfg -Encoding ascii
 
-& $Exe index $c3Src --db $c3Db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $c3Src --db $c3Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'CASE3: index exits 0' ($LASTEXITCODE -eq 0)
 
-$out3 = & $Exe lint-all --db $c3Db --config $c3Cfg --rule type-name-prefix --fix --apply --quiet 2>&1
+$out3 = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $c3Db --config $c3Cfg --rule type-name-prefix --fix --apply --quiet 2>&1 | ForEach-Object { "$_" } }
 Write-Host ($out3 -join "`n")
 
 $after3 = Get-Content -Raw $c3File
@@ -284,10 +287,10 @@ $gateBefore = Get-Content -Raw $gateFile
 # so a stray legacy opt-in could not make this pass vacuously).
 '{ "autofix": ["type-name-prefix"], "autofix_off": ["type-name-prefix"], "naming": { "type_prefix": { "class": "T" } } }' | Out-File -FilePath $gateCfg -Encoding ascii
 
-& $Exe index $gateSrc --db $gateDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $gateSrc --db $gateDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'GATE: index exits 0' ($LASTEXITCODE -eq 0)
 
-$gateOut = & $Exe lint-all --db $gateDb --config $gateCfg --rule type-name-prefix --fix --apply --quiet 2>&1
+$gateOut = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $gateDb --config $gateCfg --rule type-name-prefix --fix --apply --quiet 2>&1 | ForEach-Object { "$_" } }
 $gateExit = $LASTEXITCODE
 Write-Host ($gateOut -join "`n")
 
@@ -335,10 +338,10 @@ end.
 Write-Ascii $colFile $CollisionFixture
 '{ "autofix": ["param-name-prefix"], "naming": { "param_prefix": "p" } }' | Out-File -FilePath $colCfg -Encoding ascii
 
-& $Exe index $colSrc --db $colDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $colSrc --db $colDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'COLLISION: index exits 0' ($LASTEXITCODE -eq 0)
 
-$colOut = & $Exe lint-all --db $colDb --config $colCfg --rule param-name-prefix --fix --apply --quiet 2>&1
+$colOut = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $colDb --config $colCfg --rule param-name-prefix --fix --apply --quiet 2>&1 | ForEach-Object { "$_" } }
 $colExit = $LASTEXITCODE
 Write-Host ($colOut -join "`n")
 
@@ -385,10 +388,10 @@ end.
 Write-Ascii $slFile $SameLineFixture
 '{ "autofix": ["param-name-prefix"], "naming": { "param_prefix": "p" } }' | Out-File -FilePath $slCfg -Encoding ascii
 
-& $Exe index $slSrc --db $slDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $slSrc --db $slDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'SAMELINE: index exits 0' ($LASTEXITCODE -eq 0)
 
-$slOut = & $Exe lint-all --db $slDb --config $slCfg --rule param-name-prefix --fix --apply --quiet 2>&1
+$slOut = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $slDb --config $slCfg --rule param-name-prefix --fix --apply --quiet 2>&1 | ForEach-Object { "$_" } }
 $slExit = $LASTEXITCODE
 Write-Host ($slOut -join "`n")
 
@@ -431,11 +434,11 @@ $dryCfg  = Join-Path $dryDir 'drag-lint-lint.json'
 Write-Ascii $dryFile $Case1Fixture
 '{ "autofix": ["field-name-prefix"], "naming": { "field_prefix": "F" } }' | Out-File -FilePath $dryCfg -Encoding ascii
 
-& $Exe index $drySrc --db $dryDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $drySrc --db $dryDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'DRYRUN: index exits 0' ($LASTEXITCODE -eq 0)
 
 $beforeDry = Get-Content -Raw $dryFile
-$dryOut = & $Exe lint-all --db $dryDb --config $dryCfg --rule field-name-prefix --fix --quiet 2>&1
+$dryOut = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $dryDb --config $dryCfg --rule field-name-prefix --fix --quiet 2>&1 | ForEach-Object { "$_" } }
 $dryExit = $LASTEXITCODE
 Write-Host ($dryOut -join "`n")
 $afterDry = Get-Content -Raw $dryFile
@@ -470,10 +473,10 @@ Write-Ascii $detBFile $Case1Fixture
 '{ "autofix": ["field-name-prefix"], "naming": { "field_prefix": "F" } }' | Out-File -FilePath $detACfg -Encoding ascii
 '{ "autofix": ["field-name-prefix"], "naming": { "field_prefix": "F" } }' | Out-File -FilePath $detBCfg -Encoding ascii
 
-& $Exe index (Join-Path $detA 'src') --db $detADb 2>&1 | Out-Null
-& $Exe index (Join-Path $detB 'src') --db $detBDb 2>&1 | Out-Null
-& $Exe lint-all --db $detADb --config $detACfg --rule field-name-prefix --fix --apply --quiet 2>&1 | Out-Null
-& $Exe lint-all --db $detBDb --config $detBCfg --rule field-name-prefix --fix --apply --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $detA 'src') --db $detADb 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $detB 'src') --db $detBDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $detADb --config $detACfg --rule field-name-prefix --fix --apply --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $detBDb --config $detBCfg --rule field-name-prefix --fix --apply --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 $detAAfter = Get-Content -Raw $detAFile
 $detBAfter = Get-Content -Raw $detBFile
@@ -523,7 +526,7 @@ $warnDb   = Join-Path $warnDir 'naming.sqlite'
 $warnCfg  = Join-Path $warnDir 'drag-lint-lint.json'
 Write-Ascii $warnFile $Case1Fixture
 '{ "autofix": ["field-name-prefix"], "naming": { "field_prefix": "F" } }' | Out-File -FilePath $warnCfg -Encoding ascii
-& $Exe index $warnSrc --db $warnDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $warnSrc --db $warnDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'WARN-A: index exits 0' ($LASTEXITCODE -eq 0)
 
 $warnStdout = Join-Path $warnDir 'stdout.txt'
@@ -553,7 +556,7 @@ $warnDb2   = Join-Path $warnDir2 'naming.sqlite'
 $warnCfg2  = Join-Path $warnDir2 'drag-lint-lint.json'
 Write-Ascii $warnFile2 $Case3Fixture
 '{ "autofix": ["type-name-prefix"], "naming": { "type_prefix": { "class": "T" } } }' | Out-File -FilePath $warnCfg2 -Encoding ascii
-& $Exe index $warnSrc2 --db $warnDb2 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $warnSrc2 --db $warnDb2 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'WARN-B: index exits 0' ($LASTEXITCODE -eq 0)
 
 $warnStdout2 = Join-Path $warnDir2 'stdout.txt'
@@ -573,7 +576,7 @@ $warnDb3   = Join-Path $warnDir3 'naming.sqlite'
 $warnCfg3  = Join-Path $warnDir3 'drag-lint-lint.json'
 Write-Ascii $warnFile3 $Case2Fixture
 '{ "autofix": ["param-name-prefix"], "naming": { "param_prefix": "p" } }' | Out-File -FilePath $warnCfg3 -Encoding ascii
-& $Exe index $warnSrc3 --db $warnDb3 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $warnSrc3 --db $warnDb3 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'WARN-C: index exits 0' ($LASTEXITCODE -eq 0)
 
 $warnStdout3 = Join-Path $warnDir3 'stdout.txt'

@@ -63,7 +63,7 @@ type
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.V151.RTLCOLL.TV151RTLCOLLRules.CheckFile (DRagLint.V151.RTLCOLL.pas), DRagLint.V151.RTLCOLL.TV151RTLCOLLRules.CheckProject (DRagLint.V151.RTLCOLL.pas)</para>
 /// <para>Calls: PChar, SetString</para>
-/// <para>Complexity: 30 (cyclomatic, outer body), 85 lines (full implementation)</para>
+/// <para>Complexity: 32 (cyclomatic, outer body), 85 lines (full implementation)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function MaskSource(const ASrc: string): string;
@@ -104,14 +104,14 @@ function ReadSourceText(const APath: string): string;
 /// before the read, or handles EKeyNotFoundException / EListError. A write target (Dict[Key] := ...) is not a read.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.V151.RTLCOLL.TV151RTLCOLLRules.CheckFile (DRagLint.V151.RTLCOLL.pas)</para>
-/// <para>Calls: CharInSet, ContainsText, Copy, DRagLint.V151.RTLCOLL.Support.BaseTypeName, DRagLint.V151.RTLCOLL.Support.Esc, DRagLint.V151.RTLCOLL.Support.Hit, DRagLint.V151.RTLCOLL.Support.MatchClose, DRagLint.V151.RTLCOLL.Support.TScan.Body, DRagLint.V151.RTLCOLL.Support.TScan.Create, DRagLint.V151.RTLCOLL.Support.TScan.Qualifies, DRagLint.V151.RTLCOLL.Support.TScan.RangeIndex, IntToStr, LowerCase, Trim</para>
+/// <para>Calls: CharInSet, ContainsText, Copy, DRagLint.V151.RTLCOLL.Support.BaseTypeName, DRagLint.V151.RTLCOLL.Support.Esc, DRagLint.V151.RTLCOLL.Support.Hit, DRagLint.V151.RTLCOLL.Support.MatchClose, DRagLint.V151.RTLCOLL.Support.NameMatches, DRagLint.V151.RTLCOLL.Support.TScan.Body, DRagLint.V151.RTLCOLL.Support.TScan.Create, DRagLint.V151.RTLCOLL.Support.TScan.Qualifies, DRagLint.V151.RTLCOLL.Support.TScan.RangeIndex, IntToStr, LowerCase, Trim</para>
 /// <para>Returns: nil</para>
 /// <para>Complexity: 20 (cyclomatic, outer body), 60 lines (full implementation)</para>
 /// <seealso cref="DRagLint.V151.RTLCOLL.Support.BaseTypeName"/>
 /// <seealso cref="DRagLint.V151.RTLCOLL.Support.Esc"/>
 /// <seealso cref="DRagLint.V151.RTLCOLL.Support.Hit"/>
 /// <seealso cref="DRagLint.V151.RTLCOLL.Support.MatchClose"/>
-/// <seealso cref="DRagLint.V151.RTLCOLL.Support.TScan.Body"/>
+/// <seealso cref="DRagLint.V151.RTLCOLL.Support.NameMatches"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function FindDictionaryGetWithoutCheck(const AMasked: string): TArray<TRtlCollHit>;
@@ -128,7 +128,7 @@ function FindDictionaryGetWithoutCheck(const AMasked: string): TArray<TRtlCollHi
 /// <para>Called from: DRagLint.V151.RTLCOLL.TV151RTLCOLLRules.CheckFile (DRagLint.V151.RTLCOLL.pas)</para>
 /// <para>Calls: ContainsText, DRagLint.V151.RTLCOLL.Support.Esc, DRagLint.V151.RTLCOLL.Support.Hit, DRagLint.V151.RTLCOLL.Support.IsFreshCreateExpr, DRagLint.V151.RTLCOLL.Support.IsUnownedList, DRagLint.V151.RTLCOLL.Support.SplitArgs, DRagLint.V151.RTLCOLL.Support.TScan.Body, DRagLint.V151.RTLCOLL.Support.TScan.Create, DRagLint.V151.RTLCOLL.Support.TScan.RangeIndex, SameText</para>
 /// <para>Returns: nil</para>
-/// <para>Complexity: 11 (cyclomatic, outer body), 45 lines (full implementation)</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 45 lines (full implementation)</para>
 /// <seealso cref="DRagLint.V151.RTLCOLL.Support.Esc"/>
 /// <seealso cref="DRagLint.V151.RTLCOLL.Support.Hit"/>
 /// <seealso cref="DRagLint.V151.RTLCOLL.Support.IsFreshCreateExpr"/>
@@ -148,6 +148,7 @@ function FindStringListObjectsLeak(const AMasked: string): TArray<TRtlCollHit>;
 /// <para>Called from: DRagLint.V151.RTLCOLL.TV151RTLCOLLRules.CheckFile (DRagLint.V151.RTLCOLL.pas)</para>
 /// <para>Calls: ContainsText, DRagLint.V151.RTLCOLL.Support.Esc, DRagLint.V151.RTLCOLL.Support.Hit, DRagLint.V151.RTLCOLL.Support.TScan.Create, DRagLint.V151.RTLCOLL.Support.TScan.CreatedIn, DRagLint.V151.RTLCOLL.Support.TScan.Qualifies, DRagLint.V151.RTLCOLL.Support.TScan.RangeIndex, DRagLint.V151.RTLCOLL.Support.TScan.ScopeText, StartsText</para>
 /// <para>Returns: nil</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 28 lines (full implementation)</para>
 /// <seealso cref="DRagLint.V151.RTLCOLL.Support.Esc"/>
 /// <seealso cref="DRagLint.V151.RTLCOLL.Support.Hit"/>
 /// <seealso cref="DRagLint.V151.RTLCOLL.Support.TScan.Create"/>
@@ -229,7 +230,7 @@ function FindNowForElapsedTime(const AMasked: string): TArray<TRtlCollHit>;
 implementation
 
 uses
-  System.IOUtils
+  DRagLint.Core.Encoding, System.IOUtils
   , System.StrUtils
   , System.RegularExpressions
   , System.Character
@@ -376,7 +377,7 @@ end;
 function ReadSourceText(const APath: string): string;
 begin
   try
-    Result:= TFile.ReadAllText(APath, TEncoding.ANSI);
+    Result:= ReadSourceFileText(APath);
   except
     on E: EInOutError do Result:= '';
     on E: EFOpenError do Result:= '';
@@ -460,6 +461,118 @@ begin
 end;
 
 type
+  { 1.52 BUDGET: candidate start positions (1-based, ascending) of a TScan pattern for one occurrence of its anchor literal. }
+  TStartsFn = reference to function(const AText: string; AAnchor: Integer): TArray<Integer>;
+
+{ TScan's patterns all start with the lookbehind (?<![\w.]), which defeats PCRE's start
+  optimisation: the pattern is tried at every position of a 1 MB unit (350 ms per TScan, three
+  TScans per file). Every match of them contains a fixed literal (the '=' of an alias, the ':='
+  of a creation, the ':' of a declaration) at a place the text before it determines, so the
+  candidates are found from that literal: for each occurrence AStarts walks back to the start
+  positions a match could have (ascending), and a \G-anchored copy of the same pattern is tried
+  there. Taken leftmost first, never before the end of the previous match, this gives the matches
+  TRegEx.Matches gives, in its order. Text that is not plain ASCII (where \w may mean more) takes
+  the full scan. }
+
+function IsWordChar(C: Char): Boolean; inline;
+begin
+  Result:= CharInSet(C, ['A'..'Z', 'a'..'z', '0'..'9', '_']);
+end;
+
+function IsBlank(C: Char): Boolean; inline;
+begin
+  Result:= CharInSet(C, [#9, #10, #11, #12, #13, ' ']);
+end;
+
+function IsAsciiText(const AText: string): Boolean;
+const
+  MAX_ASCII = 127;
+begin
+  for var C: Char in AText do
+    if Ord(C) > MAX_ASCII then Exit(False);
+  Result:= True;
+end;
+
+function AnchoredMatches(const AText, APattern, AAnchor: string; const AStarts: TStartsFn): TArray<TMatch>;
+begin
+  Result:= nil;
+  if not IsAsciiText(AText) then
+  begin
+    for var M: TMatch in TRegEx.Matches(AText, APattern, [roIgnoreCase]) do Result:= Result + [M];
+    Exit;
+  end;
+  var Anchored: TRegEx:= TRegEx.Create('\G(?:' + APattern + ')', [roIgnoreCase]);
+  var NextAllowed: Integer:= 1;
+  var Q: Integer:= PosEx(AAnchor, AText, 1);
+  while Q > 0 do
+  begin
+    for var S: Integer in AStarts(AText, Q) do
+      if S >= NextAllowed then
+      begin
+        var M: TMatch:= Anchored.Match(AText, S);
+        if M.Success and (M.Index = S) then
+        begin
+          Result:= Result + [M];
+          NextAllowed:= M.Index + M.Length;
+          Break;
+        end;
+      end;
+    Q:= PosEx(AAnchor, AText, Q + 1);
+  end;
+end;
+
+{ Start of the word that ends at AEnd (1-based, inclusive), or 0 when AText[AEnd] is no word char. }
+function WordStart(const AText: string; AEnd: Integer): Integer;
+begin
+  if (AEnd < 1) or not IsWordChar(AText[AEnd]) then Exit(0);
+  Result:= AEnd;
+  while (Result > 1) and IsWordChar(AText[Result - 1]) do Dec(Result);
+end;
+
+{ Last non-blank position before AFrom, or 0. }
+function SkipBlanksBack(const AText: string; AFrom: Integer): Integer;
+begin
+  Result:= AFrom - 1;
+  while (Result >= 1) and IsBlank(AText[Result]) do Dec(Result);
+end;
+
+{ IDENT \s* <anchor>: the word right before the anchor. }
+function WordStartsBefore(const AText: string; AAnchor: Integer): TArray<Integer>;
+begin
+  var W: Integer:= WordStart(AText, SkipBlanksBack(AText, AAnchor));
+  Result:= if W > 0 then [W] else nil;
+end;
+
+{ (?:Self \s* . \s*)? IDENT \s* <anchor>: the 'Self' of a 'Self . name' first, then the name. }
+function SelfOrWordStartBefore(const AText: string; AAnchor: Integer): TArray<Integer>;
+const
+  SELF_WORD = 'self';
+begin
+  Result:= nil;
+  var W: Integer:= WordStart(AText, SkipBlanksBack(AText, AAnchor));
+  if W = 0 then Exit;
+  Result:= [W];
+  var P: Integer:= SkipBlanksBack(AText, W);
+  if (P < 1) or (AText[P] <> '.') then Exit;
+  var E: Integer:= SkipBlanksBack(AText, P);
+  var S: Integer:= WordStart(AText, E);
+  if (S > 0) and SameText(Copy(AText, S, E - S + 1), SELF_WORD) then Result:= [S, W];
+end;
+
+{ IDENT (?:\s*,\s* IDENT)* \s* <anchor>: every word of the comma list before the anchor, first word first. }
+function ListStartsBefore(const AText: string; AAnchor: Integer): TArray<Integer>;
+begin
+  Result:= nil;
+  var W: Integer:= WordStart(AText, SkipBlanksBack(AText, AAnchor));
+  while W > 0 do
+  begin
+    Result:= [W] + Result;
+    var P: Integer:= SkipBlanksBack(AText, W);
+    if (P < 1) or (AText[P] <> ',') then Break;
+    W:= WordStart(AText, SkipBlanksBack(AText, P));
+  end;
+end;
+type
   { One file, scanned once per rule family: routine ranges, the type names that count as a target (the
     given ones plus aliases / descendants declared in the file) and the declaration facts.
     A name declared INSIDE a routine (parameter or local) is judged by that routine alone; any other name
@@ -499,17 +612,20 @@ begin
   FCreated:= TDictionary<string, Boolean>.Create;
   for var T: string in ATargets do FTargets.Add(LowerCase(T));
   // aliases and descendants: TFoo = TDictionary<..>;  TFoo = class(TDictionary<..>);  TBar = TFoo;
-  var ReAlias: TRegEx:= TRegEx.Create('(?<![\w.])(' + IDENT + ')\s*=\s*(?:class\s*\(\s*)?([\w.]+)\s*(?:<|[;)])', [roIgnoreCase]);
+  // (1.52 BUDGET: both patterns run anchored on their literal, see AnchoredMatches; the alias
+  // matches are the same in both passes, so they are found once)
+  var Aliases: TArray<TMatch>:= AnchoredMatches(AMasked,
+    '(?<![\w.])(' + IDENT + ')\s*=\s*(?:class\s*\(\s*)?([\w.]+)\s*(?:<|[;)])', '=', WordStartsBefore);
   for var Pass:= 1 to 2 do
-    for var M: TMatch in ReAlias.Matches(AMasked) do
+    for var M: TMatch in Aliases do
       if FTargets.Contains(LowerCase(BaseTypeName(M.Groups[2].Value))) and
          not FTargets.Contains(LowerCase(M.Groups[1].Value)) then
         FTargets.Add(LowerCase(M.Groups[1].Value));
   FGlobalDecl:= DeclMap(Slice(AMasked, FRanges[0]));
   // creations "Name := Target<..>.Create" / "Name := Target.Create"
-  var ReMake: TRegEx:= TRegEx.Create('(?<![\w.])(?:Self\s*\.\s*)?(' + IDENT + ')\s*:=\s*(' + IDENT + '(?:\.' + IDENT + ')*?)\s*(?:<|\.\s*Create\b)',
-    [roIgnoreCase]);
-  for var M: TMatch in ReMake.Matches(AMasked) do
+  for var M: TMatch in AnchoredMatches(AMasked,
+      '(?<![\w.])(?:Self\s*\.\s*)?(' + IDENT + ')\s*:=\s*(' + IDENT + '(?:\.' + IDENT + ')*?)\s*(?:<|\.\s*Create\b)', ':=',
+      SelfOrWordStartBefore) do
     if FTargets.Contains(LowerCase(BaseTypeName(M.Groups[2].Value))) then
       FCreated.AddOrSetValue(LowerCase(M.Groups[1].Value), True);
 end;
@@ -526,9 +642,8 @@ end;
 function TScan.DeclMap(const AText: string): TDictionary<string, Boolean>;
 begin
   Result:= TDictionary<string, Boolean>.Create;
-  var ReDecl: TRegEx:= TRegEx.Create('(?<![\w.])(' + IDENT + '(?:\s*,\s*' + IDENT + ')*)\s*:(?!=)\s*(' + IDENT + '(?:\.' + IDENT + ')*)',
-    [roIgnoreCase]);
-  for var M: TMatch in ReDecl.Matches(AText) do
+  for var M: TMatch in AnchoredMatches(AText,
+      '(?<![\w.])(' + IDENT + '(?:\s*,\s*' + IDENT + ')*)\s*:(?!=)\s*(' + IDENT + '(?:\.' + IDENT + ')*)', ':', ListStartsBefore) do
   begin
     var IsTarget: Boolean:= FTargets.Contains(LowerCase(BaseTypeName(M.Groups[2].Value)));
     for var Nm: string in M.Groups[1].Value.Split([',']) do

@@ -31,13 +31,16 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-loosescale-$PID",
   [int]$Small      = 2500,
   [double]$MaxRatio = 6.0,
   [int]$MaxLargeCpuMs = 60000,
   [int]$KillAfterMs   = 180000
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
@@ -65,7 +68,7 @@ New-Item -ItemType Directory $WorkDir | Out-Null
 $other = Join-Path $WorkDir 'other'; New-Item -ItemType Directory $other | Out-Null
 [IO.File]::WriteAllText((Join-Path $other 'uOther.pas'), "unit uOther;`r`n`r`ninterface`r`n`r`nimplementation`r`n`r`nend.`r`n", [Text.ASCIIEncoding]::new())
 $db = Join-Path $WorkDir 'other.sqlite'
-& $Exe index $other --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $other --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host 'FATAL: could not build the unrelated index' -ForegroundColor Red; exit 2 }
 
 function Measure-LooseOpen([int]$Lines) {
@@ -101,7 +104,7 @@ function Measure-LooseOpen([int]$Lines) {
   $cpu = [int]$p.TotalProcessorTime.TotalMilliseconds
   $pcharLines = @(); $tokCount = 0
   foreach ($mm in [regex]::Matches([IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.method -eq 'textDocument/publishDiagnostics' -and $o.params.uri -eq $uri) {
       $pcharLines = @($o.params.diagnostics | Where-Object { $_.code -eq 'pchar-arithmetic' } | ForEach-Object { [int]$_.range.start.line })
     }

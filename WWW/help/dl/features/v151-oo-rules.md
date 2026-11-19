@@ -4,10 +4,10 @@ title: Object-model lint rules (Equals/hash, events, GUIDs, exports)
 summary: "Ten single-file lint rules: Equals/GetHashCode, event calls, duplicate GUIDs, DLL exports, money as float, default params, accessors, forwards, legacy lists"
 product: DL
 group: linting
-order: 30052
+order: 30055
 since: 1.51.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Object-model lint rules (Equals/hash, events, GUIDs, exports)
@@ -19,7 +19,7 @@ Read this to see what each object-model rule reports, which ship ON and what kee
 ## How to run it
 
 ```text
-drag-lint lint-all [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]
+drag-lint lint-all [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget]
 ```
 
 Full flag list: [lint-all in the CLI reference](../cli.md#lint-all).

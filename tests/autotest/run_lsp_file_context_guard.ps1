@@ -27,9 +27,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-lsp-filectx-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -97,7 +100,7 @@ PasUnit "$WorkDir\many\s\uShared.pas"
 foreach ($n in 'First', 'Second') {
   Dproj "$WorkDir\many\$n\$n.dproj" @(($Marker32 -replace 'Win32', 'Win64'), '  </PropertyGroup>')
   New-Item -ItemType Directory -Force "$WorkDir\many\$n\_D-RAG" | Out-Null
-  & $Exe index "$WorkDir\many\s" --db "$WorkDir\many\$n\_D-RAG\$n.sqlite" 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\many\s" --db "$WorkDir\many\$n\_D-RAG\$n.sqlite" 2>&1 | ForEach-Object { "$_" } } | Out-Null
 }
 New-Item -ItemType Directory -Force "$R\app\_D-RAG" | Out-Null
 $dbApp = "$R\app\_D-RAG\App.sqlite"
@@ -105,8 +108,8 @@ $dbLib = "$WorkDir\library-Win64.sqlite"
 New-Item -ItemType Directory -Force "$WorkDir\lib" | Out-Null
 PasUnit "$WorkDir\lib\uLib.pas"
 $held = "$R\heldroot"; PasUnit "$held\uHeld.pas"
-& $Exe index $held --db $dbApp 2>&1 | Out-Null
-& $Exe index "$WorkDir\lib" --db $dbLib 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $held --db $dbApp 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\lib" --db $dbLib 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'SETUP: fixture indexes built' ((Test-Path $dbApp) -and (Test-Path $dbLib) -and (Test-Path "$WorkDir\many\First\_D-RAG\First.sqlite"))
 
 function Uri($p) { 'file:///' + ($p -replace '\\', '/') }
@@ -122,7 +125,7 @@ function Read-Frames([string]$Out) {
     $start = $i + $m.Index + $m.Length
     $len = [int]$m.Groups[1].Value
     if ($start + $len -gt $Out.Length) { break }
-    $res += ($Out.Substring($start, $len) | ConvertFrom-Json)
+    $res += ($Out.Substring($start, $len) | ConvertFrom-Json | ForEach-Object { $_ })
     $i = $start + $len
   }
   return $res
@@ -174,7 +177,7 @@ Write-Host 'DPLAT: a .dproj without the $(Platform) marker' -ForegroundColor Cya
 # 149 LX: a marker-less project is what the index makes of it (manifest default, else a3 Win32),
 # not 'Win64 if targeted'. Read the default the engine will read, so the expectation follows it.
 $ManDef = ''
-try { $ManDef = [string]((Get-Content (Join-Path (Split-Path $Exe) 'drag-lint.json') -Raw | ConvertFrom-Json).settings.defaultPlatform) } catch { }
+try { $ManDef = [string]((Get-Content (Join-Path (Split-Path $Exe) 'drag-lint.json') -Raw | ConvertFrom-Json | ForEach-Object { $_ }).settings.defaultPlatform) } catch { }
 $A3 = if ($ManDef) { $ManDef } else { 'Win32' }
 foreach ($t in @(@('Both', $A3), @('Only32', $A3), @('Tp3', $A3), @('Tp1', $A3), @('Marked', 'Win32'), @('Marked64', 'Win64'))) {
   $f = "$WorkDir\plat\$($t[0])\u$($t[0]).pas"
@@ -194,7 +197,7 @@ $mk = {
       source = @{ file = "$dir\$name.dpr"; sha1 = '' } } | ConvertTo-Json -Depth 5))
   }
   New-Item -ItemType Directory -Force "$dir\_D-RAG" | Out-Null
-  & $Exe index "$dir\u$name.pas" --db "$dir\_D-RAG\$name.sqlite" 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index "$dir\u$name.pas" --db "$dir\_D-RAG\$name.sqlite" 2>&1 | ForEach-Object { "$_" } } | Out-Null
 }
 & $mk 'WithDproj' $true $false
 & $mk 'WithCtx' $false $true

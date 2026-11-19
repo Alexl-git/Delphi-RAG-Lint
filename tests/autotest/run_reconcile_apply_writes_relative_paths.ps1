@@ -32,9 +32,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-reconcile-apply-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -131,7 +134,7 @@ $dpr   = Join-Path $app 'App.dpr'
 $dproj = Join-Path $app 'App.dproj'
 
 Push-Location $app
-try { $out = & $Exe reconcile-project $dproj --apply 2>&1 | Out-String }
+try { $out = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project $dproj --apply 2>&1 | ForEach-Object { "$_" } } | Out-String }
 finally { Pop-Location }
 
 $dprText   = Get-Content $dpr   -Raw
@@ -166,7 +169,7 @@ Check 'uHelper is inserted BEFORE uMain' `
 
 Write-Host ''
 Write-Host 'The result still parses as a project' -ForegroundColor Cyan
-$again = & $Exe reconcile-project $dproj 2>&1 | Out-String
+$again = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project $dproj 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'a second run reports MISSING (0) -- the edit was understood' `
   ($again -match 'MISSING \(0\)') `
   (($again -split "`r?`n" | Where-Object { $_ -match '^MISSING' } | Select-Object -First 1))

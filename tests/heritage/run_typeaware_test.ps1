@@ -19,9 +19,9 @@ function Check($name, $cond) {
 if (Test-Path $db) { Remove-Item $db -Force }
 & $exe index (Join-Path $dir 'typeaware') --db $db | Out-Null
 
-$raw = (& $exe check-ast $pas --db $db --format json 2>$null | Out-String)
+$raw = (& { $ErrorActionPreference = 'Continue'; & $exe check-ast $pas --db $db --format json 2>$null } | Out-String)
 $idx = $raw.IndexOf('[')
-$findings = if ($idx -ge 0) { $raw.Substring($idx) | ConvertFrom-Json } else { @() }
+$findings = @(if ($idx -ge 0) { $raw.Substring($idx) | ConvertFrom-Json | ForEach-Object { $_ } } else { @() })
 
 function Has($rule, $line) {
   return @($findings | Where-Object { $_.rule -eq $rule -and $_.start_line -eq $line }).Count -ge 1
@@ -32,9 +32,9 @@ Check 'freeandnil fires on non-I-prefix interface (line 31)' (Has 'freeandnil-on
 Check 'freeandnil SUPPRESSED on I-prefix class (line 32)' (-not (Has 'freeandnil-on-interface' 32))
 
 # string-equality store-path (se_store.pas): integer '=' suppressed, string '=' fires.
-$rawSE = (& $exe check-ast (Join-Path $dir 'typeaware\se_store.pas') --db $db --format json 2>$null | Out-String)
+$rawSE = (& { $ErrorActionPreference = 'Continue'; & $exe check-ast (Join-Path $dir 'typeaware\se_store.pas') --db $db --format json 2>$null } | Out-String)
 $idxSE = $rawSE.IndexOf('[')
-$findingsSE = if ($idxSE -ge 0) { $rawSE.Substring($idxSE) | ConvertFrom-Json } else { @() }
+$findingsSE = @(if ($idxSE -ge 0) { $rawSE.Substring($idxSE) | ConvertFrom-Json | ForEach-Object { $_ } } else { @() })
 function HasSE($line) { return @($findingsSE | Where-Object { $_.rule -eq 'string-equality-comparison' -and $_.start_line -eq $line }).Count -ge 1 }
 Check 'string-equality NOT on integer = (line 18)' (-not (HasSE 18))
 Check 'string-equality fires on string = (line 19)' (HasSE 19)

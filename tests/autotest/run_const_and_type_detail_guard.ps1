@@ -48,9 +48,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-const-detail-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -138,7 +141,7 @@ end.
 '@
 
 $Db = Join-Path $WorkDir 'const.sqlite'
-& $Exe index $Src --db $Db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $Src --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'built the fixture index' (Test-Path $Db)
 
 # ---- THE EXTRACTOR CONTRACT ------------------------------------------------
@@ -146,9 +149,9 @@ Check 'built the fixture index' (Test-Path $Db)
 # still blank the fault is downstream; if this fails the popup cannot be right
 # whatever the renderer does.
 function SigOf([string]$name) {
-  $raw = & $Exe query --name $name --db $Db --json 2>&1
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe query --name $name --db $Db --json 2>&1 | ForEach-Object { "$_" } }
   $txt = ($raw | Where-Object { $_ -notmatch '^\(loaded defaults' }) -join "`n"
-  try { $o = $txt | ConvertFrom-Json } catch { return '<unparseable>' }
+  try { $o = $txt | ConvertFrom-Json | ForEach-Object { $_ } } catch { return '<unparseable>' }
   if ($null -eq $o) { return '<absent>' }
   $rows = @($o) | Where-Object { $_.kind -eq 'const' -and $_.name -eq $name }
   if ($rows.Count -eq 0) { return '<absent>' }
@@ -198,7 +201,7 @@ function CompletionItems([int]$line, [int]$col) {
     -RedirectStandardError (Join-Path $WorkDir 'err.txt') -NoNewWindow -Wait | Out-Null
   $items = @()
   foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 2 -and $null -ne $o.result) { $items = @($o.result.items) }
   }
   return $items
@@ -294,7 +297,7 @@ function HoverModelAt([int]$line, [int]$col) {
     -RedirectStandardInput $inF -RedirectStandardOutput $outF `
     -RedirectStandardError (Join-Path $WorkDir 'herr.txt') -NoNewWindow -Wait | Out-Null
   foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 2 -and $null -ne $o.result) { return $o.result.model }
   }
   return $null

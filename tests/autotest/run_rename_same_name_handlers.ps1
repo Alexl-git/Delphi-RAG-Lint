@@ -20,9 +20,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-rename-same-name-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $env:DRAGLINT_RENAME_TEST_UNGATED = '1' # lane 144: these fixtures do not compile; run_rename_precise.ps1 proves the gate
@@ -177,7 +180,7 @@ function New-Fixture([string]$Name) {
   foreach ($k in $Files.Keys) { Write-Ascii (Join-Path $src $k) $Files[$k] }
   $db = Join-Path $dir 'idx.sqlite'
   Push-Location $dir
-  try { & $Exe index $src --db $db 2>&1 | Out-Null } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null } finally { Pop-Location }
   Check "$Name index exits 0" ($LASTEXITCODE -eq 0)
   [pscustomobject]@{ Dir = $dir; Src = $src; Db = $db }
 }
@@ -186,7 +189,7 @@ function Run-Rename($fx, [string[]]$RenameArgs) {
   Push-Location $fx.Dir
   # 150 INT4: --library-db none -- the fixture has no library, and 150 CQ (d48cf1bdc1) prints a stderr
   # 'drag-lint: NOTE: no --library-db given ...' that 2>&1 would splice into the --json document.
-  try { $o = & $Exe rename @RenameArgs --db $fx.Db --library-db none 2>&1 } finally { Pop-Location }
+  try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe rename @RenameArgs --db $fx.Db --library-db none 2>&1 | ForEach-Object { "$_" } } } finally { Pop-Location }
   [pscustomobject]@{ Exit = $LASTEXITCODE; Out = ($o -join "`n") }
 }
 
@@ -204,7 +207,7 @@ $j = New-Fixture 'J'
 $r = Run-Rename $j ($RenArgs + '--json')
 Check 'json exits 0' ($r.Exit -eq 0) "exit=$($r.Exit)"
 $edits = @()
-try { $edits = @($r.Out | ConvertFrom-Json) } catch { }
+try { $edits = @(($r.Out | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { }
 $got = @($edits | ForEach-Object { '{0}:{1}' -f (Split-Path -Leaf $_.file), $_.line } | Sort-Object)
 Check 'json edit set is exact' (($got -join ',') -ceq ($Expected -join ',')) "got=$($got -join ',')"
 Check 'json has no Unit2 edit' (-not ($got -match '^Unit2\.'))
@@ -251,7 +254,7 @@ $u1Text = ((Get-Content -Raw (Join-Path $u.Src 'Unit1.pas')) -replace 'implement
 $lfDfm = (Get-Content -Raw (Join-Path $u.Src 'Unit1.dfm')) -replace "`r`n", "`n"
 [IO.File]::WriteAllText((Join-Path $u.Src 'Unit1.dfm'), $lfDfm, [Text.Encoding]::ASCII)
 Push-Location $u.Dir
-try { & $Exe index $u.Src --db $u.Db 2>&1 | Out-Null } finally { Pop-Location }
+try { & { $ErrorActionPreference = 'Continue'; & $Exe index $u.Src --db $u.Db 2>&1 | ForEach-Object { "$_" } } | Out-Null } finally { Pop-Location }
 $r = Run-Rename $u ($RenArgs + @('--apply', '--no-backup'))
 Check 'U apply exits 0' ($r.Exit -eq 0) "exit=$($r.Exit) $($r.Out)"
 $ub = [IO.File]::ReadAllBytes((Join-Path $u.Src 'Unit1.pas'))

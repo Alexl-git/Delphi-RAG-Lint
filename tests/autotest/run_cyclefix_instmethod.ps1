@@ -21,11 +21,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe       = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
+  [string]$Exe       = '',
   [string]$WorkDir   = "$env:TEMP\drag-lint-cyclefix-instmethod-$PID",
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite',
   [switch]$KeepWorkDir
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }) }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -70,7 +73,7 @@ function Get-Cycles([string]$Db, [string]$Tag, [string[]]$Extra) {
   try {
     $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
       -ArgumentList (@('cycles', '--db', ('"' + $Db + '"')) + $Extra) `
-      -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "cycles-$Tag.err")
+      -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "cycles-$Tag.err"); $null = $p.Handle
   } finally {
     $env:DRAGLINT_TEST_DUMP_PLAN = $null
   }
@@ -88,7 +91,7 @@ function Get-Cycles([string]$Db, [string]$Tag, [string[]]$Extra) {
 function Get-VariantPlan([hashtable]$V, [string]$Tag) {
   $dproj = (Get-ChildItem $V.Dir -Filter '*.dproj')[0].FullName
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project $dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
   $okIdx = $LASTEXITCODE -eq 0
   $pl = Get-Cycles $db $Tag @('--plan', '--library-db', ('"' + $Lib + '"'))
   return @{ Ok = ($V.Ok -and $okIdx); Text = $pl.Out; Dump = $pl.Dump; File = $pl.File; Db = $db; Dproj = $dproj }
@@ -109,13 +112,13 @@ try {
     $va.Text.Contains("    procedure Mark(const pText: string);`r`n    procedure Touch;`r`n    procedure Reset(const pCount: Integer = 1);`r`n    function GetNamePath: string;`r`n")) ''
   Check 'a3 the prose names the carried methods' $va.Text.Contains('calls on it, the signature copied verbatim: Mark(const pText: string), Touch, Reset(const pCount: Integer = 1), GetNamePath: string.') ''
   Check 'a4 no getter for a method (no GetMark / GetTouch / GetReset / GetGetNamePath)' ($va.Text -notmatch 'GetMark|GetTouch|GetReset|GetGetNamePath') ''
-  $fo = & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $va.File -Cycle 1 -Root (Join-Path $WorkDir 'a') 2>&1 | Out-String
+  $fo = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $va.File -Cycle 1 -Root (Join-Path $WorkDir 'a') 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'a5 the follower applies cycle 1 (exit 0)' ($LASTEXITCODE -eq 0) ($fo.Trim() -replace "`r?`n", ' | ')
   $gp = [IO.File]::ReadAllText((Join-Path $WorkDir "a\$G"))
   Check 'a6 the class keeps its methods and directives, and implements the interface' (
     $gp.Contains('TDemoGagePort = class(TComponent, IDemoGagePortSurface)') -and
     $gp.Contains('    procedure Reset(const pCount: Integer = 1); virtual;') -and $gp.Contains('    function GetNamePath: string; override;')) ''
-  & $Exe index --project $va.Dproj --db $va.Db *> (Join-Path $WorkDir 'index-a2.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $va.Dproj --db $va.Db *> (Join-Path $WorkDir 'index-a2.log') }
   $after = Get-Cycles $va.Db 'a-after' @()
   Check 'a7 no cycle remains after a re-index' ($after.Out -match 'No circular unit dependencies found\.') ($after.Out.Trim() -replace "`r?`n", ' | ')
 

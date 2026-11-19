@@ -56,10 +56,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-jobs-probe-$PID",
   [int]   $Units   = 250
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -105,7 +108,7 @@ $cfgPath = Join-Path $WorkDir '.drag-lint.json'
 
 function Remove-Dbs { foreach ($s in $SECTIONS) { $p = Join-Path $WorkDir "$s.sqlite"; if (Test-Path $p) { [System.IO.File]::Delete($p) } } }
 function Table-Counts([string]$Section) {
-  $t = (& $Exe schema --db (Join-Path $WorkDir "$Section.sqlite") 2>&1 | Out-String)
+  $t = (& { $ErrorActionPreference = 'Continue'; & $Exe schema --db (Join-Path $WorkDir "$Section.sqlite") 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $o = @()
   foreach ($k in 'files','symbols','refs') {
     if ($t -match "(?m)^\s*$k \((\d+) rows\)") { $o += "$k=$($Matches[1])" } else { $o += "$k=?" }
@@ -113,7 +116,7 @@ function Table-Counts([string]$Section) {
   return ($o -join ' ')
 }
 function File-Count([string]$Section) {
-  $t = (& $Exe schema --db (Join-Path $WorkDir "$Section.sqlite") 2>&1 | Out-String)
+  $t = (& { $ErrorActionPreference = 'Continue'; & $Exe schema --db (Join-Path $WorkDir "$Section.sqlite") 2>&1 | ForEach-Object { "$_" } } | Out-String)
   if ($t -match "(?m)^\s*files \((\d+) rows\)") { return [int]$Matches[1] }
   return -1
 }
@@ -126,7 +129,7 @@ function Probe-Run([string]$Label, [string[]]$ExtraArgs) {
     $argv = @('index','--all','--only',$ONLY) + $ExtraArgs
     $out  = Join-Path $WorkDir "$Label.out"
     $proc = Start-Process $Exe -ArgumentList $argv -NoNewWindow -PassThru `
-              -RedirectStandardOutput $out -RedirectStandardError "$out.err"
+              -RedirectStandardOutput $out -RedirectStandardError "$out.err"; $null = $proc.Handle
     $max = 0
     while (-not $proc.HasExited) {
       $n = @(Get-CimInstance Win32_Process -Filter "Name='drag-lint.exe'" |
@@ -145,7 +148,7 @@ function Probe-Run([string]$Label, [string[]]$ExtraArgs) {
 Write-Host ''
 Write-Host 'SAFETY -- the plan must be exactly the three probe sections' -ForegroundColor Cyan
 Push-Location $WorkDir
-$dry = (& $Exe index --all --only $ONLY --dry-run 2>&1 | Out-String)
+$dry = (& { $ErrorActionPreference = 'Continue'; & $Exe index --all --only $ONLY --dry-run 2>&1 | ForEach-Object { "$_" } } | Out-String)
 Pop-Location
 $planned = @([regex]::Matches($dry, '(?m)^\s{4}\[([^\]]+)\]')) | ForEach-Object { $_.Groups[1].Value }
 Check 'dry-run plans exactly 3 sections' ($planned.Count -eq 3) "planned: $($planned -join ', ')"

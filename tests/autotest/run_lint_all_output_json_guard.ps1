@@ -12,10 +12,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$RepoRoot = "$PSScriptRoot\..\..",
+  [string]$RepoRoot = '',
   [string]$Exe = '',
   [string]$DbPath = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $RepoRoot) { $RepoRoot = "$PSScriptRoot\..\.." }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -35,7 +38,7 @@ try {
   function Run([string[]]$Extra) {
     $o = Join-Path $tmp ([Guid]::NewGuid().ToString('N') + '.out')
     $p = Start-Process $Exe -ArgumentList (@('lint-all', '--db', $DbPath, '--rule', 'unit-not-in-dpr') + $Extra) `
-           -WorkingDirectory $tmp -PassThru -Wait -RedirectStandardOutput $o -RedirectStandardError "$o.err" -WindowStyle Hidden
+           -WorkingDirectory $tmp -PassThru -Wait -RedirectStandardOutput $o -RedirectStandardError "$o.err" -WindowStyle Hidden; $null = $p.Handle
     [pscustomobject]@{ Out = (Get-Content -LiteralPath $o -Raw); Exit = $p.ExitCode }
   }
   $f1 = Join-Path $tmp 'report.json'

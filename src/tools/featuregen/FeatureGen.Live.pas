@@ -220,7 +220,11 @@ function SortUniqueText(const pItems: TArray<string>): TArray<string>;
 /// <param name="pOut">Receives verb -> sorted subcommands; verbs with none are not added. Not cleared first.</param>
 /// <exception cref="EFeatureGenLive">The Run dispatcher implementation is not found.</exception>
 /// <remarks>Comments, string literals (for the span scan) and inactive Win64 conditional branches are
-/// blanked first; a subcommand belongs to every verb whose dispatch closure reaches its routine.</remarks>
+/// blanked first; a subcommand belongs to every verb whose dispatch closure reaches its routine.
+/// A subcommand is a literal compared with Args.SubCommand (`=`, `<>`, SameText / MatchText / IndexText),
+/// or with the FIRST parameter of a routine handed Args.SubCommand as its first argument (repo ->
+/// RunRepoVerb(pSub, ...)), followed into callees that receive that parameter first in turn (1.52 B25).
+/// A sub passed in any other argument position is not followed.</remarks>
 procedure HarvestSubcommandMap(const pCliText: string; const pOut: TDictionary<string, TArray<string>>);
 
 implementation
@@ -799,9 +803,50 @@ begin
   Result := TRegEx.IsMatch(pSpan, '(?m)^begin\b', [roIgnoreCase, roMultiLine]);
 end;
 
+const
+  { Args.SubCommand / AArgs.SubCommand as an operand (a qualified Foo.Args is not one). }
+  ARGS_SUB_RE = '(?:\bAArgs|(?<![A-Za-z0-9_.])Args)\.SubCommand\b';
+  { An optional case fold around the operand: LowerCase(Args.SubCommand). }
+  CASE_WRAP_RE = '(?:(?:Ansi)?(?:LowerCase|UpperCase)\s*\(\s*|Trim\s*\(\s*)?';
+  { How far past a routine header its parameter list is looked for. }
+  HEADER_PARAM_SCAN = 400;
+
+{ The sub-verb literals ('x' or ['x', 'y']) of pList: lower-case dashed words only. }
+function SubLiterals(const pList: string): TArray<string>;
+var
+  lM: TMatch;
+begin
+  Result := nil;
+  for lM in TRegEx.Matches(pList, '''([a-z0-9][a-z0-9-]*)''') do
+    Result := Result + [lM.Groups[1].Value];
+end;
+
+{ B25: the literals pSpan compares the operand pOperandRe with: `= 'x'`, `<> 'x'`, and the first
+  argument of SameText / MatchText / IndexText (Ansi- forms too). }
+function ComparedLiterals(const pSpan, pOperandRe: string): TArray<string>;
+var
+  lM: TMatch;
+begin
+  Result := nil;
+  for lM in TRegEx.Matches(pSpan, '(?:Ansi)?(?:Same|Match|Index)Text\s*\(\s*' + CASE_WRAP_RE + pOperandRe
+    + '\s*\)?\s*,\s*(\[[^\]]*\]|''[^'']*'')', [roIgnoreCase]) do
+    Result := Result + SubLiterals(lM.Groups[1].Value); // dl:ok concat-in-loop@7f8a -- REVIEWED 2026-11-18 v152 BK-TOOLING2: TArray<string> concat, not a string; a handful of sub-verb literals per CLI routine
+  for lM in TRegEx.Matches(pSpan, pOperandRe + '\s*(?:=|<>)\s*(''[^'']*'')', [roIgnoreCase]) do
+    Result := Result + SubLiterals(lM.Groups[1].Value); // dl:ok concat-in-loop@7f8a -- REVIEWED 2026-11-18 v152 BK-TOOLING2: TArray<string> concat, not a string; a handful of sub-verb literals per CLI routine
+end;
+
+{ B25: the routines pSpan hands the operand pOperandRe to as their FIRST argument (case fold allowed). }
+function FirstArgCallees(const pSpan, pOperandRe: string): TArray<string>;
+var
+  lM: TMatch;
+begin
+  Result := nil;
+  for lM in TRegEx.Matches(pSpan, '(?<![A-Za-z0-9_.])([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*' + CASE_WRAP_RE + pOperandRe, [roIgnoreCase]) do
+    Result := Result + [lM.Groups[1].Value];
+end;
+
 procedure HarvestSubcommandMap(const pCliText: string; const pOut: TDictionary<string, TArray<string>>);
 const
-  SUB_RE = '(?:\bAArgs|(?<![A-Za-z0-9_.])Args)\.SubCommand\s*(?:=|<>)\s*''([a-z0-9][a-z0-9-]*)''';
   HEADER_RE = '^(?:procedure|function)\s+([A-Za-z_][A-Za-z0-9_]*)';
 var
   lRes: TPascalProjections;
@@ -817,6 +862,22 @@ var
   lTodo: TStack<string>;
   lFound: Boolean;
   lArr: TArray<string>;
+  lFirst: TDictionary<string, string>;
+  lSpanFrom, lSpanTo: TDictionary<string, Integer>;
+  lMarked: TStrSet;
+  lWork: TStack<string>;
+  lSeeds: TList<string>;
+  lPm: TMatch;
+  lLit, lOp: string;
+
+  procedure MarkSub(const pRoutine: string);
+  begin
+    if not lMarked.ContainsKey(pRoutine) then
+    begin
+      lMarked.Add(pRoutine, True);
+      lWork.Push(pRoutine);
+    end;
+  end;
 
   procedure AddSub(const pRoutine, pSub: string);
   var
@@ -836,6 +897,12 @@ begin
   lRoutines := TObjectDictionary<string, TStrSet>.Create([doOwnsValues], TIStringComparer.Ordinal);
   lDispatch := TObjectDictionary<string, TStrSet>.Create([doOwnsValues], TIStringComparer.Ordinal);
   lVerbOrder := TList<string>.Create;
+  lFirst := TDictionary<string, string>.Create(TIStringComparer.Ordinal);
+  lSpanFrom := TDictionary<string, Integer>.Create(TIStringComparer.Ordinal);
+  lSpanTo := TDictionary<string, Integer>.Create(TIStringComparer.Ordinal);
+  lMarked := TStrSet.Create(TIStringComparer.Ordinal);
+  lWork := TStack<string>.Create;
+  lSeeds := TList<string>.Create;
   try
     lHeaders := TRegEx.Matches(lRes.Code, HEADER_RE, [roMultiLine]);
     // routine -> subcommand literals in its own span; routine -> callees (Get-CliRoutineMap)
@@ -847,8 +914,17 @@ begin
       lSpan := Copy(lRes.Code, lFrom, lTo - lFrom);
       if not HasBody(lSpan) then
         Continue;
-      for lM in TRegEx.Matches(Copy(lRes.NoComments, lFrom, lTo - lFrom), SUB_RE) do
-        AddSub(lName, lM.Groups[1].Value);
+      for lLit in ComparedLiterals(Copy(lRes.NoComments, lFrom, lTo - lFrom), ARGS_SUB_RE) do
+        AddSub(lName, lLit);
+      for lC in FirstArgCallees(lSpan, ARGS_SUB_RE) do
+        lSeeds.Add(lName + #9 + lC);
+      lPm := TRegEx.Match(Copy(lRes.Code, lFrom + lHeaders[h].Length, HEADER_PARAM_SCAN), '^\s*\(\s*(?:(?:const|var|out)\s+)?([A-Za-z_][A-Za-z0-9_]*)', [roIgnoreCase]);
+      if lPm.Success and not lFirst.ContainsKey(lName) then
+      begin
+        lFirst.Add(lName, lPm.Groups[1].Value);
+        lSpanFrom.Add(lName, lFrom);
+        lSpanTo.Add(lName, lTo);
+      end;
       if not lRoutines.TryGetValue(lName, lSet) then
       begin
         lSet := TStrSet.Create;
@@ -896,8 +972,41 @@ begin
         lVerbOrder.Add(lVerb);
       end;
       ArgsCallees(lSpan, 'Run', lSet);
-      for lM in TRegEx.Matches(Copy(lRes.NoComments, lFrom, lTo - lFrom), SUB_RE) do
-        AddSub('Run:' + lVerb, lM.Groups[1].Value);
+      for lLit in ComparedLiterals(Copy(lRes.NoComments, lFrom, lTo - lFrom), ARGS_SUB_RE) do
+        AddSub('Run:' + lVerb, lLit);
+      for lC in FirstArgCallees(lSpan, ARGS_SUB_RE) do
+        if lFirst.ContainsKey(lC) then
+        begin
+          lSet.AddOrSetValue(lC, True);
+          MarkSub(lC);
+        end;
+    end;
+    // B25: routines handed the sub (first argument) from a routine body; then follow each one's
+    // first parameter into its comparisons and into the callees it hands that parameter to first.
+    for lEntry in lSeeds do
+    begin
+      lR := lEntry.Split([#9])[0];
+      lC := lEntry.Split([#9])[1];
+      if lFirst.ContainsKey(lC) and not SameText(lC, lR) then
+      begin
+        lRoutines[lR].AddOrSetValue(lC, True);
+        MarkSub(lC);
+      end;
+    end;
+    while lWork.Count > 0 do
+    begin
+      lR := lWork.Pop;
+      lFrom := lSpanFrom[lR];
+      lTo := lSpanTo[lR];
+      lOp := '(?<![A-Za-z0-9_.])' + lFirst[lR] + '\b(?!\s*\.)';
+      for lLit in ComparedLiterals(Copy(lRes.NoComments, lFrom, lTo - lFrom), lOp) do
+        AddSub(lR, lLit);
+      for lC in FirstArgCallees(Copy(lRes.Code, lFrom, lTo - lFrom), lOp) do
+        if lFirst.ContainsKey(lC) and not SameText(lC, lR) then
+        begin
+          lRoutines[lR].AddOrSetValue(lC, True);
+          MarkSub(lC);
+        end;
     end;
     // verb -> transitive closure of subcommands
     for lVerb in SortUniqueText(lVerbOrder.ToArray) do
@@ -940,6 +1049,12 @@ begin
       end;
     end;
   finally
+    lSeeds.Free;
+    lWork.Free;
+    lMarked.Free;
+    lSpanTo.Free;
+    lSpanFrom.Free;
+    lFirst.Free;
     lVerbOrder.Free;
     lDispatch.Free;
     lRoutines.Free;
@@ -1023,13 +1138,68 @@ begin
   pLive.MenuSource := MENU_SOURCE_TREE;
 end;
 
-{ Get-MenuSourceText: Editor.pas + AboutForm.pas + ReportText.pas, concatenated. }
+{ The editor right-click items one DragLint.Plugin.Cmd.X unit adds under pRoot ("drag-lint"): when the unit
+  sets a row's Surfaces to include csEditorContext and its Visible to True, every literal caption of a ROW VARIABLE
+  (one passed to RegisterCmd152, or the Result of a row-builder function), under the unit's EditorParent level
+  (literal or a const of the unit) when it sets one. Per unit, as before: a unit mixing editor and main-menu-only rows
+  lists all its row captions. A dialog's TD.Caption is not a row variable and is never listed. }
+function EditorCmdCaptions(const pSource, pRoot: string): TArray<string>;
+var
+  lVars: TArray<string>;
+  lM: TMatch;
+  lParent, lName: string;
+begin
+  Result := nil;
+  if not TRegEx.IsMatch(pSource, '\b\w+\.Surfaces\s*:=\s*\[[^\]]*\bcsEditorContext\b')
+    or not TRegEx.IsMatch(pSource, '\b\w+\.Visible\s*:=\s*True\b', [roIgnoreCase]) then
+    Exit;
+  lVars := ['Result'];
+  for lName in Matches1(pSource, '\bRegisterCmd152\s*\(\s*(\w+)\s*\)') do
+    lVars := lVars + [lName];
+  lParent := '';
+  lM := TRegEx.Match(pSource, '\b\w+\.EditorParent\s*:=\s*(?:''([^'']*)''|(\w+))');
+  if lM.Success then
+  begin
+    if lM.Groups[1].Success and (lM.Groups[1].Value <> '') then
+      lParent := lM.Groups[1].Value
+    else if (lM.Groups.Count > 2) and lM.Groups[2].Success then
+      for lName in Matches1(pSource, '\b' + lM.Groups[2].Value + '\s*=\s*''([^'']*)''') do
+        lParent := lName;
+  end;
+  for lM in TRegEx.Matches(pSource, '\b(\w+)\.Caption\s*:=\s*''([^'']+)''') do
+    for lName in lVars do
+      if SameText(lName, lM.Groups[1].Value) then
+      begin
+        Result := Result + [pRoot + ' > ' + (if lParent <> '' then DropAccelerator(lParent) + ' > ' else '')
+          + DropAccelerator(lM.Groups[2].Value)];
+        Break;
+      end;
+end;
+
+{ Get-MenuSourceText: Editor.pas + AboutForm.pas + ReportText.pas, then every
+  DragLint.Plugin.Cmd.*.pas (the 1.52 Cmd152 command units) in ordinal file-name order, concatenated.
+  Parity: DocsSurfaceHarvest.ps1 Get-MenuSourceText reads the same files in the same order. }
 function MenuSourceText(const pRepo: string): string;
 var
   lF: string;
+  lNames: TArray<string>;
+  lCmd: TArray<string>;
+  lDir: string;
+  lI: Integer;
 begin
+  lNames := ['DragLint.Plugin.Editor.pas', 'DragLint.Plugin.AboutForm.pas', 'DragLint.Plugin.ReportText.pas'];
+  lDir := TPath.Combine(pRepo, 'src\delphi-plugin');
+  if TDirectory.Exists(lDir) then
+  begin
+    // TDirectory.GetFiles filters with TPath.MatchesPattern (no 8.3 '.pas*' widening), like the PS -like
+    lCmd := TDirectory.GetFiles(lDir, 'DragLint.Plugin.Cmd.*.pas');
+    for lI := 0 to High(lCmd) do
+      lCmd[lI] := TPath.GetFileName(lCmd[lI]);
+    TArray.Sort<string>(lCmd, TStringComparer.Ordinal);
+    lNames := lNames + lCmd;
+  end;
   Result := '';
-  for lF in ['DragLint.Plugin.Editor.pas', 'DragLint.Plugin.AboutForm.pas', 'DragLint.Plugin.ReportText.pas'] do
+  for lF in lNames do
     Result := Result + ReadText(TPath.Combine(pRepo, 'src\delphi-plugin\' + lF));  // dl:ok concat-in-loop@e2ec -- REVIEWED 2026-10-19: builds one small bounded text (tens of lines) whose bytes must match the PowerShell output; not a hot path
 end;
 
@@ -1076,15 +1246,16 @@ end;
 
 procedure TLiveSurface.Harvest(const pRepo, pEngine: string);
 const
-  CAPTION_RES: array[0..5] of string = (
+  CAPTION_RES: array[0..6] of string = (
     'AddWrappedItem\(\s*\w+\s*,\s*''([^'']+)''',
     'AddSectionHeader\(\s*\w+\s*,\s*''([^'']+)''',
     'Add(?:Proc)?Button\(\s*''([^'']+)''',
     '\.Caption\s*:=\s*''([^'']+)''',
     '\bCaption:\s*''([^'']+)''',
-    '\brtk\w+\s*:\s*Result\s*:=\s*''([^'']+)''');
+    '\brtk\w+\s*:\s*Result\s*:=\s*''([^'']+)''',
+    '\bRegisterRow\(\s*''[^'']*''\s*,\s*''([^'']+)''\s*,\s*True\b');  { 1.52 Cmd.FieldRepo rows; a hidden row (False) is not live }
 var
-  lHasDesigner: Boolean;
+  lHasDesigner, lHasEditorMenu: Boolean;
   lHelp: TLiveHelp;
   lCli, lMenu, lRx, lS, lRt, lElse, lCore, lSchemaPas, lPack, lChart, lBlock, lF: string;
   lFamily: string;
@@ -1172,6 +1343,10 @@ begin
     ContextHosts := ['Structure form', 'Project Manager', 'Form Designer']
   else
     ContextHosts := ['Structure form', 'Project Manager'];
+  // 'Editor' (the code editor's right-click submenu, 1.52 lane PLUGCTX) joins only when its hook unit exists, as above.
+  lHasEditorMenu := TFile.Exists(TPath.Combine(pRepo, 'src\delphi-plugin\DragLint.Plugin.EditorLocalMenu.pas'));
+  if lHasEditorMenu then
+    ContextHosts := ContextHosts + ['Editor'];
   lList := TList<string>.Create;
   try
     for lS in Matches1(ReadText(TPath.Combine(pRepo, 'src\delphi-plugin\DragLint.Plugin.StructureForm.pas')), 'AddPopupItem\(\s*\w+\s*,\s*''([^'']+)''') do
@@ -1190,7 +1365,22 @@ begin
         lList.Add(DropAccelerator(lS));
       ContextCaptions.Add('Form Designer', SortUniqueText(lList.ToArray));
     end;
-  finally
+    // the editor right-click submenu: its caption, then 'submenu > caption' for every VISIBLE 1.52 command-table row
+    // whose Surfaces include csEditorContext (DragLint.Plugin.Cmd.X units; a hidden row is not on the live menu)
+    if lHasEditorMenu then
+    begin
+      lList.Clear;
+      lRt := '';
+      for lS in Matches1(ReadText(TPath.Combine(pRepo, 'src\delphi-plugin\DragLint.Plugin.EditorLocalMenu.pas')), 'EDITOR_SUBMENU_CAPTION\s*=\s*''([^'']+)''') do
+        lRt := DropAccelerator(lS);
+      if lRt <> '' then
+      begin
+        lList.Add(lRt);
+        for lF in TDirectory.GetFiles(TPath.Combine(pRepo, 'src\delphi-plugin'), 'DragLint.Plugin.Cmd.*.pas') do
+          lList.AddRange(EditorCmdCaptions(ReadText(lF), lRt));
+      end;
+      ContextCaptions.Add('Editor', SortUniqueText(lList.ToArray));
+    end;  finally
     lList.Free;
   end;
   for lH in ContextHosts do

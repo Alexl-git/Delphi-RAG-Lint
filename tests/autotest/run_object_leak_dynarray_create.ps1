@@ -21,7 +21,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -90,7 +93,7 @@ end.
 
 Push-Location C:\TEMP
 try {
-  $out = & $exePath lint $target 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath lint $target 2>&1 | ForEach-Object { "$_" } } | Out-String
   $leaks = @(($out -split "`r?`n") | Where-Object { $_ -match 'object-leak' })
   Check 'SANITY: the linter ran and produced output' ($out.Trim().Length -gt 0) $out
 

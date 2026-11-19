@@ -35,9 +35,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-expr-refs-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -126,7 +129,7 @@ end.
 [System.IO.File]::WriteAllText((Join-Path $WorkDir 'exprrefs.pas'), $src, [System.Text.Encoding]::ASCII)
 
 $db = Join-Path $WorkDir 'expr.sqlite'
-& $Exe index $WorkDir --db $db --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 $py = Join-Path $WorkDir 'refs.py'
 @'
@@ -142,7 +145,7 @@ out['LLocal_refs'] = c.execute(
 print(json.dumps(out))
 c.close()
 '@ | Set-Content $py -Encoding ascii
-$refs = (& python $py $db) -join "`n" | ConvertFrom-Json
+$refs = (& python $py $db) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 
 Write-Host 'Reference index' -ForegroundColor Cyan
 Check 'exprUnary operand  (if not X then)' ($refs.LoopsBackIntoScan -ge 1) "refs=$($refs.LoopsBackIntoScan)"
@@ -161,7 +164,7 @@ Check 'a local variable in a condition is NOT a call site' ($refs.LLocal_call_re
 Write-Host ''
 Write-Host 'find-callers' -ForegroundColor Cyan
 foreach ($nm in 'LoopsBackIntoScan','KeepGoing','ItemLimit','GuardedByParens','SelectorSource') {
-  $fc = (& $Exe query find-callers --name $nm --db $db 2>$null | Out-String)
+  $fc = (& { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name $nm --db $db 2>$null } | Out-String)
   Check "find-callers resolves $nm" ($fc -match 'exprrefs\.pas')
 }
 
@@ -169,7 +172,7 @@ Write-Host ''
 Write-Host 'unused-public-symbol' -ForegroundColor Cyan
 # Match the DEAD tier's message only: since L11 (a3084012) the own-unit hint shares this rule id
 # and correctly names a routine that IS called, but only from its own unit.
-$lint = (& $Exe lint-all --db $db 2>$null | Out-String)
+$lint = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db 2>$null } | Out-String)
 foreach ($nm in 'LoopsBackIntoScan','KeepGoing','ItemLimit','GuardedByParens','SelectorSource') {
   Check "$nm is NOT called dead" (-not ($lint -match "unused-public-symbol: Exported routine $nm has no references"))
 }

@@ -31,10 +31,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-dbselect-libs-$PID",
   [switch]$Keep
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -145,10 +148,10 @@ $projDb = Join-Path $WorkDir 'OUT\Proj.sqlite'
 $lib1Db = Join-Path $WorkDir 'OUT\library-Win64.sqlite'
 $lib2Db = Join-Path $WorkDir 'OUT\libextra-Win64.sqlite'
 $lib3Db = Join-Path $WorkDir 'OUT\libw32-Win32.sqlite'
-& $Exe index "$WorkDir\projsrc" --db $projDb 2>&1 | Out-Null
-& $Exe index "$WorkDir\lib1src" --db $lib1Db 2>&1 | Out-Null
-& $Exe index "$WorkDir\lib2src" --db $lib2Db 2>&1 | Out-Null
-& $Exe index "$WorkDir\lib3src" --db $lib3Db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\projsrc" --db $projDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\lib1src" --db $lib1Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\lib2src" --db $lib2Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\lib3src" --db $lib3Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'built fixture indexes' ((Test-Path $projDb) -and (Test-Path $lib1Db) -and (Test-Path $lib2Db) -and (Test-Path $lib3Db))
 
 function Section-Lib([string]$Name, [string]$Db, [string[]]$Platforms) {
@@ -172,7 +175,7 @@ Write-Manifest $oneOnly @($projSec, (Section-Lib 'Library' 'library-{platform}.s
 function Run-Engine([string]$Manifest, [string[]]$EngineArgs) {
   $env:DRAGLINT_MANIFEST = $Manifest
   Push-Location $WorkDir
-  try { return (& $Exe @EngineArgs 2>&1 | Out-String) } finally { Pop-Location; $env:DRAGLINT_MANIFEST = $null }
+  try { return (& { $ErrorActionPreference = 'Continue'; & $Exe @EngineArgs 2>&1 | ForEach-Object { "$_" } } | Out-String) } finally { Pop-Location; $env:DRAGLINT_MANIFEST = $null }
 }
 
 Write-Host 'P1/R1/R2: query + resolve-dbs through a two-library manifest' -ForegroundColor Cyan
@@ -180,7 +183,7 @@ $q1 = Run-Engine $both @('query', '--name', 'LibOneRoutine', '--platform', 'Win6
 Check 'P1 query finds the FIRST library section''s symbol (control)' ($q1 -match 'LibOneUnit\.LibOneRoutine') "got: [$q1]"
 $rd = Run-Engine $both @('resolve-dbs', '--platform', 'Win64', '--json')
 $rdList = @()
-try { $rdList = @(($rd -split "`r?`n" | Where-Object { $_.TrimStart().StartsWith('[') } | Select-Object -Last 1) | ConvertFrom-Json) } catch { $rdList = @() }
+try { $rdList = @((($rd -split "`r?`n" | Where-Object { $_.TrimStart().StartsWith('[') } | Select-Object -Last 1) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $rdList = @() }
 $i1 = [Array]::FindIndex([string[]]$rdList, [Predicate[string]]{ param($x) $x -like '*library-Win64.sqlite' })
 $i2 = [Array]::FindIndex([string[]]$rdList, [Predicate[string]]{ param($x) $x -like '*libextra-Win64.sqlite' })
 Check 'R1 resolve-dbs lists libextra-Win64 after library-Win64' (($i1 -ge 0) -and ($i2 -gt $i1)) "got: [$($rdList -join ' | ')]"
@@ -216,13 +219,13 @@ function Hover-At([string]$Needle, [string]$Tag) {
   $env:DRAGLINT_CONTEXT_DEFAULTS = $noDefaults
   try {
     $p = Start-Process $Exe -ArgumentList @('lsp', '--platform', 'Win64') -WorkingDirectory $WorkDir -RedirectStandardInput $inF `
-      -RedirectStandardOutput $outF -RedirectStandardError $errF -NoNewWindow -PassThru
+      -RedirectStandardOutput $outF -RedirectStandardError $errF -NoNewWindow -PassThru; $null = $p.Handle
     if (-not $p.WaitForExit(60000)) { $p.Kill($true) }
   } finally { $env:DRAGLINT_MANIFEST = $null; $env:DRAGLINT_CONTEXT_DEFAULTS = $null }
   $raw = [IO.File]::ReadAllText($outF)
   $hover = ''
   foreach ($m in [regex]::Matches($raw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $m.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $m.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 2 -and $null -ne $o.result) { $hover = [string]$o.result.contents.value }
   }
   return $hover

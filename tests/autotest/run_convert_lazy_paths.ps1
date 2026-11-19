@@ -74,14 +74,18 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe        = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe        = '',
   [string]$WorkDir    = "$env:TEMP\drag-lint-convert-lazy-paths-$PID",
   [switch]$RealBook,
   [string]$LibDb      = '',
   [string]$DmDb       = '',
-  [string]$Book       = "$PSScriptRoot\..\..\convrules\BDE-to-FireDAC.rules",
+  [string]$Book       = '',
   [string]$OldDumpDir = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
+if (-not $Book) { $Book = "$PSScriptRoot\..\..\convrules\BDE-to-FireDAC.rules" }
 try {
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -105,7 +109,7 @@ function P([string]$n) { return (Join-Path $WorkDir $n) }
 function Json([string]$s) {
   $a = $s.IndexOf('{'); $b = $s.LastIndexOf('}')
   if ($a -lt 0 -or $b -le $a) { return $null }
-  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json) } catch { return $null }
+  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function ErrLines([string]$s) { return ,@($s -split "`n" | Where-Object { $_ -match '^\s*line \d+: ' -and $_ -notmatch 'warning:' }) }
 
@@ -377,17 +381,17 @@ end
 '@
 
 $db = P 'fx.sqlite'
-$idx = & $Exe index $fx --db $db 2>&1
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'V the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db)) "exit=$LASTEXITCODE; $($idx -join ' | ')"
 
 function Book([string]$Name, [string]$Body) { Write-Ascii (P $Name) $Body; return (P $Name) }
 function Validate([string]$Rules, [string]$From = 'LibLazy.TLazySrc', [string]$To = 'LibLazy.TLazyDst') {
-  $o = (& $Exe convert-validate --rules $Rules --from $From --to $To --db $db 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules $Rules --from $From --to $To --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 # T2h: STDOUT only -- pins the stream the unreachable warnings are printed on.
 function ValidateOut([string]$Rules, [string]$From = 'LibLazy.TLazySrc', [string]$To = 'LibLazy.TLazyDst') {
-  $o = (& $Exe convert-validate --rules $Rules --from $From --to $To --db $db 2>$null) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules $Rules --from $From --to $To --db $db 2>$null }) -join "`n"
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 # The one warning text (owner ruling 2026-09-30, R12), for a rule on line $L.
@@ -398,8 +402,8 @@ function HasLine([string]$Out, [string]$Line) { return (@($Out -split "`r?`n" | 
 # JSON is read from STDOUT only: the engine's stderr preamble can land inside the
 # document when the two streams are merged.
 function Apply([string]$Rules, [string[]]$Extra = @()) {
-  $o = if ($Extra -contains 'json') { (& $Exe convert-apply --unit (Join-Path $fx 'LazyForm.pas') --rules $Rules --db $db @Extra 2>$null) -join "`n" }
-       else { (& $Exe convert-apply --unit (Join-Path $fx 'LazyForm.pas') --rules $Rules --db $db @Extra 2>&1) -join "`n" }
+  $o = if ($Extra -contains 'json') { (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (Join-Path $fx 'LazyForm.pas') --rules $Rules --db $db @Extra 2>$null }) -join "`n" }
+       else { (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (Join-Path $fx 'LazyForm.pas') --rules $Rules --db $db @Extra 2>&1 | ForEach-Object { "$_" } }) -join "`n" }
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 $Hdr = '#convert LibLazy.TLazySrc -> LibLazy.TLazyDst, LibLazy'
@@ -431,7 +435,7 @@ Check 'B4 NOT-FOUND control, FROM side: a misspelled member is still an error (e
 $r = Validate (Book 'nf-to.rules' "#link Titel <- Shade`n")
 Check 'B5 NOT-FOUND control, TO side: a misspelled member is still an error (exit 1)' `
   (($r.Code -eq 1) -and ($r.Out -match 'link ToPath not found in --to tree: Titel') -and -not ($r.Out -match 'warning:')) $r.Out
-$pt = (& $Exe proptree --qname LibLazy.TLazySrc --refs-as-leaves --no-write-back --json --db $db 2>$null) -join "`n"
+$pt = (& { $ErrorActionPreference = 'Continue'; & $Exe proptree --qname LibLazy.TLazySrc --refs-as-leaves --no-write-back --json --db $db 2>$null }) -join "`n"
 $pj = Json $pt
 $paths = @($pj.properties | ForEach-Object { $_.path })
 Check 'B2 proptree lists no private member (Secret, FP1, FSecret gone; P1 kept)' `
@@ -464,12 +468,12 @@ Check 'D4 NOT-FOUND wins: a protected hop to a misspelled leaf is an error, not 
   (($r.Code -eq 1) -and ($r.Out -match 'link FromPath not found in --from tree: ProtPart\.Nme') -and -not ($r.Out -match 'warning:')) $r.Out
 
 # ---- K: ruling R11 -- a private redeclaration shadows; the warning names it --
-$pt = (& $Exe proptree --qname LibLazy.TShDesc --refs-as-leaves --no-write-back --json --db $db 2>$null) -join "`n"
+$pt = (& { $ErrorActionPreference = 'Continue'; & $Exe proptree --qname LibLazy.TShDesc --refs-as-leaves --no-write-back --json --db $db 2>$null }) -join "`n"
 $kj = Json $pt
 $kp = @($kj.properties | ForEach-Object { $_.path })
 Check 'K1 proptree TShDesc: neither Color nor FPubF (the private redeclarations shadow the ancestor''s)' `
   (($null -ne $kj) -and -not ($kp -contains 'Color') -and -not ($kp -contains 'FPubF')) ($kp -join ',')
-$pt = (& $Exe proptree --qname LibLazy.TShBase --refs-as-leaves --no-write-back --json --db $db 2>$null) -join "`n"
+$pt = (& { $ErrorActionPreference = 'Continue'; & $Exe proptree --qname LibLazy.TShBase --refs-as-leaves --no-write-back --json --db $db 2>$null }) -join "`n"
 $bp = @((Json $pt).properties | ForEach-Object { $_.path })
 Check 'K2 positive control: proptree TShBase lists Color and the public field FPubF' `
   (($bp -contains 'Color') -and ($bp -contains 'FPubF')) ($bp -join ',')
@@ -511,7 +515,7 @@ Check 'U5 items[] mirrors them as kind rule-path-unreachable (field warnings, ru
   ((@($uj.items | Where-Object { $_.kind -eq 'rule-path-unreachable' -and $_.field -eq 'warnings' -and @(2, 3) -contains $_.rule_line }).Count -eq 2)) ($uj.items | ConvertTo-Json -Compress -Depth 4)
 Check 'U6 the reachable rule on line 4 still ran (Shade default 3 carried to Title)' `
   (@($uj.resolved_defaults | Where-Object { $_.from_path -eq 'Shade' -and $_.to_path -eq 'Title' -and $_.value -eq '3' }).Count -eq 1) ($uj.resolved_defaults | ConvertTo-Json -Compress -Depth 4)
-$r = (& $Exe convert-apply --unit (Join-Path $fx 'LazyForm.pas') --rules $ub --db $db 2>$null) -join "`n"
+$r = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (Join-Path $fx 'LazyForm.pas') --rules $ub --db $db 2>$null }) -join "`n"
 $uc = $LASTEXITCODE
 Check 'U7 text mode: exit 0; each warning is a line on STDOUT; the skipped #default wrote nothing (no PubTo in the plan)' `
   (($uc -eq 0) -and (HasLine $r $UMsg2) -and (HasLine $r $UMsg3) -and -not ($r -match 'PubTo = 4')) $r
@@ -520,7 +524,7 @@ object src1: TLazySrc
   Shade = 7
 end
 '@
-$o = (& $Exe convert-reemit --from-block (P 'unr.dfm') --rules $ub --from LibLazy.TLazySrc --to LibLazy.TUnrDst --db $db 2>$null) -join "`n"
+$o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-reemit --from-block (P 'unr.dfm') --rules $ub --from LibLazy.TLazySrc --to LibLazy.TUnrDst --db $db 2>$null }) -join "`n"
 $ej = Json $o
 Check 'U8 convert-reemit skips the unreachable #default (no PubTo) and lists it in unreachable[]; Title = 7 still carried' `
   (($null -ne $ej) -and $ej.ok -and -not ([string]$ej.dfm -match 'PubTo') -and ([string]$ej.dfm -match '(?m)^  Title = 7\r?$') -and `
@@ -529,7 +533,7 @@ Check 'U8 convert-reemit skips the unreachable #default (no PubTo) and lists it 
 # ---- M: #mapping branch order survives an unreachable path (fix round 1) ---
 $MHdr = '#convert LibLazy.TMapSrc -> LibLazy.TMapDst, LibLazy'
 function Reemit([string]$Dfm, [string]$Rules, [string]$From = 'LibLazy.TMapSrc', [string]$To = 'LibLazy.TMapDst') {
-  $o = (& $Exe convert-reemit --from-block $Dfm --rules $Rules --from $From --to $To --db $db 2>$null) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-reemit --from-block $Dfm --rules $Rules --from $From --to $To --db $db 2>$null }) -join "`n"
   return (Json $o)
 }
 Write-Ascii (P 'k1.dfm') "object s1: TMapSrc`n  Kind = 1`nend`n"
@@ -554,12 +558,12 @@ Check 'M3 unreachable #when SOURCE: the WHOLE mapping is skipped -- no branch, N
 # unreachable in block 2 (TMapDst2.A public).
 $sb = Book 'smap.rules' ("#convert LibLazy.TMapSrc -> LibLazy.TMapDst, LibLazy`n#apply SMap`n" +
   "#convert LibLazy.TMapSrc2 -> LibLazy.TMapDst2, LibLazy`n#apply SMap`n#mapping SMap`n#mapping SMap #when Kind = 1 -> A = 5`n")
-$o = (& $Exe convert-apply --unit (Join-Path $fx 'MapForm.pas') --rules $sb --db $db --format json 2>$null) -join "`n"
+$o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (Join-Path $fx 'MapForm.pas') --rules $sb --db $db --format json 2>$null }) -join "`n"
 $sj = Json $o
 Check 'M4 shared mapping, JSON: exit 0; exactly ONE unreachable record, naming block 2''s class (LibLazy.TMapDst2) only' `
   (($LASTEXITCODE -eq 0) -and ($null -ne $sj) -and $sj.ok -and (@($sj.unreachable).Count -eq 1) -and ($sj.unreachable[0].line -eq 6) -and `
    ($sj.unreachable[0].class -eq 'LibLazy.TMapDst2') -and ($sj.unreachable[0].message -ceq (UnrMsg 6 'A' 'A' 'public' 'LibLazy.TMapDst2'))) $o
-$o = (& $Exe convert-apply --unit (Join-Path $fx 'MapForm.pas') --rules $sb --db $db 2>$null) -join "`n"
+$o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (Join-Path $fx 'MapForm.pas') --rules $sb --db $db 2>$null }) -join "`n"
 $b1 = [regex]::Match($o, '(?s)object m1: TMapDst\r?\n(.*?)\bend\b')
 $b2 = [regex]::Match($o, '(?s)object m2: TMapDst2\r?\n(.*?)\bend\b')
 Check 'M5 shared mapping, dry-run plan: block 1 still applies it (m1 gets A = 5); block 2 does not (m2 has no A)' `
@@ -584,7 +588,7 @@ object src1: TLazySrc
 end
 '@
 $fr = Book 'part.rules' "$Hdr`n#link Hue <- Shade`n#convert LibLazy.TPartF -> LibLazy.TPartT, LibLazy`n#link Hue <- Shade`n"
-$o = (& $Exe convert-reemit --from-block (P 'part.dfm') --rules $fr --from LibLazy.TLazySrc --to LibLazy.TLazyDst --db $db 2>$null) -join "`n"
+$o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-reemit --from-block (P 'part.dfm') --rules $fr --from LibLazy.TLazySrc --to LibLazy.TLazyDst --db $db 2>$null }) -join "`n"
 $rj = Json $o
 $dfm = if ($rj) { [string]$rj.dfm } else { '' }
 $pm = [regex]::Match($dfm, '(?s)  object part1: TPartT\r?\n(.*?)  end\r?\n')
@@ -601,7 +605,7 @@ object src1: TLazySrc
 end
 '@
 $hr = Book 'h.rules' "$Hdr`n#link Hue <- Shade`n#link Deep <- P1.P2.Leaf2`n#link Title <- P1.P2.P3.Leaf3`n#convert LibLazy.TPartF -> LibLazy.TPartT, LibLazy`n#link Hue <- Shade`n"
-$o = (& $Exe convert-reemit --from-block (P 'h.dfm') --rules $hr --from LibLazy.TLazySrc --to LibLazy.TLazyDst --db $db 2>$null) -join "`n"
+$o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-reemit --from-block (P 'h.dfm') --rules $hr --from LibLazy.TLazySrc --to LibLazy.TLazyDst --db $db 2>$null }) -join "`n"
 $hj = Json $o
 # Captured from the 14396852 engine (depth-6 trees) on this block and book --
 # with ONE deliberate change, 1.25.1: that engine wrote 'Title = 11' AFTER the
@@ -653,7 +657,7 @@ object dmQry: TdmQry
 end
 '@
     $qdb = Join-Path $real 'qry.sqlite'
-    & $Exe index $real --db $qdb 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $Exe index $real --db $qdb 2>&1 | ForEach-Object { "$_" } } | Out-Null
     $dbArgs = @('--db', $qdb)
     if ($DmDb -and (Test-Path $DmDb)) { $dbArgs += @('--db', $DmDb) }
     $dbArgs += @('--db', $LibDb)
@@ -682,7 +686,7 @@ end
     $qb = Join-Path $real 'tquery-block.rules'
     Write-Ascii $qb ($blk -join "`n")
     $sw = [Diagnostics.Stopwatch]::StartNew()
-    $o = (& $Exe convert-validate --rules $qb --from Bde.DBTables.TQuery --to FireDAC.Comp.Client.TFDQuery @dbArgs 2>&1) -join "`n"
+    $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules $qb --from Bde.DBTables.TQuery --to FireDAC.Comp.Client.TFDQuery @dbArgs 2>&1 | ForEach-Object { "$_" } }) -join "`n"
     $code = $LASTEXITCODE; $sw.Stop()
     $el = ErrLines $o
     Write-Host ("  convert-validate (TQuery block, {0} lines): {1:N1} s, {2} error(s)" -f $blk.Count, $sw.Elapsed.TotalSeconds, $el.Count)
@@ -694,14 +698,14 @@ end
     $qb2 = Join-Path $real 'tquery-block-r8.rules'
     Write-Ascii $qb2 ((R8Stripped $blk ($start + 1)) -join "`n")
     $sw = [Diagnostics.Stopwatch]::StartNew()
-    $o = (& $Exe convert-validate --rules $qb2 --from Bde.DBTables.TQuery --to FireDAC.Comp.Client.TFDQuery @dbArgs 2>&1) -join "`n"
+    $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules $qb2 --from Bde.DBTables.TQuery --to FireDAC.Comp.Client.TFDQuery @dbArgs 2>&1 | ForEach-Object { "$_" } }) -join "`n"
     $code = $LASTEXITCODE; $sw.Stop()
     Write-Host ("  convert-validate (TQuery block, R8-rejected lines commented out): {0:N1} s" -f $sw.Elapsed.TotalSeconds)
     Check 'R1b TQuery block without the R8-rejected links: exit 0 in < 30 s' (($code -eq 0) -and ($sw.Elapsed.TotalSeconds -lt 30)) $o
 
     # R2: the whole book, convert-apply dry run.
     $sw = [Diagnostics.Stopwatch]::StartNew()
-    $o = (& $Exe convert-apply --unit (Join-Path $real 'QryUnit.pas') --rules (Resolve-Path $Book).Path @dbArgs --format json 2>$null) -join "`n"
+    $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (Join-Path $real 'QryUnit.pas') --rules (Resolve-Path $Book).Path @dbArgs --format json 2>$null }) -join "`n"
     $code = $LASTEXITCODE; $sw.Stop()
     $aj = Json $o
     $unrLines = @($aj.unreachable | ForEach-Object { [int]$_.line } | Sort-Object -Unique)
@@ -716,7 +720,7 @@ end
     $bk2 = Join-Path $real 'BDE-to-FireDAC-r8.rules'
     Write-Ascii $bk2 ((R8Stripped $lines 1) -join "`n")
     $sw = [Diagnostics.Stopwatch]::StartNew()
-    $o = (& $Exe convert-apply --unit (Join-Path $real 'QryUnit.pas') --rules $bk2 @dbArgs --format json 2>$null) -join "`n"
+    $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (Join-Path $real 'QryUnit.pas') --rules $bk2 @dbArgs --format json 2>$null }) -join "`n"
     $code = $LASTEXITCODE; $sw.Stop()
     $aj = Json $o
     Write-Host ("  convert-apply dry run (whole book, R8-rejected links commented out): {0:N1} s, classes_built={1}" -f `
@@ -727,7 +731,7 @@ end
     # R3: per-path equivalence with the old engine's trees.
     if ($OldDumpDir -and (Test-Path $OldDumpDir)) {
       # New engine's answers: every path the whole-book validation did NOT name.
-      $txt = (& $Exe convert-apply --unit (Join-Path $real 'QryUnit.pas') --rules (Resolve-Path $Book).Path @dbArgs 2>&1) -join "`n"
+      $txt = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (Join-Path $real 'QryUnit.pas') --rules (Resolve-Path $Book).Path @dbArgs 2>&1 | ForEach-Object { "$_" } }) -join "`n"
       $newMiss = @{}
       foreach ($m in [regex]::Matches($txt, '(?m)^\s*line (\d+): (?:link|default|mapping \S+) (?:#when path|target path|ToPath|FromPath) not found in --(from|to) tree: (.+?)(?: \(#convert line \d+:.*\))?\s*$')) {
         $newMiss["$($m.Groups[1].Value)|$($m.Groups[2].Value)|$($m.Groups[3].Value)"] = $true
@@ -747,7 +751,7 @@ end
         $f = @((Join-Path $OldDumpDir "$q.d6.json"), (Join-Path $OldDumpDir "$q.d4.json"), (Join-Path $OldDumpDir "$q.d2.json")) | Where-Object { (Test-Path $_) -and ((Get-Item $_).Length -gt 0) } | Select-Object -First 1
         $map = $null
         if ($f) {
-          $js = Get-Content -Raw $f | ConvertFrom-Json
+          $js = Get-Content -Raw $f | ConvertFrom-Json | ForEach-Object { $_ }
           $map = @{}
           foreach ($n in $js.properties) { if (-not $map.ContainsKey($n.path.ToLower())) { $map[$n.path.ToLower()] = $n } }
         }
@@ -793,7 +797,7 @@ end
           $checks.Add(@($ln, 'to', $Matches[1], @($b)))
         } elseif ($L -match '^#mapping\s+(\S+)\s+#(when|else)\b(.*)$') {
           $name = $Matches[1]; $rest = $Matches[3]
-          $bs = if ($applies.ContainsKey($name)) { $applies[$name] } elseif ($b -gt 0) { @($b) } else { @() }
+          $bs = @(if ($applies.ContainsKey($name)) { $applies[$name] } elseif ($b -gt 0) { @($b) } else { @() })
           if ($Matches[2] -eq 'when' -and $rest -match '^\s*(\S+)\s*=') { $checks.Add(@($ln, 'from', $Matches[1], $bs)) }
           if ($rest -match '->\s*(.+)$') { foreach ($set in $Matches[1].Split(',')) { if ($set.Trim() -match '^(\S+)') { $checks.Add(@($ln, 'to', $Matches[1], $bs)) } } }
         }

@@ -30,9 +30,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-inlay-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -102,13 +105,13 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'hints.sqlite'
-& $Exe index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 # S5: a defaults file whose WIN32 library declares a second `Add` (1.39 lsp-libfb: the active Win64 platform
 # would now fall back to a Win64 defaults library, so the never-another-platform leak is what S5 pins).
 $libSrc = Join-Path $WorkDir 'lib'; New-Item -ItemType Directory $libSrc | Out-Null
 WriteAnsi (Join-Path $libSrc 'uLibAdd.pas') "unit uLibAdd;`r`ninterface`r`nprocedure Add(pOther: Integer);`r`nimplementation`r`nprocedure Add(pOther: Integer);`r`nbegin`r`nend;`r`nend.`r`n"
 $libDb = Join-Path $WorkDir 'defaults-lib.sqlite'
-& $Exe index $libSrc --db $libDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $libSrc --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $defaultsFile = Join-Path $WorkDir 'defaults.json'
 [System.IO.File]::WriteAllText($defaultsFile, (@{ schema = 1; platform = 'Win64'; libraries = @{ Win32 = @{ libraryDb = $libDb } } } | ConvertTo-Json -Depth 5), (New-Object System.Text.ASCIIEncoding))
 $env:DRAGLINT_CONTEXT_DEFAULTS = $defaultsFile
@@ -134,7 +137,7 @@ function Session([string]$uri, [int]$fromLine, [int]$toLine) {
     -RedirectStandardError (Join-Path $WorkDir 'err.txt') -NoNewWindow -Wait | Out-Null
   $r = @{ init = $null; hints = $null; err = $null }
   foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 1) { $r.init = $o.result }
     if ($o.id -eq 2) {
       if ($null -ne $o.error) { $r.err = $o.error }

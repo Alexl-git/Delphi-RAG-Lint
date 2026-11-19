@@ -21,11 +21,14 @@ Scratch only: the fixture is copied, every --db is under -WorkDir except the rea
 library DB; nothing is written to a real project. Plain 7-bit ASCII, CRLF.
 #>
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$LibDb   = 'C:\Projects\.drag-lint\library-Win64.sqlite',
   [string]$PreRef  = '5bcc1ac5',
   [string]$WorkDir = "$env:TEMP\drag-lint-book-split-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -53,16 +56,16 @@ try {
   function Copy-Fixture([string]$Name) {
     $d = Join-Path $WorkDir $Name
     Copy-Item (Join-Path $root 'tests\autotest\fixtures\bdesplit') $d -Recurse
-    & $Exe index $d --db "$d.sqlite" 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $Exe index $d --db "$d.sqlite" 2>&1 | ForEach-Object { "$_" } } | Out-Null
     return $d
   }
   function Apply([string]$Dir, [string]$Rules, [switch]$Write) {
     $a = @('convert-apply', '--unit', (Join-Path $Dir 'BdeSplitForm.pas'), '--rules', $Rules, '--db', "$Dir.sqlite", '--db', $LibDb, '--no-reindex', '--json')
     if ($Write) { $a += '--apply' }
-    $o = (& $Exe @a 2>$null) -join "`n"
+    $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null }) -join "`n"
     $i = $o.IndexOf('{'); $j = $o.LastIndexOf('}')
     if ($i -lt 0 -or $j -le $i) { return $null }
-    try { return ($o.Substring($i, $j - $i + 1) | ConvertFrom-Json) } catch { return $null }
+    try { return ($o.Substring($i, $j - $i + 1) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
   }
   function StripLine([string]$t) { return ($t -replace '^line \d+: ', '') }
   # Engine 1.36 echoes BOOK line numbers inside item text ("at line(s) 421, 424", "under #link at line 420")
@@ -155,7 +158,7 @@ try {
   function Run-Sequence([string]$Name, [string[]]$Books) {
     $d = Copy-Fixture $Name
     foreach ($b in $Books) {
-      & $Exe index $d --db "$d.sqlite" 2>&1 | Out-Null
+      & { $ErrorActionPreference = 'Continue'; & $Exe index $d --db "$d.sqlite" 2>&1 | ForEach-Object { "$_" } } | Out-Null
       $r = Apply $d $b -Write
       if (-not ($r -and $r.ok)) { return $null }
     }

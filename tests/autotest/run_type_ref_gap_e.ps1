@@ -45,9 +45,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-type-ref-gap-e-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 # E-RENAME-OTHER-PATHS: a naming fix or LSP rename now runs the rename proof, and these fixtures have no library: the proof's own test seam.
@@ -148,11 +151,11 @@ $localVarLine    = 23
 $isOperandLine   = 26
 
 Write-Host 'PHASE 1: index the fixture, assert the 3 missing shapes are NOT indexed as refs' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db --deep 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db --deep 2>&1 | ForEach-Object { "$_" } }
 $indexExit = $LASTEXITCODE
 Check 'index exits 0' ($indexExit -eq 0) "exit=$indexExit; $($indexOut -join ' | ')"
 
-$refs1 = & $Exe query find-callers --name Widget --db $db --json | ConvertFrom-Json
+$refs1 = & $Exe query find-callers --name Widget --db $db --json | ConvertFrom-Json | ForEach-Object { $_ }
 $lines1 = @($refs1 | ForEach-Object { $_.start_line })
 Write-Host ("  find-callers --name Widget returned lines: {0}" -f (($lines1 | Sort-Object) -join ', '))
 
@@ -186,7 +189,7 @@ Write-Host 'PHASE 2: type-name-prefix --fix --apply (Widget -> TWidget), reindex
 # test exists to measure. The exact number is deliberately NOT pinned: the
 # per-site assertions below are what guard coverage, and pinning it here would
 # make every ref-index improvement look like a failure.
-$fixOut = & $Exe lint-all --db $db --config $cfg --rule type-name-prefix --fix --apply --quiet 2>&1
+$fixOut = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --config $cfg --rule type-name-prefix --fix --apply --quiet 2>&1 | ForEach-Object { "$_" } }
 $fixExit = $LASTEXITCODE
 Write-Host ("  autofix output: {0}" -f ($fixOut -join ' | '))
 Check 'type-name-prefix --fix --apply exits 0 and reports an applied fix' `
@@ -230,7 +233,7 @@ Check "local-var line $localVarLine has NO stale 'Widget' after autofix (round-t
 Check "is-operand line $isOperandLine has NO stale 'Widget' after autofix (round-trip clean)" `
   (-not $staleIs) "line: $($afterLines[$isOperandLine - 1])"
 
-$reindexOut = & $Exe index $work --db $db --deep 2>&1
+$reindexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db --deep 2>&1 | ForEach-Object { "$_" } }
 $reindexExit = $LASTEXITCODE
 Check 'reindex after autofix exits 0' ($reindexExit -eq 0) "exit=$reindexExit; $($reindexOut -join ' | ')"
 
@@ -248,15 +251,15 @@ print(json.dumps([r[0] for r in cur.fetchall()]))
 c.close()
 '@ | Set-Content $py -Encoding ascii
 
-$staleRefRows = @((python $py $db 'refs' 'name_text' 'Widget') -join "`n" | ConvertFrom-Json)
+$staleRefRows = @(((python $py $db 'refs' 'name_text' 'Widget') -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 Check 'direct refs-table query: zero rows with name_text = "Widget" (case-sensitive)' `
   ($staleRefRows.Count -eq 0) "count=$($staleRefRows.Count)"
 
-$oldSym = @((python $py $db 'symbols' 'name' 'Widget') -join "`n" | ConvertFrom-Json)
+$oldSym = @(((python $py $db 'symbols' 'name' 'Widget') -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 Check 'zero symbols still named (case-sensitive) "Widget"' `
   ($oldSym.Count -eq 0) "count=$($oldSym.Count)"
 
-$newSym = @((python $py $db 'symbols' 'name' 'TWidget') -join "`n" | ConvertFrom-Json)
+$newSym = @(((python $py $db 'symbols' 'name' 'TWidget') -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 Check 'class now resolves under the new name "TWidget" (case-sensitive)' `
   ($newSym.Count -ge 1) "count=$($newSym.Count)"
 

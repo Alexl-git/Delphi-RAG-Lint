@@ -12,9 +12,12 @@
 # Usage: pwsh -File tests/autotest/run_textedit_sameline.ps1
 [CmdletBinding()]
 param(
-    [string] $DprojDir = "$PSScriptRoot\fixtures\textedit",
+    [string] $DprojDir = '',
     [string] $WorkDir  = "$env:TEMP\drag-lint-textedit-sameline-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $DprojDir) { $DprojDir = "$PSScriptRoot\fixtures\textedit" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -56,7 +59,7 @@ $batBody = ($batLines -join "`r`n")
 
 $p = Start-Process cmd.exe -ArgumentList "/c", "`"$batPath`"" `
        -RedirectStandardOutput $logPath -RedirectStandardError "$logPath.err" `
-       -NoNewWindow -Wait -PassThru
+       -NoNewWindow -Wait -PassThru; $null = $p.Handle
 $log = Get-Content $logPath -Raw -ErrorAction SilentlyContinue
 $buildOk = ($log -match 'BUILD_EXITCODE=0') -and ($log -notmatch 'Error:')
 Check 'SameLineHarness.dpr builds (Win64 Debug)' $buildOk (($log -split "`r?`n" | Select-Object -Last 8) -join ' | ')
@@ -69,7 +72,7 @@ if (-not $buildOk -or -not (Test-Path $exe)) {
     exit 1
 }
 
-$got = (& $exe 2>&1 | Out-String).Trim()
+$got = (& { $ErrorActionPreference = 'Continue'; & $exe 2>&1 | ForEach-Object { "$_" } } | Out-String).Trim()
 $expect = 'FIRST := X;'
 Check 'Same-line edits apply back-to-front (right edit first)' ($got -eq $expect) "got='$got' expect='$expect'"
 

@@ -37,9 +37,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-serve-multidb-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
@@ -84,7 +87,7 @@ $emptyIn = Join-Path $WorkDir 'empty.in'
 
 Push-Location C:\TEMP
 try {
-  & $Exe index --all --config $manifest --jobs 1 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $manifest --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
   if (-not (Test-Path $dbA) -or -not (Test-Path $dbB)) {
     $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }
     Write-Host "FATAL: index did not produce both DBs" -ForegroundColor Red; exit 2
@@ -98,14 +101,14 @@ try {
   $p = Start-Process -FilePath $Exe -ArgumentList @('serve', '--db', $dbA, '--db', $dbB) `
          -RedirectStandardInput $emptyIn -RedirectStandardError $errTwo `
          -RedirectStandardOutput (Join-Path $WorkDir 'two.out') `
-         -NoNewWindow -PassThru
+         -NoNewWindow -PassThru; $null = $p.Handle
   if (-not $p.WaitForExit(30000)) { try { $p.Kill($true) } catch { } }
   $two = if (Test-Path $errTwo) { Get-Content $errTwo -Raw } else { '' }
 
   $p = Start-Process -FilePath $Exe -ArgumentList @('serve', '--db', $dbA) `
          -RedirectStandardInput $emptyIn -RedirectStandardError $errOne `
          -RedirectStandardOutput (Join-Path $WorkDir 'one.out') `
-         -NoNewWindow -PassThru
+         -NoNewWindow -PassThru; $null = $p.Handle
   if (-not $p.WaitForExit(30000)) { try { $p.Kill($true) } catch { } }
   $one = if (Test-Path $errOne) { Get-Content $errOne -Raw } else { '' }
 }

@@ -91,9 +91,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-convert-scaffold-assignability-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -157,7 +160,7 @@ Write-Ascii (Join-Path $work 'ScafFix.pas') $FixBody
 
 $db = Join-Path $WorkDir 'scaffix.sqlite'
 Write-Host 'Indexing ScafFix fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 $indexExit = $LASTEXITCODE
 Check 'index exits 0' ($indexExit -eq 0) "exit=$indexExit; $($indexOut -join ' | ')"
 
@@ -240,14 +243,14 @@ Check 'pas: FThing (writable field) NOW INCLUDED with a concrete #link' ($pasRaw
 Write-Host ''
 Write-Host 'convert-scaffold --surface pas --out (write file), then convert-validate round-trip' -ForegroundColor Cyan
 $emitted = Join-Path $WorkDir 'emitted-pas-rules.txt'
-$outOut = & $Exe convert-scaffold --from 'ScafFix.TFrom' --to 'ScafFix.TTo' --surface pas --out $emitted --db $db 2>&1
+$outOut = & { $ErrorActionPreference = 'Continue'; & $Exe convert-scaffold --from 'ScafFix.TFrom' --to 'ScafFix.TTo' --surface pas --out $emitted --db $db 2>&1 | ForEach-Object { "$_" } }
 $outExit = $LASTEXITCODE
 Check 'scaffold --out exits 0' ($outExit -eq 0) "exit=$outExit; $($outOut -join ' | ')"
 Check 'emitted file exists' (Test-Path $emitted) "path=$emitted"
 
 Push-Location $WorkDir
 try {
-  $valOut = (& $Exe convert-validate --rules $emitted --from 'ScafFix.TFrom' --to 'ScafFix.TTo' --db $db 2>$null) -join "`n"
+  $valOut = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules $emitted --from 'ScafFix.TFrom' --to 'ScafFix.TTo' --db $db 2>$null }) -join "`n"
   $valExit = $LASTEXITCODE
 } finally { Pop-Location }
 $valLines = @($valOut -split "`n" | Where-Object { $_ -match '^\s*line \d+: ' })
@@ -263,7 +266,7 @@ Check 'round-trip convert-validate: exit 0, OK, and ONLY 3 unreachable warnings 
 # ---------------------------------------------------------------------------
 Write-Host ''
 Write-Host 'convert-scaffold --surface bogus' -ForegroundColor Cyan
-$badSurfOut = ((& $Exe convert-scaffold --from 'ScafFix.TFrom' --to 'ScafFix.TTo' --surface bogus --db $db 2>&1) -join "`n")
+$badSurfOut = ((& { $ErrorActionPreference = 'Continue'; & $Exe convert-scaffold --from 'ScafFix.TFrom' --to 'ScafFix.TTo' --surface bogus --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n")
 $badSurfExit = $LASTEXITCODE
 Check 'bad --surface value exits 2' ($badSurfExit -eq 2) "exit=$badSurfExit; out=$badSurfOut"
 

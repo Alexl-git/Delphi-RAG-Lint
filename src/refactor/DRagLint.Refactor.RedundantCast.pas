@@ -14,6 +14,12 @@ uses
 
 type
   /// <summary>The flags of one `lint --fix --fix-rule redundant-cast` run.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.RedundantCast.pas) ?, DRagLint.CLI.DoRedundantCastFix (DRagLint.CLI.pas), DRagLint.Refactor.RedundantCast.PlanRedundantCasts (DRagLint.Refactor.RedundantCast.pas) ?, DRagLint.Refactor.RedundantCast.RunRedundantCastFix (DRagLint.Refactor.RedundantCast.pas) ?, DRagLint.Refactor.RedundantCast.TCastPlanner.Create (DRagLint.Refactor.RedundantCast.pas) ?</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Refactor.RedundantCast</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRedundantCastOptions = record
     /// <summary>--project: required with --apply; bounds the edit to the project's own roots.</summary>
     Project: string;
@@ -38,6 +44,12 @@ type
   end;
 
   /// <summary>One cast the planner looked at.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.RedundantCast.pas) ?, DRagLint.Refactor.RedundantCast.TCastPlanner.CountConversion (DRagLint.Refactor.RedundantCast.pas) ?, DRagLint.Refactor.RedundantCast.TCastPlanner.Create (DRagLint.Refactor.RedundantCast.pas) ?, DRagLint.Refactor.RedundantCast.TCastPlanner.Decide (DRagLint.Refactor.RedundantCast.pas), DRagLint.Refactor.RedundantCast.TCastPlanner.Refuse (DRagLint.Refactor.RedundantCast.pas) ? (+2 more)</para>
+  /// <para>Used in units: DRagLint.Refactor.RedundantCast</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCastSite = record
     /// <summary>The file.</summary>
     FilePath: string;
@@ -58,6 +70,12 @@ type
   end;
 
   /// <summary>How many real conversions fell in one class, with one of them to read.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.RedundantCast.pas) ?, DRagLint.Refactor.RedundantCast.TCastPlanner.CountConversion (DRagLint.Refactor.RedundantCast.pas), DRagLint.Refactor.RedundantCast.TCastPlanner.Create (DRagLint.Refactor.RedundantCast.pas) ?, DRagLint.Refactor.RedundantCast.TCastPlanner.Run (DRagLint.Refactor.RedundantCast.pas) ?</para>
+  /// <para>Used in units: DRagLint.Refactor.RedundantCast</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TConversionClass = record
     /// <summary>enum-target, other-target (a record or the like), downcast, upcast, unrelated, chain-unknown (an ancestor
     /// no index holds), or same-name (two symbols of one name: the one class a later proof could still remove).</summary>
@@ -69,6 +87,12 @@ type
   end;
 
   /// <summary>The verdict over one index.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.RedundantCast.pas), DRagLint.Refactor.RedundantCast.BuildGateFiles (DRagLint.Refactor.RedundantCast.pas), DRagLint.Refactor.RedundantCast.PlanRedundantCasts (DRagLint.Refactor.RedundantCast.pas), DRagLint.Refactor.RedundantCast.RefusalCounts (DRagLint.Refactor.RedundantCast.pas), DRagLint.Refactor.RedundantCast.TCastPlanner.Run (DRagLint.Refactor.RedundantCast.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.Refactor.RedundantCast</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCastPlan = record
     /// <summary>The casts proved identity, in file and line order.</summary>
     Fixes: TArray<TCastSite>;
@@ -81,10 +105,32 @@ type
   end;
 
   /// <summary>A source file read once: its text, the same text with comments and strings blanked, and its lines.</summary>
-  /// <remarks>Masked has the length of Text, so an offset means the same in both. Comments become spaces, string
-  /// literals #1; line breaks stay. Line numbers are 1-based, as in the index.</remarks>
+  /// <remarks>
+  /// Masked has the length of Text, so an offset means the same in both. Comments become spaces, string
+  /// literals #1; line breaks stay. Line numbers are 1-based, as in the index.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Refactor.ExtractInterface.TIfacePlanner.MapsInterface (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.ExtractInterface.TIfacePlanner.PlanRetype (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.ExtractInterface.TIfacePlanner.QuietAddRef (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.ExtractInterface.TIfacePlanner.RefuseClass (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.LazyInit.PlanSection (DRagLint.Refactor.LazyInit.pas) (+12 more)</para>
+  /// <para>Used in units: DRagLint.Refactor.ExtractInterface, DRagLint.Refactor.LazyInit, DRagLint.Refactor.NarrowParam, DRagLint.Refactor.RedundantCast</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMaskedSource = class
   strict private
+    /// <summary><!-- drag-lint:auto sum -->Blanks comments with spaces and string
+    /// literals with CMaskString, keeping every offset, and notes per line where the
+    /// directives and the conditional regions are.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Refactor.RedundantCast.TMaskedSource.Create (DRagLint.Refactor.RedundantCast.pas), DRagLint.Refactor.RedundantCast.TMaskedSource.CreateFromText (DRagLint.Refactor.RedundantCast.pas)</para>
+    /// <para>Calls: CharInSet, Copy, Directive, DRagLint.Refactor.RedundantCast.TMaskedSource.Scan.Blank, DRagLint.Refactor.RedundantCast.TMaskedSource.Scan.NewLine, DRagLint.Refactor.RedundantCast.TMaskedSource.Scan.SkipComment, MatchStr, PosEx, UniqueString, UpperCase</para>
+    /// <para>Complexity: 17 (cyclomatic, outer body), 79 lines (full implementation)</para>
+    /// <para>Reads: Text, Masked   Writes: Masked</para>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.Scan.Blank"/>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.Scan.NewLine"/>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.Scan.SkipComment"/>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.Create"/>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.CreateFromText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Scan;
   public
     /// <summary>The file; '' for CreateFromText.</summary>
@@ -103,26 +149,97 @@ type
     DirAt: TArray<Boolean>;  // dl:ok public-field@b487 -- a read-only view of one file, read in tight scan loops; the class owns no invariant to guard
     /// <summary>Reads and scans a file.</summary>
     /// <param name="pPath">The file.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Refactor.ExtractInterface.TIfacePlanner.MapsInterface (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.ExtractInterface.TIfacePlanner.PlanRetype (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.ExtractInterface.TIfacePlanner.QuietAddRef (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.ExtractInterface.TIfacePlanner.RefuseClass (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.LazyInit.PlanSection (DRagLint.Refactor.LazyInit.pas) (+2 more)</para>
+    /// <para>Calls: DRagLint.Refactor.RedundantCast.TMaskedSource.Scan, DRagLint.Report.CyclePlan.DecodeSource</para>
+    /// <para>constructor</para>
+    /// <para>Reads: Enc   Writes: Path, Text</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.Scan"/>
+    /// <seealso cref="DRagLint.Report.CyclePlan.DecodeSource"/>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.CreateFromText"/>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.LineEnd"/>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.LineOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(const pPath: string);
     /// <summary>Scans text already in memory.</summary>
     /// <param name="pText">The text.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Refactor.NarrowParam.RetypeHeaders.RetypeIn (DRagLint.Refactor.NarrowParam.pas)</para>
+    /// <para>Calls: DRagLint.Refactor.RedundantCast.TMaskedSource.Scan</para>
+    /// <para>constructor</para>
+    /// <para>Writes: Text</para>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.Scan"/>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.Create"/>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.LineEnd"/>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.LineOf"/>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.OffsetOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor CreateFromText(const pText: string);
     /// <summary>The offset of a line and column.</summary>
     /// <param name="pLine">1-based line.</param>
     /// <param name="pCol">1-based column.</param>
     /// <returns>The 1-based offset; 0 when there is no such line.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Refactor.ExtractInterface.TIfacePlanner.Build (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.ExtractInterface.TIfacePlanner.HeritageEdit (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.ExtractInterface.TIfacePlanner.MapsInterface (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.ExtractInterface.TIfacePlanner.MethodText (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.ExtractInterface.TIfacePlanner.NamesClassScope (DRagLint.Refactor.ExtractInterface.pas) (+10 more)</para>
+    /// <para>Returns: Starts[pLine] + pCol - 1</para>
+    /// <para>Reads: Starts</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.Create"/>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.CreateFromText"/>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.LineEnd"/>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.LineOf"/>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.Scan"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function OffsetOf(pLine, pCol: Integer): Integer;
     /// <summary>The offset one past a line's last character, its line break excluded.</summary>
     /// <param name="pLine">1-based line; must exist.</param>
     /// <returns>The offset.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Refactor.ExtractInterface.TIfacePlanner.Build (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.ExtractInterface.TIfacePlanner.PlanRetype (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.ExtractInterface.TIfacePlanner.QuietAddRef (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.LazyInit.FindEntryPoints (DRagLint.Refactor.LazyInit.pas), DRagLint.Refactor.LazyInit.SplitStatements (DRagLint.Refactor.LazyInit.pas) (+4 more)</para>
+    /// <para>Calls: CharInSet</para>
+    /// <para>Reads: Starts, Text</para>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.Create"/>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.CreateFromText"/>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.LineOf"/>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.OffsetOf"/>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.Scan"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function LineEnd(pLine: Integer): Integer;
     /// <summary>The line holding an offset.</summary>
     /// <param name="pOffset">1-based offset.</param>
     /// <returns>The 1-based line.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Refactor.ExtractInterface.TIfacePlanner.PlanRetype (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.LazyInit.PlanSection (DRagLint.Refactor.LazyInit.pas), DRagLint.Refactor.LazyInit.SplitStatements (DRagLint.Refactor.LazyInit.pas), DRagLint.Refactor.NarrowParam.TNarrowPlanner.ScanBody (DRagLint.Refactor.NarrowParam.pas)</para>
+    /// <para>Returns: Lo</para>
+    /// <para>Reads: Starts</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.Create"/>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.CreateFromText"/>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.LineEnd"/>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.OffsetOf"/>
+    /// <seealso cref="DRagLint.Refactor.RedundantCast.TMaskedSource.Scan"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function LineOf(pOffset: Integer): Integer;
   end;
 
   /// <summary>Raised when the index predates ref_types: there is no fact to prove anything with.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Refactor.RedundantCast.RunRedundantCastFix (DRagLint.Refactor.RedundantCast.pas) ?, DRagLint.Refactor.RedundantCast.TCastPlanner.Create (DRagLint.Refactor.RedundantCast.pas), DRagLint.Refactor.RedundantCast.TCastPlanner.Run (DRagLint.Refactor.RedundantCast.pas)</para>
+  /// <para>Used in units: DRagLint.Refactor.RedundantCast</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   ENoRefTypes = class(Exception);
 
 /// <summary>Decides every hard cast of an index: fix, named refusal, or a real conversion.</summary>
@@ -130,7 +247,9 @@ type
 /// <param name="pLibraries">The platform library indexes, or none; they prove ancestors and name clashes.</param>
 /// <param name="pOpts">Project, Target and Line bound the run.</param>
 /// <returns>The plan. Reads the source files; writes nothing.</returns>
-/// <remarks>A cast is fixed only when ALL of these hold; the first that fails names the refusal: the file is what the
+/// <exception cref="ENoRefTypes">The index has no ref_types table.</exception>
+/// <remarks>
+/// A cast is fixed only when ALL of these hold; the first that fails names the refusal: the file is what the
 /// index read (stale-file), a source unit (include-file) and inside the project (outside-roots); the callee is a bare
 /// name with its parenthesis on the same line, no comment and no directive (not-a-plain-cast, multi-line, comment-in-cast,
 /// ifdef-line); the operand is a plain identifier chain, calls allowed, no index, dereference or operator (operand-shape),
@@ -140,8 +259,15 @@ type
 /// and the libraries (ambiguous-type-name), a non-generic (generic-type), non-procedural one, since a procedural value
 /// without a cast may be CALLED (procedural-type); the operand does not name an overloaded routine (overloaded-operand);
 /// neither the type nor the operand is declared under a conditional (conditional-decl); no `with` precedes it in its
-/// routine (with-body); every ancestor of the enclosing class is indexed (unresolved-ancestor).</remarks>
-/// <exception cref="ENoRefTypes">The index has no ref_types table.</exception>
+/// routine (with-body); every ancestor of the enclosing class is indexed (unresolved-ancestor).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Refactor.RedundantCast.RunRedundantCastFix (DRagLint.Refactor.RedundantCast.pas)</para>
+/// <para>Calls: DRagLint.Refactor.RedundantCast.TCastPlanner.Create, DRagLint.Refactor.RedundantCast.TCastPlanner.Run</para>
+/// <para>Returns: Planner.Run</para>
+/// <seealso cref="DRagLint.Refactor.RedundantCast.TCastPlanner.Create"/>
+/// <seealso cref="DRagLint.Refactor.RedundantCast.TCastPlanner.Run"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PlanRedundantCasts(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;  // dl:ok unused-public-symbol@8fa5 -- public API for the next gated rewrites (items 3 and 4) and the owed report rule
   const pOpts: TRedundantCastOptions): TCastPlan;
 
@@ -151,6 +277,22 @@ function PlanRedundantCasts(const pStore: ISymbolStore; const pLibraries: TArray
 /// <param name="pOpts">The flags.</param>
 /// <returns>0: dry run, or applied and built (or nothing to do). 1: the gate refused and the project is unchanged.
 /// 2: bad flags, an index without ref_types, or a rollback that failed.</returns>
+/// <exception cref="EInOutError"><!-- drag-lint:auto exc -->via DRagLint.Refactor.CompileGate.ApplyGated: nothing staged for %s</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoRedundantCastFix (DRagLint.CLI.pas)</para>
+/// <para>Calls: Cardinal, Default, DRagLint.Refactor.CompileGate.ApplyGated, DRagLint.Refactor.CompileGate.FreshScratchName, DRagLint.Refactor.RedundantCast.BuildGateFiles, DRagLint.Refactor.RedundantCast.PlanRedundantCasts, DRagLint.Refactor.RedundantCast.PrintPlanText, DRagLint.Refactor.RedundantCast.RunRedundantCastFix.SayError, DRagLint.Refactor.RedundantCast.SiteToJson, ExpandFileName, Format, FormatDateTime, StrToIntDef, Writeln</para>
+/// <para>Returns: CExitOk; CExitError; CExitRefused; if Gate.RollbackFailed then CExitError</para>
+/// <para>Complexity: 18 (cyclomatic, outer body), 121 lines (full implementation)</para>
+/// <para>Catches: ECompileGateCancelled (swallowed); EInOutError (swallowed); ENoRefTypes (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Refactor.CompileGate.ApplyGated"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.FreshScratchName"/>
+/// <seealso cref="DRagLint.Refactor.RedundantCast.BuildGateFiles"/>
+/// <seealso cref="DRagLint.Refactor.RedundantCast.PlanRedundantCasts"/>
+/// <seealso cref="DRagLint.Refactor.RedundantCast.PrintPlanText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunRedundantCastFix(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;
   const pOpts: TRedundantCastOptions): Integer;
 
@@ -158,6 +300,17 @@ function RunRedundantCastFix(const pStore: ISymbolStore; const pLibraries: TArra
 /// <param name="pStore">The index.</param>
 /// <param name="pPath">The file; must exist.</param>
 /// <returns>False when it changed since it was indexed.</returns>
+/// <exception cref="EFileNotFoundException"><!-- drag-lint:auto exc -->via DRagLint.Core.FileTime.FileMTimeUnix: Cannot read the last-write time of %s</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Refactor.ExtractInterface.TIfacePlanner.PlanRetype (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.ExtractInterface.TIfacePlanner.RefuseClass (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.LazyInit.PlanSection (DRagLint.Refactor.LazyInit.pas), DRagLint.Refactor.NarrowParam.TNarrowPlanner.Decide (DRagLint.Refactor.NarrowParam.pas), DRagLint.Refactor.RedundantCast.TCastPlanner.StampOk (DRagLint.Refactor.RedundantCast.pas)</para>
+/// <para>Calls: DRagLint.Core.FileTime.FileMTimeUnix, DRagLint.Core.Interfaces.ISymbolStore.FileIsUpToDate</para>
+/// <para>Returns: pStore.FileIsUpToDate(pPath, FileMTimeUnix(pPath), THashSHA2.GetHashString(TEncoding.ANSI.GetString(TFile.ReadAllBytes(pPath))))</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Core.FileTime.FileMTimeUnix"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FileIsUpToDate"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsFileCurrent(const pStore: ISymbolStore; const pPath: string): Boolean;
 
 /// <summary>The last code character before an offset.</summary>
@@ -165,6 +318,14 @@ function IsFileCurrent(const pStore: ISymbolStore; const pPath: string): Boolean
 /// <param name="pAt">The offset.</param>
 /// <param name="pOffset">Receives that character's offset; 0 when there is none.</param>
 /// <returns>The character, #0 when there is none.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Refactor.NarrowParam.TNarrowPlanner.Decide (DRagLint.Refactor.NarrowParam.pas), DRagLint.Refactor.RedundantCast.TCastPlanner.Decide (DRagLint.Refactor.RedundantCast.pas)</para>
+/// <para>Calls: CharInSet</para>
+/// <para>Returns: if pOffset &gt;= 1 then pMasked[pOffset]</para>
+/// <para>Mutates: pOffset (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LastCodeChar(const pMasked: string; pAt: Integer; out pOffset: Integer): Char;
 
 implementation
@@ -799,7 +960,7 @@ begin
   Result:= One <> '';
 end;
 
-procedure TCastPlanner.Decide(pFileId: Int64; const pPath: string; pLine, pCol: Integer; const pName: string;  // dl:ok cyclomatic-complexity@4f22, too-many-exit-points@6420 -- one branch per named refusal, documented on the public function
+procedure TCastPlanner.Decide(pFileId: Int64; const pPath: string; pLine, pCol: Integer; const pName: string;  // dl:ok cyclomatic-complexity@50cc, too-many-exit-points@6420 -- one branch per named refusal, documented on the public function (REVIEWED 2026-11-18 INT13: re-measured after 1.52 GA-1 counts if-expressions; shape and reason unchanged)
   pTypeId, pEnclosing: Int64);
 const
   CTypeKinds: array[0..4] of string = ('class', 'record', 'interface', 'enum', 'type');
@@ -1075,7 +1236,7 @@ begin
 end;
 
 // CAST2 (1.51.1): Decide alone polls too rarely. ReadUntypedCalls' self-join runs ~2 min on a 300 MB index, longer
-// than `shutdown --wait`, and the listener withdraws a request nobody took; so every SELECT here polls through
+// than `stop-now --wait`, and the listener withdraws a request nobody took; so every SELECT here polls through
 // SQLite's progress callback and an interrupted one surfaces as the cancel, never as an SQL error.
 procedure TCastPlanner.ReadAllRows;
 const

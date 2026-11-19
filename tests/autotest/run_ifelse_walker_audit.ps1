@@ -37,7 +37,10 @@
   Run from a NEUTRAL CWD. pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -171,18 +174,18 @@ end.
 '@
 [IO.File]::WriteAllText($pas, ($unit -replace "`r?`n", "`r`n"))
 
-& $exePath index $work --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $work --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'index' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 # P: sql --json rows are POSITIONAL arrays (name_text, kind, start_line, start_col)
 $q = "select name_text, kind, start_line, start_col from refs where name_text in ('Foo','Bar','Baz','Qux','Sink') order by start_line, start_col"
-$rows = @((& $exePath sql --query $q --db $db --json 2>$null | ConvertFrom-Json).rows)
+$rows = @((& { $ErrorActionPreference = 'Continue'; & $exePath sql --query $q --db $db --json 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }).rows)
 $got = ($rows | ForEach-Object { '{0}:{1}:{2}:{3}' -f $_[0], $_[1], $_[2], $_[3] }) -join ' '
 $want = 'Foo:call:50:23 Bar:call:50:32 Baz:call:55:13 Qux:call:55:22 Foo:call:62:43 Foo:call:69:23 Foo:call:76:35 Foo:call:91:23 Foo:call:106:23 Sink:call:106:32'
 Check 'P branch calls, one call row each' ($got -eq $want) "got=[$got]"
 
 # L / S: lint --json is a bare array of {rule, start_line, ...}
-$lint = @(& $exePath lint $pas --db $db --rule 'used-before-assignment,dead-store-before-out-arg' --json 2>$null | ConvertFrom-Json)
+$lint = @((& { $ErrorActionPreference = 'Continue'; & $exePath lint $pas --db $db --rule 'used-before-assignment,dead-store-before-out-arg' --json 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 $uba = @($lint | Where-Object { $_.rule -eq 'used-before-assignment' } | ForEach-Object { [int]$_.start_line } | Sort-Object)
 $dso = @($lint | Where-Object { $_.rule -eq 'dead-store-before-out-arg' } | ForEach-Object { [int]$_.start_line } | Sort-Object)
 Check 'L positive control PlainRead (83) fires' ($uba -contains 83) "uba=[$($uba -join ',')]"
@@ -195,12 +198,12 @@ Check 'S else-arm out arg does not kill the store (89)' ($dso.Count -eq 1)
 
 # D: data_flows row for the else-arm argument
 $q = "select dst_kind, dst_name, src_kind, src_name from data_flows where dst_line = 106"
-$rows = @((& $exePath sql --query $q --db $db --json 2>$null | ConvertFrom-Json).rows)
+$rows = @((& { $ErrorActionPreference = 'Continue'; & $exePath sql --query $q --db $db --json 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }).rows)
 $got = ($rows | ForEach-Object { '{0}:{1}<-{2}:{3}' -f $_[0], $_[1], $_[2], $_[3] }) -join ' '
 Check 'D else-arm arg flow row' ($got -eq 'arg:Sink<-param:S') "got=[$got]"
 
 # C: syntax-count --json = {totals: {feature: n}}
-$sc = & $exePath syntax-count --in $pas --feature if-expr --json 2>$null | ConvertFrom-Json
+$sc = & { $ErrorActionPreference = 'Continue'; & $exePath syntax-count --in $pas --feature if-expr --json 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
 $n = $sc.totals.'if-expr'
 Check 'C if-expr counts the real inline if only' ($n -eq 1) "if-expr=$n"
 

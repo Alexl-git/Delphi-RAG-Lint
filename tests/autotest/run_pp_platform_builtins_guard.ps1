@@ -10,7 +10,10 @@
   Run from any CWD, pwsh 7. -Exe defaults to the lane engine.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -21,7 +24,7 @@ function Check($n, $ok, $d = '') {
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 $Exe = (Resolve-Path $Exe).Path
 function Get-Set($plat) {
-  $out = & $Exe pp-profile --platform $plat 2>&1 | ForEach-Object { "$_".Trim().ToLowerInvariant() }
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe pp-profile --platform $plat 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_".Trim().ToLowerInvariant() }
   ,@($out | Where-Object { $_ -match '^[a-z_][a-z0-9_]*$' })
 }
 $common = 'unicode','conditionalexpressions','ver370','nativecode','dcc','weakref'

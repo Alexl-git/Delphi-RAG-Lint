@@ -58,9 +58,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\draglint_resolver_stamp_absent_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -154,11 +157,11 @@ Write-Host 'run_resolver_stamp_absent_is_stale -- a missing stamp is not a fresh
 
 Push-Location C:\TEMP
 try {
-  & $Exe index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'the fixture indexed' (Test-Path $db) $db
   if (-not (Test-Path $db)) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 
-  $stamp0 = (& $py $pyRead $db 2>&1 | Out-String).Trim()
+  $stamp0 = (& { $ErrorActionPreference = 'Continue'; & $py $pyRead $db 2>&1 | ForEach-Object { "$_" } } | Out-String).Trim()
   Check 'a fresh index carries a resolver stamp' ($stamp0 -match '^r=') $stamp0
 
   # ---------------------------------------------------------------- CASE C ---
@@ -167,7 +170,7 @@ try {
   # make A and B pass for the wrong reason.
   Write-Host ''
   Write-Host 'CASE C -- a MATCHING stamp with no file change must still SKIP' -ForegroundColor Cyan
-  $matching = & $Exe index $src --db $db 2>&1 | Out-String
+  $matching = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'the calls pass is skipped' ($matching -match 'stage:\s+calls\s+--\s+skipped') `
     'RED here means every unchanged index now pays a whole-DB resolve -- the 2,252s to 17s saving is gone'
   Check 'and it does NOT claim the resolver changed' `
@@ -176,10 +179,10 @@ try {
   # ---------------------------------------------------------------- CASE B ---
   Write-Host ''
   Write-Host 'CASE B -- a MISMATCHED stamp is stale (the case that already worked)' -ForegroundColor Cyan
-  & $py $pyAge $db 2>&1 | Out-Null
-  $aged = (& $py $pyRead $db 2>&1 | Out-String).Trim()
+  & { $ErrorActionPreference = 'Continue'; & $py $pyAge $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $aged = (& { $ErrorActionPreference = 'Continue'; & $py $pyRead $db 2>&1 | ForEach-Object { "$_" } } | Out-String).Trim()
   Check 'the stamp was actually aged on disk' ($aged -match 'ancient') $aged
-  $mismatch = & $Exe index $src --db $db 2>&1 | Out-String
+  $mismatch = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'it announces the resolver change' ($mismatch -match 'Resolver changed since this DB was resolved') ''
   Check 'and the calls pass RUNS' (-not ($mismatch -match 'stage:\s+calls\s+--\s+skipped')) ''
   Check 'as a WHOLE-DB pass' ($mismatch -match 'WHOLE-DB pass') `
@@ -190,20 +193,20 @@ try {
   # only thing distinguishing this case is its ABSENCE.
   Write-Host ''
   Write-Host 'CASE A -- an ABSENT stamp is stale (the 2026-08-31 defect)' -ForegroundColor Cyan
-  & $py $pyDrop $db 2>&1 | Out-Null
-  $gone = (& $py $pyRead $db 2>&1 | Out-String).Trim()
+  & { $ErrorActionPreference = 'Continue'; & $py $pyDrop $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $gone = (& { $ErrorActionPreference = 'Continue'; & $py $pyRead $db 2>&1 | ForEach-Object { "$_" } } | Out-String).Trim()
   Check 'the stamp was actually removed on disk' ($gone -eq '(absent)') $gone
   Check 'and this is a genuinely UNCHANGED corpus, so nothing else can force the pass' `
     ($true) 'no file was written between the runs above and this one'
 
-  $absent = & $Exe index $src --db $db 2>&1 | Out-String
+  $absent = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'it says the DB carries no resolver stamp' ($absent -match 'no resolver stamp') `
     'RED means the grandfather clause is back: an unstamped DB is being trusted'
   Check 'the calls pass RUNS' (-not ($absent -match 'stage:\s+calls\s+--\s+skipped')) `
     'RED is the exact incident -- 25 of 31 sections skipped and were stamped current anyway'
   Check 'as a WHOLE-DB pass' ($absent -match 'WHOLE-DB pass') ''
 
-  $stamp1 = (& $py $pyRead $db 2>&1 | Out-String).Trim()
+  $stamp1 = (& { $ErrorActionPreference = 'Continue'; & $py $pyRead $db 2>&1 | ForEach-Object { "$_" } } | Out-String).Trim()
   Check 'and the stamp is restored, so it now tells the truth' ($stamp1 -eq $stamp0) `
     "before=$stamp0 after=$stamp1"
 
@@ -214,8 +217,8 @@ try {
   if (-not (Test-Path "$fx\global.drag-lint.json")) {
     Check 'manifest fixture present' $false "$fx\global.drag-lint.json"
   } else {
-    & $Exe index --all --only Proj --config "$fx\global.drag-lint.json" 2>&1 | Out-Null
-    $allRo = & $Exe index --all --only Proj --resolve-only --config "$fx\global.drag-lint.json" 2>&1 | Out-String
+    & { $ErrorActionPreference = 'Continue'; & $Exe index --all --only Proj --config "$fx\global.drag-lint.json" 2>&1 | ForEach-Object { "$_" } } | Out-Null
+    $allRo = & { $ErrorActionPreference = 'Continue'; & $Exe index --all --only Proj --resolve-only --config "$fx\global.drag-lint.json" 2>&1 | ForEach-Object { "$_" } } | Out-String
     Check 'it announces the walk-skip' ($allRo -match 'skipping the walk') `
       'RED means --all accepted --resolve-only and dropped it'
     Check 'and the calls pass RUNS anyway' (-not ($allRo -match 'stage:\s+calls\s+--\s+skipped')) `

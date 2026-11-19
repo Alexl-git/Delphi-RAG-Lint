@@ -14,10 +14,16 @@ unit DRagLint.Refactor.NarrowParam;
 interface
 
 uses
-  System.SysUtils, DRagLint.Core.Interfaces;
+  System.SysUtils, DRagLint.Core.Interfaces, DRagLint.Refactor.TextEdit;
 
 type
   /// <summary>The flags of one `narrow-param` run.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.NarrowParam.pas) ?, DRagLint.CLI.DoNarrowParam (DRagLint.CLI.pas), DRagLint.Lint.ParamTooWide.CollectParamTooWide (DRagLint.Lint.ParamTooWide.pas), DRagLint.Refactor.NarrowParam.BuildNarrowEdits (DRagLint.Refactor.NarrowParam.pas), DRagLint.Refactor.NarrowParam.TNarrowPlanner.Create (DRagLint.Refactor.NarrowParam.pas) ? (+2 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.ParamTooWide, DRagLint.Refactor.NarrowParam</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TNarrowParamOptions = record
     /// <summary>--routine: the routine's qualified name; '' with All.</summary>
     Routine: string;
@@ -50,6 +56,12 @@ type
   end;
 
   /// <summary>One parameter the planner decided.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.NarrowParam.pas) ?, DRagLint.Refactor.NarrowParam.RetypeHeaders (DRagLint.Refactor.NarrowParam.pas) ?, DRagLint.Refactor.NarrowParam.TNarrowPlanner.AddRefused (DRagLint.Refactor.NarrowParam.pas), DRagLint.Refactor.NarrowParam.TNarrowPlanner.Create (DRagLint.Refactor.NarrowParam.pas) ?, DRagLint.Refactor.NarrowParam.TNarrowPlanner.Decide (DRagLint.Refactor.NarrowParam.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.Refactor.NarrowParam</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TNarrowSite = record
     /// <summary>The file holding the routine's declaration.</summary>
     FilePath: string;
@@ -72,6 +84,12 @@ type
   end;
 
   /// <summary>One member binding the member proof settled (--show-bound).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.NarrowParam.pas) ?, DRagLint.Refactor.NarrowParam.TNarrowPlanner.Create (DRagLint.Refactor.NarrowParam.pas) ?, DRagLint.Refactor.NarrowParam.TNarrowPlanner.Decide (DRagLint.Refactor.NarrowParam.pas)</para>
+  /// <para>Used in units: DRagLint.Refactor.NarrowParam</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TNarrowBound = record
     /// <summary>The routine's qualified name.</summary>
     Routine: string;
@@ -86,6 +104,12 @@ type
   end;
 
   /// <summary>The verdict over the parameters in scope.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.NarrowParam.pas), DRagLint.Refactor.NarrowParam.BuildGateFiles (DRagLint.Refactor.NarrowParam.pas), DRagLint.Refactor.NarrowParam.PlanNarrowParams (DRagLint.Refactor.NarrowParam.pas), DRagLint.Refactor.NarrowParam.PrintBoundText (DRagLint.Refactor.NarrowParam.pas), DRagLint.Refactor.NarrowParam.TNarrowPlanner.Run (DRagLint.Refactor.NarrowParam.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.Refactor.NarrowParam</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TNarrowPlan = record
     /// <summary>The parameters that can narrow.</summary>
     Fixes: TArray<TNarrowSite>;
@@ -103,7 +127,8 @@ type
 /// not declare is unproved.</param>
 /// <param name="pOpts">Routine, Param, All and Project bound the run.</param>
 /// <returns>The plan. Reads the source files; writes nothing.</returns>
-/// <remarks>A parameter narrows only when ALL of these hold; the first that fails names the refusal: the file is what the
+/// <remarks>
+/// A parameter narrows only when ALL of these hold; the first that fails names the refusal: the file is what the
 /// index read and is a source unit in the project's roots (stale-file, include-file, outside-roots); no directive in the
 /// routine (ifdef-in-routine); it has a body, no asm (no-body, asm-body); the routine is not virtual, override, dynamic,
 /// abstract or message (virtual-routine), not overloaded (overloaded-routine), not published (published-routine), declares
@@ -113,7 +138,15 @@ type
 /// meaning (ambiguous-type-name); every use is `p.m` read, written or called, or a nil test, with no `with` in the body
 /// (with-body, other-use, no-member-use); each m has a first declaring class in the chain (member-not-in-chain), is
 /// not overloaded (overloaded-member), and an index binding agrees with it (binding-mismatch); the narrow type is not generic (generic-ancestor) and is in scope
-/// or its unit can be added without a cycle (uses-cycle).</remarks>
+/// or its unit can be added without a cycle (uses-cycle).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.ParamTooWide.CollectParamTooWide (DRagLint.Lint.ParamTooWide.pas), DRagLint.Refactor.NarrowParam.BuildNarrowEdits (DRagLint.Refactor.NarrowParam.pas)</para>
+/// <para>Calls: DRagLint.Refactor.NarrowParam.TNarrowPlanner.Create, DRagLint.Refactor.NarrowParam.TNarrowPlanner.Run</para>
+/// <para>Returns: Planner.Run(NoRoutine)</para>
+/// <seealso cref="DRagLint.Refactor.NarrowParam.TNarrowPlanner.Create"/>
+/// <seealso cref="DRagLint.Refactor.NarrowParam.TNarrowPlanner.Run"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PlanNarrowParams(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;
   const pOpts: TNarrowParamOptions): TNarrowPlan;
 
@@ -123,13 +156,83 @@ function PlanNarrowParams(const pStore: ISymbolStore; const pLibraries: TArray<I
 /// <param name="pOpts">The flags.</param>
 /// <returns>0: plan, or applied and built, or nothing to do. 1: the gate refused and the project is unchanged; or --apply
 /// on one routine whose parameter was refused. 2: bad flags, no such routine, or a rollback that failed.</returns>
+/// <exception cref="EInOutError"><!-- drag-lint:auto exc -->via DRagLint.Refactor.CompileGate.ApplyGated: nothing staged for %s</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoNarrowParam (DRagLint.CLI.pas)</para>
+/// <para>Calls: Cardinal, Default, DRagLint.Refactor.CompileGate.ApplyGated, DRagLint.Refactor.CompileGate.FreshScratchName, DRagLint.Refactor.NarrowParam.BuildGateFiles, DRagLint.Refactor.NarrowParam.PrintBoundText, DRagLint.Refactor.NarrowParam.PrintPlanText, DRagLint.Refactor.NarrowParam.RunNarrowParam.SayError, DRagLint.Refactor.NarrowParam.SiteToJson, DRagLint.Refactor.NarrowParam.TNarrowPlanner.Create (+7 more)</para>
+/// <para>Returns: CExitOk; CExitError; CExitRefused; if Gate.RollbackFailed then CExitError</para>
+/// <para>Complexity: 27 (cyclomatic, outer body), 151 lines (full implementation)</para>
+/// <para>Catches: ECompileGateCancelled (swallowed); EInOutError (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Refactor.CompileGate.ApplyGated"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.FreshScratchName"/>
+/// <seealso cref="DRagLint.Refactor.NarrowParam.BuildGateFiles"/>
+/// <seealso cref="DRagLint.Refactor.NarrowParam.PrintBoundText"/>
+/// <seealso cref="DRagLint.Refactor.NarrowParam.PrintPlanText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunNarrowParam(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;
   const pOpts: TNarrowParamOptions): Integer;
+
+type
+  /// <summary>One parameter-type-too-wide finding to fix: the routine's declaration line and the parameter.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.NarrowParam.pas), DRagLint.Fix.V152.PTW.FixParamTooWide (DRagLint.Fix.V152.PTW.pas), DRagLint.Refactor.NarrowParam.BuildNarrowEdits (DRagLint.Refactor.NarrowParam.pas)</para>
+  /// <para>Used in units: DRagLint.Fix.V152.PTW, DRagLint.Refactor.NarrowParam</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TNarrowTarget = record
+    /// <summary>The 1-based line of the routine's declaration (the finding's line).</summary>
+    Line: Integer;
+    /// <summary>The parameter's name; '' = every parameter of that routine the plan can narrow.</summary>
+    Param: string;
+  end;
+
+/// <summary>Builds the text edits that narrow parameters of routines declared in one file (the autofix of the
+/// parameter-type-too-wide rule, lane v152 PTW): each parameter retyped in its routine's declaration and implementation
+/// headers, and each narrow type's unit added once to the uses clause of the section that declares the routine when
+/// the plan says it is not in scope yet.</summary>
+/// <param name="pStore">The project's index; must be a SQLite store, else nothing is built.</param>
+/// <param name="pLibraries">The platform library indexes, or none; without them a chain or member the project does not
+/// declare is unproved and its target is declined.</param>
+/// <param name="pFilePath">The file holding the declarations (the findings' file).</param>
+/// <param name="pTargets">The findings to fix.</param>
+/// <param name="pEdits">Out: one tekReplaceLines per changed header line and one edit for the uses clause, all in one
+/// atom group (all or nothing); nil when nothing is built.</param>
+/// <param name="pFixed">Out: how many targets the edits fix.</param>
+/// <param name="pWhy">Out: '' when every target is fixed, else why the first declined one was declined (the plan's
+/// refusal kind and reason, or a header that no longer reads as the index says).</param>
+/// <returns>True when at least one edit was built.</returns>
+/// <remarks>
+/// Each target is re-proved by PlanNarrowParams scoped to its one routine, with the same scoping as the rule
+/// (the index's own project when it lives in a _D-RAG home), so a stale finding -- the body now needs the wide type, or
+/// the routine became virtual or is now taken as a value -- is declined, never applied. Reads the index and the source
+/// file; writes nothing. Each header edit carries ExpectText = that line as read, so the applier skips a file that
+/// changed under the run. Not thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Fix.V152.PTW.FixParamTooWide (DRagLint.Fix.V152.PTW.pas)</para>
+/// <para>Calls: Default, DRagLint.Refactor.CompileGate.AddToUses, DRagLint.Refactor.CompileGate.SectionNameOf, DRagLint.Refactor.NarrowParam.PlanNarrowParams, DRagLint.Refactor.NarrowParam.ReplaceLinesEdit, DRagLint.Refactor.NarrowParam.RetypeHeaders, DRagLint.Refactor.NarrowParam.RoutineAt, DRagLint.Report.CyclePlan.DecodeSource, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection, ExtractFileName, Format, Max, SameText</para>
+/// <para>Returns: False; pEdits &lt;&gt; nil</para>
+/// <para>Complexity: 30 (cyclomatic, outer body), 108 lines (full implementation)</para>
+/// <para>Catches: EInOutError (swallowed)</para>
+/// <para>Mutates: pEdits (out), pFixed (out), pWhy (out)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Refactor.CompileGate.AddToUses"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.SectionNameOf"/>
+/// <seealso cref="DRagLint.Refactor.NarrowParam.PlanNarrowParams"/>
+/// <seealso cref="DRagLint.Refactor.NarrowParam.ReplaceLinesEdit"/>
+/// <seealso cref="DRagLint.Refactor.NarrowParam.RetypeHeaders"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function BuildNarrowEdits(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>; const pFilePath: string;
+  const pTargets: TArray<TNarrowTarget>; out pEdits: TArray<TTextEdit>; out pFixed: Integer; out pWhy: string): Boolean;
 
 implementation
 
 uses
-  System.Classes, System.IOUtils, System.JSON, System.StrUtils, System.RegularExpressions,
+  DRagLint.Core.Encoding, System.Classes, System.IOUtils, System.JSON, System.StrUtils, System.RegularExpressions,
   System.Generics.Collections, System.Generics.Defaults, System.Math, Winapi.Windows,
   FireDAC.Comp.Client,
   DRagLint.Project.OwnRoots, DRagLint.Report.CyclePlan, DRagLint.Refactor.CompileGate,
@@ -246,8 +349,12 @@ begin
   FConn := (pStore as TSQLiteSymbolStore).GetConnection;
   for var L in pLibraries do
     if L is TSQLiteSymbolStore then FLibConns:= FLibConns + [(L as TSQLiteSymbolStore).GetConnection];
-  { --project names the roots; without it the index's own project does (its _D-RAG parent), so no library unit leaks in }
-  var Anchor:= if pOpts.Project <> '' then ExtractFilePath(ExpandFileName(pOpts.Project)) else pOpts.OwnDir;
+  { --project names the roots; without it the index's own project does (its _D-RAG parent), so no library unit leaks in.
+    v152 PTW: a caller that names neither (the parameter-type-too-wide rule, its autofix) takes that same anchor from the
+    index's own path; lint-project reported library code before. An index outside a _D-RAG home stays unscoped. }
+  var Anchor:= if pOpts.Project <> '' then ExtractFilePath(ExpandFileName(pOpts.Project))
+    else if pOpts.OwnDir <> '' then pOpts.OwnDir
+    else AnchorDirForDb(FConn.Params.Database);
   FScoped:= Anchor <> '';
   if FScoped then FOwn:= TOwnRoots.Load(Anchor);
   FBound  := TList<TNarrowBound>.Create;
@@ -615,7 +722,7 @@ begin
       begin
         var Path:= Q.FieldByName('path').AsString;  // dl:ok field-by-name-in-loop@9da5 -- a few thousand rows at most; column names beat positions (magic-literal) here
         if TFile.Exists(Path) then
-          for var M in TRegEx.Matches(TFile.ReadAllText(Path, TEncoding.ANSI), '\b(?:read|write)\s+([A-Za-z_][A-Za-z0-9_]*)', [roIgnoreCase]) do
+          for var M in TRegEx.Matches(ReadSourceFileText(Path), '\b(?:read|write)\s+([A-Za-z_][A-Za-z0-9_]*)', [roIgnoreCase]) do
             FAccessors.AddOrSetValue(LowerCase(M.Groups[1].Value), True);
         Q.Next;
       end;
@@ -689,7 +796,7 @@ begin
   FRefused.Add(S);
 end;
 
-procedure TNarrowPlanner.Decide(const pR: TRoutineRow; const pParam: TParamRow);  // dl:ok cyclomatic-complexity@1034, too-many-exit-points@0beb -- one branch per named refusal, documented on the public function
+procedure TNarrowPlanner.Decide(const pR: TRoutineRow; const pParam: TParamRow);  // dl:ok cyclomatic-complexity@211a, too-many-exit-points@0beb -- one branch per named refusal, documented on the public function (REVIEWED 2026-11-18 INT13: re-measured after 1.52 GA-1 counts if-expressions; shape and reason unchanged)
 var
   V: TVerdict;
 begin
@@ -1032,6 +1139,147 @@ begin
   finally
     Paths.Free;
   end;
+end;
+
+// The qualified name of the routine declared at pPath:pLine, or ''.
+function RoutineAt(pConn: TFDConnection; const pPath: string; pLine: Integer): string;
+begin
+  Result:= '';
+  var Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= pConn;
+    Q.SQL.Text:= 'SELECT s.qualified_name FROM symbols s JOIN files f ON f.id = s.file_id WHERE f.path = :p COLLATE NOCASE ' +
+                 'AND s.start_line = :l AND s.kind IN (' + CRoutineKinds + ')';
+    Q.ParamByName('p').AsWideString:= pPath;
+    Q.ParamByName('l').AsInteger   := pLine;
+    Q.Open;
+    if not Q.Eof then Result:= Q.Fields[0].AsString;
+  finally
+    Q.Free;
+  end;
+end;
+
+// One tekReplaceLines edit of pFile, lines pFirst..pLast (1-based), guarded on the first line's current text.
+function ReplaceLinesEdit(const pFile, pGroup: string; pFirst, pLast: Integer; const pText, pExpect: string): TTextEdit;
+begin
+  Result:= Default(TTextEdit);
+  Result.FilePath  := pFile;
+  Result.Kind      := tekReplaceLines;
+  Result.Line      := pFirst;
+  Result.EndLine   := pLast;
+  Result.Text      := pText;
+  Result.ExpectText:= pExpect;
+  Result.AtomGroup := pGroup;
+end;
+
+function BuildNarrowEdits(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>; const pFilePath: string;
+  const pTargets: TArray<TNarrowTarget>; out pEdits: TArray<TTextEdit>; out pFixed: Integer; out pWhy: string): Boolean;
+const
+  CCrLf = #13#10;
+begin
+  pEdits:= nil;
+  pFixed:= 0;
+  pWhy  := '';
+  if (pStore = nil) or (pStore is not TSQLiteSymbolStore) or not TFile.Exists(pFilePath) then
+  begin
+    pWhy:= 'no SQLite index or no such file';
+    Exit(False);
+  end;
+  var Conn:= (pStore as TSQLiteSymbolStore).GetConnection;
+  { re-prove each target on its one routine }
+  var Sites: TArray<TNarrowSite>:= nil;
+  for var T in pTargets do
+  begin
+    var Hit:= False;
+    var Routine:= RoutineAt(Conn, pFilePath, T.Line);
+    if Routine <> '' then
+    begin
+      var Opts:= Default(TNarrowParamOptions);
+      Opts.Routine:= Routine;
+      Opts.Param  := T.Param;
+      var Plan:= PlanNarrowParams(pStore, pLibraries, Opts);
+      for var S in Plan.Fixes do
+        if (S.Line = T.Line) and SameText(S.FilePath, pFilePath) then
+        begin
+          Sites:= Sites + [S];
+          Hit:= True;
+        end;
+      if not Hit and (pWhy = '') then
+        for var S in Plan.Refused do
+          if (S.Line = T.Line) and SameText(S.FilePath, pFilePath) then
+          begin
+            pWhy:= S.Kind + ': ' + S.Reason;
+            Break;
+          end;
+    end;
+    if Hit then Inc(pFixed)
+    else if pWhy = '' then pWhy:= Format('%s:%d: no routine there that the plan can narrow', [ExtractFileName(pFilePath), T.Line]);
+  end;
+  if Sites = nil then Exit(False);
+
+  var Enc: TEncoding;
+  var Old:= TStringList.Create;
+  var Work:= TStringList.Create;
+  try
+    Old.Text:= DecodeSource(TFile.ReadAllBytes(pFilePath), Enc);
+    var Text:= Old.Text;
+    try
+      for var S in Sites do RetypeHeaders(Text, S, Conn);
+    except
+      on E: EInOutError do
+      begin
+        pWhy  := E.Message;
+        pFixed:= 0;
+        Exit(False);
+      end;
+    end;
+    Work.Text:= Text;
+    if Work.Count <> Old.Count then
+    begin
+      pWhy  := 'retyping the headers changed the line count';
+      pFixed:= 0;
+      Exit(False);
+    end;
+    var Group:= Format('parameter-type-too-wide:%s', [pFilePath]);
+    { the headers: same line count, so one guarded line edit per changed line }
+    for var I:= 0 to Old.Count - 1 do
+      if Work[I] <> Old[I] then pEdits:= pEdits + [ReplaceLinesEdit(pFilePath, Group, I + 1, I + 1, Work[I], Old[I])];
+    { the uses clause: each unit once; the changed span between the retyped and the final text becomes one edit }
+    var Retyped:= Work.ToStringArray;
+    var Added:= False;
+    for var S in Sites do
+      if (S.AddUses <> '') and AddToUses(Work, SectionNameOf(Work, Max(0, S.Line - 1)), S.AddUses) then Added:= True;
+    if Added then
+    begin
+      var Head:= 0;
+      while (Head < Length(Retyped)) and (Head < Work.Count) and (Retyped[Head] = Work[Head]) do Inc(Head);
+      var Tail:= 0;
+      while (Tail < Length(Retyped) - Head) and (Tail < Work.Count - Head) and
+        (Retyped[High(Retyped) - Tail] = Work[Work.Count - 1 - Tail]) do Inc(Tail);
+      var NewSpan:= '';
+      for var I:= Head to Work.Count - 1 - Tail do
+        NewSpan:= NewSpan + (if I > Head then CCrLf else '') + Work[I];
+      var OldLast:= Length(Retyped) - Tail;  // 1-based last old line of the span
+      if OldLast >= Head + 1 then
+        pEdits:= pEdits + [ReplaceLinesEdit(pFilePath, Group, Head + 1, OldLast, NewSpan, Retyped[Head])]
+      else
+      begin
+        { a pure insertion after line Head }
+        var Ins:= Default(TTextEdit);
+        Ins.FilePath := pFilePath;
+        Ins.Kind     := tekInsertLines;
+        Ins.Line     := Head;
+        Ins.Text     := NewSpan;
+        Ins.AtomGroup:= Group;
+        pEdits:= pEdits + [Ins];
+      end;
+    end;
+  finally
+    Work.Free;
+    Old.Free;
+  end;
+  Result:= pEdits <> nil;
+  if not Result then pFixed:= 0;
 end;
 
 function SiteToJson(const pS: TNarrowSite): TJSONObject;

@@ -65,9 +65,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 
 # convert-validate EXITS 1 when a rules file has errors -- which is the expected
@@ -90,11 +93,11 @@ if ($WorkDir -eq '') {
 }
 New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
 
-$infoRaw = (& $exePath info --json 2>$null) -join "`n"
+$infoRaw = (& { $ErrorActionPreference = 'Continue'; & $exePath info --json 2>$null }) -join "`n"
 $engineVersion = '(unknown)'
 try {
   $line = ($infoRaw -split "`n" | Where-Object { $_.Trim().StartsWith('{') } | Select-Object -First 1)
-  if ($line) { $j = $line | ConvertFrom-Json; $engineVersion = "$($j.version) / extractor $($j.extractor_version) / built $($j.build_date)" }
+  if ($line) { $j = $line | ConvertFrom-Json | ForEach-Object { $_ }; $engineVersion = "$($j.version) / extractor $($j.extractor_version) / built $($j.build_date)" }
 } catch { }
 Write-Host ''
 Write-Host ("engine : {0}" -f $exePath) -ForegroundColor Cyan
@@ -109,7 +112,7 @@ function Write-Rules([string]$Name, [string[]]$Lines) {
 # Runs convert-validate and returns exit code, combined output, and the parsed
 # rule count from the `parsed N rule(s)` line (-1 when it is not printed).
 function Validate([string]$Path) {
-  $out  = & $exePath convert-validate --rules $Path --print-parsed 2>&1
+  $out  = & { $ErrorActionPreference = 'Continue'; & $exePath convert-validate --rules $Path --print-parsed 2>&1 | ForEach-Object { "$_" } }
   $code = $LASTEXITCODE
   $text = ($out | Out-String)
   $n = -1

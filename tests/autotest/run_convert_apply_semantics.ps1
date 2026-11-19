@@ -37,9 +37,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_convert_apply_semantics_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -375,14 +378,14 @@ Write-Ascii (P 'sites.rules') @'
 '@
 
 $db = P 'fx.sqlite'
-$idx = & $Exe index $WorkDir --db $db 2>&1
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'V the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db)) "exit=$LASTEXITCODE; $($idx -join ' | ')"
 Check 'V the load checker is available (lib\DfmLoadCheck.ps1)' (Test-DfmLoadsChecker)
 
-$o = (& $Exe convert-apply --unit (P 'SemDM.pas') --rules (P 'sem.rules') --db $db --format json 2>&1) -join "`n"
-$j = $null; try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {}
+$o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'SemDM.pas') --rules (P 'sem.rules') --db $db --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
+$j = $null; try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'A0 dry run parses as apply/1 JSON' ($null -ne $j) $o
-$r = (& $Exe convert-apply --unit (P 'SemDM.pas') --rules (P 'sem.rules') --db $db --apply --no-backup 2>&1) -join "`n"
+$r = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'SemDM.pas') --rules (P 'sem.rules') --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'A1 --apply exits 0' ($LASTEXITCODE -eq 0) $r
 $t = [IO.File]::ReadAllText((P 'SemDM.dfm'))
 
@@ -430,12 +433,12 @@ Check 'F4e ParamData is no longer reported unlinked' `
   (-not (@($j.unlinked | Where-Object { "$_" -match 'ParamData' }).Count)) (($j.unlinked | ConvertTo-Json -Compress -Depth 4))
 
 # ---- F5: .pas access sites use their own block's #link -----------------------
-$o = (& $Exe convert-apply --unit (P 'SiteDM.pas') --rules (P 'sites.rules') --db $db --format json 2>&1) -join "`n"
-$js = $null; try { $js = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {}
+$o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'SiteDM.pas') --rules (P 'sites.rules') --db $db --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
+$js = $null; try { $js = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 $sites = @($js.items | Where-Object { $_.kind -eq 'access-site-rewritten' })
 Check 'F5a exactly ONE access-site rewrite per site: db and tbl one each (2 in all)' `
   (($sites.Count -eq 2) -and (@($sites | Where-Object instance -eq 'db').Count -eq 1) -and (@($sites | Where-Object instance -eq 'tbl').Count -eq 1)) (($sites | ForEach-Object text) -join ' | ')
-$r = (& $Exe convert-apply --unit (P 'SiteDM.pas') --rules (P 'sites.rules') --db $db --apply --no-backup 2>&1) -join "`n"
+$r = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'SiteDM.pas') --rules (P 'sites.rules') --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 $ps = [IO.File]::ReadAllText((P 'SiteDM.pas'))
 Check 'F5b each instance gets its OWN block''s target: db.Locked, tbl.Frozen' `
   (($LASTEXITCODE -eq 0) -and ($ps -match 'db\.Locked := True;') -and ($ps -match 'tbl\.Frozen := True;') -and -not ($ps -match 'ReadOnly')) ($r + "`n" + $ps)
@@ -453,10 +456,10 @@ $errLines = @(($cl -split "`r?`n") | Where-Object { $_ -match 'Error|Fatal' })
 Check 'F5c the converted SemDM and SiteDM compile with dcc64 (private -E/-NU)' (($cl -match 'BUILD_EXITCODE=0') -and ($errLines.Count -eq 0)) ($errLines -join ' | ')
 
 # ---- convert-validate says when it only parsed -------------------------------
-$vo = & $Exe convert-validate --rules (P 'sites.rules') --db $db 2>&1 | Out-String
+$vo = & { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules (P 'sites.rules') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'V1 convert-validate with no --from/--to prints OK and a NOTE that it only parsed' `
   (($vo -match '(?m)^OK\r?$') -and ($vo -match 'NOTE: --from and --to not both given -- the book was PARSED only')) $vo
-$vo = & $Exe convert-validate --rules (P 'sites.rules') --from LibS.TSrcDb --to LibT.TDstConn --db $db 2>&1 | Out-String
+$vo = & { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules (P 'sites.rules') --from LibS.TSrcDb --to LibT.TDstConn --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'V2 ... and no such NOTE when both are given' (-not ($vo -cmatch 'NOTE: --from and --to')) $vo
 
 # ---- load -------------------------------------------------------------------

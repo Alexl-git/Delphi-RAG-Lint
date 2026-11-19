@@ -29,9 +29,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-sleep-in-vcl-scope-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -134,15 +137,15 @@ end.
 
 function SleepLines([string]$Path) {
   $out = @()
-  foreach ($line in (& $Exe lint $Path 2>$null)) {
+  foreach ($line in (& { $ErrorActionPreference = 'Continue'; & $Exe lint $Path 2>$null })) {
     if ("$line" -match ':(\d+):\d+\s+\[\w+\]\s+sleep-in-vcl:') { $out += [int]$Matches[1] }
   }
   return @($out | Sort-Object -Unique)
 }
 
-$firedVcl      = SleepLines $vclUnit
-$firedDfm      = SleepLines $dfmUnit
-$firedHeadless = SleepLines $headlessUnit
+$firedVcl      = @(SleepLines $vclUnit)
+$firedDfm      = @(SleepLines $dfmUnit)
+$firedHeadless = @(SleepLines $headlessUnit)
 
 Write-Host ''
 Write-Host 'POSITIVE CONTROL -- the rule must still fire on VCL code' -ForegroundColor Cyan

@@ -45,10 +45,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_uses_reconcile_$PID",
   [string]$RsVars  = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 $script:fail = $false
@@ -616,15 +619,15 @@ foreach ($k in @('batch', 'single', 'ctl')) {
 }
 
 $db = P 'fx.sqlite'
-& $Exe index --project (P 'P.dpr') --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (P 'P.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the fixture PROJECT index was built' (Test-Path $db)
 
 function Run([string]$Unit, [string]$Rules, [string[]]$Extra = @()) {
   $a = @('convert-apply', '--unit', (P $Unit), '--rules', (P $Rules), '--db', $db, '--castlib', (P 'fx.castlib')) + $Extra
-  $o = (& $Exe @a 2>$null) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null }) -join "`n"
   $code = $LASTEXITCODE
   $j = $null
-  if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {} }
+  if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {} }
   return [pscustomobject]@{ Code = $code; Out = $o; J = $j }
 }
 function J([string]$Unit, [string]$Rules, [string[]]$Extra = @()) { return Run $Unit $Rules (@('--format', 'json') + $Extra) }
@@ -634,7 +637,7 @@ function Need($row) { return (@($row.needed_by | ForEach-Object { $_.name }) -jo
 
 # ============================ dry-run contract ===============================
 $r = J 'W1Form.pas' 'old.rules'
-$rm = Rows $r 'remove'
+$rm = @(Rows $r 'remove')
 Check 'W1 every TOld converts: LibOld REMOVED (remove row, source rule)' `
   (($r.Code -eq 0) -and ($rm.Count -eq 1) -and ($rm[0].unit -eq 'LibOld') -and ($rm[0].source -eq 'rule') -and ($r.J.uses_reconcile -eq 'on')) $r.Out
 Check 'W1 ... apply/1 carries uses_kept / uses_moved / uses_unresolved, always' `
@@ -642,51 +645,51 @@ Check 'W1 ... apply/1 carries uses_kept / uses_moved / uses_unresolved, always' 
 
 $r = J 'EncForm.pas' 'old.rules'
 Check 'ENC a CP1252 byte in the unit: re-index stays on (not degraded), LibOld removed' `
-  (($r.Code -eq 0) -and ($r.J.uses_reconcile -eq 'on') -and ((Rows $r 'remove').Count -eq 1)) $r.Out
+  (($r.Code -eq 0) -and ($r.J.uses_reconcile -eq 'on') -and ((@(Rows $r 'remove')).Count -eq 1)) $r.Out
 $r = J 'Enc2Form.pas' 'old.rules'
 Check 'ENC2 eight CP1252 bytes before a reference: byte columns read as characters, not past the line end (on, LibOld removed)' `
-  (($r.Code -eq 0) -and ($r.J.uses_reconcile -eq 'on') -and ((Rows $r 'remove').Count -eq 1)) $r.Out
+  (($r.Code -eq 0) -and ($r.J.uses_reconcile -eq 'on') -and ((@(Rows $r 'remove')).Count -eq 1)) $r.Out
 
 $r = J 'W2Form.pas' 'old.rules'
-$rm = Rows $r 'remove'
+$rm = @(Rows $r 'remove')
 Check 'W2 (ruling 1/2) only .pas code (on E: ELibOld) needs LibOld: REMOVED anyway' (($r.Code -eq 0) -and ($rm.Count -eq 1) -and ($rm[0].unit -eq 'LibOld')) $r.Out
 Check 'W2 ... the remove row names the dangling reference: needed_by ELibOld with its line' `
   (($rm.Count -eq 1) -and ((Need $rm[0]) -eq 'ELibOld') -and ($rm[0].needed_by[0].line -eq 31) -and ($rm[0].needed_by[0].section -eq 'implementation')) ($rm | ConvertTo-Json -Depth 5)
-Check 'W2 ... and warns unit-rule-dangling' ((Kinds $r) -contains 'unit-rule-dangling') ((Kinds $r) -join ',')
+Check 'W2 ... and warns unit-rule-dangling' ((@(Kinds $r)) -contains 'unit-rule-dangling') ((@(Kinds $r)) -join ',')
 
 $r = J 'W3Form.pas' 'old.rules'
-$rm = Rows $r 'remove'
+$rm = @(Rows $r 'remove')
 Check 'W3 a `var T: TOld` local alone: REMOVED, needed_by TOld' (($rm.Count -eq 1) -and ((Need $rm[0]) -eq 'TOld')) ($r.Out)
 
 $r = J 'W4Form.pas' 'old.rules'
-$kp = Rows $r 'kept'
+$kp = @(Rows $r 'kept')
 Check 'W4 a second component type of LibOld (Old2: TOld2) still streams: LibOld KEPT' `
-  (($r.Code -eq 0) -and ($kp.Count -eq 1) -and ($kp[0].unit -eq 'LibOld') -and ((Rows $r 'remove').Count -eq 0) -and ($r.J.uses_kept -eq 1)) $r.Out
+  (($r.Code -eq 0) -and ($kp.Count -eq 1) -and ($kp[0].unit -eq 'LibOld') -and ((@(Rows $r 'remove')).Count -eq 0) -and ($r.J.uses_kept -eq 1)) $r.Out
 Check 'W4 ... needed_by names the component, with its .dfm line' (($kp.Count -eq 1) -and ((Need $kp[0]) -eq 'Old2: TOld2') -and ($kp[0].needed_by[0].line -eq 5)) ($kp | ConvertTo-Json -Depth 5)
 Check 'W4 ... `kept` is a WARNING (Q5): items[] unit-rule-kept + a line N: warning' `
-  (((Kinds $r) -contains 'unit-rule-kept') -and (@($r.J.warnings | Where-Object { $_ -match '^line 3: warning: #unuse LibOld kept LibOld -- still needed by \.dfm component\(s\) Old2: TOld2' }).Count -eq 1)) ($r.J.warnings -join ' | ')
+  (((@(Kinds $r)) -contains 'unit-rule-kept') -and (@($r.J.warnings | Where-Object { $_ -match '^line 3: warning: #unuse LibOld kept LibOld -- still needed by \.dfm component\(s\) Old2: TOld2' }).Count -eq 1)) ($r.J.warnings -join ' | ')
 
 $r = J 'W5Form.pas' 'old.rules'
-$rm = Rows $r 'remove'
+$rm = @(Rows $r 'remove')
 Check 'W5 only a type-helper member (S.OldUpper) needs LibOld: REMOVED, needed_by OldUpper' (($rm.Count -eq 1) -and ((Need $rm[0]) -match 'OldUpper')) $r.Out
 
 $r = J 'W6Form.pas' 'al.rules'
-$rm = Rows $r 'remove'
+$rm = @(Rows $r 'remove')
 Check 'W6 alias: `#unuse LibAl` removes the entry Scope.LibAl' (($rm.Count -eq 1) -and ($rm[0].unit -eq 'Scope.LibAl') -and ($rm[0].rule -eq '#unuse LibAl')) $r.Out
 $r = J 'W6bForm.pas' 'al.rules'
-$kp = Rows $r 'kept'
+$kp = @(Rows $r 'kept')
 Check 'W6b alias: entry LibAl, keeper TAl2 declared in Scope.LibAl: KEPT' (($kp.Count -eq 1) -and ($kp[0].unit -eq 'LibAl') -and ((Need $kp[0]) -eq 'Al2: TAl2')) $r.Out
 
 $r = J 'W7Form.pas' 'old.rules'
-Check 'W7 a KEPT unit inside {$IFNDEF}: no refusal (R12), kept row' (($r.Code -eq 0) -and (-not $r.J.refused) -and ((Rows $r 'kept').Count -eq 1)) $r.Out
+Check 'W7 a KEPT unit inside {$IFNDEF}: no refusal (R12), kept row' (($r.Code -eq 0) -and (-not $r.J.refused) -and ((@(Rows $r 'kept')).Count -eq 1)) $r.Out
 $r = Run 'W8Form.pas' 'old.rules'
 Check 'W8 a REMOVED unit inside {$IFNDEF}: refused, message unchanged' `
   (($r.Code -eq 1) -and ($r.Out -match [regex]::Escape('REFUSED: W8Form.pas: "LibOld" sits inside a conditional ({$IF...}) region of the interface uses clause -- unit rules not applied to this unit'))) $r.Out
 
 $r = J 'U1Form.pas' 'gone.rules'
-$kp = Rows $r 'kept'
+$kp = @(Rows $r 'kept')
 Check 'U1 (Q3) a watched unit no --db knows: KEPT with unit-rule-unverified' `
-  (($kp.Count -eq 1) -and ($kp[0].unit -eq 'GoneU') -and ((Kinds $r) -contains 'unit-rule-unverified')) $r.Out
+  (($kp.Count -eq 1) -and ($kp[0].unit -eq 'GoneU') -and ((@(Kinds $r)) -contains 'unit-rule-unverified')) $r.Out
 Check 'A7-10 ... and the warning says how to fix it: pass the platform library --db (resolve-dbs --platform Win32|Win64)' `
   (@($r.J.warnings | Where-Object { $_ -match 'GoneU' -and $_ -match [regex]::Escape('pass the platform library --db (resolve-dbs --platform Win32|Win64)') }).Count -eq 1) ($r.J.warnings -join ' | ')
 
@@ -694,19 +697,19 @@ $r = J 'D1Form.pas' 'db.rules'
 Check 'D1 `#use DB` on a unit using Fx.DB: no add (alias-aware presence)' (($r.Code -eq 0) -and (@($r.J.uses | Where-Object { $_.unit -eq 'DB' }).Count -eq 0)) $r.Out
 
 $r = J 'D2Form.pas' 'old.rules'
-$mv = Rows $r 'moved'
+$mv = @(Rows $r 'moved')
 Check 'D2 the C13 move is now a uses[] row: moved LibNew to the interface' `
   (($mv.Count -eq 1) -and ($mv[0].unit -eq 'LibNew') -and ($mv[0].section -eq 'interface') -and ($r.J.uses_moved -eq 1)) $r.Out
 
 $r = J 'DescForm.pas' 'old.rules'
-$kp = Rows $r 'kept'
+$kp = @(Rows $r 'kept')
 Check 'DESC inherited Old1 (ancestor unconverted) still streams TOld: LibOld KEPT -- no R26 refusal' `
   (($r.Code -eq 0) -and (-not $r.J.refused) -and ($kp.Count -eq 1) -and ((Need $kp[0]) -eq 'Old1: TOld')) $r.Out
 
 $r = J 'O1Form.pas' 'old.rules' @('--only', 'Old1')
-$sk = Rows $r 'skipped'
+$sk = @(Rows $r 'skipped')
 Check 'O1 --only Old1: the C13 N4 skipped row, byte-identical to 1.26.6' `
-  (($sk.Count -eq 1) -and ($sk[0].unit -eq 'LibOld') -and ($sk[0].reason -eq 'would leave 1 unconverted instance(s) of TOld') -and ($sk[0].rule -eq '#unuse LibOld') -and ((Rows $r 'kept').Count -eq 0)) $r.Out
+  (($sk.Count -eq 1) -and ($sk[0].unit -eq 'LibOld') -and ($sk[0].reason -eq 'would leave 1 unconverted instance(s) of TOld') -and ($sk[0].rule -eq '#unuse LibOld') -and ((@(Rows $r 'kept')).Count -eq 0)) $r.Out
 Check 'O1 ... and its unit-rule-skipped warning text unchanged' `
   (@($r.J.warnings | Where-Object { $_ -eq 'line 3: warning: #unuse LibOld skipped -- it would leave 1 unconverted instance(s) of TOld left out by --only; LibOld kept in uses' }).Count -eq 1) ($r.J.warnings -join ' | ')
 
@@ -733,47 +736,47 @@ Check 'A8-2 (owner ruling 2026-10-11) ... the fix names the #convert line (1) an
 $r = J 'TieUForm.pas' 'tieu.rules'
 $ad = @(Rows $r 'add' | Where-Object { $_.unit -eq 'LibTieA' })
 Check 'A8-1 #use LibTieA resolves the TTie tie: no ambiguity warning, no uses_unresolved row' `
-  (($r.Code -eq 0) -and -not ((Kinds $r) -contains 'uses-unit-ambiguous') -and (@($r.J.uses_unresolved).Count -eq 0)) $r.Out
+  (($r.Code -eq 0) -and -not ((@(Kinds $r)) -contains 'uses-unit-ambiguous') -and (@($r.J.uses_unresolved).Count -eq 0)) $r.Out
 Check 'A8-1 ... LibTieA is added ONCE, to the INTERFACE uses (the retyped field is declared there), rule #use LibTieA' `
   (($ad.Count -eq 1) -and ($ad[0].section -eq 'interface') -and ($ad[0].rule -eq '#use LibTieA')) ($r.J.uses | ConvertTo-Json -Depth 5)
 $r = J 'TieMForm.pas' 'tieu.rules'
-$mv = Rows $r 'moved'
+$mv = @(Rows $r 'moved')
 Check 'A8-4 LibTieA used only in the implementation: MOVED to the interface (moved row), no ambiguity, no add' `
   (($r.Code -eq 0) -and ($mv.Count -eq 1) -and ($mv[0].unit -eq 'LibTieA') -and ($mv[0].section -eq 'interface') -and
-   ((Rows $r 'add').Count -eq 0) -and -not ((Kinds $r) -contains 'uses-unit-ambiguous')) $r.Out
+   ((@(Rows $r 'add')).Count -eq 0) -and -not ((@(Kinds $r)) -contains 'uses-unit-ambiguous')) $r.Out
 
 # ---- A8-3: 'implementation{comment}' is still the implementation keyword -----
 $r = J 'W2iForm.pas' 'old.rules'
-$rm = Rows $r 'remove'
+$rm = @(Rows $r 'remove')
 Check 'A8-3 implementation{ glued }: the dangling ELibOld is in the IMPLEMENTATION section (line 31)' `
   (($rm.Count -eq 1) -and ((Need $rm[0]) -eq 'ELibOld') -and ($rm[0].needed_by[0].line -eq 31) -and ($rm[0].needed_by[0].section -eq 'implementation')) ($rm | ConvertTo-Json -Depth 5)
 
 # ---- A7-6: a keeper past the needed_by cap still counts --------------------
 $r = J 'O2Form.pas' 'old.rules' @('--only', 'Old0')
 Check 'A7-6 --only Old0 with 5 own left-out TOld instances + X2: TOld2 (6th keeper): KEPT, not skipped' `
-  (($r.Code -eq 0) -and ((Rows $r 'kept').Count -eq 1) -and ((Rows $r 'skipped').Count -eq 0)) $r.Out
+  (($r.Code -eq 0) -and ((@(Rows $r 'kept')).Count -eq 1) -and ((@(Rows $r 'skipped')).Count -eq 0)) $r.Out
 
 # ---- A7-7: a class-level (nested) declaration is no unit-level declarer -----
 $r = J 'SoloForm.pas' 'solo.rules'
 Check 'A7-7 TSolo (unit level in LibSolo, nested in LibNest): not ambiguous, nothing unresolved' `
-  (($r.Code -eq 0) -and -not ((Kinds $r) -contains 'uses-unit-ambiguous') -and (@($r.J.uses_unresolved).Count -eq 0)) $r.Out
+  (($r.Code -eq 0) -and -not ((@(Kinds $r)) -contains 'uses-unit-ambiguous') -and (@($r.J.uses_unresolved).Count -eq 0)) $r.Out
 
 # ---- A7-8: a helper member another kept unit provides is not dangling -------
 $r = J 'W5bForm.pas' 'old.rules'
-$rm = Rows $r 'remove'
+$rm = @(Rows $r 'remove')
 Check 'A7-8 S.OldUpper also provided by LibHelp2 (kept): LibOld removed with NO needed_by, no unit-rule-dangling' `
-  (($rm.Count -eq 1) -and (@($rm[0].needed_by).Count -eq 0) -and -not ((Kinds $r) -contains 'unit-rule-dangling')) $r.Out
+  (($rm.Count -eq 1) -and (@($rm[0].needed_by).Count -eq 0) -and -not ((@(Kinds $r)) -contains 'unit-rule-dangling')) $r.Out
 
 # ---- review fix wave ---------------------------------------------------------
 $r = J 'TieCForm.pas' 'tiec.rules'
 Check 'F1 a tie settled only by the #convert block unit (LibTieA): no ambiguity, nothing unresolved (the write is checked in X F1 / C1 -- the #convert surface''s own add has no uses[] row)' `
-  (($r.Code -eq 0) -and -not ((Kinds $r) -contains 'uses-unit-ambiguous') -and (@($r.J.uses_unresolved).Count -eq 0)) $r.Out
+  (($r.Code -eq 0) -and -not ((@(Kinds $r)) -contains 'uses-unit-ambiguous') -and (@($r.J.uses_unresolved).Count -eq 0)) $r.Out
 $r = J 'TieRForm.pas' 'tier.rules'
 Check 'F2 #unuse LibTieB on a unit using LibTieB: LibTieB does not settle the tie (ambiguity reported) and its #unuse is not cancelled (a remove or kept row for it)' `
-  (((Kinds $r) -contains 'uses-unit-ambiguous') -and (@($r.J.uses | Where-Object { $_.unit -eq 'LibTieB' -and $_.action -in @('remove','kept') }).Count -eq 1)) $r.Out
+  (((@(Kinds $r)) -contains 'uses-unit-ambiguous') -and (@($r.J.uses | Where-Object { $_.unit -eq 'LibTieB' -and $_.action -in @('remove','kept') }).Count -eq 1)) $r.Out
 $r = J 'TieR2Form.pas' 'tier2.rules'
 Check 'F2 ... + #use LibTieA: the tie goes to LibTieA (interface), LibTieB REMOVED, no ambiguity' `
-  (-not ((Kinds $r) -contains 'uses-unit-ambiguous') -and (@(Rows $r 'remove' | Where-Object { $_.unit -eq 'LibTieB' }).Count -eq 1) -and
+  (-not ((@(Kinds $r)) -contains 'uses-unit-ambiguous') -and (@(Rows $r 'remove' | Where-Object { $_.unit -eq 'LibTieB' }).Count -eq 1) -and
    (@(Rows $r 'add' | Where-Object { $_.unit -eq 'LibTieA' -and $_.section -eq 'interface' }).Count -eq 1)) $r.Out
 $r = J 'TieSForm.pas' 'ties.rules'
 # owner ruling 2026-10-11: the unsettled tie is now REFUSED (see A3), not reported
@@ -782,41 +785,41 @@ Check 'F-minor #useswap LibAmbA -> LibTieA on a unit without LibAmbA settles not
    (@(Rows $r 'add' | Where-Object { $_.unit -eq 'LibTieA' }).Count -eq 0) -and -not ((Text 'TieSForm.pas') -match 'LibTie')) $r.Out
 $r = J 'Solo2Form.pas' 'solo2.rules'
 Check 'F3 swapped names / order (LibANest2 nested, LibZSolo2 unit level): no ambiguity, the unit added is LibZSolo2' `
-  (-not ((Kinds $r) -contains 'uses-unit-ambiguous') -and ($r.J.items | Where-Object { $_.kind -eq 'field-retyped' }) -and
+  (-not ((@(Kinds $r)) -contains 'uses-unit-ambiguous') -and ($r.J.items | Where-Object { $_.kind -eq 'field-retyped' }) -and
    -not ($r.Out -match 'LibANest2')) $r.Out
 $r = J 'AmpForm.pas' 'old.rules'
-$rm = Rows $r 'remove'
+$rm = @(Rows $r 'remove')
 Check 'F-minor &implementation (an escaped identifier) is not the keyword: E1: ELibOld dangles in the INTERFACE' `
   (($rm.Count -eq 1) -and ((Need $rm[0]) -eq 'ELibOld') -and ($rm[0].needed_by[0].section -eq 'interface')) $r.Out
 function AddRows($r) { return @(Rows $r 'add') }
 $r = J 'CvForm.pas' 'cv.rules'
-$ad = AddRows $r
+$ad = @(AddRows $r)
 Check 'F4 #convert TOld -> TNew, LibNew (no unit rules): ONE add row -- LibNew, interface, line 6, rule #convert, source rule -- and uses_added 1' `
   (($r.Code -eq 0) -and ($ad.Count -eq 1) -and ($ad[0].unit -eq 'LibNew') -and ($ad[0].section -eq 'interface') -and ($ad[0].line -eq 6) -and
    ($ad[0].rule -eq '#convert') -and ($ad[0].source -eq 'rule') -and ($r.J.uses_added -eq 1)) ($r.J.uses | ConvertTo-Json -Depth 5)
 $r = J 'CvUForm.pas' 'cvu.rules'
-$ad = AddRows $r
+$ad = @(AddRows $r)
 Check 'F4 ... with #unuse LibOld (the capture shape): remove LibOld AND add LibNew (interface, #convert, rule), uses_added 1, uses_removed 1' `
   (($r.Code -eq 0) -and ($ad.Count -eq 1) -and ($ad[0].unit -eq 'LibNew') -and ($ad[0].section -eq 'interface') -and ($ad[0].rule -eq '#convert') -and
    ($ad[0].source -eq 'rule') -and ($r.J.uses_added -eq 1) -and ($r.J.uses_removed -eq 1)) ($r.J.uses | ConvertTo-Json -Depth 5)
 $r = J 'CvPForm.pas' 'cv.rules'
 Check 'F4 control: LibNew already in the uses -- no add row, uses_added 0' `
-  (($r.Code -eq 0) -and ((AddRows $r).Count -eq 0) -and ($r.J.uses_added -eq 0)) ($r.J.uses | ConvertTo-Json -Depth 5)
+  (($r.Code -eq 0) -and ((@(AddRows $r)).Count -eq 0) -and ($r.J.uses_added -eq 0)) ($r.J.uses | ConvertTo-Json -Depth 5)
 # N-06: the same with the interface clause in an include: present via the include
 $ciBefore = (Text 'CvIForm.pas') + '|' + (Text 'CvIForm.Uses.inc')
 $r = J 'CvIForm.pas' 'cv.rules'
 Check 'N06 LibNew used through {$I CvIForm.Uses.inc}: no add row, uses_added 0 (already used via include)' `
-  (($r.Code -eq 0) -and ((AddRows $r).Count -eq 0) -and ($r.J.uses_added -eq 0)) ($r.J.uses | ConvertTo-Json -Depth 5)
+  (($r.Code -eq 0) -and ((@(AddRows $r)).Count -eq 0) -and ($r.J.uses_added -eq 0)) ($r.J.uses | ConvertTo-Json -Depth 5)
 Check 'N06 the dry run leaves CvIForm.pas and its include byte-identical' (((Text 'CvIForm.pas') + '|' + (Text 'CvIForm.Uses.inc')) -ceq $ciBefore) ''
 # ---- A7-9: an interface name is not satisfied by an implementation-only unit -
 $r = J 'SecForm.pas' 'olds.rules'
-$rm = Rows $r 'remove'
+$rm = @(Rows $r 'remove')
 Check 'A7-9 TShared (interface field) declared by LibOldS (removed) and LibDupI (implementation uses only): dangling, section interface' `
   (($rm.Count -eq 1) -and ($rm[0].unit -eq 'LibOldS') -and ((Need $rm[0]) -eq 'TShared') -and ($rm[0].needed_by[0].section -eq 'interface')) $r.Out
 $r = J 'SecIForm.pas' 'olds.rules'
-$rm = Rows $r 'remove'
+$rm = @(Rows $r 'remove')
 Check 'A7-9 control: TShared referenced only in the implementation, LibDupI in the implementation uses: NOT dangling' `
-  (($rm.Count -eq 1) -and ($rm[0].unit -eq 'LibOldS') -and (@($rm[0].needed_by).Count -eq 0) -and -not ((Kinds $r) -contains 'unit-rule-dangling')) $r.Out
+  (($rm.Count -eq 1) -and ($rm[0].unit -eq 'LibOldS') -and (@($rm[0].needed_by).Count -eq 0) -and -not ((@(Kinds $r)) -contains 'unit-rule-dangling')) $r.Out
 
 # 1.27.0 (cast-link refusal, owner decision): a cast link writes NO .pas access
 # site, so a cast template's routine (CastPic, CastPicMode + cmFancy, AmbPic,
@@ -831,27 +834,27 @@ function CastRefused($r) { return @(if ($r.J) { $r.J.items | Where-Object { $_.k
 foreach ($x in @(@('CastForm','cast.rules','CastA'), @('CastEForm','caste.rules','CastE'), @('AmbForm','amb.rules','CastAmb'),
                  @('AmbUForm','ambu.rules','CastAmb'), @('NfForm','nf.rules','CastNf'))) {
   $r = J "$($x[0]).pas" $x[1]
-  $cr = CastRefused $r
+  $cr = @(CastRefused $r)
   Check "A1 $($x[0]): the cast link's access site pic1.Picture (line 20) is REFUSED, one cast-not-applied naming $($x[2])" `
     (($r.Code -eq 0) -and ($cr.Count -eq 1) -and ($cr[0].value -eq $x[2]) -and ($cr[0].text -match "$($x[0])\.pas:20 pic1\.Picture") -and
      ($cr[0].text -match 'convert this access site by hand')) $r.Out
   Check "A1 ... $($x[0]): so no reconcile add and no uses_unresolved row (the template never reaches the .pas)" `
     ((@(Rows $r 'add' | Where-Object { $_.source -eq 'reconcile' }).Count -eq 0) -and (@($r.J.uses_unresolved).Count -eq 0) -and
-     -not ((Kinds $r) -contains 'uses-unit-ambiguous') -and -not ((Kinds $r) -contains 'cast-applied')) $r.Out
+     -not ((@(Kinds $r)) -contains 'uses-unit-ambiguous') -and -not ((@(Kinds $r)) -contains 'cast-applied')) $r.Out
 }
 
 # ---- N1: --no-reconcile-uses is 1.26.6 --------------------------------------
 $r = J 'W2Form.pas' 'old.rules' @('--no-reconcile-uses')
 Check 'N1 --no-reconcile-uses: uses_reconcile off, plain remove row, no needed_by, no dangling warning' `
-  (($r.Code -eq 0) -and ($r.J.uses_reconcile -eq 'off') -and ((Rows $r 'remove').Count -eq 1) -and (@((Rows $r 'remove')[0].needed_by).Count -eq 0) -and -not ((Kinds $r) -contains 'unit-rule-dangling')) $r.Out
+  (($r.Code -eq 0) -and ($r.J.uses_reconcile -eq 'off') -and ((@(Rows $r 'remove')).Count -eq 1) -and (@((@(Rows $r 'remove'))[0].needed_by).Count -eq 0) -and -not ((@(Kinds $r)) -contains 'unit-rule-dangling')) $r.Out
 $r = J 'W4Form.pas' 'old.rules' @('--no-reconcile-uses')
 Check 'N1 ... W4: 1.26.6 REMOVES LibOld although Old2: TOld2 still streams (R26 only counts #convert types) -- the defect W4 pins' `
-  (($r.Code -eq 0) -and ((Rows $r 'remove').Count -eq 1) -and ((Rows $r 'kept').Count -eq 0)) $r.Out
+  (($r.Code -eq 0) -and ((@(Rows $r 'remove')).Count -eq 1) -and ((@(Rows $r 'kept')).Count -eq 0)) $r.Out
 $r = Run 'DescForm.pas' 'old.rules' @('--no-reconcile-uses')
 Check 'N1 ... DESC refused by R26 exactly as 1.26.6' `
   (($r.Code -eq 1) -and ($r.Out -match [regex]::Escape('REFUSED: #unuse LibOld would leave 1 unconverted instance(s) of TOld -- unit not changed'))) $r.Out
 $r = J 'D2Form.pas' 'old.rules' @('--no-reconcile-uses')
-Check 'N1 ... D2 move has no uses[] row (1.26.6)' (($r.Code -eq 0) -and (@($r.J.uses).Count -eq 1) -and ((Rows $r 'moved').Count -eq 0)) $r.Out
+Check 'N1 ... D2 move has no uses[] row (1.26.6)' (($r.Code -eq 0) -and (@($r.J.uses).Count -eq 1) -and ((@(Rows $r 'moved')).Count -eq 0)) $r.Out
 
 # ---- R: the re-index step ---------------------------------------------------
 $r = J 'W1Form.pas' 'old.rules'
@@ -872,8 +875,8 @@ Check 'R3 --no-reindex: uses_reindex off' (($r.Code -eq 0) -and ($r.J.uses_reind
 # ---- B1: batch entries equal single runs ------------------------------------
 $singles = @{}
 foreach ($u in @('W2Form', 'W6Form')) { $singles[$u] = (J "$u.pas" (@{W2Form='old.rules'; W6Form='al.rules'}[$u])).J }
-$b = (& $Exe convert-apply --unit (P 'W2Form.pas') --unit (P 'W3Form.pas') --rules (P 'old.rules') --db $db --format json 2>$null) -join "`n"
-$bj = $null; try { $bj = $b.Substring($b.IndexOf('{')) | ConvertFrom-Json } catch {}
+$b = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'W2Form.pas') --unit (P 'W3Form.pas') --rules (P 'old.rules') --db $db --format json 2>$null }) -join "`n"
+$bj = $null; try { $bj = $b.Substring($b.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 $s2 = (J 'W3Form.pas' 'old.rules').J
 Check 'B1 batch W2+W3: each units[] uses[] equals its single run' `
   (($null -ne $bj) -and (($bj.units[0].uses | ConvertTo-Json -Depth 6) -eq ($singles['W2Form'].uses | ConvertTo-Json -Depth 6)) -and
@@ -890,17 +893,17 @@ function ApplyJ([string]$Dir, [string[]]$Units, [string[]]$Extra = @()) {
   $a = @('convert-apply')
   foreach ($u in $Units) { $a += @('--unit', (Join-Path $Dir "$u.pas")) }
   $a += @('--rules', (Join-Path $Dir 'old.rules'), '--db', (Join-Path $Dir 'fx.sqlite'), '--apply', '--no-backup', '--format', 'json') + $Extra
-  $o = (& $Exe @a 2>$null) -join "`n"
-  try { return ($o.Substring($o.IndexOf('{')) | ConvertFrom-Json) } catch { return $null }
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null }) -join "`n"
+  try { return ($o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function Norm($Entry, [string]$Dir) {
   if ($null -eq $Entry) { return '<null>' }
-  $c = $Entry | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+  $c = $Entry | ConvertTo-Json -Depth 10 | ConvertFrom-Json | ForEach-Object { $_ }
   $c.PSObject.Properties.Remove('uses_reindex')
   $c.PSObject.Properties.Remove('classes_built')
   return (($c | ConvertTo-Json -Depth 10 -Compress).Replace(($Dir -replace '\\', '\\'), '<D>'))
 }
-foreach ($k in $b2.Keys) { & $Exe index --project (Join-Path $b2[$k] 'P.dpr') --db (Join-Path $b2[$k] 'fx.sqlite') 2>&1 | Out-Null }
+foreach ($k in $b2.Keys) { & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $b2[$k] 'P.dpr') --db (Join-Path $b2[$k] 'fx.sqlite') 2>&1 | ForEach-Object { "$_" } } | Out-Null }
 $bb = ApplyJ $b2['batch'] @('Base2Form', 'Desc2Form')
 $sb = ApplyJ $b2['single'] @('Base2Form')
 $sd = ApplyJ $b2['single'] @('Desc2Form')
@@ -991,12 +994,12 @@ foreach ($x in @(@('CastForm','cast.rules'), @('CastEForm','caste.rules'), @('D2
   $r = J "$($x[0]).pas" $x[1]
   Check "I2 second run on the converted $($x[0]): no uses add/remove/moved row, no ambiguity warning" `
     (($null -ne $r.J) -and (-not $r.J.refused) -and (@($r.J.uses | Where-Object { $_.action -in @('add','remove','moved') }).Count -eq 0) -and
-     -not ((Kinds $r) -contains 'uses-unit-ambiguous')) $r.Out
+     -not ((@(Kinds $r)) -contains 'uses-unit-ambiguous')) $r.Out
 }
 
 # ---- capability -------------------------------------------------------------
-$info = (& $Exe info --json 2>$null) -join "`n"
-$ij = $null; try { $ij = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json } catch {}
+$info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n"
+$ij = $null; try { $ij = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'K info --json: capabilities.uses_reconcile is true' (($null -ne $ij) -and ($ij.capabilities.uses_reconcile -eq $true)) ''
 
 Write-Host ''

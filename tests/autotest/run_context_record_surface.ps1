@@ -41,9 +41,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_context_record_surface_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -107,7 +110,7 @@ end.
 "@
 
 $db = Join-Path $WorkDir 'fx.sqlite'
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the fixture index was built' (Test-Path $db) $db
 
 # Returns the `## Class surface` section only (the call operator, not
@@ -115,7 +118,7 @@ Check 'V the fixture index was built' (Test-Path $db) $db
 function Surface([string]$Task, [switch]$Full) {
   $extra = @()
   if ($Full) { $extra = @('--full-surface') }
-  $out = ((& $exePath context --task $Task --db $db --format markdown @extra 2>$null) -join "`n")
+  $out = ((& { $ErrorActionPreference = 'Continue'; & $exePath context --task $Task --db $db --format markdown @extra 2>$null }) -join "`n")
   if ($out -match '(?s)## Class surface(.*?)(\n## |\z)') { return $Matches[1] }
   return ''
 }

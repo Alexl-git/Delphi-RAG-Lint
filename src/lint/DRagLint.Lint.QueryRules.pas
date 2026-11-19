@@ -251,8 +251,7 @@ type
       /// the enclosing routine (defProc) up to the picked node, or the file start when
       /// the match is outside a routine. Each brace-wrapped capture name becomes the
       /// regex-escaped text of capture @name, so the pattern can insist on the SAME array
-      /// the match named. A pattern ending in an unescaped $ (end-anchored) is matched against
-      /// only the last 512 bytes of the window, so the check stays linear per file.</summary>
+      /// the match named.</summary>
       /// <param name="APicked"><!-- drag-lint:auto type -->const TTSNode</param>
       /// <param name="ACaptures"><!-- drag-lint:auto type -->const TTSQueryCaptureArray</param>
       /// <param name="ASource"><!-- drag-lint:auto type -->const TBytes</param>
@@ -261,6 +260,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Lint.QueryRules.TQueryRule.Run (DRagLint.Lint.QueryRules.pas)</para>
       /// <para>Calls: DRagLint.Lint.QueryRules.NodeText, Integer, StringReplace, TreeSitter.Query.TTSQuery.CaptureNameForID, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.Parent, TreeSitter.TTSNodeHelper.StartByte, Trim</para>
+      /// <para>Complexity: 17 (cyclomatic, outer body), 59 lines (full implementation)</para>
       /// <para>Reads: FExcludePrecededBy, FQuery</para>
       /// <seealso cref="DRagLint.Lint.QueryRules.NodeText"/>
       /// <seealso cref="TreeSitter.Query.TTSQuery.CaptureNameForID"/>
@@ -354,23 +354,24 @@ type
       /// <param name="ASource"><!-- drag-lint:auto type -->const TBytes</param>
       /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AOracle">Optional (O2): static facts for #declared-type?, #oracle-via? and #enclosing-class-descends?. nil asks TQueryTypeOracleScope.Current; none = the rule decides as before.</param>
+      /// <param name="AColSource">Optional (1.52 BK-TAILS-ENG): the UTF-8 bytes BEFORE the preprocessor blanked inactive branches, same length as ASource; finding columns are counted on it, because a blanked non-ASCII character is one space per BYTE. nil = ASource.</param>
       /// <returns><!-- drag-lint:auto -->TArray&lt;TLintFinding&gt; -- Observed:
       /// FoundList.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas) ?, DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas)</para>
-      /// <para>Calls: Default, DRagLint.Lint.QueryRules.AllPredicatesPass, DRagLint.Lint.QueryRules.NoteRuleTicks, DRagLint.Lint.QueryRules.RuleProfileArmed, DRagLint.Lint.QueryRules.TDeclScopeCache.Create, DRagLint.Lint.QueryRules.TQueryRule.AttachFix, DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor, DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor, DRagLint.Lint.QueryRules.TQueryRule.IsArgumentOfExcludedCallee, DRagLint.Lint.QueryRules.TQueryRule.IsPrecededByExcludedText (+10 more)</para>
-      /// <para>Complexity: 17 (cyclomatic, outer body), 92 lines (full implementation)</para>
+      /// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas) ?, DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas)</para>
+      /// <para>Calls: Default, DRagLint.Core.Encoding.Utf8ByteColToCharCol, DRagLint.Lint.QueryRules.AllPredicatesPass, DRagLint.Lint.QueryRules.NoteRuleTicks, DRagLint.Lint.QueryRules.RuleProfileArmed, DRagLint.Lint.QueryRules.TDeclScopeCache.Create, DRagLint.Lint.QueryRules.TQueryRule.AttachFix, DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor, DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor, DRagLint.Lint.QueryRules.TQueryRule.IsArgumentOfExcludedCallee (+13 more)</para>
+      /// <para>Complexity: 18 (cyclomatic, outer body), 94 lines (full implementation)</para>
       /// <para>Reads: FQuery, FWarnCapture, FId, FSeverity, FMessage, FFixes, FRuleId</para>
       /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.Encoding.Utf8ByteColToCharCol"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.AllPredicatesPass"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.NoteRuleTicks"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.RuleProfileArmed"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TDeclScopeCache.Create"/>
-      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.AttachFix"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      function Run(const ARootNode: TTSNode; const ASource: TBytes; const AFilePath: string; const AOracle: ITypeOracle = nil): TArray<TLintFinding>;
+      function Run(const ARootNode: TTSNode; const ASource: TBytes; const AFilePath: string; const AOracle: ITypeOracle = nil; const AColSource: TBytes = nil): TArray<TLintFinding>;
       /// <summary>A literal the FILE TEXT must contain for this rule's query to
       /// be capable of matching -- a cheap pre-filter the caller may use to skip
       /// running the query at all. '' when no such literal could be proven.</summary>
@@ -581,14 +582,14 @@ function CreateStoreTypeOracle(const AStore: ISymbolStore; AFileId: Int64; const
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Diagnostics.ExprChecks.TExprChecker.Check.CheckDoubleLookup (DRagLint.Diagnostics.ExprChecks.pas), DRagLint.Lint.Linter.EmitFieldByNameLoopFinding (DRagLint.Lint.Linter.pas)</para>
-/// <para>Calls: Copy, DRagLint.Lint.QueryRules.ITypeOracle.ClassDescends, DRagLint.Lint.QueryRules.ITypeOracle.TypeAt, DRagLint.Lint.QueryRules.NodeText, Integer, Pos, SameText, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.StartPoint</para>
+/// <para>Calls: Copy, DRagLint.Core.Encoding.Utf8ByteColToCharCol, DRagLint.Lint.QueryRules.ITypeOracle.ClassDescends, DRagLint.Lint.QueryRules.ITypeOracle.TypeAt, DRagLint.Lint.QueryRules.NodeText, Integer, Pos, SameText, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.StartByte, TreeSitter.TTSNodeHelper.StartPoint</para>
 /// <para>Returns: False; AOracle.ClassDescends(Leaf, 'TObject')</para>
 /// <para>Complexity: 10 (cyclomatic, outer body), 19 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Core.Encoding.Utf8ByteColToCharCol"/>
 /// <seealso cref="DRagLint.Lint.QueryRules.ITypeOracle.ClassDescends"/>
 /// <seealso cref="DRagLint.Lint.QueryRules.ITypeOracle.TypeAt"/>
 /// <seealso cref="DRagLint.Lint.QueryRules.NodeText"/>
 /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
-/// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ReceiverProvenOtherClass(const AOracle: ITypeOracle; const ARecv: TTSNode; const ASource: TBytes; const ARoots: array of string): Boolean;
@@ -604,7 +605,7 @@ function ReceiverProvenOtherClass(const AOracle: ITypeOracle; const ARecv: TTSNo
 /// an untyped inline var or anything else the source does not show.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Lint.Autofix.DeclTypeOf (DRagLint.Lint.Autofix.pas)</para>
+/// <para>Called from: DRagLint.Lint.Autofix.DeclTypeOf (DRagLint.Lint.Autofix.pas), DRagLint.V151.MEM.Support.TMemRun.DeclTypeOf (DRagLint.V151.MEM.Support.pas)</para>
 /// <para>Calls: DRagLint.Lint.QueryRules.NamedChildrenOf, DRagLint.Lint.QueryRules.TDeclScopeCache.Create, DRagLint.Lint.QueryRules.TDeclScopeCache.Find, TreeSitter.TTSNodeHelper.EndByte, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.Parent, TreeSitter.TTSNodeHelper.StartByte</para>
 /// <para>Returns: False</para>
 /// <para>Mutates: AType (out)</para>
@@ -622,6 +623,7 @@ implementation
 
 uses
   FireDAC.Comp.Client    { TFDQuery -- the store oracle reads ref_types }
+  , DRagLint.Core.Encoding { 1.52 EXTGAPS2: Utf8ByteColToCharCol -- the oracle is keyed by index CHARACTER columns }
   , DRagLint.Storage.SQLite { TSQLiteSymbolStore -- the connection behind ISymbolStore }
   , DRagLint.Lint.RefTypeRules { TExprTypeReader -- ancestry for the class oracle }
   , System.Diagnostics       { TStopwatch -- the per-rule .scm timing below }
@@ -1164,6 +1166,25 @@ begin
   end;
 end;
 
+{ (#parent? @cap "nodeType" ["field"]) / (#not-parent? ...) -- 2026-11-18.
+  True when the DIRECT parent of the captured node has type ANodeType and,
+  when AField is given, the node sits in that parent's AField field. #in?
+  walks every ancestor, which is too wide for "is this if/else the else arm
+  of another if/else": an if/else nested inside a begin..end branch of an
+  outer if/else also has an ifElse ancestor, and must keep firing. Born for
+  ifthen-to-if-expression (the tail of an else-if chain is not a two-way
+  choice). }
+function ParentIsField(const ANode: TTSNode; const ANodeType, AField: string): Boolean;
+var
+  P: TTSNode;
+begin
+  Result:= False;
+  if ANode.IsNull then Exit;
+  P:= ANode.Parent;
+  if P.IsNull or (P.NodeType <> ANodeType) then Exit;
+  Result:= (AField = '') or (P.ChildByField(AField) = ANode);
+end;
+
 { True when ANode's subtree contains an `identifier` whose text is AName
   (case-insensitive -- Delphi identifiers are). }
 function SubtreeHasIdentifier(const ANode: TTSNode; const ASource: TBytes; const AName: string): Boolean;
@@ -1704,7 +1725,7 @@ begin
   Id:= ARecv;
   if Id.NodeType = 'exprDot' then Id:= Id.ChildByField('rhs');
   if Id.IsNull or (Id.NodeType <> 'identifier') then Exit;
-  if not AOracle.TypeAt(Integer(Id.StartPoint.Row) + 1, Integer(Id.StartPoint.Column) + 1, NodeText(Id, ASource), Leaf, Via) then Exit;
+  if not AOracle.TypeAt(Integer(Id.StartPoint.Row) + 1, Utf8ByteColToCharCol(ASource, Id.StartByte, Id.StartPoint.Column) + 1, NodeText(Id, ASource), Leaf, Via) then Exit;
   P:= Pos('<', Leaf);
   if P > 0 then Leaf:= Copy(Leaf, 1, P - 1);
   for Root in ARoots do
@@ -1959,7 +1980,7 @@ begin
   { O2: nothing typed in the declared scopes (a field, a global of another unit, an inline var):
     ask the oracle by the capture's position. No oracle = False, as before. }
   if ACache.Oracle = nil then Exit;
-  if not ACache.Oracle.TypeAt(Integer(ANode.StartPoint.Row) + 1, Integer(ANode.StartPoint.Column) + 1, Name, Ty, Via) then Exit;
+  if not ACache.Oracle.TypeAt(Integer(ANode.StartPoint.Row) + 1, Utf8ByteColToCharCol(ASource, ANode.StartByte, ANode.StartPoint.Column) + 1, Name, Ty, Via) then Exit;
   try
     Result:= TRegEx.IsMatch(Ty, ATypeRx, [roIgnoreCase]);
   except  { same as above: a malformed rule regex answers no match }
@@ -2038,7 +2059,7 @@ begin
   Node:= ResolveCaptureNode(AMatch, AArgs[CAP_ARG].CaptureIndex);
   if (ACache.Oracle <> nil) and (not Node.IsNull) and (Node.NodeType = 'identifier') then
   try
-    Hit:= ACache.Oracle.TypeAt(Integer(Node.StartPoint.Row) + 1, Integer(Node.StartPoint.Column) + 1,
+    Hit:= ACache.Oracle.TypeAt(Integer(Node.StartPoint.Row) + 1, Utf8ByteColToCharCol(ASource, Node.StartByte, Node.StartPoint.Column) + 1,
       NodeText(Node, ASource), Leaf, Via) and TRegEx.IsMatch(Via, AArgs[RX_ARG].StringValue);
   except { a malformed rule regex answers no match, never aborts the scan }
     on ERegularExpressionError do Hit:= False;
@@ -2111,7 +2132,7 @@ begin
     Cur:= Cur.Parent;
   end;
   if (Ty = '') and (ACache.Oracle <> nil)
-     and not ACache.Oracle.TypeAt(Integer(Node.StartPoint.Row) + 1, Integer(Node.StartPoint.Column) + 1, Name, Ty, Via) then Ty:= '';
+     and not ACache.Oracle.TypeAt(Integer(Node.StartPoint.Row) + 1, Utf8ByteColToCharCol(ASource, Node.StartByte, Node.StartPoint.Column) + 1, Name, Ty, Via) then Ty:= '';
   if Ty = '' then Exit;
   if ContainsText(Ty, 'class of') then Exit(False);
   var Leaf: string:= Ty.Substring(Ty.LastIndexOf('.') + 1);
@@ -2239,6 +2260,21 @@ begin
     Exit;
   end;
 
+  if (Op = 'parent?') or (Op = 'not-parent?') then
+  begin
+    { (#parent? @cap "nodeType" ["field"]) -- see ParentIsField. The third
+      argument is a FIELD name here, not a name regex. Malformed arguments
+      pass, as above. }
+    if (Length(AArgs) < MinArgs) or (Length(AArgs) > MaxArgs) then Exit(True);
+    if (not AArgs[CapArg].IsCapture) or AArgs[TypeArg].IsCapture then Exit(True);
+    if (Length(AArgs) = MaxArgs) and AArgs[NameRxArg].IsCapture then Exit(True);
+    Pattern:= '';
+    if Length(AArgs) = MaxArgs then Pattern:= AArgs[NameRxArg].StringValue;
+    Result:= ParentIsField(ResolveCaptureNode(AMatch, AArgs[CapArg].CaptureIndex), AArgs[TypeArg].StringValue, Pattern);
+    if Op = 'not-parent?' then Result:= not Result;
+    Exit;
+  end;
+
   if (Op = 'reset-in-loop?') or (Op = 'not-reset-in-loop?') then
     Exit(EvalResetInLoop(AMatch, ASource, AArgs, Op = 'not-reset-in-loop?'));
 
@@ -2304,7 +2340,7 @@ begin
   end; // try
 end; // function
 
-function TQueryRule.Run(const ARootNode: TTSNode; const ASource: TBytes; const AFilePath: string; const AOracle: ITypeOracle): TArray<TLintFinding>;
+function TQueryRule.Run(const ARootNode: TTSNode; const ASource: TBytes; const AFilePath: string; const AOracle: ITypeOracle; const AColSource: TBytes): TArray<TLintFinding>;
 var
   Cursor     : TTSQueryCursor      ;
   Match      : TTSQueryMatch       ;
@@ -2321,7 +2357,9 @@ var
   ProfT0     : Int64               ;
   Profiled   : Boolean             ;
   DeclCache  : TDeclScopeCache     ; { X-23: #declared-type? scope tables, this tree only }
+  ColSrc     : TBytes              ; { 1.52 BK-TAILS-ENG: the bytes finding columns are counted on }
 begin
+  ColSrc:= if Length(AColSource) = Length(ASource) then AColSource else ASource;
   { P3 MEASUREMENT. Off unless DRAGLINT_PROFILE is set -- see QueryRuleTimings.
     try/finally rather than a tail call: several Exit paths below would otherwise
     drop the sample, and a per-rule table that silently omits its cheapest-
@@ -2381,9 +2419,9 @@ begin
         Finding.FilePath:= AFilePath;
         Finding.Message := FMessage;
         Finding.StartLine:= Integer(Picked.StartPoint.row   ) + 1;
-        Finding.StartCol := Integer(Picked.StartPoint.column) + 1;
+        Finding.StartCol := Utf8ByteColToCharCol(ColSrc, Picked.StartByte, Picked.StartPoint.column) + 1; { 1.52 BK-COLS2: character column }
         Finding.EndLine  := Integer(Picked.EndPoint  .row   ) + 1;
-        Finding.EndCol   := Integer(Picked.EndPoint  .column) + 1;
+        Finding.EndCol   := Utf8ByteColToCharCol(ColSrc, Picked.EndByte, Picked.EndPoint.column) + 1;
         if (Length(FFixes) > 0) and not AttachFix(Finding, Captures, ASource) then Continue;
         FoundList.Add(Finding);
       end; // while

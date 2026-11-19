@@ -14,10 +14,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-mcp-exc-$PID",
-  [int]$ExpectedTools = 18
+  [int]$ExpectedTools = 20   # 1.52: check_init is the 20th tool
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -36,12 +39,12 @@ $work = Join-Path $WorkDir 'fixture'
 New-Item -ItemType Directory $work | Out-Null
 Copy-Item (Join-Path $FixtureDir '*.pas'), (Join-Path $FixtureDir '*.dpr') $work
 $db = Join-Path $WorkDir 'facts.sqlite'
-$null = & $Exe index $work --db $db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
-$cliT = ((& $Exe exception-facts --target TypeFacts.Stamp --db $db --json 2>$null) -join "`n").Trim()
-$cliN = ((& $Exe exception-facts --name ELocal --db $db --json 2>$null) -join "`n").Trim()
-Check 'control: the CLI answers (non-empty, count > 0)' (($cliT | ConvertFrom-Json).count -gt 0 -and ($cliN | ConvertFrom-Json).count -gt 0)
+$cliT = ((& { $ErrorActionPreference = 'Continue'; & $Exe exception-facts --target TypeFacts.Stamp --db $db --json 2>$null }) -join "`n").Trim()
+$cliN = ((& { $ErrorActionPreference = 'Continue'; & $Exe exception-facts --name ELocal --db $db --json 2>$null }) -join "`n").Trim()
+Check 'control: the CLI answers (non-empty, count > 0)' (($cliT | ConvertFrom-Json | ForEach-Object { $_ }).count -gt 0 -and ($cliN | ConvertFrom-Json | ForEach-Object { $_ }).count -gt 0)
 
 $req = @(
   '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}',
@@ -52,9 +55,9 @@ $req = @(
   '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"get_exception_facts","arguments":{"target":"A","name":"B"}}}',
   '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"get_exception_facts","arguments":{"target":"NoSuchRoutine"}}}'
 ) -join "`n"
-$mcp = $req | & $Exe serve --db $db 2>$null | Out-String
+$mcp = $req | & { $ErrorActionPreference = 'Continue'; $input | & $Exe serve --db $db 2>$null } | Out-String
 $rep = @{}
-foreach ($ln in ($mcp -split "`n")) { try { $o = $ln.Trim() | ConvertFrom-Json; if ($o.id) { $rep[[int]$o.id] = $o } } catch { } }
+foreach ($ln in ($mcp -split "`n")) { try { $o = $ln.Trim() | ConvertFrom-Json | ForEach-Object { $_ }; if ($o.id) { $rep[[int]$o.id] = $o } } catch { } }
 $tools = @($rep[2].result.tools)
 $t = @($tools | Where-Object { $_.name -eq 'get_exception_facts' })
 Check 'M1 tools/list carries get_exception_facts' ($t.Count -eq 1)
@@ -68,7 +71,7 @@ Check 'M3 {name} == exception-facts --name --json' ($txtN -ne '' -and $txtN -ceq
 Check 'M4 control: the target compare fails against the name text' (-not ($txtT -ceq $cliN))
 Check 'M4 no selector is an error' ($null -ne $rep[5].error -or [bool]$rep[5].result.isError) ($rep[5] | ConvertTo-Json -Compress -Depth 5)
 Check 'M4 both selectors is an error' ($null -ne $rep[6].error -or [bool]$rep[6].result.isError) ($rep[6] | ConvertTo-Json -Compress -Depth 5)
-$empty = $null; try { $empty = (ToolText $rep[7]) | ConvertFrom-Json } catch { }
+$empty = $null; try { $empty = (ToolText $rep[7]) | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'M4 unknown routine: count 0, not an error' ($null -ne $empty -and $empty.count -eq 0)
 
 if ($script:Failed) { Write-Host 'run_mcp_exception_facts_guard: FAIL' -ForegroundColor Red; exit 1 }

@@ -22,10 +22,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\draglint_dir_union_$PID",
   [switch]$Quiet
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
 function Check([bool]$ok, [string]$what) {
@@ -41,17 +44,17 @@ New-Item -ItemType Directory -Force $WorkDir | Out-Null
 foreach ($n in $names) { Copy-Item (Join-Path $src "$n.pas") $WorkDir -Force }
 
 function Tuples([string]$path, [string[]]$extra) {
-  $out = & $exePath lint $path --json @extra 2>$null
-  $j = @($out | ConvertFrom-Json)
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath lint $path --json @extra 2>$null }
+  $j = @(($out | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   return @($j | ForEach-Object { '{0}|{1}|{2}' -f (Split-Path $_.file_path -Leaf), $_.rule, $_.start_line } | Sort-Object)
 }
 
 Push-Location $env:TEMP
 try {
   # Case 1: no --rule.
-  $dir = Tuples $WorkDir @()
+  $dir = @(Tuples $WorkDir @())
   $per = @()
-  foreach ($n in $names) { $per += Tuples (Join-Path $WorkDir "$n.pas") @() }
+  foreach ($n in $names) { $per += @(Tuples (Join-Path $WorkDir "$n.pas") @()) }
   $per = @($per | Sort-Object)
   $missing = @($per | Where-Object { $dir -notcontains $_ })
   $extra   = @($dir | Where-Object { $per -notcontains $_ })

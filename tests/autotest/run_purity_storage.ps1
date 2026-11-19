@@ -11,9 +11,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\draglint_purity_storage_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -52,9 +55,9 @@ $db = Join-Path $WorkDir 's.sqlite'
 $colSql = "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'symbol_facts'"
 Push-Location C:\TEMP
 try {
-  $null = & $Exe index $src --db $db 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } }
   Check '1. fixture indexed' (Test-Path $db) $db
-  $cols = (& $Exe sql --db $db --format text --query $colSql 2>&1) -join "`n"
+  $cols = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --format text --query $colSql 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check '2. effect_free / effect_summary / effect_witness columns exist' `
     (($cols -match '\beffect_free\b') -and ($cols -match '\beffect_summary\b') -and ($cols -match '\beffect_witness\b')) ($cols -replace '\s+', ' ')
   # UPDATED 2026-09-22 (C6.1 Task 3), deliberately, NOT to get green: until the
@@ -66,15 +69,15 @@ try {
   # does not name them) and by run_purity_stage.ps1's gate control, where
   # deleting rows behind the engine's back FLIPS the verdict -- which it could
   # not do if the verdict came from the parse.
-  $rows   = (& $Exe sql --db $db --format text --query "SELECT count(*) FROM symbol_facts WHERE ifnull(body_loc, 0) > 0" 2>&1) -join "`n"
-  $filled = (& $Exe sql --db $db --format text --query "SELECT count(*) FROM symbol_facts WHERE ifnull(body_loc, 0) > 0 AND effect_free IS NOT NULL" 2>&1) -join "`n"
+  $rows   = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --format text --query "SELECT count(*) FROM symbol_facts WHERE ifnull(body_loc, 0) > 0" 2>&1 | ForEach-Object { "$_" } }) -join "`n"
+  $filled = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --format text --query "SELECT count(*) FROM symbol_facts WHERE ifnull(body_loc, 0) > 0 AND effect_free IS NOT NULL" 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $nRows = [int]([regex]::Match($rows,   '^\s*(\d+)\s*$', 'Multiline').Groups[1].Value)
   $nFill = [int]([regex]::Match($filled, '^\s*(\d+)\s*$', 'Multiline').Groups[1].Value)
   Check '2b. after an index run every routine row carries a verdict (the stage filled what the walk left NULL)' `
     (($nRows -ge 1) -and ($nFill -eq $nRows)) "rows=$nRows filled=$nFill"
-  $null = & $Exe index $src --db $db 2>&1
-  $cols2 = (& $Exe sql --db $db --format text --query $colSql 2>&1) -join "`n"
-  $filled2 = (& $Exe sql --db $db --format text --query "SELECT count(*) FROM symbol_facts WHERE ifnull(body_loc, 0) > 0 AND effect_free IS NOT NULL" 2>&1) -join "`n"
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } }
+  $cols2 = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --format text --query $colSql 2>&1 | ForEach-Object { "$_" } }) -join "`n"
+  $filled2 = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --format text --query "SELECT count(*) FROM symbol_facts WHERE ifnull(body_loc, 0) > 0 AND effect_free IS NOT NULL" 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $nFill2 = [int]([regex]::Match($filled2, '^\s*(\d+)\s*$', 'Multiline').Groups[1].Value)
   Check '3. a second index run keeps the columns AND every verdict (Migrate is idempotent, PutSymbolFacts does not reset them)' `
     (($cols2 -match '\beffect_witness\b') -and ($nFill2 -eq $nRows)) "filled=$nFill2 rows=$nRows"
@@ -87,26 +90,26 @@ try {
   #    precondition (5a) proves the fixture really lacks them, so 5b cannot
   #    pass vacuously against a DB that still has the columns.
   $db2 = Join-Path $WorkDir 'legacy.sqlite'
-  $null = & $Exe index $src --db $db2 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db2 2>&1 | ForEach-Object { "$_" } }
   $py = Get-Command python -ErrorAction SilentlyContinue
   if ($null -eq $py) {
     Check '5a. legacy fixture: python (sqlite3) available to drop the columns' $false 'python not on PATH -- cannot build the column-less fixture'
   } else {
     $drop = "import sqlite3; c = sqlite3.connect(r'$db2'); [c.execute('ALTER TABLE symbol_facts DROP COLUMN ' + n) for n in ('effect_free', 'effect_summary', 'effect_witness')]; c.commit(); c.close()"
-    $pyOut = (& python -c $drop 2>&1) -join "`n"
-    $cols5 = (& $Exe sql --db $db2 --format text --query $colSql 2>&1) -join "`n"
+    $pyOut = (& { $ErrorActionPreference = 'Continue'; & python -c $(if ($PSVersionTable.PSVersion.Major -lt 7) { $drop.Replace('"', '\"') } else { $drop }) 2>&1 | ForEach-Object { "$_" } }) -join "`n"
+    $cols5 = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db2 --format text --query $colSql 2>&1 | ForEach-Object { "$_" } }) -join "`n"
     Check '5a. legacy fixture lacks the three columns (precondition for 5b)' `
       (($cols5 -match '\bwiring\b') -and ($cols5 -notmatch 'effect_free') -and ($cols5 -notmatch 'effect_summary') -and ($cols5 -notmatch 'effect_witness')) $pyOut
     # document --unit WITHOUT --apply is a preview: read-only open, reaches
     # GetSymbolFacts for every public decl (Doc.Facts), writes nothing.
-    $docOut = (& $Exe document --unit (Join-Path $src 'uOne.pas') --db $db2 --json 2>&1) -join "`n"
+    $docOut = (& { $ErrorActionPreference = 'Continue'; & $Exe document --unit (Join-Path $src 'uOne.pas') --db $db2 --json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
     $docExit = $LASTEXITCODE
     Check '5b. read-only verb on the column-less DB: exit 0, no "no such column"' `
       (($docExit -eq 0) -and ($docOut -notmatch 'no such column')) ("exit=$docExit " + (($docOut -split "`n" | Where-Object { $_ -match 'FATAL|no such column|error' } | Select-Object -First 1)))
     # A WRITABLE open migrates the columns back in (the path that lets the
     # purity stage fill them on the next index run).
-    $null = & $Exe index $src --db $db2 2>&1
-    $cols5c = (& $Exe sql --db $db2 --format text --query $colSql 2>&1) -join "`n"
+    $null = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db2 2>&1 | ForEach-Object { "$_" } }
+    $cols5c = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db2 --format text --query $colSql 2>&1 | ForEach-Object { "$_" } }) -join "`n"
     Check '5c. a writable index run on the legacy DB adds the columns (Migrate ALTER)' ($cols5c -match '\beffect_witness\b') ''
   }
 } finally { Pop-Location }

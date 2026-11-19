@@ -45,14 +45,25 @@ type
   /// position, True when SOME same-named routine of the unit has a var / out
   /// parameter there. Built once per file by TDataFlowFacts.BuildCallees; it decides
   /// which call arguments get an 'argout' source (see TDataFlowFacts.Collect).</summary>
-  /// <remarks>Owned by the caller of BuildCallees. Name-keyed on purpose: the
+  /// <remarks>
+  /// Owned by the caller of BuildCallees. Name-keyed on purpose: the
   /// extractor sees one file, so overloads and same-named methods of different
-  /// classes are merged (any var/out at a position keeps that position).</remarks>
+  /// classes are merged (any var/out at a position keeps that position).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Index.DataFlowFacts.pas) ?, DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas) ?, DRagLint.Index.DataFlowFacts.TCollector.Create (DRagLint.Index.DataFlowFacts.pas) ?, DRagLint.Index.DataFlowFacts.TDataFlowFacts.BuildCallees (DRagLint.Index.DataFlowFacts.pas), DRagLint.Index.DataFlowFacts.TDataFlowFacts.Collect (DRagLint.Index.DataFlowFacts.pas) ? (+1 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDataFlowCallees = TDictionary<string, TArray<Boolean>>;
 
   /// <summary>Computes the data_flows rows of one routine from its tree-sitter
   /// subtree. Stateless apart from two process-wide counters; NOT thread-safe
   /// (the indexer's per-file loop is single-threaded).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas)</para>
+  /// <para>Used in units: DRagLint.Core.Indexer</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDataFlowFacts = class
     public
       /// <summary>The data_flows rows of routine ASym (see TDataFlowRow for every
@@ -71,7 +82,8 @@ type
       /// <returns>The rows, deduplicated, at most DF_ROW_CAP; nil when nothing is
       /// proven or the body is pure asm. FileId is left 0 (PutDataFlows takes it from
       /// the file tx).</returns>
-      /// <remarks>Never raises: an exception inside the walk (a malformed tree) is
+      /// <remarks>
+      /// Never raises: an exception inside the walk (a malformed tree) is
       /// caught, a one-line stderr note names the routine, and nil is returned --
       /// silence over a wrong claim, and the file tx is not rolled back for it.
       /// Literals, nil, and values of numeric/boolean declared type emit nothing;
@@ -82,22 +94,103 @@ type
       /// is kept); otherwise a short built-in RTL list decides (value-only routines
       /// drop, TryGetValue keeps position 1 only); every OTHER callee is unresolved
       /// here and KEEPS its argout source -- the linter resolves the callee and
-      /// reads its outparam rows, so no taint the walk needs is lost.</remarks>
+      /// reads its outparam rows, so no taint the walk needs is lost.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas), DRagLint.Index.DataFlowFacts.TDataFlowFacts.CollectMainBlock (DRagLint.Index.DataFlowFacts.pas)</para>
+      /// <para>Calls: DRagLint.Index.DataFlowFacts.TCollector.Create, DRagLint.Index.DataFlowFacts.TCollector.Rows, DRagLint.Index.DataFlowFacts.TCollector.Run, Format, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType, Writeln</para>
+      /// <para>Returns: nil; C.Rows</para>
+      /// <para>Catches: Exception (swallowed)</para>
+      /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Index.DataFlowFacts.TCollector.Create"/>
+      /// <seealso cref="DRagLint.Index.DataFlowFacts.TCollector.Rows"/>
+      /// <seealso cref="DRagLint.Index.DataFlowFacts.TCollector.Run"/>
+      /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+      /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function Collect(const ASym: TSymbol; const AProc, ABody: TTSNode; const ASrc: TBytes;
                              const AOwnerFields: TArray<string>;
                              const AGlobals: TArray<string>;
                              const ACallees: TDataFlowCallees): TArray<TDataFlowRow>; static;
+      /// <summary>The data_flows rows of a program's MAIN BLOCK (`begin ... end.` of a .dpr),
+      /// attributed to the program symbol.</summary>
+      /// <param name="AProgram">The skProgram symbol with its REAL identity (Id = symbols.id,
+      /// ParentId -1).</param>
+      /// <param name="ARoot">The file's tree root (the `program` / `library` node or its parent).</param>
+      /// <param name="ASrc">The UTF-8 source bytes ARoot indexes into.</param>
+      /// <param name="AGlobals">The program-level variable names, as declared.</param>
+      /// <param name="ACallees">As for Collect; nil = none known. Not owned.</param>
+      /// <returns>Collect's rows for the main block; nil when the root is no program or has no
+      /// main block.</returns>
+      /// <remarks>
+      /// 1.52 EXTGAPS (HBEVENTS gap 2): before, a .dpr main block had NO data_flows rows
+      /// -- `Fill(GDpr)` and `Application.CreateForm(TMainForm, MainForm)` were invisible to
+      /// check-init, which fell back to source text. The block node is handed to Collect as both
+      /// routine and body (TCfgBuilder.Build accepts a `block`); program-level vars are globals
+      /// (AGlobals), never locals. Never raises (Collect's own guard).
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas)</para>
+      /// <para>Calls: Default, DRagLint.Index.DataFlowFacts.TDataFlowFacts.Collect, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+      /// <para>Returns: nil; Collect(AProgram, Block, Block, ASrc, nil, AGlobals, ACallees)</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 26 lines (full implementation)</para>
+      /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Index.DataFlowFacts.TDataFlowFacts.Collect"/>
+      /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+      /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+      /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
+      /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      class function CollectMainBlock(const AProgram: TSymbol; const ARoot: TTSNode; const ASrc: TBytes;
+                                      const AGlobals: TArray<string>;
+                                      const ACallees: TDataFlowCallees): TArray<TDataFlowRow>; static;
       /// <summary>The var/out masks of every routine ASymbols declares (parsed from
       /// TSymbol.Signature), for Collect.</summary>
       /// <param name="ASymbols">One file's parsed symbols; non-routine kinds are skipped.</param>
       /// <returns>A new dictionary the CALLER frees (never nil).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas)</para>
+      /// <para>Calls: Copy, DRagLint.Index.DataFlowFacts.VarOutMask, LastDelimiter, LowerCase, Pos</para>
+      /// <para>Returns: TDataFlowCallees.Create</para>
+      /// <para>Owns returned: new (caller owns)</para>
+      /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Index.DataFlowFacts.VarOutMask"/>
+      /// <seealso cref="DRagLint.Index.DataFlowFacts.TDataFlowFacts.CappedCount"/>
+      /// <seealso cref="DRagLint.Index.DataFlowFacts.TDataFlowFacts.Collect"/>
+      /// <seealso cref="DRagLint.Index.DataFlowFacts.TDataFlowFacts.CollectMainBlock"/>
+      /// <seealso cref="DRagLint.Index.DataFlowFacts.TDataFlowFacts.FallbackCount"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function BuildCallees(const ASymbols: TArray<TSymbol>): TDataFlowCallees; static;
       /// <summary>Routines that took the flow-insensitive fallback since process start
       /// (Skipped CFG or over DF_CFG_BLOCK_CAP blocks).</summary>
       /// <returns>The running count.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Returns: GFallbacks</para>
+      /// <para>Effect-free (proven)</para>
+      /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Index.DataFlowFacts.TDataFlowFacts.BuildCallees"/>
+      /// <seealso cref="DRagLint.Index.DataFlowFacts.TDataFlowFacts.CappedCount"/>
+      /// <seealso cref="DRagLint.Index.DataFlowFacts.TDataFlowFacts.Collect"/>
+      /// <seealso cref="DRagLint.Index.DataFlowFacts.TDataFlowFacts.CollectMainBlock"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function FallbackCount: Integer; static;
       /// <summary>Routines whose rows hit DF_ROW_CAP since process start.</summary>
       /// <returns>The running count.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Returns: GCapped</para>
+      /// <para>Effect-free (proven)</para>
+      /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Index.DataFlowFacts.TDataFlowFacts.BuildCallees"/>
+      /// <seealso cref="DRagLint.Index.DataFlowFacts.TDataFlowFacts.Collect"/>
+      /// <seealso cref="DRagLint.Index.DataFlowFacts.TDataFlowFacts.CollectMainBlock"/>
+      /// <seealso cref="DRagLint.Index.DataFlowFacts.TDataFlowFacts.FallbackCount"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function CappedCount: Integer; static;
   end;
 
@@ -105,6 +198,7 @@ implementation
 
 uses
   System.Generics.Defaults
+  , DRagLint.Core.Encoding { 1.52 EXTGAPS2: data_flows positions are refs' CHARACTER columns }
   , DRagLint.Analysis.Cfg
   , DRagLint.Analysis.DataFlow
   , DRagLint.Analysis.Flow.Lattices
@@ -611,7 +705,7 @@ begin
       RV.Kind    := vkLocal;
       RV.TypeText:= Trim(Text(N.ChildByField('type')));
       RV.DeclLine:= Integer(IdN.StartPoint.Row) + 1;
-      RV.DeclCol := Integer(IdN.StartPoint.Column) + 1;
+      RV.DeclCol := Utf8ByteColToCharCol(FSrc, IdN.StartByte, IdN.StartPoint.Column) + 1;
       FVars.Add(RV);
     end;
   end;
@@ -814,7 +908,7 @@ begin
   for E in AV.May do
   begin
     T:= E shr 1;
-    AddRow(AKind, Integer(APos.StartPoint.Row) + 1, Integer(APos.StartPoint.Column) + 1, AIndex, AName, ARecv,
+    AddRow(AKind, Integer(APos.StartPoint.Row) + 1, Utf8ByteColToCharCol(FSrc, APos.StartByte, APos.StartPoint.Column) + 1, AIndex, AName, ARecv,
       T, (E and 1) = 1, FInsensitive or not SetHas(AV.Must, T));
   end;
 end;
@@ -844,7 +938,7 @@ begin
   if FRecording and (not ASite.IsNull) then
   begin
     L:= Integer(ASite.StartPoint.Row) + 1;
-    C:= Integer(ASite.StartPoint.Column) + 1;
+    C:= Utf8ByteColToCharCol(FSrc, ASite.StartByte, ASite.StartPoint.Column) + 1;
     if (FSiteLine[ASlot] = 0) or (L < FSiteLine[ASlot]) or ((L = FSiteLine[ASlot]) and (C < FSiteCol[ASlot])) then
     begin
       FSiteLine[ASlot]:= L;
@@ -902,7 +996,7 @@ begin
   if Slot >= 0 then Exit(ReadSlot(St, Slot));
   if FFields.ContainsKey(Nm) then Exit(TokVal(Tok(DF_SRC_FIELD, -1, 0, 0, Text(N))));
   if FGlobals.ContainsKey(Nm) then Exit(TokVal(Tok(DF_SRC_GLOBAL, -1, 0, 0, Text(N))));
-  Result:= TokVal(Tok(DF_SRC_REF, -1, Integer(N.StartPoint.Row) + 1, Integer(N.StartPoint.Column) + 1, Text(N)));
+  Result:= TokVal(Tok(DF_SRC_REF, -1, Integer(N.StartPoint.Row) + 1, Utf8ByteColToCharCol(FSrc, N.StartByte, N.StartPoint.Column) + 1, Text(N)));
 end;
 
 function TCollector.EvalDot(var St: TTaintVal; const N: TTSNode): TExprVal;  // dl:ok too-many-exit-points@49b8 -- one early Exit per receiver shape (Self, local, member ref)
@@ -917,7 +1011,7 @@ begin
   begin
     if R.IsNull or (R.NodeType <> 'identifier') then Exit(Eval(St, R));
     if FFields.ContainsKey(LowerCase(Text(R))) then Exit(TokVal(Tok(DF_SRC_FIELD, -1, 0, 0, Text(R))));
-    Exit(TokVal(Tok(DF_SRC_REF, -1, Integer(R.StartPoint.Row) + 1, Integer(R.StartPoint.Column) + 1, Text(R))));
+    Exit(TokVal(Tok(DF_SRC_REF, -1, Integer(R.StartPoint.Row) + 1, Utf8ByteColToCharCol(FSrc, R.StartByte, R.StartPoint.Column) + 1, Text(R))));
   end;
   LV:= Eval(St, L);
   Member:= '';
@@ -928,7 +1022,7 @@ begin
   if SlotOf(Base) >= 0 then Exit(LV);
   if (Member <> '') and RefShapeOk(L, SameText(Text(L), 'Self')) then
   begin
-    Result:= TokVal(Tok(DF_SRC_REF, -1, Integer(R.StartPoint.Row) + 1, Integer(R.StartPoint.Column) + 1, Text(R)));
+    Result:= TokVal(Tok(DF_SRC_REF, -1, Integer(R.StartPoint.Row) + 1, Utf8ByteColToCharCol(FSrc, R.StartByte, R.StartPoint.Column) + 1, Text(R)));
     BN:= LowerCase(Text(Base));
     if ((BN <> '') and (FFields.ContainsKey(BN) or FGlobals.ContainsKey(BN))) or IsHardCastRooted(L) then Result:= ExprUnion(Result, LV); { a cast keeps its operand's taint }
     Exit;
@@ -977,7 +1071,7 @@ begin
   if Recv.IsNull and (Length(ArgVals) = 1) and InList(Callee, TAINT_TYPECASTS) then Exit(ArgVals[0]);
   if Recv.IsNull and (Callee = 'exit') then Exit;
   CallLine:= Integer(NameN.StartPoint.Row) + 1;
-  CallCol := Integer(NameN.StartPoint.Column) + 1;
+  CallCol := Utf8ByteColToCharCol(FSrc, NameN.StartByte, NameN.StartPoint.Column) + 1;
   for I:= 0 to High(ArgVals) do RecordDst(DF_DST_ARG, NameN, I, Text(NameN), RecvText, ArgVals[I]);
   { receive: X.Add(e) and friends }
   if (not Recv.IsNull) and InList(Callee, TAINT_RECEIVER_MUTATORS) then
@@ -1363,7 +1457,7 @@ begin
     if L = 0 then
     begin
       L:= Integer(FProc.StartPoint.Row) + 1;
-      C:= Integer(FProc.StartPoint.Column) + 1;
+      C:= Utf8ByteColToCharCol(FSrc, FProc.StartByte, FProc.StartPoint.Column) + 1;
     end;
     for E in St.May[S] do
     begin
@@ -1464,6 +1558,34 @@ begin
   finally
     C.Free;
   end;
+end;
+
+class function TDataFlowFacts.CollectMainBlock(const AProgram: TSymbol; const ARoot: TTSNode; const ASrc: TBytes;
+                                               const AGlobals: TArray<string>;
+                                               const ACallees: TDataFlowCallees): TArray<TDataFlowRow>;
+var
+  Prog, Block: TTSNode;
+  I          : Integer;
+begin
+  Result:= nil;
+  if ARoot.IsNull then Exit;
+  Prog:= Default(TTSNode);
+  if (ARoot.NodeType = 'program') or (ARoot.NodeType = 'library') then Prog:= ARoot
+  else
+    for I:= 0 to ARoot.NamedChildCount - 1 do
+      if (ARoot.NamedChild(I).NodeType = 'program') or (ARoot.NamedChild(I).NodeType = 'library') then
+      begin
+        Prog:= ARoot.NamedChild(I);
+        Break;
+      end;
+  if Prog.IsNull then Exit;
+  { the main block is the program node's own `block` child (a nested routine's block hangs
+    under its defProc, never directly under the program) -- the last one, by position }
+  Block:= Default(TTSNode);
+  for I:= 0 to Prog.NamedChildCount - 1 do
+    if Prog.NamedChild(I).NodeType = 'block' then Block:= Prog.NamedChild(I);
+  if Block.IsNull then Exit;
+  Result:= Collect(AProgram, Block, Block, ASrc, nil, AGlobals, ACallees);
 end;
 
 class function TDataFlowFacts.BuildCallees(const ASymbols: TArray<TSymbol>): TDataFlowCallees;

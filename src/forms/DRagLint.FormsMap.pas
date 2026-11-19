@@ -83,7 +83,7 @@ type
 /// resolved.</exception>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoFormsCsv (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.Workspace.DoFormsCsv (DRagLint.CLI.Workspace.pas)</para>
 /// <para>Calls: DRagLint.FormsMap.GenerateFormsCsv/3</para>
 /// <para>Returns: GenerateFormsCsv([ADbPath], AProjectFile, ARootForm)</para>
 /// <para>Overload 1 of 2</para>
@@ -105,6 +105,7 @@ function GenerateFormsCsv(const ADbPath, AProjectFile, ARootForm: string): strin
 /// <returns>ANSI CSV text incl. the FORMS_CSV_ALGORITHM provenance footer.</returns>
 /// <exception cref="Exception">If ADbPaths is empty, the index cannot be opened,
 /// or no root can be resolved.</exception>
+/// <exception cref="ESchemaUnreadable"><!-- drag-lint:auto exc -->via DRagLint.Storage.SQLite.TSQLiteSymbolStore.CreateReadable: :</exception>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.FormsMap.GenerateFormsCsv/3 (DRagLint.FormsMap.pas)</para>
@@ -122,7 +123,7 @@ function GenerateFormsCsv(const ADbPaths: TArray<string>; const AProjectFile, AR
 implementation
 
 uses
-  System.RegularExpressions
+  DRagLint.Core.Encoding, System.RegularExpressions
   , System.JSON
   , System.Math
   , DRagLint.Core.FileTime { 151 Y2: FileMTimeUnix for the dfm_properties currency check }
@@ -155,12 +156,12 @@ begin
 
   // ReadAllLines' count is authoritative: it is what every OTHER read in this
   // unit produces, and what the line numbers in the index are relative to.
-  Raw:= TFile.ReadAllLines(APath, TEncoding.ANSI);
+  Raw:= ReadSourceFileLines(APath);
 
   // Layout-preserving: StripPasCommentsKeepLayout starts from Result := ASrc
   // and only overwrites non-EOL characters with spaces, so the scrubbed text
   // is byte-parallel to the raw text and line i maps to line i.
-  Scrubbed:= StripPasCommentsKeepLayout(TFile.ReadAllText(APath, TEncoding.ANSI));
+  Scrubbed:= StripPasCommentsKeepLayout(ReadSourceFileText(APath));
 
   // Split on LF ONLY, and KEEP empty elements, then drop the CR.
   //
@@ -292,7 +293,7 @@ var
 begin
   Result:= '';
   if (ADfmPath = '') or not TFile.Exists(ADfmPath) then Exit;
-  Lines:= TFile.ReadAllLines(ADfmPath, TEncoding.ANSI);
+  Lines:= ReadSourceFileLines(ADfmPath);
   for I:= 1 to High(Lines) do
   begin
     T:= Trim(Lines[I]);
@@ -314,7 +315,7 @@ var
 begin
   Result:= '';
   if not TFile.Exists(APasPath) then Exit;
-  Lines:= TFile.ReadAllLines(APasPath, TEncoding.ANSI);
+  Lines:= ReadSourceFileLines(APasPath);
   Buf:= '';
   for I:= AStartLine - 1 to Length(Lines) - 1 do
   begin
@@ -401,7 +402,7 @@ begin
   if AProjectFile = '' then Exit;
   DprPath:= TPath.ChangeExtension(AProjectFile, '.dpr');
   if not TFile.Exists(DprPath) then Exit;
-  Content:= TFile.ReadAllText(DprPath, TEncoding.ANSI);
+  Content:= ReadSourceFileText(DprPath);
   List:= TStringList.Create;
   try
     P:= 1;
@@ -475,8 +476,7 @@ begin
           end;
         if not InProject then Continue;
       end;
-      if TFile.Exists(Node.PasPath) then Node.PasLineCount:= Length(TFile.ReadAllLines(Node.PasPath, TEncoding.ANSI))
-      else Node.PasLineCount:= 0;
+      Node.PasLineCount:= if TFile.Exists(Node.PasPath) then Length(ReadSourceFileLines(Node.PasPath)) else 0;
       if IsNavigableForm(AStore, Node.FormClass) then Result.Add(Node);
     end; // while
   finally
@@ -551,7 +551,7 @@ var
 begin
   Result:= '';
   if not TFile.Exists(ADfmPath) then Exit;
-  Lines:= TFile.ReadAllLines(ADfmPath, TEncoding.ANSI);
+  Lines:= ReadSourceFileLines(ADfmPath);
   for I:= AStartLine to AEndLine - 1 do // skip the object header line itself
   begin
     if (I < 0) or (I >= Length(Lines)) then Continue;
@@ -637,7 +637,7 @@ var
 begin
   Result:= '';
   if not TFile.Exists(ADfmPath) then Exit;
-  Lines:= TFile.ReadAllLines(ADfmPath, TEncoding.ANSI);
+  Lines:= ReadSourceFileLines(ADfmPath);
   for I:= AStartLine to AEndLine - 1 do
   begin
     if (I < 0) or (I >= Length(Lines)) then Continue;
@@ -1648,7 +1648,7 @@ begin
   if AProjectFile = '' then Exit;
   DprPath:= TPath.ChangeExtension(AProjectFile, '.dpr');
   if not TFile.Exists(DprPath) then Exit;
-  Lines:= TFile.ReadAllLines(DprPath, TEncoding.ANSI);
+  Lines:= ReadSourceFileLines(DprPath);
   Best:= '';
   for L in Lines do
   begin

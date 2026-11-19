@@ -178,7 +178,7 @@ procedure RegisterProjectMenu;
 /// call even if RegisterProjectMenu was never called.</summary>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.Wizard.TDragLintWizard.Destroyed (DragLint.Plugin.Wizard.pas), initialization/finalization (DragLint.Plugin.ProjectMenu.pas)</para>
+/// <para>Called from: DragLint.Plugin.ProjectMenu.finalization (DragLint.Plugin.ProjectMenu.pas), DragLint.Plugin.Wizard.TDragLintWizard.Destroyed (DragLint.Plugin.Wizard.pas)</para>
 /// <para>Calls: Supports</para>
 /// <para>Catches: Exception (empty)</para>
 /// <!-- drag-lint:auto END -->

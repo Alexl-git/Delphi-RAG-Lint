@@ -54,7 +54,10 @@
   Usage: pwsh -File tests\callresolve\run_unit_qualified_value_bind.ps1 [-Exe <drag-lint.exe>]
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -74,10 +77,10 @@ $db  = Join-Path $scratch 'unitqual.sqlite'
 
 # `sql --json` rows are POSITIONAL arrays: map each onto the column names.
 function Sql([string]$Query) {
-  $raw = (& $exePath sql --db $db --json --limit 1000 --query $Query 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --limit 1000 --query $Query 2>$null }) -join "`n"
   $b = $raw.IndexOf('{')
   if ($b -lt 0) { throw "sql returned no JSON for: $Query" }
-  $o = $raw.Substring($b) | ConvertFrom-Json
+  $o = $raw.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }
   $names = @($o.columns | ForEach-Object { $_.name })
   $out = @()
   foreach ($r in @($o.rows)) {
@@ -108,7 +111,7 @@ function RefsAt([int]$Line, [string]$Name) {
 Push-Location C:\TEMP
 try {
   Copy-Item (Join-Path $fixDir '*.pas') $scratch
-  $idxOut = ((& $exePath index $scratch --db $db *>&1) | ForEach-Object { "$_" }) -join "`n"
+  $idxOut = ((& { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db *>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" }) -join "`n"
 
   $libLimit  = SymbolId 'Qual.Lib.GLimit'
   $libMax    = SymbolId 'Qual.Lib.CMax'
@@ -188,10 +191,10 @@ try {
           ("rows=" + (($ma | ForEach-Object { "mid=$($_.mid):mode=$($_.mode):aid=$($_.aid)" }) -join ','))
   }
   foreach ($nm in @('GLimit', 'CMax')) {
-    $raw = (& $exePath query find-callers --name $nm --resolved --json --db $db 2>$null) -join "`n"
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name $nm --resolved --json --db $db 2>$null }) -join "`n"
     Write-Host "   raw find-callers --name $nm --resolved --json: $(($raw -replace '\s+', ' '))"
     $fc  = @()
-    try { $fc = @($raw | ConvertFrom-Json) } catch { $fc = @() }
+    try { $fc = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $fc = @() }
     foreach ($x in @($modes | Where-Object { ($_.M -eq 'MARK-CONST') -eq ($nm -eq 'CMax') })) {
       $ln  = LineOf $x.M
       $hit = @($fc | Where-Object { [int]$_.line -eq $ln })

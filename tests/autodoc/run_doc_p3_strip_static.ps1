@@ -64,7 +64,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Continue'
@@ -166,15 +169,15 @@ try {
   $dbA     = Join-Path $scratchA 'a.sqlite'
   Copy-Item $fixture $targetA -Force
 
-  & $exePath index $scratchA --db $dbA 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratchA --db $dbA 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'Scenario A: index exits 0' ($LASTEXITCODE -eq 0)
 
-  $dryA = (& $exePath document --unit $targetA --db $dbA --strip 2>&1) -join "`n"
+  $dryA = (& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $targetA --db $dbA --strip 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'Scenario A: dry-run exits 0' ($LASTEXITCODE -eq 0)
   Check 'Scenario A: dry-run reports the exact counts (4 tags, 2 blocks)' `
     ($dryA -match 'stripped:\s*4\s*tags,\s*2\s*blocks') $dryA
 
-  & $exePath document --unit $targetA --db $dbA --strip --apply 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $targetA --db $dbA --strip --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'Scenario A: strip --apply exits 0' ($LASTEXITCODE -eq 0)
 
   $actualA = [IO.File]::ReadAllText($targetA)
@@ -189,10 +192,10 @@ try {
   $dbB     = Join-Path $scratchB 'b.sqlite'
   Copy-Item $fixture $targetB -Force
 
-  & $exePath index $scratchB --db $dbB 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratchB --db $dbB 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'Scenario B: index exits 0' ($LASTEXITCODE -eq 0)
 
-  $qOut = (& $exePath document --qname strip_static.GapDoc --db $dbB --strip --apply 2>&1) -join "`n"
+  $qOut = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname strip_static.GapDoc --db $dbB --strip --apply 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'Scenario B: --qname --strip --apply exits 0' ($LASTEXITCODE -eq 0)
   Check 'Scenario B: reports the exact counts (2 tags, 0 blocks -- GapDoc only)' `
     ($qOut -match 'stripped:\s*2\s*tags,\s*0\s*blocks') $qOut
@@ -212,7 +215,7 @@ try {
     ($textB.Contains('/// <returns><!-- drag-lint:auto -->Observed: a mined case that') -and $textB.Contains('/// spans two physical lines.</returns>'))
 
   # --- Scenario C: --strip + --stubs exits 2 (no --apply needed) ---
-  & $exePath document --unit $targetA --db $dbA --strip --stubs 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $targetA --db $dbA --strip --stubs 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'Scenario C: --strip + --stubs exits 2' ($LASTEXITCODE -eq 2)
 } finally { Pop-Location }
 

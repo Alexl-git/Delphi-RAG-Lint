@@ -28,7 +28,10 @@
   Run from a NEUTRAL CWD (C:\TEMP) so no drag-lint-lint.json is picked up.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -50,7 +53,7 @@ try {
   Copy-Item $fixture $target -Force
   if (Test-Path $bak) { Remove-Item $bak -Force }
   $beforeBytes = [IO.File]::ReadAllBytes($target)
-  $pv = & $exePath lint $target --fix 2>$null | Out-String
+  $pv = & { $ErrorActionPreference = 'Continue'; & $exePath lint $target --fix 2>$null } | Out-String
 
   Check 'preview: summary reports 2 fixable finding(s)' ($pv -match 'autofix: 2 fixable finding\(s\) -- pass --apply to write')
   Check 'preview: dry-run mentions delete lines 8..8'    ($pv -match 'delete lines 8\.\.8')
@@ -62,7 +65,7 @@ try {
   # --- 2) APPLY (--fix --apply): BOTH fixes applied, N=2, .bak holds the original ---
   Copy-Item $fixture $target -Force
   if (Test-Path $bak) { Remove-Item $bak -Force }
-  $ap = & $exePath lint $target --fix --apply 2>$null | Out-String
+  $ap = & { $ErrorActionPreference = 'Continue'; & $exePath lint $target --fix --apply 2>$null } | Out-String
 
   Check 'apply: summary reports applied 2 edit(s) across 1 file(s)' ($ap -match 'autofix: applied 2 edit\(s\) across 1 file\(s\) \(\.bak written\)')
 

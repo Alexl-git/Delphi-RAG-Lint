@@ -19,7 +19,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe       = $(. "$PSScriptRoot\lib\FreshEngineExe.ps1"; Get-FreshEngineExe),
+  [string]$Exe       = '',
   [string]$WorkDir   = "$env:TEMP\drag-lint-cyclefix-b1-dcc-$PID",
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite',
   # Off by default (152b): the platform library is READ in place via --library-db, never copied (the DB is ~3.5 GB;
@@ -28,6 +28,9 @@ param(
   [switch]$CopyLibrary,
   [switch]$KeepWorkDir
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(. "$PSScriptRoot\lib\FreshEngineExe.ps1"; Get-FreshEngineExe) }
 $ErrorActionPreference = 'Stop'
 $RsVars = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 if (-not (Test-Path $RsVars)) { Write-Host 'SKIP: RAD Studio not installed' -ForegroundColor Yellow; exit 0 }
@@ -97,11 +100,11 @@ function Invoke-Program([string]$Dproj) {
 
 function Invoke-Cycles([string]$Dproj, [string]$Tag, [string[]]$Extra) {
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project $Dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $Dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
   $o = Join-Path $WorkDir "cycles-$Tag.out"
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
     -ArgumentList (@('cycles', '--db', ('"' + $db + '"'), '--library-db', ('"' + $Lib + '"')) + $Extra) `
-    -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "cycles-$Tag.err")
+    -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "cycles-$Tag.err"); $null = $p.Handle
   return @{ Exit = $p.ExitCode; File = $o; Text = [IO.File]::ReadAllText($o) }
 }
 
@@ -118,7 +121,7 @@ function Test-Tree([string]$Tag, [string]$Member, [scriptblock]$Edit) {
   $plan = Invoke-Cycles (Join-Path $work 'MemberWrite.dproj') "$Tag-plan" @('--plan')
   Check "$Tag 1 planned (exit 0) by member hand-over with a setter, no refusal" `
     (($plan.Exit -eq 0) -and ($plan.Text -notmatch 'refused: ') -and $plan.Text.Contains("procedure Set$Member(const pValue: ")) "exit=$($plan.Exit)"
-  $fo = & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $plan.File -Cycle 1 -Root $work 2>&1 | Out-String
+  $fo = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $plan.File -Cycle 1 -Root $work 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check "$Tag 2 the follower applies cycle 1 (exit 0)" ($LASTEXITCODE -eq 0) ($fo.Trim() -replace "`r?`n", ' | ')
   $leafP = Join-Path $work 'DemoGagePort.Untangle.pas'
   $leaf = if (Test-Path $leafP) { [IO.File]::ReadAllText($leafP) } else { '' }

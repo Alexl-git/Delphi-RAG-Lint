@@ -29,9 +29,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\draglint_impl_only_sig_type_uses_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'
@@ -48,8 +51,8 @@ function Write-Ascii([string]$Path, [string]$Body) {
 }
 # sql --json rows are POSITIONAL arrays: map them onto columns[].name.
 function SqlRows([string]$Db, [string]$Query) {
-  $raw = & $Exe sql --db $Db --query $Query --json 2>$null | Out-String
-  $j = $raw | ConvertFrom-Json
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query $Query --json 2>$null } | Out-String
+  $j = $raw | ConvertFrom-Json | ForEach-Object { $_ }
   $names = @($j.columns | ForEach-Object { $_.name })
   $out = @()
   foreach ($r in @($j.rows)) {
@@ -145,8 +148,8 @@ end.
 
 $libDb = Join-Path $WorkDir 'lib.sqlite'
 $prjDb = Join-Path $WorkDir 'prj.sqlite'
-& $Exe index $lib --db $libDb 2>&1 | Out-Null
-& $Exe index $prj --db $prjDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $lib --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $prj --db $prjDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 # --- (a) exact type_use refs per line on the fixture -------------------------
 $refs = SqlRows $prjDb ("SELECT r.name_text AS n, r.start_line AS l FROM refs r JOIN files f ON f.id = r.file_id " +
@@ -171,9 +174,9 @@ $params = SqlRows $prjDb ("SELECT s.qualified_name AS q FROM symbols s JOIN file
 Check 'fixture param symbols unchanged (6: Param1-3, Callback, P, Q)' ($params.Count -eq 6) "count=$($params.Count)"
 
 # --- (c) end to end: unused-unit-in-uses --------------------------------------
-$lintRaw = & $Exe lint-all --db $prjDb --db $libDb --rule unused-unit-in-uses --json 2>$null | Out-String
+$lintRaw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $prjDb --db $libDb --rule unused-unit-in-uses --json 2>$null } | Out-String
 $findings = @()
-try { $findings = @($lintRaw | ConvertFrom-Json) } catch { $findings = @() }
+try { $findings = @(($lintRaw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $findings = @() }
 $uuiu = @($findings | Where-Object { $_.rule -eq 'unused-unit-in-uses' })
 $typesHits  = @($uuiu | Where-Object { $_.message -match "'impl_only_routine_type_uses_types'" })
 $unusedHits = @($uuiu | Where-Object { $_.message -match "'impl_only_routine_type_uses_unused'" })

@@ -48,9 +48,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-const-typepos-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -129,7 +132,7 @@ end.
 [System.IO.File]::WriteAllText((Join-Path $WorkDir 'constpos.pas'), $src, [System.Text.Encoding]::ASCII)
 
 $db = Join-Path $WorkDir 'constpos.sqlite'
-& $Exe index $WorkDir --db $db --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 $py = Join-Path $WorkDir 'refs.py'
 @'
@@ -155,7 +158,7 @@ out['TElemDeclType_call'] = n('TElemDeclType', 'call')
 print(json.dumps(out))
 c.close()
 '@ | Set-Content $py -Encoding ascii
-$r = (& python $py $db) -join "`n" | ConvertFrom-Json
+$r = (& python $py $db) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 
 Write-Host 'B1 -- a const in a TYPE POSITION emits a read' -ForegroundColor Cyan
 Check 'HAZARD: array bound in a type decl'        ($r.CBoundType       -ge 1) "refs=$($r.CBoundType)"

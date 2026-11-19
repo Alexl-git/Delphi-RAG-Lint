@@ -35,7 +35,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -139,8 +142,8 @@ function HitsIn([string]$Out, [string]$File) {
 Push-Location C:\TEMP
 try {
   $db  = Join-Path $scratch 'idx.sqlite'
-  & $exePath index $scratch --db $db 2>&1 | Out-Null
-  $out = (& $exePath lint-all --db $db --quiet 2>&1 | Out-String)
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $out = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String)
 
   # --- THE POINT OF THE SUITE ---------------------------------------------
   Check 'the paren-LESS form is still reported (the only form ORM3 actually has)' `

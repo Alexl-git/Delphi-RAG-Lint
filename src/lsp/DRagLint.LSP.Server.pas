@@ -34,10 +34,12 @@ uses
   , DRagLint.Index   .Manifest  { v(ADP2 T9): LoadDocComplexityMin -- same threshold `document` uses }
   , DRagLint.Query   .Callers   { v(hover bundle): the shared caller queries the CLI also renders from }
   , DRagLint.Query   .HoverModel{ v(hover bundle): the shared model assembly `hover --format json` uses }
+  , DRagLint.Query   .UsageScope{ 1.52 FUSCOPE: the Find Usages scope references honour }
   , DRagLint.LSP     .Context   { S0: ILspServerContext + the feature registry }
   , DRagLint.Project .ContextFile { LSP-1 CORE: .dlcontext.json + central context defaults }
   , DRagLint.Lint    .TargetCompiler { 1.38: the target-compiler gate of each file's diagnostics }
   , DRagLint.Charts  .Index     { 151 CF: FExcIndex -- the Raises: line's open index }
+  , DRagLint.LSP     .Deferred  { v152 ASYNC: the deferred-hover slot (fast part now, slow part on the second ask) }
   ;
 
 type
@@ -77,6 +79,17 @@ type
     IsIntrinsic  : Boolean;
     IntrinsicName: string ;
     IntrinsicSig : string ;
+    /// <summary>v152 ASYNC: True when ComputeHoverAt already built the Phase-2
+    /// facts (Facts) and the Raises: lines (ExceptionLines) of the symbol
+    /// FactsSymId for the markdown, so hoverBundle reuses them instead of
+    /// building both a second time for the model.</summary>
+    /// <remarks>Valid only while FactsSymId = Sel.Id; False on the fast first
+    /// step of a deferred hover, on the owner-type floor and for overload
+    /// lists, where the markdown built no facts for Sel.</remarks>
+    FactsReady    : Boolean       ;
+    FactsSymId    : Int64         ;
+    Facts         : TDocFacts     ;
+    ExceptionLines: TArray<string>;
   end;
 
   /// <summary>Which indexed symbol a cursor position means, before anything
@@ -228,6 +241,11 @@ type
       /// ISymbolStore does not expose its own path, and widening that interface
       /// for one caller-scoping rule would be the larger change.</remarks>
       FStorePaths  : TArray<string>      ;
+      { 1.52 FUSCOPE: the Find Usages scope of textDocument/references (client setting
+        dragLint.usagesScope, default symbol) and the project group file scope group reads
+        (dragLint.usagesGroup). }
+      FUsagesScope : TUsageScope         ;
+      FUsagesGroup : string              ;
       { INBOX-lsp-hover-unindexed-file-resolves-library-symbol (2026-08-27).
       An EPHEMERAL, single-unit index for a hovered file that NO configured
       store owns -- a loose unit, another repo, anything open after Close All.
@@ -296,11 +314,11 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Used by: declaration (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.Create/1 (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ProjectDbIncompleteReason (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.StorePathOf (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.StoreSet (DRagLint.LSP.Server.pas)</para>
       /// <para>Used in units: DRagLint.LSP.Server</para>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       TStoreSet = record
@@ -314,11 +332,11 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Used by: declaration (DRagLint.LSP.Server.pas)</para>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       TReindexState = (risRunning, risDone, risFailed);
@@ -326,11 +344,11 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Used by: declaration (DRagLint.LSP.Server.pas) ?, DRagLint.LSP.Server.TLSPServer.Create/1 (DRagLint.LSP.Server.pas) ?, DRagLint.LSP.Server.TLSPServer.Destroy (DRagLint.LSP.Server.pas) ?, DRagLint.LSP.Server.TLSPServer.ProjectDbIncompleteReason (DRagLint.LSP.Server.pas) ?, DRagLint.LSP.Server.TLSPServer.StartReindex (DRagLint.LSP.Server.pas) (+2 more)</para>
       /// <para>Used in units: DRagLint.LSP.Server</para>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       TReindexRun = record
@@ -342,11 +360,11 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Used by: declaration (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.Create/1 (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.FileContext (DRagLint.LSP.Server.pas)</para>
       /// <para>Used in units: DRagLint.LSP.Server</para>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       TCtxEntry = record
@@ -394,12 +412,18 @@ type
       FClientTarget   : string;
       FTargetGate     : TTargetRuleGate;
       FPublishedTarget: TDictionary<string, Integer>;    { lower(path) -> CompilerVersion }
+      FFixDiags       : TDictionary<string, string>;     { 1.52 VSFIX: lower(path) -> JSON of the diagnostics last published, for the file-wide fix-all code actions }
       { Yield (INBOX-ide-hang-on-slow-engine section 2): messages read while a
         long request yielded, to be dispatched by Run before its next read, in
         arrival order. FInputEnded: such a read hit EOF / a cancelled read. }
       FDeferred       : TQueue<TJSONObject>              ;
       FInputEnded     : Boolean                          ;
       FYielding       : Boolean                          ;
+      { v152 ASYNC: the session's deferred-hover slot (created on first use, see
+        DeferredHover) and the switch that makes ComputeHoverAt render the fast
+        sections only, with DEFERRED_PLACEHOLDER where the facts go. }
+      FDeferredHover  : IDeferredHoverSlot               ;
+      FHoverFastOnly  : Boolean                          ;
       { 1.38: resolves APath's target compiler (startup > lint config > context),
         publishes it (SetActiveTargetCompiler) and returns its gate; AError <> ''
         when the winning token is invalid -- the gate is then the default's. }
@@ -419,7 +443,7 @@ type
       /// <seealso cref="DRagLint.Lint.TargetCompiler.SetActiveTargetCompiler"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildTargetGate"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.LintConfigTargetCompiler"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  TargetGateFor(const APath: string; const ACtx: TLspFileContext; out AError: string): TTargetRuleGate;
@@ -435,7 +459,7 @@ type
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.FileFromUri"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.PublishDiagnostics"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.TargetGateFor"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure RepublishRetargeted;
@@ -444,15 +468,15 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ContextNotice (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: CloseHandle, CreateFile, CreateProcess, Default, DRagLint.LSP.Server.TLSPServer.ReindexFinished, ExtractFileExt, FillChar, Format, GetEnvironmentVariable, LowerCase (+7 more)</para>
-      /// <para>Complexity: 12 (cyclomatic, outer body), 87 lines (full implementation)</para>
+      /// <para>Calls: CloseHandle, CreateFile, CreateProcess, Default, DRagLint.LSP.Server.TLSPServer.ReindexFinished, ExtractFileExt, FillChar, Format, GetEnvironmentVariable, LowerCase (+8 more)</para>
+      /// <para>Complexity: 12 (cyclomatic, outer body), 90 lines (full implementation)</para>
       /// <para>Reads: FReindex, FStopEvent, FWorkLock, FReindexThreads</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ReindexFinished"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure StartReindex(const ADb, ADproj: string);
@@ -479,8 +503,8 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.RefreshFileFromDisk (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ReindexFinished (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.RepublishRetargeted (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.Lint.TargetCompiler.TTargetRuleGate.Drops, DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4, DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics, DRagLint.LSP.Completion.TLspCompletion.DiagnosticsFromLintJson, DRagLint.LSP.Server.TLSPServer.AnyStoreOwns, DRagLint.LSP.Server.TLSPServer.EnsureLinter, DRagLint.LSP.Server.TLSPServer.FileContext, DRagLint.LSP.Server.TLSPServer.RunFullRulesLint, DRagLint.LSP.Server.TLSPServer.SendRawNotification, DRagLint.LSP.Server.TLSPServer.StoresForFile, DRagLint.LSP.Server.TLSPServer.TargetGateFor, Format, LowerCase, SameText, Writeln</para>
-      /// <para>Complexity: 15 (cyclomatic, outer body), 75 lines (full implementation)</para>
-      /// <para>Reads: FPublishedTarget, FStore, FFullRules, FFullRulesSuperseded</para>
+      /// <para>Complexity: 15 (cyclomatic, outer body), 76 lines (full implementation)</para>
+      /// <para>Reads: FPublishedTarget, FStore, FFullRules, FFullRulesSuperseded, FFixDiags</para>
       /// <seealso cref="DRagLint.Lint.TargetCompiler.TTargetRuleGate.Drops"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics"/>
@@ -493,14 +517,14 @@ type
       /// <returns><!-- drag-lint:auto -->string -- Observed: ''.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.CallerSearchStores (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeExceptionFactsAt (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeExceptionLenses (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ExceptionFactLines (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HoverExtraStores (DRagLint.LSP.Server.pas)</para>
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.CallerSearchStores (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeExceptionFactsAt (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeExceptionLenses (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeReferences (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ExceptionFactLines (DRagLint.LSP.Server.pas) (+2 more)</para>
       /// <para>Reads: FStores, FStorePaths, FSets</para>
       /// <para>Effect-free (proven)</para>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  StorePathOf(const AStore: ISymbolStore): string;
@@ -513,8 +537,8 @@ type
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.IsLibraryPath"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.StorePathOf"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.StoresForFile"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  CallerSearchStores(const APath: string): TArray<ISymbolStore>;
@@ -526,9 +550,9 @@ type
       /// <para>Reads: FDefaultsRead, FDefaults   Writes: FDefaultsRead, FDefaults</para>
       /// <seealso cref="DRagLint.LSP.Server.LibrariesVisibleToThisEngine"/>
       /// <seealso cref="DRagLint.Project.ContextFile.TryLoadContextDefaults"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  Defaults: TContextDefaults;
@@ -541,11 +565,11 @@ type
       /// <para>Calls: FormatDateTime</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  DprojStamp(const AFile: string): string;
@@ -556,7 +580,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.FileContext (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: ChangeFileExt, Default, DRagLint.LSP.Server.MarkerlessDprojPlatform, DRagLint.LSP.Server.TLSPServer.Defaults, DRagLint.LSP.Server.TLSPServer.FindListingProject, DRagLint.LSP.Server.TLSPServer.OtherOwningStores, DRagLint.LSP.Server.TLSPServer.StartupLibraryPlatformOf, DRagLint.Project.ContextFile.ContextFileFor, DRagLint.Project.ContextFile.FindProjectContextForUnit, DRagLint.Project.DefineProfile.ReadDelphiLspDefines, DRagLint.Project.DefineProfile.ReadDprojActiveSelection, DRagLint.Project.DefineProfile.TProjectProfileCache.BuildForFile, ExpandFileName, ExtractFileExt, SameText</para>
-      /// <para>Complexity: 41 (cyclomatic, outer body), 115 lines (full implementation)</para>
+      /// <para>Complexity: 46 (cyclomatic, outer body), 115 lines (full implementation)</para>
       /// <para>Reads: FStartProject, FClientProject, FHaveClientCtx, FClientCtx, FStartPlatform, FClientPlatform, FClientConfig, FClientTarget</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.LSP.Server.MarkerlessDprojPlatform"/>
@@ -574,11 +598,11 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.CallerSearchStores (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HoverExtraStores (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.OtherOwningStores (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.OwningStartupProjectDb (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.StartupLibraryPlatformOf (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: ExtractFileName, LowerCase</para>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  IsLibraryPath(const APath: string): Boolean;
@@ -591,9 +615,9 @@ type
       /// <para>Reads: FStores, FStorePaths</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.IsLibraryPath"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  OwningStartupProjectDb(const APath: string): string;
@@ -609,8 +633,8 @@ type
       /// <seealso cref="DRagLint.LSP.Server.IsProjectSearchSkipped"/>
       /// <seealso cref="DRagLint.LSP.Server.NearStamp"/>
       /// <seealso cref="DRagLint.LSP.Server.ProjectFilesIn"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  NearProjects(const ADir: string): TArray<string>;
@@ -631,10 +655,10 @@ type
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.DprojStamp"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  ProjectListsUnit(const AProject, AUnitLower: string): Boolean;
@@ -653,13 +677,14 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeFileContext (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.LSP.Server.IsRepositoryRoot, DRagLint.LSP.Server.TLSPServer.NearProjects, DRagLint.LSP.Server.TLSPServer.ProjectListsUnit, ExcludeTrailingPathDelimiter, ExpandFileName, ExtractFileName, ExtractFilePath, LowerCase, SameText</para>
+      /// <para>Complexity: 10 (cyclomatic, outer body), 19 lines (full implementation)</para>
       /// <para>Mutates: AOthers (out)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.LSP.Server.IsRepositoryRoot"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.NearProjects"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ProjectListsUnit"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  FindListingProject(const APath: string; out AOthers: string): string;
@@ -676,9 +701,9 @@ type
       /// <para>Reads: FStores, FStorePaths</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.IsLibraryPath"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  OtherOwningStores(const APath, AProject: string): string;
@@ -696,9 +721,9 @@ type
       /// <para>Reads: FStores, FStorePaths</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.IsLibraryPath"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  StartupLibraryPlatformOf(const APath: string): string;
@@ -709,11 +734,11 @@ type
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ContextNotice (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.DbSetFor (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: ChangeFileExt, ExtractFileName, SameText</para>
       /// <para>Reads: FStorePaths</para>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  StartupLibraryFor(const APlatform: string): string;
@@ -732,7 +757,7 @@ type
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.Defaults"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.OwningStartupProjectDb"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.StartupLibraryFor"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  DbSetFor(const APath: string; const ACtx: TLspFileContext): TLspDbSet;
@@ -740,7 +765,7 @@ type
       /// <returns><!-- drag-lint:auto -->ISymbolStore -- Observed: nil; S.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.Create/1 (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ReindexFinished (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.StoreSet (DRagLint.LSP.Server.pas)</para>
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.Create/1 (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ExtraScopeStores (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ReindexFinished (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.StoreSet (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue, DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent, DRagLint.Doc.Facts.ClearDocFactsMemos, DRagLint.Storage.Schema.IsSchemaReadable, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, Format, Writeln</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
@@ -762,10 +787,10 @@ type
       /// <para>Complexity: 15 (cyclomatic, outer body), 40 lines (full implementation)</para>
       /// <para>Reads: FSets, FStorePaths, FStores</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.OpenReaderStore"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  StoreSet(const ADbs: TLspDbSet): TArray<ISymbolStore>;
@@ -801,9 +826,9 @@ type
       /// <para>Catches: Exception (swallowed)</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue"/>
       /// <seealso cref="DRagLint.LSP.Server.JsonStrOf"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  ProjectDbIncompleteReason(const AProjectDb: string): string;
@@ -813,11 +838,11 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ContextNotice.Add (DRagLint.LSP.Server.pas) ?, DRagLint.LSP.Server.TLSPServer.ContextNotice.AddAdvice (DRagLint.LSP.Server.pas) ?, DRagLint.LSP.Server.TLSPServer.QueueContextNotification (DRagLint.LSP.Server.pas)</para>
       /// <para>Reads: FQueueNotices, FPending</para>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure QueueNotification(const AMethod: string; AParams: TJSONObject);
@@ -841,10 +866,10 @@ type
       /// <para>Calls: DRagLint.LSP.Server.TLSPServer.SendRawNotification, FNoticeSink</para>
       /// <para>Reads: FPending, FNoticeSink</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.SendRawNotification"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure FlushPending;
@@ -858,7 +883,7 @@ type
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.QueueContextNotification"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.RepublishRetargeted"/>
       /// <seealso cref="DRagLint.Project.ContextFile.TryLoadProjectContext"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ApplyClientContext(const AObj: TJSONObject);
@@ -874,7 +899,7 @@ type
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.SendError"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.SendResult"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  HandleSetContext(const AId: TJSONValue; const AParams: TJSONObject): Boolean;
@@ -882,12 +907,12 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.DispatchMessage (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.LSP.Server.HasContextKeys, DRagLint.LSP.Server.JsonStrOf, DRagLint.LSP.Server.TLSPServer.ApplyClientContext, DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile, DRagLint.LSP.Server.TLSPServer.FileFromUri, TJSONObject</para>
+      /// <para>Calls: DRagLint.LSP.Server.HasContextKeys, DRagLint.LSP.Server.JsonStrOf, DRagLint.LSP.Server.TLSPServer.ApplyClientContext, DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile, DRagLint.LSP.Server.TLSPServer.ApplyUsageSettings, DRagLint.LSP.Server.TLSPServer.FileFromUri, TJSONObject</para>
       /// <seealso cref="DRagLint.LSP.Server.HasContextKeys"/>
       /// <seealso cref="DRagLint.LSP.Server.JsonStrOf"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.FileFromUri"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyUsageSettings"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleDidChangeConfiguration(const AParams: TJSONObject);
@@ -920,9 +945,9 @@ type
       /// <para>Calls: DRagLint.LSP.Server.TLSPServer.ContextFooter, DRagLint.LSP.Server.TLSPServer.PositionParams</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ContextFooter"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.PositionParams"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  WithContextFooter(const AParams: TJSONObject; const AMd: string): string;
@@ -932,16 +957,16 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.Run (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.YieldToPendingRequests (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.LSP.Context.TLspFeature.Handle, DRagLint.LSP.Server.TLSPServer.HandleCallerCounts, DRagLint.LSP.Server.TLSPServer.HandleCodeAction, DRagLint.LSP.Server.TLSPServer.HandleCompletion, DRagLint.LSP.Server.TLSPServer.HandleDefinition, DRagLint.LSP.Server.TLSPServer.HandleDidChange, DRagLint.LSP.Server.TLSPServer.HandleDidChangeConfiguration, DRagLint.LSP.Server.TLSPServer.HandleDidChangeWatchedFiles, DRagLint.LSP.Server.TLSPServer.HandleDidClose, DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave (+13 more)</para>
+      /// <para>Calls: DRagLint.LSP.Context.TLspFeature.Handle, DRagLint.LSP.Server.TLSPServer.HandleCallerCounts, DRagLint.LSP.Server.TLSPServer.HandleCodeAction, DRagLint.LSP.Server.TLSPServer.HandleCompletion, DRagLint.LSP.Server.TLSPServer.HandleDeferHover, DRagLint.LSP.Server.TLSPServer.HandleDefinition, DRagLint.LSP.Server.TLSPServer.HandleDidChange, DRagLint.LSP.Server.TLSPServer.HandleDidChangeConfiguration, DRagLint.LSP.Server.TLSPServer.HandleDidChangeWatchedFiles, DRagLint.LSP.Server.TLSPServer.HandleDidClose (+15 more)</para>
       /// <para>Returns: True; False</para>
-      /// <para>Complexity: 28 (cyclomatic, outer body), 60 lines (full implementation)</para>
+      /// <para>Complexity: 32 (cyclomatic, outer body), 63 lines (full implementation)</para>
       /// <para>Reads: FFeatureByMethod, FContext</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <seealso cref="DRagLint.LSP.Context.TLspFeature.Handle"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.HandleCallerCounts"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.HandleCodeAction"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.HandleCompletion"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.HandleDefinition"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.HandleDeferHover"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DispatchMessage(const AMsg: TJSONObject): Boolean;
@@ -955,11 +980,11 @@ type
       /// <para>Calls: GetFileType, PeekNamedPipe</para>
       /// <para>Returns: False; PeekNamedPipe(H, nil, 0, nil, @Avail, nil) and (Avail &gt; 0); FStdIn.Position &lt; FStdIn.Size</para>
       /// <para>Reads: FInputEnded, FStdIn</para>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function InputPending: Boolean;
@@ -972,16 +997,16 @@ type
       /// deferred no later one is served early, so a hover can never overtake
       /// a didChange it was sent after. Not re-entrant (FYielding).
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeCallerCounts (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.WaitFullRulesChild (DRagLint.LSP.Server.pas)</para>
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeCallerCounts (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HoverStillWanted (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.WaitFullRulesChild (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.LSP.Server.TLSPServer.DispatchMessage, DRagLint.LSP.Server.TLSPServer.InputPending, DRagLint.LSP.Server.TLSPServer.ReadMessage, DRagLint.LSP.Server.TLSPServer.SendError, Writeln</para>
-      /// <para>Complexity: 11 (cyclomatic, outer body), 53 lines (full implementation)</para>
+      /// <para>Complexity: 13 (cyclomatic, outer body), 54 lines (full implementation)</para>
       /// <para>Reads: FYielding, FDeferred   Writes: FYielding, FInputEnded</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.DispatchMessage"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.InputPending"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ReadMessage"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.SendError"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure YieldToPendingRequests;
@@ -994,10 +1019,10 @@ type
       /// <para>Reads: FControl</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.StandDownRequested"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function StandDownTaken: Boolean;
@@ -1011,8 +1036,8 @@ type
       /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.EnterRead"/>
       /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.LeaveRead"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ReadMessage"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ReadMessageGuarded: TJSONObject;
@@ -1031,10 +1056,10 @@ type
       /// <para>Reads: FStores</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  AnyStoreOwns(const APath: string): Boolean;
@@ -1045,11 +1070,11 @@ type
       /// <para>Reads: FEphemDbPath   Writes: FEphemStore, FEphemFile, FEphemStamp, FEphemDbPath</para>
       /// <para>Catches: Exception (empty)</para>
       /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure DropEphemeralStore;
@@ -1084,11 +1109,11 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen (DRagLint.LSP.Proxy.Merge.pas)</para>
       /// <para>Writes: FNoticeSink, FQueueNotices</para>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure EnableProxyNotices(const ASink: TProc<string>);
@@ -1103,8 +1128,8 @@ type
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.FlushPending"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.QueueContextNotification"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.StoresForFile"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure AnnounceProxyOpen(const APath: string);
@@ -1149,11 +1174,11 @@ type
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeDefinition (DRagLint.LSP.Server.pas)</para>
       /// <para>Reads: FEphemStore</para>
       /// <para>Effect-free (proven)</para>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  EphemeralLeads(const AStores: TArray<ISymbolStore>): Boolean;
@@ -1166,11 +1191,11 @@ type
       /// <para>Complexity: 14 (cyclomatic, outer body), 64 lines (full implementation)</para>
       /// <para>Reads: FStdIn</para>
       /// <para>Pure</para>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ReadMessage: TJSONObject  ;
@@ -1181,11 +1206,11 @@ type
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleCompletion (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleInitialize (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleShutdown (DRagLint.LSP.Server.pas) (+5 more)</para>
       /// <para>Calls: AnsiString, GetStdHandle, IntToStr, Move, WriteFile</para>
       /// <para>Pure</para>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SendMessage        (const AObj: TJSONObject);
@@ -1200,10 +1225,10 @@ type
       /// <para>Calls: DRagLint.LSP.Server.TLSPServer.SendMessage</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.SendMessage"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SendRawNotification(const AObj: TJSONObject);
@@ -1212,14 +1237,14 @@ type
       /// <param name="AMessage"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.DispatchMessage (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleSetContext (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleUsages (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.YieldToPendingRequests (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLspServerContextAdapter.ReplyError (DRagLint.LSP.Server.pas)</para>
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.DispatchMessage (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleSetContext (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleUsages (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HoverStillWanted (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.YieldToPendingRequests (DRagLint.LSP.Server.pas) (+1 more)</para>
       /// <para>Calls: DRagLint.LSP.Server.TLSPServer.SendMessage</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.SendMessage"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SendError(const AId: TJSONValue; ACode: Integer; const AMessage: string);
@@ -1231,10 +1256,10 @@ type
       /// <para>Calls: DRagLint.LSP.Completion.PathToFileUri</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.LSP.Completion.PathToFileUri"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FileToUri  (const APath: string): string;
@@ -1250,10 +1275,10 @@ type
       /// <para>Calls: DRagLint.LSP.Server.TLSPServer.SendMessage</para>
       /// <para>Catches: Exception (re-raise)</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.SendMessage"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SendResult(const AId: TJSONValue; AResult: TJSONValue);
@@ -1266,15 +1291,15 @@ type
       /// <returns>False when AParams, textDocument or position is missing.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDefinition (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleReferences (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.WithContextFooter (DRagLint.LSP.Server.pas)</para>
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDeferHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDefinition (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas) (+2 more)</para>
       /// <para>Calls: DRagLint.LSP.Server.TLSPServer.FileFromUri, StrToIntDef</para>
       /// <para>Returns: True</para>
       /// <para>Mutates: APath (out), ALine0 (out), ACol0 (out)</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.FileFromUri"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function PositionParams(const AParams: TJSONObject; out APath: string; out ALine0, ACol0: Integer): Boolean;
@@ -1297,8 +1322,8 @@ type
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
       /// <seealso cref="DRagLint.Resolver.TypeAt.TTypeAtResolver.Resolve"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function SelectSymbolAt(const AStores: TArray<ISymbolStore>; const APath, AIdent: string; ALine0, ACol0: Integer; out ASel: TSymbolSelection): Boolean;
@@ -1311,10 +1336,10 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverMarkdown (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Core.Model.IntrinsicSignature, DRagLint.Core.Model.IsCompilerIntrinsic, DRagLint.Doc.Facts.FormatHoverCalledFromLine, DRagLint.Doc.Facts.TDocFactsBuilder.Build (+20 more)</para>
+      /// <para>Calls: Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Core.Model.IntrinsicSignature, DRagLint.Core.Model.IsCompilerIntrinsic, DRagLint.Doc.Facts.FormatHoverCalledFromLine, DRagLint.Doc.Facts.TDocFactsBuilder.Build (+22 more)</para>
       /// <para>Returns: False; True</para>
-      /// <para>Complexity: 37 (cyclomatic, outer body), 284 lines (full implementation)</para>
-      /// <para>Reads: FStores</para>
+      /// <para>Complexity: 42 (cyclomatic, outer body), 324 lines (full implementation)</para>
+      /// <para>Reads: FStores, FHoverFastOnly</para>
       /// <para>Mutates: AOut (out)</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc"/>
@@ -1329,8 +1354,8 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.DispatchMessage (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.LSP.Context.TLspFeature.AddCapabilities, DRagLint.LSP.Server.HasContextKeys, DRagLint.LSP.Server.JsonStrOf, DRagLint.LSP.Server.TLSPServer.ApplyClientContext, DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile, DRagLint.LSP.Server.TLSPServer.FileFromUri, DRagLint.LSP.Server.TLSPServer.SendMessage, TJSONArray, TJSONObject</para>
-      /// <para>Complexity: 15 (cyclomatic, outer body), 98 lines (full implementation)</para>
+      /// <para>Calls: DRagLint.LSP.Context.TLspFeature.AddCapabilities, DRagLint.LSP.Server.HasContextKeys, DRagLint.LSP.Server.JsonStrOf, DRagLint.LSP.Server.TLSPServer.ApplyClientContext, DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile, DRagLint.LSP.Server.TLSPServer.ApplyUsageSettings, DRagLint.LSP.Server.TLSPServer.FileFromUri, DRagLint.LSP.Server.TLSPServer.SendMessage, TJSONArray, TJSONObject</para>
+      /// <para>Complexity: 16 (cyclomatic, outer body), 100 lines (full implementation)</para>
       /// <para>Reads: FFeatures, FExceptionFacts   Writes: FInitialized</para>
       /// <seealso cref="DRagLint.LSP.Context.TLspFeature.AddCapabilities"/>
       /// <seealso cref="DRagLint.LSP.Server.HasContextKeys"/>
@@ -1347,10 +1372,10 @@ type
       /// <para>Calls: DRagLint.LSP.Server.TLSPServer.SendMessage</para>
       /// <para>Writes: FShuttingDown</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.SendMessage"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleShutdown(const AId: TJSONValue);
@@ -1363,9 +1388,9 @@ type
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeWorkspaceSymbols"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.SendResult"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleWorkspaceSymbol(const AId: TJSONValue; const AParams: TJSONObject);
@@ -1380,8 +1405,8 @@ type
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeDefinition"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.PositionParams"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.SendResult"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleDefinition     (const AId: TJSONValue; const AParams: TJSONObject);
@@ -1396,8 +1421,8 @@ type
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.PositionParams"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.SendResult"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleReferences     (const AId: TJSONValue; const AParams: TJSONObject);
@@ -1406,13 +1431,14 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.DispatchMessage (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.LSP.Server.TLSPServer.ComputeHover, DRagLint.LSP.Server.TLSPServer.SendResult, DRagLint.LSP.Server.TLSPServer.WithContextFooter</para>
+      /// <para>Calls: DRagLint.LSP.Deferred.HoverKey, DRagLint.LSP.Deferred.IDeferredHoverSlot.BeginComplete, DRagLint.LSP.Deferred.IDeferredHoverSlot.Decide, DRagLint.LSP.Deferred.IDeferredHoverSlot.EndComplete, DRagLint.LSP.Server.TLSPServer.ComputeHover, DRagLint.LSP.Server.TLSPServer.DeferredHover, DRagLint.LSP.Server.TLSPServer.HoverSlowWork, DRagLint.LSP.Server.TLSPServer.HoverStillWanted, DRagLint.LSP.Server.TLSPServer.PositionParams, DRagLint.LSP.Server.TLSPServer.SendResult, DRagLint.LSP.Server.TLSPServer.WithContextFooter</para>
       /// <para>Pure</para>
+      /// <para>Writes: FHoverFastOnly</para>
+      /// <seealso cref="DRagLint.LSP.Deferred.HoverKey"/>
+      /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.BeginComplete"/>
+      /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.Decide"/>
+      /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.EndComplete"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeHover"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.SendResult"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.WithContextFooter"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleHover          (const AId: TJSONValue; const AParams: TJSONObject);
@@ -1437,9 +1463,9 @@ type
       /// <para>Mutates: AOut (out)</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeHoverAt"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.PositionParams"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  ComputeHover         (const AParams: TJSONObject; out AOut: THoverComputation): Boolean;
@@ -1454,19 +1480,104 @@ type
       /// database of its own.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.DispatchMessage (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: Copy, Default, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Hover.Renderer.BuildHoverModel, DRagLint.Hover.Renderer.RenderHoverJson/2, DRagLint.LSP.Server.AddViaKeys, DRagLint.LSP.Server.HoverResolvedCallers, DRagLint.LSP.Server.TLSPServer.CallerSearchStores, DRagLint.LSP.Server.TLSPServer.ComputeHover (+10 more)</para>
-      /// <para>Complexity: 25 (cyclomatic, outer body), 235 lines (full implementation)</para>
-      /// <para>Reads: FStores</para>
+      /// <para>Calls: Copy, Default, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines, DRagLint.Doc.Regions.TDocRegions.FormatUsedInLines, DRagLint.Hover.Renderer.BuildHoverModel, DRagLint.Hover.Renderer.RenderHoverJson/2, DRagLint.Index.Manifest.LoadDocComplexityMin, DRagLint.LSP.Deferred.HoverKey (+22 more)</para>
+      /// <para>Complexity: 41 (cyclomatic, outer body), 320 lines (full implementation)</para>
+      /// <para>Reads: FStores   Writes: FHoverFastOnly</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Readable"/>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines"/>
+      /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
+      /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatUsedInLines"/>
       /// <seealso cref="DRagLint.Hover.Renderer.BuildHoverModel"/>
-      /// <seealso cref="DRagLint.Hover.Renderer.RenderHoverJson"/>
-      /// <seealso cref="DRagLint.LSP.Server.AddViaKeys"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleHoverBundle    (const AId: TJSONValue; const AParams: TJSONObject);
+      /// <summary>v152 ASYNC: the session's deferred-hover slot, created on first use.</summary>
+      /// <returns>The slot; owned by the server (reference-counted field).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleDeferHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverCancel (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HoverStillWanted (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: DRagLint.LSP.Deferred.NewDeferredHoverSlot</para>
+      /// <para>Returns: FDeferredHover</para>
+      /// <para>Reads: FDeferredHover   Writes: FDeferredHover</para>
+      /// <para>Owns returned: borrowed</para>
+      /// <seealso cref="DRagLint.LSP.Deferred.NewDeferredHoverSlot"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      function  DeferredHover: IDeferredHoverSlot;
+      /// <summary>v152 ASYNC: a checkpoint of a deferred second step. Serves what
+      /// arrived meanwhile (YieldToPendingRequests), then answers AId with
+      /// RequestCancelled when the run was abandoned.</summary>
+      /// <param name="AId">The request being answered.</param>
+      /// <param name="ARunSerial">The run's serial; 0 = not a deferred second step (always True, no yield).</param>
+      /// <returns>False when the run was abandoned and AId already answered.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HoverSlowWork (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: DRagLint.LSP.Deferred.IDeferredHoverSlot.Abandoned, DRagLint.LSP.Server.TLSPServer.DeferredHover, DRagLint.LSP.Server.TLSPServer.SendError, DRagLint.LSP.Server.TLSPServer.YieldToPendingRequests</para>
+      /// <para>Returns: True; not DeferredHover.Abandoned(ARunSerial)</para>
+      /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.Abandoned"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.DeferredHover"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.SendError"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.YieldToPendingRequests"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      function  HoverStillWanted(const AId: TJSONValue; ARunSerial: Integer): Boolean;
+      /// <summary>v152 ASYNC: the test switch's artificial slow section
+      /// (DRAGLINT_TEST_HOVER_SLOW_MS), in SLOW_SLICE_MS slices with a
+      /// HoverStillWanted checkpoint after each.</summary>
+      /// <param name="AId">The request being answered.</param>
+      /// <param name="ARunSerial">As for HoverStillWanted.</param>
+      /// <returns>False when the run was abandoned and AId already answered.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleHover (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: DRagLint.LSP.Deferred.InjectedHoverSlowMs, DRagLint.LSP.Server.TLSPServer.HoverStillWanted, Sleep</para>
+      /// <para>Returns: True</para>
+      /// <seealso cref="DRagLint.LSP.Deferred.InjectedHoverSlowMs"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.HoverStillWanted"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      function  HoverSlowWork(const AId: TJSONValue; ARunSerial: Integer): Boolean;
+      /// <summary>v152 ASYNC: `draglint/deferHover` -- the client will complete
+      /// the next hoverBundle at this position in two steps.</summary>
+      /// <param name="AParams">A TextDocumentPositionParams.</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.DispatchMessage (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: DRagLint.LSP.Deferred.HoverKey, DRagLint.LSP.Deferred.IDeferredHoverSlot.Announce, DRagLint.LSP.Server.TLSPServer.DeferredHover, DRagLint.LSP.Server.TLSPServer.PositionParams</para>
+      /// <seealso cref="DRagLint.LSP.Deferred.HoverKey"/>
+      /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.Announce"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.DeferredHover"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.PositionParams"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      procedure HandleDeferHover(const AParams: TJSONObject);
+      /// <summary>v152 ASYNC: `$/cancelRequest` -- abandons a deferred hover's
+      /// running second step; other requests are not cancellable.</summary>
+      /// <param name="AParams">`{id}` of the cancelled request.</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.DispatchMessage (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: DRagLint.LSP.Deferred.IDeferredHoverSlot.CancelRequest, DRagLint.LSP.Server.TLSPServer.DeferredHover</para>
+      /// <seealso cref="DRagLint.LSP.Deferred.IDeferredHoverSlot.CancelRequest"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.DeferredHover"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      procedure HandleHoverCancel(const AParams: TJSONObject);
       /// <summary>Answers `draglint/callerCounts`: the caller count for EVERY
       /// routine in one file, in a single round trip.</summary>
       /// <param name="AId"><!-- drag-lint:auto type -->const TJSONValue</param>
@@ -1507,15 +1618,15 @@ type
       /// drift apart.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.DispatchMessage (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindTransitiveCallers, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Model.TSymbolKindHelper.ToText, DRagLint.LSP.Server.TLSPServer.HandleUsages.AddRefRow, DRagLint.LSP.Server.TLSPServer.HandleUsages.GroupFor, DRagLint.LSP.Server.TLSPServer.SendError, DRagLint.LSP.Server.TLSPServer.SendMessage, DRagLint.Query.Callers.UsageRefsForName, LowerCase, UsageBucketIn</para>
-      /// <para>Complexity: 10 (cyclomatic, outer body), 162 lines (full implementation)</para>
-      /// <para>Reads: FStores</para>
+      /// <para>Calls: Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindTransitiveCallers, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Model.TSymbolKindHelper.ToText, DRagLint.LSP.Server.TLSPServer.ExtraScopeStores, DRagLint.LSP.Server.TLSPServer.HandleUsages.AddRefRow, DRagLint.LSP.Server.TLSPServer.HandleUsages.GroupFor (+14 more)</para>
+      /// <para>Complexity: 43 (cyclomatic, outer body), 247 lines (full implementation)</para>
+      /// <para>Reads: FUsagesGroup, FStores, FStorePaths</para>
       /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindTransitiveCallers"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
       /// <seealso cref="DRagLint.Core.Model.TSymbolKindHelper.ToText"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.HandleUsages.AddRefRow"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleUsages         (const AId: TJSONValue; const AParams: TJSONObject);
@@ -1531,7 +1642,7 @@ type
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.FileFromUri"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.SendMessage"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.StoresForFile"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleCompletion     (const AId: TJSONValue; const AParams: TJSONObject);
@@ -1546,8 +1657,8 @@ type
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.FileFromUri"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.SendMessage"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleSignatureHelp  (const AId: TJSONValue; const AParams: TJSONObject);
@@ -1559,9 +1670,9 @@ type
       /// Responds with a JSON array of CodeAction objects or null.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.DispatchMessage (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.ReadBytes, DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions, DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/3, DRagLint.LSP.Completion.TLspCompletion.BuildFixActions, DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesActions, DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics, DRagLint.LSP.Server.CodeActionKindRequested, DRagLint.LSP.Server.TLSPServer.BuildRemoveUnusedSourceAction, DRagLint.LSP.Server.TLSPServer.EnsureLinter, DRagLint.LSP.Server.TLSPServer.FileFromUri, DRagLint.LSP.Server.TLSPServer.FileToUri, DRagLint.LSP.Server.TLSPServer.SendMessage, DRagLint.LSP.Server.TLSPServer.StoresForFile, DRagLint.LSP.UsesOnSave.TUsesOnSave.RemoveUnusedQuickfixes, StrToIntDef</para>
-      /// <para>Complexity: 15 (cyclomatic, outer body), 117 lines (full implementation)</para>
-      /// <para>Reads: FStore</para>
+      /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.ReadBytes, DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions, DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/3, DRagLint.LSP.Completion.TLspCompletion.BuildFixActions, DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesActions, DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics, DRagLint.LSP.Server.BuildFixAllActions, DRagLint.LSP.Server.CodeActionKindRequested, DRagLint.LSP.Server.MoveDisableRuleActionsLast, DRagLint.LSP.Server.TLSPServer.BuildRemoveUnusedSourceAction (+9 more)</para>
+      /// <para>Complexity: 20 (cyclomatic, outer body), 146 lines (full implementation)</para>
+      /// <para>Reads: FStore, FFixDiags</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.ReadBytes"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions"/>
@@ -1627,10 +1738,10 @@ type
       /// <para>Returns: False</para>
       /// <para>Reads: FDeferred</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.FileFromUri"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function NewerSavePending(const AFile: string): Boolean;
@@ -1651,9 +1762,9 @@ type
       /// <para>Writes: FFullRulesSuperseded</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.NewerSavePending"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.YieldToPendingRequests"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function WaitFullRulesChild(AProcess, AOut: THandle; ABudget: Cardinal; const AFile: string; ASupersedable: Boolean): Boolean;
@@ -1695,8 +1806,8 @@ type
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Remove"/>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.SetText"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.FileFromUri"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleDidChange(const AParams: TJSONObject);
@@ -1724,10 +1835,10 @@ type
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleDidChangeWatchedFiles (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidClose (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.RefreshFileFromDisk (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.LSP.Server.TLSPServer.SendRawNotification</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.SendRawNotification"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure PublishEmptyDiagnostics(const AUri: string);
@@ -1756,10 +1867,10 @@ type
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.DispatchMessage (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.LSP.Server.TLSPServer.RefreshFileFromDisk</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.RefreshFileFromDisk"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleRefreshDiagnostics(const AParams: TJSONObject);
@@ -1790,10 +1901,10 @@ type
       /// <para>Reads: FStore</para>
       /// <para>Directives: overload</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.LocationFromSymbol"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function LocationFromSymbol(const ASym: TSymbol   ): TJSONObject; overload;
@@ -1808,10 +1919,10 @@ type
       /// <para>Pure</para>
       /// <para>Directives: overload</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.LocationFromRef"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function LocationFromRef   (const ARef: TReference): TJSONObject; overload;
@@ -1825,16 +1936,16 @@ type
       /// <returns><!-- drag-lint:auto -->TJSONObject -- Observed: TJSONObject.Create.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeDefinition (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeReferences (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeWorkspaceSymbols (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.LocationFromSymbol/1 (DRagLint.LSP.Server.pas)</para>
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.AddBoundReferences (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeDefinition (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeReferences (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeWorkspaceSymbols (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.LocationFromSymbol/1 (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.LSP.Server.TLSPServer.FileToUri</para>
       /// <para>Overload 2 of 2</para>
       /// <para>Owns returned: new (caller owns)</para>
       /// <para>Directives: overload</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.FileToUri"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function LocationFromSymbol(const ASym: TSymbol   ; const AStore: ISymbolStore): TJSONObject; overload;
@@ -1843,7 +1954,7 @@ type
       /// <returns><!-- drag-lint:auto -->TJSONObject -- Observed: TJSONObject.Create.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeReferences (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.LocationFromRef/1 (DRagLint.LSP.Server.pas)</para>
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.AddBoundReferences (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeReferences (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.LocationFromRef/1 (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.LSP.Server.TLSPServer.FileToUri</para>
       /// <para>Overload 2 of 2</para>
       /// <para>Owns returned: new (caller owns)</para>
@@ -1851,9 +1962,9 @@ type
       /// <para>Directives: overload</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.FileToUri"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function LocationFromRef   (const ARef: TReference; const AStore: ISymbolStore): TJSONObject; overload;
@@ -1872,14 +1983,14 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeDefinition (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeReferences (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ResolveSymbolAt (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLspServerContextAdapter.IdentifierAtPosition (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadBytes, DRagLint.LSP.Server.ContainsPosition, DRagLint.LSP.Server.FindSmallestNamedAt, DRagLint.LSP.Server.NodeTextLocal, DRagLint.LSP.Server.TLSPServer.IdentTreeFor, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSTree.RootNode, Trim</para>
-      /// <para>Complexity: 18 (cyclomatic, outer body), 59 lines (full implementation)</para>
+      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadBytes, DRagLint.LSP.Server.ByteCol0Of, DRagLint.LSP.Server.ContainsPosition, DRagLint.LSP.Server.FindSmallestNamedAt, DRagLint.LSP.Server.NodeTextLocal, DRagLint.LSP.Server.TLSPServer.IdentTreeFor, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSTree.RootNode, Trim</para>
+      /// <para>Complexity: 18 (cyclomatic, outer body), 61 lines (full implementation)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Readable"/>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.ReadBytes"/>
+      /// <seealso cref="DRagLint.LSP.Server.ByteCol0Of"/>
       /// <seealso cref="DRagLint.LSP.Server.ContainsPosition"/>
-      /// <seealso cref="DRagLint.LSP.Server.FindSmallestNamedAt"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function IdentifierAtPosition(const APath: string; ALine, ACol: Integer): string;
@@ -1899,9 +2010,9 @@ type
       /// <para>Owns returned: borrowed</para>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess"/>
       /// <seealso cref="DRagLint.LSP.SyntaxTree.ParseDelphiUtf8"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function IdentTreeFor(const ASource: TBytes; const APath: string): TTSTree;
@@ -1913,10 +2024,10 @@ type
       /// <para>Reads: FLinter   Writes: FLinter</para>
       /// <para>Owns returned: borrowed</para>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.Create"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function EnsureLinter: TLinter                                                  ;
@@ -1930,28 +2041,28 @@ type
       /// <para>Calls: Copy, DRagLint.LSP.Completion.NoteClientFileUri, StringReplace</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.LSP.Completion.NoteClientFileUri"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function FileFromUri(const AUri : string): string;
       /// <param name="ADbPath"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Server (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Server.TLSPServer.Create/1 (DRagLint.LSP.Server.pas)</para>
+      /// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Server (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Server.TLSPServer.Create/1 (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.LSP.Server.TLSPServer.Create/1</para>
       /// <para>Overload 1 of 2</para>
       /// <para>constructor</para>
       /// <para>Recursive</para>
       /// <para>Pure</para>
       /// <para>Directives: overload</para>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(const ADbPath: string); overload;
@@ -1971,32 +2082,33 @@ type
       /// <para>Calls: DRagLint.LSP.Context.RegisteredLspFeatures, DRagLint.LSP.Server.TLSPServer.OpenReaderStore, DRagLint.LSP.Server.TLspServerContextAdapter.Create, GetStdHandle</para>
       /// <para>Overload 2 of 2</para>
       /// <para>constructor</para>
-      /// <para>Reads: FStores, FStorePaths, FFeatures, FFeatureByMethod   Writes: FExceptionFacts, FStdIn, FLinter, FStores, FStorePaths, FStore, FSets, FCtxCache (+17 more)</para>
+      /// <para>Reads: FStores, FStorePaths, FFeatures, FFeatureByMethod   Writes: FExceptionFacts, FStdIn, FLinter, FStores, FStorePaths, FStore, FSets, FCtxCache (+18 more)</para>
       /// <para>Directives: overload</para>
       /// <seealso cref="DRagLint.LSP.Context.RegisteredLspFeatures"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.OpenReaderStore"/>
       /// <seealso cref="DRagLint.LSP.Server.TLspServerContextAdapter.Create"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(const ADbPaths: TArray<string>); overload;
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: CloseHandle, DRagLint.LSP.Server.TLSPServer.DropEphemeralStore</para>
-      /// <para>Reads: FStopEvent, FReindexThreads, FDeferred, FIdentTree, FExcIndex, FFeatureByMethod, FFeatures, FLinter (+14 more)   Writes: FContext, FStore</para>
+      /// <para>Reads: FStopEvent, FReindexThreads, FDeferred, FIdentTree, FExcIndex, FFeatureByMethod, FFeatures, FLinter (+15 more)   Writes: FContext, FStore</para>
       /// <para>Directives: override</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.DropEphemeralStore"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       destructor Destroy; override;
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: DRagLint.Core.ControlChannel.BeatBegin, DRagLint.Core.ControlChannel.TControlChannel.BeginWork, DRagLint.Core.ControlChannel.TControlChannel.EndWork, DRagLint.LSP.Server.TLSPServer.DispatchMessage, DRagLint.LSP.Server.TLSPServer.FlushPending, DRagLint.LSP.Server.TLSPServer.ReadMessageGuarded, DRagLint.LSP.Server.TLSPServer.StandDownTaken</para>
+      /// <para>Complexity: 10 (cyclomatic, outer body), 38 lines (full implementation)</para>
       /// <para>Reads: FShuttingDown, FDeferred, FInputEnded, FWorkLock, FControl   Writes: FQueueNotices</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.ControlChannel.BeatBegin"/>
@@ -2061,12 +2173,13 @@ type
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ContextFooter (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.PublishDiagnostics (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.QueueContextNotification (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.RepublishRetargeted (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.RunFullRulesLint (DRagLint.LSP.Server.pas) (+1 more)</para>
       /// <para>Calls: DRagLint.LSP.Server.ProjectSearchStamp, DRagLint.LSP.Server.TLSPServer.ComputeFileContext, DRagLint.LSP.Server.TLSPServer.DprojStamp, DRagLint.Project.DefineProfile.TProjectProfileCache.Forget, LowerCase</para>
       /// <para>Returns: Entry.Ctx</para>
+      /// <para>Complexity: 10 (cyclomatic, outer body), 27 lines (full implementation)</para>
       /// <para>Reads: FCtxCache</para>
       /// <seealso cref="DRagLint.LSP.Server.ProjectSearchStamp"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeFileContext"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.DprojStamp"/>
       /// <seealso cref="DRagLint.Project.DefineProfile.TProjectProfileCache.Forget"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  FileContext(const APath: string): TLspFileContext;
@@ -2084,8 +2197,8 @@ type
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.QueueContextNotification"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.RepublishRetargeted"/>
       /// <seealso cref="DRagLint.Project.DefineProfile.ReadDelphiLspDefines"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ApplyClientSettingsFile(const AFile: string);
@@ -2106,11 +2219,11 @@ type
       /// <para>Returns: Copy(FStores)</para>
       /// <para>Reads: FStores</para>
       /// <para>Effect-free (proven)</para>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function OpenStores: TArray<ISymbolStore>;
@@ -2145,19 +2258,78 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Server.TLSPServer.HandleReferences (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLspServerContextAdapter.References (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition, DRagLint.LSP.Server.TLSPServer.LocationFromRef/2, DRagLint.LSP.Server.TLSPServer.LocationFromSymbol/2, DRagLint.LSP.Server.TLSPServer.StoresForFile</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.LSP.Server.DedupeLocations, DRagLint.LSP.Server.TLSPServer.AddBoundReferences, DRagLint.LSP.Server.TLSPServer.ExtraScopeStores, DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition, DRagLint.LSP.Server.TLSPServer.LocationFromRef/2, DRagLint.LSP.Server.TLSPServer.LocationFromSymbol/2, DRagLint.LSP.Server.TLSPServer.StorePathOf, DRagLint.LSP.Server.TLSPServer.StoresForFile, DRagLint.Query.UsageScope.IsLibraryDbPath, Writeln</para>
       /// <para>Returns: Arr</para>
-      /// <para>Reads: FStores</para>
+      /// <para>Complexity: 13 (cyclomatic, outer body), 80 lines (full implementation)</para>
+      /// <para>Reads: FStores, FUsagesScope, FUsagesGroup, FEphemStore</para>
       /// <para>Catches: Exception (re-raise)</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.LocationFromRef"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.LocationFromSymbol"/>
+      /// <seealso cref="DRagLint.LSP.Server.DedupeLocations"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ComputeReferences(const APath: string; ALine0, ACol0: Integer; AIncludeDecl: Boolean): TJSONArray;
-      /// <summary>What a registered LSP feature answers for a request, without
+      /// <summary>1.52 FUSCOPE: the references of the symbol the position is BOUND to
+      /// (scope symbol), added to AArr.</summary>
+      /// <param name="AArr">Receives the locations.</param>
+      /// <param name="AStores">The file's stores.</param>
+      /// <param name="APath">The file.</param>
+      /// <param name="AIdent">The identifier at the position.</param>
+      /// <param name="ALine0">0-based line.</param>
+      /// <param name="ACol0">0-based column.</param>
+      /// <param name="AIncludeDecl">Add the bound declaration too.</param>
+      /// <returns>False when no store owning the file binds the position: the caller
+      /// answers by name (scope project).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeReferences (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.LSP.Server.TLSPServer.LocationFromRef/2, DRagLint.LSP.Server.TLSPServer.LocationFromSymbol/2, DRagLint.Query.Callers.UsageRefsForName, DRagLint.Query.UsageScope.BindUsageAt, DRagLint.Query.UsageScope.BoundUsageRefs</para>
+      /// <para>Returns: False; True</para>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.LocationFromRef"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.LocationFromSymbol"/>
+      /// <seealso cref="DRagLint.Query.Callers.UsageRefsForName"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      function AddBoundReferences(AArr: TJSONArray; const AStores: TArray<ISymbolStore>; const APath, AIdent: string;
+        ALine0, ACol0: Integer; AIncludeDecl: Boolean): Boolean;
+      /// <summary>1.52 FUSCOPE: reads dragLint.usagesScope / usagesGroup from a
+      /// settings object (initializationOptions or the didChangeConfiguration section).</summary>
+      /// <param name="ASettings">The object; nil or keys absent leave the settings as they are.</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleDidChangeConfiguration (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleInitialize (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: DRagLint.LSP.Server.JsonStrOf, DRagLint.Query.UsageScope.TryParseUsageScope, DRagLint.Query.UsageScope.UsageScopeChoices, Writeln</para>
+      /// <para>Writes: FUsagesScope, FUsagesGroup</para>
+      /// <seealso cref="DRagLint.LSP.Server.JsonStrOf"/>
+      /// <seealso cref="DRagLint.Query.UsageScope.TryParseUsageScope"/>
+      /// <seealso cref="DRagLint.Query.UsageScope.UsageScopeChoices"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      procedure ApplyUsageSettings(const ASettings: TJSONObject);
+      /// <summary>1.52 FUSCOPE: the stores scope group / everywhere adds to the open ones.</summary>
+      /// <param name="AScope">The scope; symbol and project add nothing.</param>
+      /// <param name="AOwnPaths">The databases already open for the question.</param>
+      /// <param name="AGroup">The .groupproj scope group reads.</param>
+      /// <param name="ANote">Receives DRagLint.Query.UsageScope.UsageScopeDbs's note.</param>
+      /// <returns>Every other database of the scope, opened read-only; one that fails to open is skipped.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeReferences (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleUsages (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: DRagLint.LSP.Server.TLSPServer.OpenReaderStore, DRagLint.Query.UsageScope.UsageScopeDbs, ExpandFileName, SameText</para>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.OpenReaderStore"/>
+      /// <seealso cref="DRagLint.Query.UsageScope.UsageScopeDbs"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      function ExtraScopeStores(AScope: TUsageScope; const AOwnPaths: TArray<string>; const AGroup: string; out ANote: string): TArray<ISymbolStore>;      /// <summary>What a registered LSP feature answers for a request, without
       /// writing it anywhere: the merge proxy's way to serve a feature (stdout is
       /// the relay's, never this server's, in that mode).</summary>
       /// <param name="AMethod">The LSP method name.</param>
@@ -2198,8 +2370,8 @@ type
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsFuzzy"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.LocationFromSymbol"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ComputeWorkspaceSymbols(const AQuery: string): TJSONArray;
@@ -2216,7 +2388,7 @@ type
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleCallerCounts (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLspServerContextAdapter.CallerCounts (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: Copy, DRagLint.Core.Interfaces.ISymbolStore.CountCallerSitesByNames, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.LSP.Server.TLSPServer.ComputeCallerCounts.NameOf, DRagLint.LSP.Server.TLSPServer.ComputeCallerCounts.StoreOf, DRagLint.LSP.Server.TLSPServer.ComputeCallerCounts.UnionCount, DRagLint.LSP.Server.TLSPServer.StoresForFile, DRagLint.LSP.Server.TLSPServer.YieldToPendingRequests, Int64, IntToStr, LowerCase, Pos, StrToInt</para>
       /// <para>Returns: Arr</para>
-      /// <para>Complexity: 14 (cyclomatic, outer body), 173 lines (full implementation)</para>
+      /// <para>Complexity: 15 (cyclomatic, outer body), 173 lines (full implementation)</para>
       /// <para>Catches: Exception (re-raise)</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CountCallerSitesByNames"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
@@ -2263,6 +2435,7 @@ type
       /// <para>Called from: DRagLint.LSP.Server.TLspServerContextAdapter.ExceptionFactsAt (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.LSP.Server.TLSPServer.FileToUri, DRagLint.LSP.Server.TLSPServer.StorePathOf, DRagLint.LSP.Server.TLSPServer.StoresForFile, DRagLint.Query.ExceptionFacts.ExceptionFactsOfFile</para>
       /// <para>Returns: TJSONArray.Create</para>
+      /// <para>Complexity: 12 (cyclomatic, outer body), 33 lines (full implementation)</para>
       /// <para>Reads: FExceptionFacts</para>
       /// <para>Catches: Exception (re-raise)</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
@@ -2293,7 +2466,7 @@ type
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.IsLibraryPath"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.StorePathOf"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.StoresForFile"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function HoverExtraStores(const APath: string; const AHit: ISymbolStore): TArray<ISymbolStore>;
@@ -2312,7 +2485,7 @@ type
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.StorePathOf"/>
       /// <seealso cref="DRagLint.Query.ExceptionFacts.ExceptionFactsOfIndex"/>
       /// <seealso cref="DRagLint.Query.ExceptionFacts.ExceptionRaisesLine"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ExceptionFactLines(const AStore: ISymbolStore; const ASym: TSymbol): TArray<string>;
@@ -2327,10 +2500,10 @@ type
       /// <para>Calls: DRagLint.LSP.Server.TLSPServer.ComputeHoverAt</para>
       /// <para>Returns: Comp.MdValue; ''</para>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeHoverAt"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AddBoundReferences"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ComputeHoverMarkdown(const APath: string; ALine0, ACol0: Integer): string;
@@ -2369,6 +2542,7 @@ implementation
 
 uses
   System.StrUtils, { LSP-1 CORE: MatchText }
+  System.Diagnostics, { v152 ASYNC: TStopwatch -- the per-section hover timing }
   DRagLint.Storage.Schema, { 150 SC: IsSchemaReadable, the read gate of the store opener }  // dl:unit DRagLint.Storage.Schema accepted -- 150 SC: SCHEMA_READ_MIN (and SCHEMA_VERSION) are the read-compat bounds every read gate compares; they travel with the schema
   System.RegularExpressions, { 1.44 lspctx: a project file's units and declared platform }
   DRagLint.Query.Implementors, { 1.40 ifrpt: the implementors counts of draglint/callerCounts }
@@ -2378,11 +2552,17 @@ uses
   DRagLint.Symbol.Describe,  // DescribeDeclaredType: the type a hover shows for a value kind
   DRagLint.Convert.PropTree, // ClearPropertyDeclaredTypeCache: a reopened DB must not answer from old rows
   DRagLint.Diagnostics.ParseCache, // 151 CF: TAstParseCache.ApplyPreprocess -- the key of IdentTreeFor's parse cache
+  DRagLint.CLI.Wiring,  // ResolvedImpactLevels: draglint/usages walks the resolved callers the usages verb walks (GitHub #14 follow-up)
   DRagLint.LSP.Features,  // linked for its feature units' initialization (RegisterLspFeature); no identifier is referenced
   DRagLint.LSP.UsesOnSave  { KINDS_ON_SAVE: the codeActionKinds initialize advertises } // dl:unit DRagLint.LSP.UsesOnSave accepted -- KINDS_ON_SAVE and UNUSED_UNIT_RULE are the protocol kinds and rule id TUsesOnSave builds for, so they travel with it
   ;
 
 const
+  { 1.52 VSFIX: the whole-file fix, a source action so editor.codeActionsOnSave can name it. }
+  FIX_ALL_KIND = 'source.fixAll.drag-lint';
+  FIX_TITLE_PREFIX = 'Fix: ';
+  { Edit key = line * stride + character; a source line never reaches the stride. }
+  EDIT_KEY_STRIDE = 100000;
   { C1/C12/C13: the budget for the out-of-process `lint --json` that --full-rules
     runs on each didOpen/didSave is DRagLint.Core.LintBudget.LintChildTimeoutMs --
     the same function the IDE plugin's live runner asks, so the two cannot drift. }
@@ -2687,6 +2867,7 @@ begin
   FReindexThreads:= TObjectList<TThread>.Create({AOwnsObjects=}True);
   FOpenDocs      := TDictionary<string, string>.Create;
   FPublishedTarget:= TDictionary<string, Integer>.Create;
+  FFixDiags      := TDictionary<string, string>.Create;
   FProxyPaths    := TList<string>.Create;
   FPending := TObjectList<TJSONObject>.Create({AOwnsObjects=}True);
 
@@ -2730,6 +2911,7 @@ begin
   FReindex.Free;
   FOpenDocs.Free;
   FPublishedTarget.Free;
+  FFixDiags.Free;
   FStopEvent.Free;
   FProxyPaths.Free;
   FWorkLock.Free;
@@ -3010,6 +3192,7 @@ begin
     var CaKinds: TJSONArray:= TJSONArray.Create;
     CaKinds.Add('quickfix');
     for var OnSaveKind: string in KINDS_ON_SAVE do CaKinds.Add(OnSaveKind);
+    CaKinds.Add(FIX_ALL_KIND); { 1.52 VSFIX }
     var CaProvider: TJSONObject:= TJSONObject.Create;
     CaProvider.AddPair('codeActionKinds', CaKinds);
     Caps.AddPair('codeActionProvider'     , CaProvider);
@@ -3059,6 +3242,7 @@ begin
     if AParams <> nil then
     begin
       var InitOpt: TJSONValue:= AParams.GetValue('initializationOptions');
+      if InitOpt is TJSONObject then ApplyUsageSettings(TJSONObject(InitOpt));
       if (InitOpt is TJSONObject) and HasContextKeys(TJSONObject(InitOpt)) then ApplyClientContext(TJSONObject(InitOpt))
       else if (InitOpt is TJSONObject) and (JsonStrOf(TJSONObject(InitOpt), 'settingsFile') <> '') then
         ApplyClientSettingsFile(FileFromUri(JsonStrOf(TJSONObject(InitOpt), 'settingsFile')));
@@ -3129,6 +3313,23 @@ begin
   Result:= TEncoding.UTF8.GetString(ASource, StartIdx, Len);
 end;
 
+{ 1.52 COLS: the 0-based tree-sitter BYTE column of the 0-based CHARACTER (UTF-16) column AChar0 on the 0-based line
+  ALine0 of the UTF-8 buffer ASource. AChar0 unchanged when the line is past the buffer's end. }
+function ByteCol0Of(const ASource: TBytes; ALine0, AChar0: Integer): Integer;
+const
+  LF = 10;
+begin
+  var Start: Integer:= 0;
+  var Ln: Integer:= 0;
+  while (Ln < ALine0) and (Start < Length(ASource)) do
+  begin
+    if ASource[Start] = LF then Inc(Ln);
+    Inc(Start);
+  end;
+  if Ln < ALine0 then Exit(AChar0);
+  Result:= Utf8CharColToByteCol(ASource, Start, AChar0 + 1) - 1;
+end;
+
 function TLSPServer.IdentifierAtPosition(const APath: string; ALine, ACol: Integer): string;
 var
   Tree  : TTSTree  ;
@@ -3146,24 +3347,26 @@ begin
   var FromOverlay: Boolean;
   Source:= TLiveDocuments.ReadBytes(APath, FromOverlay);
   if not FromOverlay then Source:= EnsureUtf8Bytes(Source);
+  { 1.52 COLS: ACol is a CHARACTER (UTF-16) column -- the client's and the index's unit; the tree counts bytes. }
+  var Col: Integer:= ByteCol0Of(Source, ALine, ACol);
   // C15: the C9 preprocessed parse (inactive IFDEF branches blanked, length-preserving, so
   // Source still slices the identifier text) with a bounded read callback.
   Tree:= IdentTreeFor(Source, APath);  { 151 CF: cached; owned by the server, not freed here }
   if Tree = nil then Exit;
   begin
-    Node:= FindSmallestNamedAt(Tree.RootNode, ALine, ACol);
+    Node:= FindSmallestNamedAt(Tree.RootNode, ALine, Col);
     if Node.IsNull then Exit;
     // Prefer an identifier-shaped node. If the smallest enclosing is e.g.
     // a `genericDot` (qualified name like Foo.Bar), drill into its rhs.
     if Node.NodeType = 'genericDot' then
     begin
       var Rhs:= Node.ChildByField('rhs');
-      if (not Rhs.IsNull) and ContainsPosition(Rhs, ALine, ACol) then Node:= Rhs;
+      if (not Rhs.IsNull) and ContainsPosition(Rhs, ALine, Col) then Node:= Rhs;
     end
     else if Node.NodeType = 'exprDot' then
     begin
       var Rhs:= Node.ChildByField('rhs');
-      if (not Rhs.IsNull) and ContainsPosition(Rhs, ALine, ACol) then Node:= Rhs;
+      if (not Rhs.IsNull) and ContainsPosition(Rhs, ALine, Col) then Node:= Rhs;
     end;
     if (Node.NodeType <> 'identifier') and (Node.NodeType <> 'moduleName') then
     begin
@@ -3175,7 +3378,7 @@ begin
         for var I:= 0 to ChildIt.NamedChildCount - 1 do
         begin
           var C:= ChildIt.NamedChild(I);
-          if ContainsPosition(C, ALine, ACol) then
+          if ContainsPosition(C, ALine, Col) then
           begin
             ChildIt:= C;
             Found  := True;
@@ -3421,6 +3624,29 @@ begin
   end;
 end;
 
+{ 1.52 BK-SCOPEUI B47: one Location per call site. The name answer lists a member call
+  (A.Run) once as the call row and once as the member-access row -- two byte-identical
+  Locations, so Find All References showed every member call twice. Equal JSON is an
+  equal Location (uri + range), so the first one stays and later copies go. }
+procedure DedupeLocations(AArr: TJSONArray);
+begin
+  var Seen: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+  try
+    var I: Integer:= 0;
+    while I < AArr.Count do
+    begin
+      var Key: string:= AArr.Items[I].ToJSON;
+      if Seen.ContainsKey(Key) then AArr.Remove(I).Free
+      else
+      begin
+        Seen.Add(Key, True);
+        Inc(I);
+      end;
+    end;
+  finally
+    Seen.Free;
+  end;
+end;
 function TLSPServer.ComputeReferences(const APath: string; ALine0, ACol0: Integer; AIncludeDecl: Boolean): TJSONArray;
 var
   Arr        : TJSONArray        ;
@@ -3443,6 +3669,38 @@ begin
       { v0.40.3: iterate every store for both callers and declarations.
         Through StoresForFile for the same reason HandleDefinition does. }
       var RefStores: TArray<ISymbolStore>:= StoresForFile(Path);
+      { 1.52 FUSCOPE: scope symbol (the default) answers the symbol the position is
+        BOUND to; nothing bound falls through to the name answer below (scope project). }
+      if (FUsagesScope = usSymbol) and AddBoundReferences(Arr, RefStores, Path, Ident, ALine0, ACol0, IncludeDecl) then
+      begin
+        DedupeLocations(Arr);
+        Exit(Arr);
+      end;
+      if FUsagesScope in [usGroup, usEverywhere] then
+      begin
+        var Own: TArray<string>:= nil;
+        for var St: ISymbolStore in RefStores do Own:= Own + [StorePathOf(St)];
+        var Note: string;
+        RefStores:= RefStores + ExtraScopeStores(FUsagesScope, Own, FUsagesGroup, Note);
+        if Note <> '' then Writeln(ErrOutput, 'drag-lint LSP: references: ', Note);
+      end
+      else
+      begin
+        { INT8 (1.52): scope symbol / project answers from this project's index; a library
+          store's rows are not in it (`usages --scope project` drops library-*.sqlite the same
+          way). A loose file that no project store indexes keeps every store: "this project"
+          is undefined there, and its library declaration is what references must find. }
+        var ProjectStores: TArray<ISymbolStore>:= nil;
+        var Indexed: Boolean:= False;
+        for var St: ISymbolStore in RefStores do
+          if not IsLibraryDbPath(StorePathOf(St)) then
+          begin
+            ProjectStores:= ProjectStores + [St];
+            { the ephemeral store of a loose file (StoresForFile) is no project index }
+            if (St <> FEphemStore) and (St.FindFileIdByPath(Path) > 0) then Indexed:= True;
+          end;
+        if Indexed then RefStores:= ProjectStores;
+      end;
       for var StIdx:= 0 to High(RefStores) do
       begin
         Refs:= RefStores[StIdx].FindCallersByName(Ident);
@@ -3467,8 +3725,62 @@ begin
     Arr.Free;
     raise;
   end; // try
+  DedupeLocations(Arr);
   Result:= Arr;
 end; // function
+
+function TLSPServer.AddBoundReferences(AArr: TJSONArray; const AStores: TArray<ISymbolStore>; const APath, AIdent: string;
+  ALine0, ACol0: Integer; AIncludeDecl: Boolean): Boolean;
+begin
+  Result:= False;
+  for var Home: ISymbolStore in AStores do
+  begin
+    if Home.FindFileIdByPath(APath) <= 0 then Continue;
+    var B: TUsageBinding:= BindUsageAt(Home, APath, AIdent, ALine0 + 1, ACol0 + 1);
+    if not B.Bound then Exit(False);
+    if B.HasDecl then
+    begin
+      { symbol ids are per store: a declaration's users are in its own store }
+      var Decls: TArray<TSymbol>;
+      for var R: TReference in BoundUsageRefs(Home, B, Decls) do AArr.AddElement(LocationFromRef(R, Home));
+      if AIncludeDecl then
+        for var D: TSymbol in Decls do AArr.AddElement(LocationFromSymbol(D, Home));
+    end
+    else
+      { a library target: every store's rows bound to that qualified name }
+      for var St: ISymbolStore in AStores do
+      begin
+        var Decls: TArray<TSymbol>:= St.FindSymbolsByExactName(B.QName);
+        for var R: TReference in UsageRefsForName(St, B.QName, Decls) do AArr.AddElement(LocationFromRef(R, St));
+        if AIncludeDecl then
+          for var D: TSymbol in Decls do AArr.AddElement(LocationFromSymbol(D, St));
+      end;
+    Exit(True);
+  end;
+end;
+
+function TLSPServer.ExtraScopeStores(AScope: TUsageScope; const AOwnPaths: TArray<string>; const AGroup: string; out ANote: string): TArray<ISymbolStore>;
+begin
+  Result:= nil;
+  for var D: string in UsageScopeDbs(AScope, AOwnPaths, AGroup, '', ANote) do
+  begin
+    var Known: Boolean:= False;
+    for var P: string in AOwnPaths do
+      if SameText(ExpandFileName(P), D) then Known:= True;
+    if Known then Continue;
+    var Extra: ISymbolStore:= OpenReaderStore(D);
+    if Extra <> nil then Result:= Result + [Extra];
+  end;
+end;
+
+procedure TLSPServer.ApplyUsageSettings(const ASettings: TJSONObject);begin
+  if ASettings = nil then Exit;
+  var Scope: TUsageScope;
+  var Word: string:= JsonStrOf(ASettings, 'usagesScope');
+  if (Word <> '') and TryParseUsageScope(Word, Scope) then FUsagesScope:= Scope
+  else if Word <> '' then Writeln(ErrOutput, 'drag-lint LSP: unknown usagesScope "', Word, '"; use ', UsageScopeChoices);
+  if ASettings.GetValue('usagesGroup') <> nil then FUsagesGroup:= JsonStrOf(ASettings, 'usagesGroup');
+end;
 
 // v0.42: render a symbol as a Code-Insight-style declaration line, e.g.
 //   function TShape.Area: Double          (proc-likes: sig has params+return)
@@ -4430,7 +4742,10 @@ begin
         is the engine's own (busy timeout / two-writers rule), not ours. }
       Exe:= GetEnvironmentVariable('DRAGLINT_LSP_REINDEX_EXE');
       if Exe = '' then Exe:= ParamStr(0);
-      Cmd:= Format('"%s" index --project "%s" --db "%s"', [Exe, ADproj, ADb]);
+      { A double quote is never part of a Windows path; dropping it keeps each
+        argument inside its own quotes. }
+      Cmd:= Format('"%s" index --project "%s" --db "%s"',
+        [Exe, StringReplace(ADproj, '"', '', [rfReplaceAll]), StringReplace(ADb, '"', '', [rfReplaceAll])]);
       { A batch stub runs through cmd /s /c, which keeps the inner quoting. }
       if MatchText(ExtractFileExt(Exe), ['.cmd', '.bat']) then
       begin
@@ -4438,7 +4753,7 @@ begin
         Exe:= GetEnvironmentVariable('ComSpec');
       end;
       UniqueString(Cmd);
-      if CreateProcess(PChar(Exe), PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, Si, Pi) then
+      if CreateProcess(PChar(Exe), PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, Si, Pi) then  // dl:ok taint-command-injection@705f -- REVIEWED 2026-11-18: the exe is our own (ParamStr(0) or the test-only DRAGLINT_LSP_REINDEX_EXE / ComSpec, same trust as the process); project and DB paths are quoted with every double quote dropped
       begin
         CloseHandle(Pi.hThread);
         Run.Process:= Pi.hProcess;
@@ -4838,6 +5153,7 @@ begin
   Settings:= AParams.GetValue('settings');
   if not (Settings is TJSONObject) then Exit;
   Section:= TJSONObject(Settings).GetValue(LSP_CONFIG_SECTION);
+  if Section is TJSONObject then ApplyUsageSettings(TJSONObject(Section));
   if (Section is TJSONObject) and HasContextKeys(TJSONObject(Section)) then ApplyClientContext(TJSONObject(Section))
   else if JsonStrOf(TJSONObject(Settings), 'settingsFile') <> '' then
     ApplyClientSettingsFile(FileFromUri(JsonStrOf(TJSONObject(Settings), 'settingsFile')));
@@ -5046,7 +5362,18 @@ begin
   Result:= True;
 end; // function
 
-function TLSPServer.ComputeHoverAt(const APath: string; ALine, ACol: Integer; out AOut: THoverComputation): Boolean;  // dl:ok cyclomatic-complexity@22a3, cognitive-complexity@e6bb, method-too-long@ebc3, deep-nesting@5f57 -- REVIEWED S0: the hover RENDERING half of the former ComputeHover (54 before); the selection half moved to SelectSymbolAt, further splitting is out of S0 scope (re-reviewed A5 fix: now 35; still one rendering pass, a split stays out of scope here; 151 INT re-review: 37 / 270 lines after CF's one-TypeAt-per-hover reuse, same single pass)
+{ v152 BK-VSHOVER (B51): the check-init 'Init:' / 'Set by:' lines of a variable or field for the
+  markdown hover -- the same AttachHoverSetBy the hoverBundle model uses (cached per index file,
+  so the bundle's second call is free). Empty for any other symbol. Slow on a first solve: only
+  the whole / second-step hover calls it, never the fast step. }
+function HoverSetByLines(const AStore: ISymbolStore; const ASym: TSymbol): TArray<string>;
+begin
+  var Asm_: THoverAssembly:= Default(THoverAssembly);
+  AttachHoverSetBy(AStore, ASym, Asm_);
+  Result:= Asm_.FactLines;
+end;
+
+function TLSPServer.ComputeHoverAt(const APath: string; ALine, ACol: Integer; out AOut: THoverComputation): Boolean;  // dl:ok cyclomatic-complexity@df30, cognitive-complexity@b7e0, method-too-long@43f0 -- REVIEWED S0: the hover RENDERING half of the former ComputeHover (54 before); the selection half moved to SelectSymbolAt, further splitting is out of S0 scope (re-reviewed A5 fix: now 35; still one rendering pass, a split stays out of scope here; 151 INT re-review: 37 / 270 lines after CF's one-TypeAt-per-hover reuse, same single pass; 1.52 BK-VSHOVER re-review: 41 / 310 lines after ASYNC fast-step, HBHOVER and the Set by: lines, still one rendering pass; deep-nesting no longer fires)
 var
   Path    : string         ;
   Ident   : string         ;
@@ -5105,11 +5432,15 @@ begin
     first store that has the NAME -- from handing back a library symbol
     belonging to a different program. Built after the intrinsic check, so
     hovering `Length` never triggers a parse. }
+  { v152 ASYNC: per-section timing (DRAGLINT_HOVER_TIMING=1) -- the measurement
+    that decides which sections a deferred hover answers later. }
+  var HT: TStopwatch:= TStopwatch.StartNew;
   Stores:= StoresForFile(Path);
   if not SelectSymbolAt(Stores, Path, Ident, Line, Col, Selection) then
   begin
     Exit;
   end;
+  LapHoverTiming(HT, 'select');
   Symbols       := Selection.Symbols       ;
   var HitStore: ISymbolStore:= Selection.HitStore;
   var Sel     : TSymbol     := Selection.Sel     ;
@@ -5141,6 +5472,7 @@ begin
       end;
     end;
   end;
+  LapHoverTiming(HT, 'returns');
 
   // Honest owner-type floor: the resolver found the LHS type but the member is
   // not on it or any base (incl. cross-DB generic bases). Show "Type.Member --
@@ -5153,6 +5485,7 @@ begin
   // GetSymbolDoc returns a zeroed TParsedDoc with HasContent=False when
   // no row exists; in that case fall back to the legacy signature listing.
   Doc:= HitStore.GetSymbolDoc(Sel.Id);
+  LapHoverTiming(HT, 'doc');
   if Doc.HasContent then
   begin
     // v(ADP2 T9): thread the SAME Phase-2 analysis facts `document` and
@@ -5165,16 +5498,32 @@ begin
     // docs.complexity_min threshold `document` uses. AIncludeSeeAlso/
     // AIncludeSince stay False (no --seealso/--since opt-in here),
     // mirroring a default `document` run.
-    var HovFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Sel, LoadDocHandlesOptions, False, False, '', HoverExtraStores(APath, HitStore)); { gap 3: the SAME 'Catches:' knob document writes with; 149 LX: + the file's other project stores }
-    var HovFactLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(HovFacts, LoadDocComplexityMin);
-    { E-USE-EDGES-PHASE2: the property/field 'Used in:' line, same formatter as the doc block. }
-    HovFactLines:= TDocRegions.FormatUsedInLines(HovFacts) + HovFactLines;
-    { 150 LX2: the callers, first as in the doc block; '' when the /// block already shows them. }
-    var HovCalledFrom: string:= FormatHoverCalledFromLine(HovFacts, Doc.RawBlock + Doc.Remarks);
-    if HovCalledFrom <> '' then HovFactLines:= [HovCalledFrom] + HovFactLines;
-    HovFactLines:= HovFactLines + ExceptionFactLines(HitStore, Sel); { D1: Raises:, after the doc-block facts }
+    var HovFactLines: TArray<string>;
+    if FHoverFastOnly then HovFactLines:= [DEFERRED_PLACEHOLDER] { v152 ASYNC: the facts come with the second step }
+    else
+    begin
+      var HovFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Sel, LoadDocHandlesOptions, False, False, '', HoverExtraStores(APath, HitStore)); { gap 3: the SAME 'Catches:' knob document writes with; 149 LX: + the file's other project stores }
+      HovFactLines:= TDocRegions.FormatPhase2FactLines(HovFacts, LoadDocComplexityMin);
+      { E-USE-EDGES-PHASE2: the property/field 'Used in:' line, same formatter as the doc block. }
+      HovFactLines:= TDocRegions.FormatUsedInLines(HovFacts) + HovFactLines;
+      { 150 LX2: the callers, first as in the doc block; '' when the /// block already shows them. }
+      var HovCalledFrom: string:= FormatHoverCalledFromLine(HovFacts, Doc.RawBlock + Doc.Remarks);
+      if HovCalledFrom <> '' then HovFactLines:= [HovCalledFrom] + HovFactLines;
+      LapHoverTiming(HT, 'facts');
+      var HovExc: TArray<string>:= ExceptionFactLines(HitStore, Sel); { D1: Raises:, after the doc-block facts }
+      HovFactLines:= HovFactLines + HovExc;
+      LapHoverTiming(HT, 'exceptions');
+      HovFactLines:= HovFactLines + HoverSetByLines(HitStore, Sel); { v152 BK-VSHOVER (B51): the writer list, as in the bundle }
+      LapHoverTiming(HT, 'set-by');
+      { v152 ASYNC: kept for hoverBundle's model (built once per popup). }
+      AOut.FactsReady    := True    ;
+      AOut.FactsSymId    := Sel.Id  ;
+      AOut.Facts         := HovFacts;
+      AOut.ExceptionLines:= HovExc  ;
+    end;
     MdValue:= DRagLint.Hover.Renderer.RenderHoverMarkdown(Sel, Doc, HovRhs, HovFactLines,
       FormatDeclaredType(DescribeDeclaredType(Sel, HitStore)));
+    LapHoverTiming(HT, 'render');
   end
   else
   begin
@@ -5293,14 +5642,30 @@ begin
       { C3: an undocumented symbol still has index facts (Directives:, Complexity:,
         ...). Append the SAME Phase-2 fact lines the doc branch renders, only when
         the popup describes exactly ONE symbol (several overloads would misattribute). }
+      LapHoverTiming(HT, 'candidates');
       if Length(Filtered) = 1 then
       begin
-        var NdFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Filtered[0], LoadDocHandlesOptions, False, False, '', HoverExtraStores(APath, HitStore)); { 149 LX: cross-DB uses }
-        var NdLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(NdFacts, LoadDocComplexityMin);
-        NdLines:= TDocRegions.FormatUsedInLines(NdFacts) + NdLines; { E-USE-EDGES-PHASE2 }
-        var NdCalledFrom: string:= FormatHoverCalledFromLine(NdFacts, ''); { 150 LX2: no /// block here }
-        if NdCalledFrom <> '' then NdLines:= [NdCalledFrom] + NdLines;
-        NdLines:= NdLines + ExceptionFactLines(HitStore, Filtered[0]); { D1: Raises: }
+        var NdLines: TArray<string>;
+        if FHoverFastOnly then NdLines:= [DEFERRED_PLACEHOLDER] { v152 ASYNC: the facts come with the second step }
+        else
+        begin
+          var NdFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Filtered[0], LoadDocHandlesOptions, False, False, '', HoverExtraStores(APath, HitStore)); { 149 LX: cross-DB uses }
+          NdLines:= TDocRegions.FormatPhase2FactLines(NdFacts, LoadDocComplexityMin);
+          NdLines:= TDocRegions.FormatUsedInLines(NdFacts) + NdLines; { E-USE-EDGES-PHASE2 }
+          var NdCalledFrom: string:= FormatHoverCalledFromLine(NdFacts, ''); { 150 LX2: no /// block here }
+          if NdCalledFrom <> '' then NdLines:= [NdCalledFrom] + NdLines;
+          LapHoverTiming(HT, 'facts');
+          var NdExc: TArray<string>:= ExceptionFactLines(HitStore, Filtered[0]); { D1: Raises: }
+          NdLines:= NdLines + NdExc;
+          LapHoverTiming(HT, 'exceptions');
+          NdLines:= NdLines + HoverSetByLines(HitStore, Filtered[0]); { v152 BK-VSHOVER (B51): the writer list, as in the bundle }
+          LapHoverTiming(HT, 'set-by');
+          { v152 ASYNC: kept for hoverBundle's model (built once per popup). }
+          AOut.FactsReady    := True          ;
+          AOut.FactsSymId    := Filtered[0].Id;
+          AOut.Facts         := NdFacts       ;
+          AOut.ExceptionLines:= NdExc         ;
+        end;
         if Length(NdLines) > 0 then
         begin
           Sb.AppendLine('');
@@ -5329,6 +5694,8 @@ begin
   AOut.Store    := HitStore;
   AOut.Path     := APath   ;
   AOut.HasSymbol:= True    ;
+  { v152 ASYNC: facts built for another symbol than the subject are not reused. }
+  if AOut.FactsReady and (AOut.FactsSymId <> AOut.Sel.Id) then AOut.FactsReady:= False;
   Result:= True;
 end; // function
 
@@ -5346,24 +5713,58 @@ end;
 procedure TLSPServer.HandleHover(const AId: TJSONValue; const AParams: TJSONObject);
 { A thin envelope over ComputeHover. Every rule about WHICH symbol a position
   means now lives in one place, so `draglint/hoverBundle` cannot describe a
-  different symbol than this reply does for the same cursor. }
+  different symbol than this reply does for the same cursor.
+
+  v152 BK-VSHOVER (B32): the same two-step deferral hoverBundle has (ASYNC), for
+  the VS Code client. After draglint/deferHover the first hover at that position
+  is the fast markdown with the DEFERRED_PLACEHOLDER line where the facts go; the
+  second hover there is the whole markdown, cancellable ($/cancelRequest or an
+  announcement elsewhere -> RequestCancelled). Unannounced hovers are whole. }
 var
-  HoverObj: TJSONObject     ;
-  Contents: TJSONObject     ;
-  Comp    : THoverComputation;
+  HoverObj : TJSONObject     ;
+  Contents : TJSONObject     ;
+  Comp     : THoverComputation;
+  Decision : TDeferredHoverDecision;
+  RunSerial: Integer         ;
+  Computed : Boolean         ;
+  KeyPath  : string          ;
+  KeyLine  : Integer         ;
+  KeyCol   : Integer         ;
 begin
-  if not ComputeHover(AParams, Comp) then
+  Decision := dhdFull;
+  RunSerial:= 0;
+  if PositionParams(AParams, KeyPath, KeyLine, KeyCol) then
   begin
-    SendResult(AId, nil); { result: null }
-    Exit;
+    var Key: string:= HoverKey(KeyPath, KeyLine, KeyCol);
+    Decision:= DeferredHover.Decide(Key);
+    if (Decision = dhdComplete) and (AId <> nil) then RunSerial:= DeferredHover.BeginComplete(AId.ToJSON, Key);
   end;
-  Comp.MdValue:= WithContextFooter(AParams, Comp.MdValue);
-  HoverObj:= TJSONObject.Create;
-  Contents:= TJSONObject.Create;
-  Contents.AddPair('kind'    , 'markdown' );
-  Contents.AddPair('value'   , Comp.MdValue);
-  HoverObj.AddPair('contents', Contents   );
-  SendResult(AId, HoverObj);
+  try
+    FHoverFastOnly:= Decision = dhdFast;
+    try
+      Computed:= ComputeHover(AParams, Comp);
+    finally
+      FHoverFastOnly:= False;
+    end;
+    if not Computed then
+    begin
+      SendResult(AId, nil); { result: null }
+      Exit;
+    end;
+    { The test switch's slow section stands where the whole answer's slow work
+      is; the fast step skips it. Both checks answer RequestCancelled themselves. }
+    if (Decision <> dhdFast) and not HoverSlowWork(AId, RunSerial) then Exit;
+    if not HoverStillWanted(AId, RunSerial) then Exit;
+    Comp.MdValue:= WithContextFooter(AParams, Comp.MdValue);
+    HoverObj:= TJSONObject.Create;
+    Contents:= TJSONObject.Create;
+    Contents.AddPair('kind'    , 'markdown' );
+    Contents.AddPair('value'   , Comp.MdValue);
+    HoverObj.AddPair('contents', Contents   );
+    SendResult(AId, HoverObj);
+  finally
+    if RunSerial <> 0 then DeferredHover.EndComplete(RunSerial);
+  end;
 end; // procedure
 
 function TLSPServer.ComputeHoverMarkdown(const APath: string; ALine0, ACol0: Integer): string;
@@ -5785,7 +6186,8 @@ begin
       end;
       Method:= if Msg.GetValue('method') <> nil then Msg.GetValue('method').Value else '';
       if (Method = 'textDocument/hover') or (Method = 'draglint/hoverBundle') or
-         (Method = 'textDocument/definition') or (Method = '$/cancelRequest') then
+         (Method = 'textDocument/definition') or (Method = '$/cancelRequest') or
+         (Method = DEFER_HOVER_METHOD) then { v152 ASYNC: an announcement abandons a running deferred hover }
       begin
         try
           try
@@ -5896,6 +6298,31 @@ begin
     if DepthNum <> nil then Depth:= DepthNum.AsInt;
   end;
 
+  { 1.52 FUSCOPE: "scope" (symbol|project|group|everywhere, default symbol), and the
+    position that binds scope symbol: "file" + 1-based "line" / "col". Same rules as
+    `usages --scope`: a bare name with no position is answered as scope project. }
+  var ScopeWord: string:= '';
+  var PosFile: string:= '';
+  var PosLine: Integer:= 0;
+  var PosCol: Integer:= 0;
+  var GroupFile: string:= FUsagesGroup;
+  if AParams <> nil then
+  begin
+    AParams.TryGetValue<string>('scope', ScopeWord);
+    AParams.TryGetValue<string>('file', PosFile);
+    AParams.TryGetValue<string>('group', GroupFile);
+    var LineNum: TJSONNumber:= AParams.GetValue('line') as TJSONNumber;
+    if LineNum <> nil then PosLine:= LineNum.AsInt;
+    var ColNum: TJSONNumber:= AParams.GetValue('col') as TJSONNumber;
+    if ColNum <> nil then PosCol:= ColNum.AsInt;
+  end;
+  var Requested: TUsageScope:= USAGE_SCOPE_DEFAULT;
+  if (ScopeWord <> '') and not TryParseUsageScope(ScopeWord, Requested) then
+  begin
+    SendError(AId, LSP_ERR_INVALID_PARAMS, 'draglint/usages: unknown "scope" ' + ScopeWord + '; use ' + UsageScopeChoices);
+    Exit;
+  end;
+
   if Nm = '' then
   begin
     { A missing name is a CLIENT error, not an empty result. Returning an empty
@@ -5928,10 +6355,63 @@ begin
     JHandles:= TJSONArray.Create;
     JImpact:= TJSONArray.Create;
 
-    for St in FStores do
+    { 1.52 FUSCOPE: bind, settle the scope answered, and widen the store list. }
+    var Scope: TUsageScope:= Requested;
+    var ScopeNote: string:= '';
+    var Binding: TUsageBinding:= Default(TUsageBinding);
+    var BindStore: ISymbolStore:= nil;
+    if Scope = usSymbol then
+    begin
+      if (PosFile <> '') and (PosLine > 0) then
+      begin
+        for var Home: ISymbolStore in FStores do
+          if (Home <> nil) and (BindStore = nil) and (Home.FindFileIdByPath(PosFile) > 0) then BindStore:= Home;
+        if BindStore <> nil then Binding:= BindUsageAt(BindStore, PosFile, Copy(Nm, LastDelimiter('.', Nm) + 1, MaxInt), PosLine, PosCol);
+        if Binding.Bound and not Binding.HasDecl then Nm:= Binding.QName
+        else if not Binding.Bound then
+        begin
+          Scope:= usProject;
+          ScopeNote:= Format('nothing is bound at %s:%d; answered scope project', [PosFile, PosLine]);
+        end;
+      end
+      else if not Nm.Contains('.') then
+      begin
+        Scope:= usProject;
+        ScopeNote:= USAGE_NOTE_BARE_NAME;
+      end;
+    end;
+    if Scope <> usSymbol then Nm:= Copy(Nm, LastDelimiter('.', Nm) + 1, MaxInt);
+    var ScanStores: TArray<ISymbolStore>:= FStores;
+    var JDbs: TJSONArray:= TJSONArray.Create;
+    if Scope in [usGroup, usEverywhere] then
+    begin
+      var WideNote: string;
+      ScanStores:= ScanStores + ExtraScopeStores(Scope, FStorePaths, GroupFile, WideNote);
+      if WideNote <> '' then ScopeNote:= WideNote;
+    end
+    else if UsageScopeExcludesLibraries(Scope) then
+    begin
+      { INT8 (1.52): symbol / project = this project's index, no library-*.sqlite rows (the
+        CLI's UsageScopeDbs rule); every store a library -> all kept, as WithoutLibraryDbs does. }
+      var ProjectStores: TArray<ISymbolStore>:= nil;
+      for var PS: ISymbolStore in ScanStores do
+        if (PS <> nil) and ((PS = BindStore) or not IsLibraryDbPath(StorePathOf(PS))) then ProjectStores:= ProjectStores + [PS];
+      if ProjectStores <> nil then ScanStores:= ProjectStores;
+    end;
+
+    for St in ScanStores do
     begin
       if St = nil then Continue;
-      var Decls: TArray<TSymbol>:= St.FindSymbolsByExactName(Nm);
+      if (Scope = usSymbol) and Binding.HasDecl and (St <> BindStore) then Continue; { symbol ids are per store }
+      JDbs.Add(StorePathOf(St));
+      var Decls: TArray<TSymbol>;
+      var Refs : TArray<TReference>;
+      if (Scope = usSymbol) and Binding.HasDecl then Refs:= BoundUsageRefs(St, Binding, Decls)
+      else
+      begin
+        Decls:= St.FindSymbolsByExactName(Nm);
+        Refs := UsageRefsForName(St, Nm, Decls);
+      end;
       for S in Decls do
       begin
         DeclO:= TJSONObject.Create;
@@ -5942,10 +6422,18 @@ begin
         DeclO.AddPair('signature', S.Signature);
         JDecls.AddElement(DeclO);
       end;
-      for R in UsageRefsForName(St, Nm, Decls) do
+      for R in Refs do
         AddRefRow(GroupFor(R, Decls), St.GetFilePath(R.FileId), R.StartLine, R.StartCol, R.Resolution);
-      if Width = 'very-wide' then
-        for L in St.FindTransitiveCallers(Nm, Depth) do
+      { N3WIDE (1.52): 'wide' too, as the CLI verb -- testing 'very-wide' alone made the
+        IDE's Wide answer identical to Narrow (run_v152_N3WIDE.ps1). }
+      { GitHub #14 follow-up (1.52, be8a41f51): a routine walks its RESOLVED callers, as the CLI usages verb does;
+        a type or variable keeps the by-name walk. The CLI-only change left this reply on the by-name walk, so
+        wide / very-wide over the LSP undercounted (run_v152_N3WIDE.ps1 d). }
+      var WideLevels: TArray<TImpactLevel>:= nil;
+      if ((Width = 'wide') or (Width = 'very-wide'))
+        and not ResolvedImpactLevels(St, Decls, Depth, WideLevels) then WideLevels:= St.FindTransitiveCallers(Nm, Depth);
+      if (Width = 'wide') or (Width = 'very-wide') then
+        for L in WideLevels do
         begin
           var IO_: TJSONObject:= TJSONObject.Create;
           IO_.AddPair('depth'  , TJSONNumber.Create(L.Depth      ));
@@ -5958,6 +6446,10 @@ begin
     Res:= TJSONObject.Create;
     Res.AddPair('name'        , Nm     );
     Res.AddPair('width'       , Width  );
+    Res.AddPair('scope'       , USAGE_SCOPE_NAMES[Scope]); { 1.52 FUSCOPE: keys as the CLI's }
+    if Scope <> Requested then Res.AddPair('scope_requested', USAGE_SCOPE_NAMES[Requested]);
+    if ScopeNote <> '' then Res.AddPair('scope_note', ScopeNote);
+    if Binding.Bound then Res.AddPair('bound', Binding.QName);
     Res.AddPair('declarations', JDecls );
     Res.AddPair('reads'       , JReads );
     Res.AddPair('writes'      , JWrites);
@@ -5968,6 +6460,7 @@ begin
     Res.AddPair('raises'      , JRaises);
     Res.AddPair('handles'     , JHandles);
     Res.AddPair('impact'      , JImpact);
+    Res.AddPair('databases'   , JDbs   );
     Reply.AddPair('result', Res);
     SendMessage(Reply);
   finally
@@ -6018,26 +6511,58 @@ procedure TLSPServer.HandleHoverBundle(const AId: TJSONValue; const AParams: TJS
 
   Every store consulted here is already open on FStores. Nothing in this handler
   opens a database, which is the whole point -- the spawns it replaces each
-  cold-opened the ~1.4 GB library index to answer one tooltip. }
+  cold-opened the ~1.4 GB library index to answer one tooltip.
+
+  v152 ASYNC (ruling B9c): a client that announced this position
+  (draglint/deferHover) gets TWO answers -- the fast sections at once with the
+  DEFERRED_PLACEHOLDER line, then the whole bundle when it asks the same
+  position again. That second computation yields between sections and stops,
+  answering RequestCancelled, as soon as the user moved on. Unannounced
+  requests (the menu hover, batch callers) are answered whole, as before. }
 var
   Reply    : TJSONObject     ;
   Res      : TJSONObject     ;
   Comp     : THoverComputation;
   FactLines: TArray<string>  ;
+  Decision : TDeferredHoverDecision;
+  RunSerial: Integer         ;
+  HT       : TStopwatch      ;
+  Computed : Boolean         ;
 begin
+  Decision := dhdFull;
+  RunSerial:= 0;
+  HT       := TStopwatch.StartNew;
+  var KeyPath: string;
+  var KeyLine, KeyCol: Integer;
+  if PositionParams(AParams, KeyPath, KeyLine, KeyCol) then
+  begin
+    var Key: string:= HoverKey(KeyPath, KeyLine, KeyCol);
+    Decision:= DeferredHover.Decide(Key);
+    if (Decision = dhdComplete) and (AId <> nil) then RunSerial:= DeferredHover.BeginComplete(AId.ToJSON, Key);
+  end;
   Reply:= TJSONObject.Create;
   try
     Reply.AddPair('jsonrpc', '2.0');
     if AId <> nil then Reply.AddPair('id', AId.Clone as TJSONValue);
 
-    if not ComputeHover(AParams, Comp) then
+    FHoverFastOnly:= Decision = dhdFast;
+    try
+      Computed:= ComputeHover(AParams, Comp);
+    finally
+      FHoverFastOnly:= False;
+    end;
+    LapHoverTiming(HT, 'bundle-markdown');
+    if not Computed then
     begin
       Reply.AddPair('result', TJSONNull.Create);
       SendMessage(Reply);
       Exit;
     end;
+    if not HoverStillWanted(AId, RunSerial) then Exit;
 
+    { Owned by Reply from here on, so an abandoned run below frees it with Reply. }
     Res:= TJSONObject.Create;
+    Reply.AddPair('result', Res);
     Res.AddPair('markdown', WithContextFooter(AParams, Comp.MdValue));
 
     if not Comp.HasSymbol then
@@ -6095,7 +6620,6 @@ begin
         Res.AddPair('model', TJSONNull.Create);
       Res.AddPair('nameCallers'    , TJSONArray.Create );
       Res.AddPair('resolvedCallers', TJSONArray.Create );
-      Reply.AddPair('result', Res);
       SendMessage(Reply);
       Exit;
     end;
@@ -6105,8 +6629,35 @@ begin
     { The model, assembled by the same shared code `hover --format json` calls,
       then re-parsed into the reply. Re-parsing costs a few microseconds and
       buys the guarantee that the two surfaces cannot format differently. }
-    var Asm_     : THoverAssembly:= AssembleHover(Comp.Store, Comp.Sel, True, HoverExtraStores(Comp.Path, Comp.Store)); { 149 LX: cross-DB uses }
-    FactLines:= Asm_.FactLines + ExceptionFactLines(Comp.Store, Comp.Sel); { D1: the popup's Raises: line }
+    { v152 ASYNC: the first step skips the Phase-2 facts (AWithFacts False) and
+      says where they will go. }
+    var Fast     : Boolean       := Decision = dhdFast;
+    { v152 ASYNC: the markdown above already built this symbol's facts and
+      Raises: lines (Comp.FactsReady) -- reuse them rather than paying the two
+      slowest fact queries twice per popup. The model's lines are AssembleHover's
+      AWithFacts branch over the SAME TDocFacts: Used in + Phase-2 + Implemented
+      by, and the Purity verdict; no 'Called from:' (the popup has its grid). }
+    var Reuse    : Boolean       := (not Fast) and Comp.FactsReady;
+    var Asm_     : THoverAssembly:= AssembleHover(Comp.Store, Comp.Sel, not (Fast or Reuse), HoverExtraStores(Comp.Path, Comp.Store),
+      if Fast then [hskImplementors, hskSetBy] else []); { 149 LX: cross-DB uses; 1.52 HBHOVER: the fast step skips the slow sections }
+    if Reuse then
+    begin
+      Asm_.FactLines:= TDocRegions.FormatUsedInLines(Comp.Facts) +
+        TDocRegions.FormatPhase2FactLines(Comp.Facts, LoadDocComplexityMin) + Asm_.ImplLines;
+      AttachHoverSetBy(Comp.Store, Comp.Sel, Asm_); { 1.52 HBHOVER: reused facts still carry set-by }
+      Asm_.Model.EffectFree   := Comp.Facts.EffectFree   ;
+      Asm_.Model.EffectSummary:= Comp.Facts.EffectSummary;
+      Asm_.Model.EffectWitness:= Comp.Facts.EffectWitness;
+    end;
+    LapHoverTiming(HT, 'bundle-assemble');
+    if Fast then FactLines:= Asm_.FactLines + [DEFERRED_PLACEHOLDER]
+    else
+    begin
+      if not HoverStillWanted(AId, RunSerial) then Exit;
+      FactLines:= Asm_.FactLines + (if Reuse then Comp.ExceptionLines
+                                    else ExceptionFactLines(Comp.Store, Comp.Sel)); { D1: the popup's Raises: line }
+      LapHoverTiming(HT, 'bundle-exceptions');
+    end;
     var ModelJson: string:= DRagLint.Hover.Renderer.RenderHoverJson(Asm_.Model, FactLines);
     var ModelVal : TJSONValue := nil;
     try
@@ -6125,6 +6676,27 @@ begin
     end;
     if ModelVal <> nil then Res.AddPair('model', ModelVal)
     else                    Res.AddPair('model', TJSONNull.Create);
+
+    if Fast then
+    begin
+      { The first step ends here: no caller rows yet, and the list of what the
+        second ask at this position will add. Empty arrays, not missing keys --
+        the same contract the intrinsic branch keeps. }
+      Res.AddPair('nameCallers'    , TJSONArray.Create);
+      Res.AddPair('resolvedCallers', TJSONArray.Create);
+      var Pending: TJSONArray:= TJSONArray.Create;
+      Pending.Add('facts').Add('exceptions').Add('callers');
+      var Deferred: TJSONObject:= TJSONObject.Create;
+      Deferred.AddPair('placeholder', DEFERRED_PLACEHOLDER);
+      Deferred.AddPair('pending'    , Pending);
+      Res.AddPair('deferred', Deferred);
+      SendMessage(Reply);
+      Exit;
+    end;
+
+    { The test switch's artificial slow section sits where the real slow one
+      does: before the caller queries, sliced, and cancellable like them. }
+    if not HoverSlowWork(AId, RunSerial) then Exit;
 
     { CALLER SCOPING. Library stores are dropped from the caller search: callers
       of project code live in the project, and scanning the library index by
@@ -6224,6 +6796,8 @@ begin
     finally
       SrcCache.Free;
     end; // try
+    LapHoverTiming(HT, 'bundle-resolved-callers');
+    if not HoverStillWanted(AId, RunSerial) then Exit;
 
     var JName: TJSONArray:= TJSONArray.Create;
     for var i:= 0 to High(Search) do
@@ -6240,13 +6814,69 @@ begin
         JName.AddElement(O);
       end;
     Res.AddPair('nameCallers', JName);
+    LapHoverTiming(HT, 'bundle-name-callers');
+    { The last chance to notice the user moved on: a whole answer about where
+      the pointer WAS is the late reply the deferral exists to prevent. }
+    if not HoverStillWanted(AId, RunSerial) then Exit;
 
-    Reply.AddPair('result', Res);
     SendMessage(Reply);
   finally
     Reply.Free;
+    if RunSerial <> 0 then DeferredHover.EndComplete(RunSerial);
   end; // try
 end; // procedure
+
+function TLSPServer.DeferredHover: IDeferredHoverSlot;
+begin
+  if FDeferredHover = nil then FDeferredHover:= NewDeferredHoverSlot;
+  Result:= FDeferredHover;
+end;
+
+function TLSPServer.HoverStillWanted(const AId: TJSONValue; ARunSerial: Integer): Boolean;
+begin
+  Result:= True;
+  if ARunSerial = 0 then Exit; { not a deferred second step: never abandoned }
+  { Serve what arrived meanwhile -- a hover elsewhere, a $/cancelRequest, an
+    announcement -- so it can abandon this run. Single-threaded by design (see
+    YieldToPendingRequests); nothing here is concurrent. }
+  YieldToPendingRequests;
+  Result:= not DeferredHover.Abandoned(ARunSerial);
+  if not Result then SendError(AId, LSP_ERR_REQUEST_CANCELLED, 'hover abandoned: the pointer moved on');
+end;
+
+function TLSPServer.HoverSlowWork(const AId: TJSONValue; ARunSerial: Integer): Boolean;
+var
+  Remaining: Integer;
+begin
+  Result   := True;
+  Remaining:= InjectedHoverSlowMs;
+  while Remaining > 0 do
+  begin
+    Sleep(if Remaining < SLOW_SLICE_MS then Remaining else SLOW_SLICE_MS);
+    Dec(Remaining, SLOW_SLICE_MS);
+    if not HoverStillWanted(AId, ARunSerial) then Exit(False);
+  end;
+end;
+
+procedure TLSPServer.HandleDeferHover(const AParams: TJSONObject);
+var
+  Path: string ;
+  Line: Integer;
+  Col : Integer;
+begin
+  if PositionParams(AParams, Path, Line, Col) then DeferredHover.Announce(HoverKey(Path, Line, Col));
+end;
+
+procedure TLSPServer.HandleHoverCancel(const AParams: TJSONObject);
+var
+  IdVal: TJSONValue;
+begin
+  { $/cancelRequest was a no-op here before 1.52: only the deferred second step
+    of a hover is cancellable; every other request runs to its answer. }
+  if AParams = nil then Exit;
+  IdVal:= AParams.GetValue('id');
+  if IdVal <> nil then DeferredHover.CancelRequest(IdVal.ToJSON);
+end;
 
 procedure TLSPServer.HandleCompletion(const AId: TJSONValue; const AParams: TJSONObject);
 var
@@ -6357,6 +6987,113 @@ begin
     if SameText(V.Value, AKind) or StartsText(V.Value + '.', AKind) then Exit(True);
 end;
 
+{ Position of a TextEdit as one comparable number; AEnd picks range.end over range.start. }
+function FixEditKey(const AEdit: TJSONObject; AEnd: Boolean): Int64;
+begin
+  Result:= 0;
+  var Side: string:= if AEnd then 'end' else 'start';
+  var L: Integer;
+  var C: Integer;
+  if AEdit.TryGetValue<Integer>('range.' + Side + '.line', L) and AEdit.TryGetValue<Integer>('range.' + Side + '.character', C) then
+    Result:= Int64(L) * EDIT_KEY_STRIDE + C;
+end;
+
+{ The TextEdit array of a fix action's WorkspaceEdit (not owned) and the URI it targets. }
+function FixActionEdits(const AAction: TJSONValue; out AUri: string): TJSONArray;
+begin
+  Result:= nil;
+  AUri:= '';
+  var Edit: TJSONValue:= TJSONObject(AAction).GetValue('edit');
+  if Edit is not TJSONObject then Exit;
+  var Changes: TJSONValue:= TJSONObject(Edit).GetValue('changes');
+  if (Changes is not TJSONObject) or (TJSONObject(Changes).Count = 0) then Exit;
+  AUri:= TJSONObject(Changes).Pairs[0].JsonString.Value;
+  if TJSONObject(Changes).Pairs[0].JsonValue is TJSONArray then Result:= TJSONArray(TJSONObject(Changes).Pairs[0].JsonValue);
+end;
+
+{ 1.52 VSFIX: the "fix all" code actions, merged from the per-finding "Fix: <rule>" actions of the
+  WHOLE file (AFileFix) -- the client's context.diagnostics is range-filtered, so it cannot be the source.
+  AHitFix = the per-finding actions of the requested range. Offers, only when AHitFix is not empty or
+  AOnlyFixAll (the client asked for the source kind):
+    "drag-lint: fix all <rule> in file" (quickfix) for each hit rule the file holds 2+ times;
+    "drag-lint: fix all fixable in file" (source.fixAll.drag-lint).
+  Overlapping edits are dropped, first wins. Caller owns the returned array. }
+function BuildFixAllActions(const AFileFix, AHitFix: TJSONArray; AOnlyFixAll: Boolean): TJSONArray;
+
+  function MergedAction(const ATitle, AKind, ARuleTitle: string): TJSONObject;
+  var
+    Picked: TList<TJSONObject>;
+    Uri   : string;
+  begin
+    Result:= nil;
+    Picked:= TList<TJSONObject>.Create; { elements belong to AFileFix }
+    try
+      for var A: TJSONValue in AFileFix do
+      begin
+        var Title: string;
+        if (ARuleTitle <> '') and not (A.TryGetValue<string>('title', Title) and (Title = ARuleTitle)) then Continue;
+        var ActUri: string;
+        var Edits: TJSONArray:= FixActionEdits(A, ActUri);
+        if Edits = nil then Continue;
+        Uri:= ActUri;
+        for var E: TJSONValue in Edits do
+          if E is TJSONObject then
+          begin
+            var At: Integer:= 0;
+            while (At < Picked.Count) and (FixEditKey(Picked[At], False) <= FixEditKey(TJSONObject(E), False)) do Inc(At);
+            Picked.Insert(At, TJSONObject(E));
+          end;
+      end;
+      if Picked.Count = 0 then Exit;
+      var Merged: TJSONArray:= TJSONArray.Create;
+      var LastEnd: Int64:= -1;
+      for var E: TJSONObject in Picked do
+      begin
+        if FixEditKey(E, False) < LastEnd then Continue; { overlaps the edit before it }
+        Merged.AddElement(E.Clone as TJSONValue);
+        LastEnd:= FixEditKey(E, True);
+      end;
+      var Changes: TJSONObject:= TJSONObject.Create;
+      Changes.AddPair(Uri, Merged);
+      var WEdit: TJSONObject:= TJSONObject.Create;
+      WEdit.AddPair('changes', Changes);
+      Result:= TJSONObject.Create;
+      Result.AddPair('title', ATitle);
+      Result.AddPair('kind' , AKind);
+      Result.AddPair('edit' , WEdit);
+    finally
+      Picked.Free;
+    end;
+  end;
+
+begin
+  Result:= TJSONArray.Create;
+  if (AFileFix = nil) or (AFileFix.Count = 0) then Exit;
+  if ((AHitFix = nil) or (AHitFix.Count = 0)) and not AOnlyFixAll then Exit;
+  var Seen: TStringList:= TStringList.Create;
+  try
+    if AHitFix <> nil then
+      for var H: TJSONValue in AHitFix do
+      begin
+        var HitTitle: string;
+        if not H.TryGetValue<string>('title', HitTitle) or (Seen.IndexOf(HitTitle) >= 0) then Continue;
+        Seen.Add(HitTitle);
+        var InFile: Integer:= 0;
+        for var A: TJSONValue in AFileFix do
+        begin
+          var Title: string;
+          if A.TryGetValue<string>('title', Title) and (Title = HitTitle) then Inc(InFile);
+        end;
+        if InFile < 2 then Continue;
+        var RuleAll: TJSONObject:= MergedAction('drag-lint: fix all ' + Copy(HitTitle, Length(FIX_TITLE_PREFIX) + 1, MaxInt) + ' in file', 'quickfix', HitTitle);
+        if RuleAll <> nil then Result.AddElement(RuleAll);
+      end;
+  finally
+    Seen.Free;
+  end;
+  var FixAll: TJSONObject:= MergedAction('drag-lint: fix all fixable in file', FIX_ALL_KIND, '');
+  if FixAll <> nil then Result.AddElement(FixAll);
+end;
 function TLSPServer.BuildRemoveUnusedSourceAction(const APath, ABufferText: string): TJSONObject;
 begin
   Result:= nil;
@@ -6396,6 +7133,19 @@ begin
     Diags.Free;
     Edit.Free;
   end;
+end;
+
+{ v152 BK-VSHOVER (B43): the 'disable <rule> in this unit / project' actions go LAST. VS Code's
+  'Fix finding' (dragLint.fixFinding) applies the FIRST quickfix, and switching a rule off must
+  never be what a one-key fix does. Stable: the other actions keep their order. }
+procedure MoveDisableRuleActionsLast(const AActions: TJSONArray);
+begin
+  var Moved: TArray<TJSONValue>:= [];
+  for var I: Integer:= AActions.Count - 1 downto 0 do
+    if (AActions.Items[I] is TJSONObject) and
+       (TJSONObject(AActions.Items[I]).GetValue<string>('command.command', '') = 'drag-lint.disableRule') then
+      Moved:= [AActions.Remove(I)] + Moved;
+  for var V: TJSONValue in Moved do AActions.AddElement(V);
 end;
 
 procedure TLSPServer.HandleCodeAction(const AId: TJSONValue; const AParams: TJSONObject);
@@ -6503,9 +7253,38 @@ begin
       var FixActs: TJSONArray:= TLspCompletion.BuildFixActions(Path, StartLine, EndLine, Diags);
       try
         for var J:= 0 to FixActs.Count - 1 do Actions.AddElement(FixActs.Items[J].Clone as TJSONValue);
+        { 1.52 VSFIX: "fix all" actions. Offered when the range hits a fixable finding or the client asks for
+        source.fixAll; they need the FILE's findings, which the range-filtered context cannot give: the
+        set last published (cached by PublishDiagnostics, so no child lint runs here). A stale cached
+        span is dropped by BuildFixActions' ExpectText guard. }
+        var AskedFixAll: Boolean:= CodeActionKindRequested(Context, FIX_ALL_KIND);
+        var CachedJson: string;
+        if ((FixActs.Count > 0) or AskedFixAll) and FFixDiags.TryGetValue(LowerCase(Path), CachedJson) then
+        begin
+          var FileDiags: TJSONValue:= TJSONObject.ParseJSONValue(CachedJson);
+          try
+            if FileDiags is TJSONArray then
+            begin
+              var FileFix: TJSONArray:= TLspCompletion.BuildFixActions(Path, 1, MaxInt, TJSONArray(FileDiags));
+              try
+                var AllActs: TJSONArray:= BuildFixAllActions(FileFix, FixActs, AskedFixAll);
+                try
+                  for var J:= 0 to AllActs.Count - 1 do Actions.AddElement(AllActs.Items[J].Clone as TJSONValue);
+                finally
+                  AllActs.Free;
+                end;
+              finally
+                FileFix.Free;
+              end;
+            end;
+          finally
+            FileDiags.Free;
+          end;
+        end;
       finally
         FixActs.Free;
       end;
+      MoveDisableRuleActionsLast(Actions);
       Reply.AddPair('result', Actions);
     finally
       if Context = nil then Diags.Free; { only free if we built it; context owns it }
@@ -6609,6 +7388,7 @@ begin
         (Diags.Items[K] as TJSONObject).RemovePair('source').Free;
         (Diags.Items[K] as TJSONObject).AddPair('source', 'drag-lint (unowned)');
       end;
+  FFixDiags.AddOrSetValue(LowerCase(Path), Diags.ToJSON); { 1.52 VSFIX: fix-all reads the file-wide set a range-filtered context cannot give }
   Notif:= TJSONObject.Create;
   try
     Notif.AddPair('jsonrpc', '2.0'                            );
@@ -6735,15 +7515,15 @@ begin
       (timeout, bad JSON) through this variable; it is never set in production. }
     ChildExe:= GetEnvironmentVariable('DRAGLINT_FULLRULES_CHILD_EXE');
     if ChildExe = '' then ChildExe:= ParamStr(0);
-    Cmd:= '"' + ChildExe + '" lint "' + AFile + '" --json --output-encoding utf8'; { the engine writes 7-bit ASCII by default; the read below is UTF-8 }
+    Cmd:= '"' + ChildExe + '" lint "' + StringReplace(AFile, '"', '', [rfReplaceAll]) + '" --json --output-encoding utf8'; { the engine writes 7-bit ASCII by default; the read below is UTF-8 }
     if ARule <> '' then Cmd:= Cmd + ' --rule "' + StringReplace(ARule, '"', '', [rfReplaceAll]) + '"';
     for var DbP in ChildDbs do
-      if DbP <> '' then Cmd:= Cmd + ' --db "' + DbP + '"';
+      if DbP <> '' then Cmd:= Cmd + ' --db "' + StringReplace(DbP, '"', '', [rfReplaceAll]) + '"';
     { C15: the in-process lint's profile, not a different one; values quoted, a double quote dropped. }
     if FStartProject <> '' then Cmd:= Cmd + ' --project "' + StringReplace(FStartProject, '"', '', [rfReplaceAll]) + '"';
     if FStartPlatform <> '' then Cmd:= Cmd + ' --platform "' + StringReplace(FStartPlatform, '"', '', [rfReplaceAll]) + '"';
     UniqueString(Cmd);
-    if not CreateProcess(PChar(ChildExe), PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, Si, Pi) then Exit;
+    if not CreateProcess(PChar(ChildExe), PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, Si, Pi) then Exit;  // dl:ok taint-command-injection@6e02 -- REVIEWED 2026-11-18: the exe is our own (ParamStr(0) or the test-only DRAGLINT_FULLRULES_CHILD_EXE, same trust as the process); every argument is quoted with every double quote dropped
     try
       if not WaitFullRulesChild(Pi.hProcess, HOut, Budget, AFile, ARule = '') then
       begin
@@ -6985,6 +7765,9 @@ begin
     answers -32601 through the catch-all below, immediately, so a client can
     detect absence in one round trip instead of waiting for a timeout. }
   else if Method = 'draglint/hoverBundle' then HandleHoverBundle(Id, Params)
+  { v152 ASYNC: the deferred hover's announcement and its cancellation. }
+  else if Method = DEFER_HOVER_METHOD then HandleDeferHover(Params)
+  else if Method = '$/cancelRequest' then HandleHoverCancel(Params)
   else if Method = 'draglint/callerCounts' then HandleCallerCounts(Id, Params)
   else if Method = 'draglint/usages' then HandleUsages(Id, Params)
   else if Method = 'textDocument/completion' then HandleCompletion(Id, Params)

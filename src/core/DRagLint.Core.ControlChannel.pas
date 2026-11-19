@@ -26,7 +26,7 @@ unit DRagLint.Core.ControlChannel;
       grants the creating user only. A NULL DACL would grant Everyone. Remote
       clients are rejected at the pipe as well (PIPE_REJECT_REMOTE_CLIENTS).
     * It does ONE thing. Two messages exist -- `status` (describe yourself)
-      and `shutdown` (stand down) -- and `status` is there only so a
+      and `stop-now` (stand down) -- and `status` is there only so a
       maintenance tool can learn which engine holds which database before it
       asks. Nothing here runs a query, reindexes, or takes an argument that
       names work. A control channel that can do arbitrary work is the
@@ -122,13 +122,14 @@ const
 /// <para>WIDENED 2026-10-28 (DEC-13 reopened, owner): <c>index</c> (single root, `--project`, `--all`) and `lint-all` listen too, started by the Do* verb through BatchChannelOpen. A stand-down is taken BETWEEN FILES (index: the storage layer's file-transaction gate, so no file row is ever half written) or between files of the lint scan (lint-all stops and prints the findings so far). Exit code CONTROL_EXIT_STOOD_DOWN.</para>
 /// <para>WIDENED 2026-10-30 (1.39.1, known issue of 1.39.0): <c>warm-rule-cache</c> listens, started by DRagLint.CLI.DoWarmRuleCache. A warm only reads and its result is disposable, so a stand-down is taken AT ONCE by a watcher thread (no safe point to wait for) and the process exits CONTROL_EXIT_STOOD_DOWN; shutdown and an index of the same database stop it, and the engine image is free again.</para>
 /// <para>WIDENED 2026-11-07 (E-NARROW-CHANNEL, wave 146): <c>narrow-param</c>, <c>redundant-cast</c> (lint --fix --fix-rule redundant-cast), <c>create-enum-helper</c> and (148) <c>extract-interface</c> / <c>lazy-init</c> listen on an <c>--apply</c> run, opened by the Do* verb through DRagLint.Refactor.CompileGate.OpenGateStandDown. A stand-down is taken while the gate waits on a build: the build tree is killed, the written files are rolled back and the run ends Refusal = cancelled (exit 1).</para>
+/// <para>WIDENED 2026-11-18 (1.52, BK-GATE B21): <c>extract-method</c> listens on an <c>--apply</c> run through the compile gate (OpenGateStandDown in DRagLint.CLI.DoExtractMethod); a stand-down kills the after-build, rolls the edit back and exits 1.</para>
 /// <para>WIDENED 2026-11-16 (1.51.1, B25): <c>narrow-param</c> and <c>redundant-cast</c> also listen on a PLAN run (no <c>--apply</c>): the CLI opens the channel for every run, the planners poll TakeStandDown per decision, and a stand-down ends the run with exit 1 (nothing written).</para>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.CycleFix.StartStandDownChannel (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.Core.ControlChannel.BatchChannelOpen (DRagLint.Core.ControlChannel.pas), DRagLint.Refactor.CompileGate.OpenGateStandDown (DRagLint.Refactor.CompileGate.pas)</para>
+/// <para>Called from: DRagLint.CLI.CycleFix.StartStandDownChannel (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), DRagLint.CLI.RunCommand (DRagLint.CLI.pas), DRagLint.Core.ControlChannel.BatchChannelOpen (DRagLint.Core.ControlChannel.pas), DRagLint.Refactor.CompileGate.OpenGateStandDown (DRagLint.Refactor.CompileGate.pas)</para>
 /// <para>Pure</para>
 /// <para>Calls: SameText</para>
 /// <para>Returns: SameText(ACommand, 'lsp') or SameText(ACommand, 'cycles') or SameText(ACommand, 'index')</para>
-/// <para>Complexity: 10 (cyclomatic, outer body), 8 lines (full implementation)</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 9 lines (full implementation)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ControlChannelEnabledFor(const ACommand: string): Boolean;
@@ -137,7 +138,7 @@ function ControlChannelEnabledFor(const ACommand: string): Boolean;
 /// <returns>The SID string, or '' when the token cannot be read.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: [drag-lint]DRagLint.CLI.DoShutdown (DRagLint.CLI.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BeatPipeNameFor (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.ControlPipeLeafFor (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.ListControlPipesForThisUser (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.SnapshotWritingBeats (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.TControlChannel.Create (DRagLint.Core.ControlChannel.pas)</para>
+/// <para>Called from: [drag-lint]DRagLint.CLI.Shutdown.DoShutdown (DRagLint.CLI.Shutdown.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BeatPipeNameFor (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.ControlPipeLeafFor (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.ListControlPipesForThisUser (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.SnapshotWritingBeats (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.TControlChannel.Create (DRagLint.Core.ControlChannel.pas)</para>
 /// <para>Calls: CloseHandle, ConvertSidToStringSidW, GetTokenInformation, HLOCAL, LocalFree, OpenProcessToken, PTokenUser</para>
 /// <para>Pure</para>
 /// <para>Returns: ''; SidStr</para>
@@ -149,7 +150,7 @@ function CurrentUserSidString: string;
 /// <returns>The session id (0 when it cannot be read).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoShutdown (DRagLint.CLI.pas), DRagLint.Core.ControlChannel.BeatPipeNameFor (DRagLint.Core.ControlChannel.pas), DRagLint.Core.ControlChannel.ControlPipeLeafFor (DRagLint.Core.ControlChannel.pas), DRagLint.Core.ControlChannel.ListControlPipesForThisUser (DRagLint.Core.ControlChannel.pas), DRagLint.Core.ControlChannel.SnapshotWritingBeats (DRagLint.Core.ControlChannel.pas)</para>
+/// <para>Called from: DRagLint.CLI.Shutdown.DoShutdown (DRagLint.CLI.Shutdown.pas), DRagLint.Core.ControlChannel.BeatPipeNameFor (DRagLint.Core.ControlChannel.pas), DRagLint.Core.ControlChannel.ControlPipeLeafFor (DRagLint.Core.ControlChannel.pas), DRagLint.Core.ControlChannel.ListControlPipesForThisUser (DRagLint.Core.ControlChannel.pas), DRagLint.Core.ControlChannel.SnapshotWritingBeats (DRagLint.Core.ControlChannel.pas)</para>
 /// <para>Calls: ProcessIdToSessionId</para>
 /// <para>Returns: S</para>
 /// <para>Pure</para>
@@ -163,7 +164,7 @@ function CurrentSessionId: Cardinal;
 /// <returns><c>\\.\pipe\drag-lint-ctl-&lt;sid&gt;-s&lt;session&gt;-p&lt;pid&gt;</c>.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: [drag-lint]DRagLint.CLI.ForwardStandDownToChildren (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.StopStaleWarm (DRagLint.CLI.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.TControlChannel.Create (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard]DragLint.Plugin.ProcRun.StartStandDown (DragLint.Plugin.ProcRun.pas), [drag-lint]DRagLint.Refactor.CompileGate.StandDownChild (DRagLint.Refactor.CompileGate.pas)</para>
+/// <para>Called from: [drag-lint]DRagLint.CLI.Common.StopStaleWarm (DRagLint.CLI.Common.pas), [drag-lint]DRagLint.CLI.ForwardStandDownToChildren (DRagLint.CLI.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.TControlChannel.Create (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard]DragLint.Plugin.ProcRun.StartStandDown (DragLint.Plugin.ProcRun.pas), [drag-lint]DRagLint.Refactor.CompileGate.StandDownChild (DRagLint.Refactor.CompileGate.pas)</para>
 /// <para>Calls: DRagLint.Core.ControlChannel.ControlPipeLeafFor</para>
 /// <para>Pure</para>
 /// <para>Returns: PIPE_PREFIX_FULL + ControlPipeLeafFor(APid)</para>
@@ -191,7 +192,7 @@ function PidFromControlPipeLeaf(const APipeLeaf: string): Cardinal;
 /// also the live instance list -- no registry file to go stale.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoShutdown (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.Shutdown.DoShutdown (DRagLint.CLI.Shutdown.pas)</para>
 /// <para>Calls: DRagLint.Core.ControlChannel.CurrentSessionId, DRagLint.Core.ControlChannel.CurrentUserSidString, DRagLint.Core.ControlChannel.PidFromControlPipeLeaf, FindFirstFileW, FindNextFileW, IntToStr</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Core.ControlChannel.CurrentSessionId"/>
@@ -212,7 +213,7 @@ function ListControlPipesForThisUser: TArray<string>;
 /// The read blocks until the engine replies; for <c>shutdown</c>
 /// that is bounded by the wait-ms the message itself carries.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: [drag-lint]DRagLint.CLI.DoShutdown (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ForwardStandDownToChildren (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.StopStaleWarm (DRagLint.CLI.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.RequestEngineBeat (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.SnapshotWritingBeats (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard]DragLint.Plugin.ProcRun.StartStandDown (DragLint.Plugin.ProcRun.pas), [drag-lint]DRagLint.Refactor.CompileGate.StandDownChild (DRagLint.Refactor.CompileGate.pas)</para>
+/// <para>Called from: [drag-lint]DRagLint.CLI.Common.StopStaleWarm (DRagLint.CLI.Common.pas), [drag-lint]DRagLint.CLI.ForwardStandDownToChildren (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Shutdown.DoShutdown (DRagLint.CLI.Shutdown.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.RequestEngineBeat (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.SnapshotWritingBeats (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard]DragLint.Plugin.ProcRun.StartStandDown (DragLint.Plugin.ProcRun.pas), [drag-lint]DRagLint.Refactor.CompileGate.StandDownChild (DRagLint.Refactor.CompileGate.pas)</para>
 /// <para>Calls: Cardinal, CloseHandle, CreateFileW, DRagLint.Core.ControlChannel.ReadLineFromPipe, IntToStr, PChar, SysErrorMessage, WaitNamedPipeW, WriteFile</para>
 /// <para>Returns: False; True</para>
 /// <para>Mutates: AReply (out), AError (out)</para>
@@ -250,7 +251,7 @@ function ControlAuditLogPath: string;
 const
   /// <summary>Leaf prefix of a heartbeat (status-only) pipe:
   /// <c>\\.\pipe\drag-lint-beat-&lt;sid&gt;-s&lt;session&gt;-p&lt;pid&gt;</c>. A DIFFERENT family from
-  /// CONTROL_PIPE_PREFIX on purpose: `shutdown --all` and the staging tools enumerate control pipes only, so a
+  /// CONTROL_PIPE_PREFIX on purpose: `stop-now --all` and the staging tools enumerate control pipes only, so a
   /// verb that merely reports progress never becomes a stand-down target.</summary>
   BEAT_PIPE_PREFIX = 'drag-lint-beat-';
   /// <summary>Argument of a <c>status</c> request that asks for the heartbeat field.</summary>
@@ -264,9 +265,9 @@ type
   /// Seq is the ONLY change test a client may use: it grows by one on every report, so two snapshots
   /// with the same Seq mean no progress in between, whatever the other fields say.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: [dclDragLintWizard,drag-lint]declaration (DRagLint.Core.ControlChannel.pas) ?, [drag-lint]DRagLint.CLI.DoShutdown (DRagLint.CLI.pas) ?, [drag-lint]DRagLint.CLI.TStageHeartbeat.CheckStall (DRagLint.CLI.pas) ?, [drag-lint]DRagLint.CLI.TStageHeartbeat.ProgressSuffix (DRagLint.CLI.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BeatDisplayText (DRagLint.Core.ControlChannel.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BeatFieldText (DRagLint.Core.ControlChannel.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BeatSnapshot (DRagLint.Core.ControlChannel.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.ParseBeatReply (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.RequestEngineBeat (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard]DragLint.Plugin.LspClient.TDragLintLspClient.SampleEngineBeat (DragLint.Plugin.LspClient.pas) ?,
+  /// <para>Used by: [dclDragLintWizard,drag-lint]declaration (DRagLint.Core.ControlChannel.pas) ?, [drag-lint]DRagLint.CLI.Shutdown.DoShutdown (DRagLint.CLI.Shutdown.pas) ?, [drag-lint]DRagLint.CLI.TStageHeartbeat.CheckStall (DRagLint.CLI.pas) ?, [drag-lint]DRagLint.CLI.TStageHeartbeat.ProgressSuffix (DRagLint.CLI.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BeatDisplayText (DRagLint.Core.ControlChannel.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BeatFieldText (DRagLint.Core.ControlChannel.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BeatSnapshot (DRagLint.Core.ControlChannel.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.ParseBeatReply (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.RequestEngineBeat (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard]DragLint.Plugin.LspClient.TDragLintLspClient.SampleEngineBeat (DragLint.Plugin.LspClient.pas) ?,
   /// [dclDragLintWizard]DragLint.Plugin.ProcRun.RunCore.CheckBeat (DragLint.Plugin.ProcRun.pas) ?</para>
-  /// <para>Used in units: [drag-lint]DRagLint.CLI, [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel, [dclDragLintWizard]DragLint.Plugin.LspClient, [dclDragLintWizard]DragLint.Plugin.ProcRun</para>
+  /// <para>Used in units: [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.CLI.Shutdown, [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel, [dclDragLintWizard]DragLint.Plugin.LspClient, [dclDragLintWizard]DragLint.Plugin.ProcRun</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TEngineBeat = record
@@ -302,7 +303,7 @@ procedure BeatBegin(const AAction: string);
 /// <remarks>
 /// Thread-safe.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Analysis.PurityStage.TPurityRun.Execute (DRagLint.Analysis.PurityStage.pas), DRagLint.CLI.Stage (DRagLint.CLI.pas), DRagLint.CLI.TLintPhaseProfiler.Phase (DRagLint.CLI.pas), DRagLint.Refactor.CompileGate.ReportWaitProgress (DRagLint.Refactor.CompileGate.pas), DRagLint.Storage.SQLite.BeatStreamOpen (DRagLint.Storage.SQLite.pas) (+1 more)</para>
+/// <para>Called from: DRagLint.Analysis.PurityStage.TPurityRun.Execute (DRagLint.Analysis.PurityStage.pas), DRagLint.CLI.Stage (DRagLint.CLI.pas), DRagLint.CLI.TLintPhaseProfiler.Phase (DRagLint.CLI.pas), DRagLint.Refactor.CompileGate.ReportWaitProgress (DRagLint.Refactor.CompileGate.pas), DRagLint.Storage.SQLite.BeatStreamOpen (DRagLint.Storage.SQLite.pas)</para>
 /// <para>Calls: DRagLint.Core.ControlChannel.BeatMarkLocked</para>
 /// <seealso cref="DRagLint.Core.ControlChannel.BeatMarkLocked"/>
 /// <!-- drag-lint:auto END -->
@@ -315,8 +316,8 @@ procedure BeatStep(const AStep: string; ATotal: Int64 = 0);
 /// <remarks>
 /// Thread-safe; safe to call from hot loops (one critical section, no allocation).
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: [drag-lint]DRagLint.Analysis.PurityStage.TPurityRun.ScanFiles (DRagLint.Analysis.PurityStage.pas), [drag-lint]DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BeatTestHold (DRagLint.Core.ControlChannel.pas), [drag-lint]DRagLint.Core.Indexer.TIndexer.ReportProgress (DRagLint.Core.Indexer.pas), [drag-lint]DRagLint.Storage.SQLite.ResolveLog (DRagLint.Storage.SQLite.pas), [drag-lint]DRagLint.Storage.SQLite.TSQLiteSymbolStore.BindRefStream (DRagLint.Storage.SQLite.pas), [drag-lint]DRagLint.Storage.SQLite.TSQLiteSymbolStore.BuildSymbolSearch (DRagLint.Storage.SQLite.pas), [drag-lint]DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas), [drag-lint]DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveEnumValueRefs (DRagLint.Storage.SQLite.pas), [drag-lint]DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveMemberReadRefs (DRagLint.Storage.SQLite.pas),
-/// [drag-lint]DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveParenlessCallRefs (DRagLint.Storage.SQLite.pas), [drag-lint]DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveValueReadRefs (DRagLint.Storage.SQLite.pas), [drag-lint]DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveWriteRefs (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Called from: [drag-lint]DRagLint.Analysis.PurityStage.TPurityRun.ScanFiles (DRagLint.Analysis.PurityStage.pas), [drag-lint]DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BeatTestHold (DRagLint.Core.ControlChannel.pas), [drag-lint]DRagLint.Core.Indexer.TIndexer.ReportProgress (DRagLint.Core.Indexer.pas), [drag-lint]DRagLint.Storage.SQLite.ResolveLog (DRagLint.Storage.SQLite.pas), [drag-lint]DRagLint.Storage.SQLite.TSQLiteSymbolStore.BindRefStream (DRagLint.Storage.SQLite.pas), [drag-lint]DRagLint.Storage.SQLite.TSQLiteSymbolStore.BuildSymbolSearch (DRagLint.Storage.SQLite.pas), [drag-lint]DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas), [drag-lint]DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveEnumValueRefs (DRagLint.Storage.SQLite.pas), [drag-lint]DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveLibraryReadRefs (DRagLint.Storage.SQLite.pas),
+/// [drag-lint]DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveMemberReadRefs (DRagLint.Storage.SQLite.pas), [drag-lint]DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveParenlessCallRefs (DRagLint.Storage.SQLite.pas), [drag-lint]DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveValueReadRefs (DRagLint.Storage.SQLite.pas), [drag-lint]DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveWriteRefs (DRagLint.Storage.SQLite.pas)</para>
 /// <para>Calls: DRagLint.Core.ControlChannel.BeatMarkLocked</para>
 /// <seealso cref="DRagLint.Core.ControlChannel.BeatMarkLocked"/>
 /// <!-- drag-lint:auto END -->
@@ -353,7 +354,7 @@ procedure BeatTestHold;
 /// <returns>The text; 'idle' for an empty action.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: [drag-lint]DRagLint.CLI.DoShutdown (DRagLint.CLI.pas), [dclDragLintWizard]DragLint.Plugin.LspClient.TDragLintLspClient.SampleEngineBeat (DragLint.Plugin.LspClient.pas), [dclDragLintWizard]DragLint.Plugin.ProcRun.RunCore.CheckBeat (DragLint.Plugin.ProcRun.pas), [drag-lint]DRagLint.Storage.FileMembership.BeatAwareBusy (DRagLint.Storage.FileMembership.pas)</para>
+/// <para>Called from: [drag-lint]DRagLint.CLI.Shutdown.DoShutdown (DRagLint.CLI.Shutdown.pas), [dclDragLintWizard]DragLint.Plugin.LspClient.TDragLintLspClient.SampleEngineBeat (DragLint.Plugin.LspClient.pas), [dclDragLintWizard]DragLint.Plugin.ProcRun.RunCore.CheckBeat (DragLint.Plugin.ProcRun.pas), [drag-lint]DRagLint.Storage.FileMembership.BeatAwareBusy (DRagLint.Storage.FileMembership.pas)</para>
 /// <para>Calls: IntToStr</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -369,7 +370,7 @@ function BeatDisplayText(const ABeat: TEngineBeat): string;
 /// Blocks at most about AConnectTimeoutMs plus the listener's reply (immediate: a status-only
 /// listener does no work). Any thread.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: [drag-lint]DRagLint.CLI.DoShutdown (DRagLint.CLI.pas), [dclDragLintWizard]DragLint.Plugin.LspClient.TDragLintLspClient.SampleEngineBeat (DragLint.Plugin.LspClient.pas), [dclDragLintWizard]DragLint.Plugin.ProcRun.RunCore.CheckBeat (DragLint.Plugin.ProcRun.pas)</para>
+/// <para>Called from: [drag-lint]DRagLint.CLI.Shutdown.DoShutdown (DRagLint.CLI.Shutdown.pas), [dclDragLintWizard]DragLint.Plugin.LspClient.TDragLintLspClient.SampleEngineBeat (DragLint.Plugin.LspClient.pas), [dclDragLintWizard]DragLint.Plugin.ProcRun.RunCore.CheckBeat (DragLint.Plugin.ProcRun.pas)</para>
 /// <para>Calls: Default, DRagLint.Core.ControlChannel.BeatPipeNameFor, DRagLint.Core.ControlChannel.ControlRequest, DRagLint.Core.ControlChannel.ParseBeatReply</para>
 /// <para>Returns: ControlRequest(BeatPipeNameFor(APid), CONTROL_MSG_STATUS + #9 + CONTROL_STATUS_ARG_BEAT, AConnectTimeoutMs, Reply, Err)</para>
 /// <para>Mutates: ABeat (out)</para>
@@ -392,7 +393,7 @@ function RequestEngineBeat(APid: Cardinal; AConnectTimeoutMs: Integer; out ABeat
 /// <remarks>
 /// Main thread only. The pipe closes at unit finalization. Its name: <c>\\.\pipe\drag-lint-beat-&lt;sid&gt;-s&lt;session&gt;-p&lt;pid&gt;</c>.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
 /// <para>Calls: DRagLint.Core.ControlChannel.BeatBegin, DRagLint.Core.ControlChannel.BeatChannelEnabledFor, DRagLint.Core.ControlChannel.TControlChannel.Create, DRagLint.Core.ControlChannel.TControlChannel.Start, FreeAndNil</para>
 /// <para>Returns: False</para>
 /// <seealso cref="DRagLint.Core.ControlChannel.BeatBegin"/>
@@ -491,8 +492,8 @@ type
   /// <para>Thread-safety: the host hooks are interlocked; the listener owns
   /// the pipe handles exclusively.</para>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: [dclDragLintWizard,drag-lint]declaration (DRagLint.Core.ControlChannel.pas) ?, [drag-lint]declaration (DRagLint.LSP.Server.pas) ?, [drag-lint]declaration (DRagLint.Refactor.CompileGate.pas) ?, [drag-lint]DRagLint.CLI.CycleFix.StartStandDownChannel (DRagLint.CLI.CycleFix.pas), [drag-lint]DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Run (DRagLint.CLI.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BatchChannelOpen (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BeatChannelOpen (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.TControlListener.Create (DRagLint.Core.ControlChannel.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.TControlListener.ServeStandDown (DRagLint.Core.ControlChannel.pas), [drag-lint]DRagLint.Refactor.CompileGate.OpenGateStandDown (DRagLint.Refactor.CompileGate.pas)</para>
-  /// <para>Used in units: [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.CLI.CycleFix, [drag-lint]DRagLint.Core.ControlChannel, [drag-lint]DRagLint.LSP.Server, [drag-lint]DRagLint.Refactor.CompileGate</para>
+  /// <para>Used by: [dclDragLintWizard,drag-lint]declaration (DRagLint.Core.ControlChannel.pas) ?, [drag-lint]declaration (DRagLint.LSP.Server.pas) ?, [drag-lint]declaration (DRagLint.Refactor.CompileGate.pas) ?, [drag-lint]DRagLint.CLI.CycleFix.StartStandDownChannel (DRagLint.CLI.CycleFix.pas), [drag-lint]DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.RunCommand (DRagLint.CLI.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BatchChannelOpen (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BeatChannelOpen (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.TControlListener.Create (DRagLint.Core.ControlChannel.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.TControlListener.ServeStandDown (DRagLint.Core.ControlChannel.pas), [drag-lint]DRagLint.Refactor.CompileGate.OpenGateStandDown (DRagLint.Refactor.CompileGate.pas)</para>
+  /// <para>Used in units: [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.CLI.CycleFix, [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel, [drag-lint]DRagLint.LSP.Server, [drag-lint]DRagLint.Refactor.CompileGate</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TControlChannel = class
@@ -559,12 +560,12 @@ type
       /// warm-rule-cache); a `status role` request reports it. '' = not reported (the
       /// reply keeps its pre-1.39.1 shape).</param>
       /// <param name="AStatusOnly">1.40: True = the HEARTBEAT pipe (BeatPipeNameFor, not ControlPipeNameFor):
-      /// it answers `status` (with the beat field when asked) and nothing else -- a `shutdown` gets `unknown`
+      /// it answers `status` (with the beat field when asked) and nothing else -- a `stop-now` gets `unknown`
       /// and changes nothing.</param>
       /// <exception cref="EInvalidOperation">Not called on the main thread.</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.CycleFix.StartStandDownChannel (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.Core.ControlChannel.BatchChannelOpen (DRagLint.Core.ControlChannel.pas), DRagLint.Core.ControlChannel.BeatChannelOpen (DRagLint.Core.ControlChannel.pas) (+1 more)</para>
+      /// <para>Called from: DRagLint.CLI.CycleFix.StartStandDownChannel (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), DRagLint.CLI.RunCommand (DRagLint.CLI.pas), [dclDragLintWizard]DRagLint.Core.ControlChannel.BatchChannelOpen (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard]DRagLint.Core.ControlChannel.BeatChannelOpen (DRagLint.Core.ControlChannel.pas)</para>
       /// <para>Calls: Copy, DRagLint.Core.ControlChannel.BeatPipeNameFor, DRagLint.Core.ControlChannel.ControlPipeNameFor, DRagLint.Core.ControlChannel.CurrentUserSidString</para>
       /// <para>Pure</para>
       /// <para>constructor</para>
@@ -598,7 +599,7 @@ type
       /// <returns>True when listening.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: [drag-lint]DRagLint.CLI.CycleFix.StartStandDownChannel (DRagLint.CLI.CycleFix.pas), [drag-lint]DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Run (DRagLint.CLI.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BatchChannelOpen (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BeatChannelOpen (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard]DragLint.Plugin.About.StartBackgroundSelfInfoFetch (DragLint.Plugin.About.pas) ?, [dclDragLintWizard]DragLint.Plugin.Editor.InvokeReverseCallTreeMessages (DragLint.Plugin.Editor.pas) ?, [dclDragLintWizard]DragLint.Plugin.Editor.RunCompileDiagnoseAsync (DragLint.Plugin.Editor.pas) ?, [dclDragLintWizard]DragLint.Plugin.Editor.RunFullCompileSweepAsync (DragLint.Plugin.Editor.pas) ?, [dclDragLintWizard]DragLint.Plugin.Editor.RunGhostCheckAsync (DragLint.Plugin.Editor.pas) ?,
+      /// <para>Called from: [drag-lint]DRagLint.CLI.CycleFix.StartStandDownChannel (DRagLint.CLI.CycleFix.pas), [drag-lint]DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.RunCommand (DRagLint.CLI.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BatchChannelOpen (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BeatChannelOpen (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard]DragLint.Plugin.About.StartBackgroundSelfInfoFetch (DragLint.Plugin.About.pas) ?, [dclDragLintWizard]DragLint.Plugin.Editor.InvokeReverseCallTreeMessages (DragLint.Plugin.Editor.pas) ?, [dclDragLintWizard]DragLint.Plugin.Editor.RunCompileDiagnoseAsync (DragLint.Plugin.Editor.pas) ?, [dclDragLintWizard]DragLint.Plugin.Editor.RunFullCompileSweepAsync (DragLint.Plugin.Editor.pas) ?, [dclDragLintWizard]DragLint.Plugin.Editor.RunGhostCheckAsync (DragLint.Plugin.Editor.pas) ?,
       /// [dclDragLintWizard]DragLint.Plugin.Editor.RunGhostRecoverFor (DragLint.Plugin.Editor.pas) ?, [dclDragLintWizard]DragLint.Plugin.LiveDiagnostics.TLiveRunner.OnTick (DragLint.Plugin.LiveDiagnostics.pas) ?, [drag-lint]DRagLint.Refactor.CompileGate.OpenGateStandDown (DRagLint.Refactor.CompileGate.pas)</para>
       /// <para>Calls: DRagLint.Core.ControlChannel.ConvertStringSecurityDescriptorToSecurityDescriptorW, DRagLint.Core.ControlChannel.TControlChannel.CreatePipeInstance, DRagLint.Core.ControlChannel.TControlListener.Create, DuplicateHandle, PChar, SysErrorMessage</para>
       /// <para>Returns: False; True</para>
@@ -710,7 +711,7 @@ type
       /// <summary>Host hook: every store is closed; the `exiting` reply may go.</summary>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: [drag-lint]DRagLint.CLI.CycleFix.RunCycleFix (DRagLint.CLI.CycleFix.pas), [drag-lint]DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Run (DRagLint.CLI.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BatchChannelClose (DRagLint.Core.ControlChannel.pas), [drag-lint]DRagLint.Refactor.CompileGate.CloseGateStandDown (DRagLint.Refactor.CompileGate.pas) ?</para>
+      /// <para>Called from: [drag-lint]DRagLint.CLI.CycleFix.RunCycleFix (DRagLint.CLI.CycleFix.pas), [drag-lint]DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.RunCommand (DRagLint.CLI.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BatchChannelClose (DRagLint.Core.ControlChannel.pas), [drag-lint]DRagLint.Refactor.CompileGate.CloseGateStandDown (DRagLint.Refactor.CompileGate.pas) ?</para>
       /// <para>Calls: DRagLint.Core.ControlChannel.HangStoreCloseForTests, InterlockedCompareExchange</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.ControlChannel.HangStoreCloseForTests"/>
@@ -765,7 +766,7 @@ function BatchStandDownTaken: Boolean;
 /// <remarks>
 /// Call AFTER every store is closed. Safe when no channel is open.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.InstallIndexStandDownGate (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.InstallIndexStandDownGate (DRagLint.CLI.pas), DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
 /// <para>Calls: DRagLint.Core.ControlChannel.TControlChannel.StandDownComplete, FreeAndNil</para>
 /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.StandDownComplete"/>
 /// <!-- drag-lint:auto END -->
@@ -860,7 +861,8 @@ begin
   Result:= SameText(ACommand, 'lsp') or SameText(ACommand, 'cycles') or SameText(ACommand, 'index')
     or SameText(ACommand, 'lint-all') or SameText(ACommand, 'warm-rule-cache')
     or SameText(ACommand, 'narrow-param') or SameText(ACommand, 'redundant-cast') or SameText(ACommand, 'create-enum-helper')
-    or SameText(ACommand, 'extract-interface') or SameText(ACommand, 'lazy-init');
+    or SameText(ACommand, 'extract-interface') or SameText(ACommand, 'lazy-init') or SameText(ACommand, 'repo gen-param-array')
+    or SameText(ACommand, 'extract-method');  { 1.52 BK-GATE B21 }
 end;
 
 { ---- batch channel (DEC-13) ---------------------------------------------- }

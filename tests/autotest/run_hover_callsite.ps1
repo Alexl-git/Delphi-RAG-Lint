@@ -26,10 +26,13 @@
 # Usage: pwsh -File tests/autotest/run_hover_callsite.ps1 [-Exe <path>]
 [CmdletBinding()]
 param(
-    [string] $Exe = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1"),
+    [string] $Exe = '',
     [string] $WorkDir = "$env:TEMP\drag-lint-hover-callsite-$PID",
     [string] $Py = "C:\Python314\python.exe"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1") }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false

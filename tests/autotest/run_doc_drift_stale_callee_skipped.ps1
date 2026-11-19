@@ -35,7 +35,10 @@
   Run from a neutral cwd, pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$detail=''){ Write-Host ("[{0}] {1}{2}" -f (@('FAIL','PASS')[[int]$ok]),$n,$(if($detail){" -- $detail"}else{''})) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
@@ -138,16 +141,16 @@ $core = Join-Path $scratch 'Core.pas'
 $app  = Join-Path $scratch 'App.pas'
 
 function RunEngine([string[]]$EngineArgs) {
-  $out = & $exePath @EngineArgs 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath @EngineArgs 2>&1 | ForEach-Object { "$_" } } | Out-String
   return [pscustomobject]@{ Code = $LASTEXITCODE; Text = $out }
 }
 # lint --json is a bare array (rule, file_path, start_line, message ...); stderr kept apart.
 function LintApp {
   $errFile = Join-Path $scratch 'lint.err'
-  $json = & $exePath lint $app --db $db --project-rules --json 2> $errFile | Out-String
+  $json = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath lint $app --db $db --project-rules --json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String
   $arr = @()
   $s = $json.IndexOf('[')
-  if ($s -ge 0) { $arr = @($json.Substring($s) | ConvertFrom-Json) }
+  if ($s -ge 0) { $arr = @(($json.Substring($s) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   return [pscustomobject]@{ Findings = $arr; Err = (Get-Content $errFile -Raw) + '' }
 }
 # lint --json carries no symbol name: a finding belongs to routine $Sym when its
@@ -161,7 +164,7 @@ function SymLines([string]$Sym) {
   return @(($first + 1), ($decl + 1))
 }
 function Has($Findings, [string]$Rule, [string]$Sym) {
-  $r = SymLines $Sym
+  $r = @(SymLines $Sym)
   return @($Findings | Where-Object { $_.rule -eq $Rule -and $_.start_line -ge $r[0] -and $_.start_line -le $r[1] }).Count -gt 0
 }
 function Reindex { $r = RunEngine @('index','--project',$dpr,'--db',$db); if ($r.Code -ne 0) { throw "fixture index failed: $($r.Text)" } }

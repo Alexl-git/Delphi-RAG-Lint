@@ -24,9 +24,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-cyclefix-intfmovedown-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }) }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -59,7 +62,7 @@ function New-Case([string]$Tag, [string]$ImplUse, [string]$IntfExtra) {
 function Invoke-Engine([string[]]$Arguments, [string]$Tag) {
   $o = Join-Path $WorkDir "$Tag.out"; $e = Join-Path $WorkDir "$Tag.err"
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
-    -ArgumentList $Arguments -RedirectStandardOutput $o -RedirectStandardError $e
+    -ArgumentList $Arguments -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   return @{ Exit = $p.ExitCode; Out = [IO.File]::ReadAllText($o); File = $o }
 }
 
@@ -75,7 +78,7 @@ function Index-Case([string]$Root, [string]$Tag) {
 function Get-Refusals([string]$Root, [string]$Db, [string]$Tag) {
   $js = Invoke-Engine @('cycles', '--fix', '--build-timeout', '1800', '--project', ('"' + (Join-Path $Root 'IntfMoveDown.dproj') + '"'), '--db', ('"' + $Db + '"'),
     '--no-compile', '--format', 'json') "$Tag-fix"
-  try { return @(($js.Out | ConvertFrom-Json).cycles | ForEach-Object { $_.refusals }) } catch { Check "$Tag fix json parses" $false $js.Out; return @() }
+  try { return @(($js.Out | ConvertFrom-Json | ForEach-Object { $_ }).cycles | ForEach-Object { $_.refusals }) } catch { Check "$Tag fix json parses" $false $js.Out; return @() }
 }
 
 function Invoke-Build([string]$Root) {
@@ -118,7 +121,7 @@ function Test-Decided([string]$Tag, [string]$ImplUse, [string]$IntfExtra, [strin
   $work = Join-Path $WorkDir "$Tag-followed"
   New-Item -ItemType Directory -Force $work | Out-Null
   Get-ChildItem $root -File | Where-Object { $_.Extension -in '.pas', '.dpr', '.dproj' } | ForEach-Object { Copy-Item $_.FullName (Join-Path $work $_.Name) -Force }
-  $fo = & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $pl.File -Cycle 1 -Root $work 2>&1 | Out-String
+  $fo = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $pl.File -Cycle 1 -Root $work 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check "$Tag d5 the follower applies cycle 1 (exit 0)" ($LASTEXITCODE -eq 0) ($fo.Trim() -replace "`r?`n", ' | ')
   $at = [IO.File]::ReadAllText((Join-Path $work 'Alpha.pas'))
   $implAt = [regex]::Match($at, '(?m)^implementation\b').Index

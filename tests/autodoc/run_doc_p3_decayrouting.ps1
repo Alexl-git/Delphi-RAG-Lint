@@ -48,7 +48,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -105,9 +108,9 @@ try {
 
   $md5s = @()
   for ($cycle = 1; $cycle -le 3; $cycle++) {
-    & $exePath index $scratch --db $db 2>$null | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
     Check "cycle $cycle : index exits 0" ($LASTEXITCODE -eq 0)
-    & $exePath document --unit $target --db $db --stubs --apply --json 2>$null | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --stubs --apply --json 2>$null } | Out-Null
     Check "cycle $cycle : document --unit --apply exits 0" ($LASTEXITCODE -eq 0)
     $md5s += (Get-Md5 $target)
   }
@@ -226,9 +229,9 @@ try {
   $d2 = Join-Path $s2 'q.sqlite'
 
   # (a) one caller
-  & $exePath index $s2 --db $d2 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $s2 --db $d2 2>$null } | Out-Null
   Check 'N4 (a) index exits 0' ($LASTEXITCODE -eq 0)
-  & $exePath document --unit $t2 --db $d2 --stubs --apply --json 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $t2 --db $d2 --stubs --apply --json 2>$null } | Out-Null
   Check 'N4 (a) document --unit --apply exits 0' ($LASTEXITCODE -eq 0)
   $decayA = Get-DocBlock ([IO.File]::ReadAllLines($t2)) $patDecay
   Check 'N4 (a) one caller: a facts block is written naming it' `
@@ -243,9 +246,9 @@ try {
   $txt = $txt.Replace('// N4-EXTRA-CALLER-DECL', "procedure ExtraCallerOfDecay;")
   $txt = $txt.Replace('// N4-EXTRA-CALLER-IMPL', "procedure ExtraCallerOfDecay;`r`nbegin`r`n  DecayAddThenRemove;`r`nend;")
   [IO.File]::WriteAllText($t2, $txt)
-  & $exePath index $s2 --db $d2 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $s2 --db $d2 2>$null } | Out-Null
   Check 'N4 (b) index exits 0' ($LASTEXITCODE -eq 0)
-  & $exePath document --unit $t2 --db $d2 --stubs --apply --json 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $t2 --db $d2 --stubs --apply --json 2>$null } | Out-Null
   Check 'N4 (b) document --unit --apply exits 0' ($LASTEXITCODE -eq 0)
   $decayB = Get-DocBlock ([IO.File]::ReadAllLines($t2)) $patDecay
   # v(ADP3 T9) RE-PINNED: the second caller is now folded into the EXISTING
@@ -278,9 +281,9 @@ try {
   [IO.File]::WriteAllText($t2, $txt)
   Check 'N4 (c) FIXTURE: the extra caller is really gone from the source' `
     (-not ([IO.File]::ReadAllText($t2)).Contains('procedure ExtraCallerOfDecay'))
-  & $exePath index $s2 --db $d2 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $s2 --db $d2 2>$null } | Out-Null
   Check 'N4 (c) index exits 0' ($LASTEXITCODE -eq 0)
-  $j = (& $exePath document --qname 'decayrouting.DecayAddThenRemove' --db $d2 --json 2>$null) -join ' '
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname 'decayrouting.DecayAddThenRemove' --db $d2 --json 2>$null }) -join ' '
   Check 'N4 (c) document --qname exits 0' ($LASTEXITCODE -eq 0) $j
   # v(ADP3 T9) RE-PINNED -- THE DECAY GAP ITSELF IS CLOSED. The register entry
   # N4 was "decayed facts report `unchanged` forever": the engine matched the
@@ -300,14 +303,14 @@ try {
     ($null -ne $decayC -and $decayC.Contains('ExtraCallerOfDecay'))
   # ...and applying it actually removes the stale fact. This is the check the
   # old KNOWN-GAP pin could not have: recovery no longer requires --strip.
-  & $exePath document --unit $t2 --db $d2 --stubs --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $t2 --db $d2 --stubs --apply 2>$null } | Out-Null
   $decayC2 = Get-DocBlock ([IO.File]::ReadAllLines($t2)) $patDecay
   Check 'N4 FIXED (T9): --apply now REPAIRS the decayed block -- the removed caller is gone, no --strip needed' `
     ($null -ne $decayC2 -and -not $decayC2.Contains('ExtraCallerOfDecay') -and
      $decayC2.Contains('Called from: decayrouting.CallsDecayAddThenRemove'))
 
   # (d) the documented recovery
-  & $exePath document --unit $t2 --db $d2 --strip --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $t2 --db $d2 --strip --apply 2>$null } | Out-Null
   Check 'N4 (d) document --unit --strip --apply exits 0' ($LASTEXITCODE -eq 0)
   $decayD = Get-DocBlock ([IO.File]::ReadAllLines($t2)) $patDecay
   Check 'N4 recovery: --strip --apply removes the stale fact' `

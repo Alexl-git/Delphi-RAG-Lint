@@ -15,6 +15,12 @@ interface
 
 /// <summary>The process arguments after the program name.</summary>
 /// <returns>ParamStr(1)..ParamStr(ParamCount), in order; empty when there are none.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: main block (drag-lint-open.dpr)</para>
+/// <para>Calls: ParamStr</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CommandLineArgs: TArray<string>;
 
 /// <summary>Handles one draglint:// click: validates the URI, sends the
@@ -37,20 +43,17 @@ function CommandLineArgs: TArray<string>;
 /// only ever on a path the gate accepted -- and CreateProcess of
 /// System32\notepad.exe "file", never ShellExecute.</para>
 /// <para>Never raises: an exception is logged as failed: and returns 1.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: main block (drag-lint-open.dpr)</para>
+/// <para>Calls: DragLint.Open.Main.HandleUri, DragLint.Open.Main.Refuse, DragLint.Open.Main.WriteHandlerLog, Format, GetEnvironmentVariable, Trim</para>
+/// <para>Returns: Refuse('no uri given', WhatIf); HandleUri(pArgs[0], WhatIf); EXIT_FAILED</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <seealso cref="DragLint.Open.Main.HandleUri"/>
+/// <seealso cref="DragLint.Open.Main.Refuse"/>
+/// <seealso cref="DragLint.Open.Main.WriteHandlerLog"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function RunHandler(const pArgs: TArray<string>): Integer;
-
-/// <summary>Appends one line to the handler log.</summary>
-/// <param name="pText">The event text; may be attacker text (the URI). It is
-/// capped at 512 chars plus ...(+N chars), and every control character becomes
-/// '?', so one click is one bounded line.</param>
-/// <remarks>The line is the local time as yyyy-MM-ddTHH:mm:ss, two spaces, the
-/// text, CRLF, UTF-8 without BOM. The file is DRAGLINT_URI_TEST_LOG when set (its
-/// folder is NOT created), else %LOCALAPPDATA%\drag-lint\logs\uri-handler.log,
-/// whose folder is the only one this program ever creates; with neither there is
-/// no log. A log that cannot be written is ignored: logging never stops a
-/// click.</remarks>
-procedure WriteHandlerLog(const pText: string);
 
 implementation
 
@@ -99,6 +102,14 @@ begin
   Result:= FormatDateTime('yyyy"-"mm"-"dd"T"hh":"nn":"ss', Now) + '  ' + Result;
 end;
 
+{ Appends one line to the handler log. pText may be attacker text (the URI):
+  it is capped at 512 chars plus ...(+N chars), and every control character
+  becomes '?', so one click is one bounded line. The line is the local time as
+  yyyy-MM-ddTHH:mm:ss, two spaces, the text, CRLF, UTF-8 without BOM. The file
+  is DRAGLINT_URI_TEST_LOG when set (its folder is NOT created), else
+  %LOCALAPPDATA%\drag-lint\logs\uri-handler.log, whose folder is the only one
+  this program ever creates; with neither there is no log. A log that cannot
+  be written is ignored: logging never stops a click. }
 procedure WriteHandlerLog(const pText: string);
 var
   LogPath: string;
@@ -117,12 +128,9 @@ begin
   end;
   Bytes:= TEncoding.UTF8.GetBytes(FormatLogLine(pText) + sLineBreak);
   try
-    if (LogDir <> '') and not DirectoryExists(LogDir) then
-      ForceDirectories(LogDir);
-    if FileExists(LogPath) then
-      Stream:= TFileStream.Create(LogPath, fmOpenWrite or fmShareDenyWrite)
-    else
-      Stream:= TFileStream.Create(LogPath, fmCreate or fmShareDenyWrite);
+    if (LogDir <> '') and not DirectoryExists(LogDir) and not ForceDirectories(LogDir) then
+      Exit;
+    Stream:= TFileStream.Create(LogPath, (if FileExists(LogPath) then fmOpenWrite else fmCreate) or fmShareDenyWrite);  // dl:ok taint-path-traversal@ae07 -- REVIEWED 2026-11-18: the path is the test override DRAGLINT_URI_TEST_LOG or %LOCALAPPDATA%, both set by the same user as the process (same trust level)
     try
       Stream.Seek(0, soEnd);
       Stream.WriteBuffer(Bytes, Length(Bytes));

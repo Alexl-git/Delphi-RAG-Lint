@@ -95,7 +95,7 @@ function ReadProtocolStatus: TProtocolStatus;
 /// <para>Called from: DRagLint.Core.ProtocolReg.RunProtocolVerbFromCommandLine (DRagLint.Core.ProtocolReg.pas)</para>
 /// <para>Calls: DRagLint.Core.ProtocolReg.ProtocolRegistryRoot, DRagLint.Core.ProtocolReg.ReadProtocolStatus, DRagLint.Core.ProtocolReg.RemoveLegacyCopy, DRagLint.Core.ProtocolReg.ShownCommand, DRagLint.Core.ProtocolReg.UnsafeTestRoot, ExpandFileName</para>
 /// <para>Returns: EXIT_SETUP; EXIT_REFUSED; EXIT_OK</para>
-/// <para>Complexity: 12 (cyclomatic, outer body), 52 lines (full implementation)</para>
+/// <para>Complexity: 13 (cyclomatic, outer body), 52 lines (full implementation)</para>
 /// <para>Mutates: pReport (out)</para>
 /// <para>Touches: file system, registry</para>
 /// <seealso cref="DRagLint.Core.ProtocolReg.ProtocolRegistryRoot"/>
@@ -142,10 +142,10 @@ function UnregisterProtocol(pForce, pDryRun: Boolean; out pReport: string): Inte
 /// override must never resolve to the tree it exists to protect. A value that is set but blank after that normalisation is refused too, never read as unset. A trailing --handler with no value is a usage
 /// error ('--handler needs a value').
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
 /// <para>Calls: DRagLint.Core.ProtocolReg.Emit, DRagLint.Core.ProtocolReg.ReadProtocolStatus, DRagLint.Core.ProtocolReg.RegisterProtocol, DRagLint.Core.ProtocolReg.ShownCommand, DRagLint.Core.ProtocolReg.StatusJson, DRagLint.Core.ProtocolReg.UnregisterProtocol, DRagLint.Core.ProtocolReg.UnsafeTestRoot, DRagLint.Core.ProtocolReg.UsageError, ExtractFileDir, ParamStr, Writeln</para>
 /// <para>Returns: UsageError('unknown sub-verb "' + ParamStr(2) + '"'); RegisterProtocol(Handler, Force, DryRun, Report); UnregisterProtocol(Force, DryRun, Report); if Status.Kind = pcOurs then EXIT_OK</para>
-/// <para>Complexity: 19 (cyclomatic, outer body), 49 lines (full implementation)</para>
+/// <para>Complexity: 20 (cyclomatic, outer body), 49 lines (full implementation)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Core.ProtocolReg.Emit"/>
 /// <seealso cref="DRagLint.Core.ProtocolReg.ReadProtocolStatus"/>

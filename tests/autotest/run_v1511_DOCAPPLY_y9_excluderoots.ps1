@@ -23,9 +23,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = (Join-Path ([IO.Path]::GetTempPath()) "dl-v1511-y9-$PID")
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -83,26 +86,26 @@ end.
   $db    = Join-Path $drag 'app.sqlite'
   $vfile = Join-Path $vendor 'uVendor.pas'
   $afile = Join-Path $app 'uApp.pas'
-  $null  = & $Exe index $app --db $db 2>&1
+  $null  = & { $ErrorActionPreference = 'Continue'; & $Exe index $app --db $db 2>&1 | ForEach-Object { "$_" } }
   Check 'setup: index built' ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
-  $q = & $Exe query --name VendorLen --db $db 2>&1 | Out-String
+  $q = & { $ErrorActionPreference = 'Continue'; & $Exe query --name VendorLen --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'setup: the vendored unit is indexed (exclusion is a real decision)' ($q -match 'VendorLen')
   $vBefore = [IO.File]::ReadAllText($vfile)
   $aBefore = [IO.File]::ReadAllText($afile)
 
   Write-Host 'REL: relative --project from the project folder' -ForegroundColor Cyan
   Push-Location $app
-  try { $o = & $Exe document --project 'App.dpr' --db $db 2>&1 | Out-String } finally { Pop-Location }
+  try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe document --project 'App.dpr' --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String } finally { Pop-Location }
   Check 'REL dry run does not list the vendored file' ($o -notmatch '(?m)^File:.*uVendor\.pas') (($o -split "`r?`n" | Where-Object { $_ -match '^File:.*uVendor' } | Select-Object -First 1))
   Check 'REL dry run names the skipped root' ($o -match 'skipped third-party root') ''
   Push-Location $app
-  try { $o = & $Exe document --project 'App.dpr' --db $db --apply --no-backup 2>&1 | Out-String } finally { Pop-Location }
+  try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe document --project 'App.dpr' --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-String } finally { Pop-Location }
   Check 'REL --apply leaves the vendored file byte-identical' ([IO.File]::ReadAllText($vfile) -ceq $vBefore) ''
 
   Write-Host 'ABS: absolute --project' -ForegroundColor Cyan
   # Independent of REL: restore the vendored bytes first, so a REL failure is not counted twice.
   [IO.File]::WriteAllText($vfile, $vBefore, [Text.Encoding]::ASCII)
-  $o = & $Exe document --project (Join-Path $app 'App.dpr') --db $db --apply --no-backup 2>&1 | Out-String
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe document --project (Join-Path $app 'App.dpr') --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'ABS --apply leaves the vendored file byte-identical' ([IO.File]::ReadAllText($vfile) -ceq $vBefore) ''
 
   Write-Host 'CONTROL: the own unit IS documented' -ForegroundColor Cyan
@@ -111,7 +114,7 @@ end.
 
   Write-Host 'OPTIN: --document-third-party stays the opt-in' -ForegroundColor Cyan
   Push-Location $app
-  try { $o = & $Exe document --project 'App.dpr' --db $db --document-third-party 2>&1 | Out-String } finally { Pop-Location }
+  try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe document --project 'App.dpr' --db $db --document-third-party 2>&1 | ForEach-Object { "$_" } } | Out-String } finally { Pop-Location }
   Check 'OPTIN dry run lists the vendored file' ($o -match '(?m)^File:.*uVendor\.pas') ''
 } finally {
   if (Test-Path -LiteralPath $WorkDir) { try { [IO.Directory]::Delete($WorkDir, $true) } catch { } }

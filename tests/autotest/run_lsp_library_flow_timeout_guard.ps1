@@ -29,12 +29,16 @@
 [CmdletBinding()]
 param(
   [switch]$KeepWorkDir,
-  [string]$Exe         = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
-  [string]$RulesDir    = "$PSScriptRoot\..\..\rules",
+  [string]$Exe         = '',
+  [string]$RulesDir    = '',
   [string]$WorkDir     = "C:\TEMP\draglint_lsp_lib_flow_$PID",
   [string]$LibraryDb   = '',
   [string]$LibraryUnit = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
+if (-not $RulesDir) { $RulesDir = "$PSScriptRoot\..\..\rules" }
 . "$PSScriptRoot\lib\WorkDirCleanup.ps1"
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -84,13 +88,13 @@ $fx     = Join-Path $src 'uFlowFx.pas'
 $libDb  = Join-Path $WorkDir 'library-Fixture.sqlite'
 $projDb = Join-Path $WorkDir 'Fixture.sqlite'
 foreach ($d in $libDb, $projDb) {
-  $idx = & $exePath index $src --db $d 2>&1 | Out-String
+  $idx = & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $d 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check "SANITY: fixture indexed into $(Split-Path $d -Leaf)" ($LASTEXITCODE -eq 0) $idx
 }
 
 function LintDbg($db) {
   $env:DRAGLINT_DEBUG = '1'
-  try { & $exePath lint $fx --db $db --rules-dir $rules 2>&1 | Out-String }
+  try { & { $ErrorActionPreference = 'Continue'; & $exePath lint $fx --db $db --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String }
   finally { Remove-Item Env:\DRAGLINT_DEBUG }
 }
 function Frame($obj) { $j = $obj | ConvertTo-Json -Depth 20 -Compress; "Content-Length: $([Text.Encoding]::UTF8.GetByteCount($j))`r`n`r`n$j" }
@@ -106,7 +110,7 @@ function LspOpen([string]$PasFile, [string]$Db, [string]$Tag) {
   $in = Join-Path $dir 'in.txt'; $so = Join-Path $dir 'out.txt'; $se = Join-Path $dir 'err.txt'
   [IO.File]::WriteAllText($in, ($msgs -join ''), (New-Object Text.UTF8Encoding($false)))
   $p = Start-Process $exePath -ArgumentList @('lsp', '--db', ('"' + $Db + '"'), '--full-rules') -WorkingDirectory $WorkDir `
-         -RedirectStandardInput $in -RedirectStandardOutput $so -RedirectStandardError $se -NoNewWindow -Wait -PassThru
+         -RedirectStandardInput $in -RedirectStandardOutput $so -RedirectStandardError $se -NoNewWindow -Wait -PassThru; $null = $p.Handle
   $out = [IO.File]::ReadAllText($so); $err = [IO.File]::ReadAllText($se)
   $codes = @([regex]::Matches($out, '"code":"([a-z0-9\-]+)"') | ForEach-Object { $_.Groups[1].Value })
   $cost = ([regex]::Matches($err, 'full-rules[^\r\n]*') | ForEach-Object Value) -join ' | '

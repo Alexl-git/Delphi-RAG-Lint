@@ -13,12 +13,13 @@ unit DragLint.Plugin.Reports;
        because feeds-from and lands-where refuse the typeat form. Project
        questions send 'project'; table questions prompt for a name. Every
        target except 'project' is shown in an editable prompt first.
-    2. Runs `drag-lint ask ... --plain --open` through the plugin's ONE
-       background runner, the job queue (no second runner), so a report never
-       collides with a reindex or lint-all on the same database. Charts open in
-       the browser (--open). No pwsh and no Ask-Report.ps1 are looked for here:
-       the engine answers every question in-process (all 26 since the
-       CHARTS port).
+    2. Runs `drag-lint ask ... --plain --open` off the main thread with a progress
+       window -- marquee, elapsed seconds, Cancel (1.52 REPPROG). Cancel kills
+       this run's child only and shows nothing. While it runs, the report's DB is
+       held on the job queue, so no reindex or lint-all on it starts under the
+       report. Charts open in the browser (--open). No pwsh and no Ask-Report.ps1
+       are looked for here: the engine answers every question in-process (all 26
+       since the CHARTS port).
     3. On exit 0 the text answer becomes a DocInsight block
        (DragLint.Plugin.ReportText), put on the clipboard and shown in a small
        modeless window with a Copy button. Exit 1 and 2 show the verb's
@@ -93,20 +94,21 @@ procedure BuildReportsMenu(pParent: TMenuItem; const pAddItem: TReportsAddItem;
 /// <param name="Sender">Whatever the IDE passes as the click's sender; logged, never relied on.</param>
 /// <param name="pIndex">The question index bound to the item when the menu was built.</param>
 /// <remarks>
-/// Main thread only. Returns as soon as the run is queued; the
-/// answer arrives later on the main thread. Every click writes a
-/// 'Reports: click' line to the plugin log first, and every way it can stop
-/// before the run is queued writes a 'Reports:' line too; where the user acted,
-/// it also shows why (1.51.2 RPT: it used to read the index from
+/// Main thread only. Returns as soon as the run is started; a progress window
+/// with Cancel shows meanwhile and the answer arrives later on the main thread.
+/// Every click writes a 'Reports: click' line to the plugin log first, and every
+/// way it can stop before the run is started writes a 'Reports:' line too; where
+/// the user acted, it also shows why (1.51.2 RPT: it used to read the index from
 /// TMenuItem(Sender).Tag and return silently).
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
-/// <para>Calls: DragLint.Plugin.LspClient.DebugLog, DragLint.Plugin.Reports.ChooseTargetThen, DragLint.Plugin.Reports.EnqueueReport, DragLint.Plugin.Reports.PromptSecondRoutine, DragLint.Plugin.Reports.ResolveRunTools, DragLint.Plugin.ReportText.BuildAskCmdLine, DragLint.Plugin.ReportText.QuestionTakesSecondRoutine, DragLint.Plugin.ReportText.ReportClickQuestion, Format, ShowMessage</para>
+/// <para>Calls: DragLint.Plugin.LspClient.DebugLog, DragLint.Plugin.Reports.ChooseTargetThen, DragLint.Plugin.Reports.PromptSecondRoutine, DragLint.Plugin.Reports.ResolveRunTools, DragLint.Plugin.Reports.StartReport, DragLint.Plugin.ReportText.BuildAskCmdLine, DragLint.Plugin.ReportText.QuestionTakesSecondRoutine, DragLint.Plugin.ReportText.ReportClickQuestion, Format, ShowMessage</para>
 /// <seealso cref="DragLint.Plugin.LspClient.DebugLog"/>
 /// <seealso cref="DragLint.Plugin.Reports.ChooseTargetThen"/>
-/// <seealso cref="DragLint.Plugin.Reports.EnqueueReport"/>
 /// <seealso cref="DragLint.Plugin.Reports.PromptSecondRoutine"/>
 /// <seealso cref="DragLint.Plugin.Reports.ResolveRunTools"/>
+/// <seealso cref="DragLint.Plugin.Reports.StartReport"/>
+/// <seealso cref="DragLint.Plugin.ReportText.BuildAskCmdLine"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure InvokeReportQuestionAt(Sender: TObject; pIndex: Integer);
@@ -116,6 +118,7 @@ implementation
 uses
   System.SysUtils
   , System.Classes
+  , System.Generics.Collections
   , System.UITypes
   , Vcl.Forms
   , Vcl.Controls
@@ -128,6 +131,7 @@ uses
   , DragLint.Plugin.JobQueue
   , DragLint.Plugin.IndexJob  // dl:unit DragLint.Plugin.IndexJob accepted -- a section reindex shares the save-time reindex ceiling INDEX_JOB_TIMEOUT_MS on purpose
   , DragLint.Plugin.CliAsync
+  , DragLint.Plugin.ReportProgress
   , DragLint.Plugin.ExeResolver
   , DragLint.Plugin.Theme
   , DragLint.Plugin.Fonts
@@ -142,8 +146,8 @@ const
   ASK_EXIT_REFUSED = 1;
   ASK_EXIT_SETUP = 2;
   ASK_EXIT_STALE = 3;
-  { A round-trip measured ~55-60 s on ORM3; the queue's timeout is advisory for
-    a non-streaming job, so this is a ceiling, not a kill. }
+  { A round-trip measured ~55-60 s on ORM3. A STALL budget (ProcRun): the child is
+    killed only after this long with neither output nor CPU. }
   REPORT_TIMEOUT_MS = 600000;
   TYPEAT_TIMEOUT_MS = 20000;
   PROJECT_TARGET = 'project';
@@ -168,7 +172,13 @@ type
     procedure DoClose(var Action: TCloseAction); override;
   public
     constructor CreateReport(AOwner: TComponent; const ACaption, AText: string);
+    destructor Destroy; override;
   end;
+
+var
+  { Every report text window still open: they have no owner (an Application-owned form would outlive
+    this package's code), so finalization frees them. Destroy removes each one. }
+  GReportTexts: TList<TDragLintReportTextForm> = nil;
 
 constructor TDragLintReportTextForm.CreateReport(AOwner: TComponent; const ACaption, AText: string);
 var
@@ -190,6 +200,7 @@ var
 
 begin
   inherited CreateNew(AOwner);
+  if GReportTexts <> nil then GReportTexts.Add(Self);
   Caption:= ACaption;
   BorderStyle:= bsSizeToolWin;
   Position:= poScreenCenter;
@@ -221,6 +232,12 @@ begin
   FMemo.Lines.Text:= AText;
 
   ApplyIdeTheme(Self, TDragLintReportTextForm);
+end;
+
+destructor TDragLintReportTextForm.Destroy;
+begin
+  if GReportTexts <> nil then GReportTexts.Remove(Self);
+  inherited Destroy;
 end;
 
 procedure TDragLintReportTextForm.DoClose(var Action: TCloseAction);
@@ -437,7 +454,7 @@ end;
 
 procedure ShowReportText(const pCaption, pText: string);
 begin
-  TDragLintReportTextForm.CreateReport(Application, pCaption, pText).Show;
+  TDragLintReportTextForm.CreateReport(nil, pCaption, pText).Show;
 end;
 
 function SectionReindexJob(const pExe, pSection: string): TDragLintJob;
@@ -514,26 +531,33 @@ begin
   end;
 end;
 
-procedure EnqueueReport(const pQuestionId, pTarget, pCmdLine: string);
+{ Runs one report with a progress window (1.52 REPPROG): a marquee, the elapsed
+  seconds and Cancel. Cancel kills THIS run's child only and shows nothing. The
+  report's DB is held on the job queue for the run, so no reindex or lint-all on it
+  STARTS under the report (one already running is not stopped). }
+procedure StartReport(const pQuestionId, pTarget, pCmdLine: string);
 var
-  Job: TDragLintJob;
+  Db  : string;
+  Form: TDragLintReportProgressForm;
 begin
-  DebugLog('Reports: enqueue ' + pCmdLine);
-  Job:= TDragLintJob.Create;
-  Job.Kind       := jkGeneric;
-  Job.Title      := Format('Report %s %s', [pQuestionId, pTarget]);
-  Job.CoalesceKey:= 'report:' + pQuestionId + ':' + LowerCase(pTarget);
-  Job.CmdLine    := pCmdLine;
-  Job.TimeoutMs  := REPORT_TIMEOUT_MS;
-  Job.Streaming  := False;
-  Job.OnDone     :=
-    procedure(AExit: Integer; AOut: string)
+  DebugLog('Reports: run ' + pCmdLine);
+  Db:= ResolvePrimaryIndexDb;
+  if Db <> '' then JobQueue.HoldDb(Db);
+  Form:= TDragLintReportProgressForm.CreateRun(Application, Format('Report %s -- %s', [pQuestionId, pTarget]),
+    pCmdLine, REPORT_TIMEOUT_MS,
+    procedure(AExit: Integer; const AOut: string)
     begin
+      if Db <> '' then JobQueue.ReleaseDb(Db);
       HandleReportDone(pQuestionId, pTarget, AExit, AOut);
-    end;
-  JobQueue.Enqueue(Job);
+    end,
+    procedure
+    begin
+      if Db <> '' then JobQueue.ReleaseDb(Db);
+      DebugLog(Format('Reports: %s %s -> cancelled', [pQuestionId, pTarget]));
+    end);
+  ApplyIdeTheme(Form, TDragLintReportProgressForm);
+  Form.Show;
 end;
-
 { ---- public ---- }
 
 procedure BuildReportsMenu(pParent: TMenuItem; const pAddItem: TReportsAddItem;
@@ -603,13 +627,16 @@ begin
       ToName:= '';
       if QuestionTakesSecondRoutine(Q.Id) and not PromptSecondRoutine(Q, ATarget, ToName) then Exit;
       var Shown: string:= if ToName = '' then ATarget else ATarget + ' -> ' + ToName;
-      EnqueueReport(Q.Id, Shown, BuildAskCmdLine(ExeName, Q.Id, ATarget, FromFile, ToName));
+      StartReport(Q.Id, Shown, BuildAskCmdLine(ExeName, Q.Id, ATarget, FromFile, ToName));
     end);
 end;
 
 initialization
+  GReportTexts:= TList<TDragLintReportTextForm>.Create;
 
 finalization
+  while (GReportTexts <> nil) and (GReportTexts.Count > 0) do GReportTexts.Last.Free;
+  FreeAndNil(GReportTexts);
   FreeAndNil(GCaretRun);
 
 end.

@@ -45,9 +45,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string] $Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string] $Exe     = '',
   [string] $WorkDir = (Join-Path ([IO.Path]::GetTempPath()) ("draglint-wiki-" + [Guid]::NewGuid().ToString('N')))
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 
 $ErrorActionPreference = 'Stop'
@@ -86,7 +89,7 @@ $errFile = Join-Path $WorkDir 'stderr.txt'
 # so $ErrorActionPreference = 'Stop' cannot turn that banner into an
 # ErrorRecord and corrupt a JSON slice.
 function Run([string[]]$A) {
-  $out = & $Exe @A 2>$errFile
+  $out = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe @A 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   $rc  = $LASTEXITCODE
   $err = if (Test-Path -LiteralPath $errFile) { (Get-Content -LiteralPath $errFile -Raw) } else { '' }
   if ($null -eq $err) { $err = '' }
@@ -106,7 +109,7 @@ Write-Host '-- check 1: a block above `unit X;` attaches, and so does one on a t
 
 $list = Run @('wiki', '--list', '--db', $goodDb, '--json')
 $topics = $null
-try { $topics = $list.Out | ConvertFrom-Json } catch { }
+try { $topics = $list.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'wiki --list exits 0' ($list.Code -eq 0) "exit $($list.Code) / $($list.Err.Trim())"
 Check 'and emits valid JSON on stdout' ($null -ne $topics) $list.Out
 
@@ -201,7 +204,7 @@ Check 'and the entry that DOES resolve is not reported' `
 
 $badJson = Run @('wiki', '--check', '--db', $badDb, '--json')
 $bj = $null
-try { $bj = $badJson.Out | ConvertFrom-Json } catch { }
+try { $bj = $badJson.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'the JSON form reports ok=false' (($null -ne $bj) -and ($bj.ok -eq $false)) $badJson.Out
 Check 'and carries both problems' (($null -ne $bj) -and (@($bj.problems).Count -eq 2)) `
   "got $(if ($null -ne $bj) { @($bj.problems).Count } else { '<none>' })"
@@ -277,7 +280,7 @@ Check 'and still sees the same number of topics' ($postChecked -eq $checked) "wa
 # provenance, not something a human wrote about the concept.
 $postList = Run @('wiki', '--list', '--db', $goodDb, '--json')
 $pt = $null
-try { $pt = $postList.Out | ConvertFrom-Json } catch { }
+try { $pt = $postList.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 $payload = @($pt | Where-Object { $_.name -eq 'Zorb Payload' })
 Check 'the topic survived two rewrites' ($payload.Count -eq 1) "got $($payload.Count)"
 if ($payload.Count -eq 1) {
@@ -327,12 +330,12 @@ Check 'and says no symbol matched' ($ctxNone.Out -match 'No symbol matched') $ct
 # guessing from an empty bundle.
 $ctxJson = Run @('context', '--task', 'modify TZorbDispatcher', '--format', 'json', '--db', $goodDb)
 $cj = $null
-try { $cj = $ctxJson.Out | ConvertFrom-Json } catch { }
+try { $cj = $ctxJson.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'the JSON bundle reports resolved=true for a real symbol' `
   (($null -ne $cj) -and ($cj.resolved -eq $true)) $ctxJson.Out
 $ctxJson2 = Run @('context', '--task', 'modify zorb dispatch', '--format', 'json', '--db', $goodDb)
 $cj2 = $null
-try { $cj2 = $ctxJson2.Out | ConvertFrom-Json } catch { }
+try { $cj2 = $ctxJson2.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'and resolved=false with the topic named for a phrase' `
   (($null -ne $cj2) -and ($cj2.resolved -eq $false) -and (@($cj2.wiki).Count -eq 1)) $ctxJson2.Out
 

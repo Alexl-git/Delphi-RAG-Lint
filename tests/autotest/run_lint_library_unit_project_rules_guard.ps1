@@ -42,13 +42,17 @@
 [CmdletBinding()]
 param(
   [switch]$KeepWorkDir,
-  [string]$Exe      = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
-  [string]$RulesDir = "$PSScriptRoot\..\..\rules",
+  [string]$Exe      = '',
+  [string]$RulesDir = '',
   [string]$WorkDir  = "C:\TEMP\draglint_lib_unit_projrules_$PID",
   [string]$LibraryDb   = '',
   [string]$LibraryUnit = '',
   [int]   $CpuBudgetSec = 30
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
+if (-not $RulesDir) { $RulesDir = "$PSScriptRoot\..\..\rules" }
 . "$PSScriptRoot\lib\WorkDirCleanup.ps1"
 if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 . "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG3: no machine drag-lint.json
@@ -120,13 +124,13 @@ $fileA  = Join-Path $src 'uCycA.pas'
 $libDb  = Join-Path $WorkDir 'library-Fixture.sqlite'
 $projDb = Join-Path $WorkDir 'Fixture.sqlite'
 foreach ($d in $libDb, $projDb) {
-  $idx = & $exePath index $src --db $d 2>&1 | Out-String
+  $idx = & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $d 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check "SANITY: fixture indexed into $(Split-Path $d -Leaf)" ($LASTEXITCODE -eq 0) $idx
 }
 
 function LintDbg($db) {
   $env:DRAGLINT_DEBUG = '1'
-  try { & $exePath lint $fileA --db $db --rules-dir $rules 2>&1 | Out-String }
+  try { & { $ErrorActionPreference = 'Continue'; & $exePath lint $fileA --db $db --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String }
   finally { Remove-Item Env:\DRAGLINT_DEBUG }
 }
 
@@ -152,7 +156,7 @@ if ($LibraryDb -ne '' -and $LibraryUnit -ne '') {
     $out = Join-Path $WorkDir 'a3.out'; $err = Join-Path $WorkDir 'a3.err'
     $p = Start-Process -FilePath $exePath -PassThru -NoNewWindow -WorkingDirectory $WorkDir `
            -RedirectStandardOutput $out -RedirectStandardError $err `
-           -ArgumentList @('lint', ('"' + $LibraryUnit + '"'), '--db', ('"' + $LibraryDb + '"'), '--json', '--rules-dir', ('"' + $rules + '"'))
+           -ArgumentList @('lint', ('"' + $LibraryUnit + '"'), '--db', ('"' + $LibraryDb + '"'), '--json', '--rules-dir', ('"' + $rules + '"')); $null = $p.Handle
     $done = $p.WaitForExit(($CpuBudgetSec * 10) * 1000)
     $p.Refresh(); $cpu = $p.TotalProcessorTime.TotalSeconds
     if (-not $done) { $p.Kill() }

@@ -57,10 +57,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$Source  = "$PSScriptRoot\..\..\src\lsp\DRagLint.LSP.Server.pas",
+  [string]$Exe     = '',
+  [string]$Source  = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-lsp-reader-guard-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $Source) { $Source = "$PSScriptRoot\..\..\src\lsp\DRagLint.LSP.Server.pas" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -136,7 +140,7 @@ $callLine  = [Array]::FindIndex($projLines, [Predicate[string]]{ param($x) $x -l
 $dotCol    = $projLines[$callLine].IndexOf('.') + 1
 
 $pristine = Join-Path $WorkDir 'pristine.sqlite'
-$o0 = (& $Exe index "$WorkDir\projsrc" --db $pristine 2>&1 | Out-String)
+$o0 = (& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\projsrc" --db $pristine 2>&1 | ForEach-Object { "$_" } } | Out-String)
 Check 'V1 fixture index exits 0' ($LASTEXITCODE -eq 0) ($o0 -split "`r?`n" | Select-Object -Last 1)
 Check 'V2 fixture has NO pending -wal' ((SidecarBytes $pristine) -eq 0) "wal bytes=$(SidecarBytes $pristine)"
 Check 'V3 fixture is WAL (header byte 18 = 2)' ((HeaderWriteVersion $pristine) -eq 2) "byte18=$(HeaderWriteVersion $pristine)"
@@ -168,12 +172,12 @@ function Invoke-Session([string[]]$Dbs, [string]$Tag) {
   $argv = @('lsp'); foreach ($d in $Dbs) { $argv += @('--db', $d) }
   $p = Start-Process $Exe -ArgumentList $argv -WorkingDirectory $WorkDir `
          -RedirectStandardInput $inF -RedirectStandardOutput $outF -RedirectStandardError $errF `
-         -NoNewWindow -Wait -PassThru
+         -NoNewWindow -Wait -PassThru; $null = $p.Handle
   $raw = [System.IO.File]::ReadAllText($outF)
   $err = [System.IO.File]::ReadAllText($errF)
   $hover = '<NO REPLY>'
   foreach ($m in [regex]::Matches($raw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $m.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $m.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 2) { $hover = if ($null -eq $o.result) { '' } else { [string]$o.result.contents.value } }
   }
   return @{ Raw = $raw; Err = $err; Hover = $hover; Exit = $p.ExitCode }
@@ -266,7 +270,7 @@ Write-Host 'PC: POSITIVE CONTROL -- a real write (index) on the v12 file DOES mo
 $v12w = Join-Path $WorkDir 'v12-writable.sqlite'
 & python $pyV12 $v12w
 $md5w = Md5 $v12w
-$pcOut = (& $Exe index "$WorkDir\projsrc" --db $v12w 2>&1 | Out-String)
+$pcOut = (& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\projsrc" --db $v12w 2>&1 | ForEach-Object { "$_" } } | Out-String)
 Check 'PC index on the v12 file exits 0 (it migrates, as a writer should)' ($LASTEXITCODE -eq 0) ($pcOut -split "`r?`n" | Select-Object -Last 1)
 Check 'PC md5 CHANGED -- so byte-identity above is a real assertion' ((Md5 $v12w) -ne $md5w) "before=$md5w after=$(Md5 $v12w)"
 

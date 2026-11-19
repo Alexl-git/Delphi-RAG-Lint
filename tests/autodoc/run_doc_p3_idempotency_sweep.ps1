@@ -49,9 +49,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe = '',
   [string]$Py  = 'C:\Python314\python.exe'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Continue'
@@ -132,7 +135,7 @@ $pyEnumPath = Join-Path ([IO.Path]::GetTempPath()) ('draglint_sweep_enum_' + $PI
 [IO.File]::WriteAllText($pyEnumPath, $pyEnum)
 
 function Get-Symbols([string]$db, [string]$suffix) {
-  $out = & $Py $pyEnumPath $db $suffix 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $Py $pyEnumPath $db $suffix 2>$null }
   $res = New-Object System.Collections.Generic.List[object]
   foreach ($line in $out) {
     if ($line -match '^(.+)\t(\d+)$') { $res.Add([pscustomobject]@{ QName = $Matches[1]; Line = [int]$Matches[2] }) }
@@ -156,12 +159,12 @@ function Invoke-UnitSweep([string]$fixture, [string]$scratchName, [string]$suffi
   $symOrder  = $null
 
   for ($cycle = 1; $cycle -le 3; $cycle++) {
-    & $exePath index $scratch --db $db 2>$null | Out-Null
-    $j = (& $exePath document --unit $target --db $db --apply --json 2>$null) -join ' '
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+    $j = (& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply --json 2>$null }) -join ' '
     $actions += $j
     # Reindex so start lines reflect the file the apply just wrote, then
     # snapshot each symbol's own block.
-    & $exePath index $scratch --db $db 2>$null | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
     $syms = Get-Symbols $db $suffix
     if ($null -eq $symOrder) { $symOrder = $syms }
     $lines = [IO.File]::ReadAllLines($target)
@@ -190,8 +193,8 @@ function Invoke-QNameSweep([string]$fixture, [string]$scratchRoot, [string]$qnam
   $md5s  = @( Get-FileMd5 $target )
   $acts  = @()
   for ($cycle = 1; $cycle -le 3; $cycle++) {
-    & $exePath index $scratch --db $db 2>$null | Out-Null
-    $j = (& $exePath document --qname $qname --db $db --apply --json 2>$null) -join ' '
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+    $j = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname $qname --db $db --apply --json 2>$null }) -join ' '
     if ($j -match '"action":"(\w+)"') { $a = $Matches[1] } else { $a = '?' }
     if ($j -match '"edits":(\d+)')    { $a = "$a/$($Matches[1])" }
     $acts  += $a
@@ -318,7 +321,7 @@ $probeDb = Join-Path $cRoot 'probe.sqlite'
 $probeDir = Join-Path $cRoot '_probe'
 New-Item -ItemType Directory -Path $probeDir | Out-Null
 Copy-Item $fxShapes $probeDir -Force
-& $exePath index $probeDir --db $probeDb 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $probeDir --db $probeDb 2>$null } | Out-Null
 $shapeSyms = Get-Symbols $probeDb 'idempotency_shapes.pas'
 Check 'SWEEP C: symbols enumerated from the index' ($shapeSyms.Count -gt 0) "count=$($shapeSyms.Count)"
 
@@ -516,8 +519,8 @@ foreach ($nm in @('DeprecatedWithNestedReturns','ExampleWithNestedRemarks')) {
   Check "SWEEP D FIXED (T3h): $nm cycle-2 apply makes NO edit" `
     ($r.Actions[1] -match '/0$') ($r.Actions -join ' ')
   # THE acceptance criterion: --strip recovers the pristine bytes.
-  & $exePath index $r.Scratch --db $r.Db 2>$null | Out-Null
-  & $exePath document --qname "preserve_tags.$nm" --db $r.Db --strip --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $r.Scratch --db $r.Db 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --qname "preserve_tags.$nm" --db $r.Db --strip --apply 2>$null } | Out-Null
   $afterStrip = Get-FileMd5 $r.Target
   Check "SWEEP D FIXED (T3h): $nm --strip RESTORES the pristine bytes -- the round-trip holds" `
     ($afterStrip -eq $r.Md5s[0]) ("pristine=$($r.Md5s[0]) afterStrip=$afterStrip")

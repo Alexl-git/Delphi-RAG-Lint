@@ -4,10 +4,10 @@ title: Library Drift Check
 summary: Flags registered library roots that have source on disk but nothing in the index
 product: DL
 group: maintenance
-order: 120010
+order: 120011
 since: 0.47.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # Library Drift Check

@@ -17,9 +17,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-info-unreadable-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -40,25 +43,25 @@ function InfoJson([string[]]$Dbs) {
   Push-Location $WorkDir
   try {
     $a = @('info', '--json'); foreach ($d in $Dbs) { $a += @('--db', $d) }
-    $out = & $Exe @a 2>&1 | Out-String
+    $out = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } } | Out-String
     return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $out }
   } finally { Pop-Location }
 }
 function Verdicts($r) {
   $i = $r.Out.IndexOf('{"schema"')
   if ($i -lt 0) { return @() }
-  try { return @(($r.Out.Substring($i) | ConvertFrom-Json).indexes) } catch { return @() }
+  try { return @(($r.Out.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }).indexes) } catch { return @() }
 }
 
 Write-Host 'B. CONTROL: a missing --db alone' -ForegroundColor Cyan
 $b = InfoJson @($missing)
-$bv = Verdicts $b
+$bv = @(Verdicts $b)
 Check 'B1 one index, verdict missing' (($bv.Count -eq 1) -and ($bv[0].verdict -eq 'missing')) "exit=$($b.Code)"
 
 Write-Host ''
 Write-Host 'A. garbage + missing in one call' -ForegroundColor Cyan
 $a = InfoJson @($garbage, $missing)
-$av = Verdicts $a
+$av = @(Verdicts $a)
 Check 'A1 no FATAL, exit 0' ((-not ($a.Out -match 'FATAL')) -and ($a.Code -eq 0)) "exit=$($a.Code)"
 Check 'A2 both indexes reported' ($av.Count -eq 2) "n=$($av.Count)"
 $g = $av | Where-Object { $_.path -eq $garbage }

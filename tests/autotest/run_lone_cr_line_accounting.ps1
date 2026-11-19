@@ -46,9 +46,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -110,15 +113,15 @@ Check 'lonecr is exactly one byte longer than clean' `
   "lonecr=$((Get-Item $fLoneCr).Length) clean=$((Get-Item $fClean).Length)"
 
 function Get-EmptyBodyLines([string]$Path) {
-  $out = & $exePath lint $Path 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath lint $Path 2>$null }
   return @($out |
     Select-String 'empty-procedure-body' |
     ForEach-Object { if ($_.Line -match ':(\d+):\d+\s') { [int]$Matches[1] } })
 }
 
-$lnClean  = Get-EmptyBodyLines $fClean
-$lnLoneCr = Get-EmptyBodyLines $fLoneCr
-$lnWithLf = Get-EmptyBodyLines $fWithLf
+$lnClean  = @(Get-EmptyBodyLines $fClean)
+$lnLoneCr = @(Get-EmptyBodyLines $fLoneCr)
+$lnWithLf = @(Get-EmptyBodyLines $fWithLf)
 
 Write-Host ''
 Write-Host 'The rule fires at all (without this, every line check below is vacuous)' -ForegroundColor Cyan

@@ -4,10 +4,10 @@ title: Identifier case mismatch (lint rule)
 summary: "Lint rule, OFF by default: a name spelled in a different case from its declaration"
 product: DL
 group: linting
-order: 30023
+order: 30025
 since: 1.42.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Identifier case mismatch (lint rule)
@@ -19,7 +19,7 @@ Read this to see what identifier-case-mismatch covers: locals and parameters fro
 ## How to run it
 
 ```text
-drag-lint lint-all [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]
+drag-lint lint-all [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget]
 ```
 
 Example:

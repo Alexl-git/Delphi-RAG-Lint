@@ -21,9 +21,12 @@
   Needs dcc: SKIPs (exit 0) when rsvars.bat is missing.
 #>
 param(
-  [string]$Exe    = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe    = '',
   [string]$Rsvars = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Continue'  # native stderr must not terminate; every call is checked by exit code
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -36,21 +39,21 @@ $Fx  = (Resolve-Path "$PSScriptRoot\fixtures\v151-DFMREN").Path
 $Tmp = Join-Path $env:TEMP ('v151_dfmren_' + [guid]::NewGuid().ToString('N').Substring(0, 8))
 [IO.Directory]::CreateDirectory($Tmp) | Out-Null
 $Lib = Join-Path $Tmp 'lib.sqlite'
-$null = ($null | & $Exe index (Join-Path $Fx 'vclstub') --db $Lib --library-db none 2>&1 | Out-String)
+$null = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index (Join-Path $Fx 'vclstub') --db $Lib --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String)
 
 function New-Case([string]$Tag, [scriptblock]$Edit = $null) {
   $d = Join-Path $Tmp $Tag
   Copy-Item (Join-Path $Fx 'frdemo') $d -Recurse
   if ($Edit) { & $Edit $d }
   $db = Join-Path $d 'p.sqlite'
-  $null = ($null | & $Exe index --project (Join-Path $d 'FrDemo.dproj') --db $db --library-db none 2>&1 | Out-String)
+  $null = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project (Join-Path $d 'FrDemo.dproj') --db $db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String)
   if ($LASTEXITCODE -ne 0) { throw "index $Tag exit $LASTEXITCODE" }
   return @{ Dir = $d; Db = $db; Proj = (Join-Path $d 'FrDemo.dproj') }
 }
 function Rename($C, [string]$QName, [string]$To, [string[]]$Mode) {
   $errFile = Join-Path $Tmp 'stderr.txt'
   $a = @('rename', '--kind', 'symbol', '--name', $QName, '--to', $To, '--db', $C.Db, '--library-db', $Lib) + $Mode
-  $out = ($null | & $Exe @a 2> $errFile | Out-String)
+  $out = ($null | & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); $input | & $Exe @a 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
   $code = $LASTEXITCODE
   return @{ Code = $code; Out = $out; Err = [IO.File]::ReadAllText($errFile) }
 }
@@ -81,7 +84,7 @@ try {
   $prog = Join-Path $A.Dir 'Win64\Debug\FrDemo.exe'
   Check 'b1 the gate built the program' (Test-Path $prog) $prog
   if (Test-Path $prog) {
-    $o = (& $prog 2>&1 | Out-String)
+    $o = (& { $ErrorActionPreference = 'Continue'; & $prog 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'b2 every form loads, the field and FocusControl bound' ($LASTEXITCODE -eq 0 -and $o -match 'main=BtnRun focus=BtnRun kid=BtnRun') $o
   }
 

@@ -15,9 +15,12 @@
 #Requires -Version 7
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-lsp-ifc-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -61,7 +64,7 @@ function New-Fixture([string]$Name, [string]$IfBody, [string]$ElseBody) {
   Write-Ascii $f (($lines -join "`r`n") + "`r`n")
   $cl = @('unit uConsts;', 'interface', 'const', '  Ver = 3;', 'implementation', 'end.')
   Write-Ascii (Join-Path $dir 'uConsts.pas') (($cl -join "`r`n") + "`r`n")
-  & $Exe index $dir --db (Join-Path $dir 'fx.sqlite') *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db (Join-Path $dir 'fx.sqlite') *> $null }
   return $f
 }
 $Good    = '  Result := 1;'
@@ -81,7 +84,7 @@ function Read-Frames([string]$Out) {
     $start = $i + $m.Index + $m.Length
     $len = [int]$m.Groups[1].Value
     if ($start + $len -gt $Out.Length) { break }
-    $res += ($Out.Substring($start, $len) | ConvertFrom-Json)
+    $res += ($Out.Substring($start, $len) | ConvertFrom-Json | ForEach-Object { $_ })
     $i = $start + $len
   }
   return $res
@@ -109,9 +112,9 @@ function LspLines([string]$PasFile, [string]$Rule) {
 }
 # `lint --json` is a bare array; the line field is start_line, the id is rule.
 function CliLines([string]$PasFile, [string]$Rule, [string[]]$Extra = @()) {
-  $raw = (& $Exe lint $PasFile --json --db (Join-Path (Split-Path $PasFile) 'fx.sqlite') @Extra 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $PasFile --json --db (Join-Path (Split-Path $PasFile) 'fx.sqlite') @Extra 2>$null }) -join "`n"
   $arr = @()
-  if ($raw.Trim()) { $arr = @($raw | ConvertFrom-Json) }
+  if ($raw.Trim()) { $arr = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   return ,@($arr | Where-Object { $_.rule -eq $Rule } | ForEach-Object { [int]$_.start_line })
 }
 

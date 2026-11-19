@@ -32,12 +32,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe") { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" } else { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }),
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-cyclefix-finalproof-$PID",
   [string]$RsVars  = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat',
   [ValidateSet('all', 'model', 'engine')][string]$Phase = 'all',
   [switch]$KeepWorkDir
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe") { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" } else { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }) }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false; $script:Passed = 0
 function Check($n, $ok, $d = '') {
@@ -78,7 +81,7 @@ function New-Proj([string[]]$Order, [scriptblock]$Patch = $null, [switch]$NoInde
   $db = "$root.sqlite"
   if (-not $NoIndex) {
     Push-Location $WorkDir
-    try { $null | & $Exe index --project (Join-Path $root 'FinP3.dproj') --db $db --library-db none *> "$db.log" } finally { Pop-Location }
+    try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project (Join-Path $root 'FinP3.dproj') --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
   }
   return @{ Root = $root; Dproj = (Join-Path $root 'FinP3.dproj'); Db = $db; Name = 'FinP3' }
 }
@@ -168,18 +171,18 @@ function Get-Plan($P, [switch]$NoProject) {
   $a = @('cycles', '--plan', '--db', $P.Db, '--library-db', 'none')
   if (-not $NoProject) { $a += @('--project', $P.Dproj) }
   Push-Location $WorkDir
-  try { return ($null | & $Exe @a 2>$null | Out-String) } finally { Pop-Location }
+  try { return ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @a 2>$null } | Out-String) } finally { Pop-Location }
 }
 function Get-CausesJson($P) {
   Push-Location $WorkDir
-  try { $o = ($null | & $Exe cycles --causes --format json --project $P.Dproj --db $P.Db --library-db none 2>$null | Out-String) } finally { Pop-Location }
-  try { return ($o | ConvertFrom-Json) } catch { return $null }
+  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe cycles --causes --format json --project $P.Dproj --db $P.Db --library-db none 2>$null } | Out-String) } finally { Pop-Location }
+  try { return ($o | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function Run-Fix($P, [string[]]$Extra) {
   $a = @('cycles', '--fix', '--build-timeout', '1800', '--project', $P.Dproj, '--db', $P.Db, '--library-db', 'none', '--format', 'json') + $Extra
   Push-Location $WorkDir
-  try { $out = ($null | & $Exe @a 2>$null | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
-  $j = $null; try { $j = $out | ConvertFrom-Json } catch { }
+  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @a 2>$null } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
+  $j = $null; try { $j = $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   $k = @(); $r = @()
   foreach ($c in @($j.cycles)) { foreach ($x in @($c.refusals)) { if ($x) { $k += $x.kind; $r += "$($x.kind): $($x.reason)" } } }
   foreach ($x in @($j.refusals)) { if ($x) { $k += $x.kind; $r += "$($x.kind): $($x.reason)" } }
@@ -198,11 +201,11 @@ try {
         $b = Invoke-Build $P
         Check ("m.build {0} first, cut={1}" -f $first, $cut) $b.Ok $b.Errors
         $out = Invoke-Program $P
-        $init = (Get-Lines $out 'init') -join ','
-        $fin = Get-Lines $out 'fin'
+        $init = (@(Get-Lines $out 'init')) -join ','
+        $fin = @(Get-Lines $out 'fin')
         [array]::Reverse($fin)
         $finRev = $fin -join ','
-        $model = ((Get-ModelOrder $P.Root) | Where-Object { $_ -ne 'FP3Hook' }) -join ','
+        $model = ((@(Get-ModelOrder $P.Root)) | Where-Object { $_ -ne 'FP3Hook' }) -join ','
         $state = if ($out -match '\[b\] a stopped name=alive') { 'alive' } elseif ($out -match '(?m)\[b\] a stopped name=\r?$') { 'gone' } else { '?' }
         $script:ModelTable += ("| {0} first | {1} | {2} | {3} | {4} | {5} |" -f $first, $(if ($cut) { 'cut' } else { 'cycle' }), $init, ($finRev -replace ',', '<'), $model, $state)
         Check ("m.init {0} first, cut={1}: run [{2}] = model [{3}]" -f $first, $cut, $init, $model) (($init -ne '') -and ($init -eq $model)) $out
@@ -250,15 +253,14 @@ try {
     $out2 = Invoke-Program $P
     Check 'g.1 the swapped program runs FP3A''s finalization after FP3B''s: the name is gone' (($out2 -cne $out0) -and ($out2 -match '(?m)\[b\] a stopped name=\r?$')) "leaf=$leaf out=[$out2]"
 
-    Write-Host '== B the other two orders refuse, naming both positions and the .dpr' -ForegroundColor Cyan
+    Write-Host '== B the other two orders: FP3A already initializes first, the cut leaves the order unchanged (1.52 B9a)' -ForegroundColor Cyan
     foreach ($first in 'FP3B', 'FP3C') {
       $order = @($first) + @($Units | Where-Object { $_ -ne $first })
       $P = New-Proj $order
       $plan = Get-Plan $P
       $pa = Get-Pos $P.Root 'FP3A'; $pb = Get-Pos $P.Root 'FP3B'
-      $m = [regex]::Match($plan, $RefusedRx)
-      $want = "$Order3, and in ``FinP3.dpr`` ``FP3A`` (position $pa) initializes before ``FP3B`` (position $pb): list ``FP3A`` before ``$first`` in the .dpr, or cut another edge"
-      Check "b.$first first: finalization-order refused, text says MAY and names .dpr + positions $pa / $pb + the entry" ($m.Success -and $m.Groups[1].Value.Contains('`FP3B` may be finalized first') -and $m.Groups[1].Value.Contains($want)) $plan
+      $want = "finalization order: unchanged by the cut: ``FP3B`` is finalized before ``FP3A`` with the cycle as written and after the cut: $Order3, and in ``FinP3.dpr`` ``FP3A`` (position $pa) initializes before ``FP3B`` (position $pb)"
+      Check "b.$first first: planned (lane FINCUT), the step says the order is unchanged and names .dpr + positions $pa / $pb" (($plan -match '(?m)^- `fp3a -> fp3b`: recipe: routine-call inversion -- \*\*cut by this plan\*\*') -and $plan.Contains($want) -and -not [regex]::IsMatch($plan, $RefusedRx)) $plan
     }
 
     Write-Host '== C a two-unit cycle: never provable, the old certain wording' -ForegroundColor Cyan
@@ -280,7 +282,7 @@ try {
     Check "d.1 refused: the order depends on a conditional uses entry (FP3C.pas:$ifLine)" ($m.Success -and $m.Groups[1].Value.Contains("conditional uses entry (``FP3C.pas:$ifLine``)")) $plan
     $P = New-Proj $null { param($r) [IO.File]::Delete((Join-Path $r 'FinP3.dpr')); [IO.File]::Delete((Join-Path $r 'FinP3.dproj')) } -NoIndex
     Push-Location $WorkDir
-    try { $null | & $Exe index $P.Root --db $P.Db --library-db none *> "$($P.Db).log" } finally { Pop-Location }
+    try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index $P.Root --db $P.Db --library-db none *> "$($P.Db).log" } } finally { Pop-Location }
     $plan = Get-Plan $P -NoProject
     $m = [regex]::Match($plan, $RefusedRx)
     Check 'd.2 no .dpr in the index: refused "no program"' ($m.Success -and $m.Groups[1].Value.Contains('no program in this index')) $plan
@@ -323,8 +325,7 @@ try {
       Check "$($v.Tag).2 applied through the compile gate, builds, stdout byte-identical" ($b0.Ok -and ($a.Exit -eq 0) -and ($a.Kinds.Count -eq 0) -and $b1.Ok -and ($out1 -ceq $out0) -and ($out0 -match $v.Out)) "exit=$($a.Exit) $($a.Reasons) b0=$($b0.Errors) b1=$($b1.Errors) before=[$out0] after=[$out1]"
       $P = New-Proj @('FP3B', 'FP3A', 'FP3C') $v.Patch
       $plan = Get-Plan $P
-      $m = [regex]::Match($plan, $v.Refused)
-      Check "$($v.Tag).3 FP3B first: refused, FP3B may be finalized first, the order is named" ($m.Success -and $m.Groups[1].Value.Contains('`FP3B` may be finalized first') -and $m.Groups[1].Value.Contains("$Order3, and in ``FinP3.dpr``")) $plan
+      Check "$($v.Tag).3 FP3B first: FP3A already initializes first, planned with the unchanged-order line (1.52 B9a)" ((-not [regex]::IsMatch($plan, $v.Refused)) -and ($plan -match ('(?m)^- `fp3a -> fp3b`: recipe: ' + $v.Recipe + ' -- \*\*cut by this plan\*\*')) -and $plan.Contains('finalization order: unchanged by the cut: `FP3B` is finalized before `FP3A`')) $plan
     }
   }
 } finally {

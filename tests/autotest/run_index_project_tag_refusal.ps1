@@ -27,9 +27,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_index_project_tag_refusal_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -94,17 +97,17 @@ $beta  = Join-Path $app 'BetaApp.dpr'
 function Run([string[]]$argv) {
   Push-Location $WorkDir
   try {
-    $o = (& $exePath @argv 2>&1 | ForEach-Object { "$_" }) -join "`n"
+    $o = (& { $ErrorActionPreference = 'Continue'; & $exePath @argv 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n"
     return [pscustomobject]@{ Exit = $LASTEXITCODE; Out = $o }
   } finally { Pop-Location }
 }
 function Tag([string]$Db) {
-  $j = & $exePath sql --db $Db --json --query "SELECT value FROM schema_meta WHERE key = 'project_tag'" 2>$null | ConvertFrom-Json
+  $j = & { $ErrorActionPreference = 'Continue'; & $exePath sql --db $Db --json --query "SELECT value FROM schema_meta WHERE key = 'project_tag'" 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
   if ($null -eq $j -or $j.rows.Count -eq 0) { return '' }
   return [string]$j.rows[0][0]
 }
 function HasFile([string]$Db, [string]$Leaf) {
-  $j = & $exePath sql --db $Db --json --query "SELECT path FROM files" 2>$null | ConvertFrom-Json
+  $j = & { $ErrorActionPreference = 'Continue'; & $exePath sql --db $Db --json --query "SELECT path FROM files" 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
   if ($null -eq $j) { return $false }
   foreach ($row in $j.rows) { if ([string]$row[0] -like "*\$Leaf") { return $true } }
   return $false

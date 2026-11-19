@@ -97,7 +97,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Continue'
@@ -137,10 +140,10 @@ try {
   $exceptionBlockBefore = Get-DocBlockAbove $beforeLines '^procedure HasException;'
   $valueTagBlockBefore  = Get-DocBlockAbove $beforeLines '^function HasValueTag: Integer;'
 
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
-  $applyJson = (& $exePath document --unit $target --db $db --stubs --apply --json 2>$null) -join "`n"
+  $applyJson = (& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --stubs --apply --json 2>$null }) -join "`n"
   Check 'document --unit --stubs --apply exits 0' ($LASTEXITCODE -eq 0)
   # Task 3b: HasSinceSeeAlsoExampleDeprecated's four tags are now preserved
   # (Merged is no longer '' for it), so it is genuinely repaired -- ONE
@@ -236,8 +239,8 @@ try {
   # the newly-repaired HasSinceSeeAlsoExampleDeprecated is now a stable
   # fixed point, not a decl that keeps getting rewritten every cycle.
   $afterApply1 = [IO.File]::ReadAllBytes($target)
-  & $exePath index $scratch --db $db 2>$null | Out-Null
-  & $exePath document --unit $target --db $db --stubs --apply --json 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --stubs --apply --json 2>$null } | Out-Null
   $afterApply2 = [IO.File]::ReadAllBytes($target)
   Check '6. idempotent: file byte-identical on a 2nd --stubs --apply cycle' `
     ([System.Linq.Enumerable]::SequenceEqual([byte[]]$afterApply1,[byte[]]$afterApply2))

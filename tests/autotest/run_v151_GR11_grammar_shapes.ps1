@@ -51,8 +51,8 @@ function Get-Line([string]$File, [string]$Text) {
   return $hit.LineNumber
 }
 function Invoke-Sql([string]$Db, [string]$Query) {
-  $txt = (& $exePath sql --db $Db --query $Query --json 2>$null) -join "`n"
-  $doc = $txt | ConvertFrom-Json
+  $txt = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $Db --query $Query --json 2>$null }) -join "`n"
+  $doc = $txt | ConvertFrom-Json | ForEach-Object { $_ }
   $cols = @($doc.columns | ForEach-Object { $_.name })
   $out = foreach ($r in @($doc.rows)) {
     $o = [ordered]@{}
@@ -62,9 +62,9 @@ function Invoke-Sql([string]$Db, [string]$Query) {
   return , @($out)
 }
 function Get-Findings([string]$Pas, [string]$Db, [string[]]$Extra) {
-  $txt = (& $exePath lint $Pas --db $Db --library-db none @Extra --json 2>$null) -join "`n"
+  $txt = (& { $ErrorActionPreference = 'Continue'; & $exePath lint $Pas --db $Db --library-db none @Extra --json 2>$null }) -join "`n"
   if ($txt.Trim() -eq '') { return , @() }
-  return , @($txt | ConvertFrom-Json)
+  return , @(($txt | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ('gr11-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
@@ -82,7 +82,7 @@ try {
       [IO.File]::WriteAllText((Join-Path $dir $f.Name), $text, [Text.Encoding]::ASCII)
     }
     $db = Join-Path $tmp "$state.sqlite"
-    $log = (& $exePath index $dir --db $db --library-db none 2>&1) -join "`n"
+    $log = (& { $ErrorActionPreference = 'Continue'; & $exePath index $dir --db $db --library-db none 2>&1 | ForEach-Object { "$_" } }) -join "`n"
     $tag = "[$state]"
 
     # P1

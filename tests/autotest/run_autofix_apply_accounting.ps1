@@ -50,9 +50,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-autofix-accounting-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -179,21 +182,22 @@ $appPas = Join-Path $projDir 'App.pas'
 $venPas = Join-Path $venDir  'Vendor.pas'
 Write-Ascii $appPas $App
 Write-Ascii $venPas $Vendor
+# The stub .dproj does not build: --apply below says --no-compile-gate (1.52 BK-GATE B23 gates through it otherwise).
 Write-Ascii (Join-Path $projDir 'App.dproj') '<Project/>'
 Write-Ascii (Join-Path $dragDir 'drag-lint-project.json') '{ "ownRoots": ["."] }'
 
 # One database holding BOTH roots -- exactly how DelphiAST ended up inside
 # YADF.sqlite. The db lives in _D-RAG so the ownRoots anchor resolves.
 $db = Join-Path $dragDir 'App.sqlite'
-& $Exe index $projDir --db $db 2>&1 | Out-Null
-& $Exe index $venDir  --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $projDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $venDir  --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' (Test-Path $db)
 
 $rep = Join-Path $WorkDir 'report.txt'
 $venHashBefore = (Get-FileHash $venPas -Algorithm SHA256).Hash
 
 # ---------------------------------------------------------------- dry run ----
-$dry = & $Exe lint-all --db $db --output $rep --fix 2>&1 | Out-String
+$dry = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --output $rep --fix 2>&1 | ForEach-Object { "$_" } } | Out-String
 
 Check 'lint-all sees the owned drift' ($dry -match 'autofix: \d+ fixable finding') $dry
 
@@ -204,7 +208,7 @@ Check 'no planned edit targets the vendored root' (-not ($dry -match 'Vendor\.pa
 Check 'the owned unit IS planned for repair' ($dry -match 'App\.pas') $dry
 
 # ------------------------------------------------------------------ apply ----
-$applyOut = & $Exe lint-all --db $db --output $rep --fix --apply 2>&1 | Out-String
+$applyOut = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --output $rep --fix --apply --no-compile-gate 2>&1 | ForEach-Object { "$_" } } | Out-String
 
 $applied = -1; $touched = -1; $skipped = 0
 # Accept the pre-fix wording ("fix(es)") and the post-fix wording ("edit(s)") so
@@ -242,8 +246,8 @@ Check 'the stale fact is gone from the owned file' `
 # ------------------------------------------------------------ second pass ----
 # Reindex so the store matches what was just written, then re-run. A repair path
 # that has converged plans nothing and skips nothing.
-& $Exe index $projDir --db $db 2>&1 | Out-Null
-$second = & $Exe lint-all --db $db --output $rep --fix --apply 2>&1 | Out-String
+& { $ErrorActionPreference = 'Continue'; & $Exe index $projDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+$second = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --output $rep --fix --apply --no-compile-gate 2>&1 | ForEach-Object { "$_" } } | Out-String
 
 $secondSkipped = 0
 if ($second -match 'autofix: applied \d+ (?:fix\(es\)|edit\(s\)) across \d+ file\(s\)(?:, (\d+) skipped)?') {

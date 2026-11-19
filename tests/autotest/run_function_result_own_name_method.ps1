@@ -23,9 +23,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-fres-own-name-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -106,8 +109,8 @@ end.
     'F'           = @($lnF, $lnEnd)
   }
 
-  $raw = (& $Exe lint $fixture --rule function-result-not-set --json 2>$null) -join "`n"
-  $all = if ($raw.Trim()) { @($raw | ConvertFrom-Json) } else { @() }
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture --rule function-result-not-set --json 2>$null }) -join "`n"
+  $all = @(if ($raw.Trim()) { @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } else { @() })
   $hits = @($all | Where-Object { $_.rule -eq 'function-result-not-set' })
   Write-Host ("  function-result-not-set fired on lines: {0}" -f (($hits | ForEach-Object { $_.start_line }) -join ', ')) -ForegroundColor DarkGray
   function CountIn([string]$Routine) {

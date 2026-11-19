@@ -14,8 +14,11 @@
   Usage: pwsh -File tests\autotest\run_output_file_encoding.ps1 [-Exe <drag-lint.exe>]
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+param([string]$Exe = '',
       [string]$WorkDir = "$env:TEMP\drag-lint-output-file-enc-$PID")
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -35,7 +38,7 @@ try {
   [IO.File]::WriteAllText((Join-Path $fx "Enc$odd.pas"), $src, [Text.Encoding]::ASCII)
   $db = Join-Path $WorkDir 'e.sqlite'
   Push-Location $fx
-  try { & $Exe index . --db $db --quiet *> $null } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe index . --db $db --quiet *> $null } } finally { Pop-Location }
   $BS = [string][char]92
   $esc = $BS + 'u00e9' + $BS + 'u0434'
   $u8  = [Text.Encoding]::UTF8.GetBytes($odd)
@@ -51,7 +54,7 @@ try {
       $f = Join-Path $WorkDir ('o-' + ($v.n -replace '\W', '_') + "-$mode.out")
       $al = @($v.a) + @('--output', $f)
       if ($mode -ne 'default') { $al += @('--output-encoding', $mode) }
-      $null = & $Exe @al 2>$null
+      $null = & { $ErrorActionPreference = 'Continue'; & $Exe @al 2>$null }
       $nm = "$($v.n) --output [$mode]"
       if (-not (Test-Path -LiteralPath $f)) { Check "$nm : file written" $false; continue }
       $b = [IO.File]::ReadAllBytes($f)

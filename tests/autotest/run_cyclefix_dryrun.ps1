@@ -24,11 +24,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe       = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
+  [string]$Exe       = '',
   [switch]$KeepScratch,
   [string]$WorkDir   = "$env:TEMP\drag-lint-cyclefix-dryrun-$PID",
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }) }
 # E18 T13: removes this run's scratch (WorkDir) however the run ends; kept only on failure when
 # -KeepScratch is passed (the path is printed).
 function Remove-Scratch {
@@ -66,7 +69,7 @@ function Copy-Tree([string]$From, [string]$To) {
 }
 function Index-Copy([string]$Dir, [string]$Tag) {
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  $idx = & $Exe index --project (Join-Path $Dir 'CircularDemo.dproj') --db $db 2>&1 | Out-String
+  $idx = & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $Dir 'CircularDemo.dproj') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check "${Tag}: SANITY the 10 units indexed with 0 errors" `
     (([regex]::Matches($idx, 'Demo[\w.]+\.pas\s*->\s*\d+ symbols, \d+ refs, 0 errors')).Count -eq 10) $idx
   return $db
@@ -75,10 +78,10 @@ function Index-Copy([string]$Dir, [string]$Tag) {
 function Run-Fix([string]$Dir, [string]$Db, [string[]]$Extra, [bool]$Json = $true, [string]$Dproj = 'CircularDemo.dproj') {
   $a = @('cycles', '--fix', '--build-timeout', '1800', '--project', (Join-Path $Dir $Dproj), '--db', $Db) + $Extra
   if ($Json) { $a += @('--format', 'json') }
-  $out = (& $Exe @a 2>$null | Out-String)
+  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null } | Out-String)
   $code = $LASTEXITCODE
   $j = $null
-  if ($Json) { try { $j = $out | ConvertFrom-Json } catch { $j = $null } }
+  if ($Json) { try { $j = $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $j = $null } }
   return @{ Exit = $code; Out = $out; Json = $j }
 }
 
@@ -106,7 +109,7 @@ try {
   Check 'a: 18 edits' ($c -and @($c.edits).Count -eq 18) "got $(@($c.edits).Count)"
   $need = 'n','units','interface_edges','edges','part','verdict','recipe','edge','refusals','moves','uses','new_units','edits',
           'compile','baseline','repairs','written','backups','reindex','predicted','actual','verified'
-  $have = if ($c) { @($c.PSObject.Properties.Name) } else { @() }
+  $have = @(if ($c) { @($c.PSObject.Properties.Name) } else { @() })
   Check 'a: every documented field is present' (@($need | Where-Object { $have -notcontains $_ }).Count -eq 0) `
     ('missing: ' + (@($need | Where-Object { $have -notcontains $_ }) -join ','))
   Check 'a: arrays are arrays (refusals/repairs/written/backups empty)' `
@@ -123,7 +126,7 @@ try {
   } else { Write-Host '  SKIP b: no platform library DB on disk' -ForegroundColor Yellow }
 
   Write-Host '== (c) --fix without --project' -ForegroundColor Cyan
-  $out = (& $Exe cycles --fix --build-timeout 1800 --db $db --library-db none 2>&1 | Out-String)
+  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --build-timeout 1800 --db $db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check 'c: exit 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
   Check 'c: names --project' ($out.Contains('cycles --fix needs --project <X.dproj>')) $out
 
@@ -156,7 +159,7 @@ try {
   Check 'g: --format json error: exit 2 and a JSON object with "error"' `
     ($r.Exit -eq 2 -and $r.Json -and $r.Json.error -match '--cycle' -and $r.Json.ok -eq $false -and $r.Json.exit_code -eq 2) $r.Out
   $r = Run-Fix $demo $db @('--part', 'b', '--no-compile', '--library-db', 'none')
-  $parts = if ($r.Json) { @($r.Json.cycles | ForEach-Object { $_.part }) } else { @() }
+  $parts = @(if ($r.Json) { @($r.Json.cycles | ForEach-Object { $_.part }) } else { @() })
   Check 'g: default scan with --part b skips the part-a group and picks a part-b one (exit 0)' `
     ($r.Exit -eq 0 -and $parts.Count -ge 1 -and (@($parts | Where-Object { $_ -ne 'b' }).Count -eq 0) -and $r.Json.cycles[-1].verdict -eq 'mechanical') $r.Out
 
@@ -169,7 +172,7 @@ try {
   New-Item -ItemType Directory -Force (Join-Path $own 'owned'), (Join-Path $own '_D-RAG') | Out-Null
   [IO.File]::WriteAllText((Join-Path $own '_D-RAG\drag-lint-project.json'), '{ "ownRoots": ["owned"] }')
   $r = Run-Fix $own $odb @('--cycle', '1', '--no-compile', '--library-db', 'none')
-  $kinds = if ($r.Json) { @($r.Json.cycles[0].refusals | ForEach-Object { $_.kind }) } else { @() }
+  $kinds = @(if ($r.Json) { @($r.Json.cycles[0].refusals | ForEach-Object { $_.kind }) } else { @() })
   Check 'h: --cycle 1 -> exit 1, refusals include outside-roots' ($r.Exit -eq 1 -and $kinds -contains 'outside-roots') $r.Out
 
   Write-Host '== (i) manual-edit: a plan with a manual edit is refused (planner-sourced; see note)' -ForegroundColor Cyan
@@ -178,7 +181,7 @@ try {
   $fx = Join-Path $WorkDir 'ifdef'
   Copy-Tree (Join-Path $Repo 'tests\fixtures\cyclefix\ifdefclause') $fx
   $fdb = Join-Path $WorkDir 'ifdef.sqlite'
-  $fidx = & $Exe index --project (Join-Path $fx 'IfdefClause.dproj') --db $fdb 2>&1 | Out-String
+  $fidx = & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $fx 'IfdefClause.dproj') --db $fdb 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'i: SANITY ifdefclause indexed with 0 errors' ($fidx -match ', 0 errors' -and $fidx -notmatch '[1-9]\d* errors') $fidx
   $r = Run-Fix $fx $fdb @('--cycle', '1', '--no-compile', '--library-db', 'none') $true 'IfdefClause.dproj'
   $c = if ($r.Json) { $r.Json.cycles[0] } else { $null }

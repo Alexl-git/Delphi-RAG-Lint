@@ -47,7 +47,7 @@ type
 /// <summary>Decode a .dfm binary-property value (`{ 4A0B... }`, any whitespace,
 /// either case) into bytes. Non-hex characters are skipped; an odd trailing
 /// nibble is dropped.</summary>
-/// <param name="AValueText">The verbatim value text as TDfmNode.ValueText holds it.</param>
+/// <param name="AValueText">The verbatim value text as TReemitDfmNode.ValueText holds it.</param>
 /// <returns>The decoded bytes; empty for an empty or non-hex value.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->

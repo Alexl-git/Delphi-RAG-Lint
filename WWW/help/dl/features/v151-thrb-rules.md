@@ -4,10 +4,10 @@ title: Thread race and blocking rules
 summary: "Four lint rules: racing writes in parallel bodies, non-atomic global increments in threads, unbounded waits in forms, lost task exceptions"
 product: DL
 group: linting
-order: 30057
+order: 30060
 since: 1.51.0-alpha
 status: shipped
-updated: 1.51.0-alpha
+updated: 1.52.0-alpha
 ---
 
 # Thread race and blocking rules
@@ -19,7 +19,7 @@ Read this when you want lint to catch data races between threads, a frozen windo
 ## How to run it
 
 ```text
-drag-lint lint <path> [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>|help] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]
+drag-lint lint <path> [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>|help] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>] [--no-budget]
 ```
 
 Full flag list: [lint in the CLI reference](../cli.md#lint).

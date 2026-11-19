@@ -9,9 +9,12 @@
 # Usage: pwsh -File tests/autotest/run_members.ps1
 [CmdletBinding()]
 param(
-    [string] $DprojDir = "$PSScriptRoot\fixtures\members",
+    [string] $DprojDir = '',
     [string] $WorkDir  = "$env:TEMP\drag-lint-members-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $DprojDir) { $DprojDir = "$PSScriptRoot\fixtures\members" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -50,7 +53,7 @@ $batBody = ($batLines -join "`r`n")
 
 $p = Start-Process cmd.exe -ArgumentList "/c", "`"$batPath`"" `
        -RedirectStandardOutput $logPath -RedirectStandardError "$logPath.err" `
-       -NoNewWindow -Wait -PassThru
+       -NoNewWindow -Wait -PassThru; $null = $p.Handle
 $log = Get-Content $logPath -Raw -ErrorAction SilentlyContinue
 $buildOk = ($log -match 'BUILD_EXITCODE=0') -and ($log -notmatch 'Error:')
 Check 'MembersHarness.dpr builds (Win64 Debug)' $buildOk (($log -split "`r?`n" | Select-Object -Last 8) -join ' | ')
@@ -67,7 +70,7 @@ $withFormPas = "$DprojDir\uWithForm.pas"
 $noFormPas   = "$DprojDir\uNoForm.pas"
 $withFormDfm = "$DprojDir\uWithForm.dfm"
 
-$out = (& $exe $withFormPas $noFormPas 2>&1 | Out-String).Trim()
+$out = (& { $ErrorActionPreference = 'Continue'; & $exe $withFormPas $noFormPas 2>&1 | ForEach-Object { "$_" } } | Out-String).Trim()
 $lines = @($out -split "`r?`n")
 Check 'harness returns 2 lines' ($lines.Count -eq 2) "got $($lines.Count): $out"
 

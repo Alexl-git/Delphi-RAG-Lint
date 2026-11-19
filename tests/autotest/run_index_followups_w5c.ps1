@@ -16,9 +16,12 @@ Usage: pwsh -NoProfile -File tests\autotest\run_index_followups_w5c.ps1 [-Exe <d
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\draglint-w5c-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -39,7 +42,7 @@ function Write-Ascii([string]$Path, [string]$Body) {
 function Invoke-Dl([string]$Cwd, [string[]]$Arguments) {
   $o = "$WorkDir\o.txt"; $e = "$WorkDir\e.txt"
   $p = Start-Process -FilePath $Exe -ArgumentList $Arguments -NoNewWindow -Wait -PassThru -WorkingDirectory $Cwd `
-         -RedirectStandardOutput $o -RedirectStandardError $e
+         -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   [pscustomobject]@{
     Exit = $p.ExitCode
     Out  = [IO.File]::ReadAllText($o)

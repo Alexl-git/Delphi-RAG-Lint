@@ -21,10 +21,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [switch]$KeepScratch,
   [string]$WorkDir = "$env:TEMP\drag-lint-follow-plan-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 # E18 T13: removes this run's scratch (WorkDir) however the run ends; kept only on failure when
 # -KeepScratch is passed (the path is printed).
 function Remove-Scratch {
@@ -54,7 +57,7 @@ function Keep([string]$Text) {
     Where-Object { $_ -ne '' -and $_ -notmatch '^\(loaded|^drag-lint: note:|^\s+resolver:' })
 }
 function Run([string[]]$a) {
-  $o = & $Exe @a 2>$null | Out-String
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null } | Out-String
   return $o
 }
 
@@ -63,7 +66,7 @@ Push-Location $WorkDir
 try {
   $S = Join-Path $WorkDir 'copy'; Copy-Demo $S
   $dproj = Join-Path $S 'CircularDemo.dproj'; $db = Join-Path $S 'demo.sqlite'
-  & $Exe index --project $dproj --db $db *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $dproj --db $db *> $null }
   Check 'index the copy' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
   $plan = Join-Path $WorkDir 'plan.txt'
   [IO.File]::WriteAllText($plan, (Run @('cycles', '--db', $db, '--plan', '--library-db', 'none')), [Text.Encoding]::ASCII)
@@ -76,7 +79,7 @@ try {
   }
   $S2 = Join-Path $WorkDir 'copy2'; Copy-Demo $S2
   $h1 = (Get-Hashes $S | ConvertTo-Json -Compress); $h2 = (Get-Hashes $S2 | ConvertTo-Json -Compress)
-  $ro = & pwsh -NoProfile -File $Follow -PlanFile $plan -Cycle 1 -Root $S2 2>&1 | Out-String
+  $ro = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $Follow -PlanFile $plan -Cycle 1 -Root $S2 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check '-Root run on a second copy exits 0' ($LASTEXITCODE -eq 0) $ro
   Check '-Root: copy2 got the 3 new files' ((@('DemoSession.Untangle.pas', 'DemoLogger.Untangle.pas', 'DemoAudit.Untangle.pas') | Where-Object { Test-Path (Join-Path $S2 $_) }).Count -eq 3)
   Check '-Root: copy2 changed' ((Get-Hashes $S2 | ConvertTo-Json -Compress) -cne $h2)
@@ -87,9 +90,9 @@ try {
   # -Root with paths sharing no common directory is refused
   $odd = ([IO.File]::ReadAllText($plan)) -replace '(?m)^(#### `DemoAudit\.Untangle` -> `)[^`]*(DemoAudit\.Untangle\.pas`)', '${1}D:\elsewhere\${2}'
   $oddPlan = Join-Path $WorkDir 'plan-odd.txt'; [IO.File]::WriteAllText($oddPlan, $odd, [Text.Encoding]::ASCII)
-  $ro2 = & pwsh -NoProfile -File $Follow -PlanFile $oddPlan -Cycle 1 -Root $S3 2>&1 | Out-String
+  $ro2 = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $Follow -PlanFile $oddPlan -Cycle 1 -Root $S3 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check '-Root with no common directory: exit 2 with REFUSE' ($LASTEXITCODE -eq 2 -and $ro2 -match 'REFUSE: -Root given but') $ro2
-  $out = & pwsh -NoProfile -File $Follow -PlanFile $plan -Cycle 1 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $Follow -PlanFile $plan -Cycle 1 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'Cycle 1 follows: exit 0' ($LASTEXITCODE -eq 0) $out
   Check 'Cycle 1 created 3 new files' (([regex]::Matches($out, '(?m)^created ')).Count -eq 3) $out
 
@@ -97,25 +100,25 @@ try {
   Check 'POSITIVE CONTROL: without -Root the plan did not touch copy3' ((Get-Hashes $S3 | ConvertTo-Json -Compress) -ceq $h3)
 
   # Cycle 2 stays REFUSED (this run opens no platform library, so R2 cannot classify its ancestry): the refusal control.
-  $o = & pwsh -NoProfile -File $Follow -PlanFile $plan -Cycle 2 2>&1 | Out-String
+  $o = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $Follow -PlanFile $plan -Cycle 2 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'Cycle 2 is refused (exit 2)' ($LASTEXITCODE -eq 2) $o
   Check 'Cycle 2 says no mechanical steps' ($o -match 'REFUSE: plan has no mechanical steps') $o
   # Cycle 3 is cut mechanically by recipe R1 (routine-call inversion, E18 Task 5). It is followed on its OWN copy
   # (-Root), so `copy` stays the Cycle 1 tree the predicted block describes.
   $S4 = Join-Path $WorkDir 'copy4'; Copy-Demo $S4
   $h4 = (Get-Hashes $S4 | ConvertTo-Json -Compress)
-  $o3 = & pwsh -NoProfile -File $Follow -PlanFile $plan -Cycle 3 -Root $S4 2>&1 | Out-String
+  $o3 = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $Follow -PlanFile $plan -Cycle 3 -Root $S4 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'Cycle 3 follows mechanically (R1): exit 0' ($LASTEXITCODE -eq 0) $o3
   Check 'Cycle 3 is not refused' ($o3 -notmatch 'REFUSE') $o3
   Check 'Cycle 3 changed its copy' ((Get-Hashes $S4 | ConvertTo-Json -Compress) -cne $h4)
 
-  & $Exe index --project $dproj --db $db *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $dproj --db $db *> $null }
   $actual = Keep (Run @('cycles', '--db', $db))
 
   $pt = [IO.File]::ReadAllText($plan)
   $m = [regex]::Match($pt, '(?s)## Cycle 1:.*?It must print exactly:\s*\r?\n```text\r?\n(.*?)\r?\n```')
   Check 'Cycle 1 has a predicted block' $m.Success
-  $pred = if ($m.Success) { Keep $m.Groups[1].Value } else { @() }
+  $pred = @(if ($m.Success) { Keep $m.Groups[1].Value } else { @() })
   $same = ($pred.Count -gt 0) -and (($pred -join "`n") -ceq ($actual -join "`n"))
   Check 'predicted block == actual cycles output, group order included' $same ("`n  predicted:`n    " + ($pred -join "`n    ") + "`n  actual:`n    " + ($actual -join "`n    "))
 
@@ -143,7 +146,7 @@ try {
   function Head4([string]$Dir) { ,@(('#### `Existing.pas`  (`' + (Join-Path $Dir 'Existing.pas') + '`)')) }
   $okEdit = @('E1. After line 1 (`unit Existing;`), insert:', '```', '// added', '```')
   function Run-Follow([string]$Plan, [string[]]$More = @()) {
-    $o = & pwsh -NoProfile -File $Follow -PlanFile $Plan -Cycle 1 @More 2>&1 | Out-String
+    $o = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $Follow -PlanFile $Plan -Cycle 1 @More 2>&1 | ForEach-Object { "$_" } } | Out-String
     return @{ Exit = $LASTEXITCODE; Out = $o }
   }
 
@@ -171,7 +174,7 @@ try {
     Check "REFUSE exits 2: $k" (($r.Exit -eq 2) -and ($r.Out -match 'REFUSE')) ("exit=" + $r.Exit + " " + $r.Out)
   }
   $r = Run-Follow $p1 @()
-  $r = & pwsh -NoProfile -File $Follow -PlanFile $p1 -Cycle 7 2>&1 | Out-String
+  $r = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $Follow -PlanFile $p1 -Cycle 7 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'REFUSE exits 2: cycle not in plan' (($LASTEXITCODE -eq 2) -and ($r -match 'REFUSE: cycle 7')) $r
 } finally {
   Pop-Location

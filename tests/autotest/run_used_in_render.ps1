@@ -55,7 +55,10 @@
   Line numbers are never hard-coded; the doc block is read back from the file.
   Usage: pwsh -File tests\autotest\run_used_in_render.ps1 [-Exe <drag-lint.exe>]
 #>
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')
 $ErrorActionPreference = 'Continue'
 $script:fail = $false
@@ -87,7 +90,7 @@ function BlockAbove([string]$path, [string]$decl) {
   return ($buf -join "`n")
 }
 function Index([string]$db) {
-  & $exePath index $scratch --db $db *> (Join-Path $scratch 'index.log')
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db *> (Join-Path $scratch 'index.log') }
   if ($LASTEXITCODE -ne 0) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index exit $LASTEXITCODE" -ForegroundColor Red; exit 2 }
 }
 
@@ -175,18 +178,18 @@ end.
   # property goes through --qname; every apply shifts lines, so reindex first.
   Index $db
   Write-Host '== checks 8-9: hover (BEFORE any document run, so the line cannot come from a written doc block) ==' -ForegroundColor Cyan
-  $md = (& $exePath hover --qname uProv.TProvider.Value --format md --db $db 2>$null) -join "`n"
+  $md = (& { $ErrorActionPreference = 'Continue'; & $exePath hover --qname uProv.TProvider.Value --format md --db $db 2>$null }) -join "`n"
   Check '8 hover md: Used in:' ($md -match 'Used in: [^\n]*uCons\.TConsumer\.Go \(uCons\.pas\) \[rw\]') $md
-  $js = (& $exePath hover --qname uProv.TProvider.Value --format json --db $db 2>$null) -join "`n"
+  $js = (& { $ErrorActionPreference = 'Continue'; & $exePath hover --qname uProv.TProvider.Value --format json --db $db 2>$null }) -join "`n"
   $facts = @()
-  try { $facts = @(($js | ConvertFrom-Json).facts) } catch { }
+  try { $facts = @(($js | ConvertFrom-Json | ForEach-Object { $_ }).facts) } catch { }
   Check '9 hover json: facts[] Used in:' (@($facts | Where-Object { ([string]$_).StartsWith('Used in: ') -and ([string]$_).Contains('[rw]') }).Count -eq 1) $js
 
-  & $exePath document --unit $fP --db $db --apply --no-backup *> (Join-Path $scratch 'doc1.log')
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $fP --db $db --apply --no-backup *> (Join-Path $scratch 'doc1.log') }
   $ec = $LASTEXITCODE
   foreach ($q in 'Value', 'Flag', 'Unused') {
     Index $db
-    & $exePath document --qname "uProv.TProvider.$q" --db $db --apply --no-backup *>> (Join-Path $scratch 'doc1.log')
+    & { $ErrorActionPreference = 'Continue'; & $exePath document --qname "uProv.TProvider.$q" --db $db --apply --no-backup *>> (Join-Path $scratch 'doc1.log') }
     if ($LASTEXITCODE -ne 0) { $ec = $LASTEXITCODE }
   }
 
@@ -213,16 +216,16 @@ end.
   Write-Host '== check 10: idempotence ==' -ForegroundColor Cyan
   $before = [IO.File]::ReadAllBytes($fP)
   Index $db
-  & $exePath document --qname uProv.TProvider.Value --db $db --apply --no-backup *> (Join-Path $scratch 'doc2.log')
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --qname uProv.TProvider.Value --db $db --apply --no-backup *> (Join-Path $scratch 'doc2.log') }
   $after = [IO.File]::ReadAllBytes($fP)
   Check '10 second document run is byte-identical' (($LASTEXITCODE -eq 0) -and ([Convert]::ToBase64String($before) -eq [Convert]::ToBase64String($after))) (Get-Content (Join-Path $scratch 'doc2.log') -Raw)
 
   Write-Host '== checks 11-14: getter/setter echo line (spec sec 8.1 bullet 2) ==' -ForegroundColor Cyan
   Index $db
-  $mdG = (& $exePath hover --qname uProv.TProvider.GetValue --format md --db $db 2>$null) -join "`n"
+  $mdG = (& { $ErrorActionPreference = 'Continue'; & $exePath hover --qname uProv.TProvider.GetValue --format md --db $db 2>$null }) -join "`n"
   foreach ($q in 'GetValue', 'SetValue') {
     Index $db
-    & $exePath document --qname "uProv.TProvider.$q" --db $db --apply --no-backup *>> (Join-Path $scratch 'doc3.log')
+    & { $ErrorActionPreference = 'Continue'; & $exePath document --qname "uProv.TProvider.$q" --db $db --apply --no-backup *>> (Join-Path $scratch 'doc3.log') }
   }
   $bGet  = BlockAbove $fP 'function GetValue:'
   $bSet  = BlockAbove $fP 'procedure SetValue('
@@ -240,7 +243,7 @@ end.
   Check '14 Work / Flag: no via line' ((-not $bWork.Contains('Used in (via')) -and (-not $bFlag.Contains('Used in (via')) -and ($bFlag -ne '')) "Work=[$bWork] Flag=[$bFlag]"
   $before = [IO.File]::ReadAllBytes($fP)
   Index $db
-  & $exePath document --qname uProv.TProvider.GetValue --db $db --apply --no-backup *> (Join-Path $scratch 'doc4.log')
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --qname uProv.TProvider.GetValue --db $db --apply --no-backup *> (Join-Path $scratch 'doc4.log') }
   $after = [IO.File]::ReadAllBytes($fP)
   Check '18 idempotence: second document on GetValue is byte-identical' (($LASTEXITCODE -eq 0) -and $bGet.Contains('Used in (via') -and ([Convert]::ToBase64String($before) -eq [Convert]::ToBase64String($after))) (Get-Content (Join-Path $scratch 'doc4.log') -Raw)
 
@@ -308,21 +311,21 @@ end.
 '@ -replace "`r?`n", "`r`n"
   [IO.File]::WriteAllText((Join-Path $xb 'uUser.pas'), $userSrc, [Text.Encoding]::ASCII)
   $dbA = Join-Path $scratchX 'a.sqlite'; $dbB = Join-Path $scratchX 'b.sqlite'
-  & $exePath index $xa --db $dbA *> (Join-Path $scratchX 'ia.log')
-  & $exePath index $xb --db $dbB *> (Join-Path $scratchX 'ib.log')
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $xa --db $dbA *> (Join-Path $scratchX 'ia.log') }
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $xb --db $dbB *> (Join-Path $scratchX 'ib.log') }
   $fXA = Join-Path $xa 'uXProv.pas'
   $pristine = [IO.File]::ReadAllBytes($fXA)
   # 17 first: A alone.
   foreach ($q in 'Flag', 'GetValue') {
-    & $exePath index $xa --db $dbA *>> (Join-Path $scratchX 'ia.log')
-    & $exePath document --qname "uXProv.TXProv.$q" --db $dbA --apply --no-backup *>> (Join-Path $scratchX 'dA.log')
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $xa --db $dbA *>> (Join-Path $scratchX 'ia.log') }
+    & { $ErrorActionPreference = 'Continue'; & $exePath document --qname "uXProv.TXProv.$q" --db $dbA --apply --no-backup *>> (Join-Path $scratchX 'dA.log') }
   }
   $aOnly = [IO.File]::ReadAllText($fXA)
   Check '17 POSITIVE CONTROL: --db A alone writes no Used in' (-not $aOnly.Contains('Used in')) $aOnly
   [IO.File]::WriteAllBytes($fXA, $pristine)
   foreach ($q in 'Flag', 'GetValue') {
-    & $exePath index $xa --db $dbA *>> (Join-Path $scratchX 'ia.log')
-    & $exePath document --qname "uXProv.TXProv.$q" --db $dbA --db $dbB --apply --no-backup *>> (Join-Path $scratchX 'dAB.log')
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $xa --db $dbA *>> (Join-Path $scratchX 'ia.log') }
+    & { $ErrorActionPreference = 'Continue'; & $exePath document --qname "uXProv.TXProv.$q" --db $dbA --db $dbB --apply --no-backup *>> (Join-Path $scratchX 'dAB.log') }
   }
   $bXFlag = BlockAbove $fXA 'property Flag:'
   $bXGet  = BlockAbove $fXA 'function GetValue:'

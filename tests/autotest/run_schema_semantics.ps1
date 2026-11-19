@@ -40,9 +40,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$DbFile  = "$PSScriptRoot\..\..\src\cli\_D-RAG\drag-lint.sqlite"
+  [string]$Exe = '',
+  [string]$DbFile  = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $DbFile) { $DbFile = "$PSScriptRoot\..\..\src\cli\_D-RAG\drag-lint.sqlite" }
 
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -58,10 +62,10 @@ $Exe = (Resolve-Path $Exe).Path
 if (-not (Test-Path $DbFile)) { Write-Host "SKIP: no self-index at $DbFile" -ForegroundColor Yellow; exit 0 }
 $DbFile = (Resolve-Path $DbFile).Path
 
-$raw = (& $Exe schema --db $DbFile --format json 2>$null) -join "`n"
+$raw = (& { $ErrorActionPreference = 'Continue'; & $Exe schema --db $DbFile --format json 2>$null }) -join "`n"
 $i   = $raw.IndexOf('{')
 $obj = $null
-if ($i -ge 0) { try { $obj = ($raw.Substring($i) | ConvertFrom-Json) } catch { } }
+if ($i -ge 0) { try { $obj = ($raw.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { } }
 Check 'schema --format json is ONE valid object' ($null -ne $obj) ''
 if ($null -eq $obj) { Write-Host 'FATAL: no JSON'; exit 1 }
 
@@ -157,10 +161,10 @@ foreach ($v in $vocab) {
   # SQLite as `unrecognized token: "\"`. The identifier-shape test above is what
   # makes bare names safe here.
   $q   = "SELECT DISTINCT $($v.Column) AS v FROM $($v.Table)"
-  $raw = (& $Exe sql --query $q --db $DbFile --json --limit 500 2>$sqlErrFile) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($sqlErrFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe sql --query $q --db $DbFile --json --limit 500 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }) -join "`n"
   $rc  = $LASTEXITCODE
   $doc = $null
-  if ($rc -eq 0) { try { $doc = $raw | ConvertFrom-Json } catch { } }
+  if ($rc -eq 0) { try { $doc = $raw | ConvertFrom-Json | ForEach-Object { $_ } } catch { } }
   if ($null -eq $doc) {
     $why = if (Test-Path -LiteralPath $sqlErrFile) { (Get-Content -LiteralPath $sqlErrFile -Raw).Trim() } else { '' }
     Check "$($v.Table).$($v.Column): SELECT DISTINCT ran" $false "exit $rc / $why"

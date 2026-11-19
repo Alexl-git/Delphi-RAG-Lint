@@ -58,7 +58,10 @@
   Usage: pwsh -File tests\autotest\run_uses_fix_json_and_only.ps1
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'
@@ -176,7 +179,7 @@ $proj = Join-Path $src 'App.dproj'
 
 Write-Host '== uses-fix --format json / --only ==' -ForegroundColor Cyan
 
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' (Test-Path $db) $db
 
 function RunJson([string[]]$ExtraArgs) {
@@ -186,11 +189,11 @@ function RunJson([string[]]$ExtraArgs) {
   # object (1a asserts it), so "no object" is retried up to twice; the retry is announced, and
   # the checks on the content are untouched. A call that never answers still fails 1a.
   for ($try = 1; $try -le 3; $try++) {
-    $raw = (& $exePath @a 2>$null | Out-String)
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath @a 2>$null } | Out-String)
     # The engine prints a defaults banner on some paths; take the JSON object only.
     $i = $raw.IndexOf('{')
     if ($i -ge 0) {
-      try { $doc = ($raw.Substring($i) | ConvertFrom-Json); if ($try -gt 1) { Write-Host "  [NOTE] engine answered only on attempt $try (load flake)" -ForegroundColor Yellow }; return $doc } catch { }
+      try { $doc = ($raw.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }); if ($try -gt 1) { Write-Host "  [NOTE] engine answered only on attempt $try (load flake)" -ForegroundColor Yellow }; return $doc } catch { }
     }
     Start-Sleep -Milliseconds 500
   }
@@ -261,9 +264,9 @@ Check '4b and every real candidate is deselected' `
 # 5 -- A JSON CALLER GETS A DOCUMENT IN EVERY OUTCOME. uKeepMe has a clean uses
 #      clause, so this is the "nothing to change" path.
 # ---------------------------------------------------------------------------
-$clean = (& $exePath uses-fix (Join-Path $src 'uKeepMe.pas') --project $proj --db $db --format json 2>$null | Out-String)
+$clean = (& { $ErrorActionPreference = 'Continue'; & $exePath uses-fix (Join-Path $src 'uKeepMe.pas') --project $proj --db $db --format json 2>$null } | Out-String)
 $ci = $clean.IndexOf('{')
-$cleanJson = if ($ci -ge 0) { try { $clean.Substring($ci) | ConvertFrom-Json } catch { $null } } else { $null }
+$cleanJson = if ($ci -ge 0) { try { $clean.Substring($ci) | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null } } else { $null }
 Check '5 "nothing to change" still emits JSON' `
   (($null -ne $cleanJson) -and ($cleanJson.schema -eq 'uses-fix/1')) `
   'an empty stdout makes "nothing to do" indistinguishable from a crash'
@@ -275,9 +278,9 @@ Check '5 "nothing to change" still emits JSON' `
 #      file had been rewritten. uKeepMe has a clean uses clause.
 # ---------------------------------------------------------------------------
 $keep = Join-Path $src 'uKeepMe.pas'
-$rawA = (& $exePath uses-fix $keep --project $proj --db $db --apply --format json 2>$null | Out-String)
+$rawA = (& { $ErrorActionPreference = 'Continue'; & $exePath uses-fix $keep --project $proj --db $db --apply --format json 2>$null } | Out-String)
 $ai = $rawA.IndexOf('{')
-$applyJson = if ($ai -ge 0) { try { $rawA.Substring($ai) | ConvertFrom-Json } catch { $null } } else { $null }
+$applyJson = if ($ai -ge 0) { try { $rawA.Substring($ai) | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null } } else { $null }
 Check '7a --apply with nothing to change still emits JSON' ($null -ne $applyJson) 'no document'
 Check '7b and reports applied=false, because nothing was written' `
   ($applyJson.applied -eq $false) "applied=$($applyJson.applied)"
@@ -300,7 +303,7 @@ Check '8 the counts object carries deselected' `
 #      Silence there makes a mistyped command look like an answer.
 # ---------------------------------------------------------------------------
 $sweepErr = Join-Path $scratch 'sweep.err'
-& $exePath uses-fix --project $proj --db $db --only uMoveMe --format json 2>$sweepErr | Out-Null
+& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($sweepErr); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath uses-fix --project $proj --db $db --only uMoveMe --format json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-Null
 $sweepNote = if (Test-Path $sweepErr) { Get-Content $sweepErr -Raw } else { '' }
 Check '9a the sweep says --only does not apply to it' `
   ($sweepNote -match '--only applies to') "stderr was:`n$sweepNote"
@@ -310,7 +313,7 @@ Check '9b and says the same of --format json' `
 # ---------------------------------------------------------------------------
 # 6 -- TEXT MODE IS UNCHANGED. The IDE and humans still use it.
 # ---------------------------------------------------------------------------
-$txt = (& $exePath uses-fix $unit --project $proj --db $db --remove-unused 2>$null | Out-String)
+$txt = (& { $ErrorActionPreference = 'Continue'; & $exePath uses-fix $unit --project $proj --db $db --remove-unused 2>$null } | Out-String)
 Check '6a text mode prints no JSON' ($txt -notmatch '"schema"') 'text callers must not suddenly get a document'
 Check '6b text mode still names the candidates' `
   (($txt -match 'uMoveMe') -and ($txt -match 'uDropMe')) `

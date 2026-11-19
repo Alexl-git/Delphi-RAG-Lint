@@ -26,9 +26,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-hover-cf-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -112,7 +115,7 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'cf.sqlite'
-& $Exe index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' (Test-Path $db)
 
 $lines = [System.IO.File]::ReadAllLines($file)
@@ -145,7 +148,7 @@ Start-Process $Exe -ArgumentList @('lsp', '--db', $db) -WorkingDirectory $WorkDi
   -RedirectStandardError (Join-Path $WorkDir 'err.txt') -NoNewWindow -Wait | Out-Null
 $r = @{}
 foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-  try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+  try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
   if ($null -ne $o.id) { $r[[int]$o.id] = $o }
 }
 function HoverMd($resp) { if ($null -eq $resp -or $null -eq $resp.result) { return '' } return [string]$resp.result.contents.value }
@@ -159,7 +162,7 @@ Check 'L1 Target (no-doc path): one Called from: line naming CallerA and CallerB
 $cD = @(CfLines $mdD)
 Check 'L2 DocTarget (doc path): one Called from: line naming CallerA and CallerB' ($cD.Count -eq 1 -and $cD[0] -match 'CallerA' -and $cD[0] -match 'CallerB') ("md=" + (Flat $mdD))
 Check 'L2 control: the doc path really is the doc path (summary shown)' ($mdD -match 'documented routine with two callers')
-Check 'L3 Lonely (no callers): no Called from: line' ((CfLines $mdL).Count -eq 0) ("md=" + (Flat $mdL))
+Check 'L3 Lonely (no callers): no Called from: line' ((@(CfLines $mdL)).Count -eq 0) ("md=" + (Flat $mdL))
 Check 'L4 Applied (block already holds the line): exactly one Called from:' (([regex]::Matches($mdA, 'Called from:')).Count -eq 1) ("md=" + (Flat $mdA))
 $b = $r[6].result
 $bf = @(); if ($null -ne $b -and $null -ne $b.model) { $bf = @($b.model.facts) }
@@ -167,11 +170,11 @@ Check 'L5 hoverBundle answered with a model' ($null -ne $b -and $null -ne $b.mod
 Check 'L5 hoverBundle model facts carry NO Called from: (the popup has its resolvedCallers grid)' (@($bf | Where-Object { $_ -match 'Called from:' }).Count -eq 0) ("facts=" + ($bf -join ' | '))
 Check 'L5 hoverBundle resolvedCallers still lists both callers' (@($b.resolvedCallers).Count -ge 2)
 
-$cli = (& $Exe hover --qname uCf.TWorker.Target --db $db --format md 2>$null) -join "`n"
+$cli = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname uCf.TWorker.Target --db $db --format md 2>$null }) -join "`n"
 $cc = @(CfLines $cli)
 Check 'C1 CLI hover --format md Target: one Called from: naming CallerA and CallerB' ($cc.Count -eq 1 -and $cc[0] -match 'CallerA' -and $cc[0] -match 'CallerB') ("md=" + (Flat $cli))
-$cliL = (& $Exe hover --qname uCf.TWorker.Lonely --db $db --format md 2>$null) -join "`n"
-Check 'C2 CLI hover Lonely: answered, no Called from:' ($cliL -match 'Lonely' -and (CfLines $cliL).Count -eq 0) ("md=" + (Flat $cliL))
+$cliL = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname uCf.TWorker.Lonely --db $db --format md 2>$null }) -join "`n"
+Check 'C2 CLI hover Lonely: answered, no Called from:' ($cliL -match 'Lonely' -and (@(CfLines $cliL)).Count -eq 0) ("md=" + (Flat $cliL))
 
 if ($script:Failed) { Write-Host 'run_lsp_hover_called_from_guard: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'run_lsp_hover_called_from_guard: PASS' -ForegroundColor Green

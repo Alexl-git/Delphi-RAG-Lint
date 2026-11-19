@@ -32,9 +32,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-overload-arity-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -128,7 +131,7 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'arity.sqlite'
-& $Exe index $WorkDir --db $db --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 # Report each call site as (enclosing routine, target arity, confidence). Arity
 # is read back off the TARGET's own signature so the assertions below name the
@@ -178,7 +181,7 @@ out_noedge = [r[0] for r in c.execute("""
 print(json.dumps({"edges": out, "noedge": out_noedge}))
 c.close()
 '@ | Set-Content $py -Encoding ascii
-$res = (& python $py $db) -join "`n" | ConvertFrom-Json
+$res = (& python $py $db) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 $edges = @($res.edges)
 
 function Edge($fromArity, $callee) {

@@ -28,9 +28,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_layout_v2_p2_guard_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 
 function Assert-Scratch([string]$Path) {
   $full = [IO.Path]::GetFullPath($Path).TrimEnd('\') + '\'
@@ -99,7 +102,7 @@ function Invoke-Engine([string]$Copy, [string]$Roam, [string[]]$EngineArgs, [has
   Push-Location -LiteralPath $cwd
   try {
     $errFile = Join-Path $WorkDir 'stderr.txt'
-    $o = ((& $Copy @EngineArgs 2>$errFile | ForEach-Object { "$_" }) -join "`n")
+    $o = ((& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Copy @EngineArgs 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | ForEach-Object { "$_" }) -join "`n")
     $rc = $LASTEXITCODE
     $e = if (Test-Path -LiteralPath $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
     return [pscustomobject]@{ Rc = $rc; Out = $o; Err = $e }
@@ -110,11 +113,11 @@ function Invoke-Engine([string]$Copy, [string]$Roam, [string[]]$EngineArgs, [has
 }
 function Get-Plan([string]$Copy, [string]$Roam, [hashtable]$Vars = @{}) {
   $r = Invoke-Engine $Copy $Roam @('index','--all','--dry-run','--json') $Vars
-  try { $plan = $r.Out | ConvertFrom-Json } catch { return [pscustomobject]@{ Key = ''; Dbs = @(); Raw = $r.Out + $r.Err } }
+  try { $plan = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { return [pscustomobject]@{ Key = ''; Dbs = @(); Raw = $r.Out + $r.Err } }
   $pairs = @($plan.sections | ForEach-Object { "$($_.name)=$($_.db)" })
   return [pscustomobject]@{ Key = ($pairs -join '|'); Dbs = @($plan.sections | ForEach-Object { $_.db }); Raw = $r.Out + $r.Err }
 }
-function Get-Json([object]$R) { try { return ($R.Out | ConvertFrom-Json) } catch { return $null } }
+function Get-Json([object]$R) { try { return ($R.Out | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null } }
 function Test-Under([string]$Path, [string]$Dir) { return $Path -and $Path.StartsWith($Dir.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) }
 function Get-Tree([string]$Dir) { if (Test-Path -LiteralPath $Dir) { @(Get-ChildItem -LiteralPath $Dir -Recurse -Force | ForEach-Object { "$($_.FullName)/$(if ($_.PSIsContainer) {'d'} else {$_.Length})" }) -join '|' } else { 'absent' } }
 $V2 = @{ DRAGLINT_LAYOUT = 'v2' }

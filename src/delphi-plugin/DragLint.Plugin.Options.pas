@@ -21,7 +21,7 @@ interface
 procedure RegisterDragLintOptions;
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.Wizard.TDragLintWizard.Destroyed (DragLint.Plugin.Wizard.pas), initialization/finalization (DragLint.Plugin.Options.pas)</para>
+/// <para>Called from: DragLint.Plugin.Options.finalization (DragLint.Plugin.Options.pas), DragLint.Plugin.Wizard.TDragLintWizard.Destroyed (DragLint.Plugin.Wizard.pas)</para>
 /// <para>Calls: Supports</para>
 /// <para>Catches: Exception (empty)</para>
 /// <!-- drag-lint:auto END -->

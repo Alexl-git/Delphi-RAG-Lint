@@ -6,7 +6,10 @@
   through --rules-dir. Controls: C1 the rule fires (so --rules-dir is honoured by the runner); C2 a bogus id is
   still malformed (the reporter is on); C3 without --rules-dir the copy has no rules (the setup is a real test).
 #>
-param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $bad = $false
 function Check([string]$N, [bool]$Ok) { if ($Ok) { Write-Host "  ok   $N" } else { $script:bad = $true; Write-Host "  FAIL $N" -ForegroundColor Red } }
@@ -22,7 +25,7 @@ try {
   $good = Join-Path $Tmp 'u1.pas'; $bogus = Join-Path $Tmp 'u2.pas'
   [IO.File]::WriteAllText($good, ($body -f 'sql-injection-concat'), [Text.Encoding]::ASCII)
   [IO.File]::WriteAllText($bogus, (($body -f 'bogus-rule-x').Replace('U1', 'U2')), [Text.Encoding]::ASCII)
-  function Run([string]$F, [string[]]$Extra) { @(& $x lint $F @Extra --enable review-marker-malformed 2>&1 | ForEach-Object { "$_" }) }
+  function Run([string]$F, [string[]]$Extra) { @(& { $ErrorActionPreference = 'Continue'; & $x lint $F @Extra --enable review-marker-malformed 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) }
   $a = Run $good @('--rules-dir', $Rules)
   $nm = Join-Path $Tmp 'u4.pas'; [IO.File]::WriteAllText($nm, (($body -f 'x').Replace(' // dl:ok x -- reviewed', '').Replace('U1', 'U4')), [Text.Encoding]::ASCII)
   $n = Run $nm @('--rules-dir', $Rules)

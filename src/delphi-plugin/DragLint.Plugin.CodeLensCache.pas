@@ -41,7 +41,7 @@ const
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DragLint.Plugin.CodeLensCache.pas) ?, DragLint.Plugin.CodeLensCache.CodeLensCache (DragLint.Plugin.CodeLensCache.pas)</para>
+  /// <para>Used by: declaration (DragLint.Plugin.CodeLensCache.pas) ?, DragLint.Plugin.CodeLensCache.CodeLensCache (DragLint.Plugin.CodeLensCache.pas), DragLint.Plugin.CodeLensCache.initialization (DragLint.Plugin.CodeLensCache.pas) ?</para>
   /// <para>Used in units: DragLint.Plugin.CodeLensCache</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -238,15 +238,15 @@ type
       /// bounded by a STALL budget (ProcRun.RunCaptureStdout), not a wall clock.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DragLint.Plugin.EditViewNotifier.TDragLintEditServicesNotifier.EditorViewActivated (DragLint.Plugin.EditViewNotifier.pas)</para>
-      /// <para>Calls: AOnStored, DragLint.Plugin.CodeLensCache.SpawnCallerCounts, DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.FinishFallback, DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.StoreForFile, DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.TouchLocked, DragLint.Plugin.Telemetry.DLT, Format, GCallerCountsHook, LowerCase</para>
-      /// <para>Complexity: 21 (cyclomatic, outer body), 95 lines (full implementation)</para>
+      /// <para>Calls: AOnStored, DragLint.Plugin.CodeLensCache.CallerLensLabel, DragLint.Plugin.CodeLensCache.SpawnCallerCounts, DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.FinishFallback, DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.StoreForFile, DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.TouchLocked, DragLint.Plugin.Telemetry.DLT, GCallerCountsHook, LowerCase</para>
+      /// <para>Complexity: 20 (cyclomatic, outer body), 92 lines (full implementation)</para>
       /// <para>Reads: FLock, FByFile, FInFlight</para>
       /// <para>Catches: Exception (swallowed)</para>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.CallerLensLabel"/>
       /// <seealso cref="DragLint.Plugin.CodeLensCache.SpawnCallerCounts"/>
       /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.FinishFallback"/>
       /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.StoreForFile"/>
       /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.TouchLocked"/>
-      /// <seealso cref="DragLint.Plugin.Telemetry.DLT"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure PopulateOnce(const AFilePath, AExePath, ADbPath: string; const AOnStored: TProc = nil);
@@ -320,7 +320,7 @@ type
 /// <param name="AHook"><!-- drag-lint:auto type -->const TCallerCountsHook</param>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: initialization/finalization (DragLint.Plugin.Editor.pas)</para>
+/// <para>Called from: DragLint.Plugin.Editor.initialization (DragLint.Plugin.Editor.pas)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure SetCallerCountsHook(const AHook: TCallerCountsHook);
@@ -335,6 +335,12 @@ procedure SetCallerCountsHook(const AHook: TCallerCountsHook);
 /// <returns>The parts in the order callers, implementors, exceptions, each in
 /// brackets and separated by one space, e.g. '[1 caller] [raises 2 types]';
 /// '' when no part applies. With AExc = '' the result is the 1.48 label.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.PopulateOnce (DragLint.Plugin.CodeLensCache.pas)</para>
+/// <para>Calls: Format</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CallerLensLabel(ACount, AImpls: Integer; const AExc: string): string;  // dl:ok unused-public-symbol@2c75 -- public as the test seam: tests\CodeLensExceptionsTests.dpr (outside the plugin project) pins the label
 
 /// <summary>Reads a draglint/callerCounts reply into the four per-line arrays a
@@ -350,8 +356,19 @@ function CallerLensLabel(ACount, AImpls: Integer; const AExc: string): string;  
 /// same length. An engine without 'exceptions' (&lt;= 1.48) gives all ''.</param>
 /// <returns>True when the reply carries a 'counts' array; False (all arrays empty)
 /// otherwise.</returns>
-/// <remarks>Pure: no IDE, no I/O. May raise on malformed JSON values; the LSP reply
-/// handler catches and treats that as no answer.</remarks>
+/// <remarks>
+/// Pure: no IDE, no I/O. May raise on malformed JSON values; the LSP reply
+/// handler catches and treats that as no answer.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.LspCallerCounts (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.CodeLensCache.LensLineIndex, DragLint.Plugin.CodeLensCache.ReplyArray, TJSONObject</para>
+/// <para>Returns: False; True</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 44 lines (full implementation)</para>
+/// <para>Mutates: ALines (out), ACounts (out), AImpls (out), AExcs (out)</para>
+/// <seealso cref="DragLint.Plugin.CodeLensCache.LensLineIndex"/>
+/// <seealso cref="DragLint.Plugin.CodeLensCache.ReplyArray"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseCallerCountsReply(AReply: TJSONValue; out ALines, ACounts, AImpls: TArray<Integer>;
   out AExcs: TArray<string>): Boolean;
 

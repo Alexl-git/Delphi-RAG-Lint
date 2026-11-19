@@ -80,7 +80,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -169,8 +172,8 @@ function DriftReported([string]$Out) { $Out -match '(?m)^\s*\S+thing\.pas:\d+:\d
 # against a stale index examines nothing and reports nothing -- which reads
 # exactly like "no drift" and is failure mode 1 above.
 function Reindex {
-  & $exePath index --all --config $cfg --only SecA --jobs 1 2>&1 | Out-Null
-  & $exePath index --all --config $cfg --only SecB --jobs 1 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only SecA --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only SecB --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
 }
 
 Push-Location C:\TEMP
@@ -179,7 +182,7 @@ try {
   Check '1. SANITY: both section DBs exist' ((Test-Path $dbA) -and (Test-Path $dbB))
 
   # --- 2. document with BOTH stores -----------------------------------------
-  $d2 = (& $exePath document --qname $QNAME --db $dbB --db $dbA --apply 2>&1 | Out-String)
+  $d2 = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname $QNAME --db $dbB --db $dbA --apply 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check '2. document --db B --db A wrote a managed block naming B''s caller' `
         (BlockHasCaller) `
         $(($d2 -split "`n" | Where-Object { $_ -match '(?i)doc:' } | Select-Object -First 1))
@@ -194,7 +197,7 @@ try {
   # reconciliation now applies to any block carrying entries this index cannot
   # vouch for, marked or not -- so the entry is forgiven and no drift is
   # reported. That is the fix, asserted here rather than left implicit.
-  $l3 = (& $exePath lint-all --db $dbA --quiet 2>&1 | Out-String)
+  $l3 = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbA --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check '3. lint-all --db A alone does NOT report drift on an unvouchable entry' `
         (-not (DriftReported $l3)) `
         'dbA cannot see the bside caller, so its absence is a blind spot, not evidence'
@@ -223,7 +226,7 @@ try {
   # which is what keeps this suite from passing on absences alone.
 
   # --- 4. THE BUG: the same two stores that wrote it must accept it ---------
-  $l4 = (& $exePath lint-all --db $dbB --db $dbA --quiet 2>&1 | Out-String)
+  $l4 = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbB --db $dbA --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $drift4 = DriftReported $l4
   Check '4. lint-all --db B --db A reports NO doc-drift on the block it just wrote' `
         (-not $drift4) `
@@ -235,7 +238,7 @@ try {
     Write-Host '      --- block ON DISK ---' -ForegroundColor DarkGray
     (Get-Content $thing) | Where-Object { $_ -match '///' } | ForEach-Object { Write-Host "        $_" -ForegroundColor DarkGray }
     Write-Host '      --- what document --db B --db A would write now ---' -ForegroundColor DarkGray
-    (& $exePath document --qname $QNAME --db $dbB --db $dbA 2>&1) |
+    (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname $QNAME --db $dbB --db $dbA 2>&1 | ForEach-Object { "$_" } }) |
       ForEach-Object { Write-Host "        $_" -ForegroundColor DarkGray }
   }
 
@@ -251,7 +254,7 @@ try {
   # never hold a test caller. The writer now preserves entries whose unit the
   # primary store cannot vouch for, so the narrow invocation is non-destructive
   # and the two agree. The assertion is inverted to pin the cure.
-  & $exePath document --qname $QNAME --db $dbA --apply 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --qname $QNAME --db $dbA --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check '5. CURED: document --db A alone PRESERVES the block written by A+B' `
         (BlockHasCaller) `
         'the narrow invocation is no longer destructive -- was RECORDED as a defect until 2026-09-02'

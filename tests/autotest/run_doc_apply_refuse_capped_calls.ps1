@@ -15,14 +15,17 @@
   Run from a NEUTRAL CWD, pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$detail=''){ Write-Host ("[{0}] {1}{2}" -f (@('FAIL','PASS')[[int]$ok]),$n,$(if($detail){" -- $detail"}else{''})) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
 $Exe  = (Resolve-Path $Exe).Path
 $root = Join-Path ([System.IO.Path]::GetTempPath()) ("dl-refusecap-" + [Guid]::NewGuid().ToString('N').Substring(0,8))
 New-Item -ItemType Directory -Force -Path $root | Out-Null
 function Lane-WriteAscii($path, $lines) { [IO.File]::WriteAllText($path, (($lines -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding)) }
-function Lane-Run([string[]]$xs) { $o = & $Exe @xs 2>&1 | Out-String; [pscustomobject]@{ Out = $o; Code = $LASTEXITCODE } }
+function Lane-Run([string[]]$xs) { $o = & { $ErrorActionPreference = 'Continue'; & $Exe @xs 2>&1 | ForEach-Object { "$_" } } | Out-String; [pscustomobject]@{ Out = $o; Code = $LASTEXITCODE } }
 Lane-WriteAscii (Join-Path $root 'uB.pas') @('unit uB;','interface','procedure Q;','procedure S;','implementation','procedure Q; begin end;','procedure S; begin end;','end.')
 $ua = Join-Path $root 'uA.pas'
 Lane-WriteAscii $ua @('unit uA;','interface','uses uB;',

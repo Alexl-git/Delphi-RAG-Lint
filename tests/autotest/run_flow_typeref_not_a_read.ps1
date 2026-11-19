@@ -43,9 +43,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-typeref-not-a-read-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -142,8 +145,8 @@ Check 'located the probe lines' `
   (($k1Read -gt 0) -and ($typeLines.Count -eq 2) -and ($k2RealRead -gt 0) -and ($k4Read -gt 0)) `
   "k1=$k1Read types=$($typeLines -join ',') k2read=$k2RealRead k4=$k4Read"
 
-$raw = & $Exe lint $file --json 2>$null
-$all = @($raw | ConvertFrom-Json)
+$raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file --json 2>$null }
+$all = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 $uba = @($all | Where-Object { $_.rule -eq 'used-before-assignment' })
 $hit = @($uba | ForEach-Object { $_.start_line })
 Write-Host ("  fired on lines: {0}" -f ($hit -join ', ')) -ForegroundColor DarkGray

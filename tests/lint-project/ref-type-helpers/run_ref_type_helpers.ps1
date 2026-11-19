@@ -29,7 +29,7 @@ try {
   foreach ($d in @($src, $dcu, $out)) { [void](New-Item -ItemType Directory -Force -Path $d) }
   Copy-Item (Join-Path $PSScriptRoot 'uRhTypes.pas') $src
   $db = Join-Path $work 'rth.sqlite'
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Copy-Item $db "$db.notable"
 
   . (Join-Path $repo 'tests\autotest\lib\CliBuildPaths.ps1')
@@ -46,8 +46,8 @@ try {
   if ($b -notmatch 'BUILD_EXITCODE=0') { Write-Host $b; Write-Host 'FATAL: harness did not compile'; exit 2 }
   [void](Copy-TreeSitterDlls -Dest $out)
   $h = Join-Path $out 'RefTypeHelpersHarness.exe'
-  $on  = @(& $h $db 2>&1)
-  $off = @(& $h "$db.notable" notable 2>&1)
+  $on  = @(& { $ErrorActionPreference = 'Continue'; & $h $db 2>&1 | ForEach-Object { "$_" } })
+  $off = @(& { $ErrorActionPreference = 'Continue'; & $h "$db.notable" notable 2>&1 | ForEach-Object { "$_" } })
   $on  | ForEach-Object { Write-Host "  on : $_" }
   $off | ForEach-Object { Write-Host "  off: $_" }
 
@@ -74,9 +74,9 @@ try {
   # The shape G5 already covers keeps its answer and exactly one member-access row
   Check 'hard-cast shape: RhOne(1).FLeaf still typed' ($on -contains 'LEAF|RhOne(1).FLeaf|TRhLeaf')
   function CountRefs([string]$Where) {
-    $j = (& $exePath sql --db $db --query "SELECT COUNT(*) FROM refs WHERE $Where" --json 2>$null) -join "`n"
+    $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "SELECT COUNT(*) FROM refs WHERE $Where" --json 2>$null }) -join "`n"
     $start = $j.IndexOf('{')
-    return [int](($j.Substring($start) | ConvertFrom-Json).rows[0][0])
+    return [int](($j.Substring($start) | ConvertFrom-Json | ForEach-Object { $_ }).rows[0][0])
   }
   $srcLines = [IO.File]::ReadAllLines((Join-Path $src 'uRhTypes.pas'))
   function LineOf([string]$Text) { return [array]::FindIndex($srcLines, [Predicate[string]] { param($l) $l.Contains($Text) }) + 1 }

@@ -27,12 +27,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe") { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" } else { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }),
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-cyclefix-initproof-$PID",
   [string]$RsVars  = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat',
   [ValidateSet('all', 'model', 'engine')][string]$Phase = 'all',
   [switch]$KeepWorkDir
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe") { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" } else { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }) }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false; $script:Passed = 0
 function Check($n, $ok, $d = '') {
@@ -73,7 +76,7 @@ function New-Proj([string[]]$Order, [scriptblock]$Patch = $null, [switch]$NoInde
   $db = "$root.sqlite"
   if (-not $NoIndex) {
     Push-Location $WorkDir
-    try { $null | & $Exe index --project (Join-Path $root 'InitP3.dproj') --db $db --library-db none *> "$db.log" } finally { Pop-Location }
+    try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project (Join-Path $root 'InitP3.dproj') --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
   }
   return @{ Root = $root; Dproj = (Join-Path $root 'InitP3.dproj'); Db = $db; Name = 'InitP3' }
 }
@@ -137,18 +140,18 @@ function Get-Plan($P, [switch]$NoProject) {
   $a = @('cycles', '--plan', '--db', $P.Db, '--library-db', 'none')
   if (-not $NoProject) { $a += @('--project', $P.Dproj) }
   Push-Location $WorkDir
-  try { return ($null | & $Exe @a 2>$null | Out-String) } finally { Pop-Location }
+  try { return ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @a 2>$null } | Out-String) } finally { Pop-Location }
 }
 function Get-CausesJson($P) {
   Push-Location $WorkDir
-  try { $o = ($null | & $Exe cycles --causes --format json --project $P.Dproj --db $P.Db --library-db none 2>$null | Out-String) } finally { Pop-Location }
-  try { return ($o | ConvertFrom-Json) } catch { return $null }
+  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe cycles --causes --format json --project $P.Dproj --db $P.Db --library-db none 2>$null } | Out-String) } finally { Pop-Location }
+  try { return ($o | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function Run-Fix($P, [string[]]$Extra) {
   $a = @('cycles', '--fix', '--build-timeout', '1800', '--project', $P.Dproj, '--db', $P.Db, '--library-db', 'none', '--format', 'json') + $Extra
   Push-Location $WorkDir
-  try { $out = ($null | & $Exe @a 2>$null | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
-  $j = $null; try { $j = $out | ConvertFrom-Json } catch { }
+  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @a 2>$null } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
+  $j = $null; try { $j = $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   $k = @(); $r = @()
   foreach ($c in @($j.cycles)) { foreach ($x in @($c.refusals)) { if ($x) { $k += $x.kind; $r += "$($x.kind): $($x.reason)" } } }
   foreach ($x in @($j.refusals)) { if ($x) { $k += $x.kind; $r += "$($x.kind): $($x.reason)" } }
@@ -158,10 +161,10 @@ function Run-Fix($P, [string[]]$Extra) {
 function Get-Hazard($P) {
   Push-Location $WorkDir
   try {
-    $null | & $Exe index --project $P.Dproj --db $P.Db --library-db none *> "$($P.Db).hzlog"
-    $o = ($null | & $Exe lint-all --db $P.Db --rule init-order-hazard --json 2>$null | Out-String)
+    $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project $P.Dproj --db $P.Db --library-db none *> "$($P.Db).hzlog" }
+    $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe lint-all --db $P.Db --rule init-order-hazard --json 2>$null } | Out-String)
   } finally { Pop-Location }
-  $j = @(); try { $j = @($o | ConvertFrom-Json) } catch { }
+  $j = @(); try { $j = @(($o | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { }
   return @($j | Where-Object { $_ -and $_.rule -eq 'init-order-hazard' })
 }
 
@@ -177,8 +180,8 @@ try {
         $b = Invoke-Build $P
         Check ("m.build {0} first, cut={1}" -f $first, $cut) $b.Ok $b.Errors
         $out = Invoke-Program $P
-        $seen = (Get-InitLines $out) -join ','
-        $model = ((Get-ModelOrder $P.Root) | Where-Object { $_ -ne 'IP3Hook' }) -join ','
+        $seen = (@(Get-InitLines $out)) -join ','
+        $model = ((@(Get-ModelOrder $P.Root)) | Where-Object { $_ -ne 'IP3Hook' }) -join ','
         $ptr = if (-not $cut) { '-' } elseif ($out -match '\[b\] a started') { 'assigned' } elseif ($out -match 'pointer nil') { 'nil' } else { '?' }
         $script:ModelTable += ("| {0} first | {1} | {2} | {3} | {4} |" -f $first, $(if ($cut) { 'cut' } else { 'cycle' }), $seen, $model, $ptr)
         Check ("m.order {0} first, cut={1}: run [{2}] = model [{3}]" -f $first, $cut, $seen, $model) (($seen -ne '') -and ($seen -eq $model)) $out
@@ -222,12 +225,12 @@ try {
     Check 'a.8 stdout byte-identical to the untouched build (the pointer was assigned in time)' (($out0 -ne '<no exe>') -and ($out1 -ceq $out0) -and ($out0 -match '\[b\] a started')) "before=[$out0] after=[$out1]"
 
     Write-Host '== G safety net: the applied program with the .dpr order reversed' -ForegroundColor Cyan
-    $h0 = Get-Hazard $P
+    $h0 = @(Get-Hazard $P)
     Check 'g.1 init-order-hazard is silent on the applied program as ordered (B first)' ($h0.Count -eq 0) ($h0 | ConvertTo-Json -Compress)
     $dpr = Join-Path $P.Root 'InitP3.dpr'
     $dt = [IO.File]::ReadAllText($dpr, $Ascii)
     [IO.File]::WriteAllText($dpr, [regex]::Replace($dt, "(?s)uses\r\n.*?;\r\n", "uses`r`n  IP3C in 'IP3C.pas',`r`n  IP3A in 'IP3A.pas',`r`n  IP3B in 'IP3B.pas',`r`n  IP3B.Untangle in 'IP3B.Untangle.pas';`r`n"), $Ascii)
-    $h1 = Get-Hazard $P
+    $h1 = @(Get-Hazard $P)
     Check 'g.2 after the swap (IP3C first) init-order-hazard reports the pointer read in IP3A''s initialization' (@($h1 | Where-Object { $_.file_path -match 'IP3A\.pas$' -and $_.message -match 'IP3BWritePtr' }).Count -ge 1) ($h1 | ConvertTo-Json -Compress)
     $null = Invoke-Build $P
     Check 'g.3 (the run agrees) the swapped program calls the nil pointer: its output differs' ((Invoke-Program $P) -cne $out0)
@@ -262,7 +265,7 @@ try {
     Check "d.1 refused: the order depends on a conditional uses entry (IP3C.pas:$ifLine)" ($m.Success -and $m.Groups[1].Value.Contains("conditional uses entry (``IP3C.pas:$ifLine``)")) $plan
     $P = New-Proj $null { param($r) [IO.File]::Delete((Join-Path $r 'InitP3.dpr')); [IO.File]::Delete((Join-Path $r 'InitP3.dproj')) } -NoIndex
     Push-Location $WorkDir
-    try { $null | & $Exe index $P.Root --db $P.Db --library-db none *> "$($P.Db).log" } finally { Pop-Location }
+    try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index $P.Root --db $P.Db --library-db none *> "$($P.Db).log" } } finally { Pop-Location }
     $plan = Get-Plan $P -NoProject
     $m = [regex]::Match($plan, $RefusedRx)
     Check 'd.2 no .dpr in the index: refused "no program"' ($m.Success -and $m.Groups[1].Value.Contains('no program in this index')) $plan
@@ -281,7 +284,7 @@ try {
     $a = Run-Fix $P @('--part', 'a', '--apply')
     Check 'e.2 Part A applied (exit 0)' ($a.Exit -eq 0) "exit=$($a.Exit) $($a.Reasons)"
     Push-Location $WorkDir
-    try { $null | & $Exe index --project $P.Dproj --db $P.Db --library-db none *> "$($P.Db).relog" } finally { Pop-Location }
+    try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project $P.Dproj --db $P.Db --library-db none *> "$($P.Db).relog" } } finally { Pop-Location }
     $plan = Get-Plan $P
     Check 'e.3 after Part A + reindex the same edge is planned with the proof line' (($plan -match '(?m)^- `ip3a -> ip3b`: recipe: routine-call inversion -- \*\*cut by this plan\*\*') -and $plan.Contains('- init order: `IP3B` initializes before `IP3A` in `InitP3.dpr`')) $plan
   }

@@ -10,8 +10,11 @@
   Usage: pwsh -File tests\autotest\run_v1511_AST_fixes.ps1 [-Exe <drag-lint.exe>]
 #>
 param(
-  [string]$Exe = (Join-Path $PSScriptRoot '..\..\third_party\dll-win64\drag-lint.exe')
+  [string]$Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = (Join-Path $PSScriptRoot '..\..\third_party\dll-win64\drag-lint.exe') }
 $ErrorActionPreference = 'Stop'
 $fx  = Join-Path $PSScriptRoot 'fixtures\v1511-AST'
 $cfg = Join-Path $fx 'config.json'
@@ -20,9 +23,9 @@ $pass = 0; $fail = 0
 foreach ($pas in Get-ChildItem (Join-Path $fx '*.pas')) {
   $expFile = [IO.Path]::ChangeExtension($pas.FullName, '.expected')
   if (-not (Test-Path $expFile)) { continue }
-  $raw = & $exePath lint $pas.FullName --config $cfg --json 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint $pas.FullName --config $cfg --json 2>$null }
   $findings = @()
-  try { $findings = @($raw | ConvertFrom-Json) } catch { $findings = @() }
+  try { $findings = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $findings = @() }
   $pairs = @{}
   foreach ($f in $findings) { if ($null -ne $f) { $pairs["$($f.rule):$($f.start_line)"] = $true } }
   foreach ($d in Get-Content $expFile) {

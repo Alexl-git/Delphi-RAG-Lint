@@ -15,7 +15,10 @@
   Run from a NEUTRAL CWD (C:\TEMP) so no drag-lint-lint.json is picked up.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -33,10 +36,10 @@ Copy-Item $fixture $target -Force
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # --- call-path StepA -> StepD: the full 4-node chain (text). ---
-  $txt = & $exePath call-path --from StepA --to StepD --db $db 2>$null | Out-String
+  $txt = & { $ErrorActionPreference = 'Continue'; & $exePath call-path --from StepA --to StepD --db $db 2>$null } | Out-String
   $rc  = $LASTEXITCODE
   Check 'call-path A->D exit 0'                 ($rc -eq 0)
   Check 'call-path text mentions TChain.StepA'  ($txt -match 'callchain\.TChain\.StepA')
@@ -49,8 +52,8 @@ try {
   Check 'call-path prints EXACT ordered chain A -> B -> C -> D' ($flat -eq $expected)
 
   # --- call-path --json: ordered path array. ---
-  $jsonOut = & $exePath call-path --from StepA --to StepD --json --db $db 2>$null | Out-String
-  $obj = $jsonOut | ConvertFrom-Json
+  $jsonOut = & { $ErrorActionPreference = 'Continue'; & $exePath call-path --from StepA --to StepD --json --db $db 2>$null } | Out-String
+  $obj = $jsonOut | ConvertFrom-Json | ForEach-Object { $_ }
   Check 'json found:true' ($obj.found -eq $true)
   $names = @($obj.path)
   Check 'json path has 4 nodes'                 (@($names).Count -eq 4)
@@ -58,13 +61,13 @@ try {
   Check 'json path[3] = TChainD.StepD'          ($names[3] -eq 'callchain.TChainD.StepD')
 
   # --- No path: StepA -> Lonely (unreachable) -> exit 1, "no path". ---
-  $noTxt = & $exePath call-path --from StepA --to Lonely --db $db 2>$null | Out-String
+  $noTxt = & { $ErrorActionPreference = 'Continue'; & $exePath call-path --from StepA --to Lonely --db $db 2>$null } | Out-String
   $noRc  = $LASTEXITCODE
   Check 'no-path exit 1'          ($noRc -eq 1)
   Check 'no-path prints "no path"' ($noTxt -match 'no path')
 
-  $noJson = & $exePath call-path --from StepA --to Lonely --json --db $db 2>$null | Out-String
-  $noObj  = $noJson | ConvertFrom-Json
+  $noJson = & { $ErrorActionPreference = 'Continue'; & $exePath call-path --from StepA --to Lonely --json --db $db 2>$null } | Out-String
+  $noObj  = $noJson | ConvertFrom-Json | ForEach-Object { $_ }
   Check 'no-path json found:false' ($noObj.found -eq $false)
 } finally { Pop-Location }
 

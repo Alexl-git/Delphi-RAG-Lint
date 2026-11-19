@@ -10,9 +10,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Dpr     = "$PSScriptRoot\..\PropDeclTypeTests.dpr",
+  [string]$Dpr     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-prop-decl-type-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Dpr) { $Dpr = "$PSScriptRoot\..\PropDeclTypeTests.dpr" }
 try {
 $ErrorActionPreference = 'Stop'
 
@@ -49,7 +52,7 @@ $lines = @(
 $buildLog = Join-Path $WorkDir 'build.log'
 $p = Start-Process cmd.exe -ArgumentList "/c","`"$bat`"" `
        -RedirectStandardOutput $buildLog -RedirectStandardError "$buildLog.err" `
-       -NoNewWindow -Wait -PassThru
+       -NoNewWindow -Wait -PassThru; $null = $p.Handle
 $buildOut = Get-Content $buildLog -Raw
 if ($buildOut -notmatch 'BUILD_EXITCODE=0') {
   Write-Host 'FATAL: compile failed' -ForegroundColor Red
@@ -64,7 +67,7 @@ Copy-TreeSitterDlls -Dest $WorkDir | Out-Null
 
 # Run from the WorkDir: the test writes its scratch DB to a relative path.
 Push-Location $WorkDir
-try   { $out = & $exe 2>&1 | Out-String; $rc = $LASTEXITCODE }
+try   { $out = & { $ErrorActionPreference = 'Continue'; & $exe 2>&1 | ForEach-Object { "$_" } } | Out-String; $rc = $LASTEXITCODE }
 finally { Pop-Location }
 Write-Host $out.TrimEnd()
 

@@ -17,9 +17,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-lsp-c16-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
@@ -75,7 +78,7 @@ function LspTokens([string]$File, [string]$Db) {
     if (-not $mm.Success) { break }
     $start = $i + $mm.Index + $mm.Length; $len = [int]$mm.Groups[1].Value
     if ($start + $len -gt $out.Length) { break }
-    $o = $out.Substring($start, $len) | ConvertFrom-Json
+    $o = $out.Substring($start, $len) | ConvertFrom-Json | ForEach-Object { $_ }
     if ($null -ne $o.id -and [int]$o.id -eq 11) { return $o.result }
     $i = $start + $len
   }
@@ -96,7 +99,7 @@ $tokens = @{}
 foreach ($v in 'cr', 'crlf') {
   $dir = Join-Path $WorkDir $v
   $db = Join-Path $WorkDir "$v.sqlite"
-  & $Exe index $dir --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: $v fixture not indexed" -ForegroundColor Red; exit 2 }
   $tokens[$v] = Decode (LspTokens (Join-Path $dir 'uCr.pas') $db)
 }

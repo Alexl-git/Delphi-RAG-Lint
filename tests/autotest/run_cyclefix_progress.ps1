@@ -24,10 +24,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe") { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" } else { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }),
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-cyclefix-progress-$PID",
   [string]$Rsvars  = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe") { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" } else { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }) }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 $script:Passed = 0
@@ -45,7 +48,7 @@ Set-Location -LiteralPath $WorkDir
 
 $PingHost = '127.{0}.{1}.{2}' -f (Get-Random -Min 2 -Max 250), (Get-Random -Min 2 -Max 250), (Get-Random -Min 2 -Max 250)
 function Parked { return @(Get-CimInstance Win32_Process -Filter "Name = 'PING.EXE' OR Name = 'ping.exe'" | Where-Object { "$($_.CommandLine)" -match [regex]::Escape($PingHost) }) }
-function Stop-Parked { foreach ($p in (Parked)) { try { [Diagnostics.Process]::GetProcessById([int]$p.ProcessId).Kill() } catch { } } }
+function Stop-Parked { foreach ($p in (@(Parked))) { try { [Diagnostics.Process]::GetProcessById([int]$p.ProcessId).Kill() } catch { } } }
 function Remove-Scratch {
   Set-Location -LiteralPath $env:TEMP
   for ($i = 0; ($i -lt 20) -and (Test-Path -LiteralPath $WorkDir); $i++) {
@@ -93,11 +96,11 @@ New-Item -ItemType Directory -Force $Proj | Out-Null
 Get-ChildItem $Demo -File | Where-Object { $_.Extension -in '.pas', '.dpr', '.dproj' } | ForEach-Object { Copy-Item $_.FullName (Join-Path $Proj $_.Name) -Force }
 $Dproj = Join-Path $Proj 'CircularDemo.dproj'
 $Db = Join-Path $WorkDir 'demo.sqlite'
-& $Exe index --project $Dproj --db $Db *> (Join-Path $WorkDir 'index.log')
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project $Dproj --db $Db *> (Join-Path $WorkDir 'index.log') }
 $EmptyDir = Join-Path $WorkDir 'empty'
 New-Item -ItemType Directory -Force $EmptyDir | Out-Null
 $Lib = Join-Path $WorkDir 'lib.sqlite'
-& $Exe index $EmptyDir --db $Lib *> (Join-Path $WorkDir 'lib.log')
+& { $ErrorActionPreference = 'Continue'; & $Exe index $EmptyDir --db $Lib *> (Join-Path $WorkDir 'lib.log') }
 $Fake = Join-Path $WorkDir 'rsvars.bat'
 [IO.File]::WriteAllText($Fake, ((@('@echo off', "call `"$Rsvars`"", "ping -n 600 $PingHost > nul") -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 Write-Host '== setup' -ForegroundColor Cyan
@@ -108,8 +111,8 @@ Write-Host '== cycles --fix parked in its baseline build' -ForegroundColor Cyan
 $a = @('cycles', '--fix', '--project', $Dproj, '--db', $Db, '--library-db', $Lib, '--unit', 'demogageport', '--format', 'json', '--rsvars', $Fake)
 $q = ($a | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' '
 $Out = Join-Path $WorkDir 'run.out'; $Err = Join-Path $WorkDir 'run.err'
-$run = Start-Process -FilePath $Exe -ArgumentList $q -RedirectStandardOutput $Out -RedirectStandardError $Err -NoNewWindow -PassThru
-$parked = Wait-For { ((Parked).Count -gt 0) -or $run.HasExited } 120
+$run = Start-Process -FilePath $Exe -ArgumentList $q -RedirectStandardOutput $Out -RedirectStandardError $Err -NoNewWindow -PassThru; $null = $run.Handle
+$parked = Wait-For { ((@(Parked)).Count -gt 0) -or $run.HasExited } 120
 Check 'setup: the baseline build parked' ($parked -and -not $run.HasExited) ("exited=" + $run.HasExited + ' ' + (Read-Text $Out) + (Read-Text $Err))
 
 $leaf = BeatLeaf $run.Id
@@ -123,12 +126,12 @@ Check 'P1 stderr repeats a progress line naming the baseline build, seconds grow
 $beatOk = ($null -ne $b1) -and ($null -ne $b2) -and ($b1.Action -eq 'cycles --fix') -and ($b2.Step -match '^baseline build') -and ($b2.Seq -gt $b1.Seq)
 Check 'P2 the heartbeat says cycles --fix / baseline build and its seq advances' $beatOk ("b1=" + ($b1 | Out-String).Trim() + " b2=" + ($b2 | Out-String).Trim())
 
-$sd = (& $Exe shutdown --db $Db --wait 60 2>&1 | Out-String)
+$sd = (& { $ErrorActionPreference = 'Continue'; & $Exe shutdown --db $Db --wait 60 2>&1 | ForEach-Object { "$_" } } | Out-String)
 $exited = Wait-For { $run.HasExited } 60
 if (-not $exited) { try { $run.Kill($true) } catch { }; $run.WaitForExit(10000) | Out-Null }
 $text = Read-Text $Out
-Check 'P3 shutdown cancels: exit 1, cancelled, the parked build tree is gone' ($exited -and ($run.ExitCode -eq 1) -and ($text -match 'cancelled') -and ((Parked).Count -eq 0)) ("exit=" + $run.ExitCode + " parked=" + (Parked).Count + " shutdown: $sd out: $text")
-$doc = $null; try { $doc = $text | ConvertFrom-Json } catch { }
+Check 'P3 shutdown cancels: exit 1, cancelled, the parked build tree is gone' ($exited -and ($run.ExitCode -eq 1) -and ($text -match 'cancelled') -and ((@(Parked)).Count -eq 0)) ("exit=" + $run.ExitCode + " parked=" + (@(Parked)).Count + " shutdown: $sd out: $text")
+$doc = $null; try { $doc = $text | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'P4 stdout is one cycle-fix/1 document (no progress on stdout)' (($null -ne $doc) -and ($doc.schema -eq 'cycle-fix/1') -and ($text -notmatch 'cycles --fix: baseline build --')) $text
 Stop-Parked
 

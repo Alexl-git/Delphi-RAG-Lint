@@ -120,9 +120,9 @@ type
     /// Never raises.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Calls: Default, DRagLint.Charts.Ask.AskChartQuestion, DRagLint.Charts.Producer.Delphi.Fail, DRagLint.Charts.Producer.Delphi.Freshness, DRagLint.Charts.Producer.Delphi.InIndexList, DRagLint.Charts.Producer.Delphi.NumArg, DRagLint.Charts.Producer.Delphi.PairedIndexes, DRagLint.Charts.Producer.Delphi.ProjectIndex, DRagLint.Charts.Producer.Delphi.TDelphiProducer.AnswersInProcess, DRagLint.Charts.Producer.Delphi.TDelphiProducer.Refuse (+7 more)</para>
-    /// <para>Returns: Refuse(EXIT_SETUP, Format('unknown question ''%s'' -- one of: %s', [pCommand.Question, string.Join(', ', PortedQuestionIds)])); Fail(E.Code, E.Message); Fail(EXIT_SETUP, Setup); Fail(PRODUCER_EXIT_STALE, 'stale index -- the answer would be short or wrong. Reindex incrementally, then ask again:' + StaleLines); Default(TProduceResult); Fail(ASK_EXIT_REFUSED, E.Message)</para>
+    /// <para>Returns: Refuse(EXIT_SETUP, Format('unknown question ''%s'' -- one of: %s', [pCommand.Question, string.Join(', ', PortedQuestionIds)])); Fail(E.Code, E.Message); Fail(EXIT_SETUP, Setup); Fail(PRODUCER_EXIT_STALE, 'stale index -- the answer would be short or wrong. Reindex incrementally, then ask again:' + StaleLines); Default(TProduceResult); Fail(ASK_EXIT_REFUSED, E.Message); Fail(EXIT_SETUP, E.Message); Fail(ASK_EXIT_REFUSED, Format('the in-process answer failed (%s: %s)', [E.ClassName, E.Message]))</para>
     /// <para>Implements: DRagLint.Charts.Producer.IReportProducer.Produce</para>
-    /// <para>Complexity: 14 (cyclomatic, outer body), 95 lines (full implementation)</para>
+    /// <para>Complexity: 18 (cyclomatic, outer body), 95 lines (full implementation)</para>
     /// <para>Reads: FOutRoot, FAllowLiveDb   Writes: FLast</para>
     /// <para>Catches: EChartsIndex (swallowed); EChartsQuestion (swallowed); EChartsTool (swallowed); EReportPairStop (swallowed); Exception (swallowed)</para>
     /// <para>Touches: file system</para>
@@ -160,7 +160,7 @@ type
 /// clone guard stays on only in the parity harness and the tests. The CLI's compare verb obtains
 /// its producer from this function.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.CompareTakeSnapshot (DRagLint.CLI.pas), DRagLint.CLI.DoCompare (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.Compare.CompareTakeSnapshot (DRagLint.CLI.Compare.pas), DRagLint.CLI.Compare.DoCompare (DRagLint.CLI.Compare.pas)</para>
 /// <para>Calls: DRagLint.Charts.Producer.Delphi.TDelphiProducer.Create</para>
 /// <para>Returns: TDelphiProducer.Create(True)</para>
 /// <para>Owns returned: new (caller owns)</para>

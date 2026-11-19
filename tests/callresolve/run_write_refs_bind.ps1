@@ -49,7 +49,10 @@
   FAIL check, and KEEP the scratch dir C:\TEMP\draglint_write_refs_bind_<PID> (disable the finally cleanup).
 #>
 [CmdletBinding()]
-param([string]$Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe'))
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe') }
 if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: no engine at $Exe -- pass -Exe <drag-lint.exe>"; exit 2 }
 . "$PSScriptRoot\..\autotest\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG2: no machine drag-lint.json
 try {
@@ -72,10 +75,10 @@ $use = Join-Path $scratch 'uWriteUse.pas'
 $db  = Join-Path $scratch 'writes.sqlite'
 
 function Sql([string]$Query) {
-  $raw = (& $exePath sql --db $db --json --limit 1000 --query $Query 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --limit 1000 --query $Query 2>$null }) -join "`n"
   $b = $raw.IndexOf('{')
   if ($b -lt 0) { throw "sql returned no JSON for: $Query" }
-  $o = $raw.Substring($b) | ConvertFrom-Json
+  $o = $raw.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }
   $names = @($o.columns | ForEach-Object { $_.name })
   $out = @()
   foreach ($r in @($o.rows)) {
@@ -121,7 +124,7 @@ $neg = @(
 function Check-Positives([string]$Tag, [string[]]$Skip) {
   foreach ($p in $pos) {
     if ($Skip -contains $p.M) { continue }
-    $rows = WriteAt (LineOf $p.M) $p.N
+    $rows = @(WriteAt (LineOf $p.M) $p.N)
     $ok = ($rows.Count -eq 1) -and ($rows[0].tq -eq $p.Q)
     $det = if ($rows.Count -eq 1) { "tq=$($rows[0].tq)" } else { "rows=$($rows.Count)" }
     Check ("{0}  {1}: write {2} binds to {3}" -f $Tag, $p.M, $p.N, $p.Q) $ok $det
@@ -130,12 +133,12 @@ function Check-Positives([string]$Tag, [string[]]$Skip) {
 
 Push-Location $scratch   # 150 HG: own scratch as cwd -- C:\TEMP is shared by every lane/guard (config discovery + stray files)
 try {
-  $log1 = (& $exePath index $scratch --db $db *>&1) -join "`n"
+  $log1 = (& { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db *>&1 | ForEach-Object { "$_" } }) -join "`n"
 
   # --- check 1 / 2 ----------------------------------------------------------------
   Check-Positives 'check 1' @()
   foreach ($n in $neg) {
-    $rows = WriteAt (LineOf $n.M) $n.N
+    $rows = @(WriteAt (LineOf $n.M) $n.N)
     $ok = ($rows.Count -eq 1) -and ($null -eq $rows[0].symbol_id)
     $det = if ($rows.Count -eq 1) { "sid=$($rows[0].symbol_id) tq=$($rows[0].tq)" } else { "rows=$($rows.Count)" }
     Check ("check 2  {0}: write {1} stays unbound" -f $n.M, $n.N) $ok $det
@@ -169,9 +172,9 @@ try {
   if ($txt -notmatch 'GShared: Integer') { throw 'check 5 fixture edit did not apply (uWriteLib2.pas has no GClash line)' }
   [System.IO.File]::WriteAllText($lib2, $txt, [System.Text.Encoding]::ASCII)
   [System.IO.File]::SetLastWriteTimeUtc($lib2, (Get-Date).ToUniversalTime().AddSeconds(5))
-  $log2 = (& $exePath index $scratch --db $db *>&1) -join "`n"
+  $log2 = (& { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db *>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'check 5  the re-index ran a SCOPED pass' ($log2 -match 'starting SCOPED pass') ''
-  $rows = WriteAt (LineOf 'W-USED-UNIT') 'GShared'
+  $rows = @(WriteAt (LineOf 'W-USED-UNIT') 'GShared')
   Check 'check 5  W-USED-UNIT is now ambiguous and unbound' (($rows.Count -eq 1) -and ($null -eq $rows[0].symbol_id)) ("sid=" + $(if ($rows.Count -ge 1) { $rows[0].symbol_id } else { '<none>' }))
   Check-Positives 'check 5' @('W-USED-UNIT')
 } finally {

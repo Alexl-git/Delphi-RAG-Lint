@@ -214,6 +214,14 @@ function LineAnchorProblems(const pEntry: TJSONObject; const pRepo: string; cons
 /// Plugin Log"). A blank line or a heading ends a quote; a single line break is a wrap.</returns>
 function MenuProseProblems(const pId, pWhere, pText: string; const pNodes: TArray<TMenuNodeRow>): TArray<string>;
 
+/// <summary>True when pWhere (an EntryTexts location) is the caption of an ide-context surface of pEntry. Such a
+/// caption ("drag-lint &gt; Fix ..." on the Editor context menu) is a context-menu path that checks B/C judge; the
+/// main-menu prose check (G-4) must skip it.</summary>
+/// <param name="pEntry">The feature entry; not owned.</param>
+/// <param name="pWhere">A text location such as "surfaces[1].caption", "surfaces[1].steps[0]" or "intro".</param>
+/// <returns>False for any other location, a non-context surface or an index past the surfaces.</returns>
+function IsContextCaption(const pEntry: TJSONObject; const pWhere: string): Boolean;
+
 /// <summary>Check C (help audit G-6): rule-catalog counts quoted in prose equal the live "rules --json" catalog.</summary>
 /// <param name="pId">Entry id, for the message.</param>
 /// <param name="pWhere">Where the text came from, for the message.</param>
@@ -2409,6 +2417,21 @@ begin
   Result := False;
 end;
 
+function IsContextCaption(const pEntry: TJSONObject; const pWhere: string): Boolean;
+var
+  lM: TMatch;
+  lIdx: Integer;
+  lS: TArray<TJSONValue>;
+begin
+  Result := False;
+  lM := TRegEx.Match(pWhere, '^surfaces\[(\d+)\]\.caption$');
+  if not lM.Success then
+    Exit;
+  lIdx := StrToInt(lM.Groups[1].Value);
+  lS := JItems(pEntry, 'surfaces');
+  Result := (lIdx <= High(lS)) and SameText(JS(lS[lIdx], 'type'), 'ide-context');
+end;
+
 function MenuProseProblems(const pId, pWhere, pText: string; const pNodes: TArray<TMenuNodeRow>): TArray<string>;
 var
   lText, lLow, lBest, lRest, lQuote: string;
@@ -2700,7 +2723,7 @@ begin
           ReportDocs('C2', lScope, PathProblems(lId, lT.Where, lT.Text, FSrc));
         if SameText(JS(lE, 'status'), 'shipped') then
           ReportDocs('C3', lScope, PhraseProblems(lId, lT.Where, lT.Text));
-        if FLive.HasMenuTree then
+        if FLive.HasMenuTree and not IsContextCaption(lE, lT.Where) then
           for lPr in MenuProseProblems(lId, lT.Where, lT.Text, FLive.MenuNodes) do
             Fail('C', lPr);
         if FLive.RuleCatalog <> nil then

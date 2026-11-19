@@ -16,6 +16,9 @@ param(
     [string] $WorkDir  = "$env:TEMP\drag-lint-indexjob-tests-$PID",
     [int]    $MinTests = 34
 )
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
 try {
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path "$PSScriptRoot\..\..").Path
@@ -60,7 +63,7 @@ if (($log -notmatch 'BUILD_EXITCODE=0') -or ($log -match 'Error:') -or -not (Tes
 }
 
 # --- run ---
-$out = @(& $testExe 2>&1 | ForEach-Object { "$_" })
+$out = @(& { $ErrorActionPreference = 'Continue'; & $testExe 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" })
 $code = $LASTEXITCODE
 $out | Where-Object { $_ -match '^FAIL|passed' } | ForEach-Object { Write-Host $_ }
 $last = ($out | Where-Object { $_ -match '^\d+ passed, \d+ failed$' } | Select-Object -Last 1)
@@ -72,3 +75,4 @@ exit 1
     Write-Host "FAIL run_indexjob_tests: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
 }
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

@@ -36,7 +36,10 @@
   Runs from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Continue'
@@ -56,8 +59,8 @@ function Get-FileMd5([string]$p) { (Get-FileHash -Algorithm MD5 -Path $p).Hash }
 # INTERFACE-section start line for $name, read back from the index via the
 # engine's own query verb (index-first: no second parser).
 function Get-DeclLine([string]$db, [string]$name) {
-  $j = (& $exePath query --name $name --db $db --json 2>$null) -join "`n"
-  $o = $null; try { $o = ($j | ConvertFrom-Json) } catch { return 0 }
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --db $db --json 2>$null }) -join "`n"
+  $o = $null; try { $o = ($j | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return 0 }
   if ($null -eq $o) { return 0 }
   foreach ($r in @($o)) { if ($r.section -eq 'interface') { return [int]$r.start_line } }
   return 0
@@ -108,7 +111,7 @@ function Test-SummaryMarked([string]$block) {
 
 # doc-drift for one qname, as raw JSON lines joined.
 function Get-Drift([string]$db, [string]$qname) {
-  return ((& $exePath doc-drift --qname $qname --db $db --json 2>$null) -join "`n")
+  return ((& { $ErrorActionPreference = 'Continue'; & $exePath doc-drift --qname $qname --db $db --json 2>$null }) -join "`n")
 }
 
 function Set-Text([string]$p, [string]$s) {
@@ -130,7 +133,7 @@ Copy-Item $fx $tgt -Force
 
 $pristine = [IO.File]::ReadAllBytes($tgt)
 
-& $exePath index $sc --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc --db $db 2>$null } | Out-Null
 Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
 # --- PRECONDITIONS. --------------------------------------------------------
@@ -145,9 +148,9 @@ Check 'PRECONDITION: Vanishing''s source comment is present' `
 # ===========================================================================
 # STEP 1 -- first apply: both summaries are marked and carry their prose.
 # ===========================================================================
-& $exePath document --unit $tgt --db $db --apply 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $tgt --db $db --apply 2>$null } | Out-Null
 Check 'STEP 1: apply exits 0' ($LASTEXITCODE -eq 0)
-& $exePath index $sc --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc --db $db 2>$null } | Out-Null
 
 $blkD = Get-Block $db $tgt 'Drifting'
 $blkV = Get-Block $db $tgt 'Vanishing'
@@ -169,8 +172,8 @@ $md5Step1 = Get-FileMd5 $tgt
 # ===========================================================================
 # STEP 2 -- idempotency with a harvested summary already present.
 # ===========================================================================
-& $exePath document --unit $tgt --db $db --apply 2>$null | Out-Null
-& $exePath index $sc --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $tgt --db $db --apply 2>$null } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc --db $db 2>$null } | Out-Null
 Check 'STEP 2: a second apply after a reindex is byte-identical' `
   ((Get-FileMd5 $tgt) -eq $md5Step1) ("c1=$md5Step1 c2=" + (Get-FileMd5 $tgt))
 # A file that lost BOTH summaries identically would also be byte-identical on a
@@ -188,7 +191,7 @@ Check 'STEP 2: the harvested summary survived the second apply' `
 # re-checks that the edited comment is actually on disk.
 Set-Text $tgt (([IO.File]::ReadAllText($tgt)) -replace `
   '(?m)^// Original prose, first version\.\r?$', '// Original prose, SECOND version.')
-& $exePath index $sc --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc --db $db 2>$null } | Out-Null
 
 $drift3 = Get-Drift $db 'harvest_drift.Drifting'
 Check 'STEP 3: doc-drift reports ddHarvestDrift BEFORE the apply' `
@@ -199,8 +202,8 @@ Check 'STEP 3: the finding names the text the source comment now yields' `
   ($drift3 -match 'Original prose, SECOND version\.') $drift3
 Check 'STEP 3: the finding names the symbol' ($drift3 -match 'Drifting') $drift3
 
-& $exePath document --unit $tgt --db $db --apply 2>$null | Out-Null
-& $exePath index $sc --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $tgt --db $db --apply 2>$null } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc --db $db 2>$null } | Out-Null
 $blkD3 = Get-Block $db $tgt 'Drifting'
 Check 'STEP 3: the marked summary was REFRESHED to the new prose' `
   ((Get-Summary $blkD3) -eq 'Original prose, SECOND version.') ("got=[" + (Get-Summary $blkD3) + "]")
@@ -216,7 +219,7 @@ Check 'STEP 3: the edited source // comment is still in the file' `
 # STEP 4 -- the source comment was DELETED: remove the managed summary, report.
 # ===========================================================================
 Set-Text $tgt (([IO.File]::ReadAllText($tgt)) -replace '(?m)^// Prose that will be deleted\.\r?\n', '')
-& $exePath index $sc --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc --db $db 2>$null } | Out-Null
 
 $drift4 = Get-Drift $db 'harvest_drift.Vanishing'
 Check 'STEP 4: doc-drift reports ddHarvestDrift for the vanished source comment' `
@@ -224,8 +227,8 @@ Check 'STEP 4: doc-drift reports ddHarvestDrift for the vanished source comment'
 Check 'STEP 4: the finding names the summary about to be removed' `
   ($drift4 -match 'Prose that will be deleted\.') $drift4
 
-& $exePath document --unit $tgt --db $db --apply 2>$null | Out-Null
-& $exePath index $sc --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $tgt --db $db --apply 2>$null } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc --db $db 2>$null } | Out-Null
 $blkV4 = Get-Block $db $tgt 'Vanishing'
 Check 'STEP 4: Vanishing has NO <summary> tag at all' (-not (Has-SummaryTag $blkV4)) ($blkV4 -replace "`n",' | ')
 Check 'STEP 4 (de-vacuator): the rest of Vanishing''s block is still there' `
@@ -244,7 +247,7 @@ Check 'STEP 4: Drifting is untouched by Vanishing''s removal' `
 Set-Text $tgt (([IO.File]::ReadAllText($tgt)) -replace `
   '<summary><!-- drag-lint:auto sum -->Original prose, SECOND version\.</summary>', `
   '<summary>Human owns this now.</summary>')
-& $exePath index $sc --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc --db $db 2>$null } | Out-Null
 
 $blkD5pre = Get-Block $db $tgt 'Drifting'
 Check 'STEP 5 (precondition): the summary is now UNMARKED and reads the human text' `
@@ -257,8 +260,8 @@ Check 'STEP 5: doc-drift does NOT report harvest drift on a hand-written summary
   (-not ((Get-Drift $db 'harvest_drift.Drifting') -match '"kind":"ddHarvestDrift"')) `
   (Get-Drift $db 'harvest_drift.Drifting')
 
-& $exePath document --unit $tgt --db $db --apply 2>$null | Out-Null
-& $exePath index $sc --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $tgt --db $db --apply 2>$null } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc --db $db 2>$null } | Out-Null
 $blkD5 = Get-Block $db $tgt 'Drifting'
 Check 'STEP 5: the hand-written summary is UNTOUCHED by the apply' `
   ((Get-Summary $blkD5) -eq 'Human owns this now.') ("got=[" + (Get-Summary $blkD5) + "]")
@@ -277,13 +280,13 @@ $tgt2 = Join-Path $sc2 'harvest_drift.pas'
 $db2  = Join-Path $sc2 'h.sqlite'
 [IO.File]::WriteAllBytes($tgt2, $pristine)
 
-& $exePath index $sc2 --db $db2 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc2 --db $db2 2>$null } | Out-Null
 $md5Pre = Get-FileMd5 $tgt2
-& $exePath document --unit $tgt2 --db $db2 --apply 2>$null | Out-Null
-& $exePath index $sc2 --db $db2 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $tgt2 --db $db2 --apply 2>$null } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc2 --db $db2 2>$null } | Out-Null
 Check 'STEP 6 (de-vacuator): the apply really changed the file' `
   ((Get-FileMd5 $tgt2) -ne $md5Pre) ''
-& $exePath document --unit $tgt2 --db $db2 --strip --apply 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $tgt2 --db $db2 --strip --apply 2>$null } | Out-Null
 Check 'STEP 6: --strip restores the file byte-for-byte, harvested summaries and all' `
   ((Get-FileMd5 $tgt2) -eq $md5Pre) ("pre=$md5Pre post=" + (Get-FileMd5 $tgt2))
 $after = [IO.File]::ReadAllLines($tgt2)

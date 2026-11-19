@@ -4,10 +4,10 @@ title: Global set in initialization and never freed (lint rule)
 summary: "Project lint rule: a unit's initialization sets its own global to a new object and no source that names the variable frees it"
 product: DL
 group: linting
-order: 30021
+order: 30023
 since: 1.44.1-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Global set in initialization and never freed (lint rule)
@@ -19,7 +19,7 @@ Read this to see when global-set-in-initialization-never-freed fires and what si
 ## How to run it
 
 ```text
-drag-lint lint-all [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]
+drag-lint lint-all [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget]
 ```
 
 Example:

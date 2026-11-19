@@ -21,9 +21,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-query-list-kind-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -48,35 +51,35 @@ for ($k = 1; $k -le $N; $k++) {
   [IO.File]::WriteAllText((Join-Path $WorkDir "$name.pas"), $src, [Text.Encoding]::ASCII)
 }
 $db = Join-Path $WorkDir 'list.sqlite'
-& $Exe index $WorkDir --db $db *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db *> $null }
 Check 'fixture indexed' ((Test-Path $db) -and $LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 Write-Host ''
 Write-Host 'query --kind unit --all' -ForegroundColor Cyan
-$text = @(& $Exe query --kind unit --all --db $db 2>$null)
+$text = @(& { $ErrorActionPreference = 'Continue'; & $Exe query --kind unit --all --db $db 2>$null })
 $textExit = $LASTEXITCODE
 $found = @($text | Where-Object { $_ -match '\bLU\d{3}\b' } | ForEach-Object { [regex]::Match($_, '\bLU\d{3}\b').Value } | Sort-Object -Unique)
 Check 'exits 0' ($textExit -eq 0) "exit=$textExit"
 Check "text lists all $N units (more than sql's 200-row default)" ($found.Count -eq $N) "found=$($found.Count)"
 Check 'the DOCUMENTED unit LU001 is listed (not the --no-docs filter)' ($found -contains 'LU001')
 
-$json = (& $Exe query --kind unit --all --json --db $db 2>$null) | Out-String
+$json = (& { $ErrorActionPreference = 'Continue'; & $Exe query --kind unit --all --json --db $db 2>$null }) | Out-String
 $rows = @()
-try { $rows = @($json | ConvertFrom-Json) } catch { }
+try { $rows = @(($json | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { }
 $jNames = @($rows | ForEach-Object { $_.name } | Where-Object { $_ -match '^LU\d{3}$' } | Sort-Object -Unique)
 Check "--json parses and lists all $N units" ($jNames.Count -eq $N) "rows=$($rows.Count) unit names=$($jNames.Count)"
 
 Write-Host ''
 Write-Host 'the kind is honoured' -ForegroundColor Cyan
-$cls = @(& $Exe query --kind class --all --db $db 2>$null)
+$cls = @(& { $ErrorActionPreference = 'Continue'; & $Exe query --kind class --all --db $db 2>$null })
 Check 'query --kind class --all lists TListMe' (@($cls | Where-Object { $_ -match '\bTListMe\b' }).Count -ge 1) "lines=$($cls.Count)"
 Check 'and lists no unit rows' (@($cls | Where-Object { $_ -match '\bunit\b.*\bLU\d{3}\b' }).Count -eq 0)
 
 Write-Host ''
 Write-Host 'controls: unchanged behaviour' -ForegroundColor Cyan
-$o1 = (& $Exe query --kind unit --db $db 2>&1) | Out-String
+$o1 = (& { $ErrorActionPreference = 'Continue'; & $Exe query --kind unit --db $db 2>&1 | ForEach-Object { "$_" } }) | Out-String
 Check 'query --kind unit WITHOUT --all still exits 2 asking for --name' (($LASTEXITCODE -eq 2) -and ($o1 -match '--name')) "exit=$LASTEXITCODE"
-$o2 = (& $Exe query --all --db $db 2>&1) | Out-String
+$o2 = (& { $ErrorActionPreference = 'Continue'; & $Exe query --all --db $db 2>&1 | ForEach-Object { "$_" } }) | Out-String
 Check 'query --all WITHOUT --kind exits 2 and names --kind' (($LASTEXITCODE -eq 2) -and ($o2 -match '--kind')) "exit=$LASTEXITCODE out=$($o2.Trim())"
 
 if (Test-Path $WorkDir) { Remove-Item -Recurse -Force $WorkDir -ErrorAction SilentlyContinue }

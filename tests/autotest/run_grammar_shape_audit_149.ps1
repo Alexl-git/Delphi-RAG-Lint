@@ -36,9 +36,9 @@ function Get-RgLine([string]$File, [string]$Text) {
   return $hit.LineNumber
 }
 function Get-Findings([string]$PasCopy, [string]$Db, [string]$Rules) {
-  $txt = (& $exePath lint $PasCopy --db $Db --library-db none --enable $Rules --json 2>$null) -join "`n"
+  $txt = (& { $ErrorActionPreference = 'Continue'; & $exePath lint $PasCopy --db $Db --library-db none --enable $Rules --json 2>$null }) -join "`n"
   if ($txt.Trim() -eq '') { return @() }
-  return @($txt | ConvertFrom-Json)
+  return @(($txt | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ("rg149-" + [Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($tmp) | Out-Null
@@ -47,7 +47,7 @@ try {
     $one = Join-Path $tmp $unit
     [IO.Directory]::CreateDirectory($one) | Out-Null
     [IO.File]::Copy((Join-Path $fxDir "$unit.pas"), (Join-Path $one "$unit.pas"))
-    & $exePath index $one --db (Join-Path $one 'db.sqlite') 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $one --db (Join-Path $one 'db.sqlite') 2>&1 | ForEach-Object { "$_" } } | Out-Null
   }
   # N1
   $a = Join-Path $tmp 'RG_149'
@@ -66,8 +66,8 @@ try {
   Check 'N3 used-before-assignment still fires on a real read (positive control)' ($ubaLines -contains $lnRead)
   # N4
   $q = "select kind, name_text, start_line from refs where start_line in ($(Get-RgLine $pasB 'pSheet.Other(Format'), $lnLabel1)) and kind = 'read'"
-  $rows = (& $exePath sql --db (Join-Path $b 'db.sqlite') --query $q --json 2>$null) -join "`n"
-  $names = @(($rows | ConvertFrom-Json).rows | ForEach-Object { $_[1] })
+  $rows = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db (Join-Path $b 'db.sqlite') --query $q --json 2>$null }) -join "`n"
+  $names = @(($rows | ConvertFrom-Json | ForEach-Object { $_ }).rows | ForEach-Object { $_[1] })
   Check 'N4 named-argument VALUE lTmp is a read ref' ($names -contains 'lTmp') ("read refs: " + ($names -join ','))
   Check 'N4 named-argument LABEL Format/FileName is no ref' (($names -notcontains 'Format') -and ($names -notcontains 'FileName'))
 } finally {

@@ -45,13 +45,13 @@ Write-Host "Indexing fixtures..."
 & $exePath index $dir --db $db | Out-Null
 
 Write-Host "RUN 1: bare lint-all (SC OFF by default; PG, UT, LI ON by default)..."
-$f0 = Parse-Findings (& $exePath lint-all --db $db --format json 2>$null)
+$f0 = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json 2>$null })
 $ids = @($Rules.Values)
 $off = @($f0 | Where-Object { $_.rule -eq $Rules["SC"] }).Count
 Write-Host ("  run 1: {0} finding(s) total; ours={1}" -f $f0.Count, $off)
 
 Write-Host "RUN 2: lint-all --enable $($ids -join ',') ..."
-$f = Parse-Findings (& $exePath lint-all --db $db --format json --enable ($ids -join ',') 2>$null)
+$f = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json --enable ($ids -join ',') 2>$null })
 $ok = ($off -eq 0) -and ($f0.Count -gt 0)
 $detail = @("scOff=$($off -eq 0) run1Real=$($f0.Count -gt 0)")
 foreach ($p in $Rules.Keys) {

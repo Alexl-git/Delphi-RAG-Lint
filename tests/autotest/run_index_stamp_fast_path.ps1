@@ -22,7 +22,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -74,28 +77,28 @@ elif sys.argv[1] == 'sym':
 '@
 $pyf = Join-Path $scratch 'q.py'
 Write-Ascii $pyf $py
-function Q([string]$What, [string]$Db) { return (& python $pyf $What $Db 2>&1 | Out-String) }
+function Q([string]$What, [string]$Db) { return (& { $ErrorActionPreference = 'Continue'; & python $pyf $What $Db 2>&1 | ForEach-Object { "$_" } } | Out-String) }
 # Files parsed this run = the per-file progress lines ("<path> -> N symbols, ..."); main's Done line has no parsed count.
 function Parsed([string]$Out) { return @($Out -split "`r?`n" | Where-Object { $_ -match ' -> \d+ symbols' }).Count }
 
 $db = Join-Path $scratch 'idx.sqlite'
 Push-Location C:\TEMP
 try {
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $s1 = Q 'sizes' $db
   Check '1: every files row carries the size of its file' ($s1 -match 'BAD_COUNT=0') $s1
 
-  $o2 = & $exePath index $src --db $db 2>&1 | Out-String
+  $o2 = & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check '2: a run with nothing changed parses nothing' ((Parsed $o2) -eq 0) ($o2 -split "`r?`n" | Select-String 'Done' | Out-String)
 
   Start-Sleep -Milliseconds 1100
   Write-Unit 'uOne' 'procedure Fresh;'
-  $o3 = & $exePath index $src --db $db 2>&1 | Out-String
+  $o3 = & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check '3: a changed file is re-parsed' ((Parsed $o3) -eq 1) ($o3 -split "`r?`n" | Select-String 'Done' | Out-String)
   Check '3: and its new declaration is in the index' ((Q 'sym' $db) -match 'SYM=1') (Q 'sym' $db)
 
   Q 'null' $db | Out-Null
-  $o4 = & $exePath index $src --db $db 2>&1 | Out-String
+  $o4 = & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check '4: a row with no recorded size is still up to date (full test)' ((Parsed $o4) -eq 0) ($o4 -split "`r?`n" | Select-String 'Done' | Out-String)
   Check '4: and the full test records the size' ((Q 'size2' $db) -match 'SIZE2=\d+') (Q 'size2' $db)
 } finally { Pop-Location }

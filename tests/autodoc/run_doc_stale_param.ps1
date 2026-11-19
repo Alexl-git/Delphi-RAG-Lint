@@ -19,7 +19,10 @@
   Run from a NEUTRAL CWD (C:\TEMP).
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -37,9 +40,9 @@ Copy-Item $fixture $target -Force
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
-  $ap = & $exePath document --qname doc_stale_param.Handle --db $db --apply 2>$null | Out-String
+  $ap = & { $ErrorActionPreference = 'Continue'; & $exePath document --qname doc_stale_param.Handle --db $db --apply 2>$null } | Out-String
   Check 'apply: reports extended' ($ap -match 'doc: extended -- \d+ edit\(s\) applied')
 
   $txt = [IO.File]::ReadAllText($target)

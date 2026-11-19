@@ -15,9 +15,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\drag-lint-multiname-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -69,12 +72,12 @@ end.
   $db = Join-Path $WorkDir 'm.sqlite'
   Push-Location $WorkDir
   try {
-    $o = & $Exe index $WorkDir --db $db --library-db none --rule-cache-warm off 2>&1 | Out-String
+    $o = & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db --library-db none --rule-cache-warm off 2>&1 | ForEach-Object { "$_" } } | Out-String
     Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
-    $j = & $Exe sql --db $db --query "SELECT name FROM symbols" --json 2>$null | Out-String
+    $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query "SELECT name FROM symbols" --json 2>$null } | Out-String
   } finally { Pop-Location }
   $names = @()
-  try { $names = @((($j | ConvertFrom-Json).rows) | ForEach-Object { [string]$_[0] }) } catch {}
+  try { $names = @((($j | ConvertFrom-Json | ForEach-Object { $_ }).rows) | ForEach-Object { [string]$_[0] }) } catch {}
   Write-Host ("  symbols: {0}" -f (($names | Sort-Object -Unique) -join ','))
   function Has([string]$n) { return [bool]($names | Where-Object { $_ -ceq $n }) }
   foreach ($first in 'A', 'Message', 'FX', 'CA', 'GOne', 'LOne', 'P1') {

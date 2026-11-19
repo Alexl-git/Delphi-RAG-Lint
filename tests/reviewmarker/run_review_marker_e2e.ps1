@@ -9,8 +9,9 @@
 # somebody has since edited, which is a real defect hidden behind an old
 # signature -- strictly worse than never having marked it.
 
+param([Parameter(Mandatory)][string]$Exe)   # 152 TESTS: no default engine
 $ErrorActionPreference = 'Stop'
-$exe = Join-Path $PSScriptRoot '..\..\third_party\dll-win64\drag-lint.exe'
+$exe = $Exe
 if (-not (Test-Path $exe)) { Write-Output "review-marker-e2e: FATAL -- no exe at $exe"; exit 1 }
 
 $tmp  = Join-Path $env:TEMP ("dl-marker-e2e-" + $PID)
@@ -33,7 +34,7 @@ function Write-Fixture($exceptLine) {
 }
 
 function LintRules {
-  $out = & $exe lint $src 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $exe lint $src 2>&1 | ForEach-Object { "$_" } } | Out-String
   # rule ids look like: "  [warning] rule-id: message"
   ([regex]::Matches($out, '\[\w+\]\s+([a-z0-9-]+):')) | ForEach-Object { $_.Groups[1].Value }
 }
@@ -50,7 +51,7 @@ Check 'A hashless marker suppresses'            (-not ($r -contains 'try-except-
 Check 'A hashless marker reports stale'         ($r -contains 'review-marker-stale')
 
 # The hint names the hash to use, so the fix is copy-paste rather than guesswork.
-$msg  = (& $exe lint $src 2>&1 | Out-String)
+$msg  = (& { $ErrorActionPreference = 'Continue'; & $exe lint $src 2>&1 | ForEach-Object { "$_" } } | Out-String)
 $hash = ([regex]::Match($msg, 'try-except-swallowed@([0-9a-f]{4})')).Groups[1].Value
 Check 'A hint supplies the correct hash'        ($hash -match '^[0-9a-f]{4}$')
 

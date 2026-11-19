@@ -231,9 +231,6 @@ type
     FAnsweredIds     : TDictionary<string, Boolean>;   { C>S pump only: ids Answer took }
     FTestAnswerInline: Boolean;
     FTestFastPath    : Boolean;
-    /// <summary><!-- drag-lint:auto sum -->C&gt;S pump: consumes a $/cancelRequest for an
-    /// id Answer took (group-4 P1). DelphiLSP never saw that request, so the cancel is
-    /// not forwarded; the reply (already written or still on the worker) is unaffected.</summary>
     /// <param name="AFrame"><!-- drag-lint:auto type -->const TBytes</param>
     /// <param name="ALen"><!-- drag-lint:auto type -->Integer</param>
     /// <param name="AOnTake"><!-- drag-lint:auto type -->const TProc</param>
@@ -368,7 +365,7 @@ type
     /// <returns><!-- drag-lint:auto -->Boolean -- Observed: FQueue.Count &lt; QUEUE_MAX.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoUsesReport.WalkBfs (DRagLint.CLI.pas) ?, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.RecordRequest (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.WarmUp (DRagLint.LSP.Proxy.Merge.pas) (+2 more)</para>
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Enqueue (DRagLint.LSP.Proxy.Merge.pas) ?, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.RecordRequest (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.WarmUp (DRagLint.LSP.Proxy.Merge.pas)</para>
     /// <para>Reads: FStateLock, FQueue, FJobReady</para>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
@@ -894,6 +891,7 @@ type
     /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeDefinition (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeHover (DRagLint.LSP.Proxy.Merge.pas) (+1 more)</para>
     /// <para>Calls: DRagLint.LSP.Proxy.Merge.MergeErrLine, DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile, DRagLint.LSP.Server.TLSPServer.Create/1, FileExists</para>
     /// <para>Returns: FServer</para>
+    /// <para>Complexity: 10 (cyclomatic, outer body), 54 lines (full implementation)</para>
     /// <para>Reads: FServerLock, FServerTried, FOptions, FServer, FPendingSettingsFile   Writes: FServerTried, FServer, FPendingSettingsFile</para>
     /// <para>Owns returned: borrowed</para>
     /// <para>Catches: Exception (swallowed)</para>

@@ -35,7 +35,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 function Parse-Findings([string[]]$Raw) {
   $txt = ($Raw -join "`n"); $b = $txt.IndexOf('[')
-  $out = @(); if ($b -ge 0) { try { $out = @($txt.Substring($b) | ConvertFrom-Json) } catch { $out = @() } }
+  $out = @(); if ($b -ge 0) { try { $out = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $out = @() } }
   if ($null -eq $out) { $out = @() }
   return ,@($out)
 }
@@ -57,26 +57,26 @@ try {
   Copy-Item (Join-Path $PSScriptRoot '*.pas') $src
   $use = Join-Path $src 'uR10Use.pas'
   $db = Join-Path $scratch 'r10.sqlite'
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $old = Join-Path $scratch 'old.sqlite'
   Copy-Item $db $old
   $py = Join-Path $scratch 'drop.py'
   [IO.File]::WriteAllText($py, "import sqlite3, sys`nc = sqlite3.connect(sys.argv[1])`nc.execute('DROP TABLE ref_types')`nc.commit()`nc.close()`n")
   python -I $py $old
-  $rows = @(& $exePath sql --db $db --query "SELECT count(*) FROM ref_types" 2>&1) -join ' '
-  $gone = @(& $exePath sql --db $old --query "SELECT name FROM sqlite_master WHERE name = 'ref_types'" 2>&1) -join ' '
+  $rows = @(& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "SELECT count(*) FROM ref_types" 2>&1 | ForEach-Object { "$_" } }) -join ' '
+  $gone = @(& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $old --query "SELECT name FROM sqlite_master WHERE name = 'ref_types'" 2>&1 | ForEach-Object { "$_" } }) -join ' '
   Check 'the fixture DB has ref_types rows' ($rows -notmatch '\b0\b\s*$') $rows
   Check 'the control DB really has no ref_types' ($gone -match '\b0 row') $gone
 
-  $withFacts = Parse-Findings (& $exePath lint-all --db $db --format json 2>$null)
+  $withFacts = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json 2>$null })
   $oldAnc = Join-Path $scratch 'oldanc.sqlite'
   Copy-Item $old $oldAnc
   [IO.File]::WriteAllText($py, "import sqlite3, sys`nc = sqlite3.connect(sys.argv[1])`nc.execute('DELETE FROM type_ancestors')`nc.commit()`nc.close()`n")
   python -I $py $oldAnc
-  $noAnc     = Parse-Findings (& $exePath lint-all --db $oldAnc --format json 2>$null)
-  $noTable   = Parse-Findings (& $exePath lint-all --db $old --format json 2>$null)
-  $noIndex   = Parse-Findings (& $exePath lint $use --format json 2>$null)
-  $oneFile   = Parse-Findings (& $exePath lint $use --db $db --format json 2>$null)
+  $noAnc     = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $oldAnc --format json 2>$null })
+  $noTable   = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $old --format json 2>$null })
+  $noIndex   = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $use --format json 2>$null })
+  $oneFile   = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint $use --db $db --format json 2>$null })
 
   foreach ($r in $rules) {
     $rule = $r.Rule; $tag = $r.Tag
@@ -87,12 +87,12 @@ try {
     $wantOn  = @($always + $only | Sort-Object)
     $wantOff = @($always + $silenced | Sort-Object)
     Check "$rule fixture has an ALWAYS line and a CONTROL line" (($always.Count -gt 0) -and ($control.Count -gt 0)) ''
-    Check "$rule lint-all with ref_types: ALWAYS + ORACLE-ONLY" ((@(Lines $withFacts $rule) -join ',') -eq ($wantOn -join ',')) "got [$((Lines $withFacts $rule) -join ',')] want [$($wantOn -join ',')]"
-    Check "$rule lint <file> --db with ref_types: ALWAYS + ORACLE-ONLY" ((@(Lines $oneFile $rule) -join ',') -eq ($wantOn -join ',')) "got [$((Lines $oneFile $rule) -join ',')] want [$($wantOn -join ',')]"
+    Check "$rule lint-all with ref_types: ALWAYS + ORACLE-ONLY" ((@(Lines $withFacts $rule) -join ',') -eq ($wantOn -join ',')) "got [$((@(Lines $withFacts $rule)) -join ',')] want [$($wantOn -join ',')]"
+    Check "$rule lint <file> --db with ref_types: ALWAYS + ORACLE-ONLY" ((@(Lines $oneFile $rule) -join ',') -eq ($wantOn -join ',')) "got [$((@(Lines $oneFile $rule)) -join ',')] want [$($wantOn -join ',')]"
     $wantNoTable = if ($r.AncestryOnly) { $wantOn } else { $wantOff }   # sleep-in-vcl reads type_ancestors, not ref_types
-    Check "$rule lint-all, ref_types table dropped" ((@(Lines $noTable $rule) -join ',') -eq ($wantNoTable -join ',')) "got [$((Lines $noTable $rule) -join ',')] want [$($wantNoTable -join ',')]"
-    Check "$rule lint-all, ref_types dropped and type_ancestors emptied: as before (ALWAYS + SILENCED)" ((@(Lines $noAnc $rule) -join ',') -eq ($wantOff -join ',')) "got [$((Lines $noAnc $rule) -join ',')] want [$($wantOff -join ',')]"
-    Check "$rule lint <file>, no index: as before (ALWAYS + SILENCED)" ((@(Lines $noIndex $rule) -join ',') -eq ($wantOff -join ',')) "got [$((Lines $noIndex $rule) -join ',')] want [$($wantOff -join ',')]"
+    Check "$rule lint-all, ref_types table dropped" ((@(Lines $noTable $rule) -join ',') -eq ($wantNoTable -join ',')) "got [$((@(Lines $noTable $rule)) -join ',')] want [$($wantNoTable -join ',')]"
+    Check "$rule lint-all, ref_types dropped and type_ancestors emptied: as before (ALWAYS + SILENCED)" ((@(Lines $noAnc $rule) -join ',') -eq ($wantOff -join ',')) "got [$((@(Lines $noAnc $rule)) -join ',')] want [$($wantOff -join ',')]"
+    Check "$rule lint <file>, no index: as before (ALWAYS + SILENCED)" ((@(Lines $noIndex $rule) -join ',') -eq ($wantOff -join ',')) "got [$((@(Lines $noIndex $rule)) -join ',')] want [$($wantOff -join ',')]"
   }
 } finally {
   if (Test-Path $scratch) { [System.IO.Directory]::Delete($scratch, $true) }

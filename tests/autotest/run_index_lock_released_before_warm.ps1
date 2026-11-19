@@ -25,8 +25,11 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe"
+  [string]$Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -82,7 +85,7 @@ $env:DRAGLINT_TEST_WARM_DELAY_MS = '20000'
 try {
   $a = Start-Process -FilePath $Exe -ArgumentList @('index', '--project', "`"$dpr`"", '--db', "`"$db`"", '--rule-cache-warm', 'wait') `
     -WorkingDirectory $work -RedirectStandardOutput (Join-Path $work 'a.out') -RedirectStandardError (Join-Path $work 'a.err') `
-    -NoNewWindow -PassThru
+    -NoNewWindow -PassThru; $null = $a.Handle
 } finally { Remove-Item Env:\DRAGLINT_TEST_WARM_DELAY_MS -ErrorAction SilentlyContinue }
 
 # The lock appears when A starts writing; with the fix it goes when the writes end.

@@ -21,9 +21,9 @@ Write-Host "Indexing fixture..."
 & $exePath index $dir --db $db | Out-Null
 
 Write-Host "Running lint-all..."
-$raw = & $exePath lint-all --db $db --format json 2>$null
+$raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json 2>$null }
 $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
-$f = @(); if ($b -ge 0) { try { $f = ($txt.Substring($b) | ConvertFrom-Json) } catch { $f = @() } }
+$f = @(); if ($b -ge 0) { try { $f = ($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $f = @() } }
 if ($null -eq $f) { $f = @() }
 
 $privFindings = @($f | Where-Object { $_.rule -eq 'unused-private-member' })

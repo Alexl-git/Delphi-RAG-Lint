@@ -15,12 +15,12 @@ if ($missing.Count -gt 0) {
 $fail = 0
 function Test-One([string]$Name, [string[]]$VerbArgs) {
   $log = Join-Path $env:TEMP ("cast-shutdown-$Name-" + [guid]::NewGuid().ToString('N') + '.log')
-  $p = Start-Process -FilePath $Engine -ArgumentList $VerbArgs -PassThru -NoNewWindow -RedirectStandardOutput $log -RedirectStandardError "$log.err"
+  $p = Start-Process -FilePath $Engine -ArgumentList $VerbArgs -PassThru -NoNewWindow -RedirectStandardOutput $log -RedirectStandardError "$log.err"; $null = $p.Handle
   try {
     # Send the shutdown as soon as the control channel is up: retry every 0.5 s until an engine holds the DB.
     $reached = $false
     for ($i = 0; $i -lt 120 -and -not $p.HasExited; $i++) {
-      $out = (& $Engine shutdown --db $DbPath --wait 30 2>&1 | Out-String)
+      $out = (& { $ErrorActionPreference = 'Continue'; & $Engine shutdown --db $DbPath --wait 30 2>&1 | ForEach-Object { "$_" } } | Out-String)
       if ($out -notmatch 'no running drag-lint engine') { $reached = $true; break }
       Start-Sleep -Milliseconds 500
     }

@@ -37,9 +37,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_query_descendants_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){ if($d){Write-Host "      $d" -ForegroundColor DarkGray}; $script:fail=$true } }
@@ -79,12 +82,12 @@ $db  = Join-Path $WorkDir 'desc.sqlite'
 $out = Join-Path $WorkDir 'o.txt'
 $err = Join-Path $WorkDir 'e.txt'
 
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 function RunDescendants([string]$Ancestor) {
   $p = Start-Process -FilePath $exePath `
         -ArgumentList @('query','descendants','--of',$Ancestor,'--db',$db) `
-        -NoNewWindow -Wait -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
+        -NoNewWindow -Wait -PassThru -RedirectStandardOutput $out -RedirectStandardError $err; $null = $p.Handle
   $lines = @(Get-Content -LiteralPath $out -ErrorAction SilentlyContinue |
              Where-Object { $_.Trim() -ne '' -and $_ -notmatch '^\(loaded defaults' })
   return @{ Code = $p.ExitCode; Lines = $lines }

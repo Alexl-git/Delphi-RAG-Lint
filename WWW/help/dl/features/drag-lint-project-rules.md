@@ -4,10 +4,10 @@ title: "drag-lint: Project Rules"
 summary: Right-click a project in the Project Manager to make it the active project and open its Lint Options tab in the drag-lint dock
 product: DL
 group: linting
-order: 30009
+order: 30010
 since: 0.95.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # drag-lint: Project Rules
@@ -29,6 +29,8 @@ Full flag list: [rules in the CLI reference](../cli.md#rules).
 | `--standard` | `cwe\|cert\|misra` |  |  |
 | `--rule` | `<id>[,<id>]` |  |  |
 | `--rules-dir` | `<dir>` |  |  |
+| `--project` | `<X.dproj>` |  |  |
+| `--target-compiler` | `<ver\|auto>` |  |  |
 
 ## Where to click
 

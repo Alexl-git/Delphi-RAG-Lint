@@ -26,7 +26,10 @@ attended check (plan P6), not something to fake here.
 Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$detail=''){
@@ -75,13 +78,13 @@ $dproj = Join-Path $work 'TreeP.dproj'
 $unit  = Join-Path $work 'TreeB.pas'
 $base  = Join-Path $work 'b.json'
 
-& $Exe index $work --db $db --rebuild *> $null
-& $Exe lint-tree --unit $unit --db $db --write-baseline $base *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db --rebuild *> $null }
+& { $ErrorActionPreference = 'Continue'; & $Exe lint-tree --unit $unit --db $db --write-baseline $base *> $null }
 Check 'baseline captured' (Test-Path $base) $base
 
 # --- case 1: BUILD A STALE .DCU FIRST ----------------------------------------
 Push-Location $work
-& $dcc -Q -B TreeP.dpr *> $null
+& { $ErrorActionPreference = 'Continue'; & $dcc -Q -B TreeP.dpr *> $null }
 Pop-Location
 $dcuB = Join-Path $work 'TreeB.dcu'
 Check 'a STALE TreeB.dcu exists before tier 3 runs' (Test-Path $dcuB) `
@@ -91,8 +94,8 @@ function Run-Compile([string]$buffer){
   $a = @('lint-tree','--unit',$unit,'--db',$db,'--baseline',$base,'--project',$dproj,
          '--platform','win32','--compile','--format','json')
   if($buffer){ $a += @('--buffer',$buffer) }
-  $o = & $Exe @a 2>$null
-  try { ($o | Out-String) | ConvertFrom-Json } catch { $null }
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null }
+  try { ($o | Out-String) | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
 }
 
 # --- case 2: the shadow must beat the stale .dcu ------------------------------

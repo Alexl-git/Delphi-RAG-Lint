@@ -39,7 +39,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7. Needs `python` on PATH.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $scratch = $null
 try {
 
@@ -85,7 +88,7 @@ Write-Ascii (Join-Path $scratch 'Fix.dproj') @'
 $proj = Join-Path $scratch 'Fix.dproj'
 
 function Invoke-Victim { # returns @{Code; Out}
-  $o = & $exePath index --project $proj --db $db --resolve-only 2>&1 | Out-String
+  $o = & { $ErrorActionPreference = 'Continue'; & $exePath index --project $proj --db $db --resolve-only 2>&1 | ForEach-Object { "$_" } } | Out-String
   @{ Code = $LASTEXITCODE; Out = $o }
 }
 function Db-Facts { # call_edges count, orphan edges, fk_check rows, integrity
@@ -98,25 +101,25 @@ print(c.execute('select count(*) from call_edges').fetchone()[0],
       c.execute('PRAGMA integrity_check').fetchone()[0])
 '@
   $f = Join-Path $scratch '_facts.py'; Write-Ascii $f $py
-  $r = (& python -I $f $db 2>&1 | Out-String).Trim() -split '\s+'
+  $r = (& { $ErrorActionPreference = 'Continue'; & python -I $f $db 2>&1 | ForEach-Object { "$_" } } | Out-String).Trim() -split '\s+'
   @{ Edges = [int]$r[0]; Orphans = [int]$r[1]; FkRows = [int]$r[2]; Integrity = $r[3] }
 }
 
 # --- first index ------------------------------------------------------------
-$first = & $exePath index --project $proj --db $db 2>&1 | Out-String
+$first = & { $ErrorActionPreference = 'Continue'; & $exePath index --project $proj --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 $firstCode = $LASTEXITCODE
 $edges0 = (Db-Facts).Edges
 Check 'setup: first index exit 0 and call_edges present' (($firstCode -eq 0) -and ($edges0 -gt 600)) "edges=$edges0"
 
 # --- C0 positive control ----------------------------------------------------
-$id0 = [int](& python -I $perp $db 'UnitX.pas' --min-id 2>&1 | Out-String).Trim()
-$null = & python -I $perp $db 'UnitX.pas' --hold-ms 1 2>&1
-$id1 = [int](& python -I $perp $db 'UnitX.pas' --min-id 2>&1 | Out-String).Trim()
+$id0 = [int](& { $ErrorActionPreference = 'Continue'; & python -I $perp $db 'UnitX.pas' --min-id 2>&1 | ForEach-Object { "$_" } } | Out-String).Trim()
+$null = & { $ErrorActionPreference = 'Continue'; & python -I $perp $db 'UnitX.pas' --hold-ms 1 2>&1 | ForEach-Object { "$_" } }
+$id1 = [int](& { $ErrorActionPreference = 'Continue'; & python -I $perp $db 'UnitX.pas' --min-id 2>&1 | ForEach-Object { "$_" } } | Out-String).Trim()
 Check 'C0 positive control: a perpetrator commit re-issues UnitX symbol ids' ($id1 -ne $id0) "min id $id0 -> $id1"
 
 # --- C1 deterministic race --------------------------------------------------
 $pOut = Join-Path $scratch 'perp-c1.out'
-$p = Start-Process python -ArgumentList @('-I', $perp, $db, 'UnitX.pas', '--hold-ms', '3000') -PassThru -NoNewWindow -RedirectStandardOutput $pOut
+$p = Start-Process python -ArgumentList @('-I', $perp, $db, 'UnitX.pas', '--hold-ms', '3000') -PassThru -NoNewWindow -RedirectStandardOutput $pOut; $null = $p.Handle
 $deadline = (Get-Date).AddSeconds(15)
 while ((Get-Date) -lt $deadline -and -not ((Test-Path $pOut) -and ((Get-Content $pOut -Raw) -match 'READY'))) { Start-Sleep -Milliseconds 50 }
 Start-Sleep -Milliseconds 500
@@ -131,7 +134,7 @@ if ($v.Out -match 'FOREIGN KEY|database is locked') { ($v.Out -split "`r?`n" | W
 # B holds an IMMEDIATE tx for 20 s while the victim starts. A 5 s writer timeout dies
 # "database is locked" at 5 s; the 120 s writer timeout waits the hold out and completes.
 $hOut = Join-Path $scratch 'perp-c6.out'
-$hp = Start-Process python -ArgumentList @('-I', $perp, $db, 'UnitX.pas', '--hold-ms', '20000') -PassThru -NoNewWindow -RedirectStandardOutput $hOut
+$hp = Start-Process python -ArgumentList @('-I', $perp, $db, 'UnitX.pas', '--hold-ms', '20000') -PassThru -NoNewWindow -RedirectStandardOutput $hOut; $null = $hp.Handle
 $deadline = (Get-Date).AddSeconds(15)
 while ((Get-Date) -lt $deadline -and -not ((Test-Path $hOut) -and ((Get-Content $hOut -Raw) -match 'READY'))) { Start-Sleep -Milliseconds 50 }
 Start-Sleep -Milliseconds 300
@@ -145,7 +148,7 @@ Check 'C6 no database-is-locked failure' ($hv.Out -notmatch 'database is locked'
 Check 'C6 victim really waited (>= 15 s)' ($sw.Elapsed.TotalSeconds -ge 15) ("{0:N1} s" -f $sw.Elapsed.TotalSeconds)
 # --- C2 stress --------------------------------------------------------------
 $sOut = Join-Path $scratch 'perp-c2.out'
-$sp = Start-Process python -ArgumentList @('-I', $perp, $db, 'UnitX.pas', '--loop', '--period-ms', '10', '--seconds', '45') -PassThru -NoNewWindow -RedirectStandardOutput $sOut
+$sp = Start-Process python -ArgumentList @('-I', $perp, $db, 'UnitX.pas', '--loop', '--period-ms', '10', '--seconds', '45') -PassThru -NoNewWindow -RedirectStandardOutput $sOut; $null = $sp.Handle
 Start-Sleep -Milliseconds 300
 $ok = 0; $fk = 0; $lk = 0
 1..8 | ForEach-Object {

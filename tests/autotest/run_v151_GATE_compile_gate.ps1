@@ -24,9 +24,12 @@
   Needs dcc: SKIPs (exit 0) when rsvars.bat is missing.
 #>
 param(
-  [string]$Exe    = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe    = '',
   [string]$Rsvars = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Continue'  # native stderr must not terminate; every call is checked by exit code
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -46,13 +49,13 @@ function New-Case([string]$Tag, [string]$Fx, [string]$Proj, [string]$UnitName, [
   $u = Join-Path $d $UnitName
   if ($Edit) { & $Edit $u }
   $db = Join-Path $d 'p.sqlite'
-  & $Exe index --project (Join-Path $d $Proj) --db $db --library-db none *> (Join-Path $Tmp "$Tag.index.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $d $Proj) --db $db --library-db none *> (Join-Path $Tmp "$Tag.index.log") }
   if ($LASTEXITCODE -ne 0) { throw "index $Tag exit $LASTEXITCODE" }
   return @{ Dir = $d; Db = $db; Proj = (Join-Path $d $Proj); Unit = $u }
 }
 function Fix($C, [string]$Rule, [int]$Line, [string[]]$Extra) {
   $a = @('lint', '--in', $C.Unit, '--db', $C.Db, '--enable', $Rule, '--fix', '--fix-rule', $Rule, '--fix-line', "$Line", '--apply', '--no-backup', '--rsvars', $Rsvars) + $Extra
-  $out = & $Exe @a 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } } | Out-String
   return @{ Code = $LASTEXITCODE; Out = $out }
 }
 function Hash($p) { return (Get-FileHash $p -Algorithm SHA1).Hash }

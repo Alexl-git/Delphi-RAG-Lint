@@ -1,5 +1,8 @@
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
@@ -19,8 +22,8 @@ function Assert-Fix($fixtureName, $L, $R, $expect, $tag) {
   Push-Location C:\TEMP
   try {
     $fixArgs = @('lint','--file',$target,'--fix','--fix-line',$L,'--fix-rule',$R,'--json','--apply')
-    $raw = & $exePath @fixArgs 2>$null | Out-String
-    $arr = $null; try { $arr = ($raw | ConvertFrom-Json) } catch { $arr = $null }
+    $raw = & { $ErrorActionPreference = 'Continue'; & $exePath @fixArgs 2>$null } | Out-String
+    $arr = $null; try { $arr = ($raw | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $arr = $null }
     if ($null -ne $arr -and $arr -isnot [System.Array]) { $arr = @($arr) }
     $t = $null; if ($null -ne $arr) { $t = $arr | Where-Object { $_.rule -eq $R } | Select-Object -First 1 }
     Check "${tag}: targeted finding present"    ($null -ne $t)

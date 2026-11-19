@@ -13,13 +13,16 @@
 #
 # Usage: pwsh -File run_v1511_CYC_loader_gate.ps1 -Exe <drag-lint.exe> -LibraryDb <library-Win32 COPY> [-WorkDir <dir>] [-KeepWorkDir]
 param(
-  [string]$Exe       = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe       = '',
   [string]$LoaderSrc = (Join-Path 'C:\' 'TEMP\claude\lanes\v151\I10\loader-base'),
   [string]$LibraryDb = '',
   [string]$WorkDir   = "$env:TEMP\drag-lint-v1511-cyc-loader-$PID",
   [string]$RsVars    = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat',
   [switch]$KeepWorkDir
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false; $script:Passed = 0
 function Check($n, $ok, $d = '') {
@@ -49,11 +52,11 @@ try {
   $db = Join-Path $WorkDir 'loader.sqlite'
   Push-Location $WorkDir
   try {
-    $null | & $Exe index --project $dproj --db $db --library-db $LibraryDb *> "$db.log"
+    $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project $dproj --db $db --library-db $LibraryDb *> "$db.log" }
     $common = @('cycles', '--fix', '--hub-surface', '--project', $dproj, '--db', $db, '--library-db', $LibraryDb, '--platform', 'win32', '--cycle', '1')
-    $dry = ($null | & $Exe @common --no-compile --format text 2>$null | Out-String); $dryCode = $LASTEXITCODE
+    $dry = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @common --no-compile --format text 2>$null } | Out-String); $dryCode = $LASTEXITCODE
     $errFile = Join-Path $WorkDir 'apply.err'
-    $app = ($null | & $Exe @common --apply --rsvars $wrap --build-timeout 1800 --format text 2> $errFile | Out-String); $appCode = $LASTEXITCODE
+    $app = ($null | & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); $input | & $Exe @common --apply --rsvars $wrap --build-timeout 1800 --format text 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String); $appCode = $LASTEXITCODE
     $err = if (Test-Path $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
   } finally { Pop-Location }
   Check 'l0 dry run: R3 plans the 78-unit group, 76 spokes, the group breaks, mechanical   (RED on 1.51.0: exit 2)' (($dryCode -eq 0) -and

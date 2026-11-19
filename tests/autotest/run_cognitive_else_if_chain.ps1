@@ -13,9 +13,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-cogelseif-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -91,8 +94,8 @@ end.
   $norm = $body -replace "`r`n", "`n" -replace "`n", "`r`n"
   [System.IO.File]::WriteAllText($fx, $norm, [System.Text.Encoding]::ASCII)
 
-  $raw = (& $Exe lint $fx --rule cognitive-complexity --json 2>$null) -join "`n"
-  $f = if ([string]::IsNullOrWhiteSpace($raw)) { @() } else { @($raw | ConvertFrom-Json) }
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fx --rule cognitive-complexity --json 2>$null }) -join "`n"
+  $f = if ([string]::IsNullOrWhiteSpace($raw)) { @() } else { @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   $lines = [System.IO.File]::ReadAllLines($fx)
   function ScoreAt($name) {
     $ln = -1

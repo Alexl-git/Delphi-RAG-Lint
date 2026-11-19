@@ -45,9 +45,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-shared-staleness-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -220,18 +223,18 @@ $dbA = "$aDir\_D-RAG\A.sqlite"
 $dbB = "$bDir\_D-RAG\B.sqlite"
 
 function Reindex([string]$Db, [string[]]$Dirs) {
-  foreach ($d in $Dirs) { & $Exe index $d --db $Db 2>&1 | Out-Null }
+  foreach ($d in $Dirs) { & { $ErrorActionPreference = 'Continue'; & $Exe index $d --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-Null }
 }
 function DocApply([string]$Db, [string]$Unit) {
-  & $Exe document --unit (Join-Path $shDir "$Unit.pas") --db $Db --apply --no-backup 2>$null
+  & { $ErrorActionPreference = 'Continue'; & $Exe document --unit (Join-Path $shDir "$Unit.pas") --db $Db --apply --no-backup 2>$null }
 }
 function DocEditCount([string]$Db, [string]$Unit) {
-  $o = ((& $Exe document --unit (Join-Path $shDir "$Unit.pas") --db $Db 2>$null) -join "`n") -replace '</?para>',''
+  $o = ((& { $ErrorActionPreference = 'Continue'; & $Exe document --unit (Join-Path $shDir "$Unit.pas") --db $Db 2>$null }) -join "`n") -replace '</?para>',''
   if ($o -match 'decl\(s\)[^,]*,\s*(\d+)\s*edit\(s\)') { return [int]$Matches[1] }
   return 0
 }
 function DriftCount([string]$Db, [string]$Unit) {
-  $o = & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $Db --quiet 2>$null
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $Db --quiet 2>$null }
   ($o | Select-String 'doc-drift' | Where-Object { $_.Line -match "\\$Unit\.pas:" }).Count
 }
 function BlockLine([string]$Unit, [string]$Label) {
@@ -439,7 +442,8 @@ Check 'no entry is duplicated in the merged list' (
 
 Check 'the --fix path starts from real drift' ((DriftCount $dbB 'MarkFix') -gt 0)
 
-& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $dbB --fix --apply --no-backup 2>$null | Out-Null
+# 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $dbB --fix --apply --no-compile-gate --no-backup 2>$null } | Out-Null
 Reindex $dbA @($shDir)
 Reindex $dbB @($shDir)
 
@@ -451,7 +455,8 @@ Check '--fix gains this project''s caller' ($fixed -match 'BOnly') `
 Check '--fix converges under B' ((DriftCount $dbB 'MarkFix') -eq 0)
 # A's one-time adoption, through the --fix path this time (see the convergence
 # section above): it must be offered as fixable, and once applied BOTH converge.
-& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $dbA --fix --apply --no-backup 2>$null | Out-Null
+# 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $dbA --fix --apply --no-compile-gate --no-backup 2>$null } | Out-Null
 Reindex $dbA @($shDir)
 Reindex $dbB @($shDir)
 Check '--fix converges under A too' ((DriftCount $dbA 'MarkFix') -eq 0) `

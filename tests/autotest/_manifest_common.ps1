@@ -1,7 +1,10 @@
 # Shared prologue for manifest smoke tests. Pins the Win64 exe + ensures DLLs.
 param(
-    [string] $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe"
+    [string] $Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 # tree-sitter Win64 DLLs must sit beside the exe.

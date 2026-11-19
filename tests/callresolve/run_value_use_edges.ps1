@@ -24,9 +24,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_value_use_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -96,11 +99,11 @@ end.
 
 $db = Join-Path $WorkDir 'app.sqlite'
 Push-Location C:\TEMP
-$idxOut = & $exePath index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | Out-String
+$idxOut = & { $ErrorActionPreference = 'Continue'; & $exePath index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'V index built' (Test-Path $db) $db
 $raw = & $exePath sql --db $db --json --limit 500 --query "SELECT f.path, r.start_line, r.kind, r.name_text, CASE WHEN r.symbol_id IS NULL THEN 0 ELSE 1 END, coalesce(m.mode,''), coalesce(t.qualified_name,'') FROM refs r JOIN files f ON f.id = r.file_id LEFT JOIN member_accesses m ON m.ref_id = r.id LEFT JOIN symbols t ON t.id = m.receiver_type_symbol_id WHERE r.kind IN ('read','write','member-access') ORDER BY f.path, r.start_line" | Out-String
 Pop-Location
-$rows = foreach ($r in ($raw | ConvertFrom-Json).rows) { [pscustomobject]@{ File=[IO.Path]::GetFileNameWithoutExtension([string]$r[0]); Line=[int]$r[1]; Kind=[string]$r[2]; Name=[string]$r[3]; Bound=[int]$r[4]; Mode=[string]$r[5]; Rcv=[string]$r[6] } }
+$rows = foreach ($r in ($raw | ConvertFrom-Json | ForEach-Object { $_ }).rows) { [pscustomobject]@{ File=[IO.Path]::GetFileNameWithoutExtension([string]$r[0]); Line=[int]$r[1]; Kind=[string]$r[2]; Name=[string]$r[3]; Bound=[int]$r[4]; Mode=[string]$r[5]; Rcv=[string]$r[6] } }
 Check "V read/write refs were read ($(@($rows).Count))" (@($rows).Count -ge 7) $raw
 function MarkLine($file,$tag){ $m=@(Select-String -LiteralPath (Join-Path $WorkDir "$file.pas") -SimpleMatch -Pattern "// $tag"); if($m.Count -ne 1){ throw "marker $tag x$($m.Count)" }; [int]$m[0].LineNumber }
 function Site($file,$tag,$name,$kind){ $ln = MarkLine $file $tag; @($rows | Where-Object { $_.File -eq $file -and $_.Line -eq $ln -and $_.Name -eq $name -and $_.Kind -eq $kind }) | Select-Object -First 1 }

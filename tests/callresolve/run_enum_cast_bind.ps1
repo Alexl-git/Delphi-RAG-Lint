@@ -22,7 +22,10 @@
   Usage: pwsh -File tests\callresolve\run_enum_cast_bind.ps1 [-Exe <drag-lint.exe>]
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'
@@ -43,10 +46,10 @@ $use = Join-Path $scratch 'uEcUse.pas'
 $db  = Join-Path $scratch 'enumcasts.sqlite'
 
 function Sql([string]$Query) {
-  $raw = (& $exePath sql --db $db --json --limit 1000 --query $Query 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --limit 1000 --query $Query 2>$null }) -join "`n"
   $b = $raw.IndexOf('{')
   if ($b -lt 0) { throw "sql returned no JSON for: $Query" }
-  $o = $raw.Substring($b) | ConvertFrom-Json
+  $o = $raw.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }
   $names = @($o.columns | ForEach-Object { $_.name })
   $out = @()
   foreach ($r in @($o.rows)) {
@@ -86,7 +89,7 @@ function CheckAll([string]$Phase) {
   }
 }
 
-$log = & $exePath index $scratch --db $db 2>&1
+$log = & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 CheckAll 'full'
 $line = @($log | Where-Object { "$_" -match 'enum-casts: (\d+) of (\d+)' })
@@ -94,7 +97,7 @@ Check 'calls-stage enum-casts: line present' ($line.Count -eq 1) "lines=$($line.
 
 # incremental: touch the using unit (append a trailing comment) and reindex
 [IO.File]::AppendAllText($use, "{ touched }`r`n", [Text.Encoding]::ASCII)
-$log2 = & $exePath index $scratch --db $db 2>&1
+$log2 = & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'incremental index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 CheckAll 'incremental'
 

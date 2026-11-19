@@ -38,10 +38,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe      = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$RulesDir = "$PSScriptRoot\..\..\rules",
+  [string]$Exe      = '',
+  [string]$RulesDir = '',
   [string]$WorkDir  = "C:\TEMP\draglint_cfg_db_anchor_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $RulesDir) { $RulesDir = "$PSScriptRoot\..\..\rules" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){ if($d){Write-Host "      $d" -ForegroundColor DarkGray}; $script:fail=$true } }
@@ -78,11 +82,11 @@ Write-Ascii (Join-Path $proj 'drag-lint-lint.json') '{ "enabled": ["magic-litera
 # relies on it, so the fixture must reproduce it rather than putting the DB
 # somewhere convenient.
 $db = Join-Path (Join-Path $proj '_D-RAG') 'p.sqlite'
-& $exePath index $proj --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $proj --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 function LintFrom([string]$Cwd) {
   Push-Location $Cwd
-  try   { return (& $exePath lint-all --db $db --rules-dir $rules 2>$null | Out-String) }
+  try   { return (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rules-dir $rules 2>$null } | Out-String) }
   finally { Pop-Location }
 }
 function FindingsOnly([string]$T) {
@@ -117,7 +121,7 @@ Check 'A1 the finding SET is identical from both directories' `
 $otherCfg = Join-Path $WorkDir 'other-lint.json'
 Write-Ascii $otherCfg '{ "disabled": ["magic-literal"] }'
 Push-Location 'C:\TEMP'
-try   { $withCfg = & $exePath lint-all --db $db --rules-dir $rules --config $otherCfg 2>$null | Out-String }
+try   { $withCfg = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rules-dir $rules --config $otherCfg 2>$null } | Out-String }
 finally { Pop-Location }
 Check 'A2 an explicit --config still overrides the --db anchor' `
       (-not ($withCfg -match 'magic-literal')) `

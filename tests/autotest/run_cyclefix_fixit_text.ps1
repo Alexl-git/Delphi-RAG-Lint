@@ -24,11 +24,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe       = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
+  [string]$Exe       = '',
   [switch]$KeepScratch,
   [string]$WorkDir   = "$env:TEMP\drag-lint-cyclefix-fixit-$PID",
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }) }
 # E18 T13: removes this run's scratch (WorkDir) however the run ends; kept only on failure when
 # -KeepScratch is passed (the path is printed).
 function Remove-Scratch {
@@ -66,12 +69,12 @@ function Copy-Tree([string]$From, [string]$To) {
 }
 function Index-Copy([string]$Dir, [string]$Dproj, [string]$Tag) {
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  $idx = & $Exe index --project (Join-Path $Dir $Dproj) --db $db 2>&1 | Out-String
+  $idx = & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $Dir $Dproj) --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check "${Tag}: SANITY the copy indexed with 0 errors" (($idx -match ', 0 errors') -and ($idx -notmatch '[1-9]\d* errors')) $idx
   return $db
 }
 # `cycles <args>` -> stdout text (stderr dropped)
-function Run-Cycles([string[]]$A) { return (& $Exe cycles @A 2>$null | Out-String) }
+function Run-Cycles([string[]]$A) { return (& { $ErrorActionPreference = 'Continue'; & $Exe cycles @A 2>$null } | Out-String) }
 # The text of cycle N of a --plan output (from its `## Cycle N` heading to the next one).
 function Cycle-Text([string]$Plan, [int]$N) {
   $m = [regex]::Match($Plan, "(?ms)^## Cycle $N`:.*?(?=^## Cycle \d+`:|\z)")
@@ -137,7 +140,7 @@ try {
 
   Write-Host '== (c) JSON --causes' -ForegroundColor Cyan
   $jt = Run-Cycles @('--format', 'json', '--causes', '--project', $proj, '--db', $db, '--library-db', $Lib)
-  $j = try { $jt | ConvertFrom-Json } catch { $null }
+  $j = try { $jt | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
   Check 'c0: SANITY three groups, each with a fix object' ($j -and @($j).Count -eq 3 -and @($j | Where-Object { $null -ne $_.fix }).Count -eq 3) $jt
   if ($j -and @($j).Count -eq 3) {
     $g = @($j)
@@ -150,12 +153,12 @@ try {
     Check 'c5: cycle 1 (Part A) has part a, no edges, a followup demoaudit -> democonfig move-globals' `
       ($g[0].fix.part -eq 'a' -and @($g[0].fix.edges).Count -eq 0 -and $g[0].fix.followup.from -eq 'demoaudit' -and $g[0].fix.followup.to -eq 'democonfig' -and $g[0].fix.followup.recipe -eq 'move-globals') ($g[0].fix | ConvertTo-Json -Compress)
     Check 'c6: reason is empty when available' ($g[2].fix.reason -eq '') ''
-    $jn = (Run-Cycles @('--format', 'json', '--causes', '--db', $db, '--library-db', $Lib)) | ConvertFrom-Json
+    $jn = (Run-Cycles @('--format', 'json', '--causes', '--db', $db, '--library-db', $Lib)) | ConvertFrom-Json | ForEach-Object { $_ }
     Check 'c7: without --project the JSON commands carry --project <your.dproj>' `
       ($jn -and $jn[2].fix.dry_run -like '*--project <your.dproj> --db *') ''
 
     # a library that cannot be opened: the rest of the --causes output is unchanged, the fix objects say why
-  $jbad = (& $Exe cycles --format json --causes --project $proj --db $db --library-db (Join-Path $WorkDir 'no-such-library.sqlite') 2>$null | Out-String) | ConvertFrom-Json
+  $jbad = (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --format json --causes --project $proj --db $db --library-db (Join-Path $WorkDir 'no-such-library.sqlite') 2>$null } | Out-String) | ConvertFrom-Json | ForEach-Object { $_ }
   Check 'c8: missing --library-db: exit 0 path, JSON still parses with 3 groups' ($jbad -and @($jbad).Count -eq 3) ''
   Check 'c8: every fix has available=false and reason `library unavailable: library database not found: <path>`' `
     ($jbad -and @($jbad | Where-Object { $_.fix.available -eq $false -and $_.fix.reason -like 'library unavailable: library database not found: *no-such-library.sqlite' }).Count -eq 3) (($jbad | ConvertTo-Json -Depth 5 -Compress))
@@ -165,7 +168,7 @@ try {
   Write-Host '== (d) agreement with the --fix dry run' -ForegroundColor Cyan
     foreach ($n in 2, 3) {
       if ($n -eq 2 -and -not $haveLib) { continue }
-      $fx = (& $Exe cycles --fix --project $proj --db $db --cycle $n --no-compile --library-db $Lib --format json 2>$null | Out-String) | ConvertFrom-Json
+      $fx = (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --project $proj --db $db --cycle $n --no-compile --library-db $Lib --format json 2>$null } | Out-String) | ConvertFrom-Json | ForEach-Object { $_ }
       $ch = @($g[$n - 1].fix.edges | Where-Object { $_.chosen })[0]
       Check "d$n`: --fix --cycle $n plans the edge the block marks chosen ($($ch.from)->$($ch.to))" `
         ($fx -and $fx.cycles[0].verdict -eq 'mechanical' -and $ch -and $fx.cycles[0].edge -eq "$($ch.from)->$($ch.to)" -and $fx.cycles[0].recipe -eq $ch.recipe) ($fx.cycles[0] | ConvertTo-Json -Depth 3 -Compress)
@@ -176,7 +179,7 @@ try {
   $nplan = Run-Cycles @('--plan', '--project', $nproj, '--db', $ndb, '--library-db', 'none')
   Check 'e1: nocut text: `Fix it: not available -- construction`' ($nplan -match '(?m)^Fix it: not available -- construction') $nplan
   Check 'e2: nocut text has no dry-run line' ($nplan -notmatch 'dry run :') ''
-  $nj = (Run-Cycles @('--format', 'json', '--causes', '--project', $nproj, '--db', $ndb, '--library-db', 'none')) | ConvertFrom-Json
+  $nj = (Run-Cycles @('--format', 'json', '--causes', '--project', $nproj, '--db', $ndb, '--library-db', 'none')) | ConvertFrom-Json | ForEach-Object { $_ }
   Check 'e3: nocut JSON fix.available = false, reason starts with construction' `
     ($nj -and $nj[0].fix.available -eq $false -and $nj[0].fix.reason -like 'construction*') ($nj | ConvertTo-Json -Depth 6 -Compress)
   Check 'e4: nocut JSON still carries both commands' ($nj -and $nj[0].fix.dry_run -like '*--cycle 1' -and $nj[0].fix.apply -like '*--cycle 1 --apply') ''

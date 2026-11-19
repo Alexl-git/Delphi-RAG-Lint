@@ -13,7 +13,10 @@
   Run from a neutral cwd, pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$detail=''){ Write-Host ("[{0}] {1}{2}" -f (@('FAIL','PASS')[[int]$ok]),$n,$(if($detail){" -- $detail"}else{''})) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
@@ -107,12 +110,12 @@ $libDb = Join-Path $scratch 'lib.sqlite'
 $projDb = Join-Path $scratch 'proj.sqlite'
 Push-Location $scratch
 try {
-  $null = & $exePath index (Join-Path $scratch 'lib') --db $libDb --library-db none 2>&1 | Out-String
-  $null = & $exePath index (Join-Path $scratch 'proj') --db $projDb --library-db none 2>&1 | Out-String
+  $null = & { $ErrorActionPreference = 'Continue'; & $exePath index (Join-Path $scratch 'lib') --db $libDb --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String
+  $null = & { $ErrorActionPreference = 'Continue'; & $exePath index (Join-Path $scratch 'proj') --db $projDb --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String
 
   function Lane-NeverRaisedIn([string]$LibArg) {
-    $raw = (& $exePath lint-all --db $projDb --rule doc-drift --library-db $LibArg --json 2>$null | Out-String)
-    $rows = @($raw | ConvertFrom-Json)
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $projDb --rule doc-drift --library-db $LibArg --json 2>$null } | Out-String)
+    $rows = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
     $names = @{}
     foreach ($r in $rows) {
       if ($r.message -notmatch 'never raises') { continue }

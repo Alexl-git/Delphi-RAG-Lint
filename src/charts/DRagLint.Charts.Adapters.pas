@@ -36,7 +36,7 @@ type
 /// <returns>The format; cfUnknown only for a path.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Compare.LoadOldIndexSide (DRagLint.Charts.Compare.pas), DRagLint.Charts.Compare.LoadSide (DRagLint.Charts.Compare.pas), DRagLint.Charts.Compare.ProduceNewSide (DRagLint.Charts.Compare.pas), DRagLint.CLI.CompareShowPage (DRagLint.CLI.pas), DRagLint.CLI.CompareTakeSnapshot (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.Charts.Compare.LoadOldIndexSide (DRagLint.Charts.Compare.pas), DRagLint.Charts.Compare.LoadSide (DRagLint.Charts.Compare.pas), DRagLint.Charts.Compare.ProduceNewSide (DRagLint.Charts.Compare.pas), DRagLint.CLI.Compare.CompareShowPage (DRagLint.CLI.Compare.pas), DRagLint.CLI.Compare.CompareTakeSnapshot (DRagLint.CLI.Compare.pas)</para>
 /// <para>Calls: DRagLint.Charts.Adapter.FormsCsv.IsFormsCsv, DRagLint.Charts.Adapters.DetectByPath, DRagLint.Charts.Adapters.FirstWordIsGraph</para>
 /// <para>Returns: cfReportText</para>
 /// <seealso cref="DRagLint.Charts.Adapter.FormsCsv.IsFormsCsv"/>

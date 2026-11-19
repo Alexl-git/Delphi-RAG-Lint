@@ -35,9 +35,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-concat-typeaware-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -232,7 +235,7 @@ $ln = [ordered]@{
 }
 Check 'all thirteen fixture statements located' (@($ln.Values) -notcontains -1) (($ln.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ' ')
 
-& $Exe index --project $dprPath --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project $dprPath --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' ((Test-Path $db) -and $LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 function FiredText([string[]]$Out) {
@@ -259,12 +262,12 @@ function FiredLsp([string]$PasFile, [string]$Db) {
   $in = Join-Path $WorkDir 'lsp-in.txt'; $so = Join-Path $WorkDir 'lsp-out.txt'; $se = Join-Path $WorkDir 'lsp-err.txt'
   [IO.File]::WriteAllText($in, ($msgs -join ''), (New-Object Text.UTF8Encoding($false)))
   $null = Start-Process $Exe -ArgumentList @('lsp', '--db', "`"$Db`"") -WorkingDirectory $WorkDir `
-            -RedirectStandardInput $in -RedirectStandardOutput $so -RedirectStandardError $se -NoNewWindow -Wait -PassThru
+            -RedirectStandardInput $in -RedirectStandardOutput $so -RedirectStandardError $se -NoNewWindow -Wait -PassThru; $null = $null.Handle
   $out = if (Test-Path $so) { [IO.File]::ReadAllText($so) } else { '' }
   $r = @()
   foreach ($body in ($out -split 'Content-Length: \d+\r\n\r\n')) {
     if ($body.Trim() -eq '') { continue }
-    try { $m = $body | ConvertFrom-Json } catch { continue }
+    try { $m = $body | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($m.method -ne 'textDocument/publishDiagnostics') { continue }
     foreach ($d in @($m.params.diagnostics)) { if ($d.code -eq 'concat-in-loop') { $r += ([int]$d.range.start.line + 1) } }
   }
@@ -272,8 +275,8 @@ function FiredLsp([string]$PasFile, [string]$Db) {
 }
 
 $surfaces = [ordered]@{
-  'lint --db'     = FiredText @(& $Exe lint $pas --db $db 2>$null)
-  'lint-all --db' = FiredText @(& $Exe lint-all --db $db --rule concat-in-loop 2>$null)
+  'lint --db'     = FiredText @(& { $ErrorActionPreference = 'Continue'; & $Exe lint $pas --db $db 2>$null })
+  'lint-all --db' = FiredText @(& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule concat-in-loop 2>$null })
   'lsp --db'      = FiredLsp $pas $db
 }
 
@@ -303,7 +306,7 @@ foreach ($s in $surfaces.GetEnumerator()) {
 
 Write-Host ''
 Write-Host 'Without a store the .scm rule answers from the DECLARATION alone (drag-lint#7)' -ForegroundColor Cyan
-$noStore = FiredText @(& $Exe lint $pas 2>$null)
+$noStore = FiredText @(& { $ErrorActionPreference = 'Continue'; & $Exe lint $pas 2>$null })
 Check 'lint (no --db): Integer Total := Total + Count (declared in the routine) no longer fires' (-not ($noStore -contains $ln.IntegerVar)) ("fired=[" + ($noStore -join ', ') + "]")
 
 Write-Host ''

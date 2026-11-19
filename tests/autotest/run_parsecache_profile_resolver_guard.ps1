@@ -18,9 +18,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-pc-resolver-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -81,23 +84,23 @@ Write-Ascii "$WorkDir\other\uLoose.pas" (New-Body 'uLoose')
 $WithLine = ((Get-Content "$WorkDir\proj\uUnit.pas") | Select-String -SimpleMatch 'with X do Free').LineNumber
 $Db = "$WorkDir\proj\_D-RAG\App.sqlite"
 
-$idx = (& $Exe index --project "$WorkDir\proj\App.dproj" --db $Db 2>&1 | Out-String)
+$idx = (& { $ErrorActionPreference = 'Continue'; & $Exe index --project "$WorkDir\proj\App.dproj" --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-String)
 $files = if ($idx -match 'Files:\s*(\d+)') { [int]$Matches[1] } else { 0 }
 Check 'SETUP project index built' ($files -ge 2) "files=$files"
 
 function LintRule([string]$File, [string]$Rule, [string[]]$Extra = @()) {
-  $out = & $Exe lint $File --json --db $Db @Extra 2>$null | Out-String
-  $j = @($out | ConvertFrom-Json)
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe lint $File --json --db $Db @Extra 2>$null } | Out-String
+  $j = @(($out | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   return @($j | Where-Object { $_.rule -eq $Rule } | ForEach-Object { [int]$_.start_line })
 }
 
-$a = LintRule "$WorkDir\proj\uUnit.pas" 'parser-error'
+$a = @(LintRule "$WorkDir\proj\uUnit.pas" 'parser-error')
 Check 'a uUnit.pas: 0 parser-error (active Debug config)' ($a.Count -eq 0) "lines=$($a -join ',')"
-$b = LintRule "$WorkDir\other\uLoose.pas" 'parser-error'
+$b = @(LintRule "$WorkDir\other\uLoose.pas" 'parser-error')
 Check 'b uLoose.pas: >= 1 parser-error (POSITIVE CONTROL)' ($b.Count -ge 1) "lines=$($b -join ',')"
-$c = LintRule "$WorkDir\proj\uUnit.pas" 'parser-error' @('--project', "$WorkDir\proj\App.dproj", '--no-preprocess')
+$c = @(LintRule "$WorkDir\proj\uUnit.pas" 'parser-error' @('--project', "$WorkDir\proj\App.dproj", '--no-preprocess'))
 Check 'c --no-preprocess: >= 1 parser-error (SETUP)' ($c.Count -ge 1) "lines=$($c -join ',')"
-$d = LintRule "$WorkDir\proj\uUnit.pas" 'with-statement'
+$d = @(LintRule "$WorkDir\proj\uUnit.pas" 'with-statement')
 Check "d with-statement on line $WithLine" ($d -contains $WithLine) "lines=$($d -join ',')"
 }
 catch { Write-Host "FATAL: $($_.Exception.Message)" -ForegroundColor Red; $script:Failed = $true }

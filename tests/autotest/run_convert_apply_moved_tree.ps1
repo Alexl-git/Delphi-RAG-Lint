@@ -22,9 +22,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_convert_apply_moved_tree_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -124,7 +127,7 @@ Write-Ascii (Join-Path $WorkDir 'mv.rules') @'
 '@
 
 $db = Join-Path $WorkDir 'fx.sqlite'
-$idx = & $Exe index $A --db $db 2>&1
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $A --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'V the fixture index was built over the ORIGINAL folder' (($LASTEXITCODE -eq 0) -and (Test-Path $db)) "exit=$LASTEXITCODE; $($idx -join ' | ')"
 # move the tree: the DB keeps the old paths
 Copy-Item (Join-Path $A '*') $B
@@ -132,7 +135,7 @@ Remove-Item -Recurse -Force $A
 function Json([string]$s) {
   $a = $s.IndexOf('{'); $b = $s.LastIndexOf('}')
   if ($a -lt 0 -or $b -le $a) { return $null }
-  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json) } catch { return $null }
+  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 
 $py = 'C:\Python314\python.exe'
@@ -141,13 +144,13 @@ if (-not (Test-Path $py)) {
 } else {
   $old = Join-Path $WorkDir 'old.sqlite'
   Copy-Item $db $old
-  & $py -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute(""UPDATE schema_meta SET value='r=1.11.0-alpha;schema=23' WHERE key='resolver_fingerprint'""); c.commit(); c.close()" $old
-  $o = (& $Exe convert-apply --unit (Join-Path $B 'MovedDM.pas') --rules (Join-Path $WorkDir 'mv.rules') --db $old --format json 2>&1) -join "`n"; $code = $LASTEXITCODE
+  & $py -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('UPDATE schema_meta SET value=? WHERE key=?', ('r=1.11.0-alpha;schema=23', 'resolver_fingerprint')); c.commit(); c.close()" $old
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (Join-Path $B 'MovedDM.pas') --rules (Join-Path $WorkDir 'mv.rules') --db $old --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"; $code = $LASTEXITCODE
   $j = Json $o
   Check 'M1 moved tree, r=1.11 DB that stores OTHER paths: REFUSED (exit 1), the reason names that DB' `
     (($code -eq 1) -and ($null -ne $j) -and ($j.refused -eq $true) -and ($j.reason -match [regex]::Escape($old) + ': edges were derived by resolver 1\.11\.0-alpha')) $o
 }
-$o = (& $Exe convert-apply --unit (Join-Path $B 'MovedDM.pas') --rules (Join-Path $WorkDir 'mv.rules') --db $db --format json 2>&1) -join "`n"; $code = $LASTEXITCODE
+$o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (Join-Path $B 'MovedDM.pas') --rules (Join-Path $WorkDir 'mv.rules') --db $db --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"; $code = $LASTEXITCODE
 $j = Json $o
 Check 'M2 positive control, the same moved tree on an up-to-date DB: converts, and the access site IS rewritten (refs found)' `
   (($code -eq 0) -and ($null -ne $j) -and $j.ok -and (@($j.converted).Count -eq 1) -and (@($j.access_sites | Where-Object { $_ -match '^mbtn\.Caption -> mbtn\.Title' }).Count -eq 1) -and `

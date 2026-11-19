@@ -29,8 +29,11 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe"
+  [string]$Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 . "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe
 $ErrorActionPreference = 'Continue'
@@ -55,11 +58,11 @@ $dproj = @(
 
 function IndexedExtU([string]$tag, [string[]]$extra) {
   $db = Join-Path $Work "$tag.sqlite"
-  $out = (& $Exe index --project (Join-Path $Work 'Ex.dproj') --db $db @extra 2>&1) -join "`n"
+  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $Work 'Ex.dproj') --db $db @extra 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $code = $LASTEXITCODE
-  $raw = (& $Exe sql --db $db --query 'SELECT path FROM files' --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query 'SELECT path FROM files' --json 2>$null }) -join "`n"
   $paths = @()
-  try { $paths = @(($raw | ConvertFrom-Json).rows | ForEach-Object { $_[0] }) } catch { }
+  try { $paths = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }).rows | ForEach-Object { $_[0] }) } catch { }
   [pscustomobject]@{ Exit = $code; Paths = $paths; ExtU = (@($paths | Where-Object { $_ -match '\\ext\\ExtU\.pas$' }).Count -gt 0)
                      Noted = ($out -match '(?s)NOTE: --exclude-under.*\\ext\\ExtU\.pas') }
 }

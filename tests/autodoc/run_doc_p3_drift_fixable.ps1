@@ -47,7 +47,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Continue'
@@ -80,10 +83,10 @@ function Get-DocBlockAbove([string[]]$lines, [string]$declPattern) {
 
 # doc-drift --qname rows (one JSON object per line): .kind/.detail/.fixable/.line
 function Get-Drift($qname) {
-  $out = & $exePath doc-drift --qname $qname --db $db --json 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath doc-drift --qname $qname --db $db --json 2>$null }
   Check "doc-drift --qname $qname exits 0" ($LASTEXITCODE -eq 0)
   $rows = @()
-  foreach ($ln in $out) { $t = "$ln".Trim(); if ($t.StartsWith('{')) { $rows += ($t | ConvertFrom-Json) } }
+  foreach ($ln in $out) { $t = "$ln".Trim(); if ($t.StartsWith('{')) { $rows += ($t | ConvertFrom-Json | ForEach-Object { $_ }) } }
   return ,$rows
 }
 # True when a row of kind $k exists whose fixable flag equals $fx.
@@ -134,7 +137,7 @@ function Get-Findings($raw) {
   $arrStart = $raw.IndexOf('[')
   $arrEnd   = $raw.LastIndexOf(']')
   if ($arrStart -ge 0 -and $arrEnd -gt $arrStart) {
-    return @(ConvertFrom-Json ($raw.Substring($arrStart, $arrEnd - $arrStart + 1)))
+    return @((ConvertFrom-Json ($raw.Substring($arrStart, $arrEnd - $arrStart + 1)) | ForEach-Object { $_ }) | ForEach-Object { $_ })
   }
   return @()
 }
@@ -146,7 +149,7 @@ $patMarked  = '^function MarkedReturns\(Key: Integer\): string;'
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
   # --- FIXTURE DISCRIMINATION -----------------------------------------------
@@ -189,7 +192,7 @@ try {
   # --- D4: the widened doc-drift population ---------------------------------
   $remarksOnlyDocLine = Get-DocStartLine ([IO.File]::ReadAllLines($target)) '^procedure RemarksOnlyStaleFacts;'
   Check 'D4 FIXTURE: the remarks-only doc block was located' ($remarksOnlyDocLine -gt 0) "line=$remarksOnlyDocLine"
-  $rawBefore = (& $exePath lint-all --db $db --json 2>$null) -join "`n"
+  $rawBefore = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --json 2>$null }) -join "`n"
   # v(ADP3 T3d2): NOT "exits 0" -- bare `lint-all` (no --fix, no --fail-on)
   # returns ExitCodeFor(Survivors, '', IfThen(Survivors.Count>0, 1, 0))
   # (DRagLint.Output.ExitCode.pas), i.e. 1 whenever findings survive, which
@@ -198,7 +201,7 @@ try {
   # a failure -- checking for it still catches a genuine engine crash, which
   # would not reliably land on exactly 1 either.
   Check 'D4 lint-all --json (before --fix) exits 1 (findings present, no --fail-on override)' ($LASTEXITCODE -eq 1)
-  $driftBefore = @((Get-Findings $rawBefore) | Where-Object { $_.rule -eq 'doc-drift' })
+  $driftBefore = @((@(Get-Findings $rawBefore)) | Where-Object { $_.rule -eq 'doc-drift' })
   Check 'D4 lint-all reports the stale facts block on the REMARKS-ONLY decl (summary is NULL there)' `
     (@($driftBefore | Where-Object { $_.message -like '*managed facts block is out of date*' }).Count -ge 1) `
     ("doc-drift findings=" + $driftBefore.Count)
@@ -214,7 +217,8 @@ try {
   Check 'pre-apply: all three protected doc blocks were located' `
     ($null -ne $noMinBefore -and $null -ne $blankBefore -and $null -ne $markedBefore)
 
-  & $exePath lint-all --db $db --fix --apply --no-backup 2>$null | Out-Null
+  # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --apply --no-compile-gate --no-backup 2>$null } | Out-Null
   Check 'lint-all --fix --apply (fixable subset) exits 0' ($LASTEXITCODE -eq 0)
   $after = [IO.File]::ReadAllLines($target)
 
@@ -243,7 +247,7 @@ try {
 
   # --- Re-analyse: the promise is measurably discharged, and the honest
   # --- report-only finding measurably survives -------------------------------
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   Check 're-index after --fix exits 0' ($LASTEXITCODE -eq 0)
   $minable2 = Get-Drift 'driftfixable.MinableReturn'
   Check 'D2 after --fix: MinableReturn has NO ddValueButNoReturns left (the fix discharged it)' `
@@ -258,7 +262,8 @@ try {
 
   # --- Idempotency ----------------------------------------------------------
   $bytes1 = [IO.File]::ReadAllBytes($target)
-  & $exePath lint-all --db $db --fix --apply --no-backup 2>$null | Out-Null
+  # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --apply --no-compile-gate --no-backup 2>$null } | Out-Null
   Check 'idempotency: 2nd lint-all --fix --apply exits 0' ($LASTEXITCODE -eq 0)
   $bytes2 = [IO.File]::ReadAllBytes($target)
   Check 'idempotent: a 2nd lint-all --fix --apply is byte-identical' `

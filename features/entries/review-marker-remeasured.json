@@ -1,0 +1,23 @@
+{
+  "id": "review-marker-remeasured",
+  "title": "review-marker-remeasured hint",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.51.1-alpha",
+  "summary": "A dl:ok on a routine-metric rule stamped under an older hash still suppresses its finding; a hint names the allow command that re-stamps it",
+  "intro": "Read this when lint shows review-marker-remeasured: the marker is still valid (routine unchanged, only the hash version moved) and one allow --apply re-stamps it.",
+  "wikiPage": "Review-Marker-Remeasured",
+  "surfaces": [
+    {
+      "type": "workflow",
+      "doc": "docs\\wiki\\Review-Marker-Remeasured.md"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-17",
+    "by": "alexanderl",
+    "build": "1.51.1-alpha"
+  }
+}

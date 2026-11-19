@@ -22,9 +22,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-rename-unresolved-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $env:DRAGLINT_RENAME_TEST_UNGATED = '1' # lane 144: these fixtures do not compile; run_rename_precise.ps1 proves the gate
@@ -128,12 +131,12 @@ function New-Fixture([string]$Tag, [string[]]$Skip = @()) {
   }
   $db = Join-Path $dir 'fx.sqlite'
   Push-Location $dir
-  try { & $Exe index $src --db $db 2>&1 | Out-Null } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null } finally { Pop-Location }
   [pscustomobject]@{ Dir = $dir; Src = $src; Db = $db }
 }
 function Run-Rename($fx, [string[]]$RenameArgs) {
   Push-Location $fx.Dir
-  try { $o = & $Exe rename @RenameArgs --db $fx.Db 2>&1 } finally { Pop-Location }
+  try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe rename @RenameArgs --db $fx.Db 2>&1 | ForEach-Object { "$_" } } } finally { Pop-Location }
   [pscustomobject]@{ Exit = $LASTEXITCODE; Out = ($o -join "`n") }
 }
 function FileHash($fx, [string]$Leaf) {
@@ -142,7 +145,7 @@ function FileHash($fx, [string]$Leaf) {
 function Edit-Set($fx) {
   $r = Run-Rename $fx ($RenArgs + '--json')
   $edits = @()
-  try { $edits = @(($r.Out -split "`n" | Where-Object { $_ -notmatch '^drag-lint: note:' -and $_ -notmatch '^\(loaded' }) -join "`n" | ConvertFrom-Json) } catch { }
+  try { $edits = @((($r.Out -split "`n" | Where-Object { $_ -notmatch '^drag-lint: note:' -and $_ -notmatch '^\(loaded' }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { }
   [pscustomobject]@{
     Exit = $r.Exit
     Out  = $r.Out
@@ -157,9 +160,9 @@ $j = New-Fixture 'J'
 # Precondition: the fixture really has one bound and one unbound Process ref in Unit3.
 $sq = "SELECT r.start_line AS l, r.symbol_id AS s FROM refs r JOIN files f ON f.id = r.file_id " +
       "WHERE f.path LIKE '%Unit3.pas' AND r.name_text = 'Process' ORDER BY r.start_line"
-$raw = (& $Exe sql --db $j.Db --json --query $sq 2>$null) -join "`n"
+$raw = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $j.Db --json --query $sq 2>$null }) -join "`n"
 $rows = @()
-try { $rows = @(($raw | ConvertFrom-Json).rows) } catch { }
+try { $rows = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }).rows) } catch { }
 $unbound17 = (@($rows | Where-Object { $_[0] -eq 17 }).Count -gt 0) -and (@($rows | Where-Object { $_[0] -eq 17 -and $_[1] }).Count -eq 0)
 $bound16   = @($rows | Where-Object { $_[0] -eq 16 -and $_[1] }).Count -gt 0
 Check 'precondition: Unit3.pas:16 A.Process is bound'          $bound16   "rows=$(@($rows | ForEach-Object { $_ -join '/' }) -join ';')"

@@ -53,6 +53,21 @@
         {
           "name": "--db",
           "arg": "<db>"
+        },
+        {
+          "name": "--platform",
+          "arg": "<p>"
+        },
+        {
+          "name": "--rsvars",
+          "arg": "<bat>"
+        },
+        {
+          "name": "--build-timeout",
+          "arg": "<s>"
+        },
+        {
+          "name": "--no-compile"
         }
       ],
       "helpOrder": 52,
@@ -76,9 +91,9 @@
     }
   ],
   "verified": {
-    "date": "2026-11-14",
+    "date": "2026-11-18",
     "by": "ENGINE",
-    "build": "1.51.0-alpha",
+    "build": "1.52.0-alpha",
     "surfaceHash": "2ad7b9ef33864a962ae7322cd83bce57a429f1a62803c79ae4b6101492e32595"
   }
 }

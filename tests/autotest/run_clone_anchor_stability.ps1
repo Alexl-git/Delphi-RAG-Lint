@@ -44,9 +44,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-clone-anchor-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -217,8 +220,8 @@ Write-Host ("  uKeepA.pas / uKeepB.pas byte-identical across all {0} states" -f 
 
 function Keep-Findings([string]$Dir) {
   $db = Join-Path $Dir 'x.sqlite'
-  & $Exe index $Dir --db $db 2>$null | Out-Null
-  $out = & $Exe lint-all --db $db --output (Join-Path $WorkDir 'lint-report.txt') 2>$null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $Dir --db $db 2>$null } | Out-Null
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --output (Join-Path $WorkDir 'lint-report.txt') 2>$null }
   @($out | Select-String 'duplicate-code' | Where-Object { $_ -match 'uKeep' } |
     ForEach-Object { $_.Line -replace [regex]::Escape($Dir + '\'), '' } | Sort-Object)
 }

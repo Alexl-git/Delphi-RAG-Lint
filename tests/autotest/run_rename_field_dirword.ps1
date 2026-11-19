@@ -19,9 +19,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\drag-lint-renamefield-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -35,10 +38,10 @@ $Exe = (Resolve-Path $Exe).Path
 function Get-ParseFindings([string]$Dir, [string]$File, [string]$Db) {
   Push-Location $Dir
   try {
-    $raw = & $Exe lint $File --db $Db --json 2>$null | Out-String
+    $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $File --db $Db --json 2>$null } | Out-String
   } finally { Pop-Location }
   $rows = @()
-  try { $rows = @($raw | ConvertFrom-Json) } catch {}
+  try { $rows = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch {}
   return @($rows | Where-Object { $_.rule -in 'parser-error', 'syntax-error' })
 }
 
@@ -81,24 +84,24 @@ end.
   $gdb = Join-Path $good 'g.sqlite'; $bdb = Join-Path $bad 'b.sqlite'
   foreach ($p in @(@($good, $gdb), @($bad, $bdb))) {
     Push-Location $p[0]
-    try { $null = & $Exe index $p[0] --db $p[1] --library-db none --rule-cache-warm off 2>&1 } finally { Pop-Location }
+    try { $null = & { $ErrorActionPreference = 'Continue'; & $Exe index $p[0] --db $p[1] --library-db none --rule-cache-warm off 2>&1 | ForEach-Object { "$_" } } } finally { Pop-Location }
     Check "index exits 0 ($([IO.Path]::GetFileName($p[0])))" ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
   }
 
   # POSITIVE CONTROL: the parse rules fire on a real syntax error.
-  $badHits = Get-ParseFindings $bad (Join-Path $bad 'FieldDirWord.pas') $bdb
+  $badHits = @(Get-ParseFindings $bad (Join-Path $bad 'FieldDirWord.pas') $bdb)
   Check 'CONTROL broken twin raises parser-error/syntax-error' ($badHits.Count -gt 0) "count=$($badHits.Count)"
 
-  $goodHits = Get-ParseFindings $good (Join-Path $good 'FieldDirWord.pas') $gdb
+  $goodHits = @(Get-ParseFindings $good (Join-Path $good 'FieldDirWord.pas') $gdb)
   Check 'ASSERT no parser-error/syntax-error with a field named Platform' ($goodHits.Count -eq 0) `
     ("count={0} {1}" -f $goodHits.Count, (($goodHits | ForEach-Object { "L$($_.start_line)" }) -join ','))
 
   Push-Location $good
   try {
-    $j = & $Exe sql --db $gdb --query "SELECT name, kind, start_line FROM symbols WHERE kind IN ('record','field')" --json 2>$null | Out-String
+    $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $gdb --query "SELECT name, kind, start_line FROM symbols WHERE kind IN ('record','field')" --json 2>$null } | Out-String
   } finally { Pop-Location }
   $rows = @()
-  try { $rows = @(($j | ConvertFrom-Json).rows) } catch {}
+  try { $rows = @(($j | ConvertFrom-Json | ForEach-Object { $_ }).rows) } catch {}
   function HasSym([string]$n, [string]$k, [int]$line = 0) {
     return [bool]($rows | Where-Object { ([string]$_[0] -ceq $n) -and ([string]$_[1] -eq $k) -and (($line -eq 0) -or ([int]$_[2] -eq $line)) })
   }
@@ -111,7 +114,7 @@ end.
 
   Push-Location $good
   try {
-    $plan = & $Exe rename --kind symbol --name FieldDirWord.TLibraryDefault.Platform --to PlatformName --db $gdb 2>&1 | Out-String
+    $plan = & { $ErrorActionPreference = 'Continue'; & $Exe rename --kind symbol --name FieldDirWord.TLibraryDefault.Platform --to PlatformName --db $gdb 2>&1 | ForEach-Object { "$_" } } | Out-String
   } finally { Pop-Location }
   Check 'ASSERT rename plans the declaration edit (L13)' ($plan -match 'L13:C5\s+Platform -> PlatformName') ($plan.Trim() -replace "`r?`n", ' | ')
   Check 'ASSERT rename plans the use site (L22)' ($plan -match 'L22:C\d+\s+Platform -> PlatformName')

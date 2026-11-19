@@ -55,7 +55,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $script:fail = $false
@@ -241,7 +244,7 @@ function Run-Eviction([string]$Tag, [string]$Victim, [string]$NoScoped, [string]
   $dir = Join-Path $scratch $Tag
   Build-Corpus $dir
   $db = Join-Path $scratch "$Tag.sqlite"
-  & $exePath index $dir --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
   Remove-Item (Join-Path $dir $Victim) -Force
   # One touched file, so the run records a write -- without it the run declines
@@ -254,7 +257,7 @@ function Run-Eviction([string]$Tag, [string]$Victim, [string]$NoScoped, [string]
   if ($Removals) { $env:DRAGLINT_SCOPED_RESOLVE_REMOVALS = $Removals }
   Remove-Item Env:\DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE -ErrorAction SilentlyContinue
   if ($NoClosure) { $env:DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE = $NoClosure }
-  try   { $out = & $exePath index $dir --db $db 2>&1 | Out-String }
+  try   { $out = & { $ErrorActionPreference = 'Continue'; & $exePath index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String }
   finally {
     Remove-Item Env:\DRAGLINT_NO_SCOPED_RESOLVE      -ErrorAction SilentlyContinue
     Remove-Item Env:\DRAGLINT_SCOPED_RESOLVE_REMOVALS -ErrorAction SilentlyContinue

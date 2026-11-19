@@ -35,14 +35,20 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1"),
-  [string]$Source  = "$PSScriptRoot\..\..\src\mcp\DRagLint.MCP.Server.pas",
-  [string]$Model   = "$PSScriptRoot\..\..\src\core\DRagLint.Core.Model.pas",
+  [string]$Exe     = '',
+  [string]$Source  = '',
+  [string]$Model   = '',
   # NOT $Db: CmdletBinding aliases -Debug to 'db', and the collision is a
   # MetadataError at parse time, not a runtime surprise.
-  [string]$DbPath  = "$PSScriptRoot\..\calls.sqlite",
+  [string]$DbPath  = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-mcp-protocol-guard-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1") }
+if (-not $Source) { $Source = "$PSScriptRoot\..\..\src\mcp\DRagLint.MCP.Server.pas" }
+if (-not $Model) { $Model = "$PSScriptRoot\..\..\src\core\DRagLint.Core.Model.pas" }
+if (-not $DbPath) { $DbPath = "$PSScriptRoot\..\calls.sqlite" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -100,14 +106,14 @@ $so = Join-Path $WorkDir 'out.txt'
 $se = Join-Path $WorkDir 'err.txt'
 $p = Start-Process $Exe -ArgumentList 'serve','--db',$DbPath -WorkingDirectory $WorkDir `
        -RedirectStandardInput $reqFile -RedirectStandardOutput $so -RedirectStandardError $se `
-       -NoNewWindow -Wait -PassThru
+       -NoNewWindow -Wait -PassThru; $null = $p.Handle
 Check 'serve exited cleanly' ($p.ExitCode -eq 0) "exit=$($p.ExitCode)"
 
 $resp = @{}
 foreach ($ln in (Get-Content $so)) {
   $t = $ln.Trim()
   if ($t -eq '') { continue }
-  try { $o = $t | ConvertFrom-Json } catch { continue }
+  try { $o = $t | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
   if (HasProp $o 'id') { $resp[[string]$o.id] = $o }
 }
 Check 'got a reply for every request that carried an id' ($resp.Count -eq 7) "replies=$($resp.Count)"

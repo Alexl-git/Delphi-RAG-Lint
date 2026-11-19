@@ -6,7 +6,10 @@
   Usage: pwsh -File tests\autofix\run_v151_wid_scm_fixers.ps1 [-Exe path\to\drag-lint.exe]
 #>
 [CmdletBinding()]
-param([string]$Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe'))
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe') }
 $ErrorActionPreference = 'Stop'
 $Exe = (Resolve-Path $Exe).Path
 $scratch = Join-Path ([IO.Path]::GetTempPath()) "v151_wid_scm_fix_$PID"
@@ -17,7 +20,7 @@ try {
     $dir = Join-Path $PSScriptRoot "v151-WID-SCM-$id"
     $tgt = Join-Path $scratch "$id.pas"
     Copy-Item (Join-Path $dir "$id.pas") $tgt -Force
-    & $Exe lint $tgt --fix --fix-rule $id --apply --no-backup 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $Exe lint $tgt --fix --fix-rule $id --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
     $got = [IO.File]::ReadAllText($tgt)
     $want = [IO.File]::ReadAllText((Join-Path $dir "$id.expected"))
     if ($got -ceq $want) { Write-Host "PASS  $id" } else { Write-Host "FAIL  ${id}: output differs from $id.expected"; $fail = $true }

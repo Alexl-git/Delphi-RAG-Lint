@@ -76,9 +76,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-proptree-framework-anchor-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -455,13 +458,13 @@ end.
 
 $db = Join-Path $WorkDir 'anchor.sqlite'
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>$null
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>$null }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($indexOut -join ' | ')"
 
 function Get-Tree([string]$Database, [string]$QName) {
   Push-Location $WorkDir
   try {
-    $raw = (& $Exe proptree --qname $QName --format json --db $Database --no-write-back 2>$null) -join "`n"
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe proptree --qname $QName --format json --db $Database --no-write-back 2>$null }) -join "`n"
   } finally { Pop-Location }
   # Empty output must degrade to $null, not throw. ConvertFrom-Json on '' raises
   # under $ErrorActionPreference='Stop' and would abort the whole suite mid-run,
@@ -469,7 +472,7 @@ function Get-Tree([string]$Database, [string]$QName) {
   # treat a missing tree as a failed check. Mirrors the same guard in
   # run_proptree_prop_type_scope.ps1.
   if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
-  return ($raw | ConvertFrom-Json)
+  return ($raw | ConvertFrom-Json | ForEach-Object { $_ })
 }
 
 # Assert one case: the Marker property must be class-typed and expand into the

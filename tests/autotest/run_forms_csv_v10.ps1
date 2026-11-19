@@ -18,10 +18,17 @@
 # Usage: pwsh -File tests/autotest/run_forms_csv_v10.ps1 [-Exe <path>]
 [CmdletBinding()]
 param(
-    [string] $Exe        = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-    [string] $FixtureDir = "$PSScriptRoot\..\fixtures\dispatch-forms",
+    [string] $Exe        = '',
+    [string] $FixtureDir = '',
     [string] $WorkDir    = "$env:TEMP\drag-lint-forms-csv-v10-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $FixtureDir) { $FixtureDir = "$PSScriptRoot\..\fixtures\dispatch-forms" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -45,9 +52,9 @@ Copy-Item -LiteralPath (Resolve-Path $FixtureDir).Path -Destination $fx -Recurse
 New-Item -ItemType Directory "$fx\_D-RAG" | Out-Null
 [IO.File]::WriteAllText("$fx\_D-RAG\drag-lint-project.json", '{ "ownRoots": ["."] }')
 
-& $Exe index $fx --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'index fixture exits 0' ($LASTEXITCODE -eq 0)
-& $Exe forms-csv --project "$fx\DispatchForms.dproj" --db $db --output $out 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe forms-csv --project "$fx\DispatchForms.dproj" --db $db --output $out 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'forms-csv exits 0' ($LASTEXITCODE -eq 0)
 $raw = [IO.File]::ReadAllText($out)
 $lines = @($raw -split "`r`n" | Where-Object { $_ -ne '' })
@@ -88,3 +95,4 @@ exit 0
     Write-Host "FATAL: $_" -ForegroundColor Red
     exit 2
 }
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

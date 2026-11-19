@@ -41,9 +41,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-doc-callers-foreign-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -261,7 +264,7 @@ end.
     [System.IO.File]::WriteAllText((Join-Path $srcDir $p[0]), $norm, [System.Text.Encoding]::ASCII)
   }
 
-  & $Exe index $srcDir --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $srcDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
   # Two targets so that, even before the fix, neither list reaches the display
@@ -269,7 +272,7 @@ end.
   # and make its not-listed check vacuous.
   function Get-Called([string]$QName) {
     $errFile = Join-Path $WorkDir 'doc.err'
-    $out = (& $Exe document --qname $QName --db $db 2>$errFile) -join "`n"
+    $out = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe document --qname $QName --db $db 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }) -join "`n"
     $err = if (Test-Path $errFile) { [System.IO.File]::ReadAllText($errFile) } else { '' }
     $called = ([regex]::Match($out, 'Called from:[^<]*')).Value
     Write-Host ("  {0}: {1}" -f $QName, $called) -ForegroundColor DarkGray
@@ -305,13 +308,13 @@ end.
 
   Write-Host ''
   Write-Host 'Keep paths, on calls the resolver left unbound (and the one it now binds)' -ForegroundColor Cyan
-  $edges = (& $Exe dump-call-edges --db $db 2>$null) -join "`n"
+  $edges = (& { $ErrorActionPreference = 'Continue'; & $Exe dump-call-edges --db $db 2>$null }) -join "`n"
   # 1.43 (RECV-UNDECIDABLE): a nested routine's receiver now types through an outer local,
   # so DescNested.Inner is resolver-bound; the other three still reach the gate.
   $recomputeEdges = @(($edges -split "`r?`n") | Where-Object { $_ -match 'TAncSet\.Recompute' })
   # A dump line is <ref id>|<target>|<confidence>: the ref's enclosing routine names the caller.
   $boundIds = @($recomputeEdges | ForEach-Object { ($_ -split '\|')[0] }) -join ','
-  $boundOwners = if ($boundIds) { (& $Exe sql --query "SELECT s.qualified_name FROM refs r JOIN symbols s ON s.id = r.enclosing_symbol_id WHERE r.id IN ($boundIds)" --db $db --json 2>$null) -join ' ' } else { '' }
+  $boundOwners = if ($boundIds) { (& { $ErrorActionPreference = 'Continue'; & $Exe sql --query "SELECT s.qualified_name FROM refs r JOIN symbols s ON s.id = r.enclosing_symbol_id WHERE r.id IN ($boundIds)" --db $db --json 2>$null }) -join ' ' } else { '' }
   Check 'exactly one Recompute call is resolver-bound (shape check: the rest reach the gate)' ($recomputeEdges.Count -eq 1) ($recomputeEdges -join ' | ')
   Check 'the bound one is DescNested.Inner (outer local)' ($boundOwners -match 'DescNested\.Inner') $boundOwners
   $c3 = Get-Called 'Sets2.TAncSet.Recompute'
@@ -322,9 +325,9 @@ end.
 
   Write-Host ''
   Write-Host 'Checker agrees with the writer' -ForegroundColor Cyan
-  & $Exe document --qname $qn --db $db --apply --no-backup 2>$null | Out-Null
-  & $Exe index $srcDir --db $db 2>&1 | Out-Null
-  $drift = @(& $Exe doc-drift --qname $qn --db $db --json 2>$null | Where-Object { "$_".Trim().StartsWith('{') })
+  & { $ErrorActionPreference = 'Continue'; & $Exe document --qname $qn --db $db --apply --no-backup 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $srcDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $drift = @(& { $ErrorActionPreference = 'Continue'; & $Exe doc-drift --qname $qn --db $db --json 2>$null } | Where-Object { "$_".Trim().StartsWith('{') })
   Check 'doc-drift clean after document --apply' ($drift.Count -eq 0) ($drift -join ' | ')
 }
 finally {

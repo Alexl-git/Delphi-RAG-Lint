@@ -31,7 +31,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Continue'
@@ -118,7 +121,7 @@ $queryPyPath = Join-Path $scratch 'query.py'
 [System.IO.File]::WriteAllText($queryPyPath, $queryPy, [System.Text.Encoding]::ASCII)
 
 function Get-Snapshot([string]$name) {
-  $out = & $py $queryPyPath $db $name 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $py $queryPyPath $db $name 2>$null }
   $h = @{}
   foreach ($ln in $out) {
     $m = [regex]::Match($ln, '^(\w+)=(-?\d+)$')
@@ -127,7 +130,7 @@ function Get-Snapshot([string]$name) {
   return $h
 }
 function Has-SymId([int]$symid) {
-  $out = & $py $queryPyPath $db '--has-symid' $symid 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $py $queryPyPath $db '--has-symid' $symid 2>$null }
   $m = [regex]::Match(($out -join "`n"), 'HAS_SYMID=(\d+)')
   return ($m.Success -and [int]$m.Groups[1].Value -gt 0)
 }
@@ -135,11 +138,11 @@ function Has-SymId([int]$symid) {
 Push-Location C:\TEMP
 try {
   # --- index p2index.pas ALONE first (gives DoWork the LOWER ids) ---
-  & $exePath index $target --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $target --db $db 2>$null } | Out-Null
   Check 'index p2index.pas exits 0' ($LASTEXITCODE -eq 0)
 
   # --- then index anchor.pas SEPARATELY (gives AnchorFunc HIGHER ids; never reindexed again) ---
-  & $exePath index $anchorTarget --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $anchorTarget --db $db 2>$null } | Out-Null
   Check 'index anchor.pas exits 0' ($LASTEXITCODE -eq 0)
 
   $before = Get-Snapshot 'DoWork'
@@ -158,7 +161,7 @@ try {
 
   # --- reindex p2index.pas ONLY (anchor.pas untouched -> its rows stay live, ---
   # --- forcing a genuinely NEW id for DoWork, never a reused old one).      ---
-  & $exePath index $target --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $target --db $db 2>$null } | Out-Null
   Check 'reindex p2index.pas exits 0' ($LASTEXITCODE -eq 0)
 
   $after = Get-Snapshot 'DoWork'

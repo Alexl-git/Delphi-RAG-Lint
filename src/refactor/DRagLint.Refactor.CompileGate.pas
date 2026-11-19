@@ -37,13 +37,25 @@ const
 
 type
   /// <summary>Raised inside a gated run once a stand-down request (the maintenance control
-  /// channel: `drag-lint shutdown`, or the IDE's Cancel) is taken while the run waits on a child.</summary>
-  /// <remarks>The child's process tree is already gone when it is raised. The caller turns it into a
+  /// channel: `drag-lint stop-now`, or the IDE's Cancel) is taken while the run waits on a child.</summary>
+  /// <remarks>
+  /// The child's process tree is already gone when it is raised. The caller turns it into a
   /// rollback and the refusal `cancelled`, or, raised before any file was written, into
-  /// "cancelled -- nothing written". Either way the run exits 1.</remarks>
+  /// "cancelled -- nothing written". Either way the run exits 1.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas) ?, DRagLint.Refactor.CompileGate.RunBounded (DRagLint.Refactor.CompileGate.pas), DRagLint.Refactor.NarrowParam.TNarrowPlanner.Decide (DRagLint.Refactor.NarrowParam.pas), DRagLint.Refactor.RedundantCast.TCastPlanner.Decide (DRagLint.Refactor.RedundantCast.pas), DRagLint.Refactor.RedundantCast.TCastPlanner.ReadAllRows (DRagLint.Refactor.RedundantCast.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.CLI.CycleFix, DRagLint.Refactor.CompileGate, DRagLint.Refactor.NarrowParam, DRagLint.Refactor.RedundantCast, DRagLint.Refactor.ScratchGate, DRagLint.Refactor.Unwith</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   ECompileGateCancelled = class(Exception);
 
   /// <summary>The outcome of one msbuild run of a whole project (RunMsBuild).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas) ?, declaration (DRagLint.Refactor.CompileGate.pas) ?, DRagLint.CLI.CycleFix.BaselineCompile (DRagLint.CLI.CycleFix.pas) ?, DRagLint.Refactor.CompileGate.RunMsBuild (DRagLint.Refactor.CompileGate.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.CycleFix, DRagLint.Refactor.CompileGate</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TBuildOutcome = record
     /// <summary>True when msbuild exited 0 and printed no `error E`/`fatal F` line.</summary>
     Ok: Boolean;
@@ -59,6 +71,12 @@ type
   end;
 
   /// <summary>One bounded repair (R4) the compile gate made; an item of `repairs[]` in cycle-fix/1.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas), declaration (DRagLint.Refactor.CompileGate.pas), DRagLint.CLI.CycleFix.CompileAfter (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.TryRepair (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.TryRepair.AddRepair (DRagLint.CLI.CycleFix.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.CycleFix, DRagLint.Refactor.CompileGate</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRepair = record
     /// <summary>The dcc code repaired: E2003, E2015 or E2010.</summary>
     Code: string;
@@ -71,6 +89,12 @@ type
   end;
 
   /// <summary>The result of the after-gate (CompileAfter).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.CompileAfter (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.RunCycleFixGroups (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RunHubSurfaceFix (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.CompileGate.CompileAfterWith (DRagLint.Refactor.CompileGate.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.CLI.CycleFix, DRagLint.Refactor.CompileGate</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCompileAfterResult = record
     /// <summary>True when the last build was clean.</summary>
     Ok: Boolean;
@@ -89,8 +113,14 @@ type
   end;
 
   /// <summary>What WriteAll wrote and everything RollBack needs to undo it.</summary>
-  /// <remarks>Owns no object; the original bytes are held in memory, so a rollback never depends on
-  /// the backup files.</remarks>
+  /// <remarks>
+  /// Owns no object; the original bytes are held in memory, so a rollback never depends on
+  /// the backup files.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas) ?, declaration (DRagLint.Refactor.CompileGate.pas) ?, DRagLint.CLI.CycleFix.WriteAll (DRagLint.CLI.CycleFix.pas) ?, DRagLint.Refactor.CompileGate.MakeDirs (DRagLint.Refactor.CompileGate.pas) ?, DRagLint.Refactor.CompileGate.WriteStaged (DRagLint.Refactor.CompileGate.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.CLI.CycleFix, DRagLint.Refactor.CompileGate</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TApplyTransaction = record
     /// <summary>The project paths written, new files first, in write order.</summary>
     Written: TArray<string>;
@@ -125,9 +155,20 @@ type
   /// <summary>One bounded repair pass over the dcc lines of a failed after-build (CompileAfterWith).</summary>
   /// <param name="pErrors">The dcc lines of the failed build.</param>
   /// <returns>The repairs made; empty = nothing repairable, no second build.</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.CompileGate.pas), DRagLint.Refactor.CompileGate.CompileAfterWith (DRagLint.Refactor.CompileGate.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TGateRepairFunc = reference to function(const pErrors: TArray<string>): TArray<TRepair>;
 
   /// <summary>The bytes a rewrite wants one existing file to hold.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.CompileGate.pas) ?, DRagLint.CLI.ApplyEditsGated (DRagLint.CLI.pas) ?, DRagLint.CLI.RepoParamArray.RunGate (DRagLint.CLI.RepoParamArray.pas) ?, DRagLint.Refactor.NarrowParam.BuildGateFiles (DRagLint.Refactor.NarrowParam.pas) ?, DRagLint.Refactor.Unwith.UnwithApply (DRagLint.Refactor.Unwith.pas) (+3 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.RepoParamArray, DRagLint.Refactor.CompileGate, DRagLint.Refactor.NarrowParam, DRagLint.Refactor.RedundantCast, DRagLint.Refactor.RenameProof, DRagLint.Refactor.Unwith, DRagLint.Refactor.VerbShape</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TGateFile = record
     /// <summary>The file, absolute. It must exist; a new file has no place in this record.</summary>
     Path: string;
@@ -136,6 +177,12 @@ type
   end;
 
   /// <summary>A rewrite to pass through the gate (ApplyGated).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.ApplyEditsGated (DRagLint.CLI.pas), DRagLint.CLI.RepoParamArray.RunGate (DRagLint.CLI.RepoParamArray.pas), DRagLint.Refactor.NarrowParam.RunNarrowParam (DRagLint.Refactor.NarrowParam.pas), DRagLint.Refactor.RedundantCast.RunRedundantCastFix (DRagLint.Refactor.RedundantCast.pas), DRagLint.Refactor.RenameProof.ApplyRenameGated (DRagLint.Refactor.RenameProof.pas) (+6 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.RepoParamArray, DRagLint.Refactor.CompileGate, DRagLint.Refactor.NarrowParam, DRagLint.Refactor.RedundantCast, DRagLint.Refactor.RenameProof, DRagLint.Refactor.ScratchGate, DRagLint.Refactor.Unwith, DRagLint.Refactor.VerbShape</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TGateRequest = record
     /// <summary>The .dproj to build; its folder holds the backups' recovery.txt.</summary>
     Project: string;
@@ -162,6 +209,12 @@ type
   end;
 
   /// <summary>What ApplyGated did.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Refactor.CompileGate.ApplyGated (DRagLint.Refactor.CompileGate.pas), DRagLint.Refactor.ExtractInterface.RunExtractInterface (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.LazyInit.RunLazyInit (DRagLint.Refactor.LazyInit.pas), DRagLint.Refactor.NarrowParam.RunNarrowParam (DRagLint.Refactor.NarrowParam.pas), DRagLint.Refactor.RedundantCast.RunRedundantCastFix (DRagLint.Refactor.RedundantCast.pas) (+13 more)</para>
+  /// <para>Used in units: DRagLint.CLI.RepoParamArray, DRagLint.Refactor.CompileGate, DRagLint.Refactor.ExtractInterface, DRagLint.Refactor.LazyInit, DRagLint.Refactor.NarrowParam, DRagLint.Refactor.RedundantCast, DRagLint.Refactor.RenameProof, DRagLint.Refactor.ScratchGate, DRagLint.Refactor.VerbShape</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TGateOutcome = record
     /// <summary>True when the files are written and the project builds.</summary>
     Applied: Boolean;
@@ -199,7 +252,7 @@ var
   GStandDown : TControlChannel; // the run's control channel (RunCycleFix); nil = not listening
   GCancelTaken: Boolean; // a stand-down request was taken: every later child wait raises at once
   GScratchCited: Boolean; // a message of this run names a file in its scratch: DeleteDefaultScratch keeps it
-  GProgressDb : string; // the run's --db, expanded: the progress lines name the `shutdown --db` that cancels it
+  GProgressDb : string; // the run's --db, expanded: the progress lines name the `stop-now --db` that cancels it
   /// <summary>The verb the progress lines name.</summary>
   GGateVerb: string = 'cycles --fix';
 
@@ -210,9 +263,13 @@ var
 /// <param name="pPlatform">win32 / win64 (any case); '' = Win64.</param>
 /// <param name="pLogPath">The build log; the `.bat` is written next to it (same name, .bat).
 /// Its folder is created; neither file is in the project.</param>
+/// <param name="pWhat">The step the progress names, e.g. 'baseline build'.</param>
 /// <returns>Ok, the distinct `error E`/`fatal F` lines and the seconds taken. A missing rsvars.bat
 /// gives Ok = False with one line saying so (CompilerAvailable tells beforehand).</returns>
-/// <remarks>The build writes what any build of the project writes (dcu, exe) into the project's
+/// <exception cref="ECompileGateCancelled">A stand-down request arrived on the run's control channel while
+/// the build ran: the build's process tree was killed.</exception>
+/// <remarks>
+/// The build writes what any build of the project writes (dcu, exe) into the project's
 /// own output folders; it writes no source file. The build is UNBOUNDED by default (owner ruling
 /// 2026-10-26); --build-timeout &lt;s&gt; bounds it: a run past the limit is killed with its whole process tree
 /// (a job object) and returns Ok = False, TimedOut = True and one `build-timeout` line. The test seam
@@ -220,20 +277,47 @@ var
 /// the flag for a project under %TEMP% / C:\TEMP only.
 /// While it waits the build reports progress (owner ruling D4, 2026-11-03): `&lt;GGateVerb&gt;: &lt;pWhat&gt; --
 /// started`, then every 10 s `&lt;GGateVerb&gt;: &lt;pWhat&gt; -- &lt;n&gt; s ...` on stderr, and the heartbeat step
-/// `&lt;pWhat&gt; &lt;n&gt; s` (the IDE status strip).</remarks>
-/// <param name="pWhat">The step the progress names, e.g. 'baseline build'.</param>
-/// <exception cref="ECompileGateCancelled">A stand-down request arrived on the run's control channel while
-/// the build ran: the build's process tree was killed.</exception>
+/// `&lt;pWhat&gt; &lt;n&gt; s` (the IDE status strip).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.BaselineCompile (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.CompileGate.ApplyGated (DRagLint.Refactor.CompileGate.pas), DRagLint.Refactor.CompileGate.CompileAfterWith (DRagLint.Refactor.CompileGate.pas)</para>
+/// <para>Calls: ChangeFileExt, ContainsStr, Default, DRagLint.Refactor.CompileGate.BuildEnvBat, DRagLint.Refactor.CompileGate.BuildTimeoutMs, DRagLint.Refactor.CompileGate.CiteScratch, DRagLint.Refactor.CompileGate.CompilerAvailable, DRagLint.Refactor.CompileGate.DccErrorLines, DRagLint.Refactor.CompileGate.DccMessages, DRagLint.Refactor.CompileGate.MsBuildPlatform (+8 more)</para>
+/// <para>Returns: Default(TBuildOutcome)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Refactor.CompileGate.BuildEnvBat"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.BuildTimeoutMs"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.CiteScratch"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.CompilerAvailable"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.DccErrorLines"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunMsBuild(const pProject, pPlatform, pLogPath: string; const pWhat: string = 'build'): TBuildOutcome;
 
 /// <summary>True when the RAD Studio rsvars.bat RunMsBuild calls exists.</summary>
 /// <returns>False when no Studio root resolves (TStudioEnv: $BDS, the registry, the fallback) or
 /// its rsvars.bat is missing.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.PassBaselineGate (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.CompileGate.ApplyGated (DRagLint.Refactor.CompileGate.pas), DRagLint.Refactor.CompileGate.RunMsBuild (DRagLint.Refactor.CompileGate.pas), DRagLint.Refactor.ScratchGate.ApplyThroughScratch (DRagLint.Refactor.ScratchGate.pas)</para>
+/// <para>Calls: DRagLint.Refactor.CompileGate.BuildEnvBat</para>
+/// <para>Returns: (Bat &lt;&gt; '') and TFile.Exists(Bat)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Refactor.CompileGate.BuildEnvBat"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CompilerAvailable: Boolean;
 
 /// <summary>The Studio build-environment batch: --rsvars when given (GRsVars), else the repo's one Studio-root
 /// resolver; '' when no root resolves.</summary>
 /// <returns>The path of rsvars.bat, or ''.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.PassBaselineGate (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.CompileGate.ApplyGated (DRagLint.Refactor.CompileGate.pas), DRagLint.Refactor.CompileGate.CompilerAvailable (DRagLint.Refactor.CompileGate.pas), DRagLint.Refactor.CompileGate.RunMsBuild (DRagLint.Refactor.CompileGate.pas), DRagLint.Refactor.ScratchGate.BuildMirror (DRagLint.Refactor.ScratchGate.pas)</para>
+/// <para>Calls: DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty, DRagLint.Core.StudioEnv.TStudioEnv.RsvarsBat</para>
+/// <para>Returns: if TStudioEnv.RootOrEmpty = '' then ''</para>
+/// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty"/>
+/// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RsvarsBat"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildEnvBat: string;
 
 /// <summary>Runs pCmd as a child in its own job object and waits at most pTimeoutMs (INFINITE = no limit).</summary>
@@ -246,36 +330,97 @@ function BuildEnvBat: string;
 /// <returns>The exit code, or -1 after a kill.</returns>
 /// <exception cref="EOSError">The child cannot start.</exception>
 /// <exception cref="ECompileGateCancelled">A stand-down request was taken.</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.AllIteration (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.NextGroup (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RerunAfterReindex (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.VerifyAfterCore (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.CompileGate.RunMsBuild (DRagLint.Refactor.CompileGate.pas) (+2 more)</para>
+/// <para>Calls: AssignProcessToJobObject, Cardinal, CloseHandle, CreateFile, CreateJobObject, CreateProcess, DRagLint.Core.ControlChannel.TControlChannel.RequestEvent, DRagLint.Refactor.CompileGate.ReportWaitProgress, DRagLint.Refactor.CompileGate.StandDownChild, DRagLint.Refactor.CompileGate.TakeStandDown (+16 more)</para>
+/// <para>Returns: -1; Integer(Code)</para>
+/// <para>Complexity: 23 (cyclomatic, outer body), 87 lines (full implementation)</para>
+/// <para>Mutates: pTimedOut (out)</para>
+/// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.RequestEvent"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.ReportWaitProgress"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.StandDownChild"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.TakeStandDown"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunBounded(const pWhat, pCmd, pOutFile: string; pTimeoutMs: Cardinal; out pTimedOut: Boolean;
   pEngineChild: Boolean = False): Integer;
 
-/// <summary>True when pPath lies under C:\TEMP or %TEMP%: the scope of every test seam.</summary>
+/// <summary>True when pPath lies under C:\TEMP, %TEMP% or the system temp folder (GetTempPath, which reads %TMP%
+/// first): the scope of every test seam.</summary>
 /// <param name="pPath">The path.</param>
-/// <returns>True under either root.</returns>
+/// <returns>True under any of the three roots.</returns>
+/// <remarks>
+/// 1.52 BK-VERIFY: a runner that builds its fixture under [IO.Path]::GetTempPath() lands in %TMP%; with
+/// %TEMP% = C:\TEMP and %TMP% elsewhere the seam used to miss it.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.BreakSeam (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.ChildExe (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.PrepareChildOutput (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.ProbeSpec (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.FixEditsUnderTestSeam (DRagLint.CLI.pas) (+6 more)</para>
+/// <para>Calls: ExpandFileName, GetEnvironmentVariable, IncludeTrailingPathDelimiter, StartsText</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsUnderTemp(const pPath: string): Boolean;
 
 /// <summary>The time limit of a build of pProject: --build-timeout (INFINITE = none, the default), or the test seam
 /// DRAGLINT_CYCLEFIX_BUILD_TIMEOUT_MS (milliseconds) for a project under %TEMP% / C:\TEMP.</summary>
 /// <param name="pProject">The project.</param>
 /// <returns>The limit in milliseconds.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.AnnounceSeams (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.CompileGate.RunMsBuild (DRagLint.Refactor.CompileGate.pas), DRagLint.Refactor.ScratchGate.BuildMirror (DRagLint.Refactor.ScratchGate.pas)</para>
+/// <para>Calls: DRagLint.Refactor.CompileGate.IsUnderTemp, GetEnvironmentVariable, StrToIntDef</para>
+/// <para>Returns: GBuildTimeoutMs; Seam</para>
+/// <seealso cref="DRagLint.Refactor.CompileGate.IsUnderTemp"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildTimeoutMs(const pProject: string): Cardinal;
 
 /// <summary>The stand-down request, if one is pending: takes it and remembers that it was taken.</summary>
 /// <returns>False when there is none, or the listener withdrew it a moment ago.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Refactor.CompileGate.RunBounded (DRagLint.Refactor.CompileGate.pas), DRagLint.Refactor.NarrowParam.TNarrowPlanner.Decide (DRagLint.Refactor.NarrowParam.pas), DRagLint.Refactor.RedundantCast.TCastPlanner.Decide (DRagLint.Refactor.RedundantCast.pas), DRagLint.Refactor.RedundantCast.TCastPlanner.ReadAllRows (DRagLint.Refactor.RedundantCast.pas), DRagLint.Refactor.RedundantCast.TCastPlanner.StandDownProbe (DRagLint.Refactor.RedundantCast.pas)</para>
+/// <para>Calls: DRagLint.Core.ControlChannel.TControlChannel.StandDownRequested</para>
+/// <para>Returns: GCancelTaken</para>
+/// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.StandDownRequested"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TakeStandDown: Boolean;  // dl:ok unused-public-symbol@34e9 -- public API for the next gated rewrites (items 3 and 4) and the owed report rule
 
 /// <summary>The text a message uses to cite pPath, a file in this run's scratch.</summary>
 /// <param name="pPath">The file.</param>
 /// <param name="pFmt">The format, with one %s.</param>
 /// <returns>Format(pFmt, [pPath]) when the file exists (the scratch is then kept at exit), else ''.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.AllIteration (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.NextGroup (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.VerifyAfterCore (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.CompileGate.RunMsBuild (DRagLint.Refactor.CompileGate.pas)</para>
+/// <para>Calls: Format</para>
+/// <para>Returns: Format(pFmt, [pPath])</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CiteScratch(const pPath, pFmt: string): string;
 
 /// <summary>A scratch name under C:\TEMP that does not exist now.</summary>
 /// <param name="pTail">The name's tail, e.g. '_build'.</param>
 /// <returns>The directory name with a trailing delimiter; nothing is created.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ApplyEditsGated (DRagLint.CLI.pas), DRagLint.CLI.CycleFix.BuildScratchDir (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.DefaultShadowDir (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.RepoParamArray.RunGate (DRagLint.CLI.RepoParamArray.pas), DRagLint.Refactor.NarrowParam.RunNarrowParam (DRagLint.Refactor.NarrowParam.pas) (+4 more)</para>
+/// <para>Calls: Copy, Format, GetEnvironmentVariable, GUIDToString, IntToStr</para>
+/// <para>Returns: Format('C:\TEMP\draglint_cyclefix_%s%s\', [Pid, pTail]); Format('C:\TEMP\draglint_cyclefix_%s_%s%s\', [Pid, Copy(GUIDToString(TGUID.NewGuid), CGuidHexFrom, CGuidHexLen), pTail])</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FreshScratchName(const pTail: string): string;
 
-/// <summary>One dcc error line, parsed (ParseDccLine).</summary>
+  /// <summary>One dcc error line, parsed (ParseDccLine).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.CycleFix.DccErrorsToJson (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.TryRepair (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.TryRepair.AddRepair (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.TryRepair.RepairCast (DRagLint.CLI.CycleFix.pas) ?, DRagLint.Refactor.CompileGate.ParseDccLine (DRagLint.Refactor.CompileGate.pas) (+4 more)</para>
+  /// <para>Used in units: DRagLint.CLI.CycleFix, DRagLint.CLI.RepoParamArray, DRagLint.Refactor.CompileGate</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
 type
   TDccLine = record
     /// <summary>The file the line names.</summary>
@@ -292,6 +437,14 @@ type
 /// <param name="pText">The line.</param>
 /// <param name="pLine">Receives the parts.</param>
 /// <returns>False when it is neither.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.DccErrorsToJson (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.TryRepair (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.RepoParamArray.RefuseNamedUnits (DRagLint.CLI.RepoParamArray.pas)</para>
+/// <para>Calls: Default, StrToIntDef, Trim, UpperCase</para>
+/// <para>Returns: M.Success</para>
+/// <para>Mutates: pLine (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseDccLine(const pText: string; out pLine: TDccLine): Boolean;
 
 /// <summary>The first line in [pFrom, pTo) matching pPattern, case-insensitively.</summary>
@@ -300,12 +453,26 @@ function ParseDccLine(const pText: string; out pLine: TDccLine): Boolean;
 /// <param name="pFrom">First index.</param>
 /// <param name="pTo">One past the last index.</param>
 /// <returns>The index, or -1.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.TryRepair.RepairPointer (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.CompileGate.AddToUses (DRagLint.Refactor.CompileGate.pas), DRagLint.Refactor.CompileGate.SectionNameOf (DRagLint.Refactor.CompileGate.pas), DRagLint.Refactor.CompileGate.SectionRange (DRagLint.Refactor.CompileGate.pas)</para>
+/// <para>Returns: -1</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LineIndexOf(pLines: TStrings; const pPattern: string; pFrom, pTo: Integer): Integer;
 
 /// <summary>interface / implementation / program: the section holding 0-based line pIdx.</summary>
 /// <param name="pLines">The unit's lines.</param>
 /// <param name="pIdx">The line.</param>
 /// <returns>The section's name.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.TryRepair.QueueUses (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.NarrowParam.BuildGateFiles (DRagLint.Refactor.NarrowParam.pas), DRagLint.Refactor.NarrowParam.BuildNarrowEdits (DRagLint.Refactor.NarrowParam.pas)</para>
+/// <para>Calls: DRagLint.Refactor.CompileGate.LineIndexOf</para>
+/// <para>Returns: if LineIndexOf(pLines, '^\s*interface\b', 0, pLines.Count) &gt;= 0 then 'interface'</para>
+/// <seealso cref="DRagLint.Refactor.CompileGate.LineIndexOf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SectionNameOf(pLines: TStrings; pIdx: Integer): string;
 
 /// <summary>Adds pLeaf as the first entry of the section's uses clause (a section without one gets one).</summary>
@@ -313,11 +480,27 @@ function SectionNameOf(pLines: TStrings; pIdx: Integer): string;
 /// <param name="pSection">interface / implementation / program (SectionNameOf).</param>
 /// <param name="pLeaf">The unit to add.</param>
 /// <returns>False when it is there already or the section has no place for it.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.TryRepair (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.NarrowParam.BuildGateFiles (DRagLint.Refactor.NarrowParam.pas), DRagLint.Refactor.NarrowParam.BuildNarrowEdits (DRagLint.Refactor.NarrowParam.pas)</para>
+/// <para>Calls: DRagLint.Refactor.CompileGate.LineIndexOf, DRagLint.Refactor.CompileGate.SectionRange, DRagLint.Refactor.CompileGate.UsesEntries, MatchText, Trim</para>
+/// <para>Returns: True</para>
+/// <seealso cref="DRagLint.Refactor.CompileGate.LineIndexOf"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.SectionRange"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.UsesEntries"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AddToUses(pLines: TStrings; const pSection, pLeaf: string): Boolean;
 
 /// <summary>pPaths expanded, each once (case-insensitive), in first-seen order.</summary>
 /// <param name="pPaths">The paths.</param>
 /// <returns>The distinct full paths.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Refactor.CompileGate.WriteStaged (DRagLint.Refactor.CompileGate.pas)</para>
+/// <para>Calls: ExpandFileName, LowerCase</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DistinctPaths(const pPaths: TArray<string>): TArray<string>;  // dl:ok unused-public-symbol@64dc -- public API for the next gated rewrites (items 3 and 4) and the owed report rule
 
 /// <summary>Writes a staged result into the project: all files or none.</summary>
@@ -330,11 +513,27 @@ function DistinctPaths(const pPaths: TArray<string>): TArray<string>;  // dl:ok 
 /// <param name="pTx">Receives what was written and what a rollback needs.</param>
 /// <returns>True when every file was written; False when anything failed, in which case the
 /// project is already rolled back (pTx.Error says why, pTx.RollbackFailure what could not be restored).</returns>
-/// <remarks>Order: every touched file's original bytes are read into memory; unless pNoBackup each
+/// <exception cref="EInOutError"><!-- drag-lint:auto exc -->the new unit's file already exists: %s</exception>
+/// <remarks>
+/// Order: every touched file's original bytes are read into memory; unless pNoBackup each
 /// changed file is copied to its NextBackupName sibling and a recovery.txt block is appended
 /// (AppendRecoveryBlock) BEFORE any write; then the new files are written, then the changed
 /// files. A file whose staged bytes equal the original is not written. Each write passes FailWriteForTests
-/// (DRAGLINT_TEST_FAIL_WRITE_AT).</remarks>
+/// (DRAGLINT_TEST_FAIL_WRITE_AT).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.WriteAll (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.CompileGate.ApplyGated (DRagLint.Refactor.CompileGate.pas)</para>
+/// <para>Calls: Default, DRagLint.Refactor.CompileGate.BackUpChanged, DRagLint.Refactor.CompileGate.DistinctPaths, DRagLint.Refactor.CompileGate.MakeDirs, DRagLint.Refactor.CompileGate.RollBack, DRagLint.Refactor.CompileGate.SameBytes, DRagLint.Refactor.CompileGate.WriteStaged.WriteOne, ExtractFilePath, FailWriteForTests, IsUnderTemp, LowerCase, pHeader, pStaged</para>
+/// <para>Returns: True; False</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Mutates: pTx (out)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Refactor.CompileGate.BackUpChanged"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.DistinctPaths"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.MakeDirs"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.RollBack"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.SameBytes"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function WriteStaged(const pTouched, pNew: TArray<string>; const pProjectDir: string; pNoBackup: Boolean;
   const pStaged: TFunc<string, TBytes>; const pHeader: TFunc<Integer, Integer, string>;
   out pTx: TApplyTransaction): Boolean;
@@ -344,7 +543,15 @@ function WriteStaged(const pTouched, pNew: TArray<string>; const pProjectDir: st
 /// <returns>One `compile gate: ...` line each: the counts of build 1, every error of build 1, the counts of build 2,
 /// every error of build 2, and when the rewrite was applied the new warnings and hints of build 2 (or that there are
 /// none) and how many of build 1 are gone. Empty when no build ran.</returns>
-/// <remarks>Pure. The caller decides the stream (the CLI writes them to stderr).</remarks>
+/// <remarks>
+/// Pure. The caller decides the stream (the CLI writes them to stderr).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ApplyEditsGated (DRagLint.CLI.pas), DRagLint.CLI.FinishRename (DRagLint.CLI.pas), DRagLint.CLI.RepoParamArray.NoteGate (DRagLint.CLI.RepoParamArray.pas), DRagLint.Refactor.ExtractInterface.RunExtractInterface (DRagLint.Refactor.ExtractInterface.pas)</para>
+/// <para>Calls: DRagLint.Refactor.CompileGate.GateMessageReport.Build, DRagLint.Refactor.CompileGate.GateMessageReport.Shown, Format, SameText</para>
+/// <seealso cref="DRagLint.Refactor.CompileGate.GateMessageReport.Build"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.GateMessageReport.Shown"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function GateMessageReport(const pOutcome: TGateOutcome): TArray<string>;
 
 /// <summary>The after gate: builds the written project, repairs once and builds again.</summary>
@@ -353,38 +560,90 @@ function GateMessageReport(const pOutcome: TGateOutcome): TArray<string>;
 /// <param name="pLogDir">Folder for the .bat and logs (after-1.log, after-2.log).</param>
 /// <param name="pRepair">The repair pass; nil = none.</param>
 /// <returns>Ok, the last build's errors, the repairs and the build count and time.</returns>
-/// <remarks>Rolls nothing back: on not Ok the caller restores the transaction.</remarks>
+/// <remarks>
+/// Rolls nothing back: on not Ok the caller restores the transaction.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.CompileAfter (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.CompileGate.ApplyGated (DRagLint.Refactor.CompileGate.pas)</para>
+/// <para>Calls: Default, DRagLint.Refactor.CompileGate.RunMsBuild, Format, IncludeTrailingPathDelimiter, pRepair</para>
+/// <para>Returns: Default(TCompileAfterResult)</para>
+/// <seealso cref="DRagLint.Refactor.CompileGate.RunMsBuild"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CompileAfterWith(const pBuildProject, pPlatform, pLogDir: string; const pRepair: TGateRepairFunc): TCompileAfterResult;
 
 /// <summary>Undoes WriteAll byte-identically.</summary>
 /// <param name="pTx">The transaction WriteAll returned.</param>
 /// <returns>'' when every file is restored; else the files that could not be, with the reason.</returns>
-/// <remarks>Restores every held original whose bytes changed (a repair's edits included) with its last-write time, deletes
+/// <remarks>
+/// Restores every held original whose bytes changed (a repair's edits included) with its last-write time, deletes
 /// the new files and the folders made for them, the backups made, and restores recovery.txt (or
-/// deletes it when the write created it). Never raises.</remarks>
+/// deletes it when the write created it). Never raises.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.ApplyGroup (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.CancelledApply (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.CompileGate.ApplyGated.RollBackAs (DRagLint.Refactor.CompileGate.pas), DRagLint.Refactor.CompileGate.WriteStaged (DRagLint.Refactor.CompileGate.pas), DRagLint.Refactor.Unwith.UnwithApply (DRagLint.Refactor.Unwith.pas) (+1 more)</para>
+/// <para>Calls: DRagLint.Refactor.CompileGate.DeleteIfPresent, DRagLint.Refactor.CompileGate.RollBack.Attempt, DRagLint.Refactor.CompileGate.SameBytes, pStep</para>
+/// <para>Returns: string.Join('; ', Fails.ToArray)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Refactor.CompileGate.DeleteIfPresent"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.RollBack.Attempt"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.SameBytes"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RollBack(const pTx: TApplyTransaction): string;
 
 /// <summary>The one way a rewrite outside `cycles --fix` reaches the disk: baseline build, all-or-nothing write
 /// under backups, after build (one repair pass when the request has one), rollback on any failure.</summary>
 /// <param name="pReq">The rewrite.</param>
 /// <returns>Applied, or the refusal with its detail. Never raises.</returns>
-/// <remarks>Nothing is written when the baseline does not build. Test seam: DRAGLINT_GATE_TEST_BREAK=1, for a project
+/// <exception cref="EInOutError"><!-- drag-lint:auto exc -->nothing staged for %s; via DRagLint.Refactor.CompileGate.WriteStaged: the new unit's file already exists: %s</exception>
+/// <remarks>
+/// Nothing is written when the baseline does not build. Test seam: DRAGLINT_GATE_TEST_BREAK=1, for a project
 /// under %TEMP% / C:\TEMP, puts a line dcc rejects at the top of the first written file before the after build, so a guard can
-/// prove the rollback on a rewrite that is itself sound.</remarks>
+/// prove the rollback on a rewrite that is itself sound.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ApplyEditsGated (DRagLint.CLI.pas), DRagLint.CLI.RepoParamArray.RunGate (DRagLint.CLI.RepoParamArray.pas), DRagLint.Refactor.NarrowParam.RunNarrowParam (DRagLint.Refactor.NarrowParam.pas), DRagLint.Refactor.RedundantCast.RunRedundantCastFix (DRagLint.Refactor.RedundantCast.pas), DRagLint.Refactor.RenameProof.ApplyRenameGated (DRagLint.Refactor.RenameProof.pas) (+2 more)</para>
+/// <para>Calls: Default, DRagLint.Refactor.CompileGate.ApplyGated.RollBackAs, DRagLint.Refactor.CompileGate.BuildEnvBat, DRagLint.Refactor.CompileGate.CompileAfterWith, DRagLint.Refactor.CompileGate.CompilerAvailable, DRagLint.Refactor.CompileGate.IsUnderTemp, DRagLint.Refactor.CompileGate.NewCompilerMessages, DRagLint.Refactor.CompileGate.RunMsBuild, DRagLint.Refactor.CompileGate.WriteStaged, ExpandFileName (+7 more)</para>
+/// <para>Returns: Outcome</para>
+/// <para>Complexity: 22 (cyclomatic, outer body), 138 lines (full implementation)</para>
+/// <para>Catches: ECompileGateCancelled (swallowed); Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Refactor.CompileGate.ApplyGated.RollBackAs"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.BuildEnvBat"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.CompileAfterWith"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.CompilerAvailable"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.IsUnderTemp"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ApplyGated(const pReq: TGateRequest): TGateOutcome;
 
-/// <summary>Opens the control channel of a gated `--apply` run, so `drag-lint shutdown` and the IDE's Cancel
+/// <summary>Opens the control channel of a gated `--apply` run, so `drag-lint stop-now` and the IDE's Cancel
 /// reach it while it waits on a build (E-NARROW-CHANNEL).</summary>
 /// <param name="pVerb">The verb hosting the run; must be one ControlChannelEnabledFor accepts.</param>
-/// <param name="pDb">The run's --db; the channel answers `shutdown --db` for it.</param>
+/// <param name="pDb">The run's --db; the channel answers `stop-now --db` for it.</param>
 /// <returns>True when the channel listens (GStandDown is set). False when the verb does not listen or the
 /// pipe could not start (said on stderr: a cancel then kills the run instead of rolling it back).</returns>
-/// <remarks>Main thread only. Pair with CloseGateStandDown in a finally. A request taken while ApplyGated
-/// builds kills the build and rolls back: ApplyGated returns Refusal = CGateCancelled.</remarks>
+/// <exception cref="EInvalidOperation"><!-- drag-lint:auto exc -->via DRagLint.Core.ControlChannel.TControlChannel.Create: TControlChannel must be created on the main thread -- the one the listener has to wake</exception>
+/// <remarks>
+/// Main thread only. Pair with CloseGateStandDown in a finally. A request taken while ApplyGated
+/// builds kills the build and rolls back: ApplyGated returns Refusal = CGateCancelled.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), DRagLint.CLI.DoExtractInterface (DRagLint.CLI.pas), DRagLint.CLI.DoExtractMethod (DRagLint.CLI.pas), DRagLint.CLI.DoLazyInit (DRagLint.CLI.pas), DRagLint.CLI.DoNarrowParam (DRagLint.CLI.pas) (+2 more)</para>
+/// <para>Calls: DRagLint.Core.ControlChannel.ControlChannelEnabledFor, DRagLint.Core.ControlChannel.TControlChannel.Create, DRagLint.Core.ControlChannel.TControlChannel.Start, ExpandFileName, Writeln</para>
+/// <para>Returns: False; True</para>
+/// <seealso cref="DRagLint.Core.ControlChannel.ControlChannelEnabledFor"/>
+/// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Create"/>
+/// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Start"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function OpenGateStandDown(const pVerb, pDb: string): Boolean;
 
 /// <summary>Closes the channel OpenGateStandDown opened; a pending or taken request is answered `exiting`.</summary>
-/// <remarks>Safe when no channel is open. Call after the run's files are rolled back or kept.</remarks>
+/// <remarks>
+/// Safe when no channel is open. Call after the run's files are rolled back or kept.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), DRagLint.CLI.DoExtractInterface (DRagLint.CLI.pas), DRagLint.CLI.DoExtractMethod (DRagLint.CLI.pas), DRagLint.CLI.DoLazyInit (DRagLint.CLI.pas), DRagLint.CLI.DoNarrowParam (DRagLint.CLI.pas) (+2 more)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure CloseGateStandDown;
 
 implementation
@@ -500,7 +759,8 @@ begin
   var Full:= ExpandFileName(pPath);
   var Temp:= GetEnvironmentVariable('TEMP');
   Result:= StartsText('C:\TEMP\', Full) or // dl:ok hardcoded-absolute-path@485b -- the test seams' fixed scratch root (ruling T10)
-    ((Temp <> '') and StartsText(IncludeTrailingPathDelimiter(ExpandFileName(Temp)), Full));
+    ((Temp <> '') and StartsText(IncludeTrailingPathDelimiter(ExpandFileName(Temp)), Full)) or
+    StartsText(IncludeTrailingPathDelimiter(ExpandFileName(TPath.GetTempPath)), Full);
 end;
 
 // The time limit of a build of pProject: --build-timeout (INFINITE = none, the default), or the test seam
@@ -567,7 +827,7 @@ begin
   var Secs:= pElapsedMs div CMsPerSec;
   BeatStep(Format('%s %d s', [pWhat, Secs]));
   if pLine then
-    Writeln(ErrOutput, Format(GGateVerb + ': %s -- %d s (no time limit; Cancel, or drag-lint shutdown --db "%s", stops it)',
+    Writeln(ErrOutput, Format(GGateVerb + ': %s -- %d s (no time limit; Cancel, or drag-lint stop-now --db "%s", stops it)',
       [pWhat, Secs, GProgressDb]));
 end;
 
@@ -1264,7 +1524,7 @@ begin
   begin
     GStandDown  := Ctl;
     GCancelTaken:= False;
-    GProgressDb := ExpandFileName(pDb); { the progress lines name the shutdown --db that cancels the run }
+    GProgressDb := ExpandFileName(pDb); { the progress lines name the stop-now --db that cancels the run }
     Exit(True);
   end;
   Writeln(ErrOutput, pVerb, ': control channel NOT started (', Err, '); a cancel will kill this run instead of rolling it back');

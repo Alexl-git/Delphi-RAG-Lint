@@ -9,7 +9,7 @@
 $root  = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 $debug = Join-Path $root 'src\cli\Win64\Debug\drag-lint.exe'
 $cand  = @($debug, (Join-Path $root 'third_party\dll-win64\drag-lint.exe'))
-$common = & git -C $root rev-parse --path-format=absolute --git-common-dir 2>$null
+$common = & { $ErrorActionPreference = 'Continue'; & git -C $root rev-parse --path-format=absolute --git-common-dir 2>$null }
 if ($common) { $cand += (Join-Path (Split-Path -Parent $common) 'third_party\dll-win64\drag-lint.exe') }
 foreach ($c in $cand) { if (Test-Path -LiteralPath $c) { $c; return } }
 $debug

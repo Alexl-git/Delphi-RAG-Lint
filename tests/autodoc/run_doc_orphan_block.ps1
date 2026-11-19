@@ -30,7 +30,10 @@
   drag-lint's own source, the largest managed-block corpus available: 0 findings.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'
@@ -54,7 +57,7 @@ function Write-Ascii([string]$Path, [string]$Text) {
   [System.IO.File]::WriteAllText($Path, $n, [System.Text.Encoding]::ASCII)
 }
 function OrphanFindings([string]$File) {
-  @(& $Exe lint $File 2>$null | Select-String '\] doc-orphan-block:')
+  @(& { $ErrorActionPreference = 'Continue'; & $Exe lint $File 2>$null } | Select-String '\] doc-orphan-block:')
 }
 
 # --- THE DEFECT: two blocks, two blank lines, one declaration -----------------

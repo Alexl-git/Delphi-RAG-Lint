@@ -25,10 +25,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string] $Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string] $Exe     = '',
   [string] $BaseExe = '',
   [string] $WorkDir = "$env:TEMP\drag-lint-formsmap-navfacts-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = 0
 $script:Passed = 0
@@ -201,7 +204,7 @@ function Run-Verb([string[]]$VerbArgs, [bool]$Off, [string]$Tag, [string]$UseExe
   if ($Off) { $env:DRAGLINT_NO_FILE_FACTS = '1' } else { $env:DRAGLINT_NO_FILE_FACTS = $null }
   try {
     $p = Start-Process -FilePath $UseExe -ArgumentList $VerbArgs -NoNewWindow -Wait -PassThru `
-      -RedirectStandardOutput $o -RedirectStandardError $e
+      -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   } finally {
     $env:DRAGLINT_DEBUG = $null
     $env:DRAGLINT_NO_FILE_FACTS = $null
@@ -247,7 +250,7 @@ foreach ($s in $sets) {
   New-Item -ItemType Directory -Force (Join-Path $s.Dir '_D-RAG') | Out-Null
   [IO.File]::WriteAllText((Join-Path $s.Dir '_D-RAG\drag-lint-project.json'), '{ "ownRoots": ["."] }')
   $db = Join-Path $WorkDir "$($s.Name).sqlite"
-  & $Exe index $s.Dir --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $s.Dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check "$($s.Name) index exits 0" ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
   $proj = @(Get-ChildItem $s.Dir -Filter *.dproj | Select-Object -First 1 | ForEach-Object FullName)[0]
   $on  = Forms-Csv $s.Dir $db $proj $false "$($s.Name)-on"
@@ -305,7 +308,7 @@ if ($BaseExe -and (Test-Path $BaseExe)) {
   $absDir = Join-Path $WorkDir 'abs'
   Copy-Item -LiteralPath (Join-Path $fixRoot 'formsmap-v6') -Destination $absDir -Recurse
   $absDb = Join-Path $WorkDir 'abs.sqlite'
-  & $BaseExe index $absDir --db $absDb 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $BaseExe index $absDir --db $absDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $aOn  = Forms-Csv $absDir $absDb (Join-Path $absDir 'Demo6.dproj') $false 'abs-on'
   $aOff = Forms-Csv $absDir $absDb (Join-Path $absDir 'Demo6.dproj') $true  'abs-off'
   Check 'ABS base-engine index answered by the text path' (($aOn.Table -eq 0) -and ($aOn.Text -gt 0)) "table=$($aOn.Table) text=$($aOn.Text)"

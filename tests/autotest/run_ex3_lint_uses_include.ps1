@@ -10,7 +10,10 @@
   same command (a fix that silenced the rule would fail it).
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = 0; $script:Passed = 0
 function Check($n, $ok, $d = '') {
@@ -24,10 +27,10 @@ $Fx  = (Resolve-Path (Join-Path $PSScriptRoot '..\fixtures')).Path
 
 # lint --json is a bare ARRAY of findings with a `rule` field (inspected raw); 0 findings prints [].
 function SyntaxFindings([string]$file) {
-  $raw = & $Exe lint $file --json 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file --json 2>$null }
   $txt = ($raw | Where-Object { $_ -notmatch '^\(loaded' }) -join "`n"
   if ($txt.Trim() -eq '') { return $null }
-  return ,@(@($txt | ConvertFrom-Json) | Where-Object { $_.rule -in @('parser-error', 'syntax-error') })
+  return ,@(@(($txt | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) | Where-Object { $_.rule -in @('parser-error', 'syntax-error') })
 }
 Write-Host "== EX3 lint parse of a uses-list include host ($Exe)"
 $host_ = Join-Path $Fx 'file-facts-149\facts\FfIncA.pas'

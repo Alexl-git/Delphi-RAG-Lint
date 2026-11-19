@@ -7,7 +7,7 @@ group: documentation
 order: 40007
 since: 0.90.0-alpha
 status: shipped
-updated: 1.48.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # Document it
@@ -58,7 +58,10 @@ Generates/repairs a managed DocInsight comment for that one qualified name.
 On a property or field with resolved uses the managed block says where it is
 used, with the access mode: `Used in: uCons.TConsumer.Go (uCons.pas) [rw]`. That
 line replaces the name-matched `Used by:` (wave 147, on by default); with no
-resolved use the `Used by:` line is written as before.
+resolved use the `Used by:` line is written as before. Since 1.52 a site that is
+the whole argument of `Inc`/`Dec` or of an `out` parameter counts as a write
+(`[w]`) and of a `var` parameter as both (`[rw]`), the same directions
+`usages --rw` lists.
 
 Since wave 148 the line also lists uses that only another project's index
 records (`document --db A --db B`: the extra `--db` is asked by the full

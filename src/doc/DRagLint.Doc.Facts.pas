@@ -190,7 +190,7 @@ type
   /// fields carry the true count so the renderer can add '(+N more)'.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas) ?, DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas) ?, DRagLint.Doc.Facts.DemoteForeignSummary (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas) (+19 more)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas) ?, DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas) ?, DRagLint.Doc.Facts.DemoteForeignSummary (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas) (+20 more)</para>
   /// <para>Used in units: DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.Doc.Facts, DRagLint.Doc.Regions, DRagLint.LSP.Server, DRagLint.Query.HoverModel</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -772,8 +772,8 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
-    /// <para>Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAccessorEchoUses, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNamesOfKind, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers (+55 more)</para>
-    /// <para>Complexity: 95 (cyclomatic, outer body), 1222 lines (full implementation)</para>
+    /// <para>Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAccessorEchoUses, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNamesOfKind, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers (+58 more)</para>
+    /// <para>Complexity: 96 (cyclomatic, outer body), 1248 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAccessorEchoUses"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
@@ -973,7 +973,7 @@ type
 
 /// <summary>Per-section cost of every TDocFactsBuilder.Build call so far, as two
 /// printable lines. Diagnostic only; read by the DRAGLINT_PROFILE doc-drift
-/// breakdown.</summary>
+/// breakdown and (v152 HOVERCAP) by `hover --format md|json` under DRAGLINT_PROFILE.</summary>
 /// <returns><!-- drag-lint:auto type -->string</returns>
 /// <remarks>
 /// Build runs once per declaration and dominates both `document` and
@@ -1017,13 +1017,22 @@ procedure ClearDocFactsMemos;
 /// The `document` verbs call this before building, then compare
 /// SourceFilesRead with the files the index reports changed. Not thread-safe:
 /// call it from the thread that runs Build.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas) (+1 more)</para>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure ResetSourceFilesRead;
 
 /// <summary>The distinct source paths read since the last ResetSourceFilesRead,
 /// in the stored form the store handed out, sorted case-insensitively.</summary>
 /// <returns>Empty when nothing was read since the reset.</returns>
-/// <remarks>Not thread-safe, as ResetSourceFilesRead.</remarks>
+/// <remarks>
+/// Not thread-safe, as ResetSourceFilesRead.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RescanTamperedFacts (DRagLint.CLI.pas), DRagLint.CLI.StaleFactSources (DRagLint.CLI.pas), DRagLint.Lint.DocRules.StaleCalleeReads (DRagLint.Lint.DocRules.pas)</para>
+/// <para>Returns: GSrcFilesRead.ToStringArray</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SourceFilesRead: TArray<string>;
 
   /// <summary>Applies the display cap: a list of ATotal items shows all of them
@@ -1115,6 +1124,7 @@ function SourceFilesRead: TArray<string>;
 implementation
 
 uses
+  DRagLint.Core.Encoding, // 1.52 EXTGAPS2: Utf8ByteColToCharCol -- handler spans meet refs' CHARACTER columns
   System.Diagnostics, // TStopwatch -- DocFactsBuildProfile's per-section counters
   // StripPasCommentsKeepLayout only, for ReadDeclLine -- see its header. A pure
   // leaf despite the unit name (its interface pulls in nothing but System.*), so
@@ -1137,6 +1147,10 @@ uses
   // keeps paying for. CallResolver reaches only Core.Model / Core.Interfaces,
   // so this adds no cycle.
   DRagLint.Index.CallResolver,
+  // 1.52 BK-USEEDGES: NewUseDirections only, so 'Used in:' gives an Inc/Dec or var/out
+  // argument the direction `usages --rw` gives it. Query.Callers' interface reaches
+  // only Core.Model / Core.Interfaces: no cycle.
+  DRagLint.Query.Callers,
   // v(Q0, 2026-08-14): TSharedUnit.IsShared -- the `dl:shared` marker decides
   // whether an INBOUND list may be truncated (see UnitIsShared below and the two
   // cap sites in Build). Reaches only System units and Lint.ReviewMarker, so no
@@ -1214,6 +1228,10 @@ var
     exactly what must be measured rather than assumed -- the previous four
     suspects were all obvious too. }
   GBOverloadTag, GCOverloadTag: Int64;
+  { 1.52 B42: the 'Used in:' direction pass (AddUseRows) and the setter arg-write echo
+    (AddArgWriteEchoes) -- both read source files through IUseDirections, once per
+    declaration (BK-USEEDGES left the cost unmeasured). Inside resolved-callers. }
+  GBUsedIn, GCUsedIn: Int64;
   { MEMO for OverloadArityTag, and the reason it exists is the measurement above:
     255.48 s of a 572 s ORM3 lint-all, 10.52 ms x 24,286 calls.
 
@@ -1424,6 +1442,7 @@ begin
                   '                                 rest-of-window %s'#13#10 +
                   '        overload-arity-tag %s (%d call(s), %s) -- inside ToFactRef,'#13#10 +
                   '          so it is charged to BOTH resolved-callers and rest-of-window'#13#10 +
+                  '        used-in directions %s (%d call(s), %s) -- inside resolved-callers'#13#10 +
                   '        seealso SPLIT -- %d declaration(s) entered the block'#13#10 +
                   '                         callees  %s (%d edge row(s), %d distinct target(s), %s)'#13#10 +
                   '                         siblings %s (%d row(s) MATERIALISED for %d distinct parent(s),'#13#10 +
@@ -1437,6 +1456,7 @@ begin
      S(GBUnresExtra  ), GCUnresExtra  , Per(GBUnresExtra  , GCUnresExtra  ),
      S(GBUnresolved - GBUnresGate - GBUnresPrimary - GBUnresExtra),
      S(GBOverloadTag), GCOverloadTag, Per(GBOverloadTag, GCOverloadTag),
+     S(GBUsedIn), GCUsedIn, Per(GBUsedIn, GCUsedIn),
      GCSeeDecl,
      S(GBSeeCallees), GCSeeCalleeRows, GSeeTargetSeen.Count, Per(GBSeeCallees, GCSeeCalleeRows),
      S(GBSeeSibs   ), GCSeeSibRows   , GSeeParentSeen.Count, GCSeeSibIter, Per(GBSeeSibs, GCSeeSibIter),
@@ -3139,7 +3159,7 @@ begin
     This is not that, and the cast says so.) }
   if (GSrcCachePath = AFilePath) and (PInt64(@GSrcCacheStamp)^ = PInt64(@Stamp)^) then Exit(GSrcCacheLines);
   try
-    GSrcCacheLines:= System.IOUtils.TFile.ReadAllLines(AFilePath, TEncoding.ANSI);
+    GSrcCacheLines:= ReadSourceFileLines(AFilePath);
   except
     GSrcCachePath:= '';
     Exit;
@@ -4123,9 +4143,9 @@ var
     if not (SawExcept and HasBody) then Exit;
     if not HandlerSeen then Span.CatchAll:= True; { `except end` swallows everything }
     Span.FromLine:= Integer(Body.StartPoint.Row) + 1;
-    Span.FromCol := Integer(Body.StartPoint.Column) + 1;
+    Span.FromCol := Utf8ByteColToCharCol(Src, Body.StartByte, Body.StartPoint.Column) + 1;
     Span.ToLine  := Integer(Body.EndPoint.Row) + 1;
-    Span.ToCol   := Integer(Body.EndPoint.Column) + 1;
+    Span.ToCol   := Utf8ByteColToCharCol(Src, Body.EndByte, Body.EndPoint.Column) + 1;
     Acc:= Acc + [Span];
   end;
 
@@ -4457,17 +4477,26 @@ var
   // Wave 148 UP: the moded rows of ARows (member accesses, bound usages) as
   // 'Used in:' rows, Mode 'w' for a write and 'r' otherwise. AOwningStore is the
   // store the rows came from (ToFactRef's rule).
+  // 1.52 BK-USEEDGES: a stored read that is the whole argument of Inc/Dec or of an
+  // out parameter is a 'w', of a var parameter an 'rw' -- the directions `usages --rw`
+  // gives the same site (one TArgClassifier decides both).
+  // Guard: tests\autotest\run_v152_BK-USEEDGES_used_in_args.ps1.
   procedure AddUseRows(const AOwningStore: ISymbolStore; const ARows: TArray<TResolvedCaller>);
   var
     URow: TDocFactRef;
   begin
+    var T0: Int64:= BTick;
+    var Dirs: IUseDirections:= NewUseDirections(AOwningStore);
     for var Row in ARows do
     begin
       if Row.Mode = '' then Continue;
+      var Modes: TArray<string>:= Dirs.ModesOf(Row);
       URow:= ToFactRef(AOwningStore, Row);
-      URow.Mode:= if SameText(Row.Mode, 'write') then 'w' else 'r';
+      URow.Mode:= if Length(Modes) > 1 then 'rw' else if SameText(Modes[0], 'write') then 'w' else 'r';
       UseRows.Add(URow);
     end;
+    Inc(GBUsedIn, BTick - T0);
+    Inc(GCUsedIn);
   end;
 
   // Wave 148 UP: accessor echo rows, bucketed by the accessed property's name.
@@ -4488,6 +4517,17 @@ var
       ERow.Mode:= if SameText(Echo.Caller.Mode, 'write') then 'w' else 'r';
       Bucket.Add(ERow);
     end;
+  end;
+
+  // 1.52 B42: a setter's echo rows the index stores against the READ accessor -- an
+  // Inc/Dec or out / var argument of a property whose read accessor is a field.
+  // Guard: tests\autotest\run_v152_BK-TAILS-LSP.ps1 (A1, A2).
+  procedure AddArgWriteEchoes(const AOwningStore: ISymbolStore; const ASetter: TSymbol);
+  begin
+    var T0: Int64:= BTick;
+    AddEchoRows(AOwningStore, SetterArgWriteEchoes(AOwningStore, ASetter, NewUseDirections(AOwningStore)));
+    Inc(GBUsedIn, BTick - T0);
+    Inc(GCUsedIn);
   end;
 
   // C14: True when ARC's receiver has a known type unrelated to ASym's class;
@@ -4626,7 +4666,10 @@ begin
     { Wave 148 UP (spec sec 8.1 bullet 2): a getter/setter's echo rows -- the
       property accesses that ran it. 'Called from:' is not changed by them. }
     if CanBeCallTarget(ASym.Kind) then
+    begin
       AddEchoRows(AStore, AStore.FindAccessorEchoUses(ASym.Id));
+      AddArgWriteEchoes(AStore, ASym);
+    end;
     Inc(GBResolved, BTick - TB0);
     TB0:= BTick;
     // Unverified name-match bucket: CALL-SITE refs whose name matches but that
@@ -4794,7 +4837,10 @@ begin
         if ASym.Kind in [skProperty, skField] then
           AddUseRows(ExStore, ResCallers);
         if CanBeCallTarget(ASym.Kind) then
+        begin
           AddEchoRows(ExStore, ExStore.FindAccessorEchoUses(ExSyms[0].Id));
+          AddArgWriteEchoes(ExStore, ExSyms[0]);
+        end;
       end;
 
       // AMBIGUITY GATE, and it matters MORE here than on the primary store: the

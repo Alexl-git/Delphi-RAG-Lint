@@ -30,10 +30,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_explicit_db_strict_$PID",
   [switch]$ListRedOnly   # print a RED/GREEN matrix and exit 0 -- for capturing evidence pre-fix
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -160,8 +163,8 @@ $convBlock = Join-Path $WorkDir 'block.txt'
 Write-Ascii $convRules "#convert TAlphaBase -> TBetaThing, uBeta`r`n"
 Write-Ascii $convBlock "object alpha1: TAlphaBase`r`n  Tag = 1`r`nend`r`n"
 
-& $exePath index $srcA --db $dbA 2>&1 | Out-Null
-& $exePath index $srcB --db $dbB 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $srcA --db $dbA 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $srcB --db $dbB 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 $out = Join-Path $WorkDir 'o.txt'
 $err = Join-Path $WorkDir 'e.txt'
@@ -188,7 +191,7 @@ function Reset-Ghosts {
 function Run-Verb([string[]]$VerbArgs, [int]$TimeoutSec = 90, [string]$Label = '') {
   Reset-Ghosts
   $p = Start-Process -FilePath $exePath -ArgumentList $VerbArgs -NoNewWindow -PassThru `
-        -RedirectStandardOutput $out -RedirectStandardError $err -WorkingDirectory 'C:\TEMP'
+        -RedirectStandardOutput $out -RedirectStandardError $err -WorkingDirectory 'C:\TEMP'; $null = $p.Handle
   if (-not $p.WaitForExit($TimeoutSec * 1000)) { try { $p.Kill($true) } catch {}; return @{ Code = -1; Out=''; Err='(timed out)' } }
   $made = @(@($ghost, $ghos2) | Where-Object { Test-Path $_ } | ForEach-Object { Split-Path $_ -Leaf })
   if ($made.Count -gt 0 -and $Label -ne '') { $script:creators += ("{0} -> {1}" -f $Label, ($made -join '+')) }
@@ -386,7 +389,7 @@ function Reset-StaleDb {
   foreach ($s in @($dbV12, "$dbV12-wal", "$dbV12-shm")) {
     if (Test-Path $s) { Remove-Item $s -Force -ErrorAction SilentlyContinue }
   }
-  python $py $dbV12 $fileA (Join-Path $srcA 'uForm.pas') 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; python $py $dbV12 $fileA (Join-Path $srcA 'uForm.pas') 2>&1 | ForEach-Object { "$_" } } | Out-Null
 }
 function Get-StaleSchemaVersion {
   # 'NONE' when schema_meta is gone; the number otherwise. A migration moves it.
@@ -399,7 +402,7 @@ function Get-StaleSchemaVersion {
        '    print("ERR")' + "`n"
   $qf = Join-Path $WorkDir 'ver.py'
   Write-Ascii $qf $q
-  return (python $qf $dbV12 2>&1 | Select-Object -Last 1)
+  return (& { $ErrorActionPreference = 'Continue'; python $qf $dbV12 2>&1 | ForEach-Object { "$_" } } | Select-Object -Last 1)
 }
 
 function Get-StaleFileCount {
@@ -410,7 +413,7 @@ function Get-StaleFileCount {
                    "    print(c.execute('select count(*) from files').fetchone()[0])" + "`n" +
                    "except Exception:" + "`n" +
                    "    print('ERR')" + "`n")
-  return (python $qf $dbV12 2>&1 | Select-Object -Last 1)
+  return (& { $ErrorActionPreference = 'Continue'; python $qf $dbV12 2>&1 | ForEach-Object { "$_" } } | Select-Object -Last 1)
 }
 
 Reset-StaleDb
@@ -536,7 +539,7 @@ if ($havePython) {
   function Run-Stale([string[]]$VerbArgs) {
     Reset-StaleDb
     $p = Start-Process -FilePath $exePath -ArgumentList $VerbArgs -NoNewWindow -PassThru `
-          -RedirectStandardOutput $out -RedirectStandardError $err -WorkingDirectory 'C:\TEMP'
+          -RedirectStandardOutput $out -RedirectStandardError $err -WorkingDirectory 'C:\TEMP'; $null = $p.Handle
     if (-not $p.WaitForExit(90000)) { try { $p.Kill($true) } catch {}; return @{ Code=-1; Out=''; Err='(timed out)'; Ver='?' } }
     return @{
       Code = $p.ExitCode
@@ -592,7 +595,7 @@ if ($havePython) {
   $t8Exe = Join-Path $t8Engine (Split-Path $exePath -Leaf)
   function Run-InDir([string]$Dir, [string[]]$VerbArgs) {
     $p = Start-Process -FilePath $t8Exe -ArgumentList $VerbArgs -NoNewWindow -PassThru `
-          -RedirectStandardOutput $out -RedirectStandardError $err -WorkingDirectory $Dir
+          -RedirectStandardOutput $out -RedirectStandardError $err -WorkingDirectory $Dir; $null = $p.Handle
     if (-not $p.WaitForExit(90000)) { try { $p.Kill($true) } catch {}; return @{ Code=-1; Out=''; Err='(timed out)' } }
     return @{ Code = $p.ExitCode
               Out  = ((Get-Content -LiteralPath $out -Raw -ErrorAction SilentlyContinue) + '')

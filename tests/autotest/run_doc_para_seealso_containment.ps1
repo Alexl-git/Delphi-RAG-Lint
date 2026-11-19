@@ -38,7 +38,10 @@
   Runs from anywhere, pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Root = "$PSScriptRoot\..\..\src")
+param([string]$Root = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Root) { $Root = "$PSScriptRoot\..\..\src" }
 
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false

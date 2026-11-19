@@ -4,10 +4,10 @@ title: Class Surface
 summary: "Shows the public surface of a class: its members and signatures, without the method bodies"
 product: DL
 group: search-navigation
-order: 20002
+order: 20003
 since: 0.1.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.51.1-alpha
 ---
 
 # Class Surface

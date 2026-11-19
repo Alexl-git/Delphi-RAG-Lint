@@ -11,9 +11,12 @@
 # Usage: pwsh -File tests/autotest/run_typeat_generic_member.ps1 [-Exe <path>]
 [CmdletBinding()]
 param(
-    [string] $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+    [string] $Exe = '',
     [string] $WorkDir = "$env:TEMP\drag-lint-typeat-generic-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -50,7 +53,7 @@ implementation
 end.
 '@ | Set-Content "$libDir\MyColl.pas" -Encoding ascii
 $dbLib = "$WorkDir\lib.sqlite"
-$idxL = & $Exe index $libDir --db $dbLib 2>&1
+$idxL = & { $ErrorActionPreference = 'Continue'; & $Exe index $libDir --db $dbLib 2>&1 | ForEach-Object { "$_" } }
 Check 'index lib exits 0' ($LASTEXITCODE -eq 0) (($idxL | Select-Object -Last 1))
 
 # --- PROJECT db (db A): the alias + a consumer that does ATokens.Count.
@@ -87,7 +90,7 @@ end;
 end.
 '@ | Set-Content $consumer -Encoding ascii
 $dbPrj = "$WorkDir\prj.sqlite"
-$idxP = & $Exe index $prjDir --db $dbPrj 2>&1
+$idxP = & { $ErrorActionPreference = 'Continue'; & $Exe index $prjDir --db $dbPrj 2>&1 | ForEach-Object { "$_" } }
 Check 'index prj exits 0' ($LASTEXITCODE -eq 0) (($idxP | Select-Object -Last 1))
 
 $lines = Get-Content $consumer
@@ -100,7 +103,7 @@ $aLineText = '  N := ATokens.Count;'
 $aIdx = [Array]::IndexOf($lines, $aLineText); Check 'located ATokens line' ($aIdx -ge 0)
 $aLine = $aIdx + 1
 $aCol  = $aLineText.IndexOf('ATokens') + 1
-$aOut  = (& $Exe typeat "${consumer}:${aLine}:${aCol}" --db $dbPrj --db $dbLib --format json 2>&1) -join "`n"
+$aOut  = (& { $ErrorActionPreference = 'Continue'; & $Exe typeat "${consumer}:${aLine}:${aCol}" --db $dbPrj --db $dbLib --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'local resolves with dbLib passed last (primary-store selection)' `
     ($aOut -match '"resolved":"Consumer\.TUser\.Use\.ATokens"') $aOut
 
@@ -110,7 +113,7 @@ $cLineText = '  N := ATokens.Count;'
 $cIdx = [Array]::IndexOf($lines, $cLineText); Check 'located Count line' ($cIdx -ge 0)
 $cLine = $cIdx + 1
 $cCol  = $cLineText.IndexOf('.Count') + 2   # 1-based col ON the 'C' of Count
-$cOut  = (& $Exe typeat "${consumer}:${cLine}:${cCol}" --db $dbPrj --db $dbLib --format json 2>&1) -join "`n"
+$cOut  = (& { $ErrorActionPreference = 'Continue'; & $Exe typeat "${consumer}:${cLine}:${cCol}" --db $dbPrj --db $dbLib --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 # --- Task 3: ATokens.Count -> the generic base's Count property, resolved
 #     CROSS-DB (the base TMyList<T> lives in dbLib, the alias in dbPrj).
 Check 'ATokens.Count resolves to the generic base Count property' `
@@ -142,12 +145,12 @@ end;
 
 end.
 '@ | Set-Content "$prjDir\NoSuch.pas" -Encoding ascii
-& $Exe index $prjDir --db $dbPrj 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $prjDir --db $dbPrj 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $ns = "$prjDir\NoSuch.pas"; $nsLines = Get-Content $ns
 $nsText = '  L.Nonexistent;'
 $nsLine = [Array]::IndexOf($nsLines, $nsText) + 1
 $nsCol  = $nsText.IndexOf('.Nonexistent') + 2
-$nsOut  = (& $Exe typeat "${ns}:${nsLine}:${nsCol}" --db $dbPrj --db $dbLib --format json 2>&1) -join "`n"
+$nsOut  = (& { $ErrorActionPreference = 'Continue'; & $Exe typeat "${ns}:${nsLine}:${nsCol}" --db $dbPrj --db $dbLib --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'absent member -> honest owner-type floor (not a wrong symbol)' `
     ($nsOut -match '"owner_type_fallback":true') $nsOut
 
@@ -182,7 +185,7 @@ end;
 
 end.
 '@ | Set-Content "$prjDir\Inh.pas" -Encoding ascii
-$idxP2 = & $Exe index $prjDir --db $dbPrj 2>&1   # incremental reindex of prj dir
+$idxP2 = & { $ErrorActionPreference = 'Continue'; & $Exe index $prjDir --db $dbPrj 2>&1 | ForEach-Object { "$_" } }   # incremental reindex of prj dir
 Check 'reindex prj (with Inh) exits 0' ($LASTEXITCODE -eq 0) (($idxP2 | Select-Object -Last 1))
 
 $inh = "$prjDir\Inh.pas"
@@ -191,7 +194,7 @@ $inhCallText = '  D.BaseOp;'
 $inhIdx = [Array]::IndexOf($inhLines, $inhCallText); Check 'located D.BaseOp line' ($inhIdx -ge 0)
 $inhLine = $inhIdx + 1
 $inhCol  = $inhCallText.IndexOf('.BaseOp') + 2
-$inhOut  = (& $Exe typeat "${inh}:${inhLine}:${inhCol}" --db $dbPrj --db $dbLib --format json 2>&1) -join "`n"
+$inhOut  = (& { $ErrorActionPreference = 'Continue'; & $Exe typeat "${inh}:${inhLine}:${inhCol}" --db $dbPrj --db $dbLib --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'inherited member resolves to the ancestor method' `
     ($inhOut -match '"resolved":"Inh\.TBase\.BaseOp"') $inhOut
 

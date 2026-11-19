@@ -24,9 +24,12 @@ Usage: pwsh -NoProfile -File tests\autotest\run_autocreate_project_db.ps1 [-Exe 
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\draglint-autocreate-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -64,7 +67,7 @@ try {
     $o = "$WorkDir\o.txt"; $e = "$WorkDir\e.txt"
     $engine = "$EngineDir\drag-lint.exe"  # exe-freshness: absent
     $p = Start-Process -FilePath $engine -ArgumentList $A -NoNewWindow -Wait -PassThru -WorkingDirectory $cwd `
-           -RedirectStandardOutput $o -RedirectStandardError $e
+           -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
     [pscustomobject]@{ Exit = $p.ExitCode; Out = [IO.File]::ReadAllText($o); Err = [IO.File]::ReadAllText($e) }
   }
   function Db([string]$Proj) { "$Proj\_D-RAG\App.sqlite" }
@@ -137,7 +140,7 @@ try {
     $o = "$WorkDir\so.txt"; $e = "$WorkDir\se.txt"
     $engine = "$deployed\drag-lint.exe"  # exe-freshness: absent
     $sp = Start-Process -FilePath $engine -ArgumentList @($verb[1], '--project', "$ps\App.dpr") -NoNewWindow -PassThru -WorkingDirectory $cwd `
-            -RedirectStandardInput "$WorkDir\empty.txt" -RedirectStandardOutput $o -RedirectStandardError $e
+            -RedirectStandardInput "$WorkDir\empty.txt" -RedirectStandardOutput $o -RedirectStandardError $e; $null = $sp.Handle
     if (-not $sp.WaitForExit(60000)) { $sp.Kill($true) }
     Check ($verb[0] + ': ' + $verb[1] + ' --project on a deployed engine -- nothing built') (-not (Test-Path (Db $ps))) ("stderr=" + [IO.File]::ReadAllText($e).Trim())
   }

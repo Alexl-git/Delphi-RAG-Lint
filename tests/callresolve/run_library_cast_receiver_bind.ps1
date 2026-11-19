@@ -23,10 +23,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe       = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe       = '',
   [string]$LibraryDb = "C:\Projects\.drag-lint\library-Win64.sqlite",
   [string]$WorkDir   = "C:\TEMP\draglint_lib_cast_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -93,11 +96,11 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'App.sqlite'
-& $Exe index --project (Join-Path $WorkDir 'App.dpr') --db $db --library-db $LibraryDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $WorkDir 'App.dpr') --db $db --library-db $LibraryDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the fixture index was built' (Test-Path $db) $db
 
 function Sql([string]$Q) {
-  $j = & $Exe sql --db $db --json --limit 1000 --query $Q 2>$null | ConvertFrom-Json
+  $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --limit 1000 --query $Q 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
   if ($null -eq $j) { return ,@() }
   $cols = @($j.columns | ForEach-Object { $_.name })
   $out = @()
@@ -126,15 +129,15 @@ Expect 'E2  case arm TEdit(FControls[i]).Text := S: Vcl.StdCtrls.TEdit.Text'    
 Expect 'E3  TCheckBox(FArr[i]).Checked := True: Vcl.StdCtrls.TCheckBox.Checked'  'E3' 'Checked' 'Vcl.StdCtrls.TCheckBox.Checked' 'TCheckBox'
 
 Push-Location $WorkDir
-try { $o = ($null | & $Exe rename --kind symbol --name 'uC.TMine.Text' --to Caption2 --db $db --library-db $LibraryDb --plan 2>&1 | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
+try { $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe rename --kind symbol --name 'uC.TMine.Text' --to Caption2 --db $db --library-db $LibraryDb --plan 2>&1 | ForEach-Object { "$_" } } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
 Check 'P1  rename --plan uC.TMine.Text: proved, no receiver-untyped refusal' (($code -eq 0) -and ($o -notmatch 'receiver-untyped') -and ($o -match 'undecided: 0')) ("exit=$code " + (($o -split "`r?`n" | Where-Object { $_ -match 'decided|refused|proved' }) -join ' | '))
 
 # NEGATIVE CONTROL (the YADF mechanism): the same project INDEXED without a library, the proof run WITH one -> no
 # external target in the DB, and the proof refuses receiver-untyped. Proves P1 can fail.
 $db0 = Join-Path $WorkDir 'NoLib.sqlite'
-& $Exe index --project (Join-Path $WorkDir 'App.dpr') --db $db0 --library-db none 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $WorkDir 'App.dpr') --db $db0 --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Push-Location $WorkDir
-try { $o0 = ($null | & $Exe rename --kind symbol --name 'uC.TMine.Text' --to Caption2 --db $db0 --library-db $LibraryDb --plan 2>&1 | Out-String); $code0 = $LASTEXITCODE } finally { Pop-Location }
+try { $o0 = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe rename --kind symbol --name 'uC.TMine.Text' --to Caption2 --db $db0 --library-db $LibraryDb --plan 2>&1 | ForEach-Object { "$_" } } | Out-String); $code0 = $LASTEXITCODE } finally { Pop-Location }
 # v1511 RENAME B01 (e9245a7ea) changed the second half on purpose: the proof now decides an UNBOUND member on a
 # hard-cast receiver by the cast type, so the no-library DB no longer refuses. N1 pins both halves: the DB really
 # holds no external target for E1-E3 (the YADF mechanism is still reproduced), and the plan decides the two Text

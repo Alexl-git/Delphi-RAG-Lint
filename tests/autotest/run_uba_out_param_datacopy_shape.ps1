@@ -24,9 +24,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-uba-out-datacopy-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -145,10 +148,10 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'OutParams.sqlite'
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' (Test-Path $db)
 
-$uba = @(& $Exe lint (Join-Path $WorkDir 'uOutCaller.pas') --db $db 2>&1 |
+$uba = @(& { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $WorkDir 'uOutCaller.pas') --db $db 2>&1 | ForEach-Object { "$_" } } |
          ForEach-Object { "$_" } | Where-Object { $_ -match 'used-before-assignment' })
 $uba | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
 

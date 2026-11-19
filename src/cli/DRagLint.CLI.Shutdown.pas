@@ -1,7 +1,7 @@
 unit DRagLint.CLI.Shutdown;
 
 // ---------------------------------------------------------------------------
-// The `ide-release` and `shutdown` verbs (lane v1511 SPLIT T07): hold the IDE plugin's respawn, stand
+// The `ide-release` and `stop-now` verbs (lane v1511 SPLIT T07): hold the IDE plugin's respawn, stand
 // running engines down over their control channel. Moved verbatim out of DRagLint.CLI.
 // ---------------------------------------------------------------------------
 
@@ -18,12 +18,24 @@ uses
 /// seconds when given (--seconds is its alias); Resume selects the clear
 /// operation; AsJson or Format='json' selects JSON output.</param>
 /// <returns>0 on success; 1 when the sentinel could not be written or removed.</returns>
-/// <remarks>Touches no index and needs no --db. The sentinel lives in the
+/// <remarks>
+/// Touches no index and needs no --db. The sentinel lives in the
 /// current user's TEMP directory -- the IDE and the build run as the same
-/// user.</remarks>
+/// user.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Core.EngineHold.EngineHoldFilePath, DRagLint.Core.EngineHold.EngineIsHeld, DRagLint.Core.EngineHold.HoldEngine, DRagLint.Core.EngineHold.ReleaseEngineHold, SameText, Writeln</para>
+/// <para>Returns: 0; 1</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 93 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Core.EngineHold.EngineHoldFilePath"/>
+/// <seealso cref="DRagLint.Core.EngineHold.EngineIsHeld"/>
+/// <seealso cref="DRagLint.Core.EngineHold.HoldEngine"/>
+/// <seealso cref="DRagLint.Core.EngineHold.ReleaseEngineHold"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoIdeRelease(const AArgs: TArgs): Integer;
 
-/// <summary>drag-lint shutdown: asks every reachable engine of THIS user and
+/// <summary>drag-lint stop-now: asks every reachable engine of THIS user and
 /// session that exposes a maintenance control channel (lsp, index, lint-all,
 /// cycles --fix, warm-rule-cache) to stand down -- close every store and exit --
 /// and reports which did. Each engine is listed with its role (`status role`,
@@ -34,11 +46,24 @@ function DoIdeRelease(const AArgs: TArgs): Integer;
 /// for an engine that refused (busy) or did not answer, and says so.</param>
 /// <returns>0 when every engine asked exited (or none was reachable); 1 when
 /// at least one refused, did not answer, or did not exit in time.</returns>
-/// <remarks>Discovery is the pipe namespace itself -- a control pipe vanishes
+/// <remarks>
+/// Discovery is the pipe namespace itself -- a control pipe vanishes
 /// with its process, so there is no instance file to go stale. The graceful
 /// path is ALWAYS attempted first, --force or not. The engine writes the
 /// audit line, not this verb: the record is kept by the side that acted.
-/// docs\PLAN-maintenance-shutdown-channel.md.</remarks>
+/// docs\PLAN-maintenance-shutdown-channel.md.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: Cardinal, CloseHandle, Copy, DRagLint.CLI.Shutdown.DoShutdown.DbList, DRagLint.CLI.Shutdown.DoShutdown.WaitGone, DRagLint.Core.ControlChannel.BeatDisplayText, DRagLint.Core.ControlChannel.ControlRequest, DRagLint.Core.ControlChannel.CurrentSessionId, DRagLint.Core.ControlChannel.CurrentUserSidString, DRagLint.Core.ControlChannel.ListControlPipesForThisUser (+13 more)</para>
+/// <para>Returns: 0; if Failed then 1</para>
+/// <para>Complexity: 32 (cyclomatic, outer body), 192 lines (full implementation)</para>
+/// <seealso cref="DRagLint.CLI.Shutdown.DoShutdown.DbList"/>
+/// <seealso cref="DRagLint.CLI.Shutdown.DoShutdown.WaitGone"/>
+/// <seealso cref="DRagLint.Core.ControlChannel.BeatDisplayText"/>
+/// <seealso cref="DRagLint.Core.ControlChannel.ControlRequest"/>
+/// <seealso cref="DRagLint.Core.ControlChannel.CurrentSessionId"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoShutdown(const AArgs: TArgs): Integer;
 
 implementation

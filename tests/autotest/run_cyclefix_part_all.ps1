@@ -23,12 +23,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe       = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
+  [string]$Exe       = '',
   [switch]$KeepScratch,
   [string]$WorkDir   = "$env:TEMP\drag-lint-cyclefix-part-all-$PID",
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite',
   [string]$Rsvars    = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }) }
 # E18 T13: removes this run's scratch (WorkDir) however the run ends; kept only on failure when
 # -KeepScratch is passed (the path is printed).
 function Remove-Scratch {
@@ -73,7 +76,7 @@ function New-Demo([string]$Tag) {
   $proj = Join-Path $WorkDir "$Tag-proj"
   Copy-Tree $Demo $proj
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project (Join-Path $proj 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "$Tag-index.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $proj 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "$Tag-index.log") }
   return @{ Proj = $proj; Dproj = (Join-Path $proj 'CircularDemo.dproj'); Db = $db }
 }
 function Run-Fix([hashtable]$D, [string[]]$Extra, [hashtable]$Env = @{}, [bool]$Json = $true, [string]$LibArg = $Lib) {
@@ -82,15 +85,15 @@ function Run-Fix([hashtable]$D, [string[]]$Extra, [hashtable]$Env = @{}, [bool]$
   if ($Json) { $a += @('--format', 'json') }
   foreach ($k in $Env.Keys) { Set-Item "Env:$k" $Env[$k] }
   try {
-    $out = (& $Exe @a 2>$errf | Out-String)
+    $out = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errf); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe @a 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
     $code = $LASTEXITCODE
   } finally { foreach ($k in $Env.Keys) { Remove-Item "Env:$k" -ErrorAction SilentlyContinue } }
   $err = if (Test-Path $errf) { [IO.File]::ReadAllText($errf) } else { '' }
   $j = $null
-  if ($Json) { try { $j = $out | ConvertFrom-Json } catch { $j = $null } }
+  if ($Json) { try { $j = $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $j = $null } }
   return @{ Exit = $code; Out = $out; Err = $err; Json = $j; Log = '' }
 }
-function Cycles-Text($D) { return (& $Exe cycles --db $D.Db 2>$null | Out-String) }
+function Cycles-Text($D) { return (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --db $D.Db 2>$null } | Out-String) }
 
 # ---------------------------------------------------------------- (a) cycle 1: Part A then Part B
 Write-Host '== (a) default group (cycle 1): Part A, Part B' -ForegroundColor Cyan
@@ -125,7 +128,7 @@ Check 'c: final cycles prints "No circular unit dependencies found."' ($cyc -mat
 Write-Host '== (d) score-cycle-playbook.ps1 -RunExe (Part A report)' -ForegroundColor Cyan
 $P = New-Demo 'p'
 $planTxt = Join-Path $WorkDir 'part-a-report.md'
-(& $Exe cycles --plan --db $P.Db --library-db none 2>$null | Out-String) | Set-Content $planTxt -Encoding ASCII
+(& { $ErrorActionPreference = 'Continue'; & $Exe cycles --plan --db $P.Db --library-db none 2>$null } | Out-String) | Set-Content $planTxt -Encoding ASCII
 $O = Join-Path $WorkDir 'p-original'
 Copy-Tree $Demo $O
 $ra = Run-Fix $P @('--unit', 'demologger', '--apply', '--no-backup')
@@ -133,7 +136,7 @@ Check 'd: setup: the Part A apply (one iteration) exit 0' ($ra.Exit -eq 0) "exit
 $partAFiles = @(@($ra.Json.cycles)[0].written | ForEach-Object { Split-Path $_ -Leaf } | Sort-Object)
 $allFiles = @(@($cys[0].written) | ForEach-Object { Split-Path $_ -Leaf } | Sort-Object)
 Check 'd: iteration 1 of (a) wrote the same files as the single Part A apply' (($partAFiles -join ',') -eq ($allFiles -join ',')) "$($partAFiles -join ',') vs $($allFiles -join ',')"
-$scoreOut = (& pwsh -NoProfile -File $Scorer -Original $O -Edited $P.Proj -Report $planTxt -Project 'CircularDemo.dproj' -RunExe -Exe $Exe 2>&1 | Out-String)
+$scoreOut = (& { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $Scorer -Original $O -Edited $P.Proj -Report $planTxt -Project 'CircularDemo.dproj' -RunExe -Exe $Exe 2>&1 | ForEach-Object { "$_" } } | Out-String)
 Check 'd: SCORE: PASS 4/4' ($scoreOut -match 'SCORE: PASS 4/4') $scoreOut
 
 # ---------------------------------------------------------------- (e) --part all needs --apply

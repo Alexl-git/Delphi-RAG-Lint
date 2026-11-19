@@ -36,10 +36,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe      = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$RulesDir = "$PSScriptRoot\..\..\rules",
+  [string]$Exe      = '',
+  [string]$RulesDir = '',
   [string]$WorkDir  = "C:\TEMP\draglint_index_freshness_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $RulesDir) { $RulesDir = "$PSScriptRoot\..\..\rules" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){ if($d){Write-Host "      $d" -ForegroundColor DarkGray}; $script:fail=$true } }
@@ -103,14 +107,14 @@ $db  = Join-Path $WorkDir 'fresh.sqlite'
 $out = Join-Path $WorkDir 'o.txt'
 $err = Join-Path $WorkDir 'e.txt'
 
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 # Runs lint-all with stdout and stderr captured SEPARATELY -- the whole point of
 # F3 is that they do not mix, so a runner that merged them could not see it.
 function RunSplit() {
   $p = Start-Process -FilePath $exePath `
         -ArgumentList @('lint-all','--db',$db,'--rules-dir',$rules) `
-        -NoNewWindow -Wait -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
+        -NoNewWindow -Wait -PassThru -RedirectStandardOutput $out -RedirectStandardError $err; $null = $p.Handle
   return @{
     Code = $p.ExitCode
     Out  = (Get-Content -LiteralPath $out -Raw -ErrorAction SilentlyContinue)
@@ -168,7 +172,7 @@ try {
   # ---- F6: reindexing clears it -------------------------------------------
   # The note tells the reader to reindex. If doing so does not silence it, the
   # advice is wrong and the reader learns to ignore the line.
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $healed = RunSplit
   Check 'F6 the note the fix advises actually silences it' `
         (-not ($healed.Err -match 'indexed file\(s\) changed')) `

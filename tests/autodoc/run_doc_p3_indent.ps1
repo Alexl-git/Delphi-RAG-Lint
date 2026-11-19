@@ -55,7 +55,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Continue'
@@ -118,9 +121,9 @@ function Invoke-ShapeSweep([string]$root, [string]$qname, [string]$slug) {
   $md5s = @( Get-FileMd5 $target )
   $acts = @()
   for ($cycle = 1; $cycle -le 3; $cycle++) {
-    & $exePath index $scratch --db $db 2>$null | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
     Check "$qname cycle $cycle : index exits 0" ($LASTEXITCODE -eq 0)
-    $j = (& $exePath document --qname $qname --db $db --apply --json 2>$null) -join ' '
+    $j = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname $qname --db $db --apply --json 2>$null }) -join ' '
     Check "$qname cycle $cycle : document --apply exits 0" ($LASTEXITCODE -eq 0) $j
     if ($j -match '"action":"(\w+)"') { $a = $Matches[1] } else { $a = '?' }
     if ($j -match '"edits":(\d+)')    { $a = "$a/$($Matches[1])" }
@@ -215,7 +218,7 @@ Write-Host '--- INDENTATION: every emitted line sits at the DECLARATION s own in
 
 foreach ($nm in $shapes.Keys) {
   $want = $shapes[$nm].Indent
-  $blk  = Get-Lines $res[$nm].Block
+  $blk  = @(Get-Lines $res[$nm].Block)
   Check "INDENT $nm : a doc block was written at all" ($blk.Count -gt 0) ("count=" + $blk.Count)
   if ($blk.Count -eq 0) { continue }
   # EXACT equality on the whole leading-whitespace run: 'starts with' would
@@ -335,9 +338,9 @@ Check 'DAMAGE SETUP: the block was flattened to column 0 (simulating a pre-fix b
   (($flattened -gt 0) -and ($flattened -eq @($goodBlock).Count)) "flattened=$flattened blockCount=$(@($goodBlock).Count)"
 [IO.File]::WriteAllLines($dr.Target, $all, (New-Object Text.UTF8Encoding $false))
 
-& $exePath index $dr.Scratch --db $dr.Db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $dr.Scratch --db $dr.Db 2>$null } | Out-Null
 Check 'DAMAGE REPAIR SETUP: index exits 0' ($LASTEXITCODE -eq 0)
-$j = (& $exePath document --qname $shapes['DamagedMember'].QName --db $dr.Db --apply --json 2>$null) -join ' '
+$j = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname $shapes['DamagedMember'].QName --db $dr.Db --apply --json 2>$null }) -join ' '
 Check 'DAMAGE REPAIR: document --apply exits 0' ($LASTEXITCODE -eq 0) $j
 Check 'DAMAGE REPAIR: the engine EMITS an edit for a body-identical but de-indented block' `
   ($j -match '"action":"extended"' -and $j -notmatch '"edits":0') $j
@@ -350,9 +353,9 @@ Check 'DAMAGE REPAIR: the restored block is BYTE-IDENTICAL to the correctly-inde
 # non-idempotent shape. Without this, option (B) could "fix" the damage by
 # rewriting the same block on every single run forever.
 $md5AfterRepair = Get-FileMd5 $dr.Target
-& $exePath index $dr.Scratch --db $dr.Db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $dr.Scratch --db $dr.Db 2>$null } | Out-Null
 Check 'DAMAGE CONVERGES SETUP: index exits 0' ($LASTEXITCODE -eq 0)
-$j2 = (& $exePath document --qname $shapes['DamagedMember'].QName --db $dr.Db --apply --json 2>$null) -join ' '
+$j2 = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname $shapes['DamagedMember'].QName --db $dr.Db --apply --json 2>$null }) -join ' '
 Check 'DAMAGE CONVERGES: document --apply exits 0' ($LASTEXITCODE -eq 0) $j2
 Check 'DAMAGE CONVERGES: the very next apply makes NO edit' ($j2 -match '"edits":0') $j2
 Check 'DAMAGE CONVERGES: ...and the file is byte-unchanged by it' `
@@ -364,9 +367,9 @@ Write-Host '--- STRIP ROUND-TRIP: an INDENTED engine block must still be strippa
 foreach ($nm in $shapes.Keys) {
   if ($nm -eq 'DamagedMember') { continue }   # its scratch was hand-edited above
   $r = $res[$nm]
-  & $exePath index $r.Scratch --db $r.Db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $r.Scratch --db $r.Db 2>$null } | Out-Null
   Check "STRIP $nm : index exits 0" ($LASTEXITCODE -eq 0)
-  & $exePath document --qname $shapes[$nm].QName --db $r.Db --strip --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --qname $shapes[$nm].QName --db $r.Db --strip --apply 2>$null } | Out-Null
   Check "STRIP $nm : document --strip --apply exits 0" ($LASTEXITCODE -eq 0)
   $after = Get-DocBlockLines ([IO.File]::ReadAllLines($r.Target)) $shapes[$nm].Decl
   Check "STRIP $nm : no engine residue survives the strip (an indented block is still fully strippable)" `
@@ -379,7 +382,7 @@ foreach ($nm in $shapes.Keys) {
 # FreshMember had no comment at all, so its whole block is engine-owned and
 # strip must remove it entirely -- there is no "pristine" to come back to.
 Check 'STRIP FreshMember : the entire engine-written block is gone (nothing was left behind)' `
-  ((Get-Lines $res['FreshMember'].Stripped).Count -eq 0) (($res['FreshMember'].Stripped) -join ' | ')
+  ((@(Get-Lines $res['FreshMember'].Stripped)).Count -eq 0) (($res['FreshMember'].Stripped) -join ' | ')
 
 # The four shapes whose pristine indentation is ALREADY correct and whose
 # pristine tag order already matches the emitter's own fixed order round-trip

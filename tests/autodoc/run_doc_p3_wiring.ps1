@@ -27,7 +27,10 @@
   Runs from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Continue'
@@ -73,23 +76,23 @@ $tgt = Join-Path $sc 'wiring.pas'
 $db  = Join-Path $sc 'w.sqlite'
 Copy-Item $fx $tgt -Force
 
-& $exePath index $sc --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc --db $db 2>$null } | Out-Null
 Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
 # --- (1) the precondition the whole suite rests on. -------------------------
-$diRow = ((python -c @"
+$diRow = ((& { $ErrorActionPreference = 'Continue'; python -c @"
 import sqlite3
 c = sqlite3.connect(r'$db')
 r = c.execute('SELECT interface_name, impl_name, lifetime FROM di_bindings').fetchall()
 print('|'.join(r[0]) if r else '<none>')
-"@ 2>&1) -join ' ').Trim()
+"@ 2>&1 | ForEach-Object { "$_" } }) -join ' ').Trim()
 Check '1. PRECONDITION: the DI extractor produced a di_bindings row for the fixture shape' `
   ($diRow -eq 'IFolderService|TFolderService|singleton') "got=[$diRow]"
 
-& $exePath document --unit $tgt --db $db --apply 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $tgt --db $db --apply 2>$null } | Out-Null
 Check 'apply exits 0' ($LASTEXITCODE -eq 0)
 $md5Cycle1 = Get-FileMd5 $tgt
-& $exePath index $sc --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc --db $db 2>$null } | Out-Null
 
 $lines  = [IO.File]::ReadAllLines($tgt)
 $blkSvc = Get-BlockAbove $lines '^\s*TFolderService = class\(TInterfacedObject, IFolderService\)'
@@ -106,14 +109,14 @@ Check '3. TUnregistered has NO "Registered as:" line' `
   ((Get-FactLine $blkUnr 'Registered as') -eq '') ("block=" + ($blkUnr -replace "`n",' | '))
 
 # --- (4) idempotency. -------------------------------------------------------
-& $exePath document --unit $tgt --db $db --apply 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $tgt --db $db --apply 2>$null } | Out-Null
 Check '4. a second apply after a reindex is byte-identical' `
   ((Get-FileMd5 $tgt) -eq $md5Cycle1) ("c1=$md5Cycle1 c2=" + (Get-FileMd5 $tgt))
 
 # ===========================================================================
 # (5) THE DATASET HALF -- seeded, because no corpus has orm_links rows.
 # ===========================================================================
-$seeded = ((python -c @"
+$seeded = ((& { $ErrorActionPreference = 'Continue'; python -c @"
 import sqlite3, time
 c = sqlite3.connect(r'$db')
 row = c.execute("SELECT id FROM symbols WHERE name = 'TFolderService' AND kind = 'class'").fetchone()
@@ -139,7 +142,7 @@ else:
               "VALUES (?, 0, ?, 0, 100, 'table', 'seeded by run_doc_p3_wiring', ?)", (sid, sqlsid, now))
     c.commit()
     print('ok')
-"@ 2>&1) -join ' ').Trim()
+"@ 2>&1 | ForEach-Object { "$_" } }) -join ' ').Trim()
 
 if ($seeded -ne 'ok') {
   Skip '5. Dataset: half' "could not seed orm_links/fb_relations/fb_columns into the scratch DB (python said: $seeded). The assertion is NOT silently dropped -- it did not run."
@@ -153,7 +156,7 @@ if ($seeded -ne 'ok') {
   #     held the old numbers, so the following apply would resolve declarations
   #     to the wrong lines and write nothing. (Observed, not assumed: the first
   #     version of this block did exactly that and produced an empty doc block.)
-  & $exePath document --unit $tgt --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $tgt --db $db --apply 2>$null } | Out-Null
   $blkSvc2 = Get-BlockAbove ([IO.File]::ReadAllLines($tgt)) '^\s*TFolderService = class\(TInterfacedObject, IFolderService\)'
   $ds = Get-FactLine $blkSvc2 'Dataset'
   Check '5. TFolderService renders a "Dataset:" line from the seeded orm_links row' `

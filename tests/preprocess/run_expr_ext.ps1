@@ -7,7 +7,10 @@
   Run from a NEUTRAL CWD (C:\TEMP) so no drag-lint-lint.json is picked up.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'; $fail = $false; $n = 0; $bad = 0
 function Check($name, $ok) {
   Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]), $name) -ForegroundColor (@('Red','Green')[[int]$ok])
@@ -18,7 +21,7 @@ function EvalExpr([string]$expr, [string[]]$defines, [string[]]$numeric) {
   $cliArgs = @('dump-pp-eval', '--expr', $expr)
   foreach ($d in $defines) { $cliArgs += @('--define', $d) }
   foreach ($v in $numeric) { $cliArgs += @('--numeric', $v) }
-  return (& $exePath @cliArgs 2>$null | Out-String).Trim().ToLower()
+  return (& { $ErrorActionPreference = 'Continue'; & $exePath @cliArgs 2>$null } | Out-String).Trim().ToLower()
 }
 function T([string]$expr, [string]$want, [string[]]$defines = @(), [string[]]$numeric = @()) {
   $got = EvalExpr $expr $defines $numeric

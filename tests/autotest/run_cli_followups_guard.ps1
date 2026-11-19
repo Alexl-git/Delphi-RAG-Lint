@@ -23,9 +23,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-clifollow-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'g8-common.ps1')   # Get-ExeStartFailureHint (case H); also defines Check
 $script:Failed = $false
@@ -57,7 +60,7 @@ function New-Engine([string]$Dir, $Manifest) {
 }
 function Run($Cwd, $Cmd, [string[]]$A) {
   Push-Location $Cwd
-  try { $o = (& $Cmd @A 2>&1 | ForEach-Object { "$_" }) -join "`n"; return @{ Out = $o; Code = $LASTEXITCODE } }
+  try { $o = (& { $ErrorActionPreference = 'Continue'; & $Cmd @A 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n"; return @{ Out = $o; Code = $LASTEXITCODE } }
   finally { Pop-Location }
 }
 
@@ -88,8 +91,8 @@ Write-Ascii "$l\lib\uLibOnly.pas" "unit uLibOnly;`n`ninterface`n`nimplementation
 $libDb = "$l\eng\library-Win64.sqlite"
 Push-Location $l
 try {
-  & $lExe index "$l\lib" --db $libDb 2>&1 | Out-Null
-  & $lExe index --project "$l\proj\libraryapp.dpr" 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $lExe index "$l\lib" --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $lExe index --project "$l\proj\libraryapp.dpr" 2>&1 | ForEach-Object { "$_" } } | Out-Null
 } finally { Pop-Location }
 $ownDb = "$l\proj\_D-RAG\libraryapp.sqlite"
 Check 'L0 precondition: the project DB is named library* and the real library DB exists' `
@@ -121,7 +124,7 @@ New-Item -ItemType Directory -Path "$c\withdb", "$c\nodb", "$c\neutral" | Out-Nu
 $cExe = New-Engine "$c\eng" $null
 foreach ($d in 'withdb', 'nodb') { Write-Ascii "$c\$d\Tiny.dpr" "program Tiny;`n`n{`$APPTYPE CONSOLE}`n`nbegin`n  Writeln('hi');`nend.`n" }
 Push-Location "$c\withdb"
-try { & $cExe index "$c\withdb" --db "$c\withdb\_D-RAG\Tiny.sqlite" 2>&1 | Out-Null } finally { Pop-Location }
+try { & { $ErrorActionPreference = 'Continue'; & $cExe index "$c\withdb" --db "$c\withdb\_D-RAG\Tiny.sqlite" 2>&1 | ForEach-Object { "$_" } } | Out-Null } finally { Pop-Location }
 Check 'C0 precondition: the unregistered project has its own _D-RAG\Tiny.sqlite' (Test-Path "$c\withdb\_D-RAG\Tiny.sqlite")
 $r = Run "$c\neutral" $cExe @('compile-check', "$c\withdb\Tiny.dpr", '--format', 'json')
 Check 'C1 an unregistered project with its own default DB caches (no "no database resolved" warning)' `

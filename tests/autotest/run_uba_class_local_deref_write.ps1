@@ -29,9 +29,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-uba-class-deref-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -157,11 +160,11 @@ $ln = [ordered]@{
 Check 'all fixture statements located' (@($ln.Values) -notcontains -1) (($ln.Values) -join ',')
 
 $projDb = Join-Path $WorkDir 'proj.sqlite'
-& $Exe index $projSrc --db $projDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $projSrc --db $projDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'index built' (Test-Path $projDb)
 
-$json = (& $Exe lint-all --db $projDb --rule used-before-assignment --json 2>$null) -join "`n"
-$arr  = @($json | ConvertFrom-Json)
+$json = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $projDb --rule used-before-assignment --json 2>$null }) -join "`n"
+$arr  = @(($json | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 $uba  = @{}
 foreach ($f in $arr) {
   if ($f.rule -eq 'used-before-assignment') { $uba[[int]$f.start_line] = "$($f.severity)" }

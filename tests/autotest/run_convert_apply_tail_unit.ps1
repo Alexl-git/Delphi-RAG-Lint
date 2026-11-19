@@ -17,9 +17,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_convert_apply_tail_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -49,13 +52,13 @@ W 'c.rules' "#convert TOldBtn -> TNewBtn, LibNew, Extra`n#convert TUnusedBtn -> 
 W 'd.rules' "#convert TOldBtn -> TNewBtn, LibNew, extra, Extra`n#unuse LibOld`n"
 
 $db = P 't.sqlite'
-& $Exe index --project (P 'P.dpr') --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (P 'P.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the fixture index was built' (Test-Path $db)
 
 function Apply([string]$Rules, [bool]$Write) {
   $a = @('convert-apply', '--unit', (P 'F1.pas'), '--rules', (P $Rules), '--db', $db)
   if ($Write) { $a += @('--apply', '--no-backup', '--no-reindex') }
-  $o = (& $Exe @a 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 function UsesLine([string]$t) { if ($t -match '(?s)\buses\s+(.*?);') { return ($Matches[1] -replace '\s+', ' ') }; return '<none>' }
@@ -72,7 +75,7 @@ Check 'B1 --apply: exit 0' ($r.Code -eq 0) $r.Out
 Check 'B2 bytes: the interface uses holds LibNew and Extra, not LibOld' (($u -match '\bLibNew\b') -and ($u -match '\bExtra\b') -and ($u -notmatch '\bLibOld\b')) $u
 Check 'B3 bytes: Extra appears once' (([regex]::Matches((GetTxt 'F1.pas'), '\bExtra\b')).Count -eq 1) (GetTxt 'F1.pas')
 # controls: a fresh unit each time
-function Fresh() { W 'F1.pas' $orig.Replace("`r`n", "`n"); W 'F1.dfm' "object F1: TF1`n  object b1: TOldBtn`n  end`nend`n"; & $Exe index --project (P 'P.dpr') --db $db 2>&1 | Out-Null }
+function Fresh() { W 'F1.pas' $orig.Replace("`r`n", "`n"); W 'F1.dfm' "object F1: TF1`n  object b1: TOldBtn`n  end`nend`n"; & { $ErrorActionPreference = 'Continue'; & $Exe index --project (P 'P.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null }
 Fresh
 $r = Apply 'b.rules' $true
 $u = UsesLine (GetTxt 'F1.pas')

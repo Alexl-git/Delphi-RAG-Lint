@@ -46,9 +46,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_convert_cast_realized_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 $script:fail = $false
@@ -211,9 +214,9 @@ $rulesNoCast  = WriteRules 'r-nocast.rules'  ''
 $dbA   = Join-Path $WorkDir 'dbA.sqlite'
 $dbB   = Join-Path $WorkDir 'dbB.sqlite'
 $dbApp = Join-Path $WorkDir 'dbApp.sqlite'
-& $Exe index $libA --db $dbA   2>&1 | Out-Null
-& $Exe index $libB --db $dbB   2>&1 | Out-Null
-& $Exe index $app  --db $dbApp 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $libA --db $dbA   2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $libB --db $dbB   2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $app  --db $dbApp 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the three fixture indexes were built' ((Test-Path $dbA) -and (Test-Path $dbB) -and (Test-Path $dbApp))
 
 # convert-apply prints the JSON document on the FIRST line and may follow it
@@ -221,11 +224,11 @@ Check 'V the three fixture indexes were built' ((Test-Path $dbA) -and (Test-Path
 # than by parsing the whole stream.
 function ApplyJson([string]$Rules) {
   Push-Location $app
-  try { $raw = (& $Exe convert-apply --unit 'MyForm.pas' --rules $Rules --castlib $castlib --db $dbApp --db $dbA --db $dbB --format json 2>&1) -join "`n" }
+  try { $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'MyForm.pas' --rules $Rules --castlib $castlib --db $dbApp --db $dbA --db $dbB --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n" }
   finally { Pop-Location }
   $line = ($raw -split "`n" | Where-Object { $_.TrimStart().StartsWith('{') } | Select-Object -First 1)
   if (-not $line) { return @{ Raw = $raw; J = $null } }
-  try { return @{ Raw = $raw; J = ($line | ConvertFrom-Json) } } catch { return @{ Raw = $raw; J = $null } }
+  try { return @{ Raw = $raw; J = ($line | ConvertFrom-Json | ForEach-Object { $_ }) } } catch { return @{ Raw = $raw; J = $null } }
 }
 function KindsOf($r) { if ($r.J -and $r.J.items) { return @($r.J.items | ForEach-Object { $_.kind }) } else { return @() } }
 function TextOfKind($r,[string]$k) {
@@ -250,7 +253,7 @@ $good = ApplyJson $rulesGood
 $site = @(if ($good.J) { $good.J.items | Where-Object { $_.kind -eq 'cast-not-applied' -and $_.instance -eq 'btn1' } })
 Check 'T1 a cast WITH a pas template is refused at its access site: one cast-not-applied for btn1, line 21' `
       (($site.Count -eq 1) -and ($site[0].line -eq 21) -and ($site[0].field -eq 'warnings') -and ($site[0].file -like '*MyForm.pas')) `
-      ("kinds: " + ((KindsOf $good) -join ', ') + "`n" + ($site | ConvertTo-Json -Depth 4))
+      ("kinds: " + ((@(KindsOf $good)) -join ', ') + "`n" + ($site | ConvertTo-Json -Depth 4))
 
 Check 'T2 the refusal names the file, line, instance and cast, and says to convert the site by hand' `
       (($site.Count -eq 1) -and ($site[0].text -match 'MyForm\.pas:21 btn1\.Picture') -and ($site[0].text -match ': AssignGraphic') -and
@@ -262,14 +265,14 @@ Check 'T2b no rendered template reaches the report' `
       ("a rendered or raw template leaked: " + (TextOfKind $good 'cast-not-applied'))
 
 Check 'T3 the retired kind cast-applied is never emitted' `
-      (-not ((KindsOf $good) -contains 'cast-applied')) `
-      ("kinds: " + ((KindsOf $good) -join ', '))
+      (-not ((@(KindsOf $good)) -contains 'cast-applied')) `
+      ("kinds: " + ((@(KindsOf $good)) -join ', '))
 
 # ---- OUTCOME 2: cast resolves, NO pas template ------------------------------
 $noPas = ApplyJson $rulesNoPas
 Check 'T4 a cast with NO pas template is still refused' `
-      ((KindsOf $noPas) -contains 'cast-not-applied') `
-      ("kinds: " + ((KindsOf $noPas) -join ', '))
+      ((@(KindsOf $noPas)) -contains 'cast-not-applied') `
+      ("kinds: " + ((@(KindsOf $noPas)) -join ', '))
 
 Check 'T4b and the message says the cast was FOUND but carries no template' `
       ((TextOfKind $noPas 'cast-not-applied') -match '(?i)no pas template|found .*no .*template|carries no') `
@@ -278,8 +281,8 @@ Check 'T4b and the message says the cast was FOUND but carries no template' `
 # ---- OUTCOME 3: cast name resolves to nothing -------------------------------
 $unknown = ApplyJson $rulesUnknown
 Check 'T5 an UNRESOLVED cast name is refused' `
-      ((KindsOf $unknown) -contains 'cast-not-applied') `
-      ("kinds: " + ((KindsOf $unknown) -join ', '))
+      ((@(KindsOf $unknown)) -contains 'cast-not-applied') `
+      ("kinds: " + ((@(KindsOf $unknown)) -join ', '))
 
 Check 'T5b DISCRIMINATION the unresolved message is NOT the no-template message' `
       (-not ((TextOfKind $unknown 'cast-not-applied') -match '(?i)no pas template|carries no')) `
@@ -348,15 +351,15 @@ object TwoForm: TTwoForm
 end
 '@
 
-& $Exe index $app --db $dbApp 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $app --db $dbApp 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 function ApplyTwo([string]$Rules) {
   Push-Location $app
-  try { $raw = (& $Exe convert-apply --unit 'TwoPic.pas' --rules $Rules --castlib $castlib --db $dbApp --db $dbA --db $dbB --format json 2>&1) -join "`n" }
+  try { $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'TwoPic.pas' --rules $Rules --castlib $castlib --db $dbApp --db $dbA --db $dbB --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n" }
   finally { Pop-Location }
   $line = ($raw -split "`n" | Where-Object { $_.TrimStart().StartsWith('{') } | Select-Object -First 1)
   if (-not $line) { return @{ Raw = $raw; J = $null } }
-  try { return @{ Raw = $raw; J = ($line | ConvertFrom-Json) } } catch { return @{ Raw = $raw; J = $null } }
+  try { return @{ Raw = $raw; J = ($line | ConvertFrom-Json | ForEach-Object { $_ }) } } catch { return @{ Raw = $raw; J = $null } }
 }
 $two = ApplyTwo $rulesGood
 $notes2 = (($two.J.reemit_notes + $two.J.warnings + $two.J.todos) -join ' || ')
@@ -426,12 +429,12 @@ foreach ($f in 'MyForm.pas','MyForm.dfm','TwoPic.pas','TwoPic.dfm') {
 }
 $srcDfmText = [IO.File]::ReadAllText((Join-Path $appW 'TwoPic.dfm'))
 $dbW = Join-Path $WorkDir 'dbW.sqlite'
-& $Exe index $appW --db $dbW 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $appW --db $dbW 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 Push-Location $appW
 try {
-  $wRaw = (& $Exe convert-apply --unit 'TwoPic.pas' --rules $rulesGood --castlib $castlib `
-             --db $dbW --db $dbA --db $dbB --apply 2>&1) -join "`n"
+  $wRaw = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'TwoPic.pas' --rules $rulesGood --castlib $castlib `
+             --db $dbW --db $dbA --db $dbB --apply 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $wExit = $LASTEXITCODE
 } finally { Pop-Location }
 
@@ -493,8 +496,8 @@ $myPas = Join-Path $appW 'MyForm.pas'
 $myBefore = [IO.File]::ReadAllText($myPas)
 Push-Location $appW
 try {
-  $mRaw = (& $Exe convert-apply --unit 'MyForm.pas' --rules $rulesGood --castlib $castlib `
-             --db $dbW --db $dbA --db $dbB --apply --no-backup 2>&1) -join "`n"
+  $mRaw = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'MyForm.pas' --rules $rulesGood --castlib $castlib `
+             --db $dbW --db $dbA --db $dbB --apply --no-backup 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $mExit = $LASTEXITCODE
 } finally { Pop-Location }
 $myAfter = [IO.File]::ReadAllText($myPas)
@@ -506,8 +509,8 @@ Check 'W6b ... while the .dfm half of the cast still converted (positive control
       ("the unit did not convert at all, so W6 proves nothing:`n$mRaw")
 
 # ---- K the editor's gate ----------------------------------------------------
-$info = (& $Exe info --json 2>$null) -join "`n"
-$ij = $null; try { $ij = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json } catch {}
+$info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n"
+$ij = $null; try { $ij = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'K info --json: capabilities.cast_site_refusal is true' (($null -ne $ij) -and ($ij.capabilities.cast_site_refusal -eq $true)) ''
 
 Write-Host ''

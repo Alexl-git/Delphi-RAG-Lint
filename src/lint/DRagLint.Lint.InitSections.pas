@@ -18,7 +18,8 @@ unit DRagLint.Lint.InitSections;
 interface
 
 uses
-  DRagLint.Core.Model
+  System.SysUtils
+  , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   ;
 
@@ -38,9 +39,17 @@ const
 /// <param name="AStore">The project index; nil yields no findings.</param>
 /// <returns>One 'init-order-hazard' warning per (section's unit, later unit, variable), anchored at
 /// the call or the reference in the section that starts the path.</returns>
-/// <remarks>Not thread-safe. Follows call_edges rows of confidence 'certain' only, so virtual dispatch
+/// <remarks>
+/// Not thread-safe. Follows call_edges rows of confidence 'certain' only, so virtual dispatch
 /// and callbacks are not walked. A routine that also assigns the variable (lazy creation) or tests it
-/// against nil stays silent. An index holding no .dpr has no root and yields nothing.</remarks>
+/// against nil stays silent. An index holding no .dpr has no root and yields nothing.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
+/// <para>Calls: DRagLint.Lint.InitSections.RunOrderWalk</para>
+/// <para>Returns: RunOrderWalk(AStore, skiInit)</para>
+/// <seealso cref="DRagLint.Lint.InitSections.RunOrderWalk"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CollectInitOrderHazard(const AStore: ISymbolStore): TArray<TLintFinding>;
 
 /// <summary>A finalization section reaches a global variable of a unit that is finalized EARLIER, and
@@ -49,9 +58,17 @@ function CollectInitOrderHazard(const AStore: ISymbolStore): TArray<TLintFinding
 /// <param name="AStore">The project index; nil yields no findings.</param>
 /// <returns>One 'finalization-after-dependency' warning per (section's unit, earlier unit, variable),
 /// anchored at the call or the reference in the section that starts the path.</returns>
-/// <remarks>Not thread-safe. The same walk and the same silences as init-order-hazard: certain call
+/// <remarks>
+/// Not thread-safe. The same walk and the same silences as init-order-hazard: certain call
 /// edges only; a routine that assigns the variable or tests it against nil stays silent, which covers
-/// the FreeAndNil + Assigned idiom. An index holding no .dpr yields nothing.</remarks>
+/// the FreeAndNil + Assigned idiom. An index holding no .dpr yields nothing.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
+/// <para>Calls: DRagLint.Lint.InitSections.RunOrderWalk</para>
+/// <para>Returns: RunOrderWalk(AStore, skiFinal)</para>
+/// <seealso cref="DRagLint.Lint.InitSections.RunOrderWalk"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CollectFinalizationAfterDependency(const AStore: ISymbolStore): TArray<TLintFinding>;
 
 /// <summary>An initialization section reaches the file system, the registry, the network, a database or
@@ -65,11 +82,24 @@ function CollectFinalizationAfterDependency(const AStore: ISymbolStore): TArray<
 /// name has a heavy TYPE segment (TRegistry, TIniFile, THTTPClient ...) shows that category by itself.</param>
 /// <returns>One 'heavy-initialization' hint per section, anchored at the call or reference that starts
 /// the first path; the message names each category and a routine that shows it.</returns>
-/// <remarks>Not thread-safe. Evidence is positive only: the section's refs and the reached routines'
+/// <remarks>
+/// Not thread-safe. Evidence is positive only: the section's refs and the reached routines'
 /// refs against the curated names below, plus symbol_facts.touches (registry, network, transactions)
 /// and sql_reads / sql_writes of a reached routine. With a library index the walk also enters library routines
 /// (certain library call edges, at most LIBRARY_WALK_DEPTH levels). A path behind an `if` counts, because the index has
-/// no branch conditions. TPath alone is not a file access. Certain call edges only.</remarks>
+/// no branch conditions. TPath alone is not a file access. Certain call edges only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas), DRagLint.Refactor.LazyInit.RunLazyInit (DRagLint.Refactor.LazyInit.pas)</para>
+/// <para>Calls: ContainsText, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolFacts, DRagLint.Lint.InitSections.CollectHeavyInitialization.LoadBound, DRagLint.Lint.InitSections.CollectHeavyInitialization.Note, DRagLint.Lint.InitSections.CollectHeavyInitialization.NoteLibrary, DRagLint.Lint.InitSections.CollectHeavyInitialization.NoteVia, DRagLint.Lint.InitSections.HeavyCategoryOfQName (+13 more)</para>
+/// <para>Returns: nil; Findings.ToArray</para>
+/// <para>Complexity: 22 (cyclomatic, outer body), 177 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolFacts"/>
+/// <seealso cref="DRagLint.Lint.InitSections.CollectHeavyInitialization.LoadBound"/>
+/// <seealso cref="DRagLint.Lint.InitSections.CollectHeavyInitialization.Note"/>
+/// <seealso cref="DRagLint.Lint.InitSections.CollectHeavyInitialization.NoteLibrary"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CollectHeavyInitialization(const AStore: ISymbolStore; const ALibraryStore: ISymbolStore = nil): TArray<TLintFinding>;
 
 /// <summary>A unit's initialization sets its own global variable to a new object (`G:= TFoo.Create`) and
@@ -80,16 +110,35 @@ function CollectHeavyInitialization(const AStore: ISymbolStore; const ALibrarySt
 /// a record has a Create too (TRegEx, TFormatSettings). Without it only project classes and a short list
 /// of common RTL classes count, and any other type is silent.</param>
 /// <returns>One 'global-set-in-initialization-never-freed' hint per variable, at the assignment.</returns>
-/// <remarks>Not thread-safe. Counts a section's assignment and one in a routine of the unit the section
+/// <remarks>
+/// Not thread-safe. Counts a section's assignment and one in a routine of the unit the section
 /// calls. Silent on an interface-typed variable, a type not proven a class, a factory call (only `.Create` proves a new
 /// object), an owner argument, FreeOnTerminate, a variable handed to a container or a Register* call, and
-/// any text that frees it: the check is lexical, so a free in a comment also silences it.</remarks>
+/// any text that frees it: the check is lexical, so a free in a comment also silences it.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
+/// <para>Calls: Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindRefsNamingInFiles, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Lint.InitSections.IsInterfaceTyped, DRagLint.Lint.InitSections.IsProvenClass, DRagLint.Lint.InitSections.TextFreesVariable, DRagLint.Lint.InitSections.TInitGraph.Create (+9 more)</para>
+/// <para>Returns: nil; Findings.ToArray</para>
+/// <para>Complexity: 18 (cyclomatic, outer body), 78 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindRefsNamingInFiles"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <seealso cref="DRagLint.Lint.InitSections.IsInterfaceTyped"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CollectGlobalNeverFreed(const AStore: ISymbolStore; const ALibraryStore: ISymbolStore = nil): TArray<TLintFinding>;
 
 type
   /// <summary>Lane CYC3 (152c, fabcyc case 3): the verdict of ProveInitOrderInversion.</summary>
-  /// <remarks>Proved True: Text is the plan's proof line ("init order: ..."). Proved False: Text is the reason the
-  /// order cannot be proved, worded to follow an init-order refusal after "; ".</remarks>
+  /// <remarks>
+  /// Proved True: Text is the plan's proof line ("init order: ..."). Proved False: Text is the reason the
+  /// order cannot be proved, worded to follow an init-order refusal after "; ".
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.InitSections.pas) ?, DRagLint.Lint.InitSections.ProveInitOrderInversion (DRagLint.Lint.InitSections.pas)</para>
+  /// <para>Used in units: DRagLint.Lint.InitSections</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TInitOrderProof = record
     Proved: Boolean;
     Text  : string;
@@ -108,17 +157,128 @@ type
 /// positions, the .dpr and its entry to list AConsumer before), no program reaching both, or a uses entry that
 /// comes from an include or sits in a conditional region in the .dpr, either unit, or a unit on the path that
 /// carries AConsumer to ADeclaring after the cut.</returns>
-/// <remarks>Not thread-safe; reads the index once per call. Sound subset, default refuse: the order is the one of
+/// <remarks>
+/// Not thread-safe; reads the index once per call. Sound subset, default refuse: the order is the one of
 /// the index's configuration, so a conditional or include-borne entry on the deciding files refuses. Without the
 /// pp_regions facts (an index older than schema 24) every such check refuses. The rule init-order-hazard is the
-/// net once a later uses change reverses a proved order.</remarks>
+/// net once a later uses change reverses a proved order.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Report.CycleEdge.FinalOrderVerdict (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.InitOrderVerdict (DRagLint.Report.CycleEdge.pas)</para>
+/// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Lint.InitSections.OrderDependsOnConfig, DRagLint.Lint.InitSections.PathAfterCut, DRagLint.Lint.InitSections.TInitGraph.ComputeOrder, DRagLint.Lint.InitSections.TInitGraph.Create, DRagLint.Lint.InitSections.TInitGraph.ProgramFiles, ExtractFileName, Format, LowerCase</para>
+/// <para>Returns: Default(TInitOrderProof)</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 75 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <seealso cref="DRagLint.Lint.InitSections.OrderDependsOnConfig"/>
+/// <seealso cref="DRagLint.Lint.InitSections.PathAfterCut"/>
+/// <seealso cref="DRagLint.Lint.InitSections.TInitGraph.ComputeOrder"/>
+/// <seealso cref="DRagLint.Lint.InitSections.TInitGraph.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ProveInitOrderInversion(const AStore: ISymbolStore; const AConsumer, ADeclaring: string): TInitOrderProof;
+
+type
+  /// <summary>Lane INITAPI (1.52): one unit at its place in a program's initialization order.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.InitSections.pas) ?, DRagLint.Lint.InitSections.ProgramInitOrders (DRagLint.Lint.InitSections.pas), DRagLint.Query.HappensBefore.Roots.LoadRoots (DRagLint.Query.HappensBefore.Roots.pas) ?</para>
+  /// <para>Used in units: DRagLint.Lint.InitSections, DRagLint.Query.HappensBefore.Roots</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TProgramInitUnit = record
+    Name   : string;  { as declared }
+    FileId : Int64;
+    UnitId : Int64;   { the unit symbol }
+    InitId : Int64;   { the initialization section symbol, 0 when the unit has none }
+    FinalId: Int64;   { the finalization section symbol, 0 when the unit has none }
+  end;
+
+  /// <summary>Lane INITAPI (1.52): the order one program initializes its units in -- the computed order of this
+  /// unit's header, the same one init-order-hazard and finalization-after-dependency walk.</summary>
+  /// <remarks>
+  /// Units: first initialized first; finalization runs in reverse. Unreliable: some uses entry of the
+  /// program or of a unit in Units comes from an include or sits in a conditional region, so another
+  /// configuration may order the units differently; UnreliableReason names the first such site ('file:line').
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.InitSections.pas) ?, DRagLint.Lint.InitSections.ProgramInitOrders (DRagLint.Lint.InitSections.pas), DRagLint.Query.HappensBefore.Roots.LoadRoots (DRagLint.Query.HappensBefore.Roots.pas) ?</para>
+  /// <para>Used in units: DRagLint.Lint.InitSections, DRagLint.Query.HappensBefore.Roots</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TProgramInitOrder = record
+    ProgramFileId   : Int64;
+    ProgramName     : string;  { the program file's name, e.g. 'App.dpr' }
+    ProgramBlockId  : Int64;   { the program symbol whose body is the main block, 0 when not indexed }
+    Units           : TArray<TProgramInitUnit>;
+    Unreliable      : Boolean;
+    UnreliableReason: string;
+  end;
+
+  /// <summary>Lane INITAPI (1.52, ruling B9a): the answer of InitializesBefore.</summary>
+  /// <remarks>
+  /// ioaUnplaced: no program of the question places both units (unknown or ambiguous name, no program,
+  /// a package). ioaBefore: yes. ioaNotBefore: no (B first, or A = B). ioaConfigDependent: the answer of the
+  /// index's configuration rests on a conditional or include-borne uses entry.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.InitSections.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TInitOrderAnswer = (ioaUnplaced, ioaBefore, ioaNotBefore, ioaConfigDependent);
+
+  /// <summary>Lane INITAPI (1.52): the answer of InitializesBefore with its one-line evidence.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.InitSections.pas) ?, DRagLint.Lint.InitSections.AnswerInProgram (DRagLint.Lint.InitSections.pas) ?, DRagLint.Lint.InitSections.InitializesBefore (DRagLint.Lint.InitSections.pas)</para>
+  /// <para>Used in units: DRagLint.Lint.InitSections</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TInitOrderVerdict = record
+    Answer: TInitOrderAnswer;
+    Text  : string;
+  end;
+
+/// <summary>Lane INITAPI (1.52, happens-before lane ROOTS step 1): the initialization order of every program of
+/// the index, as the init-order rules compute it.</summary>
+/// <param name="AStore">The project index; nil yields none.</param>
+/// <returns>One entry per program file (a file with a program uses clause), in GetAllFileIds order; a unit no
+/// program reaches, or whose name the index holds twice, is in no entry.</returns>
+/// <param name="AStop">v152 HOVERCAP: asked per unit while the graph loads and per unit of each order; True ends
+/// the walk and the result is PARTIAL. nil (the default) never stops.</param>
+/// <remarks>Not thread-safe; reads the index once per call. Nothing is cached between calls. check-init passes
+/// its wall-clock check and judges nothing after it returned True, so a partial result never decides.</remarks>
+function ProgramInitOrders(const AStore: ISymbolStore; const AStop: TFunc<Boolean> = nil): TArray<TProgramInitOrder>;
+
+/// <summary>Lane INITAPI (1.52, ruling B9a): does AUnitA initialize before AUnitB in AProgram?</summary>
+/// <param name="AStore">The project index; nil answers ioaUnplaced.</param>
+/// <param name="AProgram">The program file name ('App.dpr') or its base name ('App'), any case; '' asks every
+/// program of the index that places both units.</param>
+/// <param name="AUnitA">The unit asked about (any case).</param>
+/// <param name="AUnitB">The unit it is compared with (any case).</param>
+/// <returns>ioaBefore / ioaNotBefore with the positions as evidence ("in `App.dpr` `A` (position 1) ..."),
+/// ioaConfigDependent naming the deciding 'file:line', or ioaUnplaced with the reason. With AProgram = '':
+/// ioaBefore only when every program placing both says before; ioaConfigDependent when any of them is
+/// config-dependent; else ioaNotBefore naming a program where A does not come first.</returns>
+/// <remarks>
+/// Not thread-safe; reads the index once per call. Sound subset, default refuse: the deciding files are
+/// the program and every unit placed at or before the later of the two, plus every unit whose uses reach either
+/// (a DFS ancestor placed after them); a conditional or include-borne uses entry in any of them answers
+/// ioaConfigDependent. Without the pp_regions facts every answer is ioaConfigDependent.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Report.CycleEdge.FinalOrderVerdict (DRagLint.Report.CycleEdge.pas)</para>
+/// <para>Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Lint.InitSections.AnswerInProgram, DRagLint.Lint.InitSections.TInitGraph.ComputeOrder, DRagLint.Lint.InitSections.TInitGraph.Create, DRagLint.Lint.InitSections.TInitGraph.ProgramFiles, ExtractFileName, Format, LowerCase, SameText</para>
+/// <para>Returns: Default(TInitOrderVerdict); if NotBefore.Answer &lt;&gt; ioaUnplaced then NotBefore</para>
+/// <para>Complexity: 19 (cyclomatic, outer body), 51 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <seealso cref="DRagLint.Lint.InitSections.AnswerInProgram"/>
+/// <seealso cref="DRagLint.Lint.InitSections.TInitGraph.ComputeOrder"/>
+/// <seealso cref="DRagLint.Lint.InitSections.TInitGraph.Create"/>
+/// <seealso cref="DRagLint.Lint.InitSections.TInitGraph.ProgramFiles"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function InitializesBefore(const AStore: ISymbolStore; const AProgram, AUnitA, AUnitB: string): TInitOrderVerdict;  // dl:ok unused-public-symbol@5b89 -- REVIEWED 2026-11-17: 1.52 API for lanes HBROOTS and FINCUT (merge after INITAPI); today only tests\fixtures\v152-initapi\InitApiHarness.dpr calls it
 
 implementation
 
 uses
-  System.SysUtils
-  , System.IOUtils
+  System.IOUtils
   , System.StrUtils
   , System.Math
   , System.RegularExpressions
@@ -128,6 +288,8 @@ uses
 
 const
   KIND_UNIT  = 'unit';
+  KIND_PROGRAM = 'program';
+  USES_KEYWORD_PATTERN = '(^|[^\w.])uses\b';
   REF_WRITE  = 'write';
   REF_CALL   = 'call';
   ALLOCATING_INTRINSICS: array[0..2] of string = ('New', 'GetMem', 'SetLength');
@@ -231,12 +393,13 @@ type
     FLiveRefs  : TDictionary<Int64, TArray<TReference>>;
     FClosureRef: TDictionary<Int64, Boolean>;
     FProcVars  : TProcVarIndex;
+    FStop      : TFunc<Boolean>;  { v152 HOVERCAP: LoadUnits ends early when it answers True; nil never }
     procedure LoadUnits;
     function UsesOfFile(AFileId: Int64): TArray<string>;
     procedure LoadRefsOfFile(AFileId: Int64);
     function LinesOf(AFileId: Int64): TArray<string>;
   public
-    constructor Create(const AStore: ISymbolStore);
+    constructor Create(const AStore: ISymbolStore; const AStop: TFunc<Boolean> = nil);
     destructor Destroy; override;
     /// <summary>The files whose uses clause is a program's.</summary>
     function ProgramFiles: TArray<Int64>;
@@ -400,10 +563,11 @@ begin
   end;
 end;
 
-constructor TInitGraph.Create(const AStore: ISymbolStore);
+constructor TInitGraph.Create(const AStore: ISymbolStore; const AStop: TFunc<Boolean>);
 begin
   inherited Create;
   FStore     := AStore;
+  FStop      := AStop;
   FUnits     := TDictionary<string, TUnitNode>.Create;
   FAmbiguous := TDictionary<string, Boolean>.Create;
   FByFile    := TDictionary<Int64, string>.Create;
@@ -444,6 +608,7 @@ procedure TInitGraph.LoadUnits;
 begin
   for var U in FStore.FindSymbolsByKind(KIND_UNIT, False, MaxInt) do
   begin
+    if Assigned(FStop) and FStop() then Exit;  { v152 HOVERCAP: a stopped caller discards the graph }
     var Key: string:= LowerCase(U.Name);
     if FUnits.ContainsKey(Key) then
     begin
@@ -1556,8 +1721,9 @@ begin
 end;
 
 { Lane CYC3: 'file:line' of the first uses entry of AFileId that comes from an include or sits in a conditional
-  region (a pp_regions branch overlapping a uses clause, from its first entry to one line past its last, so an
-  inactive branch between or after the entries counts too); '' when there is none. }
+  region (a pp_regions branch overlapping a uses clause, from its `uses` keyword -- lane INITAPI; was its first
+  entry -- to one line past its last, so an inactive branch before, between or after the entries counts too); ''
+  when there is none. }
 function OrderDependsOnConfig(const AStore: ISymbolStore; AFileId: Int64): string;
 begin
   Result:= '';
@@ -1568,6 +1734,7 @@ begin
   if Length(Rows) = 0 then Exit;
   if not AStore.HasFileFacts then Exit(Format('%s (the index has no conditional-region facts: reindex)', [Name]));
   var Regions:= AStore.GetPpRegions(AFileId);
+  var Lines: TArray<string>:= nil;
   for var Sect:= Low(TUnitUseSection) to High(TUnitUseSection) do
   begin
     var Lo:= MaxInt;
@@ -1578,6 +1745,20 @@ begin
         Lo:= Min(Lo, R.StartLine);
         Hi:= Max(Hi, R.EndLine + 1);
       end;
+    // Lane INITAPI: a branch BEFORE the first active entry (an inactive IFDEF entry on its own line, then W) belongs
+    // to the clause too: widen Lo back to the line of the `uses` keyword.
+    if (Hi > 0) and (Length(Regions) > 0) then
+    begin
+      if Lines = nil then
+        try
+          Lines:= TFile.ReadAllLines(AStore.GetFilePath(AFileId));
+        except
+          on EInOutError do Lines:= nil;  { EFileNotFoundException / EDirectoryNotFoundException too }
+        end;
+      var L:= Min(Lo, Length(Lines));
+      while (L >= 1) and not TRegEx.IsMatch(Lines[L - 1], USES_KEYWORD_PATTERN, [roIgnoreCase]) do Dec(L);
+      if L >= 1 then Lo:= L;
+    end;
     for var G in Regions do
       if (Hi > 0) and (G.StartLine <= Hi) and (G.EndLine >= Lo) then Exit(Format('%s:%d', [Name, G.StartLine]));
   end;
@@ -1663,7 +1844,8 @@ begin
         for var Order in Orders do
           if Order[KB] > Order[KA] then
           begin
-            var Entry:= Roots[KA];
+            var Entry: string;
+            if not Roots.TryGetValue(KA, Entry) then Entry:= KB;
             var EntryNode: TUnitNode;
             if Graph.Units.TryGetValue(Entry, EntryNode) then Entry:= EntryNode.Name;
             Result.Text:= Format('in `%s` `%s` (position %d) initializes before `%s` (position %d)%s: list `%s` ' +
@@ -1696,6 +1878,165 @@ begin
       else 'init order: ' + First + (if Length(Programs) > 1 then Format(', and so in %d other programs',
       [Length(Programs) - 1]) else '') + '. This holds for this uses order; the lint rule `init-order-hazard` ' +
       'reports it if a later uses change reverses it.';
+  finally
+    Graph.Free;
+  end;
+end;
+
+{ Lane INITAPI: lower-case unit -> position, as a sorted unit list. }
+function UnitsInOrder(AOrder: TDictionary<string, Integer>): TArray<string>;
+begin
+  SetLength(Result, AOrder.Count);
+  for var Pair in AOrder do Result[Pair.Value]:= Pair.Key;
+end;
+
+{ Lane INITAPI: the program symbol of AFileId (its body is the main block), 0 when not indexed. }
+function ProgramBlockOf(AGraph: TInitGraph; AFileId: Int64): Int64;
+begin
+  Result:= 0;
+  for var S in AGraph.Store.FindSymbolsByKind(KIND_PROGRAM, False, MaxInt) do
+    if S.FileId = AFileId then Exit(S.Id);
+end;
+
+function ProgramInitOrders(const AStore: ISymbolStore; const AStop: TFunc<Boolean>): TArray<TProgramInitOrder>;
+begin
+  Result:= nil;
+  if AStore = nil then Exit;
+  var Graph: TInitGraph:= TInitGraph.Create(AStore, AStop);
+  try
+    for var P in Graph.ProgramFiles do
+    begin
+      if Assigned(AStop) and AStop() then Exit;
+      var Entry: TProgramInitOrder:= Default(TProgramInitOrder);
+      Entry.ProgramFileId:= P;
+      Entry.ProgramName:= ExtractFileName(AStore.GetFilePath(P));
+      Entry.ProgramBlockId:= ProgramBlockOf(Graph, P);
+      Entry.UnreliableReason:= OrderDependsOnConfig(AStore, P);
+      var Order:= Graph.ComputeOrder(P);
+      try
+        for var Key in UnitsInOrder(Order) do
+        begin
+          if Assigned(AStop) and AStop() then Exit;  { the order's unit walk reads source per unit (OrderDependsOnConfig) }
+          var Node:= Graph.Units[Key];
+          var U: TProgramInitUnit:= Default(TProgramInitUnit);
+          U.Name   := Node.Name;
+          U.FileId := Node.FileId;
+          U.UnitId := Node.UnitId;
+          U.InitId := Node.InitId;
+          U.FinalId:= Node.FinalId;
+          Entry.Units:= Entry.Units + [U];
+          if Entry.UnreliableReason = '' then Entry.UnreliableReason:= OrderDependsOnConfig(AStore, Node.FileId);
+        end;
+      finally
+        Order.Free;
+      end;
+      Entry.Unreliable:= Entry.UnreliableReason <> '';
+      Result:= Result + [Entry];
+    end;
+  finally
+    Graph.Free;
+  end;
+end;
+
+{ Lane INITAPI: the answer for one program whose order places both units. The deciding files: the program, every
+  unit placed at or before the later of the two, and every unit whose uses reach either (a DFS ancestor of a unit
+  placed after them; a unit placed after both that reaches neither was entered after both were placed). }
+function AnswerInProgram(AGraph: TInitGraph; AProgram: Int64; AOrder: TDictionary<string, Integer>;
+  const KA, KB: string): TInitOrderVerdict;
+var
+  Reaches: TDictionary<string, Boolean>;
+begin
+  var Dpr:= ExtractFileName(AGraph.Store.GetFilePath(AProgram));
+  var PA:= AOrder[KA];
+  var PB:= AOrder[KB];
+  var Last:= Max(PA, PB);
+  Reaches:= TDictionary<string, Boolean>.Create;
+  try
+    { reverse reach: a unit of the order whose uses name a unit already known to reach KA or KB }
+    Reaches.Add(KA, True);
+    Reaches.AddOrSetValue(KB, True);
+    var Grew:= True;
+    while Grew do
+    begin
+      Grew:= False;
+      for var Pair in AOrder do
+        if not Reaches.ContainsKey(Pair.Key) then
+          for var Dep in AGraph.UsesOfFile(AGraph.Units[Pair.Key].FileId) do
+            if Reaches.ContainsKey(Dep) then
+            begin
+              Reaches.Add(Pair.Key, True);
+              Grew:= True;
+              Break;
+            end;
+    end;
+    var Site:= OrderDependsOnConfig(AGraph.Store, AProgram);
+    for var Key in UnitsInOrder(AOrder) do
+      if (Site = '') and ((AOrder[Key] <= Last) or Reaches.ContainsKey(Key)) then
+        Site:= OrderDependsOnConfig(AGraph.Store, AGraph.Units[Key].FileId);
+    var A:= AGraph.Units[KA].Name;
+    var B:= AGraph.Units[KB].Name;
+    if Site <> '' then
+    begin
+      Result.Answer:= ioaConfigDependent;
+      Result.Text:= Format('in `%s` the order of `%s` and `%s` depends on a conditional uses entry (`%s`)', [Dpr, A, B, Site]);
+      Exit;
+    end;
+    Result.Answer:= if PA < PB then ioaBefore else ioaNotBefore;
+    Result.Text:= Format('in `%s` `%s` (position %d) initializes %s `%s` (position %d)', [Dpr, A, PA + 1,
+      (if PA < PB then 'before' else if PA = PB then 'as' else 'after'), B, PB + 1]);
+  finally
+    Reaches.Free;
+  end;
+end;
+
+function InitializesBefore(const AStore: ISymbolStore; const AProgram, AUnitA, AUnitB: string): TInitOrderVerdict;
+begin
+  Result:= Default(TInitOrderVerdict);
+  Result.Text:= 'no store';
+  if AStore = nil then Exit;
+  var KA:= LowerCase(AUnitA);
+  var KB:= LowerCase(AUnitB);
+  var Graph: TInitGraph:= TInitGraph.Create(AStore);
+  try
+    if not Graph.Units.ContainsKey(KA) or not Graph.Units.ContainsKey(KB) then
+    begin
+      Result.Text:= Format('`%s` or `%s` has no single place in the initialization order (the index holds that unit ' +
+        'name twice, or not at all)', [AUnitA, AUnitB]);
+      Exit;
+    end;
+    var Answered:= False;
+    var NotBefore: TInitOrderVerdict:= Default(TInitOrderVerdict);
+    var Before: TInitOrderVerdict:= Default(TInitOrderVerdict);
+    var Count:= 0;
+    for var P in Graph.ProgramFiles do
+    begin
+      var FileName:= ExtractFileName(AStore.GetFilePath(P));
+      if (AProgram <> '') and not SameText(AProgram, FileName) and not SameText(AProgram, ChangeFileExt(FileName, ''))
+        then Continue;
+      var Order:= Graph.ComputeOrder(P);
+      try
+        if not (Order.ContainsKey(KA) and Order.ContainsKey(KB)) then Continue;
+        var V:= AnswerInProgram(Graph, P, Order, KA, KB);
+        Answered:= True;
+        Inc(Count);
+        case V.Answer of
+          ioaConfigDependent: Exit(V);
+          ioaNotBefore: if NotBefore.Answer = ioaUnplaced then NotBefore:= V;
+          ioaBefore: if Before.Answer = ioaUnplaced then Before:= V;
+        end;
+      finally
+        Order.Free;
+      end;
+    end;
+    if not Answered then
+    begin
+      Result.Text:= if AProgram = '' then Format('no program of the index initializes both `%s` and `%s`', [AUnitA, AUnitB])
+        else Format('no program `%s` of the index initializes both `%s` and `%s`', [AProgram, AUnitA, AUnitB]);
+      Exit;
+    end;
+    Result:= if NotBefore.Answer <> ioaUnplaced then NotBefore else Before;
+    if (Result.Answer = ioaBefore) and (Count > 1) then
+      Result.Text:= Result.Text + Format(', and so in %d other programs', [Count - 1]);
   finally
     Graph.Free;
   end;

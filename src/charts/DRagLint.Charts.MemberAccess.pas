@@ -316,7 +316,7 @@ function ZeroNote(const pKind: string; const pU: TUnreportedAccess; pOtherN: Int
 /// the question unit never passes it. Opens no connection of its own.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Charts.Q.MemberAccess.Emit (DRagLint.Charts.Q.MemberAccess.pas)</para>
-/// <para>Calls: DRagLint.Charts.Index.TChartsIndex.ResolveMemberSelection, DRagLint.Charts.MemberAccess.BackingOf, DRagLint.Charts.MemberAccess.CanonicalMode, DRagLint.Charts.MemberAccess.CrossCheckSites, DRagLint.Charts.MemberAccess.GroupRoutines, DRagLint.Charts.MemberAccess.HitsOf, DRagLint.Charts.MemberAccess.LoadSites, DRagLint.Charts.MemberAccess.TMemberAccessData.Create, DRagLint.Charts.MemberAccess.UnreportedOf, DRagLint.Charts.Text.UnitNameOf, DRagLint.Query.Callers.ResolvedCallersForName, FreeAndNil</para>
+/// <para>Calls: DRagLint.Charts.Index.TChartsIndex.ResolveMemberSelection, DRagLint.Charts.MemberAccess.BackingOf, DRagLint.Charts.MemberAccess.CanonicalMode, DRagLint.Charts.MemberAccess.CrossCheckSites, DRagLint.Charts.MemberAccess.GroupRoutines, DRagLint.Charts.MemberAccess.HitsOf, DRagLint.Charts.MemberAccess.LoadSites, DRagLint.Charts.MemberAccess.TMemberAccessData.Create, DRagLint.Charts.MemberAccess.UnreportedOf, DRagLint.Charts.Text.TRanked.TopRanked, DRagLint.Charts.Text.UnitNameOf, DRagLint.Query.Callers.ResolvedCallersForName, FreeAndNil</para>
 /// <para>Returns: TMemberAccessData.Create</para>
 /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.ResolveMemberSelection"/>
 /// <seealso cref="DRagLint.Charts.MemberAccess.BackingOf"/>

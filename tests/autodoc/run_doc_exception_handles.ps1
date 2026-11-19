@@ -37,7 +37,10 @@
   Run from a NEUTRAL CWD, pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'
@@ -334,7 +337,7 @@ end
 '@
 
 function DocFor([string]$QName) {
-  return (& $exePath document --qname $QName --db $db 2>$null | Out-String)
+  return (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname $QName --db $db 2>$null } | Out-String)
 }
 # The emitter wraps long lines across `/// ` continuations; flatten before
 # asserting on content (same idiom as run_doc_exception_message.ps1).
@@ -349,7 +352,7 @@ function CatchesOf([string]$Doc) {
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   Check 'fixture indexed' (Test-Path $db)
 
   Write-Host ''
@@ -443,13 +446,13 @@ try {
 
   Write-Host ''
   Write-Host 'CONVERGENCE: document --apply twice; the second pass changes nothing' -ForegroundColor Cyan
-  & $exePath document --unit $target --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply 2>$null } | Out-Null
   $h1 = (Get-FileHash $target -Algorithm SHA256).Hash
   $applied = [IO.File]::ReadAllText($target)
   Check 'apply #1 wrote a Catches: line into the unit' ($applied -match 'Catches: EConvertError \(dialog: ShowMessage\)') `
     'the fact must reach the file, not only --qname output'
-  & $exePath index $scratch --db $db 2>$null | Out-Null
-  & $exePath document --unit $target --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply 2>$null } | Out-Null
   $h2 = (Get-FileHash $target -Algorithm SHA256).Hash
   Check 'apply #2 after a reindex is byte-identical (a non-convergent fact is definitely wrong)' ($h1 -eq $h2)
 }
@@ -462,7 +465,7 @@ New-Item -ItemType Directory -Path $cfgDir | Out-Null
 function DocUnderConfig([string]$Json, [string]$QName) {
   WriteAscii (Join-Path $cfgDir '.drag-lint.json') $Json
   Push-Location $cfgDir
-  try { return (& $exePath document --qname $QName --db $db 2>$null | Out-String) }
+  try { return (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname $QName --db $db 2>$null } | Out-String) }
   finally { Pop-Location }
 }
 $off = DocUnderConfig '{ "docs": { "dialog_routines": [] } }' 'exchandles.DialogHandler'

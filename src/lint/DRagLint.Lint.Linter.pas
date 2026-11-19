@@ -96,12 +96,11 @@ type
       /// <summary><!-- drag-lint:auto sum -->True when a run narrowed to FOnlyRuleId
       /// wants ARuleId computed.</summary>
       /// <param name="ARuleId"><!-- drag-lint:auto type -->const string</param>
-      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: (FOnlyRuleId = '') or
-      /// SameText(FOnlyRuleId, ARuleId).</returns>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas)</para>
-      /// <para>Calls: SameText</para>
+      /// <para>Calls: SameText, Trim</para>
       /// <para>Reads: FOnlyRuleId</para>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.CheckFileImpl"/>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.Create"/>
@@ -118,29 +117,31 @@ type
       /// stage 3, not this.</summary>
       /// <param name="ANode"><!-- drag-lint:auto type -->const TTSNode</param>
       /// <param name="ASource"><!-- drag-lint:auto type -->const TBytes</param>
+      /// <param name="AColSource">1.52 BK-TAILS-ENG: the bytes before preprocessing (same length as ASource); the site column is counted on them, so it matches the raise-bare-exception finding's column.</param>
       /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.HarvestExceptions (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.HarvestFile (DRagLint.Lint.Linter.pas)</para>
-      /// <para>Calls: DRagLint.Lint.Linter.NodeText, DRagLint.Lint.Linter.NormalizeExcMessage, DRagLint.Lint.Linter.TLinter.HarvestExceptions, DRagLint.Lint.Linter.TLinter.HarvestExceptions.FirstLiteralString, DRagLint.Lint.Linter.UnquotePascalString, Integer, SameText, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.StartPoint</para>
+      /// <para>Calls: DRagLint.Core.Encoding.Utf8ByteColToCharCol, DRagLint.Lint.Linter.NodeText, DRagLint.Lint.Linter.NormalizeExcMessage, DRagLint.Lint.Linter.TLinter.HarvestExceptions, DRagLint.Lint.Linter.TLinter.HarvestExceptions.FirstLiteralString, DRagLint.Lint.Linter.UnquotePascalString, Integer, SameText, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.StartByte, TreeSitter.TTSNodeHelper.StartPoint</para>
       /// <para>Complexity: 11 (cyclomatic, outer body), 62 lines (full implementation)</para>
       /// <para>Reads: FExcSites, FExcCand   Writes: FExcSites, FExcCand</para>
       /// <para>Recursive</para>
+      /// <seealso cref="DRagLint.Core.Encoding.Utf8ByteColToCharCol"/>
       /// <seealso cref="DRagLint.Lint.Linter.NodeText"/>
       /// <seealso cref="DRagLint.Lint.Linter.NormalizeExcMessage"/>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.HarvestExceptions.FirstLiteralString"/>
       /// <seealso cref="DRagLint.Lint.Linter.UnquotePascalString"/>
-      /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      procedure HarvestExceptions(const ANode: TTSNode; const ASource: TBytes; const AFilePath: string);
+      procedure HarvestExceptions(const ANode: TTSNode; const ASource, AColSource: TBytes; const AFilePath: string);
       /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto type -->TArray&lt;TLintFinding&gt;</returns>
+      /// <exception cref="ETreeSitterException"><!-- drag-lint:auto exc -->via TreeSitter.TTSParser.SetLanguage: Failed to set parser language to 0x%p</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Lint.Linter.TLinter.LintFile (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.LintFolder (DRagLint.Lint.Linter.pas)</para>
-      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.Lint.Linter.CheckDfmCredentials, DRagLint.Lint.Linter.CollectDfmParseErrors, DRagLint.Lint.Linter.EmptyBranchIsCommented, DRagLint.Lint.Linter.TLinter.HarvestExceptions, DRagLint.Lint.Linter.TLinter.Wants, DRagLint.Lint.Linter.tree_sitter_dfm, DRagLint.Lint.Linter.WalkForFieldByNameInLoop, DRagLint.Lint.QueryRules.TQueryRule.Run (+9 more)</para>
-      /// <para>Complexity: 26 (cyclomatic, outer body), 137 lines (full implementation)</para>
+      /// <para>Calls: Default, DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.Lint.Linter.CheckDfmCredentials, DRagLint.Lint.Linter.CollectDfmParseErrors, DRagLint.Lint.Linter.EmptyBranchIsCommented, DRagLint.Lint.Linter.IsBinaryFormBytes, DRagLint.Lint.Linter.TLinter.HarvestExceptions, DRagLint.Lint.Linter.TLinter.Wants, DRagLint.Lint.Linter.tree_sitter_dfm (+11 more)</para>
+      /// <para>Complexity: 29 (cyclomatic, outer body), 161 lines (full implementation)</para>
       /// <para>Reads: FOnlyRuleId, FExcUnit, FQueryRules, FLanguage</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
@@ -484,8 +485,9 @@ begin
   for I:= 0 to ANode.NamedChildCount - 1 do CollectFieldByNameCalls(ANode.NamedChild(I), ASource, ACalls);
 end; // procedure
 
-{ One finding for the whole loop, naming the fields to hoist. }
-procedure EmitFieldByNameLoopFinding(const ALoop: TTSNode; const ASource: TBytes; const AFilePath: string; AFindings: TList<TLintFinding>);
+{ One finding for the whole loop, naming the fields to hoist. Its columns are counted on AColSource, the
+  bytes before the preprocessor blanked inactive branches (1.52 BK-TAILS-ENG). }
+procedure EmitFieldByNameLoopFinding(const ALoop: TTSNode; const ASource, AColSource: TBytes; const AFilePath: string; AFindings: TList<TLintFinding>);
 const
   MAX_NAMES_LISTED = 6;
 var
@@ -537,9 +539,9 @@ begin
     Finding.Message := Format('FieldByName() called %d time(s) inside this loop%s -- cache the TField reference(s) ' + 'in locals before the loop and reuse them', [Calls.Count, Detail]);
     Finding.FilePath := AFilePath;
     Finding.StartLine:= Integer(Anchor.StartPoint.row   ) + 1;
-    Finding.StartCol := Integer(Anchor.StartPoint.column) + 1;
+    Finding.StartCol := Utf8ByteColToCharCol(AColSource, Anchor.StartByte, Anchor.StartPoint.column) + 1; { 1.52 BK-COLS2: character column }
     Finding.EndLine  := Integer(Anchor.EndPoint  .row   ) + 1;
-    Finding.EndCol   := Integer(Anchor.EndPoint  .column) + 1;
+    Finding.EndCol   := Utf8ByteColToCharCol(AColSource, Anchor.EndByte, Anchor.EndPoint.column) + 1;
     AFindings.Add(Finding);
   finally
     Names.Free;
@@ -639,7 +641,7 @@ begin
   Result:= StringReplace(Result, '''''', '''', [rfReplaceAll]);
 end;
 
-procedure WalkForFieldByNameInLoop(const ANode: TTSNode; const ASource: TBytes; const AFilePath: string; AFindings: TList<TLintFinding>);
+procedure WalkForFieldByNameInLoop(const ANode: TTSNode; const ASource, AColSource: TBytes; const AFilePath: string; AFindings: TList<TLintFinding>);
 var
   NT: string ;
   I : Integer;
@@ -648,10 +650,10 @@ begin
   NT:= ANode.NodeType;
   if (NT = 'while') or (NT = 'for') or (NT = 'repeat') then
   begin
-    EmitFieldByNameLoopFinding(ANode, ASource, AFilePath, AFindings);
+    EmitFieldByNameLoopFinding(ANode, ASource, AColSource, AFilePath, AFindings);
     Exit;
   end;
-  for I:= 0 to ANode.NamedChildCount - 1 do WalkForFieldByNameInLoop(ANode.NamedChild(I), ASource, AFilePath, AFindings);
+  for I:= 0 to ANode.NamedChildCount - 1 do WalkForFieldByNameInLoop(ANode.NamedChild(I), ASource, AColSource, AFilePath, AFindings);
 end; // procedure
 
 // v0.57: DFM files are parsed with the dedicated tree-sitter DFM grammar
@@ -664,7 +666,7 @@ end; // procedure
 // the .scm rule uses for Pascal, so a real DFM problem is still caught. Mirrors
 // the ERROR/MISSING walk in TAstChecker.CheckSyntaxErrors (cap 100, no descent
 // into an error node, skip clean subtrees via HasError).
-procedure CollectDfmParseErrors(const ARoot: TTSNode; const AFilePath: string; AFindings: TList<TLintFinding>);
+procedure CollectDfmParseErrors(const ARoot: TTSNode; const ASource: TBytes; const AFilePath: string; AFindings: TList<TLintFinding>);
 
   procedure Visit(const N: TTSNode);
   var
@@ -682,7 +684,7 @@ procedure CollectDfmParseErrors(const ARoot: TTSNode; const AFilePath: string; A
       F.Message := 'Syntax error: parser failed to recognize this construct';
       F.FilePath:= AFilePath;
       F.StartLine:= Integer(P.Row   ) + 1;
-      F.StartCol := Integer(P.Column) + 1;
+      F.StartCol := Utf8ByteColToCharCol(ASource, N.StartByte, P.Column) + 1; { 1.52 BK-COLS2: character column }
       F.EndLine  := F.StartLine;
       F.EndCol   := F.StartCol + 1;
       AFindings.Add(F);
@@ -695,6 +697,18 @@ procedure CollectDfmParseErrors(const ARoot: TTSNode; const AFilePath: string; A
 begin
   Visit(ARoot);
 end; // procedure
+
+// B30: True for a binary form file -- the FF 0A 00 resource header, or a bare 'TPF0' stream (same test as
+// DRagLint.Parser.DFM.IsBinaryDfmBytes, which is implementation-private there).
+function IsBinaryFormBytes(const ABytes: TBytes): Boolean;
+const
+  RES_HEADER_FIRST = $FF;
+  TPF0_SIGNATURE: array[0..3] of Byte = ($54, $50, $46, $30); // 'TPF0'
+begin
+  if Length(ABytes) = 0 then Exit(False);
+  if ABytes[0] = RES_HEADER_FIRST then Exit(True);
+  Result:= (Length(ABytes) >= Length(TPF0_SIGNATURE)) and CompareMem(@ABytes[0], @TPF0_SIGNATURE[0], Length(TPF0_SIGNATURE));
+end; // function
 
 // v0.76 (#10 security): scan a parsed DFM tree for a credential-named property
 // (Password/Pwd/Secret/ApiKey/...) assigned a non-empty string LITERAL. A secret
@@ -775,7 +789,7 @@ procedure CheckDfmCredentials(const ARoot: TTSNode; const ASource: TBytes; const
             F.Message := Format('Hardcoded credential in DFM: property "%s" assigns a literal string; move secrets out of the form resource', [PropName]);
             F.FilePath:= AFilePath;
             F.StartLine:= Integer(P.Row   ) + 1;
-            F.StartCol := Integer(P.Column) + 1;
+            F.StartCol := Utf8ByteColToCharCol(ASource, N.StartByte, P.Column) + 1; { 1.52 BK-COLS2: character column }
             F.EndLine  := F.StartLine;
             F.EndCol   := F.StartCol + 1;
             AFindings.Add(F);
@@ -886,7 +900,31 @@ begin
     // v0.86 (Task 3): transcode ANSI/UTF-16 sources to valid UTF-8 before the
     // parse/slice pipeline (both assume UTF-8). This is the direct lint/lint-all
     // path; without it a valid CP1252 file (SOFTWID class) errored here.
-    Source:= EnsureUtf8Bytes(TFile.ReadAllBytes(AFilePath));
+    var RawBytes: TBytes:= TFile.ReadAllBytes(AFilePath);
+    { B30: a binary .dfm (resource header FF 0A 00, or a bare TPF0 stream) holds no text for the DFM grammar;
+      say so instead of a bogus 1:1 parse error (same signature test as DRagLint.Parser.DFM.IsBinaryDfmBytes). }
+    if SameText(ExtractFileExt(AFilePath), '.dfm') and IsBinaryFormBytes(RawBytes) then
+    begin
+      if Wants('parser-error') then
+      begin
+        var BinF: TLintFinding:= Default(TLintFinding);
+        BinF.RuleId  := 'parser-error';
+        BinF.Severity:= 'warning';
+        BinF.Message := 'Binary DFM (TPF0) -- not linted; save as Text DFM in the IDE to lint this file';
+        BinF.FilePath:= AFilePath;
+        BinF.StartLine:= 1;
+        BinF.StartCol := 1;
+        BinF.EndLine  := 1;
+        BinF.EndCol   := 2;
+        Findings.Add(BinF);
+      end;
+      Exit(Findings.ToArray);
+    end;
+    Source:= EnsureUtf8Bytes(RawBytes);
+    { 1.52 BK-TAILS-ENG: the preprocess below blanks an inactive branch to one space per BYTE, so a
+      non-ASCII character in it would count as two or three columns. Finding columns are counted on
+      these bytes instead (same length -- the offsets agree). }
+    var ColSource: TBytes:= Source;
     { Same preprocessing the AST checks now get, through the SAME call, so the
       two lint entry points cannot drift into disagreeing about which branches
       are live. TLinter builds its own parser (see the note below), which is
@@ -938,16 +976,16 @@ begin
         that don't exist in the DFM grammar (and the queries are compiled against the
         Pascal language), so the only meaningful diagnostic is a genuine grammar error. }
     begin
-      if Wants('parser-error') then CollectDfmParseErrors(Tree.RootNode, AFilePath, Findings);
+      if Wants('parser-error') then CollectDfmParseErrors(Tree.RootNode, Source, AFilePath, Findings);
       if Wants('dfm-hardcoded-credential') then CheckDfmCredentials(Tree.RootNode, Source, AFilePath, Findings); // v0.76 #10
     end
     else
     begin
-      if Wants('field-by-name-in-loop') then WalkForFieldByNameInLoop(Tree.RootNode, Source, AFilePath, Findings);
+      if Wants('field-by-name-in-loop') then WalkForFieldByNameInLoop(Tree.RootNode, Source, ColSource, AFilePath, Findings);
       { Rides the parse above rather than adding one. Returns immediately when
         the project has not opted in; its only consumer is the
         raise-bare-exception enrichment. }
-      if (FExcUnit <> '') and Wants('raise-bare-exception') then HarvestExceptions(Tree.RootNode, Source, AFilePath);
+      if (FExcUnit <> '') and Wants('raise-bare-exception') then HarvestExceptions(Tree.RootNode, Source, ColSource, AFilePath);
       // External *.scm rules
       var R: TQueryRule;
       { LITERAL PRE-FILTER -- see TQueryRule.RequiredText.
@@ -989,7 +1027,7 @@ begin
             if LowerSrc.Contains(Needle) then begin InScope:= True; Break; end;
           if not InScope then Continue;
         end;
-        var QFindings:= R.Run(Tree.RootNode, Source, AFilePath);
+        var QFindings:= R.Run(Tree.RootNode, Source, AFilePath, nil, ColSource);
         var F: TLintFinding;
         for F in QFindings do
         begin
@@ -1053,6 +1091,7 @@ begin
   try
     try
       Source:= EnsureUtf8Bytes(TFile.ReadAllBytes(AFilePath));
+      var ColSource: TBytes:= Source; { 1.52 BK-TAILS-ENG: columns are counted before blanking }
       Source:= TAstParseCache.ApplyPreprocess(Source, AFilePath);
       Parser:= TTSParser.Create;
       Parser.Language:= FLanguage;
@@ -1066,7 +1105,7 @@ begin
           Move(Source[AByteIndex], Result[0], Remaining);
           ABytesRead:= Remaining;
         end, TTSInputEncoding.TSInputEncodingUTF8);
-      if Tree <> nil then HarvestExceptions(Tree.RootNode, Source, AFilePath);
+      if Tree <> nil then HarvestExceptions(Tree.RootNode, Source, ColSource, AFilePath);
     except
       { see the remark above -- best-effort, never fatal }
     end;
@@ -1076,7 +1115,7 @@ begin
   end;
 end;
 
-procedure TLinter.HarvestExceptions(const ANode: TTSNode; const ASource: TBytes; const AFilePath: string);
+procedure TLinter.HarvestExceptions(const ANode: TTSNode; const ASource, AColSource: TBytes; const AFilePath: string);
 
   function FirstLiteralString(const N: TTSNode): string;
   var
@@ -1121,7 +1160,7 @@ begin
               `raise` node, so this is that node's own start. }
             Site.FilePath:= AFilePath;
             Site.Line    := Integer(ANode.StartPoint.row   ) + 1;
-            Site.Col     := Integer(ANode.StartPoint.column) + 1;
+            Site.Col     := Utf8ByteColToCharCol(AColSource, ANode.StartByte, ANode.StartPoint.column) + 1; { 1.52 BK-COLS2: character column, counted before blanking (BK-TAILS-ENG) }
             Site.Msg     := Msg;
             Site.Raw     := UnquotePascalString(FirstLiteralString(Args));
             FExcSites:= FExcSites + [Site];
@@ -1137,7 +1176,7 @@ begin
     end;
   end;
   for I:= 0 to ANode.NamedChildCount - 1 do
-    HarvestExceptions(ANode.NamedChild(I), ASource, AFilePath);
+    HarvestExceptions(ANode.NamedChild(I), ASource, AColSource, AFilePath);
 end;
 
 procedure TLinter.EnrichExceptionFindings(var AFindings: TArray<TLintFinding>);

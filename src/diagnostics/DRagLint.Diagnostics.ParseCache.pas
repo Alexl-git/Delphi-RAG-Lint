@@ -11,8 +11,8 @@ type
   /// TAstParseCache frees Tree; consumers must not.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnbalancedBeginEnd (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUndeclared (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnusedLocals (DRagLint.Diagnostics.AstChecks.pas) (+76 more)</para>
-  /// <para>Used in units: DRagLint.Diagnostics.AstChecks, DRagLint.Diagnostics.BoundsNilChecks, DRagLint.Diagnostics.CloneChecks, DRagLint.Diagnostics.ConcurrencyChecks, DRagLint.Diagnostics.ControlFlowChecks, DRagLint.Diagnostics.DeadCodeChecks, DRagLint.Diagnostics.DeclChecks, DRagLint.Diagnostics.DeclParityChecks, DRagLint.Diagnostics.EnumOrdinalCast, DRagLint.Diagnostics.ExceptionThreadChecks (+23 more)</para>
+  /// <para>Used by: DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnbalancedBeginEnd (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUndeclared (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnusedLocals (DRagLint.Diagnostics.AstChecks.pas) (+92 more)</para>
+  /// <para>Used in units: DRagLint.Diagnostics.AstChecks, DRagLint.Diagnostics.BoundsNilChecks, DRagLint.Diagnostics.CloneChecks, DRagLint.Diagnostics.ConcurrencyChecks, DRagLint.Diagnostics.ControlFlowChecks, DRagLint.Diagnostics.DeadCodeChecks, DRagLint.Diagnostics.DeclChecks, DRagLint.Diagnostics.DeclParityChecks, DRagLint.Diagnostics.EnumOrdinalCast, DRagLint.Diagnostics.ExceptionThreadChecks (+33 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TParsedFile = record
@@ -27,6 +27,10 @@ type
       between the two: the preprocessor is offset-preserving by construction. }
     RawSrc: TBytes;
     Tree  : TTSTree;
+    { 1.52 BK-COLS2: the byte offset of every line start in RawSrc, filled only when RawSrc holds a
+      byte >= $80 -- nil means pure ASCII, where a tree-sitter byte column IS the character column.
+      TAstParseCache.CharCol reads it. }
+    LineStarts: TArray<Integer>;
   end;
 
   /// <summary>Process-wide parse-once cache so the many TAstChecker rules reuse one
@@ -35,8 +39,8 @@ type
   /// Not thread-safe; the lint pipeline is single-threaded per process.
   /// Call Clear between files in a batch to bound memory.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ApplyLineMarkers.LineIsPreprocessorInactive (DRagLint.CLI.pas), DRagLint.CLI.ConfigureLspLint (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintTree (DRagLint.CLI.pas) (+95 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.Unwith, DRagLint.Core.Indexer, DRagLint.Diagnostics.AstChecks, DRagLint.Diagnostics.BoundsNilChecks, DRagLint.Diagnostics.CloneChecks, DRagLint.Diagnostics.ConcurrencyChecks, DRagLint.Diagnostics.ControlFlowChecks, DRagLint.Diagnostics.DeadCodeChecks, DRagLint.Diagnostics.DeclChecks (+31 more)</para>
+  /// <para>Used by: DRagLint.CLI.ApplyLineMarkers.LineIsPreprocessorInactive (DRagLint.CLI.pas), DRagLint.CLI.ConfigureLspLint (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintTree (DRagLint.CLI.pas) (+186 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.Unwith, DRagLint.Core.Indexer, DRagLint.Diagnostics.AstChecks, DRagLint.Diagnostics.BoundsNilChecks, DRagLint.Diagnostics.CloneChecks, DRagLint.Diagnostics.ConcurrencyChecks, DRagLint.Diagnostics.ControlFlowChecks, DRagLint.Diagnostics.DeadCodeChecks, DRagLint.Diagnostics.DeclChecks (+49 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TAstParseCache = class
@@ -55,10 +59,10 @@ type
     /// <para>Calls: FResolver</para>
     /// <para>Catches: Exception (swallowed)</para>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ByteCol"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol"/>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear"/>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ClearIncludeContexts"/>
-    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
-    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.HostIncludeSites"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function ProfileFor(const AFile: string): TDefineProfile;
@@ -78,10 +82,10 @@ type
     /// <para>Calls: LowerCase</para>
     /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ByteCol"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol"/>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear"/>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ClearIncludeContexts"/>
-    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
-    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.HostIncludeSites"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class procedure SetIncludeContext(const AIncFile: string; const ABytes: TBytes);
@@ -90,10 +94,10 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.InstallLintIncludeContexts (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ByteCol"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol"/>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear"/>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
-    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.HostIncludeSites"/>
-    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ProfileFor"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class procedure ClearIncludeContexts;
@@ -155,10 +159,10 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.InstallFileProfileResolver (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ByteCol"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol"/>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear"/>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ClearIncludeContexts"/>
-    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
-    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.HostIncludeSites"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class procedure SetProfileResolver(const AResolver: TFunc<string, TDefineProfile>);
@@ -174,10 +178,10 @@ type
     /// <para>Called from: DRagLint.CLI.ConfigureLspLint (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoUnwith (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.SetPreprocess (DRagLint.Core.Indexer.pas)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ByteCol"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol"/>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear"/>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ClearIncludeContexts"/>
-    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
-    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.HostIncludeSites"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class procedure SetPreprocess(AEnabled: Boolean; const AProfile: TDefineProfile);
@@ -193,7 +197,7 @@ type
     /// entry points would drift into disagreeing about which branches are live,
     /// which is the defect this whole change exists to close.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.ApplyLineMarkers.LineIsPreprocessorInactive (DRagLint.CLI.pas), DRagLint.CLI.DoLintTree (DRagLint.CLI.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (DRagLint.Diagnostics.ParseCache.pas), DRagLint.LSP.Server.TLSPServer.IdentTreeFor (DRagLint.LSP.Server.pas), DRagLint.LSP.SyntaxTree.ParseDelphiUtf8 (DRagLint.LSP.SyntaxTree.pas) (+2 more)</para>
+    /// <para>Called from: DRagLint.CLI.ApplyLineMarkers.LineIsPreprocessorInactive (DRagLint.CLI.pas), DRagLint.CLI.DoLintTree (DRagLint.CLI.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (DRagLint.Diagnostics.ParseCache.pas), DRagLint.LSP.Server.TLSPServer.IdentTreeFor (DRagLint.LSP.Server.pas), DRagLint.LSP.SyntaxTree.ParseDelphiUtf8 (DRagLint.LSP.SyntaxTree.pas) (+3 more)</para>
     /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.TAstParseCache.ProfileFor, DRagLint.Index.IncludeUses.MarkUsesListIncludes, DRagLint.Preprocess.Preprocess/3, DRagLint.Preprocess.Types.NormalizeLoneCR, DRagLint.Preprocess.Types.TPPOptionsDefault, ExtractFileExt, LowerCase, MatchText</para>
     /// <para>Catches: Exception (swallowed)</para>
     /// <para>Touches: file system</para>
@@ -213,28 +217,72 @@ type
     /// <exception cref="ETreeSitterException"><!-- drag-lint:auto exc -->via TreeSitter.TTSParser.SetLanguage: Failed to set parser language to 0x%p</exception>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity/2 (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckControlFlowInFinally (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection (DRagLint.Diagnostics.AstChecks.pas) (+77 more)</para>
-    /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.Diagnostics.ParseCache.tree_sitter_delphi13, Integer, LowerCase, Move, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, TreeSitter.TTSParser.SetLanguage</para>
+    /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity/2 (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckControlFlowInFinally (DRagLint.Diagnostics.AstChecks.pas) (+96 more)</para>
+    /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.LineStartsIfNonAscii, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.Diagnostics.ParseCache.tree_sitter_delphi13, Integer, LowerCase, Move, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, TreeSitter.TTSParser.SetLanguage</para>
     /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.LineStartsIfNonAscii"/>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess"/>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.tree_sitter_delphi13"/>
     /// <seealso cref="TreeSitter.TTSParser.Create"/>
-    /// <seealso cref="TreeSitter.TTSParser.Parse"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Get(const AFile: string): TParsedFile;
+    /// <summary>The 1-based CHARACTER (UTF-16) column of a tree-sitter point in AFile -- the column a
+    /// lint finding reports and every fixer, the LSP and the IDE count in.</summary>
+    /// <param name="AFile">The file the point's tree was parsed from (Get's key).</param>
+    /// <param name="APoint">A node's StartPoint or EndPoint: 0-based row, 0-based UTF-8 BYTE column.</param>
+    /// <returns>APoint.column + 1 on a pure-ASCII file (or one Get cannot read); fewer on a line whose
+    /// prefix holds a multi-byte character.</returns>
+    /// <remarks>
+    /// 1.52 BK-COLS2: tree-sitter reports byte columns, so every AST rule that copied
+    /// StartPoint.column into a finding moved its column right by one per extra byte of every non-ASCII
+    /// character earlier on the line. Counts on RawSrc (the bytes on disk, transcoded), so a directive the
+    /// preprocessor blanked still counts its real characters. Not thread-safe (the cache is not).
+    /// Pinned by tests\autotest\run_v152_BK-COLS2.ps1.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits.HandleProc (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit.CheckList (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity.Visit (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckControlFlowInFinally.SearchFinally (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection.VisitProcs (DRagLint.Diagnostics.AstChecks.pas) (+71 more)</para>
+    /// <para>Calls: Cardinal, DRagLint.Core.Encoding.Utf8ByteColToCharCol, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Integer</para>
+    /// <para>Returns: Integer(APoint.column) + 1; Utf8ByteColToCharCol(PF.RawSrc, Cardinal(PF.LineStarts[Row]) + APoint.column, APoint.column) + 1</para>
+    /// <seealso cref="DRagLint.Core.Encoding.Utf8ByteColToCharCol"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ByteCol"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    class function CharCol(const AFile: string; const APoint: TTSPoint): Integer;
+    /// <summary>The inverse of CharCol: the 1-based UTF-8 BYTE column of the 1-based CHARACTER column ACharCol on
+    /// 1-based line ALine of AFile -- for code that walks the tree from a finding's position.</summary>
+    /// <param name="AFile">The file (Get's key).</param>
+    /// <param name="ALine">1-based line.</param>
+    /// <param name="ACharCol">1-based character column (a finding's StartCol).</param>
+    /// <returns>ACharCol on a pure-ASCII file or line prefix; larger past a multi-byte character.</returns>
+    /// <remarks>
+    /// 1.52 BK-COLS2. Not thread-safe (the cache is not).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Fix.V151.Legacy.WithLineOf (DRagLint.Fix.V151.Legacy.pas)</para>
+    /// <para>Calls: DRagLint.Core.Encoding.Utf8CharColToByteCol, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get</para>
+    /// <para>Returns: ACharCol; Utf8CharColToByteCol(PF.RawSrc, PF.LineStarts[ALine - 1], ACharCol)</para>
+    /// <seealso cref="DRagLint.Core.Encoding.Utf8CharColToByteCol"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    class function ByteCol(const AFile: string; ALine, ACharCol: Integer): Integer;
     /// <summary>Frees every cached tree and empties the cache. Call between files in a batch to bound
     /// memory, and once at the end of a single-file lint.</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.Unwith.RunUnwith (DRagLint.CLI.Unwith.pas), DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas) (+61 more)</para>
+    /// <para>Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.Unwith.RunUnwith (DRagLint.CLI.Unwith.pas), DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas) (+86 more)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ByteCol"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol"/>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ClearIncludeContexts"/>
     /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
-    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.HostIncludeSites"/>
-    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ProfileFor"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class procedure Clear;
@@ -256,6 +304,49 @@ uses
   the same reason; this now matches. Only TAstParseCache.Get uses it. }
 function tree_sitter_delphi13: PTSLanguage; cdecl; external 'tree-sitter-delphi13';
 
+{ 1.52 BK-COLS2: nil for pure-ASCII bytes (no column needs mapping), else the byte offset of each line start. }
+function LineStartsIfNonAscii(const ABytes: TBytes): TArray<Integer>;
+const
+  LF = 10;
+  HIGH_BIT = $80;
+begin
+  Result:= nil;
+  var HasHigh: Boolean:= False;
+  for var B: Byte in ABytes do
+    if B >= HIGH_BIT then
+    begin
+      HasHigh:= True;
+      Break;
+    end;
+  if not HasHigh then Exit;
+  var L: TList<Integer>:= TList<Integer>.Create;
+  try
+    L.Add(0);
+    for var I: Integer:= 0 to High(ABytes) do
+      if ABytes[I] = LF then L.Add(I + 1);
+    Result:= L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
+class function TAstParseCache.CharCol(const AFile: string; const APoint: TTSPoint): Integer;
+begin
+  Result:= Integer(APoint.column) + 1;
+  var PF: TParsedFile:= Get(AFile);
+  var Row: Integer:= Integer(APoint.row);
+  if (PF.LineStarts = nil) or (Row >= Length(PF.LineStarts)) then Exit;
+  Result:= Utf8ByteColToCharCol(PF.RawSrc, Cardinal(PF.LineStarts[Row]) + APoint.column, APoint.column) + 1;
+end;
+
+class function TAstParseCache.ByteCol(const AFile: string; ALine, ACharCol: Integer): Integer;
+begin
+  Result:= ACharCol;
+  var PF: TParsedFile:= Get(AFile);
+  if (PF.LineStarts = nil) or (ALine < 1) or (ALine > Length(PF.LineStarts)) then Exit;
+  Result:= Utf8CharColToByteCol(PF.RawSrc, PF.LineStarts[ALine - 1], ACharCol);
+end;
+
 class function TAstParseCache.Get(const AFile: string): TParsedFile;
 var
   Key   : string;
@@ -275,6 +366,7 @@ begin
     // downstream (all assume UTF-8), so transcoding here fixes them all.
     PF.RawSrc:= EnsureUtf8Bytes(TFile.ReadAllBytes(AFile));
     PF.Src   := PF.RawSrc;
+    PF.LineStarts:= LineStartsIfNonAscii(PF.RawSrc);
     { THE LINT WALK NOW PREPROCESSES, and before this it never did -- not "with
       the wrong defines", but not at all: Preprocess had three production
       callers and every one was on the index side. So `lint` parsed raw bytes

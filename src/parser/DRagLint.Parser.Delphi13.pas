@@ -72,15 +72,15 @@ type
       /// <exception cref="ETreeSitterException"><!-- drag-lint:auto exc -->via TreeSitter.TTSParser.SetLanguage: Failed to set parser language to 0x%p</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: ChangeFileExt, Default, DRagLint.Parser.Delphi13.CollectParseErrors, DRagLint.Parser.Delphi13.HarvestStringLiterals, DRagLint.Parser.Delphi13.TWalkState.Create, DRagLint.Parser.Delphi13.Walk, DRagLint.Preprocess.Types.NormalizeLoneCR, ExtractFileName, Integer, Move, TreeSitter.TTSNodeHelper.HasError, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, TreeSitter.TTSParser.SetLanguage, TreeSitter.TTSTree.RootNode</para>
+      /// <para>Calls: ChangeFileExt, Default, DRagLint.Parser.Delphi13.CollectParseErrors, DRagLint.Parser.Delphi13.HarvestAttributes, DRagLint.Parser.Delphi13.HarvestStringLiterals, DRagLint.Parser.Delphi13.TWalkState.Create, DRagLint.Parser.Delphi13.Walk, DRagLint.Preprocess.Types.NormalizeLoneCR, ExtractFileName, Integer (+6 more)</para>
       /// <para>Implements: DRagLint.Core.Interfaces.IParser.Parse</para>
       /// <para>Reads: FLanguage, EmitUsageRefs</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Parser.Delphi13.CollectParseErrors"/>
+      /// <seealso cref="DRagLint.Parser.Delphi13.HarvestAttributes"/>
       /// <seealso cref="DRagLint.Parser.Delphi13.HarvestStringLiterals"/>
       /// <seealso cref="DRagLint.Parser.Delphi13.TWalkState.Create"/>
       /// <seealso cref="DRagLint.Parser.Delphi13.Walk"/>
-      /// <seealso cref="DRagLint.Preprocess.Types.NormalizeLoneCR"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function Parse(const ASource: TBytes; const AFilePath: string): TParseResult;
@@ -89,7 +89,7 @@ type
 /// <returns><!-- drag-lint:auto type -->PTSLanguage</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoInfo (DRagLint.CLI.pas), DRagLint.Lint.Linter.TLinter.Create (DRagLint.Lint.Linter.pas), DRagLint.LSP.SyntaxTree.ParseDelphiUtf8 (DRagLint.LSP.SyntaxTree.pas), DRagLint.Parser.Delphi13.TDelphi13Parser.Create (DRagLint.Parser.Delphi13.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoInfo (DRagLint.CLI.pas), DRagLint.Lint.Linter.TLinter.Create (DRagLint.Lint.Linter.pas), DRagLint.LSP.SyntaxTree.ParseDelphiUtf8 (DRagLint.LSP.SyntaxTree.pas), DRagLint.Parser.Delphi13.TDelphi13Parser.Create (DRagLint.Parser.Delphi13.pas), DRagLint.V151.DFMA.Support.LoadPasSummary (DRagLint.V151.DFMA.Support.pas)</para>
 /// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -132,6 +132,21 @@ type
 function ScanScopedEnumSwitches(const ASource: TBytes): TArray<TScopedEnumSwitch>;
 
 implementation
+
+uses
+  DRagLint.Core.Encoding; { 1.52 EXTGAPS2: Utf8ByteColToCharCol -- index columns are character columns }
+
+{ 1.52 EXTGAPS2: the 1-based CHARACTER column of ANode's start / end. tree-sitter reports byte columns, so
+  every non-ASCII character earlier on the line moved each column the index stored. }
+function NodeStartCharCol(const ANode: TTSNode; const ASource: TBytes): Integer;
+begin
+  Result:= Utf8ByteColToCharCol(ASource, ANode.StartByte, ANode.StartPoint.column) + 1;
+end;
+
+function NodeEndCharCol(const ANode: TTSNode; const ASource: TBytes): Integer;
+begin
+  Result:= Utf8ByteColToCharCol(ASource, ANode.EndByte, ANode.EndPoint.column) + 1;
+end;
 
 function NodeText(const ANode: TTSNode; const ASource: TBytes): string;
 var
@@ -439,9 +454,9 @@ begin
   U.Section := ASection;
   U.InPath  := AInPath;
   U.StartLine:= Integer(ARangeNode.StartPoint.row   ) + 1;
-  U.StartCol := Integer(ARangeNode.StartPoint.column) + 1;
+  U.StartCol := NodeStartCharCol(ARangeNode, Source);
   U.EndLine  := Integer(ARangeNode.EndPoint  .row   ) + 1;
-  U.EndCol   := Integer(ARangeNode.EndPoint  .column) + 1;
+  U.EndCol   := NodeEndCharCol(ARangeNode, Source);
   UsesEntries.Add(U);
   { Suppress hint: Stem reserved for a future normalize-here path. }
   Stem:= AUnitName;
@@ -460,9 +475,9 @@ begin
   Ref.ReceiverText:= AReceiver;
   Ref.SymbolId:= 0; // unresolved at parse time
   Ref.StartLine:= Integer(ARangeNode.StartPoint.row   ) + 1;
-  Ref.StartCol := Integer(ARangeNode.StartPoint.column) + 1;
+  Ref.StartCol := NodeStartCharCol(ARangeNode, Source);
   Ref.EndLine  := Integer(ARangeNode.EndPoint  .row   ) + 1;
-  Ref.EndCol   := Integer(ARangeNode.EndPoint  .column) + 1;
+  Ref.EndCol   := NodeEndCharCol(ARangeNode, Source);
   References.Add(Ref);
 end;
 
@@ -491,9 +506,9 @@ begin
   if not ARangeNode.IsNull then
   begin
     Sym.StartLine:= Integer(ARangeNode.StartPoint.row   ) + 1;
-    Sym.StartCol := Integer(ARangeNode.StartPoint.column) + 1;
+    Sym.StartCol := NodeStartCharCol(ARangeNode, Source);
     Sym.EndLine  := Integer(ARangeNode.EndPoint  .row   ) + 1;
-    Sym.EndCol   := Integer(ARangeNode.EndPoint  .column) + 1;
+    Sym.EndCol   := NodeEndCharCol(ARangeNode, Source);
   end;
   Symbols.Add(Sym);
   Result:= Symbols.Count - 1;
@@ -745,6 +760,52 @@ begin
   if Length(Result) > RECEIVER_TEXT_MAX then Result:= '';
 end;
 
+{ 1.52 EXTP: REF_KIND_WRITE_THROUGH lives in DRagLint.Core.Model beside the other REF_KIND_* constants. }
+
+{ 1.52 EXTP (ORM3 batch 3 item 2, Blueprint4.pas:1016): `edtF1.DataBinding.DataField := X` changes the
+  object edtF1 holds, yet edtF1 carried only a read and DataBinding only a member-access, so
+  `usages --name edtF1` answered writes: 0. Every identifier of the RECEIVER chain of a written member
+  -- the root and each intermediate member, never the written member itself and never a leading Self
+  -- gets one extra ref of kind write-through beside the row it already has (read / member-access).
+  An intermediate carries the same receiver text as its member-access row. Only a pure dotted chain
+  of identifiers (IsDottedIdentChain); a call or indexed receiver is left alone. Guard:
+  tests\autotest\run_v152_EXTP_refs.ps1 (W1-W3). }
+procedure EmitWriteThroughRefs(const ALhs: TTSNode; const AState: TWalkState);
+begin
+  if ALhs.IsNull or (ALhs.NodeType <> 'exprDot') then Exit;
+  var Recv:= ALhs.ChildByField('lhs');
+  if not IsDottedIdentChain(Recv) then Exit;
+  while (not Recv.IsNull) and (Recv.NodeType = 'exprDot') do
+  begin
+    var Member:= Recv.ChildByField('rhs');
+    AState.EmitRef(REF_KIND_WRITE_THROUGH, NodeText(Member, AState.Source), Member, ReceiverTextOf(Recv, AState.Source));
+    Recv:= Recv.ChildByField('lhs');
+  end;
+  if (not Recv.IsNull) and not SameText(Trim(NodeText(Recv, AState.Source)), 'Self') then
+    AState.EmitRef(REF_KIND_WRITE_THROUGH, NodeText(Recv, AState.Source), Recv);
+end;
+
+{ E-RENAME-RESIDUE (1.52, lane RENFACT): the subscript ASub `X[...]` as one REF_KIND_INDEX_ACCESS ref --
+  name '[]', receiver = the entity X normalised like ReceiverTextOf, span from the bracket group (the
+  'args' field; the whole node when the grammar gives none) to the subscript's end. `Bag[0]` reaches
+  TBag.Items without naming it, so before this the site had no ref at all; the resolver decides which
+  subscripts reach a default property. Nothing when the entity is missing, is or holds an ERROR node,
+  or is too long to be a receiver. Pinned by tests\autotest\run_v152_RENFACT.ps1. }
+procedure EmitIndexAccessRef(const ASub: TTSNode; const AState: TWalkState);
+begin
+  var Entity:= ASub.ChildByField('entity');
+  if Entity.IsNull or Entity.IsError or Entity.HasError then Exit;
+  var Rcv: string:= NormaliseReceiverText(NodeText(Entity, AState.Source));
+  if (Rcv = '') or (Length(Rcv) > RECEIVER_TEXT_MAX) then Exit;
+  var Args:= ASub.ChildByField('args');
+  if Args.IsNull then Args:= ASub;
+  AState.EmitRef(REF_KIND_INDEX_ACCESS, REF_NAME_INDEX_ACCESS, ASub, Rcv);
+  var R: TReference:= AState.References.Last;
+  R.StartLine:= Integer(Args.StartPoint.row   ) + 1;
+  R.StartCol := NodeStartCharCol(Args, AState.Source);
+  AState.References[AState.References.Count - 1]:= R;
+end;
+
 { E-PARSER-NOREFS: is this node inherited X, or a dotted chain of identifier
   members rooted in one, inherited X.Y? inherited X(a).Y is IsCallRootedReceiver's. }
 function IsInheritedRootedReceiver(const ANode: TTSNode): Boolean;
@@ -838,7 +899,7 @@ var
   procedure Retag(const AIdent: TTSNode; const AKind, AReceiver: string);
   begin
     var Line:= Integer(AIdent.StartPoint.row) + 1;
-    var Col := Integer(AIdent.StartPoint.column) + 1;
+    var Col := NodeStartCharCol(AIdent, AState.Source);
     for var i:= AMark to AState.References.Count - 1 do
     begin
       var R:= AState.References[i];
@@ -1264,6 +1325,10 @@ begin
   if VarName = '' then Exit;
   RoutineQN:= AState.Symbols[AState.CurrentRoutineIdx].QualifiedName;
   AState.Emit(skLocalVar, VarName, RoutineQN + '.' + VarName, AState.CurrentRoutineIdx, ANode, NodeText(TypeRef, AState.Source));
+  { 1.52 EXTP: the E token itself is a write of E (the handler assigns it the exception object). The
+    symbol's range is the whole clause, so without this ref the token had no occurrence and a rename of
+    any other E refused with no-ref-occurrence (YADF TXTok.E). Guard: run_v152_EXTP_refs.ps1 E1/E2. }
+  AState.EmitRef('write', VarName, VarNode);
 end; // procedure
 
 procedure EmitHandlerReference(const ANode: TTSNode; const AState: TWalkState);
@@ -3168,7 +3233,13 @@ begin
   end;
 end;
 
-procedure SetRoutineImplRange(const AState: TWalkState; const AName: string; AStartLine, AEndLine: Integer; const ASignature: string);
+{ 1.52 EXTP: AIsClass = the implementation header starts with `class`. A declaration of the same
+  class-ness is preferred over the name order: `class constructor Create;` and
+  `constructor Create(pA: Integer)` (or `class destructor Destroy` and `destructor Destroy; override`)
+  share a name, and the empty / equal signature sent the class constructor's body to the instance
+  constructor and back (impl ranges swapped, locals parented to the wrong routine). Only when no
+  candidate of that class-ness waits does the old name-order match run. Guard: run_v152_EXTP_refs.ps1 C1. }
+procedure SetRoutineImplRange(const AState: TWalkState; const AName: string; AStartLine, AEndLine: Integer; const ASignature: string; AIsClass: Boolean);
 var
   i          : Integer;
   Sym        : TSymbol;
@@ -3176,6 +3247,17 @@ var
   ShapeKey   : string ;
   ShapeIdx   : Integer;
   FallbackIdx: Integer;
+  SameClass  : Boolean;
+
+  { A routine declaration named AName (same last segment, qualified name equal or ending in '.' + AName)
+    that still waits for its body. }
+  function Waiting(const ASym: TSymbol): Boolean;
+  begin
+    Result:= (ASym.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) and (ASym.ImplStartLine = 0)
+      and SameText(ASym.Name, LastSeg);
+    if Result then Result:= SameText(ASym.QualifiedName, AName) or ASym.QualifiedName.EndsWith('.' + AName, True);
+  end;
+
 begin
   if AName = '' then Exit;
   LastSeg:= AName;
@@ -3184,11 +3266,20 @@ begin
   if ASignature <> '' then ShapeKey:= ParamShapeKey(ASignature);
   ShapeIdx   := -1;
   FallbackIdx:= -1;
+  SameClass  := False;
   for i:= AState.Symbols.Count - 1 downto 0 do
   begin
     Sym:= AState.Symbols[i];
-    if (Sym.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) and (Sym.ImplStartLine = 0) and SameText(Sym.Name, LastSeg)
-       and (SameText(Sym.QualifiedName, AName) or Sym.QualifiedName.EndsWith('.' + AName, True)) then
+    if Waiting(Sym) and (Sym.IsClassMethod = AIsClass) then
+    begin
+      SameClass:= True;
+      Break;
+    end;
+  end;
+  for i:= AState.Symbols.Count - 1 downto 0 do
+  begin
+    Sym:= AState.Symbols[i];
+    if Waiting(Sym) and ((not SameClass) or (Sym.IsClassMethod = AIsClass)) then
     begin
       if (ASignature <> '') and SameText(Sym.Signature, ASignature) then
       begin
@@ -3353,6 +3444,10 @@ procedure EmitRoutineLocals(const ADefProcNode: TTSNode; const AState: TWalkStat
   begin
     if ANode.IsNull or (ADepth > MaxInlineDeclWalkDepth) then Exit;
     if ANode.NodeType = 'defProc' then Exit;
+    { 1.52 EXTP (Q-EXT1): an anonymous method's parameters are skParam symbols of the enclosing named
+      routine, like its locals above, so `O.Field` inside the lambda has a typed receiver and a rename
+      of pA reaches it. Guard: run_v152_EXTP_refs.ps1 A1/A2. }
+    if ANode.NodeType = 'lambda' then EmitRoutineParams(ANode, AState, ARoutineIdx, ARoutineQualifiedName);
     if IsInlineDecl(ANode.NodeType) or (ANode.NodeType = 'declVar') then
     begin
       EmitDeclVar(ANode);
@@ -3460,9 +3555,9 @@ begin
       row.ImplName     := Binding.ImplName;
       row.Lifetime     := Binding.Lifetime;
       row.StartLine:= Integer(AExpr.StartPoint.row   ) + 1;
-      row.StartCol := Integer(AExpr.StartPoint.column) + 1;
+      row.StartCol := NodeStartCharCol(AExpr, AState.Source);
       row.EndLine  := Integer(AExpr.EndPoint  .row   ) + 1;
-      row.EndCol   := Integer(AExpr.EndPoint  .column) + 1;
+      row.EndCol   := NodeEndCharCol(AExpr, AState.Source);
       AState.DiBindings.Add(row);
     end;
     dioResolve   : AState.EmitRef('di-resolve', ResIntf, AExpr)       ;
@@ -3548,20 +3643,21 @@ begin
 
   // 150 X1: each entry of an `exports` clause (`exports Foo, Bar name 'x', U.Baz index 2;`,
   // legal in a library .dpr and in a unit) is a reference to the exported routine: emit it
-  // as a 'call' ref so the resolver binds it, find-callers lists it and the unused rules stop
-  // calling an exported routine dead. Before, the clause emitted NO ref at all (T2 FOUND).
+  // so the resolver binds it and the unused rules stop calling an exported routine dead. Before,
+  // the clause emitted NO ref at all (T2 FOUND). 1.52 EXTGAPS2 (HB6): kind REF_KIND_EXPORT, not
+  // 'call' -- an export names the routine, it does not call it, so it gets no call edge.
   // A dotted entry names the routine by its LAST segment, receiver = the qualifier (the same
   // shape as a qualified call). Recursion below still walks the name/index expressions.
   if NodeType = 'declExport' then
   begin
     var ExpName:= ANode.NamedChild(0);
     if (not ExpName.IsNull) and (ExpName.NodeType = 'identifier') then
-      AState.EmitRef(REF_KIND_CALL, NodeText(ExpName, AState.Source), ExpName)
+      AState.EmitRef(REF_KIND_EXPORT, NodeText(ExpName, AState.Source), ExpName)
     else if (not ExpName.IsNull) and (ExpName.NodeType = 'genericDot') and (ExpName.NamedChildCount >= 2) then
     begin
       var ExpLeaf:= ExpName.NamedChild(ExpName.NamedChildCount - 1);
       if ExpLeaf.NodeType = 'identifier' then
-        AState.EmitRef(REF_KIND_CALL, NodeText(ExpLeaf, AState.Source), ExpLeaf,
+        AState.EmitRef(REF_KIND_EXPORT, NodeText(ExpLeaf, AState.Source), ExpLeaf,
           NodeText(ExpName.NamedChild(0), AState.Source));
     end;
   end;
@@ -3621,7 +3717,7 @@ begin
     begin
       var OwnerSym:= AState.Symbols[OrphanOwner];
       OwnerSym.EndLine:= Integer(ANode.EndPoint.row   ) + 1;
-      OwnerSym.EndCol := Integer(ANode.EndPoint.column) + 1;
+      OwnerSym.EndCol := NodeEndCharCol(ANode, AState.Source);
       AState.Symbols[OrphanOwner]:= OwnerSym;
       var OrphanOldVis:= AState.CurrentVisibility;
       var OrphanOldVisExp:= AState.CurrentVisExplicit;
@@ -3743,7 +3839,7 @@ begin
       begin
         var FSym:= AState.Symbols[FIdx];
         FSym.StartLine:= Integer(FNameNode.StartPoint.row   ) + 1;
-        FSym.StartCol := Integer(FNameNode.StartPoint.column) + 1;
+        FSym.StartCol := NodeStartCharCol(FNameNode, AState.Source);
         AState.Symbols[FIdx]:= FSym;
       end;
       FFirst:= False;
@@ -3966,7 +4062,9 @@ begin
             header's own signature (built by the same ProcSignatureOf that
             produced the decl's stored Signature) so overloads disambiguate
             by signature, not just name -- see SetRoutineImplRange. }
-          if HdrName <> '' then SetRoutineImplRange(AState, HdrName, Integer(ANode.StartPoint.row) + 1, Integer(ANode.EndPoint.row) + 1, ProcSignatureOf(HdrNode, AState.Source));
+          if HdrName <> '' then
+            SetRoutineImplRange(AState, HdrName, Integer(ANode.StartPoint.row) + 1, Integer(ANode.EndPoint.row) + 1, ProcSignatureOf(HdrNode, AState.Source),
+              (HdrNode.ChildCount > 0) and (HdrNode.Child(0).NodeType = 'kClass'));
           { v14 (D5, Task 3) / v23: emit this routine's locals as skLocalVar
             symbols, parented to its (already-emitted) routine symbol, with the
             routine symbol's own unit-qualified name so the local's
@@ -4211,6 +4309,9 @@ begin
   // still recurses, so nested expressions are fully covered.
   if AState.EmitUsageRefs then
   begin
+    { E-RENAME-RESIDUE (1.52): every subscript gets its index-access ref; no Exit, the arms below and the
+      default recursion still see the node. }
+    if NodeType = 'exprSubscript' then EmitIndexAccessRef(ANode, AState);
     // Member access `obj.Member` -> the BASE identifier is a usage of `obj`
     // (the dxDBGrid1 case). The member itself is captured as call/type_use
     // elsewhere; we don't re-emit it here.
@@ -4374,6 +4475,7 @@ begin
           SelfMemberLhs:= True;
         end;
       end;
+      EmitWriteThroughRefs(Lhs, AState); { 1.52 EXTP: `edtF1.DataBinding.DataField := v` }
       // Bug B fix: a bare-identifier RHS (`Result := maxItems;`) is a READ of
       // that symbol, but a lone identifier that IS the whole RHS hits no case
       // in the generic recurse below (it is neither exprDot/exprArgs/etc.), so
@@ -4598,7 +4700,7 @@ var
   end;
 
   procedure Visit(const N: TTSNode);
-  var I: Integer; Lit: TStringLiteral; Raw, Dec: string; P: TTSPoint;
+  var I: Integer; Lit: TStringLiteral; Raw, Dec: string;
   begin
     if N.IsNull then Exit;
     { M1b: body-inline comment prose, so `query --text` can find an error
@@ -4630,8 +4732,10 @@ var
         Lit.Id       := 0;
         Lit.FileId   := 0;
         Lit.SymbolId := 0;
-        P:= N.StartPoint; Lit.StartLine:= Integer(P.Row)+1; Lit.StartCol:= Integer(P.Column)+1;
-        P:= N.EndPoint;   Lit.EndLine  := Integer(P.Row)+1; Lit.EndCol  := Integer(P.Column)+1;
+        Lit.StartLine:= Integer(N.StartPoint.Row) + 1;
+        Lit.StartCol := NodeStartCharCol(N, ASource);
+        Lit.EndLine  := Integer(N.EndPoint.Row) + 1;
+        Lit.EndCol   := NodeEndCharCol(N, ASource);
         Acc.Add(Lit);
       end;
       { A comment is a leaf (ChildCount=0 for all four forms, probed), so there
@@ -4648,8 +4752,10 @@ var
         Lit.Source:= 'pas';
         Lit.Kind  := ClassifyKind(N, Dec);
         Lit.Text  := Dec;
-        P:= N.StartPoint; Lit.StartLine:= Integer(P.Row)+1; Lit.StartCol:= Integer(P.Column)+1;
-        P:= N.EndPoint;   Lit.EndLine  := Integer(P.Row)+1; Lit.EndCol  := Integer(P.Column)+1;
+        Lit.StartLine:= Integer(N.StartPoint.Row) + 1;
+        Lit.StartCol := NodeStartCharCol(N, ASource);
+        Lit.EndLine  := Integer(N.EndPoint.Row) + 1;
+        Lit.EndCol   := NodeEndCharCol(N, ASource);
         Acc.Add(Lit);
       end;
     end;
@@ -4658,6 +4764,140 @@ var
 
 begin
   Acc:= TList<TStringLiteral>.Create;
+  try
+    Visit(ARoot);
+    Result:= Acc.ToArray;
+  finally
+    Acc.Free;
+  end;
+end;
+
+{ 1.52 BK-EXTRA (B09, owner ruling 2026-11-18): the attributes table. Every `rttiAttributes`
+  list (one node per `[...]`; the items are `identifier` for a bare attribute and `exprCall`
+  for one with arguments, see the rttiAttributes branch of Walk) gives one row per item.
+
+  WHICH SYMBOL IT DECORATES. The list hangs off the declaration node it decorates (declType,
+  declProc, declField, declArg, declProp ...). The target is the EARLIEST symbol that starts
+  inside that declaration, at or after the list -- or exactly at the declaration's own start,
+  which is where a routine / type / field symbol begins when the attribute precedes it (so a
+  second stacked list `[A] [B]` still reaches it). Members of a decorated class start later
+  than the class, so the class wins. Further names of the same declaration (`[Weak] A, B:
+  TObject`, `const [Ref] A, B`) share the target's parent, kind and line and get a row each.
+  No symbol (a local variable, an implementation-header parameter) = SymbolIdx -1.
+
+  A SEPARATE pass, not the Walk branch: that branch runs only on a deep scan (EmitUsageRefs),
+  and the fact must reach library indexes too. }
+function HarvestAttributes(const ARoot: TTSNode; const ASource: TBytes; const ASymbols: TArray<TSymbol>): TArray<TAttributeRow>;
+var
+  Acc: TList<TAttributeRow>;
+
+  function PosLE(AL1, AC1, AL2, AC2: Integer): Boolean;
+  begin
+    Result:= (AL1 < AL2) or ((AL1 = AL2) and (AC1 <= AC2));
+  end;
+
+  { A further name of the same declaration as ABest: same parent, kind and line, not before it. }
+  function IsSameDeclName(const ASym, ABest: TSymbol): Boolean;
+  begin
+    Result:= (ASym.ParentId = ABest.ParentId) and (ASym.Kind = ABest.Kind) and (ASym.StartLine = ABest.StartLine)
+      and (ASym.StartCol >= ABest.StartCol);
+  end;
+
+  function TargetsOf(const AList: TTSNode): TArray<Integer>;
+  var
+    Decl          : TTSNode;
+    P             : TTSPoint;
+    LL, LC, DL, DC: Integer;
+    EL, EC        : Integer;
+    I, Best       : Integer;
+  begin
+    Result:= nil;
+    Decl:= AList.Parent;
+    if Decl.IsNull then Exit;
+    P := AList.StartPoint;
+    LL:= Integer(P.Row) + 1;
+    LC:= Integer(P.Column) + 1;
+    P := Decl.StartPoint;
+    DL:= Integer(P.Row) + 1;
+    DC:= Integer(P.Column) + 1;
+    P := Decl.EndPoint;
+    EL:= Integer(P.Row) + 1;
+    EC:= Integer(P.Column) + 1;
+    Best:= -1;
+    for I:= 0 to High(ASymbols) do
+    begin
+      var SL: Integer:= ASymbols[I].StartLine;
+      var SC: Integer:= ASymbols[I].StartCol;
+      if not (PosLE(LL, LC, SL, SC) or ((SL = DL) and (SC = DC))) then Continue;
+      if not PosLE(SL, SC, EL, EC) then Continue;
+      if (Best < 0) or not PosLE(ASymbols[Best].StartLine, ASymbols[Best].StartCol, SL, SC) then Best:= I;
+    end;
+    if Best < 0 then Exit;
+    Result:= [Best];
+    for I:= 0 to High(ASymbols) do
+      if (I <> Best) and IsSameDeclName(ASymbols[I], ASymbols[Best]) and PosLE(ASymbols[I].StartLine, ASymbols[I].StartCol, EL, EC) then
+        Result:= Result + [I];
+  end;
+
+  procedure AddList(const AList: TTSNode);
+  var
+    I     : Integer;
+    Item  : TTSNode;
+    NameN : TTSNode;
+    Args  : string;
+    Row   : TAttributeRow;
+    P     : TTSPoint;
+    Target: TArray<Integer>;
+  begin
+    Target:= TargetsOf(AList);
+    if Target = nil then Target:= [-1];
+    for I:= 0 to AList.NamedChildCount - 1 do
+    begin
+      Item:= AList.NamedChild(I);
+      if Item.IsNull or (Item.NodeType = 'comment') then Continue;
+      NameN:= Item;
+      Args := '';
+      if Item.NodeType = 'exprCall' then
+      begin
+        NameN:= Item.ChildByField('entity');
+        if NameN.IsNull then NameN:= Item;
+        var ArgsN:= Item.ChildByField('args');
+        if not ArgsN.IsNull then
+        begin
+          Args:= Trim(NodeText(ArgsN, ASource));
+          if Args.StartsWith('(') and Args.EndsWith(')') then Args:= Trim(Copy(Args, 2, Length(Args) - 2));
+        end;
+      end;
+      Row:= Default(TAttributeRow);
+      Row.Name   := NodeText(NameN, ASource);
+      Row.ArgText:= Args;
+      P      := NameN.StartPoint;
+      Row.Line:= Integer(P.Row) + 1;
+      Row.Col := Integer(P.Column) + 1;
+      if Row.Name = '' then Continue;
+      for var T: Integer in Target do
+      begin
+        Row.SymbolIdx:= T;
+        Acc.Add(Row);
+      end;
+    end;
+  end;
+
+  procedure Visit(const N: TTSNode);
+  var
+    I: Integer;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'rttiAttributes' then
+    begin
+      AddList(N);
+      Exit;
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
+  end;
+
+begin
+  Acc:= TList<TAttributeRow>.Create;
   try
     Visit(ARoot);
     Result:= Acc.ToArray;
@@ -4740,6 +4980,7 @@ begin
     Result.UsesEntries:= State.UsesEntries.ToArray;
     Result.DiBindings := State.DiBindings .ToArray;
     Result.Literals   := HarvestStringLiterals(Root, Source);
+    Result.Attributes := HarvestAttributes(Root, Source, Result.Symbols); { 1.52 BK-EXTRA (B09) }
     Result.ImplementationLine:= State.ImplementationLine; { N-06 }
   finally
     State.Free;

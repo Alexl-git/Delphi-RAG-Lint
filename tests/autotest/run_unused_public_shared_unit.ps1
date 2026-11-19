@@ -21,9 +21,12 @@
 # Usage: pwsh -File tests/autotest/run_unused_public_shared_unit.ps1 [-Exe <path>]
 [CmdletBinding()]
 param(
-    [string] $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+    [string] $Exe = '',
     [string] $WorkDir = "$env:TEMP\drag-lint-unused-public-shared-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -74,9 +77,9 @@ foreach ($k in $files.Keys) {
 }
 
 $db = Join-Path $WorkDir 'fx.sqlite'
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'index exits 0' ($LASTEXITCODE -eq 0)
-$out = & $Exe lint-all --project (Join-Path $WorkDir 'AlphaProj.dproj') --db $db 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --project (Join-Path $WorkDir 'AlphaProj.dproj') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 
 $shared = ($out -split "`n" | Where-Object { $_ -match 'SharedOrphan' }) -join ' '
 $solo   = ($out -split "`n" | Where-Object { $_ -match 'SoloOrphan'   }) -join ' '

@@ -38,9 +38,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-generic-typeref-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -107,7 +110,7 @@ Write-Ascii (Join-Path $work 'u.pas') $UBody
 $db = Join-Path $WorkDir 'genrefs.sqlite'
 
 Write-Host 'Indexing fixture (deep usage refs on by default for a project index)' -ForegroundColor Cyan
-$indexOut  = & $Exe index $work --db $db 2>&1
+$indexOut  = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 $indexExit = $LASTEXITCODE
 Check 'index exits 0' ($indexExit -eq 0) "exit=$indexExit; $($indexOut -join ' | ')"
 
@@ -127,7 +130,7 @@ c.close()
 
 function Get-Refs([string]$Name, [string]$Kind) {
   $raw = (python $py $db $Name $Kind) -join "`n"
-  return @($raw | ConvertFrom-Json)
+  return @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 
 # 1-based line number of the fixture line matching $Pattern. Assertions below
@@ -147,21 +150,21 @@ function Line-Of([string]$Pattern) {
 # anything.
 Write-Host ''
 Write-Host '(A) POSITIVE CONTROL -- non-generic TStringList (passes before the fix)' -ForegroundColor Cyan
-$c1 = Get-Refs 'TStringList' 'type_use'
+$c1 = @(Get-Refs 'TStringList' 'type_use')
 Check 'control: type_use TStringList at its declaration' ($c1.Count -ge 1) ("rows=" + ($c1 | ConvertTo-Json -Compress))
-$c2 = Get-Refs 'TStringList' 'read'
+$c2 = @(Get-Refs 'TStringList' 'read')
 Check 'control: read TStringList at the construction site' ($c2.Count -ge 1) ("rows=" + ($c2 | ConvertTo-Json -Compress))
-$c3 = @((Get-Refs 'Create' 'member-access') | Where-Object { $_.receiver_text -eq 'TStringList' })
+$c3 = @((@(Get-Refs 'Create' 'member-access')) | Where-Object { $_.receiver_text -eq 'TStringList' })
 Check 'control: member-access Create with receiver_text=TStringList' ($c3.Count -ge 1) ("rows=" + ($c3 | ConvertTo-Json -Compress))
 
 # --------------------------------------------------------------- (B) THE FIX
 Write-Host ''
 Write-Host '(B) generic instantiations emit the SAME refs as the non-generic control' -ForegroundColor Cyan
-$g1 = Get-Refs 'TDictionary' 'type_use'
+$g1 = @(Get-Refs 'TDictionary' 'type_use')
 Check 'field decl FMap: TDictionary<string, Boolean> emits type_use TDictionary' ($g1.Count -ge 1) ("rows=" + ($g1 | ConvertTo-Json -Compress))
-$g2 = Get-Refs 'TList' 'type_use'
+$g2 = @(Get-Refs 'TList' 'type_use')
 Check 'local decl L: TList<Integer> emits type_use TList' ($g2.Count -ge 1) ("rows=" + ($g2 | ConvertTo-Json -Compress))
-$g3 = Get-Refs 'TList' 'read'
+$g3 = @(Get-Refs 'TList' 'read')
 Check 'construction TList<Integer>.Create emits read TList' ($g3.Count -ge 1) ("rows=" + ($g3 | ConvertTo-Json -Compress))
 # receiver_text is the LITERAL receiver EXPRESSION -- for `L.Free` it stores the
 # variable `L`, so for `TList<Integer>.Create` it correctly stores the whole
@@ -170,7 +173,7 @@ Check 'construction TList<Integer>.Create emits read TList' ($g3.Count -ge 1) ("
 # different things depending on whether the receiver happened to be generic.
 # Stripping the type arguments is the CONSUMER's job (see DoQueryTypeUsage), and
 # assertion (D) below is what proves the consumer does it.
-$g4 = @((Get-Refs 'Create' 'member-access') | Where-Object { $_.receiver_text -match '^TList\b' })
+$g4 = @((@(Get-Refs 'Create' 'member-access')) | Where-Object { $_.receiver_text -match '^TList\b' })
 Check 'construction emits member-access Create whose receiver_text names TList' ($g4.Count -ge 1) ("rows=" + ($g4 | ConvertTo-Json -Compress))
 Check 'that receiver_text keeps its type arguments verbatim' (($g4.Count -ge 1) -and ($g4[0].receiver_text -eq 'TList<Integer>')) ("rows=" + ($g4 | ConvertTo-Json -Compress))
 
@@ -185,19 +188,19 @@ $declFieldLine = Line-Of 'FMap:\s+TDictionary'
 $declLocalLine = Line-Of 'L:\s+TList'
 Check 'fixture line lookup resolved' (($declFieldLine -gt 0) -and ($declLocalLine -gt 0)) "field=$declFieldLine local=$declLocalLine"
 
-$a1 = @((Get-Refs 'Boolean' 'type_use') | Where-Object { $_.start_line -eq $declFieldLine })
+$a1 = @((@(Get-Refs 'Boolean' 'type_use')) | Where-Object { $_.start_line -eq $declFieldLine })
 Check "TDictionary<string, Boolean> emits type_use Boolean ON THE DECLARATION LINE ($declFieldLine)" ($a1.Count -ge 1) ("rows=" + ($a1 | ConvertTo-Json -Compress))
-$a2 = @((Get-Refs 'Integer' 'type_use') | Where-Object { $_.start_line -eq $declLocalLine })
+$a2 = @((@(Get-Refs 'Integer' 'type_use')) | Where-Object { $_.start_line -eq $declLocalLine })
 Check "TList<Integer> emits type_use Integer ON THE DECLARATION LINE ($declLocalLine)" ($a2.Count -ge 1) ("rows=" + ($a2 | ConvertTo-Json -Compress))
 
 # ------------------------------------------------ (C) OVER-CAPTURE NEGATIVES
 Write-Host ''
 Write-Host '(C) NEGATIVE -- a type PARAMETER declaration is not a type USE' -ForegroundColor Cyan
-$n1 = Get-Refs 'T' 'type_use'
+$n1 = @(Get-Refs 'T' 'type_use')
 Check 'TBox<T> = class emits ZERO type_use rows for T' ($n1.Count -eq 0) ("rows=" + ($n1 | ConvertTo-Json -Compress))
-$n2 = Get-Refs 'T' 'read'
+$n2 = @(Get-Refs 'T' 'read')
 Check 'TBox<T> = class emits ZERO read rows for T' ($n2.Count -eq 0) ("rows=" + ($n2 | ConvertTo-Json -Compress))
-$n3 = @((Get-Refs 'TBox' 'type_use') | Where-Object { $_.start_line -le 9 })
+$n3 = @((@(Get-Refs 'TBox' 'type_use')) | Where-Object { $_.start_line -le 9 })
 Check 'the TBox declaration name is not itself a type_use' ($n3.Count -eq 0) ("rows=" + ($n3 | ConvertTo-Json -Compress))
 
 # --------------------------------------------- (D) CONSUMER-FACING SURFACES
@@ -215,7 +218,7 @@ Check 'query type-usage exits 0' ($tuExit -eq 0) "exit=$tuExit"
 # back with "referenced": false, so `-match 'TList'` is satisfied by the broken
 # build's own negative answer. Assert the FLAG.
 $tu = $null
-try { $tu = $tuRaw | ConvertFrom-Json } catch { }
+try { $tu = $tuRaw | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'query type-usage --json parses' ($null -ne $tu) "raw=$tuRaw"
 if ($null -ne $tu) {
   foreach ($n in @('TStringList', 'TList', 'TDictionary')) {

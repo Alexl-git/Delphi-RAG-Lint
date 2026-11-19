@@ -10,7 +10,7 @@
      over two lines, a blob, an action ref) equal the hand-written
      expected-uP151Main.tsv. Generated non-ASCII forms (a BOM-less Windows-1252 and
      a UTF-8-BOM .dfm, written here so the repo stays ASCII) decode to the right
-     Unicode text with UTF-8 byte columns; a #nnn above $FFFF becomes a surrogate
+     Unicode text with CHARACTER columns (1.52 BK-COLS2; UTF-8 byte columns before); a #nnn above $FFFF becomes a surrogate
      pair; every row's object_ordinal names a dfm_objects row of its file.
   B  identity: forms-csv (and menu-tree --with-dfm --format paths where a project
      has .dfm menus) byte-identical between ON (the table, default) and OFF
@@ -32,10 +32,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string] $Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string] $Exe     = '',
   [string] $BaseExe = '',
   [string] $WorkDir = "$env:TEMP\drag-lint-dfmprops151-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = 0
 $script:Passed = 0
@@ -84,8 +87,8 @@ function Esc([string]$S) {
 }
 # sql --json rows are POSITIONAL arrays: map them onto columns[].name.
 function Sql([string]$Db, [string]$Query) {
-  $raw = & $Exe sql --db $Db --query $Query --json 2>$null
-  try { $doc = ($raw -join "`n") | ConvertFrom-Json } catch { return }  # no table (base engine): no rows
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --query $Query --json 2>$null }
+  try { $doc = ($raw -join "`n") | ConvertFrom-Json | ForEach-Object { $_ } } catch { return }  # no table (base engine): no rows
   if ($null -eq $doc -or $null -eq $doc.rows -or $null -eq $doc.columns) { return }
   $cols = @($doc.columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
   $out = @()
@@ -108,7 +111,7 @@ function Run-Verb([string[]]$VerbArgs, [bool]$Off, [string]$Tag, [string]$UseExe
   if ($Off) { $env:DRAGLINT_NO_FILE_FACTS = '1' } else { $env:DRAGLINT_NO_FILE_FACTS = $null }
   try {
     $p = Start-Process -FilePath $UseExe -ArgumentList $VerbArgs -NoNewWindow -Wait -PassThru `
-      -RedirectStandardOutput $o -RedirectStandardError $e
+      -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   } finally {
     $env:DRAGLINT_DEBUG = $null
     $env:DRAGLINT_NO_FILE_FACTS = $null
@@ -138,7 +141,7 @@ function Forms-Csv([string]$Db, [string]$Proj, [bool]$Off, [string]$Tag, [string
 function Index-Dir([string]$Dir, [string]$Db, [string]$UseExe = $Exe) {
   New-Item -ItemType Directory -Force (Join-Path $Dir '_D-RAG') | Out-Null
   [IO.File]::WriteAllText((Join-Path $Dir '_D-RAG\drag-lint-project.json'), '{ "ownRoots": ["."] }')
-  & $UseExe index $Dir --db $Db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $UseExe index $Dir --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $LASTEXITCODE
 }
 
@@ -167,8 +170,8 @@ for ($i = 0; $i -lt [Math]::Max($got.Count, $expected.Count); $i++) {
 Check 'A2 uP151Main.dfm rows equal expected-uP151Main.tsv' (($got.Count -gt 0) -and ($firstDiff -eq '')) $firstDiff
 $ansi = @(PropRows $pdb 'uGenAnsi.dfm')
 $bom  = @(PropRows $pdb 'uGenBom.dfm')
-Check 'A3 Windows-1252 caption decoded, UTF-8 byte columns' (($ansi.Count -eq 2) -and ($ansi[0].value_text -ceq ($UUml + 'bernehmen')) -and ($ansi[0].end_col -eq 26)) "rows=$($ansi.Count) [$(if ($ansi.Count) { (Esc $ansi[0].value_text) + ' ' + $ansi[0].end_col })]"
-Check 'A4 UTF-8-BOM caption decoded, UTF-8 byte columns' (($bom.Count -eq 2) -and ($bom[0].value_text -ceq ($OUml + 'ffnen ' + $De + 'a')) -and ($bom[0].end_col -eq 26) -and ($bom[0].start_line -eq 2)) "rows=$($bom.Count) [$(if ($bom.Count) { (Esc $bom[0].value_text) + ' ' + $bom[0].start_line + ':' + $bom[0].end_col })]"
+Check 'A3 Windows-1252 caption decoded, character columns (1.52 BK-COLS2: was UTF-8 byte 26)' (($ansi.Count -eq 2) -and ($ansi[0].value_text -ceq ($UUml + 'bernehmen')) -and ($ansi[0].end_col -eq 25)) "rows=$($ansi.Count) [$(if ($ansi.Count) { (Esc $ansi[0].value_text) + ' ' + $ansi[0].end_col })]"
+Check 'A4 UTF-8-BOM caption decoded, character columns (1.52 BK-COLS2: was UTF-8 byte 26)' (($bom.Count -eq 2) -and ($bom[0].value_text -ceq ($OUml + 'ffnen ' + $De + 'a')) -and ($bom[0].end_col -eq 24) -and ($bom[0].start_line -eq 2)) "rows=$($bom.Count) [$(if ($bom.Count) { (Esc $bom[0].value_text) + ' ' + $bom[0].start_line + ':' + $bom[0].end_col })]"
 Check 'A5 #nnn above $FFFF is a surrogate pair' (($bom.Count -eq 2) -and ($bom[1].value_text -ceq ('x' + [char]::ConvertFromUtf32(128512)))) "[$(if ($bom.Count -ge 2) { Esc $bom[1].value_text })]"
 $orph = @(Sql $pdb ("SELECT COUNT(*) AS n FROM dfm_properties p WHERE p.object_ordinal >= 0 AND NOT EXISTS " +
                     "(SELECT 1 FROM dfm_objects o WHERE o.file_id = p.file_id AND o.ordinal = p.object_ordinal)"))

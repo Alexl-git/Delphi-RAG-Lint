@@ -48,9 +48,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-stale-libstore"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -112,9 +115,9 @@ end.
 
 $projDb = Join-Path $WorkDir 'proj.sqlite'
 $libDb  = Join-Path $WorkDir 'lib.sqlite'
-$null = & $Exe index $proj --db $projDb 2>$null
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $proj --db $projDb 2>$null }
 Check 'project index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
-$null = & $Exe index $lib --db $libDb 2>$null
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $lib --db $libDb 2>$null }
 Check 'library index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 # The manifest is what makes the engine open a library store at all.
@@ -131,7 +134,7 @@ function New-Manifest([string]$LibPath) {
 }
 
 function Run-Lint([string]$Config) {
-  $out = & $Exe lint-all --db $projDb --config $Config 2>&1
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $projDb --config $Config 2>&1 | ForEach-Object { "$_" } }
   return ,@($out)
 }
 
@@ -157,8 +160,8 @@ $sqlite = Join-Path (Split-Path $Exe -Parent) 'sqlite3.exe'
 $lowered = $false
 try {
   # No sqlite3.exe dependency: the engine's own sql verb can write.
-  $null = & $Exe sql --query "UPDATE meta SET value='1' WHERE key='schema_version'" --db $libDb 2>&1
-  $chk = (& $Exe sql --query "SELECT value FROM meta WHERE key='schema_version'" --db $libDb --json 2>$null) -join "`n"
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe sql --query "UPDATE meta SET value='1' WHERE key='schema_version'" --db $libDb 2>&1 | ForEach-Object { "$_" } }
+  $chk = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --query "SELECT value FROM meta WHERE key='schema_version'" --db $libDb --json 2>$null }) -join "`n"
   $lowered = $chk -match '"1"|: *1\b'
 } catch { $lowered = $false }
 Check 'the library index really is stale now (precondition)' $lowered "if this fails the case below is vacuous, not passing"

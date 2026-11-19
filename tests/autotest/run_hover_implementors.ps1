@@ -17,9 +17,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1"),
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_hover_implm_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1") }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -76,14 +79,14 @@ end.
 "@
 
 $db = Join-Path $WorkDir 'fx.sqlite'
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the fixture index was built' (Test-Path $db) $db
 
 function Hover([string]$QName, [string]$Fmt) {
-  return ((& $exePath hover --qname $QName --db $db --format $Fmt 2>$null) -join "`r`n")
+  return ((& { $ErrorActionPreference = 'Continue'; & $exePath hover --qname $QName --db $db --format $Fmt 2>$null }) -join "`r`n")
 }
 
-$impl = ((& $exePath implementors --target 'IWorker.Work' --db $db 2>$null) -join ' ')
+$impl = ((& { $ErrorActionPreference = 'Continue'; & $exePath implementors --target 'IWorker.Work' --db $db 2>$null }) -join ' ')
 Check 'V2 POSITIVE CONTROL implementors answers TWorkerAlpha.Work for IWorker.Work' `
       ($impl -match 'TWorkerAlpha') $impl
 

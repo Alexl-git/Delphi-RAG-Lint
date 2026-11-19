@@ -49,9 +49,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-uses-padded-name-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -162,7 +165,7 @@ end.
 
 $db = Join-Path $WorkDir 'padded.sqlite'
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($indexOut -join ' | ')"
 Check 'index reports 0 parse errors (a padded dotted name is legal Delphi and must parse)' `
   (-not (($indexOut -join ' ') -match '[1-9]\d* errors')) "$($indexOut -join ' | ')"
@@ -233,7 +236,7 @@ Check 'B3 sweep: no kind=unit symbol name carries whitespace, #11 and #12 includ
 Write-Host ''
 Write-Host 'site 3 -- the unit-name-matches-file lint rule (NamingChecks)' -ForegroundColor Cyan
 function LintUnitName([string]$File) {
-  return @(& $Exe lint (Join-Path $work $File) --rule unit-name-matches-file 2>&1) | ForEach-Object { "$_" }
+  return @(& { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $work $File) --rule unit-name-matches-file 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" }
 }
 $c1 = LintUnitName 'Gamma.Config.pas'
 $c1Hits = @($c1 | Where-Object { $_ -match 'unit-name-matches-file' })

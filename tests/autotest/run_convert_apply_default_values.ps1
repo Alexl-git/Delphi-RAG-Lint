@@ -29,9 +29,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_convert_apply_default_values_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -260,12 +263,12 @@ Write-Ascii (P 'values.rules') @'
 '@
 
 $db = P 'fx.sqlite'
-$idx = & $Exe index $WorkDir --db $db 2>&1
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'V the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db)) "exit=$LASTEXITCODE; $($idx -join ' | ')"
 Check 'V the load checker is available (lib\DfmLoadCheck.ps1)' (Test-DfmLoadsChecker)
 
 function ApplyTo([string]$Unit, [string[]]$Extra = @()) {
-  $o = (& $Exe convert-apply --unit (P $Unit) --rules (P 'values.rules') --db $db @Extra 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P $Unit) --rules (P 'values.rules') --db $db @Extra 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 
@@ -307,7 +310,7 @@ Check 'G3 limit, pinned: ''FieldDefs.Items.Attributes = []'' PARSES (caught by D
 
 # ---- resolved defaults --------------------------------------------------------
 $r = ApplyTo 'AbsentDM.pas' @('--format', 'json')
-$jd = $null; try { $jd = $r.Out.Substring($r.Out.IndexOf('{')) | ConvertFrom-Json } catch {}
+$jd = $null; try { $jd = $r.Out.Substring($r.Out.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'D2b a default NOT written for a non-published path is REPORTED: one reemit note, count and paths' `
   (($null -ne $jd) -and (@($jd.reemit_notes | Where-Object { $_ -match '^v: 2 resolved default\(s\) not written -- Defs\.Items\.Size, Sub\.Level: the path runs through a non-published member' }).Count -eq 1)) ($jd.reemit_notes -join ' | ')
 $r = ApplyTo 'AbsentDM.pas' @('--apply', '--no-backup')

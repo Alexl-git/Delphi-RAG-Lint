@@ -25,9 +25,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-ownroots-note-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
@@ -95,12 +98,12 @@ end.
 '@
 $db   = Join-Path $app '_D-RAG\App.sqlite'
 $decl = Join-Path $app '_D-RAG\drag-lint-project.json'
-& $Exe index --project (Join-Path $app 'App.dpr') --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $app 'App.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: no index" -ForegroundColor Red; exit 2 }
 
 function LintAll {
   Push-Location $WorkDir
-  try { return (& $Exe lint-all --db $db --output (Join-Path $WorkDir 'rep.txt') 2>&1 | Out-String) }
+  try { return (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --output (Join-Path $WorkDir 'rep.txt') 2>&1 | ForEach-Object { "$_" } } | Out-String) }
   finally { Pop-Location }
 }
 
@@ -135,7 +138,7 @@ begin
   Go;
 end.
 '@
-& $Exe index --project (Join-Path $app 'App.dpr') --db $db --rebuild 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $app 'App.dpr') --db $db --rebuild 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $c = LintAll
 Check 'C1 names the defaulted root in one line' ($c -match ('ownRoots = ' + [regex]::Escape($app) + ' \(DEFAULT')) ''
 Check 'C2 and not the loud form (nothing was skipped)' (-not ($c -match 'ownRoots DEFAULTED')) ''

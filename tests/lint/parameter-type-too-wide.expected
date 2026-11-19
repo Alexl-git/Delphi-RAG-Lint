@@ -1,0 +1,2 @@
+# store-less lint: the project rule cannot run without an index (positive control: run_v152_PTW.ps1 A1)
+!parameter-type-too-wide

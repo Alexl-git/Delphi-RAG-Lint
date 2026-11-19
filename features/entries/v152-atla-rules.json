@@ -1,0 +1,29 @@
+{
+  "id": "v152-atla-rules",
+  "title": "Reserved words as names, implicit package imports, contract-unit globs",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.52.0-alpha",
+  "summary": "reserved-word-identifier and implicit-package-import rules; contractUnits globs in drag-lint.json for contract-unit-declares-class",
+  "intro": "Read this to see what the two rules new in 1.52 report, how contract units can be named by glob, and why noreturn-returns is not in 1.52.",
+  "wikiPage": "v152-atla-rules",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint",
+      "example": "drag-lint lint <unit.pas> --rule reserved-word-identifier"
+    },
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "example": "drag-lint lint-all --db <package.sqlite> --project <Package.dproj> --rule implicit-package-import"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-17",
+    "by": "ENGINE",
+    "build": "1.52.0-alpha"
+  }
+}

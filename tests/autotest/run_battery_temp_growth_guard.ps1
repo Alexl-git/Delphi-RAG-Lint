@@ -10,7 +10,9 @@
     -Snapshot <file>     write the names of the watched dirs to <file>   (run_battery.ps1 calls this at start)
     -Compare  <file>     list watched dirs not in <file>; exit 1 on any (run_battery.ps1 calls this at the end)
   Watched: C:\TEMP and %TEMP% children named drag-lint-*, draglint_*, draglint-*, drag_lint_*, reparse_guard_*,
-  excluding drag-lint-hermetic (a bounded cache: Get-HermeticEngine keeps the newest 3) and drag-lint-cache*.
+  excluding drag-lint-hermetic (a bounded cache: Get-HermeticEngine keeps the newest 3), drag-lint-cache*, and the
+  build caches draglint_firedacload / draglint_glyphdecode (lib\FireDacLoad.ps1, lib\GlyphDecodeCheck.ps1: one helper
+  exe per source hash, reused across runs on purpose; v152 DDFIX5).
   Another session writing to C:\TEMP during the run counts as growth; the message names the dirs so it can be judged.
 #>
 [CmdletBinding()]
@@ -21,7 +23,7 @@ function Get-Watched {
   @(foreach ($r in $Roots) {
       if (Test-Path -LiteralPath $r) {
         Get-ChildItem -LiteralPath $r -Directory -ErrorAction SilentlyContinue |
-          Where-Object { $_.Name -match '^(drag-lint-|draglint_|draglint-|drag_lint_|reparse_guard_)' -and $_.Name -notmatch '^drag-lint-(hermetic|cache)' } |
+          Where-Object { $_.Name -match '^(drag-lint-|draglint_|draglint-|drag_lint_|reparse_guard_)' -and $_.Name -notmatch '^(drag-lint-(hermetic|cache)|draglint_(firedacload|glyphdecode)$)' } |
           ForEach-Object { $_.FullName }
       }
     }) | Sort-Object -Unique

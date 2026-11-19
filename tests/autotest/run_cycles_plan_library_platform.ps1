@@ -16,10 +16,13 @@
 #
 # Usage: pwsh -File run_cycles_plan_library_platform.ps1 [-Exe <drag-lint.exe>] [-WorkDir <dir>] [-KeepWorkDir]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-cycles-plan-libplat-$PID",
   [switch]$KeepWorkDir
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 $Exe = (Resolve-Path $Exe).Path
@@ -46,7 +49,7 @@ function Invoke-Plan([string]$Dproj, [string]$Db, [string[]]$Extra) {
   $out = Join-Path $WorkDir ('out-' + [guid]::NewGuid().ToString('N') + '.txt')
   $a = @('cycles', '--db', $Db, '--project', $Dproj) + $Extra
   $p = Start-Process -FilePath $EngExe -ArgumentList $a -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
-    -RedirectStandardOutput $out -RedirectStandardError $err
+    -RedirectStandardOutput $out -RedirectStandardError $err; $null = $p.Handle
   return @{ Exit = $p.ExitCode; Err = [IO.File]::ReadAllText($err); Out = [IO.File]::ReadAllText($out) }
 }
 
@@ -71,8 +74,8 @@ try {
   $p32 = New-Project 'w32' 'Win32'
   $p64 = New-Project 'w64' 'Win64'
   $db32 = Join-Path $WorkDir 'w32.sqlite'; $db64 = Join-Path $WorkDir 'w64.sqlite'
-  & $EngExe index --project $p32 --db $db32 *> (Join-Path $WorkDir 'index-w32.log')
-  & $EngExe index --project $p64 --db $db64 *> (Join-Path $WorkDir 'index-w64.log')
+  & { $ErrorActionPreference = 'Continue'; & $EngExe index --project $p32 --db $db32 *> (Join-Path $WorkDir 'index-w32.log') }
+  & { $ErrorActionPreference = 'Continue'; & $EngExe index --project $p64 --db $db64 *> (Join-Path $WorkDir 'index-w64.log') }
   if (-not (Test-Path $db32) -or -not (Test-Path $db64)) { Write-Host 'FATAL: fixture index failed' -ForegroundColor Red; exit 2 }
   $L32 = Join-Path $libs 'library-Win32.sqlite'; $L64 = Join-Path $libs 'library-Win64.sqlite'
   Copy-Item $db32 $L32; Copy-Item $db32 $L64

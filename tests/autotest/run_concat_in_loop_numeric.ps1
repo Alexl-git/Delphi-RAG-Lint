@@ -25,8 +25,11 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe"
+  [string]$Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -168,7 +171,7 @@ end.
 '@
 $lines = Get-Content -LiteralPath $unit
 function LineOf([string]$mark) { for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -cmatch ('\{ ' + [regex]::Escape($mark) + ' \}')) { return $i + 1 } }; return -1 }
-$out = (& $Exe lint $unit --rule concat-in-loop 2>$null) -join "`n"
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $unit --rule concat-in-loop 2>$null }) -join "`n"
 Write-Host $out -ForegroundColor DarkGray
 $hits = @($out -split "`n" | Where-Object { $_ -match 'concat-in-loop' })
 function Fires([string]$mark) { $l = LineOf $mark; return (@($hits | Where-Object { $_ -match ":${l}:" }).Count -ge 1) }

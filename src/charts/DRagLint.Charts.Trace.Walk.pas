@@ -757,7 +757,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Charts.Trace.Walk.TRoutineWalk.AddBranchConds (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.AddExceptConds (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.ReadGuards (DRagLint.Charts.Trace.Walk.pas)</para>
     /// <para>Calls: DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Sql.SortUniqueNames, DRagLint.Charts.Trace.Shim.LiteralSourceText, DRagLint.Charts.Trace.Shim.TraceAnchorText, DRagLint.Charts.Trace.Walk.Filter, DRagLint.Charts.Trace.Walk.IsCall, DRagLint.Charts.Trace.Walk.IsEnum, DRagLint.Charts.Trace.Walk.IsKind, DRagLint.Charts.Trace.Walk.IsOp (+7 more)</para>
-    /// <para>Complexity: 29 (cyclomatic, outer body), 72 lines (full implementation)</para>
+    /// <para>Complexity: 34 (cyclomatic, outer body), 72 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
     /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
     /// <seealso cref="DRagLint.Charts.Sql.SortUniqueNames"/>
@@ -776,6 +776,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Charts.Trace.Walk.TRoutineWalk.ClassifyCrossing (DRagLint.Charts.Trace.Walk.pas)</para>
     /// <para>Calls: DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Trace.Shim.ConcatAssignExpr, DRagLint.Charts.Trace.Walk.IsCall, DRagLint.Charts.Trace.Walk.PayloadLits, DRagLint.Charts.Trace.Walk.SortedUniqueInts, DRagLint.Charts.Trace.Walk.StreamFormat, DRagLint.Charts.Trace.Walk.TTraceWalker.FormatTraceLiteral, DRagLint.Charts.Trace.Walk.TTraceWalker.TraceSource, Format, SameText</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 35 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
     /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
     /// <seealso cref="DRagLint.Charts.Trace.Shim.ConcatAssignExpr"/>
@@ -836,7 +837,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Charts.Trace.Walk.TRoutineWalk.AddExceptConds (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.ReadOmits (DRagLint.Charts.Trace.Walk.pas)</para>
     /// <para>Calls: Default, DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Trace.Walk.Filter, DRagLint.Charts.Trace.Walk.HandlerRefs, DRagLint.Charts.Trace.Walk.IsCall, DRagLint.Charts.Trace.Walk.IsEnum, DRagLint.Charts.Trace.Walk.IsOp, DRagLint.Charts.Trace.Walk.IsPipe, DRagLint.Charts.Trace.Walk.TTraceContext.Clone (+7 more)</para>
-    /// <para>Complexity: 23 (cyclomatic, outer body), 68 lines (full implementation)</para>
+    /// <para>Complexity: 24 (cyclomatic, outer body), 68 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
     /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
     /// <seealso cref="DRagLint.Charts.Trace.Walk.Filter"/>
@@ -919,7 +920,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Charts.Trace.Walk.TTraceWalker.DatabaseSteps (DRagLint.Charts.Trace.Walk.pas)</para>
     /// <para>Calls: DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Sql.TSqlTableSet.Table, DRagLint.Charts.Trace.FormA.NewTraceStep, DRagLint.Charts.Trace.Shim.AssignExprAt, DRagLint.Charts.Trace.Shim.TraceAnchorText, DRagLint.Charts.Trace.Shim.TraceStopText, DRagLint.Charts.Trace.Walk.IsKind, DRagLint.Charts.Trace.Walk.JoinLast, DRagLint.Charts.Trace.Walk.OwnersOf (+7 more)</para>
-    /// <para>Complexity: 24 (cyclomatic, outer body), 108 lines (full implementation)</para>
+    /// <para>Complexity: 31 (cyclomatic, outer body), 108 lines (full implementation)</para>
     /// <para>Mutates: pAfter (out)</para>
     /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
     /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
@@ -938,13 +939,13 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Charts.Trace.Walk.TTraceWalker.DatabaseSteps (DRagLint.Charts.Trace.Walk.pas)</para>
-    /// <para>Calls: CompareValue, DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Sql.TSqlTableSet.Table, DRagLint.Charts.Trace.FormA.NewTraceStep, DRagLint.Charts.Trace.Shim.TraceAnchorText, DRagLint.Charts.Trace.Shim.TraceStopText, DRagLint.Charts.Trace.Walk.Filter, DRagLint.Charts.Trace.Walk.FindLoader, DRagLint.Charts.Trace.Walk.InNames (+9 more)</para>
-    /// <para>Complexity: 23 (cyclomatic, outer body), 139 lines (full implementation)</para>
+    /// <para>Calls: CompareValue, DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.PsSort.TPsSort.Sort, DRagLint.Charts.Sql.TSqlTableSet.Table, DRagLint.Charts.Trace.FormA.NewTraceStep, DRagLint.Charts.Trace.Shim.TraceAnchorText, DRagLint.Charts.Trace.Shim.TraceStopText, DRagLint.Charts.Trace.Walk.Filter, DRagLint.Charts.Trace.Walk.FindLoader (+10 more)</para>
+    /// <para>Complexity: 35 (cyclomatic, outer body), 139 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
     /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.Sort"/>
     /// <seealso cref="DRagLint.Charts.Sql.TSqlTableSet.Table"/>
     /// <seealso cref="DRagLint.Charts.Trace.FormA.NewTraceStep"/>
-    /// <seealso cref="DRagLint.Charts.Trace.Shim.TraceAnchorText"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function WriteStatementStop(const pServerItems: TArray<TTraceItem>; pCtx: TTraceContext): TTraceItem;
@@ -1094,6 +1095,7 @@ type
     /// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.ReadThroughRoute (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.WriteThroughCrossing (DRagLint.Charts.Q.RoundTrip.pas)</para>
     /// <para>Calls: Default, DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Charts.Index.TChartsIndex.SqlText, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Sql.SortUniqueNames, DRagLint.Charts.Text.ShortName, DRagLint.Charts.Text.UnitNameOf, DRagLint.Charts.Trace.FormA.NewTraceStep, DRagLint.Charts.Trace.Shim.TraceAnchorText, DRagLint.Charts.Trace.Shim.TraceStopText (+10 more)</para>
     /// <para>Returns: TServerHandling.Create</para>
+    /// <para>Complexity: 11 (cyclomatic, outer body), 96 lines (full implementation)</para>
     /// <para>Catches: Exception (re-raise)</para>
     /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
     /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlText"/>

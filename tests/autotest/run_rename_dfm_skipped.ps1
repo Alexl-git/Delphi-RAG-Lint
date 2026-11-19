@@ -25,9 +25,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-rename-dfm-skipped-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $env:DRAGLINT_RENAME_TEST_UNGATED = '1' # lane 144: these fixtures do not compile; run_rename_precise.ps1 proves the gate
@@ -112,7 +115,7 @@ Write-Ascii (Join-Path $src 'Unit5.pas') (Form-Unit 'Unit5' 'TForm5' 'TComponent
 Write-BinaryDfm (Join-Path $src 'Unit5.dfm') 'TForm5' 'Form5' 'Button1Click'
 $db = Join-Path $dir 'idx.sqlite'
 Push-Location $dir
-try { & $Exe index $src --db $db 2>&1 | Out-Null } finally { Pop-Location }
+try { & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null } finally { Pop-Location }
 Check 'index exits 0' ($LASTEXITCODE -eq 0)
 # Unit4.dfm appears after indexing: on disk, not in the index.
 Write-Ascii (Join-Path $src 'Unit4.dfm') (Text-Dfm 'Form4' 'TForm4' 'inherited')
@@ -122,7 +125,7 @@ function Run-Rename([string[]]$RenameArgs) {
   Push-Location $dir
   # 150 INT4: --library-db none -- the fixture has no library, and 150 CQ (d48cf1bdc1) prints a stderr
   # 'drag-lint: NOTE: no --library-db given ...' that the case-insensitive note filter below would count.
-  try { $o = & $Exe rename @RenameArgs --db $db --library-db none 2>$errFile } finally { Pop-Location }
+  try { $o = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe rename @RenameArgs --db $db --library-db none 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } } finally { Pop-Location }
   $code = $LASTEXITCODE
   $err = if (Test-Path $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
   [pscustomobject]@{ Exit = $code; Out = ($o -join "`n"); Err = $err }
@@ -141,7 +144,7 @@ foreach ($m in @(
   Check "$($m.N) CONTROL no note for Unit6.dfm (indexed text, rewritten)" (@($n | Where-Object { $_ -match 'Unit6\.dfm' }).Count -eq 0) ($n -join ' | ')
   Check "$($m.N) CONTROL no note for Unit5.dfm (unrelated form)"          (@($n | Where-Object { $_ -match 'Unit5\.dfm' }).Count -eq 0) ($n -join ' | ')
   if ($m.N -eq '--json') {
-    $ed = $null; try { $ed = @($r.Out | ConvertFrom-Json) } catch { }
+    $ed = $null; try { $ed = @(($r.Out | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { }
     Check '--json stdout is still a bare edit array'      ($null -ne $ed -and $ed.Count -gt 0) $r.Out
     Check '--json rewrites Unit6.dfm (indexed descendant)' (@($ed | Where-Object { $_.file -like '*Unit6.dfm' }).Count -eq 1)
   }

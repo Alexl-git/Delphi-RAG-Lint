@@ -29,7 +29,13 @@
   Run from a neutral cwd, pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$detail=''){ Write-Host ("[{0}] {1}{2}" -f (@('FAIL','PASS')[[int]$ok]),$n,$(if($detail){" -- $detail"}else{''})) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
@@ -208,18 +214,18 @@ function UnusedAt([string]$Out, [string]$File) { $Out -match "(?im)$File[:\w\\/.
 
 Push-Location C:\TEMP
 try {
-  & $exePath index --all --config $cfg --only SecA --jobs 1 2>&1 | Out-Null
-  & $exePath index --all --config $cfg --only SecB --jobs 1 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only SecA --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only SecB --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check '0. sanity: both DBs exist' ((Test-Path $dbA) -and (Test-Path $dbB))
 
-  $pre = (& $exePath lint-all --db $dbB --rule duplicate-code 2>&1 | Out-String)
+  $pre = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbB --rule duplicate-code 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $m = [regex]::Match($pre, '(?im)thing\.pas:(\d+):\d+\s+\[\w+\]\s+duplicate-code')
   Check '0b. sanity: duplicate-code fires on thing.pas under B (no marker yet)' $m.Success
-  if ($m.Success) { & $exePath allow (Join-Path $scratch 'shared\thing.pas') --fix-line $m.Groups[1].Value --fix-rule duplicate-code --apply 2>&1 | Out-Null }
+  if ($m.Success) { & { $ErrorActionPreference = 'Continue'; & $exePath allow (Join-Path $scratch 'shared\thing.pas') --fix-line $m.Groups[1].Value --fix-rule duplicate-code --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null }
   Check '0c. sanity: a dl:ok duplicate-code marker was written' ((Get-Content (Join-Path $scratch 'shared\thing.pas') -Raw) -match 'dl:ok duplicate-code@')
 
-  $oB = (& $exePath lint-all --db $dbB 2>&1 | Out-String)
-  $oA = (& $exePath lint-all --db $dbA 2>&1 | Out-String)
+  $oB = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbB 2>&1 | ForEach-Object { "$_" } } | Out-String)
+  $oA = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbA 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Write-Host (($oA -split "`n" | Where-Object { $_ -match 'review-marker' }) -join "`n") -ForegroundColor DarkGray
   Check '1. sanity: under B the duplicate-code finding is suppressed (marker live, not reported unused)' (-not (UnusedAt $oB 'thing\.pas'))
   Check '2. FIX: under A the shared-unit marker is NOT reported unused' (-not (UnusedAt $oA 'thing\.pas'))
@@ -228,3 +234,4 @@ try {
 } finally { Pop-Location }
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
 } catch { Write-Host "ERROR: $_" -ForegroundColor Red; exit 2 }
+} finally { Remove-WorkDir $scratch -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

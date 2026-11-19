@@ -19,9 +19,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-lsp-private-outdir-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -47,8 +50,8 @@ $looseFile = "$WorkDir\loose\LooseUnit.pas"
 WriteAnsi $looseFile $looseText
 $DefLib = "$WorkDir\libhome\dctx-win64.sqlite"
 $projDb = "$WorkDir\proj.sqlite"
-& $Exe index "$WorkDir\libsrc"  --db $DefLib 2>&1 | Out-Null
-& $Exe index "$WorkDir\projsrc" --db $projDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\libsrc"  --db $DefLib 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\projsrc" --db $projDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'built fixture indexes' ((Test-Path $DefLib) -and (Test-Path $projDb))
 $lines = $looseText -split "`r?`n"
 $ln  = [Array]::FindIndex($lines, [Predicate[string]]{ param($x) $x -like '*LibraryOnlyRoutine(2);*' })
@@ -79,12 +82,12 @@ function Run-Case([string]$Tag, [string]$Engine) {
   $inF = "$WorkDir\$Tag-in.txt"; $outF = "$WorkDir\$Tag-out.txt"; $errF = "$WorkDir\$Tag-err.txt"
   [IO.File]::WriteAllText($inF, $msgs, (New-Object Text.ASCIIEncoding))
   $p = Start-Process $Engine -ArgumentList @('lsp', '--db', $projDb) -WorkingDirectory $WorkDir -RedirectStandardInput $inF `
-    -RedirectStandardOutput $outF -RedirectStandardError $errF -NoNewWindow -PassThru
+    -RedirectStandardOutput $outF -RedirectStandardError $errF -NoNewWindow -PassThru; $null = $p.Handle
   if (-not $p.WaitForExit(120000)) { try { $p.Kill() } catch { }; throw "lsp $Tag timed out" }
   $raw = [IO.File]::ReadAllText($outF)
   $hover = ''; $notice = ''
   foreach ($m in [regex]::Matches($raw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $m.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $m.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 2 -and $null -ne $o.result) { $hover = [string]$o.result.contents.value }
     if ($o.method -eq 'draglint/context') { $notice += [string]$o.params.notice + ' ' }
   }

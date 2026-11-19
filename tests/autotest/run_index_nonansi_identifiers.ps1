@@ -17,7 +17,13 @@
   Run from a NEUTRAL CWD. pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -52,11 +58,11 @@ function Utf8Hex([string]$s) { return ([BitConverter]::ToString([Text.Encoding]:
 
 Push-Location $env:TEMP
 try {
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
   $q = "select name, hex(name), qualified_name, hex(qualified_name) from symbols"
-  $j = (& $exePath sql --db $db --query $q --json 2>$null) -join "`n" | ConvertFrom-Json
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
   $byHex = @{}
   foreach ($row in $j.rows) { $byHex[[string]$row[3]] = $row }   # keyed by hex(qualified_name); rows are POSITIONAL arrays
 
@@ -70,9 +76,9 @@ try {
   # non-ANSI name PRINTS as '?' even when the lookup is right (a separate,
   # output-side issue -- see the INBOX note).
   function FoundBy($Name) {
-    $ids = (& $exePath sql --db $db --query "select id from symbols where hex(name) = '$(Utf8Hex $Name)'" --json 2>$null) -join "`n" | ConvertFrom-Json
+    $ids = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "select id from symbols where hex(name) = '$(Utf8Hex $Name)'" --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
     $id  = if ($ids.rows.Count -ge 1) { [long]$ids.rows[0][0] } else { -1 }
-    $r = @((& $exePath query --name $Name --db $db --json 2>$null) -join "`n" | ConvertFrom-Json)
+    $r = @(((& { $ErrorActionPreference = 'Continue'; & $exePath query --name $Name --db $db --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
     $hit = @($r | Where-Object { ([long]$_.id -eq $id) -and ($_.match_kind -eq 'exact') })
     Check "query --name finds $(Utf8Hex $Name) by its real spelling (exact, id $id)" (($id -ge 0) -and ($hit.Count -eq 1)) "rows=$($r.Count)"
   }
@@ -90,8 +96,9 @@ try {
   StoredAs $bomCls "uEncBom.$bomCls"
   FoundBy  $bomCls
 
-  $qm = (& $exePath sql --db $db --query "select count(*) from symbols where instr(name, '?') > 0 or instr(qualified_name, '?') > 0" --json 2>$null) -join "`n" | ConvertFrom-Json
+  $qm = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query "select count(*) from symbols where instr(name, '?') > 0 or instr(qualified_name, '?') > 0" --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
   Check 'no stored symbol name holds a literal ?' ([long]$qm.rows[0][0] -eq 0) "count=$($qm.rows[0][0])"
 } finally { Pop-Location }
 
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally { Remove-WorkDir $work -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

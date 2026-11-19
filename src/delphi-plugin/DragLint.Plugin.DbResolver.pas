@@ -121,8 +121,10 @@ function ManifestReadDbs(const AActiveProjectFile, AEditorFile: string): TArray<
 /// else drag-lint.json in the BPL folder (the only answer before phase 3).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.DbResolver.ManifestLibraryDbFor (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.DbResolver.TryLoadManifest (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.Diagnose.DiagConfiguration (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Editor.InvokeReindexProject (DragLint.Plugin.Editor.pas)</para>
-/// <para>Calls: ExtractFilePath, GetModuleName</para>
+/// <para>Called from: DragLint.Plugin.Diagnose.DiagConfiguration (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Editor.InvokeReindexProject (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.ManifestPaths.PluginManifestIn, ExtractFilePath, GetModuleName</para>
+/// <para>Returns: PluginManifestIn(ExtractFilePath(GetModuleName(HInstance))).Path</para>
+/// <seealso cref="DragLint.Plugin.ManifestPaths.PluginManifestIn"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ManifestPathBesideEngine: string;
@@ -198,7 +200,7 @@ function GetActiveEditorFilePath: string;
 /// <returns><!-- drag-lint:auto -->string -- Observed: ''; ActiveProj.FileName.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.DbResolver.ActiveProjectWriteDb (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.DbResolver.ResolveActiveIndexDbs (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.DbResolver.ResolverDiagnostic (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.Diagnose.DiagIndexes (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.FanOut.BuildContext (DragLint.Plugin.FanOut.pas) (+3 more)</para>
+/// <para>Called from: DragLint.Plugin.ConvertLaunch.HandOff (DragLint.Plugin.ConvertLaunch.pas), DragLint.Plugin.ConvertLaunch.InvokeOpenConversionEditor (DragLint.Plugin.ConvertLaunch.pas), DragLint.Plugin.DbResolver.ActiveProjectWriteDb (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.DbResolver.ResolveActiveIndexDbs (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.DbResolver.ResolverDiagnostic (DragLint.Plugin.DbResolver.pas) (+5 more)</para>
 /// <para>Calls: Supports</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <!-- drag-lint:auto END -->
@@ -238,6 +240,7 @@ function ActiveProjectWriteDb(out AProjectFile, AWhy: string): string;
 /// ResolveDbPath(ASettings.DbPathTemplate, ProjDir, ProjName).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.ConvertLaunch.HandOff (DragLint.Plugin.ConvertLaunch.pas), DragLint.Plugin.ConvertLaunch.InvokeOpenConversionEditor (DragLint.Plugin.ConvertLaunch.pas)</para>
 /// <para>Calls: ChangeFileExt, DragLint.Plugin.Settings.ResolveDbPath, ExtractFileName, ExtractFilePath</para>
 /// <seealso cref="DragLint.Plugin.Settings.ResolveDbPath"/>
 /// <!-- drag-lint:auto END -->
@@ -254,7 +257,7 @@ function PrimaryDbForProject(const AProjPath: string; const ASettings: TDragLint
 /// currently-active editor file, in priority order. Empty paths and non-existent files are
 /// filtered. Duplicates removed.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.Diagnose.DiagConnections (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.DiagIndexes (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.RefreshEngineInfo (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeFindUsages (DragLint.Plugin.Editor.pas) (+10 more)</para>
+/// <para>Called from: DragLint.Plugin.Cmd.FindUsagesScope.FindUsagesIn (DragLint.Plugin.Cmd.FindUsagesScope.pas), DragLint.Plugin.Diagnose.DiagConnections (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.DiagIndexes (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.RefreshEngineInfo (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas) (+11 more)</para>
 /// <para>Calls: DRagLint.Plugin.DbProbe.PickProjectDb, DragLint.Plugin.DbResolver.AddUnique, DragLint.Plugin.DbResolver.DiscoverSiblings, DragLint.Plugin.DbResolver.FindAncestorDb, DragLint.Plugin.DbResolver.FindOwningProject, DragLint.Plugin.DbResolver.GetActiveEditorFilePath, DragLint.Plugin.DbResolver.GetActiveProjectFilePath, DragLint.Plugin.DbResolver.GetPlatformAwareLibraryDbPath, DragLint.Plugin.DbResolver.ManifestReadDbs, DragLint.Plugin.Telemetry.DLT, ExtractFileName, ExtractFilePath, Format, Pos</para>
 /// <para>Complexity: 19 (cyclomatic, outer body), 138 lines (full implementation)</para>
 /// <para>Touches: file system</para>
@@ -355,7 +358,7 @@ function GetLibraryDbPathEx(out AReason: string): string;
 /// than copied a third time -- Editor.pas already carries its own
 /// GetActiveProjectPlatform. Not thread-safe; call from the main thread only.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.DbResolver.ManifestLibraryDbFor (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.Diagnose.DiagIndexes (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Editor.InvokeCircularUsesFix (DragLint.Plugin.Editor.pas), DragLint.Plugin.FanOut.BuildContext (DragLint.Plugin.FanOut.pas), DragLint.Plugin.SaveNotifier.QueueReindexJob (DragLint.Plugin.SaveNotifier.pas) (+4 more)</para>
+/// <para>Called from: DragLint.Plugin.ConvertLaunch.HandOff (DragLint.Plugin.ConvertLaunch.pas), DragLint.Plugin.ConvertLaunch.InvokeOpenConversionEditor (DragLint.Plugin.ConvertLaunch.pas), DragLint.Plugin.DbResolver.ManifestLibraryDbFor (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.Diagnose.DiagIndexes (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Editor.InvokeCircularUsesFix (DragLint.Plugin.Editor.pas) (+6 more)</para>
 /// <para>Calls: Supports</para>
 /// <para>Returns: ''; P</para>
 /// <para>Catches: Exception (empty)</para>

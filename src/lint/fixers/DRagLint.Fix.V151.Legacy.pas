@@ -15,6 +15,19 @@ unit DRagLint.Fix.V151.Legacy;
 
 interface
 
+uses
+  DRagLint.Core.Interfaces;
+
+/// <summary>Hands the platform library store to the with-statement fixer (FixWith), for ancestors the project index does not hold (TObject).</summary>
+/// <param name="pLib">The library store; nil = a class target whose ancestor is outside the project is declined (unresolved-ancestor).</param>
+/// <remarks>
+/// Set by the fix-all run (lint --fix without --fix-rule) around BuildAutofixEdits and cleared after. Not thread-safe; call from the run thread only. The caller keeps ownership of the store.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+procedure SetFixWithLibrary(const pLib: ISymbolStore);
+
 implementation
 
 uses
@@ -23,7 +36,6 @@ uses
   , System.RegularExpressions
   , TreeSitter
   , DRagLint.Core.Model
-  , DRagLint.Core.Interfaces
   , DRagLint.Refactor.TextEdit
   , DRagLint.Refactor.Rename
   , DRagLint.Refactor.RenameProof
@@ -31,6 +43,15 @@ uses
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Lint.Autofix
   ;
+
+var
+  { the library store of the current fix-all run (SetFixWithLibrary); nil = none }
+  GFixWithLib: ISymbolStore = nil;
+
+procedure SetFixWithLibrary(const pLib: ISymbolStore);
+begin
+  GFixWithLib:= pLib;
+end;
 
 const
   { the last 7-bit character: the diff below works on 7-bit text only }
@@ -87,7 +108,7 @@ begin
   Result:= 0;
   PF:= TAstParseCache.Get(AFinding.FilePath);
   if PF.Tree = nil then Exit;
-  N:= NodeAtPoint(PF.Tree.RootNode, AFinding.StartLine - 1, AFinding.StartCol - 1);
+  N:= NodeAtPoint(PF.Tree.RootNode, AFinding.StartLine - 1, TAstParseCache.ByteCol(AFinding.FilePath, AFinding.StartLine, AFinding.StartCol) - 1); { 1.52 BK-COLS2: the finding column counts characters, the tree bytes }
   while (not N.IsNull) and (N.NodeType <> 'with') do N:= N.Parent;
   if not N.IsNull then Result:= Integer(N.StartPoint.Row) + 1;
 end;
@@ -157,7 +178,7 @@ begin
   if (Store = nil) or (ALines = nil) then Exit;
   L:= WithLineOf(AFinding);
   if L = 0 then Exit;
-  Plan:= UnwithPlanFile(Store, nil, AFinding.FilePath, L);
+  Plan:= UnwithPlanFile(Store, GFixWithLib, AFinding.FilePath, L);
   if (Length(Plan.Sites) <> 1) or (Plan.Sites[0].Refusal <> '') or (Length(Plan.NewBytes) = 0) then Exit;
   Result:= DiffEdit(AFinding.FilePath, ALines, Plan.NewBytes);
 end;

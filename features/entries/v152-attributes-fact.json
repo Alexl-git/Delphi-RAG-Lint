@@ -1,0 +1,25 @@
+{
+  "id": "v152-attributes-fact",
+  "title": "Custom attributes in the index",
+  "group": "indexing",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.51.1-alpha",
+  "summary": "Every custom attribute is stored with its argument text and the symbol it decorates (table attributes), library indexes too",
+  "intro": "Read this when a rule or a query needs to know which declarations carry an RTTI attribute and with which arguments. Each [..] item is one row: attr_name, arg_text, line / col and symbol_id of the decorated class, field, routine, param or property; query it with drag-lint sql.",
+  "wikiPage": "Index-DB-Schema",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "sql",
+      "example": "drag-lint sql --db <file.sqlite> --query \"SELECT a.attr_name, a.arg_text, s.qualified_name FROM attributes a JOIN symbols s ON s.id = a.symbol_id\""
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-18",
+    "by": "ENGINE",
+    "build": "1.51.1-alpha",
+    "surfaceHash": "b5f80ced846660c364a5479dac4f078746b2addadc27f3fe64fdfc3338ac9bd4"
+  }
+}

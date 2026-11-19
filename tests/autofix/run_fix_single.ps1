@@ -14,7 +14,10 @@
   Run from a NEUTRAL CWD (C:\TEMP) so no drag-lint-lint.json is picked up.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -50,10 +53,10 @@ function Invoke-FixChecks($form, $tag) {
   Copy-Item $fixture $target -Force
   if (Test-Path $bak) { Remove-Item $bak -Force }
   $before = [IO.File]::ReadAllText($target)
-  $pvArgs = (TargetArgs $form) + @('--fix','--fix-line',$L,'--fix-rule',$Rule,'--json')
-  $raw = & $exePath @pvArgs 2>$null | Out-String
+  $pvArgs = (@(TargetArgs $form)) + @('--fix','--fix-line',$L,'--fix-rule',$Rule,'--json')
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath @pvArgs 2>$null } | Out-String
   $arr = $null
-  try { $arr = ($raw | ConvertFrom-Json) } catch { $arr = $null }
+  try { $arr = ($raw | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $arr = $null }
   # Normalize to array
   if ($null -ne $arr -and $arr -isnot [System.Array]) { $arr = @($arr) }
 
@@ -74,10 +77,10 @@ function Invoke-FixChecks($form, $tag) {
   # --- 2) APPLY (--apply --json): parens stripped, applied=true, .bak exists ---
   Copy-Item $fixture $target -Force
   if (Test-Path $bak) { Remove-Item $bak -Force }
-  $apArgs = (TargetArgs $form) + @('--fix','--fix-line',$L,'--fix-rule',$Rule,'--json','--apply')
-  $raw2 = & $exePath @apArgs 2>$null | Out-String
+  $apArgs = (@(TargetArgs $form)) + @('--fix','--fix-line',$L,'--fix-rule',$Rule,'--json','--apply')
+  $raw2 = & { $ErrorActionPreference = 'Continue'; & $exePath @apArgs 2>$null } | Out-String
   $arr2 = $null
-  try { $arr2 = ($raw2 | ConvertFrom-Json) } catch { $arr2 = $null }
+  try { $arr2 = ($raw2 | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $arr2 = $null }
   if ($null -ne $arr2 -and $arr2 -isnot [System.Array]) { $arr2 = @($arr2) }
   $t2 = $null
   if ($null -ne $arr2) { $t2 = $arr2 | Where-Object { $_.rule -eq $Rule } | Select-Object -First 1 }

@@ -50,10 +50,27 @@ function AnalyzeLibraryDrift(const ADbPath: string; const ACurrentRoots: TArray<
 /// that the walk prunes by configuration -- reported, never counted as drift.</param>
 /// <returns>Roots with source on disk, no indexed file, and not pruned by
 /// AFilter.</returns>
-/// <remarks>B-02: without the filter, the four Win64 compiled-lib roots
+/// <exception cref="ESchemaUnreadable"><!-- drag-lint:auto exc -->via DRagLint.Storage.SQLite.TSQLiteSymbolStore.CreateReadable: :</exception>
+/// <remarks>
+/// B-02: without the filter, the four Win64 compiled-lib roots
 /// (...\Lib\RX13\Win64) read as "missing" after every full rescan, because the
 /// manifest's global exclude "Win64" prunes the walk ROOT itself, so no rescan
-/// can ever index them. Not thread-safe; call from a single thread.</remarks>
+/// can ever index them. Not thread-safe; call from a single thread.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestDrift (DRagLint.CLI.pas), DRagLint.Index.Drift.AnalyzeLibraryDrift/2 (DRagLint.Index.Drift.pas)</para>
+/// <para>Calls: DRagLint.Core.Indexer.DirPrunedByFilter, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Index.Drift.DirHasSource, DRagLint.Index.Drift.NormPath, DRagLint.Index.Drift.NormRoot, DRagLint.Storage.SQLite.TSQLiteSymbolStore.CreateReadable</para>
+/// <para>Returns: nil; Missing</para>
+/// <para>Overload 2 of 2</para>
+/// <para>Complexity: 13 (cyclomatic, outer body), 78 lines (full implementation)</para>
+/// <para>Mutates: AExcluded (out)</para>
+/// <para>Directives: overload</para>
+/// <seealso cref="DRagLint.Core.Indexer.DirPrunedByFilter"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <seealso cref="DRagLint.Index.Drift.DirHasSource"/>
+/// <seealso cref="DRagLint.Index.Drift.NormPath"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AnalyzeLibraryDrift(const ADbPath: string; const ACurrentRoots: TArray<string>; const AFilter: TWalkFilter; out AExcluded: TArray<string>): TArray<string>; overload;
 
 implementation

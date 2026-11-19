@@ -58,7 +58,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -188,7 +191,7 @@ function RunIndex([string]$Db, [string]$NoScoped, [string]$Additions) {
   Remove-Item Env:\DRAGLINT_SCOPED_RESOLVE_ADDITIONS -ErrorAction SilentlyContinue
   if ($NoScoped)   { $env:DRAGLINT_NO_SCOPED_RESOLVE        = $NoScoped  }
   if ($Additions)  { $env:DRAGLINT_SCOPED_RESOLVE_ADDITIONS = $Additions }
-  try   { return (& $exePath index $src --db $Db 2>&1 | Out-String) }
+  try   { return (& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-String) }
   finally {
     Remove-Item Env:\DRAGLINT_NO_SCOPED_RESOLVE        -ErrorAction SilentlyContinue
     Remove-Item Env:\DRAGLINT_SCOPED_RESOLVE_ADDITIONS -ErrorAction SilentlyContinue
@@ -198,7 +201,7 @@ function RunIndex([string]$Db, [string]$NoScoped, [string]$Additions) {
 Push-Location C:\TEMP
 try {
   # 1. index WITHOUT uNew -- X.Ping cannot resolve yet
-  & $exePath index $src --db $dbBase 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $dbBase 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Copy-Item $dbBase $dbWhole      -Force
   Copy-Item $dbBase $dbDefault    -Force
   Copy-Item $dbBase $dbPermissive -Force
@@ -242,10 +245,10 @@ end.
   Check 'OFF SWITCH: and it declines on the TYPE-NAME gate, not something else' `
         ($outOff -match 'changed the set of declared type names') $outOff
 
-  $dumpW = & python $pyf $dbWhole      2>&1 | Out-String
-  $dumpX = & python $pyf $dbDefault    2>&1 | Out-String
-  $dumpP = & python $pyf $dbPermissive 2>&1 | Out-String
-  $dumpO = & python $pyf $dbOff        2>&1 | Out-String
+  $dumpW = & { $ErrorActionPreference = 'Continue'; & python $pyf $dbWhole      2>&1 | ForEach-Object { "$_" } } | Out-String
+  $dumpX = & { $ErrorActionPreference = 'Continue'; & python $pyf $dbDefault    2>&1 | ForEach-Object { "$_" } } | Out-String
+  $dumpP = & { $ErrorActionPreference = 'Continue'; & python $pyf $dbPermissive 2>&1 | ForEach-Object { "$_" } } | Out-String
+  $dumpO = & { $ErrorActionPreference = 'Continue'; & python $pyf $dbOff        2>&1 | ForEach-Object { "$_" } } | Out-String
 
   # THE HAZARD MUST EXIST BEFORE IT CAN BE COMPARED. Without this, a fixture
   # that failed to build the inherited-call shape passes vacuously.

@@ -23,7 +23,10 @@
   Usage: pwsh -File tests\autodoc\run_doc_drift_fix_overloads.ps1 [-Exe <path>]
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'
@@ -49,10 +52,10 @@ function Write-Ascii([string]$Path, [string]$Text) {
   [System.IO.File]::WriteAllText($Path, $n, [System.Text.Encoding]::ASCII)
 }
 function Get-Findings {
-  $raw = (& $Exe lint-all --db $Db --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --json 2>$null }) -join "`n"
   $a = $raw.IndexOf('['); $b = $raw.LastIndexOf(']')
   if ($a -lt 0 -or $b -le $a) { return ,@() }
-  return ,@(ConvertFrom-Json $raw.Substring($a, $b - $a + 1))
+  return ,@((ConvertFrom-Json $raw.Substring($a, $b - $a + 1) | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 # Every line that is not a /// doc line, in order -- the invariant under test.
 function CodeLines { @([IO.File]::ReadAllLines($Pas) | Where-Object { -not $_.TrimStart().StartsWith('///') }) }
@@ -121,10 +124,10 @@ end.
 
 Push-Location $W
 try {
-  & $Exe index $W --db $Db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $W --db $Db 2>$null } | Out-Null
 
   # ---- Part A: one managed block per overload --------------------------------
-  & $Exe document --unit $Pas --db $Db --apply --no-backup 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe document --unit $Pas --db $Db --apply --no-backup 2>$null } | Out-Null
   $d = DeclLines
   Check 'A: two Query declarations after document' ($d.Count -eq 2) "decls=$($d -join ',')"
   Check 'A: overload 1 has its own managed block' ((DocAbove $d[0]) -match 'Overload 1 of 2')
@@ -135,14 +138,15 @@ try {
   $src = $src.Replace('Result := Length(AName) + Alpha;', 'Result := Length(AName) + Gamma;')
   $src = $src.Replace('ACode := Beta;', 'ACode := Delta;')
   Write-Ascii $Pas $src
-  & $Exe index $W --db $Db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $W --db $Db 2>$null } | Out-Null
   $codeBefore = CodeLines
   $f = Get-Findings
   $drift = @($f | Where-Object { $_.rule -eq 'doc-drift' })
   Check 'B: doc-drift reports stale blocks' ($drift.Count -ge 2) ("lines=" + (($drift | ForEach-Object { $_.start_line }) -join ','))
 
   # ---- Part C: the invariant -------------------------------------------------
-  & $Exe lint-all --db $Db --fix --apply --no-backup 2>$null | Out-Null
+  # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+  & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $Db --fix --apply --no-compile-gate --no-backup 2>$null } | Out-Null
   $codeAfter = CodeLines
   $same = ($codeBefore.Count -eq $codeAfter.Count) -and (@(Compare-Object $codeBefore $codeAfter -SyncWindow 0).Count -eq 0)
   Check 'C: --fix left every non-/// line intact and in order' $same `
@@ -161,7 +165,7 @@ try {
   }
 
   # ---- Part E: repaired, not reshuffled --------------------------------------
-  & $Exe index $W --db $Db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $W --db $Db 2>$null } | Out-Null
   $f2 = Get-Findings
   $drift2 = @($f2 | Where-Object { $_.rule -eq 'doc-drift' })
   Check 'E: a second lint-all reports no doc-drift' ($drift2.Count -eq 0) ("left: " + (($drift2 | ForEach-Object { "$($_.start_line): $($_.message)" }) -join ' | '))

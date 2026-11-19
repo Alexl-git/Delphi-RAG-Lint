@@ -3,7 +3,7 @@
 
   A unit that declares a TDataModule descendant reads or writes another unit's global form
   variable. RUN 1 asks for the rule: exactly the TRIGGER-* lines, one finding per (unit, variable),
-  anchored at the first reference. RUN 2 is a plain lint-all: the rule ships OFF, so nothing.
+  anchored at the first reference. RUN 2 is a plain lint-all: the rule ships ON since 1.52 (DEFAULTS, 5b0d7fad8), so the same findings.
   RUN 3 is a scratch copy where the class stops descending from TDataModule: the same reads are now
   silent, so the triggers fire because of the module and not by accident. RUN 4 adds a one-unit
   library index: TViaLibForm's base class is only there, so TRIGGER-LIB fires ONLY with it (a form on
@@ -26,7 +26,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 function Parse-Findings([string[]]$Raw) {
   $txt = ($Raw -join "`n"); $b = $txt.IndexOf('[')
-  $out = @(); if ($b -ge 0) { try { $out = @($txt.Substring($b) | ConvertFrom-Json) } catch { $out = @() } }
+  $out = @(); if ($b -ge 0) { try { $out = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $out = @() } }
   if ($null -eq $out) { $out = @() }
   return ,@($out)
 }
@@ -36,7 +36,7 @@ function LineOf([string]$File, [string]$Marker) {
   return [int]$m[0].LineNumber
 }
 function RuleFindings([string]$Db, [string[]]$Extra) {
-  $raw = & $exePath lint-all --db $Db --format json @Extra 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $Db --format json @Extra 2>$null }
   return @((Parse-Findings $raw) | Where-Object { $_.rule -eq $Rule })
 }
 try {
@@ -44,11 +44,11 @@ try {
   [void](New-Item -ItemType Directory -Force -Path $src)
   Copy-Item (Join-Path $PSScriptRoot '*.pas') $src
   $db = Join-Path $scratch 'dmfg.sqlite'
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $mod = Join-Path $src 'uDmfModule.pas'
 
   # positive-control: datamodule-form-global
-  $hits = RuleFindings $db @('--rule', $Rule)
+  $hits = @(RuleFindings $db @('--rule', $Rule))
   $inModule = @($hits | Where-Object { $_.file_path -like '*uDmfModule.pas' })
   $lines = @($inModule | ForEach-Object { [int]$_.start_line } | Sort-Object)
   $want  = @((LineOf $mod 'TRIGGER-MAIN'), (LineOf $mod 'TRIGGER-PLAIN') | Sort-Object)
@@ -56,23 +56,24 @@ try {
   Check 'RUN 1 nothing fires outside the data module (CONTROL-NOTMODULE)' ($hits.Count -eq $inModule.Count) "$($hits.Count) total"
   Check 'RUN 1 the message counts both references of MainForm' (@($inModule | Where-Object { $_.message -match 'MainForm' -and $_.message -match '\b2 time' }).Count -eq 1) ''
 
-  $off = RuleFindings $db @()
-  Check 'RUN 2 plain lint-all: the rule ships OFF' ($off.Count -eq 0) "$($off.Count) finding(s)"
+  $on = @(RuleFindings $db @())
+  $onLines = @($on | Where-Object { $_.file_path -like '*uDmfModule.pas' } | ForEach-Object { [int]$_.start_line } | Sort-Object)
+  Check 'RUN 2 plain lint-all: the rule ships ON (1.52) and fires the RUN 1 lines' (($on.Count -eq $hits.Count) -and (($onLines -join ',') -eq ($lines -join ','))) "$($on.Count) finding(s) [$($onLines -join ',')]"
 
   $libSrc = Join-Path $scratch 'libsrc'
   [void](New-Item -ItemType Directory -Force -Path $libSrc)
   Copy-Item (Join-Path $PSScriptRoot 'lib\*.pas') $libSrc
   $libDb = Join-Path $scratch 'library-dmfg.sqlite'
-  & $exePath index $libSrc --db $libDb 2>&1 | Out-Null
-  $withLib = @((Parse-Findings (& $exePath lint-all --db $db --db $libDb --format json --rule $Rule 2>$null)) | Where-Object { $_.rule -eq $Rule } | ForEach-Object { [int]$_.start_line })
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $libSrc --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $withLib = @((Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --db $libDb --format json --rule $Rule 2>$null })) | Where-Object { $_.rule -eq $Rule } | ForEach-Object { [int]$_.start_line })
   $libLine = LineOf $mod 'TRIGGER-LIB'
   Check 'RUN 4 with the library: the form on a library base class fires' ($withLib -contains $libLine) "got [$($withLib -join ',')] want $libLine"
   Check 'RUN 1 without the library: that form is unknown and silent' ($lines -notcontains $libLine) ''
 
   $t = [IO.File]::ReadAllText($mod).Replace('class(TDataModule)', 'class(TObject)')
   [IO.File]::WriteAllText($mod, $t, [Text.Encoding]::ASCII)
-  & $exePath index $src --db $db 2>&1 | Out-Null
-  $gone = RuleFindings $db @('--rule', $Rule)
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $gone = @(RuleFindings $db @('--rule', $Rule))
   Check 'RUN 3 no TDataModule in the unit: the same reads are silent' ($gone.Count -eq 0) "$($gone.Count) finding(s)"
 } finally {
   if (Test-Path $scratch) { [System.IO.Directory]::Delete($scratch, $true) }

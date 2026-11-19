@@ -37,9 +37,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe  = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
-  [string]$Repo = "$PSScriptRoot\..\.."
+  [string]$Exe  = '',
+  [string]$Repo = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Repo) { $Repo = "$PSScriptRoot\..\.." }
 if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 . "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG3: no machine drag-lint.json
 $ErrorActionPreference = 'Continue'
@@ -76,7 +82,7 @@ $tmpE = "$tmpO.err"
 function RunOut([string[]]$a) {
   $p = Start-Process -FilePath $script:Exe -ArgumentList $a -NoNewWindow -PassThru `
         -WorkingDirectory $script:NeutralCwd `
-        -RedirectStandardOutput $script:tmpO -RedirectStandardError $script:tmpE
+        -RedirectStandardOutput $script:tmpO -RedirectStandardError $script:tmpE; $null = $p.Handle
   if (-not $p.WaitForExit(120000)) { try { $p.Kill($true) } catch { }; return @{ C = -1; O = '(timed out)' } }
   $o = ((Get-Content -LiteralPath $script:tmpO -Raw -ErrorAction SilentlyContinue) + '') +
        ((Get-Content -LiteralPath $script:tmpE -Raw -ErrorAction SilentlyContinue) + '')

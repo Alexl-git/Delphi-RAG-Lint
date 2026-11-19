@@ -76,7 +76,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Continue'
@@ -95,10 +98,10 @@ Copy-Item $fixture $target -Force
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
-  $applyJson = (& $exePath document --qname valuetag_caller.HasValueAndExample --db $db --apply --json 2>$null) -join "`n"
+  $applyJson = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname valuetag_caller.HasValueAndExample --db $db --apply --json 2>$null }) -join "`n"
   Check 'apply exits 0' ($LASTEXITCODE -eq 0)
   Check '1. action = extended (the repair branch runs on the FIRST apply -- pinned so a branch flip in EITHER direction is visible)' `
     ($applyJson -match '"action":"extended"') $applyJson
@@ -121,8 +124,8 @@ try {
   # 5. Stability: the carry-through is re-derived from the region on every run,
   # so cycle 2 reproduces cycle 1's output exactly instead of re-appending.
   $afterApply1 = [IO.File]::ReadAllBytes($target)
-  & $exePath index $scratch --db $db 2>$null | Out-Null
-  $applyJson2 = (& $exePath document --qname valuetag_caller.HasValueAndExample --db $db --apply --json 2>$null) -join "`n"
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+  $applyJson2 = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname valuetag_caller.HasValueAndExample --db $db --apply --json 2>$null }) -join "`n"
   $afterApply2 = [IO.File]::ReadAllBytes($target)
   Check '5. second apply cycle: action = unchanged (a stable fixed point)' `
     ($applyJson2 -match '"action":"unchanged"') $applyJson2

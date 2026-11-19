@@ -14,7 +14,10 @@
   Run under pwsh 7:  pwsh -File tests\autotest\run_default_engine_fallback_guard.ps1
 #>
 [CmdletBinding()]
-param([string]$Repo = (Resolve-Path "$PSScriptRoot\..\..").Path)
+param([string]$Repo = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Repo) { $Repo = (Resolve-Path "$PSScriptRoot\..\..").Path }
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -38,8 +41,17 @@ function Set-Stub([string]$Path, [bool]$On) {
 function Get-ExeDefault([string]$Script) {
   $ast = [Management.Automation.Language.Parser]::ParseFile($Script, [ref]$null, [ref]$null)
   $p = $ast.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'Exe' } | Select-Object -First 1
-  if (-not $p -or -not $p.DefaultValue) { return $null }
-  return $p.DefaultValue.Extent.Text
+  if (-not $p) { return $null }
+  if ($p.DefaultValue -and ($p.DefaultValue.Extent.Text -notin @("''", '""'))) { return $p.DefaultValue.Extent.Text }
+  # 1.52 PS5RUNNERS moved the default into the body (`if (-not $Exe) { $Exe = <expr> }`, PS5 -File
+  # leaves $PSScriptRoot empty inside param()): read that assignment's right-hand side instead.
+  $as = $ast.Find({ param($n) $n -is [Management.Automation.Language.IfStatementAst] -and
+      $n.Clauses.Count -ge 1 -and ($n.Clauses[0].Item1.Extent.Text -match '^-not\s+\$Exe$') }, $false)
+  if (-not $as) { return $null }
+  $asg = $as.Clauses[0].Item2.Find({ param($n) $n -is [Management.Automation.Language.AssignmentStatementAst] -and
+      $n.Left.Extent.Text -eq '$Exe' }, $true)
+  if (-not $asg) { return $null }
+  return $asg.Right.Extent.Text
 }
 try {
   # ---- A: every cyclefix guard's -Exe default
@@ -57,10 +69,10 @@ try {
       $onlyBuilt = & $sb $psr
       $childFile = Join-Path $tmp 'fresh-probe.ps1'; [IO.File]::WriteAllText($childFile, 'param($r) & { param($PSScriptRoot) ' + $expr + ' } $r')
       Set-Stub $built $false
-      $nb = & pwsh -NoProfile -File $childFile $psr 2>&1 | Out-String; $nbCode = $LASTEXITCODE
+      $nb = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $childFile $psr 2>&1 | ForEach-Object { "$_" } } | Out-String; $nbCode = $LASTEXITCODE
       Set-Stub $deployed $true
-      $dp = & pwsh -NoProfile -File $childFile $psr 2>&1 | Out-String; $dpCode = $LASTEXITCODE
-      $okFresh = ($onlyBuilt -like '*src\cli\Win64\Debug\drag-lint.exe') -and ($nbCode -eq 2) -and ($dpCode -eq 2) -and $nb.Contains('no build of this tree') -and $dp.Contains('no build of this tree')
+      $dp = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $childFile $psr 2>&1 | ForEach-Object { "$_" } } | Out-String; $dpCode = $LASTEXITCODE
+      $okFresh = ($onlyBuilt -like '*src\cli\Win64\Debug\drag-lint.exe') -and ($nbCode -eq 2) -and ($dpCode -eq 2) -and $nb.Contains('no build of this tree') -and $dp.Contains('no build of this tree')  # exe-freshness: absent (wildcard pattern matched against a stub path, not an exe reference)
       if (-not $okFresh) { $bad += $s.Name }
       continue
     }
@@ -84,13 +96,13 @@ try {
     $probe = '$Repo = $args[0]; $Engine = ""; ' + $m.Value + ' Write-Host "ENGINE=$engine"'
     $pf = Join-Path $tmp 'probe.ps1'; [IO.File]::WriteAllText($pf, $probe)
     Set-Stub $deployed $false; Set-Stub $built $false
-    $o0 = (& pwsh -NoProfile -File $pf $tmp 2>&1 | Out-String); $c0 = $LASTEXITCODE
+    $o0 = (& { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $pf $tmp 2>&1 | ForEach-Object { "$_" } } | Out-String); $c0 = $LASTEXITCODE
     Check 'B neither engine: GUARD BROKEN naming both paths, exit 1' (($c0 -eq 1) -and $o0.Contains('GUARD BROKEN') -and $o0.Contains($deployed) -and $o0.Contains($built))
     Set-Stub $built $true
-    $o1 = (& pwsh -NoProfile -File $pf $tmp 2>&1 | Out-String)
+    $o1 = (& { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $pf $tmp 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'B only Debug build: it is chosen' ($o1.Contains("ENGINE=$built"))
     Set-Stub $deployed $true
-    $o2 = (& pwsh -NoProfile -File $pf $tmp 2>&1 | Out-String)
+    $o2 = (& { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $pf $tmp 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'B both present: deployed wins' ($o2.Contains("ENGINE=$deployed"))
   }
 } finally {

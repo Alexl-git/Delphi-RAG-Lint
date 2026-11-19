@@ -23,7 +23,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 function Parse-Findings([string[]]$Raw) {
   $txt = ($Raw -join "`n"); $b = $txt.IndexOf('[')
-  $out = @(); if ($b -ge 0) { try { $out = @($txt.Substring($b) | ConvertFrom-Json) } catch { $out = @() } }
+  $out = @(); if ($b -ge 0) { try { $out = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $out = @() } }
   if ($null -eq $out) { $out = @() }
   return ,@($out)
 }
@@ -37,16 +37,16 @@ try {
   [void](New-Item -ItemType Directory -Force -Path $src)
   Copy-Item (Join-Path $PSScriptRoot '*.pas') $src
   $db = Join-Path $scratch 'icm.sqlite'
-  & $exePath index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $use = Join-Path $src 'uIcmUse.pas'
 
   # positive-control: identifier-case-mismatch
-  $hits = @((Parse-Findings (& $exePath lint-all --db $db --format json --rule $Rule 2>$null)) | Where-Object { $_.rule -eq $Rule })
+  $hits = @((Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json --rule $Rule 2>$null })) | Where-Object { $_.rule -eq $Rule })
   $lines = @($hits | ForEach-Object { [int]$_.start_line } | Sort-Object)
   $want  = @((LineOf $use 'TRIGGER-LOWER'), (LineOf $use 'TRIGGER-UPPER'), (LineOf $use 'TRIGGER-PROPERTY'), (LineOf $use 'TRIGGER-FUNCTION') | Sort-Object)
   Check 'RUN 1 exactly the TRIGGER lines fire' (($lines -join ',') -eq ($want -join ',')) "got [$($lines -join ',')] want [$($want -join ',')]"
 
-  $off = @((Parse-Findings (& $exePath lint-all --db $db --format json 2>$null)) | Where-Object { $_.rule -eq $Rule })
+  $off = @((Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json 2>$null })) | Where-Object { $_.rule -eq $Rule })
   Check 'RUN 2 plain lint-all: the rule ships OFF' ($off.Count -eq 0) "$($off.Count) finding(s)"
 } finally {
   if (Test-Path $scratch) { [System.IO.Directory]::Delete($scratch, $true) }

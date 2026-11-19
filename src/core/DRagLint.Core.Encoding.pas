@@ -34,9 +34,9 @@ uses
 /// (ASCII is valid UTF-8, so this returns the input unchanged). Pure function;
 /// thread-safe (no shared state; the CP1252 encoding it allocates is freed).
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Analysis.LintTree.RunLintTree (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.ValidateAndResolve (DRagLint.Analysis.LintTree.pas), DRagLint.CLI.ApplyLineMarkers.LineIsPreprocessorInactive (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas) (+16 more)</para>
+/// <para>Called from: DRagLint.Analysis.LintTree.RunLintTree (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.ValidateAndResolve (DRagLint.Analysis.LintTree.pas), DRagLint.CLI.ApplyLineMarkers.LineIsPreprocessorInactive (DRagLint.CLI.pas), DRagLint.CLI.ApplyLineMarkers.LinesOf (DRagLint.CLI.pas), DRagLint.CLI.MarkedRuleIds (DRagLint.CLI.pas) (+28 more)</para>
 /// <para>Calls: DRagLint.Core.Encoding.IsValidUtf8, Move</para>
-/// <para>Complexity: 14 (cyclomatic, outer body), 43 lines (full implementation)</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 54 lines (full implementation)</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Core.Encoding.IsValidUtf8"/>
 /// <!-- drag-lint:auto END -->
@@ -60,8 +60,65 @@ function EnsureUtf8Bytes(const ABytes: TBytes): TBytes;
 /// </remarks>
 function IsValidUtf8(const ABytes: TBytes): Boolean;
 
+/// <summary>The 0-based CHARACTER column of a position in a UTF-8 buffer: the number of UTF-16 code units
+/// (the unit a Delphi string indexes) from the start of the line up to the position.</summary>
+/// <param name="ASource">The UTF-8 bytes the parser parsed (EnsureUtf8Bytes' result).</param>
+/// <param name="AByteOffset">The position's byte offset in ASource (a tree-sitter node's StartByte / EndByte).</param>
+/// <param name="AByteColumn">The position's byte column in its line (the node's StartPoint / EndPoint column).</param>
+/// <returns>AByteColumn when the line prefix is pure ASCII; fewer when it holds a multi-byte character
+/// (two for a character outside the BMP, which is a surrogate pair in a string); AByteColumn when the
+/// two arguments disagree with ASource (no line start inside the buffer).</returns>
+/// <remarks>
+/// 1.52 EXTGAPS2: tree-sitter reports BYTE columns, every index column (refs, symbols, uses,
+/// literals, data_flows, with scopes) is a CHARACTER column -- the column a reader of the source line
+/// counts. Pure; thread-safe. Pinned by tests\autotest\run_extgaps2_extraction.ps1.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Doc.Facts.CatchSpansOf.AddTry (DRagLint.Doc.Facts.pas), DRagLint.Index.CallResolver.CollectWithStatements (DRagLint.Index.CallResolver.pas), DRagLint.Index.DataFlowFacts.TCollector.AssignSlot (DRagLint.Index.DataFlowFacts.pas), DRagLint.Index.DataFlowFacts.TCollector.EmitExitRows (DRagLint.Index.DataFlowFacts.pas) (+34 more)</para>
+/// <para>Calls: Cardinal, Integer</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function Utf8ByteColToCharCol(const ASource: TBytes; AByteOffset, AByteColumn: Cardinal): Integer;
+
+/// <summary>The inverse of Utf8ByteColToCharCol for code that keeps byte offsets: the 1-based BYTE column of
+/// the 1-based CHARACTER column ACharCol on the line that starts at byte ALineStart.</summary>
+/// <param name="ASource">UTF-8 bytes.</param>
+/// <param name="ALineStart">Byte offset of the line's first byte in ASource.</param>
+/// <param name="ACharCol">1-based character (UTF-16 unit) column, an index column.</param>
+/// <returns>ACharCol on a pure-ASCII prefix; larger past a multi-byte character. Past the line end (LF) or the
+/// buffer the remaining columns count one byte each.</returns>
+/// <remarks>
+/// 1.52 EXTGAPS2. Pure; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Diagnostics.ParseCache.TAstParseCache.ByteCol (DRagLint.Diagnostics.ParseCache.pas), DRagLint.LSP.Server.ByteCol0Of (DRagLint.LSP.Server.pas), DRagLint.Refactor.Unwith.LoadRowsOf (DRagLint.Refactor.Unwith.pas)</para>
+/// <para>Returns: I - ALineStart + 1 + (ACharCol - 1 - Units)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function Utf8CharColToByteCol(const ASource: TBytes; ALineStart, ACharCol: Integer): Integer;
+
+/// <summary>The lines of a source file decoded the way the indexer decodes it (EnsureUtf8Bytes): a
+/// UTF-8 / UTF-16 BOM is honoured and dropped, BOM-less valid UTF-8 is UTF-8, anything else is
+/// Windows-1252.</summary>
+/// <param name="APath">The source file; it must exist.</param>
+/// <returns>One string per line, CR / LF / CRLF breaks removed, no trailing empty line for a final
+/// line break (the TFile.ReadAllLines shape).</returns>
+/// <remarks>TFile.ReadAllBytes' own exceptions (file missing / unreadable) propagate unchanged. GitHub #16 (1.52): TFile.ReadAllLines(APath, TEncoding.ANSI) kept a UTF-8 BOM as the
+/// text (three ANSI characters) and decoded every UTF-8 character as two ANSI ones, so context printed
+/// mojibake for a unit saved as UTF-8. Thread-safe. Pinned by tests\autotest\run_v152_GH16.ps1.</remarks>
+function ReadSourceFileLines(const APath: string): TArray<string>;
+
+/// <summary>The whole text of a source file decoded as ReadSourceFileLines decodes it (BOM honoured
+/// and dropped, BOM-less valid UTF-8 as UTF-8, else Windows-1252); line breaks are kept as in the file.</summary>
+/// <param name="APath">The source file; it must exist.</param>
+/// <returns>The decoded text, without a BOM.</returns>
+/// <remarks>TFile.ReadAllBytes' own exceptions (file missing / unreadable) propagate unchanged. GitHub #16 follow-up (1.52): replaces TFile.ReadAllText(APath, TEncoding.ANSI) in the
+/// read-only source readers. Thread-safe. The decoder it shares with ReadSourceFileLines is pinned by tests\autotest\run_v152_GH16.ps1.</remarks>
+function ReadSourceFileText(const APath: string): string;
+
 implementation
 
+uses
+  System.IOUtils;
 const
   CP_ANSI_LATIN = 1252; { Windows-1252, the ANSI fallback for bytes that are not valid UTF-8 }
 
@@ -190,5 +247,61 @@ begin
   end;
   Result:= TEncoding.UTF8.GetBytes(S);
 end;
+
+function Utf8ByteColToCharCol(const ASource: TBytes; AByteOffset, AByteColumn: Cardinal): Integer;
+const
+  UTF8_CONT_FIRST = $80; { 10xxxxxx: a continuation byte, no character of its own }
+  UTF8_LEAD2_FIRST = $C0; { 110xxxxx / 1110xxxx: a BMP character, one UTF-16 unit }
+  UTF8_LEAD4_FIRST = $F0; { 11110xxx: outside the BMP, a surrogate pair }
+begin
+  Result:= Integer(AByteColumn);
+  if (AByteColumn = 0) or (AByteColumn > AByteOffset) or (AByteOffset > Cardinal(Length(ASource))) then Exit;
+  Result:= 0;
+  for var I: Integer:= Integer(AByteOffset - AByteColumn) to Integer(AByteOffset) - 1 do
+  begin
+    var B: Byte:= ASource[I];
+    if B < UTF8_CONT_FIRST then Inc(Result)
+    else if B >= UTF8_LEAD4_FIRST then Inc(Result, 2)
+    else if B >= UTF8_LEAD2_FIRST then Inc(Result);
+  end;
+end;
+
+function Utf8CharColToByteCol(const ASource: TBytes; ALineStart, ACharCol: Integer): Integer;
+const
+  LF = 10;
+  UTF8_CONT_FIRST = $80;
+  UTF8_LEAD2_FIRST = $C0;
+  UTF8_LEAD4_FIRST = $F0;
+begin
+  if ALineStart < 0 then Exit(ACharCol);
+  var Units: Integer:= 0;
+  var I: Integer:= ALineStart;
+  while (Units < ACharCol - 1) and (I < Length(ASource)) and (ASource[I] <> LF) do
+  begin
+    var B: Byte:= ASource[I];
+    if B >= UTF8_LEAD4_FIRST then Inc(Units, 2) else Inc(Units);
+    Inc(I);
+    while (I < Length(ASource)) and (ASource[I] >= UTF8_CONT_FIRST) and (ASource[I] < UTF8_LEAD2_FIRST) do Inc(I);
+  end;
+  Result:= I - ALineStart + 1 + (ACharCol - 1 - Units);
+end;
+
+function ReadSourceFileLines(const APath: string): TArray<string>;
+var
+  Lines: TStringList;
+begin
+  Lines:= TStringList.Create;
+  try
+    Lines.Text:= TEncoding.UTF8.GetString(EnsureUtf8Bytes(TFile.ReadAllBytes(APath)));  // dl:ok taint-path-traversal@7bfa -- REVIEWED 2026-11-18 a source reader: APath is the file the caller indexes or shows (manifest/project roots); confining it is the caller's job, not this decoder's
+    Result:= Lines.ToStringArray;
+  finally
+    Lines.Free;
+  end; // try
+end; // function
+
+function ReadSourceFileText(const APath: string): string;
+begin
+  Result:= TEncoding.UTF8.GetString(EnsureUtf8Bytes(TFile.ReadAllBytes(APath)));  // dl:ok taint-path-traversal@011e -- REVIEWED 2026-11-18 a source reader: APath is the file the caller indexes or shows (manifest/project roots); confining it is the caller's job, not this decoder's
+end; // function
 
 end.

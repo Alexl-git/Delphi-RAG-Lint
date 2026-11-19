@@ -29,8 +29,11 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe"
+  [string]$Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -86,13 +89,13 @@ end;
 end.
 '@
 $db = Join-Path $longDir 'l.sqlite'
-& $Exe index --project (Join-Path $shortDir 'L.dpr') --db $db *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $shortDir 'L.dpr') --db $db *> $null }
 Check 'seed: index through the short spelling' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
-$stored = (& $Exe sql --db $db --query "select path from files where path like '%ULook.pas'" 2>$null) -join "`n"
+$stored = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query "select path from files where path like '%ULook.pas'" 2>$null }) -join "`n"
 Check '1. the database holds the SHORT spelling (premise)' ($stored -match '~') $stored
 
-function NoteFor([string]$file) { return ((& $Exe lint $file --db $db 2>&1) -join "`n") }
+function NoteFor([string]$file) { return ((& { $ErrorActionPreference = 'Continue'; & $Exe lint $file --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n") }
 $long = NoteFor (Join-Path $longDir 'ULook.pas')
 Check '2. lint <long path> --db runs store-backed ("project rules ran")' `
   (($long -match 'project rules ran for this file') -and -not ($long -match 'no index covers this file')) ''

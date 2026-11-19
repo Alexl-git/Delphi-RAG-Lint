@@ -76,7 +76,7 @@ end.
 
 $db = Join-Path $WorkDir 'fold.sqlite'
 $ea = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-& $Exe index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $ErrorActionPreference = $ea
 Check 'unrelated unit indexed (the fixture itself is not)' (Test-Path $db)
 
@@ -102,19 +102,19 @@ $lCom = LineOf '^\{ a block comment'; $lOne = LineOf '^// one line'
 $lFwd = LineOf '^  TFwd = class;'; $lTiny = LineOf '^begin end;'
 Write-Host ("  folds: " + (($f | % { "$($_.startLine)-$($_.endLine)$(if ($_.kind) { ':' + $_.kind })" }) -join ' ')) -ForegroundColor DarkGray
 
-$u = FoldAt $lUses
+$u = @(FoldAt $lUses)
 Check 'uses clause folds, kind imports, ending on its last line' ($u.Count -eq 1 -and $u[0].kind -eq 'imports' -and $u[0].endLine -eq $lSemi) "got=$($u.Count)/$($u[0].kind)/$($u[0].endLine) want-end=$lSemi"
-$c = FoldAt $lClass
+$c = @(FoldAt $lClass)
 Check 'class folds from its header to the line before end;' ($c.Count -eq 1 -and $c[0].endLine -eq ($lClassEnd - 1)) "got=$($c.Count)/$($c[0].endLine) want=$($lClassEnd - 1)"
-$ru = FoldAt $lRun
+$ru = @(FoldAt $lRun)
 Check 'routine folds from its header, leaving the final end; visible' ($ru.Count -eq 1 -and $ru[0].endLine -eq ($lRunEnd - 1)) "got=$($ru.Count)/$($ru[0].endLine) want=$($lRunEnd - 1)"
-$ib = FoldAt $lIfBegin
+$ib = @(FoldAt $lIfBegin)
 Check 'the nested begin..end block folds from its begin' ($ib.Count -eq 1 -and $ib[0].endLine -eq ($lIfEnd - 1)) "got=$($ib.Count)/$($ib[0].endLine) want=$($lIfEnd - 1)"
-$cm = FoldAt $lCom
+$cm = @(FoldAt $lCom)
 Check 'multi-line { } comment folds, kind comment' ($cm.Count -eq 1 -and $cm[0].kind -eq 'comment' -and $cm[0].endLine -eq ($lCom + 1)) "got=$($cm.Count)/$($cm[0].kind)/$($cm[0].endLine)"
-Check 'one-line comment does not fold' ((FoldAt $lOne).Count -eq 0)
-Check 'one-line class forward does not fold' ((FoldAt $lFwd).Count -eq 0)
-Check 'one-line begin end does not fold' ((FoldAt $lTiny).Count -eq 0)
+Check 'one-line comment does not fold' ((@(FoldAt $lOne)).Count -eq 0)
+Check 'one-line class forward does not fold' ((@(FoldAt $lFwd)).Count -eq 0)
+Check 'one-line begin end does not fold' ((@(FoldAt $lTiny)).Count -eq 0)
 Check 'every fold spans at least two lines and stays inside the file' (@($f | ? { $_.endLine -le $_.startLine -or $_.endLine -ge $lines.Count }).Count -eq 0)
 Check 'an unreadable path answers [] (not an error)' ($r.res.ContainsKey(12) -and @($r.res[12][0]).Count -eq 0 -and -not $r.err.ContainsKey(12))
 

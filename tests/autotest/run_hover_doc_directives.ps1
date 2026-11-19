@@ -51,9 +51,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1"),
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-hover-doc-directives-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1") }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -69,7 +72,7 @@ $Exe = (Resolve-Path $Exe).Path
 if (Test-Path $WorkDir) { Remove-Item -Recurse -Force $WorkDir }
 New-Item -ItemType Directory $WorkDir | Out-Null
 
-$info = (& $Exe info --json 2>$null) -join "`n" | ConvertFrom-Json
+$info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 Write-Host ("engine: extractor={0} exe={1}" -f $info.extractor_version, $Exe) -ForegroundColor Cyan
 
 function Write-Ascii([string]$Path, [string]$Body) {
@@ -112,13 +115,13 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'hov.sqlite'
-$null = & $Exe index $work --db $db 2>$null
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>$null }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 function Get-HoverFacts([string]$QName) {
-  $raw = (& $Exe hover --qname $QName --db $db --format json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname $QName --db $db --format json 2>$null }) -join "`n"
   if ([string]::IsNullOrWhiteSpace($raw)) { return @() }
-  return @(($raw | ConvertFrom-Json).facts)
+  return @(($raw | ConvertFrom-Json | ForEach-Object { $_ }).facts)
 }
 function Get-DirectivesFact([string[]]$Facts) {
   return @($Facts | Where-Object { $_ -match '^\s*Directives:' }) | Select-Object -First 1
@@ -127,9 +130,9 @@ function Get-DirectivesFact([string[]]$Facts) {
 # --- surface 1: hover ---------------------------------------------------------
 Write-Host ''
 Write-Host 'SURFACE 1: CLI hover' -ForegroundColor Cyan
-$hovVirtual = Get-DirectivesFact (Get-HoverFacts 'uHov.THovKit.MVirtual')
-$hovCombo   = Get-DirectivesFact (Get-HoverFacts 'uHov.THovKit.MCombo')
-$hovPlain   = Get-DirectivesFact (Get-HoverFacts 'uHov.THovKit.MPlain')
+$hovVirtual = Get-DirectivesFact (@(Get-HoverFacts 'uHov.THovKit.MVirtual'))
+$hovCombo   = Get-DirectivesFact (@(Get-HoverFacts 'uHov.THovKit.MCombo'))
+$hovPlain   = Get-DirectivesFact (@(Get-HoverFacts 'uHov.THovKit.MPlain'))
 
 Check "hover MVirtual HAS a Directives fact" ($null -ne $hovVirtual) "got: $(if ($null -eq $hovVirtual) { 'ABSENT' } else { $hovVirtual })"
 Check "hover MCombo   HAS a Directives fact" ($null -ne $hovCombo)   "got: $(if ($null -eq $hovCombo)   { 'ABSENT' } else { $hovCombo })"
@@ -142,7 +145,7 @@ Check "hover MPlain has NO Directives fact" ($null -eq $hovPlain) "got: $hovPlai
 Write-Host ''
 Write-Host 'SURFACE 2: the managed doc block (document --apply)' -ForegroundColor Cyan
 foreach ($q in @('uHov.THovKit.MVirtual','uHov.THovKit.MCombo','uHov.THovKit.MPlain')) {
-  $null = & $Exe document --qname $q --db $db --apply --no-backup 2>$null
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe document --qname $q --db $db --apply --no-backup 2>$null }
 }
 $src = [System.IO.File]::ReadAllText($unit)
 

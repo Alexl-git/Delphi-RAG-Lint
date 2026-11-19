@@ -29,9 +29,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-string-eq-fp-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -84,7 +87,7 @@ Write-Ascii (Join-Path $src 'StrEqFp.pas') $Body
 
 $db = Join-Path $WorkDir 'seq.sqlite'
 Write-Host 'Indexing fixture (--deep)' -ForegroundColor Cyan
-$idx = & $Exe index $src --db $db --deep 2>&1
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db --deep 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "$($idx -join ' | ')"
 
 $fixture = Join-Path $src 'StrEqFp.pas'
@@ -95,7 +98,7 @@ try {
   Write-Host 'STORE path (check-ast --db): type-aware rule -- non-string compares must NOT fire' -ForegroundColor Cyan
   # check-ast exits non-zero when it reports findings (linter convention), so we
   # do NOT assert exit 0 -- we assert on the FINDINGS instead.
-  $storeOut = (& $Exe check-ast $fixture --db $db 2>&1) -join "`n"
+  $storeOut = (& { $ErrorActionPreference = 'Continue'; & $Exe check-ast $fixture --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   # check-ast prints findings as `<file>(<line>,<col>): <sev> <rule>: ...`.
   $seLines = @()
   foreach ($line in ($storeOut -split "`n")) {
@@ -123,7 +126,7 @@ try {
   # scenario poses: "WHEN THIS RULE IS ASKED FOR, is the no-store path still
   # type-blind?" The answer is yes, and that is what keeps the store path
   # authoritative for the plugin.
-  $noStoreOut = (& $Exe lint $fixture --rule string-equality-comparison 2>&1) -join "`n"
+  $noStoreOut = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture --rule string-equality-comparison 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $nsSe = ($noStoreOut -split "`n" | Where-Object { $_ -match 'string-equality-comparison' }).Count
   # This is the DOCUMENTED no-store limitation: the .scm fires on the non-string
   # lines. We assert it here so a future .scm tightening that also fixes the

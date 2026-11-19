@@ -63,7 +63,7 @@ type
   /// others name WHY it was discarded, for telemetry.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DragLint.Plugin.HoverGate.pas), DragLint.Plugin.HoverGate.DLHoverGate (DragLint.Plugin.HoverGate.pas), DragLint.Plugin.HoverTracker.TDragLintHoverHelper.GateAndShowInflight (DragLint.Plugin.HoverTracker.pas)</para>
+  /// <para>Used by: declaration (DragLint.Plugin.HoverGate.pas), declaration (DragLint.Plugin.HoverTracker.pas), DragLint.Plugin.HoverGate.DLHoverGate (DragLint.Plugin.HoverGate.pas), DragLint.Plugin.HoverTracker.TDragLintHoverHelper.GateAndShowInflight (DragLint.Plugin.HoverTracker.pas), DragLint.Plugin.HoverTracker.TDragLintHoverHelper.InflightGateVerdict (DragLint.Plugin.HoverTracker.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDLHoverGateVerdict = (
@@ -91,7 +91,7 @@ type
 /// Pure; never raises. A fallback anchor (Row0 = -1) skips the cell
 /// rule: there was no grid to map the question to.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.HoverTracker.TDragLintHoverHelper.GateAndShowInflight (DragLint.Plugin.HoverTracker.pas)</para>
+/// <para>Called from: DragLint.Plugin.HoverTracker.TDragLintHoverHelper.InflightGateVerdict (DragLint.Plugin.HoverTracker.pas)</para>
 /// <para>Returns: hgvOtherCell; hgvShow</para>
 /// <para>Complexity: 11 (cyclomatic, outer body), 10 lines (full implementation)</para>
 /// <!-- drag-lint:auto END -->

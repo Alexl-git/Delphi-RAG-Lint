@@ -13,11 +13,11 @@ function Assert($n,$c){ if($c){Write-Host "PASS  $n"}else{Write-Host "FAIL  $n" 
 
 $target = Join-Path $dir "Target.pas"
 # dry-run: should propose adding 'Lib' to Target.pas uses
-$dry = (& $exe find-unit --name TWidget --in $target --db $db 2>$null) -join "`n"
+$dry = (& { $ErrorActionPreference = 'Continue'; & $exe find-unit --name TWidget --in $target --db $db 2>$null }) -join "`n"
 Assert "dry-run proposes adding Lib" ($dry -match 'Lib')
 
 # --json edit set
-$json = & $exe find-unit --name TWidget --in $target --json --db $db 2>$null | ConvertFrom-Json
+$json = & { $ErrorActionPreference = 'Continue'; & $exe find-unit --name TWidget --in $target --json --db $db 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
 Assert "json edit set non-empty" (@($json).Count -ge 1)
 
 # --apply into a temp copy, then verify Lib is in the uses clause
@@ -28,13 +28,13 @@ Copy-Item (Join-Path $dir "*.pas") $tmp
 $db2 = Join-Path $env:TEMP "refactor_findunit2_$PID.sqlite"; if (Test-Path $db2) { Remove-Item $db2 -Force }
 & $exe index $tmp --db $db2 | Out-Null
 $t = Join-Path $tmp "Target.pas"
-& $exe find-unit --name TWidget --in $t --apply --no-backup --db $db2 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exe find-unit --name TWidget --in $t --apply --no-backup --db $db2 2>$null } | Out-Null
 $after = Get-Content $t -Raw
 Assert "apply added Lib to a uses clause" ($after -match '\bLib\b')
 Assert "apply kept it compilable-looking (uses ... ;)" ($after -match 'uses[^;]*Lib[^;]*;')
 
 # already-present: asking for a unit already in uses is a no-op
-$noop = (& $exe find-unit --name TObject --in $target --db $db 2>&1) -join "`n"
+$noop = (& { $ErrorActionPreference = 'Continue'; & $exe find-unit --name TObject --in $target --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Assert "already-used or unresolved is a clean no-op (no crash)" ($LASTEXITCODE -ne $null)
 
 Write-Host ""

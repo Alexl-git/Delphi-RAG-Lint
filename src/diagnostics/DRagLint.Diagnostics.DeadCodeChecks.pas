@@ -198,9 +198,9 @@ type
     /// the checker itself has no shared mutable state.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: AnsiChar, ArgsHaveNoEncoding, Byte, CallReceiverField, CharInSet, CheckBooleanFlagParam, CheckUnusedParams, ClassifyRefs, ClassImplementsInterface, ClassIsFormLike (+82 more)</para>
+    /// <para>Calls: AnsiChar, ArgsHaveNoEncoding, Byte, CallReceiverField, CharInSet, CheckBooleanFlagParam, CheckUnusedParams, ClassifyRefs, ClassImplementsInterface, ClassIsFormLike (+86 more)</para>
     /// <para>Returns: nil; Deduped.ToArray</para>
-    /// <para>Complexity: 21 (cyclomatic, outer body), 2870 lines (full implementation)</para>
+    /// <para>Complexity: 21 (cyclomatic, outer body), 3067 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.AddLongLineFindings"/>
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CheckPublicWritableFields"/>
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CheckReferencedNeverSet"/>
@@ -410,7 +410,7 @@ var
     F.Message  := AMessage;
     F.FilePath := AFile;
     F.StartLine:= Integer(P.Row   ) + 1;
-    F.StartCol := Integer(P.Column) + 1;
+    F.StartCol := TAstParseCache.CharCol(F.FilePath, P); { 1.52 BK-COLS2: character column }
     F.EndLine  := F.StartLine;
     F.EndCol   := F.StartCol + Length(Trim(NodeStr(ANode)));
     Findings.Add(F);
@@ -2028,6 +2028,33 @@ var
            and (LitPrnt.ChildByField('rhs') = N)
            and (LitPrnt.ChildByField('lhs').NodeType = 'exprDot') then
           IsExempt:= True;
+        { v152 NOISE2 (ruling B4, FP-only): an argument of a call that is a DATA ROW
+          (six or more numeric-literal arguments, e.g. Set4Map(Cls, 0, 1, 9, 6, ...)) or of
+          Reg(<id>, 'NAME') -- the id table large-magic-number already exempts. The nearest
+          argument list decides, as in large-magic-number's exclude_if_argument_of. }
+        if (not IsExempt) and ((LitPT = 'exprArgs') or
+           ((LitPT = 'exprUnary') and (not LitPrnt.Parent.IsNull) and (LitPrnt.Parent.NodeType = 'exprArgs'))) then
+        begin
+          var ArgList: TTSNode:= if LitPT = 'exprArgs' then LitPrnt else LitPrnt.Parent;
+          var CallN  : TTSNode:= ArgList.Parent;
+          if (not CallN.IsNull) and (CallN.NodeType = 'exprCall') and (CallN.NamedChildCount > 0)
+             and SameText(Trim(NodeStr(CallN.NamedChild(0))), 'Reg') then
+            IsExempt:= True
+          else
+          begin
+            var NumArgs: Integer:= 0;
+            for var Ai: Integer:= 0 to Integer(ArgList.NamedChildCount) - 1 do
+            begin
+              var ArgN: TTSNode:= ArgList.NamedChild(Ai);
+              if (ArgN.NodeType = 'literalNumber') or
+                 ((ArgN.NodeType = 'exprUnary') and (ArgN.NamedChildCount > 0)
+                  and (ArgN.NamedChild(ArgN.NamedChildCount - 1).NodeType = 'literalNumber')) then
+                Inc(NumArgs);
+            end;
+            const CDataRowArgs = 6;  { fewer numeric arguments is an ordinary call, not a table row }
+            if NumArgs >= CDataRowArgs then IsExempt:= True;
+          end;
+        end;
         if not IsExempt then
         begin
           var Anc: TTSNode := LitPrnt;
@@ -2038,6 +2065,12 @@ var
             if (AncT = 'defaultValue') or (AncT = 'declConst') or (AncT = 'declConsts')
                or (AncT = 'declEnumValue') or (AncT = 'constInline')
                or (AncT = 'procExternal') then  // external Lib index N: the ordinal is the import's identity
+            begin
+              IsExempt := True;
+              Break;
+            end;
+            { v152 NOISE2: Groups[3] / Params[12] is a position, not a quantity (as large-magic-number) }
+            if AncT = 'exprSubscript' then
             begin
               IsExempt := True;
               Break;

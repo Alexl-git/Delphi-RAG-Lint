@@ -22,9 +22,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-named-arg-own-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -119,8 +122,8 @@ $pas = Join-Path $WorkDir 'uNamedArgOwn.pas'
 
 Push-Location $WorkDir
 try {
-  $raw = (& $Exe lint $pas --json 2>$null) -join "`n"
-  $rows = @($raw | ConvertFrom-Json)
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $pas --json 2>$null }) -join "`n"
+  $rows = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Check 'lint --json answered (non-empty array)' ($rows.Count -gt 0) "rows=$($rows.Count)"
   $leak  = @($rows | Where-Object { $_.rule -eq 'object-leak' } | ForEach-Object { [regex]::Match($_.message, 'Object "(\w+)"').Groups[1].Value.ToLower() })
   $field = @($rows | Where-Object { $_.rule -eq 'field-created-not-freed' } | ForEach-Object { [regex]::Match($_.message, 'Field (\w+) ').Groups[1].Value.ToLower() })
@@ -141,7 +144,7 @@ try {
   Check 'field-created-not-freed IS reported for FLabel (V.Add(FLabel := 0))' ($field -contains 'flabel')
 
   Write-Host 'autofix (dry run) -> no FreeAndNil for a handed-on field' -ForegroundColor Cyan
-  $fix = (& $Exe lint --in $pas --fix 2>$null) -join "`n"
+  $fix = (& { $ErrorActionPreference = 'Continue'; & $Exe lint --in $pas --fix 2>$null }) -join "`n"
   Check 'the fix plan answered' ($fix -match 'File:')
   Check 'NO FreeAndNil(FItem) proposed' (-not ($fix -match 'FreeAndNil\(FItem\)'))
   Check 'FreeAndNil(FNever) IS proposed (positive control)' ($fix -match 'FreeAndNil\(FNever\)')

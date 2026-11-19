@@ -18,6 +18,12 @@ uses
 
 type
   /// <summary>One Markdown text node: a heading, paragraph or list item.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.TextNodes.pas) ?, DRagLint.CLI.Graph.DoGraph.GraphJsonOrHtml (DRagLint.CLI.Graph.pas) ?, DRagLint.Query.TextNodes.GraphTextNodesJson (DRagLint.Query.TextNodes.pas) ?, DRagLint.Query.TextNodes.LoadGraphTextNodes (DRagLint.Query.TextNodes.pas), DRagLint.Query.TextNodes.TextLayerSvg (DRagLint.Query.TextNodes.pas) ? (+1 more)</para>
+  /// <para>Used in units: DRagLint.CLI.Graph, DRagLint.Query.TextNodes</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TGraphTextNode = record
     Id      : string ; { '<file name>:<line>', unique within one graph }
     FileName: string ; { base name of the .md file }
@@ -29,6 +35,12 @@ type
   end;
 
   /// <summary>A text node -> the unit declaring a name it mentions.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.TextNodes.pas), DRagLint.CLI.Graph.DoGraph.GraphJsonOrHtml (DRagLint.CLI.Graph.pas), DRagLint.Query.TextNodes.GraphTextNodesJson (DRagLint.Query.TextNodes.pas), DRagLint.Query.TextNodes.LoadGraphTextNodes (DRagLint.Query.TextNodes.pas), DRagLint.Query.TextNodes.TextLayerSvg (DRagLint.Query.TextNodes.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.CLI.Graph, DRagLint.Query.TextNodes</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TGraphTextEdge = record
     FromId: string; { TGraphTextNode.Id }
     ToUnit: string; { the declaring file's base name without extension: the graph's unit node }
@@ -41,7 +53,17 @@ type
 /// own path, or the path of a unit it links to, contains this text (case-insensitive).</param>
 /// <param name="ANodes">The nodes, ordered by path then line.</param>
 /// <param name="AEdges">The edges of the kept nodes.</param>
-/// <remarks>An index without Markdown (every DB built before 1.47) yields two empty arrays.</remarks>
+/// <remarks>
+/// An index without Markdown (every DB built before 1.47) yields two empty arrays.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Graph.DoGraph.GraphJsonOrHtml (DRagLint.CLI.Graph.pas)</para>
+/// <para>Calls: ChangeFileExt, ContainsStr, Default, DRagLint.Query.TextNodes.BacktickNames, DRagLint.Query.TextNodes.LoadGraphTextNodes.Resolve, ExtractFileName, IntToStr, LowerCase</para>
+/// <para>SQL: reads FILES, STRING_LITERALS</para>
+/// <para>Mutates: ANodes (out), AEdges (out)</para>
+/// <seealso cref="DRagLint.Query.TextNodes.BacktickNames"/>
+/// <seealso cref="DRagLint.Query.TextNodes.LoadGraphTextNodes.Resolve"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure LoadGraphTextNodes(AConn: TFDConnection; const ARootSubstr: string; out ANodes: TArray<TGraphTextNode>;
   out AEdges: TArray<TGraphTextEdge>);
 
@@ -50,6 +72,14 @@ procedure LoadGraphTextNodes(AConn: TFDConnection; const ARootSubstr: string; ou
 /// <param name="AEdges">From LoadGraphTextNodes.</param>
 /// <returns>'"text_nodes":[..],"text_edges":[..]' -- no braces, ready to splice
 /// into the drag-lint.graph/1 object.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Graph.DoGraph.GraphJsonOrHtml (DRagLint.CLI.Graph.pas)</para>
+/// <para>Calls: DRagLint.Core.Model.JsonEscape, Format</para>
+/// <para>Returns: '"text_nodes":[' + NJson + '],"text_edges":[' + string.Join(',', Parts.ToArray) + ']'</para>
+/// <seealso cref="DRagLint.Core.Model.JsonEscape"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function GraphTextNodesJson(const ANodes: TArray<TGraphTextNode>; const AEdges: TArray<TGraphTextEdge>): string;
 
 /// <summary>The HTML section that draws and lists the text nodes and what each links to.</summary>
@@ -62,9 +92,18 @@ function GraphTextNodesJson(const ANodes: TArray<TGraphTextNode>; const AEdges: 
 /// data-id = the node id), one box per linked unit (`dl-tn-unit`, data-unit) and
 /// one dashed path per edge (`dl-tn-edge`, data-from / data-to); then the h2 and
 /// the list of every node. Everything is HTML-encoded; no script is needed.</returns>
-/// <remarks>The toggle is pure CSS (`:checked ~`), so the page works with
+/// <remarks>
+/// The toggle is pure CSS (`:checked ~`), so the page works with
 /// scripts off. A note box shows the id, the section and the first characters of
-/// the text; its SVG title carries the full text.</remarks>
+/// the text; its SVG title carries the full text.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Graph.DoGraph.GraphJsonOrHtml (DRagLint.CLI.Graph.pas)</para>
+/// <para>Calls: DRagLint.Query.TextNodes.TextLayerLegend, DRagLint.Query.TextNodes.TextLayerSvg, IfThen</para>
+/// <para>Returns: Sb.ToString</para>
+/// <seealso cref="DRagLint.Query.TextNodes.TextLayerLegend"/>
+/// <seealso cref="DRagLint.Query.TextNodes.TextLayerSvg"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function GraphTextNodesHtml(const ANodes: TArray<TGraphTextNode>; const AEdges: TArray<TGraphTextEdge>): string;
 
 implementation

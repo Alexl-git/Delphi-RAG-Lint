@@ -8,9 +8,12 @@
 [CmdletBinding()]
 param(
   [switch]$KeepWorkDir,
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-exehint-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 . "$PSScriptRoot\lib\WorkDirCleanup.ps1"
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'g8-common.ps1')
@@ -47,7 +50,7 @@ foreach ($g in 'run_find_callers_callback_reach', 'run_generate_test_stub_guard'
                'run_repo_ownroots_tracked', 'run_serve_multidb_warning_guard', 'run_unit_missing_from_uses',
                'run_unit_usage_degrades', 'run_unused_unit_enum_values', 'run_unused_unit_helpers',
                'run_usages_field_access', 'run_wiki_blocks', 'run_with_hiding_rule') {
-  $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot "$g.ps1") -Exe $bareExe -WorkDir (Join-Path $WorkDir $g) 2>&1 | ForEach-Object { "$_" }) -join "`n"
+  $out = (& { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $PSScriptRoot "$g.ps1") -Exe $bareExe -WorkDir (Join-Path $WorkDir $g) 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n"
   Check "$g names the load failure (0xC000007B or 0xC0000135) when the exe cannot start" ($out -match '0xC000007B|0xC0000135') (($out -split "`n" | Select-Object -First 2) -join ' | ')
 }
 Check 'helper: ordinary exit code gives no hint (negative control)' ((Get-ExeStartFailureHint 1) -eq '')

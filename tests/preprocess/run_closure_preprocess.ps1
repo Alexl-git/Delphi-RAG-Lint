@@ -38,7 +38,10 @@
   Run from a NEUTRAL CWD (C:\TEMP) so no drag-lint-lint.json is picked up.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -73,7 +76,7 @@ try {
   # ============================================================
   # (a) DEFAULT: preprocess ON, Win64 built-in profile. Per-config narrowing.
   # ============================================================
-  $ppOut = & $exePath selftest closure --project $proj --platform win64 2>$null
+  $ppOut = & { $ErrorActionPreference = 'Continue'; & $exePath selftest closure --project $proj --platform win64 2>$null }
   Check 'DEFAULT: selftest closure exited 0 (preprocess wired into the closure)' ($LASTEXITCODE -eq 0)
 
   $ppWin   = Get-LeafCount $ppOut 'Win64Only.pas'
@@ -85,7 +88,7 @@ try {
   # ============================================================
   # (b) NO-PREPROC: --no-preprocess reverts to the OLD all-branch behaviour.
   # ============================================================
-  $rawOut = & $exePath selftest closure --project $proj --platform win64 --no-preprocess 2>$null
+  $rawOut = & { $ErrorActionPreference = 'Continue'; & $exePath selftest closure --project $proj --platform win64 --no-preprocess 2>$null }
   Check 'NO-PREPROC: selftest closure exited 0' ($LASTEXITCODE -eq 0)
 
   $rawWin   = Get-LeafCount $rawOut 'Win64Only.pas'

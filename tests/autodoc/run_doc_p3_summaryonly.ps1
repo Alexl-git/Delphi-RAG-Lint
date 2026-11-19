@@ -41,7 +41,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Continue'
@@ -60,10 +63,10 @@ Copy-Item $fixture $target -Force
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
-  $applyJson = (& $exePath document --qname summaryonly.Echo3 --db $db --apply --json 2>$null) -join "`n"
+  $applyJson = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname summaryonly.Echo3 --db $db --apply --json 2>$null }) -join "`n"
   Check 'document --qname --apply exits 0' ($LASTEXITCODE -eq 0)
   # v(ADP3 T3 review fix, Finding 3): must be "extended" (repair path, one
   # comment updated) -- NOT "created" (fresh path, which would mean a
@@ -105,8 +108,8 @@ try {
 
   # --- 4. Idempotency ---
   $before = [IO.File]::ReadAllBytes($target)
-  & $exePath index $scratch --db $db 2>$null | Out-Null
-  $reApplyJson = (& $exePath document --qname summaryonly.Echo3 --db $db --apply --json 2>$null) -join "`n"
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+  $reApplyJson = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname summaryonly.Echo3 --db $db --apply --json 2>$null }) -join "`n"
   Check '4. second apply reports edits=0'      ($reApplyJson -match '"edits":0')      $reApplyJson
   Check '4. second apply reports applied=false' ($reApplyJson -match '"applied":false') $reApplyJson
   $after = [IO.File]::ReadAllBytes($target)

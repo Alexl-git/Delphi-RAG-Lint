@@ -23,9 +23,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_tc_d5_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false; $script:Passed = 0
 function Check($n, $ok, $d = '') {
@@ -49,7 +52,7 @@ function Exec([string[]]$ArgList) {
   Push-Location $cwd
   try {
     $errFile = Join-Path $WorkDir 'stderr.txt'
-    $o = & $Exe @ArgList 2>$errFile | ForEach-Object { "$_" }
+    $o = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe @ArgList 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | ForEach-Object { "$_" }
     $code = $LASTEXITCODE
     $e = if (Test-Path $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
   } finally { Pop-Location }
@@ -58,7 +61,7 @@ function Exec([string[]]$ArgList) {
 function TargetOf([string[]]$Extra) {
   $r = Exec (@('rules', '--json') + $Extra)
   if ($r.Code -ne 0) { return "exit$($r.Code)" }
-  return [string](($r.Out | ConvertFrom-Json).target_compiler)
+  return [string](($r.Out | ConvertFrom-Json | ForEach-Object { $_ }).target_compiler)
 }
 
 # ---- tokens -----------------------------------------------------------------------
@@ -97,11 +100,11 @@ WriteLines $dprSib @('program Modern;', '', 'begin', 'end.')
 WriteLines (Join-Path $sib 'Modern.dproj') @('<Project><PropertyGroup><ProjectVersion>20.4</ProjectVersion></PropertyGroup></Project>')
 
 $r = Exec @('rules', '--json', '--target-compiler', 'auto', '--project', $dpr)
-$got = if ($r.Code -eq 0) { [string](($r.Out | ConvertFrom-Json).target_compiler) } else { "exit$($r.Code)" }
+$got = if ($r.Code -eq 0) { [string](($r.Out | ConvertFrom-Json | ForEach-Object { $_ }).target_compiler) } else { "exit$($r.Code)" }
 Check 'auto on a .dpr with no .dproj assumes 13' ($got -eq '13') "got $got; $($r.Err.Trim())"
 Check 'auto on a .dpr: the assumption is noted on stderr, once' (([regex]::Matches($r.Err, 'assuming Delphi 5')).Count -eq 1) $r.Err.Trim()
 $r = Exec @('rules', '--json', '--target-compiler', 'auto', '--project', $dprSib)
-$got = if ($r.Code -eq 0) { [string](($r.Out | ConvertFrom-Json).target_compiler) } else { "exit$($r.Code)" }
+$got = if ($r.Code -eq 0) { [string](($r.Out | ConvertFrom-Json | ForEach-Object { $_ }).target_compiler) } else { "exit$($r.Code)" }
 Check 'CONTROL auto on a .dpr with a sibling .dproj reads its ProjectVersion' ($got -eq '37') "got $got"
 Check 'CONTROL ... and notes no assumption' ($r.Err -notmatch 'assuming') $r.Err.Trim()
 $r = Exec @('rules', '--json', '--target-compiler', 'auto')
@@ -111,7 +114,7 @@ Check 'CONTROL auto with no project still refuses, naming the D5 way out' (($r.C
 # sql --json rows are POSITIONAL arrays.
 function Names([string]$Db) {
   $r = Exec @('sql', '--db', $Db, '--query', "SELECT name FROM symbols WHERE kind = 'const'", '--json')
-  return ,@((($r.Out | ConvertFrom-Json).rows) | ForEach-Object { [string]$_[0] })
+  return ,@((($r.Out | ConvertFrom-Json | ForEach-Object { $_ }).rows) | ForEach-Object { [string]$_[0] })
 }
 $db5 = Join-Path $WorkDir 'd5.sqlite'
 $r = Exec @('index', '--project', $dpr, '--db', $db5, '--target-compiler', '5', '--library-db', 'none')

@@ -12,6 +12,12 @@ uses
 
 type
   /// <summary>What the `unwith` command line asks for.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.Unwith.pas) ?, DRagLint.CLI.DoUnwith (DRagLint.CLI.pas), DRagLint.CLI.Unwith.RunUnwith (DRagLint.CLI.Unwith.pas) ?</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.Unwith</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUnwithRunOptions = record
     /// <summary>--in: one file; '' = every .pas / .dpr of the project index.</summary>
     InFile: string;
@@ -29,6 +35,9 @@ type
     NoBackup: Boolean;
     /// <summary>--json.</summary>
     Json: Boolean;
+    /// <summary>--exclude-under (repeatable): a project-wide run leaves out every file under one of these folders, so a
+    /// generated region (DB-RAD) is never planned or rewritten. An explicit --in file is never excluded. [] = none.</summary>
+    ExcludeUnder: TArray<string>;
   end;
 
 /// <summary>Runs `unwith`: the verdict on every with statement in scope, then (with Apply) the gated rewrite.</summary>
@@ -37,6 +46,20 @@ type
 /// <param name="pLib">The platform library; nil = ancestors outside the project refuse.</param>
 /// <returns>0 = plan printed, or applied and proved. 1 = the with on --line refused, nothing to apply, or the gate or the
 /// after-proof refused and rolled back. 2 = a rollback failed: the project may be PARTLY changed.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoUnwith (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.CLI.Unwith.RunUnwith.IsExcluded, DRagLint.CLI.Unwith.RunUnwith.JsonOf, DRagLint.CLI.Unwith.RunUnwith.PrintSite, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear, DRagLint.Refactor.Unwith.UnwithApply, DRagLint.Refactor.Unwith.UnwithPlanFile, ExpandFileName (+7 more)</para>
+/// <para>Returns: 0; if Applied.RollbackFailed then 2; 1</para>
+/// <para>Complexity: 19 (cyclomatic, outer body), 168 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Unwith.RunUnwith.IsExcluded"/>
+/// <seealso cref="DRagLint.CLI.Unwith.RunUnwith.JsonOf"/>
+/// <seealso cref="DRagLint.CLI.Unwith.RunUnwith.PrintSite"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunUnwith(const pOpts: TUnwithRunOptions; const pStore, pLib: ISymbolStore): Integer;
 
 implementation
@@ -46,6 +69,15 @@ uses
   DRagLint.Diagnostics.ParseCache, DRagLint.Refactor.Unwith;
 
 function RunUnwith(const pOpts: TUnwithRunOptions; const pStore, pLib: ISymbolStore): Integer;
+
+  function IsExcluded(const pPath: string): Boolean;
+  begin
+    Result:= False;
+    var L:= LowerCase(pPath.Replace('/', '\'));
+    for var R: string in pOpts.ExcludeUnder do
+      if (R <> '') and StartsStr(LowerCase(IncludeTrailingPathDelimiter(ExpandFileName(R.Replace('/', '\')))), L) then Exit(True);
+  end;
+
 var
   Plans: TArray<TUnwithFilePlan>;
   ByKind: TDictionary<string, Integer>;
@@ -133,7 +165,7 @@ begin
       for var Id: Int64 in pStore.GetAllFileIds do
       begin
         var P:= pStore.GetFilePath(Id);
-        if MatchText(ExtractFileExt(P), ['.pas', '.dpr']) and TFile.Exists(P) then Files:= Files + [P];
+        if MatchText(ExtractFileExt(P), ['.pas', '.dpr']) and TFile.Exists(P) and not IsExcluded(P) then Files:= Files + [P];
       end;
     for var F: string in Files do
     begin

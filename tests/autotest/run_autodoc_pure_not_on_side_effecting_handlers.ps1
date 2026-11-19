@@ -44,9 +44,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-pure-not-on-side-effects-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 if (Test-Path Variable:PSNativeCommandUseErrorActionPreference) { $PSNativeCommandUseErrorActionPreference = $false }
@@ -114,7 +117,7 @@ $db = Join-Path $WorkDir 'fx.sqlite'
 # a crash would otherwise be visible only through whichever pin it happened to
 # trip (review-task-1 M5).
 function Invoke-Engine([string]$Label, [string[]]$EngineArgs) {
-  $out = (& $Exe @EngineArgs 2>&1 | Out-String)
+  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe @EngineArgs 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $code = $LASTEXITCODE
   Check "ENGINE: $Label exits 0" ($code -eq 0) ("exit=$code " + (($out -split "`r?`n" | Where-Object { $_ -ne '' } | Select-Object -Last 1)))
 }

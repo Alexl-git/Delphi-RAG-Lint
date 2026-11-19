@@ -27,10 +27,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_convert_apply_intf_uses_$PID",
   [string]$RsVars  = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 $script:fail = $false
@@ -46,13 +49,13 @@ New-Item -ItemType Directory $WorkDir -Force | Out-Null
 Copy-Item (Join-Path $PSScriptRoot 'fixtures\intfuses\*') $WorkDir
 
 $db = Join-Path $WorkDir 'fx.sqlite'
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the fixture index was built' (Test-Path $db)
 
 function P([string]$n) { return (Join-Path $WorkDir $n) }
 function Text([string]$n) { return [IO.File]::ReadAllText((P $n)) }
 function Apply([string]$Unit, [string]$Rules, [string[]]$Extra = @()) {
-  $o = (& $Exe @(@('convert-apply', '--unit', (P $Unit), '--rules', (P $Rules), '--db', $db) + $Extra) 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @(@('convert-apply', '--unit', (P $Unit), '--rules', (P $Rules), '--db', $db) + $Extra) 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 $CRLF = "`r`n"
@@ -92,7 +95,7 @@ Check 'D3 ... the interface uses is untouched' ($t.Contains("uses$CRLF  Classes,
 # the #convert surface, so it is not a uses[] row (like the add itself).
 $r = Apply 'IntfMove.pas' 'convert.rules' @('--apply', '--no-backup', '--format', 'json')
 $t = Text 'IntfMove.pas'
-$j = $null; try { $j = $r.Out.Substring($r.Out.IndexOf('{')) | ConvertFrom-Json } catch {}
+$j = $null; try { $j = $r.Out.Substring($r.Out.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'M1 #convert-only book, LibB already in the implementation uses: exit 0' ($r.Code -eq 0) $r.Out
 Check 'M2 ... LibB MOVED to the interface uses' ($t.Contains("interface$CRLF$CRLF" + "uses$CRLF  Classes, LibA, LibB;$CRLF")) $t
 Check 'M3 ... and removed from the implementation uses (ImplU kept), exactly once in the file' `
@@ -125,7 +128,7 @@ Check 'M8 ... IntfMoveIf.pas byte-identical' ((Get-FileHash (P 'IntfMoveIf.pas')
 # 1.22.0 planned 7 edits for IntfFormU, this plan is 5, and the implementation
 # clause (lines 15..16) is not touched.
 $r = Apply 'IntfFormU.pas' 'convertunuse.rules' @('--format', 'json')
-$j = $null; try { $j = $r.Out.Substring($r.Out.IndexOf('{')) | ConvertFrom-Json } catch {}
+$j = $null; try { $j = $r.Out.Substring($r.Out.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'P1 #unuse OldU (interface) + interface field: 5 edits planned (dfm 2, retype 1, ONE interface clause rewrite 2)' `
   (($r.Code -eq 0) -and ($null -ne $j) -and ($j.edits_count -eq 5)) $r.Out
 $r = Apply 'IntfFormU.pas' 'convertunuse.rules'

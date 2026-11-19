@@ -4,10 +4,10 @@ title: manifest where / migrate (installed layout v2)
 summary: Shows which drag-lint.json this engine reads and why; moves the exe-side one to %APPDATA% once (renamed, never deleted). Installed layout v2, off by default
 product: DL
 group: maintenance
-order: 120009
+order: 120010
 since: 1.50.0-alpha
 status: shipped
-updated: 1.50.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # manifest where / migrate (installed layout v2)
@@ -73,6 +73,10 @@ folder. It exits 0 even when the file does not exist.
 `--config <file>` still names one file for one verb and bypasses the lookup. A local
 `.drag-lint.json` still merges over whichever file answered. Relative paths resolve against the folder
 the file was found in.
+
+An engine copy that must not see the machine's `.drag-lint.json` (a lane-private engine run from a folder under
+`C:\Projects`) sets `"settings": {"ignoreLocalConfig": true}` in ITS OWN `drag-lint.json`: that engine then merges and loads no
+`.drag-lint.json` found by walking up from the working directory (neither the manifest merge nor the (loaded defaults from ...) defaults). Off unless set; the Config tool does not write the key.
 
 ### Move the manifest: `manifest migrate`
 

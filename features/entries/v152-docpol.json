@@ -1,0 +1,35 @@
+{
+  "id": "v152-docpol",
+  "title": "Documentation policy: missing-doc, doc-placeholder, doc-malformed-summary",
+  "group": "documentation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.52.0-alpha",
+  "summary": "missing-doc covers DFM-bound handlers with code; doc-placeholder (ON, hint) flags template summaries; doc-malformed-summary (OFF) flags declaration-like ones",
+  "intro": "Read this to see which declarations missing-doc expects a doc comment on after 1.52 (a bound Button1Click with code now needs one, an empty one does not), and how doc-placeholder and doc-malformed-summary catch summaries that are not descriptions.",
+  "wikiPage": "v152-docpol",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "usage": "drag-lint lint-all --db <db> [--rule missing-doc|doc-placeholder|doc-malformed-summary] (documentation rules: missing-doc OFF by default, document all real code, an empty DFM-bound handler is exempt; doc-placeholder ON hint; doc-malformed-summary OFF hint)",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<db>"
+        },
+        {
+          "name": "--rule",
+          "arg": "<id>"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-18",
+    "by": "ENGINE",
+    "build": "1.51.1-alpha",
+    "surfaceHash": "b47eb66bf0cb814b73ab6883a63435ae8219a7ec857a578350c86dfa85120e65"
+  }
+}

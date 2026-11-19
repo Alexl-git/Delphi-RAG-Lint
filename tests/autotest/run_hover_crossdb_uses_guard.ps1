@@ -29,9 +29,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1"),
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-hover-xdb-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1") }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -147,8 +150,8 @@ $cfg = Join-Path $WorkDir 'manifest.drag-lint.json'
   }
 }
 "@ | Set-Content $cfg -Encoding ascii
-& $Exe index --all --config $cfg --only SecA --jobs 1 2>&1 | Out-Null
-& $Exe index --all --config $cfg --only SecB --jobs 1 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $cfg --only SecA --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $cfg --only SecB --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $dbA = Join-Path $WorkDir 'out\a.sqlite'
 $dbB = Join-Path $WorkDir 'out\b.sqlite'
 Check 'fixture: both DBs indexed' ((Test-Path $dbA) -and (Test-Path $dbB))
@@ -156,7 +159,7 @@ Check 'fixture: both DBs indexed' ((Test-Path $dbA) -and (Test-Path $dbB))
 function Hover([string]$QName, [string]$Fmt, [string[]]$Dbs) {
   $a = @('hover', '--qname', $QName, '--format', $Fmt)
   foreach ($d in $Dbs) { $a += @('--db', $d) }
-  return ((& $Exe @a 2>$null) -join "`n")
+  return ((& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null }) -join "`n")
 }
 function UsedInLine([string]$md) { return (($md -split "`n") | Where-Object { $_ -match 'Used in:' }) -join ' / ' }
 function ViaLine([string]$md) { return (($md -split "`n") | Where-Object { $_ -match 'Used in \(via property' }) -join ' / ' }
@@ -196,7 +199,7 @@ function Session([string[]]$Dbs, [string]$Tag) {
     -RedirectStandardError (Join-Path $WorkDir "err-$Tag.txt") -NoNewWindow -Wait | Out-Null
   $r = @{}
   foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($null -ne $o.id) { $r[[int]$o.id] = $o }
   }
   return $r

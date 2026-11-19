@@ -36,6 +36,10 @@ const
   /// working is never cut short -- its answer is always delivered.</summary>
   REFACTOR_STALL_MS = 60000;
 
+  /// <summary>STALL budget of an APPLY run (Rename, Extract Method): the write goes through the compile gate, which
+  /// builds the project before and after; a large project can sit idle for minutes on a link or a lock.</summary>
+  REFACTOR_APPLY_STALL_MS = 300000;
+
 /// <summary>Runs one drag-lint refactor command line on a worker thread and hands
 /// the result to ADone on the main thread (IDE-HANG, 1.40; CliAsync since 1.42).</summary>
 /// <param name="ACmdLine">Full command line, as CreateProcessW takes it.</param>
@@ -66,13 +70,9 @@ procedure RunRefactorCliAsync(const ACmdLine: string; const ADone: TRefactorRunD
 /// Main thread only. Preview / Apply run the CLI off the main thread.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.Editor.InvokeRename (DragLint.Plugin.Editor.pas)</para>
-/// <para>Calls: DragLint.Plugin.RefactorForm.TCliDialogHandler.DoCloseQuery, DragLint.Plugin.RefactorForm.TRefactorHandler.Create, DragLint.Plugin.RefactorForm.TRefactorHandler.DoApply, DragLint.Plugin.RefactorForm.TRefactorHandler.DoClose, DragLint.Plugin.RefactorForm.TRefactorHandler.DoPreview</para>
+/// <para>Calls: DragLint.Plugin.RefactorForm.TRefactorHandler.Create</para>
 /// <para>UI thread only -- touches Form</para>
-/// <seealso cref="DragLint.Plugin.RefactorForm.TCliDialogHandler.DoCloseQuery"/>
 /// <seealso cref="DragLint.Plugin.RefactorForm.TRefactorHandler.Create"/>
-/// <seealso cref="DragLint.Plugin.RefactorForm.TRefactorHandler.DoApply"/>
-/// <seealso cref="DragLint.Plugin.RefactorForm.TRefactorHandler.DoClose"/>
-/// <seealso cref="DragLint.Plugin.RefactorForm.TRefactorHandler.DoPreview"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure ShowRefactorDialog(const ASuggestedQName: string; const AProjectDb: string; const AExePath: string; const ASuggestedNewName: string = ''; const AFromFile: string = '');
@@ -99,9 +99,14 @@ function DLRenameCmdLine(const AExePath, AQName, ANewName, ADb, AFromFile: strin
 /// <param name="AOutput">The dry run's stdout and stderr, interleaved.</param>
 /// <returns>The number of `drag-lint: note: ... refused [kind]: ...` lines. A note
 /// without `refused [` (the stale-index note, a reach note) is not counted.</returns>
-/// <remarks>Pure. The dry run exits 0 with refusals; the apply refuses with exit 2
+/// <remarks>
+/// Pure. The dry run exits 0 with refusals; the apply refuses with exit 2
 /// and writes nothing whenever one is printed (DRagLint.CLI FinishRename), so
-/// DoPreview enables Apply only when this is 0. Test seam: tests\RenamePreviewTests.dpr.</remarks>
+/// DoPreview enables Apply only when this is 0. Test seam: tests\RenamePreviewTests.dpr.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.RefactorForm.TRefactorHandler.DoPreview (DragLint.Plugin.RefactorForm.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DLRenamePreviewRefusals(const AOutput: string): Integer;  // dl:ok unused-public-symbol@6a7e -- public as the test seam: tests\RenamePreviewTests.dpr (outside the plugin project) drives it
 
 /// <summary>Reads the symbol the typeat verb resolved from its JSON answer.</summary>
@@ -139,14 +144,10 @@ function DLParseTypeAtResolved(const AOutput: string; out AToken: string): strin
 /// Call from the main IDE thread only (creates/shows a TForm).
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.Keyboard.InvokeExtractMethod (DragLint.Plugin.Keyboard.pas)</para>
-/// <para>Calls: DragLint.Plugin.RefactorForm.TCliDialogHandler.DoCloseQuery, DragLint.Plugin.RefactorForm.TExtractMethodHandler.Create, DragLint.Plugin.RefactorForm.TExtractMethodHandler.DoApply, DragLint.Plugin.RefactorForm.TExtractMethodHandler.DoClose, DragLint.Plugin.RefactorForm.TExtractMethodHandler.DoPreview, ExtractFileName, Format</para>
+/// <para>Calls: DragLint.Plugin.RefactorForm.TExtractMethodHandler.Create, ExtractFileName, Format</para>
 /// <para>Returns: Handler.Applied</para>
 /// <para>UI thread only -- touches Form</para>
-/// <seealso cref="DragLint.Plugin.RefactorForm.TCliDialogHandler.DoCloseQuery"/>
 /// <seealso cref="DragLint.Plugin.RefactorForm.TExtractMethodHandler.Create"/>
-/// <seealso cref="DragLint.Plugin.RefactorForm.TExtractMethodHandler.DoApply"/>
-/// <seealso cref="DragLint.Plugin.RefactorForm.TExtractMethodHandler.DoClose"/>
-/// <seealso cref="DragLint.Plugin.RefactorForm.TExtractMethodHandler.DoPreview"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ShowExtractMethodDialog(const AFilePath: string; AFromLine, AToLine: Integer; const AExePath: string): Boolean;
@@ -194,7 +195,7 @@ type
       FBusy    : Boolean;
       { Starts ACmdLine off the main thread; shows ABusyText and disables Apply
         and Close until ADone has run. False (nothing started) while busy. }
-      function RunAsync(const ACmdLine, ABusyText: string; const ADone: TRefactorRunDone): Boolean;
+      function RunAsync(const ACmdLine, ABusyText: string; const ADone: TRefactorRunDone; AStallMs: Integer = REFACTOR_STALL_MS): Boolean;
     public
       constructor Create(AOwner: TComponent); override;
       destructor Destroy; override;
@@ -215,7 +216,7 @@ begin
   inherited Destroy;
 end;
 
-function TCliDialogHandler.RunAsync(const ACmdLine, ABusyText: string; const ADone: TRefactorRunDone): Boolean;
+function TCliDialogHandler.RunAsync(const ACmdLine, ABusyText: string; const ADone: TRefactorRunDone; AStallMs: Integer): Boolean;
 var
   Me: TObject;
 begin
@@ -235,10 +236,10 @@ begin
       FBusy:= False;
       FBtnClose.Enabled:= True;
       FMemo.Lines.Text:= if AExitCode = PROCRUN_TIMED_OUT_EXIT_CODE then
-                           AOutput + sLineBreak + Format('(drag-lint made no progress for %d s and was stopped)', [REFACTOR_STALL_MS div MSEC_PER_SEC])
+                           AOutput + sLineBreak + Format('(drag-lint made no progress for %d s and was stopped)', [AStallMs div MSEC_PER_SEC])
                          else AOutput;
       ADone(AExitCode, AOutput);
-    end);
+    end, AStallMs);
 end;
 
 procedure TCliDialogHandler.DoCloseQuery(Sender: TObject; var CanClose: Boolean);
@@ -361,7 +362,7 @@ begin
         FBtnApply.Enabled:= True;
         ShowMessage('drag-lint: Rename apply failed. See output for details.');
       end;
-    end);
+    end, REFACTOR_APPLY_STALL_MS);
 end; // procedure
 
 procedure TRefactorHandler.DoClose(Sender: TObject);
@@ -624,7 +625,7 @@ begin
         FBtnApply.Enabled:= True;
         ShowMessage('drag-lint: Extract Method apply failed. See output for details.');
       end;
-    end);
+    end, REFACTOR_APPLY_STALL_MS);
 end; // procedure
 
 procedure TExtractMethodHandler.DoClose(Sender: TObject);

@@ -340,7 +340,7 @@ or more rule ids it silences only those. Applies to both `.scm` and built-in rul
 
 ## 4. What it checks
 
-This release ships **423 rules** (341 enabled by default, 125 with an auto-fix)
+This release ships **435 rules** (355 enabled by default, 131 with an auto-fix)
 across 18 categories: exceptions, control-flow
 / dead code, expression bugs, resource/lifetime, naming, and security (SQL
 injection, hardcoded credentials). Run `drag-lint rules` for the full,
@@ -460,8 +460,8 @@ left by an interrupted command (a pipeline cut short, e.g. by
 
 ```
 Get-Process drag-lint | Select-Object Id, StartTime, Path
-& $dl shutdown --dry-run      # lists the running `lsp` engines it would ask to stand down
-& $dl shutdown                # asks them to close every index and exit
+& $dl stop-now --dry-run      # lists the running `lsp` engines it would ask to stand down
+& $dl stop-now                # asks them to close every index and exit
 Stop-Process -Id <Id>         # a leftover that is not an lsp engine -- check Path and StartTime first
 ```
 

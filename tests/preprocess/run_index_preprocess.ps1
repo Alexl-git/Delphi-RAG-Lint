@@ -35,7 +35,10 @@
   Run from a NEUTRAL CWD (C:\TEMP) so no drag-lint-lint.json is picked up.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -63,10 +66,10 @@ $rawDb = Join-Path $scratchRoot 'raw.sqlite'
 # with DIFFERENT names -- none of which equal $name -- so counting exact-name
 # matches is fuzzy-proof. Returns an integer; 0 means genuinely absent.
 function Get-ExactCount([string]$db, [string]$name) {
-  $out = & $exePath query --name $name --db $db --json 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --db $db --json 2>$null }
   $joined = ($out -join "`n").Trim()
   if ($joined -eq '' -or $joined -eq '[]') { return 0 }
-  try { $arr = $joined | ConvertFrom-Json } catch { return 0 }
+  try { $arr = $joined | ConvertFrom-Json | ForEach-Object { $_ } } catch { return 0 }
   if ($null -eq $arr) { return 0 }
   # ConvertFrom-Json returns a single object (not an array) for a 1-element list.
   $items = @($arr)
@@ -78,7 +81,7 @@ try {
   # ============================================================
   # (a) DEFAULT: preprocess ON, Win64 built-in profile. Per-config narrowing.
   # ============================================================
-  & $exePath index $ppDir --db $ppDb 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $ppDir --db $ppDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'DEFAULT: index run exited 0 (preprocess wired into the pipeline)' ($LASTEXITCODE -eq 0)
 
   $ppWin   = Get-ExactCount $ppDb 'WinOnlyProc'
@@ -90,7 +93,7 @@ try {
   # ============================================================
   # (b) NO-PREPROC: --no-preprocess reverts to the OLD all-branch behaviour.
   # ============================================================
-  & $exePath index $rawDir --db $rawDb --no-preprocess 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $rawDir --db $rawDb --no-preprocess 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'NO-PREPROC: index run exited 0' ($LASTEXITCODE -eq 0)
 
   $rawWin   = Get-ExactCount $rawDb 'WinOnlyProc'

@@ -72,20 +72,13 @@ const
 /// would exit 0 exits 3 (FATAL EInOutError on stderr) when its stdout pipe was
 /// closed by the reader before the end, even if no write reported the failure;
 /// lsp and serve excepted (stdout is their transport).</summary>
-/// <returns><!-- drag-lint:auto -->Integer -- Observed: 0; 2; DoIndexAll(Args);
-/// DoIndex(Args); DoWarmRuleCache(Args); DoQuery (Args).</returns>
+/// <returns><!-- drag-lint:auto -->Integer -- Observed: RunCommand(Command); EXIT_FATAL.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas) ?, main block (drag-lint.dpr)</para>
-/// <para>Calls: AssignFile, Default, DRagLint.Charts.AskVerb.RunAskVerbFromCommandLine, DRagLint.CLI.ApplyManifestSwitch, DRagLint.CLI.ApplyPreprocessCompilerVersion, DRagLint.CLI.Bookmarks.RunBookmarksRestore, DRagLint.CLI.Bookmarks.RunBookmarksStrip, DRagLint.CLI.ConfigureLspLint, DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls (+162 more)</para>
-/// <para>Complexity: 170 (cyclomatic, outer body), 509 lines (full implementation)</para>
-/// <para>Catches: Exception (empty); Exception (swallowed)</para>
-/// <para>Touches: file system</para>
-/// <seealso cref="DRagLint.Charts.AskVerb.RunAskVerbFromCommandLine"/>
-/// <seealso cref="DRagLint.CLI.ApplyManifestSwitch"/>
-/// <seealso cref="DRagLint.CLI.ApplyPreprocessCompilerVersion"/>
-/// <seealso cref="DRagLint.CLI.Bookmarks.RunBookmarksRestore"/>
-/// <seealso cref="DRagLint.CLI.Bookmarks.RunBookmarksStrip"/>
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas) ?, main block (drag-lint.dpr)</para>
+/// <para>Calls: DRagLint.CLI.RunCommand, DRagLint.CLI.StdoutReaderGone, MatchText, Writeln</para>
+/// <seealso cref="DRagLint.CLI.RunCommand"/>
+/// <seealso cref="DRagLint.CLI.StdoutReaderGone"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function Run: Integer;
@@ -140,7 +133,9 @@ uses
   , DRagLint.Lint.RuleCache // dl:unit DRagLint.Lint.RuleCache accepted -- CACHED_RULES travels with the cache that defines which rules it may hold, so lint and the indexer warm cannot drift apart
   , DRagLint.Lint.UsesAudit { TUsesAuditor -- the uses-audit core shared with the uses-movable-to-implementation rule (G8) }
   , DRagLint.Index.LibraryOracle { TLibraryOracle -- find-callees binds a value receiver typed by name to a library routine (item 4) }
+  , DRagLint.Fix.V151.Legacy { SetFixWithLibrary (152 FIXLIB) }
   , DRagLint.Lint.Autofix   { IsFixableRule & co. + BuildAutofixEdits -- the autofix registry (lane A0) }
+  , DRagLint.Fix.V152.PTW   { SetPtwFixLibrary (v152 PTW) }
   , DRagLint.Refactor.RedundantCast { lane 144 item 1: the gated redundant-cast fix }
   , DRagLint.Refactor.NarrowParam   { lane 144 item 2: narrow-param }
   , DRagLint.Refactor.ExtractInterface   { lane 146 g3: extract-interface }
@@ -163,7 +158,7 @@ uses
   , DRagLint.Sql    .FbSnapshot
   , DRagLint.Sql    .OrmLinker
   , DRagLint.Core   .UsageLog   { RecordUsage + BuildGainReport behind `gain` }
-  , DRagLint.Core   .ControlChannel // dl:unit DRagLint.Core.ControlChannel accepted -- the wire constants travel with the pipe: the channel behind `shutdown`, and the lsp-only gate
+  , DRagLint.Core   .ControlChannel // dl:unit DRagLint.Core.ControlChannel accepted -- the wire constants travel with the pipe: the channel behind `stop-now`, and the lsp-only gate
   , DRagLint.Core   .StudioEnv  { TStudioEnv: the ONLY source of a RAD Studio path }
   , DRagLint.Lint   .Config
   , DRagLint.Lint   .RuleCatalog
@@ -217,6 +212,7 @@ uses
   , DRagLint.Refactor   .ExtractMethod
   , DRagLint.CLI.Unwith
   , DRagLint.Query.ExceptionFacts
+  , DRagLint.Query.UsageScope { 1.52 FUSCOPE: usages --scope }
   , DRagLint.Refactor.CompileGate
   , DRagLint.Refactor   .EnumHelper
   , DRagLint.Diagnostics.CompileCheck
@@ -243,6 +239,7 @@ uses
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.V151.Api       { v151 lane FRAME: TV151FileCtx / TV151ProjectCtx }
   , DRagLint.V151.Dispatch  { v151 lane FRAME: the one entry to the v151 rule lanes }
+  , DRagLint.Core.LintBudget  { 1.52 BUDGET: --no-budget, lint-all's rule-budget summary line }
   , DRagLint.Diagnostics.FlowChecks
   , DRagLint.Analysis   .DataFlow  { DataFlowStats -- the solver iteration counters }
   , DRagLint.Index      .Manifest
@@ -282,6 +279,10 @@ uses
   , DRagLint.CLI.ConsumerDbs { ResolveConsumerDbs + platform detection + project index auto-create (v1511 SPLIT) }
   , DRagLint.CLI.Convert { proptree / convert-validate / -reemit / -scaffold / glyph-vacuum verbs (v1511 SPLIT) }
   , DRagLint.CLI.ConvertApply { convert-apply verb (v1511 SPLIT) }
+  , DRagLint.CLI.CheckInit { check-init verb (1.52 FRAME; lane HBSKEL) }
+  , DRagLint.CLI.Repo { repo verb family (1.52 FRAME; lane TTE) }
+  , DRagLint.CLI.Explain { explain verb (1.52 FRAME; lane EXPLAIN) }
+  , DRagLint.CLI.RuleScope { rules disable / enable (1.52 FRAME; lane DISRULE) }
   , DRagLint.CLI.Compare { compare verb (v1511 SPLIT) }
   , DRagLint.CLI.MigrateDbs { migrate-dbs verb + the manifest pair rule (v1511 SPLIT) }
   , DRagLint.CLI.Workspace { workspace / forms-csv / menu-tree / menu-drift verbs (v1511 SPLIT) }
@@ -314,7 +315,7 @@ const
   /// tests\autotest\run_help_env_table.ps1: every quoted 'DRAGLINT_*' literal
   /// under src\ must be a Name here and --help must print every Name. A new
   /// variable is added HERE in the same change, or that guard fails.</remarks>
-  ENV_VARS_HELP: array[0..81] of TEnvVarHelp = (
+  ENV_VARS_HELP: array[0..89] of TEnvVarHelp = (
     (Name: 'DRAGLINT_BUSY_TIMEOUT_MS';                Purpose: 'writer busy timeout in ms (overrides the built-in default; a non-negative integer)'),
     (Name: 'DRAGLINT_CHARTS_ALLOW_LIVE_DB';           Purpose: 'charts: lets CloneDb accept a non-clone (live) database'),
     (Name: 'DRAGLINT_CHARTS_DIR';                     Purpose: 'charts: folder of the charts scripts'),
@@ -336,6 +337,9 @@ const
     (Name: 'DRAGLINT_FIXDOC_TRACE';                   Purpose: 'traces doc-drift fix edits on stderr'),
     (Name: 'DRAGLINT_FULLRULES_CHILD_EXE';            Purpose: 'test hook: the LSP full-rules child exe'),
     (Name: 'DRAGLINT_GATE_TEST_BREAK';                Purpose: 'test hook: breaks the compile gate'),
+    (Name: 'DRAGLINT_HOVER_SETBY_MAX_ROUTINES';        Purpose: 'hover Set by: routine (CFG) budget, a whole number >= 1 (overrides the built-in HOVER_SETBY_MAX_ROUTINES)'),
+    (Name: 'DRAGLINT_HOVER_SETBY_MAX_SECONDS';         Purpose: 'hover Set by: wall-clock cap in seconds, a number > 0 (overrides the built-in HOVER_SETBY_MAX_SECONDS)'),
+    (Name: 'DRAGLINT_HOVER_TIMING';                    Purpose: 'LSP: 1 writes one ''hover-timing <section> <ms>'' line per hover section to stderr'),
     (Name: 'DRAGLINT_INDEX_TEST_FAIL_FILE';           Purpose: 'test hook: index fails on the named file'),
     (Name: 'DRAGLINT_LAYOUT';                         Purpose: 'installed-layout switch (unset = the default layout)'),
     (Name: 'DRAGLINT_LIBRARY_EFFECTS';                Purpose: 'purity stage: 0 = no library effect summaries for the run; a path = that library DB (measurements); unset = the first opening external_stores library'),
@@ -351,6 +355,7 @@ const
     (Name: 'DRAGLINT_MERGE_TEST_EMPTY_REPLACEMENT';   Purpose: 'test hook: merge gets an empty replacement'),
     (Name: 'DRAGLINT_MERGE_TEST_FASTPATH';            Purpose: 'test hook: merge fast path'),
     (Name: 'DRAGLINT_NO_AUTOCREATE';                  Purpose: '1 = a query verb never builds a missing project index on first use'),
+    (Name: 'DRAGLINT_NO_BUDGET';                       Purpose: 'lint: any value other than 0 turns the per-rule time budget off for the process (as --no-budget)'),
     (Name: 'DRAGLINT_NO_FILE_FACTS';                  Purpose: 'forces the text read of a .dfm instead of the stored file facts'),
     (Name: 'DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE';     Purpose: '1|on|yes|true switches off the scoped receiver closure of the resolve pass (A/B)'),
     (Name: 'DRAGLINT_NO_SCOPED_RESOLVE';              Purpose: 'any value switches the scoped resolve pass off (whole-database A/B)'),
@@ -365,6 +370,7 @@ const
     (Name: 'DRAGLINT_RULE_CACHE';                     Purpose: '0 disables the lint rule cache'),
     (Name: 'DRAGLINT_RULE_CACHE_DIR';                 Purpose: 'folder of the lint rule cache'),
     (Name: 'DRAGLINT_RULE_CACHE_WARM';                Purpose: 'rule-cache warm mode when --rule-cache-warm is not given'),
+    (Name: 'DRAGLINT_SCOPED_LOCAL_NAMES';             Purpose: '1|on|yes|true keeps local / parameter names in the scoped resolve pass (the scope before 1.52.1; A/B)'),
     (Name: 'DRAGLINT_SCOPED_RESOLVE_ADDITIONS';       Purpose: 'scoped-resolve escape hatch (unset = widened; an unknown value = off)'),
     (Name: 'DRAGLINT_SCOPED_RESOLVE_REMOVALS';        Purpose: 'scoped-resolve escape hatch (unset = widened; an unknown value = off)'),
     (Name: 'DRAGLINT_STAGE_HEARTBEAT_MS';             Purpose: 'test hook: stage heartbeat period in ms'),
@@ -379,13 +385,16 @@ const
     (Name: 'DRAGLINT_TEST_FAIL_ROLLBACK';             Purpose: 'test hook: fails the rollback'),
     (Name: 'DRAGLINT_TEST_FAIL_WRITE_AT';             Purpose: 'test hook: fails a write at the named step'),
     (Name: 'DRAGLINT_TEST_HANG_STORE_CLOSE_MS';       Purpose: 'test hook: hangs the store close'),
+    (Name: 'DRAGLINT_TEST_HOVER_SLOW_MS';              Purpose: 'test hook: ms of cancellable artificial work in the slow section of a full LSP hover'),
     (Name: 'DRAGLINT_TEST_INDEX_FILE_DELAY_MS';       Purpose: 'test hook: delay per indexed file'),
     (Name: 'DRAGLINT_TEST_LINT_FILE_DELAY_MS';        Purpose: 'test hook: delay per linted file'),
     (Name: 'DRAGLINT_TEST_METRIC_ALGO_BUMP';          Purpose: 'test hook: bumps the routine-metric marker hash version'),
     (Name: 'DRAGLINT_TEST_REINDEX_TIMEOUT_MS';       Purpose: 'test hook: reindex timeout'),
     (Name: 'DRAGLINT_TEST_RESOLVE_DELAY_MS';          Purpose: 'test hook: delay in the resolve pass'),
+    (Name: 'DRAGLINT_TEST_RULE_SLEEP_MS';              Purpose: 'test hook: ''<rule-id>=<ms>'' sleeps that long the first time a lane asks for the rule in a file'),
     (Name: 'DRAGLINT_TEST_SCRATCH_PID';               Purpose: 'test hook: scratch-folder owner pid'),
     (Name: 'DRAGLINT_TEST_STORE_CLOSE_GRACE_MS';      Purpose: 'test hook: store-close grace period'),
+    (Name: 'DRAGLINT_TEST_SCOPE_NO_NAMES';            Purpose: 'test hook: the scoped resolve pass re-resolves the changed files only (a wrong scope)'),
     (Name: 'DRAGLINT_TEST_STREAM_COUNT_DELAY_MS';     Purpose: 'test hook: delay in the stream count'),
     (Name: 'DRAGLINT_TEST_WARM_DELAY_MS';             Purpose: 'test hook: delay in the rule-cache warm'),
     (Name: 'DRAGLINT_TEST_WARM_HOLD_MS';              Purpose: 'test hook: hold in the rule-cache warm'),
@@ -671,6 +680,8 @@ var
   N        : TJSONNumber;
   B        : TJSONBool  ;
 begin
+  { B28 (1.52): an engine whose own manifest says settings.ignoreLocalConfig reads no defaults file found by walking up from the CWD. }
+  if TManifestIO.IgnoresLocalConfig(ExtractFilePath(ParamStr(0))) then Exit;
   Dir      := GetCurrentDir;
   Candidate:= '';
   while Dir <> '' do
@@ -976,7 +987,10 @@ begin
 
   // Optional subcommand: ParamStr(2) if it doesn't start with '--'.
   i:= 2;
-  if MatchText(Result.Command, ['query', 'export', 'workspace', 'selftest', 'manifest']) and (ParamCount >= 2) then
+  { 1.52 FRAME: check-init <QName>, repo <sub-verb>, explain <rule-id>, rules disable|enable (only
+    those two words: every other `rules` argument keeps its old meaning) }
+  if (MatchText(Result.Command, ['query', 'export', 'workspace', 'selftest', 'manifest', 'check-init', 'repo', 'explain'])
+      or ((Result.Command = 'rules') and MatchText(ParamStr(2), ['disable', 'enable']))) and (ParamCount >= 2) then
   begin
     A:= ParamStr(2);
     { `not StartsWith('--')` is what made `drag-lint query -h` take '-h' as the
@@ -1117,6 +1131,17 @@ begin
     else if A = '--no-preprocess' then Result.NoPreprocess:= True { PP-Task-9: revert index to raw all-branch parsing }
     else if (A = '--build-config') and (i < ParamCount) then begin Inc(i); Result.BuildConfig:= ParamStr(i); end  // dl:ok multiple-statements-per-line@902e -- REVIEWED 2026-10-26: the ParseArgs one-line value-flag arm shape shared by every sibling arm
     else if (A = '--width') and (i < ParamCount) then begin Inc(i); Result.Width:= ParamStr(i); end
+    { 1.52 FUSCOPE: usages --scope / --group (before the generic --scope arm, which is doc forget's) }
+    else if (A = '--scope') and (Result.Command = 'usages') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.UsagesScope:= ParamStr(i);
+    end
+    else if (A = '--group') and (Result.Command = 'usages') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.UsagesGroup:= ParamStr(i);
+    end
     else if (A = '--project') and (i < ParamCount) then begin Inc(i); Result.ProjectPath:= ParamStr(i); Result.ProjectFromConfig:= False; end  // dl:ok multiple-statements-per-line@7a94 -- REVIEWED 2026-10-25: the ParseArgs one-line value-flag arm shape shared by every sibling arm; X-11 adds the config-flag reset to it
     else if (A = '--rules-dir') and (i < ParamCount) then begin Inc(i); Result.RulesDir:= ParamStr(i); end
     else if (A = '--category') and (i < ParamCount) then begin Inc(i); Result.RuleCategory:= ParamStr(i); end
@@ -1157,6 +1182,8 @@ begin
       Inc(i) { every verb: applied by Run, before ParseArgs (ApplyManifestSwitch) }
     else if A = '--no-locals' then Result.NoLocals:= True
     else if A = '--lint-third-party' then Result.LintThirdParty:= True
+    else if A = '--no-stand-down' then Result.NoStandDown:= True
+    else if A = '--no-budget' then Result.NoBudget:= True  { 1.52 BUDGET (D9): lint / lint-all without the per-rule time budget }
     else if (A = '--shared-db') and (i < ParamCount) then
     begin
       { lint-all only: a verb that accepted and ignored it would read as "judged". }
@@ -1196,7 +1223,7 @@ begin
       Inc(i);
       Result.TargetCompiler:= ParamStr(i);
     end
-    else if ((A = '--output') or (A = '--out')) and (i < ParamCount) then begin Inc(i); Result.Output:= ParamStr(i); end
+    else if ((A = '--output') or (A = '--out') or (A = '--report')) and (i < ParamCount) then begin Inc(i); Result.Output:= ParamStr(i); end
     else if (A = '--output-dir') and (i < ParamCount) then begin Inc(i); Result.OutputDir:= ParamStr(i); end
     else if A = '--include-external' then Result.IncludeExternal:= True
     else if A = '--all-sources'      then Result.AllSources     := True
@@ -1613,6 +1640,46 @@ begin
     end
     else if A = '--since' then Result.DocSince:= True
     else if A = '--migrate-pure' then Result.DocMigratePure:= True
+    { 1.52 FRAME F2: flags of check-init, repo, explain and rules disable / enable (verbs in their own units) }
+    else if (A = '--scope') and (Result.Command = 'rules') and (i < ParamCount) then  // dl:ok duplicate-code@e071 -- REVIEWED 2026-11-17 v152 FRAME: the ParseArgs one-value flag arm shape every sibling arm repeats; folding it is a ParseArgs refactor, not this lane
+    begin
+      Inc(i);
+      Result.RuleScope:= ParamStr(i);
+    end
+    else if (A = '--reason') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.Reason:= ParamStr(i);
+    end
+    else if (A = '--at') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.At:= ParamStr(i);
+    end
+    else if A = '--explain' then Result.HbExplain:= True
+    else if (A = '--max-routines') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.MaxRoutines:= StrToIntDef(ParamStr(i), -1);
+    end
+    else if (A = '--max-seconds') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.MaxSeconds:= ParamStr(i);
+    end
+    else if (A = '--repo') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.RepoPath:= ParamStr(i);
+    end
+    else if A = '--replace' then Result.Replace:= True
+    else if A = '--prepare-queries' then // repo gen-param-array: DRagLint.CLI.RepoParamArray reads it from ParamStr
+    { repo gen-param-array: DRagLint.CLI.RepoParamArray reads these values from ParamStr. One branch per flag: they are
+      four different options, and an OR-group reads as an alias group to run_flag_verb_map.ps1 (features\flag-aliases.json). }
+    else if (A = '--dfm') and (i < ParamCount) then Inc(i)
+    else if (A = '--table') and (i < ParamCount) then Inc(i)
+    else if (A = '--step-size') and (i < ParamCount) then Inc(i)
+    else if (A = '--progress-form') and (i < ParamCount) then Inc(i)
     else if (A = '--scope') and (i < ParamCount) then
     begin
       Inc(i);
@@ -1726,6 +1793,11 @@ begin
       Result.Path          := A;
       Result.PathFromConfig:= False;
     end
+    { 1.52 TTGEN: repo gen-orm / update-orm / gen-dataservice read these values with ParamStr (CLI.Repo) }
+    else if (Result.Command = 'repo') and (A = '--code-dir') and (i < ParamCount) then Inc(i)
+    else if (Result.Command = 'repo') and (A = '--server-dir') and (i < ParamCount) then Inc(i)
+    else if (Result.Command = 'repo') and (A = '--client-dir') and (i < ParamCount) then Inc(i)
+    else if (Result.Command = 'repo') and (A = '--save-form') and (i < ParamCount) then Inc(i) { --table: the gen-param-array branch above already consumes it }
     else raise Exception.Create(UNKNOWN_ARG_PREFIX + A);
     Inc(i);
   end; // while
@@ -2620,7 +2692,7 @@ begin
       var MdDir: string:= TPath.GetDirectoryName(ProjAbs);
       if TDirectory.Exists(MdDir) then
       begin
-        var MdFiles: TArray<string>:= TDirectory.GetFiles(MdDir, '*.md', TSearchOption.soTopDirectoryOnly);  // dl:ok taint-path-traversal@db48 -- CLI file I/O on a path the user passed or the drag-lint manifest names; the env var is the user's own config, no privilege boundary (147 INT sweep)
+        var MdFiles: TArray<string>:= TDirectory.GetFiles(MdDir, '*.md', TSearchOption.soTopDirectoryOnly);
         TArray.Sort<string>(MdFiles);
         for var MdFile in MdFiles do
           if SameText(ExtractFileExt(MdFile), '.md') then AddOnce(MdFile); { the mask also matches *.mdx }
@@ -2876,7 +2948,7 @@ begin
   { dl:ok inherited-bare -- the standard destructor idiom. A bare `inherited` in
     a destructor is the ONLY correct form: naming Destroy explicitly would call
     it non-virtually and skip TThread's own teardown. }
-  inherited;  // dl:ok inherited-bare@246d
+  inherited;
 end;
 
 function TStageHeartbeat.ProgressSuffix: string;
@@ -6779,10 +6851,10 @@ begin
       if Length(RunLibs) = 0 then
         RunLibs:= ManifestLibraryStores(LibRun.Wanted, AArgs.CheckPlatform, IdxDproj, ResolvedDb, Store, IdxResolveGate);
       { v1511 F3: a DB resolved against a library before (external_stores meta) re-resolved
-        with none -- typically a copy outside the manifest -- loses every external_target.
-        Say so; the behaviour is unchanged. }
+        with none -- typically a copy outside the manifest. 1.52 EXTR: the library bindings of the last
+        library run are KEPT (not refreshed); say so. }
       if (Length(RunLibs) = 0) and (Store.GetMetaValue('external_stores') <> '') then
-        Writeln(ErrOutput, 'WARNING: index: no library store attached: external targets will be cleared; pass --library-db <library.sqlite>.');
+        Writeln(ErrOutput, 'WARNING: index: no library store attached: library bindings are kept from the last library run, not refreshed; pass --library-db <library.sqlite>.');
       Stage('', 'calls', procedure begin ResolveCallsClearingFirst(Store, ClearEdgesInPass, RunLibs); end); { v14 (D5) + v21 cross-DB }
       Stage('', 'dispatch', procedure begin Store.ResolveDispatch(RunLibs); end); { 2026-10-26: libraries only recognise a library `class of` param type }
     end
@@ -8350,6 +8422,8 @@ begin
 end;
 
 function DoQueryText(const AArgs: TArgs): Integer;
+const
+  TRIGRAM_MIN_CHARS = 3; // --substring floor: the trigram tokenizer cannot match a shorter needle
 var
   PathsToScan: TArray<string>         ;
   DbPath     : string                 ;
@@ -8406,8 +8480,12 @@ begin
     end;
   end;
   FetchLim:= if NearOn then NearFetchLimit else Lim + 1; { cap + 1: one extra row proves the cap hid something (XERJ item 2) }
-  if (Mode = 'substring') and (Length(Trim(AArgs.TextQuery)) < 3) then
-    Writeln('NOTE: --substring needs a query of at least 3 characters (trigram tokenizer); "' + AArgs.TextQuery + '" is too short - try --any-order for shorter terms.');
+  { B29: the floor applies to the text AFTER the enclosing Pascal quotes are stripped ('ok' is 2 characters, not 4). }
+  var ShortNeedle: string:= Trim(AArgs.TextQuery);
+  if (Length(ShortNeedle) >= 2) and ShortNeedle.StartsWith('''') and ShortNeedle.EndsWith('''') then
+    ShortNeedle:= Copy(ShortNeedle, 2, Length(ShortNeedle) - 2);
+  if (Mode = 'substring') and (Length(ShortNeedle) < TRIGRAM_MIN_CHARS) then
+    Writeln('NOTE: --substring needs a query of at least 3 characters (trigram tokenizer); "' + AArgs.TextQuery + '" is too short, so it is matched as a whole word instead.');
 
   PathsToScan:= ResolveConsumerDbs(AArgs);
   for DbPath in PathsToScan do
@@ -10093,7 +10171,20 @@ const
   USAGES_FALLBACK_DEPTH = 4;
 begin
   if not ExplicitDbsExist(AArgs, 'usages') then Exit(2);
-  if AArgs.Name = '' then begin Writeln('Usage: drag-lint usages --name <X> ' + '[--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]'); Exit(2); end;
+  { 1.52 FUSCOPE: a position (--in F --line L [--col C]) names the symbol as well as --name does. }
+  var HasPosition: Boolean:= (AArgs.InFile <> '') and (AArgs.RefLine > 0);
+  if (AArgs.Name = '') and not HasPosition then
+  begin
+    Writeln('Usage: drag-lint usages --name <X> | --in <file> --line <L> [--col <C>] [--scope ' + UsageScopeChoices + '] [--group <x.groupproj>] ' +
+      '[--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]');
+    Exit(2);
+  end;
+  var Requested: TUsageScope:= USAGE_SCOPE_DEFAULT;
+  if (AArgs.UsagesScope <> '') and not TryParseUsageScope(AArgs.UsagesScope, Requested) then
+  begin
+    Writeln(ErrOutput, Format('usages: unknown --scope "%s"; use %s', [AArgs.UsagesScope, UsageScopeChoices]));
+    Exit(2);
+  end;
   Width:= LowerCase(AArgs.Width);
   if Width = '' then Width:= 'narrow';
 
@@ -10131,6 +10222,56 @@ begin
 
   if AArgs.UsagesRw then Exit(DoUsagesReadersWriters(AArgs, PathsToScan));
 
+  { 1.52 FUSCOPE: the identifier, what it is bound to, and the scope actually answered.
+    symbol (the default) = the declaration the position / a qualified name is bound to;
+    a bare name with no position binds nothing and is answered as scope project, said so. }
+  var QueryName: string:= AArgs.Name;
+  if (QueryName = '') and HasPosition then QueryName:= IdentifierAtFilePosition(AArgs.InFile, AArgs.RefLine, AArgs.RefCol);
+  if QueryName = '' then
+  begin
+    Writeln(ErrOutput, Format('usages: no identifier at %s:%d:%d', [AArgs.InFile, AArgs.RefLine, AArgs.RefCol]));
+    Exit(2);
+  end;
+  var Scope: TUsageScope:= Requested;
+  var ScopeNote: string:= '';
+  var Binding: TUsageBinding:= Default(TUsageBinding);
+  var BindDb: string:= '';
+  if Scope = usSymbol then
+  begin
+    if HasPosition then
+    begin
+      for DbPath in WithoutLibraryDbs(PathsToScan) do { INT8: bind in this project's index, not a library's }
+        if TFile.Exists(DbPath) then
+        begin
+          BindDb:= DbPath;
+          Break;
+        end;
+      var BindOk: Boolean;
+      var BindStore: ISymbolStore:= OpenReadOnlyStore(BindDb, BindOk);
+      if BindOk and (BindStore <> nil) then
+        Binding:= BindUsageAt(BindStore, ExpandFileName(AArgs.InFile), Copy(QueryName, LastDelimiter('.', QueryName) + 1, MaxInt), AArgs.RefLine, AArgs.RefCol);
+      BindStore:= nil;
+      if Binding.Bound and not Binding.HasDecl then QueryName:= Binding.QName { a library target: the qualified path below }
+      else if not Binding.Bound then
+      begin
+        Scope:= usProject;
+        ScopeNote:= Format('nothing is bound at %s:%d; answered scope project (every "%s")', [AArgs.InFile, AArgs.RefLine, QueryName]);
+      end;
+    end
+    else if not QueryName.Contains('.') then
+    begin
+      Scope:= usProject;
+      ScopeNote:= USAGE_NOTE_BARE_NAME;
+    end;
+  end;
+  { The wider scopes match the NAME: a qualified --name keeps its last segment. }
+  if Scope <> usSymbol then QueryName:= Copy(QueryName, LastDelimiter('.', QueryName) + 1, MaxInt);
+  var GroupNote: string;
+  var ScanDbs: TArray<string>:= UsageScopeDbs(Scope, PathsToScan, AArgs.UsagesGroup, AArgs.CheckPlatform, GroupNote);
+  if GroupNote <> '' then Writeln(ErrOutput, 'usages: NOTE -- ', GroupNote);
+  { The bare-name answer is the historical one: its note goes in the document, not on stderr. }
+  if (ScopeNote <> '') and HasPosition then Writeln(ErrOutput, 'usages: NOTE -- ', ScopeNote);
+
   JRoot:= TJSONObject.Create;
   JDecls := TJSONArray.Create; JReads := TJSONArray.Create;
   JWrites:= TJSONArray.Create; JCalls := TJSONArray.Create;
@@ -10143,8 +10284,12 @@ begin
     the loop early. Attached-then-filled is fine: AddPair keeps the reference
     and AddElement on it afterwards lands in the document. Key order is the
     order of these AddPairs, unchanged from when they sat after the loop. }
-  JRoot.AddPair('name', AArgs.Name);
+  JRoot.AddPair('name', QueryName);
   JRoot.AddPair('width'       , Width  );
+  JRoot.AddPair('scope'       , USAGE_SCOPE_NAMES[Scope]); { 1.52 FUSCOPE: the scope ANSWERED }
+  if Scope <> Requested then JRoot.AddPair('scope_requested', USAGE_SCOPE_NAMES[Requested]);
+  if ScopeNote <> '' then JRoot.AddPair('scope_note', ScopeNote);
+  if Binding.Bound then JRoot.AddPair('bound', Binding.QName);
   JRoot.AddPair('declarations', JDecls );
   JRoot.AddPair('reads'       , JReads );
   JRoot.AddPair('writes'      , JWrites);
@@ -10155,10 +10300,14 @@ begin
   JRoot.AddPair('raises'      , JRaises);
   JRoot.AddPair('handles'     , JHandles);
   JRoot.AddPair('impact'      , JImpact);
+  var JDbs: TJSONArray:= TJSONArray.Create;
+  JRoot.AddPair('databases', JDbs); { 1.52 FUSCOPE: what the scope read }
   try
-    for DbPath in PathsToScan do
+    for DbPath in ScanDbs do
     begin
       if not TFile.Exists(DbPath) then Continue;
+      { symbol ids are per store: a declaration bound at a position is looked up in its own store only }
+      if (Scope = usSymbol) and Binding.HasDecl and not SameText(ExpandFileName(DbPath), ExpandFileName(BindDb)) then Continue;
       { OpenReadOnlyStore, NOT Create+Migrate. Until 2026-09-14 this loop opened
         every --db read-write and migrated it as a side effect of a read: a v12
         index handed to `usages` came back at the current schema, 31 tables and
@@ -10176,7 +10325,15 @@ begin
         Continue;
       end;
 
-      var Decls: TArray<TSymbol>:= Store.FindSymbolsByExactName(AArgs.Name);
+      JDbs.Add(DbPath);
+      var Decls: TArray<TSymbol>;
+      var Refs : TArray<TReference>;
+      if (Scope = usSymbol) and Binding.HasDecl then Refs:= BoundUsageRefs(Store, Binding, Decls)
+      else
+      begin
+        Decls:= Store.FindSymbolsByExactName(QueryName);
+        Refs := UsageRefsForName(Store, QueryName, Decls);
+      end;
       for S in Decls do
       begin
         DeclO:= TJSONObject.Create;
@@ -10188,10 +10345,15 @@ begin
         JDecls.AddElement(DeclO);
       end;
 
-      for R in UsageRefsForName(Store, AArgs.Name, Decls) do AddRefRow(GroupFor(R, Decls), Store.GetFilePath(R.FileId), R.StartLine, R.StartCol, R.Resolution);
+      for R in Refs do AddRefRow(GroupFor(R, Decls), Store.GetFilePath(R.FileId), R.StartLine, R.StartCol, R.Resolution);
 
+      { GitHub #14 follow-up (1.52): a routine walks its RESOLVED callers, as impact does; a type or
+        variable keeps the by-name walk. }
+      var WideLevels: TArray<TImpactLevel>:= nil;
+      if ((Width = 'wide') or (Width = 'very-wide'))
+        and not ResolvedImpactLevels(Store, Decls, Depth, WideLevels) then WideLevels:= Store.FindTransitiveCallers(QueryName, Depth);
       if (Width = 'wide') or (Width = 'very-wide') then
-        for L in Store.FindTransitiveCallers(AArgs.Name, Depth) do
+        for L in WideLevels do
         begin
           { TImpactLevel is an aggregate per transitive depth: how many distinct
             callers / units reference the symbol at that level. }
@@ -10234,7 +10396,9 @@ begin
     end
     else
     begin
-      Writeln(Format('usages of "%s" (width=%s)', [AArgs.Name, Width]));
+      Writeln(Format('usages of "%s" (width=%s)', [QueryName, Width]));
+      Writeln('  scope: ' + USAGE_SCOPE_NAMES[Scope] + (if Binding.Bound then ' (' + Binding.QName + ')' else '') +
+        (if Scope <> Requested then ' -- asked ' + USAGE_SCOPE_NAMES[Requested] + ': ' + ScopeNote else ''));
       Writeln(Format('  declarations: %d', [JDecls.Count]));
       Writeln(Format(
           '  reads: %d  writes: %d  calls: %d  types: %d  attributes: %d  events: %d  raises: %d  handles: %d',
@@ -10693,6 +10857,9 @@ begin
                 body-span hash would do the latter, flagging a renamed local
                 across all 58 markers in this class for no reason. }
               var IsMetric: Boolean:= DRagLint.Lint.RuleCatalog.IsRoutineMetricRule(F.RuleId);
+              var Verdict: TMarkerVerdict:= mvStale;
+              if M.Hash <> '' then
+                Verdict:= DRagLint.Lint.MarkerHash.MarkerVerdict(Lines, F.RuleId, M.Hash, F.StartLine, F.Metric);
               if M.Hash = '' then
               begin
                 { Hand-written, no hash: honour it, but say that it cannot be
@@ -10702,11 +10869,18 @@ begin
                   Format('dl:ok marker for "%s" carries no @hash, so it cannot be checked against the code -- re-mark it as %s@%s.',
                          [M.RuleId, M.RuleId, Want]), M.RuleId);
               end
-              else if DRagLint.Lint.MarkerHash.MarkerVerdict(Lines, F.RuleId, M.Hash, F.StartLine, F.Metric) <> mvStale then
+              else if Verdict <> mvStale then
+              begin
                 { Verified, or re-measured: the routine is unchanged and only the engine's
                   measure-algorithm version moved (Y4, DRagLint.Lint.MarkerHash). A legacy
-                  (1.51.0) marker is checked exactly as before. }
-                Suppressed:= True
+                  (1.51.0) marker is checked exactly as before. v152 MARK (B3): a marker
+                  that answers but was stamped under the 1.51.0 hash or an older algorithm
+                  is also reported, once, as the hint review-marker-remeasured. }
+                Suppressed:= True;
+                if NeedsRestampHint(Verdict) then
+                  EmitHint(F.FilePath, ML, RULE_MARKER_REMEASURED,
+                    RemeasuredHintText(M.RuleId, Verdict, F.StartLine), M.RuleId);
+              end
               else if TReviewMarkers.IsPlaceholderHash(M.Hash) or TReviewMarkers.IsMalformedHash(M.Hash) then
                 { A HASH THAT WAS NEVER COMPUTED. Checked only after the real hash
                   failed to match, so a genuine @0000 (1 in 65536) still verifies.
@@ -11605,7 +11779,7 @@ begin
     for var FP: string in AFilePaths do
     begin
       if not FileExists(FP) then Continue;
-      var Text: string:= TFile.ReadAllText(FP, TEncoding.ANSI);
+      var Text: string:= ReadSourceFileText(FP);
       if not Text.Contains('dl:ok') then Continue;
       var Listed: TArray<string>:= TSharedUnit.ProjectsOfText(Text);
       if Length(Listed) < 2 then Continue;
@@ -11836,7 +12010,7 @@ begin
       'Run `drag-lint exceptions-sync --db <db> --apply` first, reindex, then re-run this fix.', [Cfg.ExceptionsUnit])];
     Exit;
   end;
-  Entries:= ParseExceptionBlock(TFile.ReadAllText(UnitPath, TEncoding.ANSI));
+  Entries:= ParseExceptionBlock(ReadSourceFileText(UnitPath));
   if Length(Entries) = 0 then
   begin
     ANotes:= ANotes + [Format('raise-bare-exception: %s declares no generated classes yet -- run `exceptions-sync --apply` first.', [UnitPath])];
@@ -12523,6 +12697,33 @@ begin
   Result.AddPair('weak' , Arr(ALabels.Weak ));
 end;
 
+// 1.52 BK-VERIFY: the rename test seam (DRAGLINT_RENAME_TEST_UNGATED=1, every edit under C:\TEMP / %TEMP% / the
+// system temp folder) also lifts the B23 no-project refusal: the seam exists for the guards older than the gate,
+// whose fixtures have no .dproj and do not compile. Off the seam B23 is unchanged.
+function FixEditsUnderTestSeam(const pEdits: TArray<TTextEdit>): Boolean;
+begin
+  Result:= GetEnvironmentVariable('DRAGLINT_RENAME_TEST_UNGATED') = '1';
+  for var Ed in pEdits do
+    if Result and not IsUnderTemp(Ed.FilePath) then Result:= False;
+end;
+
+{ One taint path as the --json `path` array: hop 0 = source, last = sink. Shared by `path` and
+  each entry of `paths` (TAINTDEDUP 1.52). }
+function TaintPathToJson(const pPath: TArray<TLintLocation>): TJSONArray;
+begin
+  Result:= TJSONArray.Create;
+  for var Hop: TLintLocation in pPath do
+  begin
+    var JHop: TJSONObject:= TJSONObject.Create;
+    JHop.AddPair('file_path', Hop.FilePath);
+    JHop.AddPair('line'     , TJSONNumber.Create(Hop.Line));
+    JHop.AddPair('col'      , TJSONNumber.Create(Hop.Col ));
+    JHop.AddPair('routine'  , Hop.Routine);
+    JHop.AddPair('note'     , Hop.Note);
+    Result.AddElement(JHop);
+  end;
+end;
+
 function FinalizeAndOutput(const AArgs: TArgs; AFindings: TArray<TLintFinding>; const ADefaultDisabled: TArray<string>; const AEmitText: TProc<TArray<TLintFinding>>;
   const AStore: ISymbolStore = nil; const AScannedFiles: TArray<string> = nil;
   const APrimaryDb: string = ''; const AWalkSkipped: TArray<string> = nil;
@@ -12722,16 +12923,25 @@ begin
         'use "autofix_off": [...] to exclude a rule.');
     var Braked: TArray<TLintFinding>:= nil;
     var BrakedIds: TArray<string>:= nil;
+    var ManualIds: TArray<string>:= nil;
     for F in Targeted do
       if Cfg.IsAutoFixOff(F.RuleId) and not ((AArgs.FixLine > 0) and SameText(AArgs.FixRule, F.RuleId)) then
       begin
         if not MatchText(F.RuleId, BrakedIds) then BrakedIds:= BrakedIds + [F.RuleId];
+      end
+      { 1.52 IDXRANGE2 (owner C3): a manual-only fix needs --fix-rule naming its rule }
+      else if IsFixManualOnly(F.RuleId) and not SameText(AArgs.FixRule, F.RuleId) then
+      begin
+        if not MatchText(F.RuleId, ManualIds) then ManualIds:= ManualIds + [F.RuleId];
       end
       else Braked:= Braked + [F];
     Targeted:= Braked;
     if Length(BrakedIds) > 0 then
       Writeln(ErrOutput, Format('drag-lint: note: %d rule(s) here are not fixed because "autofix_off" lists them: %s.',
         [Length(BrakedIds), string.Join(', ', BrakedIds)]));
+    if Length(ManualIds) > 0 then
+      Writeln(ErrOutput, Format('drag-lint: note: %d rule(s) here have a manual only fix, applied only with --fix-rule <id> (the IDE''s Fix it): %s.',
+        [Length(ManualIds), string.Join(', ', ManualIds)]));
 
     { lane 144 item 1: the one fix that needs the compile gate is not part of a batch }
     var GatedCasts: Integer:= 0;
@@ -12743,11 +12953,19 @@ begin
     var FixCount: Integer                                               ;
     { lane A5B: the store-backed registered fixers (DRagLint.Fix.Store) read the run's store }
     SetAutofixStore(AStore);
+    { 152 FIXLIB (B9h): the with fixer resolves a class target through the platform library, as unwith does }
+    var FixLibs: TArray<ISymbolStore>:= RefactorLibraries(AArgs);
+    if Length(FixLibs) > 0 then SetFixWithLibrary(FixLibs[0]);
+    { v152 PTW: the parameter-type-too-wide fix re-proves each finding; VCL / RTL ancestors need the platform library }
+    var PtwLibs: TArray<ISymbolStore>:= RefactorLibraries(AArgs);
+    SetPtwFixLibrary(if Length(PtwLibs) > 0 then PtwLibs[0] else nil);
     var Edits: TArray<TTextEdit>:= BuildAutofixEdits(Targeted, FixCount);
     if AutofixTargetSkipped > 0 then
       Writeln(ErrOutput, Format('drag-lint: %d fix(es) skipped (target-compiler) -- the fix emits syntax newer than %s; the finding stays.',
         [AutofixTargetSkipped, CompilerDisplayName(ActiveTargetCompiler)]));
     SetAutofixStore(nil);
+    SetFixWithLibrary(nil);
+    SetPtwFixLibrary(nil);
     { Naming edits dropped by BuildNamingFixEdits' stale-position guard (the
       recorded site no longer holds the identifier being renamed). Declared out
       here so the autofix summary below can report it -- an invisible skip is
@@ -13005,6 +13223,33 @@ begin
       Writeln(ErrOutput, 'drag-lint: note: the compile gate also builds ' + string.Join(', ', GateAlso) + ' -- they compile the renamed unit(s)');
     if GateWrite then
       for var GN in GateNotes do Writeln(ErrOutput, 'drag-lint: note: ' + GN);
+    { 1.52 BK-GATE B23 (owner ruling 2026-11-18): with an index (--db) a fix that no project builds is REFUSED,
+      not written unbuilt; --no-compile-gate is the explicit opt-out. A loose file with no index is unchanged. }
+    var NoProjectCheck: Boolean:= AArgs.Apply and (not GateWrite) and (not AArgs.NoCompileGate);
+    if NoProjectCheck and (AArgs.DbPath <> '') and (Length(Edits) > 0) and not FixEditsUnderTestSeam(Edits) then
+    begin
+      var UnitProject, UnitMsg: string;
+      var Seen:= TDictionary<string, Boolean>.Create;
+      try
+        for var Ed in Edits do
+          if Seen.TryAdd(LowerCase(Ed.FilePath), True) then
+          begin
+            if ResolveFixerGate('lint --fix', '', AArgs.DbPath, Ed.FilePath, False, UnitProject, UnitMsg) = fgvRefused then
+            begin
+              Writeln(ErrOutput, UnitMsg);
+              Exit(2);
+            end;
+            if not GateWrite then
+            begin
+              GateWrite:= True;
+              GateArgs.ProjectPath:= UnitProject;
+              Writeln(ErrOutput, UnitMsg);
+            end;
+          end;
+      finally
+        Seen.Free;
+      end;
+    end;
     { ONE PASS NEVER WRITES MIXED BYTES: a finding whose edits overlap an earlier
       finding's (two rules rewriting one span) is withheld WHOLE and reported
       deferred; the next --fix pass re-lints and applies it.
@@ -13178,7 +13423,7 @@ begin
       var Written: Integer:= Length(Edits) - ApplySkipped;
       if ApplySkipped > 0 then
         SkipSuffix:= Format(', %d %sskipped (stale index)', [NFSkippedTotal + ApplySkipped, IfThen(NFStaleTotal > 0, 'edit(s) ', '')]);
-      Writeln(Format('autofix: applied %d edit(s) across %d file(s)%s%s%s%s%s', [Written, Touched, StaleSuffix, SkipSuffix, DropSuffix, DeclineSuffix, IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
+      Writeln(Format('autofix: applied %d edit(s) across %d file(s)%s%s%s%s%s', [Written, Touched, StaleSuffix, SkipSuffix, DropSuffix, DeclineSuffix, (if AArgs.NoBackup then '' else if GateWrite then ' (.BCK backup written)' else ' (.bak written)')]));
     end
     else
     begin
@@ -13237,20 +13482,13 @@ begin
         var CompLb: TComplianceLabels;
         CompTbl.TryGet(F.RuleId, CompLb);
         if not CompLb.IsEmpty then JObj.AddPair('compliance', ComplianceToJson(CompLb, False));
-        if Length(F.Path) > 0 then
+        if Length(F.Path) > 0 then JObj.AddPair('path', TaintPathToJson(F.Path));
+        { TAINTDEDUP 1.52: every distinct path into this sink (shortest first) when there is more than one }
+        if Length(F.Paths) > 1 then
         begin
-          var JPath: TJSONArray:= TJSONArray.Create;
-          for var Hop: TLintLocation in F.Path do
-          begin
-            var JHop: TJSONObject:= TJSONObject.Create;
-            JHop.AddPair('file_path', Hop.FilePath);
-            JHop.AddPair('line'     , TJSONNumber.Create(Hop.Line));
-            JHop.AddPair('col'      , TJSONNumber.Create(Hop.Col ));
-            JHop.AddPair('routine'  , Hop.Routine);
-            JHop.AddPair('note'     , Hop.Note);
-            JPath.AddElement(JHop);
-          end;
-          JObj.AddPair('path', JPath);
+          var JPaths: TJSONArray:= TJSONArray.Create;
+          for var OnePath: TArray<TLintLocation> in F.Paths do JPaths.AddElement(TaintPathToJson(OnePath));
+          JObj.AddPair('paths', JPaths);
         end;
         JArr.AddElement(JObj);
       end;
@@ -13336,11 +13574,26 @@ begin
   begin
     var Root: TJSONObject:= TJSONObject.Create;
     try
+      { 1.52 DISRULE H2: disabled_by = 'project' or 'unit:<u1,u2>' from the config's rule_overrides }
+      { Only the config's LOCATION matters to rule_overrides; --profile / --disable / --enable / --stand-in-for change the
+        enabled set, which this listing does not show, so they are not passed (run_flag_verb_map.ps1 would credit them to rules). }
+      var RArgs: TArgs:= Default(TArgs);
+      RArgs.ConfigPath:= AArgs.ConfigPath;
+      RArgs.ProjectPath:= AArgs.ProjectPath;
+      RArgs.DbPath:= AArgs.DbPath;
+      RArgs.InFile:= AArgs.InFile;
+      RArgs.Path:= AArgs.Path;
+      RArgs.RulesDir:= AArgs.RulesDir;
+      var RCfg: TLintConfig:= LoadLintConfig(RArgs);
       var Arr: TJSONArray:= TJSONArray.Create;
       for R in Cat do
       begin
         var O: TJSONObject:= TJSONObject.Create;
         O.AddPair('id'              , R.Id             );
+        var OV: TRuleOverride;
+        if RCfg.FindRuleOverride(R.Id, OV) then
+          if OV.HasEnabled and not OV.Enabled then O.AddPair('disabled_by', 'project')
+          else if Length(OV.ExcludeUnits) > 0 then O.AddPair('disabled_by', 'unit:' + string.Join(',', OV.ExcludeUnits));
         O.AddPair('category'        , R.Category       );
         O.AddPair('title'           , R.Title          );
         O.AddPair('default_severity', R.DefaultSeverity);
@@ -13349,6 +13602,8 @@ begin
         O.AddPair('fixable', TJSONBool.Create(IsFixableRule(R.Id)));
         { true: the fix runs only when "autofix": [...] opts the rule in }
         O.AddPair('fix_opt_in', TJSONBool.Create(False)); // deprecated: every fix is on by default (1.37.0); emitted for the IDE plugin
+        { 1.52 IDXRANGE2: true = the fix runs only when --fix-rule names the rule (never in a batch fix) }
+        O.AddPair('fix_manual_only', TJSONBool.Create(IsFixManualOnly(R.Id)));
         AddParamsJson(O, R.Params);
         O.AddPair('compliance', ComplianceToJson(R.Compliance, True));
         { 1.38 two-way modernize: the gate's inputs, and whether the rule runs by
@@ -13425,10 +13680,10 @@ const
     'length-zero-compare', 'freeandnil-on-interface', 'win64-pointer-cast',
     'nativeint-truncation', 'redundant-cast', 'unsafe-typecast-without-is', 'lossy-cast',
     'abstract-method-instantiation', 'interface-object-mixing');
-  LINT_GATE_FLOW: array[0..12] of string = (
+  LINT_GATE_FLOW: array[0..11] of string = (
     'used-before-assignment', 'not-assigned-interface', 'double-free', 'function-result-not-set',
     'out-param-not-set', 'overwrite-before-read', 'write-only-local', 'split-variable',
-    'loop-var-after-loop', 'object-leak', 'local-only-out-arg', 'dead-store-before-out-arg', 'by-value-arg-before-assignment');
+    'loop-var-after-loop', 'object-leak', 'local-only-out-arg', 'dead-store-before-out-arg');
   LINT_GATE_PROJECT_RULES: array[0..48] of string = (
     'unused-public-symbol', 'unused-private-member', 'circular-uses', 'cycle-participant-unit', 'global-only-uses-edge',
     'dfm-property-not-declared', 'dependent-project-not-recompiled', 'duplicate-global-decl',
@@ -13515,8 +13770,9 @@ const
   { Gap-rules wave (G0): one gate per new checker unit; same rule as above. }
   LINT_GATE_OWNERSHIP: array[0..4] of string = (
     'field-created-not-freed', 'free-of-owned-item', 'mismatched-alloc-free', 'freeonterminate-then-wait', 'begin-end-pair-not-in-finally');
-  LINT_GATE_BOUNDS_NIL: array[0..3] of string = (
-    'nil-check-after-dereference', 'address-of-local-returned', 'constant-index-out-of-range', 'copy-paste-assignment');
+  LINT_GATE_BOUNDS_NIL: array[0..4] of string = (
+    'nil-check-after-dereference', 'address-of-local-returned', 'constant-index-out-of-range', 'copy-paste-assignment',
+    'index-possibly-out-of-range');
   LINT_GATE_EXCEPTION_THREAD: array[0..3] of string = (
     'exception-escapes-thread', 'raise-in-destructor', 'network-client-without-timeout', 'closure-captures-loop-local');
   LINT_GATE_DECL_PARITY: array[0..7] of string = (
@@ -14020,7 +14276,7 @@ begin
       on E: Exception do Marker:= ''; { an unwritable folder costs only the de-duplication }
     end;
   end;
-  { 1.39.1: listen for `shutdown` (and an index of this database, StopStaleWarm).
+  { 1.39.1: listen for `stop-now` (and an index of this database, StopStaleWarm).
     The warm has no safe point to wait for -- it only reads, and its result is
     disposable -- so the watcher takes a request at once and ends the process. }
   var Ctl    : TControlChannel:= nil;
@@ -14782,6 +15038,21 @@ begin
     end);
 end;
 
+/// <summary>1.52 D1 "Disable in this unit": drops the findings whose rule the project lint config
+/// excludes in the finding's unit (`"rule_overrides": { "<rule>": { "exclude_units": [...] } }`).</summary>
+/// <param name="ACfg">The run's lint config; no rule_overrides keeps every finding.</param>
+/// <param name="AFindings">The lint / lint-all findings.</param>
+/// <returns>AFindings without those for which ACfg.IsRuleExcludedInUnit(RuleId, FilePath) is True;
+/// a finding without a file path is always kept.</returns>
+/// <remarks>Shared by DoLint and DoLintAll so both paths honour the same unit scope.</remarks>
+function DropUnitExcludedFindings(const ACfg: TLintConfig; const AFindings: TArray<TLintFinding>): TArray<TLintFinding>;
+begin
+  if Length(ACfg.RuleOverrides) = 0 then Exit(AFindings);
+  Result:= nil;
+  for var F: TLintFinding in AFindings do
+    if (F.FilePath = '') or not ACfg.IsRuleExcludedInUnit(F.RuleId, F.FilePath) then Result:= Result + [F];
+end;
+
 function DoLint(const AArgs: TArgs): Integer;
 var
   Linter      : DRagLint.Lint.Linter.TLinter;
@@ -14805,6 +15076,7 @@ var
     start reporting markers in files the run deliberately does not report on. }
   ScannedFiles: TArray<string>              ;
 begin
+  SetRuleBudgetDisabled(AArgs.NoBudget);  { 1.52 BUDGET }
   if not ExplicitDbsExist(AArgs, 'lint') then Exit(2);
   if AArgs.Fix and SameText(AArgs.FixRule, REDUNDANT_CAST_RULE_ID) then Exit(DoRedundantCastFix(AArgs));
   if AArgs.Fix and MatchText(AArgs.FixRule, UNWITH_FIX_RULE_IDS) then Exit(DoUnwithFix(AArgs));
@@ -15769,6 +16041,7 @@ begin
                   and SameText(TPath.GetFullPath(F.FilePath), TPath.GetFullPath(EffPath))) then FragKept:= FragKept + [F];
         Findings:= FragKept;
       end;
+      Findings:= DropUnitExcludedFindings(Cfg, Findings);   { 1.52 D1 unit-scope rule_overrides }
       { Free cached tree after single-file lint }
       TraceLintChecker('after-checkers');
       DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
@@ -16134,7 +16407,7 @@ begin
       if not FileCache.TryGetValue(FilePath, FileSource) then
       begin
         try
-          FileSource:= TFile.ReadAllText(FilePath, TEncoding.ANSI);
+          FileSource:= ReadSourceFileText(FilePath);
         except
           FileSource:= '';
         end;
@@ -16625,7 +16898,7 @@ begin
   try
     for F in Files do
     begin
-      Txt:= TFile.ReadAllText(F, TEncoding.ANSI);
+      Txt:= ReadSourceFileText(F);
       Hits:= if AArgs.Name <> '' then TBookmarks.Find(Txt, AArgs.Name) else TBookmarks.Scan(Txt);
       for B in Hits do
       begin
@@ -17255,6 +17528,28 @@ begin
   end;
 end;
 
+{ 1.52 FINDOC2: runs the in-process DoIndex of a doc verb. DoIndex reports
+  stage: / Done. / rule-cache: lines on stdout, which broke the single-JSON-
+  document --json contract on every in-process reindex (the DOCU5 rescan, the
+  D-2 retry, --apply --reindex). Under a machine-readable format (decided by
+  AArgs, the doc verb's own args) stdout goes to NUL for the call, as
+  reconcile-project does; stderr is untouched. Returns DoIndex's exit code. }
+function DoIndexForDoc(const AArgs, AIndexArgs: TArgs): Integer;
+begin
+  if not IsMachineReadableOutput(AArgs) then Exit(DoIndex(AIndexArgs));
+  var SavedOut: TTextRec;
+  Flush(Output);
+  Move(TTextRec(Output), SavedOut, SizeOf(TTextRec));
+  AssignFile(Output, 'NUL');
+  Rewrite(Output);
+  try
+    Result:= DoIndex(AIndexArgs);
+  finally
+    CloseFile(Output);
+    Move(SavedOut, TTextRec(Output), SizeOf(TTextRec)); // restore stdout
+  end; // try
+end; // function
+
 // v(PHASE A2 + ruling D-2): the doc verbs' recovery step when the applier's
 // stale-anchor guard refused an edit.
 //
@@ -17279,7 +17574,8 @@ function ReindexAfterStaleAnchor(const AArgs: TArgs; const AFilePath: string): B
 var
   IndexArgs: TArgs;
 begin
-  Writeln('doc: the index disagrees with the file on where a declaration is -- reindexing and retrying once (ruling D-2).');
+  { 1.52 FINDOC2: EmitStatusLine -- stdout on the text path, stderr under --json. }
+  EmitStatusLine(AArgs, 'doc: the index disagrees with the file on where a declaration is -- reindexing and retrying once (ruling D-2).');
   IndexArgs         := AArgs;
   IndexArgs.IndexAll:= False;
   if AArgs.ProjectPath <> '' then IndexArgs.Path:= ''    // ProjectPath drives the closure
@@ -17290,9 +17586,9 @@ begin
   // is the endorsed incremental move: it cannot widen a scope and it leaves the
   // scan_type stamp alone. ExpandFileName: a bare `--unit foo.pas` is cwd-relative.
   else IndexArgs.Path:= ExpandFileName(AFilePath);
-  Result:= DoIndex(IndexArgs) = 0;
+  Result:= DoIndexForDoc(AArgs, IndexArgs) = 0;
   if not Result then
-    Writeln('doc: the reindex FAILED. Nothing was written at the unverified coordinate(s).');
+    EmitStatusLine(AArgs, 'doc: the reindex FAILED. Nothing was written at the unverified coordinate(s).');
 end;
 
 // Reports edits the stale-anchor guard dropped even after the D-2 retry. The
@@ -17372,6 +17668,9 @@ begin
   Writeln(ErrOutput, Format('doc: WARN -- %d file(s) (%s) look unchanged by timestamp and size, but the facts stored for them ' +
     'disagree with the source text. Rescanning %d file(s) (the documented file and the files its facts were read from), then running.',
     [Length(Bad), Named, Length(Files)]));
+  { 1.52 FINDOC: DoIndexForDoc keeps the in-process indexer's stdout lines out
+    of a --json document (DOCAPPLY FOUND: 60 such lines on a TableTools copy);
+    the WARN above and any failure stay on stderr. }
   for var F: string in Files do
   begin
     if not TFile.Exists(F) then Continue;
@@ -17379,7 +17678,7 @@ begin
     IndexArgs.IndexAll     := False;
     IndexArgs.ForceReparse := True;
     IndexArgs.Path         := ExpandFileName(F);
-    if DoIndex(IndexArgs) <> 0 then
+    if DoIndexForDoc(AArgs, IndexArgs) <> 0 then
       Writeln(ErrOutput, 'doc: WARN -- the rescan of ' + F + ' FAILED; the facts for it may still be stale.');
   end;
   var Ok: Boolean;
@@ -17504,6 +17803,8 @@ begin
   Opts:= Default(TDocBatchOptions);
   { exclude_paths, the OTHER half of ownership -- see TDocBatchOptions.IsExcluded. }
   Opts.IsExcluded:= DocExcludePredicate(AArgs);
+  Opts.DocumentThirdParty:= AArgs.DocumentThirdParty; { 1.52 FINDOC: ownRoots for --unit }
+  Opts.OwnAnchorDir:= AnchorDirForDb(AArgs.DbPath);
   // --stubs flips the facts-only default: on = keep pure all-TODO creates too.
   Opts.Stubs:= AArgs.DocStubs;
   Opts.IncludeSeeAlso:= AArgs.DocSeeAlso; // ADF T4: --seealso opts in <seealso> crefs.
@@ -17588,12 +17889,34 @@ end; // function
 // ('project' | 'all'); AScopeVal is the .dpr/.dproj path or '' for document-all.
 // Applies the aggregated per-file edits (TTextEditApplier groups+sorts per file)
 // unless dry-run, then prints the summary or the --json aggregate. Exit 0.
+// 1.52 FINDOC2 (DOCAPPLY FOUND 3 / FINDOC item 5): AStaleSrc = StaleFactSources
+// of the run -- files the facts were read from that changed since indexing
+// (e.g. another project's apply to a shared unit). Their indexed line ranges
+// cover other text, so the facts cite the wrong routines. --apply REFUSES
+// (ReportStaleFactSources, nothing written, as --unit / --qname do); a dry run
+// REPORTS it -- a WARN on stderr naming the files, the preview still rendered,
+// and the --json key staleFactSources -- because a preview writes nothing and
+// is how the user sees what the run would do. --apply --reindex reindexes
+// first, so it never sees a stale source.
 function ReportDocBatch(const AArgs: TArgs; const ARes: TDocBatchResult;
-  const AScope, AScopeVal: string): Integer;
+  const AScope, AScopeVal: string; const AStaleSrc: TArray<string>): Integer;
+const
+  MAX_NAMED = 3; { files named in the WARN; the count covers the rest }
 var
   O      : TJSONObject;
   Applied: Boolean    ;
 begin
+  if Length(AStaleSrc) > 0 then
+  begin
+    if AArgs.Apply then Exit(ReportStaleFactSources(AStaleSrc, AArgs.DbPath));
+    var Named: string:= '';
+    for var I: Integer:= 0 to Min(High(AStaleSrc), MAX_NAMED - 1) do
+      Named:= Named + (if Named = '' then '' else ', ') + AStaleSrc[I];
+    Writeln(ErrOutput, Format('doc: WARN -- %d file(s) this run reads facts from changed since it was indexed (%s). ' +
+      'This PREVIEW may cite the wrong routines; --apply refuses until the index is fresh: ' +
+      'drag-lint index --project <file.dproj> --db %s (or --apply --reindex).',
+      [Length(AStaleSrc), Named, AArgs.DbPath]));
+  end;
   Applied:= AArgs.Apply and (Length(ARes.Edits) > 0);
   // v(PHASE A2): the batch paths compute every edit from ONE snapshot, so a
   // stale-anchor refusal here does not mean "an earlier edit in this run moved
@@ -17634,6 +17957,7 @@ begin
       // some sites were refused -- without it the text path reports a refusal
       // and the machine path silently claims success. 0 on every healthy run.
       O.AddPair('staleAnchorsRefused', TJSONNumber.Create(BatchSkipped));
+      O.AddPair('staleFactSources', TJSONNumber.Create(Length(AStaleSrc))); // 1.52 FINDOC2: ADDITIVE, 0 on a fresh index
       Writeln(O.ToJson);
     finally
       O.Free;
@@ -17696,16 +18020,22 @@ begin
   // ADP1: Step 1 (if --reindex + --apply): reindex BEFORE document to ensure
   // --apply works on current line numbers. INCREMENTAL index auto-detects
   // stale/absent files, skips up-to-date, re-parses only those changed.
+  // 1.52 FINDOC2: the notes go through EmitNoteLine / EmitStatusLine and the
+  // indexer through DoIndexForDoc, so --json stdout stays ONE document.
   if AArgs.DocReindex and AArgs.Apply then
   begin
-    Writeln('Reindexing (INCREMENTAL): detecting stale/absent files...');
+    EmitNoteLine(AArgs, 'Reindexing (INCREMENTAL): detecting stale/absent files...');
     // Use a copy of AArgs for the index call. ProjectPath is preserved so
     // DoIndex can resolve the project's compilation closure folders.
     var IndexArgs: TArgs := AArgs;
     IndexArgs.IndexAll := False;  // incremental (default)
     IndexArgs.Path := '';  // clear Path; let ProjectPath drive the resolution
-    var IndexResult := DoIndex(IndexArgs);
-    if IndexResult <> 0 then begin Writeln('Reindex before document failed.'); Exit(IndexResult); end;
+    var IndexResult := DoIndexForDoc(AArgs, IndexArgs);
+    if IndexResult <> 0 then
+    begin
+      EmitStatusLine(AArgs, 'Reindex before document failed.');
+      Exit(IndexResult);
+    end;
   end;
 
   if not AArgs.DocStrip then
@@ -17739,19 +18069,25 @@ begin
     ResetSourceFilesRead;
     Res:= TDocBatch.DocumentProject(Store, AArgs.ProjectPath, Opts);
   end;
-  Result:= ReportDocBatch(AArgs, Res, 'project', AArgs.ProjectPath);
+  var StaleSrc: TArray<string>:= nil; // 1.52 FINDOC2: see ReportDocBatch
+  if not AArgs.DocStrip then StaleSrc:= StaleFactSources(Store, '');
+  Result:= ReportDocBatch(AArgs, Res, 'project', AArgs.ProjectPath, StaleSrc);
 
   // ADP1: Step 3 (if --reindex + --apply): reindex AFTER document to re-freshen
   // the index after the line-shifting edits. The index is now consistent with the
   // source files, so hover/lint/LSP work correctly immediately after.
   if AArgs.DocReindex and AArgs.Apply and (Result = 0) then
   begin
-    Writeln('Reindexing (INCREMENTAL): refreshing after line-shift edits...');
+    EmitNoteLine(AArgs, 'Reindexing (INCREMENTAL): refreshing after line-shift edits...');
     var IndexArgs: TArgs := AArgs;
     IndexArgs.IndexAll := False;  // incremental
     IndexArgs.Path := '';  // clear Path; let ProjectPath drive the resolution
-    var IndexResult := DoIndex(IndexArgs);
-    if IndexResult <> 0 then begin Writeln('Reindex after document failed.'); Exit(IndexResult); end;
+    var IndexResult := DoIndexForDoc(AArgs, IndexArgs);
+    if IndexResult <> 0 then
+    begin
+      EmitStatusLine(AArgs, 'Reindex after document failed.');
+      Exit(IndexResult);
+    end;
   end;
 end; // function
 
@@ -17780,6 +18116,8 @@ begin
   Opts:= Default(TDocBatchOptions);
   { exclude_paths, the OTHER half of ownership -- see TDocBatchOptions.IsExcluded. }
   Opts.IsExcluded:= DocExcludePredicate(AArgs);
+  Opts.DocumentThirdParty:= AArgs.DocumentThirdParty; { 1.52 FINDOC: ownRoots for document-all }
+  Opts.OwnAnchorDir:= AnchorDirForDb(AArgs.DbPath);
   Opts.Stubs:= AArgs.DocStubs;
   Opts.Strip:= AArgs.DocStrip; // v(ADP3 T2): --strip removes engine output instead.
   Opts.IncludeSeeAlso:= AArgs.DocSeeAlso; // ADF T4: --seealso opts in <seealso> crefs.
@@ -17799,7 +18137,10 @@ begin
     ResetSourceFilesRead;
     Res:= TDocBatch.DocumentAll(Store, Opts);
   end;
-  Result:= ReportDocBatch(AArgs, Res, 'scope', 'all');
+  // 1.52 FINDOC2: see ReportDocBatch. --strip reads no facts, so nothing is stale.
+  var StaleSrc: TArray<string>:= nil;
+  if not AArgs.DocStrip then StaleSrc:= StaleFactSources(Store, '');
+  Result:= ReportDocBatch(AArgs, Res, 'scope', 'all', StaleSrc);
 end; // function
 
 // v(ADP3 T2): `document --qname X --strip` -- strips the doc region(s)
@@ -18415,7 +18756,8 @@ end; // function
 /// NoBackup, AsJson, EnumMethodsStr (--methods), EnumToString (--tostring).</param>
 /// <returns>0 when Action=ehaBuilt (preview, --json, or --apply all succeed);
 /// 1 when the enum resolves but Build refuses (ehaExists/ehaNoImplSection) or
-/// AEnumQName does not resolve (ehaNotFound); 2 on a usage/db error.</returns>
+/// AEnumQName does not resolve (ehaNotFound) or the compile gate refuses; 2 on a usage/db error or when --apply
+/// finds no project to build (REFUSED (no-project); --no-compile-gate writes unbuilt).</returns>
 /// <remarks>Idempotent: once the generated helper is indexed, a second
 /// --apply run resolves Action=ehaExists and makes no edit (Build never
 /// overwrites a hand-written or previously-generated helper). Refusal reasons
@@ -18463,18 +18805,27 @@ begin
 
   Applied:= AArgs.Apply and (Res.Action = ehaBuilt) and (Length(Res.Edits) > 0);
   var GateRefused:= False;
+  var GatedWrite:= False;  { B22: the gate keeps .BCK<n> backups, not .bak }
   if Applied then
   begin
+    { 1.52 GATE2: gated by default, as extract-method (ResolveFixerGate). }
     var Touched: Integer;
-    if AArgs.ProjectPath <> '' then
+    var GateArgs:= AArgs;
+    var GateMsg: string;
+    var Verdict:= ResolveFixerGate('create-enum-helper', AArgs.ProjectPath, AArgs.DbPath, Res.FilePath,
+      AArgs.NoCompileGate, GateArgs.ProjectPath, GateMsg);
+    Writeln(ErrOutput, GateMsg);
+    if Verdict = fgvRefused then Exit(2);
+    if Verdict = fgvGated then
     begin
       OpenGateStandDown('create-enum-helper', AArgs.DbPath);
       try
-        Applied:= ApplyEditsGated(Res.Edits, 'create-enum-helper', AArgs, Touched);
+        Applied:= ApplyEditsGated(Res.Edits, 'create-enum-helper', GateArgs, Touched);
       finally
         CloseGateStandDown;
       end;
       GateRefused:= not Applied;
+      GatedWrite:= True;
     end
     else TTextEditApplier.Apply(Res.Edits, not AArgs.NoBackup);
   end;
@@ -18510,7 +18861,7 @@ begin
   end
   else
     Writeln(Format('create-enum-helper: %s helper built, %d edit(s) applied%s',
-      [Res.EnumName, Length(Res.Edits), IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
+      [Res.EnumName, Length(Res.Edits), (if AArgs.NoBackup then '' else if GatedWrite then ' (.BCK backup written)' else ' (.bak written)')]));
   Result:= 0;
 end; // function
 
@@ -18793,10 +19144,24 @@ begin
     Writeln(Format('Dry run: extract "%s". Pass --apply to write.', [AArgs.Name]));
     Exit(0);
   end;
+  { 1.52 GATE2: the compile gate is the default -- --project, the DB's project, or the project that names the unit;
+    none = REFUSED (no-project), exit 2; --no-compile-gate writes unbuilt. }
   var Touched: Integer;
-  if AArgs.ProjectPath <> '' then
+  var GateArgs:= AArgs;
+  var GateMsg: string;
+  var Verdict:= ResolveFixerGate('extract-method', AArgs.ProjectPath, AArgs.DbPath, AArgs.InFile, AArgs.NoCompileGate,
+    GateArgs.ProjectPath, GateMsg);
+  Writeln(ErrOutput, GateMsg);
+  if Verdict = fgvRefused then Exit(2);
+  if Verdict = fgvGated then
   begin
-    if not ApplyEditsGated(Edits, 'extract-method', AArgs, Touched) then Exit(1);
+    { 1.52 BK-GATE B21: `drag-lint shutdown --db` reaches the build this write waits on (rolled back, exit 1). }
+    OpenGateStandDown('extract-method', AArgs.DbPath);
+    try
+      if not ApplyEditsGated(Edits, 'extract-method', GateArgs, Touched) then Exit(1);
+    finally
+      CloseGateStandDown;
+    end;
   end
   else Touched:= TTextEditApplier.Apply(Edits, not AArgs.NoBackup);
   Writeln(Format('Applied: extracted "%s" (%d file).', [AArgs.Name, Touched]));
@@ -18899,6 +19264,7 @@ begin
   Opts.Db:= AArgs.DbPath;
   Opts.NoBackup:= AArgs.NoBackup;
   Opts.Json:= AArgs.AsJson or SameText(AArgs.Format, 'json');
+  Opts.ExcludeUnder:= AArgs.ExcludeUnder;
   Result:= RunUnwith(Opts, Store, Lib);
 end;
 
@@ -18920,6 +19286,24 @@ begin
   if Length(Symbols) > 0 then Result:= 0
   else Result:= 1;
 end; // function
+
+const
+  { B19 (1.52 BK-XPROJ): appended to a project-composition finding kept outside the roots. }
+  OUTSIDE_ROOTS_NOTE = 'outside the project roots; kept because the finding is about the project''s composition';
+
+/// <summary>B19 (1.52 BK-XPROJ): True for the rules whose finding is about the PROJECT's
+/// composition -- what it lists, needs or cannot resolve -- rather than about the code of
+/// the unit it is anchored on.</summary>
+/// <param name="ARuleId">A finding's rule id; case-insensitive.</param>
+/// <returns>True for unit-not-in-dpr, unit-used-by-no-unit, ancestor-not-in-project,
+/// used-unit-not-resolvable, unit-not-in-library and dependent-project-not-recompiled.</returns>
+/// <remarks>lint-all --project keeps such a finding when its unit is in the project's
+/// closure but outside the project roots; every other rule stays scoped to the roots.</remarks>
+function IsProjectCompositionRule(const ARuleId: string): Boolean;
+begin
+  Result:= MatchText(ARuleId, ['unit-not-in-dpr', 'unit-used-by-no-unit', 'ancestor-not-in-project',
+    'used-unit-not-resolvable', 'unit-not-in-library', 'dependent-project-not-recompiled']);
+end;
 
 { Canonical comparison form for a scope-set path: absolute, all-backslash,
   lower-cased. Delphi paths are case-insensitive and the index stores them with
@@ -19428,7 +19812,7 @@ begin
 
     Created := False;
     UnitText:= '';
-    if UnitPath <> '' then UnitText:= TFile.ReadAllText(UnitPath, TEncoding.ANSI)
+    if UnitPath <> '' then UnitText:= ReadSourceFileText(UnitPath)
     else
     begin
       { No such unit in the index. Create it at the project's own root, so it
@@ -19956,6 +20340,8 @@ var
   end;
 
 begin
+  SetRuleBudgetDisabled(AArgs.NoBudget);  { 1.52 BUDGET }
+  RuleBudgetResetSummary;
   if RefuseCompileGateWithoutFix(AArgs, 'lint-all') then Exit(2);
   { wave 148 RO: an unknown --rule id was a silent empty report here (lint and lint-project already refuse it). }
   if AArgs.Rule <> '' then
@@ -20214,8 +20600,9 @@ begin
   if not AArgs.NoPreprocess then InstallLintIncludeContexts(Store, FilePaths, AArgs.ProjectPath);
   { PF E-LINTALL-SLOWER: which OFF flow passes this run keeps, read once for the per-file loop. }
   var FlowKeep: TFunc<string, Boolean>:= RuleKeptByRun(AArgs, Cfg, MarkedRuleIds(FilePaths));
-  { DEC-13: lint-all listens for a maintenance stand-down; the scan stops between files. }
-  BatchChannelOpen('lint-all', TArray<string>.Create(ExpandFileName(ProjectDb)), DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION, IsMachineReadableOutput(AArgs));
+  { DEC-13: lint-all listens for a maintenance stand-down; the scan stops between files.
+    1.52 B17: --no-stand-down keeps a measurement run whole -- no channel, so BatchStandDownTaken stays False. }
+  if not AArgs.NoStandDown then BatchChannelOpen('lint-all', TArray<string>.Create(ExpandFileName(ProjectDb)), DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION, IsMachineReadableOutput(AArgs));
   var LintStoodAt: Integer:= -1;
   var LintDelayMs: Integer:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_TEST_LINT_FILE_DELAY_MS'), 0);
   Prof.Phase(Format('per-file scan (%d files)', [Length(FilePaths)]));
@@ -20665,11 +21052,11 @@ begin
       OptIn:= OptIn + ['heavy-initialization'];
     if Cfg.ShouldKeep('global-set-in-initialization-never-freed', {ADefaultDisabled=}False) then   { 1.44 lane rulesf2 }
       OptIn:= OptIn + ['global-set-in-initialization-never-freed'];
-    if Cfg.ShouldKeep('datamodule-form-global', {ADefaultDisabled=}True) then   { 1.42 lane ruleset }
+    if Cfg.ShouldKeep('datamodule-form-global', {ADefaultDisabled=}False) then   { 1.42 lane ruleset }
       OptIn:= OptIn + ['datamodule-form-global'];
     if Cfg.ShouldKeep('rtti-unavailable', {ADefaultDisabled=}True) then   { 152b lane RTTI }
       OptIn:= OptIn + ['rtti-unavailable'];
-    if Cfg.ShouldKeep('parameter-type-too-wide', {ADefaultDisabled=}True) then   { 1.46 lane t4 }
+    if Cfg.ShouldKeep('parameter-type-too-wide', {ADefaultDisabled=}False) then   { 1.46 lane t4; ON since 1.52 lane PTW (B7) }
       OptIn:= OptIn + ['parameter-type-too-wide'];
     for var Rt in REF_TYPE_RULES do   { 1.44 lane rulesf1 }
       if Cfg.ShouldKeep(Rt, RefTypeRuleDefaultOff(Rt)) then OptIn:= OptIn + [Rt];
@@ -20729,9 +21116,25 @@ begin
     Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store, DocRenderOptionsFor(AArgs, ProjectDb));
   { v151 lane FRAME: the v151 rule lanes' project-wide checks, once per run. }
   if V151Wanted then
-    for var V151Nr: string in V151Runs do
-      for var PF: TLintFinding in TV151Dispatch.CheckProject(TV151ProjectCtx.Make(Store, LibStore, Cfg, V151Nr, FilePaths, AArgs.ProjectPath)) do
-        if (Length(V151Runs) = 1) or SameText(PF.RuleId, V151Nr) then Findings:= Findings + [PF];
+  begin
+    { 1.52 BK-XPROJ: the sibling resolver + lister reach the project-wide v151/v152 checks
+      (member-could-be-private judges a unit other projects compile through TSharedScope). }
+    var V151SibKeep : TList<ISymbolStore>:= TList<ISymbolStore>.Create;
+    var V151SibOwned: TObjectList<TObject>:= TObjectList<TObject>.Create(True);
+    try
+      for var V151Nr: string in V151Runs do
+      begin
+        var PCtx: TV151ProjectCtx:= TV151ProjectCtx.Make(Store, LibStore, Cfg, V151Nr, FilePaths, AArgs.ProjectPath);
+        PCtx.SiblingStore:= MakeSiblingStoreResolver(AArgs, V151SibKeep, V151SibOwned);
+        PCtx.SiblingNames:= MakeSiblingProjectLister(AArgs);
+        for var PF: TLintFinding in TV151Dispatch.CheckProject(PCtx) do
+          if (Length(V151Runs) = 1) or SameText(PF.RuleId, V151Nr) then Findings:= Findings + [PF];
+      end;
+    finally
+      V151SibKeep .Free;
+      V151SibOwned.Free;
+    end;
+  end;
   { v0.77: cross-file + within-file clone detection (#6). Runs ONLY here in
     lint-all (never the per-file Check) so within-file clones are reported once. }
   LintPhase('duplicate-code');
@@ -20850,6 +21253,7 @@ begin
     configured glob. Pinned by
     tests\autotest\run_lintall_project_rules_honour_exclude_paths.ps1. }
   Findings:= DropUsesFragmentParseErrors(Store, Findings);   { 152c lane INCR (M4) }
+  Findings:= DropUnitExcludedFindings(Cfg, Findings);         { 1.52 D1 unit-scope rule_overrides }
   LintPhase(Format('exclude_paths filter (%d findings)', [Length(Findings)]));
   begin
     var ExclMemo: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
@@ -20892,7 +21296,22 @@ begin
           Keep:= Own.IsOurs(F.FilePath);
           OwnMemo.Add(F.FilePath, Keep);
         end;
-        if Keep then begin Ours[OursCount]:= F; Inc(OursCount); end;
+        { B19 (1.52 BK-XPROJ): a project-COMPOSITION finding (the project lists, needs or
+          cannot resolve this unit) is about the project, wherever the unit lies: kept when
+          the unit is in this --project's closure, and says so. }
+        if (not Keep) and (ScopeSet <> nil) and IsProjectCompositionRule(F.RuleId)
+           and ScopeSet.ContainsKey(ScopeKey(F.FilePath)) then
+        begin
+          Ours[OursCount]:= F;
+          if not ContainsText(F.Message, OUTSIDE_ROOTS_NOTE) then
+            Ours[OursCount].Message:= F.Message + ' (' + OUTSIDE_ROOTS_NOTE + ')';
+          Inc(OursCount);
+        end
+        else if Keep then
+        begin
+          Ours[OursCount]:= F;
+          Inc(OursCount);
+        end;
       end;
       SetLength(Ours, OursCount);
       Findings:= Ours;
@@ -20918,15 +21337,15 @@ begin
     FreeAndNil(ScopeSet);
   end;
 
-  { Resolve output path: --output, or lint-report-YYYYMMDD.txt beside --project, else in the current
-    directory. 148 IX (144 qsmall): the old "beside the DB" default wrote into a shared _D-RAG folder,
-    where every caller's run of the day overwrote the last. Guard: run_output_encoding_written_files.ps1. }
+  { Resolve output path: --output / --report, or lint-report-YYYYMMDD.txt beside --project, else beside
+    the DB. 1.52 SMALLS: the 148 IX "current directory" default littered whatever folder the caller
+    stood in (VS Code workspaces, repo roots); --report <path> is the escape hatch for a shared _D-RAG.
+    Guards: run_lintall_report_in_cwd_guard.ps1, run_output_encoding_written_files.ps1. }
   OutPath:= AArgs.Output;
   if OutPath = '' then
   begin
-    var BaseDir: string;
-    if AArgs.ProjectPath <> '' then BaseDir:= ExtractFilePath(AArgs.ProjectPath)
-    else BaseDir:= GetCurrentDir;
+    var BaseDir:= if AArgs.ProjectPath <> '' then ExtractFilePath(AArgs.ProjectPath)
+      else ExtractFilePath(ExpandFileName(ProjectDb));
     OutPath:= TPath.Combine(BaseDir, 'lint-report-' + FormatDateTime('YYYYMMDD', NowLocal) + '.txt');
   end;
 
@@ -21093,6 +21512,8 @@ begin
   finally
     MarkerUnion.Free;
   end;
+  { 1.52 BUDGET (D9): the rules the per-rule time budget skipped, once per run (each file also got a rule-skipped-budget note) }
+  if RuleBudgetSummaryLine <> '' then EmitNoteLine(AArgs, 'lint-all: ' + RuleBudgetSummaryLine);
   { 100% means FINISHED -- the report is written and every phase is done. It is
     emitted exactly once, here, so a reader (and the IDE bar) can treat it as a
     completion signal rather than as "the scan loop ended", which is what it
@@ -21205,11 +21626,11 @@ begin
       OptIn2:= OptIn2 + ['heavy-initialization'];
     if LoadLintConfig(AArgs).ShouldKeep('global-set-in-initialization-never-freed', {ADefaultDisabled=}False) then   { 1.44 lane rulesf2 }
       OptIn2:= OptIn2 + ['global-set-in-initialization-never-freed'];
-    if LoadLintConfig(AArgs).ShouldKeep('datamodule-form-global', {ADefaultDisabled=}True) then   { 1.42 lane ruleset }
+    if LoadLintConfig(AArgs).ShouldKeep('datamodule-form-global', {ADefaultDisabled=}False) then   { 1.42 lane ruleset }
       OptIn2:= OptIn2 + ['datamodule-form-global'];
     if LoadLintConfig(AArgs).ShouldKeep('rtti-unavailable', {ADefaultDisabled=}True) then   { 152b lane RTTI }
       OptIn2:= OptIn2 + ['rtti-unavailable'];
-    if LoadLintConfig(AArgs).ShouldKeep('parameter-type-too-wide', {ADefaultDisabled=}True) then   { 1.46 lane t4 }
+    if LoadLintConfig(AArgs).ShouldKeep('parameter-type-too-wide', {ADefaultDisabled=}False) then   { 1.46 lane t4; ON since 1.52 lane PTW (B7) }
       OptIn2:= OptIn2 + ['parameter-type-too-wide'];
     for var Rt2 in REF_TYPE_RULES do   { 1.44 lane rulesf1 }
       if LoadLintConfig(AArgs).ShouldKeep(Rt2, RefTypeRuleDefaultOff(Rt2)) then OptIn2:= OptIn2 + [Rt2];
@@ -23189,9 +23610,10 @@ begin
 
     { --hub-surface (spec 2026-11-08-hub-scc-phased P2): recipe R3 in place of the planner. Phase P6 (lane v151 I10,
       after the Loader apply built with 0 errors): the --plan dry run asks R3 first WITHOUT the switch, for a group R3
-      predicts to break; --no-hub-surface gives the planner's plan. Writing (--apply) and the --causes --format json
-      fix object still need the switch by name. Since 1.51.1 (lane v1511 CYC, T06) --fix --hub-surface runs R3 through
-      the compile gate; the default is not flipped (O11), so the default fix object still does not offer R3. }
+      predicts to break; --no-hub-surface gives the planner's plan. Since 1.51.1 (lane v1511 CYC, T06) --fix
+      --hub-surface runs R3 through the compile gate. Since 1.52 (owner ruling B9b, lane v152 HUB) the same default
+      holds for writing (--plan --apply), --fix and the --causes --format json fix object: R3 for a group it breaks
+      (R3DefaultGroup), the planner for every other group; --no-hub-surface = the planner everywhere. }
     if AArgs.HubSurface and AArgs.NoHubSurface then
     begin
       Writeln(ErrOutput, 'ERROR: cycles --hub-surface and --no-hub-surface exclude each other');
@@ -23209,17 +23631,27 @@ begin
         Exit(2);
       end;
     end;
-    if AArgs.HubSurface and AArgs.Plan and AArgs.Apply then
+    { 1.52 (owner ruling B9b, lane v152 HUB): --plan --apply without a switch writes R3 for a group R3 predicts to
+      break (R3DefaultGroup, the group --fix takes); any other group: the old default, nothing written }
+    var HubApplyGroup:= 0;
+    var HubApplyLib: ISymbolStore:= nil;
+    var HubLibFailed:= False;
+    var HubLibMessage:= '';
+    if AArgs.Plan and AArgs.Apply and not AArgs.NoHubSurface then
+    begin
+      { lane 149 CYA: the platform library types an ancestor's member (`frmMain.Invalidate`); without it that member stays refused }
+      HubApplyLib:= OpenPlanLibrary(HubLibFailed, HubLibMessage);
+      if not AArgs.HubSurface then
+        HubApplyGroup:= R3DefaultGroup(Store, HubApplyLib, Sccs, CycGraph, (if AArgs.FixCycleGiven then AArgs.FixCycle else 0), AArgs.GhostUnit);
+    end;
+    if (AArgs.HubSurface or (HubApplyGroup > 0)) and AArgs.Plan and AArgs.Apply then
     begin
       var HubOpts:= Default(THubSurfaceOptions);
       HubOpts.Apply     := AArgs.Apply;
       HubOpts.NoBackup  := AArgs.NoBackup;
-      HubOpts.CycleIndex:= if AArgs.FixCycleGiven then AArgs.FixCycle else 0;
+      HubOpts.CycleIndex:= if AArgs.FixCycleGiven then AArgs.FixCycle else HubApplyGroup;
       HubOpts.UnitStem  := LowerCase(AArgs.GhostUnit);
-      { lane 149 CYA: the platform library types an ancestor's member (`frmMain.Invalidate`); without it that member stays refused }
-      var HubLibFailed: Boolean;
-      var HubLibMessage: string;
-      HubOpts.LibraryStore:= OpenPlanLibrary(HubLibFailed, HubLibMessage);
+      HubOpts.LibraryStore:= HubApplyLib;
       if HubLibFailed then Writeln(ErrOutput, 'drag-lint: note: cycles --hub-surface: ', HubLibMessage, ' -- ancestor members stay refused');
       var HubLines:= TStringList.Create;
       try
@@ -23276,6 +23708,7 @@ begin
         FixOpts.RulesDir  := AArgs.RulesDir;
         FixOpts.Json     := SameText(AArgs.Format, 'json');
         FixOpts.HubSurface:= AArgs.HubSurface;
+        FixOpts.NoHubSurface:= AArgs.NoHubSurface;
         FixCode:= RunCycleFix(FixOpts, Store, Sccs, Graph, LibStore);
       end
       else
@@ -23343,15 +23776,10 @@ begin
           HintIn.FixProject:= AArgs.ProjectPath;
           HintIn.Unavailable:= (if JsonLibFailed then 'library unavailable: ' + (if JsonLibMessage <> '' then JsonLibMessage else 'the platform library could not be opened') else '');
           HintIn.FixHook:= nil;
-          if AArgs.HubSurface then
-          begin
-            var HubLibStore:= HintIn.LibStore;
-            var HubDbPath  := AArgs.DbPath;
-            HintIn.FixHook:= function(pIndex: Integer; out pFix: TJSONObject): Boolean
-              begin
-                Result:= HubSurfaceFixJson(Store, HubLibStore, Sccs[pIndex - 1], pIndex, EdgeGraph, HubDbPath, pFix);
-              end;
-          end;
+          { 1.52 (owner ruling B9b): R3's fix object by default for a group R3 breaks; --hub-surface also for one it
+            cannot break; --no-hub-surface = the planner's object for every group }
+          if not AArgs.NoHubSurface then
+            HintIn.FixHook:= HubSurfaceFixHook(Store, HintIn.LibStore, Sccs, EdgeGraph, AArgs.DbPath, AArgs.HubSurface);
           AddCycleFixHints(HintIn, JArr);
         end;
         Writeln(JArr.ToJson);
@@ -25574,7 +26002,27 @@ begin
   var SupNew : string := '';
   FindSupersededMarker(WinLines, MarkLine, AArgs.FixRule, OldLine, SupLine, SupNew);
 
-  NewLine:= TReviewMarkers.InsertInto(OldLine, AArgs.FixRule, '', WinHash);
+  { 1.52 INT14: the superseded marker's REASON moves with it. It used to be
+    written with an empty reason, so the reviewer's text vanished silently.
+    The stamp does not move: the entry is re-hashed, and a re-hash is not a
+    re-review (L3) -- the note below says so. }
+  var SupReason: string:= '';
+  var SupStamped: Boolean:= False;
+  if SupLine > 0 then
+    for M in TReviewMarkers.Parse(WinLines[SupLine - 1]) do
+      if SameText(M.RuleId, AArgs.FixRule) and (Trim(M.Reason) <> '') then
+      begin
+        SupReason := TReviewMarkers.WithoutReviewStamp(M.Reason);
+        SupStamped:= M.Reason.Contains('REVIEWED') and not SupReason.Contains('REVIEWED');
+        Break;
+      end;
+
+  { 1.52 INT14: `--reason "<text>"` REPLACES the entry's reason, stamp included:
+    the operator passing it is the re-review that L3 asks for. Without it the
+    L3 default stands (a re-hash drops the stamp, the note below says so). }
+  var Restamp: Boolean:= Trim(AArgs.Reason) <> '';
+  NewLine:= TReviewMarkers.InsertInto(OldLine, AArgs.FixRule,
+    (if Restamp then Trim(AArgs.Reason) else SupReason), WinHash, Restamp);
   if (NewLine = OldLine) and (SupLine = 0) then
   begin
     { Already reviewed and the hash still matches -- nothing to write, and the
@@ -25622,7 +26070,7 @@ begin
   { L3: InsertInto drops a `REVIEWED <date>` stamp when it RE-HASHES a stale
     marker, because a re-hash is not a re-review. Say so, or the operator never
     learns the stamp has to be re-written after actually re-reading the code. }
-  if (Pos('REVIEWED', OldLine) > 0) and (Pos('REVIEWED', NewLine) = 0) then
+  if (not Restamp) and (SupStamped or (OldLine.Contains('REVIEWED') and not NewLine.Contains('REVIEWED'))) then
     Writeln(Format('note: %s:%d -- the marker was re-hashed to changed code, so its REVIEWED stamp was dropped ' +
       '(a re-hash is not a re-review). Re-stamp the reason once you have re-read the code.',
       [AArgs.Target, AArgs.FixLine]));
@@ -25797,19 +26245,33 @@ end; // function
 procedure LoadSiblingNameToDb(const AArgs: TArgs; const ANameToDb: TDictionary<string, string>);
 begin
   LoadManifestNameToDb(AArgs, ANameToDb);
-  if PrimaryDbRegistered(AArgs, ANameToDb) then Exit;
-  { v1511 F1: --db is not the DB the manifest registers (a lane / test COPY): the
-    manifest's DBs are the REAL sibling indexes, which a run on a copy must never open.
-    Each one is replaced by the file of the same name beside the --db copy when one
-    exists (a copy set like v1511\_dbs\ keeps its answers), else dropped -- the rules
-    read a missing sibling as "could not check". }
-  var CopyDir: string:= ExtractFilePath(ExpandFileName(AArgs.DbPath));
-  for var Key: string in ANameToDb.Keys.ToArray do
+  var IsCopy: Boolean:= not PrimaryDbRegistered(AArgs, ANameToDb);
+  if IsCopy then
   begin
-    var Cand: string:= TPath.Combine(CopyDir, ExtractFileName(ANameToDb[Key]));
-    if SameText(Cand, ExpandFileName(AArgs.DbPath)) or not TFile.Exists(Cand) then Cand:= '';
-    PeerTrace('sibling-remap ' + ANameToDb[Key] + ' -> ' + (if Cand = '' then '(none)' else Cand));
-    ANameToDb[Key]:= Cand;
+    { v1511 F1: --db is not the DB the manifest registers (a lane / test COPY): the
+      manifest's DBs are the REAL sibling indexes, which a run on a copy must never open.
+      Each one is replaced by the file of the same name beside the --db copy when one
+      exists (a copy set like v1511\_dbs\ keeps its answers), else dropped -- the rules
+      read a missing sibling as "could not check". }
+    var CopyDir: string:= ExtractFilePath(ExpandFileName(AArgs.DbPath));
+    for var Key: string in ANameToDb.Keys.ToArray do
+    begin
+      var Cand: string:= TPath.Combine(CopyDir, ExtractFileName(ANameToDb[Key]));
+      if SameText(Cand, ExpandFileName(AArgs.DbPath)) or not TFile.Exists(Cand) then Cand:= '';
+      PeerTrace('sibling-remap ' + ANameToDb[Key] + ' -> ' + (if Cand = '' then '(none)' else Cand));
+      ANameToDb[Key]:= Cand;
+    end;
+  end;
+  { B16 (1.52 BK-XPROJ): the peers no manifest section names -- the copies beside a --db
+    copy, or the .groupproj peers of a DB in its own _D-RAG folder (AddDiscoveredPeers). }
+  var Before: TDictionary<string, string>:= TDictionary<string, string>.Create(ANameToDb);
+  try
+    AddDiscoveredPeers(AArgs.DbPath, AArgs.ProjectPath, IsCopy, ANameToDb);
+    for var Pair: TPair<string, string> in ANameToDb do
+      if not Before.ContainsKey(Pair.Key) or (Before[Pair.Key] <> Pair.Value) then
+        PeerTrace('sibling-discovered ' + Pair.Key + ' -> ' + Pair.Value);
+  finally
+    Before.Free;
   end;
 end;
 
@@ -28906,7 +29368,11 @@ begin
     end
     else if Args.Command = 'warm-rule-cache' then Result:= DoWarmRuleCache(Args)
     else if Args.Command = 'query'             then Result:= DoQuery           (Args)
+    else if (Args.Command = 'rules') and MatchText(Args.SubCommand, ['disable', 'enable']) then Result:= RunRuleScope(LowerCase(Args.SubCommand), Args.Rule, Args.RuleScope, Args.InFile, Args.RefLine, Args.Reason, Args.ProjectPath, Args.ConfigPath, Args.AsJson or SameText(Args.Format, 'json')) { 1.52 FRAME: DRagLint.CLI.RuleScope }
     else if Args.Command = 'rules'             then Result:= DoRules           (Args)
+    else if Args.Command = 'check-init'        then Result:= RunCheckInit(if Args.SubCommand <> '' then Args.SubCommand else Args.QName, Args.At, Args.DbPath, Args.ProjectPath, Args.AsJson or SameText(Args.Format, 'json'), Args.HbExplain, Args.MaxRoutines, Args.MaxSeconds) { 1.52 FRAME: DRagLint.CLI.CheckInit; v152 HBFIX --max-seconds }
+    else if Args.Command = 'repo'              then Result:= RunRepoVerb(Args.SubCommand, Args.RepoPath, Args.ProjectPath, Args.FbConnection, Args.InFile, Args.Output, Args.Replace, Args.AsJson or SameText(Args.Format, 'json')) { 1.52 FRAME: DRagLint.CLI.Repo }
+    else if Args.Command = 'explain'           then Result:= RunExplain(if Args.SubCommand <> '' then Args.SubCommand else Args.Rule, Args.RulesDir, Args.AsJson or SameText(Args.Format, 'json')) { 1.52 FRAME: DRagLint.CLI.Explain }
     else if Args.Command = 'lint'              then Result:= DoLint            (Args)
     else if Args.Command = 'allow'             then Result:= DoAllow           (Args)
     else if Args.Command = 'export'            then Result:= DoExport          (Args)
@@ -28945,7 +29411,7 @@ begin
     else if Args.Command = 'ide-release'       then Result:= DoIdeRelease      (Args)
     else if Args.Command = 'manifest'          then Result:= DoManifest        (Args)
     else if Args.Command = 'project-context'   then Result:= DoProjectContext  (Args)
-    else if Args.Command = 'shutdown'          then Result:= DoShutdown        (Args)
+    else if (Args.Command = 'stop-now') or (Args.Command = 'shutdown') then Result:= DoShutdown (Args) { 'shutdown' = hidden alias (1.52 Q15: the autonomy guard matches the old name) }
     else if Args.Command = 'shared-unit'       then Result:= DoSharedUnit      (Args)
     else if Args.Command = 'bookmarks'         then Result:= DoBookmarks       (Args)
     else if Args.Command = 'bookmarks-strip'   then Result:= RunBookmarksStrip(Args.InFile, Args.Output, Args.Name, Args.Apply, Args.AsJson or SameText(Args.Format, 'json'))

@@ -25,10 +25,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$Studio  = 'C:\Program Files (x86)\Embarcadero\Studio\37.0',
-  [string]$Session = "$PSScriptRoot\fixtures\lspproxy\session-basic.txt"
+  [string]$Session = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
+if (-not $Session) { $Session = "$PSScriptRoot\fixtures\lspproxy\session-basic.txt" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 
@@ -88,7 +92,7 @@ function Caps([byte[]]$b) {
   $t = [Text.Encoding]::UTF8.GetString($b)
   foreach ($m in [regex]::Matches($t, '\{"jsonrpc":"2\.0","id":1,.*?\}(?=Content-Length:|\s*$)', 'Singleline')) {
     try {
-      $o = $m.Value | ConvertFrom-Json
+      $o = $m.Value | ConvertFrom-Json | ForEach-Object { $_ }
       if ($o.result -and $o.result.capabilities) { return ($o.result.capabilities | ConvertTo-Json -Compress -Depth 60) }
     } catch { }
   }

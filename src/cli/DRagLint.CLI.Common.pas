@@ -15,6 +15,12 @@ uses
   DRagLint.Core.Model, DRagLint.Core.Interfaces, DRagLint.Index.Manifest, DRagLint.Index.Plan;
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.EvaluateLibraryGate (DRagLint.CLI.pas), DRagLint.CLI.ManifestLibraryStores (DRagLint.CLI.pas), DRagLint.CLI.ParseArgs (DRagLint.CLI.pas), DRagLint.CLI.PlanLibraryResolve (DRagLint.CLI.pas) (+256 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.CallGraph, DRagLint.CLI.Common, DRagLint.CLI.Compare, DRagLint.CLI.ConsumerDbs, DRagLint.CLI.Convert, DRagLint.CLI.ConvertApply, DRagLint.CLI.Export, DRagLint.CLI.Format, DRagLint.CLI.Graph (+9 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TArgs = record
     Command         : string        ;
     SubCommand      : string        ;
@@ -58,6 +64,8 @@ type
     Deep            : Boolean       ; // v0.42: emit identifier usage refs
     DeepExplicit    : Boolean       ; // --deep/--shallow was given on the cmd line
     Width           : string        ; // v0.42: usages width narrow|wide|very-wide
+    UsagesScope     : string        ; // 1.52 FUSCOPE: usages --scope symbol|project|group|everywhere
+    UsagesGroup     : string        ; // 1.52 FUSCOPE: usages --group <x.groupproj> (scope group)
     Name            : string        ;
     QName           : string        ;
     OfName          : string        ; // v11 (M1): query ancestors --of <ancestor> (is-descendant check)
@@ -73,8 +81,8 @@ type
     Resume          : Boolean       ; // --resume: `ide-release` clears the hold instead of setting it
     StatusOnly      : Boolean       ; // --status: `ide-release` reports the hold without changing it
     GainSince       : string        ; // --since <yyyy-mm-dd>: `gain` skips usage-log lines older than this
-    WaitSeconds     : Integer       ; // --wait N: `shutdown` graceful deadline per engine (default 5)
-    ForceKill       : Boolean       ; // --force: `shutdown` escalates to TerminateProcess -- only after a refusal
+    WaitSeconds     : Integer       ; // --wait N: `stop-now` graceful deadline per engine (default 5)
+    ForceKill       : Boolean       ; // --force: `stop-now` escalates to TerminateProcess -- only after a refusal
     SqlQuery        : string        ; // --query "SELECT ...": the one statement `sql` runs
     TimeoutMs       : Integer       ; // --timeout-ms N: `sql` wall-clock cap (default 10000)
     { `wiki`: the three modes. Term is the human phrase to look up; the two
@@ -129,6 +137,7 @@ type
     ConfigPath   : string ; // --config <file>: drag-lint-lint.json override path
     Enable       : string ; // --enable id1,id2: re-include disabled/off-by-default rules
     Profile      : string ; // --profile <name>: merge a named enable/disable set
+    NoStandDown  : Boolean; // --no-stand-down (1.52 B17): lint-all opens no stand-down channel, so a measurement run is never cut to PARTIAL
     TargetCompiler: string ; // --target-compiler <ver|auto> (1.38): lint / lint-all / rules; '' = config, then 37
     // v0.16: query find flags
     DocTag     : string ;
@@ -442,6 +451,8 @@ type
     // Task 5: lint-all ownership scope. --lint-third-party restores the pre-
     // Task-5 behaviour (every indexed .pas file, vendored code included).
     LintThirdParty: Boolean;
+    // 1.52 BUDGET (D9): lint / lint-all --no-budget -- no rule is skipped for exceeding rule_time_budget_ms.
+    NoBudget: Boolean;
     // lint-all --shared-db <db> (repeatable): other project indexes whose findings
     // count as evidence for a closure-dependent review marker on a shared unit.
     SharedDbs: TArray<string>;
@@ -532,15 +543,33 @@ type
     UpdateDoc     : Boolean; // --update-doc (with --in/--line)
     SnapshotDir   : string ; // --snapshot-dir <dir>
     CompareOutRoot: string ; // --out-root <dir>  (compare: where the rerun's per-run bundle folder is made; '' = %TEMP%\drag-lint-reports)
+    // 1.52 FRAME F2: flags of the verbs check-init, repo, explain and rules disable / enable.
+    // The verb itself lives in its own unit (DRagLint.CLI.CheckInit / .Repo / .Explain / .RuleScope);
+    // --in/--file (InFile), --line (RefLine), --rule, --project, --config, --connection (FbConnection),
+    // --output, --rules-dir, --json and --format are the existing fields.
+    At          : string ; // --at <file>:<line>[:<col>]  (check-init target by position)
+    HbExplain   : Boolean; // --explain  (check-init: roots and reasons in the answer)
+    MaxRoutines : Integer; // --max-routines N  (check-init budget; 0 = absent / the verb's default, -1 = not a number)
+    MaxSeconds  : string ; // --max-seconds S  (check-init wall-clock cap, v152 HBFIX; '' = absent, validated by the verb)
+    RepoPath    : string ; // --repo <file.dlrepo>  (repo verbs; '' = derived from --project)
+    Replace     : Boolean; // --replace  (repo import-fb / restore)
+    RuleScope   : string ; // --scope line|unit|project  (rules disable / enable only; other verbs keep DocForgetScope)
+    Reason      : string ; // --reason "<text>"  (rules disable: stored beside the entry)
   end; // record
 
   /// <summary>The post-apply refresh of the unit's project index (C9,
   /// apply/1 uses_reindex).</summary>
-  /// <remarks>Status: 'done', 'skipped' (Reason says why: no single project
+  /// <remarks>
+  /// Status: 'done', 'skipped' (Reason says why: no single project
   /// DB holds the unit, nothing was written), 'failed' (the child index
   /// run's exit code is in Reason), 'dry-run' (Db / Project name what --apply
   /// would refresh) or 'off' (--no-reindex / --no-reconcile-uses). Ms is the
-  /// child run's wall time.</remarks>
+  /// child run's wall time.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.Common.pas) ?, declaration (DRagLint.CLI.ConvertApplyJson.pas) ?, DRagLint.CLI.Common.RefreshProjectIndex (DRagLint.CLI.Common.pas) ?, DRagLint.CLI.Common.ReindexOwnerProject (DRagLint.CLI.Common.pas), DRagLint.CLI.ConvertApply.ReindexPreview (DRagLint.CLI.ConvertApply.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.Common, DRagLint.CLI.ConvertApply, DRagLint.CLI.ConvertApplyJson</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUsesReindex = record
     Status : string;
     Db     : string;
@@ -578,7 +607,8 @@ const
 /// Write(Output, ADoc), after every pending STDERR byte (engine 1.20.6, T2i).</summary>
 /// <param name="ADoc">The complete document, line breaks included. Converted to
 /// stdout's code page by the RTL exactly as Write/Writeln would convert it.</param>
-/// <remarks>Output and ErrOutput are Text files whose Writeln does NOT flush
+/// <remarks>
+/// Output and ErrOutput are Text files whose Writeln does NOT flush
 /// when the handle is a file or a pipe -- only a console flushes per line -- so
 /// before this, a stderr note (even the "(loaded defaults ...)" banner) sat in
 /// its 128-byte buffer and reached a merged pipe (the editor runs the engine
@@ -590,23 +620,55 @@ const
 /// write for most documents) and 32 KiB when stdout is a console
 /// (GetFileType = FILE_TYPE_CHAR), so no single console WriteFile exceeds 32
 /// KiB. Nothing else writes to either stream in between (single-threaded;
-/// proptree's progress lines are only emitted while the tree builds).</remarks>
+/// proptree's progress lines are only emitted while the tree builds).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Convert.DoConvertReemit (DRagLint.CLI.Convert.pas), DRagLint.CLI.Convert.DoConvertScaffold (DRagLint.CLI.Convert.pas), DRagLint.CLI.Convert.DoPropTree (DRagLint.CLI.Convert.pas), DRagLint.CLI.ConvertApply.DoConvertApply (DRagLint.CLI.ConvertApply.pas), DRagLint.CLI.ConvertApply.DoConvertApply.EmitBatchJson (DRagLint.CLI.ConvertApply.pas) (+5 more)</para>
+/// <para>Calls: Flush, GetFileType, SetTextBuf, TTextRec, Write</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure WriteStdoutDocument(const ADoc: string);
 
 /// <summary>The version limb of a stored fingerprint whose FIRST limb is `&lt;APrefix&gt;&lt;ver&gt;`, or ''.</summary>
 /// <param name="AFingerprint">The stored stamp, e.g. `v=1.39.0-alpha;...`.</param>
 /// <param name="APrefix">`v=` (indexer) or `r=` (resolver).</param>
 /// <returns>The version text, or '' when the stamp is absent or not in that form.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Common.ResolverVersionOfFingerprint (DRagLint.CLI.Common.pas), DRagLint.CLI.ExtractorVersionOfFingerprint (DRagLint.CLI.pas)</para>
+/// <para>Calls: Copy, Pos</para>
+/// <para>Returns: ''; if SemiPos &gt; 0 then Copy(Rest, 1, SemiPos - 1)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FingerprintVersionLimb(const AFingerprint, APrefix: string): string;
 
 /// <summary>The `r=` limb of a stored resolver fingerprint (`r=&lt;ver&gt;;schema=N`), or ''.</summary>
 /// <param name="AFingerprint">The stored resolver fingerprint.</param>
 /// <returns>The resolver version, or ''.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Common.NoteIndexFreshnessOnce (DRagLint.CLI.Common.pas), DRagLint.CLI.ComputeInfoIndexVerdict (DRagLint.CLI.pas), DRagLint.CLI.ConvertApply.ResolverRefusal (DRagLint.CLI.ConvertApply.pas), DRagLint.CLI.RefuseIfEngineOlderThanDb (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Common.FingerprintVersionLimb</para>
+/// <para>Returns: FingerprintVersionLimb(AFingerprint, RESOLVER_LIMB_PREFIX)</para>
+/// <para>Effect-free (proven)</para>
+/// <seealso cref="DRagLint.CLI.Common.FingerprintVersionLimb"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ResolverVersionOfFingerprint(const AFingerprint: string): string;
 
 /// <summary>Adds the staleness fact of ADbPath (`stale`, `stale_files`) to an index-reading verb's JSON envelope (ENG-3).</summary>
 /// <param name="AObj">The envelope; nil is ignored.</param>
 /// <param name="ADbPath">The index the answer came from.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CallGraph.DoButterfly (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.CallGraph.DoCallGraph (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.CallGraph.DoReverseCallTree (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.Schema.DoSchema (DRagLint.CLI.Schema.pas), DRagLint.CLI.Sql.DoSql (DRagLint.CLI.Sql.pas) (+1 more)</para>
+/// <para>Calls: Default, DRagLint.CLI.Common.AddLibraryPendingNotes, DRagLint.Index.Freshness.ProbeIndexFreshness, DRagLint.Storage.SQLite.TSQLiteSymbolStore.OpenReadable, ExpandFileName, SameText</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.AddLibraryPendingNotes"/>
+/// <seealso cref="DRagLint.Index.Freshness.ProbeIndexFreshness"/>
+/// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.OpenReadable"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure AddStalenessPairs(const AObj: TJSONObject; const ADbPath: string);
 
 /// <summary>The command that refreshes AStore, shaped by the database's own scan type: the project-file form for a PROJECT database, the folder form for a library.</summary>
@@ -614,6 +676,14 @@ procedure AddStalenessPairs(const AObj: TJSONObject; const ADbPath: string);
 /// <param name="ADbPath">Its path, as printed in the command.</param>
 /// <param name="AResolveOnly">True: the cheap re-derive (`--resolve-only`), False: the re-parse.</param>
 /// <returns>The command line to advise.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Common.AddLibraryPendingNotes (DRagLint.CLI.Common.pas), DRagLint.CLI.Common.NoteIndexFreshnessOnce (DRagLint.CLI.Common.pas), DRagLint.CLI.ComputeInfoIndexVerdict (DRagLint.CLI.pas), DRagLint.CLI.ConvertApply.ResolverRefusal (DRagLint.CLI.ConvertApply.pas), DRagLint.CLI.FinishLibraryResolve (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue, Format, IfThen, SameText</para>
+/// <para>Returns: Format('index --project &lt;file.dproj&gt; --db "%s"%s', [ADbPath, Suffix]); Format('index &lt;dir&gt; --db "%s"%s', [ADbPath, Suffix])</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IndexRemedyFor(const AStore: ISymbolStore; const ADbPath: string; AResolveOnly: Boolean): string;
 
 /// <summary>Opens ADbPath READ-ONLY for a query verb and validates its schema without any DDL; prints the once-per-process freshness notes.</summary>
@@ -621,6 +691,20 @@ function IndexRemedyFor(const AStore: ISymbolStore; const ADbPath: string; AReso
 /// <param name="AOk">False when the schema is behind (the caller exits nonzero).</param>
 /// <param name="AQuiet">True: no schema-behind line (a caller that only sharpens an analysis).</param>
 /// <returns>The store; never nil on a successful open -- check AOk.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CallGraph.DoAmbiguousCalls (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.CallGraph.DoButterfly (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.CallGraph.DoCallGraph (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.CallGraph.DoCallPath (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.CallGraph.DoDumpCallEdges (DRagLint.CLI.CallGraph.pas) (+75 more)</para>
+/// <para>Calls: DRagLint.CLI.Common.NoteIndexFreshnessOnce, DRagLint.CLI.Common.NoteIndexIncompleteOnce, DRagLint.CLI.Common.NoteIndexRunInProgressOnce, DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent, DRagLint.Storage.Schema.IsSchemaReadable, DRagLint.Storage.Schema.SchemaUnreadableReason, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, Format, Writeln</para>
+/// <para>Returns: TSQLiteSymbolStore.Create(ADbPath, True)</para>
+/// <para>Owns returned: new (caller owns)</para>
+/// <para>Mutates: AOk (out)</para>
+/// <seealso cref="DRagLint.CLI.Common.NoteIndexFreshnessOnce"/>
+/// <seealso cref="DRagLint.CLI.Common.NoteIndexIncompleteOnce"/>
+/// <seealso cref="DRagLint.CLI.Common.NoteIndexRunInProgressOnce"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent"/>
+/// <seealso cref="DRagLint.Storage.Schema.IsSchemaReadable"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function OpenReadOnlyStore(const ADbPath: string; out AOk: Boolean; AQuiet: Boolean = False): ISymbolStore;
 
 /// <summary>Takes `&lt;db&gt;.indexing.lock` for ADbPath: one index run per database, refused at the start (Gitea drag-lint#17).</summary>
@@ -628,17 +712,42 @@ function OpenReadOnlyStore(const ADbPath: string; out AOk: Boolean; AQuiet: Bool
 /// <param name="AQuiet">True: no refusal line.</param>
 /// <param name="AVerb">The verb named in the refusal.</param>
 /// <returns>True when this process holds the lock (also when it already did).</returns>
-/// <remarks>Held until ReleaseIndexLock or process exit; the OS releases it however the process dies.</remarks>
+/// <remarks>
+/// Held until ReleaseIndexLock or process exit; the OS releases it however the process dies.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoFbSnapshot (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.DoRefreshFindings (DRagLint.CLI.pas) (+1 more)</para>
+/// <para>Calls: CreateFile, DRagLint.CLI.Common.StopStaleWarm, DRagLint.Lint.RuleCache.TRuleCache.SweepStaleTmp, Format, LowerCase, PChar, Sleep, SysErrorMessage, Writeln</para>
+/// <para>Returns: False; True</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 42 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.StopStaleWarm"/>
+/// <seealso cref="DRagLint.Lint.RuleCache.TRuleCache.SweepStaleTmp"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AcquireIndexLock(const ADbPath: string; AQuiet: Boolean = False; const AVerb: string = 'index'): Boolean;
 
 /// <summary>Gives back the lock AcquireIndexLock took for ADbPath; a no-op when this process holds none.</summary>
 /// <param name="ADbPath">The database whose lock is released.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas)</para>
+/// <para>Calls: CloseHandle, LowerCase</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ReleaseIndexLock(const ADbPath: string);
 
 /// <summary>True when there is no database to open, having said why on STDERR (B-21); every caller exits 2 on True.</summary>
 /// <param name="ADbPath">The resolved database, '' when none.</param>
 /// <param name="AVerb">The verb named in the message.</param>
 /// <returns>True when the caller must stop.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.CLI.DoCycles (DRagLint.CLI.pas) (+17 more)</para>
+/// <para>Calls: Writeln</para>
+/// <para>Returns: ADbPath = ''</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function NoDbResolved(const ADbPath, AVerb: string): Boolean;
 
 /// <summary>Refuses a run whose EXPLICIT --db list names a file that does not
@@ -668,6 +777,12 @@ function NoDbResolved(const ADbPath, AVerb: string): Boolean;
 /// `convert-scaffold --db app --db lib-typo` drafted rules from a corpus smaller
 /// than the operator named, convert-validate then passed them, and convert-apply
 /// rewrote a form on that basis -- each step reporting success.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CallGraph.DoButterfly (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.CallGraph.DoReverseCallTree (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.Convert.DoConvertReemit (DRagLint.CLI.Convert.pas), DRagLint.CLI.Convert.DoConvertScaffold (DRagLint.CLI.Convert.pas), DRagLint.CLI.Convert.DoConvertValidate (DRagLint.CLI.Convert.pas) (+33 more)</para>
+/// <para>Calls: Flush, Format, Writeln</para>
+/// <para>Returns: True; False</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function ExplicitDbsExist(const AArgs: TArgs; const AVerb: string): Boolean;
 
@@ -675,11 +790,22 @@ function ExplicitDbsExist(const AArgs: TArgs; const AVerb: string): Boolean;
 /// <param name="APaths">Existing database files, as ResolveConsumerDbs returned them.</param>
 /// <returns>True on the first store at the current schema; False when every store
 ///  is stale or cannot be opened.</returns>
-/// <remarks>Opens each store directly rather than through OpenReadOnlyStore, so
-///  the probe prints neither the schema note nor the freshness note -- the verb's
-///  own loop prints them once when it opens the store for real. A store the probe
-///  cannot open (zero-byte, corrupt, locked) counts as not current and the probe
-///  moves on: a probe must not turn one bad manifest database into a FATAL.</remarks>
+/// <remarks>
+/// Opens each store directly rather than through OpenReadOnlyStore, so
+/// the probe prints neither the schema note nor the freshness note -- the verb's
+/// own loop prints them once when it opens the store for real. A store the probe
+/// cannot open (zero-byte, corrupt, locked) counts as not current and the probe
+/// moves on: a probe must not turn one bad manifest database into a FATAL.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent, DRagLint.Storage.Schema.IsSchemaReadable, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create</para>
+/// <para>Returns: False</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent"/>
+/// <seealso cref="DRagLint.Storage.Schema.IsSchemaReadable"/>
+/// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AnyDbSchemaCurrent(const APaths: TArray<string>): Boolean;
 
 /// <summary>Decides what a STALE-SCHEMA database means for the run in hand: a
@@ -715,6 +841,11 @@ function AnyDbSchemaCurrent(const APaths: TArray<string>): Boolean;
 /// <para>The schema gap itself (`index schema v12 &lt; v22`) is already named on
 /// stderr by OpenReadOnlyStore / OpenWritableStore, so this adds the VERDICT and
 /// the REPAIR, not the diagnosis.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CallGraph.DoButterfly (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.CallGraph.DoReverseCallTree (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.Convert.ConvertClassIn (DRagLint.CLI.Convert.pas), DRagLint.CLI.Convert.DoConvertScaffold (DRagLint.CLI.Convert.pas), DRagLint.CLI.Convert.DoGlyphVacuum (DRagLint.CLI.Convert.pas) (+33 more)</para>
+/// <para>Calls: Flush, Format, Writeln</para>
+/// <para>Returns: Length(AArgs.DbPaths) &gt; 0</para>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function StaleDbRefusesRun(const AArgs: TArgs; const AVerb, ADbPath: string): Boolean;
 
@@ -738,6 +869,14 @@ function StaleDbRefusesRun(const AArgs: TArgs; const AVerb, ADbPath: string): Bo
 /// worse than none.</para>
 /// <para>Does not test existence. Whether a missing file is created (index) or
 /// refused (every reader) is the caller's decision.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ConsumerDbs.LoadManifestForProject (DRagLint.CLI.ConsumerDbs.pas), DRagLint.CLI.ConsumerDbs.ResolveConsumerDbs (DRagLint.CLI.ConsumerDbs.pas), DRagLint.CLI.ResolveCompileCheckDb (DRagLint.CLI.pas), DRagLint.CLI.ResolveProjectWriteDbIn (DRagLint.CLI.pas), DRagLint.CLI.RunCommand (DRagLint.CLI.pas) (+1 more)</para>
+/// <para>Calls: DRagLint.Index.Manifest.ResolveProjectDb, ExpandFileName, ExtractFilePath</para>
+/// <para>Returns: ResolveProjectDb(AManifest, AProjectFile, ADb, AClaimants)</para>
+/// <para>Mutates: ADb (out)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Index.Manifest.ResolveProjectDb"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function ResolveOwnProjectDb(const AManifest: TIndexManifest; const AProjectFile: string;
   out ADb: string; out AClaimants: TArray<string>): TProjectDbMatch;
@@ -747,18 +886,32 @@ function ResolveOwnProjectDb(const AManifest: TIndexManifest; const AProjectFile
 /// <param name="AVerb">Verb name for the message prefix.</param>
 /// <param name="AProjectFile">The project file as the user typed it.</param>
 /// <param name="AClaimants">The claiming section names, from ResolveOwnProjectDb.</param>
-/// <remarks>Same wording as `resolve-dbs --project`, so the two cannot drift
+/// <remarks>
+/// Same wording as `resolve-dbs --project`, so the two cannot drift
 /// into two instructions for one manifest defect. Naming the claimants IS the
-/// fix instruction.</remarks>
+/// fix instruction.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ResolveCompileCheckDb (DRagLint.CLI.pas), DRagLint.CLI.ResolveProjectWriteDbIn (DRagLint.CLI.pas), DRagLint.CLI.UsagesDbForFile (DRagLint.CLI.pas)</para>
+/// <para>Calls: Flush, Format, Writeln</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ReportAmbiguousProject(const AVerb, AProjectFile: string; const AClaimants: TArray<string>);
 
 /// <summary>Every database a LIBRARY section of AManifest names, for every
 /// platform the section expands to, as expanded absolute paths.</summary>
 /// <param name="AManifest">The manifest this run loaded.</param>
 /// <returns>The library-section DB paths; empty when the manifest has none.</returns>
-/// <remarks>Keyed on the section KIND (ResolvePlan's smLibrary), not on a
+/// <remarks>
+/// Keyed on the section KIND (ResolvePlan's smLibrary), not on a
 /// `library-` file-name prefix: a library section may name its DB anything,
-/// and a project DB may happen to start with that prefix.</remarks>
+/// and a project DB may happen to start with that prefix.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Common.SplitConsumerDbs (DRagLint.CLI.Common.pas), DRagLint.CLI.ConsumerDbs.ResolveConsumerDbs (DRagLint.CLI.ConsumerDbs.pas), DRagLint.CLI.DoCycles.OpenPlanLibrary (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoUnwith (DRagLint.CLI.pas) (+3 more)</para>
+/// <para>Calls: DRagLint.Index.Plan.ResolvePlan, DRagLint.Project.Resolver.TProjectResolver.Create, ExpandFileName</para>
+/// <seealso cref="DRagLint.Index.Plan.ResolvePlan"/>
+/// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LibrarySectionDbs(const AManifest: TIndexManifest): TArray<string>;
 
 /// <summary>True when ADb is one of ALibraryDbs (case-insensitive, after
@@ -766,19 +919,53 @@ function LibrarySectionDbs(const AManifest: TIndexManifest): TArray<string>;
 /// <param name="ALibraryDbs">From LibrarySectionDbs.</param>
 /// <param name="ADb">The database path to classify.</param>
 /// <returns>True for a library-section database.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Common.SplitConsumerDbs (DRagLint.CLI.Common.pas), DRagLint.CLI.ConsumerDbs.ResolveConsumerDbs (DRagLint.CLI.ConsumerDbs.pas), DRagLint.CLI.DoCycles.OpenPlanLibrary (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), DRagLint.CLI.DoUnwith (DRagLint.CLI.pas) (+5 more)</para>
+/// <para>Calls: ExpandFileName, SameText</para>
+/// <para>Returns: False</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsLibrarySectionDb(const ALibraryDbs: TArray<string>; const ADb: string): Boolean;
 
 /// <summary>The resolver fingerprint of AStore, `r=&lt;resolver version&gt;;schema=&lt;expected schema&gt;`: would this build DERIVE different edges?</summary>
 /// <param name="AStore">The index.</param>
 /// <returns>The fingerprint text.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.CommitAfterResolveOnly (DRagLint.CLI.pas), DRagLint.CLI.CommitIndexerFingerprint (DRagLint.CLI.pas), DRagLint.CLI.Common.NoteIndexFreshnessOnce (DRagLint.CLI.Common.pas), DRagLint.CLI.ComputeInfoIndexVerdict (DRagLint.CLI.pas) (+1 more)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent, Format</para>
+/// <para>Returns: Format('r=%s;schema=%d', [DRAGLINT_RESOLVER_VERSION, Expected])</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ResolverFingerprint(const AStore: ISymbolStore): string;
 
 /// <summary>Stops the previous background rule-cache warm of a database, named by AMarker; only a process running THIS engine's image is stopped.</summary>
 /// <param name="AMarker">`&lt;db&gt;.rule-cache-warm.pid`.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Common.AcquireIndexLock (DRagLint.CLI.Common.pas), DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas)</para>
+/// <para>Calls: CloseHandle, Copy, DRagLint.CLI.Common.SameFileIdentity, DRagLint.CLI.Common.WarmQueryImageName, DRagLint.Core.ControlChannel.ControlPipeNameFor, DRagLint.Core.ControlChannel.ControlRequest, ExpandFileName, IntToStr, OpenProcess, ParamStr (+7 more)</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 50 lines (full implementation)</para>
+/// <para>Catches: EInOutError (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.SameFileIdentity"/>
+/// <seealso cref="DRagLint.CLI.Common.WarmQueryImageName"/>
+/// <seealso cref="DRagLint.Core.ControlChannel.ControlPipeNameFor"/>
+/// <seealso cref="DRagLint.Core.ControlChannel.ControlRequest"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure StopStaleWarm(const AMarker: string);
 
 /// <summary>Runs `&lt;this exe&gt; index --project &lt;P&gt; --db &lt;D&gt;` as a CHILD process for ARx (C9); never raises.</summary>
 /// <param name="ARx">From ReindexPreview with Status 'dry-run'; ends 'done' or 'failed' (the exit code in Reason).</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Common.ReindexOwnerProject (DRagLint.CLI.Common.pas), DRagLint.CLI.ConvertApply.DoConvertApply.RunUnit (DRagLint.CLI.ConvertApply.pas)</para>
+/// <para>Calls: Cardinal, CloseHandle, CreateProcess, FillChar, Format, GetEnvironmentVariable, GetExitCodeProcess, ParamStr, PChar, StrToIntDef, SysErrorMessage, TerminateProcess, UniqueString, WaitForSingleObject</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RefreshProjectIndex(var ARx: TUsesReindex);
 
 /// <summary>An incremental `index --project &lt;AProjectFile&gt; --db &lt;ADbPath&gt;` in a CHILD engine, never the folder form.</summary>
@@ -786,6 +973,19 @@ procedure RefreshProjectIndex(var ARx: TUsesReindex);
 /// <param name="ADbPath">Its project index.</param>
 /// <param name="AVerb">The caller named in the failure line.</param>
 /// <returns>True when the child exited 0; on failure the reason goes to stderr.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto -->The multi-project rename's reindex callback (RefreshOwner's AReindex): an
+/// incremental `index --project &lt;AProjectFile&gt; --db &lt;ADbPath&gt;` in a CHILD engine, never
+/// the folder form. A child, not DoIndex in-process, because DoIndex writes its progress to STDOUT,
+/// which is the lint run's output (and, under --json, a JSON document). True when the child exited
+/// 0; on failure its reason goes to stderr and RefreshOwner reports the owner unverified.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ConsumerDbs.AutoCreateMissingProjectDb (DRagLint.CLI.ConsumerDbs.pas), DRagLint.CLI.PlanMultiOwnerNaming (DRagLint.CLI.pas), DRagLint.CLI.RenameReach (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.CLI.Common.RefreshProjectIndex, Writeln</para>
+/// <para>Returns: Rx.Status = 'done'</para>
+/// <seealso cref="DRagLint.CLI.Common.RefreshProjectIndex"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReindexOwnerProject(const AProjectFile, ADbPath: string; const AVerb: string = 'rename'): Boolean;
 
 const
@@ -795,13 +995,30 @@ const
 /// <summary>Prints a "not found" diagnostic: to stderr when the verb was asked for JSON (stdout must stay parseable), to stdout otherwise.</summary>
 /// <param name="AJson">The verb's own JSON test -- AsJson, SameText(Format, 'json'), or both, whichever the verb accepts.</param>
 /// <param name="AMsg">The diagnostic line.</param>
-/// <remarks>The caller passes the test so each verb reads only the output flags it documents (run_flag_verb_map.ps1 attributes a field read to every verb that reaches it).</remarks>
+/// <remarks>
+/// The caller passes the test so each verb reads only the output flags it documents (run_flag_verb_map.ps1 attributes a field read to every verb that reaches it).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CallGraph.DoButterfly (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.CallGraph.DoReverseCallTree (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.Common.ReportNotFound (DRagLint.CLI.Common.pas), DRagLint.CLI.Convert.DoPropTree (DRagLint.CLI.Convert.pas), DRagLint.CLI.DoBookmarks (DRagLint.CLI.pas) (+10 more)</para>
+/// <para>Calls: Writeln</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ReportNotFoundFor(AJson: Boolean; const AMsg: string);
 
 /// <summary>Opens ADbPath WRITABLE with the same schema-current guard as OpenReadOnlyStore (proptree's write-back).</summary>
 /// <param name="ADbPath">The index to open.</param>
 /// <param name="AOk">False when the open failed or the schema is behind (line on stderr).</param>
 /// <returns>The store, or nil when the writable open threw (the caller falls back to read-only).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Convert.DoPropTree (DRagLint.CLI.Convert.pas)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, Format, Writeln</para>
+/// <para>Returns: TSQLiteSymbolStore.Create(ADbPath, False); nil</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Mutates: AOk (out)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent"/>
+/// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function OpenWritableStore(const ADbPath: string; out AOk: Boolean): ISymbolStore;
 
 /// <summary>The one place a capped list says so (XERJ item 2): a text note, or `omitted` / `cap` keys in AJson.</summary>
@@ -812,18 +1029,39 @@ function OpenWritableStore(const ADbPath: string; out AOk: Boolean): ISymbolStor
 /// <param name="ARerun">The value the note suggests for AFlag.</param>
 /// <param name="AJson">When given, receives the keys (always, 0 included) instead of a text note.</param>
 /// <param name="AAsJsonStream">True: the text note goes to STDERR (stdout is a bare JSON array).</param>
-/// <remarks>The exit code is never touched here.</remarks>
+/// <remarks>
+/// The exit code is never touched here.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoQueryText (DRagLint.CLI.pas), DRagLint.CLI.Export.DoTop (DRagLint.CLI.Export.pas)</para>
+/// <para>Calls: DRagLint.Core.Model.CapOmittedNote, Max, Writeln</para>
+/// <seealso cref="DRagLint.Core.Model.CapOmittedNote"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ReportCap(AOmitted, ACap: Integer; AAtLeast: Boolean; const AFlag: string; ARerun: Integer; AJson: TJSONObject; AAsJsonStream: Boolean);
 
 /// <summary>The text after the last ASep in S (all of S when ASep does not occur).</summary>
 /// <param name="S">A dotted / separated name.</param>
 /// <param name="ASep">The separator.</param>
 /// <returns>The last segment.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Export.EmitEnumsDelphiConst.FlushBlock (DRagLint.CLI.Export.pas), DRagLint.CLI.Wiring.DoImpact (DRagLint.CLI.Wiring.pas)</para>
+/// <para>Calls: Copy, LastDelimiter</para>
+/// <para>Returns: Copy(S, DotPos + 1, MaxInt); S</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LastSegmentAfter(const S: string; ASep: Char): string;
 
 /// <summary>Prints a "not found" diagnostic: to stderr under --json (stdout must stay parseable JSON), to stdout otherwise.</summary>
 /// <param name="AArgs">Parsed arguments; AsJson selects the stream.</param>
 /// <param name="AMsg">The diagnostic line.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CallGraph.DoCallGraph (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.CallGraph.DoCallPath (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.CallGraph.DoFindCallees (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), DRagLint.CLI.DoFindUnit (DRagLint.CLI.pas) (+4 more)</para>
+/// <para>Calls: DRagLint.CLI.Common.ReportNotFoundFor</para>
+/// <seealso cref="DRagLint.CLI.Common.ReportNotFoundFor"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ReportNotFound(const AArgs: TArgs; const AMsg: string);
 
 /// <summary>Refuses a WRITING verb whose database came only from a "db" key of a
@@ -835,8 +1073,16 @@ procedure ReportNotFound(const AArgs: TArgs; const AMsg: string);
 /// (then a config db is never accepted: a destructive verb must act on a database the
 /// user named).</param>
 /// <returns>True when the verb must stop (the ERROR is already on stderr; exit 2).</returns>
-/// <remarks>`index` has its own, softer rule (it ignores the key with a WARNING and goes on);
-/// these verbs have no fallback database, so they stop. --db on the command line always wins.</remarks>
+/// <remarks>
+/// `index` has its own, softer rule (it ignores the key with a WARNING and goes on);
+/// these verbs have no fallback database, so they stop. --db on the command line always wins.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoFbSnapshot (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.DoRefreshFindings (DRagLint.CLI.pas), DRagLint.CLI.Format.DoPurgeLocals (DRagLint.CLI.Format.pas)</para>
+/// <para>Calls: ExtractFilePath, Format, IncludeTrailingPathDelimiter, Writeln</para>
+/// <para>Returns: False; True</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ConfigDbRedirectsWrite(const AVerb: string; const AArgs: TArgs; const ATarget: string): Boolean;
 
 /// <summary>The command that builds one plan section's database, as the
@@ -847,10 +1093,17 @@ function ConfigDbRedirectsWrite(const AVerb: string; const AArgs: TArgs; const A
 /// <returns>"drag-lint index --all --only &lt;Name&gt;", plus " --platform
 /// &lt;P&gt;" when the item is a per-platform (library) expansion and
 /// " --config &lt;path&gt;" when one was given.</returns>
-/// <remarks>--only matches the SECTION name. The advice used to guess it from the
+/// <remarks>
+/// --only matches the SECTION name. The advice used to guess it from the
 /// DB file's base name, which is wrong for a library ("library-Win64" vs the
 /// section "Library") and for a project section ("Foo" for a section "P-Foo"
-/// whose DB is _D-RAG\Foo.sqlite): both advised commands exited 2.</remarks>
+/// whose DB is _D-RAG\Foo.sqlite): both advised commands exited 2.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DRagLint.CLI.MissingDbBuildCommand (DRagLint.CLI.pas), DRagLint.CLI.Wiring.DoImpactAllProjects (DRagLint.CLI.Wiring.pas)</para>
+/// <para>Calls: AnsiQuotedStr</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IndexSectionCommand(const AItem: TPlanSection; const AConfigPath: string): string;
 
 /// <summary>Splits a consumer DB list into the PROJECT store and the platform
@@ -870,6 +1123,16 @@ function IndexSectionCommand(const AItem: TPlanSection; const AConfigPath: strin
 /// named it; that is the documented meaning of `--db &lt;proj&gt; --db &lt;lib&gt;`.</para>
 /// <para>A manifest that fails to load classifies nothing as a library, and
 /// says so on stderr.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CallGraph.FindCalleesLibraryDb (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.Common.FirstProjectDb (DRagLint.CLI.Common.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.MakeLspContextDbResolver (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Common.IsLibrarySectionDb, DRagLint.CLI.Common.LibrarySectionDbs, DRagLint.Index.Manifest.TManifestIO.Load, ExtractFilePath, Format, ParamStr, Writeln</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Mutates: AProjectDb (out), ALibraryDb (out)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.IsLibrarySectionDb"/>
+/// <seealso cref="DRagLint.CLI.Common.LibrarySectionDbs"/>
+/// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure SplitConsumerDbs(const AArgs: TArgs; const ADbs: TArray<string>; out AProjectDb, ALibraryDb: string);
 
@@ -878,6 +1141,13 @@ procedure SplitConsumerDbs(const AArgs: TArgs; const ADbs: TArray<string>; out A
 /// <param name="ADbs">The list, normally ResolveConsumerDbs(AArgs).</param>
 /// <returns>The project store, or '' -- a verb that writes source from it must
 /// then refuse and name --db.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.Wiring.DoWiring (DRagLint.CLI.Wiring.pas)</para>
+/// <para>Calls: DRagLint.CLI.Common.SplitConsumerDbs</para>
+/// <seealso cref="DRagLint.CLI.Common.SplitConsumerDbs"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FirstProjectDb(const AArgs: TArgs; const ADbs: TArray<string>): string;
 
 implementation

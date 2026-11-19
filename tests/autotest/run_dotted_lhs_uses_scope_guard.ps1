@@ -37,9 +37,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-dotted-uses-scope-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -179,8 +182,8 @@ end.
 
 $libDb = Join-Path $WorkDir 'lib.sqlite'
 $appDb = Join-Path $WorkDir 'app.sqlite'
-& $Exe index $libDir --db $libDb 2>&1 | Out-Null
-& $Exe index $appDir --db $appDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $libDir --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $appDir --db $appDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'both indexes built' ((Test-Path $libDb) -and (Test-Path $appDb))
 
 function ResolvedAt([string]$file, [string]$needle, [string]$token) {
@@ -189,7 +192,7 @@ function ResolvedAt([string]$file, [string]$needle, [string]$token) {
   for ($i = 0; $i -lt $ls.Count; $i++) { if ($ls[$i].Contains($needle)) { $ln = $i + 1; break } }
   if ($ln -lt 1) { return "<needle not found: $needle>" }
   $col = $ls[$ln - 1].IndexOf($token) + 4
-  $out = & $Exe typeat "${file}:${ln}:${col}" --db $appDb --db $libDb 2>$null | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe typeat "${file}:${ln}:${col}" --db $appDb --db $libDb 2>$null } | Out-String
   $r = ''
   foreach ($l in ($out -split "`r?`n")) { if ($l -match '^\s*Resolved:\s*(.+?)\s*$') { $r = $matches[1] } }
   return $r

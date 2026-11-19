@@ -82,6 +82,7 @@ for %%D in (%STAGEDIRS%) do (
   copy /Y "%ROOT%\rules\*.json" "%%~D\rules\" >NUL
   if exist "%ROOT%\rules\builtin-symbols.txt" copy /Y "%ROOT%\rules\builtin-symbols.txt" "%%~D\rules\" >NUL
   if exist "%ROOT%\rules\enum-persist-sinks.txt" copy /Y "%ROOT%\rules\enum-persist-sinks.txt" "%%~D\rules\" >NUL
+  if exist "%ROOT%\rules\form-object-without-field.exempt.txt" copy /Y "%ROOT%\rules\form-object-without-field.exempt.txt" "%%~D\rules\" >NUL
 )
 
 REM STAGE THE CAST LIBRARY BESIDE BOTH EXES (1.26.2). The converter's editor

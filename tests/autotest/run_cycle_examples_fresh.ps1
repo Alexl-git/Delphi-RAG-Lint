@@ -31,12 +31,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe       = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe") { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" } else { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }),
+  [string]$Exe       = '',
   [switch]$KeepScratch,
   [string]$WorkDir   = "$env:TEMP\drag-lint-cycle-examples-$PID",
   [switch]$Update,
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe") { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" } else { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }) }
 
 # E18 T13: removes this run's scratch (WorkDir) however the run ends; kept only on failure when
 # -KeepScratch is passed (the path is printed).
@@ -133,7 +136,7 @@ foreach ($ex in $Examples) {
 
   Push-Location $runDir
   try {
-    & $Exe @($ex.IndexArgs) *> $null
+    & { $ErrorActionPreference = 'Continue'; & $Exe @($ex.IndexArgs) *> $null }
     Check "$($ex.Name): indexed the documented way" ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
     $text  = [IO.File]::ReadAllText($docPath)
@@ -159,7 +162,7 @@ foreach ($ex in $Examples) {
         $close = $open + 1
         while ($close -lt $lines.Count -and $lines[$close] -ne $fence) { $close++ }
         $cycArgs = @('cycles', '--db', $ex.Db) + (Split-Args $argText) + $LibArgs
-        $raw = & $Exe @cycArgs 2>$null
+        $raw = & { $ErrorActionPreference = 'Continue'; & $Exe @cycArgs 2>$null }
         $freshSet = New-Object 'System.Collections.Generic.HashSet[string]'
         foreach ($f in @($raw | ForEach-Object { ("$_").Replace($runDir + '\', '').Replace($WorkDir + '\', '').TrimEnd() })) { [void]$freshSet.Add($f) }
         $quoted = 0
@@ -195,7 +198,7 @@ foreach ($ex in $Examples) {
         for ($k = $open + 1; $k -lt $close; $k++) { $current += $lines[$k] }
 
         $cycArgs = @('cycles', '--db', $ex.Db) + (Split-Args $argText) + $LibArgs
-        $raw = & $Exe @cycArgs 2>$null
+        $raw = & { $ErrorActionPreference = 'Continue'; & $Exe @cycArgs 2>$null }
         $exit = $LASTEXITCODE
         # Paths relative to the directory the doc's commands run FROM (so the
         # re-index line and the file paths agree with "Indexed with: ..."),

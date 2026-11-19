@@ -31,7 +31,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [Parameter(Mandatory)][string]$Exe,   # 152 TESTS: no default engine
   [string]$WorkDir = "$env:TEMP\drag-lint-marker-placeholder-hash-$PID"
 )
 try {
@@ -115,7 +115,7 @@ Check 'all fixture lines located' (
   @($lnBrace,$lnProse,$lnZero,$lnXxxx,$lnWrong,$lnUnmark,$lnNoFind) -notcontains -1)
 
 $concat = @(); $stale = @{}; $unused = @{}; $ph = @{}
-foreach ($line in (& $Exe lint $fixture 2>&1)) {
+foreach ($line in (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture 2>&1 | ForEach-Object { "$_" } })) {
   $t = "$line"
   if     ($t -match ':(\d+):\d+\s+\[\w+\]\s+concat-in-loop:')                 { $concat += [int]$Matches[1] }
   elseif ($t -match ':(\d+):\d+\s+\[\w+\]\s+review-marker-stale:')            { $stale[[int]$Matches[1]] = $t }

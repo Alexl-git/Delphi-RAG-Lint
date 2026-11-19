@@ -29,9 +29,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-rename-implheader-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $env:DRAGLINT_RENAME_TEST_UNGATED = '1' # lane 144: these fixtures do not compile; run_rename_precise.ps1 proves the gate
@@ -105,13 +108,13 @@ end.
 Write-Ascii $u1File $Fixture
 
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-& $Exe index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'index exits 0' ($LASTEXITCODE -eq 0)
 Check 'db built' (Test-Path $db)
 
 Write-Host ''
 Write-Host 'rename --qname u1.TThing.DoIt --to DoItNow --apply' -ForegroundColor Cyan
-$out = & $Exe rename --qname u1.TThing.DoIt --to DoItNow --db $db --apply 2>&1
+$out = & { $ErrorActionPreference = 'Continue'; & $Exe rename --qname u1.TThing.DoIt --to DoItNow --db $db --apply 2>&1 | ForEach-Object { "$_" } }
 $exit = $LASTEXITCODE
 Write-Host ($out -join "`n")
 Check 'rename exits 0' ($exit -eq 0) "exit=$exit"

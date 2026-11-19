@@ -18,8 +18,8 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.MCP.Server.pas), DRagLint.CLI.CountDistinctFiles (DRagLint.CLI.pas), DRagLint.LSP.Feature.Rename.BuildWorkspaceEdit (DRagLint.LSP.Feature.Rename.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas), DRagLint.MCP.Server.TMCPServer.FormatRenameEditsAsJson (DRagLint.MCP.Server.pas) (+23 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Feature.Rename, DRagLint.MCP.Server, DRagLint.Refactor.MultiProjectRename, DRagLint.Refactor.NamingFix, DRagLint.Refactor.Rename, DRagLint.Refactor.RenameProof</para>
+  /// <para>Used by: declaration (DRagLint.MCP.Server.pas), DRagLint.CLI.CountDistinctFiles (DRagLint.CLI.pas), DRagLint.Fix.V151.Legacy.FixLocalShadowsField (DRagLint.Fix.V151.Legacy.pas), DRagLint.LSP.Feature.Rename.BuildWorkspaceEdit (DRagLint.LSP.Feature.Rename.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas) (+23 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Fix.V151.Legacy, DRagLint.LSP.Feature.Rename, DRagLint.MCP.Server, DRagLint.Refactor.MultiProjectRename, DRagLint.Refactor.NamingFix, DRagLint.Refactor.Rename, DRagLint.Refactor.RenameProof</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRenameEdit = record
@@ -61,8 +61,8 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.NamingFix.BuildTargetEdits (DRagLint.Refactor.NamingFix.pas)</para>
-      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Refactor.Rename.CompareEdits, DRagLint.Refactor.Rename.DecodedLines, DRagLint.Refactor.Rename.DfmBindingBelongsTo, DRagLint.Refactor.Rename.FindIdentFrom, DRagLint.Refactor.Rename.IndexColsToCharCols, DRagLint.Refactor.Rename.LastDotSegment (+6 more)</para>
-      /// <para>Complexity: 20 (cyclomatic, outer body), 166 lines (full implementation)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Refactor.Rename.CompareEdits, DRagLint.Refactor.Rename.DecodedLines, DRagLint.Refactor.Rename.DfmBindingBelongsTo, DRagLint.Refactor.Rename.FindIdentFrom, DRagLint.Refactor.Rename.LastDotSegment, DRagLint.Refactor.Rename.SnapEditsToToken, DRagLint.Refactor.Rename.UnresolvedCandidates, Format, IntToStr, SameText, UpperCase</para>
+      /// <para>Complexity: 20 (cyclomatic, outer body), 164 lines (full implementation)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
@@ -91,7 +91,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.FinishRename (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
       /// <para>Calls: Copy, Default, DRagLint.Refactor.Rename.DecodedLines, DRagLint.Refactor.TextEdit.TTextEditApplier.Apply/2, SameText</para>
-      /// <para>Complexity: 10 (cyclomatic, outer body), 83 lines (full implementation)</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 83 lines (full implementation)</para>
       /// <para>Catches: Exception (empty); Exception (re-raise)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Refactor.Rename.DecodedLines"/>
@@ -291,7 +291,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas)</para>
       /// <para>Calls: CompareStr, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Refactor.Rename.LastDotSegment, ExtractFilePath, Format, SameText</para>
-      /// <para>Complexity: 11 (cyclomatic, outer body), 47 lines (full implementation)</para>
+      /// <para>Complexity: 16 (cyclomatic, outer body), 47 lines (full implementation)</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
       /// <seealso cref="DRagLint.Refactor.Rename.LastDotSegment"/>
@@ -334,7 +334,7 @@ type
       /// repeats none). Shadowing nested routines, qualified members (X.Name) on
       /// both exprDot and genericDot rhs sides, and with-statement members are
       /// conservatively skipped. Empty array if no param/local decl is found at that
-      /// position. Pure AST -- no symbol store.
+      /// position, or when ACol names two locals (BuildLocalScan's AColumnNote). Pure AST -- no symbol store.
       /// Known limitation (deliberate conservative choice): occurrences inside a
       /// with block are skipped entirely. A nested routine's forward header is not
       /// followed; the compile gate reports it.</summary>
@@ -343,7 +343,7 @@ type
       /// <param name="ACol"><!-- drag-lint:auto type -->Integer</param>
       /// <param name="ANewName"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->TArray&lt;TRenameEdit&gt; -- Observed:
-      /// BuildLocalScan(AFile, ALine, ACol, ANewName, WithSites, NewSites).</returns>
+      /// BuildLocalScan(AFile, ALine, ACol, ANewName, WithSites, NewSites, ColumnNote).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Refactor.NamingFix.BuildTargetEdits (DRagLint.Refactor.NamingFix.pas)</para>
@@ -368,24 +368,29 @@ type
       /// target may declare the name, which pure AST cannot tell (RenameProof asks the index).</param>
       /// <param name="ANewNameSites">Out: bare occurrences of ANewName in the routine. Each would bind to the
       /// renamed local afterwards, and dcc accepts that when the types agree.</param>
+      /// <param name="AColumnNote">Out: '' unless ACol is ambiguous (see remarks); then why, and the result is empty.</param>
       /// <returns>What BuildLocal returns.</returns>
       /// <remarks>
       /// Pure AST. ACol is either the identifier's UTF-8 byte column (a lint finding's) or its character
-      /// column; byte wins. Every returned Col is a character column, as StaleEditReason and Apply expect.
+      /// column. When a non-ASCII character sits before it on the line, the two readings can name two identifiers:
+      /// the one that is a parameter or local of its routine is taken (byte when neither is); when BOTH are, the
+      /// result is empty and AColumnNote says so -- a guess would rename the wrong local (1.52 RENRES).
+      /// Every returned Col is a character column, as StaleEditReason and Apply expect.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal (DRagLint.Refactor.Rename.pas), DRagLint.Refactor.RenameProof.ProveLocalRename (DRagLint.Refactor.RenameProof.pas)</para>
-      /// <para>Calls: AddEdit, ArgsSig, Copy, Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.EnclosingProc, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.FindIdentAt, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.NStr, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.SyncForwardHeaders, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.Walk (+19 more)</para>
+      /// <para>Calls: AddEdit, ArgsSig, Copy, Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.DeclaresHere, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.EnclosingProc, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.FindIdentAt, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.NStr, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.SyncForwardHeaders (+21 more)</para>
       /// <para>Returns: nil; Final.ToArray</para>
-      /// <para>Mutates: AWithSites (out), ANewNameSites (out)</para>
+      /// <para>Complexity: 14 (cyclomatic, outer body), 373 lines (full implementation)</para>
+      /// <para>Mutates: AWithSites (out), ANewNameSites (out), AColumnNote (out)</para>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+      /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.DeclaresHere"/>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.EnclosingProc"/>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.FindIdentAt"/>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.NStr"/>
-      /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.SyncForwardHeaders"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function BuildLocalScan(const AFile: string; ALine, ACol: Integer; const ANewName: string;
-        out AWithSites, ANewNameSites: TArray<TRenameEdit>): TArray<TRenameEdit>;
+        out AWithSites, ANewNameSites: TArray<TRenameEdit>; out AColumnNote: string): TArray<TRenameEdit>;
   end;
 
 /// <summary>True when AName sits at 1-based ACol of ALine as a whole identifier, case-insensitive.</summary>
@@ -418,24 +423,13 @@ function IsIdentAt(const ALine, AName: string; ACol: Integer): Boolean;
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function NameAfterDeclKeywords(const ALine, AName: string; ACol: Integer): Integer;
-/// <summary>An index column (1-based UTF-8 bytes) as a 1-based character column of the decoded line.</summary>
-/// <param name="ALine">The decoded line.</param>
-/// <param name="AByteCol">The index column.</param>
-/// <returns>The character column; identity on a pure-ASCII line.</returns>
-/// <remarks>
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Refactor.Rename.IndexColsToCharCols (DRagLint.Refactor.Rename.pas), DRagLint.Refactor.RenameProof.TProver.AddDeclTokens (DRagLint.Refactor.RenameProof.pas), DRagLint.Refactor.RenameProof.TProver.ProcessDfmRefs (DRagLint.Refactor.RenameProof.pas)</para>
-/// <para>Returns: AByteCol; Length(TEncoding.UTF8.GetString(Bytes, 0, AByteCol - 1)) + 1</para>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
-function ByteColToCharCol(const ALine: string; AByteCol: Integer): Integer;
 /// <summary>Index just past the comment, string literal or numeric run that starts at APos.</summary>
 /// <param name="AText">The source text.</param>
 /// <param name="APos">1-based position.</param>
 /// <returns>APos itself when none starts there.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Refactor.Rename.IdentOccursIn (DRagLint.Refactor.Rename.pas), DRagLint.Refactor.RenameProof.TProver.ScanFile (DRagLint.Refactor.RenameProof.pas)</para>
+/// <para>Called from: DRagLint.Refactor.Rename.IdentOccursIn (DRagLint.Refactor.Rename.pas), DRagLint.Refactor.RenameProof.TProver.CheckNameInStrings (DRagLint.Refactor.RenameProof.pas), DRagLint.Refactor.RenameProof.TProver.ScanFile (DRagLint.Refactor.RenameProof.pas)</para>
 /// <para>Calls: CharInSet, Copy, Pos</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -480,7 +474,7 @@ function DfmBindingBelongsTo(const AStore: ISymbolStore; const ADfmPath: string;
 implementation
 
 uses
-  System.StrUtils
+  DRagLint.Core.Encoding, System.StrUtils
   , DRagLint.Refactor.TextEdit
   ;
 
@@ -591,39 +585,6 @@ begin
   ACache.Add(UpperCase(APath), Result);
   TTextFileFormat.ReadFile(APath, Text);
   Result.Text:= Text;
-end;
-
-// An index column (1-based, in UTF-8 BYTES: the indexer parses the file
-// transcoded to UTF-8) as a 1-based CHARACTER column of ALine, the decoded
-// line. Identity on a pure-ASCII prefix; a column past the line's bytes keeps
-// its distance past the end.
-function ByteColToCharCol(const ALine: string; AByteCol: Integer): Integer;
-var
-  Bytes: TBytes;
-begin
-  Result:= AByteCol;
-  if AByteCol <= 1 then Exit;
-  Bytes:= TEncoding.UTF8.GetBytes(ALine);
-  if Length(Bytes) = Length(ALine) then Exit; { pure ASCII: bytes = chars }
-  if AByteCol - 1 >= Length(Bytes) then Exit(Length(ALine) + AByteCol - Length(Bytes));
-  Result:= Length(TEncoding.UTF8.GetString(Bytes, 0, AByteCol - 1)) + 1;
-end;
-
-// Every edit of AList carries an index (byte) column: rewrite
-// it as a character column of its decoded line (W5-D).
-procedure IndexColsToCharCols(AList: TList<TRenameEdit>; ACache: TObjectDictionary<string, TStringList>);
-var
-  Lines: TStringList;
-  Edit : TRenameEdit;
-begin
-  for var I: Integer:= 0 to AList.Count - 1 do
-  begin
-    Edit:= AList[I];
-    Lines:= DecodedLines(ACache, Edit.FilePath);
-    if (Edit.Line < 1) or (Edit.Line > Lines.Count) then Continue;
-    Edit.Col:= ByteColToCharCol(Lines[Edit.Line - 1], Edit.Col);
-    AList[I]:= Edit;
-  end;
 end;
 
 // True when ABytes is a BINARY form file: a resource header (first byte $FF)
@@ -875,10 +836,8 @@ begin
       Edit.NewName:= ANewName;
       List.Add(Edit);
     end;
-    // Index columns are UTF-8 byte columns; every edit leaves Build with a
-    // CHARACTER column of the decoded file (W5-D). The impl-header edit below
-    // is computed on the decoded text, so it is added after this pass.
-    IndexColsToCharCols(List, Cache);
+    // Every index column is a CHARACTER column of the decoded file (.pas since 1.52 EXTGAPS2, .dfm since
+    // 1.52 BK-COLS2), so each edit already leaves Build with one (W5-D).
 
     // Implementation-section header (procedure TFoo.Bar;) -- NOT a decl symbol nor
     // a refs row, so neither branch above catches it. Emit it explicitly when the
@@ -1078,12 +1037,13 @@ class function TRenameRefactoring.BuildLocal(const AFile: string; ALine, ACol: I
   const ANewName: string): TArray<TRenameEdit>;
 var
   WithSites, NewSites: TArray<TRenameEdit>;
+  ColumnNote: string;
 begin
-  Result:= BuildLocalScan(AFile, ALine, ACol, ANewName, WithSites, NewSites);
+  Result:= BuildLocalScan(AFile, ALine, ACol, ANewName, WithSites, NewSites, ColumnNote);
 end;
 
 class function TRenameRefactoring.BuildLocalScan(const AFile: string; ALine, ACol: Integer; const ANewName: string;
-  out AWithSites, ANewNameSites: TArray<TRenameEdit>): TArray<TRenameEdit>;
+  out AWithSites, ANewNameSites: TArray<TRenameEdit>; out AColumnNote: string): TArray<TRenameEdit>;
 var
   PF       : TParsedFile        ;
   Src      : TBytes             ;
@@ -1365,6 +1325,20 @@ var
     Visit(ARoot, '');
   end;
 
+  { True when AId names a parameter or a local of the routine around it: a reading of ACol that a rename could mean. }
+  function DeclaresHere(const AId: TTSNode): Boolean;
+  begin
+    var Proc:= EnclosingProc(Integer(AId.StartByte), PF.Tree.RootNode, Default(TTSNode));
+    if Proc.IsNull then Exit(False);
+    var Saved:= Target;
+    Target:= Trim(NStr(AId));
+    try
+      Result:= (Target <> '') and NestedRedeclares(Proc);
+    finally
+      Target:= Saved;
+    end;
+  end;
+
 var
   IdNode  : TTSNode;
   Dedup   : TDictionary<string, Boolean>;
@@ -1376,13 +1350,29 @@ begin
   Result:= nil;
   AWithSites:= nil;
   ANewNameSites:= nil;
+  AColumnNote:= '';
   WithDepth:= 0;
   PF:= TAstParseCache.Get(AFile);
   if PF.Tree = nil then Exit;
   Src:= PF.Src;
 
   IdNode:= FindIdentAt(PF.Tree.RootNode, False);
-  if IdNode.IsNull then IdNode:= FindIdentAt(PF.Tree.RootNode, True);
+  var CharNode:= FindIdentAt(PF.Tree.RootNode, True);
+  if IdNode.IsNull then IdNode:= CharNode
+  else if not CharNode.IsNull and (CharNode.StartByte <> IdNode.StartByte) then
+  begin
+    { Before a non-ASCII character the byte and the character reading of ACol name two identifiers. }
+    var ByByte:= DeclaresHere(IdNode);
+    var ByChar:= DeclaresHere(CharNode);
+    if ByByte and ByChar then
+    begin
+      AColumnNote:= Format('column %d names "%s" as a UTF-8 byte column and "%s" as a character column; ' +
+        'both are locals of the routine, so nothing tells which is meant: give the column of an occurrence on a line ' +
+        'with no non-ASCII text before it', [ACol, Trim(NStr(IdNode)), Trim(NStr(CharNode))]);
+      Exit;
+    end;
+    if ByChar and not ByByte then IdNode:= CharNode;
+  end;
   if IdNode.IsNull then Exit;
   Target:= Trim(NStr(IdNode));
   if Target = '' then Exit;
@@ -1560,7 +1550,7 @@ begin
   try
     for Stamp in AStore.GetAllFileStamps do
       if SameText(ExtractFileExt(Stamp.Path), '.inc') and FileExists(Stamp.Path)
-        and IdentOccursIn(TFile.ReadAllText(Stamp.Path, TEncoding.ANSI), ShortName) then
+        and IdentOccursIn(ReadSourceFileText(Stamp.Path), ShortName) then
         Hits.Add(Stamp.Path);
     // N-06: a uses entry inside an include is a unit_uses row of its HOST with
     // origin_path set -- authoritative even for an .inc the index keeps no files

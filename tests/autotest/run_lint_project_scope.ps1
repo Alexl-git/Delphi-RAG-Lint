@@ -40,9 +40,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-lint-project-scope-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -129,13 +132,13 @@ Write-Project 'AppA' 'UnitA'
 Write-Project 'AppB' 'UnitB'
 
 $db = Join-Path $WorkDir 'scope.sqlite'
-& $Exe index $proj --db $db --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $proj --db $db --quiet 2>&1 } | Out-Null
 
 # Findings' file leaves, from the JSON document on stdout.
 function Get-Leaves([string[]]$JsonLines) {
   $raw = ($JsonLines -join "`n")
   $obj = $null
-  try { $obj = $raw | ConvertFrom-Json } catch { return $null }
+  try { $obj = $raw | ConvertFrom-Json | ForEach-Object { $_ } } catch { return $null }
   return @($obj | ForEach-Object { Split-Path $_.file_path -Leaf } | Sort-Object -Unique)
 }
 
@@ -143,8 +146,8 @@ function Get-Leaves([string[]]$JsonLines) {
 # 1) BARE run: the DB spans both projects, so everything shows up.
 # ---------------------------------------------------------------------------
 Write-Host 'Bare lint-all (no --project)' -ForegroundColor Cyan
-$bareOut = & $Exe lint-all --db $db --json 2>$null
-$bare = Get-Leaves $bareOut
+$bareOut = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --json 2>$null }
+$bare = @(Get-Leaves $bareOut)
 Check 'bare run emitted parseable JSON' ($null -ne $bare)
 Check 'bare run sees all four units' (
   ($bare -contains 'UnitA.pas') -and ($bare -contains 'SharedU.pas') -and
@@ -156,26 +159,26 @@ Check 'bare run sees all four units' (
 Write-Host ''
 Write-Host 'lint-all --project AppA.dproj' -ForegroundColor Cyan
 $dprojA  = Join-Path $proj 'AppA.dproj'
-$scopeOut = & $Exe lint-all --db $db --project $dprojA --json 2>$null
-$scoped = Get-Leaves $scopeOut
+$scopeOut = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --project $dprojA --json 2>$null }
+$scoped = @(Get-Leaves $scopeOut)
 Check 'scoped run emitted parseable JSON' ($null -ne $scoped)
 Check 'scoped run KEEPS the project member'        ($scoped -contains 'UnitA.pas')   ($scoped -join ',')
 Check 'scoped run KEEPS the transitive dependency' ($scoped -contains 'SharedU.pas') 'closure follows uses, not just DCCReference'
 Check 'scoped run DROPS the other project''s unit' (-not ($scoped -contains 'UnitB.pas'))
 Check 'scoped run DROPS the unreferenced stray'    (-not ($scoped -contains 'Stray.pas'))
 
-$bareCount  = @(($bareOut  -join "`n") | ConvertFrom-Json).Count
-$scopeCount = @(($scopeOut -join "`n") | ConvertFrom-Json).Count
+$bareCount  = @((($bareOut  -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }).Count
+$scopeCount = @((($scopeOut -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }).Count
 Check 'scoping actually reduces the finding count' ($scopeCount -lt $bareCount) "$scopeCount < $bareCount"
 
 # The scope summary is human text. Since LINTJSON-STDERR (1.40) a JSON run writes
 # NOTHING to stderr on success (run_lintall_json_stdout_clean.ps1), so under --json
 # the summary is in neither stream; in text mode it is printed (positive control).
-$scopeErr = ((& $Exe lint-all --db $db --project $dprojA --json 2>&1 |
+$scopeErr = ((& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --project $dprojA --json 2>&1 } |
               Where-Object { $_ -is [System.Management.Automation.ErrorRecord] }) -join "`n")
 Check 'scope summary stays out of the JSON and out of stderr under --json' (
   -not ($scopeErr -match 'belong to the project') -and -not (($scopeOut -join "`n") -match 'belong to the project'))
-$scopeText = ((& $Exe lint-all --db $db --project $dprojA 2>&1) -join "`n")
+$scopeText = ((& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --project $dprojA 2>&1 }) -join "`n")
 Check 'control: text mode prints the scope summary' ($scopeText -match 'belong to the project')
 
 # ---------------------------------------------------------------------------
@@ -184,7 +187,7 @@ Check 'control: text mode prints the scope summary' ($scopeText -match 'belong t
 # ---------------------------------------------------------------------------
 Write-Host ''
 Write-Host 'lint-all --project AppB.dproj' -ForegroundColor Cyan
-$scopedB = Get-Leaves (& $Exe lint-all --db $db --project (Join-Path $proj 'AppB.dproj') --json 2>$null)
+$scopedB = @(Get-Leaves (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --project (Join-Path $proj 'AppB.dproj') --json 2>$null }))
 Check 'AppB scope keeps UnitB'  ($scopedB -contains 'UnitB.pas') ($scopedB -join ',')
 Check 'AppB scope drops UnitA'  (-not ($scopedB -contains 'UnitA.pas'))
 
@@ -195,7 +198,7 @@ Check 'AppB scope drops UnitA'  (-not ($scopedB -contains 'UnitA.pas'))
 # ---------------------------------------------------------------------------
 Write-Host ''
 Write-Host 'lint-all --project <nonexistent>' -ForegroundColor Cyan
-& $Exe lint-all --db $db --project (Join-Path $proj 'NoSuch.dproj') --json 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --project (Join-Path $proj 'NoSuch.dproj') --json 2>$null } | Out-Null
 Check 'unresolvable --project exits 2 (usage), not 0' ($LASTEXITCODE -eq 2) "exit=$LASTEXITCODE"
 
 Write-Host ''

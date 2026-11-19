@@ -48,9 +48,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string] $Exe  = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string] $Repo = "$PSScriptRoot\..\.."
+  [string] $Exe  = '',
+  [string] $Repo = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Repo) { $Repo = "$PSScriptRoot\..\.." }
 
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -69,14 +75,14 @@ $Repo = (Resolve-Path $Repo).Path
 $errFile = Join-Path ([IO.Path]::GetTempPath()) ("draglint-hold-" + [Guid]::NewGuid().ToString('N') + ".txt")
 
 function Run([string[]]$A) {
-  $out = & $Exe @A 2>$errFile
+  $out = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe @A 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   $rc  = $LASTEXITCODE
   [pscustomobject]@{ Out = ($out -join "`n"); Code = $rc }
 }
 function Status {
   $r = Run @('ide-release','--status','--json')
   if ($r.Code -ne 0) { return $null }
-  try { return $r.Out | ConvertFrom-Json } catch { return $null }
+  try { return $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { return $null }
 }
 
 # Whatever state a previous run or a real build left behind.
@@ -283,7 +289,7 @@ if (Test-Path -LiteralPath $stager) {
   $stream = [IO.File]::Open($target, 'Open', 'ReadWrite', 'None')
   $job = Start-Job -ScriptBlock {
     param($p, $s)
-    pwsh -NoProfile -File $p -FreshExe $s.fresh -Target $s.target -TimeoutSec 20 2>&1
+    & { $ErrorActionPreference = 'Continue'; pwsh -NoProfile -File $p -FreshExe $s.fresh -Target $s.target -TimeoutSec 20 2>&1 | ForEach-Object { "$_" } }
     $LASTEXITCODE
   } -ArgumentList $stager, @{ fresh = $fresh; target = $target }
 

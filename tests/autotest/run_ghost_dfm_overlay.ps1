@@ -27,9 +27,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -91,10 +94,10 @@ function Invoke-Case([string]$Tag, [string[]]$Pairs) {
   [IO.File]::WriteAllText($m, (($Pairs | ForEach-Object { $_ }) -join "`r`n") + "`r`n", $Enc)
   $out = Join-Path $WorkDir "$Tag.out"
   $p = Start-Process $exePath -ArgumentList @('ghost-check', $dprojPath, '--overlays', $m, '--platform', 'win64', '--format', 'json') `
-         -WorkingDirectory $WorkDir -NoNewWindow -PassThru -Wait -RedirectStandardOutput $out -RedirectStandardError "$out.err"
+         -WorkingDirectory $WorkDir -NoNewWindow -PassThru -Wait -RedirectStandardOutput $out -RedirectStandardError "$out.err"; $null = $p.Handle
   $raw = Get-Content -LiteralPath $out -Raw
   $json = if ($raw -match '(?s)(\[.*\])') { $Matches[1] } else { '[]' }
-  $items = @($json | ConvertFrom-Json)
+  $items = @(($json | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   [pscustomobject]@{ Items = $items; Errors = @($items | Where-Object { $_.severity -eq 'Error' }); Raw = $raw; Exit = $p.ExitCode }
 }
 function Check-Untouched([string]$Tag) {

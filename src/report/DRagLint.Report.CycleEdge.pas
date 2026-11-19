@@ -44,7 +44,7 @@ type
   /// <summary>One reference of unit A that binds to unit B.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Report.CycleEdge.CallRefusal (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TMemberPlan.CarryUse (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TMemberPlan.CheckShape (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TSurfaceBuilder.AddRef (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CyclePlan.TCyclePlanner.TakeCtor (DRagLint.Report.CyclePlan.pas) (+16 more)</para>
+  /// <para>Used by: DRagLint.Report.CycleEdge.CallRefusal (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TMemberPlan.CarryUse (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TMemberPlan.CheckShape (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TSurfaceBuilder.AddRef (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CyclePlan.TCyclePlanner.TakeCtor (DRagLint.Report.CyclePlan.pas) (+17 more)</para>
   /// <para>Used in units: DRagLint.Report.CycleEdge, DRagLint.Report.CyclePlan</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -139,7 +139,7 @@ type
   /// Implemented by the planner of DRagLint.Report.CyclePlan, which keeps
   /// its own lifetime (not reference counted). All stems are lower-case unit stems.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.BuildEdgeSurface (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.BuildEdgeSurfaces (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.SignatureTypes (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TSurfaceBuilder.Create (DRagLint.Report.CycleEdge.pas) (+15 more)</para>
+  /// <para>Used by: declaration (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.BuildEdgeSurface (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.BuildEdgeSurfaces (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.SignatureTypes (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.TSurfaceBuilder.Create (DRagLint.Report.CycleEdge.pas) (+16 more)</para>
   /// <para>Used in units: DRagLint.Report.CycleEdge, DRagLint.Report.CyclePlan</para>
   /// <para>Implemented by: TCyclePlanner</para>
   /// <!-- drag-lint:auto END -->
@@ -150,7 +150,7 @@ type
     /// <returns>The store; never nil.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Report.CycleEdge.CallRefusal (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.FinalStateSeen (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PickExistingLeaf (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PlanRoutineInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PlanRoutinesInversion (DRagLint.Report.CycleEdge.pas) (+7 more)</para>
+    /// <para>Called from: DRagLint.Report.CycleEdge.CallRefusal (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.FinalOrderVerdict (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.FinalStateSeen (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PickExistingLeaf (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CycleEdge.PlanRoutineInversion (DRagLint.Report.CycleEdge.pas) (+8 more)</para>
     /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceSource.BindName"/>
     /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FidOfStem"/>
     /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FileLines"/>
@@ -507,7 +507,8 @@ type
     InitOrderProof: string;
     /// <summary>R1 (lane FINPROOF): the proof line when a call run from the consumer's finalization section is safe
     /// although the declaring unit's finalization can be seen, because that unit is finalized after the consumer in
-    /// every program of the index (FinalOrderVerdict); '' otherwise.</summary>
+    /// every program of the index, or (lane FINCUT, ruling B9a) because the cut leaves an order in which it is
+    /// already finalized first unchanged (FinalOrderVerdict); '' otherwise.</summary>
     FinalOrderProof: string;
     /// <summary>R1 (plan B3): every routine inverted, in first-call order; one entry for a single
     /// routine, which then repeats RoutineId .. VarDecl. The singular fields always name the first.</summary>
@@ -644,7 +645,7 @@ function BuildEdgeSurface(const pSource: IEdgeSurfaceSource; const pFromFid: Int
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Report.CyclePlan.TCyclePlanner.EdgeSurfacesOf (DRagLint.Report.CyclePlan.pas)</para>
 /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile, DRagLint.Report.CycleEdge.BuildEdgeSurface, DRagLint.Report.CycleEdge.IEdgeSurfaceCache.CachedNamesOfStem, DRagLint.Report.CycleEdge.IEdgeSurfaceCache.CachedRefsFromFile, DRagLint.Report.CycleEdge.RefsAt, DRagLint.Report.CycleEdge.TSurfaceBuilder.CollectRefs, DRagLint.Report.CycleEdge.TSurfaceBuilder.Create, DRagLint.Report.CycleEdge.TSurfaceBuilder.TargetKeys, IntToStr</para>
-/// <para>Complexity: 13 (cyclomatic, outer body), 67 lines (full implementation)</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 67 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile"/>
 /// <seealso cref="DRagLint.Report.CycleEdge.BuildEdgeSurface"/>
 /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceCache.CachedNamesOfStem"/>
@@ -721,6 +722,7 @@ function EdgeSurfaceToJson(const pS: TEdgeSurface): TJSONObject;
 /// <para>Called from: DRagLint.Report.CycleEdge.PlanRoutinesInversion (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CyclePlan.TCyclePlanner.SettleInversionNames (DRagLint.Report.CyclePlan.pas)</para>
 /// <para>Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Report.CycleEdge.AssignmentEdit, DRagLint.Report.CycleEdge.CallRefusal, DRagLint.Report.CycleEdge.CodeStarts, DRagLint.Report.CycleEdge.DeclConvention, DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FidOfStem, DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FileLines, DRagLint.Report.CycleEdge.IEdgeSurfaceSource.Store (+10 more)</para>
 /// <para>Returns: Default(TRecipeSteps)</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 92 lines (full implementation)</para>
 /// <para>Mutates: pRefusal (out)</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
 /// <seealso cref="DRagLint.Report.CycleEdge.AssignmentEdit"/>
@@ -754,6 +756,7 @@ function PlanRoutineInversion(const pSource: IEdgeSurfaceSource; const pSurface:
 /// <para>Called from: DRagLint.Report.CyclePlan.TCyclePlanner.PlanInversion (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.PlanMemberHandOver (DRagLint.Report.CyclePlan.pas)</para>
 /// <para>Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Report.CycleEdge.AssignmentEdit, DRagLint.Report.CycleEdge.CodeStarts, DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FidOfStem, DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FileLines, DRagLint.Report.CycleEdge.IEdgeSurfaceSource.Store, DRagLint.Report.CycleEdge.LineOf, DRagLint.Report.CycleEdge.PlanRoutineInversion, DRagLint.Report.CycleEdge.ReplaceInCode, DRagLint.Report.CycleEdge.RoutineSlice, DRagLint.Report.CycleEdge.StartAt, ExtractFileName, Format</para>
 /// <para>Returns: Default(TRecipeSteps); PlanRoutineInversion(pSource, pSurface, pRefusal); Parts[0]</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 68 lines (full implementation)</para>
 /// <para>Mutates: pRefusal (out)</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
 /// <seealso cref="DRagLint.Report.CycleEdge.AssignmentEdit"/>
@@ -1111,7 +1114,16 @@ function InitOrderWhy(const pLines: TArray<string>; const pRef: TEdgeRef; const 
 /// <param name="pProof">Receives the proof line when proved; left alone otherwise.</param>
 /// <returns>'' when pWhy is '' or the order is proved; else pWhy followed by why the order is not proved, so the
 /// refusal kind stays init-order.</returns>
-/// <remarks>Not thread-safe; reads the index on every flagged call (rare: only calls InitOrderWhy flags).</remarks>
+/// <remarks>
+/// Not thread-safe; reads the index on every flagged call (rare: only calls InitOrderWhy flags).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Report.CycleEdge.CallRefusal (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CyclePlan.TCyclePlanner.MetaclassSteps (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.TakeCtor (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Calls: DRagLint.Lint.InitSections.ProveInitOrderInversion</para>
+/// <para>Returns: pWhy; ''</para>
+/// <para>Mutates: pProof (var)</para>
+/// <seealso cref="DRagLint.Lint.InitSections.ProveInitOrderInversion"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function InitOrderVerdict(const pStore: ISymbolStore; const pWhy, pFromUnit, pDeclUnit: string; pPredicted: Boolean;
   var pProof: string): string;
 
@@ -1120,7 +1132,12 @@ function InitOrderVerdict(const pStore: ISymbolStore; const pWhy, pFromUnit, pDe
 /// Safe when finalizing the declaring unit cannot be seen (no statement in its finalization section and no
 /// unit-level variable of a type that needs finalization), or when the declaring unit is finalized AFTER the
 /// consumer: finalization runs in the exact reverse of the initialization order, so that holds when
-/// DRagLint.Lint.InitSections.ProveInitOrderInversion proves the declaring unit initializes first.</summary>
+/// DRagLint.Lint.InitSections.ProveInitOrderInversion proves the declaring unit initializes first. Lane FINCUT
+/// (1.52, ruling B9a): also safe -- in the sense that the cut changes nothing -- when the consumer ALREADY
+/// initializes before the declaring unit in every program (DRagLint.Lint.InitSections.InitializesBefore answers
+/// ioaBefore): the consumer then reaches its uses entry of the declaring unit while that unit is still being visited,
+/// so the entry the cut removes is one the order skips, and the cut moves no unit; the declaring unit is finalized
+/// first before the cut and after it, and the proof line says the call keeps running after it.</summary>
 /// <param name="pSource">The index access.</param>
 /// <param name="pLines">The consumer's source lines.</param>
 /// <param name="pRef">The call: its line and the routine that holds it.</param>
@@ -1128,15 +1145,32 @@ function InitOrderVerdict(const pStore: ISymbolStore; const pWhy, pFromUnit, pDe
 /// <param name="pDeclFid">The declaring unit's file id; its file name gives the unit name the texts use.</param>
 /// <param name="pPredicted">True on the graph predicted after Part A: never proved, the reason says it is
 /// re-checked.</param>
-/// <param name="pProof">Receives the "finalization order:" proof line when the call is safe only by the order;
+/// <param name="pProof">Receives the "finalization order:" proof line when the call is safe only by the order
+/// ("finalization order: `B` is finalized after `A`: ...") or the order is unchanged by the cut ("finalization
+/// order: unchanged by the cut: `B` is finalized before `A` with the cycle as written and after the cut: ...");
 /// left alone otherwise.</param>
-/// <returns>'' when the call is safe; else the refusal reason (kind finalization-order). When the consumer no
-/// longer reaches the declaring unit after the cut (always so in a two-unit cycle) the declaring unit is certainly
-/// finalized first and the reason says so; otherwise it says the unit MAY be finalized first and why the order is
-/// not proved.</returns>
-/// <remarks>Not thread-safe; reads the index only for a call the section runs. The proof is a sound subset with
+/// <returns>'' when the call is safe or the order is unchanged by the cut; else the refusal reason (kind
+/// finalization-order). When the consumer no longer reaches the declaring unit after the cut (always so in a
+/// two-unit cycle) and does not already initialize first, the declaring unit is certainly finalized first after the
+/// cut and the reason says so; otherwise it says the unit MAY be finalized first and why the order is not proved
+/// (an order resting on a conditional or include-borne uses entry names that entry).</returns>
+/// <remarks>
+/// Not thread-safe; reads the index only for a call the section runs. The proof is a sound subset with
 /// default refuse (see ProveInitOrderInversion); the check reads the declaring unit only, not what the routine
-/// calls.</remarks>
+/// calls.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Report.CycleEdge.CallRefusal (DRagLint.Report.CycleEdge.pas), DRagLint.Report.CyclePlan.TCyclePlanner.MetaclassSteps (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.TakeCtor (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Calls: ChangeFileExt, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Lint.InitSections.InitializesBefore, DRagLint.Lint.InitSections.ProveInitOrderInversion, DRagLint.Report.CycleEdge.FinalStateSeen, DRagLint.Report.CycleEdge.IEdgeSurfaceSource.Store, DRagLint.Report.CycleEdge.RunsAtFinalization, ExtractFileName, Format</para>
+/// <para>Returns: ''; if Same.Answer = ioaConfigDependent then Maybe + '; ' + CReverse + ', and ' + Same.Text</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 43 lines (full implementation)</para>
+/// <para>Mutates: pProof (var)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <seealso cref="DRagLint.Lint.InitSections.InitializesBefore"/>
+/// <seealso cref="DRagLint.Lint.InitSections.ProveInitOrderInversion"/>
+/// <seealso cref="DRagLint.Report.CycleEdge.FinalStateSeen"/>
+/// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceSource.Store"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FinalOrderVerdict(const pSource: IEdgeSurfaceSource; const pLines: TArray<string>; const pRef: TEdgeRef;
   const pFromUnit: string; pDeclFid: Int64; pPredicted: Boolean; var pProof: string): string;
 
@@ -1649,6 +1683,11 @@ begin
   FLines:= FSource.FileLines(FFromFid);
   for var R in pRefs do
   begin
+    { 1.52 DDFIX: a write-through row (EXTP) only DUPLICATES the read / member-access row the same
+      token already has (`Log.Text := X` adds one for Log); the surface takes that row, so the copy
+      is skipped -- taken bare it fell to erOther and refused the edge as class-ref.
+      Guard: tests\autotest\run_cyclefix_b1_memberwrite.ps1 a4. }
+    if SameText(R.Kind, REF_KIND_WRITE_THROUGH) then Continue;
     if TakeMemberAccess(R) then Continue;
     if SameText(R.Kind, 'member-access') then
     begin
@@ -2138,7 +2177,21 @@ begin
   if pPredicted then Exit(Maybe + CRecheck);
   var Proof:= ProveInitOrderInversion(pSource.Store, pFromUnit, DeclUnit);
   if not Proof.Proved then
-    Exit(if Proof.Text.StartsWith(CNoPath) then Certain else Maybe + '; ' + CReverse + ', and ' + Proof.Text);
+  begin
+    { Lane FINCUT (ruling B9a): the consumer already initializes first in every program. In the depth-first
+      post-order a unit placed before the declaring unit reaches its uses entry of it while that unit is still
+      being visited, so the order skips the entry the cut removes and the cut moves no unit. }
+    var Same:= InitializesBefore(pSource.Store, '', pFromUnit, DeclUnit);
+    if Same.Answer = ioaBefore then
+      pProof:= Format('finalization order: unchanged by the cut: `%s` is finalized before `%s` with the cycle as ' +
+        'written and after the cut: %s, and %s; the order skips the uses entry the cut removes, so the cut moves ' +
+        'no unit. The call already runs after `%s` is finalized, after which %s: the cut keeps that behaviour, it ' +
+        'does not change it.', [DeclUnit, pFromUnit, CReverse, Same.Text, DeclUnit, Seen])
+    else
+      Result:= if Same.Answer = ioaConfigDependent then Maybe + '; ' + CReverse + ', and ' + Same.Text
+        else if Proof.Text.StartsWith(CNoPath) then Certain else Maybe + '; ' + CReverse + ', and ' + Proof.Text;
+    Exit;
+  end;
   var Body:= Proof.Text;
   if Body.StartsWith(CInitHead) then Body:= Body.Substring(Length(CInitHead));
   var Tail:= Body.IndexOf(CInitTail);

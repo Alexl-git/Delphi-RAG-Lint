@@ -37,10 +37,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe      = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$RulesDir = "$PSScriptRoot\..\..\rules",
+  [string]$Exe      = '',
+  [string]$RulesDir = '',
   [string]$WorkDir  = "C:\TEMP\draglint_uba_hazard_pins_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $RulesDir) { $RulesDir = "$PSScriptRoot\..\..\rules" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){ if($d){Write-Host "      $d" -ForegroundColor DarkGray}; $script:fail=$true } }
@@ -156,11 +160,11 @@ Write-Ascii $file $fixture
 # S5d is what exposed it: a const-parameter free routine MUST be reported, and
 # store-free it was not.
 $db  = Join-Path $WorkDir 'hazards.sqlite'
-$idx = & $exePath index $WorkDir --db $db 2>&1 | Out-String
+$idx = & { $ErrorActionPreference = 'Continue'; & $exePath index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'SANITY: fixture indexed with no errors' `
       ($LASTEXITCODE -eq 0 -and $idx -notmatch '\b[1-9]\d* errors\b') $idx
 
-$out = & $exePath lint $file --db $db --rules-dir $rules 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $exePath lint $file --db $db --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String
 
 function Reported($text, $local) {
   @($text -split "`r?`n" |

@@ -20,9 +20,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-facts-init-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -92,13 +95,13 @@ end.
 '@
 
 function Scalar([string]$Sql) {
-  $j = (& $Exe sql --query $Sql --db $db --json) | Out-String | ConvertFrom-Json
+  $j = (& $Exe sql --query $Sql --db $db --json) | Out-String | ConvertFrom-Json | ForEach-Object { $_ }
   return $j.rows[0][0]
 }
 
 try {
   [IO.File]::WriteAllText($pas, ($unitText -replace "`r?`n", "`r`n"))
-  & $Exe index $src --db $db *> (Join-Path $WorkDir 'index1.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db *> (Join-Path $WorkDir 'index1.log') }
   Check 'fixture indexes' ($LASTEXITCODE -eq 0)
 
   $sections = "(SELECT id, file_id, start_line, end_line FROM symbols WHERE kind IN ('initialization','finalization'))"
@@ -123,16 +126,16 @@ try {
   Check 'call-path from <Unit>.initialization finds a direct callee' (($directExit -eq 0) -and ($directTxt -match 'OnlyFromSection')) "exit=$directExit"
   $hops = & $Exe call-path --from 'InitFx.initialization' --to 'TThing.Ping' --json --db $db
   Check 'call-path from <Unit>.initialization reaches a callee' (($LASTEXITCODE -eq 0) -and (($hops | Out-String) -match 'Ping')) "exit=$LASTEXITCODE"
-  & $Exe call-path --from 'InitFx.finalization' --to 'OnlyFromSection' --json --db $db *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe call-path --from 'InitFx.finalization' --to 'OnlyFromSection' --json --db $db *> $null }
   Check 'POSITIVE: finalization has no such path (exit 1)' ($LASTEXITCODE -eq 1) "exit=$LASTEXITCODE"
 
-  $dead = (& $Exe find-deadcode --db $db 2>&1) | Out-String
+  $dead = (& { $ErrorActionPreference = 'Continue'; & $Exe find-deadcode --db $db 2>&1 | ForEach-Object { "$_" } }) | Out-String
   Check 'POSITIVE: a routine nothing calls is still reported dead' ($dead -match 'NeverCalled')
   Check 'a routine called only from a section is not dead' ($dead -notmatch 'OnlyFromSection')
 
   # Incremental: the file's refs are re-emitted NULL, the pass must attribute them again.
   [IO.File]::WriteAllText($pas, (($unitText -replace "`r?`n", "`r`n") -replace 'procedure NeverCalled;\r\nbegin', "procedure NeverCalled;`r`n`r`nbegin"))
-  & $Exe index $src --db $db *> (Join-Path $WorkDir 'index2.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db *> (Join-Path $WorkDir 'index2.log') }
   Check 'edited fixture reindexes' ($LASTEXITCODE -eq 0)
   Check 'F2: 0 NULL after an incremental re-emit' ((Scalar $nullIn) -eq 0)
   $again = Scalar "SELECT COUNT(*) FROM refs r JOIN symbols s ON s.id = r.enclosing_symbol_id WHERE s.qualified_name = 'InitFx.initialization'"

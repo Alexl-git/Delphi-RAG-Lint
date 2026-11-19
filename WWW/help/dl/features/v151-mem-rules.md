@@ -4,10 +4,10 @@ title: Memory and string-pointer lint rules (PChar, raw memory, leaks, byte coun
 summary: "Eight memory lint rules, one widened: PChar of Char or temporaries, @S[1], read-only CreateProcess lines, raw memory over managed types, leaks, chars as bytes"
 product: DL
 group: linting
-order: 30051
+order: 30054
 since: 1.51.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Memory and string-pointer lint rules (PChar, raw memory, leaks, byte counts)
@@ -19,7 +19,7 @@ Read this to see what each memory and string-pointer rule reports, which ship ON
 ## How to run it
 
 ```text
-drag-lint lint-all [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]
+drag-lint lint-all [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget]
 ```
 
 Full flag list: [lint-all in the CLI reference](../cli.md#lint-all).

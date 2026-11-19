@@ -12,7 +12,10 @@
   Run from a NEUTRAL CWD (C:\TEMP). Touches no shared index.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d=''){ Write-Host ("[{0}] {1} {2}" -f (@('FAIL','PASS')[[int]$ok]),$n,$d) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
 function Write-Ascii([string]$Path,[string]$Body){ [IO.File]::WriteAllText($Path, ($Body -replace "`r?`n","`r`n"), [Text.Encoding]::ASCII) }
@@ -46,24 +49,24 @@ try {
     $sections ] } }
 "@
   function Q([string]$Db,[string]$Query) {
-    $raw = (& $exe sql --db $Db --json --limit 5000 --query $Query 2>$null) -join "`n"
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $exe sql --db $Db --json --limit 5000 --query $Query 2>$null }) -join "`n"
     $b = $raw.IndexOf('{'); if ($b -lt 0) { return ,@() }
-    return ,@(($raw.Substring($b) | ConvertFrom-Json).rows)
+    return ,@(($raw.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }).rows)
   }
   $extCount = 'select count(*) from refs where external_target is not null and external_target <> '''''
   $projOn = Join-Path $out 'projon.sqlite'; $libDb = Join-Path $out 'library-Win64.sqlite'
   Push-Location C:\TEMP
   try {
-    & $exe index $lib --db $libDb --platform Win64 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exe index $lib --db $libDb --platform Win64 2>&1 | ForEach-Object { "$_" } } | Out-Null
     Check 'library index built' (Test-Path $libDb)
-    $txt = (& $exe index --all --config $cfg --only ProjOn 2>&1 | Out-String)
+    $txt = (& { $ErrorActionPreference = 'Continue'; & $exe index --all --config $cfg --only ProjOn 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'project DB built' (Test-Path $projOn) $txt
     Check 'a: no "library: PENDING" with --config' ($txt -notmatch 'library: PENDING') $txt
-    $m = (& $exe sql --db $projOn --json --query "select value from schema_meta where key = 'library_resolve_state'" 2>$null) -join "`n"
+    $m = (& { $ErrorActionPreference = 'Continue'; & $exe sql --db $projOn --json --query "select value from schema_meta where key = 'library_resolve_state'" 2>$null }) -join "`n"
     Check 'a: marker state=bound' ($m -match 'bound') $m
     Check 'a: external_target > 0' ((Q $projOn $extCount)[0][0] -gt 0)
     [IO.File]::Delete($projOn)
-    $txt2 = (& $exe index --all --only ProjOn 2>&1 | Out-String)
+    $txt2 = (& { $ErrorActionPreference = 'Continue'; & $exe index --all --only ProjOn 2>&1 | ForEach-Object { "$_" } } | Out-String)
     Check 'b control: without --config the stub engine json cannot see the library (pending)' ($txt2 -match 'library: PENDING|NOT READY') $txt2
     Check 'b control: external_target = 0' ((Q $projOn $extCount)[0][0] -eq 0)
   } finally { Pop-Location }

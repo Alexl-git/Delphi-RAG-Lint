@@ -54,7 +54,10 @@
   filter BEFORE the --fix block builds edits, so the fixable set is unaffected.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -85,7 +88,7 @@ function Reset-Fixture {
   if (Test-Path $bakA) { Remove-Item $bakA -Force }
   if (Test-Path $bakB) { Remove-Item $bakB -Force }
   if (Test-Path $db)   { Remove-Item $db   -Force }
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 }
 
 Push-Location C:\TEMP
@@ -94,7 +97,7 @@ try {
   Reset-Fixture
   $beforeA = [IO.File]::ReadAllBytes($targetA)
   $beforeB = [IO.File]::ReadAllBytes($targetB)
-  $pv = & $exePath lint-all --db $db --fix --disable missing-doc,doc-drift,unused-global --output $report 2>$null | Out-String
+  $pv = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --disable missing-doc,doc-drift,unused-global --output $report 2>$null } | Out-String
 
   Check 'preview: summary reports 2 fixable finding(s)' ($pv -match 'autofix: 2 fixable finding\(s\) -- pass --apply to write')
   Check 'preview: dry-run names unita.pas'              ($pv -match 'unita\.pas')
@@ -113,10 +116,10 @@ try {
   # lint-all prints a "scanning N .pas file(s)" preamble line to stdout before the
   # JSON (same contract run_store_tests.ps1 relies on), so slice from the first '['.
   Reset-Fixture
-  $raw = & $exePath lint-all --db $db --fix --json --disable missing-doc,doc-drift,unused-global --output $report 2>$null | Out-String
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --json --disable missing-doc,doc-drift,unused-global --output $report 2>$null } | Out-String
   $arr = $null
   $b = $raw.IndexOf('[')
-  if ($b -ge 0) { try { $arr = ($raw.Substring($b) | ConvertFrom-Json) } catch { $arr = $null } }
+  if ($b -ge 0) { try { $arr = ($raw.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $arr = $null } }
   if ($null -ne $arr -and $arr -isnot [System.Array]) { $arr = @($arr) }
   Check 'json: parses as a 2-element array' ($null -ne $arr -and $arr.Count -eq 2)
   $ja = if ($null -ne $arr) { $arr | Where-Object { $_.file -match 'unita\.pas' } | Select-Object -First 1 } else { $null }
@@ -134,7 +137,8 @@ try {
 
   # --- 3) APPLY (--fix --apply): BOTH units fixed, N=2 across 2 files, .baks written ---
   Reset-Fixture
-  $ap = & $exePath lint-all --db $db --fix --apply --disable missing-doc,doc-drift,unused-global --output $report 2>$null | Out-String
+  # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+  $ap = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --apply --no-compile-gate --disable missing-doc,doc-drift,unused-global --output $report 2>$null } | Out-String
 
   Check 'apply: summary reports applied 2 edit(s) across 2 file(s)' ($ap -match 'autofix: applied 2 edit\(s\) across 2 file\(s\) \(\.bak written\)')
 

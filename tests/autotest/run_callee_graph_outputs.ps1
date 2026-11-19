@@ -29,8 +29,11 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe"
+  [string]$Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -131,7 +134,7 @@ Check '4. callgraph --format dot exits 2 and names reverse-calltree' `
   (($cg.Code -eq 2) -and (($cg.Out + $cg.Err) -match 'reverse-calltree')) "exit=$($cg.Code) out=$($cg.Out.Trim()) err=$($cg.Err.Trim())"
 $cj = Run @('callgraph', '--qname', 'UG.TRoot.Drive', '--direction', 'callees', '--format', 'json', '--db', $db)
 $parsed = $null
-try { $parsed = $cj.Out | ConvertFrom-Json } catch { }
+try { $parsed = $cj.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check '5. callgraph --format json prints JSON naming the root' `
   (($cj.Code -eq 0) -and ($null -ne $parsed) -and ($parsed.qname -eq 'UG.TRoot.Drive')) "exit=$($cj.Code)"
 $cd = Run @('callgraph', '--qname', 'UG.TRoot.Drive', '--direction', 'callees', '--db', $db)
@@ -148,7 +151,7 @@ Write-Host '=== #9: find-callees is per call SITE, and the docs say so ===' -For
 $fc = Run @('find-callees', '--qname', 'UG.TRoot.Drive', '--db', $db)
 Check '7. CONTROL: find-callees lists both callees' (($fc.Out -match 'StepA') -and ($fc.Out -match 'StepB')) ''
 $root = Join-Path $PSScriptRoot '..\..'
-$help = (& $Exe --help 2>$null) -join "`n"
+$help = (& { $ErrorActionPreference = 'Continue'; & $Exe --help 2>$null }) -join "`n"
 $helpLine = @($help -split "`n" | Where-Object { $_ -match '^\s*drag-lint find-callees ' })
 Check '8. --help: find-callees says per call site and names callgraph --depth 1' `
   (($helpLine.Count -eq 1) -and ($helpLine[0] -match 'call SITE') -and ($helpLine[0] -match 'callgraph .*--depth 1')) "line=$($helpLine -join ' | ')"

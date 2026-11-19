@@ -95,7 +95,7 @@ var
 procedure WideNamedConst;
 begin
   WideCells[WideLast + 1] := 1; {HIT}
-  WideCells[WideLast] := 1; {OK}
+  WideCells[WideLast] := 1; {HIT} { local WideLast = 9 shadows the file-level 3 }
   WideCells[4] := 1; {HIT}
   WideCells[WideLast - 3] := 1; {OK}
   WideName[0] := 'x'; {HIT}
@@ -106,7 +106,7 @@ procedure WideShadowedConst;
 const
   WideLast = 9;
 begin
-  WideCells[WideLast] := 1; {OK}
+  WideCells[WideLast] := 1; {HIT} { local WideLast = 9 shadows the file-level 3 }
 end;
 
 end.

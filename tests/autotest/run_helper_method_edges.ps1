@@ -31,7 +31,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   # NOT 'drag-lint-helper-edges' -- that is run_helper_edges.ps1's directory,
   # and this runner wipes its WorkDir recursively at startup (line ~47). Two
   # runners sharing one fixed scratch name means whichever starts second
@@ -41,6 +41,9 @@ param(
   # cleared the tree. run_battery_jobs_guard.ps1 now asserts uniqueness.
   [string]$WorkDir = "$env:TEMP\drag-lint-helper-method-edges-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -183,7 +186,7 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'helper.sqlite'
-& $Exe index $WorkDir --db $db --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 $py = Join-Path $WorkDir 'edges.py'
 @'
@@ -227,7 +230,7 @@ out['helper_rows'] = c.execute("SELECT COUNT(*) FROM type_helpers").fetchone()[0
 print(json.dumps(out))
 c.close()
 '@ | Set-Content $py -Encoding ascii
-$r = (& python $py $db) -join "`n" | ConvertFrom-Json
+$r = (& python $py $db) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 
 Write-Host 'The index already HAS the helper data' -ForegroundColor Cyan
 Check 'CONTROL: type_helpers is populated' ($r.helper_rows -ge 1) "rows=$($r.helper_rows)  -- so this is a RESOLVER gap, not an extraction one"

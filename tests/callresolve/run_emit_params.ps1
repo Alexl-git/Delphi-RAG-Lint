@@ -16,7 +16,10 @@
   Run from a NEUTRAL CWD (C:\TEMP) so no drag-lint-lint.json is picked up.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -38,8 +41,8 @@ Copy-Item $fixture $target -Force
 # collisions (ACount appears in both Handle and Fill). --json prints a JSON
 # array of matched symbols.
 function ParamByQName([string]$name, [string]$qname) {
-  $j = & $exePath query --name $name --db $db --json 2>$null | Out-String
-  $arr = $null; try { $arr = ($j | ConvertFrom-Json) } catch { $arr = $null }
+  $j = & { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --db $db --json 2>$null } | Out-String
+  $arr = $null; try { $arr = ($j | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $arr = $null }
   if ($null -eq $arr) { return $null }
   foreach ($s in @($arr)) { if ($s.kind -eq 'param' -and $s.qualified_name -eq $qname) { return $s } }
   return $null
@@ -47,7 +50,7 @@ function ParamByQName([string]$name, [string]$qname) {
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # --- Handle: const modifier stripped + plain param ---
   $ai = ParamByQName 'AItem' 'params.TThing.Handle.AItem'

@@ -26,9 +26,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_convert_apply_backup_set_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Continue'
@@ -54,11 +57,11 @@ function Fixture([string]$Dir) {
   Write-Ascii "$Dir\OnlyDfm.pas" "unit OnlyDfm;`n`ninterface`n`nuses`n  System.Classes, LibA, LibB;`n`ntype`n  TOnlyDfm = class(TDataModule)`n  end;`n`nimplementation`n`n{`$R *.dfm}`n`nend.`n"
   Write-Ascii "$Dir\OnlyDfm.dfm" "object OnlyDfm: TOnlyDfm`n  object tbl: TSrcTable`n    Caption = 't'`n  end`nend`n"
   Write-Ascii "$Dir\r.rules" "#convert LibA.TSrcTable -> LibB.TDstTable, LibB`n#link Title <- Caption`n"
-  $o = & $Exe index $Dir --db "$Dir\fx.sqlite" 2>&1
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe index $Dir --db "$Dir\fx.sqlite" 2>&1 | ForEach-Object { "$_" } }
   if ($LASTEXITCODE -ne 0) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: fixture index failed: $($o -join ' | ')" -ForegroundColor Red; exit 2 }
 }
 function Apply([string]$Dir, [string[]]$Extra) {
-  $o = (& $Exe convert-apply --unit "$Dir\OnlyDfm.pas" --rules "$Dir\r.rules" --db "$Dir\fx.sqlite" --apply @Extra 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit "$Dir\OnlyDfm.pas" --rules "$Dir\r.rules" --db "$Dir\fx.sqlite" --apply @Extra 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 function FHash([string]$p) { return (Get-FileHash $p).Hash }

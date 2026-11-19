@@ -41,10 +41,14 @@
 
 [CmdletBinding()]
 param(
-  [string]$Exe     = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1"),
-  [string]$Stub    = "$PSScriptRoot\fixtures\lspproxy\Win64\Debug\LspStubServer.exe",
+  [string]$Exe     = '',
+  [string]$Stub    = '',
   [string]$WorkDir = "$env:TEMP\draglint_lspproxy_lifecycle_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1") }
+if (-not $Stub) { $Stub = "$PSScriptRoot\fixtures\lspproxy\Win64\Debug\LspStubServer.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'
@@ -179,7 +183,7 @@ Write-Host 'CASE B: --parent-pid client exits -> relay exits -> child gone' -For
 Reset-Stubs
 # A throwaway stand-in for the IDE. The relay is NOT its child -- --parent-pid
 # watches a pid, which is what the plugin passes and what must be honoured.
-$fakeClient = Start-Process pwsh -ArgumentList '-NoProfile','-Command','Start-Sleep -Seconds 120' -PassThru -WindowStyle Hidden
+$fakeClient = Start-Process pwsh -ArgumentList '-NoProfile','-Command','Start-Sleep -Seconds 120' -PassThru -WindowStyle Hidden; $null = $fakeClient.Handle
 $b = Start-Relay @('--parent-pid', "$($fakeClient.Id)") -Linger
 Check 'the child was spawned' ($null -ne $b.ChildPid) "child pid: $($b.ChildPid)"
 if ($b.ChildPid) {

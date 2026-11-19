@@ -89,7 +89,7 @@ type
   /// BaseDir + NearSearch behaviour unchanged.
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas) ?, DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas) ?, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas) ?, DRagLint.Diagnostics.ParseCache.TAstParseCache.HostIncludeSites (DRagLint.Diagnostics.ParseCache.pas) ?, DRagLint.Preprocess.Types.TPPOptionsDefault (DRagLint.Preprocess.Types.pas) (+9 more)</para>
+  /// <para>Used by: DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas) ?, DRagLint.Core.Indexer.TIndexer.HostIncContexts (DRagLint.Core.Indexer.pas) ?, DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas) ?, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas) ?, DRagLint.Preprocess.Types.TPPOptionsDefault (DRagLint.Preprocess.Types.pas) (+10 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Diagnostics.ParseCache, DRagLint.Index.Closure, DRagLint.Index.PPUnitSource, DRagLint.Preprocess, DRagLint.Preprocess.Types</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -113,7 +113,7 @@ type
   /// Unresolved, inactive and over-depth includes produce no site.
   /// Sites are recorded in source order (a nested site follows its parent).
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Core.Indexer.pas) ?, DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas) ?, DRagLint.CLI.InstallLintIncludeContexts (DRagLint.CLI.pas) ?, DRagLint.Core.Indexer.TIndexer.RememberIncludeSites (DRagLint.Core.Indexer.pas) ?, DRagLint.Preprocess.PreprocessInto.ApplyIncludeDefines (DRagLint.Preprocess.pas) (+20 more)</para>
+  /// <para>Used by: declaration (DRagLint.Core.Indexer.pas) ?, DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas) ?, DRagLint.CLI.InstallLintIncludeContexts (DRagLint.CLI.pas) ?, DRagLint.Core.Indexer.TIndexer.RememberIncludeSites (DRagLint.Core.Indexer.pas) ?, DRagLint.Preprocess.PreprocessInto.ApplyIncludeDefines (DRagLint.Preprocess.pas) (+21 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Diagnostics.ParseCache, DRagLint.Index.Closure, DRagLint.Index.IncludeUses, DRagLint.Preprocess</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -133,7 +133,7 @@ type
 /// <returns><!-- drag-lint:auto -->TPPOptions -- Observed: Default(TPPOptions).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.HostIncludeSites (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.UnresolvedIfs (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.Closure.TClosureResolver.TryPreprocessWithSites (DRagLint.Index.Closure.pas) (+2 more)</para>
+/// <para>Called from: DRagLint.Core.Indexer.TIndexer.HostIncContexts (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.HostIncludeSites (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.UnresolvedIfs (DRagLint.Diagnostics.ParseCache.pas) (+3 more)</para>
 /// <para>Calls: Default</para>
 /// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->

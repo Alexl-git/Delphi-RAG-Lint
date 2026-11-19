@@ -43,7 +43,10 @@
   Run from a NEUTRAL CWD (C:\TEMP) so no drag-lint-lint.json is picked up.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -62,7 +65,7 @@ Copy-Item $fixture $target -Force
 
 Push-Location C:\TEMP
 try {
-  $idxOut = & $exePath index $scratch --db $db 2>&1 | Out-String
+  $idxOut = & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
   Check 'index reported no parse errors' ($idxOut -match '0 errors')
 
@@ -72,10 +75,10 @@ try {
   # below is a negative, and a negative is vacuously green if the command failed,
   # the DB was empty, or the file filter matched nothing. So capture stderr, check
   # the exit code, and require the ONE row we DO expect before trusting absence.
-  $acRaw  = & $exePath ambiguous-calls --file $target --json --db $db 2>&1 | Out-String
+  $acRaw  = & { $ErrorActionPreference = 'Continue'; & $exePath ambiguous-calls --file $target --json --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   $acExit = $LASTEXITCODE
   Check 'ambiguous-calls exits 0' ($acExit -eq 0) $acRaw
-  $rows = @($acRaw | ConvertFrom-Json)
+  $rows = @(($acRaw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   $encl = @($rows | ForEach-Object { $_.enclosing_qname })
   Check 'CONTROL: ambiguous-calls produced the expected positive row (absence below is meaningful)' `
     ($encl -contains 'callsitekind.TDriver.CallsUnknown') $acRaw
@@ -111,7 +114,7 @@ try {
   # reached the fixture ('File: ...callsitekind.pas'). Only then is absence
   # evidence. The check name carries the qname so a failure names the culprit.
   function Doc-Out([string]$QName) {
-    $out  = & $exePath document --qname $QName --db $db 2>&1 | Out-String
+    $out  = & { $ErrorActionPreference = 'Continue'; & $exePath document --qname $QName --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
     $exit = $LASTEXITCODE
     Check ("CONTROL: document --qname $QName resolved and exited 0") `
       (($exit -eq 0) -and ($out -match 'File:.*callsitekind\.pas')) $out
@@ -227,7 +230,7 @@ try {
   }
   Check 'CONTROL: the paren-less call site was located in fixture CODE (not its header comment)' `
     (($makeLineNo -gt 0) -and (-not $srcLines[$makeLineNo - 1].TrimStart().StartsWith('//'))) "line=$makeLineNo"
-  $callers  = & $exePath query find-callers --name Make --db $db 2>&1 | Out-String
+  $callers  = & { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name Make --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   $callExit = $LASTEXITCODE
   Check 'query find-callers exits 0' ($callExit -eq 0) $callers
   Check 'BOUND on the disclosed gap: kind-blind `query find-callers --name Make` STILL finds ParenlessExpr' `

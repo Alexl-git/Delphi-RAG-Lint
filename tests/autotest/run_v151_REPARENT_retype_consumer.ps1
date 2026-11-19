@@ -15,8 +15,11 @@
   after each applied retype, and the instance a caller passed is still alive after the call.
 #>
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe"
+  [string]$Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -32,7 +35,7 @@ function Tree-Hash([string]$Dir) {
 function Build-Project([string]$Proj, [string]$Tmp) {
   $bat = Join-Path $Tmp ([guid]::NewGuid().ToString('N') + '.bat')
   [IO.File]::WriteAllText($bat, "@echo off`r`ncall `"$Rsvars`"`r`ncd /d `"$(Split-Path $Proj)`"`r`nmsbuild /t:Build /p:Config=Debug /p:Platform=Win64 /v:minimal `"$(Split-Path $Proj -Leaf)`"`r`nexit /b %ERRORLEVEL%`r`n", [Text.Encoding]::ASCII)
-  $p = Start-Process -Wait -PassThru -NoNewWindow cmd.exe -ArgumentList "/c `"$bat`"" -RedirectStandardOutput "$bat.log" -RedirectStandardError "$bat.err"
+  $p = Start-Process -Wait -PassThru -NoNewWindow cmd.exe -ArgumentList "/c `"$bat`"" -RedirectStandardOutput "$bat.log" -RedirectStandardError "$bat.err"; $null = $p.Handle
   return $p.ExitCode
 }
 function Bare-Lf([string]$Path) {
@@ -45,7 +48,7 @@ $Tmp = Join-Path $env:TEMP ("v151_reparent_" + [guid]::NewGuid().ToString('N').S
 [IO.Directory]::CreateDirectory($Tmp) | Out-Null
 
 function Reindex($P) {
-  & $Exe index --project $P.Proj --db $P.Db --library-db none *> (Join-Path $Tmp "index.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $P.Proj --db $P.Db --library-db none *> (Join-Path $Tmp "index.log") }
   if ($LASTEXITCODE -ne 0) { throw "index exit $LASTEXITCODE" }
 }
 function New-Project([string]$Name) {
@@ -56,10 +59,10 @@ function New-Project([string]$Name) {
   return $P
 }
 function Run-Json($P, [string[]]$More) {
-  $o = & $Exe extract-interface --db $P.Db --project $P.Proj --library-db none --format json @More 2> (Join-Path $Tmp 'run.err')
+  $o = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath((Join-Path $Tmp 'run.err')); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe extract-interface --db $P.Db --project $P.Proj --library-db none --format json @More 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   $script:LastExit = $LASTEXITCODE
   $script:LastErr = [IO.File]::ReadAllText((Join-Path $Tmp 'run.err'))
-  try { return (($o -join "`n") | ConvertFrom-Json) } catch { return $null }
+  try { return (($o -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function Read-Markers([string]$Path) {
   $list = @()

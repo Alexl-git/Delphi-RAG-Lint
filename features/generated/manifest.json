@@ -1,8 +1,8 @@
 {
-  "product": "1.51.1-alpha",
-  "extractor": "1.40.0-alpha",
-  "resolver": "1.28.0-alpha",
-  "schema": 26,
+  "product": "1.52.0-alpha",
+  "extractor": "1.41.0-alpha",
+  "resolver": "1.29.0-alpha",
+  "schema": 27,
   "groups": [
     {
       "id": "indexing",
@@ -190,7 +190,7 @@
         {
           "type": "cli",
           "verb": "document",
-          "usage": "drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment",
+          "usage": "drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--format json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment",
           "flags": [
             {
               "name": "--qname",
@@ -214,7 +214,7 @@
             }
           ],
           "helpOrder": 54,
-          "help": ["  drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--no-backup|--migrate-pure] [--db PATH]   - generate/repair a managed DocInsight comment", "  drag-lint document --unit <file.pas> [--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]         - document every public decl in the unit (facts-only; ONE --unit per run: a second, different --unit is exit 2)", "  drag-lint document --project <p.dpr|.dproj> [--stubs|--apply|--json|--no-backup|--include-accessors|--reindex|--document-third-party|--migrate-pure] [--db PATH]  - document every public decl the project OWNS (--reindex brackets with index: self-freshens so hover/LSP are correct immediately after)", "                                 scope: the compile closure restricted to the project's own roots (_D-RAG\\drag-lint-project.json, same declaration lint-all reads).", "                                 Vendored roots are named and skipped; --document-third-party writes to them too."]
+          "help": ["  drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--format json|--no-backup|--migrate-pure] [--db PATH]   - generate/repair a managed DocInsight comment", "  drag-lint document --unit <file.pas> [--apply|--json|--no-backup|--include-accessors|--document-third-party|--migrate-pure] [--db PATH]         - document every public decl in the unit (facts-only; ONE --unit per run: a second, different --unit is exit 2)", "  drag-lint document --project <p.dpr|.dproj> [--stubs|--apply|--json|--no-backup|--include-accessors|--reindex|--document-third-party|--migrate-pure] [--db PATH]  - document every public decl the project OWNS (--reindex brackets with index: self-freshens so hover/LSP are correct immediately after)", "                                 scope: the compile closure restricted to the project's own roots (_D-RAG\\drag-lint-project.json, same declaration lint-all reads).", "                                 Vendored roots are named and skipped; --document-third-party writes to them too."]
         }
       ],
       "audience": "both",
@@ -236,6 +236,31 @@
       }
     },
     {
+      "id": "v152-attributes-fact",
+      "title": "Custom attributes in the index",
+      "group": "indexing",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.51.1-alpha",
+      "summary": "Every custom attribute is stored with its argument text and the symbol it decorates (table attributes), library indexes too",
+      "intro": "Read this when a rule or a query needs to know which declarations carry an RTTI attribute and with which arguments. Each [..] item is one row: attr_name, arg_text, line / col and symbol_id of the decorated class, field, routine, param or property; query it with drag-lint sql.",
+      "wikiPage": "Index-DB-Schema",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "sql",
+          "example": "drag-lint sql --db <file.sqlite> --query \"SELECT a.attr_name, a.arg_text, s.qualified_name FROM attributes a JOIN symbols s ON s.id = a.symbol_id\""
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-18",
+        "by": "ENGINE",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "b5f80ced846660c364a5479dac4f078746b2addadc27f3fe64fdfc3338ac9bd4"
+      }
+    },
+    {
       "id": "inc-indexing",
       "title": "Include-file indexing and IF evaluation",
       "group": "indexing",
@@ -254,10 +279,10 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-09",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.50.0-alpha",
-        "surfaceHash": "f2a0478a796ade4e9cce69218410755d7d887176fd05d65248876316fc7401bd"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "ef7035a4a4af9b1f2e8b73f5c2b7d6fd883fabb9660dd0fdf8621cf18cfd0b2e"
       }
     },
     {
@@ -367,10 +392,10 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-04",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.42.0-alpha",
-        "surfaceHash": "bf81943980c21446f70bbe6321118d84bdaa26ff7af38c331925d650baaa9ea0"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "4e8ca8f787dd1aeb7226136e582ceddf8385d4aeabccde89f819efbf12bbc563"
       }
     },
     {
@@ -423,9 +448,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "b943b9ca28fd5ea4f705191a583b6381d139bbbac048916d79e87219465d5130"
       }
     },
@@ -642,10 +667,10 @@
         }
       ],
       "verified": {
-        "date": "2026-11-04",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.42.0-alpha",
-        "surfaceHash": "79de4a889871bdf79d85cf50190c3c8326d0e4b7d78b5843bf65d046e68dcd73"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "36d4bcbc1cc6119c5dcbf85a64444a625b188ae1cb162d36857118dc1c548daf"
       }
     },
     {
@@ -734,6 +759,30 @@
       }
     },
     {
+      "id": "v152-extr-resolve",
+      "title": "Resolver fixes in 1.52",
+      "group": "indexing",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.51.1-alpha",
+      "summary": "Generic receivers (`TObjectList<T>.Create`) typed; index --resolve-only without a library keeps the last library bindings",
+      "intro": "Read this when find-callers misses a call on a generic list, or when an index --resolve-only run without --library-db used to lose every library binding.",
+      "wikiPage": "library-first-resolve",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "index",
+          "example": "drag-lint index --project <X.dproj> --db <file.sqlite> --resolve-only"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-17",
+        "by": "alexanderl",
+        "build": "1.51.1-alpha"
+      }
+    },
+    {
       "id": "schema",
       "title": "schema",
       "group": "indexing",
@@ -783,9 +832,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "ee9b2e4e42ceba0d3e0fe8bf2e7b33bc1924e9c9de75afa5204c65b93fd6d95f"
       }
     },
@@ -906,6 +955,84 @@
         "by": "ENGINE",
         "build": "1.36.0-alpha",
         "surfaceHash": "86109acb83a18b5048858c4ce221e2cb2706486551e61a6480f0dbf4d2b087ca"
+      }
+    },
+    {
+      "id": "check-init",
+      "title": "check-init",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "Answers whether a variable or field is set before a given use on every execution (SET / NEVER-SET / MAY-BE-UNSET)",
+      "intro": "Ask it before adding an Assigned guard or reordering initialization: it names the writers of a unit variable, class var or field and says whether one of them runs before the use on every path, with the reason code and the witness when it cannot prove it. Exit 0 = all SET, 1 = some MAY-BE-UNSET or NEVER-SET, 2 = error.",
+      "wikiPage": "check-init",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Analyze > Check Initialization of Identifier at Cursor...",
+          "steps": ["Put the caret on a unit variable, class var or field (a use of it) in the code editor", "Choose drag-lint > Analyze > Check Initialization of Identifier at Cursor...", "The Messages window shows the verdict (SET / NEVER-SET / MAY-BE-UNSET / UNKNOWN-CALLEE), one line per judged use with its witness hops, and one line per writer; double-click a line to jump there"]
+        },
+        {
+          "type": "ide-context",
+          "host": "Editor",
+          "caption": "drag-lint > Check Initialization of Identifier at Cursor...",
+          "steps": ["Right-click on a variable or field in the code editor", "Open the drag-lint submenu and choose Check Initialization of Identifier at Cursor...", "Read the verdict, uses, witness hops and writers in the Messages window; double-click a line to jump there"]
+        },
+        {
+          "type": "mcp",
+          "tool": "check_init"
+        },
+        {
+          "type": "cli",
+          "verb": "check-init",
+          "example": "drag-lint check-init UnitA.GCache --db <db> --json",
+          "usage": "drag-lint check-init <QName>|--qname <QName> [--at <file>:<line>[:<col>]] --db <db> [--json|--format json] [--explain] [--max-routines N] [--max-seconds S]",
+          "flags": [
+            {
+              "name": "--at",
+              "arg": "<file>:<line>[:<col>]"
+            },
+            {
+              "name": "--db",
+              "arg": "<db>"
+            },
+            {
+              "name": "--json"
+            },
+            {
+              "name": "--explain"
+            },
+            {
+              "name": "--max-routines",
+              "arg": "N"
+            },
+            {
+              "name": "--max-seconds",
+              "arg": "S"
+            }
+          ],
+          "help": ["  drag-lint check-init <QName>|--qname <QName> [--at <file>:<line>[:<col>]] --db <db> [--json|--format json] [--explain] [--max-routines N] [--max-seconds S]   (is a variable or field set before every use? SET / NEVER-SET / MAY-BE-UNSET / UNKNOWN-CALLEE; exit 0 = all SET, 1 = otherwise, 2 = error)"]
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"],
+      "questions": [
+        {
+          "ask": "Is this variable set before it is read here, on every execution?",
+          "command": "drag-lint check-init <QName> --at <file>:<line>:<col> --db <db>"
+        },
+        {
+          "ask": "Which routines or events set this field?",
+          "command": "drag-lint check-init <Unit.TClass.FField> --db <db> --json"
+        }
+      ],
+      "notes": "Shipped 1.52 (lanes HBSKEL, HBSOLVER, HBFIELDS, HBEVORD, HBDOCS). HBFIX: receiver-unproven is produced (a read through another object), --max-seconds S wall-clock cap (default 60, 0 = off; MCP max_seconds, hover 5 s). Plan docs\\superpowers\\plans\\2026-11-17-happens-before-phase1.md; guard tests\\autotest\\run_check_init_surface.ps1",
+      "verified": {
+        "date": "2026-11-18",
+        "by": "ENGINE",
+        "build": "1.52.0-alpha",
+        "surfaceHash": "8ada1d337da6472ba00b52f94039bbc2a14733a4b5f80c179445488ad7976a67"
       }
     },
     {
@@ -1108,9 +1235,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-11-07",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.46.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "a9b3674f6f8ea21550bbfdac27a045d2cba3fc23effdfe3cefc995f768599fb4"
       }
     },
@@ -1164,9 +1291,9 @@
       ],
       "notes": "wave 146 lane b5; spec docs\\superpowers\\specs\\2026-11-06-raise-handle-type-facts.md; guard tests\\autotest\\run_exception_facts.ps1",
       "verified": {
-        "date": "2026-11-07",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.46.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "78e7a3f80bd7e0aeb56cbb985eba75505379ac97d74f75c1c06923e64af4b955"
       }
     },
@@ -1256,14 +1383,62 @@
       "owner": "ENGINE",
       "status": "shipped",
       "since": "0.33.0-alpha",
-      "summary": "Lists every reference to the symbol under the editor caret across the indexed project",
-      "intro": "Read this before changing or removing a symbol, to see every place it is used. With the caret on the symbol choose drag-lint > Find Usages... (Ctrl+Alt+F); the same list comes from the command line as `drag-lint usages --name <X> --db <db>`.",
+      "summary": "Lists every reference to the symbol under the editor caret, in one of four scopes: this bound symbol (default), project, group or everywhere",
+      "intro": "Read this before changing or removing a symbol, to see every place it is used. With the caret on the symbol choose drag-lint > Find Usages... (Ctrl+Alt+F): by default it lists the usages of exactly that object in this project. drag-lint > Find Usages > This symbol / Project / Group / Everywhere (also on the editor right-click drag-lint submenu) and the scope box on the results panel widen it to every object of the name in the project, the project group or every index; the same list comes from the command line as `drag-lint usages --scope <scope>`.",
       "wikiPage": "Find-Usages",
       "surfaces": [
         {
           "type": "ide-menu",
           "path": "drag-lint > Find Usages...",
           "steps": ["Needs an index of the project", "Put the editor caret on the symbol", "drag-lint > Find Usages..."]
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Find Usages > This symbol",
+          "steps": ["Needs an index of the project", "Put the editor caret on the symbol", "drag-lint > Find Usages > This symbol"]
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Find Usages > Project",
+          "steps": ["Needs an index of the project", "Put the editor caret on the symbol", "drag-lint > Find Usages > Project"]
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Find Usages > Group",
+          "steps": ["Needs an index of the project", "Put the editor caret on the symbol", "drag-lint > Find Usages > Group"]
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Find Usages > Everywhere",
+          "steps": ["Needs an index of the project", "Put the editor caret on the symbol", "drag-lint > Find Usages > Everywhere"]
+        },
+        {
+          "type": "ide-context",
+          "host": "Editor",
+          "caption": "drag-lint > Find Usages > This symbol",
+          "steps": ["Put the caret on the symbol", "Right-click in the code editor and open drag-lint > Find Usages", "Choose This symbol"]
+        },
+        {
+          "type": "ide-context",
+          "host": "Editor",
+          "caption": "drag-lint > Find Usages > Project",
+          "steps": ["Put the caret on the symbol", "Right-click in the code editor and open drag-lint > Find Usages", "Choose Project"]
+        },
+        {
+          "type": "ide-context",
+          "host": "Editor",
+          "caption": "drag-lint > Find Usages > Group",
+          "steps": ["Put the caret on the symbol", "Right-click in the code editor and open drag-lint > Find Usages", "Choose Group"]
+        },
+        {
+          "type": "ide-context",
+          "host": "Editor",
+          "caption": "drag-lint > Find Usages > Everywhere",
+          "steps": ["Put the caret on the symbol", "Right-click in the code editor and open drag-lint > Find Usages", "Choose Everywhere"]
+        },
+        {
+          "type": "mcp",
+          "tool": "find_usages"
         }
       ],
       "audience": "both",
@@ -1275,13 +1450,17 @@
         {
           "ask": "Who calls this routine?",
           "command": "drag-lint query find-callers --name <Bar> --db <db>"
+        },
+        {
+          "ask": "Why does Find Usages list only one of several same-named fields?",
+          "command": "The default scope is This symbol (the object under the caret); pick Project in the panel scope box for every object of the name: drag-lint usages --name <X> --scope project --db <db>"
         }
       ],
       "verified": {
-        "date": "2026-11-07",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.46.0-alpha",
-        "surfaceHash": "9002cd9fe23ab0cff78aa754409d8ffbf6c163a63c1816ac99ab8fba2fb3f61d"
+        "build": "1.51.1-alpha",
+        "surfaceHash": "8e6042913e725f2729344084e87784ac244f370736b7796af7a18f9a0c2d31fd"
       }
     },
     {
@@ -1685,7 +1864,7 @@
       "status": "shipped",
       "since": "0.7.0-alpha",
       "summary": "Hover card for the symbol under the caret: signature, type, documentation, callers; an interface method also lists its implementers",
-      "intro": "Read this to check what a symbol is and who calls it without leaving the line you are on. With the caret on it choose drag-lint > Hover at Cursor (Ctrl+Alt+H); on the command line, hover --qname Foo.Bar gives the same card. The IDE never waits for the engine: the card appears when the answer arrives, and a busy engine shows 'drag-lint: engine busy' instead of freezing the editor, and an answer that arrives after that deadline is still delivered as a late result.",
+      "intro": "Read this to check what a symbol is and who calls it without leaving the line you are on. Caret on it, drag-lint > Hover at Cursor (Ctrl+Alt+H); on the command line hover --qname Foo.Bar gives the same card. The IDE never waits: a busy engine shows 'drag-lint: engine busy' and a late answer is still delivered. VS Code 1.6.6 defers the slow part: signature and docs at once with 'computing...', then callers, the Init: verdict and the Set by: writers (cancelled when you move on).",
       "wikiPage": "Hover-at-Cursor",
       "surfaces": [
         {
@@ -1734,9 +1913,9 @@
         }
       ],
       "verified": {
-        "date": "2026-11-08",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.50.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "c69cb05880f5f5bd5b68dbddc39404b274f23a964817fca00b6e6466cae29b4b"
       }
     },
@@ -2681,9 +2860,9 @@
       ],
       "access": "cli-only",
       "verified": {
-        "date": "2026-11-04",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.42.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "66d84b977cc5c8dedcfb026fccbabcd900af7e32450585a580a2c548a3a4d35c"
       }
     },
@@ -2728,9 +2907,9 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "42a2985a0cd3b716fb4b342d41394fbbe74319a5abb1f22a04c9ce5d700f2cba"
       }
     },
@@ -2741,14 +2920,14 @@
       "owner": "ENGINE",
       "status": "shipped",
       "since": "0.33.0-alpha",
-      "summary": "Finds usage sites of a named symbol, with a choice of report width",
-      "intro": "Read this when you want every place a symbol is used: usages (also behind Find Usages in the IDE) lists the grouped usage sites of a named symbol, with a narrow, wide or very-wide report width.",
+      "summary": "Finds usage sites of a symbol in one of four scopes (this bound symbol, project, group, everywhere), with a choice of report width",
+      "intro": "Read this when you want every place a symbol is used: usages (also behind Find Usages in the IDE) lists the grouped usage sites. --scope symbol (the default) answers the declaration a position (--in/--line/--col) or a qualified name is bound to; project, group and everywhere widen it to every object of that name in the project, the project group or every index.",
       "wikiPage": "usages",
       "surfaces": [
         {
           "type": "cli",
           "verb": "usages",
-          "usage": "drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file> [--no-create]] [--library-db <lib.sqlite>]",
+          "usage": "drag-lint usages --name <X> | --in <file> --line <L> [--col <C>] [--scope symbol|project|group|everywhere] [--group <x.groupproj>] [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file> [--no-create]] [--library-db <lib.sqlite>]",
           "flags": [
             {
               "name": "--name",
@@ -2788,10 +2967,26 @@
             },
             {
               "name": "--no-create"
+            },
+            {
+              "name": "--scope",
+              "arg": "symbol|project|group|everywhere"
+            },
+            {
+              "name": "--group",
+              "arg": "<x.groupproj>"
+            },
+            {
+              "name": "--line",
+              "arg": "<L>"
+            },
+            {
+              "name": "--col",
+              "arg": "<C>"
             }
           ],
           "helpOrder": 5,
-          "help": ["  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file> [--no-create]] [--library-db <lib.sqlite>]", "                               grouped usage report; backs the IDE Symbol Search dialog's Usages view.", "                               --limit N keeps the first N rows of each JSON group (declarations included) and adds", "                               \"limit\" and \"totals\" (the full counts); without it nothing is capped.", "                               --rw: the users of a member split into readers and writers, one block per declaration: a property with its backing field and accessor methods, a field with its properties, a getter (reads) or setter (writes). Rows name the route (property, field, getter, setter, direct).", "                               With no --db, --in <file> finds the unit's project and its database. No DB: prints the index command, exits 2. Two projects list it: names both, exits 2. No project: a library unit on an assumed platform, unless it uses units the library lacks (names them, exits 2). With neither --db nor --in the verb exits 2."]
+          "help": ["  drag-lint usages             --name <X> | --in <file> --line <L> [--col <C>] [--scope symbol|project|group|everywhere] [--group <x.groupproj>] [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file> [--no-create]] [--library-db <lib.sqlite>]", "                               grouped usage report; backs the IDE Symbol Search dialog's Usages view.", "                               --scope (1.52): symbol (default) = the declaration --in/--line/--col or a qualified --name is BOUND to, in this project; project = every object of the name in this project (symbol and project skip a library-*.sqlite --db unless every --db is one); group = the name in every project of --group <x.groupproj>; everywhere = the name in every index the manifest knows. A bare --name with no position binds nothing and is answered as scope project (the JSON says scope, scope_note, databases).", "                               --limit N keeps the first N rows of each JSON group (declarations included) and adds", "                               \"limit\" and \"totals\" (the full counts); without it nothing is capped.", "                               --rw: the users of a member split into readers and writers, one block per declaration: a property with its backing field and accessor methods, a field with its properties, a getter (reads) or setter (writes). Rows name the route (property, field, getter, setter, direct).", "                               With no --db, --in <file> finds the unit's project and its database. No DB: prints the index command, exits 2. Two projects list it: names both, exits 2. No project: a library unit on an assumed platform, unless it uses units the library lacks (names them, exits 2). With neither --db nor --in the verb exits 2."]
         },
         {
           "type": "ide-menu",
@@ -2808,13 +3003,21 @@
         {
           "ask": "How do I get a wider or JSON report?",
           "command": "drag-lint usages --name <X> --width wide --json"
+        },
+        {
+          "ask": "Where is exactly the symbol at this position used, not its namesakes?",
+          "command": "drag-lint usages --in <file.pas> --line <L> --col <C> --db <path>"
+        },
+        {
+          "ask": "Where is this name used in every project of the group, or in every index?",
+          "command": "drag-lint usages --name <X> --scope group --group <x.groupproj> --db <path>  |  --scope everywhere"
         }
       ],
       "verified": {
-        "date": "2026-11-05",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.44.0-alpha",
-        "surfaceHash": "c97d58b4081d81db327f53d3bcbb62f517798c5ea98c1351b93be8fcc35047ed"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "f170754cb7e95f69502fcd629b339e8ae5c398f636d4ad4f6c10c01d9d3b2dd6"
       }
     },
     {
@@ -2942,9 +3145,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "2face26acb4b8666d6a782bbebdc06a025638f796b3b19b8e66532efcf73179a"
       }
     },
@@ -3004,13 +3207,54 @@
       }
     },
     {
+      "id": "v152-index-possibly-out-of-range",
+      "title": "Array index possibly out of range lint rule (index-possibly-out-of-range)",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "Warns on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only",
+      "intro": "Read this to see when index-possibly-out-of-range warns, how it treats another collection's bound and index parameters, and how its manual-only autofix inserts an InRange check.",
+      "wikiPage": "index-possibly-out-of-range",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint",
+          "usage": "drag-lint lint <file.pas> [--rule index-possibly-out-of-range] [--fix --fix-rule index-possibly-out-of-range [--apply]] (default ON, category bug-patterns, warning; hint on an unguarded parameter or a lookup-derived index; param exception_class; the autofix is manual only: a batch --fix withholds it, --fix-rule applies it; rules --json carries fix_manual_only: true)",
+          "flags": [
+            {
+              "name": "--rule",
+              "arg": "<id>"
+            },
+            {
+              "name": "--fix"
+            },
+            {
+              "name": "--fix-rule",
+              "arg": "<id>"
+            },
+            {
+              "name": "--apply"
+            }
+          ]
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-18",
+        "by": "ENGINE",
+        "build": "1.52.0-alpha",
+        "surfaceHash": "193c42e17a1b3087f2dfef535b008235f2f191fd65c20200d6f0b7ebabb7957c"
+      }
+    },
+    {
       "id": "autofix-wave",
       "title": "Autofix for fixable rules",
       "group": "linting",
       "owner": "ENGINE",
       "status": "shipped",
       "since": "1.37.0-alpha",
-      "summary": "lint --fix repairs findings of the 125 fixable rules; --json reports per finding whether it was applied; lint accepts a folder",
+      "summary": "lint --fix repairs findings of the 131 fixable rules; --json reports per finding whether it was applied; lint accepts a folder",
       "intro": "Read this when you want drag-lint to repair findings instead of only reporting them. A dry run shows the edits, --apply writes them, and the JSON result says for each finding whether a fix was applied.",
       "wikiPage": "autofix-wave",
       "surfaces": [
@@ -3022,10 +3266,10 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-14",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.51.0-alpha",
-        "surfaceHash": "de319179f8b6b2ffbdba5a675a1f550133807d68a0339e632b8014cd5442cafc"
+        "build": "1.51.1-alpha",
+        "surfaceHash": "b4e0ea9ae96c0b3e6c9af7fd6c2fa5750a7de83e50ea8d9adf527c20397f05d5"
       }
     },
     {
@@ -3074,6 +3318,30 @@
       }
     },
     {
+      "id": "complexity-if-expression",
+      "title": "Complexity counts the if-expression",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "cyclomatic-complexity, cognitive-complexity and the autodoc Complexity fact count a Delphi 13 if-expression as a decision point",
+      "intro": "Read this to see why a routine with if-expressions now scores higher, and what happens to dl:ok markers granted for the old score.",
+      "wikiPage": "complexity-if-expression",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-18",
+        "by": "ENGINE",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "b47eb66bf0cb814b73ab6883a63435ae8219a7ec857a578350c86dfa85120e65"
+      }
+    },
+    {
       "id": "compliance-labels",
       "title": "Compliance labels (CWE, CERT, MISRA)",
       "group": "linting",
@@ -3097,10 +3365,10 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-10-27",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.36.0-alpha",
-        "surfaceHash": "a45da9f0fa1d879de55ffde5444d4d175d142844beb778c034f3d19e4281e009"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "e8a83e98a20dedd5041cd6bd01b9fea38214b19d168d0b39fd7d81f1f8e5aa4c"
       }
     },
     {
@@ -3196,7 +3464,7 @@
             }
           ],
           "helpOrder": 15,
-          "help": ["  drag-lint lint  <path>       [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>|help] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]", "                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks, and the project", "                               rules for this file, incl. the ON opt-in discarded-effect-free-result; the OFF opt-in ones run only under --rule)", "                               <path> may be a FOLDER: every scanned .pas/.inc/.dpr gets the same checks as lint <file> (their union)", "                               [--output <file>]: with --json or --format sarif the document is written to the file instead of stdout (a note on stderr).", "                               [--project-rules]  (also run doc-drift/missing-doc for this file -- OFF by default:", "                               they rebuild facts PER DECL, ~16ms each, and can exceed the IDE's 8s budget)", "                               [--stand-in-for <realpath>]  (analyse <path>'s TEXT as though it were <realpath>:", "                               for editor buffers snapshotted to a temp file -- fixes store membership, file id,", "                               unit-name and the reported path)", "  drag-lint lint  --project <file.dproj> [--build-config <name>] [--rule unit-not-in-dpr|unit-not-in-library|help] [--json]", "  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply [--no-backup]]   (AUTOFIX one file; --apply keeps a .bak beside each file it writes unless --no-backup)", "                               DRY RUN WITHOUT --apply: it reports what it would change and writes no source file.", "                               --fix-line + --fix-rule together narrow the fix to ONE finding; omit both to", "                               apply every fixable finding in the file. Only rules whose catalog entry has", "                               \"fixable\": true are ever applied -- see `drag-lint rules --json`.", "                               --fix-naming: kept for compatibility, a no-op since 1.37.0 -- every fix, the naming renames (across", "                               every owning project) included, is ON by default; only \"autofix_off\": [...] in drag-lint-lint.json withholds one;", "                               with it the run still prints \"rename-local: <N>\" (stderr) for the single-project renames.", "                               This is what the IDE Structure form's right-click Fix it / Fix all in unit run."]
+          "help": ["  drag-lint lint  <path>       [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>|help] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>] [--no-budget]", "                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks, and the project", "                               rules for this file, incl. the ON opt-in discarded-effect-free-result; the OFF opt-in ones run only under --rule)", "                               <path> may be a FOLDER: every scanned .pas/.inc/.dpr gets the same checks as lint <file> (their union)", "                               [--output <file>]: with --json or --format sarif the document is written to the file instead of stdout (a note on stderr).", "                               [--project-rules]  (also run doc-drift/missing-doc for this file -- OFF by default:", "                               they rebuild facts PER DECL, ~16ms each, and can exceed the IDE's 8s budget)", "                               [--stand-in-for <realpath>]  (analyse <path>'s TEXT as though it were <realpath>:", "                               for editor buffers snapshotted to a temp file -- fixes store membership, file id,", "                               unit-name and the reported path)", "  drag-lint lint  --project <file.dproj> [--build-config <name>] [--rule unit-not-in-dpr|unit-not-in-library|help] [--json]", "  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply [--no-backup]]   (AUTOFIX one file; --apply keeps a .bak beside each file it writes unless --no-backup)", "                               DRY RUN WITHOUT --apply: it reports what it would change and writes no source file.", "                               --fix-line + --fix-rule together narrow the fix to ONE finding; omit both to", "                               apply every fixable finding in the file. Only rules whose catalog entry has", "                               \"fixable\": true are ever applied -- see `drag-lint rules --json`.", "                               --fix-naming: kept for compatibility, a no-op since 1.37.0 -- every fix, the naming renames (across", "                               every owning project) included, is ON by default; only \"autofix_off\": [...] in drag-lint-lint.json withholds one;", "                               with it the run still prints \"rename-local: <N>\" (stderr) for the single-project renames.", "                               This is what the IDE Structure form's right-click Fix it / Fix all in unit run."]
         }
       ],
       "audience": "both",
@@ -3353,7 +3621,7 @@
       "owner": "ENGINE",
       "status": "shipped",
       "since": "1.42.0-alpha",
-      "summary": "Project lint rule, OFF by default: a data module unit reads or writes another unit's global form variable",
+      "summary": "Project lint rule, ON by default since 1.52: a data module unit reads or writes another unit's global form variable",
       "intro": "Read this to see what datamodule-form-global reports and what keeps a homonym out. It runs in lint-all and lint-project over a project index.",
       "wikiPage": "datamodule-form-global",
       "surfaces": [
@@ -3365,10 +3633,10 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-04",
+        "date": "2026-11-17",
         "by": "ENGINE",
-        "build": "1.42.0-alpha",
-        "surfaceHash": "360982a878a600caf0f2ca7a214d6b7f0220a387e74cda05b94c066a804901d1"
+        "build": "1.51.1-alpha",
+        "surfaceHash": "2d0c23565c009383cfcd928a0869cb75532a87f1d17ce233d0603d793354b85c"
       }
     },
     {
@@ -3378,8 +3646,8 @@
       "owner": "ENGINE",
       "status": "shipped",
       "since": "1.46.0-alpha",
-      "summary": "Three OFF rules: a local that only receives out arguments, a store overwritten by an out argument, a local passed by value to a method before it is assigned",
-      "intro": "Read this to see what write-only-local, overwrite-before-read and used-before-assignment cannot see, and the three OFF rules that report it.",
+      "summary": "Two OFF out-argument rules; since 1.52 a local passed by value to a method before assignment reports under the default used-before-assignment",
+      "intro": "Read this to see what write-only-local, overwrite-before-read and used-before-assignment cannot see, the two OFF rules that report the out shapes, and the by-value arm folded into used-before-assignment in 1.52.",
       "wikiPage": "flow-out-arg-rules",
       "surfaces": [
         {
@@ -3389,10 +3657,10 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-07",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.46.0-alpha",
-        "surfaceHash": "c86e88b99bad3d1352c6b7e19e7394f26a185b860c009bb97ac366379a830ab4"
+        "build": "1.51.1-alpha",
+        "surfaceHash": "b47eb66bf0cb814b73ab6883a63435ae8219a7ec857a578350c86dfa85120e65"
       }
     },
     {
@@ -3418,6 +3686,247 @@
         "by": "ENGINE",
         "build": "1.51.0-alpha",
         "surfaceHash": "de319179f8b6b2ffbdba5a675a1f550133807d68a0339e632b8014cd5442cafc"
+      }
+    },
+    {
+      "id": "v152-attrrules",
+      "title": "debug-display-placeholder + attribute-aware member-could-be-private",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "Warning (OFF in 1.52) on a DebuggerDisplay placeholder naming no member; member-could-be-private reads attributes from the index",
+      "intro": "Read this to see what debug-display-placeholder reports, when it stays silent, and how member-could-be-private now uses the attributes index fact instead of the source line.",
+      "wikiPage": "v152-attrrules",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "drag-lint lint <file> --rule debug-display-placeholder --db <db>",
+          "usage": "drag-lint lint <file> --rule debug-display-placeholder --db <db> (default OFF in 1.52; a [DebuggerDisplay('..{Name}..')] placeholder naming no member of the type, read from the attributes index fact; category bug-patterns, warning)",
+          "flags": [
+            {
+              "name": "--rule",
+              "arg": "<id>"
+            }
+          ]
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-18",
+        "by": "ENGINE",
+        "build": "1.52.0-alpha",
+        "surfaceHash": "193c42e17a1b3087f2dfef535b008235f2f191fd65c20200d6f0b7ebabb7957c"
+      }
+    },
+    {
+      "id": "v152-defaults",
+      "title": "Default-on form, dataset and data-module rules",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "Four lint rules on by default since 1.52 (form object/field, foreign form access, edit without post, data module form global); a shipped exempt-class list",
+      "intro": "Read this when a form object without a field, a control reached through another form's global variable or a dataset left in edit mode now shows up without --enable, or when you need to silence a form object class (a third-party sub-object the designer creates without a field) for your project.",
+      "wikiPage": "rule-defaults-152",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint",
+          "usage": "drag-lint lint  <path>       [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>|help] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>] [--no-budget]",
+          "flags": [
+            {
+              "name": "--profile",
+              "arg": "<name>"
+            },
+            {
+              "name": "--target-compiler",
+              "arg": "<ver|auto>"
+            },
+            {
+              "name": "--rule",
+              "arg": "<id>"
+            },
+            {
+              "name": "--disable"
+            },
+            {
+              "name": "--rules-dir",
+              "arg": "<dir>"
+            },
+            {
+              "name": "--json"
+            },
+            {
+              "name": "--labels"
+            },
+            {
+              "name": "--no-preprocess"
+            },
+            {
+              "name": "--library-db",
+              "arg": "<lib.sqlite>"
+            },
+            {
+              "name": "--build-config",
+              "arg": "<name>"
+            },
+            {
+              "name": "--db",
+              "arg": "<index.sqlite>"
+            },
+            {
+              "name": "--output",
+              "arg": "<file>"
+            },
+            {
+              "name": "--project-rules"
+            },
+            {
+              "name": "--stand-in-for",
+              "arg": "<realpath>"
+            }
+          ]
+        },
+        {
+          "type": "cli",
+          "verb": "rules",
+          "usage": "drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rule <id>[,<id>]] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance` and needs_compiler / compat_since / target_active; --standard lists only rules labelled under it; --rule <id>[,<id>] lists only those rules, an unknown id is exit 2)",
+          "flags": [
+            {
+              "name": "--json"
+            },
+            {
+              "name": "--category",
+              "arg": "<name>"
+            },
+            {
+              "name": "--standard"
+            },
+            {
+              "name": "--rule",
+              "arg": "<id>"
+            },
+            {
+              "name": "--rules-dir",
+              "arg": "<dir>"
+            },
+            {
+              "name": "--target-compiler",
+              "arg": "<ver|auto>"
+            },
+            {
+              "name": "--project",
+              "arg": "<.dproj>"
+            }
+          ]
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-18",
+        "by": "ENGINE",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "c5d96a075ccf964cd4812531d9d2bff6a7522e9b948592911e6dda021762d594"
+      }
+    },
+    {
+      "id": "v152-disable-rule",
+      "title": "Disable rule (this line, this unit, this project)",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "Silence one lint rule for a line (dl:ok marker), a unit or the project (rule_overrides in drag-lint-lint.json), with a reason and date; rules enable undoes it",
+      "intro": "Read this when a finding is right for most of the code but not here: disable the rule for this line, this unit or this project from the RAD Studio editor's right-click menu or with rules disable, and undo it with rules enable. Unit and project scope never write into the source.",
+      "wikiPage": "v152-disable-rule",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "rules",
+          "sub": "disable"
+        },
+        {
+          "type": "cli",
+          "verb": "rules",
+          "sub": "enable"
+        },
+        {
+          "type": "cli",
+          "verb": "rules",
+          "usage": "drag-lint rules disable|enable --rule <id> --scope line|unit|project [--in <F> --line <N>] --reason \"<text>\" [--project <.dproj>] [--config <drag-lint-lint.json>] [--json|--format json]   (line = a dl:ok marker on the line; unit / project = rule_overrides in the project lint config, with reason and date; enable undoes one disable)",
+          "flags": [
+            {
+              "name": "--rule",
+              "arg": "<id>"
+            },
+            {
+              "name": "--scope",
+              "arg": "line|unit|project"
+            },
+            {
+              "name": "--in",
+              "arg": "<F>"
+            },
+            {
+              "name": "--line",
+              "arg": "<N>"
+            },
+            {
+              "name": "--reason",
+              "arg": "<text>"
+            },
+            {
+              "name": "--project",
+              "arg": "<.dproj>"
+            },
+            {
+              "name": "--config",
+              "arg": "<drag-lint-lint.json>"
+            },
+            {
+              "name": "--json"
+            }
+          ],
+          "help": ["  drag-lint rules disable|enable --rule <id> --scope line|unit|project [--in <F> --line <N>] --reason \"<text>\" [--project <.dproj>] [--config <drag-lint-lint.json>] [--json|--format json]   (line = a dl:ok marker on the line; unit / project = rule_overrides in the project lint config, with reason and date; enable undoes one disable)"]
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Code Quality > Disable Rule...",
+          "steps": ["Put the caret on a line that shows a drag-lint finding", "Choose drag-lint > Code Quality > Disable Rule...", "Pick Disable here (this line), Disable in this unit or Disable in this project", "Type a one-line reason and press OK"]
+        },
+        {
+          "type": "ide-context",
+          "host": "Editor",
+          "caption": "drag-lint > Disable Rule...",
+          "steps": ["Put the caret on a line that shows a drag-lint finding", "Right-click in the editor, open the drag-lint submenu and choose Disable Rule...", "Pick Disable here (this line), Disable in this unit or Disable in this project", "Type a one-line reason and press OK"]
+        }
+      ],
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "Silence one rule on this line only, with a reason.",
+          "command": "drag-lint rules disable --rule <id> --scope line --in <U.pas> --line <N> --reason \"<why>\""
+        },
+        {
+          "ask": "Silence one rule in one unit without touching the source.",
+          "command": "drag-lint rules disable --rule <id> --scope unit --in <U.pas> --reason \"<why>\""
+        },
+        {
+          "ask": "Turn one rule off for the whole project.",
+          "command": "drag-lint rules disable --rule <id> --scope project --project <App.dproj> --reason \"<why>\""
+        },
+        {
+          "ask": "Undo a disable.",
+          "command": "drag-lint rules enable --rule <id> --scope line|unit|project [--in <U.pas> --line <N>] [--project <App.dproj>]"
+        }
+      ],
+      "verified": {
+        "date": "2026-11-17",
+        "by": "ENGINE",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "ee74bfd4bee5146e02c67338d68de51d94da8cc682b39aa1f3ea6d3177107c33"
       }
     },
     {
@@ -3485,6 +3994,14 @@
             {
               "name": "--rules-dir",
               "arg": "<dir>"
+            },
+            {
+              "name": "--project",
+              "arg": "<X.dproj>"
+            },
+            {
+              "name": "--target-compiler",
+              "arg": "<ver|auto>"
             }
           ],
           "helpOrder": 14,
@@ -3503,10 +4020,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-28",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.36.0-alpha",
-        "surfaceHash": "b8b47d5c06426ec7495d792343905a86aa5149fc5385ac6de617d47ef742ac2f"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "5efca92b9b4b603661cdf4bb84cdb3ee43edd50747d1726e07527bd4d605d0f9"
       }
     },
     {
@@ -3622,6 +4139,57 @@
       }
     },
     {
+      "id": "explain",
+      "title": "explain",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "Explains one lint rule in plain words: what it means, why it matters, a bad and a good example, its default, whether it can be fixed, and how to suppress it",
+      "intro": "Read this when a finding names a rule id and you want to know what it is for before you fix it or suppress it: explain prints the meaning, the reason, an example, the default, fixability and the exact suppress line, as text or JSON.",
+      "wikiPage": "explain",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "explain",
+          "usage": "drag-lint explain <rule-id> [--json|--format json] [--rules-dir <dir>]   (what one lint rule means, why it matters, bad / good example, default, fixable, and how to suppress it; an unknown id lists the nearest ids and exits 2)",
+          "flags": [
+            {
+              "name": "--json"
+            },
+            {
+              "name": "--rules-dir",
+              "arg": "<dir>"
+            }
+          ],
+          "helpOrder": 49,
+          "help": ["  drag-lint explain <rule-id> [--json|--format json] [--rules-dir <dir>]   (what one lint rule means, why it matters, bad / good example, default, fixable, and how to suppress it; an unknown id lists the nearest ids and exits 2)"]
+        }
+      ],
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "What does this rule mean and how do I silence it?",
+          "command": "drag-lint explain <rule-id>"
+        },
+        {
+          "ask": "Give me the explanation as data.",
+          "command": "drag-lint explain <rule-id> --json"
+        }
+      ],
+      "access": "repo-tooling",
+      "accessReviewed": {
+        "date": "2026-11-17",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-11-17",
+        "by": "ENGINE",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "32782a37a7c3aeebf9b31f3885cfd677a2fdf05a3ce8b4cbf2918a1542bcf85e"
+      }
+    },
+    {
       "id": "finalization-after-dependency",
       "title": "Finalization reaching a unit already finalized (lint rule)",
       "group": "linting",
@@ -3718,7 +4286,7 @@
             }
           ],
           "helpOrder": 19,
-          "help": ["  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]", "                               --output <file>: the text report goes to the file; with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).", "                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)", "                               --rule <id>[,<id>...]: RUN and report ONLY those rules (1.51.1: a comma list narrows execution and derives no --shared-db peers, as one id does); naming an OFF-by-default rule opts it in", "                               for the run (no --enable needed) -- the same contract as lint and lint-project.", "                               --quiet: suppress per-file progress lines written to stderr", "                               on a --db the manifest does not register (a copy), the dl:shared marker-peer pass is skipped with one stderr note and sibling DBs resolve to same-named copies beside --db (else could not check); --shared-db <db> still runs (1.51.1).", "                               --project <.dproj|.dpr>: report ONLY on the units that project compiles", "                               (its compile closure + their .dfm siblings). Use it when one folder holds", "                               several projects, or when the DB spans more than the project you are reviewing.", "                               taint-sql-injection / taint-command-injection / taint-path-traversal (store-backed): walk the index's data_flows", "                               facts from a catalogued source to a sink; catalogues rules\\taint-sources|sinks|propagators.json, extended by the", "                               \"taint\" object of drag-lint-lint.json: sources sinks propagators sanitizers disable max_depth lib_depth max_rounds", "                               follow_ambiguous weak_receiver_regex weak_severity_drop max_paths_per_sink second_order.", "                               --fix [--apply]: AUTOFIX every fixable finding across the whole project.", "                               DRY RUN WITHOUT --apply. This is what the Structure form's right-click", "                               \"Fix all in project\" runs. It can rewrite many files at once -- dry-run first."]
+          "help": ["  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget]", "                               --output <file>: the text report goes to the file (default lint-report-YYYYMMDD.txt beside --project, else beside the DB); with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).", "                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)", "                               --rule <id>[,<id>...]: RUN and report ONLY those rules (1.51.1: a comma list narrows execution and derives no --shared-db peers, as one id does); naming an OFF-by-default rule opts it in", "                               for the run (no --enable needed) -- the same contract as lint and lint-project.", "                               --quiet: suppress per-file progress lines written to stderr", "                               on a --db the manifest does not register (a copy), the dl:shared marker-peer pass is skipped with one stderr note and sibling DBs resolve to same-named copies beside --db (else could not check); --shared-db <db> still runs (1.51.1).", "                               --project <.dproj|.dpr>: report ONLY on the units that project compiles", "                               (its compile closure + their .dfm siblings). Use it when one folder holds", "                               several projects, or when the DB spans more than the project you are reviewing.", "                               taint-sql-injection / taint-command-injection / taint-path-traversal (store-backed): walk the index's data_flows", "                               facts from a catalogued source to a sink; catalogues rules\\taint-sources|sinks|propagators.json, extended by the", "                               \"taint\" object of drag-lint-lint.json: sources sinks propagators sanitizers disable max_depth lib_depth max_rounds", "                               follow_ambiguous weak_receiver_regex weak_severity_drop max_paths_per_sink second_order.", "                               --fix [--apply]: AUTOFIX every fixable finding across the whole project.", "                               DRY RUN WITHOUT --apply. This is what the Structure form's right-click", "                               \"Fix all in project\" runs. It can rewrite many files at once -- dry-run first."]
         }
       ],
       "audience": "both",
@@ -4079,7 +4647,7 @@
         {
           "type": "cli",
           "verb": "format",
-          "usage": "drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff] (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5))",
+          "usage": "drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff] (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5). Exit 0 also when YADF declines the file (its content guard leaves it unchanged; prints \"Declined: <file>\", not a failure))",
           "flags": [
             {
               "name": "--yadf-path",
@@ -4093,7 +4661,7 @@
             }
           ],
           "helpOrder": 72,
-          "help": ["  drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff]   (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5))"]
+          "help": ["  drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff]   (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5). Exit 0 also when YADF declines the file (its content guard leaves it unchanged; prints \"Declined: <file>\", not a failure))"]
         },
         {
           "type": "cli",
@@ -4153,10 +4721,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
-        "surfaceHash": "0ad2c2bda34030bc8dd66ef06706d631d871617d3e0308ceeb28ff100f32c280"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "6c51d4e1b261538df4fe390fba9ba2391418498f7f1f6c66e4399161d62f3b0b"
       }
     },
     {
@@ -4205,10 +4773,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
-        "surfaceHash": "3dd753659ed7f83d128677ae6575fa52915c2d61bd6b5d2195c71be4fd490970"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "ab9975943aacd02824debac75e63121fdbe67dec1faed4360a0eae9722e08623"
       }
     },
     {
@@ -4230,10 +4798,10 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-10-27",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.36.0-alpha",
-        "surfaceHash": "8ea04f384d04eaf3edaec969f1dfad83730fe418e900b4b5ddb76124c85923c3"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "60804e6714e32635768d09b27014567bb22ee6302f5794f4d63812b9437b04dd"
       }
     },
     {
@@ -4464,6 +5032,30 @@
       }
     },
     {
+      "id": "v152-unconn-rules",
+      "title": "Lint rules unconnected-control and hanging-handler",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "Warns on a form control that nothing wires and on an event-handler-shaped method that no form binds and no code assigns or calls",
+      "intro": "Read this to see which controls and handlers the two form rules report, what counts as a connection, and how the index widens the evidence beyond the unit.",
+      "wikiPage": "v152-unconn-rules",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "drag-lint lint <file.pas> --rule unconnected-control,hanging-handler --db <index.sqlite>"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-17",
+        "by": "alexanderl",
+        "build": "1.51.1-alpha"
+      }
+    },
+    {
       "id": "lint-rules",
       "title": "Lint rules",
       "group": "linting",
@@ -4477,7 +5069,7 @@
         {
           "type": "cli",
           "verb": "rules",
-          "usage": "drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it)",
+          "usage": "drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rule <id>[,<id>]] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance` and needs_compiler / compat_since / target_active; --standard lists only rules labelled under it; --rule <id>[,<id>] lists only those rules, an unknown id is exit 2)",
           "flags": [
             {
               "name": "--json"
@@ -4493,9 +5085,21 @@
             {
               "name": "--rules-dir",
               "arg": "<dir>"
+            },
+            {
+              "name": "--project",
+              "arg": "<X.dproj>"
+            },
+            {
+              "name": "--rule",
+              "arg": "<id>"
+            },
+            {
+              "name": "--target-compiler",
+              "arg": "<ver|auto>"
             }
           ],
-          "help": ["  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]]   - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance` and needs_compiler / compat_since / target_active; --standard lists only rules labelled under it)"]
+          "help": ["  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rule <id>[,<id>]] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]]   - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance` and needs_compiler / compat_since / target_active; --standard lists only rules labelled under it; --rule <id>[,<id>] lists only those rules, an unknown id is exit 2)"]
         }
       ],
       "audience": "both",
@@ -4517,10 +5121,10 @@
       },
       "family": "lint-rules",
       "verified": {
-        "date": "2026-11-08",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.50.0-alpha",
-        "surfaceHash": "705db8e60b73cfa9130304fc465e5d099d54877dbc5b0294285efffb6c50d9f0"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "60804e6714e32635768d09b27014567bb22ee6302f5794f4d63812b9437b04dd"
       }
     },
     {
@@ -4657,10 +5261,41 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "8669b8cdce32045d3abe557243097a7bc4dd21a96f8c0bd8adc538419d4f755e"
+      }
+    },
+    {
+      "id": "v152-atlb-rules",
+      "title": "member-could-be-private lint rule (lane ATLB)",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "Hint (OFF in 1.52) on a public member used only in its own unit; published, virtual, interface, attributed and shared-unit members stay silent",
+      "intro": "Read this to see when member-could-be-private reports a public member, which members it never touches, and why component-create-without-override was refused in favour of hides-ancestor-virtual.",
+      "wikiPage": "v152-atlb-rules",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "usage": "drag-lint lint-all --rule member-could-be-private --db <db> (default OFF in 1.52; naming it with --rule runs it, category project-wide, hint)",
+          "flags": [
+            {
+              "name": "--rule",
+              "arg": "<id>"
+            }
+          ]
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-18",
+        "by": "ENGINE",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "b47eb66bf0cb814b73ab6883a63435ae8219a7ec857a578350c86dfa85120e65"
       }
     },
     {
@@ -4743,7 +5378,7 @@
       "owner": "ENGINE",
       "status": "shipped",
       "since": "1.46.0-alpha",
-      "summary": "Project lint rule, OFF by default: a class-typed parameter that an ancestor type could carry, proved by the narrow-param plan",
+      "summary": "Project lint rule, ON since 1.52 (warning, autofix): a class-typed parameter that an ancestor type could carry, proved by the narrow-param plan",
       "intro": "Read this to see what parameter-type-too-wide reports and how it relates to narrow-param. It runs in lint-all and lint-project over a project index.",
       "wikiPage": "parameter-type-too-wide",
       "surfaces": [
@@ -4755,10 +5390,122 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-07",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.46.0-alpha",
-        "surfaceHash": "c86e88b99bad3d1352c6b7e19e7394f26a185b860c009bb97ac366379a830ab4"
+        "build": "1.51.1-alpha",
+        "surfaceHash": "b47eb66bf0cb814b73ab6883a63435ae8219a7ec857a578350c86dfa85120e65"
+      }
+    },
+    {
+      "id": "v152-ptw",
+      "title": "parameter-type-too-wide ON by default, with an autofix",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "parameter-type-too-wide ships ON as a warning in lint-all / lint-project with an autofix that retypes the parameter through the compile gate",
+      "intro": "Read this when lint-all reports parameter-type-too-wide and you want to fix it, or want to know why a similar routine is not reported. The rule reports a class-typed parameter whose routine uses only members an ancestor declares; it skips library code, overrides and virtual methods, interface methods, published and form-bound event handlers and routines taken as a method pointer. The fix re-proves the finding, retypes both routine headers, adds the ancestor's unit to uses when needed, and with --compile-gate keeps the edit only when the project still builds.",
+      "wikiPage": "v152-ptw",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "example": "drag-lint lint-all --db <project.sqlite> --rule parameter-type-too-wide"
+        },
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "drag-lint lint <unit.pas> --db <project.sqlite> --rule parameter-type-too-wide --fix --fix-rule parameter-type-too-wide --apply --project <X.dproj> --compile-gate",
+          "usage": "drag-lint lint <unit.pas> --db <db> --rule parameter-type-too-wide --fix --fix-rule parameter-type-too-wide [--fix-line <n>] --apply --project <X.dproj> [--compile-gate | --no-compile-gate] [--library-db <lib>] [--no-backup]",
+          "flags": [
+            {
+              "name": "--fix-rule",
+              "arg": "parameter-type-too-wide"
+            },
+            {
+              "name": "--fix-line",
+              "arg": "<n>"
+            },
+            {
+              "name": "--compile-gate"
+            }
+          ]
+        }
+      ],
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "Which parameters in my project could take a narrower type?",
+          "command": "drag-lint lint-all --db <project.sqlite> --rule parameter-type-too-wide"
+        },
+        {
+          "ask": "How do I narrow one reported parameter and keep the project building?",
+          "command": "drag-lint lint <unit.pas> --db <project.sqlite> --rule parameter-type-too-wide --fix --fix-rule parameter-type-too-wide --fix-line <n> --apply --project <X.dproj> --compile-gate"
+        },
+        {
+          "ask": "Why is my event handler not reported by parameter-type-too-wide?",
+          "command": "drag-lint narrow-param --routine <QName> --plan --db <project.sqlite>"
+        }
+      ],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-11-17",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-11-18",
+        "by": "ENGINE",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "a9f2e970840854267896dd1535c929a877a8a368528e641d44496181d885d0e1"
+      }
+    },
+    {
+      "id": "v152-per-rule-budget",
+      "title": "Per-rule time budget in the rule frame (rule-skipped-budget)",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "A v151/v152 rule slower than rule_time_budget_ms (2000 ms) on a file is skipped there with one rule-skipped-budget note; index warns near the parse limit",
+      "intro": "Read this when a lint run shows a rule-skipped-budget note, when you want to change or turn off the per-rule time budget, or when index warns that a unit is near the parse limit.",
+      "wikiPage": "rule-time-budget",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint",
+          "usage": "drag-lint lint <file.pas> [--config <lint.json>] [--no-budget] (lint config key rule_time_budget_ms, default 2000 ms per rule per file, 0 = off; --no-budget or DRAGLINT_NO_BUDGET=1 = off; an overrunning rule is skipped for the file with one rule-skipped-budget note: category other, info, on)",
+          "flags": [
+            {
+              "name": "--config",
+              "arg": "<file>"
+            },
+            {
+              "name": "--no-budget"
+            }
+          ]
+        },
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "usage": "drag-lint lint-all --db <file.sqlite> [--no-budget] (same budget; one \"rule budget:\" note line lists the skipped rules of the run)",
+          "flags": [
+            {
+              "name": "--no-budget"
+            }
+          ]
+        },
+        {
+          "type": "cli",
+          "verb": "index",
+          "usage": "drag-lint index --project <X.dproj> --db <file.sqlite> (prints a WARN line for a unit within 10% below settings.maxParseFileKB, default 2048 KB)"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-17",
+        "by": "ENGINE",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "64ada12f82122fda3d58a94be503c63f416b6084b863cc9b213ca279b3c6c49b"
       }
     },
     {
@@ -4929,10 +5676,62 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
-        "surfaceHash": "1d22ae2d34cfdb987bfc0783ee41fc8d462df481401d98ae849e6d00856ae193"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "a20f810bbac78e63f0cab47d56e6cce5ffb7468a86ec6fe2a282ca4cf93a97f7"
+      }
+    },
+    {
+      "id": "v152-atla-rules",
+      "title": "Reserved words as names, implicit package imports, contract-unit globs",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "reserved-word-identifier and implicit-package-import rules; contractUnits globs in drag-lint.json for contract-unit-declares-class",
+      "intro": "Read this to see what the two rules new in 1.52 report, how contract units can be named by glob, and why noreturn-returns is not in 1.52.",
+      "wikiPage": "v152-atla-rules",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "drag-lint lint <unit.pas> --rule reserved-word-identifier"
+        },
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "example": "drag-lint lint-all --db <package.sqlite> --project <Package.dproj> --rule implicit-package-import"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-17",
+        "by": "ENGINE",
+        "build": "1.52.0-alpha"
+      }
+    },
+    {
+      "id": "review-marker-remeasured",
+      "title": "review-marker-remeasured hint",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.51.1-alpha",
+      "summary": "A dl:ok on a routine-metric rule stamped under an older hash still suppresses its finding; a hint names the allow command that re-stamps it",
+      "intro": "Read this when lint shows review-marker-remeasured: the marker is still valid (routine unchanged, only the hash version moved) and one allow --apply re-stamps it.",
+      "wikiPage": "Review-Marker-Remeasured",
+      "surfaces": [
+        {
+          "type": "workflow",
+          "doc": "docs\\wiki\\Review-Marker-Remeasured.md"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-17",
+        "by": "alexanderl",
+        "build": "1.51.1-alpha"
       }
     },
     {
@@ -5121,7 +5920,7 @@
         {
           "type": "cli",
           "verb": "lint-all",
-          "usage": "drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]",
+          "usage": "drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget] [--no-stand-down]",
           "flags": [
             {
               "name": "--db",
@@ -5140,7 +5939,8 @@
             },
             {
               "name": "--output",
-              "arg": "<report.txt>"
+              "arg": "<report.txt>",
+              "summary": "default lint-report-YYYYMMDD.txt beside --project, else beside the DB"
             },
             {
               "name": "--json"
@@ -5157,6 +5957,10 @@
             },
             {
               "name": "--no-preprocess"
+            },
+            {
+              "name": "--no-stand-down",
+              "summary": "measurement runs: open no stand-down channel, so a maintenance stand-down from another process cannot cut the run to PARTIAL (exit 4)"
             },
             {
               "name": "--shared-db",
@@ -5270,10 +6074,10 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-10-27",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.36.0-alpha",
-        "surfaceHash": "a7084e4910bb01acfceb7aef57ab1752a6c96e50e2e1c4452f13acb29a80a3e0"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "b47eb66bf0cb814b73ab6883a63435ae8219a7ec857a578350c86dfa85120e65"
       }
     },
     {
@@ -5319,10 +6123,10 @@
       "audience": "both",
       "related": ["autofix-wave", "compat-downgrade-fixes"],
       "verified": {
-        "date": "2026-11-05",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.43.0-alpha",
-        "surfaceHash": "f7554479d437ae3944643487291327f5b17d22fff01963fb1b29494b4655802e"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "7be37aec9068efc99cc8a8069bb0b2a6cbe0b2af295f0c6a99e9014a3876feb7"
       }
     },
     {
@@ -5501,7 +6305,7 @@
         {
           "type": "cli",
           "verb": "lint-all",
-          "usage": "drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]",
+          "usage": "drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget] [--no-stand-down]",
           "flags": [
             {
               "name": "--db",
@@ -5611,10 +6415,10 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-11-04",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.42.0-alpha",
-        "surfaceHash": "fa6a2d2bc4917ef8878650f59b975a506908ccb8e156d67e06782a97f8b64a7c"
+        "build": "1.51.1-alpha",
+        "surfaceHash": "c0ca6fd10b7341e045f4c8447318622d1622f9eef7027ea85dd110f1c4100bc1"
       }
     },
     {
@@ -5643,6 +6447,41 @@
         "by": "ENGINE",
         "build": "1.51.0-alpha",
         "surfaceHash": "4cd8494f26078b818944a48e30ae21b811bc3d61b156974a04490a796c867192"
+      }
+    },
+    {
+      "id": "v152-proj2",
+      "title": "unit-used-by-no-unit rule; unit-not-in-dpr outside the project roots",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "Warns (ON) on a unit only the .dpr lists that nothing reaches; a form counts only when opened. unit-not-in-dpr also reports shared-folder units",
+      "intro": "Read this to see when unit-used-by-no-unit warns, which self-registering units it leaves alone, why a form with an initialization section still fires, and how lint-all --project now reports shared-folder units missing from the project files.",
+      "wikiPage": "v152-proj2",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "usage": "drag-lint lint-all --db <file.sqlite> [--project <file.dproj>] [--rule unit-used-by-no-unit|unit-not-in-dpr] (unit-used-by-no-unit: default ON, category project-wide, warning, lint-all only; exempt: initialization section or container registration, a form only when the program code or a FindClass('TName') string opens it; unit-not-in-dpr: closure units outside the project roots reported on the .dpr, with --project)",
+          "flags": [
+            {
+              "name": "--rule",
+              "arg": "<id>"
+            },
+            {
+              "name": "--project",
+              "arg": "<file.dproj>"
+            }
+          ]
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-17",
+        "by": "ENGINE",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "2d0c23565c009383cfcd928a0869cb75532a87f1d17ce233d0603d793354b85c"
       }
     },
     {
@@ -5934,9 +6773,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "30e073867914380c13da25a124d8cc0edd5676e67b1eae4c1595f69c5ce00fcc"
       }
     },
@@ -6141,7 +6980,7 @@
         {
           "type": "cli",
           "verb": "document",
-          "usage": "drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment",
+          "usage": "drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--format json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment",
           "flags": [
             {
               "name": "--qname",
@@ -6204,7 +7043,7 @@
         {
           "type": "cli",
           "verb": "document",
-          "usage": "drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment",
+          "usage": "drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--format json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment",
           "flags": [
             {
               "name": "--qname",
@@ -6234,13 +7073,17 @@
         {
           "ask": "How do I document every public declaration of the project?",
           "command": "drag-lint document --project <p.dproj> --apply"
+        },
+        {
+          "ask": "document --project warns or refuses because files it reads facts from changed since indexing -- what now?",
+          "command": "drag-lint document --project <p.dproj> --apply --reindex"
         }
       ],
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
-        "surfaceHash": "ca0c5daf49b9c71753c73c96c5fc474b4ef19e81e432084d1d2a396e3548b15f"
+        "build": "1.51.1-alpha",
+        "surfaceHash": "732a633c865239c7c3f7fcf11b5b05e3844bead505ae17120dad6e4ea47ad8bd"
       }
     },
     {
@@ -6263,7 +7106,7 @@
         {
           "type": "cli",
           "verb": "document",
-          "usage": "drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment",
+          "usage": "drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--format json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment",
           "flags": [
             {
               "name": "--qname",
@@ -6316,7 +7159,7 @@
         {
           "type": "cli",
           "verb": "document-all",
-          "usage": "drag-lint document-all [--profile <name>] [--stubs|--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH] - document every public decl in every indexed unit (no project scope)",
+          "usage": "drag-lint document-all [--profile <name>] [--stubs|--apply|--json|--format json|--no-backup|--include-accessors|--document-third-party|--migrate-pure] [--db PATH] - document every public decl in every indexed unit (no project scope)",
           "flags": [
             {
               "name": "--stubs"
@@ -6342,7 +7185,7 @@
             }
           ],
           "helpOrder": 55,
-          "help": ["  drag-lint document-all [--profile <name>] [--stubs|--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]               - document every public decl in every indexed unit (no project scope)", "     batch modes (--unit/--project/document-all) default facts-only: an empty tag is never written, <param> never gets a skeleton, and <summary> appears only when harvested from a nearby // comment; add --stubs to keep a fresh comment that has no facts block", "     batch modes also skip TRIVIAL Get*/Set* property accessors (impl body <= docs.accessor_trivial_max_lines, default 2) by default; add --include-accessors to document them too", "  drag-lint document --unit <file.pas> --strip [--apply|--no-backup] [--db PATH]   - REMOVE drag-lint-generated doc tags/blocks (marker-keyed; hand-written docs untouched)", "     --strip is also accepted on --qname/--project/document-all (strips just that symbol's doc region, or every file in scope); mutually exclusive with --stubs", "     <seealso cref> links to related symbols (callees + siblings) are emitted BY DEFAULT in every document mode;", "     --no-seealso turns them off. (--seealso is still accepted and does nothing -- it was the opt-in before it became the default.)", "     add --since [--base-dir <repoRoot>] to emit a git-derived <since> date; degrades silently when git is absent", "     @deprecated is auto-detected from the Pascal 'deprecated' directive on the decl -- no flag needed", "     --migrate-pure: regenerate a stored legacy <para>Pure</para> fact (purity v1). Without it a block whose ONLY difference is that line is left byte-identical, and doc-drift agrees", "     PROJECT TAGS: on a block reconciled across projects (dl:shared, or holding facts this index cannot see) the inbound entries -- Called from:, Used by:, Used in units:, Covered by: --", "       carry the projects that rendered them: Called from: [DataCopy,DataCopyTests]uX.Foo (uX.pas). A run adds/removes only ITS tag (the project's name, recorded in the index;", "       the DB base name for indexes built before 1.18.0); an entry goes when its set empties; untagged legacy entries keep the old rules"]
+          "help": ["  drag-lint document-all [--profile <name>] [--stubs|--apply|--json|--format json|--no-backup|--include-accessors|--document-third-party|--migrate-pure] [--db PATH]               - document every public decl in every indexed unit (no project scope)", "     batch modes (--unit/--project/document-all) default facts-only: an empty tag is never written, <param> never gets a skeleton, and <summary> appears only when harvested from a nearby // comment; add --stubs to keep a fresh comment that has no facts block", "     batch modes also skip TRIVIAL Get*/Set* property accessors (impl body <= docs.accessor_trivial_max_lines, default 2) by default; add --include-accessors to document them too", "  drag-lint document --unit <file.pas> --strip [--apply|--no-backup] [--db PATH]   - REMOVE drag-lint-generated doc tags/blocks (marker-keyed; hand-written docs untouched)", "     --strip is also accepted on --qname/--project/document-all (strips just that symbol's doc region, or every file in scope); mutually exclusive with --stubs", "     <seealso cref> links to related symbols (callees + siblings) are emitted BY DEFAULT in every document mode;", "     --no-seealso turns them off. (--seealso is still accepted and does nothing -- it was the opt-in before it became the default.)", "     add --since [--base-dir <repoRoot>] to emit a git-derived <since> date; degrades silently when git is absent", "     @deprecated is auto-detected from the Pascal 'deprecated' directive on the decl -- no flag needed", "     --migrate-pure: regenerate a stored legacy <para>Pure</para> fact (purity v1). Without it a block whose ONLY difference is that line is left byte-identical, and doc-drift agrees", "     PROJECT TAGS: on a block reconciled across projects (dl:shared, or holding facts this index cannot see) the inbound entries -- Called from:, Used by:, Used in units:, Covered by: --", "       carry the projects that rendered them: Called from: [DataCopy,DataCopyTests]uX.Foo (uX.pas). A run adds/removes only ITS tag (the project's name, recorded in the index;", "       the DB base name for indexes built before 1.18.0); an entry goes when its set empties; untagged legacy entries keep the old rules"]
         },
         {
           "type": "ide-menu",
@@ -6366,6 +7209,41 @@
         "by": "ENGINE",
         "build": "1.36.0-alpha",
         "surfaceHash": "ff5d4373a045f82f9c96f5283a5102ad2255f57f6709969e5cb7e2f5fbd70209"
+      }
+    },
+    {
+      "id": "v152-docpol",
+      "title": "Documentation policy: missing-doc, doc-placeholder, doc-malformed-summary",
+      "group": "documentation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "missing-doc covers DFM-bound handlers with code; doc-placeholder (ON, hint) flags template summaries; doc-malformed-summary (OFF) flags declaration-like ones",
+      "intro": "Read this to see which declarations missing-doc expects a doc comment on after 1.52 (a bound Button1Click with code now needs one, an empty one does not), and how doc-placeholder and doc-malformed-summary catch summaries that are not descriptions.",
+      "wikiPage": "v152-docpol",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "usage": "drag-lint lint-all --db <db> [--rule missing-doc|doc-placeholder|doc-malformed-summary] (documentation rules: missing-doc OFF by default, document all real code, an empty DFM-bound handler is exempt; doc-placeholder ON hint; doc-malformed-summary OFF hint)",
+          "flags": [
+            {
+              "name": "--db",
+              "arg": "<db>"
+            },
+            {
+              "name": "--rule",
+              "arg": "<id>"
+            }
+          ]
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-18",
+        "by": "ENGINE",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "b47eb66bf0cb814b73ab6883a63435ae8219a7ec857a578350c86dfa85120e65"
       }
     },
     {
@@ -6455,9 +7333,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "3c98eb50173c538cfb8819db70eb6da69c01c88d21d7c7bbdd53e3223b0aab69"
       }
     },
@@ -6481,7 +7359,7 @@
         {
           "type": "cli",
           "verb": "allow",
-          "usage": "drag-lint allow <file> --fix-line <L> --fix-rule <id> [--apply] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>] (record a dl:ok review of ONE finding; dry-run without --apply; the lint options decide which findings the line has)",
+          "usage": "drag-lint allow <file> --fix-line <L> --fix-rule <id> [--apply] [--reason \"<text>\"] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>] (record a dl:ok review of ONE finding; dry-run without --apply; --reason replaces the marker's reason, e.g. \"REVIEWED <yyyy-mm-dd> <why>\" -- without it a re-hash of a stale marker drops its REVIEWED stamp; the lint options decide which findings the line has)",
           "flags": [
             {
               "name": "--fix-line",
@@ -6527,10 +7405,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
-        "surfaceHash": "229cbc7819d98e8ca8685ed2fcc0f223a39ca32062d7e73e3b7b5ad211c2756f"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "d5e684ded4a9c353351fda5aeeafce4a8ac0e4033e495ad1f2eb0db2c23862d0"
       }
     },
     {
@@ -6552,7 +7430,7 @@
         {
           "type": "cli",
           "verb": "allow",
-          "usage": "drag-lint allow <file> --fix-line <L> --fix-rule <id> [--apply] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>] (record a dl:ok review of ONE finding; dry-run without --apply; the lint options decide which findings the line has)",
+          "usage": "drag-lint allow <file> --fix-line <L> --fix-rule <id> [--apply] [--reason \"<text>\"] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>] (record a dl:ok review of ONE finding; dry-run without --apply; --reason replaces the marker's reason, e.g. \"REVIEWED <yyyy-mm-dd> <why>\" -- without it a re-hash of a stale marker drops its REVIEWED stamp; the lint options decide which findings the line has)",
           "flags": [
             {
               "name": "--fix-line",
@@ -6564,6 +7442,10 @@
             },
             {
               "name": "--apply"
+            },
+            {
+              "name": "--reason",
+              "arg": "<text>"
             },
             {
               "name": "--rules-dir",
@@ -6589,7 +7471,7 @@
             }
           ],
           "helpOrder": 16,
-          "help": ["  drag-lint allow <file>       --fix-line <L> --fix-rule <id> [--apply] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>]   (record a dl:ok review of ONE finding; dry-run without --apply; the lint options decide which findings the line has)"]
+          "help": ["  drag-lint allow <file>       --fix-line <L> --fix-rule <id> [--apply] [--reason \"<text>\"] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>]   (record a dl:ok review of ONE finding; dry-run without --apply; --reason replaces the marker's reason, e.g. \"REVIEWED <yyyy-mm-dd> <why>\" -- without it a re-hash of a stale marker drops its REVIEWED stamp; the lint options decide which findings the line has)"]
         }
       ],
       "audience": "both",
@@ -6610,10 +7492,10 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-11-07",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.46.0-alpha",
-        "surfaceHash": "743633f9c86c0e8c21028de9a717befee3c186bfa8a97c46128007873b4cf949"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "52a7f09491cc264f7577e47b54319054cc6db836d3def4229c2634b348372a50"
       }
     },
     {
@@ -6693,7 +7575,7 @@
         {
           "type": "cli",
           "verb": "create-enum-helper",
-          "usage": "drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--methods <csv>] [--tostring rtti|case] [--db PATH] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] - generate a Byte-family record helper for an enum",
+          "usage": "drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--no-compile-gate] [--methods <csv>] [--tostring rtti|case] [--db PATH] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] - generate a Byte-family record helper for an enum",
           "flags": [
             {
               "name": "--project",
@@ -6725,6 +7607,9 @@
               "name": "--no-backup"
             },
             {
+              "name": "--no-compile-gate"
+            },
+            {
               "name": "--methods",
               "arg": "<csv>"
             },
@@ -6737,7 +7622,7 @@
             }
           ],
           "helpOrder": 57,
-          "help": ["  drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--methods <csv>] [--tostring rtti|case] [--db PATH] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]  - generate a Byte-family record helper for an enum", "     --methods tobyte,frombyte,tointeger,frominteger,tostring,fromstring (default: all 6); --tostring rtti (default, RTTI GetEnumName) or case (explicit case statement)", "     idempotent: a helper for the enum already indexed anywhere -> action=exists, no edit"]
+          "help": ["  drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--no-compile-gate] [--methods <csv>] [--tostring rtti|case] [--db PATH] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]  - generate a Byte-family record helper for an enum", "     --methods tobyte,frombyte,tointeger,frominteger,tostring,fromstring (default: all 6); --tostring rtti (default, RTTI GetEnumName) or case (explicit case statement)", "     idempotent: a helper for the enum already indexed anywhere -> action=exists, no edit"]
         },
         {
           "type": "ide-menu",
@@ -6853,6 +7738,142 @@
       }
     },
     {
+      "id": "v152-extract-constant",
+      "title": "Extract constant (manual fix for magic literals)",
+      "group": "refactoring",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "Turns one number or string literal into a named constant and replaces every occurrence in the unit; manual fix of the magic-literal rules",
+      "intro": "Read this when a literal should become a named constant. Give the line (and the column when the line holds several literals) and the name; without --name the plan proposes one. Occurrences inside other const declarations, attributes, uses clauses, or in a context of a different declared type are left and listed on stderr. The fix is risky and manual only: a batch --fix never applies it.",
+      "wikiPage": "v152-extract-constant",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "drag-lint lint --in <F> --db <db> --enable extract-constant --fix --fix-rule extract-constant --fix-line <n> --col <c> --name <ident> --apply",
+          "usage": "drag-lint lint --in <F> [--db <db>] --enable <rule> --fix --fix-rule <rule> --fix-line <n> [--col <c>] [--name <ident>] [--apply] [--project <X.dproj>] - extract the literal at line n (column c) into a named constant and replace every occurrence in the unit; <rule> = extract-constant (any number or string literal, OFF by default, reports only when its fix is asked for), magic-literal, large-magic-number or case-magic-numbers; risky, manual only (a batch --fix withholds it); report on stderr",
+          "flags": [
+            {
+              "name": "--fix-rule",
+              "arg": "<rule>"
+            },
+            {
+              "name": "--fix-line",
+              "arg": "<n>"
+            },
+            {
+              "name": "--col",
+              "arg": "<c>"
+            },
+            {
+              "name": "--name",
+              "arg": "<ident>"
+            },
+            {
+              "name": "--apply"
+            },
+            {
+              "name": "--project",
+              "arg": "<X.dproj>"
+            }
+          ]
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Extract Constant (literal at cursor)...",
+          "steps": ["Put the caret on a number or string literal in the editor", "drag-lint > Extract Constant (literal at cursor)...", "Edit the proposed name in the prompt and press OK; the engine report (replaced and left occurrences) is shown"]
+        },
+        {
+          "type": "ide-context",
+          "host": "Editor",
+          "caption": "drag-lint > Extract Constant (literal at cursor)...",
+          "steps": ["Put the caret on a number or string literal", "Right-click in the editor, open the drag-lint submenu and choose Extract Constant (literal at cursor)...", "Edit the proposed name in the prompt and press OK"]
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-17",
+        "by": "alexanderl",
+        "build": "1.51.1-alpha"
+      }
+    },
+    {
+      "id": "v152-fixer-compile-gate",
+      "title": "extract-method and create-enum-helper through the compile gate by default",
+      "group": "refactoring",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "extract-method / create-enum-helper --apply build the project before and after the write; no project found = REFUSED, --no-compile-gate writes unbuilt",
+      "intro": "Read this when extract-method or create-enum-helper refuses with REFUSED (no-project) or (dirty-baseline), or when you want to know which project they build. Since 1.52 --apply goes through the compile gate without --project: the project is --project, else the project a DB at `<dir>\\_D-RAG\\<base>.sqlite` belongs to, else the nearest .dproj (walking up from the unit's folder) whose .dproj / .dpr names the unit. A project that does not build is refused; a fix that breaks the build is rolled back. No project = refused (exit 2).",
+      "wikiPage": "fixer-compile-gate",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "extract-method",
+          "example": "drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> --apply",
+          "usage": "drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] [--no-compile-gate] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] - pull a statement run into a new method",
+          "flags": [
+            {
+              "name": "--apply"
+            },
+            {
+              "name": "--project",
+              "arg": "<X.dproj>"
+            },
+            {
+              "name": "--no-compile-gate"
+            }
+          ]
+        },
+        {
+          "type": "cli",
+          "verb": "create-enum-helper",
+          "example": "drag-lint create-enum-helper --qname <TEnum> --db <db> --apply",
+          "usage": "drag-lint create-enum-helper --qname <TEnum> --db <db> --apply [--project <X.dproj> | --no-compile-gate] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-backup]",
+          "flags": [
+            {
+              "name": "--apply"
+            },
+            {
+              "name": "--project",
+              "arg": "<X.dproj>"
+            },
+            {
+              "name": "--no-compile-gate"
+            }
+          ]
+        }
+      ],
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "Why did extract-method refuse with REFUSED (no-project)?",
+          "command": "drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> --apply --project <X.dproj>"
+        },
+        {
+          "ask": "How do I extract a method without building the project?",
+          "command": "drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> --apply --no-compile-gate"
+        },
+        {
+          "ask": "Which project does create-enum-helper build before it writes?",
+          "command": "drag-lint create-enum-helper --qname <TEnum> --db <db> --apply"
+        }
+      ],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-11-17",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-11-17",
+        "by": "ENGINE",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "80cd3e623aff5e4de7070f83bb054f67e1405d8984724211a886e79d01d0aec8"
+      }
+    },
+    {
       "id": "extract-method",
       "title": "extract-method",
       "group": "refactoring",
@@ -6866,7 +7887,7 @@
         {
           "type": "cli",
           "verb": "extract-method",
-          "usage": "drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] - pull a statement run into a new method",
+          "usage": "drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] [--no-compile-gate] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] - pull a statement run into a new method",
           "flags": [
             {
               "name": "--in",
@@ -6908,10 +7929,13 @@
             },
             {
               "name": "--no-backup"
+            },
+            {
+              "name": "--no-compile-gate"
             }
           ],
           "helpOrder": 61,
-          "help": ["  drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]  - pull a statement run into a new method"]
+          "help": ["  drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] [--no-compile-gate] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]  - pull a statement run into a new method"]
         },
         {
           "type": "ide-menu",
@@ -6932,10 +7956,45 @@
       ],
       "notes": "issued by the plugin from InvokeExtractMethod (DragLint.Plugin.Keyboard.pas)",
       "verified": {
-        "date": "2026-11-07",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.46.0-alpha",
-        "surfaceHash": "d99567feb498e6f2a0adc2759a647f525cfc667d7d776caabe0b882c938e0f80"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "bbb22fa0a9ca1359963ff2c3f9886abdc7b3f918e0d47fe2d8dd16ec4e58a76a"
+      }
+    },
+    {
+      "id": "v152-vsfix",
+      "title": "Fix with drag-lint (VS Code and RAD Studio)",
+      "group": "refactoring",
+      "owner": "LSP",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "Fix the finding at the cursor, all of one rule, or every fixable finding in a file: VS Code code actions and menus, plus a RAD Studio menu entry",
+      "intro": "Read this when you want drag-lint to apply its own deterministic fix instead of editing by hand. In VS Code, use the light bulb (`Fix: <rule>`, `drag-lint: fix all <rule> in file`, `drag-lint: fix all fixable in file`), right-click in the editor or on a Problems entry and choose Fix with drag-lint, or let editor.codeActionsOnSave run source.fixAll.drag-lint. In RAD Studio, put the caret on the finding, right-click in the editor, open the drag-lint submenu and choose Fix with drag-lint (finding at cursor).",
+      "wikiPage": "v152-vsfix",
+      "surfaces": [
+        {
+          "type": "lsp",
+          "method": "textDocument/codeAction"
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Code Quality > Fix with drag-lint (finding at cursor)",
+          "steps": ["Put the caret on a line that shows a drag-lint finding", "Choose drag-lint > Code Quality > Fix with drag-lint (finding at cursor)", "Answer Yes to apply the fix, No to preview it"]
+        },
+        {
+          "type": "ide-context",
+          "host": "Editor",
+          "caption": "drag-lint > Fix with drag-lint (finding at cursor)",
+          "steps": ["Put the caret on a line that shows a drag-lint finding", "Right-click in the editor, open the drag-lint submenu and choose Fix with drag-lint (finding at cursor)", "Answer Yes to apply the fix, No to preview it"]
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-17",
+        "by": "LSP",
+        "build": "1.51.1-alpha",
+        "surfaceHash": "385756770e990c98bb4e3956a564952029cb8600537cbc43385b4c769ba12fba"
       }
     },
     {
@@ -7114,9 +8173,9 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-14",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.51.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "784b27b33ecdaddb5f47a51ff08ffe78033e768a302cc2829a6add2553f145c8"
       }
     },
@@ -7197,9 +8256,9 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-08",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.50.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "6aa57b8d947b01bf7871f6b3bbc8c7f9f9029f29b76e86d178c3e89f4a9aaac2"
       }
     },
@@ -7524,6 +8583,21 @@
             {
               "name": "--db",
               "arg": "<db>"
+            },
+            {
+              "name": "--platform",
+              "arg": "<p>"
+            },
+            {
+              "name": "--rsvars",
+              "arg": "<bat>"
+            },
+            {
+              "name": "--build-timeout",
+              "arg": "<s>"
+            },
+            {
+              "name": "--no-compile"
             }
           ],
           "helpOrder": 52,
@@ -7547,9 +8621,9 @@
         }
       ],
       "verified": {
-        "date": "2026-11-14",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.51.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "2ad7b9ef33864a962ae7322cd83bce57a429f1a62803c79ae4b6101492e32595"
       }
     },
@@ -7680,7 +8754,7 @@
         {
           "type": "cli",
           "verb": "unwith",
-          "usage": "drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--build-config <c>] [--no-preprocess] [--json|--format json] - remove with blocks, proved binding by binding",
+          "usage": "drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--exclude-under <dir>]... [--no-backup] [--build-config <c>] [--no-preprocess] [--json|--format json] - remove with blocks, proved binding by binding",
           "flags": [
             {
               "name": "--db",
@@ -7721,14 +8795,29 @@
               "arg": "<L>|none"
             },
             {
+              "name": "--exclude-under",
+              "arg": "<dir>"
+            },
+            {
               "name": "--no-backup"
             },
             {
               "name": "--json"
+            },
+            {
+              "name": "--build-config",
+              "arg": "<c>"
+            },
+            {
+              "name": "--no-preprocess"
+            },
+            {
+              "name": "--format",
+              "arg": "json"
             }
           ],
           "helpOrder": 62,
-          "help": ["  drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--build-config <c>] [--no-preprocess] [--json|--format json]  - remove with blocks, proved binding by binding"]
+          "help": ["  drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--exclude-under <dir>]... [--no-backup] [--build-config <c>] [--no-preprocess] [--json|--format json]  - remove with blocks, proved binding by binding"]
         },
         {
           "type": "cli",
@@ -7779,10 +8868,10 @@
       ],
       "notes": "lane 144 unwith; guard tests\\autotest\\run_unwith.ps1",
       "verified": {
-        "date": "2026-11-07",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.46.0-alpha",
-        "surfaceHash": "8eeb31410c1a6836b0a27b0d5307d75f602d2273dbd552597b20b1ec2d97bb16"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "8433300beda108050279e7ee108a80c70294d2a5b1d82fa7b1fa165f9551b425"
       }
     },
     {
@@ -7863,9 +8952,9 @@
         }
       ],
       "verified": {
-        "date": "2026-10-23",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "f091b0c4b210d9e5851f2dfeb1358127a0936511c8984ffd1035e480a56611ec"
       }
     },
@@ -8165,10 +9254,10 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-11-07",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.46.0-alpha",
-        "surfaceHash": "272fa0bc2d9c261e2abc694194028b54e240f4cb190755c47d1697f33eaf5f47"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "27e7c52529d2050bbe3288dc119c6c0708385bdf651a46a89ebafd2dd4be59f2"
       }
     },
     {
@@ -9281,9 +10370,9 @@
         }
       ],
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "646ea26eaf11f813317fa3e265f230d630c170a55a2a452b8ef96473d1969fe4"
       }
     },
@@ -9306,7 +10395,7 @@
         {
           "type": "cli",
           "verb": "reverse-calltree",
-          "usage": "drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...] (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)",
+          "usage": "drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] [--output F] --db PATH [--db ...] (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)",
           "flags": [
             {
               "name": "--qname",
@@ -9331,7 +10420,7 @@
             }
           ],
           "helpOrder": 81,
-          "help": ["  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)"]
+          "help": ["  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] [--output F] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)"]
         }
       ],
       "audience": "both",
@@ -9386,6 +10475,9 @@
             },
             {
               "name": "--json"
+            },
+            {
+              "name": "--format"
             }
           ],
           "helpOrder": 80,
@@ -9410,9 +10502,9 @@
         }
       ],
       "verified": {
-        "date": "2026-10-30",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.38.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "51333b0ebe764effa6e717fc9627eab58a49dd2e2a2794753ee6f78d3512f747"
       }
     },
@@ -9470,7 +10562,7 @@
         {
           "type": "cli",
           "verb": "cycles",
-          "usage": "drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--hub] [--plan [--no-hub-surface | --hub-surface [--apply]] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--hub-surface] [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --hub = per group its hub units (removal leaves the rest acyclic): edges, ref weights and surfaces per side, dead uses; read-only, no planner; --f2047 = only the interface-only cycles dcc rejects with F2047, each edge with its forcing symbols and the next --plan / --fix commands; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group naming the exact --fix dry-run and --apply commands; --fix = the mechanical fix of one group, see the cycles-fix entry)",
+          "usage": "drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--hub] [--plan [--no-hub-surface | --hub-surface] [--apply] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--hub-surface | --no-hub-surface] [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--ctor-wide] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --hub = per group its hub units (removal leaves the rest acyclic): edges, ref weights and surfaces per side, dead uses; read-only, no planner; --f2047 = only the interface-only cycles dcc rejects with F2047, each edge with its forcing symbols and the next --plan / --fix commands; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group naming the exact --fix dry-run and --apply commands; --ctor-wide = the wider constructor-inversion whitelist for --plan / --fix (off by default); --fix = the mechanical fix of one group, see the cycles-fix entry)",
           "flags": [
             {
               "name": "--db",
@@ -9555,7 +10647,7 @@
             }
           ],
           "helpOrder": 68,
-          "help": ["  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--hub] [--plan [--no-hub-surface | --hub-surface [--apply]] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--hub-surface] [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>]   (circular unit deps; --hub = per group its hub units (removal leaves the rest acyclic): edges, ref weights and surfaces per side, dead uses; read-only, no planner; --f2047 = only the interface-only cycles dcc rejects with F2047: units, each interface edge with the symbols forcing it, and the next --plan / --fix commands; --unit <stem> (the name in dcc's message) narrows it, a unit in no such cycle is exit 0 with a note; --format json = [{units[],edges[{from,to,symbols[]}],plan,fix}]; --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\\TEMP\\draglint_cyclefix_<pid>\\, deleted at exit unless a message of the run cites a file in it, then kept and named on stderr; --shadow-out names another, never deleted) and builds the project (msbuild /p:Config=Debug for --platform, default the project's active platform, else win32) unless --no-compile, exit 0 mechanical / 1 refused / 2 error; --apply writes it (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 written and verified (or written with --no-reindex, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified / 2 error: a write or build failed part-way (rolled back, project not changed, or the rollback failure is named) or bad flags; a rollback restores the sources, not the DCUs the failed build wrote: rebuild after a rollback; --apply --no-compile is exit 2; --rsvars <path> = the Studio build environment the compile gate calls (default: the Studio the registry or BDS names; forwarded to every --part all iteration; a missing file is exit 2); --build-timeout <s> = whole seconds one build may take (default 0 = no limit; forwarded to every --part all iteration; anything but a whole number >= 0 is exit 2); a stand-down request (drag-lint shutdown --db <db>, or the IDE's Cancel) kills the build, rolls an --apply back and exits 1 (\"cancelled -- rolled back\"); --part all needs --apply, refuses --no-reindex; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest's library for the build platform: --platform, else the --project's active platform, else win32; --library-db none = no library); --rules-dir is forwarded to every --part all iteration; --plan --hub-surface = recipe R3 for a group with exactly one hub read through one global (spec P2): a new leaf unit <Hub>.Hub with an interface of the members the spokes read through the global, the hub class implements it, receiver-only rewrite in the spokes, the hub's free routines through R1 pointers in <Hub>.Hub; the dry run is the playbook with R3 + the --hub block in place of Part A for such a group -- since 1.51 without the switch when R3 predicts that the group breaks (--no-hub-surface = the planner plans every group) --, --causes --format json --hub-surface gives R3's fix{part:r3} without the planner and names the gated cycles --fix --hub-surface dry-run / --apply commands; --fix --hub-surface (1.51.1) writes R3 for one group through the same compile gate as --fix: baseline build, write under .BCK<n> backups, build after the edit, rollback on a new error, re-index + verify (cycle-fix/1 part r3, recipe hub-surface; refusal hub-surface-group-stays); --apply writes ONE group (.BCK<n> backups unless --no-backup) and runs no compile gate yet: build after it; --format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason,followup} and edges[] with each edge's surface: members read, writes, construction, class methods, routine + signature types)"]
+          "help": ["  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--hub] [--plan [--no-hub-surface | --hub-surface] [--apply] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--hub-surface | --no-hub-surface] [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--ctor-wide] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>]   (circular unit deps; --hub = per group its hub units (removal leaves the rest acyclic): edges, ref weights and surfaces per side, dead uses; read-only, no planner; --f2047 = only the interface-only cycles dcc rejects with F2047: units, each interface edge with the symbols forcing it, and the next --plan / --fix commands; --unit <stem> (the name in dcc's message) narrows it, a unit in no such cycle is exit 0 with a note; --format json = [{units[],edges[{from,to,symbols[]}],plan,fix}]; --ctor-wide = the wider constructor-inversion whitelist for --plan / --fix (off by default); --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\\TEMP\\draglint_cyclefix_<pid>\\, deleted at exit unless a message of the run cites a file in it, then kept and named on stderr; --shadow-out names another, never deleted) and builds the project (msbuild /p:Config=Debug for --platform, default the project's active platform, else win32) unless --no-compile, exit 0 mechanical / 1 refused / 2 error; --apply writes it (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 written and verified (or written with --no-reindex, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified / 2 error: a write or build failed part-way (rolled back, project not changed, or the rollback failure is named) or bad flags; a rollback restores the sources, not the DCUs the failed build wrote: rebuild after a rollback; --apply --no-compile is exit 2; --rsvars <path> = the Studio build environment the compile gate calls (default: the Studio the registry or BDS names; forwarded to every --part all iteration; a missing file is exit 2); --build-timeout <s> = whole seconds one build may take (default 0 = no limit; forwarded to every --part all iteration; anything but a whole number >= 0 is exit 2); a stand-down request (drag-lint shutdown --db <db>, or the IDE's Cancel) kills the build, rolls an --apply back and exits 1 (\"cancelled -- rolled back\"); --part all needs --apply, refuses --no-reindex; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest's library for the build platform: --platform, else the --project's active platform, else win32; --library-db none = no library); --rules-dir is forwarded to every --part all iteration; --plan --hub-surface = recipe R3 for a group with exactly one hub read through one global (spec P2): a new leaf unit <Hub>.Hub with an interface of the members the spokes read through the global, the hub class implements it, receiver-only rewrite in the spokes, the hub's free routines through R1 pointers in <Hub>.Hub; the dry run is the playbook with R3 + the --hub block in place of Part A for such a group -- without the switch when R3 predicts that the group breaks (since 1.51 the --plan dry run; since 1.52 also --plan --apply, --fix and the --causes --format json fix object; --no-hub-surface = the planner for every group, the default before 1.52; --hub-surface = R3 also for a group it cannot break) --, --causes --format json gives R3's fix{part:r3} without the planner and names the gated cycles --fix --hub-surface dry-run / --apply commands; --fix with R3 (1.51.1) writes one group through the same compile gate as --fix: baseline build, write under .BCK<n> backups, build after the edit, rollback on a new error, re-index + verify (cycle-fix/1 part r3, recipe hub-surface; refusal hub-surface-group-stays); --plan --apply writes ONE group (.BCK<n> backups unless --no-backup) without a compile gate: build after it, or use --fix, which gates the same edit; --format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason,followup} and edges[] with each edge's surface: members read, writes, construction, class methods, routine + signature types)"]
         }
       ],
       "audience": "both",
@@ -9575,10 +10667,10 @@
         }
       ],
       "verified": {
-        "date": "2026-11-14",
+        "date": "2026-11-17",
         "by": "ENGINE",
-        "build": "1.51.0-alpha",
-        "surfaceHash": "3fed63661ec5185cb289f5da1232f7127bbcc92cf38c2a580f5f89fd5461850f"
+        "build": "1.51.1-alpha",
+        "surfaceHash": "1683810a3b815b523e41edaea7df3ca889d4ddc899c9731d82c8f0e0cff534fc"
       }
     },
     {
@@ -9679,9 +10771,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "f3e477594f45a1b0b8a984ec283c9750740c8a7672874f7b4621055e280ddd33"
       }
     },
@@ -9700,7 +10792,6 @@
           "type": "cli",
           "verb": "cycles",
           "example": "drag-lint cycles --fix --project <X.dproj> --db <file.sqlite>",
-          "usage": "drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--hub] [--plan [--no-hub-surface | --hub-surface [--apply]] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--hub-surface] [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--ctor-wide] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\\TEMP\\draglint_cyclefix_<pid>\\, deleted at exit unless a message of the run cites a file in it, then kept and named on stderr; --shadow-out names another, never deleted) and builds the project (msbuild /p:Config=Debug for --platform, default the project's active platform, else win32) unless --no-compile, exit 0 mechanical / 1 refused / 2 error; --apply writes it (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 written and verified (or written with --no-reindex, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified / 2 error: a write or build failed part-way (rolled back, project not changed, or the rollback failure is named) or bad flags; a rollback restores the sources, not the DCUs the failed build wrote: rebuild after a rollback; --apply --no-compile is exit 2; --rsvars <path> = the Studio build environment the compile gate calls (default: the Studio the registry or BDS names; forwarded to every --part all iteration; a missing file is exit 2); --build-timeout <s> = whole seconds one build may take (default 0 = no limit; forwarded to every --part all iteration; anything but a whole number >= 0 is exit 2); a stand-down request (drag-lint shutdown --db <db>, or the IDE's Cancel) kills the build, rolls an --apply back and exits 1 (\"cancelled -- rolled back\"); --part all needs --apply, refuses --no-reindex; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest's library for the build platform: --platform, else the --project's active platform, else win32; --library-db none = no library); --rules-dir is forwarded to every --part all iteration; --format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason,followup} and edges[] with each edge's surface: members read, writes, construction, class methods, routine + signature types; --fix --hub-surface (1.51.1) = recipe R3 (hub-surface) for one group through the same compile gate, cycle-fix/1 part r3, refusal hub-surface-group-stays)",
           "flags": [
             {
               "name": "--db",
@@ -9724,6 +10815,12 @@
             },
             {
               "name": "--fix"
+            },
+            {
+              "name": "--hub-surface"
+            },
+            {
+              "name": "--no-hub-surface"
             },
             {
               "name": "--cycle",
@@ -9849,10 +10946,10 @@
         }
       ],
       "verified": {
-        "date": "2026-11-14",
+        "date": "2026-11-17",
         "by": "ENGINE",
-        "build": "1.51.0-alpha",
-        "surfaceHash": "4eb35ccb6e537d7a30eddb36dc701c08d719573531f8e62de72357743f42c475"
+        "build": "1.51.1-alpha",
+        "surfaceHash": "c022f1d761fe0143d41e1a72cd0946cbaed676a1a81c429a97b4278d05233ca9"
       }
     },
     {
@@ -9863,7 +10960,7 @@
       "status": "shipped",
       "since": "1.51.1-alpha",
       "summary": "cycles --fix --hub-surface writes recipe R3 through the compile gate: build before and after, rollback, re-index and verify",
-      "intro": "Read this when a circular group is a star around one hub form and you want the hub-surface recipe (R3) written with the same safety as the planner's fix: the project is built before and after the edit and rolled back byte-identically if it does not compile. The default stays the planner (owner question O11); --hub-surface asks for R3 by name.",
+      "intro": "Read this when a circular group is a star around one hub form and you want the hub-surface recipe (R3) written with the same safety as the planner's fix: the project is built before and after the edit and rolled back byte-identically if it does not compile. Since 1.52 R3 is the default wherever it breaks the group (--fix, --plan --apply, --causes --format json); --no-hub-surface restores the planner, --hub-surface asks for R3 by name.",
       "wikiPage": "Circular-Uses-Report-cycles-fix-plan",
       "surfaces": [
         {
@@ -9997,9 +11094,9 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "07c5a2c4989a469c90014ef9916e39440617f381b5bf65d62fe4ae1357aea1fa"
       }
     },
@@ -10061,9 +11158,9 @@
         }
       ],
       "verified": {
-        "date": "2026-11-08",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.50.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "cfa73ef402d259c06d66a408e41bc3e536fb01f52d4e68cd46eaaa3cc36117c1"
       }
     },
@@ -10118,9 +11215,9 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "214ecc8e5001112a07d688b87aad8de55dd7cbe638cf97c8d217620df157ebb8"
       }
     },
@@ -10453,9 +11550,9 @@
         }
       ],
       "verified": {
-        "date": "2026-10-28",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.36.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "f89089fdb7a9a41f3d54b3ef060dec23d32dba5056926258d4d034809748c5a5"
       }
     },
@@ -10473,7 +11570,7 @@
         {
           "type": "cli",
           "verb": "reverse-calltree",
-          "usage": "drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...] (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)",
+          "usage": "drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] [--output F] --db PATH [--db ...] (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)",
           "flags": [
             {
               "name": "--qname",
@@ -10659,7 +11756,7 @@
         {
           "type": "cli",
           "verb": "reverse-calltree",
-          "usage": "drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...] (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)",
+          "usage": "drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] [--output F] --db PATH [--db ...] (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)",
           "flags": [
             {
               "name": "--qname",
@@ -10749,9 +11846,9 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "2ef1be7d0b519e9023b5a153a4822e903ba0daf6cc6e5ba3420a7e91ba92f82d"
       }
     },
@@ -10869,9 +11966,9 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "afc13cbba541c0ce9d159b0010daef7018426e2b740bbf5f4b3061f1693cb50f"
       }
     },
@@ -11138,7 +12235,7 @@
       "status": "shipped",
       "since": "1.20.1-alpha",
       "summary": "Ask a chart question, open the answer, read a round-trip trace, jump to RAD Studio",
-      "intro": "Read this when you first ask a chart question: how to ask one from drag-lint > Reports or with drag-lint ask, where the answer lands, how to read a round-trip trace, and the one-time draglint:// registration that makes a chart row open its line in RAD Studio. Needs a fresh project index, and Graphviz for the pictures (the installer brings it).",
+      "intro": "Read this when you first ask a chart question: how to ask one from drag-lint > Reports or with drag-lint ask, where the answer lands, how to read a round-trip trace (zoom, pan and the amber unresolved steps), and the one-time draglint:// registration that makes a chart row open its line in RAD Studio. Needs a fresh project index, and Graphviz for the pictures (the installer brings it).",
       "wikiPage": "Charts-and-the-IDE",
       "surfaces": [
         {
@@ -11168,9 +12265,9 @@
         }
       ],
       "verified": {
-        "date": "2026-11-05",
+        "date": "2026-11-17",
         "by": "CHARTS",
-        "build": "1.43.0-alpha",
+        "build": "1.51.1-alpha",
         "surfaceHash": "664eca395a70f798e284bd2243de9400021810653438802d51be9ae24fc5497c"
       },
       "homeOrder": 45
@@ -11581,10 +12678,10 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
-        "surfaceHash": "69e250155e50c9e6cbc027dd98ea1b024fd84da3242bda8153f4cae1be3bfd61"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "4871e93c110e9610c26bcf0e8109d5fa817b9c51d324d34150413ca55b027378"
       }
     },
     {
@@ -12053,9 +13150,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "6a00e72aeca666ab9c2031528f6606e8ad8fa6aaf6a9f5ce18175d21d2292e14"
       }
     },
@@ -12264,6 +13361,31 @@
       }
     },
     {
+      "id": "editor-context-menu",
+      "title": "Editor right-click submenu",
+      "group": "editor-integration",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.51.1-alpha",
+      "summary": "The drag-lint submenu of the code editor's right-click menu: the 1.52 caret commands, enabled by what the caret is on",
+      "intro": "Read this when you want a drag-lint command for the code under the caret without going through the main menu. Right-click in the code editor and open the drag-lint submenu (after the Refactor group). It lists every 1.52 command whose row in the plugin command table names the editor surface; an item that needs a symbol is enabled only with an identifier under the caret, one that needs a finding only when a drag-lint finding is on the caret line. The submenu is hidden while none of its commands is switched on.",
+      "wikiPage": "editor-context-menu",
+      "surfaces": [
+        {
+          "type": "ide-context",
+          "host": "Editor",
+          "caption": "drag-lint",
+          "steps": ["Put the caret on the identifier or on the line of the finding", "Right-click in the code editor and open the drag-lint submenu (after the Refactor group)", "Choose the command; an item greyed out needs a symbol under the caret or a finding on the caret line"]
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-17",
+        "by": "alexanderl",
+        "build": "1.51.1-alpha"
+      }
+    },
+    {
       "id": "engine-heartbeat",
       "title": "Engine heartbeat: the IDE tells a busy engine from a stuck one",
       "group": "editor-integration",
@@ -12285,7 +13407,7 @@
       "questions": [
         {
           "ask": "Why was my long index not killed by the IDE, and a frozen one was?",
-          "command": "drag-lint shutdown --dry-run"
+          "command": "drag-lint stop-now --dry-run"
         },
         {
           "ask": "What is the engine doing right now?",
@@ -12293,7 +13415,7 @@
         },
         {
           "ask": "Is my long index slow or stuck, and how far has it got?",
-          "command": "drag-lint shutdown --all --dry-run"
+          "command": "drag-lint stop-now --all --dry-run"
         }
       ],
       "access": "cli-only",
@@ -12943,7 +14065,7 @@
             }
           ],
           "helpOrder": 25,
-          "help": ["  drag-lint lsp                --db <file.sqlite>    (LSP stdio server) [--stdio] [--parent-pid <n>] [--clientProcessId <n>] [--target-compiler <ver|auto>]", "                               --stdio and --clientProcessId are accepted and IGNORED -- editor clients pass them;", "                               stdio is the only transport, and --parent-pid is the shutdown watch that DOES act.", "                               in lsp mode the engine also listens on a per-user maintenance pipe -- see `drag-lint shutdown`.", "                               --proxy [--delphi-lsp <path>] [--trace <file>] [--merge-diagnostics] [--merge-completion] [--merge-hover] [--merge-definition] [--merge-navigation] [--merge-budget-ms <n>] [--delphi-lsp-bits 32|64]: relay in front of RAD Studio's DelphiLSP,", "                               so registering drag-lint as the Code Insight server keeps the compiler front end.", "                               --trace appends every relayed LSP message to <file> with a direction tag (C>S / S>C); off by default.", "                               --merge-diagnostics: append drag-lint's lint findings to DelphiLSP's publishDiagnostics (one notification, source-tagged); OFF by default.", "                               --merge-completion: union drag-lint's completion items into DelphiLSP's reply, keyed on (label, kind); DelphiLSP's items first; OFF by default.", "                               --merge-hover: append drag-lint's hover facts to DelphiLSP's hover after a --- rule, or answer with them alone when DelphiLSP has none; OFF by default.", "                               --merge-definition: drag-lint's definition when DelphiLSP's is null or empty; answer references and workspace/symbol in the proxy (DelphiLSP has neither); OFF by default.", "                               --merge-navigation: answer type and call hierarchy, typeDefinition, documentHighlight and foldingRange in the proxy, for each of those providers DelphiLSP does not advertise; OFF by default.", "                               --merge-budget-ms <n>: per-frame budget for a merge handler; over budget forwards DelphiLSP's bytes untouched (default 300).", "                               --delphi-lsp-bits 32|64: which DelphiLSP the proxy spawns (64 = bin64\\DelphiLSP.exe, the default; 32 = bin\\DelphiLSP.exe); --delphi-lsp <path> wins over it.", "                               --full-rules: run the FULL rule set (built-ins included) out-of-process on every didSave and publish the complete finding set; OFF by default -- costs one `lint` run per save, reported on stderr.", "  drag-lint index <dir> --db <file.sqlite> --resolve-only   (re-derive call edges / ancestry / helpers / purity verdicts from the STORED parses; skips the walk entirely --", "                               the cheap remedy when resolver_fingerprint says the edges are stale, since no parse became wrong)", "                               ONLY safe if no source changed since the parse: a changed file is WITHHELD, and after the clear this pass runs it HAS NO EDGES OR MEMBER ACCESSES until a plain index", "                               it writes edges INSIDE this one index only -- no cross-store edges are written (measured", "                               2026-09-22: 0 refs.external_target in every project DB; re-resolving the libraries under", "                               resolver 1.5.1 added 13 intra-library edges per platform, and nothing across stores)", "  drag-lint index --project <file.dproj> --db <file.sqlite> --resolve-only   (the same, for a PROJECT database -- the form", "                               to type there: without --resolve-only the <dir> form above widens a project DB into a folder DB)", "                               a DB resolved against a library and re-resolved with no library store attached warns on stderr (WARNING: index: no library store attached: external targets will be cleared; pass --library-db <library.sqlite>) and still clears them (1.51.1).", "  drag-lint index --all --resolve-only   (the same, across every manifest section -- the only command that reaches them all;", "                               use it to repair indexes stamped by a build that skipped the pass, which no later build can detect)", "                               library-first resolve: a section with libraryResolve whose platform library is not READY (missing, rebuilding, stale extractor) is resolved without it; the run marks the DB pending (schema_meta library_resolve_state) and says on stderr that the result is INCOMPLETE. The next index run re-resolves it once the library is ready, no flag needed."]
+          "help": ["  drag-lint lsp                --db <file.sqlite>    (LSP stdio server) [--stdio] [--parent-pid <n>] [--clientProcessId <n>] [--target-compiler <ver|auto>]", "                               --stdio and --clientProcessId are accepted and IGNORED -- editor clients pass them;", "                               stdio is the only transport, and --parent-pid is the shutdown watch that DOES act.", "                               in lsp mode the engine also listens on a per-user maintenance pipe -- see `drag-lint shutdown`.", "                               --proxy [--delphi-lsp <path>] [--trace <file>] [--merge-diagnostics] [--merge-completion] [--merge-hover] [--merge-definition] [--merge-navigation] [--merge-budget-ms <n>] [--delphi-lsp-bits 32|64]: relay in front of RAD Studio's DelphiLSP,", "                               so registering drag-lint as the Code Insight server keeps the compiler front end.", "                               --trace appends every relayed LSP message to <file> with a direction tag (C>S / S>C); off by default.", "                               --merge-diagnostics: append drag-lint's lint findings to DelphiLSP's publishDiagnostics (one notification, source-tagged); OFF by default.", "                               --merge-completion: union drag-lint's completion items into DelphiLSP's reply, keyed on (label, kind); DelphiLSP's items first; OFF by default.", "                               --merge-hover: append drag-lint's hover facts to DelphiLSP's hover after a --- rule, or answer with them alone when DelphiLSP has none; OFF by default.", "                               --merge-definition: drag-lint's definition when DelphiLSP's is null or empty; answer references and workspace/symbol in the proxy (DelphiLSP has neither); OFF by default.", "                               --merge-navigation: answer type and call hierarchy, typeDefinition, documentHighlight and foldingRange in the proxy, for each of those providers DelphiLSP does not advertise; OFF by default.", "                               --merge-budget-ms <n>: per-frame budget for a merge handler; over budget forwards DelphiLSP's bytes untouched (default 300).", "                               --delphi-lsp-bits 32|64: which DelphiLSP the proxy spawns (64 = bin64\\DelphiLSP.exe, the default; 32 = bin\\DelphiLSP.exe); --delphi-lsp <path> wins over it.", "                               --full-rules: run the FULL rule set (built-ins included) out-of-process on every didSave and publish the complete finding set; OFF by default -- costs one `lint` run per save, reported on stderr.", "  drag-lint index <dir> --db <file.sqlite> --resolve-only   (re-derive call edges / ancestry / helpers / purity verdicts from the STORED parses; skips the walk entirely --", "                               the cheap remedy when resolver_fingerprint says the edges are stale, since no parse became wrong)", "                               ONLY safe if no source changed since the parse: a changed file is WITHHELD, and after the clear this pass runs it HAS NO EDGES OR MEMBER ACCESSES until a plain index", "                               it writes edges INSIDE this one index only -- no cross-store edges are written (measured", "                               2026-09-22: 0 refs.external_target in every project DB; re-resolving the libraries under", "                               resolver 1.5.1 added 13 intra-library edges per platform, and nothing across stores)", "  drag-lint index --project <file.dproj> --db <file.sqlite> --resolve-only   (the same, for a PROJECT database -- the form", "                               to type there: without --resolve-only the <dir> form above widens a project DB into a folder DB)", "                               a DB resolved against a library and re-resolved with no library store attached warns on stderr (WARNING: index: no library store attached: library bindings are kept from the last library run, not refreshed; pass --library-db <library.sqlite>) and keeps the stored bindings (1.52; 1.51.1 cleared them).", "  drag-lint index --all --resolve-only   (the same, across every manifest section -- the only command that reaches them all;", "                               use it to repair indexes stamped by a build that skipped the pass, which no later build can detect)", "                               library-first resolve: a section with libraryResolve whose platform library is not READY (missing, rebuilding, stale extractor) is resolved without it; the run marks the DB pending (schema_meta library_resolve_state) and says on stderr that the result is INCOMPLETE. The next index run re-resolves it once the library is ready, no flag needed."]
         }
       ],
       "audience": "both",
@@ -13005,8 +14127,8 @@
       "owner": "ENGINE",
       "status": "shipped",
       "since": "0.4.0-alpha",
-      "summary": "Exposes the index to MCP clients as 18 tools",
-      "intro": "The drag-lint MCP server lets an MCP client (an AI assistant) query the index and run checks through 18 tools. It opens every index read-only (an old schema is refused, never migrated), find_callers answers from the call graph, a tool that fails answers isError instead of ending the server, and a stale index adds a freshness note.",
+      "summary": "Exposes the index to MCP clients as 19 tools",
+      "intro": "The drag-lint MCP server lets an MCP client (an AI assistant) query the index and run checks through 19 tools. It opens every index read-only (an old schema is refused, never migrated), find_callers answers from the call graph, a tool that fails answers isError instead of ending the server, and a stale index adds a freshness note.",
       "wikiPage": "Register-MCP-Server",
       "surfaces": [
         {
@@ -13095,9 +14217,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-11-09",
+        "date": "2026-11-17",
         "by": "ENGINE",
-        "build": "1.50.0-alpha",
+        "build": "1.51.1-alpha",
         "surfaceHash": "54238dbe14546a9adc7642ae77efcf4256ccccd619a32b671fa068c1022aa2c1"
       }
     },
@@ -13139,10 +14261,10 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.0-alpha",
-        "surfaceHash": "d48ae5855997dc0da8292789e6a1e14677cb26a5846f1e19f92eef874072d394"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "b5f80ced846660c364a5479dac4f078746b2addadc27f3fe64fdfc3338ac9bd4"
       }
     },
     {
@@ -13496,9 +14618,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "ca1f0d0eefb6b148bfabefee60f927bdf5daf68fe3ab07c7e26aeb08a07f7a81"
       }
     },
@@ -13542,9 +14664,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "db4afd0474ece949eb777c51d0aab98f32d10c14e86170c52addee3e779ae69d"
       }
     },
@@ -13587,9 +14709,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "914757e99e0decf7ce7bc9436a79c93311547616431328c67f81998aa295eb99"
       }
     },
@@ -13898,9 +15020,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
+        "build": "1.52.0-alpha",
         "surfaceHash": "5cccca9c2dd1c3abe3265486df5df48fa0a5edee9295f2bbc6894cd11d4dae72"
       }
     },
@@ -14254,6 +15376,247 @@
       }
     },
     {
+      "id": "field-repository",
+      "title": "Field repository",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.0-alpha",
+      "summary": "Keeps the TableTools field registry in one SQLite file per database, filled from Firebird (read-only), with a diffable text backup",
+      "intro": "Read this when you want the TableTools field repository without Firebird tables or the TableTools IDE package. Run drag-lint repo init, then repo import-fb (Micronite) or repo seed-fb (any Firebird database), keep the text backup in version control with repo backup, and point several projects at one repository with the fieldRepository key. Firebird is never modified.",
+      "wikiPage": "field-repository",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "init"
+        },
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "info"
+        },
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "import-fb"
+        },
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "seed-fb"
+        },
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "refresh-schema"
+        },
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "backup"
+        },
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "restore"
+        },
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "gen-memtable"
+        },
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "gen-param-array"
+        },
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "gen-orm"
+        },
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "update-orm"
+        },
+        {
+          "type": "cli",
+          "verb": "repo",
+          "sub": "gen-dataservice"
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Field Repository > Open Field Repository Editor...",
+          "steps": ["Open a project that has a field repository (fieldRepository key or the default file)", "Choose drag-lint > Field Repository > Open Field Repository Editor...", "The grid editor dl-field-repo.exe opens on that repository"]
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Field Repository > Refresh Schema from Database...",
+          "steps": ["Open a project with a field repository", "Choose drag-lint > Field Repository > Refresh Schema from Database...", "Enter the Firebird connection string; the output of drag-lint repo refresh-schema is shown"]
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Field Repository > FDMemTable from CSV...",
+          "steps": ["Choose drag-lint > Field Repository > FDMemTable from CSV...", "Pick a field-definition CSV", "The Pascal source is written next to the CSV as `<name>.memtable.pas`"]
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Field Repository > Generate / Update ORM Source...",
+          "steps": ["Open the project whose field repository describes the tables", "Choose drag-lint > Field Repository > Generate / Update ORM Source...", "Pick the folder of the `i<T>`/`u<T>` units; give table names for NEW units, or leave it empty to update the DB-RAD regions of every existing unit (optionally also the _SERVER/_CLIENT folders)", "Read the dry-run summary and answer Yes to write (repo gen-orm / update-orm --apply)"]
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Field Repository > Generate DataService Units...",
+          "steps": ["Choose drag-lint > Field Repository > Generate DataService Units...", "Give the table names, then pick the _SERVER and _CLIENT folders", "Read the dry-run summary and answer Yes to write (repo gen-dataservice --apply); add the listed units to the projects"]
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Field Repository > Param Array Assistant...",
+          "steps": ["Open and save the form unit", "Choose drag-lint > Field Repository > Param Array Assistant...", "Answer whether to prepare the queries first (--prepare-queries)", "Read the --plan summary and answer Yes to write through the compile gate (repo gen-param-array --apply)"]
+        },
+        {
+          "type": "cli",
+          "verb": "repo",
+          "usage": "drag-lint repo <init|info|import-fb|seed-fb|refresh-schema|backup|restore|gen-memtable|gen-param-array|gen-orm|update-orm|gen-dataservice> (--repo <file> | --project <project file>) [--connection \"<Firebird connection string>\"] [--in <file>] [--output <file>] [--name <Name>] [--replace] [--dry-run] [--json]   (the field repository: one SQLite file per database; Firebird is only read; gen-param-array needs no repository)",
+          "flags": [
+            {
+              "name": "--all"
+            },
+            {
+              "name": "--apply"
+            },
+            {
+              "name": "--build-timeout",
+              "arg": "<s>"
+            },
+            {
+              "name": "--dfm",
+              "arg": "<file>"
+            },
+            {
+              "name": "--no-backup"
+            },
+            {
+              "name": "--only",
+              "arg": "<unit,...>"
+            },
+            {
+              "name": "--plan"
+            },
+            {
+              "name": "--platform",
+              "arg": "<p>"
+            },
+            {
+              "name": "--progress-form",
+              "arg": "<Form>"
+            },
+            {
+              "name": "--query",
+              "arg": "<Name>"
+            },
+            {
+              "name": "--rsvars",
+              "arg": "<bat>"
+            },
+            {
+              "name": "--step-size",
+              "arg": "<n>"
+            },
+            {
+              "name": "--table",
+              "arg": "<Name>"
+            },
+            {
+              "name": "--connection",
+              "arg": "<Firebird connection string>"
+            },
+            {
+              "name": "--dry-run"
+            },
+            {
+              "name": "--in",
+              "arg": "<backup file>"
+            },
+            {
+              "name": "--json"
+            },
+            {
+              "name": "--name",
+              "arg": "<Name>"
+            },
+            {
+              "name": "--output",
+              "arg": "<file>"
+            },
+            {
+              "name": "--project",
+              "arg": "<project file>"
+            },
+            {
+              "name": "--replace"
+            },
+            {
+              "name": "--repo",
+              "arg": "<file>"
+            },
+            {
+              "name": "--prepare-queries"
+            },
+            {
+              "name": "--code-dir",
+              "arg": "<folder>"
+            },
+            {
+              "name": "--server-dir",
+              "arg": "<folder>"
+            },
+            {
+              "name": "--client-dir",
+              "arg": "<folder>"
+            },
+            {
+              "name": "--save-form",
+              "arg": "<legacy|current>"
+            }
+          ],
+          "helpOrder": 110,
+          "help": ["  drag-lint repo init           (--repo <file> | --project <project file>)   (create an empty field repository; exit 1 when the file exists)", "  drag-lint repo info           (--repo <file> | --project <project file>) [--json|--format json]   (path, schema version, rows per table, DL_META keys; exit 1 when not a repository)", "  drag-lint repo import-fb      --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--replace]   (copy the FIB$ registry tables; read-only on Firebird; --replace writes a before-import text backup first; exit 1 failure, 2 schema drift)", "  drag-lint repo seed-fb        --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--dry-run]   (fill an EMPTY repository from the Firebird schema; read-only on Firebird)", "  drag-lint repo refresh-schema --connection \"<Firebird connection string>\" (--repo <file> | --project <project file>) [--dry-run]   (re-read the Firebird schema into a filled repository, keep hand-edited columns, mark vanished columns; --dry-run prints the diff only)", "  drag-lint repo backup         (--repo <file> | --project <project file>) [--output <file>]   (write the diffable text backup; default <repo>.txt)", "  drag-lint repo restore        --in <backup file> (--repo <file> | --project <project file>) [--replace]   (create the repository when missing; a malformed backup prints \"line <n>: ...\" and exits 2, nothing changed)", "  drag-lint repo gen-memtable   --in <csv file> [--name <Name>] [--output <file>]   (Pascal source that builds the fields of a TFDMemTable from a field-definition CSV; exit 2 on a bad CSV)", "  drag-lint repo gen-param-array (--in <unit.pas> [--dfm <file>] | --project <X.dproj> --all [--only <unit,...>]) [--query <Name>] [--table <Name>] [--step-size <n>] [--progress-form <Form>] [--prepare-queries] [--plan | --apply --project <X.dproj> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] [--json]   (FireDAC Array-DML loop from the unit's DFM, inserted as a braced comment before the final end.; no flag prints the block, --plan the diff, --apply writes through ONE compile gate; --prepare-queries first does the IDE assistant's query preparation (each SELECT TFDQuery gets its TFDUpdateSQL INSERT SQL, ObjectView=False, no CachedUpdates; update object / schema adapter renamed ZZZ*, persistent fields removed with their declarations; .dfm + .pas diffs in --plan, both written through the gate); exit 1 a unit refused or no block, 2 bad flags or a baseline that does not build)", "  drag-lint repo gen-orm        (--repo <file> | --project <project file>) --code-dir <folder> [--table <T,...>] [--apply [--no-backup]]   (new i<T>.PAS + u<T>.PAS ORM units per repository table; dry run prints the diff, --apply writes 7-bit ASCII, an existing file is first copied to <file>.BCKn; prints add to project: per new file)", "  drag-lint repo update-orm     (--repo <file> | --project <project file>) --code-dir <folder> [--server-dir <folder>] [--client-dir <folder>] [--table <T,...>] [--save-form legacy|current] [--apply [--no-backup]]   (rewrites ONLY the DB-RAD regions of the existing i/u/_SERVER/_CLIENT units, every other byte kept; --save-form legacy (default) = the FIELD_AS_TYPE parameter binding the ORM3 units carry, current = TableTools 2026-05-19 .Value / .AsWideMemo / Set1Byte / NULL-timestamp Clear)", "  drag-lint repo gen-dataservice (--repo <file> | --project <project file>) --server-dir <folder> --client-dir <folder> [--table <T,...>] [--save-form legacy|current] [--apply [--no-backup]]   (new u<T>_SERVER.PAS + u<T>_CLIENT.PAS per table and the two DI container units; prints add to project: per new file)"]
+        }
+      ],
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "How do I create a field repository from my Firebird database?",
+          "command": "drag-lint repo seed-fb --connection \"Database=host:db;User=..;Password=..\" --repo <file>"
+        },
+        {
+          "ask": "How do I keep it in version control?",
+          "command": "drag-lint repo backup --repo <file> --output <file.txt>"
+        },
+        {
+          "ask": "How do I get the FireDAC Array-DML loop for a unit?",
+          "command": "drag-lint repo gen-param-array --in <unit.pas> --plan"
+        },
+        {
+          "ask": "How do I see what is in it?",
+          "command": "drag-lint repo info --repo <file> --json"
+        },
+        {
+          "ask": "How do I regenerate the DB-RAD regions of my ORM units from the repository?",
+          "command": "drag-lint repo update-orm --repo <file> --code-dir <COMMON\\OBJECTS> --server-dir <SERVER> --client-dir <CLIENT>"
+        }
+      ],
+      "verified": {
+        "date": "2026-11-18",
+        "by": "ENGINE",
+        "build": "1.52.0-alpha",
+        "surfaceHash": "e9e282867877c04802e5fa8e6d52cd5f69bbfcd8af9f71a8792ed1b359aa1ee8"
+      }
+    },
+    {
       "id": "info",
       "title": "info",
       "group": "maintenance",
@@ -14472,10 +15835,10 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-11-08",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.50.0-alpha",
-        "surfaceHash": "756076580f926aa5c715f8148b5efd8b83a46b7e11f44991632223fe91231cbe"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "3650cf0d02c62e5c196acc209d2116ebde6208868aeb64c96aa7c29a6e29e381"
       }
     },
     {
@@ -14597,68 +15960,6 @@
       }
     },
     {
-      "id": "shutdown",
-      "title": "shutdown",
-      "group": "maintenance",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.6.0-alpha",
-      "summary": "Ask running engines (lsp, cycles --fix, index, lint-all) to stand down cleanly, so an index can be rebuilt or an engine replaced",
-      "intro": "Read this when you need to rebuild an index that running engines hold open, or replace a running engine: shutdown asks the running engines (lsp, cycles --fix, and the long index and lint-all runs) to close their stores and stand down, without killing them (only --force terminates an engine that does not answer). An index run stops between files with its database consistent and the same command resumes; the installer and build\\stage-engine.ps1 use this channel first.",
-      "wikiPage": "Features",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "shutdown",
-          "usage": "drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force] (ask running engines to stand down: close every store, exit 0; `index` and `lint-all` runs exit 4)",
-          "flags": [
-            {
-              "name": "--db",
-              "arg": "<file.sqlite>"
-            },
-            {
-              "name": "--wait",
-              "arg": "<sec>"
-            },
-            {
-              "name": "--dry-run"
-            },
-            {
-              "name": "--all"
-            },
-            {
-              "name": "--force"
-            }
-          ],
-          "helpOrder": 45,
-          "help": ["  drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force]   (ask running engines to stand down: close every store, exit 0; `index` and `lint-all` runs exit 4)", "                               transport: a Windows NAMED PIPE, never a TCP port -- \\\\.\\pipe\\drag-lint-ctl-<sid>-s<session>-p<pid>, created with an", "                               explicit DACL for the creating user only, so another user or session cannot signal your engines. Engines in", "                               `lsp`, `cycles --fix`, `index` (incl. --all), `lint-all` and `warm-rule-cache` mode listen (`serve` and other one-shot verbs do not): an index run stops between files, database consistent, same command resumes; lint-all prints PARTIAL findings; a warm stops at once (exit 4). --all (the default) asks every", "                               reachable engine; --db keeps only engines holding that index; --dry-run lists them and changes nothing.", "                               --wait (default 5 s) bounds the graceful wait per engine: one inside a request answers BUSY and keeps", "                               running (exit 1). --force TerminateProcess'es ONLY an engine that refused or did not answer, and says", "                               ESCALATING when it does. Every honoured or refused request is audited on the engine's stderr and in", "                               %LOCALAPPDATA%\\drag-lint\\control-channel-audit.log (who asked: pid + exe, when)."]
-        }
-      ],
-      "audience": "both",
-      "questions": [
-        {
-          "ask": "How do I stop running engines so I can rebuild an index?",
-          "command": "drag-lint shutdown --all --wait 30"
-        },
-        {
-          "ask": "Can I see what it would stop first?",
-          "command": "drag-lint shutdown --all --dry-run"
-        }
-      ],
-      "notes": "seed: needs own page",
-      "access": "cli-only",
-      "accessReviewed": {
-        "date": "2026-10-21",
-        "by": "ENGINE"
-      },
-      "verified": {
-        "date": "2026-11-08",
-        "by": "ENGINE",
-        "build": "1.50.0-alpha",
-        "surfaceHash": "1ec133398b13dd5b6640e87d8b3604d65295b5cbb4698cfb41f2b46682d8a72d"
-      }
-    },
-    {
       "id": "sql",
       "title": "sql",
       "group": "maintenance",
@@ -14731,10 +16032,72 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-18",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
-        "surfaceHash": "d48ae5855997dc0da8292789e6a1e14677cb26a5846f1e19f92eef874072d394"
+        "build": "1.52.0-alpha",
+        "surfaceHash": "b5f80ced846660c364a5479dac4f078746b2addadc27f3fe64fdfc3338ac9bd4"
+      }
+    },
+    {
+      "id": "shutdown",
+      "title": "stop-now",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.6.0-alpha",
+      "summary": "Ask running engines (lsp, cycles --fix, index, lint-all) to stand down cleanly, so an index can be rebuilt or an engine replaced",
+      "intro": "Read this when you need to rebuild an index that running engines hold open, or replace a running engine: stop-now asks the running engines (lsp, cycles --fix, and the long index and lint-all runs) to close their stores and stand down, without killing them (only --force terminates an engine that does not answer). An index run stops between files with its database consistent and the same command resumes; the installer and build\\stage-engine.ps1 use this channel first.",
+      "wikiPage": "Features",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "stop-now",
+          "usage": "drag-lint stop-now [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force] (ask running engines to stand down: close every store, exit 0; `index` and `lint-all` runs exit 4)",
+          "flags": [
+            {
+              "name": "--db",
+              "arg": "<file.sqlite>"
+            },
+            {
+              "name": "--wait",
+              "arg": "<sec>"
+            },
+            {
+              "name": "--dry-run"
+            },
+            {
+              "name": "--all"
+            },
+            {
+              "name": "--force"
+            }
+          ],
+          "helpOrder": 45,
+          "help": ["  drag-lint stop-now [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force]   (ask running engines to stand down: close every store, exit 0; `index` and `lint-all` runs exit 4)", "                               transport: a Windows NAMED PIPE, never a TCP port -- \\\\.\\pipe\\drag-lint-ctl-<sid>-s<session>-p<pid>, created with an", "                               explicit DACL for the creating user only, so another user or session cannot signal your engines. Engines in", "                               `lsp`, `cycles --fix`, `index` (incl. --all), `lint-all` and `warm-rule-cache` mode listen (`serve` and other one-shot verbs do not): an index run stops between files, database consistent, same command resumes; lint-all prints PARTIAL findings; a warm stops at once (exit 4). --all (the default) asks every", "                               reachable engine; --db keeps only engines holding that index; --dry-run lists them and changes nothing.", "                               --wait (default 5 s) bounds the graceful wait per engine: one inside a request answers BUSY and keeps", "                               running (exit 1). --force TerminateProcess'es ONLY an engine that refused or did not answer, and says", "                               ESCALATING when it does. Every honoured or refused request is audited on the engine's stderr and in", "                               %LOCALAPPDATA%\\drag-lint\\control-channel-audit.log (who asked: pid + exe, when)."]
+        }
+      ],
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "How do I stop running engines so I can rebuild an index?",
+          "command": "drag-lint stop-now --all --wait 30"
+        },
+        {
+          "ask": "Can I see what it would stop first?",
+          "command": "drag-lint stop-now --all --dry-run"
+        }
+      ],
+      "notes": "seed: needs own page",
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-10-21",
+        "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-11-08",
+        "by": "ENGINE",
+        "build": "1.50.0-alpha",
+        "surfaceHash": "1ec133398b13dd5b6640e87d8b3604d65295b5cbb4698cfb41f2b46682d8a72d"
       }
     },
     {
@@ -15233,33 +16596,13 @@
         "wikiAnchor": "boolean-result-returned-directly"
       },
       {
-        "id": "rule.by-value-arg-before-assignment",
-        "title": "by-value-arg-before-assignment",
-        "group": "linting",
-        "owner": "ENGINE",
-        "status": "shipped",
-        "since": "0.2.0-alpha",
-        "summary": "Local passed by value or const to a method before it is assigned; the parameter mode comes from the receiver's static type (ref_types) (data-flow, error)",
-        "wikiPage": "rules",
-        "surfaces": [
-          {
-            "type": "cli",
-            "verb": "lint",
-            "example": "drag-lint lint <file.pas> --rule by-value-arg-before-assignment"
-          }
-        ],
-        "audience": "both",
-        "parent": "lint-rules",
-        "wikiAnchor": "by-value-arg-before-assignment"
-      },
-      {
         "id": "rule.case-magic-numbers",
         "title": "case-magic-numbers",
         "group": "linting",
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Case label is a literal -- consider naming the constant (bug-patterns, info)",
+        "summary": "Case label is a literal -- consider naming the constant (bug-patterns, info, fixable)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -16153,6 +17496,26 @@
         "wikiAnchor": "dead-store-before-out-arg"
       },
       {
+        "id": "rule.debug-display-placeholder",
+        "title": "debug-display-placeholder",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "DebuggerDisplay attribute placeholder names no member of the decorated type (bug-patterns, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule debug-display-placeholder"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "debug-display-placeholder"
+      },
+      {
         "id": "rule.deep-inheritance",
         "title": "deep-inheritance",
         "group": "linting",
@@ -16713,6 +18076,26 @@
         "wikiAnchor": "doc-drift"
       },
       {
+        "id": "rule.doc-malformed-summary",
+        "title": "doc-malformed-summary",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Doc summary opens like a declaration (procedure Foo(...)) instead of a description (documentation, hint)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule doc-malformed-summary"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "doc-malformed-summary"
+      },
+      {
         "id": "rule.doc-orphan-block",
         "title": "doc-orphan-block",
         "group": "linting",
@@ -16771,6 +18154,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "doc-param-not-in-signature"
+      },
+      {
+        "id": "rule.doc-placeholder",
+        "title": "doc-placeholder",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Doc summary is a template placeholder (Summary here ...), not a description (documentation, hint)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule doc-placeholder"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "doc-placeholder"
       },
       {
         "id": "rule.double-dictionary-lookup",
@@ -17371,6 +18774,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "exhaustive-enum-case"
+      },
+      {
+        "id": "rule.extract-constant",
+        "title": "extract-constant",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Extract the literal at --fix-line / --col into a named constant (on demand: reports only when its fix is asked for) (refactoring, hint, fixable)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule extract-constant"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "extract-constant"
       },
       {
         "id": "rule.fan-in",
@@ -18233,6 +19656,26 @@
         "wikiAnchor": "handle-leak"
       },
       {
+        "id": "rule.hanging-handler",
+        "title": "hanging-handler",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Event-handler-shaped method bound in no form file and assigned or called nowhere in code (dead-code, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule hanging-handler"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "hanging-handler"
+      },
+      {
         "id": "rule.hardcoded-absolute-path",
         "title": "hardcoded-absolute-path",
         "group": "linting",
@@ -18573,6 +20016,26 @@
         "wikiAnchor": "ignored-must-use-result"
       },
       {
+        "id": "rule.implicit-package-import",
+        "title": "implicit-package-import",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Package unit uses a project unit that is not in contains or a required package (W1033) (structure, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule implicit-package-import"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "implicit-package-import"
+      },
+      {
         "id": "rule.index-loop-to-for-in",
         "title": "index-loop-to-for-in",
         "group": "linting",
@@ -18591,6 +20054,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "index-loop-to-for-in"
+      },
+      {
+        "id": "rule.index-possibly-out-of-range",
+        "title": "index-possibly-out-of-range",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Array index written with no guard bounding it to the array's range before the access -- ERangeError is only the last resort (bug-patterns, warning, fixable)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule index-possibly-out-of-range"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "index-possibly-out-of-range"
       },
       {
         "id": "rule.indexof-result-unchecked",
@@ -19079,7 +20562,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Integer literal -- consider naming the constant (bug-patterns, info)",
+        "summary": "Integer literal -- consider naming the constant (bug-patterns, info, fixable)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -19479,7 +20962,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Unexplained numeric literal -- extract a named constant (refactoring, hint)",
+        "summary": "Unexplained numeric literal -- extract a named constant (refactoring, hint, fixable)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -19531,6 +21014,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "manual-inrange"
+      },
+      {
+        "id": "rule.member-could-be-private",
+        "title": "member-could-be-private",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Public member is only referenced inside its own unit; it could be private (project-wide, hint)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule member-could-be-private"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "member-could-be-private"
       },
       {
         "id": "rule.message-chain",
@@ -20399,7 +21902,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "A class-typed parameter whose routine uses only members an ancestor of the declared type already declares, proved by the narrow-param pl... (project-wide, hint)",
+        "summary": "A class-typed parameter whose routine uses only members an ancestor of the declared type already declares, proved by the nar... (project-wide, warning, fixable)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -21193,6 +22696,26 @@
         "wikiAnchor": "reserved-word-casing"
       },
       {
+        "id": "rule.reserved-word-identifier",
+        "title": "reserved-word-identifier",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Reserved word used as a variable, field, parameter, constant or type name (dcc E2029) (bug-patterns, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule reserved-word-identifier"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "reserved-word-identifier"
+      },
+      {
         "id": "rule.review-marker-malformed",
         "title": "review-marker-malformed",
         "group": "linting",
@@ -21253,6 +22776,26 @@
         "wikiAnchor": "review-marker-reason-unreviewed"
       },
       {
+        "id": "rule.review-marker-remeasured",
+        "title": "review-marker-remeasured",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "dl:ok marker still valid but stamped under the 1.51.0 hash or an older measure algorithm -- re-measured under the v2 hash; re-stamp wi... (review-markers, hint)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule review-marker-remeasured"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "review-marker-remeasured"
+      },
+      {
         "id": "rule.review-marker-stale",
         "title": "review-marker-stale",
         "group": "linting",
@@ -21311,6 +22854,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "rtti-unavailable"
+      },
+      {
+        "id": "rule.rule-skipped-budget",
+        "title": "rule-skipped-budget",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "A rule exceeded its per-file time budget and was skipped for this file (other, info)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule rule-skipped-budget"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "rule-skipped-budget"
       },
       {
         "id": "rule.self-as-interface-in-constructor",
@@ -22333,6 +23896,26 @@
         "wikiAnchor": "unconditional-recursion"
       },
       {
+        "id": "rule.unconnected-control",
+        "title": "unconnected-control",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Control with a default event that has no event, no Action, no binding and no code reference (dead-code, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule unconnected-control"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "unconnected-control"
+      },
+      {
         "id": "rule.undocumented-check-suppression",
         "title": "undocumented-check-suppression",
         "group": "linting",
@@ -22451,6 +24034,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "unit-too-large"
+      },
+      {
+        "id": "rule.unit-used-by-no-unit",
+        "title": "unit-used-by-no-unit",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Unit is listed only by the program file and nothing reaches it (no uses, no reference, no self-registration) (project-wide, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule unit-used-by-no-unit"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "unit-used-by-no-unit"
       },
       {
         "id": "rule.unneeded-forward-declaration",
@@ -22859,7 +24462,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Variable used before assignment (data-flow, error)",
+        "summary": "Variable used before assignment; with an index (ref_types) also a local passed by value or const to a method before it is assigned (1.52 E... (data-flow, error)",
         "wikiPage": "rules",
         "surfaces": [
           {

@@ -44,8 +44,8 @@ type
   /// be pure cost. If a threaded host is ever added, wrap the class in a lock
   /// rather than making the callers defensive.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.LSP.Completion.MarkerReviews (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildFixActions (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics (DRagLint.LSP.Completion.pas) (+23 more)</para>
-  /// <para>Used in units: DRagLint.Lint.MissingUses, DRagLint.LSP.Completion, DRagLint.LSP.Feature.DocumentSymbol, DRagLint.LSP.Feature.FoldingRange, DRagLint.LSP.Feature.InlayHint, DRagLint.LSP.Feature.Rename, DRagLint.LSP.Feature.SemanticTokens, DRagLint.LSP.Feature.TypeDefinition, DRagLint.LSP.HierarchyUtil, DRagLint.LSP.Proxy.Merge, DRagLint.LSP.Server, DRagLint.Query.HoverModel, DRagLint.Resolver.TypeAt</para>
+  /// <para>Used by: DRagLint.Diagnostics.BoundsNilChecks.FixIndexPossiblyOutOfRange (DRagLint.Diagnostics.BoundsNilChecks.pas), DRagLint.LSP.Completion.MarkerReviews (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildFixActions (DRagLint.LSP.Completion.pas) (+23 more)</para>
+  /// <para>Used in units: DRagLint.Diagnostics.BoundsNilChecks, DRagLint.Lint.MissingUses, DRagLint.LSP.Completion, DRagLint.LSP.Feature.DocumentSymbol, DRagLint.LSP.Feature.FoldingRange, DRagLint.LSP.Feature.InlayHint, DRagLint.LSP.Feature.SemanticTokens, DRagLint.LSP.Feature.TypeDefinition, DRagLint.LSP.HierarchyUtil, DRagLint.LSP.Proxy.Merge, DRagLint.LSP.Server, DRagLint.Query.HoverModel, DRagLint.Resolver.TypeAt</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TLiveDocuments = class
@@ -104,7 +104,7 @@ type
       /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.FlushDocUpdates (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Server.TLSPServer.HandleDidChange (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidChangeWatchedFiles (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidClose (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave (DRagLint.LSP.Server.pas) (+8 more)</para>
+      /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.FlushDocUpdates (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Server.TLSPServer.HandleDidChange (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidChangeWatchedFiles (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidClose (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave (DRagLint.LSP.Server.pas) (+9 more)</para>
       /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.Key</para>
       /// <para>Pure</para>
       /// <para>Directives: static</para>
@@ -169,7 +169,7 @@ type
       /// <returns>Empty array when the path is neither open nor on disk.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Completion.MarkerReviews (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildFixActions (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics (DRagLint.LSP.Completion.pas) (+12 more)</para>
+      /// <para>Called from: DRagLint.Diagnostics.BoundsNilChecks.FixIndexPossiblyOutOfRange (DRagLint.Diagnostics.BoundsNilChecks.pas), DRagLint.LSP.Completion.MarkerReviews (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildFixActions (DRagLint.LSP.Completion.pas) (+12 more)</para>
       /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.Key</para>
       /// <para>Touches: file system</para>
       /// <para>Directives: static</para>
@@ -227,6 +227,9 @@ type
   end;
 
 implementation
+
+uses
+  DRagLint.Core.Encoding;
 
 class constructor TLiveDocuments.Create;
 begin
@@ -297,7 +300,7 @@ begin
     Exit;
   end;
   if TFile.Exists(APath) then
-    Result:= TFile.ReadAllLines(APath, TEncoding.ANSI);
+    Result:= ReadSourceFileLines(APath);
 end;
 
 class function TLiveDocuments.ReadBytes(const APath: string; out AFromOverlay: Boolean): TBytes;

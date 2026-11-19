@@ -41,9 +41,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-lintall-exclude-paths-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -205,11 +208,11 @@ Write-Ascii $cfgOff '{ "exclude_paths": [], "enabled": ["global-only-uses-edge",
 
 $db    = Join-Path $drag 'app.sqlite'
 $proj  = Join-Path $app 'App.dpr'
-& $Exe index $repo --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $repo --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 function Lint-Run([string]$Cfg, [string]$OutFile) {
   Push-Location $repo
-  try { & $Exe lint-all --project $proj --db $db --config $Cfg --output $OutFile 2>&1 | Out-String }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --project $proj --db $db --config $Cfg --output $OutFile 2>&1 | ForEach-Object { "$_" } } | Out-String }
   finally { Pop-Location }
 }
 function Vendor-Findings([string]$OutFile) {
@@ -222,7 +225,7 @@ function Owned-Findings([string]$OutFile) {
 }
 
 Write-Host 'PRECONDITION: the vendored unit is indexed' -ForegroundColor Cyan
-$q = & $Exe query --name ts_query_cursor_new --db $db 2>&1 | Out-String
+$q = & { $ErrorActionPreference = 'Continue'; & $Exe query --name ts_query_cursor_new --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 $inIndex = $q -match 'ts_query_cursor_new'
 Check 'uVendor is indexed (so excluding it is a real decision)' $inIndex
 if (-not $inIndex) {
@@ -237,7 +240,7 @@ Write-Host 'POSITIVE CONTROL: with exclude_paths EMPTY the vendored file DOES re
 # the real defect sit behind a reassuring "skipped by exclude_paths" banner.
 $outOff = Join-Path $WorkDir 'off.txt'
 $null   = Lint-Run $cfgOff $outOff
-$vOff   = Vendor-Findings $outOff
+$vOff   = @(Vendor-Findings $outOff)
 Check 'vendored file produces project-wide findings when NOT excluded' `
   ($vOff.Count -gt 0) ("{0} finding(s)" -f $vOff.Count)
 if ($vOff.Count -eq 0) {
@@ -248,7 +251,7 @@ Write-Host ''
 Write-Host 'THE ASSERTION: with exclude_paths SET, no vendored finding survives' -ForegroundColor Cyan
 $outOn = Join-Path $WorkDir 'on.txt'
 $oOn   = Lint-Run $cfgOn $outOn
-$vOn   = Vendor-Findings $outOn
+$vOn   = @(Vendor-Findings $outOn)
 Check 'no finding is reported against an excluded path' `
   ($vOn.Count -eq 0) ("{0} leaked: {1}" -f $vOn.Count, (($vOn | Select-Object -First 3) -join ' | '))
 
@@ -304,7 +307,7 @@ Write-Host ''
 Write-Host 'LIVE CONTROL: the owned file is still reported in the SAME run' -ForegroundColor Cyan
 # If the fix over-reached and killed the project-wide pass outright, the
 # assertion above would pass and this one fails.
-$oOwned = Owned-Findings $outOn
+$oOwned = @(Owned-Findings $outOn)
 Check 'owned file still produces project-wide findings with exclude_paths set' `
   ($oOwned.Count -gt 0) ("{0} finding(s)" -f $oOwned.Count)
 

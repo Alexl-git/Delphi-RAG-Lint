@@ -38,7 +38,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -59,17 +62,17 @@ $dproj = Join-Path $scratch 'CircularDemo.dproj'
 
 Push-Location C:\TEMP
 try {
-  $idx = & $exePath index --project $dproj --db $db 2>&1 | Out-String
+  $idx = & { $ErrorActionPreference = 'Continue'; & $exePath index --project $dproj --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   # 2026-10-19 (E18): the demo grew from 4 units to 10 (two more cycles, both
   # refused by the planner); the 4-unit cycle and its line numbers are unchanged.
   Check 'SANITY: the ten demo units indexed with no errors' `
         (([regex]::Matches($idx, 'Demo[\w.]+\.pas\s*->\s*\d+ symbols, \d+ refs, 0 errors')).Count -eq 10) $idx
 
-  $report = & $exePath cycles --db $db 2>&1 | Out-String
+  $report = & { $ErrorActionPreference = 'Continue'; & $exePath cycles --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'POSITIVE CONTROL: plain report finds the 4-unit group with interface coupling' `
         ($report -match '\[4 units\].*has interface coupling') $report
 
-  $plan = (& $exePath cycles --plan --library-db none --db $db 2>&1 | Out-String) -replace "`r`n", "`n"
+  $plan = (& { $ErrorActionPreference = 'Continue'; & $exePath cycles --plan --library-db none --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String) -replace "`r`n", "`n"
   Set-Content -Path (Join-Path $scratch 'plan.md') -Value $plan -Encoding ascii
 
   # --- 1. kind + recipe per symbol ------------------------------------------

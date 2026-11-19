@@ -45,8 +45,11 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe"
+  [string]$Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 # E-RENAME-OTHER-PATHS: a naming fix now runs the rename proof, and these fixtures have no library: the proof's own test seam.
 $env:DRAGLINT_RENAME_TEST_UNGATED = '1'
@@ -81,10 +84,10 @@ $src = @(
 [IO.File]::WriteAllText($pas, $src + "`r`n", [Text.Encoding]::ASCII)
 
 # lint --json is a bare ARRAY whose line field is start_line (not line)
-$raw = & $Exe lint $pas --rule type-name-prefix --json 2>$null
+$raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $pas --rule type-name-prefix --json 2>$null }
 $json = ($raw | Where-Object { $_ -notmatch '^\(loaded' }) -join "`n"
 $found = @()
-if ($json.Trim().StartsWith('[')) { $found = @($json | ConvertFrom-Json) }
+if ($json.Trim().StartsWith('[')) { $found = @(($json | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
 $lines = @($found | Where-Object { $_.rule -eq 'type-name-prefix' } | ForEach-Object { [int]$_.start_line })
 Write-Host "type-name-prefix lines: $($lines -join ',')"
 
@@ -118,11 +121,11 @@ $ssrc = @(
 ) -join "`r`n"
 [IO.File]::WriteAllText($spas, $ssrc + "`r`n", [Text.Encoding]::ASCII)
 $sdb = Join-Path $work 'store.sqlite'
-& $Exe index $sdir --db $sdb 2>&1 | Out-Null
-$sraw = & $Exe lint $spas --db $sdb --library-db (Join-Path $work 'no-such-library.sqlite') --rule type-name-prefix --json 2>$null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $sdir --db $sdb 2>&1 | ForEach-Object { "$_" } } | Out-Null
+$sraw = & { $ErrorActionPreference = 'Continue'; & $Exe lint $spas --db $sdb --library-db (Join-Path $work 'no-such-library.sqlite') --rule type-name-prefix --json 2>$null }
 $sjson = ($sraw | Where-Object { $_ -notmatch '^\(loaded' }) -join "`n"
 $sfound = @()
-if ($sjson.Trim().StartsWith('[')) { $sfound = @($sjson | ConvertFrom-Json) }
+if ($sjson.Trim().StartsWith('[')) { $sfound = @(($sjson | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
 $sf = @($sfound | Where-Object { $_.rule -eq 'type-name-prefix' })
 $slines = @($sf | ForEach-Object { [int]$_.start_line })
 Write-Host "store-backed type-name-prefix lines: $($slines -join ',')"
@@ -145,11 +148,11 @@ $appDir = Join-Path $fx 'app'
 $apas   = Join-Path $appDir 'typeprefixapp.pas'
 $libDb  = Join-Path $work 'tp_lib.sqlite'
 $appDb  = Join-Path $work 'tp_app.sqlite'
-& $Exe index $libDir --db $libDb 2>&1 | Out-Null
-& $Exe index $appDir --db $appDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $libDir --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $appDir --db $appDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'B0a both fixture dbs built' ((Test-Path $libDb) -and (Test-Path $appDb)) 'index failed'
-$qa = (& $Exe query --name EDatabaseError --db $appDb --json 2>$null) -join "`n"
-$ql = (& $Exe query --name EDatabaseError --db $libDb --json 2>$null) -join "`n"
+$qa = (& { $ErrorActionPreference = 'Continue'; & $Exe query --name EDatabaseError --db $appDb --json 2>$null }) -join "`n"
+$ql = (& { $ErrorActionPreference = 'Continue'; & $Exe query --name EDatabaseError --db $libDb --json 2>$null }) -join "`n"
 Check 'B0b premise: EDatabaseError NOT in the app db' ($qa -notmatch 'EDatabaseError') 'the split is gone'
 Check 'B0c premise: EDatabaseError IS in the lib db' ($ql -match 'EDatabaseError') 'lib db lacks it'
 
@@ -157,7 +160,7 @@ function ReadFindings($rawLines) {
   $j = ($rawLines | Where-Object { $_ -notmatch '^\(loaded' -and $_ -notmatch '^lint-all:' }) -join "`n"
   $b = $j.IndexOf('[')
   if ($b -lt 0) { return @() }
-  try { return @(($j.Substring($b) | ConvertFrom-Json) | Where-Object { $_.rule -eq 'type-name-prefix' }) } catch { return @() }
+  try { return @(($j.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $_.rule -eq 'type-name-prefix' }) } catch { return @() }
 }
 $asrc = [IO.File]::ReadAllLines($apas)
 function LineOfDecl([string]$name) {
@@ -178,26 +181,26 @@ function AssertSet([string]$tag, $fs) {
   }
   function None($name) { $m = @($fs | Where-Object { [int]$_.start_line -eq $L[$name] }); return @(($m.Count -eq 0), "$($m.Count) finding(s)") }
   $gap = '^Ancestor "'
-  $r = None 'EKeyViolation'; Check "$tag-B1 EKeyViolation(EDatabaseError): no finding (library hop)" $r[0] $r[1]
-  $r = One 'KeyViolation' 'info' 'the "E" prefix'; Check "$tag-B2 KeyViolation(EDatabaseError): asks E (positive control)" $r[0] $r[1]
-  $r = None 'EBase'; Check "$tag-B3a EBase(EDatabaseError): no finding" $r[0] $r[1]
-  $r = None 'EDerived'; Check "$tag-B3b EDerived(EBase): no finding (two-level chain)" $r[0] $r[1]
-  $r = One 'Widget' 'info' 'the "T" prefix'; Check "$tag-B4 Widget(TObject): asks T" $r[0] $r[1]
-  $r = One 'EWidget' 'info' 'the "T" prefix'; Check "$tag-B5 EWidget(TLibThing): asks T (E is no exemption)" $r[0] $r[1]
-  $r = One 'Foo' 'error' $gap; Check "$tag-B6 Foo(TVendorThing): one error gap finding, no prefix finding" $r[0] $r[1]
-  $r = One 'Vendor' 'error' $gap; Check "$tag-B7 Vendor(EVendorBase): one error gap finding" $r[0] $r[1]
-  $r = One 'EVendor' 'error' $gap; Check "$tag-B8 EVendor(EVendorBase): one error gap finding" $r[0] $r[1]
-  $r = One 'Plain' 'info' 'the "T" prefix'; Check "$tag-B9 Plain = class: asks T" $r[0] $r[1]
-  $r = One 'Svc' 'info' 'the "I" prefix'; Check "$tag-B10 Svc = interface: asks I" $r[0] $r[1]
-  $r = One 'Rec' 'info' '^Record .*the "T" prefix'; Check "$tag-B11 Rec = record: asks T, says Record" $r[0] $r[1]
+  $r = @(None 'EKeyViolation'); Check "$tag-B1 EKeyViolation(EDatabaseError): no finding (library hop)" $r[0] $r[1]
+  $r = @(One 'KeyViolation' 'info' 'the "E" prefix'); Check "$tag-B2 KeyViolation(EDatabaseError): asks E (positive control)" $r[0] $r[1]
+  $r = @(None 'EBase'); Check "$tag-B3a EBase(EDatabaseError): no finding" $r[0] $r[1]
+  $r = @(None 'EDerived'); Check "$tag-B3b EDerived(EBase): no finding (two-level chain)" $r[0] $r[1]
+  $r = @(One 'Widget' 'info' 'the "T" prefix'); Check "$tag-B4 Widget(TObject): asks T" $r[0] $r[1]
+  $r = @(One 'EWidget' 'info' 'the "T" prefix'); Check "$tag-B5 EWidget(TLibThing): asks T (E is no exemption)" $r[0] $r[1]
+  $r = @(One 'Foo' 'error' $gap); Check "$tag-B6 Foo(TVendorThing): one error gap finding, no prefix finding" $r[0] $r[1]
+  $r = @(One 'Vendor' 'error' $gap); Check "$tag-B7 Vendor(EVendorBase): one error gap finding" $r[0] $r[1]
+  $r = @(One 'EVendor' 'error' $gap); Check "$tag-B8 EVendor(EVendorBase): one error gap finding" $r[0] $r[1]
+  $r = @(One 'Plain' 'info' 'the "T" prefix'); Check "$tag-B9 Plain = class: asks T" $r[0] $r[1]
+  $r = @(One 'Svc' 'info' 'the "I" prefix'); Check "$tag-B10 Svc = interface: asks I" $r[0] $r[1]
+  $r = @(One 'Rec' 'info' '^Record .*the "T" prefix'); Check "$tag-B11 Rec = record: asks T, says Record" $r[0] $r[1]
   Check "$tag total finding count is 9 (nothing extra)" (@($fs).Count -eq 9) "count=$(@($fs).Count)"
 }
-$bf = ReadFindings (& $Exe lint $apas --db $appDb --library-db $libDb --rule type-name-prefix --json 2>$null)
+$bf = @(ReadFindings (& { $ErrorActionPreference = 'Continue'; & $Exe lint $apas --db $appDb --library-db $libDb --rule type-name-prefix --json 2>$null }))
 AssertSet 'B' $bf
 
 Write-Host ''
 Write-Host 'Section B-all: lint-all --db <app> --db <lib> (parity with Section B)'
-$af = ReadFindings (& $Exe lint-all --db $appDb --db $libDb --rule type-name-prefix --json 2>$null)
+$af = @(ReadFindings (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $appDb --db $libDb --rule type-name-prefix --json 2>$null }))
 AssertSet 'BA' $af
 
 # ---------------------------------------------------------------------------
@@ -234,9 +237,9 @@ $csrc = @(
 [IO.File]::WriteAllText($cpas, $csrc + "`r`n", [Text.Encoding]::ASCII)
 $cLibDb = Join-Path $cdir 'c_lib.sqlite'
 $cAppDb = Join-Path $cdir 'c_app.sqlite'
-& $Exe index $clib --db $cLibDb 2>&1 | Out-Null
-& $Exe index $capp --db $cAppDb 2>&1 | Out-Null
-& $Exe lint $cpas --db $cAppDb --library-db $cLibDb --fix --fix-naming --apply --rule type-name-prefix 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $clib --db $cLibDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $capp --db $cAppDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe lint $cpas --db $cAppDb --library-db $cLibDb --fix --fix-naming --apply --rule type-name-prefix 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $out = [IO.File]::ReadAllLines($cpas)
 $outTxt = $out -join "`n"
 Check 'C1 KeyDup = class(EDatabaseError) became EKeyDup' ($out -contains '  EKeyDup = class(EDatabaseError);') $outTxt
@@ -257,16 +260,16 @@ $stpas = Join-Path $stdir 'StaleUnit.pas'
 $stlines = @('unit StaleUnit;', '', 'interface', '', 'type', '  Widget = class(TObject);', '', 'implementation', '', 'end.')
 [IO.File]::WriteAllText($stpas, ($stlines -join "`r`n") + "`r`n", [Text.Encoding]::ASCII)
 $stdb = Join-Path $work 'stale.sqlite'
-& $Exe index $stdir --db $stdb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $stdir --db $stdb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $stlines = @('unit StaleUnit;', '', 'interface', '', 'type', '  Widget = class(TObject);', '  EStale1 = class(Exception);', '  Stale2 = class(TObject);', '', 'implementation', '', 'end.')
 [IO.File]::WriteAllText($stpas, ($stlines -join "`r`n") + "`r`n", [Text.Encoding]::ASCII)
-$stf = @(ReadFindings (& $Exe lint $stpas --db $stdb --library-db $libDb --rule type-name-prefix --json 2>$null))
+$stf = @(ReadFindings (& { $ErrorActionPreference = 'Continue'; & $Exe lint $stpas --db $stdb --library-db $libDb --rule type-name-prefix --json 2>$null }))
 $stl = @($stf | ForEach-Object { [int]$_.start_line })
 Write-Host "stale type-name-prefix lines: $($stl -join ',')"
 Check 'S1 stale: indexed Widget = class(TObject) still asks for T (positive control)' (@($stf | Where-Object { [int]$_.start_line -eq 6 -and $_.message -match 'should start with the "T" prefix' }).Count -eq 1) "lines: $($stl -join ',')"
 Check 'S2 stale: EStale1 = class(Exception) has no finding' (@($stf | Where-Object { [int]$_.start_line -eq 7 }).Count -eq 0) "lines: $($stl -join ',')"
 Check 'S3 stale: Stale2 = class(TObject) has no finding' (@($stf | Where-Object { [int]$_.start_line -eq 8 }).Count -eq 0) "lines: $($stl -join ',')"
-& $Exe lint $stpas --db $stdb --library-db $libDb --fix --fix-naming --apply --rule type-name-prefix 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe lint $stpas --db $stdb --library-db $libDb --fix --fix-naming --apply --rule type-name-prefix 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $stout = [IO.File]::ReadAllLines($stpas)
 Check 'S4 stale --fix --fix-naming: EStale1 unchanged' ($stout -contains '  EStale1 = class(Exception);') ($stout -join "`n")
 Check 'S5 stale --fix --fix-naming: Stale2 unchanged' ($stout -contains '  Stale2 = class(TObject);') ($stout -join "`n")

@@ -19,10 +19,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Dpr     = "$PSScriptRoot\..\reportstext\ReportTextTests.dpr",
-  [string]$Bundler = "$PSScriptRoot\..\..\charts\src\New-DiagramArtifact.ps1",
+  [string]$Dpr     = '',
+  [string]$Bundler = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-reports-text-build-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Dpr) { $Dpr = "$PSScriptRoot\..\reportstext\ReportTextTests.dpr" }
+if (-not $Bundler) { $Bundler = "$PSScriptRoot\..\..\charts\src\New-DiagramArtifact.ps1" }
 try {
 $ErrorActionPreference = 'Stop'
 
@@ -54,7 +58,7 @@ $lines = @(
 $buildLog = Join-Path $WorkDir 'build.log'
 $null = Start-Process cmd.exe -ArgumentList "/c","`"$bat`"" `
        -RedirectStandardOutput $buildLog -RedirectStandardError "$buildLog.err" `
-       -NoNewWindow -Wait -PassThru
+       -NoNewWindow -Wait -PassThru; $null = $null.Handle
 $buildOut = Get-Content $buildLog -Raw
 if ($buildOut -notmatch 'BUILD_EXITCODE=0') {
   Write-Host 'FATAL: compile failed' -ForegroundColor Red
@@ -67,7 +71,7 @@ if (-not (Test-Path $exe)) { Write-Host "FATAL: exe not produced: $exe" -Foregro
 
 # the formatter cases read charts\fixtures\docinsight (the pairs the deleted PowerShell port was also held to)
 $env:DRAGLINT_REPO_ROOT = (Resolve-Path "$PSScriptRoot\..\..").Path
-$out = & $exe 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $exe 2>&1 | ForEach-Object { "$_" } } | Out-String
 $rc  = $LASTEXITCODE
 Write-Host $out.TrimEnd()
 if ($rc -ne 0) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }

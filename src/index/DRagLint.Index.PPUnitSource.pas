@@ -37,9 +37,26 @@ uses
 type
   /// <summary>The IPPUnitSource the index and lint runs install (see the unit
   /// header for how each unit is answered).</summary>
-  /// <remarks>Thread-safe. Opens its DBs read-only, lazily, on first need.</remarks>
+  /// <remarks>
+  /// Thread-safe. Opens its DBs read-only, lazily, on first need.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Index.PPUnitSource.pas) ?, DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas) ?, DRagLint.CLI.DoIndex (DRagLint.CLI.pas) ?, DRagLint.Index.PPUnitSource.InstallPPUnitSource (DRagLint.Index.PPUnitSource.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Index.PPUnitSource</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPPUnitSourceResolver = class(TInterfacedObject, IPPUnitSource)
   private type
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Used by: declaration (DRagLint.Index.PPUnitSource.pas) ?, DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.AskLibrary (DRagLint.Index.PPUnitSource.pas), DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.Create (DRagLint.Index.PPUnitSource.pas) ?, DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.LookupInUnit (DRagLint.Index.PPUnitSource.pas) ?</para>
+    /// <para>Used in units: DRagLint.Index.PPUnitSource</para>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.AddUnitFiles"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.AskLibrary"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.Create"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.Destroy"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.EvalInUnit"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     TAnswer = record
       Kind : TPPNameKind;
       Value: TPPValue;
@@ -61,10 +78,93 @@ type
     FStoresOpen : Boolean;
     FDepth      : Integer;
     FUnknownAnswers: Integer;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.AskLibrary (DRagLint.Index.PPUnitSource.pas), DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.HasLibraryEvidence (DRagLint.Index.PPUnitSource.pas), DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.UnitFile (DRagLint.Index.PPUnitSource.pas)</para>
+    /// <para>Calls: DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.OpenStores.OpenAll</para>
+    /// <para>Reads: FStoresOpen, FProjectDbs, FLibraryDbs   Writes: FStoresOpen, FProjStores, FLibStores</para>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.OpenStores.OpenAll"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.AddUnitFiles"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.AskLibrary"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.Create"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure OpenStores;
+    /// <summary><!-- drag-lint:auto sum -->The project source file of AUnit, or '' when
+    /// it is not a project unit.</summary>
+    /// <param name="AUnit"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: ''; S.GetFilePath(Sym.FileId).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.LookupInUnit (DRagLint.Index.PPUnitSource.pas)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.OpenStores, LowerCase, SameText</para>
+    /// <para>Reads: FUnitFiles, FProjStores</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.OpenStores"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.AddUnitFiles"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.AskLibrary"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function UnitFile(const AUnit: string): string;
+    /// <param name="AKey"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->TDictionary&lt;string, TPPDecl&gt; -- Observed:
+    /// TDictionary&lt;string, TPPDecl&gt;.Create.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.LookupInUnit (DRagLint.Index.PPUnitSource.pas)</para>
+    /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Preprocess.PreprocessReport, DRagLint.Preprocess.Types.TPPOptionsDefault, LowerCase</para>
+    /// <para>Reads: FScanned, FInProgress, FProfile, FSearchPaths</para>
+    /// <para>Owns returned: new (caller owns)</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
+    /// <seealso cref="DRagLint.Preprocess.PreprocessReport"/>
+    /// <seealso cref="DRagLint.Preprocess.Types.TPPOptionsDefault"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.AddUnitFiles"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.AskLibrary"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Scan(const AKey, APath: string): TDictionary<string, TPPDecl>;
+    /// <param name="AUnit"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->TAnswer -- Observed: Default(TAnswer).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.LookupInUnit (DRagLint.Index.PPUnitSource.pas)</para>
+    /// <para>Calls: Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Index.PPUnitSource.SafeByName, DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.EvalInUnit, DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.OpenStores, LowerCase, Pos, Trim</para>
+    /// <para>Complexity: 13 (cyclomatic, outer body), 56 lines (full implementation)</para>
+    /// <para>Reads: FLibStores, FDepth   Writes: FDepth</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.SafeByName"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.EvalInUnit"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.OpenStores"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.AddUnitFiles"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function AskLibrary(const AUnit, AName: string): TAnswer;
+    /// <summary><!-- drag-lint:auto sum -->Evaluates a library constant's expression in
+    /// its own unit's scope: names resolve in AUnitQName, then System.</summary>
+    /// <param name="AUnitQName"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AExpr"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AValue"><!-- drag-lint:auto type -->out TPPValue</param>
+    /// <returns><!-- drag-lint:auto type -->Boolean</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.AskLibrary (DRagLint.Index.PPUnitSource.pas)</para>
+    /// <para>Calls: DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.LookupInUnit, DRagLint.Preprocess.Expr.TryEvalPPConst, SameText</para>
+    /// <para>Reads: FDefines, FNumeric</para>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.LookupInUnit"/>
+    /// <seealso cref="DRagLint.Preprocess.Expr.TryEvalPPConst"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.AddUnitFiles"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.AskLibrary"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function EvalInUnit(const AUnitQName, AExpr: string; out AValue: TPPValue): Boolean;
   public
     /// <summary>Constructor: a source for one run.</summary>
@@ -74,22 +174,88 @@ type
     /// files to scan (missing files are skipped). May be empty.</param>
     /// <param name="ALibraryDbs">Library DBs answered from symbols. May be empty;
     /// paths that do not exist are ignored.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.PPUnitSource.InstallPPUnitSource (DRagLint.Index.PPUnitSource.pas)</para>
+    /// <para>Calls: LowerCase</para>
+    /// <para>constructor</para>
+    /// <para>Reads: FDefines, FNumeric   Writes: FLock, FProfile, FSearchPaths, FProjectDbs, FLibraryDbs, FDefines, FNumeric, FUnitFiles (+3 more)</para>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.AddUnitFiles"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.AskLibrary"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.Destroy"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.EvalInUnit"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.HasLibraryEvidence"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(const AProfile: TDefineProfile; const ASearchPaths, AProjectDbs, ALibraryDbs: TArray<string>);
     /// <summary>Frees the caches and closes the DBs.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FAnswers, FInProgress, FScanned, FUnitFiles, FNumeric, FDefines, FLock   Writes: FProjStores, FLibStores</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.AddUnitFiles"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.AskLibrary"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.Create"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.EvalInUnit"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.HasLibraryEvidence"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>Registers project source files (unit name = file base name);
     /// non-.pas paths are ignored. Clears every cached answer.</summary>
     /// <param name="APaths">Absolute paths, e.g. a closure's file list.</param>
     /// <param name="ASearchPaths">Include search paths for the scans (replaces the earlier ones).</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas)</para>
+    /// <para>Calls: ExtractFileExt, LowerCase, SameText</para>
+    /// <para>Reads: FLock, FUnitFiles, FAnswers, FScanned   Writes: FSearchPaths, FUnknownAnswers</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.AskLibrary"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.Create"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.Destroy"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.EvalInUnit"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.HasLibraryEvidence"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure AddUnitFiles(const APaths, ASearchPaths: TArray<string>);
     /// <summary>See IPPUnitSource.LookupInUnit.</summary>
     /// <param name="AUnit">The unit as the uses clause spells it.</param>
     /// <param name="AName">The bare symbol name.</param>
     /// <param name="AValue">The value when pnkConst is returned.</param>
     /// <returns>How AUnit declares AName.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.EvalInUnit (DRagLint.Index.PPUnitSource.pas)</para>
+    /// <para>Calls: Default, DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.AskLibrary, DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.Scan, DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.UnitFile, LowerCase</para>
+    /// <para>Returns: pnkUnknown; pnkTypedConst; pnkDeclared; pnkConst; A.Kind</para>
+    /// <para>Implements: DRagLint.Preprocess.Decls.IPPUnitSource.LookupInUnit</para>
+    /// <para>Complexity: 11 (cyclomatic, outer body), 39 lines (full implementation)</para>
+    /// <para>Reads: FLock, FInProgress, FAnswers   Writes: FUnknownAnswers</para>
+    /// <para>Mutates: AValue (out)</para>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.AskLibrary"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.Scan"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.UnitFile"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.AddUnitFiles"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function LookupInUnit(const AUnit, AName: string; out AValue: TPPValue): TPPNameKind;
     /// <summary>See IPPUnitSource.HasLibraryEvidence.</summary>
     /// <returns>True when a library DB opened; opens them on first need.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.OpenStores</para>
+    /// <para>Returns: Length(FLibStores) &gt; 0</para>
+    /// <para>Implements: DRagLint.Preprocess.Decls.IPPUnitSource.HasLibraryEvidence</para>
+    /// <para>Reads: FLock, FLibStores</para>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.OpenStores"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.AddUnitFiles"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.AskLibrary"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.Create"/>
+    /// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function HasLibraryEvidence: Boolean;
     /// <summary>How many lookups answered pnkUnknown since the last AddUnitFiles
     /// -- zero means no IF needed a unit the source could not see, so a second
@@ -103,6 +269,16 @@ type
 /// <param name="AProjectDbs">See TPPUnitSourceResolver.Create.</param>
 /// <param name="ALibraryDbs">See TPPUnitSourceResolver.Create.</param>
 /// <returns>The installed resolver; the installation owns it (do not free).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.ConfigureLspLint (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.Create, DRagLint.Preprocess.Decls.PPSetUnitSource</para>
+/// <para>Returns: TPPUnitSourceResolver.Create(AProfile, nil, AProjectDbs, ALibraryDbs)</para>
+/// <para>Owns returned: new (caller owns)</para>
+/// <seealso cref="DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.Create"/>
+/// <seealso cref="DRagLint.Preprocess.Decls.PPSetUnitSource"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function InstallPPUnitSource(const AProfile: TDefineProfile; const AProjectDbs, ALibraryDbs: TArray<string>): TPPUnitSourceResolver;
 
 implementation

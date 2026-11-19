@@ -17,9 +17,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Dpr     = "$PSScriptRoot\..\LspNonBlockingTests.dpr",
+  [string]$Dpr     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-lsp-nonblocking-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Dpr) { $Dpr = "$PSScriptRoot\..\LspNonBlockingTests.dpr" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -51,7 +54,7 @@ try {
   [IO.File]::WriteAllText($bat, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
   $buildLog = Join-Path $WorkDir 'build.log'
   $null = Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $buildLog `
-            -RedirectStandardError "$buildLog.err" -NoNewWindow -Wait -PassThru
+            -RedirectStandardError "$buildLog.err" -NoNewWindow -Wait -PassThru; $null = $null.Handle
   $buildOut = Get-Content $buildLog -Raw
   if ($buildOut -notmatch 'BUILD_EXITCODE=0') {
     Write-Host 'FATAL: compile failed' -ForegroundColor Red
@@ -65,7 +68,7 @@ try {
   $outFile = Join-Path $WorkDir 'out.txt'
   # H06: the plugin's log writer honours DRAGLINT_PLUGIN_LOG_DIR (the log folder itself) -- never write the owner's %LOCALAPPDATA%\drag-lint\logs.
   $env:DRAGLINT_PLUGIN_LOG_DIR = Join-Path $WorkDir 'plog'
-  $proc = Start-Process $exe -RedirectStandardOutput $outFile -RedirectStandardError "$outFile.err" -NoNewWindow -PassThru
+  $proc = Start-Process $exe -RedirectStandardOutput $outFile -RedirectStandardError "$outFile.err" -NoNewWindow -PassThru; $null = $proc.Handle
   if (-not $proc.WaitForExit(120000)) { $proc.Kill(); Check 'harness finished within 120 s' $false 'killed' }
   $out = Get-Content $outFile -Raw
   Write-Host $out.TrimEnd()

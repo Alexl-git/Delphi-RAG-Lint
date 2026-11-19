@@ -56,9 +56,12 @@
 # Usage: pwsh -File tests/autotest/run_hover_qname_row_order.ps1 [-Exe <path>]
 [CmdletBinding()]
 param(
-    [string] $Exe     = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1"),
+    [string] $Exe     = '',
     [string] $WorkDir = "$env:TEMP\drag-lint-hover-qname-row-order-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1") }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -119,7 +122,7 @@ end;
 end.
 '@ | Set-Content -LiteralPath $pas -Encoding ascii
 
-& $exePath index $srcDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $srcDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 # --- read rows straight out of the DB -------------------------------------
 # The DB is the only place the ROW SET is visible; the CLI shows one row by
@@ -140,12 +143,12 @@ print(json.dumps(rows))
 function Get-Rows([string]$qname) {
     $j = (& python $rowPy $db $qname) -join ''
     if ([string]::IsNullOrWhiteSpace($j)) { return @() }
-    return @($j | ConvertFrom-Json)
+    return @(($j | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 function Get-HoverDefLine([string]$qname) {
-    $raw = (& $exePath hover --qname $qname --db $db --format json 2>$null) -join ''
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath hover --qname $qname --db $db --format json 2>$null }) -join ''
     $o = $null
-    try { $o = ($raw -replace '\s*FTS5 probe:.*$','') | ConvertFrom-Json } catch { return -1 }
+    try { $o = ($raw -replace '\s*FTS5 probe:.*$','') | ConvertFrom-Json | ForEach-Object { $_ } } catch { return -1 }
     if ($null -eq $o) { return -1 }
     return [int]$o.def_line
 }
@@ -164,7 +167,7 @@ $bodyLine = Line-Of '^\s*TThing = class\(TObject\)\s*$'
 Check 'PRECONDITION: the fixture spells the stub ABOVE the body' `
   (($stubLine -gt 0) -and ($bodyLine -gt $stubLine)) "stub=$stubLine body=$bodyLine"
 
-$tRows = Get-Rows 'qrowfix.TThing'
+$tRows = @(Get-Rows 'qrowfix.TThing')
 Check 'PRECONDITION: the index holds exactly TWO rows for qrowfix.TThing' `
   ($tRows.Count -eq 2) ("rows=" + (($tRows | ForEach-Object { "$($_.start_line)..$($_.end_line)" }) -join ' '))
 
@@ -202,7 +205,7 @@ $implLine = Line-Of '^\s*function Doubled: Integer; overload;'
 Check 'PRECONDITION: the fixture declares the ABSTRACT overload above the implemented one' `
   (($absLine -gt 0) -and ($implLine -gt $absLine)) "abstract=$absLine implemented=$implLine"
 
-$dRows = Get-Rows 'qrowfix.TThing.Doubled'
+$dRows = @(Get-Rows 'qrowfix.TThing.Doubled')
 Check 'PRECONDITION: the index holds exactly TWO rows for qrowfix.TThing.Doubled' `
   ($dRows.Count -eq 2) ("rows=" + (($dRows | ForEach-Object { "$($_.start_line)/impl=$($_.impl)" }) -join ' '))
 $noBody = @($dRows | Where-Object { $_.impl -le 0 })
@@ -221,9 +224,9 @@ Check 'K29: hover --qname on an overload pair answers the row that HAS a body' `
 # ... and the body-first ordering is only useful if the body's facts come with
 # it. A row with no impl span mines no return value at all, so this separates
 # "the right row" from "a row".
-$dRaw = (& $exePath hover --qname 'qrowfix.TThing.Doubled' --db $db --format json 2>$null) -join ''
+$dRaw = (& { $ErrorActionPreference = 'Continue'; & $exePath hover --qname 'qrowfix.TThing.Doubled' --db $db --format json 2>$null }) -join ''
 $dObj = $null
-try { $dObj = ($dRaw -replace '\s*FTS5 probe:.*$','') | ConvertFrom-Json } catch {}
+try { $dObj = ($dRaw -replace '\s*FTS5 probe:.*$','') | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'K29: that row brings its body''s facts with it -- the mined return is "FValue * 2"' `
   (($null -ne $dObj) -and (@($dObj.returns).Count -eq 1) -and (@($dObj.returns)[0] -eq 'FValue * 2')) $dRaw
 
@@ -233,7 +236,7 @@ Write-Host '=== Control: an ordinary single-row symbol still answers ===' -Foreg
 # Non-vacuity for the whole file: an ORDER BY that returned nothing, or a hover
 # that failed on every qname, would satisfy nothing above but must be told apart
 # from a working engine all the same.
-$hRows = Get-Rows 'qrowfix.THolder'
+$hRows = @(Get-Rows 'qrowfix.THolder')
 Check 'PRECONDITION: qrowfix.THolder owns exactly ONE row (no ordering to do)' ($hRows.Count -eq 1) `
   ("rows=" + $hRows.Count)
 $hDef = Get-HoverDefLine 'qrowfix.THolder'

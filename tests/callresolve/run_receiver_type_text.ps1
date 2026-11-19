@@ -14,7 +14,10 @@
   Run from a NEUTRAL CWD (C:\TEMP).
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d=''){ Write-Host ("[{0}] {1} {2}" -f (@('FAIL','PASS')[[int]$ok]),$n,$d) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
 $exePath = (Resolve-Path $Exe).Path
@@ -30,9 +33,9 @@ try {
 
   # sql --json rows are POSITIONAL arrays: map them onto columns[].name.
   function Q([string]$Db,[string]$Query) {
-    $raw = (& $exePath sql --db $Db --json --limit 5000 --query $Query 2>$null) -join "`n"
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $Db --json --limit 5000 --query $Query 2>$null }) -join "`n"
     $b = $raw.IndexOf('{'); if ($b -lt 0) { throw "sql returned no JSON for: $Query" }
-    $o = $raw.Substring($b) | ConvertFrom-Json
+    $o = $raw.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }
     $names = @($o.columns | ForEach-Object { $_.name }); $out = @()
     foreach ($r in @($o.rows)) { $h = @{}; for ($i=0; $i -lt $names.Count; $i++) { $h[$names[$i]] = $r[$i] }; $out += $h }
     return ,@($out)
@@ -58,11 +61,11 @@ try {
 
   Push-Location C:\TEMP
   try {
-    & $exePath index $libDir --db $libDb 2>$null | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $libDir --db $libDb 2>$null } | Out-Null
     Check 'library index built' ($LASTEXITCODE -eq 0)
 
     # ---- Part A: project only ----
-    $outA = & $exePath index $appDir --db $dbA 2>&1 | Out-String
+    $outA = & { $ErrorActionPreference = 'Continue'; & $exePath index $appDir --db $dbA 2>&1 | ForEach-Object { "$_" } } | Out-String
     Check 'A: app index built' ($LASTEXITCODE -eq 0)
     $a = Q $dbA $refSql
     foreach ($s in $sites) {
@@ -74,7 +77,7 @@ try {
     Check 'A: stats line shows no-store' ($outA -match 'no-store')
 
     # ---- Part B: with the library ----
-    $outB = & $exePath index $appDir --db $dbB --library-db $libDb 2>&1 | Out-String
+    $outB = & { $ErrorActionPreference = 'Continue'; & $exePath index $appDir --db $dbB --library-db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-String
     Check 'B: app index built with --library-db' ($LASTEXITCODE -eq 0)
     $b = Q $dbB $refSql
     foreach ($s in $sites) {
@@ -93,8 +96,8 @@ try {
 
     # ---- idempotency + provenance ----
     $dump1 = (Q $dbB 'select id, receiver_type_text, external_target from refs order by id' | ForEach-Object { "$($_.id)|$($_.receiver_type_text)|$($_.external_target)" }) -join "`n"
-    & $exePath index $appDir --db $dbB --library-db $libDb --resolve-only 2>&1 | Out-Null
-    & $exePath index $appDir --db $dbB --library-db $libDb --resolve-only 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $appDir --db $dbB --library-db $libDb --resolve-only 2>&1 | ForEach-Object { "$_" } } | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $appDir --db $dbB --library-db $libDb --resolve-only 2>&1 | ForEach-Object { "$_" } } | Out-Null
     $dump2 = (Q $dbB 'select id, receiver_type_text, external_target from refs order by id' | ForEach-Object { "$($_.id)|$($_.receiver_type_text)|$($_.external_target)" }) -join "`n"
     Check 'B: --resolve-only twice is idempotent' (($dump1.Length -gt 0) -and ($dump1 -ceq $dump2))
     $meta = Q $dbB "select value from schema_meta where key = 'external_stores'"

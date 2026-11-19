@@ -127,7 +127,7 @@ type
 /// <para>Called from: DRagLint.CLI.DoProjectFacts (DRagLint.CLI.pas)</para>
 /// <para>Calls: Default, DRagLint.Preprocess.Profile.DprojEffectiveDefines, DRagLint.Preprocess.Profile.DprojGroupChain, DRagLint.Preprocess.Profile.PlatformBuiltins, DRagLint.Project.Facts.AddDefines, DRagLint.Project.Facts.AttrOf, DRagLint.Project.Facts.ConditionIsActive, DRagLint.Project.Facts.GroupBody, DRagLint.Project.Facts.ImportKind, DRagLint.Project.Facts.PostProcessorNotices (+7 more)</para>
 /// <para>Returns: Default(TProjectFacts)</para>
-/// <para>Complexity: 12 (cyclomatic, outer body), 91 lines (full implementation)</para>
+/// <para>Complexity: 13 (cyclomatic, outer body), 91 lines (full implementation)</para>
 /// <para>Catches: EInOutError (swallowed)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Preprocess.Profile.DprojEffectiveDefines"/>

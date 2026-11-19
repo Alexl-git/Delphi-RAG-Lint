@@ -40,7 +40,12 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Repo = "$PSScriptRoot\..\..")
+param([string]$Repo = '',
+      # B46 (1.52): accepted and unused, so a battery that hands every runner -Exe can call this one; the guard reads source only.
+      [string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Repo) { $Repo = "$PSScriptRoot\..\.." }
 
 $ErrorActionPreference = 'Stop'; $script:fail = $false
 function Check($n,$ok,$detail=''){

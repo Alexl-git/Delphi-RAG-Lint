@@ -40,8 +40,11 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe"
+  [string]$Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 . "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe
 $ErrorActionPreference = 'Continue'
@@ -129,11 +132,11 @@ $LA = LineOf '{A}'; $LB = (LineOf "Writeln('b')") + 2; $LC = LineOf '{C}'; $LD =
 Push-Location $Work
 try {
   $db = Join-Path $Work 'rm.sqlite'
-  $null = & $Exe index --project (Join-Path $Work 'RmProj.dpr') --db $db 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $Work 'RmProj.dpr') --db $db 2>&1 | ForEach-Object { "$_" } }
   Check 'index exit 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
-  $raw = (& $Exe lint (Join-Path $Work 'RmUnit.pas') --db $db --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $Work 'RmUnit.pas') --db $db --json 2>$null }) -join "`n"
   $all = @()
-  try { $all = @($raw | ConvertFrom-Json) } catch { Check 'lint --json parses' $false $raw.Substring(0, [Math]::Min(300, $raw.Length)) }
+  try { $all = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { Check 'lint --json parses' $false $raw.Substring(0, [Math]::Min(300, $raw.Length)) }
   Check 'lint returned findings (non-empty answer)' ($all.Count -gt 0) "count=$($all.Count)"
   function Has($rule, $line) { @($all | Where-Object { $_.rule -eq $rule -and $_.start_line -eq $line }).Count -gt 0 }
 

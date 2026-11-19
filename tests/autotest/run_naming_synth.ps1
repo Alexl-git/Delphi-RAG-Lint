@@ -10,9 +10,12 @@
 # Usage: pwsh -File tests/autotest/run_naming_synth.ps1
 [CmdletBinding()]
 param(
-    [string] $DprojDir = "$PSScriptRoot\fixtures\namesynth",
+    [string] $DprojDir = '',
     [string] $WorkDir  = "$env:TEMP\drag-lint-naming-synth-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $DprojDir) { $DprojDir = "$PSScriptRoot\fixtures\namesynth" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -58,7 +61,7 @@ $batBody = ($batLines -join "`r`n")
 
 $p = Start-Process cmd.exe -ArgumentList "/c", "`"$batPath`"" `
        -RedirectStandardOutput $logPath -RedirectStandardError "$logPath.err" `
-       -NoNewWindow -Wait -PassThru
+       -NoNewWindow -Wait -PassThru; $null = $p.Handle
 $log = Get-Content $logPath -Raw -ErrorAction SilentlyContinue
 $buildOk = ($log -match 'BUILD_EXITCODE=0') -and ($log -notmatch 'Error:')
 Check 'NameSynthHarness.dpr builds (Win64 Debug)' $buildOk (($log -split "`r?`n" | Select-Object -Last 8) -join ' | ')
@@ -81,7 +84,7 @@ if (-not $buildOk -or -not (Test-Path $exe)) {
 Copy-TreeSitterDlls -Dest $outDir | Out-Null
 
 function RunHarness([string]$OldName, [string]$ConfigCase) {
-    (& $exe $OldName $ConfigCase 2>&1 | Out-String).Trim()
+    (& { $ErrorActionPreference = 'Continue'; & $exe $OldName $ConfigCase 2>&1 | ForEach-Object { "$_" } } | Out-String).Trim()
 }
 
 # Test-case table (from the Task 5 brief, Step 1)

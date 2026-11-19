@@ -26,10 +26,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe = '',
   [switch]$KeepScratch,
   [string]$WorkDir = "$env:TEMP\drag-lint-charts-cycles-fixit-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 $script:Passed = 0
@@ -51,7 +54,7 @@ function Copy-Tree([string]$From, [string]$To) {
 }
 function Index-Copy([string]$Dir, [string]$Dproj, [string]$Tag) {
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  $idx = & $Exe index --project (Join-Path $Dir $Dproj) --db $db 2>&1 | Out-String
+  $idx = & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $Dir $Dproj) --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check "${Tag}: SANITY the copy indexed with 0 errors" (($idx -match ', 0 errors') -and ($idx -notmatch '[1-9]\d* errors')) $idx
   return $db
 }
@@ -111,17 +114,17 @@ try {
   Check 'b2: no dry-run code cell for an unavailable fix' ((Count-Code $pn.Dot) -eq 0) ''
 
   Write-Host '== (c) POSITIVE CONTROL: a stub engine without `fix`' -ForegroundColor Cyan
-  $raw = & $Exe cycles --db $db --project $proj --format json --edges --causes --library-db none 2>$null | Out-String
-  $j = @($raw | ConvertFrom-Json)
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe cycles --db $db --project $proj --format json --edges --causes --library-db none 2>$null } | Out-String
+  $j = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Check 'c0: SANITY the real JSON has a fix object on all 3 cycles' (@($j | Where-Object { $_.PSObject.Properties['fix'] }).Count -eq 3) ''
-  $old = @($raw | ConvertFrom-Json | ForEach-Object { $_.PSObject.Properties.Remove('fix'); $_ })
+  $old = @($raw | ConvertFrom-Json | ForEach-Object { $_ } | ForEach-Object { $_.PSObject.Properties.Remove('fix'); $_ })
   $stubOld = New-Stub 'old' $old
   $po = Build-Page $db $proj $stubOld 'old'
   Check 'c1: every cycle reads `fix-it: engine too old`' (([regex]::Matches($po.Dot, 'fix-it: engine too old')).Count -eq 3) ''
   Check 'c2: no dry-run command and no `not available` cell rendered' (((Count-Code $po.Dot) -eq 0) -and ($po.Dot -notmatch 'fix-it: not available')) ''
 
   Write-Host '== (d) a stub with recipe member-interface (the library case)' -ForegroundColor Cyan
-  $j2 = @($raw | ConvertFrom-Json)
+  $j2 = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   $j2[1].fix.available = $true; $j2[1].fix.reason = ''
   $j2[1].fix.edges = @([pscustomobject]@{ from = 'demogageport'; to = 'demouiconnect'; recipe = 'member-interface'; chosen = $true })
   $stubMi = New-Stub 'mi' $j2
@@ -150,7 +153,7 @@ try {
     $outRoot = Join-Path $WorkDir "ask-$Tag"
     $aa = @('-NoProfile', '-File', $ask, '-Question', 'cycles', '-Target', 'project', '-DbPath', $db, '-Engine', (Join-Path $wdir 'wrap.ps1'), '-OutRoot', $outRoot, '-Plain')
     if ($WithProject) { $aa += @('-Project', $proj) }
-    $o = & pwsh @aa 2>&1 | Out-String
+    $o = & { $ErrorActionPreference = 'Continue'; & pwsh @aa 2>&1 | ForEach-Object { "$_" } } | Out-String
     $m = [regex]::Match($o, '(?m)^BUNDLE (.+?)\s*$')
     if (-not $m.Success) { return @{ Dot = ''; Out = $o } }
     return @{ Dot = [IO.File]::ReadAllText((Join-Path $m.Groups[1].Value 'graph.dot')); Out = $o }

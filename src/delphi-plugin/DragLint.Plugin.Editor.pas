@@ -27,7 +27,7 @@ const (* v0.40.1: hardcoded version; build stamp resolved at runtime from the
      loaded BPL's file modtime (see PluginBuildTag). Compiler intrinsics
      like the dollar-I DATE/TIME macros emit unquoted strings in Delphi 13
      and don't fit in a const expression. *)
-  PLUGIN_VERSION = 'v1.51.2-alpha';
+  PLUGIN_VERSION = 'v1.52.0-alpha';
 
   { Stamp every user-visible plugin dialog with the version + the actual
   build time of the BPL the IDE has loaded so the user can verify at a
@@ -56,8 +56,8 @@ function PluginBuildTag: string;
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.Editor.BroadcastDidSaveForAffectedFiles (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.DoCompletion (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeDiagnostics (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeGoToDefinition (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeHover (DragLint.Plugin.Editor.pas) (+7 more)</para>
-/// <para>Calls: DRagLint.Core.EngineHold.EngineIsHeld, DragLint.Plugin.DbResolver.ResolveActiveIndexDbs, DragLint.Plugin.Editor.UpdateLspStatusIndicator, DragLint.Plugin.EditViewNotifier.DragLintForgetDiagnosticsAsked, DragLint.Plugin.ExeResolver.EngineExeOrEmpty, DragLint.Plugin.LspClient.DebugLog, DragLint.Plugin.LspClient.GetPluginLogPath, DragLint.Plugin.LspClient.TDragLintLspClient.Create, DragLint.Plugin.LspClient.TDragLintLspClient.InitializeAsync, DragLint.Plugin.LspClient.TDragLintLspClient.IsAlive (+14 more)</para>
-/// <para>Complexity: 19 (cyclomatic, outer body), 207 lines (full implementation)</para>
+/// <para>Calls: DRagLint.Core.EngineHold.EngineIsHeld, DragLint.Plugin.DbResolver.ResolveActiveIndexDbs, DragLint.Plugin.Editor.UpdateLspStatusIndicator, DragLint.Plugin.EditViewNotifier.DragLintForgetDiagnosticsAsked, DragLint.Plugin.ExeResolver.EngineExeOrEmpty, DragLint.Plugin.LspClient.DebugLog, DragLint.Plugin.LspClient.GetPluginLogPath, DragLint.Plugin.LspClient.TDragLintLspClient.Create, DragLint.Plugin.LspClient.TDragLintLspClient.InitializeAsync, DragLint.Plugin.LspClient.TDragLintLspClient.IsAlive (+15 more)</para>
+/// <para>Complexity: 19 (cyclomatic, outer body), 213 lines (full implementation)</para>
 /// <para>Catches: Exception (empty); Exception (swallowed)</para>
 /// <seealso cref="DRagLint.Core.EngineHold.EngineIsHeld"/>
 /// <seealso cref="DragLint.Plugin.DbResolver.ResolveActiveIndexDbs"/>
@@ -76,7 +76,7 @@ function EnsureLspClient: TDragLintLspClient;
 /// was asked to report on -- and, before the 2026-08-17 spawn-storm fix, do it
 /// while the machine was already saturated. Main thread only.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.Diagnose.DiagConnections (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Editor.LspCallerCounts (DragLint.Plugin.Editor.pas), DragLint.Plugin.HoverTracker.TDragLintHoverHelper.CancelInflight (DragLint.Plugin.HoverTracker.pas), DragLint.Plugin.HoverTracker.TDragLintHoverHelper.OnTick (DragLint.Plugin.HoverTracker.pas)</para>
+/// <para>Called from: DragLint.Plugin.Diagnose.DiagConnections (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Editor.LspCallerCounts (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas), DragLint.Plugin.HoverTracker.TDragLintHoverHelper.CancelInflight (DragLint.Plugin.HoverTracker.pas), DragLint.Plugin.HoverTracker.TDragLintHoverHelper.OnTick (DragLint.Plugin.HoverTracker.pas)</para>
 /// <para>Returns: GLspClient</para>
 /// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->
@@ -122,10 +122,10 @@ function StripFirstHeaderLine(const AMarkdown: string): string;
 /// different names for the same caret is exactly the confusion the note exists
 /// to remove. Main thread only; never raises.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.Editor.AnnounceHoverStart (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.DLAskQName (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeCallPath (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeFindUnit (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeFindUsages (DragLint.Plugin.Editor.pas) (+6 more)</para>
+/// <para>Called from: DragLint.Plugin.Cmd.FindUsagesScope.FindUsagesIn (DragLint.Plugin.Cmd.FindUsagesScope.pas), DragLint.Plugin.Editor.AnnounceHoverStart (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.DLAskQName (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeCallPath (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeFindUnit (DragLint.Plugin.Editor.pas) (+8 more)</para>
 /// <para>Calls: CharInSet, Copy, DragLint.Plugin.Editor.IdentifierAtCursor.IsIdentChar, PAnsiChar, SetString, Supports</para>
 /// <para>Returns: ''; Copy(LineText, Lo, Hi - Lo + 1)</para>
-/// <para>Complexity: 28 (cyclomatic, outer body), 84 lines (full implementation)</para>
+/// <para>Complexity: 29 (cyclomatic, outer body), 84 lines (full implementation)</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <seealso cref="DragLint.Plugin.Editor.IdentifierAtCursor.IsIdentChar"/>
 /// <!-- drag-lint:auto END -->
@@ -212,7 +212,7 @@ type
 /// answer latches for the session; later calls return 0 and the caller falls
 /// back to RequestHoverTextAsync. Main thread only; never raises.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.Editor.InvokeHover (DragLint.Plugin.Editor.pas), DragLint.Plugin.HoverTracker.TDragLintHoverHelper.OnTick (DragLint.Plugin.HoverTracker.pas)</para>
+/// <para>Called from: DragLint.Plugin.Editor.InvokeHover (DragLint.Plugin.Editor.pas), DragLint.Plugin.HoverTracker.TDragLintHoverHelper.OnHoverBundleAnswer (DragLint.Plugin.HoverTracker.pas), DragLint.Plugin.HoverTracker.TDragLintHoverHelper.OnTick (DragLint.Plugin.HoverTracker.pas)</para>
 /// <para>Calls: ADone, Default, DragLint.Plugin.Editor.EnsureLspClient, DragLint.Plugin.Editor.MakeTextDocumentPositionParams, DragLint.Plugin.Editor.ParseHoverBundleReply, DragLint.Plugin.Editor.SyncLiveBufferToLsp, DragLint.Plugin.LspClient.TDragLintLspClient.RequestAsync, DragLint.Plugin.Telemetry.DLT, Format</para>
 /// <para>Returns: 0</para>
 /// <para>Catches: Exception (swallowed)</para>
@@ -271,7 +271,7 @@ function HoverBundleUnsupported: Boolean;
 /// one shared spawn helper instead of duplicating CreateProcess plumbing.
 /// Synchronous -- call from a context where a brief block is acceptable.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.About.StartBackgroundSelfInfoFetch (DragLint.Plugin.About.pas), DragLint.Plugin.Editor.DLRunReport (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.FetchHoverCallers (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.FetchHoverModel (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeReverseCallTreeMessages (DragLint.Plugin.Editor.pas) (+5 more)</para>
+/// <para>Called from: DragLint.Plugin.About.StartBackgroundSelfInfoFetch (DragLint.Plugin.About.pas), DragLint.Plugin.Editor.DLRunReport (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.FetchHoverCallers (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.FetchHoverModel (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeReverseCallTreeMessages (DragLint.Plugin.Editor.pas) (+4 more)</para>
 /// <para>Calls: DragLint.Plugin.ProcRun.RunCaptureStdout</para>
 /// <para>Returns: RunCaptureStdout(ACmdLine, AOutput, ATimeoutMs)</para>
 /// <seealso cref="DragLint.Plugin.ProcRun.RunCaptureStdout"/>
@@ -282,26 +282,26 @@ function RunAndCaptureStdout(const ACmdLine: string; out AOutput: string; ATimeo
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.Wizard.Register (DragLint.Plugin.Wizard.pas)</para>
-/// <para>Calls: BoolToStr, DragLint.Plugin.AutoComplete.StartAutoComplete, DragLint.Plugin.Editor.AddSectionHeader, DragLint.Plugin.Editor.AddSeparator, DragLint.Plugin.Editor.AddWrappedItem, DragLint.Plugin.Editor.DLAddUnitsToImplUses, DragLint.Plugin.Editor.DLLibraryDb, DragLint.Plugin.Editor.DLNavigateToSource, DragLint.Plugin.Editor.DLResolveQnameFileThen, DragLint.Plugin.Editor.EnqueueRefreshFindings (+24 more)</para>
+/// <para>Calls: BoolToStr, DragLint.Plugin.AutoComplete.StartAutoComplete, DragLint.Plugin.Cmd152.BuildCmd152Menu, DragLint.Plugin.Cmd152.Cmd152Table, DragLint.Plugin.Editor.AddSectionHeader, DragLint.Plugin.Editor.AddSeparator, DragLint.Plugin.Editor.AddWrappedItem, DragLint.Plugin.Editor.DLAddUnitsToImplUses, DragLint.Plugin.Editor.DLLibraryDb, DragLint.Plugin.Editor.DLNavigateToSource (+28 more)</para>
 /// <para>Catches: Exception (empty)</para>
 /// <seealso cref="DragLint.Plugin.AutoComplete.StartAutoComplete"/>
+/// <seealso cref="DragLint.Plugin.Cmd152.BuildCmd152Menu"/>
+/// <seealso cref="DragLint.Plugin.Cmd152.Cmd152Table"/>
 /// <seealso cref="DragLint.Plugin.Editor.AddSectionHeader"/>
 /// <seealso cref="DragLint.Plugin.Editor.AddSeparator"/>
-/// <seealso cref="DragLint.Plugin.Editor.AddWrappedItem"/>
-/// <seealso cref="DragLint.Plugin.Editor.DLAddUnitsToImplUses"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure RegisterDragLintMenu;
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: initialization/finalization (DragLint.Plugin.Editor.pas)</para>
-/// <para>Calls: DRagLint.Core.GhostText.TGhostTextServer.Stop, DragLint.Plugin.AboutForm.CloseAboutDialog, DragLint.Plugin.AutoComplete.StopAutoComplete, DragLint.Plugin.Editor.TDStep, DragLint.Plugin.EditViewNotifier.UnregisterDragLintEditViewNotifier, DragLint.Plugin.GraphWindow.UnregisterDragLintGraph, DragLint.Plugin.HoverForm.CloseDragLintHover, DragLint.Plugin.HoverTracker.StopHoverTracker, DragLint.Plugin.Keyboard.UnregisterDragLintKeystrokes, DragLint.Plugin.LiveDiagnostics.StopLiveDiagnostics, DragLint.Plugin.LspClient.TDragLintLspClient.Stop, DragLint.Plugin.ProjectNotifier.UnregisterProjectNotifier, DragLint.Plugin.StructureForm.HideDragLintStructure, DragLint.Plugin.UsagesForm.HideFindUsages, FreeAndNil</para>
+/// <para>Called from: DragLint.Plugin.Editor.finalization (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DRagLint.Core.GhostText.TGhostTextServer.Stop, DragLint.Plugin.AboutForm.CloseAboutDialog, DragLint.Plugin.AutoComplete.StopAutoComplete, DragLint.Plugin.ConvertLaunch.ShutdownConvertLaunch, DragLint.Plugin.Editor.TDStep, DragLint.Plugin.EditorLocalMenu.UnregisterDragLintEditorLocalMenu, DragLint.Plugin.EditViewNotifier.UnregisterDragLintEditViewNotifier, DragLint.Plugin.GraphWindow.UnregisterDragLintGraph, DragLint.Plugin.HoverForm.CloseDragLintHover, DragLint.Plugin.HoverTracker.StopHoverTracker (+7 more)</para>
 /// <para>Catches: Exception (empty)</para>
 /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.Stop"/>
 /// <seealso cref="DragLint.Plugin.AboutForm.CloseAboutDialog"/>
 /// <seealso cref="DragLint.Plugin.AutoComplete.StopAutoComplete"/>
+/// <seealso cref="DragLint.Plugin.ConvertLaunch.ShutdownConvertLaunch"/>
 /// <seealso cref="DragLint.Plugin.Editor.TDStep"/>
-/// <seealso cref="DragLint.Plugin.EditViewNotifier.UnregisterDragLintEditViewNotifier"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure UnregisterDragLintMenu;
@@ -487,11 +487,10 @@ procedure InvokeButterfly(Sender: TObject);
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.Editor.InvokeButterfly (DragLint.Plugin.Editor.pas), DragLint.Plugin.StructureForm.TDragLintStructureForm.ShowInButterflyClick (DragLint.Plugin.StructureForm.pas)</para>
-/// <para>Calls: DragLint.Plugin.DockForm.ShowDragLintDockButterfly, DragLint.Plugin.Editor.DLExe64, DragLint.Plugin.Editor.RunAndCaptureStdout, DragLint.Plugin.Editor.SliceJsonBracket, DragLint.Plugin.Telemetry.DLT, Format</para>
-/// <para>Catches: Exception (swallowed)</para>
+/// <para>Calls: DragLint.Plugin.DockForm.ShowDragLintDockButterfly, DragLint.Plugin.Editor.DLExe64, DragLint.Plugin.Editor.RunGraphStage, DragLint.Plugin.Editor.SliceJsonBracket, DragLint.Plugin.Telemetry.DLT, Format</para>
 /// <seealso cref="DragLint.Plugin.DockForm.ShowDragLintDockButterfly"/>
 /// <seealso cref="DragLint.Plugin.Editor.DLExe64"/>
-/// <seealso cref="DragLint.Plugin.Editor.RunAndCaptureStdout"/>
+/// <seealso cref="DragLint.Plugin.Editor.RunGraphStage"/>
 /// <seealso cref="DragLint.Plugin.Editor.SliceJsonBracket"/>
 /// <seealso cref="DragLint.Plugin.Telemetry.DLT"/>
 /// <!-- drag-lint:auto END -->
@@ -666,9 +665,10 @@ var
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildButtons (DragLint.Plugin.AboutForm.pas)</para>
-/// <para>Calls: CloseHandle, CreateProcessW, DragLint.Plugin.Editor.DLExe64, DragLint.Plugin.Editor.PluginBuildTag, DragLint.Plugin.Editor.ReadActiveBufferText, DragLint.Plugin.Settings.LoadSettings, ExtractFileExt, ExtractFileName, FillChar, Format, Move, PChar, ShowMessage, Supports</para>
+/// <para>Calls: CloseHandle, CreateProcessW, DragLint.Plugin.Editor.DLEngineFound, DragLint.Plugin.Editor.DLExe64, DragLint.Plugin.Editor.PluginBuildTag, DragLint.Plugin.Editor.ReadActiveBufferText, DragLint.Plugin.Settings.LoadSettings, ExtractFileExt, ExtractFileName, FillChar, Format, Move, PChar, ShowMessage, Supports</para>
 /// <para>Catches: Exception (dialog: ShowMessage)</para>
 /// <para>Touches: file system</para>
+/// <seealso cref="DragLint.Plugin.Editor.DLEngineFound"/>
 /// <seealso cref="DragLint.Plugin.Editor.DLExe64"/>
 /// <seealso cref="DragLint.Plugin.Editor.PluginBuildTag"/>
 /// <seealso cref="DragLint.Plugin.Editor.ReadActiveBufferText"/>
@@ -687,7 +687,7 @@ procedure InvokeLintBuffer(Sender: TObject);
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildButtons (DragLint.Plugin.AboutForm.pas)</para>
 /// <para>Calls: Copy, DragLint.Plugin.CliAsync.RunCliAsync, DragLint.Plugin.DiagnosticCache.Cache, DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Update, DragLint.Plugin.Editor.DLExe64, DragLint.Plugin.Telemetry.DLT, ExtractFileName, FileExists, Format, LastDelimiter (+6 more)</para>
-/// <para>Complexity: 19 (cyclomatic, outer body), 172 lines (full implementation)</para>
+/// <para>Complexity: 22 (cyclomatic, outer body), 172 lines (full implementation)</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <seealso cref="DragLint.Plugin.CliAsync.RunCliAsync"/>
 /// <seealso cref="DragLint.Plugin.DiagnosticCache.Cache"/>
@@ -706,7 +706,7 @@ procedure InvokeCopyDiagnostics(Sender: TObject);
 /// <remarks>
 /// Used by the About dialog to report which project index is active.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DragLint.Plugin.Editor.DLNeedDb (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeAutoDocumentProject (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeButterfly (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeCircularUses (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeCircularUsesFix (DragLint.Plugin.Editor.pas) (+30 more)</para>
+/// <para>Called from: DragLint.Plugin.Cmd.CheckInit.InvokeCheckInit (DragLint.Plugin.Cmd.CheckInit.pas), DragLint.Plugin.Cmd.ExtractConst.InvokeExtractConst (DragLint.Plugin.Cmd.ExtractConst.pas), DragLint.Plugin.Cmd.FixMarker.InvokeFixMarker (DragLint.Plugin.Cmd.FixMarker.pas), DragLint.Plugin.Editor.DLNeedDb (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeAutoDocumentProject (DragLint.Plugin.Editor.pas) (+34 more)</para>
 /// <para>Calls: DirectoryExists, DragLint.Plugin.DbResolver.GetActiveEditorFilePath, DragLint.Plugin.DbResolver.ManifestDbForFile, DragLint.Plugin.DbResolver.ManifestDbForProject, DragLint.Plugin.DbResolver.ResolveActiveIndexDbs, DragLint.Plugin.Editor.GetActiveProjectDb, DragLint.Plugin.Editor.GetActiveProjectFile, DragLint.Plugin.Settings.LoadSettings, ExtractFilePath, ForceDirectories</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <seealso cref="DragLint.Plugin.DbResolver.GetActiveEditorFilePath"/>
@@ -817,7 +817,11 @@ uses
   , DragLint.Plugin.CliAsync
   , DragLint.Plugin.JobQueue
   , DragLint.Plugin.ExeResolver
+  , DragLint.Plugin.ReportProgress
+  , DragLint.Plugin.Theme
   , DragLint.Plugin.Reports
+  , DragLint.Plugin.Cmd152
+  , DragLint.Plugin.EditorLocalMenu
   , DragLint.Plugin.ConvertLaunch
   , DragLint.Plugin.Bookmarks // dl:unit DragLint.Plugin.Bookmarks accepted -- GBookmarkNavigate / GBookmarkPick are the hooks this unit assigns at wizard init, the GButterflyNav pattern
   , DragLint.Plugin.CycleFix // dl:unit DragLint.Plugin.CycleFix accepted -- CYCLE_FIX_TIMEOUT_MS is the one plugin cycle-fix time limit; a second copy here is what let it drift (see StructureForm)
@@ -2189,8 +2193,12 @@ var
   ResultVal: TJSONValue ;
   RObj     : TJSONObject;
   ErrVal   : TJSONValue ;
+  ErrCode  : Integer    ;
   JArr     : TJSONArray ;
   i        : Integer    ;
+const
+  { JSON-RPC "method not found": the only error that means "this engine has no hoverBundle". }
+  cMethodNotFound = -32601;
 begin
   Result:= hvsEmpty;
   AMarkdown:= '';
@@ -2200,9 +2208,16 @@ begin
   try
     if AResp is not TJSONObject then Exit;
 
-    { -32601 from an older engine: latch, and never ask again this session. }
+    { -32601 from an older engine: latch, and never ask again this session. Any other
+      error (e.g. -32800 cancelled) answers this hover only -- never latch on it (1.52 ASYNC). }
     if (AResp as TJSONObject).TryGetValue<TJSONValue>('error', ErrVal) and (ErrVal <> nil) then
     begin
+      if not ((ErrVal is TJSONObject) and (ErrVal as TJSONObject).TryGetValue<Integer>('code', ErrCode)
+              and (ErrCode = cMethodNotFound)) then
+      begin
+        DLT('hover', 'hoverBundle error reply (not -32601) -- this hover only, bundle stays on');
+        Exit(hvsEmpty);
+      end;
       FBundleUnsupported:= True;
       DLT('hover', 'hoverBundle unsupported by this engine -- plain hover for the rest of the session');
       Exit(hvsUnsupported);
@@ -5502,44 +5517,65 @@ begin
     end).Start;
 end;
 
-/// <summary>Shells reverse-calltree --format json twice (callers, then --direction
-/// callees) for AQName against ADb on a background thread, slices each stdout to
-/// its JSON object, then marshals onto the main thread via TThread.Queue to show
-/// the dock and call GDockFrame.PopulateButterfly with both slices. Factored out
-/// of InvokeButterfly so other entry points (e.g. the Structure form's context
-/// menu) can jump straight to the butterfly view without re-prompting for a
-/// qname. Safe with a nil GDockFrame (no-op) or empty/failed CLI output
-/// (PopulateButterfly renders "(0)" roots rather than erroring).</summary>
+/// <summary>Runs ONE engine command under the progress window (marquee, elapsed seconds,
+/// Cancel) of the Reports questions; the DB is held on the job queue so no reindex starts
+/// under it.</summary>
+/// <param name="ATitle">What is computed, shown in the window.</param>
+/// <param name="ACmd">Full command line.</param>
+/// <param name="ADb">The index the command reads; '' holds nothing.</param>
+/// <param name="ADone">Called once on the main thread with the exit code and stdout;
+/// never after Cancel or after closing the window.</param>
+/// <remarks>Main thread only. Cancel kills this command's child tree and nothing else.</remarks>
+procedure RunGraphStage(const ATitle, ACmd, ADb: string; const ADone: TCliRunDone);
+const
+  GRAPH_STALL_MS = 180000;
+var
+  Form: TDragLintReportProgressForm;
+begin
+  if ADb <> '' then JobQueue.HoldDb(ADb);
+  Form:= TDragLintReportProgressForm.CreateRun(Application, ATitle, ACmd, GRAPH_STALL_MS,
+    procedure(AExit: Integer; const AOut: string)
+    begin
+      if ADb <> '' then JobQueue.ReleaseDb(ADb);
+      ADone(AExit, AOut);
+    end,
+    procedure
+    begin
+      if ADb <> '' then JobQueue.ReleaseDb(ADb);
+    end);
+  Form.Caption:= 'drag-lint Call Graph';
+  ApplyIdeTheme(Form, TDragLintReportProgressForm);
+  Form.Show;
+end;
+
+/// <summary>Builds the butterfly call graph for AQName against ADb: reverse-calltree
+/// --format json twice (callers, then --direction callees), each under the progress
+/// window with Cancel (1.52 B39), then shows both slices in the dock's Call Graph tab via
+/// ShowDragLintDockButterfly. Factored out of InvokeButterfly so other entry points (e.g.
+/// the Structure form's context menu) can jump straight to the butterfly view without
+/// re-prompting for a qname.</summary>
+/// <remarks>Main thread only. Cancel at either stage shows nothing. A failed or empty
+/// command shows "(0)" roots rather than an error, as before.</remarks>
 procedure ShowButterflyForQName(const AQName, ADb: string);
 var
   CmdC, CmdF: string;
 begin
   CmdC:= Format('"%s" reverse-calltree --qname "%s" --db "%s" --depth 3 --format json', [DLExe64, AQName, ADb]);
   CmdF:= Format('"%s" reverse-calltree --qname "%s" --db "%s" --depth 3 --format json --direction callees', [DLExe64, AQName, ADb]);
-  DLT('menu', 'butterfly(async): ' + CmdC + ' | ' + CmdF);
-  TThread.CreateAnonymousThread(
-    procedure
-    var
-      CallersOut, CalleesOut: string;
+  DLT('menu', 'butterfly(progress): ' + CmdC + ' | ' + CmdF);
+  RunGraphStage(Format('Call graph %s -- callers', [AQName]), CmdC, ADb,
+    procedure(AExitC: Integer; const AOutC: string)
     begin
-      CallersOut:= ''; CalleesOut:= '';
-      try RunAndCaptureStdout(CmdC, CallersOut, 180000); except on E: Exception do CallersOut:= ''; end;
-      try RunAndCaptureStdout(CmdF, CalleesOut, 180000); except on E: Exception do CalleesOut:= ''; end;
-
-      var SC: string:= SliceJsonBracket(CallersOut, '{', '}');
-      var SF: string:= SliceJsonBracket(CalleesOut, '{', '}');
-      TThread.Queue(nil,
-        procedure
+      RunGraphStage(Format('Call graph %s -- callees', [AQName]), CmdF, ADb,
+        procedure(AExitF: Integer; const AOutF: string)
         begin
-          { TDragLintDockFrame/GDockFrame live in DockForm.pas's implementation
-            section and are not visible here -- ShowDragLintDockButterfly is the
-            interface-exported wrapper (mirrors ShowDragLintDockLintOptions) that
-            shows the dock and calls GDockFrame.PopulateButterfly internally. }
-          ShowDragLintDockButterfly(AQName, SC, SF);
+          { ShowDragLintDockButterfly is the interface-exported wrapper that shows the dock
+            and calls GDockFrame.PopulateButterfly (TDragLintDockFrame lives in DockForm.pas's
+            implementation section). }
+          ShowDragLintDockButterfly(AQName, SliceJsonBracket(AOutC, '{', '}'), SliceJsonBracket(AOutF, '{', '}'));
         end);
-    end).Start;
+    end);
 end;
-
 /// <summary>Builds the butterfly call graph (callers + callees) for the symbol
 /// under the caret (prompts for a qname) and shows it in the dock's Call Graph
 /// tab. Shells drag-lint reverse-calltree --format json twice (callers, then
@@ -7695,6 +7731,16 @@ begin
   AddWrappedItem(SubMaint, 'Shrink Index (purge locals)...', InvokePurgeLocals );
   AddWrappedItem(SubMaint, 'Migrate Index DBs to _D-RAG...', InvokeMigrateDbs  );
 
+  { 1.52 command table (lane PLUGFRAME): each 1.52 command lives in its own
+    DragLint.Plugin.Cmd.<X> unit and is placed here, HIDDEN until its lane
+    enables it. Items go through AddWrappedItem, so GMenuItems / GWrappers
+    stay the one owner and teardown path. Do not add 1.52 items above. }
+  BuildCmd152Menu(RootMenu, Cmd152Table,
+    function(AParent: TMenuItem; const ACaption: string; AClick: TCmd152Click): TMenuItem
+    begin
+      Result:= AddWrappedItem(AParent, ACaption, AClick);
+    end);
+
   { ---- Compile & Analysis (daily use) ---- }
   AddSeparator(RootMenu);
   AddSectionHeader(RootMenu, 'Compile && Analysis');
@@ -7748,6 +7794,8 @@ begin
   RegisterProjectNotifier;
   RegisterDragLintKeystrokes;
   RegisterDragLintEditViewNotifier;
+  { 1.52 (lane PLUGCTX): the editor right-click submenu, from the Cmd152 table. }
+  RegisterDragLintEditorLocalMenu;
   { v0.40.7: dwell tracker re-enabled with the 1600 ms threshold (was 600 ms)
     and the singleton guard, so it fires only on deliberate dwells and never
     competes with an already-visible popup. Menu InvokeHover does the richer
@@ -7934,6 +7982,8 @@ begin
         StopHoverTracker;
         TDStep('-> UnregisterDragLintEditViewNotifier (NO try/except)');
         UnregisterDragLintEditViewNotifier;
+        TDStep('-> UnregisterDragLintEditorLocalMenu');
+        UnregisterDragLintEditorLocalMenu;
         TDStep('-> UnregisterDragLintKeystrokes (NO try/except)');
         UnregisterDragLintKeystrokes;
         TDStep('-> UnregisterProjectNotifier (NO try/except)');

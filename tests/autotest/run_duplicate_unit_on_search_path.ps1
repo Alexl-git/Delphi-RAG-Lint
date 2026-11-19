@@ -11,9 +11,12 @@
 # Usage: pwsh -File tests/autotest/run_duplicate_unit_on_search_path.ps1 [-Exe <path>]
 [CmdletBinding()]
 param(
-    [string] $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+    [string] $Exe = '',
     [string] $WorkDir = "$env:TEMP\drag-lint-dup-unit-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail='') {
@@ -27,11 +30,11 @@ New-Item -ItemType Directory -Force $WorkDir | Out-Null
 try {
   $fx = Join-Path $PSScriptRoot '..\lint-project\dup-unit'
   $db = Join-Path $WorkDir 'fx.sqlite'
-  & $Exe index $fx --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
-  $raw = & $Exe lint-all --db $db --rule duplicate-unit-on-search-path --format json 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule duplicate-unit-on-search-path --format json 2>$null }
   $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
-  $f = @(); if ($b -ge 0) { try { $f = @($txt.Substring($b) | ConvertFrom-Json) } catch { $f = @() } }
+  $f = @(); if ($b -ge 0) { try { $f = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $f = @() } }
   $f | ForEach-Object { Write-Host ("  {0}:{1} {2}" -f $_.file_path, $_.start_line, $_.message) -ForegroundColor DarkGray }
   $a  = @($f | Where-Object { $_.rule -eq 'duplicate-unit-on-search-path' -and $_.file_path -match '\\a\\uDup\.pas$' })
   $bb = @($f | Where-Object { $_.rule -eq 'duplicate-unit-on-search-path' -and $_.file_path -match '\\b\\uDup\.pas$' })

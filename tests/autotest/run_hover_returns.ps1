@@ -1,6 +1,9 @@
 [CmdletBinding()]
-param([string] $Exe = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1"),
+param([string] $Exe = '',
       [string] $WorkDir = "$env:TEMP\drag-lint-hover-returns-$PID")
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1") }
 try {
 $ErrorActionPreference = 'Stop'; $script:Failed = $false
 function Check([string]$Name,[bool]$Ok,[string]$Detail=''){
@@ -53,13 +56,13 @@ $db = "$WorkDir\ret.sqlite"
 & $Exe index $src --db $db | Out-Null
 Check 'db created' (Test-Path $db)
 
-$boolJson = (& $Exe hover --qname RetFixture.IsPos --db $db --format json 2>&1) -join "`n"
+$boolJson = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname RetFixture.IsPos --db $db --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'bool: mined Result := S2.Length > 0' ($boolJson -match '"returns":\["S2\.Length > 0"\]') $boolJson
 Check 'bool: return_type boolean' ($boolJson -match '(?i)"return_type":"boolean"') $boolJson
 # FB3: the mined return carries its absolute source line (Result:= is on file line 12).
 Check 'bool: returns_lines carries the Result:= source line (12)' ($boolJson -match '"returns_lines":\[12\]') $boolJson
 
-$intJson = (& $Exe hover --qname RetFixture.Authy --db $db --format json 2>&1) -join "`n"
+$intJson = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname RetFixture.Authy --db $db --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'int: ERROR_OK present' ($intJson -match 'ERROR_OK') $intJson
 Check 'int: ERROR_NO_USER present' ($intJson -match 'ERROR_NO_USER') $intJson
 Check 'int: ERROR_BAD present' ($intJson -match 'ERROR_BAD') $intJson
@@ -69,7 +72,7 @@ Check 'int: ERROR_OK dedup (1 occurrence)' ($okCount -eq 1) "count=$okCount"
 # FB3: the three distinct returns are mined at their FIRST-seen lines 16/17/18.
 Check 'int: returns_lines are the first-seen source lines [16,17,18]' ($intJson -match '"returns_lines":\[16,17,18\]') $intJson
 
-$procJson = (& $Exe hover --qname RetFixture.DoStuff --db $db --format json 2>&1) -join "`n"
+$procJson = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname RetFixture.DoStuff --db $db --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'proc: empty returns' ($procJson -match '"returns":\[\]') $procJson
 
 # params structured
@@ -77,15 +80,15 @@ Check 'params carry name+type' ($boolJson -match '"name":"S2","type":"string"') 
 
 # ExitRhs hardening: a call to an unrelated local proc ExitLoop(AVal) must NOT
 # be mined as a value-form Exit() return -- word-boundary check after 'exit'.
-$looperJson = (& $Exe hover --qname RetFixture.Looper --db $db --format json 2>&1) -join "`n"
+$looperJson = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname RetFixture.Looper --db $db --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'ExitLoop(AVal) call not mined as a return' ($looperJson -notmatch '"returns":\["AVal"\]') $looperJson
 Check 'Looper: Result := ERROR_OK is mined (not AVal)' ($looperJson -match '"returns":\["ERROR_OK"\]') $looperJson
 
 # markdown format (the IDE popup) must ALSO surface the mined cases as a
 # "Returns (observed):" line -- not just the JSON.
-$boolMd = (& $Exe hover --qname RetFixture.IsPos --db $db --format md 2>&1) -join "`n"
+$boolMd = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname RetFixture.IsPos --db $db --format md 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'md: Returns (observed) line shows the mined case' ($boolMd -match '\*\*Returns \(observed\):\*\*.*S2\.Length > 0') $boolMd
-$procMd = (& $Exe hover --qname RetFixture.DoStuff --db $db --format md 2>&1) -join "`n"
+$procMd = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname RetFixture.DoStuff --db $db --format md 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'md: procedure has NO Returns (observed) line' ($procMd -notmatch 'Returns \(observed\)') $procMd
 
 Write-Host ''

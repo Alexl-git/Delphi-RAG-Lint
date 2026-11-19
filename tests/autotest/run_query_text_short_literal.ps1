@@ -24,9 +24,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-query-text-short-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -41,7 +44,7 @@ function Write-Ascii([string]$Path, [string]$Body) {
   [System.IO.File]::WriteAllText($Path, $norm, [System.Text.Encoding]::ASCII)
 }
 function Q([string[]]$QArgs) {
-  $out = & $Exe query @QArgs --db $db --source pas 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe query @QArgs --db $db --source pas 2>$null }
   return @($out | Where-Object { $_ -match '\[pas/' })
 }
 
@@ -78,20 +81,20 @@ end;
 end.
 '@
 $db = Join-Path $dir 'fx.sqlite'
-& $Exe index $dir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 Write-Host 'B-27a: a short literal is not ranked out of a small --limit' -ForegroundColor Cyan
-$r = Q @('--text', 'null', '--limit', '3')
+$r = @(Q @('--text', 'null', '--limit', '3'))
 Check '--limit 3 returns the null literal' (@($r | Where-Object { $_ -match '\[pas/literal\]\s+null\s' }).Count -ge 1) ($r -join ' | ')
 
 Write-Host 'B-27b: a Pascal-quoted --substring query matches the unquoted stored text' -ForegroundColor Cyan
-$r = Q @('--text', "'null'", '--substring', '--limit', '10')
+$r = @(Q @('--text', "'null'", '--substring', '--limit', '10'))
 Check "--substring 'null' returns the literal" (@($r | Where-Object { $_ -match 'bLiteral\.pas.*\[pas/literal\]' }).Count -eq 1) ($r -join ' | ')
 
 Write-Host 'Positive controls' -ForegroundColor Cyan
-$r = Q @('--text', 'null', '--limit', '100')
+$r = @(Q @('--text', 'null', '--limit', '100'))
 Check 'unlimited: 5 comments + 1 literal = 6 rows' ($r.Count -eq 6) ("count=" + $r.Count)
-$r = Q @('--text', 'null', '--kind', 'comment', '--limit', '100')
+$r = @(Q @('--text', 'null', '--kind', 'comment', '--limit', '100'))
 Check '--kind comment: 5 rows, all comments' (($r.Count -eq 5) -and (@($r | Where-Object { $_ -notmatch '\[pas/comment\]' }).Count -eq 0)) ($r -join ' | ')
 
 Write-Host ''

@@ -42,7 +42,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe        = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe") { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" } else { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }),
+  [string]$Exe        = '',
   [switch]$KeepScratch,
   [string]$WorkDir    = "$env:TEMP\drag-lint-cycle-split-$PID",
   [string]$SelfDb     = '',
@@ -50,6 +50,9 @@ param(
   [string]$SelfRoot   = '',
   [string]$LibraryDb  = 'C:\Projects\.drag-lint\library-Win64.sqlite'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe") { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" } else { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }) }
 # E18 T13: removes this run's scratch (WorkDir) however the run ends; kept only on failure when
 # -KeepScratch is passed (the path is printed).
 function Remove-Scratch {
@@ -84,11 +87,11 @@ function Get-PlanText([string]$Db, [string]$RunDir) {
   try {
     $p = Start-Process -FilePath $Exe -WorkingDirectory $RunDir -NoNewWindow -Wait -PassThru `
       -ArgumentList (@('cycles', '--db', ('"' + $Db + '"'), '--edges', '--causes', '--plan', '--format', 'text') + $LibArgs) `
-      -RedirectStandardOutput $outFile -RedirectStandardError (Join-Path $WorkDir 'plan-stderr.txt')
+      -RedirectStandardOutput $outFile -RedirectStandardError (Join-Path $WorkDir 'plan-stderr.txt'); $null = $p.Handle
   } finally {
     $env:DRAGLINT_TEST_DUMP_PLAN = $null
   }
-  $dump = if (Test-Path $dumpFile) { @([IO.File]::ReadAllLines($dumpFile) | Where-Object { $_ -ne '' }) } else { @() }
+  $dump = @(if (Test-Path $dumpFile) { @([IO.File]::ReadAllLines($dumpFile) | Where-Object { $_ -ne '' }) } else { @() })
   return @{ Exit = $p.ExitCode; Text = $Ascii.GetString([IO.File]::ReadAllBytes($outFile)); Dump = $dump }
 }
 
@@ -196,7 +199,7 @@ if ($LibArgs.Count -eq 0) {
     Where-Object { $_.Extension -in '.pas', '.dpr', '.dproj', '.inc', '.dfm' } |
     ForEach-Object { Copy-Item $_.FullName (Join-Path $root $_.Name) }
   $db = Join-Path $WorkDir 'demo.sqlite'
-  & $Exe index --project (Join-Path $root 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir 'index-demo.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir 'index-demo.log') }
   Check 'demo indexed' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
   $run = Get-PlanText $db $WorkDir
   Check 'demo cycles --plan ran' ($run.Exit -eq 0 -or $run.Exit -eq 1) "exit=$($run.Exit)"

@@ -21,8 +21,14 @@ uses
 
 type
   /// <summary>One run of the MEM rules over one parsed file.</summary>
-  /// <remarks>Create, Run once, Free. Not thread-safe; the owner is TV151MEMRules.CheckFile.
-  /// The stores may be nil: type questions then fall back to the file alone.</remarks>
+  /// <remarks>
+  /// Create, Run once, Free. Not thread-safe; the owner is TV151MEMRules.CheckFile.
+  /// The stores may be nil: type questions then fall back to the file alone.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.V151.MEM.TV151MEMRules.CheckFile (DRagLint.V151.MEM.pas)</para>
+  /// <para>Used in units: DRagLint.V151.MEM</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMemRun = class  // dl:ok high-response@413b -- REVIEWED 2026-11-14 v151 MEM: one walker per file run; the rules share its AST helpers and per-run state, splitting it would only pass that state around
   strict private
     FFile        : string;
@@ -35,39 +41,558 @@ type
     FTypeDecls   : TDictionary<string, TTSNode>;   // lower type name -> its declType node
     FConsts      : TDictionary<string, Boolean>;   // lower names of every const of the file
     FManagedCache: TDictionary<string, Boolean>;   // lower type name -> managed (store answers)
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: '';
+    /// TEncoding.UTF8.GetString(FSrc, S, L).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.CallName (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.CheckAnsiApi (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.CheckAssignment (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.CheckCharCount (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.CheckCreateProcess (DRagLint.V151.MEM.Support.pas) (+16 more)</para>
+    /// <para>Calls: Integer, TreeSitter.TTSNodeHelper.EndByte, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.StartByte</para>
+    /// <para>Reads: FSrc</para>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.EndByte"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.StartByte"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallArgs"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallName"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function NodeStr(const N: TTSNode): string;
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: B.ToString.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.CheckCharCount (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.CheckManagedRaw (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.IsManagedTypeNode (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.IsValueStringParam (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.PointeeType (DRagLint.V151.MEM.Support.pas) (+2 more)</para>
+    /// <para>Calls: CharInSet, DRagLint.V151.MEM.Support.TMemRun.NodeStr, LowerCase</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.NodeStr"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallArgs"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallName"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckAnsiApi"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckAssignment"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function LowerText(const N: TTSNode): string;
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="ARule"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AMsg"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ASev"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.CheckAnsiApi (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.CheckAssignment (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.CheckCharCount (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.CheckCreateProcess (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.CheckManagedRaw (DRagLint.V151.MEM.Support.pas) (+2 more)</para>
+    /// <para>Calls: Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol, FWants, Integer, TreeSitter.TTSNodeHelper.EndPoint, TreeSitter.TTSNodeHelper.StartPoint</para>
+    /// <para>Reads: FWants, FFile, FFindings</para>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.EndPoint"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.StartPoint"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallArgs"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallName"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure EmitAt(const N: TTSNode; const ARule, AMsg, ASev: string);
+    /// <summary><!-- drag-lint:auto sum -->The callee's last name segment in lower case:
+    /// Foo(..) -&gt; foo, A.B.Foo(..) -&gt; foo; '' when N is not a call.</summary>
+    /// <param name="ACall"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: ''; LowerCase(NodeStr(E)).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.CheckAnsiApi (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.CheckCall (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.CheckCharCount (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.CheckManagedRaw (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.IsPCharCast (DRagLint.V151.MEM.Support.pas) (+5 more)</para>
+    /// <para>Calls: DRagLint.V151.MEM.Support.TMemRun.IsIdent, DRagLint.V151.MEM.Support.TMemRun.NodeStr, LowerCase, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.IsIdent"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.NodeStr"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function CallName(const ACall: TTSNode): string;
+    /// <param name="ACall"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;TTSNode&gt;</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.CheckAnsiApi (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.CheckCharCount (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.CheckCreateProcess (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.CheckManagedRaw (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.CheckPostFamily (DRagLint.V151.MEM.Support.pas) (+4 more)</para>
+    /// <para>Calls: TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsExtra, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount</para>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsExtra"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function CallArgs(const ACall: TTSNode): TArray<TTSNode>;
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: (not N.IsNull) and
+    /// (N.NodeType = 'identifier').</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.CallName (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.CheckAnsiApi (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.CheckManagedRaw (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.CollectDecls (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.ContainsIdent (DRagLint.V151.MEM.Support.pas) (+10 more)</para>
+    /// <para>Calls: TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallArgs"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallName"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckAnsiApi"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsIdent(const N: TTSNode): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->Declared type of an identifier at its
+    /// position, lower case, no whitespace, no System. prefix.</summary>
+    /// <param name="AIdent"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AType"><!-- drag-lint:auto type -->out string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; T &lt;&gt; ''.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.CheckAnsiApi (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.CheckCharCount (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.CheckManagedRaw (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.CheckRoutineLeaks.AddAllocHandle (DRagLint.V151.MEM.Support.pas) ?, DRagLint.V151.MEM.Support.TMemRun.ReadOnlyCommandLine (DRagLint.V151.MEM.Support.pas)</para>
+    /// <para>Calls: Delete, DRagLint.Lint.QueryRules.DeclaredTypeAt, DRagLint.V151.MEM.Support.TMemRun.IsIdent, DRagLint.V151.MEM.Support.TMemRun.NodeStr, LowerCase, StartsStr, TreeSitter.TTSNodeHelper.StartByte</para>
+    /// <para>Reads: FRoot, FSrc</para>
+    /// <para>Mutates: AType (out)</para>
+    /// <seealso cref="DRagLint.Lint.QueryRules.DeclaredTypeAt"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.IsIdent"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.NodeStr"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.StartByte"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallArgs"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function DeclTypeOf(const AIdent: TTSNode; out AType: string): Boolean;
+    /// <param name="AType"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: MatchStr(AType, ['string',
+    /// 'unicodestring', 'widestring']).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.CheckAnsiApi (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.CheckCharCount (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.IsLongString (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.IsValueStringParam (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.ReadOnlyCommandLine (DRagLint.V151.MEM.Support.pas)</para>
+    /// <para>Calls: MatchStr</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallArgs"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallName"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckAnsiApi"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckAssignment"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckCall"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsUtf16String(const AType: string): Boolean;
+    /// <param name="AType"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: IsUtf16String(AType) or
+    /// MatchStr(AType, ['ansistring', 'rawbytestring', 'utf8string']).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.CheckManagedRaw (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.IsManagedType (DRagLint.V151.MEM.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.MEM.Support.TMemRun.IsUtf16String, MatchStr</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.IsUtf16String"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallArgs"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallName"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckAnsiApi"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckAssignment"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsLongString(const AType: string): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->Every type and const declaration of the file,
+    /// any scope (a later one of the same name wins).</summary>
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.CollectDecls (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.Run (DRagLint.V151.MEM.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.MEM.Support.TMemRun.CollectDecls, DRagLint.V151.MEM.Support.TMemRun.IsIdent, DRagLint.V151.MEM.Support.TMemRun.NodeStr, LowerCase, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <para>Reads: FTypeDecls, FConsts</para>
+    /// <para>Recursive</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.IsIdent"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.NodeStr"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CollectDecls(const N: TTSNode);
+    /// <summary><!-- drag-lint:auto sum -->A type whose values hold a reference the
+    /// compiler counts or finalizes: long strings, variants, interfaces, dynamic arrays,
+    /// and records / static arrays that contain one. Unknown -&gt; False.</summary>
+    /// <param name="AType"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ADepth"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True;
+    /// IsManagedType(Copy(T, P + Length(']of'), MaxInt), ADepth + 1);
+    /// IsManagedTypeNode(D, ADepth + 1); StoreTypeManaged(T, ADepth + 1).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.CheckManagedRaw (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.IsManagedType (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.IsManagedTypeNode (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.IsManagedTypeNode.FieldsManaged (DRagLint.V151.MEM.Support.pas) ?, DRagLint.V151.MEM.Support.TMemRun.StoreTypeManaged.Verdict (DRagLint.V151.MEM.Support.pas) ?</para>
+    /// <para>Calls: Copy, Delete, DRagLint.V151.MEM.Support.TMemRun.IsLongString, DRagLint.V151.MEM.Support.TMemRun.IsManagedType, DRagLint.V151.MEM.Support.TMemRun.IsManagedTypeNode, DRagLint.V151.MEM.Support.TMemRun.StoreTypeManaged, MatchStr, Pos, StartsStr</para>
+    /// <para>Complexity: 16 (cyclomatic, outer body), 27 lines (full implementation)</para>
+    /// <para>Reads: FTypeDecls</para>
+    /// <para>Recursive</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.IsLongString"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.IsManagedTypeNode"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.StoreTypeManaged"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallArgs"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallName"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsManagedType(const AType: string; ADepth: Integer): Boolean;
+    /// <param name="ADecl"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="ADepth"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; FieldsManaged(Inner);
+    /// IsManagedType(LowerText(T), ADepth).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto -->ADecl is a declType node of this file.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.IsManagedType (DRagLint.V151.MEM.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.MEM.Support.TMemRun.IsManagedType, DRagLint.V151.MEM.Support.TMemRun.IsManagedTypeNode.FieldsManaged, DRagLint.V151.MEM.Support.TMemRun.LowerText, MatchStr, TreeSitter.TTSNodeHelper.Child, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.ChildCount, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <para>Complexity: 10 (cyclomatic, outer body), 44 lines (full implementation)</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.IsManagedType"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.IsManagedTypeNode.FieldsManaged"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.LowerText"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsManagedTypeNode(const ADecl: TTSNode; ADepth: Integer): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->A type declared outside the file: ask the
+    /// project index, then the library. Every row of the name must agree; a name the
+    /// stores do not know, or know ambiguously, is not managed.</summary>
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ADepth"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: Verdict(FStore, Known);
+    /// Verdict(FLib, Known); False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.IsManagedType (DRagLint.V151.MEM.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.MEM.Support.TMemRun.StoreTypeManaged.Verdict, IsManagedType, LowerCase, StringReplace</para>
+    /// <para>Reads: FManagedCache, FStore, FLib</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.StoreTypeManaged.Verdict"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallArgs"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallName"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckAnsiApi"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckAssignment"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function StoreTypeManaged(const AName: string; ADepth: Integer): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->^T -&gt; t; a pointer alias declared in the
+    /// file (PFoo = ^TFoo) -&gt; tfoo; anything else ''.</summary>
+    /// <param name="AType"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: ''; Copy(T, 2, MaxInt).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.CheckManagedRaw (DRagLint.V151.MEM.Support.pas)</para>
+    /// <para>Calls: Copy, DRagLint.V151.MEM.Support.TMemRun.LowerText, StartsStr, TreeSitter.TTSNodeHelper.ChildByField/1</para>
+    /// <para>Reads: FTypeDecls</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.LowerText"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallArgs"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallName"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckAnsiApi"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function PointeeType(const AType: string): string;
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <returns><!-- drag-lint:auto type -->TTSNode</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.CheckManagedRaw (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.ReadOnlyCommandLine (DRagLint.V151.MEM.Support.pas)</para>
+    /// <para>Calls: TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.Parent</para>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.Parent"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallArgs"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallName"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function EnclosingRoutine(const N: TTSNode): TTSNode;
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="ALowerName"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.CheckCharCount (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.ContainsIdent (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.LocalAssignedReadOnly.Scan (DRagLint.V151.MEM.Support.pas) ?, DRagLint.V151.MEM.Support.TMemRun.RoutineHasCallOn.Scan (DRagLint.V151.MEM.Support.pas) ?</para>
+    /// <para>Calls: DRagLint.V151.MEM.Support.TMemRun.ContainsIdent, DRagLint.V151.MEM.Support.TMemRun.IsIdent, DRagLint.V151.MEM.Support.TMemRun.NodeStr, LowerCase, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount</para>
+    /// <para>Recursive</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.IsIdent"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.NodeStr"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ContainsIdent(const N: TTSNode; const ALowerName: string): Boolean;
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.ContainsStringLiteral (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.IsTemporaryString (DRagLint.V151.MEM.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.MEM.Support.TMemRun.ContainsStringLiteral, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <para>Recursive</para>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallArgs"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ContainsStringLiteral(const N: TTSNode): Boolean;
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AArg"><!-- drag-lint:auto type -->out TTSNode</param>
+    /// <param name="AWideOnly"><!-- drag-lint:auto type -->Boolean = False</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.CheckAnsiApi (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.CheckAssignment (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.FindTemporaryCast (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.ReadOnlyCommandLine (DRagLint.V151.MEM.Support.pas)</para>
+    /// <para>Calls: Default, DRagLint.V151.MEM.Support.TMemRun.CallArgs, DRagLint.V151.MEM.Support.TMemRun.CallName, MatchStr, TreeSitter.TTSNodeHelper.ChildByField/1</para>
+    /// <para>Mutates: AArg (out)</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallArgs"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallName"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckAnsiApi"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckAssignment"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsPCharCast(const N: TTSNode; out AArg: TTSNode; AWideOnly: Boolean = False): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->A string value with no variable behind it: a
+    /// concatenation with a string literal or the result of a well-known string function.</summary>
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed:
+    /// (N.ChildByField('operator').NodeType = 'kAdd') and ContainsStringLiteral(N);
+    /// (N.NodeType = 'exprCall') and MatchStr(CallName(N), STRING_FUNCS).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.CheckAssignment (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.FindTemporaryCast (DRagLint.V151.MEM.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.MEM.Support.TMemRun.CallName, DRagLint.V151.MEM.Support.TMemRun.ContainsStringLiteral, MatchStr, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallName"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.ContainsStringLiteral"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallArgs"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsTemporaryString(const N: TTSNode): Boolean;
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="ACast"><!-- drag-lint:auto type -->out TTSNode</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: True; False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.CheckPostFamily (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.FindTemporaryCast (DRagLint.V151.MEM.Support.pas)</para>
+    /// <para>Calls: Default, DRagLint.V151.MEM.Support.TMemRun.FindTemporaryCast, DRagLint.V151.MEM.Support.TMemRun.IsPCharCast, DRagLint.V151.MEM.Support.TMemRun.IsTemporaryString, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount</para>
+    /// <para>Recursive</para>
+    /// <para>Mutates: ACast (out)</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.IsPCharCast"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.IsTemporaryString"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallArgs"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function FindTemporaryCast(const N: TTSNode; out ACast: TTSNode): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->'lit' + X or X + 'lit' with exactly two
+    /// operands: when X is empty the RTL returns the literal itself.</summary>
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; (L.NodeType =
+    /// 'literalString') &lt;&gt; (R.NodeType = 'literalString').</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.LocalAssignedReadOnly (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.ReadOnlyCommandLine (DRagLint.V151.MEM.Support.pas)</para>
+    /// <para>Calls: TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallArgs"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallName"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckAnsiApi"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsLiteralPlusOne(const N: TTSNode): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->AIdent names a by-value or const parameter of
+    /// ARoutine declared string / UnicodeString / WideString.</summary>
+    /// <param name="ARoutine"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AIdent"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; (not ByRef) and
+    /// IsUtf16String(LowerText(Arg.ChildByField('type'))).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.ReadOnlyCommandLine (DRagLint.V151.MEM.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.MEM.Support.TMemRun.IsIdent, DRagLint.V151.MEM.Support.TMemRun.IsUtf16String, DRagLint.V151.MEM.Support.TMemRun.LowerText, DRagLint.V151.MEM.Support.TMemRun.NodeStr, LowerCase, MatchStr, TreeSitter.TTSNodeHelper.Child, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.ChildCount, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 29 lines (full implementation)</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.IsIdent"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.IsUtf16String"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.LowerText"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.NodeStr"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsValueStringParam(const ARoutine, AIdent: TTSNode): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->The last assignment to the local AIdent before
+    /// ACall gives it a literal-backed value (literal, const, 'lit' + X) and no
+    /// UniqueString(AIdent) runs between the two.</summary>
+    /// <param name="ARoutine"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AIdent"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="ACall"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.ReadOnlyCommandLine (DRagLint.V151.MEM.Support.pas)</para>
+    /// <para>Calls: CallName, ContainsIdent, Default, DRagLint.V151.MEM.Support.TMemRun.IsIdent, DRagLint.V151.MEM.Support.TMemRun.IsLiteralPlusOne, DRagLint.V151.MEM.Support.TMemRun.LocalAssignedReadOnly.Scan, DRagLint.V151.MEM.Support.TMemRun.NodeStr, LowerCase, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <para>Reads: FConsts</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.IsIdent"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.IsLiteralPlusOne"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.LocalAssignedReadOnly.Scan"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.NodeStr"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function LocalAssignedReadOnly(const ARoutine, AIdent, ACall: TTSNode): Boolean;
+    /// <param name="AArg"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="ACall"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AWhy"><!-- drag-lint:auto type -->out string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True; AWhy &lt;&gt;
+    /// ''.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.CheckCreateProcess (DRagLint.V151.MEM.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.MEM.Support.TMemRun.DeclTypeOf, DRagLint.V151.MEM.Support.TMemRun.EnclosingRoutine, DRagLint.V151.MEM.Support.TMemRun.IsIdent, DRagLint.V151.MEM.Support.TMemRun.IsLiteralPlusOne, DRagLint.V151.MEM.Support.TMemRun.IsPCharCast, DRagLint.V151.MEM.Support.TMemRun.IsUtf16String, DRagLint.V151.MEM.Support.TMemRun.IsValueStringParam, DRagLint.V151.MEM.Support.TMemRun.LocalAssignedReadOnly, DRagLint.V151.MEM.Support.TMemRun.NodeStr, Format, LowerCase, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 32 lines (full implementation)</para>
+    /// <para>Reads: FConsts</para>
+    /// <para>Mutates: AWhy (out)</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.DeclTypeOf"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.EnclosingRoutine"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.IsIdent"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.IsLiteralPlusOne"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.IsPCharCast"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ReadOnlyCommandLine(const AArg, ACall: TTSNode; out AWhy: string): Boolean;
+    /// <param name="ARoutine"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="ANames"><!-- drag-lint:auto type -->const array of string</param>
+    /// <param name="ALowerVar"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: Found.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.CheckManagedRaw (DRagLint.V151.MEM.Support.pas)</para>
+    /// <para>Calls: CallName, ContainsIdent, DRagLint.V151.MEM.Support.TMemRun.RoutineHasCallOn.Scan, MatchStr, TreeSitter.TTSNodeHelper.IsNull</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.RoutineHasCallOn.Scan"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallArgs"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallName"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckAnsiApi"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function RoutineHasCallOn(const ARoutine: TTSNode; const ANames: array of string; const ALowerVar: string): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->Rules</summary>
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.Visit (DRagLint.V151.MEM.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.MEM.Support.TMemRun.EmitAt, DRagLint.V151.MEM.Support.TMemRun.IsPCharCast, DRagLint.V151.MEM.Support.TMemRun.IsTemporaryString, DRagLint.V151.MEM.Support.TMemRun.NodeStr, Format, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.EmitAt"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.IsPCharCast"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.IsTemporaryString"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.NodeStr"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CheckAssignment(const N: TTSNode);
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.Visit (DRagLint.V151.MEM.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.MEM.Support.TMemRun.CallName, DRagLint.V151.MEM.Support.TMemRun.CheckAnsiApi, DRagLint.V151.MEM.Support.TMemRun.CheckCharCount, DRagLint.V151.MEM.Support.TMemRun.CheckCreateProcess, DRagLint.V151.MEM.Support.TMemRun.CheckManagedRaw, DRagLint.V151.MEM.Support.TMemRun.CheckPostFamily, MatchStr, StartsStr</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallName"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckAnsiApi"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckCharCount"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckCreateProcess"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckManagedRaw"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CheckCall(const N: TTSNode);
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.CheckCall (DRagLint.V151.MEM.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.MEM.Support.TMemRun.CallArgs, DRagLint.V151.MEM.Support.TMemRun.EmitAt, DRagLint.V151.MEM.Support.TMemRun.FindTemporaryCast</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallArgs"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.EmitAt"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.FindTemporaryCast"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallName"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckAnsiApi"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CheckPostFamily(const N: TTSNode);
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.CheckCall (DRagLint.V151.MEM.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.MEM.Support.TMemRun.CallArgs, DRagLint.V151.MEM.Support.TMemRun.EmitAt, DRagLint.V151.MEM.Support.TMemRun.NodeStr, DRagLint.V151.MEM.Support.TMemRun.ReadOnlyCommandLine, Format, MatchStr, TreeSitter.TTSNodeHelper.ChildByField/1</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallArgs"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.EmitAt"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.NodeStr"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.ReadOnlyCommandLine"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CheckCreateProcess(const N: TTSNode; const AName: string);
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.CheckCall (DRagLint.V151.MEM.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.MEM.Support.TMemRun.CallArgs, DRagLint.V151.MEM.Support.TMemRun.CallName, DRagLint.V151.MEM.Support.TMemRun.DeclTypeOf, DRagLint.V151.MEM.Support.TMemRun.EmitAt, DRagLint.V151.MEM.Support.TMemRun.EnclosingRoutine, DRagLint.V151.MEM.Support.TMemRun.IsIdent, DRagLint.V151.MEM.Support.TMemRun.IsLongString, DRagLint.V151.MEM.Support.TMemRun.IsManagedType, DRagLint.V151.MEM.Support.TMemRun.LowerText, DRagLint.V151.MEM.Support.TMemRun.NodeStr (+8 more)</para>
+    /// <para>Complexity: 24 (cyclomatic, outer body), 60 lines (full implementation)</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallArgs"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallName"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.DeclTypeOf"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.EmitAt"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.EnclosingRoutine"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CheckManagedRaw(const N: TTSNode; const AName: string);
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.CheckCall (DRagLint.V151.MEM.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.MEM.Support.TMemRun.CallArgs, DRagLint.V151.MEM.Support.TMemRun.CallName, DRagLint.V151.MEM.Support.TMemRun.ContainsIdent, DRagLint.V151.MEM.Support.TMemRun.DeclTypeOf, DRagLint.V151.MEM.Support.TMemRun.EmitAt, DRagLint.V151.MEM.Support.TMemRun.IsUtf16String, DRagLint.V151.MEM.Support.TMemRun.LowerText, DRagLint.V151.MEM.Support.TMemRun.NodeStr, Format, LowerCase, MatchStr, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <para>Complexity: 39 (cyclomatic, outer body), 86 lines (full implementation)</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallArgs"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallName"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.ContainsIdent"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.DeclTypeOf"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.EmitAt"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CheckCharCount(const N: TTSNode; const AName: string);
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.CheckCall (DRagLint.V151.MEM.Support.pas)</para>
+    /// <para>Calls: CharInSet, DRagLint.V151.MEM.Support.TMemRun.CallArgs, DRagLint.V151.MEM.Support.TMemRun.CallName, DRagLint.V151.MEM.Support.TMemRun.DeclTypeOf, DRagLint.V151.MEM.Support.TMemRun.EmitAt, DRagLint.V151.MEM.Support.TMemRun.IsIdent, DRagLint.V151.MEM.Support.TMemRun.IsPCharCast, DRagLint.V151.MEM.Support.TMemRun.IsUtf16String, DRagLint.V151.MEM.Support.TMemRun.NodeStr, Format, MatchStr, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 24 lines (full implementation)</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallArgs"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallName"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.DeclTypeOf"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.EmitAt"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.IsIdent"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CheckAnsiApi(const N: TTSNode);
+    /// <summary><!-- drag-lint:auto sum -->raw-memory-leak and handle-leak: a local that
+    /// receives memory or a handle and is neither released nor handed on anywhere in the
+    /// routine (nested routines included).</summary>
+    /// <param name="ADef"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.Visit (DRagLint.V151.MEM.Support.pas)</para>
+    /// <para>Calls: AddAlloc, AddAllocHandle, AssignTarget, CallArgs, CallName, CharInSet, ContainsStr, ContainsText, DeclTypeOf, DRagLint.V151.MEM.Support.TMemRun.CheckRoutineLeaks.CollectAllocs (+16 more)</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckRoutineLeaks.CollectAllocs"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckRoutineLeaks.CollectLocals"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckRoutineLeaks.Handled"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.EmitAt"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.NodeStr"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CheckRoutineLeaks(const ADef: TTSNode);
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.Support.TMemRun.Run (DRagLint.V151.MEM.Support.pas), DRagLint.V151.MEM.Support.TMemRun.Visit (DRagLint.V151.MEM.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.MEM.Support.TMemRun.CheckAssignment, DRagLint.V151.MEM.Support.TMemRun.CheckCall, DRagLint.V151.MEM.Support.TMemRun.CheckRoutineLeaks, DRagLint.V151.MEM.Support.TMemRun.Visit, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <para>Recursive</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckAssignment"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckCall"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckRoutineLeaks"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Visit(const N: TTSNode);
   public
     /// <summary>Prepares a run over one file.</summary>
@@ -76,19 +601,56 @@ type
     /// <param name="AStore">Project index, or nil.</param>
     /// <param name="ALib">Platform library index, or nil.</param>
     /// <param name="AWants">Answers whether a rule id is wanted in this run (--rule narrowing, OFF rules).</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.MEM.TV151MEMRules.CheckFile (DRagLint.V151.MEM.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FFile, FSrc, FStore, FLib, FWants, FFindings, FTypeDecls, FConsts (+1 more)</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallArgs"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallName"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckAnsiApi"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckAssignment"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckCall"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(const AFile: string; const ASrc: TBytes; const AStore, ALib: ISymbolStore;
       const AWants: TFunc<string, Boolean>);
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FManagedCache, FConsts, FTypeDecls, FFindings</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallArgs"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallName"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckAnsiApi"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckAssignment"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckCall"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>Walks the tree once and returns every finding of the lane's rules.</summary>
     /// <param name="ARoot">Root node of the file's parse tree.</param>
     /// <returns>Findings in tree order; empty when none.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas) ?, DRagLint.V151.MEM.TV151MEMRules.CheckFile (DRagLint.V151.MEM.pas)</para>
+    /// <para>Calls: DRagLint.V151.MEM.Support.TMemRun.CollectDecls, DRagLint.V151.MEM.Support.TMemRun.Visit</para>
+    /// <para>Returns: FFindings.ToArray</para>
+    /// <para>Reads: FFindings   Writes: FRoot</para>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CollectDecls"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.Visit"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallArgs"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CallName"/>
+    /// <seealso cref="DRagLint.V151.MEM.Support.TMemRun.CheckAnsiApi"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Run(const ARoot: TTSNode): TArray<TLintFinding>;
   end;
 
 implementation
 
 uses
-  System.StrUtils
+  DRagLint.Diagnostics.ParseCache { 1.52 BK-COLS2: TAstParseCache.CharCol }
+  , System.StrUtils
   , DRagLint.Lint.QueryRules { DeclaredTypeAt }
   ;
 
@@ -195,9 +757,9 @@ begin
   F.Message  := AMsg;
   F.FilePath := FFile;
   F.StartLine:= Integer(P.Row) + 1;
-  F.StartCol := Integer(P.Column) + 1;
+  F.StartCol := TAstParseCache.CharCol(F.FilePath, P); { 1.52 BK-COLS2: character column }
   F.EndLine  := Integer(Q.Row) + 1;
-  F.EndCol   := Integer(Q.Column) + 1;
+  F.EndCol   := TAstParseCache.CharCol(F.FilePath, Q); { 1.52 BK-COLS2: character column }
   FFindings.Add(F);
 end;
 

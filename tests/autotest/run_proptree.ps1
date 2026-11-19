@@ -27,9 +27,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-proptree-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 # 'Continue' not 'Stop': the native drag-lint exe prints a '(loaded defaults)' note
 # to stderr, which under 'Stop' PowerShell turns into a terminating error mid-run.
@@ -136,7 +139,7 @@ Write-Ascii (Join-Path $work 'PropFix.pas') $PropBody
 $db = Join-Path $WorkDir 'propfix.sqlite'
 
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 $indexExit = $LASTEXITCODE
 Check 'index exits 0' ($indexExit -eq 0) "exit=$indexExit; $($indexOut -join ' | ')"
 
@@ -153,7 +156,7 @@ Check 'proptree exits 0' ($ptExit -eq 0) "exit=$ptExit"
 
 $tree = $null
 try {
-  $tree = $jsonRaw | ConvertFrom-Json
+  $tree = $jsonRaw | ConvertFrom-Json | ForEach-Object { $_ }
 } catch {
   Check 'proptree --format json parses as JSON' $false "parse error: $($_.Exception.Message); raw=$jsonRaw"
 }
@@ -207,7 +210,7 @@ try {
 Check 'proptree TFwd exits 0' ($fwdExit -eq 0) "exit=$fwdExit"
 
 $fwdTree = $null
-try { $fwdTree = $fwdRaw | ConvertFrom-Json } catch { }
+try { $fwdTree = $fwdRaw | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 if ($null -ne $fwdTree) {
   $fwdPaths = @(@($fwdTree.properties) | ForEach-Object { $_.path })
   Check "TFwd resolves to the BODY (has property 'Tag'), not the forward stub" `
@@ -235,7 +238,7 @@ try {
   Pop-Location
 }
 $fcTree = $null
-try { $fcTree = $fcRaw | ConvertFrom-Json } catch { }
+try { $fcTree = $fcRaw | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 if ($null -ne $fcTree) {
   $fcTag = @($fcTree.properties) | Where-Object { $_.path -eq 'Tag' } | Select-Object -First 1
   if ($null -ne $fcTag) {
@@ -257,8 +260,8 @@ try { $defRaw = (& $Exe proptree --qname 'PropFix.TRefHost' --format json --db $
 Write-Host 'proptree PropFix.TRefHost --refs-as-leaves (= reference leaves)' -ForegroundColor Cyan
 Push-Location $WorkDir
 try { $refRaw = (& $Exe proptree --qname 'PropFix.TRefHost' --refs-as-leaves --format json --db $db) -join "`n" } finally { Pop-Location }
-$defTree = $null; try { $defTree = $defRaw | ConvertFrom-Json } catch { }
-$refTree = $null; try { $refTree = $refRaw | ConvertFrom-Json } catch { }
+$defTree = $null; try { $defTree = $defRaw | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
+$refTree = $null; try { $refTree = $refRaw | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 if (($null -ne $defTree) -and ($null -ne $refTree)) {
   $defPaths = @(@($defTree.properties) | ForEach-Object { $_.path })
   $refPaths = @(@($refTree.properties) | ForEach-Object { $_.path })
@@ -352,12 +355,12 @@ implementation
 end.
 '@
 Write-Ascii (Join-Path $work 'DefFix.pas') $DefBody
-$idx2 = & $Exe index $work --db $db 2>&1
+$idx2 = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'default-clause: reindex exits 0' ($LASTEXITCODE -eq 0) "$($idx2 -join ' | ')"
 
-$defJson = (& $Exe proptree --qname 'DefFix.TDefChild' --format json --db $db 2>$null) -join "`n"
+$defJson = (& { $ErrorActionPreference = 'Continue'; & $Exe proptree --qname 'DefFix.TDefChild' --format json --db $db 2>$null }) -join "`n"
 $defDoc = $null
-try { $defDoc = $defJson | ConvertFrom-Json } catch { $defDoc = $null }
+try { $defDoc = $defJson | ConvertFrom-Json | ForEach-Object { $_ } } catch { $defDoc = $null }
 Check 'default-clause: proptree parses' ($null -ne $defDoc) "raw=$defJson"
 if ($null -ne $defDoc) {
   function Prop($n) { @($defDoc.properties) | Where-Object { $_.path -eq $n } | Select-Object -First 1 }
@@ -388,9 +391,9 @@ if ($null -ne $defDoc) {
 }
 
 # The base class read directly: its own declarations, no walking involved.
-$baseJson = (& $Exe proptree --qname 'DefFix.TDefBase' --format json --db $db 2>$null) -join "`n"
+$baseJson = (& { $ErrorActionPreference = 'Continue'; & $Exe proptree --qname 'DefFix.TDefBase' --format json --db $db 2>$null }) -join "`n"
 $baseDoc = $null
-try { $baseDoc = $baseJson | ConvertFrom-Json } catch { $baseDoc = $null }
+try { $baseDoc = $baseJson | ConvertFrom-Json | ForEach-Object { $_ } } catch { $baseDoc = $null }
 if ($null -ne $baseDoc) {
   $bMode = @($baseDoc.properties) | Where-Object { $_.path -eq 'Mode' } | Select-Object -First 1
   Check 'default-clause: enum default is captured verbatim (Mode=omA)' `
@@ -405,9 +408,9 @@ if ($null -ne $baseDoc) {
 # cut. They matter because convert-reemit EMITS default_value into a .dfm: a
 # truncated set is a malformed form file, and a conditionally-stored property
 # read as "at its default" writes a value the form never had.
-$edgeJson = (& $Exe proptree --qname 'DefFix.TDefEdge' --format json --db $db 2>$null) -join "`n"
+$edgeJson = (& { $ErrorActionPreference = 'Continue'; & $Exe proptree --qname 'DefFix.TDefEdge' --format json --db $db 2>$null }) -join "`n"
 $edgeDoc = $null
-try { $edgeDoc = $edgeJson | ConvertFrom-Json } catch { $edgeDoc = $null }
+try { $edgeDoc = $edgeJson | ConvertFrom-Json | ForEach-Object { $_ } } catch { $edgeDoc = $null }
 if ($null -ne $edgeDoc) {
   $eAnchors = @($edgeDoc.properties) | Where-Object { $_.path -eq 'Anchors' } | Select-Object -First 1
   $eColor   = @($edgeDoc.properties) | Where-Object { $_.path -eq 'Color'   } | Select-Object -First 1

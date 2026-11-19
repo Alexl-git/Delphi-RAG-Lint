@@ -41,11 +41,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe       = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe") { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" } else { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }),
+  [string]$Exe       = '',
   [switch]$KeepScratch,
   [string]$WorkDir   = "$env:TEMP\drag-lint-cyclefix-edgesel-$PID",
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe") { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" } else { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }) }
 # E18 T13: removes this run's scratch (WorkDir) however the run ends; kept only on failure when
 # -KeepScratch is passed (the path is printed).
 function Remove-Scratch {
@@ -89,7 +92,7 @@ function Get-Cycles([string]$Db, [string]$Tag, [string[]]$Extra) {
   try {
     $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
       -ArgumentList (@('cycles', '--db', ('"' + $Db + '"')) + $Extra) `
-      -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "cycles-$Tag.err")
+      -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "cycles-$Tag.err"); $null = $p.Handle
   } finally {
     $env:DRAGLINT_TEST_DUMP_PLAN = $null
   }
@@ -118,10 +121,10 @@ function Get-Block([string]$Plan, [int]$No, [string]$Section = '') {
 
 function Index-Copy([string]$Dir, [string]$Dproj, [string]$Tag, [int]$Units) {
   $db = Join-Path $Dir "$Tag.sqlite"
-  $idx = & $Exe index --project (Join-Path $Dir $Dproj) --db $db 2>&1 | Out-String
+  $idx = & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $Dir $Dproj) --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check "${Tag}: SANITY the $Units units indexed with 0 errors" `
     (([regex]::Matches($idx, 'Demo[\w.]+\.pas\s*->\s*\d+ symbols, \d+ refs, 0 errors')).Count -eq $Units) $idx
-  $report = & $Exe cycles --db $db 2>&1 | Out-String
+  $report = & { $ErrorActionPreference = 'Continue'; & $Exe cycles --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check "${Tag}: POSITIVE CONTROL plain report finds the 4-unit group with interface coupling" `
     ($report -match '\[4 units\].*has interface coupling') $report
   return $db
@@ -240,7 +243,7 @@ try {
   $tbDir = Join-Path $WorkDir 'tiebreak'
   Copy-Tree (Join-Path $Repo 'tests\fixtures\cyclefix\tiebreak') $tbDir
   $tbDb = Join-Path $tbDir 'tiebreak.sqlite'
-  $idx = & $Exe index --project (Join-Path $tbDir 'TieBreak.dproj') --db $tbDb 2>&1 | Out-String
+  $idx = & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $tbDir 'TieBreak.dproj') --db $tbDb 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'tiebreak: SANITY the 3 units indexed with 0 errors' (([regex]::Matches($idx, 'Tie\w\.pas\s*->\s*\d+ symbols, \d+ refs, 0 errors')).Count -eq 3) $idx
   $c = Get-Cycles $tbDb 'tiebreak' @('--plan', '--library-db', ('"' + $Lib + '"'))
   $tbFix = Get-Block $c.Out 1 'Recommended fix'
@@ -252,7 +255,7 @@ try {
   $pbDir = Join-Path $WorkDir 'partbr1'
   Copy-Tree (Join-Path $Repo 'tests\fixtures\cyclefix\partbr1') $pbDir
   $pbDb = Join-Path $pbDir 'partbr1.sqlite'
-  $idx = & $Exe index --project (Join-Path $pbDir 'PartBR1.dproj') --db $pbDb 2>&1 | Out-String
+  $idx = & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $pbDir 'PartBR1.dproj') --db $pbDb 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'partbr1: SANITY the 2 units indexed with 0 errors' (([regex]::Matches($idx, 'PartB\w\.pas\s*->\s*\d+ symbols, \d+ refs, 0 errors')).Count -eq 2) $idx
   $c = Get-Cycles $pbDb 'partbr1' @('--plan', '--library-db', ('"' + $Lib + '"'))
   $pb = Get-Block $c.Out 1 'Part B'

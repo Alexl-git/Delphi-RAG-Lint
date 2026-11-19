@@ -49,7 +49,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Continue'
@@ -89,8 +92,8 @@ function Invoke-ShapeSweep([string]$root, [string]$qname, [string]$slug) {
   $md5s = @( Get-FileMd5 $target )
   $acts = @()
   for ($cycle = 1; $cycle -le 3; $cycle++) {
-    & $exePath index $scratch --db $db 2>$null | Out-Null
-    $j = (& $exePath document --qname $qname --db $db --apply --json 2>$null) -join ' '
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+    $j = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname $qname --db $db --apply --json 2>$null }) -join ' '
     if ($j -match '"action":"(\w+)"') { $a = $Matches[1] } else { $a = '?' }
     if ($j -match '"edits":(\d+)')    { $a = "$a/$($Matches[1])" }
     $acts += $a
@@ -328,8 +331,8 @@ Write-Host '--- STRIP ROUND-TRIP: what is preserved must also come back out ----
 $preservedShapes = $shapes | Where-Object { $_ -notin @('FencedRemarksTailValue','MarkedReturnsTail') }
 foreach ($nm in $preservedShapes) {
   $r = $res[$nm]
-  & $exePath index $r.Scratch --db $r.Db 2>$null | Out-Null
-  & $exePath document --qname "residual_lines.$nm" --db $r.Db --strip --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $r.Scratch --db $r.Db 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --qname "residual_lines.$nm" --db $r.Db --strip --apply 2>$null } | Out-Null
   $after = Get-DocBlockLines ([IO.File]::ReadAllLines($r.Target)) $decl[$nm]
   Check "STRIP $nm : every pristine /// line is back, verbatim" `
     ((@($pristine[$nm] | Where-Object { $after -cnotcontains $_ })).Count -eq 0) `

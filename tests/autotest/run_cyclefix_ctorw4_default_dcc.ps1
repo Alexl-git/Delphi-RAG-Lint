@@ -18,12 +18,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe       = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
+  [string]$Exe       = '',
   [string]$WorkDir   = "$env:TEMP\drag-lint-cyclefix-ctorw4-$PID",
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite',
   [switch]$NoBuild,
   [switch]$KeepWorkDir
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }) }
 $ErrorActionPreference = 'Stop'
 $RsVars = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 if (-not (Test-Path $RsVars)) { Write-Host 'SKIP: RAD Studio not installed' -ForegroundColor Yellow; exit 0 }
@@ -81,7 +84,7 @@ function Invoke-Program([string]$Dproj) {
 }
 function Invoke-Index([string]$Dproj, [string]$Tag) {
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project $Dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $Dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
   return $db
 }
 function Get-Plan([string]$Dproj, [string]$Tag) {
@@ -89,7 +92,7 @@ function Get-Plan([string]$Dproj, [string]$Tag) {
   $o = Join-Path $WorkDir "plan-$Tag.out"
   $null = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
     -ArgumentList @('cycles', '--db', ('"' + $db + '"'), '--plan', '--library-db', ('"' + $Lib + '"')) `
-    -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "plan-$Tag.err")
+    -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "plan-$Tag.err"); $null = $null.Handle
   return [IO.File]::ReadAllText($o)
 }
 function Invoke-Apply([string]$Dproj, [string]$Tag) {
@@ -98,12 +101,12 @@ function Invoke-Apply([string]$Dproj, [string]$Tag) {
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
     -ArgumentList @('cycles', '--fix', '--apply', '--no-backup', '--build-timeout', '600', '--cycle', '1', '--project', ('"' + $Dproj + '"'),
       '--db', ('"' + $db + '"'), '--library-db', ('"' + $Lib + '"')) `
-    -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "apply-$Tag.err")
+    -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "apply-$Tag.err"); $null = $p.Handle
   return @{ Exit = $p.ExitCode; Out = [IO.File]::ReadAllText($o); Err = [IO.File]::ReadAllText((Join-Path $WorkDir "apply-$Tag.err")) }
 }
 function Get-CyclesText([string]$Dproj, [string]$Tag) {
   $db = Invoke-Index $Dproj $Tag
-  return ((& $Exe cycles --db $db 2>&1) | Out-String)
+  return ((& { $ErrorActionPreference = 'Continue'; & $Exe cycles --db $db 2>&1 | ForEach-Object { "$_" } }) | Out-String)
 }
 function Get-Refusal([string]$Plan) { (([regex]::Match($Plan, '(?m)^.*refused:.*$').Value) -replace '^(.{0,300}).*$', '$1') }
 $Mech = { param($pt) $pt.Contains('**Constructor inversion:** `TW4Worker.') -and -not $pt.Contains('Fix it: not available') }

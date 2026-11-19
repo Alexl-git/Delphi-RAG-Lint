@@ -34,9 +34,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-report-encoding-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -93,8 +96,8 @@ Copy-Item (Join-Path $repo 'rules\*.json') $rulesDst -Force
 
 $db     = Join-Path $WorkDir 'reportenc.sqlite'
 $report = Join-Path $WorkDir 'report.txt'
-& $Exe index $WorkDir --db $db --quiet 2>&1 | Out-Null
-& $Exe lint-all --db $db --output $report 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --output $report 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 Write-Host ''
 Write-Host 'The report file' -ForegroundColor Cyan

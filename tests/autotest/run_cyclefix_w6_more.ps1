@@ -20,11 +20,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe       = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
+  [string]$Exe       = '',
   [string]$WorkDir   = "$env:TEMP\drag-lint-cyclefix-w6m-$PID",
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite',
   [string]$Only      = ''   # a regex over the section tags (c6, c2, c7i ...); '' = every section
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }) }
 function Want([string]$Tag) { return ($Only -eq '') -or ($Tag -match $Only) }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -63,14 +66,14 @@ function Get-Plan([string]$Fixture, [string]$Dproj, [string]$Tag, [scriptblock]$
   Copy-Tree (Join-Path $Fx $Fixture) $root
   if ($Edit) { & $Edit $root }
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  $null | & $Exe index --project (Join-Path $root $Dproj) --db $db *> (Join-Path $WorkDir "index-$Tag.log")
+  $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project (Join-Path $root $Dproj) --db $db *> (Join-Path $WorkDir "index-$Tag.log") }
   $o = Join-Path $WorkDir "plan-$Tag.out"
   $dump = Join-Path $WorkDir "dump-$Tag.txt"
   $env:DRAGLINT_TEST_DUMP_PLAN = $dump
   try {
     $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
       -ArgumentList @('cycles', '--db', ('"' + $db + '"'), '--plan', '--library-db', ('"' + $Lib + '"')) `
-      -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "plan-$Tag.err")
+      -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "plan-$Tag.err"); $null = $p.Handle
   } finally { $env:DRAGLINT_TEST_DUMP_PLAN = $null }
   $verdict = ''; $refusals = ''
   if (Test-Path $dump) {
@@ -84,9 +87,9 @@ function Get-Plan([string]$Fixture, [string]$Dproj, [string]$Tag, [scriptblock]$
 }
 # Applies cycle 1 of a plan with the follower, re-indexes, returns the text `cycles` prints on the result.
 function Invoke-FollowAndCycles($Pl, [string]$Tag) {
-  $fo = & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $Pl.Out -Cycle 1 2>&1 | Out-String
+  $fo = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $Pl.Out -Cycle 1 2>&1 | ForEach-Object { "$_" } } | Out-String
   $db = Join-Path $WorkDir "after-$Tag.sqlite"
-  $null | & $Exe index --project $Pl.Dproj --db $db *> (Join-Path $WorkDir "index-after-$Tag.log")
+  $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project $Pl.Dproj --db $db *> (Join-Path $WorkDir "index-after-$Tag.log") }
   $o = & $Exe cycles --db $db | Out-String
   return @{ Follow = $LASTEXITCODE; Text = $fo; Cycles = $o }
 }
@@ -259,8 +262,8 @@ try {
     $b = [IO.File]::ReadAllBytes($f); $s = [Text.Encoding]::GetEncoding(28591).GetString($b)
     [IO.File]::WriteAllBytes($f, [Text.Encoding]::GetEncoding(28591).GetBytes($s.Replace('<summary>Read', "<summary>Gr$([char]0xF6)$([char]0xDF)e: read"))) }
   $naDb = Join-Path $WorkDir 'na.sqlite'
-  $null | & $Exe index --project (Join-Path $naRoot 'TieBreak.dproj') --db $naDb *> (Join-Path $WorkDir 'index-na.log')
-  $naOut = & $Exe cycles --fix --build-timeout 1800 --project (Join-Path $naRoot 'TieBreak.dproj') --db $naDb --library-db none --format json 2>&1 | Out-String
+  $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project (Join-Path $naRoot 'TieBreak.dproj') --db $naDb *> (Join-Path $WorkDir 'index-na.log') }
+  $naOut = & { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --build-timeout 1800 --project (Join-Path $naRoot 'TieBreak.dproj') --db $naDb --library-db none --format json 2>&1 | ForEach-Object { "$_" } } | Out-String
   $naCode = $LASTEXITCODE
   Check 'na the dry run (it BUILDS the shadow tree) is exit 0 with no non-ascii-text refusal' (($naCode -eq 0) -and -not $naOut.Contains('non-ascii-text')) ("exit=$naCode " + ($naOut.Trim() -replace "`r?`n", ' '))
  }
@@ -269,16 +272,16 @@ try {
   $rsRoot = Join-Path $WorkDir 'rsv-tie'
   Copy-Tree (Join-Path $Fx 'tiebreak') $rsRoot
   $rsDb = Join-Path $WorkDir 'rsv.sqlite'
-  $null | & $Exe index --project (Join-Path $rsRoot 'TieBreak.dproj') --db $rsDb *> (Join-Path $WorkDir 'index-rsv.log')
+  $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project (Join-Path $rsRoot 'TieBreak.dproj') --db $rsDb *> (Join-Path $WorkDir 'index-rsv.log') }
   $fixArgs = @('cycles', '--fix', '--build-timeout', '1800', '--project', (Join-Path $rsRoot 'TieBreak.dproj'), '--db', $rsDb, '--library-db', 'none', '--format', 'json')
   $savedBds = $env:BDS
   try {
     $env:BDS = Join-Path $WorkDir 'no-studio-here'   # TStudioEnv takes the root from BDS first: a root without rsvars.bat
-    $o0 = & $Exe @fixArgs 2>&1 | Out-String; $c0 = $LASTEXITCODE
+    $o0 = & { $ErrorActionPreference = 'Continue'; & $Exe @fixArgs 2>&1 | ForEach-Object { "$_" } } | Out-String; $c0 = $LASTEXITCODE
     Check 'rsv-control without --rsvars: refused no-compiler' ($o0.Contains('no-compiler')) "exit=$c0"
-    $o1 = & $Exe @fixArgs --rsvars $RsVars 2>&1 | Out-String; $c1 = $LASTEXITCODE
+    $o1 = & { $ErrorActionPreference = 'Continue'; & $Exe @fixArgs --rsvars $RsVars 2>&1 | ForEach-Object { "$_" } } | Out-String; $c1 = $LASTEXITCODE
     Check 'rsv with --rsvars <real rsvars.bat>: exit 0, built, no no-compiler refusal' (($c1 -eq 0) -and -not $o1.Contains('no-compiler')) "exit=$c1"
-    $o2 = & $Exe @fixArgs --rsvars (Join-Path $WorkDir 'missing\rsvars.bat') 2>&1 | Out-String; $c2 = $LASTEXITCODE
+    $o2 = & { $ErrorActionPreference = 'Continue'; & $Exe @fixArgs --rsvars (Join-Path $WorkDir 'missing\rsvars.bat') 2>&1 | ForEach-Object { "$_" } } | Out-String; $c2 = $LASTEXITCODE
     Check 'rsv-missing --rsvars <no such file>: exit 2, named' (($c2 -eq 2) -and $o2.Contains('--rsvars: no such file')) "exit=$c2"
   } finally { $env:BDS = $savedBds }
   }

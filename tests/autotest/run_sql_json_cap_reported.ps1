@@ -20,8 +20,11 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe"
+  [string]$Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 . "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe
 $ErrorActionPreference = 'Continue'
@@ -41,16 +44,16 @@ $dpr  = @('program SqlCap;', '', 'uses', '  SqlCapU in ''SqlCapU.pas'';', '', 'b
 function Cte($n) { "WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM n WHERE x < $n) SELECT x FROM n" }
 function RunSql([string[]]$extra) {
   $errFile = Join-Path $Work ('err-' + [guid]::NewGuid().ToString('N') + '.txt')
-  $out = (& $Exe sql --db $script:Db @extra 2> $errFile) -join "`n"
+  $out = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe sql --db $script:Db @extra 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }) -join "`n"
   $err = if (Test-Path $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
   [pscustomobject]@{ Out = $out; Err = $err; Exit = $LASTEXITCODE }
 }
-function J($r) { try { $r.Out | ConvertFrom-Json } catch { $null } }
+function J($r) { try { $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null } }
 
 Push-Location $Work
 try {
   $script:Db = Join-Path $Work 'sqlcap.sqlite'
-  $null = & $Exe index --project (Join-Path $Work 'SqlCap.dpr') --db $script:Db 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $Work 'SqlCap.dpr') --db $script:Db 2>&1 | ForEach-Object { "$_" } }
   Check 'index exit 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
   $r1 = RunSql @('--query', (Cte 1226), '--json'); $j1 = J $r1
@@ -77,12 +80,12 @@ try {
   # --output is the documented full-dump route (GR3 FOUND-152b): no --limit = EVERY row.
   $f5 = Join-Path $Work 'j5.json'
   $r5 = RunSql @('--query', (Cte 1226), '--json', '--output', $f5)
-  $j5 = $null; try { $j5 = [IO.File]::ReadAllText($f5) | ConvertFrom-Json } catch { }
+  $j5 = $null; try { $j5 = [IO.File]::ReadAllText($f5) | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   Check 'J5 --output without --limit writes all 1226 rows' ($null -ne $j5 -and @($j5.rows).Count -eq 1226 -and $j5.truncated -eq $false) "rows=$(@($j5.rows).Count) exit=$($r5.Exit)"
   Check 'J5 no NOTE on stderr' ($r5.Err -notmatch 'NOTE') $r5.Err.Trim()
   $f6 = Join-Path $Work 'j6.json'
   $r6 = RunSql @('--query', (Cte 1226), '--json', '--output', $f6, '--limit', '10')
-  $j6 = $null; try { $j6 = [IO.File]::ReadAllText($f6) | ConvertFrom-Json } catch { }
+  $j6 = $null; try { $j6 = [IO.File]::ReadAllText($f6) | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   Check 'J6 control: --output --limit 10 writes 10 rows, truncated, total 1226' ($null -ne $j6 -and @($j6.rows).Count -eq 10 -and $j6.truncated -eq $true -and $j6.total_rows -eq 1226) "rows=$(@($j6.rows).Count)"
   Check 'J6 control: and says so on stderr' ($r6.Err -match 'NOTE' -and $r6.Err -match '1226') $r6.Err.Trim()
 } finally {

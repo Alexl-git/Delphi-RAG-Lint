@@ -75,6 +75,7 @@ Build and maintain the per-project and library indexes.
 | Feature | Surfaces | Status |
 |---|---|---|
 | [Auto-Document Whole Project](Auto-Document-Whole-Project) | drag-lint > Generate & Export > Auto-Document Whole Project...; `index`; `document` |  |
+| [Custom attributes in the index](Index-DB-Schema) | `sql` |  |
 | [Include-file indexing and IF evaluation](inc-indexing) | `index` |  |
 | [Index a project against its active build config](index-build-config) | `index` |  |
 | [Library bindings for bare reads, paren-less calls and function-result receivers](library-first-resolve) | `usages`; `index` |  |
@@ -86,6 +87,7 @@ Build and maintain the per-project and library indexes.
 | [Rebuild Index for This Project](Rebuild-Index-for-This-Project) | drag-lint > Index & Maintenance > Rebuild Index for This Project; `index` |  |
 | [References for declaration positions](index-declaration-refs) | `index`; `usages` |  |
 | [register-project](Features) | `register-project` |  |
+| [Resolver fixes in 1.52](library-first-resolve) | `index` |  |
 | [schema](schema) | `schema` |  |
 | [Show Resolved DBs (debug)](Show-Resolved-DBs-debug) | drag-lint > Index & Maintenance > Show Resolved DBs (debug)...; `resolve-dbs` |  |
 
@@ -96,12 +98,13 @@ Find symbols, callers, callees, text and types in the index.
 | Feature | Surfaces | Status |
 |---|---|---|
 | [call-path](call-path) | `call-path`; drag-lint > Uses & Dependencies > Call Path Between Two Routines... |  |
+| [check-init](check-init) | drag-lint > Analyze > Check Initialization of Identifier at Cursor...; Editor: drag-lint > Check Initialization of Identifier at Cursor...; `mcp check_init`; `check-init` |  |
 | [Class Surface](Class-Surface) | drag-lint > Inspect Symbol > Class Surface...; `surface` |  |
 | [Compiler Hints](Compiler-Hints) | drag-lint > Code Quality > Compiler Hints...; `query hints` |  |
 | [context](context) | `context` |  |
 | [exception-facts](exception-facts) | `exception-facts` |  |
 | [Find Undocumented (public)](Find-Undocumented-public) | drag-lint > Code Quality > Find Undocumented (public)...; `query find` |  |
-| [Find Usages](Find-Usages) | drag-lint > Find Usages... |  |
+| [Find Usages](Find-Usages) | drag-lint > Find Usages...; drag-lint > Find Usages > This symbol; drag-lint > Find Usages > Project; drag-lint > Find Usages > Group; drag-lint > Find Usages > Everywhere; Editor: drag-lint > Find Usages > This symbol; Editor: drag-lint > Find Usages > Project; Editor: drag-lint > Find Usages > Group; Editor: drag-lint > Find Usages > Everywhere; `mcp find_usages` |  |
 | [Find Usages](Find-Usages-context) | Structure form: Find Usages; `usages` |  |
 | [find-callees](find-callees) | `find-callees`; drag-lint > Uses & Dependencies > What This Routine Calls (callees)... |  |
 | [find-unit](find-unit) | `find-unit`; drag-lint > Uses & Dependencies > Find Unit for Symbol (add to uses)... |  |
@@ -137,36 +140,38 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**423 rules. 125 have an auto-fix. 341 are on by default.** 310 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**435 rules. 131 have an auto-fix. 355 are on by default.** 322 are built-in checks; 113 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
-| bug-patterns | 153 | 37 |
+| bug-patterns | 156 | 40 |
 | complexity | 15 | 2 |
-| data-flow | 12 | 3 |
-| dead-code | 21 | 15 |
-| documentation | 5 | 4 |
+| data-flow | 11 | 3 |
+| dead-code | 23 | 15 |
+| documentation | 7 | 4 |
 | firedac | 3 | 3 |
 | metrics | 8 | - |
 | modernize | 6 | 4 |
 | naming | 14 | 10 |
-| other | 16 | 4 |
+| other | 17 | 4 |
 | platform | 16 | 4 |
 | policy | 6 | - |
-| project-wide | 51 | 8 |
-| refactoring | 26 | 9 |
+| project-wide | 53 | 9 |
+| refactoring | 27 | 11 |
 | resource-lifetime | 22 | 9 |
-| review-markers | 5 | 2 |
+| review-markers | 6 | 2 |
 | security | 27 | 2 |
-| structure | 17 | 9 |
-| **Total** | **423** | **125** |
+| structure | 18 | 9 |
+| **Total** | **435** | **131** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
 | [Ancestor not in project (lint rule)](ancestor-not-in-project) | `lint-all` |  |
 | [Application-level lint rules](application-level-rules) | `lint`; `lint-all` |  |
+| [Array index possibly out of range lint rule (index-possibly-out-of-range)](index-possibly-out-of-range) | `lint` |  |
 | [Autofix for fixable rules](autofix-wave) | `lint` |  |
 | [CLI fixes in 1.51.1](v1511-cli-fixes) | `lint-all`; `rules`; `info`; `index`; `find-deadcode` |  |
+| [Complexity counts the if-expression](complexity-if-expression) | `lint-all` |  |
 | [Compliance labels (CWE, CERT, MISRA)](compliance-labels) | `rules`; `lint-all` |  |
 | [Component-authoring lint rules](component-authoring-rules) | `lint`; `lint-all` |  |
 | [Copy All Diagnostics](Copy-All-Diagnostics) | Structure form: Copy All Diagnostics; `lint` |  |
@@ -176,11 +181,15 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Data module reaching a global form (lint rule)](datamodule-form-global) | `lint-all` |  |
 | [Data-flow rules that know a parameter's mode](flow-out-arg-rules) | `lint-all` |  |
 | [Dataset and transaction lint rules](dataset-rules-v151) | `lint` |  |
+| [debug-display-placeholder + attribute-aware member-could-be-private](v152-attrrules) | `lint` |  |
+| [Default-on form, dataset and data-module rules](rule-defaults-152) | `lint`; `rules` |  |
+| [Disable rule (this line, this unit, this project)](v152-disable-rule) | `rules disable`; `rules enable`; `rules`; drag-lint > Code Quality > Disable Rule...; Editor: drag-lint > Disable Rule... |  |
 | [Downgrade fixes (compat rules)](compat-downgrade-fixes) | `lint` | planned |
 | [drag-lint: Project Rules](drag-lint-Project-Rules) | Project Manager: drag-lint: Project Rules; `rules` |  |
 | [Effect-free call in a loop that could move out (lint rule)](effect-free-in-loop-invariant) | `lint-all` |  |
 | [Exception and inherited lint rules](exception-and-inherited-rules) | `lint`; `lint-all` |  |
 | [exceptions-sync](Features) | `exceptions-sync` |  |
+| [explain](explain) | `explain` |  |
 | [Finalization reaching a unit already finalized (lint rule)](finalization-after-dependency) | `lint-all` |  |
 | [Fix all in project](Fix-all-in-project) | Structure form: Fix all in project; `lint-all` |  |
 | [Fix all in unit](Fix-all-in-unit) | Structure form: Fix all in unit; `lint` |  |
@@ -198,16 +207,22 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Interfaced object set to nil (lint rule)](interfaced-object-nil-leak) | `lint-all` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
 | [Lint rules on the static type of a reference](ref-type-rules) | `lint-all` |  |
-| [Lint rules](rules) | 423 rules, 125 fixable; `rules` |  |
+| [Lint rules unconnected-control and hanging-handler](v152-unconn-rules) | `lint` |  |
+| [Lint rules](rules) | 435 rules, 131 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
+| [member-could-be-private lint rule (lane ATLB)](v152-atlb-rules) | `lint-all` |  |
 | [Memory and string-pointer lint rules (PChar, raw memory, leaks, byte counts)](memory-string-pointer-rules) | `lint-all` |  |
 | [Object-model lint rules (Equals/hash, events, GUIDs, exports)](object-model-rules) | `lint-all` |  |
 | [Opaque to analysis (lint rule)](opaque-to-analysis) | `lint-all` |  |
 | [Parameter type too wide (lint rule)](parameter-type-too-wide) | `lint-all` |  |
+| [parameter-type-too-wide ON by default, with an autofix](v152-ptw) | `lint-all`; `lint` |  |
+| [Per-rule time budget in the rule frame (rule-skipped-budget)](rule-time-budget) | `lint`; `lint-all`; `index` |  |
 | [Read but never assigned (lint rule)](read-never-assigned) | `lint-all` |  |
 | [Rename across every project that compiles a shared unit](Multi-Project-Rename) | `lint`; Structure form: Fix it; Structure form: Fix all in unit |  |
 | [Rescan this unit](Rescan-this-unit) | Structure form: Rescan this unit; `index` |  |
+| [Reserved words as names, implicit package imports, contract-unit globs](v152-atla-rules) | `lint`; `lint-all` |  |
+| [review-marker-remeasured hint](Review-Marker-Remeasured) | procedure: `docs\wiki\Review-Marker-Remeasured.md` |  |
 | [RTL collection and environment lint rules](v151-rtl-collection-rules) | `lint`; `lint-all` |  |
 | [RTL string and path lint rules](v151-rtlstr-rules) | `lint` | experimental |
 | [RTTI unavailable (lint rule)](rtti-unavailable) | `lint-all` |  |
@@ -224,6 +239,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Type-level dl:ok review](Type-Level-Review-Marker) | procedure: `docs\wiki\Type-Level-Review-Marker.md` |  |
 | [type-name-prefix: expected letter from the ancestor chain](Type-Name-Prefix-Origin) | `lint`; `lint-all`; `lint` |  |
 | [Typing and ownership lint rules (casts, Self as interface, destructors)](typing-and-ownership-rules) | `lint-all`; `lint` |  |
+| [unit-used-by-no-unit rule; unit-not-in-dpr outside the project roots](v152-proj2) | `lint-all` |  |
 | [warm-rule-cache](warm-rule-cache) | `warm-rule-cache` |  |
 | [Wider built-in rules (1.51)](v151-wid-ast-rules) | `lint` |  |
 | [Wider scm rules and three new fixers](v151-wid-scm-rules) | `lint` |  |
@@ -244,6 +260,7 @@ DocInsight comments generated from the index, and drift detection.
 | [Document project](Document-project) | Structure form: Document project; `document` |  |
 | [Document unit](Document-unit) | Structure form: Document unit; `document` |  |
 | [document-all](document-all) | `document-all`; drag-lint > Generate & Export > Auto-Document Every Indexed Unit... |  |
+| [Documentation policy: missing-doc, doc-placeholder, doc-malformed-summary](v152-docpol) | `lint-all` |  |
 | [Effect Summary Legend](Effect-Summary-Legend) | procedure: `docs\wiki\Effect-Summary-Legend.md`; drag-lint > Help > Effect Summary Legend |  |
 | [shared-unit](shared-unit) | `shared-unit` |  |
 
@@ -258,7 +275,10 @@ Rename, extract, safe delete, uses cleanup and code stubs.
 | [Create helper class](Create-helper-class) | Structure form: Create helper class; `create-enum-helper` |  |
 | [create-enum-helper](create-enum-helper) | `create-enum-helper`; drag-lint > Generate & Export > Enum Record Helper (symbol)... |  |
 | [Extract an interface from the members used (scratch + compile gate)](extract-interface) | `extract-interface` |  |
+| [Extract constant (manual fix for magic literals)](v152-extract-constant) | `lint`; drag-lint > Extract Constant (literal at cursor)...; Editor: drag-lint > Extract Constant (literal at cursor)... |  |
+| [extract-method and create-enum-helper through the compile gate by default](fixer-compile-gate) | `extract-method`; `create-enum-helper` |  |
 | [extract-method](extract-method) | `extract-method`; drag-lint > Extract Method (selection)... (Ctrl+Alt+M) |  |
+| [Fix with drag-lint (VS Code and RAD Studio)](v152-vsfix) | `lsp textDocument/codeAction`; drag-lint > Code Quality > Fix with drag-lint (finding at cursor); Editor: drag-lint > Fix with drag-lint (finding at cursor) |  |
 | [Lint --fix through the compile gate](lint-fix-compile-gate) | `lint` |  |
 | [Narrow parameter types (compile-gated)](narrow-param) | `narrow-param` |  |
 | [Prepare heavy initialization for lazy loading (first phase)](lazy-init) | `lazy-init` |  |
@@ -392,6 +412,7 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [drag-lint Options](drag-lint-Options) | drag-lint > drag-lint Options... |  |
 | [drag-lint Panel (dockable)](drag-lint-Panel-dockable) | drag-lint > drag-lint Panel (dockable) |  |
 | [drag-lint](drag-lint) | View > Tool Windows > drag-lint |  |
+| [Editor right-click submenu](editor-context-menu) | Editor: drag-lint |  |
 | [Engine heartbeat: the IDE tells a busy engine from a stuck one](heartbeat) | procedure: `docs\wiki\heartbeat.md` |  |
 | [Exception facts in the editor](editor-exception-facts) | `lsp`; `lsp textDocument/hover`; `lsp textDocument/codeLens`; `lsp draglint/callerCounts`; `lsp workspace/executeCommand`; `mcp get_exception_facts` |  |
 | [Help line (DL page)](ide-help-line) | View > Tool Windows > drag-lint; drag-lint > Help > Help on a feature...; drag-lint > Help > All features (web) |  |
@@ -435,6 +456,7 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [dump-refs](dump-refs) | `dump-refs` |  |
 | [Feature registry](Feature-Registry) | `tools\publish-release.ps1 -Version -DryRun`; procedure: `docs\wiki\Feature-Registry.md` |  |
 | [featuregen](featuregen) | `featuregen.exe`; `build\_build_featuregen_local.bat builds featuregen.exe from this checkout`; `tools\featuregen-gate.ps1 -Repo -Full`; procedure: `docs\wiki\featuregen.md` | internal |
+| [Field repository](field-repository) | `repo init`; `repo info`; `repo import-fb`; `repo seed-fb`; `repo refresh-schema`; `repo backup`; `repo restore`; `repo gen-memtable`; `repo gen-param-array`; `repo gen-orm`; `repo update-orm`; `repo gen-dataservice`; drag-lint > Field Repository > Open Field Repository Editor...; drag-lint > Field Repository > Refresh Schema from Database...; drag-lint > Field Repository > FDMemTable from CSV...; drag-lint > Field Repository > Generate / Update ORM Source...; drag-lint > Field Repository > Generate DataService Units...; drag-lint > Field Repository > Param Array Assistant...; `repo` |  |
 | [info](info) | `info` |  |
 | [Library Drift Check](Library-Drift-Check) | drag-lint > Index & Maintenance > Library Drift Check...; `library-drift` |  |
 | [Maintenance](Maintenance) | procedure: `docs\wiki\Maintenance.md` |  |
@@ -442,8 +464,8 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [Open Plugin Log](Open-Plugin-Log) | About window: Open Plugin Log |  |
 | [resolve-uses](Maintenance) | `resolve-uses` | internal |
 | [selftest](Maintenance) | `selftest` | internal |
-| [shutdown](Features) | `shutdown` |  |
 | [sql](sql) | `sql` |  |
+| [stop-now](Features) | `stop-now` |  |
 | [test-store-freshness](Maintenance) | `test-store-freshness` | internal |
 
 ## Uses and Dependencies

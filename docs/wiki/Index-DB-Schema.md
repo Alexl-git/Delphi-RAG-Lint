@@ -42,7 +42,7 @@ Never open a real DB with a writer to "look": copy it first, or use the read-onl
     `type_ancestors`, `type_helpers`
   * usage and calls: `refs`, `call_edges`, `member_accesses`, `dispatch_edges`,
     `classref_args`, `data_flows`
-  * structure: `unit_uses`, `di_bindings`, `file_includes`, `dfm_objects`, `pp_regions` (1.35), `pp_directives` (150), `dfm_nav_nodes` / `dfm_nav_props` (150 Y2: the .dfm navigation tree of forms-csv / menu-tree -- blocks and collection items, parent by ordinal, and the Caption / Action / Item / ItemName / ToolbarName / BeginGroup / IsMainMenu / OldName / On* properties as `DRagLint.Parser.DfmNav.ScanDfmNav` reads them), `dfm_properties` / `comment_facts` (151, additive)
+  * structure: `unit_uses`, `di_bindings`, `file_includes`, `dfm_objects`, `pp_regions` (1.35), `pp_directives` (150), `dfm_nav_nodes` / `dfm_nav_props` (150 Y2: the .dfm navigation tree of forms-csv / menu-tree -- blocks and collection items, parent by ordinal, and the Caption / Action / Item / ItemName / ToolbarName / BeginGroup / IsMainMenu / OldName / On* properties as `DRagLint.Parser.DfmNav.ScanDfmNav` reads them), `dfm_properties` / `comment_facts` (151, additive), `attributes` (1.52, additive)
   * text: `string_literals` (+ FTS5)
   * external feeds: `compiler_findings`, `fb_relations`, `fb_columns`, `fb_field_info`,
     `fb_datasets`, `fb_enum_values`, `orm_links`
@@ -67,6 +67,8 @@ erDiagram
   files ||--o{ comment_facts : "file_id (cascade)"
   symbols ||--o{ dfm_objects : "symbol_id (set null)"
   symbols ||--o{ comment_facts : "anchor_symbol_id (set null)"
+  files ||--o{ attributes : "file_id (cascade)"
+  symbols ||--o{ attributes : "symbol_id (set null)"
   files ||--o{ compiler_findings : "file_id (set null)"
   symbols ||--o{ symbols : "parent_id (cascade)"
   symbols ||--o{ refs : "symbol_id (set null)"
@@ -95,7 +97,7 @@ erDiagram
 
 | Pass | Verb / stage | Writes |
 |---|---|---|
-| **index** (per file, one transaction) | `index`, `index --project` | `files` (incl. `indexed_at_fingerprint`, stamped in the same tx), `symbols`, `refs` (raw: `symbol_id` NULL for most), `unit_uses`, `string_literals` (+FTS via triggers), `di_bindings`, `data_flows`, `file_includes`, `dfm_objects`, `pp_regions` (1.35), `project_settings` (150, for a `.dpr` / `.dpk`), `pp_directives` (150), `dfm_nav_nodes` / `dfm_nav_props` (150, for a `.dfm`), `dfm_properties` (151, for a `.dfm`), `comment_facts` (151), `symbol_trigrams` |
+| **index** (per file, one transaction) | `index`, `index --project` | `files` (incl. `indexed_at_fingerprint`, stamped in the same tx), `symbols`, `refs` (raw: `symbol_id` NULL for most), `unit_uses`, `string_literals` (+FTS via triggers), `di_bindings`, `data_flows`, `file_includes`, `dfm_objects`, `pp_regions` (1.35), `project_settings` (150, for a `.dpr` / `.dpk`), `pp_directives` (150), `dfm_nav_nodes` / `dfm_nav_props` (150, for a `.dfm`), `dfm_properties` (151, for a `.dfm`), `comment_facts` (151), `attributes` (1.52), `symbol_trigrams` |
 | **resolve** (whole DB, after files) | end of `index` | `refs.symbol_id`, `refs.receiver_text`, `refs.receiver_type_text`, `refs.external_target`, `call_edges`, `member_accesses`, `type_ancestors` (rebuilt each run), `type_helpers`, `dispatch_edges` (wiped and rebuilt), `classref_args`, `unit_uses.target_file_id` |
 | **doc / facts** | index-time doc extraction and ADP analysis | `symbol_docs`, `symbol_facts` (`effect_*` columns come from the purity stage) |
 | **external feeds** | `import-log`, `fb-snapshot`, ORM link pass | `compiler_findings`, `fb_*`, `orm_links` |
@@ -383,6 +385,23 @@ a schema 23 / 24 DB without the table is read by scanning the text. Indexes
 | anchor_kind | TEXT | `end-of-line` / `statement` / `block` / `next-declaration`; '' = not decided |
 | anchor_symbol_id | INTEGER FK symbols (set null) | the declaration a `next-declaration` / `end-of-line` comment documents; NULL = none |
 
+### attributes (1.52, additive)
+One row per custom attribute (`[Weak]`, `[Deprecated('x')]`, `[A1, A2(1)]`) applied to a declaration,
+written inside the file transaction and replaced on its every parse; produced by the Delphi parser
+(`HarvestAttributes`, column image of `TAttributeRow`) on deep AND shallow scans, so library indexes
+carry it. A declaration naming several symbols (`[Weak] A, B: TObject`) gives one row per symbol.
+Additive and probed (`HasAttributes`), no schema bump; filled by a re-parse. Indexes
+`(file_id, ordinal)`, `symbol_id`, `attr_name COLLATE NOCASE`.
+
+| column | type | meaning |
+|---|---|---|
+| file_id | INTEGER FK files (cascade) | |
+| ordinal | INTEGER | 0-based source order |
+| symbol_id | INTEGER FK symbols (set null) | the decorated class / record / field / routine / param / property / const / type; NULL = none (a local variable) |
+| attr_name | TEXT | the attribute as written (`Weak`, `System.Weak`) |
+| arg_text | TEXT | the text between its parentheses as written; '' for a bare attribute |
+| line, col | INTEGER | 1-based position of the attribute name |
+
 ### symbol_trigrams
 `trigram TEXT`, `symbol_id INTEGER FK symbols (cascade)`; PK `(trigram, symbol_id)`,
 `WITHOUT ROWID`. Fuzzy-name index, populated lazily on first fuzzy query for a DB lacking it.
@@ -450,7 +469,7 @@ In a real index `local_var`/`param` dominate the row count (typed locals and par
 emitted so receivers can be typed), then `field` and `method`.
 
 **refs.kind** (curated in `DoSchema`; every literal passed to `EmitRef`/`AddRef`):
-`attribute call di-resolve di-unresolved event-binding handle handle-all member-access property-spec raise
+`attribute call di-resolve di-unresolved event-binding export handle handle-all member-access property-spec raise
 raise-expr read record-field reraise sql_table_ref type_use write`. Notes: a dotted call emits BOTH a
 `call` and a co-located `member-access` ref at the same span; only `call` is resolved to
 `call_edges`. This is BY DESIGN (150 EX3 item 5, measured): the `call` row is the call stream (binding, call edges,
@@ -460,6 +479,7 @@ the twin. Readers that count calls read the `call` row only, so nothing double-c
 `query find-callers` and `context` give 3 for `ISymbolStore.PutSymbolFacts` (3 `call` + 3 `member-access` rows).
 A new reader that counts refs at a span must filter by kind. `raise`/`raise-expr`/`reraise`/`handle`/`handle-all` are exception facts
 (deep parse only; never resolved); `event-binding` is a DFM event hookup (name = handler).
+`export` (1.52) is one `exports` clause entry: bound to the routine (`refs.symbol_id`), no call edge -- it names the routine, it does not call it.
 `property-spec` is a name a property's `read`/`write`/`stored` gives (receiver_text = the owner's qualified name), `record-field` a field name in a record constant
 (receiver_text = the path from the constant's type: `TBox.Pts[]`); both bind `refs.symbol_id` only (or `external_target`): no call edge, no `member_accesses` row.
 `inherited X` is a `call` (statement or arguments) or `member-access` (expression) with receiver_text `inherited`. `symbols.directives` holds `sealed` on a `class sealed`.
@@ -470,7 +490,7 @@ A `reraise`, and a `raise-expr` naming the handler variable, carry the type of t
 
 **data_flows.dst_kind** (`DF_DST_*`): `arg` (call argument), `write` (assignment to a member of
 a non-local), `result` (`Result :=`, `Exit(e)`), `field` (field of the owner or ancestor),
-`global` (unit variable), `outparam` (var/out parameter of this routine).
+`global` (unit variable; 1.52: also a unit variable passed to a var/out parameter of a resolved project routine, by the calls pass with `src_kind` `argout` and `dst_index` = the argument position), `outparam` (var/out parameter of this routine). index columns are 1-based CHARACTER (UTF-16 unit) columns since 1.52, not UTF-8 byte columns (.dfm rows too since 1.52 BK-COLS2; lint finding columns as well).
 **data_flows.src_kind** (`DF_SRC_*`): `param` (declared parameter), `ref` (a call result or a
 member/variable read that is not a local/param/field/global), `field`, `global`, `argout` (a
 variable passed at position `src_index` of an earlier call).

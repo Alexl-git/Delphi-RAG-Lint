@@ -28,9 +28,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_pp_declared_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false; $script:Passed = 0
 function Check($n, $ok, $d = '') {
@@ -72,13 +75,13 @@ $lineF = [array]::IndexOf($unitLines, '{$IF DragLintBareUnknown}') + 1
 
 function Exec([string[]]$ArgList) {
   Push-Location $cwd
-  try { $o = & $Exe @ArgList 2>&1 | ForEach-Object { "$_" } } finally { Pop-Location }
+  try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe @ArgList 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" } } finally { Pop-Location }
   return @{ Code = $LASTEXITCODE; Out = ($o -join "`n") }
 }
 # sql --json rows are POSITIONAL arrays.
 function Names([string]$Db) {
   $r = Exec @('sql', '--db', $Db, '--query', "SELECT name FROM symbols WHERE kind = 'const'", '--json')
-  $set = @((($r.Out | ConvertFrom-Json).rows) | ForEach-Object { [string]$_[0] })
+  $set = @((($r.Out | ConvertFrom-Json | ForEach-Object { $_ }).rows) | ForEach-Object { [string]$_[0] })
   return ,$set
 }
 function Picks([string[]]$Set, [string[]]$Want, [string[]]$NotWant) {
@@ -97,7 +100,7 @@ function HintRows([string]$Db, [string[]]$Extra) {
   $r = Exec (@('lint', $pas, '--db', $Db, '--json', '--rule', 'pp-unresolved-if') + $Extra)
   $i = $r.Out.IndexOf('[')
   if ($i -lt 0) { return ,@() }
-  return ,@($r.Out.Substring($i) | ConvertFrom-Json)
+  return ,@(($r.Out.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 
 $libDb = Join-Path $WorkDir 'lib.sqlite'

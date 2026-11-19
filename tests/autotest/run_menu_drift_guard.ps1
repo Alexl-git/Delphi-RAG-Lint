@@ -22,12 +22,22 @@
 # Usage: pwsh -File tests/autotest/run_menu_drift_guard.ps1 [-Exe <path>] [-PluginDb <db>]
 [CmdletBinding()]
 param(
-    [string] $Exe        = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-    [string] $FixtureDir = "$PSScriptRoot\..\fixtures\menutree",
-    [string] $Repo       = "$PSScriptRoot\..\..",
+    [string] $Exe        = '',
+    [string] $FixtureDir = '',
+    [string] $Repo       = '',
     [string] $PluginDb   = '',
     [string] $WorkDir    = "$env:TEMP\drag-lint-menu-drift-guard-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $FixtureDir) { $FixtureDir = "$PSScriptRoot\..\fixtures\menutree" }
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Repo) { $Repo = "$PSScriptRoot\..\.." }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -40,7 +50,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 # runs menu-drift; returns @{ Exit; Text; Missing; Unregistered; Moved; Notes } (counts $null without a summary line)
 function Invoke-Drift([string]$Proj, [string]$Db, [string]$Reg) {
-    $text = (& $Exe menu-drift --project $Proj --db $Db --registry $Reg 2>&1 | Out-String)
+    $text = (& { $ErrorActionPreference = 'Continue'; & $Exe menu-drift --project $Proj --db $Db --registry $Reg 2>&1 | ForEach-Object { "$_" } } | Out-String)
     $r = @{ Exit = $LASTEXITCODE; Text = $text; Missing = $null; Unregistered = $null; Moved = $null; Notes = $null }
     $m = [regex]::Match($text, 'menu-drift: missing=(\d+) unregistered=(\d+) moved=(\d+) notes=(\d+)')
     if ($m.Success) {
@@ -57,7 +67,7 @@ function New-FixtureCopy([string]$Name) {
 }
 function Index-Copy([string]$Dir) {
     $db = "$Dir.sqlite"
-    & $Exe index --project "$Dir\MenuTreeFixture.dproj" --db $db *> "$Dir.index.log"
+    & { $ErrorActionPreference = 'Continue'; & $Exe index --project "$Dir\MenuTreeFixture.dproj" --db $db *> "$Dir.index.log" }
     if ($LASTEXITCODE -ne 0) { throw "index of $Dir failed (exit $LASTEXITCODE)" }
     return $db
 }
@@ -147,3 +157,4 @@ exit 0
     Write-Host "FAIL run_menu_drift_guard: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
 }
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

@@ -14,7 +14,10 @@
   the INCR head: DIAG printed, 1 error, lint <file> = 2); fragcode / fragboth keep both, as controls.
   Usage: pwsh -File tests\lint-project\cycle-edge-in-include\run_include_false_positives.ps1 [-Exe <drag-lint.exe>]
 #>
-param([string]$Exe = "$PSScriptRoot\..\..\..\src\cli\Win64\Debug\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
@@ -28,7 +31,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 function Parse-Findings([string[]]$Raw) {
   $txt = ($Raw -join "`n"); $b = $txt.IndexOf('[')
-  $out = @(); if ($b -ge 0) { try { $out = @($txt.Substring($b) | ConvertFrom-Json) } catch { $out = @() } }
+  $out = @(); if ($b -ge 0) { try { $out = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $out = @() } }
   if ($null -eq $out) { $out = @() }
   return ,@($out)
 }
@@ -39,9 +42,9 @@ function Scenario([string]$Name, [string[]]$LintArgs) {
   [void](New-Item -ItemType Directory -Force -Path $dir)
   Copy-Item (Join-Path $PSScriptRoot "$Name\*") $dir -Recurse
   $db = Join-Path $scratch "$Name.sqlite"
-  $script:indexOut[$Name] = @(& $exePath index $dir --db $db 2>&1 | ForEach-Object { "$_" })
+  $script:indexOut[$Name] = @(& { $ErrorActionPreference = 'Continue'; & $exePath index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" })
   $script:dbOf[$Name] = $db
-  $raw = & $exePath lint-all --db $db --library-db none @LintArgs --format json 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --library-db none @LintArgs --format json 2>$null }
   $parsed = Parse-Findings $raw
   return ,@($parsed)
 }
@@ -64,7 +67,7 @@ try {
     return ,@($script:indexOut[$Name] | Where-Object { $_ -match 'DIAG:' -and $_ -match [regex]::Escape($Inc) -and $_ -match 'parse error' })
   }
   function FileLintErrors([string]$Name, [string]$Inc) {
-    $raw = & $exePath lint (Join-Path (Join-Path $scratch $Name) $Inc) --db $script:dbOf[$Name] --format json 2>$null
+    $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint (Join-Path (Join-Path $scratch $Name) $Inc) --db $script:dbOf[$Name] --format json 2>$null }
     $all = Parse-Findings $raw
     return ,@($all | Where-Object { $_.rule -in @('parser-error', 'syntax-error') })
   }

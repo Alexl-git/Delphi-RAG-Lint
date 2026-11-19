@@ -39,10 +39,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$Src = "$PSScriptRoot\..\..\src",
+  [string]$Exe = '',
+  [string]$Src = '',
   [switch]$Quiet
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $Src) { $Src = "$PSScriptRoot\..\..\src" }
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
 function Check($n, $ok, $d) {
@@ -116,7 +120,7 @@ function Get-PascalStringLiterals([string]$Path) {
 # ---------------------------------------------------------------------------
 # 1. BEHAVIOUR -- precedence, normalisation, composition.
 # ---------------------------------------------------------------------------
-$out = (& $Exe selftest studio-root 2>&1 | Out-String).Trim()
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe selftest studio-root 2>&1 | ForEach-Object { "$_" } } | Out-String).Trim()
 $rc = $LASTEXITCODE
 Check 'selftest studio-root passes' (($rc -eq 0) -and ($out -match 'STUDIOROOT-OK')) "exit=$rc, output: $out"
 

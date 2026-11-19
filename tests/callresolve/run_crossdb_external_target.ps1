@@ -23,7 +23,10 @@
   Run from a NEUTRAL CWD (C:\TEMP).
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -57,18 +60,18 @@ print('' if (r is None or r[0] is None) else r[0])
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $libDir --db $libDb 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $libDir --db $libDb 2>$null } | Out-Null
   Check 'library index built' ($LASTEXITCODE -eq 0)
 
   # --- CONTROL: no --library-db -> nothing external is recorded --------------
-  & $exePath index $appDir --db $appDb 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $appDir --db $appDb 2>$null } | Out-Null
   Check 'app index built (control run)' ($LASTEXITCODE -eq 0)
   $ctl = Get-Ext $appDb 'Create'
   Check 'CONTROL: without --library-db, external_target is EMPTY' ($ctl -eq '') "got='$ctl'"
 
   # --- with the library consulted -------------------------------------------
   Remove-Item $appDb -Force
-  $out = & $exePath index $appDir --db $appDb --library-db $libDb 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath index $appDir --db $appDb --library-db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'app index built (cross-DB run)' ($LASTEXITCODE -eq 0)
   Check 'the library db is reported as opened' ($out -match 'library-db') $out
 

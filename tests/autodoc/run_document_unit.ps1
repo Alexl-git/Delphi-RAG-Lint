@@ -21,7 +21,10 @@
   Run from a NEUTRAL CWD (C:\TEMP).
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -39,10 +42,10 @@ Copy-Item $fixture $target -Force
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # --- first --apply: both public methods documented ---
-  & $exePath document --unit $target --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply 2>$null } | Out-Null
   $ec1 = $LASTEXITCODE
   Check 'apply #1: exit 0' ($ec1 -eq 0)
 
@@ -79,8 +82,8 @@ try {
 
   # --- idempotency: second --apply leaves file byte-identical ---
   $before = [IO.File]::ReadAllBytes($target)
-  & $exePath index $scratch --db $db 2>$null | Out-Null
-  & $exePath document --unit $target --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply 2>$null } | Out-Null
   $after = [IO.File]::ReadAllBytes($target)
   Check 'idempotent: file byte-identical on 2nd run' ([System.Linq.Enumerable]::SequenceEqual([byte[]]$before,[byte[]]$after))
 
@@ -91,10 +94,10 @@ try {
   $target2 = Join-Path $scratch2 'twopublics.pas'
   $db2     = Join-Path $scratch2 'docunit.sqlite'
   Copy-Item $fixture $target2 -Force
-  & $exePath index $scratch2 --db $db2 2>$null | Out-Null
-  $rj = & $exePath document --unit $target2 --db $db2 --json 2>$null | Out-String
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch2 --db $db2 2>$null } | Out-Null
+  $rj = & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target2 --db $db2 --json 2>$null } | Out-String
   $ecj = $LASTEXITCODE
-  $oj = $null; try { $oj = ($rj | ConvertFrom-Json) } catch { $oj = $null }
+  $oj = $null; try { $oj = ($rj | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $oj = $null }
   # declCount = 3 public interface-section documentable decls (TThing, Add, Reset);
   # docCount = 2 (Add + Reset have facts; the class TThing has none -> facts-only skip).
   Check 'json: exit 0'          ($ecj -eq 0)

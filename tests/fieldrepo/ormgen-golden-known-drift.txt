@@ -1,0 +1,10 @@
+# ORM golden (tests\autotest\run_fieldrepo_ormgen_golden.ps1 -RequireForm): ORM3 units that stay
+# DIFFERENT after repo update-orm for a reason outside the generator. One unit per line, then the
+# reason. A unit listed here that is no longer DIFFERENT fails the run (STALE): delete its line.
+iCONTROLPLANNINGPRESETS.PAS          hand-ported unit (Paradox port 2026-05-19): ID first, field set differs from DL_FIELDS_INFO order
+uCONTROLPLANNINGPRESETS.PAS          same
+uCONTROLPLANNINGPRESETS_SERVER.PAS   same
+iFIB_FIELDS_INFO.PAS                 repository has UI_TAG (and other columns) the unit predates: schema drift
+uFIB_FIELDS_INFO.PAS                 same
+uFIB_FIELDS_INFO_SERVER.PAS          same
+uSTATIONS_SERVER.PAS                 region 9 hand-edited (Year > 0 guard, AsMemo, AsByteStr for STATIONTYPE)

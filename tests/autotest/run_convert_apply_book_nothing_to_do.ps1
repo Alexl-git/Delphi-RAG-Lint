@@ -29,9 +29,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_convert_apply_nothing_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -63,11 +66,11 @@ W 'identity.rules' "#migrate TOldK -> TOldK`n"
 W 'note.rules' "#note a note`nTOldK -> TNewK`n"
 W 'conv.rules' "#convert MLib.TOldC -> MLib.TNewC`n"
 $db = P 'm.sqlite'
-& $Exe index $WorkDir --db $db *> (P 'index.log')
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db *> (P 'index.log') }
 Check 'V the fixture index was built' (Test-Path $db)
 
 function Run([string]$Unit, [string]$Book, [string[]]$Extra = @()) {
-  $o = (& $Exe convert-apply --unit (P "$Unit.pas") --rules (P "$Book.rules") --db $db @Extra 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P "$Unit.pas") --rules (P "$Book.rules") --db $db @Extra 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 function NotOld($r) { return ($r.Out -notmatch 'sibling \.dfm') -and ($r.Out -notmatch '#convert rule') }
@@ -92,10 +95,10 @@ $r = Run 'MUse' 'note'
 Check 'N only #note and raw lines : exit 1, "no #convert block"' (($r.Code -eq 1) -and ($r.Out -match 'no #convert block') -and (NotOld $r)) $r.Out
 
 $r = Run 'MUse' 'empty' @('--format', 'json')
-$j = $null; try { $j = $r.Out.Substring($r.Out.IndexOf('{')) | ConvertFrom-Json } catch {}
+$j = $null; try { $j = $r.Out.Substring($r.Out.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'J JSON, no .dfm, single unit: a document, ok false, refused false, the sentence in error' (($null -ne $j) -and ($j.ok -eq $false) -and ($j.refused -eq $false) -and ($j.error -match 'holds no rules')) $r.Out
-$o = (& $Exe convert-apply --unit (P 'MUse.pas') --unit (P 'MForm.pas') --rules (P 'empty.rules') --db $db --format json 2>&1) -join "`n"
-$j = $null; try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {}
+$o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'MUse.pas') --unit (P 'MForm.pas') --rules (P 'empty.rules') --db $db --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
+$j = $null; try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'J batch: both units carry the sentence' (($null -ne $j) -and (@($j.units | Where-Object { $_.error -match 'holds no rules' }).Count -eq 2)) $o
 
 # ---- controls -----------------------------------------------------------------

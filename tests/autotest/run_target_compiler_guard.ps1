@@ -23,10 +23,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$BaseExe = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-target-compiler-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $exePath = (Resolve-Path $Exe).Path
@@ -41,18 +44,18 @@ function WriteAscii([string]$Path, [string]$Text) {
 # Runs the exe; returns @{ Out; Err; Code }.
 function Run([string[]]$ArgList) {
   $errFile = Join-Path $WorkDir '_stderr.txt'
-  $out = & $exePath @ArgList 2> $errFile | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath @ArgList 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String
   $code = $LASTEXITCODE
   $err = if (Test-Path $errFile) { Get-Content $errFile -Raw } else { '' }
   return @{ Out = $out; Err = "$err"; Code = $code }
 }
 function RulesJson([string[]]$Extra) {
   $r = Run (@('rules', '--json') + $Extra)
-  try { return ($r.Out | ConvertFrom-Json) } catch { return $null }
+  try { return ($r.Out | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function LintPairs([string]$File, [string[]]$Extra) {
   $r = Run (@('lint', $File, '--json') + $Extra)
-  $rows = @(); try { $rows = @($r.Out | ConvertFrom-Json) } catch { $rows = @() }
+  $rows = @(); try { $rows = @(($r.Out | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $rows = @() }
   return @{ Pairs = @($rows | ForEach-Object { "$($_.rule):$($_.start_line)" }); Err = $r.Err; Code = $r.Code }
 }
 
@@ -199,20 +202,20 @@ end.
     foreach ($f in @(Get-ChildItem (Join-Path $repo 'tests\lint') -Filter '*.pas' | Sort-Object Name)) {
       $cfgF = [IO.Path]::ChangeExtension($f.FullName, '.config.json')
       $xa = @('lint', $f.FullName, '--json'); if (Test-Path $cfgF) { $xa += @('--config', $cfgF) }
-      $a = & $exePath @xa 2>$null | Out-String
-      $b = & $basePath @xa 2>$null | Out-String
+      $a = & { $ErrorActionPreference = 'Continue'; & $exePath @xa 2>$null } | Out-String
+      $b = & { $ErrorActionPreference = 'Continue'; & $basePath @xa 2>$null } | Out-String
       if ($a -cne $b) { $diffs += $f.Name }
     }
     Check 'T7 lint --json on every tests\lint fixture is byte-identical to the base exe' ($diffs.Count -eq 0) ($diffs -join ', ')
     $strip = {
       param($js)
-      $o = $js | ConvertFrom-Json
+      $o = $js | ConvertFrom-Json | ForEach-Object { $_ }
       foreach ($r in $o.rules) { foreach ($k in 'needs_compiler', 'compat_since', 'target_active') { $r.PSObject.Properties.Remove($k) } }
       $o.PSObject.Properties.Remove('target_compiler')
       $o | ConvertTo-Json -Depth 8 -Compress
     }
-    $na = & $strip ((& $exePath rules --json 2>$null) | Out-String)
-    $nb = & $strip ((& $basePath rules --json 2>$null) | Out-String)
+    $na = & $strip ((& { $ErrorActionPreference = 'Continue'; & $exePath rules --json 2>$null }) | Out-String)
+    $nb = & $strip ((& { $ErrorActionPreference = 'Continue'; & $basePath rules --json 2>$null }) | Out-String)
     Check 'T7 rules --json minus the new keys is identical to the base exe' ($na -ceq $nb) ''
   } else { Write-Host 'SKIP T7: no -BaseExe' -ForegroundColor Yellow }
 } finally {

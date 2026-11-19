@@ -20,9 +20,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-reftype-refs-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -43,7 +46,7 @@ Copy-Item (Join-Path $PSScriptRoot '..\index\reftype\*.pas') $SrcDir
 $probe = Join-Path $SrcDir 'uRefTypeProbe.pas'
 
 $db = Join-Path $WorkDir 'reftype.sqlite'
-& $Exe index $SrcDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $SrcDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 # marker -> type names that must carry a type_use ref on that line
 $expect = [ordered]@{
@@ -86,7 +89,7 @@ q = ("select r.start_line as line, r.kind as kind, r.name_text as name from refs
 rows = [dict(r) for r in c.execute(q, ('%' + fname,))]
 print(json.dumps({'markers': markers, 'rows': rows}))
 '@ | Set-Content -Encoding ascii $pyFile
-$data = (& python -I $pyFile $db $probe 'uRefTypeProbe.pas' | Out-String) | ConvertFrom-Json
+$data = (& python -I $pyFile $db $probe 'uRefTypeProbe.pas' | Out-String) | ConvertFrom-Json | ForEach-Object { $_ }
 
 $tu = @($data.rows | Where-Object { $_.kind -eq 'type_use' })
 Check 'probe indexed (type_use rows present)' ($tu.Count -gt 0) "rows=$($tu.Count)"
@@ -103,8 +106,8 @@ Check 'no parameter NAME is a type_use' ($paramHits.Count -eq 0) "hits=$($paramH
 
 # uRefTypeOnly uses uRefTypeOnlyDefs ONLY in `reference to function(..): TRtOnly`.
 # Before the fix uses-audit returned [{"unit":"uRefTypeOnlyDefs","verdict":"unused",..}].
-$auditRaw = (& $Exe uses-audit (Join-Path $SrcDir 'uRefTypeOnly.pas') --db $db --format json 2>$null | Out-String)
-$audit = @($auditRaw | ConvertFrom-Json)
+$auditRaw = (& { $ErrorActionPreference = 'Continue'; & $Exe uses-audit (Join-Path $SrcDir 'uRefTypeOnly.pas') --db $db --format json 2>$null } | Out-String)
+$audit = @(($auditRaw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 Check 'uses-audit returned a JSON array' ($auditRaw.Trim().StartsWith('[')) $auditRaw.Trim()
 $flagged = @($audit | Where-Object { $_.unit -eq 'uRefTypeOnlyDefs' })
 Check 'uses-audit keeps uRefTypeOnlyDefs (signature-only use)' ($flagged.Count -eq 0) $auditRaw.Trim()
@@ -131,7 +134,7 @@ $initExpect = [ordered]@{
   'M-SET'      = @('riK1', 'riK2')
 }
 $initProbe = Join-Path $SrcDir 'uRefInitProbe.pas'
-$idata = (& python -I $pyFile $db $initProbe 'uRefInitProbe.pas' | Out-String) | ConvertFrom-Json
+$idata = (& python -I $pyFile $db $initProbe 'uRefInitProbe.pas' | Out-String) | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'init probe indexed (rows present)' (@($idata.rows).Count -gt 0) "rows=$(@($idata.rows).Count)"
 foreach ($m in $initExpect.Keys) {
   $line = $idata.markers.$m
@@ -146,9 +149,9 @@ $declHits = @($idata.rows | Where-Object { $_.name -in @('CRiUntyped', 'CRiTyped
 Check 'no declared name in an initializer line is a ref' ($declHits.Count -eq 0) "hits=$($declHits.Count)"
 
 # uRefInitOnly uses uRefInitOnlyDefs ONLY in `CInitOnly = RiOnly;` (the CLI.pas:69 shape).
-$iaRaw = (& $Exe uses-audit (Join-Path $SrcDir 'uRefInitOnly.pas') --db $db --format json 2>$null | Out-String)
+$iaRaw = (& { $ErrorActionPreference = 'Continue'; & $Exe uses-audit (Join-Path $SrcDir 'uRefInitOnly.pas') --db $db --format json 2>$null } | Out-String)
 Check 'uses-audit (init) returned a JSON array' ($iaRaw.Trim().StartsWith('[')) $iaRaw.Trim()
-$iflag = @(@($iaRaw | ConvertFrom-Json) | Where-Object { $_.unit -eq 'uRefInitOnlyDefs' })
+$iflag = @(@(($iaRaw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) | Where-Object { $_.unit -eq 'uRefInitOnlyDefs' })
 Check 'uses-audit keeps uRefInitOnlyDefs (initializer-only use)' ($iflag.Count -eq 0) $iaRaw.Trim()
 
 if ($script:Failed) { Write-Host 'run_reftype_refs: FAIL' -ForegroundColor Red; exit 1 }

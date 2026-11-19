@@ -13,10 +13,16 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe    = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe    = '',
   [string]$OldExe = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-uses-origin-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'; $script:Failed = $false
 function Check($n, $ok, $d = '') {
   $s = if ($ok) { 'PASS' } else { 'FAIL' }; $c = if ($ok) { 'Green' } else { 'Red' }
@@ -33,13 +39,13 @@ Copy-Item $src $fx -Recurse
 
 function Index([string]$exe, [string]$db) {
   Push-Location $WorkDir
-  try { & $exe index --project "$fx\IncUses.dproj" --db $db *> "$db.log" } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $exe index --project "$fx\IncUses.dproj" --db $db *> "$db.log" } } finally { Pop-Location }
   return $LASTEXITCODE
 }
 function Sql([string]$db, [string]$q) {
   Push-Location $WorkDir
-  try { $j = & $Exe sql --db $db --query $q --json 2>$null | Out-String } finally { Pop-Location }
-  try { $o = $j | ConvertFrom-Json } catch { $o = $null }
+  try { $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query $q --json 2>$null } | Out-String } finally { Pop-Location }
+  try { $o = $j | ConvertFrom-Json | ForEach-Object { $_ } } catch { $o = $null }
   if ($null -eq $o -or $null -eq $o.columns) { return ,@() }
   $names = @($o.columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
   $rows = @()
@@ -48,8 +54,8 @@ function Sql([string]$db, [string]$q) {
 }
 function HasColumns([string]$db) {
   Push-Location $WorkDir
-  try { $j = & $Exe schema --db $db --format json 2>$null | Out-String } finally { Pop-Location }
-  $t = ($j | ConvertFrom-Json).tables | Where-Object { $_.name -eq 'unit_uses' }
+  try { $j = & { $ErrorActionPreference = 'Continue'; & $Exe schema --db $db --format json 2>$null } | Out-String } finally { Pop-Location }
+  $t = ($j | ConvertFrom-Json | ForEach-Object { $_ }).tables | Where-Object { $_.name -eq 'unit_uses' }
   return @($t.columns | Where-Object { $_.name -in @('origin_path', 'include_line') }).Count
 }
 
@@ -71,7 +77,7 @@ if ($OldExe -ne '') {
   # A READ-ONLY verb never runs Migrate: the new engine must still read the
   # old shape (FindUsersOfUnit names no column the DB lacks).
   Push-Location $WorkDir
-  try { $uu = & $Exe query unit-usage --unit IncB --db $old 2>&1 | Out-String; $uuRc = $LASTEXITCODE } finally { Pop-Location }
+  try { $uu = & { $ErrorActionPreference = 'Continue'; & $Exe query unit-usage --unit IncB --db $old 2>&1 | ForEach-Object { "$_" } } | Out-String; $uuRc = $LASTEXITCODE } finally { Pop-Location }
   Check 'new engine reads the OLD DB read-only (unit-usage exits 0, names IncA)' (($uuRc -eq 0) -and ($uu -match 'IncA')) "rc=$uuRc"
   $rc2 = Index $Exe $old
   Check 'new engine reindexes the old DB (exit 0)' ($rc2 -eq 0) "rc=$rc2"
@@ -83,3 +89,4 @@ if ($OldExe -ne '') {
 
 if ($script:Failed) { Write-Host 'run_unit_uses_origin_columns: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'run_unit_uses_origin_columns: PASS' -ForegroundColor Green; exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

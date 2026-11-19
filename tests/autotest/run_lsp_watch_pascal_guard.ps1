@@ -16,11 +16,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-lsp-watchpas-$PID",
   [int]$WaitMs     = 20000,
   [int]$QuietMs    = 3000
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 . "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG3: no machine drag-lint.json
 $ErrorActionPreference = 'Stop'
@@ -38,7 +41,7 @@ if (Test-Path $WorkDir) { [System.IO.Directory]::Delete($WorkDir, $true) }
 New-Item -ItemType Directory -Force "$WorkDir\src" | Out-Null
 
 function New-Src([bool]$WithFinding) {
-  $body = if ($WithFinding) { @('  with X do', '    Free;') } else { @('  X.Free;') }
+  $body = @(if ($WithFinding) { @('  with X do', '    Free;') } else { @('  X.Free;') })
   (@('unit uWatch;', '', 'interface', '', 'procedure A(X: TObject);', '', 'implementation', '',
      'procedure A(X: TObject);', 'begin') + $body + @('end;', '', 'end.') -join "`r`n") + "`r`n"
 }
@@ -89,7 +92,7 @@ function Pump([int]$Ms) {
     if (-not $m.Success) { break }
     $start = $script:Scan + $m.Index + $m.Length; $len = [int]$m.Groups[1].Value
     if ($start + $len -gt $all.Length) { break }
-    $msg = $all.Substring($start, $len) | ConvertFrom-Json
+    $msg = $all.Substring($start, $len) | ConvertFrom-Json | ForEach-Object { $_ }
     if ($msg.method -eq 'textDocument/publishDiagnostics') { $script:Pubs.Add($msg.params) }
     $script:Scan = $start + $len
   }

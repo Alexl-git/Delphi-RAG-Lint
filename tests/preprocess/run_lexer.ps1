@@ -21,7 +21,10 @@
   Run from a NEUTRAL CWD (C:\TEMP) so no drag-lint-lint.json is picked up.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
@@ -38,7 +41,7 @@ $chunks = @()
 
 Push-Location C:\TEMP
 try {
-  $out = & $exePath dump-pp-lex --file $fixture 2>$null | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath dump-pp-lex --file $fixture 2>$null } | Out-String
   $lines = $out -split "`r?`n" | Where-Object { $_ -ne '' }
   foreach ($ln in $lines) {
     # Split into exactly 6 fields; the value field may itself contain '|', so

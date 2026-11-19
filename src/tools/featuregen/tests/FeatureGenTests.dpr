@@ -1898,6 +1898,58 @@ begin
   Check('Live.HarvestRaisesOnEmptySubMap', lMsg = 'live surface: 0 subcommands harvested from DRagLint.CLI.pas; expected > 0', lMsg);
 end;
 
+{ B25 (1.52): a verb whose arm hands Args.SubCommand to a routine (repo -> RunRepoVerb(pSub, ...))
+  or tests it with MatchText (rules disable|enable) has its sub-verbs harvested: the literals the
+  routine compares its sub parameter with, followed into callees that receive that parameter.
+  Negative controls: a literal that is not compared with the sub parameter, and a routine that
+  compares its first parameter but is never handed the sub, contribute nothing. }
+procedure TestHarvestSubParamRoutines;
+const
+  SRC =
+    'function RunCommand: Integer;'#13#10 +
+    'begin'#13#10 +
+    '  if Args.Command = ''zed'' then Result:= RunZed(Args.SubCommand, Args.InFile)'#13#10 +
+    '  else if (Args.Command = ''yak'') and MatchText(Args.SubCommand, [''on'', ''off'']) then Result:= RunYak(LowerCase(Args.SubCommand))'#13#10 +
+    '  else if Args.Command = ''old'' then begin if Args.SubCommand = ''keep'' then Result:= 0; end;'#13#10 +
+    'end;'#13#10 +
+    'function RunZed(const pSub, pIn: string): Integer;'#13#10 +
+    'begin'#13#10 +
+    '  PrintError(''delta'', pIn);'#13#10 +
+    '  if SameText(pSub, ''alpha'') then Exit(1);'#13#10 +
+    '  Result:= ZedTail(pSub, pIn);'#13#10 +
+    'end;'#13#10 +
+    'function ZedTail(const pVerb, pIn: string): Integer;'#13#10 +
+    'begin'#13#10 +
+    '  case IndexText(pVerb, [''beta'', ''gamma'']) of'#13#10 +
+    '    0: Result:= 0;'#13#10 +
+    '  end;'#13#10 +
+    '  if pIn = ''notasub'' then Result:= 2;'#13#10 +
+    'end;'#13#10 +
+    'function Unreached(const pSub: string): Integer;'#13#10 +
+    'begin'#13#10 +
+    '  if SameText(pSub, ''omega'') then Result:= 3;'#13#10 +
+    'end;'#13#10;
+var
+  lMap: TDictionary<string, TArray<string>>;
+  lZed, lYak, lOld: TArray<string>;
+begin
+  lMap := TDictionary<string, TArray<string>>.Create;
+  try
+    HarvestSubcommandMap(SRC, lMap);
+    lZed := nil;
+    lYak := nil;
+    lOld := nil;
+    lMap.TryGetValue('zed', lZed);
+    lMap.TryGetValue('yak', lYak);
+    lMap.TryGetValue('old', lOld);
+    Check('Live.SubParam.RoutineChain', string.Join(',', lZed) = 'alpha,beta,gamma', string.Join(',', lZed));
+    Check('Live.SubParam.MatchTextArm', string.Join(',', lYak) = 'off,on', string.Join(',', lYak));
+    Check('Live.SubParam.EqualsArmUnchanged', string.Join(',', lOld) = 'keep', string.Join(',', lOld));
+  finally
+    lMap.Free;
+  end;
+end;
+
 { Health of the LIVE surface (not a golden comparison): '' when every kind of the real repo is
   non-empty, else a detail naming the cause. A harvest that raises (e.g. a stale plugin DB: menu-tree
   exits 3) yields the exception text, never an access violation. }
@@ -2480,7 +2532,7 @@ begin
   { FLAG lane: the alias policy (docs\CLI-FLAG-ALIASES.md) -- one generated "Flag aliases:" section, canonical-only verb lines. }
   Check('Help.FlagAliasesProcedure', Pos('procedure WriteFlagAliases;', lGen) > 0, 'WriteFlagAliases must be generated');
   Check('Help.FlagAliasesHeader', Pos('Writeln(''Flag aliases:'');', lGen) > 0, 'section header (the scanners stop the last verb block on it)');
-  Check('Help.FlagAliasRowForOutput', TRegEx.IsMatch(lGen, 'Writeln\(''  --output +also: --out''\);'), 'row: --output also: --out');
+  Check('Help.FlagAliasRowForOutput', TRegEx.IsMatch(lGen, 'Writeln\(''  --output +also: --out, --report''\);'), 'row: --output also: --out, --report');  { --report: 1.52 SMALLS }
   Check('Help.FlagAliasRowForIn', TRegEx.IsMatch(lGen, 'Writeln\(''  --in +also: --file''\);'), 'row: --in also: --file');
 end;
 
@@ -3513,6 +3565,7 @@ end;
 procedure TestMenuProse;
 var
   lNodes: TArray<TMenuNodeRow>;
+  lE: TJSONObject;
 
   function Count(const pText: string): Integer;
   begin
@@ -3537,6 +3590,18 @@ begin
   // positive controls: a stale path that starts at the root still fails, also behind the ide-menu: prefix
   Check('Menu.G4.PrefixedStaleFails', Count('ide-menu:drag-lint > NoSuchItem') = 1);
   Check('Menu.G4.RootedStaleAfterWindowsPathFails', Count('Apps > drag-lint > Uninstall, then drag-lint > NoSuchItem') = 1);
+  // v152 INT: an ide-context caption ('drag-lint > Fix ...' on the Editor menu) is checked by B/C against the context
+  // menu, never by G-4 against the main menu; its steps and the prose are still G-4 text
+  lE := JObj('{"surfaces":[{"type":"cli","verb":"x"},{"type":"ide-context","host":"Editor","caption":"drag-lint > Fix"}]}');
+  try
+    Check('Menu.G4.ContextCaptionSkipped', IsContextCaption(lE, 'surfaces[1].caption'));
+    Check('Menu.G4.ContextStepsJudged', not IsContextCaption(lE, 'surfaces[1].steps[0]'));
+    Check('Menu.G4.CliCaptionJudged', not IsContextCaption(lE, 'surfaces[0].caption'));
+    Check('Menu.G4.IntroJudged', not IsContextCaption(lE, 'intro'));
+    Check('Menu.G4.OutOfRangeJudged', not IsContextCaption(lE, 'surfaces[7].caption'));
+  finally
+    lE.Free;
+  end;
 end;
 
 procedure TestRuleCounts;
@@ -3851,6 +3916,7 @@ begin
       TestHarvestFailureIsCleanFail;
       TestLiveSkipPositiveControl;
       TestHarvestRaisesOnEmptySubMap(lRepo);
+      TestHarvestSubParamRoutines;
       TestLiveHarvestParity(lRepo);
       lGold := GoldenRepo(lRepo);
       TestCheckParity(lRepo, lGold, 'WellFormed', clWellFormed, 'WellFormed', 0, 0, 0, 0, GOLDEN_PROSE_A, 0);
@@ -3898,4 +3964,3 @@ begin
   if GFail > 0 then
     Halt(1);
 end.
- -- REVIEWED 2026-10-19: the ported checks A-E live together because they share one context and one finding list; splitting is a later refactor

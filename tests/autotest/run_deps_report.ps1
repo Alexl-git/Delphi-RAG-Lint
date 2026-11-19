@@ -45,9 +45,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-deps-report-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -139,7 +142,7 @@ Write-Ascii (Join-Path $work 'projmid2.pas')   ($ProjMidBody -replace 'unit proj
 $db = Join-Path $WorkDir 'deps.sqlite'
 
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 $indexExit = $LASTEXITCODE
 Check 'index exits 0' ($indexExit -eq 0) "exit=$indexExit; $($indexOut -join ' | ')"
 
@@ -159,7 +162,7 @@ try {
 
 $rep = $null
 try {
-  $rep = $jsonRaw1 | ConvertFrom-Json
+  $rep = $jsonRaw1 | ConvertFrom-Json | ForEach-Object { $_ }
 } catch {
   Check 'deps-report --json parses as JSON' $false "parse error: $($_.Exception.Message); raw=$jsonRaw1"
 }
@@ -238,7 +241,7 @@ Write-Host 'deps-report --edges --format json (flat edge list)' -ForegroundColor
 $edgesRaw = (& $Exe deps-report --db $db --edges --format json) -join "`n"
 $edgesRep = $null
 try {
-  $edgesRep = $edgesRaw | ConvertFrom-Json
+  $edgesRep = $edgesRaw | ConvertFrom-Json | ForEach-Object { $_ }
 } catch {
   Check 'deps-report --edges --json parses as JSON' $false "parse error: $($_.Exception.Message); raw=$edgesRaw"
 }

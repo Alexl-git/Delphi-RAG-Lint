@@ -15,7 +15,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -39,9 +42,9 @@ $cfg = Join-Path $scratch 'docmiss.config.json'
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
-  $out = & $exePath lint-all --db $db --config $cfg --json 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --config $cfg --json 2>$null }
   $raw = ($out -join "`n")
   # lint-all --json prints one pretty-printed JSON array preceded/followed by
   # plain progress/summary text on other lines -- extract just the array.
@@ -51,7 +54,7 @@ try {
   $findings = @()
   if ($arrStart -ge 0 -and $arrEnd -gt $arrStart) {
     $jsonText = $raw.Substring($arrStart, $arrEnd - $arrStart + 1)
-    $findings = @(ConvertFrom-Json $jsonText)
+    $findings = @((ConvertFrom-Json $jsonText | ForEach-Object { $_ }) | ForEach-Object { $_ })
   }
 
   $missingDoc = @($findings | Where-Object { $_.rule -eq 'missing-doc' })
@@ -80,11 +83,11 @@ try {
   # missing-doc to its default-disabled set (the catalog default_enabled=false does
   # NOT suppress runtime output on its own; it is driven by DefDisabled/ShouldKeep).
   # Before the fix this fired the full 1302-style wave on every bare run.
-  $bareOut = & $exePath lint-all --db $db --json 2>$null
+  $bareOut = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --json 2>$null }
   $bareRaw = ($bareOut -join "`n")
   $bS = $bareRaw.IndexOf('['); $bE = $bareRaw.LastIndexOf(']')
   $bareFindings = @()
-  if ($bS -ge 0 -and $bE -gt $bS) { $bareFindings = @(ConvertFrom-Json $bareRaw.Substring($bS, $bE - $bS + 1)) }
+  if ($bS -ge 0 -and $bE -gt $bS) { $bareFindings = @((ConvertFrom-Json $bareRaw.Substring($bS, $bE - $bS + 1) | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   $bareMissing = @($bareFindings | Where-Object { $_.rule -eq 'missing-doc' })
   Check 'BARE lint-all (no config/disable) yields ZERO missing-doc findings (OFF by default at runtime)' ($bareMissing.Count -eq 0)
   # ...and doc-drift is unaffected (stays ON) -- sanity that we only disabled missing-doc.

@@ -17,9 +17,9 @@
   ],
   "audience": "both",
   "verified": {
-    "date": "2026-10-27",
+    "date": "2026-11-18",
     "by": "ENGINE",
-    "build": "1.36.0-alpha",
-    "surfaceHash": "8ea04f384d04eaf3edaec969f1dfad83730fe418e900b4b5ddb76124c85923c3"
+    "build": "1.52.0-alpha",
+    "surfaceHash": "60804e6714e32635768d09b27014567bb22ee6302f5794f4d63812b9437b04dd"
   }
 }

@@ -4,10 +4,10 @@ title: CLI fixes in 1.51.1
 summary: lint-all --rule a,b runs only those rules, a DB copy stays on the copy; rules --rule; info versions; index parse-errors; resolve-only warning
 product: DL
 group: linting
-order: 30062
+order: 30065
 since: 1.51.1-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # CLI fixes in 1.51.1
@@ -19,7 +19,7 @@ Read this when a lint-all --rule run is slow or reaches other databases, when ru
 ## How to run it
 
 ```text
-drag-lint lint-all [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]
+drag-lint lint-all [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget]
 ```
 
 Example:
@@ -117,7 +117,8 @@ tree had ERROR or MISSING nodes.
 ### index --resolve-only without the library
 A database resolved against a platform library and re-resolved with no library store attached prints
 `WARNING: index: no library store attached: external targets will be cleared; pass --library-db <library.sqlite>.`
-The targets are still cleared (1.51.2 may keep them).
+The targets are still cleared in 1.51.1. Since 1.52 the run KEEPS the library bindings of the last library run and
+the warning reads `WARNING: index: no library store attached: library bindings are kept from the last library run, not refreshed; pass --library-db <library.sqlite>.`
 
 ### find-deadcode on a library project
 `find-deadcode` no longer lists every used unit of a library project as dead.

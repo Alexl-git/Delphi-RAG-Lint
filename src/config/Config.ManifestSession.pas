@@ -16,10 +16,19 @@ uses
 /// <param name="AExeDir">Directory of the Config tool exe.</param>
 /// <returns>AExplicitPath made absolute when it is not ''; otherwise
 /// &lt;AExeDir&gt;\drag-lint.json, whether or not it exists yet. Never ''.</returns>
-/// <remarks>There is deliberately no discovery: the engine's TManifestIO.Load
+/// <remarks>
+/// There is deliberately no discovery: the engine's TManifestIO.Load
 /// MERGES a local .drag-lint.json found above the working directory into the
 /// global one, and a Save of that merge put the local file's sections into the
-/// global file (B-22). The tool edits one file, the one it names.</remarks>
+/// global file (B-22). The tool edits one file, the one it names.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: Config.MainForm.TMainForm.ResolveConfigPath (Config.MainForm.pas)</para>
+/// <para>Calls: DRagLint.Index.Manifest.TInstalledLayout.ManifestLocation</para>
+/// <para>Returns: TPath.GetFullPath(AExplicitPath); TInstalledLayout.ManifestLocation(AExeDir).Path</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.ManifestLocation"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ConfigTargetPath(const AExplicitPath, AExeDir: string): string;
 
 /// <summary>Load the manifest the Config tool will edit, and say whether it
@@ -45,8 +54,20 @@ function ConfigTargetPath(const AExplicitPath, AExeDir: string): string;
 /// (a missing folder gives '&lt;file&gt;: folder not found or not reachable --
 /// not creating a new config there'). Pass it unchanged to
 /// TrySaveConfigManifest.</returns>
-/// <remarks>Never raises for a bad or unreadable file: every exception from the
-/// read or the parse is turned into the returned text.</remarks>
+/// <remarks>
+/// Never raises for a bad or unreadable file: every exception from the
+/// read or the parse is turned into the returned text.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: Config.MainForm.TMainForm.LoadManifest (Config.MainForm.pas)</para>
+/// <para>Calls: Config.ManifestSession.SetDefaults, DRagLint.Index.Manifest.TManifestIO.ParseText, ExtractFileDir</para>
+/// <para>Returns: ''; '(no config path)'; AConfigPath + ': ' + E.Message</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Mutates: AOriginalText (out), AManifest (out)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="Config.ManifestSession.SetDefaults"/>
+/// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LoadConfigManifest(const AConfigPath: string;
   out AManifest: TIndexManifest; out AOriginalText: string): string;
 
@@ -74,7 +95,17 @@ function LoadConfigManifest(const AConfigPath: string;
 /// <para>Checks in this order: load error, validation, empty path, then the
 /// write itself. Never raises: a failing write becomes AReason. The write is
 /// atomic (TManifestIO.SaveEdits), so a failed write leaves the old file
-/// intact.</para></remarks>
+/// intact.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: Config.MainForm.TMainForm.btnSaveClick (Config.MainForm.pas), Config.MainForm.TMainForm.FormShow (Config.MainForm.pas)</para>
+/// <para>Calls: DRagLint.Index.Manifest.TManifestIO.SaveEdits, DRagLint.Index.Manifest.TManifestIO.Validate</para>
+/// <para>Returns: False; True</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Mutates: AReason (out)</para>
+/// <seealso cref="DRagLint.Index.Manifest.TManifestIO.SaveEdits"/>
+/// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Validate"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TrySaveConfigManifest(const AManifest: TIndexManifest;
   const ALoadError, AOriginalText, APath: string; out AReason: string): Boolean;
 
@@ -96,10 +127,7 @@ end;
 
 function ConfigTargetPath(const AExplicitPath, AExeDir: string): string;
 begin
-  if AExplicitPath <> '' then
-    Result := TPath.GetFullPath(AExplicitPath)
-  else
-    Result := TInstalledLayout.ManifestLocation(AExeDir).Path;
+  Result := if AExplicitPath <> '' then TPath.GetFullPath(AExplicitPath) else TInstalledLayout.ManifestLocation(AExeDir).Path;
 end;
 
 function LoadConfigManifest(const AConfigPath: string;

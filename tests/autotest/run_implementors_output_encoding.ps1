@@ -15,9 +15,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_impl_outenc_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -59,12 +62,12 @@ end.
 "@
 
 $db = Join-Path $WorkDir 'fx.sqlite'
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the fixture index was built' (Test-Path $db) $db
 
 function Run([string]$Name, [string[]]$Extra) {
   $out = Join-Path $WorkDir $Name
-  & $exePath implementors --target IWorker --db $db --output $out @Extra 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath implementors --target IWorker --db $db --output $out @Extra 2>&1 | ForEach-Object { "$_" } } | Out-Null
   if (Test-Path $out) { return ,[IO.File]::ReadAllBytes($out) } else { return ,[byte[]]@() }
 }
 function HasBom([byte[]]$b) { return ($b.Length -ge 3 -and $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF) }

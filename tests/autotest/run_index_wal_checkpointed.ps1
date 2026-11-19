@@ -51,10 +51,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\draglint_wal_checkpoint_$PID",
   [switch]$Quiet
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -72,12 +75,12 @@ if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -Foreground
 $Exe = (Resolve-Path $Exe).Path
 
 function ScanTypeOf($db) {
-  $j = (& $Exe sql --query "SELECT value FROM schema_meta WHERE key='scan_type'" --db $db --json 2>$null) -join "`n"
+  $j = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --query "SELECT value FROM schema_meta WHERE key='scan_type'" --db $db --json 2>$null }) -join "`n"
   if ($j -match '"rows"\s*:\s*\[\s*\[\s*"([^"]*)"') { return $Matches[1] }
   return ''
 }
 function FileCountOf($db) {
-  $j = (& $Exe sql --query 'SELECT COUNT(*) AS n FROM files' --db $db --json 2>$null) -join "`n"
+  $j = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --query 'SELECT COUNT(*) AS n FROM files' --db $db --json 2>$null }) -join "`n"
   if ($j -match '"rows"\s*:\s*\[\s*\[\s*(\d+)') { return [int]$Matches[1] }
   return -1
 }
@@ -138,7 +141,7 @@ try {
       -ArgumentList @('index', '--project', (Join-Path $proj 'App.dpr'), '--db', $db, '--watch', '--interval', '600') `
       -PassThru -WindowStyle Hidden `
       -RedirectStandardOutput (Join-Path $WorkDir 'watch.out') `
-      -RedirectStandardError  (Join-Path $WorkDir 'watch.err')
+      -RedirectStandardError  (Join-Path $WorkDir 'watch.err'); $null = $watcher.Handle
 
   # Completion signal: the engine's stdout is block-buffered and the process
   # never exits, so the 'Done.' trailer never reaches the redirect file --
@@ -162,7 +165,7 @@ try {
 
     # CONTROL A -- the refusal itself must be alive. A broken refusal would make
     # every assertion below fail for the wrong reason.
-    $outLive = (& $Exe index $proj --db $db 2>&1 | Out-String)
+    $outLive = (& { $ErrorActionPreference = 'Continue'; & $Exe index $proj --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String)
     $rcLive  = $LASTEXITCODE
     Check 'CONTROL A: the LIVE database (sidecars present) still refuses a folder' `
       (($rcLive -ne 0) -and ($outLive -match 'refusing to index a FOLDER')) `
@@ -189,7 +192,7 @@ try {
       "copy=$nCopy live=$liveN -- RED means the whole run was stranded, not just the stamp"
 
     # 4. the consequence that matters: the protection still works on the copy
-    $outCopy = (& $Exe index $proj --db $copy 2>&1 | Out-String)
+    $outCopy = (& { $ErrorActionPreference = 'Continue'; & $Exe index $proj --db $copy 2>&1 | ForEach-Object { "$_" } } | Out-String)
     $rcCopy  = $LASTEXITCODE
     Check 'a FOLDER into the copied project DB is still refused' ($rcCopy -ne 0) `
       "exit=$rcCopy -- 0 means a plain file copy disarmed the folder-into-project refusal"
@@ -212,12 +215,12 @@ Copy-Item (Join-Path $proj 'uMemberB.pas') $osDir -Force
 Copy-Item (Join-Path $proj 'uLooseNotAMember.pas') $osDir -Force
 Copy-Item (Join-Path $proj 'App.dpr') $osDir -Force
 $osDb = Join-Path $osDir '_D-RAG\App.sqlite'
-& $Exe index --project (Join-Path $osDir 'App.dpr') --db $osDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $osDir 'App.dpr') --db $osDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $osCopyDir = Join-Path $WorkDir 'oneshot-copy'
 New-Item -ItemType Directory -Force -Path $osCopyDir | Out-Null
 $osCopy = Join-Path $osCopyDir 'App.sqlite'
 Copy-Item $osDb $osCopy -Force
-$osOut = (& $Exe index $osDir --db $osCopy 2>&1 | Out-String)
+$osOut = (& { $ErrorActionPreference = 'Continue'; & $Exe index $osDir --db $osCopy 2>&1 | ForEach-Object { "$_" } } | Out-String)
 $osRc  = $LASTEXITCODE
 Check 'CONTROL B: a ONE-SHOT run''s .sqlite-only copy also still refuses' `
   (($osRc -ne 0) -and ($osOut -match 'refusing to index a FOLDER')) `

@@ -59,10 +59,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$Fixture = "$PSScriptRoot\fixtures\docdrift\transitive_writer.pas",
-  [string]$Human   = "$PSScriptRoot\fixtures\docdrift\transitive.pas"
+  [string]$Exe     = '',
+  [string]$Fixture = '',
+  [string]$Human   = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $Fixture) { $Fixture = "$PSScriptRoot\fixtures\docdrift\transitive_writer.pas" }
+if (-not $Human) { $Human = "$PSScriptRoot\fixtures\docdrift\transitive.pas" }
 try {
 
 $ErrorActionPreference = 'Stop'
@@ -97,13 +102,13 @@ $db     = Join-Path $scratch 'w.sqlite'
 
 function ResetFixture {
   Copy-Item $fixPath $target -Force
-  & $exePath index $srcDir --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $srcDir --db $db 2>$null } | Out-Null
 }
 # `document --qname` RENDERS the block without writing it. That is the right
 # probe for "what does the emitter produce", and it keeps the phases below
 # independent of rewrite round-tripping (run_doc_idempotent owns that).
 function DocFor([string]$QName) {
-  return (& $exePath document --qname $QName --db $db 2>$null | Out-String)
+  return (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname $QName --db $db 2>$null } | Out-String)
 }
 # The emitter wraps a long tag body across `/// ` continuation lines, so a via
 # attribution can be split mid-name. Flatten before asserting on content.
@@ -131,7 +136,7 @@ function ExcBodiesInFile([string]$FileText, [string]$DeclName) {
   for ($k = $lines.Count - 1; $k -ge 0; $k--) {
     if ($lines[$k] -match '^\s*///') { $blk.Insert(0, $lines[$k]) } else { break }
   }
-  return (ExcBodies ($blk -join "`r`n"))
+  return (@(ExcBodies ($blk -join "`r`n")))
 }
 # Every exception tag body, flattened, for one rendered declaration.
 function ExcBodies([string]$Doc) {
@@ -154,15 +159,15 @@ try {
   Write-Host ''
   Write-Host 'PHASE 1: rendering' -ForegroundColor Cyan
 
-  $delegates = ExcBodies (DocFor 'transitive_writer.NoDocDelegates')
-  $helper    = ExcBodies (DocFor 'transitive_writer.HelperRaise')
-  $ownAndVia = ExcBodies (DocFor 'transitive_writer.NoDocOwnAndVia')
-  $twoHops   = ExcBodies (DocFor 'transitive_writer.NoDocTwoHops')
-  $rtlOnly   = ExcBodies (DocFor 'transitive_writer.NoDocRtlOnly')
-  $recursive = ExcBodies (DocFor 'transitive_writer.NoDocRecursive')
-  $multi     = ExcBodies (DocFor 'transitive_writer.NoDocMulti')
-  $twoVia    = ExcBodies (DocFor 'transitive_writer.NoDocTwoVia')
-  $fanOut    = ExcBodies (DocFor 'transitive_writer.NoDocFanOut')
+  $delegates = @(ExcBodies (DocFor 'transitive_writer.NoDocDelegates'))
+  $helper    = @(ExcBodies (DocFor 'transitive_writer.HelperRaise'))
+  $ownAndVia = @(ExcBodies (DocFor 'transitive_writer.NoDocOwnAndVia'))
+  $twoHops   = @(ExcBodies (DocFor 'transitive_writer.NoDocTwoHops'))
+  $rtlOnly   = @(ExcBodies (DocFor 'transitive_writer.NoDocRtlOnly'))
+  $recursive = @(ExcBodies (DocFor 'transitive_writer.NoDocRecursive'))
+  $multi     = @(ExcBodies (DocFor 'transitive_writer.NoDocMulti'))
+  $twoVia    = @(ExcBodies (DocFor 'transitive_writer.NoDocTwoVia'))
+  $fanOut    = @(ExcBodies (DocFor 'transitive_writer.NoDocFanOut'))
 
   # 1 -- THE FIX.
   Check '1 NoDocDelegates gets an EBoom tag attributed to its callee' `
@@ -224,14 +229,14 @@ try {
   Write-Host ''
   Write-Host 'PHASE 2: agreement with doc-drift, and idempotence' -ForegroundColor Cyan
 
-  & $exePath document --unit $target --db $db --apply --no-backup 2>$null | Out-Null
-  & $exePath index $srcDir --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply --no-backup 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $srcDir --db $db 2>$null } | Out-Null
   Copy-Item $target (Join-Path $afterDir 'pass1.pas') -Force
   $applied = Get-Content -LiteralPath $target -Raw
 
   # 9 -- AGREEMENT. Both halves, or the check is vacuous: a doc-drift that is
   #      silent because no tag was written proves nothing at all.
-  $drift = (& $exePath doc-drift --qname 'transitive_writer.NoDocDelegates' --db $db --json 2>$null | Out-String)
+  $drift = (& { $ErrorActionPreference = 'Continue'; & $exePath doc-drift --qname 'transitive_writer.NoDocDelegates' --db $db --json 2>$null } | Out-String)
   Check '9a the tag assertion 1 wanted is actually IN the file' `
     ($applied -match 'via transitive_writer\.HelperRaise: boom') `
     'without this, 9b is silent-because-empty'
@@ -241,7 +246,7 @@ try {
 
   # 12 -- BYTE IDENTITY. A second apply on an unchanged tree must change nothing.
   $h1 = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
-  & $exePath document --unit $target --db $db --apply --no-backup 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply --no-backup 2>$null } | Out-Null
   $h2 = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
   Check '12 a second --apply leaves the file byte-identical' ($h1 -eq $h2) `
     "sha256 $h1 -> $h2"
@@ -256,13 +261,13 @@ try {
   $txt = Get-Content -LiteralPath $target -Raw
   $txt = $txt.Replace("raise EBoom.Create('boom');", "WriteLn('boom');")
   [System.IO.File]::WriteAllText($target, $txt, [System.Text.Encoding]::ASCII)
-  & $exePath index $srcDir --db $db 2>$null | Out-Null
-  & $exePath document --unit $target --db $db --apply --no-backup 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $srcDir --db $db 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply --no-backup 2>$null } | Out-Null
   # Re-index after the apply, exactly as phase 2 does. An apply moves every
   # declaration's line number, so rendering against the pre-apply index returns
   # NOTHING -- which looks like "the tag was reaped" and would have made 10b
   # fail for a reason that has nothing to do with reaping.
-  & $exePath index $srcDir --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $srcDir --db $db 2>$null } | Out-Null
   Copy-Item $target (Join-Path $afterDir 'reaped.pas') -Force
   $reaped = Get-Content -LiteralPath $target -Raw
 
@@ -271,7 +276,7 @@ try {
     'an engine-owned attribution that survives its evidence is doc rot'
   # POSITIVE CONTROL for 10a: the own half must SURVIVE the same reap, or 10a
   # passes for a writer that simply deleted everything.
-  $ownAfter = ExcBodiesInFile $reaped 'procedure NoDocOwnAndVia'
+  $ownAfter = @(ExcBodiesInFile $reaped 'procedure NoDocOwnAndVia')
   Check '10b NoDocOwnAndVia keeps its OWN message through the reap' `
     ($ownAfter.Count -eq 1 -and $ownAfter[0].Body -eq 'mine') `
     ("got: " + (($ownAfter | ForEach-Object { "$($_.Cls)='$($_.Body)'" }) -join ' | '))
@@ -285,7 +290,7 @@ try {
   Write-Host 'PHASE 4: rename' -ForegroundColor Cyan
 
   ResetFixture
-  & $exePath document --unit $target --db $db --apply --no-backup 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply --no-backup 2>$null } | Out-Null
   # Rename the CODE only. A blanket regex over the whole file also rewrites the
   # `via transitive_writer.HelperRaise` sitting in the doc comment -- which
   # leaves the doc already correct, gives the dry run nothing to say, and turns
@@ -295,8 +300,8 @@ try {
     if ($_ -match '^\s*///') { $_ } else { $_ -replace '\bHelperRaise\b', 'HelperRaise2' }
   })
   [System.IO.File]::WriteAllText($target, (($renamed -join "`r`n") + "`r`n"), [System.Text.Encoding]::ASCII)
-  & $exePath index $srcDir --db $db 2>$null | Out-Null
-  $dry = (& $exePath document --unit $target --db $db 2>$null | Out-String)
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $srcDir --db $db 2>$null } | Out-Null
+  $dry = (& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db 2>$null } | Out-String)
   # Anchored on the VIA text, not merely on the new name. The managed remarks
   # block also carries `<para>Calls: ... HelperRaise</para>`, so a bare
   # `-match 'HelperRaise2'` passes on an engine that never emitted a via at all
@@ -317,8 +322,8 @@ try {
   $hTarget = Join-Path $hDir 'transitive.pas'
   $hDb     = Join-Path $scratch 'h.sqlite'
   Copy-Item $humPath $hTarget -Force
-  & $exePath index $hDir --db $hDb 2>$null | Out-Null
-  & $exePath document --unit $hTarget --db $hDb --apply --no-backup 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $hDir --db $hDb 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $hTarget --db $hDb --apply --no-backup 2>$null } | Out-Null
   Copy-Item $hTarget (Join-Path $afterDir 'human.pas') -Force
   $hAfter = Get-Content -LiteralPath $hTarget -Raw
 
@@ -328,8 +333,8 @@ try {
   Check '13b and did NOT stamp it as engine-owned' `
     ($hAfter -notmatch 'Raised by the helper\.[\s\S]{0,40}drag-lint:auto exc') `
     'an AUTO_EXC marker on a human sentence means the engine claimed it'
-  & $exePath index $hDir --db $hDb 2>$null | Out-Null
-  $hDrift = (& $exePath doc-drift --qname 'transitive.StillWrong' --db $hDb --json 2>$null | Out-String)
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $hDir --db $hDb 2>$null } | Out-Null
+  $hDrift = (& { $ErrorActionPreference = 'Continue'; & $exePath doc-drift --qname 'transitive.StillWrong' --db $hDb --json 2>$null } | Out-String)
   Check '13c StillWrong is STILL reported (the rule was not weakened)' `
     ($hDrift -match 'ddExceptionNotRaised') `
     'if emitting a via silences ENever, the checker lost its teeth'

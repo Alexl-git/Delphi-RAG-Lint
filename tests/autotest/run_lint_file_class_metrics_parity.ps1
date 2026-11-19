@@ -26,10 +26,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe      = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$RulesDir = "$PSScriptRoot\..\..\rules",
+  [string]$Exe      = '',
+  [string]$RulesDir = '',
   [string]$WorkDir  = "C:\TEMP\draglint_file_class_metrics_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $RulesDir) { $RulesDir = "$PSScriptRoot\..\..\rules" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){ if($d){Write-Host "      $d" -ForegroundColor DarkGray}; $script:fail=$true } }
@@ -131,7 +135,7 @@ end.
 '@
 
 $db  = Join-Path $WorkDir 'cm.sqlite'
-$idx = & $exePath index $proj --db $db 2>&1 | Out-String
+$idx = & { $ErrorActionPreference = 'Continue'; & $exePath index $proj --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'SANITY: fixture indexed with no errors' `
       ($LASTEXITCODE -eq 0 -and $idx -notmatch '\b[1-9]\d* errors\b') $idx
 
@@ -139,7 +143,7 @@ $CM = @('too-many-children','deep-inheritance','high-response','high-coupling','
         'middle-man','fan-out','fan-in','instability','feature-envy')
 $FILES = [ordered]@{ 'uBase.pas' = 10; 'uKids.pas' = 11; 'uHub.pas' = 1; 'uUsers.pas' = 21; 'uEmpty.pas' = 0 }
 
-function Rows($json) { @(if ($json.Trim()) { $json | ConvertFrom-Json } else { @() }) }
+function Rows($json) { @(if ($json.Trim()) { $json | ConvertFrom-Json | ForEach-Object { $_ } } else { @() }) }
 function CmTuples($rows, $fileAbs) {
   @($rows | Where-Object { $CM -contains $_.rule -and
                            $_.file_path.ToLowerInvariant() -eq $fileAbs.ToLowerInvariant() } |
@@ -152,7 +156,7 @@ $env:DRAGLINT_PROFILE = '1'
 foreach ($mode in @(@{ Name = 'defaults'; Args = @() }, @{ Name = '--enable fan-in'; Args = @('--enable','fan-in') })) {
   $tag     = $mode.Name
   $allErr  = Join-Path $WorkDir 'all.err'
-  $allRows = Rows (& $exePath lint-all --db $db --rules-dir $rules --json @($mode.Args) 2>$allErr | Out-String)
+  $allRows = Rows (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($allErr); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath lint-all --db $db --rules-dir $rules --json @($mode.Args) 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
   $allProf = Get-Content $allErr -Raw
   $allIds  = @($allRows | Where-Object { $CM -contains $_.rule } | ForEach-Object { $_.rule } | Sort-Object -Unique)
 
@@ -171,7 +175,7 @@ foreach ($mode in @(@{ Name = 'defaults'; Args = @() }, @{ Name = '--enable fan-
   foreach ($leaf in $FILES.Keys) {
     $abs     = Join-Path $proj $leaf
     $oneErr  = Join-Path $WorkDir 'one.err'
-    $oneRows = Rows (& $exePath lint $abs --db $db --rules-dir $rules --json @($mode.Args) 2>$oneErr | Out-String)
+    $oneRows = Rows (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($oneErr); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath lint $abs --db $db --rules-dir $rules --json @($mode.Args) 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
     $oneProf = Get-Content $oneErr -Raw
     $want    = @(CmTuples $allRows $abs)
     $got     = @(CmTuples $oneRows $abs)
@@ -188,7 +192,7 @@ foreach ($mode in @(@{ Name = 'defaults'; Args = @() }, @{ Name = '--enable fan-
 $env:DRAGLINT_PROFILE = $null
 
 $hubAbs  = Join-Path $proj 'uHub.pas'
-$ruleRows = Rows (& $exePath lint $hubAbs --db $db --rules-dir $rules --rule fan-in --json 2>$null | Out-String)
+$ruleRows = Rows (& { $ErrorActionPreference = 'Continue'; & $exePath lint $hubAbs --db $db --rules-dir $rules --rule fan-in --json 2>$null } | Out-String)
 $ruleGot  = @(CmTuples $ruleRows $hubAbs)
 Check 'P4  --rule fan-in (OFF by default) still computes it: THub reported, Ca 21' `
       (($ruleGot.Count -eq 1) -and ($ruleGot[0] -match 'THub is referenced by 21 other classes')) `
@@ -213,16 +217,16 @@ implementation
 
 end.
 '@
-$idx2 = & $exePath index $proj --db $db 2>&1 | Out-String
+$idx2 = & { $ErrorActionPreference = 'Continue'; & $exePath index $proj --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'SANITY: marker fixture re-indexed' ($LASTEXITCODE -eq 0) $idx2
 
 function UnusedOnHub($rows) { @($rows | Where-Object { $_.rule -like 'review-marker-*' -and $_.file_path -like '*uHub.pas' } |
                                 ForEach-Object { '{0}:{1} {2}' -f $_.rule, $_.start_line, $_.message }) }
 $env:DRAGLINT_PROFILE = '1'
 $mAllErr  = Join-Path $WorkDir 'mall.err'
-$mAllRows = Rows (& $exePath lint-all --db $db --rules-dir $rules --json 2>$mAllErr | Out-String)
+$mAllRows = Rows (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($mAllErr); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath lint-all --db $db --rules-dir $rules --json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
 $mOneErr  = Join-Path $WorkDir 'mone.err'
-$mOneRows = Rows (& $exePath lint $hubAbs --db $db --rules-dir $rules --json 2>$mOneErr | Out-String)
+$mOneRows = Rows (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($mOneErr); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath lint $hubAbs --db $db --rules-dir $rules --json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
 $env:DRAGLINT_PROFILE = $null
 $ua = @(UnusedOnHub $mAllRows | Where-Object { $_ -like 'review-marker-unused*' -or $_ -like 'review-marker-stale*' })
 $uo = @(UnusedOnHub $mOneRows | Where-Object { $_ -like 'review-marker-unused*' -or $_ -like 'review-marker-stale*' })

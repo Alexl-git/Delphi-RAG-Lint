@@ -14,7 +14,10 @@
 
   Usage: pwsh -File tests\autotest\run_v151_INC_seal_forward.ps1 [-Exe <drag-lint.exe>]
 #>
-param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
@@ -27,9 +30,9 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
   if (-not $Ok) { $script:fail = $true }
 }
 function Lines([string]$File, [string]$Db, [string[]]$Extra) {
-  $sel = if ($Extra.Count -gt 0) { $Extra } else { @('--rule', 'is-never-true') }
-  $raw = (& $exePath lint $File --db $Db --json @sel 2>$null) -join "`n"
-  $j = @($raw | ConvertFrom-Json)
+  $sel = @(if ($Extra.Count -gt 0) { $Extra } else { @('--rule', 'is-never-true') })
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath lint $File --db $Db --json @sel 2>$null }) -join "`n"
+  $j = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   return ,@($j | Where-Object { $_.rule -eq 'is-never-true' } | ForEach-Object { [int]$_.start_line })
 }
 try {
@@ -39,7 +42,7 @@ try {
   Copy-Item (Join-Path $PSScriptRoot 'fixtures\v151-EXT\uSealShapes.pas') $fx
   Copy-Item (Join-Path $PSScriptRoot 'fixtures\v151-INC\uSealFwd.pas') $fx
   $db = Join-Path $scratch 'seal.sqlite'
-  & $exePath index $fx --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $fx --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $a = Lines (Join-Path $fx 'uSealShapes.pas') $db @()
   Check 'uSealShapes: line 45 (F is TShFwd, forward of a sealed class) fires' ($a -contains 45) ($a -join ',')
   Check 'uSealShapes: lines 41-44 still fire' ((@(41, 42, 43, 44) | Where-Object { $a -notcontains $_ }).Count -eq 0) ($a -join ',')

@@ -19,11 +19,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe       = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
+  [string]$Exe       = '',
   [switch]$KeepScratch,
   [string]$WorkDir   = "$env:TEMP\drag-lint-cyclefix-shadow-$PID",
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }) }
 # E18 T13: removes this run's scratch (WorkDir) however the run ends; kept only on failure when
 # -KeepScratch is passed (the path is printed).
 function Remove-Scratch {
@@ -94,13 +97,13 @@ function Run-Case([string]$Tag, [string[]]$Select, [string]$LibArg) {
   Copy-Tree $Demo $proj
   Copy-Tree $Demo $orc
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project (Join-Path $proj 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "$Tag-index.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $proj 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "$Tag-index.log") }
   Check "${Tag}: demo indexed" ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
   $hashBefore = Get-TreeHash $proj
-  $out = (& $Exe cycles --fix --build-timeout 1800 --project (Join-Path $proj 'CircularDemo.dproj') --db $db @Select `
-    --no-compile --library-db $LibArg --shadow-out $shadow --format json 2>$null | Out-String)
+  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --build-timeout 1800 --project (Join-Path $proj 'CircularDemo.dproj') --db $db @Select `
+    --no-compile --library-db $LibArg --shadow-out $shadow --format json 2>$null } | Out-String)
   $code = $LASTEXITCODE
-  $j = try { $out | ConvertFrom-Json } catch { $null }
+  $j = try { $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
   Check "${Tag}: dry run exit 0, mechanical" ($code -eq 0 -and $j -and $j.cycles[0].verdict -eq 'mechanical') "exit=$code $out"
   Check "${Tag}: the project copy is byte-identical after the dry run" ((Get-TreeHash $proj) -eq $hashBefore) ''
   Check "${Tag}: shadow dir exists" (Test-Path $shadow) $shadow
@@ -108,8 +111,8 @@ function Run-Case([string]$Tag, [string[]]$Select, [string]$LibArg) {
   $n = [int]$j.cycles[0].n
   # the oracle: the plan text of the same copy, applied to another copy
   $planFile = Join-Path $WorkDir "$Tag-plan.txt"
-  & $Exe cycles --db $db --edges --causes --plan --format text --library-db $LibArg 2>$null | Out-File $planFile -Encoding ascii
-  $fo = & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $planFile -Cycle $n -Root $orc 2>&1 | Out-String
+  & { $ErrorActionPreference = 'Continue'; & $Exe cycles --db $db --edges --causes --plan --format text --library-db $LibArg 2>$null } | Out-File $planFile -Encoding ascii
+  $fo = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $planFile -Cycle $n -Root $orc 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check "${Tag}: oracle applied cycle $n (exit 0)" ($LASTEXITCODE -eq 0) ($fo.Trim() -replace "`r?`n", ' | ')
   $want = Get-Delta $pristine (Get-Map $orc)
   $got  = if (Test-Path $shadow) { Get-Map $shadow } else { @{} }
@@ -151,18 +154,18 @@ try {
   $dproj = Join-Path $WorkDir 'dflt'
   Copy-Tree $Demo $dproj
   $ddb = Join-Path $WorkDir 'dflt.sqlite'
-  & $Exe index --project (Join-Path $dproj 'CircularDemo.dproj') --db $ddb *> (Join-Path $WorkDir 'dflt-index.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $dproj 'CircularDemo.dproj') --db $ddb *> (Join-Path $WorkDir 'dflt-index.log') }
   # the default scratch is deleted at the end of the run (E18 T13 fix round); this check inspects it, so it asks to keep it
   $env:DRAGLINT_CYCLEFIX_KEEP_SCRATCH = '1'
   try {
-    $txt = (& $Exe cycles --fix --project (Join-Path $dproj 'CircularDemo.dproj') --db $ddb --no-compile --library-db none 2>$null | Out-String)
+    $txt = (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --project (Join-Path $dproj 'CircularDemo.dproj') --db $ddb --no-compile --library-db none 2>$null } | Out-String)
   } finally { $env:DRAGLINT_CYCLEFIX_KEEP_SCRATCH = $null }
   $m = [regex]::Match($txt, '(?m)^Shadow tree: (\S+)')
   Check 'c3: text output announces "Shadow tree: <product root>\draglint_cyclefix_<pid>"' ($m.Success -and $m.Groups[1].Value -match '^C:\\TEMP\\draglint_cyclefix_\d+\\?$') $txt
   Check 'c3: that directory exists and holds files' ($m.Success -and (Test-Path $m.Groups[1].Value) -and (@(Get-ChildItem $m.Groups[1].Value -Recurse -File).Count -gt 0)) ''
   if ($m.Success -and (Test-Path $m.Groups[1].Value)) { [IO.Directory]::Delete($m.Groups[1].Value, $true) }
   # c4: without the seam the product deletes the default shadow it created; a --shadow-out dir is never deleted
-  $txt2 = (& $Exe cycles --fix --project (Join-Path $dproj 'CircularDemo.dproj') --db $ddb --no-compile --library-db none 2>$null | Out-String)
+  $txt2 = (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --project (Join-Path $dproj 'CircularDemo.dproj') --db $ddb --no-compile --library-db none 2>$null } | Out-String)
   $m2 = [regex]::Match($txt2, '(?m)^Shadow tree: (\S+)')
   Check 'c4: the run announced a default shadow dir (SANITY) and it is gone after the run' `
     ($m2.Success -and $m2.Groups[1].Value -match '^C:\\TEMP\\draglint_cyclefix_\d+\\?$' -and -not (Test-Path $m2.Groups[1].Value) -and -not (Test-Path ($m2.Groups[1].Value.TrimEnd('\') + '_build'))) $txt2
@@ -176,7 +179,7 @@ try {
   foreach ($pl in $plShadow, $plBuild) { New-Item -ItemType Directory -Force $pl | Out-Null; [IO.File]::WriteAllText((Join-Path $pl 'marker.txt'), 'keep me') }
   $env:DRAGLINT_TEST_SCRATCH_PID = $fake
   try {
-    $txt3 = (& $Exe cycles --fix --project (Join-Path $dproj 'CircularDemo.dproj') --db $ddb --no-compile --library-db none 2>$null | Out-String)
+    $txt3 = (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --project (Join-Path $dproj 'CircularDemo.dproj') --db $ddb --no-compile --library-db none 2>$null } | Out-String)
     $code3 = $LASTEXITCODE
   } finally { $env:DRAGLINT_TEST_SCRATCH_PID = $null }
   $m3 = [regex]::Match($txt3, '(?m)^Shadow tree: (\S+)')
@@ -190,11 +193,11 @@ try {
   $fake2 = 'planted' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
   $pl2 = Join-Path $ProductRoot "draglint_cyclefix_$fake2"; New-Item -ItemType Directory -Force $pl2 | Out-Null; [IO.File]::WriteAllText((Join-Path $pl2 'marker.txt'), 'keep me')
   $env:DRAGLINT_TEST_SCRATCH_PID = $fake2
-  try { $null = (& $Exe cycles --fix --build-timeout 1800 --db $ddb --library-db none 2>$null | Out-String); $code4 = $LASTEXITCODE } finally { $env:DRAGLINT_TEST_SCRATCH_PID = $null }
+  try { $null = (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --build-timeout 1800 --db $ddb --library-db none 2>$null } | Out-String); $code4 = $LASTEXITCODE } finally { $env:DRAGLINT_TEST_SCRATCH_PID = $null }
   Check 'c6: a --fix run that fails validation (no --project: exit 2) leaves the planted dir alone' ($code4 -eq 2 -and (Test-Path (Join-Path $pl2 'marker.txt'))) "exit=$code4"
   if (Test-Path $pl2) { [IO.Directory]::Delete($pl2, $true) }
   $own = Join-Path $WorkDir 'c4-own-shadow'
-  $null = (& $Exe cycles --fix --project (Join-Path $dproj 'CircularDemo.dproj') --db $ddb --no-compile --library-db none --shadow-out $own 2>$null | Out-String)
+  $null = (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --project (Join-Path $dproj 'CircularDemo.dproj') --db $ddb --no-compile --library-db none --shadow-out $own 2>$null } | Out-String)
   Check 'c4: POSITIVE CONTROL an explicit --shadow-out dir survives the run, with files' ((Test-Path $own) -and (@(Get-ChildItem $own -Recurse -File).Count -gt 0)) ''
   # final review F5: the Shadow line says what becomes of a default dir; a --shadow-out line has no such note
   Check 'c4: the Shadow line of a successful run says "(deleted at exit; --shadow-out keeps it)"' ($txt2 -match '(?m)^Shadow tree: \S+ \(deleted at exit; --shadow-out keeps it\)\s*$') $txt2
@@ -208,13 +211,13 @@ try {
     $env:DRAGLINT_TEST_SCRATCH_PID = $fk
     foreach ($k in $Env.Keys) { [Environment]::SetEnvironmentVariable($k, $Env[$k]) }
     try {
-      $o = (& $Exe cycles --fix --build-timeout 1800 --project (Join-Path $Dir 'CircularDemo.dproj') --db $Db --cycle 1 --library-db none --format json 2>$errf | Out-String)
+      $o = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errf); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe cycles --fix --build-timeout 1800 --project (Join-Path $Dir 'CircularDemo.dproj') --db $Db --cycle 1 --library-db none --format json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
       $code = $LASTEXITCODE
     } finally {
       $env:DRAGLINT_TEST_SCRATCH_PID = $null
       foreach ($k in $Env.Keys) { [Environment]::SetEnvironmentVariable($k, $null) }
     }
-    $j = try { $o | ConvertFrom-Json } catch { $null }
+    $j = try { $o | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
     return @{ Exit = $code; Json = $j; Out = $o; Err = [IO.File]::ReadAllText($errf)
               Build = (Join-Path $ProductRoot "draglint_cyclefix_${fk}_build"); Shadow = (Join-Path $ProductRoot "draglint_cyclefix_$fk") }
   }
@@ -225,7 +228,7 @@ try {
     $bp = Join-Path $WorkDir 'c7-proj'
     Copy-Tree $Demo $bp
     $bdb = Join-Path $WorkDir 'c7.sqlite'
-    & $Exe index --project (Join-Path $bp 'CircularDemo.dproj') --db $bdb *> (Join-Path $WorkDir 'c7-index.log')
+    & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $bp 'CircularDemo.dproj') --db $bdb *> (Join-Path $WorkDir 'c7-index.log') }
     [IO.File]::AppendAllText((Join-Path $bp 'CircularDemo.dproj'), "not xml`r`n")
     $r7 = Run-Scratch 'cite' $bp $bdb
     $msg7 = if ($r7.Json) { "$(@($r7.Json.baseline.errors)[0])" } else { '' }
@@ -248,7 +251,7 @@ try {
     $sp = Join-Path $WorkDir 'c8-proj'
     Copy-Tree $Demo $sp
     $sdb8 = Join-Path $WorkDir 'c8.sqlite'
-    & $Exe index --project (Join-Path $sp 'CircularDemo.dproj') --db $sdb8 *> (Join-Path $WorkDir 'c8-index.log')
+    & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $sp 'CircularDemo.dproj') --db $sdb8 *> (Join-Path $WorkDir 'c8-index.log') }
     Start-Sleep -Milliseconds 1100
     [IO.File]::AppendAllText((Join-Path $sp 'DemoLogger.pas'), "`r`n")
     $r8 = Run-Scratch 'refuse' $sp $sdb8
@@ -266,16 +269,16 @@ try {
     Copy-Tree $Demo $proj
     & $Patch $proj
     $db = Join-Path $WorkDir "$Tag.sqlite"
-    & $Exe index --project (Join-Path $proj 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "$Tag-index.log")
+    & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $proj 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "$Tag-index.log") }
     $errf = Join-Path $WorkDir "$Tag-stderr.txt"
     foreach ($k in $Env.Keys) { Set-Item "Env:$k" $Env[$k] }
     try {
-      $out = (& $Exe cycles --fix --build-timeout 1800 --project (Join-Path $proj 'CircularDemo.dproj') --db $db --cycle 1 `
-        --no-compile --library-db none --shadow-out $shadow --format json @Extra 2>$errf | Out-String)
+      $out = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errf); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe cycles --fix --build-timeout 1800 --project (Join-Path $proj 'CircularDemo.dproj') --db $db --cycle 1 `
+        --no-compile --library-db none --shadow-out $shadow --format json @Extra 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
       $code = $LASTEXITCODE
       $err = [IO.File]::ReadAllText($errf)
     } finally { foreach ($k in $Env.Keys) { Remove-Item "Env:$k" -ErrorAction SilentlyContinue } }
-    $j = try { $out | ConvertFrom-Json } catch { $null }
+    $j = try { $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
     $n = if (Test-Path $shadow) { @(Get-ChildItem $shadow -Recurse -File).Count } else { 0 }
     return @{ Exit = $code; Json = $j; Out = $out; Err = $err; Shadow = $shadow; ShadowFiles = $n; Proj = $proj }
   }
@@ -291,7 +294,7 @@ try {
   Write-Host '== e1: a non-ASCII char in a line the recipe copies into a new unit (staged UTF-8 + BOM)' -ForegroundColor Cyan
   # 0xE9 (e-acute, cp1252) in the doc comment of TDemoLogLevel, which Part A moves into a new unit.
   $r = Run-Patched 'e1' { param($p) Patch-Bytes (Join-Path $p 'DemoLogger.pas') 'Severity of a log line' ([byte[]](0x53,0xE9,0x76,0xE9,0x72,0x69,0x74,0xE9)) }
-  $kinds = if ($r.Json) { @($r.Json.cycles[0].refusals | ForEach-Object { $_.kind }) } else { @() }
+  $kinds = @(if ($r.Json) { @($r.Json.cycles[0].refusals | ForEach-Object { $_.kind }) } else { @() })
   # W6 C7 (lane CYCC): was refused non-ascii-text; the new unit is now staged as UTF-8 with a BOM.
   Check 'e1: exit 0, mechanical (no non-ascii-text refusal)' ($r.Exit -eq 0 -and -not ($kinds -contains 'non-ascii-text')) $r.Out
   $nu = @(Get-ChildItem $r.Shadow -Recurse -File -Filter 'DemoLogger.Untangle.pas' -ErrorAction SilentlyContinue)
@@ -302,7 +305,7 @@ try {
   Write-Host '== e1b (C6): a cp1252 char in a line the recipe REPLACES in an existing ANSI file (representable: no refusal)' -ForegroundColor Cyan
   # 0xE9 in the trailing comment of DemoConfig.pas's `DemoLogger;` uses entry, which Part A rewrites to `DemoLogger.Untangle;`.
   $r = Run-Patched 'e1b' { param($p) Patch-Bytes (Join-Path $p 'DemoConfig.pas') 'DemoLogger;' ([byte[]](0x44,0x65,0x6D,0x6F,0x4C,0x6F,0x67,0x67,0x65,0x72,0x3B,0x20,0x2F,0x2F,0x20,0x63,0x61,0x66,0xE9)) }
-  $kinds = if ($r.Json) { @($r.Json.cycles[0].refusals | ForEach-Object { $_.kind }) } else { @() }
+  $kinds = @(if ($r.Json) { @($r.Json.cycles[0].refusals | ForEach-Object { $_.kind }) } else { @() })
   Check 'e1b: exit 0, mechanical (no non-ascii-text refusal: cp1252 represents e-acute)' ($r.Exit -eq 0 -and $r.Json -and $r.Json.cycles[0].verdict -eq 'mechanical' -and -not ($kinds -contains 'non-ascii-text')) $r.Out
   $cb = if (Test-Path (Join-Path $r.Shadow 'DemoConfig.pas')) { [IO.File]::ReadAllBytes((Join-Path $r.Shadow 'DemoConfig.pas')) } else { [byte[]]@() }
   Check 'e1b: the staged DemoConfig.pas stays ANSI (no BOM) and keeps the 0xE9 byte on the rewritten uses line' ($cb.Length -gt 3 -and -not ($cb[0] -eq 0xEF -and $cb[1] -eq 0xBB) -and ([Text.Encoding]::GetEncoding(28591).GetString($cb)).Contains('DemoLogger.Untangle; // caf' + [char]0xE9)) "bytes=$($cb.Length)"
@@ -323,7 +326,7 @@ try {
   $r0 = Run-Patched 'e3c' { param($p) }
   Check 'e3: CONTROL without the seam the same plan is mechanical (exit 0)' ($r0.Exit -eq 0) $r0.Out
   $r = Run-Patched 'e3' { param($p) } @{ DRAGLINT_CYCLEFIX_TEST_TAMPER = 'DemoLogger.pas|llWarn, llError|llWarn, llXError' }
-  $kinds = if ($r.Json) { @($r.Json.cycles[0].refusals | ForEach-Object { $_.kind }) } else { @() }
+  $kinds = @(if ($r.Json) { @($r.Json.cycles[0].refusals | ForEach-Object { $_.kind }) } else { @() })
   Check 'e3: exit 1, refusal anchor-mismatch' ($r.Exit -eq 1 -and $kinds -contains 'anchor-mismatch') $r.Out
   Check 'e3: shadow empty or absent' ($r.ShadowFiles -eq 0) "files=$($r.ShadowFiles)"
   Check 'e3: stderr announces the seam (dry run)' ($r.Err.Contains('cycles --fix: TEST TAMPER active (dry run only)')) $r.Err
@@ -335,7 +338,7 @@ try {
   $busy = Join-Path $WorkDir 'busy'
   New-Item -ItemType Directory -Force $busy | Out-Null
   [IO.File]::WriteAllText((Join-Path $busy 'keep.txt'), 'x')
-  $out = (& $Exe cycles --fix --project (Join-Path $dproj 'CircularDemo.dproj') --db $ddb --no-compile --library-db none --shadow-out $busy --format json 2>$null | Out-String)
+  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --project (Join-Path $dproj 'CircularDemo.dproj') --db $ddb --no-compile --library-db none --shadow-out $busy --format json 2>$null } | Out-String)
   Check 'e4: exit 2, "shadow-out dir not empty"' ($LASTEXITCODE -eq 2 -and $out -match 'shadow-out dir not empty') $out
   Check 'e4: the directory is untouched' ((Test-Path (Join-Path $busy 'keep.txt')) -and @(Get-ChildItem $busy -Recurse -File).Count -eq 1) ''
 } finally {

@@ -95,9 +95,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-hardcoded-path-sink-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -364,7 +367,7 @@ Check 'fixture lines located' (@($ln1,$ln2,$ln3,$ln4,$ln5,$ln6,$ln7,$ln10,$ln15,
   "fire: $ln1,$ln2,$ln3,$ln4,$ln19,$ln23  silent: $ln5,$ln6,$ln7,$ln10,$ln15,$ln16,$ln17,$ln18,$ln20,$ln21,$ln22"
 
 $fired = @()
-foreach ($line in (& $Exe lint $fixture 2>$null)) {
+foreach ($line in (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture 2>$null })) {
   if ("$line" -match ':(\d+):\d+\s+\[\w+\]\s+hardcoded-absolute-path:') { $fired += [int]$Matches[1] }
 }
 $fired = @($fired | Sort-Object -Unique)
@@ -515,7 +518,7 @@ Write-Host 'SEVERITY TIERS -- a COMPLETE path is a warning, not info' -Foregroun
 # Owner ruling: "issue a stronger message when we see any complete path
 # including drive letter."
 $sev = @{}
-foreach ($line in (& $Exe lint $fixture 2>$null)) {
+foreach ($line in (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture 2>$null })) {
   if ("$line" -match ':(\d+):\d+\s+\[(\w+)\]\s+hardcoded-absolute-path:') { $sev[[int]$Matches[1]] = $Matches[2] }
 }
 Check "1  'C:\out\report.csv' is warning"      ($sev[$ln1]  -eq 'warning') "got '$($sev[$ln1])'"

@@ -31,9 +31,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe   = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe   = '',
   [string]$LibDb = 'C:\Projects\.drag-lint\library-Win64.sqlite'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $scratch = Join-Path C:\TEMP "draglint_uses_fix_forced_$PID"
 try {
 $ErrorActionPreference = 'Stop'
@@ -108,16 +111,16 @@ WritePas $proj @'
 </Project>
 '@
 
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' (Test-Path $db) $db
 
 function RunJson([string[]]$ExtraArgs) {
   $a = @('uses-fix', $unit, '--project', $proj, '--db', $db, '--library-db', $LibDb, '--platform', 'win64',
          '--remove-unused', '--format', 'json') + $ExtraArgs
-  $raw = (& $exePath @a 2>$null | Out-String)
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath @a 2>$null } | Out-String)
   $i = $raw.IndexOf('{')
   if ($i -lt 0) { return $null }
-  try { return ($raw.Substring($i) | ConvertFrom-Json) } catch { return $null }
+  try { return ($raw.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function ItemOf($J, [string]$Name) { @($J.items | Where-Object { $_.unit -eq $Name }) }
 

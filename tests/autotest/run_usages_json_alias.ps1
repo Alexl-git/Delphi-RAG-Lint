@@ -24,9 +24,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$DbPath = "$PSScriptRoot\..\..\src\cli\_D-RAG\drag-lint.sqlite"
+  [string]$Exe = '',
+  [string]$DbPath = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $DbPath) { $DbPath = "$PSScriptRoot\..\..\src\cli\_D-RAG\drag-lint.sqlite" }
 $ErrorActionPreference = 'Continue'
 $script:fail = $false
 function Check($n,$ok,$d=''){
@@ -48,7 +52,7 @@ function RunUsages([string[]]$ExtraArgs) {
   # note INTO the JSON document -- measured: "...index --all --only <Section>)"
   # landed inside the `attributes` array and ConvertFrom-Json failed at line 42.
   # The note is a stderr diagnostic; the document is stdout. Do not merge them.
-  $raw = (& $Exe usages --name $Sym --db $DbPath @ExtraArgs 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe usages --name $Sym --db $DbPath @ExtraArgs 2>$null }) -join "`n"
   $ex  = $LASTEXITCODE
   # convert-apply-style: the document is the first line that opens an object, so
   # a trailing "(loaded defaults from ...)" note cannot break the parse.
@@ -57,7 +61,7 @@ function RunUsages([string[]]$ExtraArgs) {
   if ($start -ge 0) {
     $body = $raw.Substring($start)
     $end  = $body.LastIndexOf('}')
-    if ($end -ge 0) { try { $json = ($body.Substring(0, $end + 1) | ConvertFrom-Json) } catch { $json = $null } }
+    if ($end -ge 0) { try { $json = ($body.Substring(0, $end + 1) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $json = $null } }
   }
   return @{ Raw = $raw; Exit = $ex; J = $json }
 }

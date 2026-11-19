@@ -12,9 +12,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-code-after-exit-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -66,7 +69,7 @@ $lnLive = LineOf "Writeln('live');"
 Check 'fixture statements located' (($lnDead -gt 0) -and ($lnLive -gt 0)) "dead=$lnDead live=$lnLive"
 
 $fired = @()
-foreach ($line in (& $Exe lint $pas 2>$null)) {
+foreach ($line in (& { $ErrorActionPreference = 'Continue'; & $Exe lint $pas 2>$null })) {
   if ("$line" -match ':(\d+):\d+\s+\[\w+\]\s+code-after-exit:') { $fired += [int]$Matches[1] }
 }
 $fired = @($fired | Sort-Object -Unique)

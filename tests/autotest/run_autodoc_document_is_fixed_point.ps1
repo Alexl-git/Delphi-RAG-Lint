@@ -72,9 +72,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-doc-fixed-point-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 if (Test-Path Variable:PSNativeCommandUseErrorActionPreference) { $PSNativeCommandUseErrorActionPreference = $false }
@@ -99,7 +102,7 @@ function Write-Ascii([string]$Path, [string]$Text) {
 # assertions below read the FILE, so a crash would otherwise be invisible until
 # a pin happened to trip over it.
 function Invoke-Engine([string]$Label, [string[]]$EngineArgs) {
-  $out = (& $Exe @EngineArgs 2>&1 | Out-String)
+  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe @EngineArgs 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $code = $LASTEXITCODE
   Check "ENGINE: $Label exits 0" ($code -eq 0) ("exit=$code " + (($out -split "`r?`n" | Where-Object { $_ -ne '' } | Select-Object -Last 1)))
 }

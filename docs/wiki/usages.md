@@ -6,7 +6,7 @@ backs the "Usages" search kind in the Symbol Search dialog.
 
 ## Running it from the CLI
 ```
-drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json] [--limit N]
+drag-lint usages --name <X> | --in <file> --line <L> [--col <C>] [--scope symbol|project|group|everywhere] [--group <x.groupproj>] [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json] [--limit N]
 ```
 `--limit N` keeps the first N rows of each JSON group and adds `"limit"` and
 `"totals"` (every group's full count); `declarations` is a group too, so it is capped like the others. Without it the document is unchanged.
@@ -18,6 +18,28 @@ drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--dep
 (`narrow`, `wide`, or `very-wide`). `--depth N` is in the usage line with no
 further description -- not documented. `--format json` is the only format the
 usage line lists.
+
+## Scope (`--scope`, 1.52)
+`--scope` picks which objects count (the same four words in the IDE, the LSP and the
+MCP `find_usages` tool):
+
+* `symbol` (the default) -- the declaration a position (`--in <file> --line <L> [--col <C>]`)
+  or a qualified `--name uJob.TJob.Run` is BOUND to, in this project. Same-named fields,
+  properties and routines elsewhere are left out.
+* `project` -- every object of that name in this project (the answer before 1.52). A platform library index (`library-*.sqlite`) is not part of the project: `symbol` and `project` skip it -- in the CLI, the LSP references and the IDE panel alike -- unless it is the only database given.
+* `group` -- the name in every project of `--group <x.groupproj>` (each project's index:
+  the manifest's, else `<project folder>\_D-RAG\<name>.sqlite`).
+* `everywhere` -- the name in every index the manifest knows for the platform.
+
+A bare `--name X` with no position binds nothing, so it is answered as `project`, as
+before. The JSON says which scope it answered: `scope`, plus `scope_requested` and
+`scope_note` when that is not the one asked, `bound` (the bound qualified name) and
+`databases` (what was read). An unknown scope word exits 2.
+
+```
+drag-lint usages --in src\uMain.pas --line 13 --col 5 --db <db> --json
+drag-lint usages --name Run --scope group --group C:\Projects\MyApp\MyApp.groupproj --db <db>
+```
 
 ## Reaching it in the IDE
 In the IDE choose drag-lint > Find Usages... with the caret on a symbol. The

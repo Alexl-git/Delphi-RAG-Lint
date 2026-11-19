@@ -34,7 +34,7 @@ type
   /// Display is set at every construction site, so it is never ''. Added for
   /// DRagLint.Doc.SymbolFacts' Mutates fact, which names var/out parameters.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddArgs (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddDeclVars (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddInline (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Index.DataFlowFacts.TCollector.ScanBody (DRagLint.Index.DataFlowFacts.pas) (+20 more)</para>
+  /// <para>Used by: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddArgs (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddDeclVars (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddInline (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Index.DataFlowFacts.TCollector.ScanBody (DRagLint.Index.DataFlowFacts.pas) (+21 more)</para>
   /// <para>Used in units: DRagLint.Analysis.Flow.Lattices, DRagLint.Diagnostics.FlowChecks, DRagLint.Doc.SymbolFacts, DRagLint.Index.DataFlowFacts, DRagLint.Refactor.ExtractMethod</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -57,7 +57,7 @@ type
   /// <summary>Maps a routine's locals/params/Result to dense indices 0..N-1.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.ProcessDefProcs (DRagLint.Diagnostics.DeadCodeChecks.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Doc.SymbolFacts.TSymbolFactsAnalyzer.Analyze (DRagLint.Doc.SymbolFacts.pas), DRagLint.Index.DataFlowFacts.TCollector.Create (DRagLint.Index.DataFlowFacts.pas) (+49 more)</para>
+  /// <para>Used by: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.ProcessDefProcs (DRagLint.Diagnostics.DeadCodeChecks.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Doc.SymbolFacts.TSymbolFactsAnalyzer.Analyze (DRagLint.Doc.SymbolFacts.pas), DRagLint.Index.DataFlowFacts.TCollector.Create (DRagLint.Index.DataFlowFacts.pas) (+52 more)</para>
   /// <para>Used in units: DRagLint.Analysis.Flow.Lattices, DRagLint.Analysis.Liveness, DRagLint.Diagnostics.DeadCodeChecks, DRagLint.Diagnostics.FlowChecks, DRagLint.Doc.SymbolFacts, DRagLint.Index.DataFlowFacts, DRagLint.Refactor.ExtractMethod</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -112,7 +112,7 @@ type
     /// <returns><!-- drag-lint:auto -->Integer -- Observed: -1.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Analysis.Flow.Lattices.ApplyEntryDefs (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.TransferDirect (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.RegisterRedeclaredDefs (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOfAt (DRagLint.Analysis.Flow.Lattices.pas) (+31 more)</para>
+    /// <para>Called from: DRagLint.Analysis.Flow.Lattices.ApplyEntryDefs (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.TransferDirect (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.RegisterRedeclaredDefs (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOfAt (DRagLint.Analysis.Flow.Lattices.pas) (+34 more)</para>
     /// <para>Reads: FByName</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Add"/>
@@ -136,7 +136,8 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Analysis.Flow.Lattices.ApplyWithRecordEntity (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.AssignmentTargetIndex (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs.Walk (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.FreedOperandVar (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.LeftmostBaseVar (DRagLint.Analysis.Flow.Lattices.pas) (+7 more)</para>
     /// <para>Calls: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf</para>
-    /// <para>Returns: IndexOf(ALowerName); I</para>
+    /// <para>Returns: IndexOf(ALowerName); -1; I</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 25 lines (full implementation)</para>
     /// <para>Reads: FMultiDecl, FVars</para>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.IndexOf"/>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Add"/>
@@ -150,7 +151,7 @@ type
     /// <param name="AVar"><!-- drag-lint:auto type -->const TRoutineVar</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddArgs (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddDeclVars (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddInline (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Index.DataFlowFacts.TCollector.ScanBody (DRagLint.Index.DataFlowFacts.pas) (+219 more)</para>
+    /// <para>Called from: DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddArgs (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddDeclVars (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build.AddInline (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Index.DataFlowFacts.TCollector.ScanBody (DRagLint.Index.DataFlowFacts.pas) (+213 more)</para>
     /// <para>Reads: FByName, FVars, FMultiDecl</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Alias"/>
@@ -996,7 +997,7 @@ type
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Analysis.Flow.Lattices.TFreedState.Transfer (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas)</para>
 /// <para>Calls: DRagLint.Analysis.Flow.Lattices.FreedOperandVar, DRagLint.Analysis.Flow.Lattices.NodeText, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
-/// <para>Complexity: 17 (cyclomatic, outer body), 40 lines (full implementation)</para>
+/// <para>Complexity: 19 (cyclomatic, outer body), 44 lines (full implementation)</para>
 /// <para>Mutates: AKind (out)</para>
 /// <seealso cref="DRagLint.Analysis.Flow.Lattices.FreedOperandVar"/>
 /// <seealso cref="DRagLint.Analysis.Flow.Lattices.NodeText"/>
@@ -1021,7 +1022,7 @@ function DetectFreedVarKind(const ANode: TTSNode; const ASrc: TBytes; AVars: TRo
 /// the wrapper (lane 152b GF1; the wrapper read made object-leak and
 /// field-created-not-freed miss the handed-on object). Pure; thread-safe.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Analysis.Flow.Lattices.CollectCallArgs.Walk (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs.Walk (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Diagnostics.ControlFlowChecks.TCfRun.ExprCallsSelf (DRagLint.Diagnostics.ControlFlowChecks.pas), DRagLint.Diagnostics.OwnershipChecks.TOwnershipScan.MarkHandled (DRagLint.Diagnostics.OwnershipChecks.pas), DRagLint.Lint.EffectRules.TLoopInvariantRun.Invariant (DRagLint.Lint.EffectRules.pas)</para>
+/// <para>Called from: DRagLint.Analysis.Flow.Lattices.CollectCallArgs.Walk (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.CollectReadsAndCallDefs.Walk (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Diagnostics.ControlFlowChecks.TCfRun.CollectCondIdents (DRagLint.Diagnostics.ControlFlowChecks.pas), DRagLint.Diagnostics.ControlFlowChecks.TCfRun.ExprCallsSelf (DRagLint.Diagnostics.ControlFlowChecks.pas), DRagLint.Diagnostics.ControlFlowChecks.TCfRun.MentionsAny (DRagLint.Diagnostics.ControlFlowChecks.pas) (+5 more)</para>
 /// <para>Calls: TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType</para>
 /// <para>Returns: if (not AArg.IsNull) and (AArg.NodeType = 'exprArgNamed') then AArg.ChildByField('value')</para>
 /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
@@ -1315,7 +1316,16 @@ function TRoutineVarTable.IndexOfAt(const ALowerName: string; APos: Integer): In
 var I, BestStart: Integer; V: TRoutineVar;
 begin
   Result := IndexOf(ALowerName);
-  if (Result < 0) or not FMultiDecl.ContainsKey(ALowerName) then Exit;
+  if Result < 0 then Exit;
+  if not FMultiDecl.ContainsKey(ALowerName) then
+  begin
+    { B02: a name declared ONCE, by an inline `var`, is that local only inside its scope. A read
+      before the declaration (the `E` of `on E: Exception do` ahead of a later `var E := ..`) is
+      another binding, not a use of this unassigned local. }
+    V := FVars[Result];
+    if (V.ScopeEnd > 0) and ((APos < V.ScopeStart) or (APos >= V.ScopeEnd)) then Result := -1;
+    Exit;
+  end;
   BestStart := -1;
   for I := 0 to FVars.Count - 1 do
   begin

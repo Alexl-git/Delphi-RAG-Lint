@@ -17,9 +17,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_doc_two_decls_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -59,11 +62,11 @@ function Fixture([string]$Name, [string]$Text) {
   $u = Join-Path $d 'uTwo.pas'
   Write-Ascii $u $Text
   $db = Join-Path $d 'fx.sqlite'
-  & $exePath index $d --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $d --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   return @{ Unit = $u; Db = $db }
 }
 function Doc($fx) {
-  $o = (& $exePath document --unit $fx.Unit --db $fx.Db --apply --no-backup 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $fx.Unit --db $fx.Db --apply --no-backup 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return @{ Out = $o; Code = $LASTEXITCODE }
 }
 
@@ -93,12 +96,12 @@ Check 'T2a document does not refuse with overlapping delete ranges' `
 Check 'T2b document leaves the stacked block alone' ([IO.File]::ReadAllText($b.Unit) -eq $before) 'the block was rewritten'
 
 # ---- T4: doc-drift does not report a block no command can clear ----------------
-$drift = @((& $exePath lint-all --db $b.Db --json 2>$null | ConvertFrom-Json) | Where-Object { $_.rule -eq 'doc-drift' })
+$drift = @((& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $b.Db --json 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $_.rule -eq 'doc-drift' })
 Check 'T4 lint-all reports no doc-drift on the shared-line block' ($drift.Count -eq 0) `
       "doc-drift fired $($drift.Count)x at line(s) $(($drift | ForEach-Object start_line) -join ',') -- unclearable, document skips it"
 
 # ---- T3: lint-all --fix --apply never deletes TC's remarks ---------------------
-& $exePath lint-all --db $b.Db --fix --apply 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $b.Db --fix --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'T3 lint-all --fix --apply keeps the block it cannot attribute' `
       ([IO.File]::ReadAllText($b.Unit) -match 'Used in units: uTwo') `
       'doc-drift --fix rewrote the shared run for one declaration and deleted the other''s remarks'

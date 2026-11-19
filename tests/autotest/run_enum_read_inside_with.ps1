@@ -37,9 +37,12 @@
   Run from a NEUTRAL CWD, pwsh 7.
 #>
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-enumwith-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
@@ -198,22 +201,22 @@ $useSrc = Join-Path $srcDir 'uEwUse.pas'
 
 Push-Location C:\TEMP
 try {
-  & $Exe index --all --config $manifest --only SecEw --jobs 1 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $manifest --only SecEw --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
   if (-not (Test-Path $db)) {
     $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }
     Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2
   }
-  $onOut   = & $Exe lint-all --db $db --quiet 2>&1 | Out-String
-  $offOut  = & $Exe lint-all --db $db --config $cfgOff --quiet 2>&1 | Out-String
-  $fileOut = & $Exe lint $useSrc --db $db --rule enum-read-inside-with --quiet 2>&1 | Out-String
+  $onOut   = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String
+  $offOut  = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --config $cfgOff --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String
+  $fileOut = & { $ErrorActionPreference = 'Continue'; & $Exe lint $useSrc --db $db --rule enum-read-inside-with --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String
   # What the index recorded at the old positive (15, R7 CLOSED) and at the
   # residual (56): the rule reads exactly these bindings.
-  $bind15 = & $Exe sql --db $db --query ("select s.kind || ':' || s.qualified_name from refs r join symbols s on s.id = r.symbol_id " +
-                                          "where r.name_text = 'cmdDelta' and r.start_line = 15") 2>&1 | Out-String
-  $bind56 = & $Exe sql --db $db --query ("select s.kind || ':' || s.qualified_name from refs r join symbols s on s.id = r.symbol_id " +
-                                          "where r.name_text = 'cmdPlain' and r.start_line = 56") 2>&1 | Out-String
-  $bind63 = & $Exe sql --db $db --query ("select s.kind || ':' || s.qualified_name from refs r join symbols s on s.id = r.symbol_id " +
-                                          "where r.name_text = 'cmdOther' and r.start_line = 63") 2>&1 | Out-String
+  $bind15 = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query ("select s.kind || ':' || s.qualified_name from refs r join symbols s on s.id = r.symbol_id " +
+                                          "where r.name_text = 'cmdDelta' and r.start_line = 15") 2>&1 | ForEach-Object { "$_" } } | Out-String
+  $bind56 = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query ("select s.kind || ':' || s.qualified_name from refs r join symbols s on s.id = r.symbol_id " +
+                                          "where r.name_text = 'cmdPlain' and r.start_line = 56") 2>&1 | ForEach-Object { "$_" } } | Out-String
+  $bind63 = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query ("select s.kind || ':' || s.qualified_name from refs r join symbols s on s.id = r.symbol_id " +
+                                          "where r.name_text = 'cmdOther' and r.start_line = 63") 2>&1 | ForEach-Object { "$_" } } | Out-String
 } finally { Pop-Location }
 
 $lines = @($onOut -split "`r?`n" | Where-Object { $_ -match 'enum-read-inside-with' })

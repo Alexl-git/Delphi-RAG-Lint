@@ -19,10 +19,16 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe         = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe         = '',
   [string]$BaselineExe = '',
   [string]$WorkDir     = "$env:TEMP\drag-lint-raise-types-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -44,8 +50,8 @@ Copy-Item (Join-Path $FixtureDir '*.pas'), (Join-Path $FixtureDir '*.dpr') $work
 $NewKinds = "'raise','raise-expr','reraise','handle','handle-all'"
 
 function Invoke-Sql([string]$EngineExe, [string]$Db, [string]$Query) {
-  $raw = (& $EngineExe sql --query $Query --db $Db --json 2>$null) -join "`n"
-  $env = $raw | ConvertFrom-Json
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $EngineExe sql --query $Query --db $Db --json 2>$null }) -join "`n"
+  $env = $raw | ConvertFrom-Json | ForEach-Object { $_ }
   $names = @($env.columns | ForEach-Object { $_.name })
   $out = foreach ($r in $env.rows) {
     $o = [ordered]@{}
@@ -70,7 +76,7 @@ function Get-Facts([string]$EngineExe, [string]$Db) {
 }
 
 $db = Join-Path $WorkDir 'types.sqlite'
-$null = & $Exe index $work --db $db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 $actual = Get-Facts $Exe $db
 $expected = @(Get-Content (Join-Path $FixtureDir 'TypeFacts.expected.tsv') | Select-Object -Skip 1 |
@@ -95,7 +101,7 @@ Check 'B. bound rows = 5' ($bound.Count -eq 5) "rows=$($bound.Count)"
 $dup = @($actual | Where-Object { ($_ -split '\|')[1] -eq 'EDup' } | ForEach-Object { ($_ -split '\|')[6] } | Sort-Object -Unique)
 Check 'B. two EDup bind to two symbols (ExcA.EDup, ExcB.EDup)' (($dup -join ',') -ceq 'ExcA.EDup,ExcB.EDup') ($dup -join ',')
 
-$null = & $Exe index $work --db $db --resolve-only 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db --resolve-only 2>&1 | ForEach-Object { "$_" } }
 Check 'C. index --resolve-only exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 $again = Get-Facts $Exe $db
 Check 'C. the facts are identical after a resolve-only pass' (Compare-Exact $expected $again)
@@ -103,7 +109,7 @@ Check 'C. the facts are identical after a resolve-only pass' (Compare-Exact $exp
 if ($BaselineExe -ne '') {
   $BaselineExe = (Resolve-Path $BaselineExe).Path
   $db0 = Join-Path $WorkDir 'baseline.sqlite'
-  $null = & $BaselineExe index $work --db $db0 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $BaselineExe index $work --db $db0 2>&1 | ForEach-Object { "$_" } }
   Check 'D. baseline index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
   $q2 = "SELECT r.kind, r.name_text, r.start_line, r.start_col, r.end_line, r.end_col, COALESCE(r.receiver_text,'') AS rt, " +
         "COALESCE(b.qualified_name,'') AS bound FROM refs r LEFT JOIN symbols b ON b.id = r.symbol_id WHERE r.kind NOT IN ($NewKinds)"
@@ -112,13 +118,13 @@ if ($BaselineExe -ne '') {
   $before = @($rows0 | ForEach-Object { ($_.PSObject.Properties.Value) -join '|' })
   $after  = @($rows1 | ForEach-Object { ($_.PSObject.Properties.Value) -join '|' })
   Check "D. other kinds identical to the baseline ($($before.Count) rows)" (($before.Count -gt 0) -and (Compare-Exact $before $after)) "before=$($before.Count) after=$($after.Count)"
-  $u0 = (& $BaselineExe usages --name ELocal --db $db0 --json 2>$null) -join "`n"
-  $u1 = (& $Exe usages --name ELocal --db $db --json 2>$null) -join "`n"
+  $u0 = (& { $ErrorActionPreference = 'Continue'; & $BaselineExe usages --name ELocal --db $db0 --json 2>$null }) -join "`n"
+  $u1 = (& { $ErrorActionPreference = 'Continue'; & $Exe usages --name ELocal --db $db --json 2>$null }) -join "`n"
   Check 'D. control: the baseline answers raises/handles name-only; this engine exact' (($u0 -match 'name-only') -and ($u1 -notmatch 'name-only')) "u0=$($u0.Length) u1=$($u1.Length)"
   Check 'D. usages --name ELocal --json differs ONLY in that' (($u0 -replace 'name-only', 'exact') -ceq $u1) "u0=$($u0.Length) u1=$($u1.Length)"
   # a raise / handle row beside a read / type_use, both bound: one edit per position, not two.
-  $r0 = @(& $BaselineExe rename --qname TypeFacts.ELocal --to ELocal2 --dry-run --db $db0 2>$null | Where-Object { $_ -match '^\s+L\d+:C\d+' })
-  $r1 = @(& $Exe rename --qname TypeFacts.ELocal --to ELocal2 --dry-run --db $db 2>$null | Where-Object { $_ -match '^\s+L\d+:C\d+' })
+  $r0 = @(& { $ErrorActionPreference = 'Continue'; & $BaselineExe rename --qname TypeFacts.ELocal --to ELocal2 --dry-run --db $db0 2>$null } | Where-Object { $_ -match '^\s+L\d+:C\d+' })
+  $r1 = @(& { $ErrorActionPreference = 'Continue'; & $Exe rename --qname TypeFacts.ELocal --to ELocal2 --dry-run --db $db 2>$null } | Where-Object { $_ -match '^\s+L\d+:C\d+' })
   Check 'D. rename dry run: the same 4 edits' (($r0.Count -eq 4) -and (Compare-Exact $r0 $r1)) "r0=$($r0.Count) r1=$($r1.Count): $($r1 -join ';')"
 }
 
@@ -129,3 +135,4 @@ exit 0
   Write-Host "FATAL: $($_.Exception.Message)" -ForegroundColor Red
   exit 2
 }
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

@@ -95,9 +95,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-index-project-scope-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -256,7 +259,7 @@ $db    = Join-Path $WorkDir 'projscope.sqlite'
 Write-Host 'Resolved scan scope (index --project --dry-run)' -ForegroundColor Cyan
 # 2>&1 yields ErrorRecord objects for the stderr lines; ToString() them so the
 # path-line regex and .Trim() below see plain strings.
-$dry = @((& $Exe index --project $dproj --db $db --platform Win64 --dry-run --quiet 2>&1) |
+$dry = @((& { $ErrorActionPreference = 'Continue'; & $Exe index --project $dproj --db $db --platform Win64 --dry-run --quiet 2>&1 | ForEach-Object { "$_" } }) |
          ForEach-Object { $_.ToString() })
 $dryExit = $LASTEXITCODE
 Check 'index --project --dry-run exits 0' ($dryExit -eq 0) "exit=$dryExit"
@@ -291,7 +294,7 @@ if ($script:Failed) {
 # ---------------------------------------------------------------------------
 Write-Host ''
 Write-Host 'Real index' -ForegroundColor Cyan
-$idx = & $Exe index --project $dproj --db $db --platform Win64 --quiet 2>&1
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index --project $dproj --db $db --platform Win64 --quiet 2>&1 | ForEach-Object { "$_" } }
 $idxExit = $LASTEXITCODE
 Check 'index --project exits 0' ($idxExit -eq 0) "exit=$idxExit; $(($idx | Select-Object -Last 2) -join ' | ')"
 
@@ -304,7 +307,7 @@ print(json.dumps(rows))
 c.close()
 '@ | Set-Content $py -Encoding ascii
 
-$indexed = @((& python $py $db) -join "`n" | ConvertFrom-Json)
+$indexed = @(((& python $py $db) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 Write-Host ("  indexed {0} file(s)" -f $indexed.Count)
 
 $stray = @($indexed | Where-Object { $_ -notlike "$proj*" })

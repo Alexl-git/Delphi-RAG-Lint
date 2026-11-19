@@ -19,9 +19,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-query-text-near-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -37,7 +40,7 @@ function Write-Ascii([string]$Path, [string]$Body) {
 }
 # Returns the routine tags (the word after 'xjphrase ') of every literal row, in output order.
 function Tags([string[]]$QArgs) {
-  $out = & $Exe query --text xjphrase --kind literal @QArgs --db $db 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe query --text xjphrase --kind literal @QArgs --db $db 2>$null }
   return @($out | Where-Object { $_ -match '\[pas/literal\]' } | ForEach-Object { if ($_ -match 'xjphrase (\w+)') { $Matches[1] } })
 }
 function Same($a, $b) { return ((($a | Sort-Object) -join ',') -eq (($b | Sort-Object) -join ',')) }
@@ -95,39 +98,39 @@ end;
 end.
 '@
 $db = Join-Path $dir 'fx.sqlite'
-& $Exe index $dir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 Write-Host 'Positive control' -ForegroundColor Cyan
-$r = Tags @()
+$r = @(Tags @())
 Check 'no --near: all 6 rows' (Same $r @('Seed','A','B','C','D','U')) ($r -join ',')
 
 Write-Host 'Hop restriction' -ForegroundColor Cyan
-$r = Tags @('--near', 'nearx.Seed', '--hops', '1')
+$r = @(Tags @('--near', 'nearx.Seed', '--hops', '1'))
 Check '--hops 1: Seed + A' (Same $r @('Seed','A')) ($r -join ',')
-$r = Tags @('--near', 'nearx.Seed', '--hops', '2')
+$r = @(Tags @('--near', 'nearx.Seed', '--hops', '2'))
 Check '--hops 2: Seed, A, B' (Same $r @('Seed','A','B')) ($r -join ',')
-$r = Tags @('--near', 'nearx.Seed', '--hops', '3')
+$r = @(Tags @('--near', 'nearx.Seed', '--hops', '3'))
 Check '--hops 3: Seed, A, B, D' (Same $r @('Seed','A','B','D')) ($r -join ',')
-$r = Tags @('--near', 'nearx.Seed')
+$r = @(Tags @('--near', 'nearx.Seed'))
 Check 'default hops is 2' (Same $r @('Seed','A','B')) ($r -join ',')
-$r = Tags @('--near', 'nearx.D', '--hops', '1')
+$r = @(Tags @('--near', 'nearx.D', '--hops', '1'))
 Check 'callees direction too: seed D --hops 1 = D + B' (Same $r @('D','B')) ($r -join ',')
 
 Write-Host 'Refusals' -ForegroundColor Cyan
-$out = & $Exe query --text xjphrase --near nearx.Seed --hops 4 --db $db 2>&1
+$out = & { $ErrorActionPreference = 'Continue'; & $Exe query --text xjphrase --near nearx.Seed --hops 4 --db $db 2>&1 | ForEach-Object { "$_" } }
 Check '--hops 4 exits 2' ($LASTEXITCODE -eq 2) "exit=$LASTEXITCODE"
 Check '--hops 4 refusal text' (($out -join ' ') -match '3 hops max; use impact --depth for wider') ($out -join ' | ')
-$out = & $Exe query --text xjphrase --near nearx.Missing --db $db 2>&1
+$out = & { $ErrorActionPreference = 'Continue'; & $Exe query --text xjphrase --near nearx.Missing --db $db 2>&1 | ForEach-Object { "$_" } }
 Check '--near Missing exits 2' ($LASTEXITCODE -eq 2) "exit=$LASTEXITCODE"
 Check '--near Missing names the symbol' (($out -join ' ') -match 'nearx\.Missing') ($out -join ' | ')
 
 Write-Host 'Uses edges and boost' -ForegroundColor Cyan
-$r = Tags @('--near', 'nearx.Seed', '--hops', '1', '--hops-uses')
+$r = @(Tags @('--near', 'nearx.Seed', '--hops', '1', '--hops-uses'))
 Check '--hops-uses adds U' (($r -contains 'U') -and ($r -contains 'Seed') -and ($r -contains 'A') -and ($r -notcontains 'C')) ($r -join ',')
-$r = Tags @('--near', 'nearx.Seed', '--hops', '1', '--near-boost')
+$r = @(Tags @('--near', 'nearx.Seed', '--hops', '1', '--near-boost'))
 Check '--near-boost keeps all 6' (Same $r @('Seed','A','B','C','D','U')) ($r -join ',')
 Check '--near-boost puts Seed, A first' ((@(@($r)[0..1]) | Sort-Object) -join ',' -eq 'A,Seed') ($r -join ',')
-$out = & $Exe query --text xjphrase --kind literal --near nearx.Seed --hops 1 --near-boost --db $db 2>$null
+$out = & { $ErrorActionPreference = 'Continue'; & $Exe query --text xjphrase --kind literal --near nearx.Seed --hops 1 --near-boost --db $db 2>$null }
 Check '--near-boost prints hop=' ((@($out | Where-Object { $_ -match 'hop=1' }).Count -ge 1)) ''
 
 Write-Host ''

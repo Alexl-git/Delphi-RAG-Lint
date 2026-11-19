@@ -53,13 +53,13 @@ $bmp = New-ResEntry 2 'TPALOK' ([byte[]](1,2,3,4))
 [IO.File]::WriteAllBytes((Join-Path $tmp 'UPalette.dcr'), [byte[]]($empty + $bmp))
 
 $db = Join-Path $tmp 'store.sqlite'
-& $exe index $tmp --db $db *> (Join-Path $tmp 'index.log')
+& { $ErrorActionPreference = 'Continue'; & $exe index $tmp --db $db *> (Join-Path $tmp 'index.log') }
 Assert "fixture folder indexed into a temp DB (exit $LASTEXITCODE)" (($LASTEXITCODE -eq 0) -and (Test-Path $db))
 
 function Lint-Lines([string]$unit, [string]$rule, [string[]]$extra) {
-  $raw = & $exe lint (Join-Path $tmp $unit) --db $db --rule $rule --json @extra 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exe lint (Join-Path $tmp $unit) --db $db --rule $rule --json @extra 2>$null }
   $arr = @()
-  try { $arr = @(($raw -join "`n") | ConvertFrom-Json) } catch { $arr = @() }
+  try { $arr = @((($raw -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $arr = @() }
   return @($arr | Where-Object { $_.rule -eq $rule } | ForEach-Object { [int]$_.start_line })
 }
 
@@ -76,10 +76,10 @@ foreach ($c in $cases) {
     if ($lines[$i] -match '\{ \(\+\) \}\s*$') { $must += ($i + 1) }
     elseif ($lines[$i] -match '\{ \(-\) \}\s*$') { $mustNot += ($i + 1) }
   }
-  $got = Lint-Lines $c.Unit $c.Rule @()
+  $got = @(Lint-Lines $c.Unit $c.Rule @())
   foreach ($l in $must) { Assert "$($c.Unit): $($c.Rule) fires at line $l (got: $($got -join ','))" ($got -contains $l) }
   foreach ($l in $mustNot) { Assert "$($c.Unit): $($c.Rule) silent at line $l" (-not ($got -contains $l)) }
-  $off = Lint-Lines $c.Unit $c.Rule @('--disable', $c.Rule)
+  $off = @(Lint-Lines $c.Unit $c.Rule @('--disable', $c.Rule))
   foreach ($l in $must) { Assert "$($c.Unit): positive control -- with --disable $($c.Rule) line $l is gone" (-not ($off -contains $l)) }
 }
 

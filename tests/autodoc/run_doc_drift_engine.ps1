@@ -26,7 +26,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -45,11 +48,11 @@ Copy-Item $fixture $target -Force
 # Parse the JSON-per-line output of `doc-drift --qname X --json` into an array of
 # PSCustomObjects (each with .kind, .detail, .fixable, .line).
 function Get-Drift($qname) {
-  $out = & $exePath doc-drift --qname $qname --db $db --json 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath doc-drift --qname $qname --db $db --json 2>$null }
   $rows = @()
   foreach ($ln in $out) {
     $t = $ln.Trim()
-    if ($t.StartsWith('{')) { $rows += ($t | ConvertFrom-Json) }
+    if ($t.StartsWith('{')) { $rows += ($t | ConvertFrom-Json | ForEach-Object { $_ }) }
   }
   return ,$rows
 }
@@ -66,7 +69,7 @@ function LacksKind($rows,$k) {
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # --- F: renamed param (report-only) + missing param (fixable), returns OK ---
   $f = Get-Drift 'drift.F'

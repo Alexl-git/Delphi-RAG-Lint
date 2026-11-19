@@ -39,7 +39,7 @@ type
   /// doc-source tasks and are inert here.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Batch.pas) ?, DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas) ? (+4 more)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Batch.pas) ?, DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.Doc.Batch.DocumentOneUnit (DRagLint.Doc.Batch.pas) ? (+5 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -144,6 +144,15 @@ type
     /// --lint-third-party does not defeat exclude_paths, so
     /// --document-third-party must not either.</remarks>
     IsExcluded: TFunc<string, Boolean>;
+    /// <summary>1.52 FINDOC: the folder whose _D-RAG\drag-lint-project.json
+    /// declares ownRoots / excludeRoots for the entry points that have no
+    /// project file -- DocumentAll and DocumentUnit. The caller resolves it from
+    /// the index (AnchorDirForDb). '' (the Default) means no anchor: filtering
+    /// off, every file ours, exactly as before.</summary>
+    /// <remarks>DocumentProject ignores it and anchors on its project file.
+    /// DocumentThirdParty opens it up, as it does for --project; IsExcluded
+    /// still applies on top.</remarks>
+    OwnAnchorDir: string;
   end;
 
   /// <summary>Aggregated batch result. Edits is the union of every kept
@@ -153,7 +162,7 @@ type
   /// DocCount is how many of them contributed at least one edit.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas) ?, DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas) ?, DRagLint.CLI.ReportDocBatch (DRagLint.CLI.pas) ?, DRagLint.Doc.Batch.AggregateOverFiles (DRagLint.Doc.Batch.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas) (+4 more)</para>
+  /// <para>Used by: DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas) ?, DRagLint.CLI.ReportDocBatch (DRagLint.CLI.pas) ?, DRagLint.Doc.Batch.AggregateOverFiles (DRagLint.Doc.Batch.pas), DRagLint.Doc.Batch.DocumentOneUnit (DRagLint.Doc.Batch.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas) (+5 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -182,8 +191,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.Doc.Batch.AggregateOverFiles (DRagLint.Doc.Batch.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch</para>
+  /// <para>Used by: DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocBatch = class
@@ -203,7 +212,10 @@ type
     /// <param name="AStore">Open symbol store to query; not owned. Must not be nil.</param>
     /// <param name="AUnitFile">Path (relative or absolute) to the unit's source file, as stored/resolvable in the index.</param>
     /// <param name="AOptions">Batch options; Stubs gates the facts-only filter, AccessorTrivialMaxLines/IncludeAccessors gate the trivial-accessor filter.</param>
-    /// <returns>Aggregated edits + DeclCount (public decls seen, after the accessor filter) + DocCount (decls contributing an edit) + AccessorsSkipped.</returns>
+    /// <returns>Aggregated edits + DeclCount (public decls seen, after the accessor filter) + DocCount (decls contributing an edit) + AccessorsSkipped.
+    /// An empty result (and a 'doc: ... third-party' line on stderr) when
+    /// AOptions.OwnAnchorDir declares ownRoots that do not hold AUnitFile and
+    /// AOptions.DocumentThirdParty is False (1.52 FINDOC).</returns>
     /// <remarks>
     /// Not thread-safe; call from the owning thread only.
     /// Every entry point (this one, DocumentProject, DocumentAll) ends by
@@ -211,16 +223,15 @@ type
     /// caller applies the edits to the very files whose trees the pass cached,
     /// and an in-process reindex must parse the edited text, not the cached one.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.Doc.Batch.AggregateOverFiles (DRagLint.Doc.Batch.pas)</para>
-    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Doc.Batch.HasManagedBlock, DRagLint.Doc.Batch.IsDocumentableKind, DRagLint.Doc.Batch.IsTrivialAccessor, DRagLint.Doc.Document.TDocumenter.BuildForSymbol, DRagLint.Doc.Strip.TDocStripper.StripFile, Format, SameText, Writeln</para>
-    /// <para>Returns: Default(TDocBatchResult)</para>
-    /// <para>Complexity: 15 (cyclomatic, outer body), 131 lines (full implementation)</para>
+    /// <para>Called from: DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas)</para>
+    /// <para>Calls: Default, DRagLint.Doc.Batch.DocumentOneUnit, DRagLint.Doc.Batch.ReleaseDocParseCaches, DRagLint.Project.OwnRoots.TOwnRoots.IsOurs, DRagLint.Project.OwnRoots.TOwnRoots.Load, ExpandFileName, Format, Writeln</para>
+    /// <para>Returns: Default(TDocBatchResult); DocumentOneUnit(AStore, AUnitFile, AOptions)</para>
     /// <para>Pure</para>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
-    /// <seealso cref="DRagLint.Doc.Batch.HasManagedBlock"/>
-    /// <seealso cref="DRagLint.Doc.Batch.IsDocumentableKind"/>
-    /// <seealso cref="DRagLint.Doc.Batch.IsTrivialAccessor"/>
-    /// <seealso cref="DRagLint.Doc.Document.TDocumenter.BuildForSymbol"/>
+    /// <seealso cref="DRagLint.Doc.Batch.DocumentOneUnit"/>
+    /// <seealso cref="DRagLint.Doc.Batch.ReleaseDocParseCaches"/>
+    /// <seealso cref="DRagLint.Project.OwnRoots.TOwnRoots.IsOurs"/>
+    /// <seealso cref="DRagLint.Project.OwnRoots.TOwnRoots.Load"/>
+    /// <seealso cref="DRagLint.Doc.Batch.TDocBatch.DocumentAll"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function DocumentUnit(const AStore: ISymbolStore; const AUnitFile: string;
@@ -242,8 +253,7 @@ type
     /// Not thread-safe; call from the owning thread only.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas)</para>
-    /// <para>Calls: DRagLint.Doc.Batch.AggregateOverFiles, DRagLint.Doc.Batch.FilterToOwnRoots, DRagLint.Index.Closure.TClosureResolver.Create, DRagLint.Index.Closure.TClosureResolver.Resolve, DRagLint.Project.Resolver.TProjectResolver.MembershipLibraryRoots, DRagLint.Project.TargetStudio.ResolveTargetStudio, DRagLint.Project.TargetStudio.TTargetStudio.OpenResolver</para>
-    /// <para>Returns: AggregateOverFiles(AStore, FilterToOwnRoots(CR.Files, AProjectFile, AOptions), AOptions)</para>
+    /// <para>Calls: DRagLint.Doc.Batch.AggregateOverFiles, DRagLint.Doc.Batch.FilterToOwnRoots, DRagLint.Index.Closure.TClosureResolver.Create, DRagLint.Index.Closure.TClosureResolver.Resolve, DRagLint.Project.Resolver.TProjectResolver.MembershipLibraryRoots, DRagLint.Project.TargetStudio.ResolveTargetStudio, DRagLint.Project.TargetStudio.TTargetStudio.OpenResolver, ExpandFileName, ExtractFilePath</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.Batch.AggregateOverFiles"/>
     /// <seealso cref="DRagLint.Doc.Batch.FilterToOwnRoots"/>
@@ -262,19 +272,22 @@ type
     /// Does not write files; the caller applies the per-file edits.</summary>
     /// <param name="AStore">Open symbol store to query; not owned. Must not be nil.</param>
     /// <param name="AOptions">Batch options; Stubs gates the facts-only filter.</param>
-    /// <returns>Aggregated edits over the whole index + summed DeclCount/DocCount.</returns>
+    /// <returns>Aggregated edits over the whole index + summed DeclCount/DocCount.
+    /// Files outside the ownRoots declared at AOptions.OwnAnchorDir are left out
+    /// (each skipped root named once on stderr) unless
+    /// AOptions.DocumentThirdParty is True (1.52 FINDOC).</returns>
     /// <remarks>
     /// Not thread-safe; call from the owning thread only.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Batch.AggregateOverFiles</para>
-    /// <para>Returns: AggregateOverFiles(AStore, Paths.ToArray, AOptions)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Batch.AggregateOverFiles, DRagLint.Doc.Batch.FilterToOwnRoots</para>
+    /// <para>Returns: AggregateOverFiles(AStore, FilterToOwnRoots(Paths.ToArray, AOptions.OwnAnchorDir, AOptions), AOptions)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Batch.AggregateOverFiles"/>
+    /// <seealso cref="DRagLint.Doc.Batch.FilterToOwnRoots"/>
     /// <seealso cref="DRagLint.Doc.Batch.TDocBatch.DocumentProject"/>
-    /// <seealso cref="DRagLint.Doc.Batch.TDocBatch.DocumentUnit"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function DocumentAll(const AStore: ISymbolStore;
@@ -289,8 +302,18 @@ type
 /// <returns>Paths (as given) where an interface-section symbol's stored name is not
 /// on its stored start line. Files whose stamp already changed are NOT returned:
 /// the stale-fact refusal and the stale-anchor retry own that case.</returns>
-/// <remarks>Read-only. A same-size edit with the mtime put back (tampering, a
-/// restore, a sync tool) is the case this exists for. Caller rescans and warns.</remarks>
+/// <remarks>
+/// Read-only. A same-size edit with the mtime put back (tampering, a
+/// restore, a sync tool) is the case this exists for. Caller rescans and warns.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RescanTamperedFacts (DRagLint.CLI.pas)</para>
+/// <para>Calls: ContainsText, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Index.Freshness.ChangedFilePaths, ExpandFileName, SameText</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 29 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
+/// <seealso cref="DRagLint.Index.Freshness.ChangedFilePaths"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DocFilesDisagreeingWithSource(const AStore: ISymbolStore;
   const AFiles: TArray<string>): TArray<string>;
 
@@ -527,6 +550,20 @@ class function TDocBatch.DocumentUnit(const AStore: ISymbolStore;
   const AUnitFile: string; const AOptions: TDocBatchOptions): TDocBatchResult;
 begin
   try
+    { 1.52 FINDOC: `document --unit` never went through FilterToOwnRoots, so a
+      vendored unit named on the command line was written although --project
+      skips it (DOCAPPLY FOUND: 212/300 decls on the YADF copy). Same declaration,
+      same escape hatch; the anchor comes from the index, as for lint-all. }
+    if (not AOptions.DocumentThirdParty) and (AOptions.OwnAnchorDir <> '') then
+    begin
+      var Own: TOwnRoots:= TOwnRoots.Load(AOptions.OwnAnchorDir);
+      if Own.Active and not Own.IsOurs(ExpandFileName(AUnitFile)) then
+      begin
+        Writeln(ErrOutput, Format('doc: %s skipped: outside the project''s ownRoots (third-party). ' +
+          'Use --document-third-party to include it.', [AUnitFile]));
+        Exit(Default(TDocBatchResult));
+      end;
+    end;
     Result:= DocumentOneUnit(AStore, AUnitFile, AOptions);
   finally
     ReleaseDocParseCaches; { Y10: see ReleaseDocParseCaches }
@@ -594,7 +631,7 @@ end;
   as lint-all reports them. Returns AFiles unchanged when the caller opted into
   third-party or when no declaration is active (an undeclared project keeps the
   pre-existing behaviour of its own folder, via TOwnRoots.Load's default). }
-function FilterToOwnRoots(const AFiles: TArray<string>; const AProjectFile: string;
+function FilterToOwnRoots(const AFiles: TArray<string>; const AAnchorDir: string;
   const AOptions: TDocBatchOptions): TArray<string>;
 var
   Own    : TOwnRoots               ;
@@ -606,11 +643,9 @@ begin
   Result:= AFiles;
   if AOptions.DocumentThirdParty then Exit;
 
-  { ExpandFileName FIRST (1.51.1 Y9): a RELATIVE --project ("YADF.dproj", run
-    from the project folder) has ExtractFilePath = '', which TOwnRoots.Load
-    reads as "no anchor" -- inactive, every file ours, excludeRoots ignored,
-    and vendored source written. }
-  Own:= TOwnRoots.Load(ExtractFilePath(ExpandFileName(AProjectFile)));
+  { '' = no anchor: TOwnRoots.Load reads it as inactive, every file ours. The
+    callers pass an absolute folder (DocumentProject: see the Y9 note there). }
+  Own:= TOwnRoots.Load(AAnchorDir);
   if not Own.Active then Exit;
 
   { exclude_paths is deliberately NOT checked here. It is not an ownership
@@ -679,7 +714,12 @@ begin
     checkout that is merely `uses`d is not on it, so it stays in the closure and
     was being edited. `lint-all` refuses to REPORT on such code; writing to it is
     strictly worse, so both read the same declaration. }
-  Result := AggregateOverFiles(AStore, FilterToOwnRoots(CR.Files, AProjectFile, AOptions), AOptions);
+  { ExpandFileName FIRST (1.51.1 Y9): a RELATIVE --project ("YADF.dproj", run
+    from the project folder) has ExtractFilePath = '', which TOwnRoots.Load
+    reads as "no anchor" -- inactive, every file ours, excludeRoots ignored,
+    and vendored source written. }
+  Result := AggregateOverFiles(AStore,
+    FilterToOwnRoots(CR.Files, ExtractFilePath(ExpandFileName(AProjectFile)), AOptions), AOptions);
 end;
 
 class function TDocBatch.DocumentAll(const AStore: ISymbolStore;
@@ -700,7 +740,9 @@ begin
       Path := AStore.GetFilePath(Id);
       if Path <> '' then Paths.Add(Path);
     end;
-    Result := AggregateOverFiles(AStore, Paths.ToArray, AOptions);
+    { 1.52 FINDOC: the same ownership filter as DocumentProject, anchored on
+      the index's own project folder (no project file here). }
+    Result := AggregateOverFiles(AStore, FilterToOwnRoots(Paths.ToArray, AOptions.OwnAnchorDir, AOptions), AOptions);
   finally
     Paths.Free;
   end;

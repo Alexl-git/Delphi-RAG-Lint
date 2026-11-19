@@ -13,8 +13,8 @@ $tmp = Join-Path ([IO.Path]::GetTempPath()) ("thra-queue-" + [Guid]::NewGuid().T
 [IO.Directory]::CreateDirectory($tmp) | Out-Null
 $fail = 0
 function Count-Hits([string]$file) {
-  $raw = & $exePath lint $file --rule queue-nil-in-package --json 2>$null
-  $f = @(); try { $f = @($raw | ConvertFrom-Json) } catch { }
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint $file --rule queue-nil-in-package --json 2>$null }
+  $f = @(); try { $f = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { }
   return @($f | Where-Object { $_.rule -eq 'queue-nil-in-package' }).Count
 }
 try {

@@ -17,20 +17,62 @@ uses
 
 /// <summary>Lists the current unit's bookmarks and jumps to the one picked.</summary>
 /// <param name="Sender">The menu item.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.Bookmarks.Jump, DragLint.Plugin.Bookmarks.ListThen, DragLint.Plugin.BookmarksCore.BookmarkRowText, GBookmarkPick</para>
+/// <seealso cref="DragLint.Plugin.Bookmarks.Jump"/>
+/// <seealso cref="DragLint.Plugin.Bookmarks.ListThen"/>
+/// <seealso cref="DragLint.Plugin.BookmarksCore.BookmarkRowText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure InvokeBookmarksList(Sender: TObject);
 
 /// <summary>Asks for a bookmark number or CODE and jumps to it in the current unit.</summary>
 /// <param name="Sender">The menu item.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.Bookmarks.Jump, DragLint.Plugin.Bookmarks.ListThen, InputQuery, Trim</para>
+/// <seealso cref="DragLint.Plugin.Bookmarks.Jump"/>
+/// <seealso cref="DragLint.Plugin.Bookmarks.ListThen"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure InvokeBookmarksGoto(Sender: TObject);
 
 /// <summary>Strips every bookmark from the current unit into a per-user sidecar, after a
 /// dry run and a confirmation; the buffer is reloaded from disk.</summary>
 /// <param name="Sender">The menu item.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.Bookmarks.CurrentPas, DragLint.Plugin.Bookmarks.Engine, DragLint.Plugin.Bookmarks.RefusedForUnsaved, DragLint.Plugin.Bookmarks.ReloadFromDisk, DragLint.Plugin.Bookmarks.SidecarFolder, DragLint.Plugin.BookmarksCore.BookmarkSidecarPath, DragLint.Plugin.BookmarksCore.BookmarksStripCmdLine, DragLint.Plugin.BookmarksCore.ParseBookmarkVerbCounts, DragLint.Plugin.CliAsync.RunCliAsync, DragLint.Plugin.Telemetry.DLT (+7 more)</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 43 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DragLint.Plugin.Bookmarks.CurrentPas"/>
+/// <seealso cref="DragLint.Plugin.Bookmarks.Engine"/>
+/// <seealso cref="DragLint.Plugin.Bookmarks.RefusedForUnsaved"/>
+/// <seealso cref="DragLint.Plugin.Bookmarks.ReloadFromDisk"/>
+/// <seealso cref="DragLint.Plugin.Bookmarks.SidecarFolder"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure InvokeBookmarksStrip(Sender: TObject);
 
 /// <summary>Restores the bookmarks a picked sidecar recorded, after a dry run and a
 /// confirmation; every open unit it touched is reloaded from disk.</summary>
 /// <param name="Sender">The menu item.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.Bookmarks.Engine, DragLint.Plugin.Bookmarks.RefusedForUnsaved, DragLint.Plugin.Bookmarks.ReloadFromDisk, DragLint.Plugin.Bookmarks.SidecarFolder, DragLint.Plugin.BookmarksCore.BookmarksRestoreCmdLine, DragLint.Plugin.BookmarksCore.ParseBookmarkVerbCounts, DragLint.Plugin.CliAsync.RunCliAsync, DragLint.Plugin.Telemetry.DLT, Format, IntToStr, MessageDlg, ShowMessage, Trim</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 58 lines (full implementation)</para>
+/// <seealso cref="DragLint.Plugin.Bookmarks.Engine"/>
+/// <seealso cref="DragLint.Plugin.Bookmarks.RefusedForUnsaved"/>
+/// <seealso cref="DragLint.Plugin.Bookmarks.ReloadFromDisk"/>
+/// <seealso cref="DragLint.Plugin.Bookmarks.SidecarFolder"/>
+/// <seealso cref="DragLint.Plugin.BookmarksCore.BookmarksRestoreCmdLine"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure InvokeBookmarksRestore(Sender: TObject);
 
 var

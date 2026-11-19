@@ -32,9 +32,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-type-decl-shapes-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -81,18 +84,18 @@ end.
 
 $db = Join-Path $WorkDir 'shapes.sqlite'
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($indexOut -join ' | ')"
 
 function Row([string]$Name) {
-  $raw = @(& $Exe query --name $Name --db $db --json 2>&1) | ForEach-Object { "$_" } |
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query --name $Name --db $db --json 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" } |
            Where-Object { $_ -notmatch 'loaded defaults' }
   $txt = ($raw -join "`n").Trim()
   if (-not $txt.StartsWith('[')) { return $null }
   # -ceq: the row must carry the spelling asked for. match_kind guards against the
   # FUZZY fallback answering for a name that does not exist -- without it, a
   # deleted declaration still "passes" via its nearest neighbour.
-  $hit = @(@($txt | ConvertFrom-Json) | Where-Object { ($_.name -ceq $Name) -and ($_.match_kind -eq 'exact') })
+  $hit = @(@(($txt | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) | Where-Object { ($_.name -ceq $Name) -and ($_.match_kind -eq 'exact') })
   if ($hit.Count -eq 0) { return $null }
   return $hit[0]
 }

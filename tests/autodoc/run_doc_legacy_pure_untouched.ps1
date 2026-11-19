@@ -28,7 +28,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -43,7 +46,7 @@ $db  = Join-Path $root 'PureLegacy.sqlite'
 function Write-Ascii([string]$Path, [string]$Body) {
   [IO.File]::WriteAllText($Path, ($Body -replace "`r`n", "`n" -replace "`n", "`r`n"), [Text.Encoding]::ASCII)
 }
-function Run([string[]]$xs) { $o = & $exePath @xs 2>&1 | Out-String; [pscustomobject]@{ Out = $o; Code = $LASTEXITCODE } }
+function Run([string[]]$xs) { $o = & { $ErrorActionPreference = 'Continue'; & $exePath @xs 2>&1 | ForEach-Object { "$_" } } | Out-String; [pscustomobject]@{ Out = $o; Code = $LASTEXITCODE } }
 # The /// lines directly above a declaration: that declaration's own block.
 function BlockAbove([string]$path, [string]$declPat) {
   $ls = [IO.File]::ReadAllLines($path); $d = -1

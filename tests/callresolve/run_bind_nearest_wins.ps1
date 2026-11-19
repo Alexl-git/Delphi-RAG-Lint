@@ -17,7 +17,10 @@
 
   Run from a NEUTRAL CWD. Pass -Exe with the engine under test.
 #>
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
 function Check([string]$n, [bool]$ok, [string]$d = '') {
@@ -181,12 +184,12 @@ end.
 Push-Location C:\TEMP
 try {
   $db = Join-Path $scratch 'n.sqlite'
-  & $exePath index $scratch --db $db *> (Join-Path $scratch 'i.log')
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db *> (Join-Path $scratch 'i.log') }
   $q = "SELECT enc.name AS site, ce.confidence AS conf, t.qualified_name AS target, b.qualified_name AS bound " +
        "FROM call_edges ce JOIN refs r ON r.id = ce.ref_id JOIN symbols enc ON enc.id = r.enclosing_symbol_id " +
        "JOIN symbols t ON t.id = ce.target_symbol_id LEFT JOIN symbols b ON b.id = r.symbol_id"
   $raw = & $exePath sql --db $db --query $q --json | Out-String
-  $j = $raw | ConvertFrom-Json
+  $j = $raw | ConvertFrom-Json | ForEach-Object { $_ }
   $cols = @($j.columns | ForEach-Object { $_.name })
   $edges = @{}
   foreach ($row in $j.rows) {

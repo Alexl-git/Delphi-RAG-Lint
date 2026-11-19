@@ -77,9 +77,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-doc-skip-accessors-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -162,8 +165,8 @@ New-Item -ItemType Directory $dir1 | Out-Null
 $file1 = Join-Path $dir1 'uAccessorSkip.pas'
 $db1   = Join-Path $dir1 'fx.sqlite'
 Write-Fixture $file1
-& $Exe index $dir1 --db $db1 2>&1 | Out-Null
-$out1 = & $Exe document --unit $file1 --db $db1 --apply --no-backup 2>$null | Out-String
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dir1 --db $db1 2>&1 | ForEach-Object { "$_" } } | Out-Null
+$out1 = & { $ErrorActionPreference = 'Continue'; & $Exe document --unit $file1 --db $db1 --apply --no-backup 2>$null } | Out-String
 $ec1 = $LASTEXITCODE
 Check 'exit 0' ($ec1 -eq 0) "ec=$ec1"
 
@@ -181,10 +184,10 @@ New-Item -ItemType Directory $dir1b | Out-Null
 $file1b = Join-Path $dir1b 'uAccessorSkip.pas'
 $db1b   = Join-Path $dir1b 'fx.sqlite'
 Write-Fixture $file1b
-& $Exe index $dir1b --db $db1b 2>&1 | Out-Null
-$rj1b = & $Exe document --unit $file1b --db $db1b --json 2>$null | Out-String
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dir1b --db $db1b 2>&1 | ForEach-Object { "$_" } } | Out-Null
+$rj1b = & { $ErrorActionPreference = 'Continue'; & $Exe document --unit $file1b --db $db1b --json 2>$null } | Out-String
 $ecj1b = $LASTEXITCODE
-$oj1b = $null; try { $oj1b = ($rj1b | ConvertFrom-Json) } catch { $oj1b = $null }
+$oj1b = $null; try { $oj1b = ($rj1b | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $oj1b = $null }
 Check 'json: exit 0' ($ecj1b -eq 0)
 Check 'json: declCount = 3 (TThing + GetB + DoWork; GetA/SetA excluded pre-count)' `
   ($null -ne $oj1b -and [int]$oj1b.declCount -eq 3) "declCount=$($oj1b.declCount)"
@@ -200,8 +203,8 @@ New-Item -ItemType Directory $dir2 | Out-Null
 $file2 = Join-Path $dir2 'uAccessorSkip.pas'
 $db2   = Join-Path $dir2 'fx.sqlite'
 Write-Fixture $file2
-& $Exe index $dir2 --db $db2 2>&1 | Out-Null
-& $Exe document --qname uAccessorSkip.TThing.GetA --db $db2 --apply --no-backup 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dir2 --db $db2 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe document --qname uAccessorSkip.TThing.GetA --db $db2 --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $ec2 = $LASTEXITCODE
 Check 'exit 0' ($ec2 -eq 0) "ec=$ec2"
 $lines2 = [IO.File]::ReadAllLines($file2)
@@ -215,8 +218,8 @@ New-Item -ItemType Directory $dir3 | Out-Null
 $file3 = Join-Path $dir3 'uAccessorSkip.pas'
 $db3   = Join-Path $dir3 'fx.sqlite'
 Write-Fixture $file3
-& $Exe index $dir3 --db $db3 2>&1 | Out-Null
-& $Exe document --unit $file3 --db $db3 --include-accessors --apply --no-backup 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dir3 --db $db3 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe document --unit $file3 --db $db3 --include-accessors --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $ec3 = $LASTEXITCODE
 Check 'exit 0' ($ec3 -eq 0) "ec=$ec3"
 $lines3 = [IO.File]::ReadAllLines($file3)
@@ -232,10 +235,10 @@ New-Item -ItemType Directory $dir3b | Out-Null
 $file3b = Join-Path $dir3b 'uAccessorSkip.pas'
 $db3b   = Join-Path $dir3b 'fx.sqlite'
 Write-Fixture $file3b
-& $Exe index $dir3b --db $db3b 2>&1 | Out-Null
-$rj3b = & $Exe document --unit $file3b --db $db3b --include-accessors --json 2>$null | Out-String
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dir3b --db $db3b 2>&1 | ForEach-Object { "$_" } } | Out-Null
+$rj3b = & { $ErrorActionPreference = 'Continue'; & $Exe document --unit $file3b --db $db3b --include-accessors --json 2>$null } | Out-String
 $ecj3b = $LASTEXITCODE
-$oj3b = $null; try { $oj3b = ($rj3b | ConvertFrom-Json) } catch { $oj3b = $null }
+$oj3b = $null; try { $oj3b = ($rj3b | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $oj3b = $null }
 Check 'json: exit 0' ($ecj3b -eq 0)
 Check 'json: declCount = 5 (TThing + GetA + SetA + GetB + DoWork)' `
   ($null -ne $oj3b -and [int]$oj3b.declCount -eq 5) "declCount=$($oj3b.declCount)"

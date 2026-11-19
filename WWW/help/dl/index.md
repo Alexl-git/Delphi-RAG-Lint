@@ -29,6 +29,8 @@ Build and maintain the per-project and library indexes.
 | [References for declaration positions](features/v1511-ext-fixes.md) | The index keeps a reference for pointer base types, generic constraints, generic method headers, dotted property specifiers and message constants | 1.51.1-alpha |
 | [Per-host bindings for refs in a shared include](features/v1511-inc2-fixes.md) | A ref inside an include that several units include keeps one binding per host (table ref_host_bindings, schema 26); find-callers and usages read it | 1.51.1-alpha |
 | [Library bindings for bare reads, paren-less calls and function-result receivers](features/v1511-res-fixes.md) | Bare reads of library vars (Application), paren-less library calls and members on a library function result bind to refs.external_target | 1.51.1-alpha |
+| [Custom attributes in the index](features/v152-attributes-fact.md) | Every custom attribute is stored with its argument text and the symbol it decorates (table attributes), library indexes too | 1.51.1-alpha |
+| [Resolver fixes in 1.52](features/v152-extr-resolve.md) | Generic receivers (`TObjectList<T>.Create`) typed; index --resolve-only without a library keeps the last library bindings | 1.51.1-alpha |
 
 ## Search and navigation
 
@@ -37,6 +39,7 @@ Find symbols, callers, callees, text and types in the index.
 | Feature | What it does | Since |
 | --- | --- | --- |
 | [call-path](features/call-path.md) | Finds the shortest resolved call path from one symbol to another | 0.91.0-alpha |
+| [check-init](features/check-init.md) | Answers whether a variable or field is set before a given use on every execution (SET / NEVER-SET / MAY-BE-UNSET) | 1.52.0-alpha |
 | [Class Surface](features/class-surface.md) | Shows the public surface of a class: its members and signatures, without the method bodies | 0.1.0-alpha |
 | [Compiler Hints](features/compiler-hints.md) | Uses query hints to surface compiler hint/warning findings that have been imported into the index, filtered by code or severity | 0.1.0-alpha |
 | [query --concept](features/concept-search.md) | Ranked BM25 concept search over identifier words and doc-comment prose | 1.38.0-alpha |
@@ -45,7 +48,7 @@ Find symbols, callers, callees, text and types in the index.
 | [find-callees](features/find-callees.md) | Lists the resolved outgoing calls of one routine, plus the library-bound ones | 0.91.0-alpha |
 | [Find Undocumented (public)](features/find-undocumented-public.md) | Uses query find to list indexed symbols filtered by documentation state, kind, or visibility | 0.1.0-alpha |
 | [find-unit](features/find-unit.md) | Finds which indexed unit declares a symbol, and adds that unit to a file's uses clause | 0.69.0-alpha |
-| [Find Usages](features/find-usages.md) | Lists every reference to the symbol under the editor caret across the indexed project | 0.33.0-alpha |
+| [Find Usages](features/find-usages.md) | Lists every reference to the symbol under the editor caret, in one of four scopes: this bound symbol (default), project, group or everywhere | 0.33.0-alpha |
 | [Find Usages](features/find-usages-context.md) | Lists references to the symbol represented by a Structure-tree node | 0.33.0-alpha |
 | [Gain (counted savings)](features/gain-usage-log.md) | Sums the per-user usage log: tokens returned versus source bytes avoided, per verb and per day | 1.38.0-alpha |
 | [Go to Declaration](features/go-to-declaration.md) | Jumps the editor caret to the declaration of the symbol represented by a Structure-tree node | 0.43.0-alpha |
@@ -70,7 +73,7 @@ Find symbols, callers, callees, text and types in the index.
 | [Symbol Slice](features/symbol-slice.md) | Shows the slice of code relevant to one symbol: its declaration, body, and immediate context | 0.17.0-alpha |
 | [syntax-count](features/syntax-count.md) | Counts modern syntax in the parse of every unit, uncapped: Delphi 13 if-expressions, is not, not in; inline var/const; anonymous methods; multiline strings | 1.42.0-alpha |
 | [Type at Cursor](features/type-at-cursor.md) | Resolves the static type of the expression under the editor caret | 0.19.0-alpha |
-| [usages](features/usages.md) | Finds usage sites of a named symbol, with a choice of report width | 0.33.0-alpha |
+| [usages](features/usages.md) | Finds usage sites of a symbol in one of four scopes (this bound symbol, project, group, everywhere), with a choice of report width | 0.33.0-alpha |
 | [uses-recover](features/uses-recover.md) | Recovers the uses edges of units that ship without source, from the vendor's .hpp headers and a dcc map; never reads a .dcu; --apply stores them in the index | 1.50.0-alpha |
 | [wiki](features/wiki.md) | Looks up the dl:wiki concept topics a team has written into their own doc comments, and routes a human phrase to the code that implements it | 1.7.0-alpha |
 
@@ -81,22 +84,24 @@ Rules, autofix, suppression markers and project-wide checks.
 | Feature | What it does | Since |
 | --- | --- | --- |
 | [Ancestor not in project (lint rule)](features/ancestor-not-in-project.md) | Project-wide lint rule (error): a form, frame or data module whose ancestor class is declared in no project unit and not in the platform library | 1.42.0-alpha |
-| [Autofix for fixable rules](features/autofix-wave.md) | lint --fix repairs findings of the 125 fixable rules; --json reports per finding whether it was applied; lint accepts a folder | 1.37.0-alpha |
+| [Autofix for fixable rules](features/autofix-wave.md) | lint --fix repairs findings of the 131 fixable rules; --json reports per finding whether it was applied; lint accepts a folder | 1.37.0-alpha |
+| [Complexity counts the if-expression](features/complexity-if-expression.md) | cyclomatic-complexity, cognitive-complexity and the autodoc Complexity fact count a Delphi 13 if-expression as a decision point | 1.52.0-alpha |
 | [Compliance labels (CWE, CERT, MISRA)](features/compliance-labels.md) | Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field | 1.37.0-alpha |
 | [Copy All Diagnostics](features/copy-all-diagnostics.md) | Puts every lint finding for the current unit onto the clipboard, starting from the Structure form | 0.1.0-alpha |
 | [Copy Diagnostics (Current File)](features/copy-diagnostics-current-file.md) | Puts the current file's lint findings onto the clipboard | 0.1.0-alpha |
 | [Copy Selected Diagnostics](features/copy-selected-diagnostics.md) | Copies only the Diagnostics rows selected in the Structure form (Ctrl/Shift-click, Ctrl+C) to the clipboard | 1.28.3-alpha |
 | [Cycle edge written in an include (lint rule)](features/cycle-edge-in-include.md) | Project lint rule: a uses entry or declaration a uses cycle runs through is written in an include, which cycles --fix never edits; write it in the .pas | 1.50.0-alpha |
-| [Data module reaching a global form (lint rule)](features/datamodule-form-global.md) | Project lint rule, OFF by default: a data module unit reads or writes another unit's global form variable | 1.42.0-alpha |
+| [Data module reaching a global form (lint rule)](features/datamodule-form-global.md) | Project lint rule, ON by default since 1.52: a data module unit reads or writes another unit's global form variable | 1.42.0-alpha |
 | [drag-lint: Project Rules](features/drag-lint-project-rules.md) | Right-click a project in the Project Manager to make it the active project and open its Lint Options tab in the drag-lint dock | 0.95.0-alpha |
 | [Effect-free call in a loop that could move out (lint rule)](features/effect-free-in-loop-invariant.md) | Project-wide lint rule, ON by default since 1.43: a proven effect-free call inside a loop whose arguments, and the state it reads, cannot change in that loop | 1.42.0-alpha |
 | [exceptions-sync](features/exceptions-sync.md) | Declare one exception class per distinct raise Exception.Create message, then rewrite the raise sites | 1.8.0-alpha |
+| [explain](features/explain.md) | Explains one lint rule in plain words: what it means, why it matters, a bad and a good example, its default, whether it can be fixed, and how to suppress it | 1.52.0-alpha |
 | [Finalization reaching a unit already finalized (lint rule)](features/finalization-after-dependency.md) | Project lint rule: a finalization section reaches a global that a unit finalized earlier in the computed order tears down | 1.44.1-alpha |
 | [Fix all in project](features/fix-all-in-project.md) | Applies autofixes for every fixable finding across the whole project, starting from the Structure form | 0.61.0-alpha |
 | [Fix all in unit](features/fix-all-in-unit.md) | Applies autofixes for every fixable finding in the current unit, starting from the Structure form | 0.1.0-alpha |
 | [Fix all reliability (1.31.3)](features/fix-all-reliability.md) | Fix all no longer drops every rename for library-root members, shows a wait cursor and refuses a second fix, and keeps E-prefixed exception classes | 1.31.3-alpha |
 | [Fix it](features/fix-it.md) | Applies the fix for the single lint finding on a Structure-tree node; an unused unit is removed or moved to implementation by compiling | 0.1.0-alpha |
-| [Data-flow rules that know a parameter's mode](features/flow-out-arg-rules.md) | Three OFF rules: a local that only receives out arguments, a store overwritten by an out argument, a local passed by value to a method before it is assigned | 1.46.0-alpha |
+| [Data-flow rules that know a parameter's mode](features/flow-out-arg-rules.md) | Two OFF out-argument rules; since 1.52 a local passed by value to a method before assignment reports under the default used-before-assignment | 1.46.0-alpha |
 | [Format Whole Project with YADF](features/format-whole-project-with-yadf.md) | Runs YADF formatting across a project's files, with indexing involved as part of the same action | 0.1.0-alpha |
 | [Format with YADF](features/format-with-yadf.md) | Reformats one Pascal unit by driving the external YADF formatter | 0.16.0-alpha |
 | [Gap-wave lint rules](features/gap-wave-rules.md) | About 50 new lint rules (bug patterns, dead code, data flow, platform, structure) added in the 1.37.0 gap wave | 1.37.0-alpha |
@@ -111,10 +116,11 @@ Rules, autofix, suppression markers and project-wide checks.
 | [lint-tree](features/lint-tree.md) | Answers one question lint-all cannot: does an interface edit to this unit reach any dependent? | 1.11.0-alpha |
 | [Rename across every project that compiles a shared unit](features/multi-project-rename.md) | A naming fix on a unit several project indexes own renames it in every owner or in none, after an IDE confirmation listing the projects | 1.29.0-alpha |
 | [Opaque to analysis (lint rule)](features/opaque-to-analysis.md) | Project-wide lint rule (info, off by default): a routine whose non-library calls are mostly unresolvable, so impact and call trees are blind inside it | 1.42.0-alpha |
-| [Parameter type too wide (lint rule)](features/parameter-type-too-wide.md) | Project lint rule, OFF by default: a class-typed parameter that an ancestor type could carry, proved by the narrow-param plan | 1.46.0-alpha |
+| [Parameter type too wide (lint rule)](features/parameter-type-too-wide.md) | Project lint rule, ON since 1.52 (warning, autofix): a class-typed parameter that an ancestor type could carry, proved by the narrow-param plan | 1.46.0-alpha |
 | [Read but never assigned (lint rule)](features/read-never-assigned.md) | Project-wide lint rule: a field or global that is read but that nothing in the project assigns or creates | 1.40.0-alpha |
 | [Lint rules on the static type of a reference](features/ref-type-rules.md) | Lint rules on ref_types: is-always-true, is-never-true, argument-narrows, UI access from a thread, quit from a thread; sharper redundant-cast and unsafe casts | 1.44.1-alpha |
 | [Rescan this unit](features/rescan-this-unit.md) | Re-indexes the active project and re-lints the current unit on demand, so the Diagnostics panel drops findings already fixed | 1.28.3-alpha |
+| [review-marker-remeasured hint](features/review-marker-remeasured.md) | A dl:ok on a routine-metric rule stamped under an older hash still suppresses its finding; a hint names the allow command that re-stamps it | 1.51.1-alpha |
 | [RTTI unavailable (lint rule)](features/rtti-unavailable.md) | Project lint rule, OFF by default: declarations that lose classic or extended RTTI (typeless enums, record properties, narrowing directives, published generics) | 1.50.0-alpha |
 | [Run AST Checks](features/run-ast-checks.md) | Runs drag-lint's AST-level checks against a file | 0.31.0-alpha |
 | [Run Diagnostics (didSave)](features/run-diagnostics-didsave.md) | Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification | 0.22.0-alpha |
@@ -142,6 +148,16 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Wider built-in rules (1.51)](features/v151-wid-ast-rules.md) | Six built-in rules read more constructs: code-page and label exemptions, named zero constants, implied else-if, thread dialogs, Supports aliases | 1.51.0-alpha |
 | [Wider scm rules and three new fixers](features/v151-wid-scm-rules.md) | Seven built-in rules read more constructs; empty-finally, format-string-not-formatted and shared-marker-legacy-shape gain autofixes | 1.51.0-alpha |
 | [CLI fixes in 1.51.1](features/v1511-cli-fixes.md) | lint-all --rule a,b runs only those rules, a DB copy stays on the copy; rules --rule; info versions; index parse-errors; resolve-only warning | 1.51.1-alpha |
+| [Reserved words as names, implicit package imports, contract-unit globs](features/v152-atla-rules.md) | reserved-word-identifier and implicit-package-import rules; contractUnits globs in drag-lint.json for contract-unit-declares-class | 1.52.0-alpha |
+| [member-could-be-private lint rule (lane ATLB)](features/v152-atlb-rules.md) | Hint (OFF in 1.52) on a public member used only in its own unit; published, virtual, interface, attributed and shared-unit members stay silent | 1.52.0-alpha |
+| [debug-display-placeholder + attribute-aware member-could-be-private](features/v152-attrrules.md) | Warning (OFF in 1.52) on a DebuggerDisplay placeholder naming no member; member-could-be-private reads attributes from the index | 1.52.0-alpha |
+| [Default-on form, dataset and data-module rules](features/v152-defaults.md) | Four lint rules on by default since 1.52 (form object/field, foreign form access, edit without post, data module form global); a shipped exempt-class list | 1.52.0-alpha |
+| [Disable rule (this line, this unit, this project)](features/v152-disable-rule.md) | Silence one lint rule for a line (dl:ok marker), a unit or the project (rule_overrides in drag-lint-lint.json), with a reason and date; rules enable undoes it | 1.52.0-alpha |
+| [Array index possibly out of range lint rule (index-possibly-out-of-range)](features/v152-index-possibly-out-of-range.md) | Warns on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only | 1.52.0-alpha |
+| [Per-rule time budget in the rule frame (rule-skipped-budget)](features/v152-per-rule-budget.md) | A v151/v152 rule slower than rule_time_budget_ms (2000 ms) on a file is skipped there with one rule-skipped-budget note; index warns near the parse limit | 1.52.0-alpha |
+| [unit-used-by-no-unit rule; unit-not-in-dpr outside the project roots](features/v152-proj2.md) | Warns (ON) on a unit only the .dpr lists that nothing reaches; a form counts only when opened. unit-not-in-dpr also reports shared-folder units | 1.52.0-alpha |
+| [parameter-type-too-wide ON by default, with an autofix](features/v152-ptw.md) | parameter-type-too-wide ships ON as a warning in lint-all / lint-project with an autofix that retypes the parameter through the compile gate | 1.52.0-alpha |
+| [Lint rules unconnected-control and hanging-handler](features/v152-unconn-rules.md) | Warns on a form control that nothing wires and on an event-handler-shaped method that no form binds and no code assigns or calls | 1.52.0-alpha |
 | [warm-rule-cache](features/warm-rule-cache.md) | Fills the lint rule cache for a project index; index runs warm it, or start it in the background (--rule-cache-warm) | 1.39.0-alpha |
 
 ## Documentation
@@ -161,6 +177,7 @@ DocInsight comments generated from the index, and drift detection.
 | [Document unit](features/document-unit.md) | Generates or repairs managed DocInsight comments for every public declaration in the unit open in the active editor (facts-only) | 0.90.0-alpha |
 | [Effect Summary Legend](features/effect-summary-legend.md) | The purity analysis writes a short token string for every routine it judges -- symbolfacts.effectsummary in the index | 1.16.0-alpha |
 | [shared-unit](features/shared-unit.md) | Reads or extends the dl:shared marker on a unit, recording which projects share it | 1.10.0-alpha |
+| [Documentation policy: missing-doc, doc-placeholder, doc-malformed-summary](features/v152-docpol.md) | missing-doc covers DFM-bound handlers with code; doc-placeholder (ON, hint) flags template summaries; doc-malformed-summary (OFF) flags declaration-like ones | 1.52.0-alpha |
 | [dl:wiki concept blocks](features/wiki-blocks-authoring.md) | The format of a dl:wiki block -- the concept notes the wiki verb reads | 1.7.0-alpha |
 
 ## Refactoring and code generation
@@ -190,6 +207,9 @@ Rename, extract, safe delete, uses cleanup and code stubs.
 | [Uses Audit -- interface->impl moves + unused (this unit)](features/uses-audit-interface-impl-moves-unused-this-unit.md) | For one unit, reports which uses entries could move from the interface section to implementation, and which are unused entirely | 0.43.0-alpha |
 | [Uses Cleanup Preview (compiler-verified, this unit)](features/uses-cleanup-preview-compiler-verified-this-unit.md) | The removals a Uses Audit suggests, but verified by actually compiling | 0.43.0-alpha |
 | [Uses & Deps Tab](features/uses-deps-tab.md) | Open the Uses & Deps tab to review uses-clause fixes and apply them | 1.12.0-alpha |
+| [Extract constant (manual fix for magic literals)](features/v152-extract-constant.md) | Turns one number or string literal into a named constant and replaces every occurrence in the unit; manual fix of the magic-literal rules | 1.52.0-alpha |
+| [extract-method and create-enum-helper through the compile gate by default](features/v152-fixer-compile-gate.md) | extract-method / create-enum-helper --apply build the project before and after the write; no project found = REFUSED, --no-compile-gate writes unbuilt | 1.52.0-alpha |
+| [Fix with drag-lint (VS Code and RAD Studio)](features/v152-vsfix.md) | Fix the finding at the cursor, all of one rule, or every fixable finding in a file: VS Code code actions and menus, plus a RAD Studio menu entry | 1.52.0-alpha |
 
 ## Component conversion
 
@@ -306,6 +326,7 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [drag-lint Graph (dockable)](features/drag-lint-graph-dockable.md) | Opens the drag-lint graph viewer as a dockable window inside the IDE, so it can sit beside Structure | 0.43.0-alpha |
 | [drag-lint Options](features/drag-lint-options.md) | The plugin's settings dialog for drag-lint: lets you browse and toggle the lint rule catalog | 0.95.0-alpha |
 | [drag-lint Panel (dockable)](features/drag-lint-panel-dockable.md) | Opens the main drag-lint dockable tool window inside the IDE | 0.42.0-alpha |
+| [Editor right-click submenu](features/editor-context-menu.md) | The drag-lint submenu of the code editor's right-click menu: the 1.52 caret commands, enabled by what the caret is on | 1.51.1-alpha |
 | [Exception facts in the editor](features/editor-exception-facts.md) | Hover, code lens and an MCP tool show which exception types a routine raises and handles | 1.50.0-alpha |
 | [Engine heartbeat: the IDE tells a busy engine from a stuck one](features/engine-heartbeat.md) | A running engine reports what it is doing, so the IDE kills only an engine whose status stopped moving | 1.40.0-alpha |
 | [Help line (DL page)](features/ide-help-line.md) | Type part of a feature name on the DL page, pick a match (with its menu path) and open that feature's help page at the configured help root | 1.33.0-alpha |
@@ -320,7 +341,7 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [Switch VS Code Delphi MCP entry](features/lsp-switch-vscode.md) | Turns the VS Code Delphi MCP entry off and on with a backup | 1.33.0-alpha |
 | [Register the MCP server (Claude Code, VS Code, Cursor)](features/mcp-config-writer.md) | Adds drag-lint serve to Claude Code, VS Code and Cursor MCP config: merged, backed up, idempotent, removable | 1.26.1-alpha |
 | [MCP get_neighbors](features/mcp-get-neighbors.md) | MCP tool: the call-graph neighbourhood of a symbol within 1..3 hops | 1.46.0-alpha |
-| [MCP server](features/mcp-server.md) | Exposes the index to MCP clients as 18 tools | 0.4.0-alpha |
+| [MCP server](features/mcp-server.md) | Exposes the index to MCP clients as 19 tools | 0.4.0-alpha |
 | [Output encoding (--output-encoding)](features/output-encoding.md) | Chooses the bytes verbs write to stdout, stderr and --output files: ASCII with \uXXXX escapes (default), UTF-8 or UTF-16LE, never a BOM; lossy ascii warns once | 1.35.0-alpha |
 | [project-context](features/project-context.md) | Writes or checks the `.dlcontext.json` file beside a project: platform, config and define set, with the .dproj SHA-1 for staleness | 1.38.0-alpha |
 | [serve](features/serve.md) | Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index | 0.4.0-alpha |
@@ -343,12 +364,13 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [dump-call-edges](features/dump-call-edges.md) | Diagnostic that dumps every resolved call edge in the index as refid\|targetqname\|confidence rows | 0.91.0-alpha |
 | [dump-refs](features/dump-refs.md) | Diagnostic that dumps every ref in a file together with its enclosingsymbolid attribution | 0.82.0-alpha |
 | [Feature registry](features/feature-registry.md) | The machine-checked master list of every feature, and the generator of the index pages | 1.22.0-alpha |
+| [Field repository](features/field-repository.md) | Keeps the TableTools field registry in one SQLite file per database, filled from Firebird (read-only), with a diffable text backup | 1.52.0-alpha |
 | [info](features/info.md) | Prints engine self-info: version, build date, license (MIT), tree-sitter details, and capabilities | 0.19.0-alpha |
 | [manifest where / migrate (installed layout v2)](features/installed-layout-v2.md) | Shows which drag-lint.json this engine reads and why; moves the exe-side one to %APPDATA% once (renamed, never deleted). Installed layout v2, off by default | 1.50.0-alpha |
 | [Library Drift Check](features/library-drift-check.md) | Flags registered library roots that have source on disk but nothing in the index | 0.47.0-alpha |
 | [Maintenance](features/maintenance.md) | Indexes, the manifest, reindexing, and what to do when something looks wrong | 1.4.0-alpha |
 | [Open Plugin Log](features/open-plugin-log.md) | Opens the drag-lint plugin's own log file | 0.39.0-alpha |
-| [shutdown](features/shutdown.md) | Ask running engines (lsp, cycles --fix, index, lint-all) to stand down cleanly, so an index can be rebuilt or an engine replaced | 0.6.0-alpha |
+| [stop-now](features/shutdown.md) | Ask running engines (lsp, cycles --fix, index, lint-all) to stand down cleanly, so an index can be rebuilt or an engine replaced | 0.6.0-alpha |
 | [sql](features/sql.md) | Runs one read-only SQL statement against an index database and prints the result set | 0.40.5-alpha |
 
 ## Uses and Dependencies

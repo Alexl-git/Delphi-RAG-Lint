@@ -19,9 +19,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string] $Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string] $Exe     = '',
   [string] $Scratch = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -71,7 +74,7 @@ function Index() { return Run @('index', '--project', $Proj, '--db', $Db) }
 function Concept([string]$Words, [string[]]$More = @()) {
   $r = Run (@('query', '--concept', $Words, '--db', $Db, '--json') + $More)
   $j = $null
-  try { $j = $r.Out | ConvertFrom-Json } catch { }
+  try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   $r['Json'] = $j
   return $r
 }
@@ -198,7 +201,7 @@ $before = Concept 'apply row changes'
 $beforeTop = Qn $before 0
 Check 'control: query works (exit 0, rank 1 ApplyRowDelta) before dropping the tables' (($before.Exit -eq 0) -and ($beforeTop -like '*TDeltaPipe.ApplyRowDelta')) (Brief $before)
 
-$py = & python -I $DropPy $Db 2>&1
+$py = & { $ErrorActionPreference = 'Continue'; & python -I $DropPy $Db 2>&1 | ForEach-Object { "$_" } }
 $pyExit = $LASTEXITCODE
 Check 'drop symbol_search, symbol_search_fts and their triggers (python helper)' (($pyExit -eq 0) -and ("$py" -match 'DROPPED')) "exit=$pyExit $py"
 

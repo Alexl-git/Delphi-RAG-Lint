@@ -26,10 +26,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe       = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe       = '',
   [string]$LibraryDb = "C:\Projects\.drag-lint\library-Win64.sqlite",
   [string]$WorkDir   = "C:\TEMP\draglint_bare_ns_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -96,7 +99,7 @@ end.
 '@
 
 function Sql([string]$Db, [string]$Q) {
-  $j = & $Exe sql --db $Db --json --limit 1000 --query $Q 2>$null | ConvertFrom-Json
+  $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $Db --json --limit 1000 --query $Q 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
   if ($null -eq $j) { return ,@() }
   $cols = @($j.columns | ForEach-Object { $_.name })
   $out = @()
@@ -115,7 +118,7 @@ function Build([string]$Name, [string]$ANs) {
   W (Join-Path $d 'App.dpr') $dpr
   W (Join-Path $d 'App.dproj') ($dproj.Replace('__NS__', $(if ($ANs) { "<DCC_Namespace>$ANs</DCC_Namespace>" } else { '' })))
   $db = Join-Path $d 'App.sqlite'
-  & $Exe index --project (Join-Path $d 'App.dproj') --db $db --library-db $LibraryDb 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $d 'App.dproj') --db $db --library-db $LibraryDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
   return $db
 }
 function LineOfMarker([string]$Marker) {
@@ -146,7 +149,7 @@ Check 'F2  Application.ProcessMessages: Vcl.Forms.TApplication.ProcessMessages' 
 # stored parses: F1 must stay bound. RED on a build that still reads the .dproj text.
 $vd = Split-Path $vcl
 W (Join-Path $vd 'App.dproj') ($dproj.Replace('__NS__', ''))
-& $Exe index --project (Join-Path $vd 'App.dproj') --db $vcl --resolve-only --library-db $LibraryDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $vd 'App.dproj') --db $vcl --resolve-only --library-db $LibraryDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $r = ExtAt $vcl 'F1' 'Show'
 Check 'S1  .dproj namespaces removed after the index, --resolve-only: F.Show still Vcl.Forms (stored DCC_Namespace fact)' (AllExt $r 'Vcl.Forms.TCustomForm.Show') (Show $r)
 

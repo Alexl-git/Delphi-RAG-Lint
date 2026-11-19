@@ -17,7 +17,10 @@
   Run from a neutral cwd, pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$detail=''){ Write-Host ("[{0}] {1}{2}" -f (@('FAIL','PASS')[[int]$ok]),$n,$(if($detail){" -- $detail"}else{''})) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
@@ -196,32 +199,32 @@ function UnusedAt([string]$Out, [string]$File) { $Out -match "(?im)$File[:\w\\/.
 
 Push-Location C:\TEMP
 try {
-  & $exePath index --all --config $cfg --only SecA --jobs 1 2>&1 | Out-Null
-  & $exePath index --all --config $cfg --only SecB --jobs 1 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only SecA --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only SecB --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check '0. sanity: both DBs exist' ((Test-Path $dbA) -and (Test-Path $dbB))
 
-  $pre = (& $exePath lint-all --db $dbB --rule duplicate-code 2>&1 | Out-String)
+  $pre = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbB --rule duplicate-code 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $m = [regex]::Match($pre, '(?im)thing\.pas:(\d+):\d+\s+\[\w+\]\s+duplicate-code')
   Check '0b. sanity: duplicate-code fires on thing.pas under B (no marker yet)' $m.Success
-  if ($m.Success) { & $exePath allow (Join-Path $scratch 'shared\thing.pas') --fix-line $m.Groups[1].Value --fix-rule duplicate-code --apply 2>&1 | Out-Null }
+  if ($m.Success) { & { $ErrorActionPreference = 'Continue'; & $exePath allow (Join-Path $scratch 'shared\thing.pas') --fix-line $m.Groups[1].Value --fix-rule duplicate-code --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null }
   Check '0c. sanity: a dl:ok duplicate-code marker was written' ((Get-Content (Join-Path $scratch 'shared\thing.pas') -Raw) -match 'dl:ok duplicate-code@')
 
   $note = 'left unjudged: their rule depends'
   $errA = Join-Path $scratch 'errA.txt'
-  $oA = (& $exePath lint-all --db $dbA 2>$errA | Out-String)
+  $oA = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errA); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath lint-all --db $dbA 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
   $eA = Get-Content $errA -Raw
   Check '1. FIX: lint-all --db A says the marker is left unjudged and names --shared-db' (($eA -match $note) -and ($eA -match '--shared-db'))
   Check '7. CONTROL: exactly the one shared closure-dependent marker is counted' ($eA -match "lint-all: 1 dl:ok marker\(s\) on dl:shared units $note")
   Check '2. sanity: the marker is still not called unused' (-not (UnusedAt $oA 'thing\.pas'))
-  $j = (& $exePath lint-all --db $dbA --json 2>$null | Out-String)
-  $parsed = $true; try { $null = $j | ConvertFrom-Json } catch { $parsed = $false }
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbA --json 2>$null } | Out-String)
+  $parsed = $true; try { $null = $j | ConvertFrom-Json | ForEach-Object { $_ } } catch { $parsed = $false }
   Check '3. CONTROL: --json stdout stays parseable' ($parsed -and ($j -notmatch [regex]::Escape($note)))
-  $u = (& $exePath lint-all --db $dbA --shared-db $dbB 2>&1 | Out-String)
+  $u = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbA --shared-db $dbB 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check '4a. CONTROL: --shared-db run has no single-index note' ($u -notmatch $note)
   Check '4b. CONTROL: --shared-db judged it' ($u -match '--shared-db: 1 marker\(s\) judged across 2 DB\(s\), 0 left unjudged')
-  $b = (& $exePath lint-all --db $dbB 2>&1 | Out-String)
+  $b = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbB 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check '5. CONTROL: under B the marker is live, no note' ($b -notmatch $note)
-  $f = (& $exePath lint (Join-Path $scratch 'shared\thing.pas') --db $dbA 2>&1 | Out-String)
+  $f = (& { $ErrorActionPreference = 'Continue'; & $exePath lint (Join-Path $scratch 'shared\thing.pas') --db $dbA 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check '6. CONTROL: lint <file> prints no note' ($f -notmatch $note)
 } finally { Pop-Location }
 [IO.Directory]::Delete($scratch, $true)

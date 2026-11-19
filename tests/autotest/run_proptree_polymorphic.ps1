@@ -91,9 +91,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-proptree-polymorphic-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -221,7 +224,7 @@ end.
 
 $db = Join-Path $WorkDir 'polyfix.sqlite'
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 $indexExit = $LASTEXITCODE
 Check 'index exits 0' ($indexExit -eq 0) "exit=$indexExit; $($indexOut -join ' | ')"
 
@@ -232,7 +235,7 @@ function Get-Tree([string]$Database, [string]$QName) {
     $exit = $LASTEXITCODE
   } finally { Pop-Location }
   $tree = $null
-  try { $tree = $raw | ConvertFrom-Json } catch { }
+  try { $tree = $raw | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   return @{ Tree = $tree; Exit = $exit; Raw = $raw }
 }
 

@@ -17,7 +17,7 @@ if (-not $Log) { $Log = Join-Path $root 'stats\draglint-usage.log' }
 # stats\ is untracked: a lane worktree has no live log. Fall back (READ-ONLY: the report only
 # reads it) to the main checkout's log, found through git's common dir, not a hard-coded path.
 if (-not $explicitLog -and -not (Test-Path $Log)) {
-  $common = (& git -C $root rev-parse --path-format=absolute --git-common-dir 2>$null)
+  $common = (& { $ErrorActionPreference = 'Continue'; & git -C $root rev-parse --path-format=absolute --git-common-dir 2>$null })
   if ($LASTEXITCODE -eq 0 -and $common) {
     $mainLog = Join-Path (Split-Path -Parent $common) 'stats\draglint-usage.log'
     if (Test-Path $mainLog) { Write-Host "note: worktree has no stats log; reading the main checkout's $mainLog"; $Log = $mainLog }
@@ -36,7 +36,7 @@ if (-not (Test-Path $Log)) {
   # no checkout on this box has a live log (fresh clone): nothing to measure -> battery SKIP
   Write-Host "SKIP live log missing: $Log and no main-checkout log (pass -Log)"; exit 77
 }
-$j = (& node $report --log $Log --json) | ConvertFrom-Json
+$j = (& node $report --log $Log --json) | ConvertFrom-Json | ForEach-Object { $_ }
 $bad = @($j.byTool.PSObject.Properties.Name | Where-Object { $_ -match '^\d+$' })
 Check ($bad.Count -eq 0) "live log: no numeric tool key (shifted rows repaired) (found: $($bad -join ','))"
 $cls = 0; foreach ($p in $j.skippedByClass.PSObject.Properties) { $cls += [int]$p.Value }
@@ -46,7 +46,7 @@ Check ($cls -eq $j.skipped) "live log: all $($j.skipped) skipped rows classified
 $fx = Join-Path $tmp 'fx.log'
 $tab = "`t"
 [IO.File]::WriteAllText($fx, ((@('2026-09-29T04:00:09Z','report','x round-trip','2','4000','report','900') -join $tab) + "`r`n"))
-$f = (& node $report --log $fx --json) | ConvertFrom-Json
+$f = (& node $report --log $fx --json) | ConvertFrom-Json | ForEach-Object { $_ }
 Check ($f.repaired -eq 1 -and $f.skipped -eq 0 -and $f.byTool.PSObject.Properties.Name -contains 'report') 'fixture: shifted report row repaired in memory'
 
 # 3. append helper
@@ -54,9 +54,9 @@ $out = Join-Path $tmp 'out.log'
 & node $append --log $out --what "a`tb`nc" --units 2 --avoided 500 --tool grep --used 40
 $lines = @([IO.File]::ReadAllLines($out))
 Check ($lines.Count -eq 1 -and $lines[0].Split("`t").Count -eq 7 -and $lines[0].EndsWith('cons-v1')) 'append: good row = 7 fields, one line, tabs/newlines sanitised'
-$null = & node $append --log $out --what w --units 2 --avoided 500 --tool 4000 --used 40 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & node $append --log $out --what w --units 2 --avoided 500 --tool 4000 --used 40 2>&1 | ForEach-Object { "$_" } }
 Check ($LASTEXITCODE -eq 2) 'append: numeric tool refused (exit 2)'
-$null = & node $append --log $out --what w --units '~2' --avoided 500 --tool grep --used 40 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & node $append --log $out --what w --units '~2' --avoided 500 --tool grep --used 40 2>&1 | ForEach-Object { "$_" } }
 Check ($LASTEXITCODE -eq 2) 'append: ~N number refused (exit 2)'
 Check (@([IO.File]::ReadAllLines($out)).Count -eq 1) 'append: refused calls wrote nothing'
 

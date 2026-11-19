@@ -39,10 +39,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$RealDb  = "$PSScriptRoot\..\..\src\cli\_D-RAG\drag-lint.sqlite",
+  [string]$Exe     = '',
+  [string]$RealDb  = '',
   [string]$WorkDir = "$env:TEMP\draglint_no_default_db_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $RealDb) { $RealDb = "$PSScriptRoot\..\..\src\cli\_D-RAG\drag-lint.sqlite" }
 try {
 
 $ErrorActionPreference = 'Stop'
@@ -83,7 +87,7 @@ end.
 function Run-In([string]$cwd, [string[]]$argv, [int]$timeoutSec = 90) {
   $o = Join-Path $WorkDir 'out.txt'; $e = Join-Path $WorkDir 'err.txt'
   $p = Start-Process $Exe -ArgumentList $argv -WorkingDirectory $cwd `
-         -PassThru -NoNewWindow -RedirectStandardOutput $o -RedirectStandardError $e
+         -PassThru -NoNewWindow -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   if (-not $p.WaitForExit($timeoutSec * 1000)) { try { $p.Kill() } catch { }; return [pscustomobject]@{ Code = -1; Text = 'TIMEOUT' } }
   $t = ((Get-Content $o -Raw -ErrorAction SilentlyContinue) + "`n" + (Get-Content $e -Raw -ErrorAction SilentlyContinue))
   return [pscustomobject]@{ Code = $p.ExitCode; Text = $t }

@@ -52,10 +52,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe      = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$RulesDir = "$PSScriptRoot\..\..\rules",
+  [string]$Exe      = '',
+  [string]$RulesDir = '',
   [string]$WorkDir  = "C:\TEMP\draglint_statgated_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $RulesDir) { $RulesDir = "$PSScriptRoot\..\..\rules" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){ if($d){Write-Host "      $d" -ForegroundColor DarkGray}; $script:fail=$true } }
@@ -167,7 +171,7 @@ Write-Ascii $file $fixture
 
 Push-Location C:\TEMP
 try {
-  $out = (& $exePath lint $file --rules-dir $rules 2>&1 | Out-String)
+  $out = (& { $ErrorActionPreference = 'Continue'; & $exePath lint $file --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $srcLines = [System.IO.File]::ReadAllLines($file)
   $hits = @()
   foreach ($l in ($out -split "`r?`n")) {
@@ -191,7 +195,7 @@ try {
 
   # The rule must be in the catalog AND enabled, or lint-all silently skips it
   # while `lint` still fires -- two surfaces disagreeing about one input.
-  $cat = (& $exePath rules --json 2>$null | Out-String | ConvertFrom-Json)
+  $cat = (& { $ErrorActionPreference = 'Continue'; & $exePath rules --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ })
   $rs  = if ($cat.rules) { $cat.rules } else { $cat }
   $me  = $rs | Where-Object { $_.id -eq 'stat-gated-destructive' }
   Check 'CAT the rule is in the catalog'        ([bool]$me) 'rules --json does not list it'

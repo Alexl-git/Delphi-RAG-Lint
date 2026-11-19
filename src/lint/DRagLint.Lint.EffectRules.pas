@@ -68,7 +68,7 @@ const
 /// which is the bug this rule exists for. Never raises.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
-/// <para>Calls: Default, DRagLint.Analysis.Purity.TEffectSummary.Decode, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsWithFacts, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetAllSymbolFacts, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Lint.EffectRules.AcceptCallSite, DRagLint.Lint.EffectRules.AndOrNear (+13 more)</para>
+/// <para>Calls: Default, DRagLint.Analysis.Purity.TEffectSummary.Decode, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsWithFacts, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetAllSymbolFacts, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Lint.EffectRules.AcceptCallSite (+13 more)</para>
 /// <para>Returns: Findings.ToArray</para>
 /// <para>Complexity: 19 (cyclomatic, outer body), 88 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.Decode"/>
@@ -97,14 +97,14 @@ function CollectSideEffectInShortCircuit(const AStore: ISymbolStore;
 /// itself assigns (other than Result) is exempt. Never raises.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
-/// <para>Calls: Default, DRagLint.Analysis.Purity.TEffectSummary.Decode, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsWithFacts, DRagLint.Core.Interfaces.ISymbolStore.GetAllSymbolFacts, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Lint.EffectRules.CollectNodesOfType, DRagLint.Lint.EffectRules.IsLazyInitGetter, DRagLint.Lint.EffectRules.NodeText, DRagLint.Lint.EffectRules.OwningTypeName (+8 more)</para>
+/// <para>Calls: Default, DRagLint.Analysis.Purity.TEffectSummary.Decode, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsWithFacts, DRagLint.Core.Interfaces.ISymbolStore.GetAllSymbolFacts, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Lint.EffectRules.CollectNodesOfType, DRagLint.Lint.EffectRules.IsLazyInitGetter, DRagLint.Lint.EffectRules.NodeText (+9 more)</para>
 /// <para>Returns: Findings.ToArray</para>
 /// <para>Complexity: 15 (cyclomatic, outer body), 76 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.Decode"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsWithFacts"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllSymbolFacts"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
-/// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+/// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function CollectPropertyGetterWithEffect(const AStore: ISymbolStore;
@@ -170,14 +170,14 @@ function CollectUiAccessInThreadTransitive(const AStore: ISymbolStore;
 /// property-getter-with-effect). Never raises.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
-/// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsWithFacts, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Lint.EffectRules.AcceptCallSite, DRagLint.Lint.EffectRules.CallNodeOf, DRagLint.Lint.EffectRules.CollectIdentsOnRow, DRagLint.Lint.EffectRules.EnclosingIteratedLoop (+16 more)</para>
+/// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsWithFacts, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Lint.EffectRules.AcceptCallSite, DRagLint.Lint.EffectRules.CallNodeOf, DRagLint.Lint.EffectRules.CollectIdentsOnRow (+17 more)</para>
 /// <para>Returns: Findings.ToArray</para>
-/// <para>Complexity: 18 (cyclomatic, outer body), 87 lines (full implementation)</para>
+/// <para>Complexity: 19 (cyclomatic, outer body), 87 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsWithFacts"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
-/// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+/// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function CollectEffectFreeInLoopInvariant(const AStore: ISymbolStore;
@@ -186,7 +186,7 @@ function CollectEffectFreeInLoopInvariant(const AStore: ISymbolStore;
 implementation
 
 uses
-  System.Classes
+  DRagLint.Core.Encoding, System.Classes
   , System.IOUtils
   , System.StrUtils
   , System.Generics.Defaults
@@ -214,7 +214,7 @@ begin
   if not ACache.TryGetValue(APath, Result) then
   begin
     try
-      Result:= TFile.ReadAllLines(APath, TEncoding.ANSI);
+      Result:= ReadSourceFileLines(APath);
     except  // dl:ok bare-except@8ac3 -- one unreadable file must cost its own findings, never abort the lint run
       Result:= nil;
     end;
@@ -633,7 +633,7 @@ begin
         Fd.FileId    := FileId;
         Fd.StartLine := C.CallSiteLine;
         Fd.EndLine   := C.CallSiteLine;
-        Fd.StartCol  := Integer(Idents[0].StartPoint.Column) + 1;
+        Fd.StartCol  := TAstParseCache.CharCol(Fd.FilePath, Idents[0].StartPoint); { 1.52 BK-COLS2: character column }
         Fd.EndCol    := Fd.StartCol + Length(Sym.Name);
         Fd.Severity  := CSeverityInfo;
         Fd.SymbolName:= Sym.Name;
@@ -852,7 +852,7 @@ begin
         Fd.FileId    := Pair.Key;
         Fd.StartLine := Integer(P.StartPoint.Row) + 1;
         Fd.EndLine   := Fd.StartLine;
-        Fd.StartCol  := Integer(P.StartPoint.Column) + 1;
+        Fd.StartCol  := TAstParseCache.CharCol(Fd.FilePath, P.StartPoint); { 1.52 BK-COLS2: character column }
         Fd.EndCol    := Fd.StartCol + Length(PName);
         Fd.Severity  := CSeverityInfo;
         Fd.SymbolName:= PName;
@@ -1382,7 +1382,7 @@ begin
           Fd.FileId    := FileId;
           Fd.StartLine := C.CallSiteLine;
           Fd.EndLine   := C.CallSiteLine;
-          Fd.StartCol  := Integer(Id.StartPoint.Column) + 1;
+          Fd.StartCol  := TAstParseCache.CharCol(Fd.FilePath, Id.StartPoint); { 1.52 BK-COLS2: character column }
           Fd.EndCol    := Fd.StartCol + Length(Sym.Name);
           Fd.Severity  := CSeverityInfo;
           Fd.SymbolName:= Sym.Name;

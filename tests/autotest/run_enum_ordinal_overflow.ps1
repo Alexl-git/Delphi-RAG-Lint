@@ -76,9 +76,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 
 # A drag-lint `query` with ZERO matches EXITS 1 (measured 2026-09-09). pwsh 7.4+
@@ -104,11 +107,11 @@ $db = Join-Path $WorkDir 'enumovf.sqlite'
 
 # WHICH ENGINE WAS MEASURED. A RED reading that reports the POST-fix extractor
 # version is not a RED reading -- it is the new engine run by mistake.
-$infoRaw = (& $exePath info --json 2>$null) -join "`n"
+$infoRaw = (& { $ErrorActionPreference = 'Continue'; & $exePath info --json 2>$null }) -join "`n"
 $extractorVersion = '(unknown)'
 try {
   $line = ($infoRaw -split "`n" | Where-Object { $_.Trim().StartsWith('{') } | Select-Object -First 1)
-  if ($line) { $extractorVersion = ([string]($line | ConvertFrom-Json).extractor_version) }
+  if ($line) { $extractorVersion = ([string]($line | ConvertFrom-Json | ForEach-Object { $_ }).extractor_version) }
 } catch { }
 Write-Host ''
 Write-Host ("engine : {0}" -f $exePath) -ForegroundColor Cyan
@@ -170,7 +173,7 @@ Check 'uCtl.pas carries NONE of the three forms' `
 
 # --- 3-5. The index run ------------------------------------------------------
 
-$idxOut  = & $exePath index $WorkDir --db $db 2>&1
+$idxOut  = & { $ErrorActionPreference = 'Continue'; & $exePath index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } }
 $idxExit = $LASTEXITCODE
 $idxText = ($idxOut | Out-String)
 
@@ -193,9 +196,9 @@ Check 'no SKIP of any kind for uCtl.pas' ($skipCtl -eq 0) "found $skipCtl"
 # --- Query helper ------------------------------------------------------------
 
 function Find-Sym([string]$Name) {
-  $raw = (& $exePath query --name $Name --exact --db $db --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name $Name --exact --db $db --json 2>$null }) -join "`n"
   if (-not $raw.Trim()) { return @() }
-  try { $d = $raw | ConvertFrom-Json } catch { return @() }
+  try { $d = $raw | ConvertFrom-Json | ForEach-Object { $_ } } catch { return @() }
   return @($d | Where-Object { $null -ne $_ })
 }
 
@@ -211,7 +214,7 @@ function SigOf($Hits) {
 }
 
 function CheckOrd([string]$Name, [string]$Expected, [string]$Note = '') {
-  $h = Find-Sym $Name
+  $h = @(Find-Sym $Name)
   $sig = SigOf $h
   Check ("{0} -> {1}" -f $Name, $Expected) ($h.Count -eq 1 -and $sig -eq $Expected) `
     ("hits={0} signature='{1}' {2}" -f $h.Count, $sig, $Note)
@@ -225,7 +228,7 @@ Write-Host '  (if any of these fails, this runner is measuring the QUERY path, n
 CheckOrd 'ctA' '0'   'positional ordinal'
 CheckOrd 'ctB' '128' 'explicit initializer resets the counter'
 CheckOrd 'ctC' '129' 'reset-then-continue semantics -- the fix must not disturb this'
-$none = Find-Sym 'NoSuchSymbolZq'
+$none = @(Find-Sym 'NoSuchSymbolZq')
 Check '--exact does not match a symbol that does not exist' ($none.Count -eq 0) `
   "hits=$($none.Count) -- without this, every 'hits=1' below could be --exact matching everything"
 
@@ -239,11 +242,11 @@ CheckOrd 'ohForce' '2147483647' 'UPPER-case hex -- the D3DCommon / dxFontFile fo
 CheckOrd 'olForce' '2147483647' 'lower-case hex -- the Winapi.D3D10 form'
 CheckOrd 'odOnly'  '2147483647' 'decimal -- the WinAPI.Media / WinAPI.UI.Core form'
 
-$marker = Find-Sym 'OvfMarkerConst'
+$marker = @(Find-Sym 'OvfMarkerConst')
 Check 'OvfMarkerConst is present' ($marker.Count -eq 1) `
   "hits=$($marker.Count) -- a const OUTSIDE the enum: this is what proves the WHOLE FILE committed"
 
-$unitRow = Find-Sym 'uOvfMax'
+$unitRow = @(Find-Sym 'uOvfMax')
 Check 'the uOvfMax unit row is present' ($unitRow.Count -eq 1) `
   "hits=$($unitRow.Count) -- a project/library DB holds only indexed members, so a hit IS membership"
 

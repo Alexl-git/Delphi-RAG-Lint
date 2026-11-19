@@ -31,7 +31,10 @@
   plan, never the bytes. Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$detail=''){ Write-Host ("[{0}] {1}{2}" -f (@('FAIL','PASS')[[int]$ok]),$n,$(if($detail){" -- $detail"}else{''})) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
@@ -46,7 +49,7 @@ function WriteAscii($path, $lines) {
   [System.IO.File]::WriteAllText($path, (($lines -join $crlf) + $crlf), (New-Object System.Text.ASCIIEncoding))
 }
 function Run([string[]]$xs) {
-  $o = & $Exe @xs 2>&1 | Out-String
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe @xs 2>&1 | ForEach-Object { "$_" } } | Out-String
   [pscustomobject]@{ Out = $o; Code = $LASTEXITCODE }
 }
 # One declaration's OWN block: walk back from the declaration over its /// run.
@@ -117,7 +120,8 @@ Check 'CONTROL-1 the ghost makes the block stale' ($d.Out -match 'ddFactsBlockSt
 Check 'CONTROL-1 and the repair is offered (this index vouches for the ghost)' ($d.Out -match '\[FIXABLE\]') $d.Out.Trim()
 
 # --- CASE-FIX: lint --fix --apply keeps the Pure line ------------------------
-$r = Run @('lint',$uPure,'--db',$db,'--project-rules','--rule','doc-drift','--fix','--apply')
+# 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+$r = Run @('lint',$uPure,'--db',$db,'--project-rules','--rule','doc-drift','--fix','--apply','--no-compile-gate')
 $blk = BlockAbove $uPure 'procedure Bump;'
 Check 'CASE-FIX the fix RAN: the ghost caller is gone (positive control)' ($blk -notmatch 'NoSuchCaller') $blk
 Check 'CASE-FIX the real caller survived' ($blk -match 'uPure\.UseIt') $blk
@@ -131,7 +135,8 @@ $r = Run @('index','--project',(Join-Path $proj 'Pure.dpr'),'--db',$db)
 $d = Run @('doc-drift','--qname','uPure.Bump','--db',$db)
 Check 'CASE-AGREE checker: the block the fixer wrote is current' ($d.Out -notmatch 'ddFactsBlockStale') $d.Out.Trim()
 $h0 = (Get-FileHash $uPure -Algorithm MD5).Hash
-$null = Run @('lint',$uPure,'--db',$db,'--project-rules','--rule','doc-drift','--fix','--apply')
+# 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+$null = Run @('lint',$uPure,'--db',$db,'--project-rules','--rule','doc-drift','--fix','--apply','--no-compile-gate')
 $h1 = (Get-FileHash $uPure -Algorithm MD5).Hash
 Check 'CASE-AGREE fixer: a second --fix --apply is byte-identical' ($h0 -eq $h1) "$h0 vs $h1"
 

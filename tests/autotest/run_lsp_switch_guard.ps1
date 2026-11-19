@@ -29,10 +29,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\tools\lsp-switch\Win64\Debug\drag-lint-switch.exe",  # the repo build (prepare_battery.ps1), as run_lsp_switch_params_guard
+  [string]$Exe     = '',  # the repo build (prepare_battery.ps1), as run_lsp_switch_params_guard
   [string]$WorkDir = "$env:TEMP\drag-lint-switch-guard-$PID",
   [string]$RegRoot = 'Software\DragLintSwitchTest\LSP\UserDefined'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\tools\lsp-switch\Win64\Debug\drag-lint-switch.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -71,7 +74,7 @@ Set-Content -LiteralPath $fakeServer -Value 'not really an exe' -Encoding ascii
 # --status against the LIVE registry root and reported success, so the first
 # assertion "PASSED" while testing the opposite of what it claimed.
 function Run-Switch([string[]]$SwitchArgs) {
-  $out = & $Exe @SwitchArgs 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @SwitchArgs 2>&1 | ForEach-Object { "$_" } } | Out-String
   return [pscustomobject]@{ Out = $out; Code = $LASTEXITCODE }
 }
 
@@ -121,7 +124,7 @@ if ($bk.Count -ge 1) {
   # ---- case 4: THE ROUND TRIP ----
   Write-Host ''
   Write-Host 'CASE 4: reg import restores every value exactly' -ForegroundColor Cyan
-  $null = reg import $bk[0].FullName 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; reg import $bk[0].FullName 2>&1 | ForEach-Object { "$_" } }
   Check 'reg import succeeded' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
   Check 'the entry is back' (Test-Path $entry)
   if (Test-Path $entry) {

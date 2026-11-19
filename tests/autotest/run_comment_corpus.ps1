@@ -43,9 +43,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -94,7 +97,7 @@ $src = @(
 # A DIRECTORY target against a fresh scratch DB is the LIBRARY-shaped scan and is
 # correct here. The rule this repo enforces -- never `index <dir> --db <projectDb>`
 # -- is about widening an existing PROJECT database, which this is not.
-$idxOut = & $exePath index $WorkDir --db $db 2>&1
+$idxOut = & { $ErrorActionPreference = 'Continue'; & $exePath index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } }
 $idxExit = $LASTEXITCODE
 Check 'the fixture indexed' ($idxExit -eq 0 -and (Test-Path $db)) "exit=$idxExit"
 if (-not (Test-Path $db)) {
@@ -118,29 +121,29 @@ function KindOf($Hits) {
 function Find-Text([string]$Phrase, [string]$Kind = '') {
   $a = @('query', '--text', $Phrase, '--db', $db, '--json')
   if ($Kind -ne '') { $a += @('--kind', $Kind) }
-  $raw = (& $exePath @a 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath @a 2>$null }) -join "`n"
   if (-not $raw.Trim()) { return @() }
-  try { $d = $raw | ConvertFrom-Json } catch { return @() }
+  try { $d = $raw | ConvertFrom-Json | ForEach-Object { $_ } } catch { return @() }
   return @($d | Where-Object { $null -ne $_ })
 }
 
 Write-Host ''
 Write-Host 'Each comment FORM is searchable (four lexically different constructs)' -ForegroundColor Cyan
-$slash = Find-Text 'axolotl body slash marker'
+$slash = @(Find-Text 'axolotl body slash marker')
 Check 'a // comment inside a routine BODY is found' ($slash.Count -ge 1) "hits=$($slash.Count)"
 Check '  ...and is reported as kind comment' `
   ($slash.Count -ge 1 -and (KindOf $slash) -eq 'comment') "kind=$((KindOf $slash))"
 
-$brace = Find-Text 'pangolin brace block marker'
+$brace = @(Find-Text 'pangolin brace block marker')
 Check 'a { } block comment is found' ($brace.Count -ge 1) "hits=$($brace.Count)"
 
-$paren = Find-Text 'capybara paren star marker'
+$paren = @(Find-Text 'capybara paren star marker')
 Check 'a (* *) comment is found' ($paren.Count -ge 1) "hits=$($paren.Count)"
 
-$trail = Find-Text 'narwhal trailing marker'
+$trail = @(Find-Text 'narwhal trailing marker')
 Check 'a trailing // comment after a field declaration is found' ($trail.Count -ge 1) "hits=$($trail.Count)"
 
-$doc = Find-Text 'quokka doc marker'
+$doc = @(Find-Text 'quokka doc marker')
 Check 'a /// doc comment is found' ($doc.Count -ge 1) "hits=$($doc.Count)"
 Check '  ...and is reported as kind doc, NOT comment' `
   ($doc.Count -ge 1 -and (KindOf $doc) -eq 'doc') `
@@ -148,7 +151,7 @@ Check '  ...and is reported as kind doc, NOT comment' `
 
 Write-Host ''
 Write-Host 'REGRESSION CONTROL -- string literals still behave exactly as before' -ForegroundColor Cyan
-$lit = Find-Text 'okapi literal marker'
+$lit = @(Find-Text 'okapi literal marker')
 Check 'a string literal is still found' ($lit.Count -ge 1) "hits=$($lit.Count)"
 Check '  ...still as kind literal' `
   ($lit.Count -ge 1 -and (KindOf $lit) -eq 'literal') "kind=$((KindOf $lit))"
@@ -156,27 +159,27 @@ Check '  ...still as kind literal' `
 Write-Host ''
 Write-Host 'THE --kind FILTER SEPARATES THEM (else kind is decorative)' -ForegroundColor Cyan
 Check '--kind literal does NOT return a comment phrase' `
-  ((Find-Text 'axolotl body slash marker' 'literal').Count -eq 0) `
+  ((@(Find-Text 'axolotl body slash marker' 'literal')).Count -eq 0) `
   'if this fails, comments were indexed as literals and every existing --kind literal query is now wrong'
 Check '--kind comment does NOT return a literal phrase' `
-  ((Find-Text 'okapi literal marker' 'comment').Count -eq 0) ''
+  ((@(Find-Text 'okapi literal marker' 'comment')).Count -eq 0) ''
 Check '--kind comment DOES return the comment phrase' `
-  ((Find-Text 'axolotl body slash marker' 'comment').Count -ge 1) ''
+  ((@(Find-Text 'axolotl body slash marker' 'comment')).Count -ge 1) ''
 Check '--kind literal still returns the literal phrase' `
-  ((Find-Text 'okapi literal marker' 'literal').Count -ge 1) `
+  ((@(Find-Text 'okapi literal marker' 'literal')).Count -ge 1) `
   '--kind literal is the documented way to get the pre-comment behaviour back'
 
 Write-Host ''
 Write-Host 'A COMPILER DIRECTIVE IS NOT PROSE' -ForegroundColor Cyan
 Check '{$R ...} is NOT indexed as comment text' `
-  ((Find-Text 'zebrafish_directive_marker').Count -eq 0) `
+  ((@(Find-Text 'zebrafish_directive_marker')).Count -eq 0) `
   'directives are not comment nodes in the grammar (probed with dumpnode); if they become so, --text fills with {$R} noise'
 
 Write-Host ''
 Write-Host 'Substring and any-order reach comment text too' -ForegroundColor Cyan
 $sub = @()
-$rawSub = (& $exePath query --text 'pangolin brace' --substring --db $db --json 2>$null) -join "`n"
-if ($rawSub.Trim()) { try { $sub = @(($rawSub | ConvertFrom-Json) | Where-Object { $null -ne $_ }) } catch { $sub = @() } }
+$rawSub = (& { $ErrorActionPreference = 'Continue'; & $exePath query --text 'pangolin brace' --substring --db $db --json 2>$null }) -join "`n"
+if ($rawSub.Trim()) { try { $sub = @(($rawSub | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $null -ne $_ }) } catch { $sub = @() } }
 Check '--substring finds a fragment of a comment' ($sub.Count -ge 1) "hits=$($sub.Count)"
 
 try { Remove-Item -LiteralPath $WorkDir -Recurse -Force -ErrorAction SilentlyContinue } catch { }

@@ -19,7 +19,6 @@ uses
   Vcl.StdCtrls,
   Vcl.Dialogs,
   DRagLint.Index.Manifest,
-  Config.ManifestSession,
   Config.IndexesFrame,
   Config.SettingsFrame;
 
@@ -27,6 +26,12 @@ type
   /// <summary>Top-level form: tabbed shell over the index section editor and
   /// the settings editor. Owns the working TIndexManifest instance and the
   /// resolved config file path.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (Config.MainForm.pas) ?, declaration (drag-lint-config.dpr)</para>
+  /// <para>Used in units: Config.MainForm, drag-lint-config</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMainForm = class(TForm)
     pcMain: TPageControl;
     tsIndexes: TTabSheet;
@@ -36,9 +41,62 @@ type
     btnReload: TButton;
     btnOpen: TButton;
     lblConfigPath: TLabel;
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.FlushToManifest, Config.MainForm.TMainForm.LoadManifest, Config.MainForm.TMainForm.ResolveConfigPath, Config.ManifestSession.TrySaveConfigManifest, Config.SettingsFrame.TSettingsFrame.FlushToManifest, ShowMessage</para>
+    /// <para>Reads: FIndexFrame, tsIndexes, FSettingsFrame, FManifest, FLoadError, FOriginalText, FConfigPath, tsSettings   Writes: FIndexFrame, FSettingsFrame, FConfigPath</para>
+    /// <para>Handles: MainForm.OnShow</para>
+    /// <para>UI thread only -- touches FIndexFrame, FSettingsFrame</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.FlushToManifest"/>
+    /// <seealso cref="Config.MainForm.TMainForm.LoadManifest"/>
+    /// <seealso cref="Config.MainForm.TMainForm.ResolveConfigPath"/>
+    /// <seealso cref="Config.ManifestSession.TrySaveConfigManifest"/>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.FlushToManifest"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure FormShow(Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.FlushToManifest, Config.ManifestSession.TrySaveConfigManifest, Config.SettingsFrame.TSettingsFrame.FlushToManifest, ShowMessage</para>
+    /// <para>Reads: FIndexFrame, FSettingsFrame, FManifest, FLoadError, FOriginalText, FConfigPath</para>
+    /// <para>Handles: btnSave.OnClick</para>
+    /// <para>UI thread only -- touches FIndexFrame, FSettingsFrame</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.FlushToManifest"/>
+    /// <seealso cref="Config.ManifestSession.TrySaveConfigManifest"/>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.FlushToManifest"/>
+    /// <seealso cref="Config.MainForm.TMainForm.btnOpenClick"/>
+    /// <seealso cref="Config.MainForm.TMainForm.btnReloadClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure btnSaveClick(Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.MainForm.TMainForm.LoadManifest</para>
+    /// <para>Handles: btnReload.OnClick</para>
+    /// <seealso cref="Config.MainForm.TMainForm.LoadManifest"/>
+    /// <seealso cref="Config.MainForm.TMainForm.btnOpenClick"/>
+    /// <seealso cref="Config.MainForm.TMainForm.btnSaveClick"/>
+    /// <seealso cref="Config.MainForm.TMainForm.FormShow"/>
+    /// <seealso cref="Config.MainForm.TMainForm.PopulateFrame"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure btnReloadClick(Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Config.MainForm.TMainForm.LoadManifest</para>
+    /// <para>Reads: FOpenDialog   Writes: FOpenDialog, FConfigPath</para>
+    /// <para>Handles: btnOpen.OnClick</para>
+    /// <seealso cref="Config.MainForm.TMainForm.LoadManifest"/>
+    /// <seealso cref="Config.MainForm.TMainForm.btnReloadClick"/>
+    /// <seealso cref="Config.MainForm.TMainForm.btnSaveClick"/>
+    /// <seealso cref="Config.MainForm.TMainForm.FormShow"/>
+    /// <seealso cref="Config.MainForm.TMainForm.PopulateFrame"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure btnOpenClick(Sender: TObject);
   private
     FManifest:       TIndexManifest;
@@ -55,14 +113,52 @@ type
     /// <summary>Resolve the config path: the --config arg, else
     /// &lt;ExeDir&gt;\drag-lint.json (see ConfigTargetPath).</summary>
     /// <returns>Absolute path of the one file this session loads and saves; never ''.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.MainForm.TMainForm.FormShow (Config.MainForm.pas)</para>
+    /// <para>Calls: Config.ManifestSession.ConfigTargetPath, ParamStr</para>
+    /// <para>Returns: ConfigTargetPath(Explicit, TPath.GetDirectoryName(ParamStr(0)))</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="Config.ManifestSession.ConfigTargetPath"/>
+    /// <seealso cref="Config.MainForm.TMainForm.btnOpenClick"/>
+    /// <seealso cref="Config.MainForm.TMainForm.btnReloadClick"/>
+    /// <seealso cref="Config.MainForm.TMainForm.btnSaveClick"/>
+    /// <seealso cref="Config.MainForm.TMainForm.FormShow"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ResolveConfigPath: string;
     /// <summary>Load the manifest from FConfigPath (never by discovery, which would
     /// merge a local .drag-lint.json) and push the result into FManifest and FIndexFrame.
     /// Records the load error in FLoadError and tells the user when it is set.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.MainForm.TMainForm.btnOpenClick (Config.MainForm.pas), Config.MainForm.TMainForm.btnReloadClick (Config.MainForm.pas), Config.MainForm.TMainForm.FormShow (Config.MainForm.pas)</para>
+    /// <para>Calls: Config.MainForm.TMainForm.PopulateFrame, Config.ManifestSession.LoadConfigManifest, ShowMessage</para>
+    /// <para>Reads: FConfigPath, FManifest, FOriginalText, FLoadError   Writes: FLoadError</para>
+    /// <seealso cref="Config.MainForm.TMainForm.PopulateFrame"/>
+    /// <seealso cref="Config.ManifestSession.LoadConfigManifest"/>
+    /// <seealso cref="Config.MainForm.TMainForm.btnOpenClick"/>
+    /// <seealso cref="Config.MainForm.TMainForm.btnReloadClick"/>
+    /// <seealso cref="Config.MainForm.TMainForm.btnSaveClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure LoadManifest;
     /// <summary>Push the current FManifest into the frame so its controls reflect
     /// the newly loaded data. Disables Save and marks the path caption while
     /// FLoadError is set.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: Config.MainForm.TMainForm.LoadManifest (Config.MainForm.pas)</para>
+    /// <para>Calls: Config.IndexesFrame.TIndexesFrame.BindManifest, Config.SettingsFrame.TSettingsFrame.BindManifest, PIndexManifest</para>
+    /// <para>Reads: FIndexFrame, FManifest, FConfigPath, FSettingsFrame, btnSave, FLoadError, lblConfigPath</para>
+    /// <para>UI thread only -- touches FIndexFrame, FSettingsFrame</para>
+    /// <seealso cref="Config.IndexesFrame.TIndexesFrame.BindManifest"/>
+    /// <seealso cref="Config.SettingsFrame.TSettingsFrame.BindManifest"/>
+    /// <seealso cref="Config.MainForm.TMainForm.btnOpenClick"/>
+    /// <seealso cref="Config.MainForm.TMainForm.btnReloadClick"/>
+    /// <seealso cref="Config.MainForm.TMainForm.btnSaveClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure PopulateFrame;
   public
     /// <summary>The working manifest. Updated by the frame on each edit.</summary>
@@ -75,6 +171,9 @@ var
   MainForm: TMainForm;
 
 implementation
+
+uses
+  Config.ManifestSession;
 
 {$R *.dfm}
 

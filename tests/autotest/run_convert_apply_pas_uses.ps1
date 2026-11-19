@@ -28,9 +28,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_pas_uses_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 $script:fail = $false
@@ -230,15 +233,15 @@ W 'p3.rules' "#convert TPicOld -> TPicNew`n#link Glyph.Data <- Caption`n#link Ca
 W 'fx.castlib' "cast CastA`n  accepts TSrcPic`n  yields  TDstGlyph`n  pas     '{dst}.Assign({src});'`nend`n"
 
 $db = P 'fx.sqlite'
-& $Exe index --project (P 'P.dpr') --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (P 'P.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the fixture PROJECT index was built' (Test-Path $db)
 
 function Run([string]$Unit, [string]$Rules, [string[]]$Extra = @()) {
   $a = @('convert-apply', '--unit', (P $Unit), '--rules', (P $Rules), '--db', $db, '--castlib', (P 'fx.castlib')) + $Extra
-  $o = (& $Exe @a 2>$null) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null }) -join "`n"
   $code = $LASTEXITCODE
   $j = $null
-  if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {} }
+  if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {} }
   return [pscustomobject]@{ Code = $code; Out = $o; J = $j }
 }
 function J([string]$Unit, [string]$Rules, [string[]]$Extra = @()) { return Run $Unit $Rules (@('--format', 'json') + $Extra) }
@@ -328,10 +331,10 @@ W 'xapp\AF.pas' "unit AF;`n`ninterface`n`nuses`n  LibX, AppOld;`n`ntype`n  TAF =
 W 'xapp\AF.dfm' "object AF: TAF`n  object a1: TAOld`n  end`nend`n"
 W 'xapp\P.dpr' "program P;`n`nuses`n  AppOld, AF;`n`nbegin`nend.`n"
 W 'x.rules' "#convert TAOld -> TANew`n"
-& $Exe index (P 'xlib') --db (P 'xlib.sqlite') 2>&1 | Out-Null
-& $Exe index --project (P 'xapp\P.dpr') --db (P 'xapp.sqlite') 2>&1 | Out-Null
-$xo = (& $Exe convert-apply --unit (P 'xapp\AF.pas') --rules (P 'x.rules') --db (P 'xapp.sqlite') --db (P 'xlib.sqlite') --format json 2>$null) -join "`n"
-$xr = [pscustomobject]@{ J = $null }; try { $xr.J = $xo.Substring($xo.IndexOf('{')) | ConvertFrom-Json } catch {}
+& { $ErrorActionPreference = 'Continue'; & $Exe index (P 'xlib') --db (P 'xlib.sqlite') 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (P 'xapp\P.dpr') --db (P 'xapp.sqlite') 2>&1 | ForEach-Object { "$_" } } | Out-Null
+$xo = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'xapp\AF.pas') --rules (P 'x.rules') --db (P 'xapp.sqlite') --db (P 'xlib.sqlite') --format json 2>$null }) -join "`n"
+$xr = [pscustomobject]@{ J = $null }; try { $xr.J = $xo.Substring($xo.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 $x = Row $xr 'a1' 'XTag'
 Check 'X1 an ancestor declared in ANOTHER --db: a1.XTag -- same-name, declared_in TXRoot, declaring_unit LibX, line 20' `
   (($null -ne $x) -and ($x.status -eq 'same-name') -and ($x.declared_in -eq 'TXRoot') -and ($x.declaring_unit -eq 'LibX') -and ($x.kind -eq 'property') -and ((Lines $x) -eq '20')) $xo
@@ -398,14 +401,14 @@ CForm 'CNone'  "uses`n  CVcl;"
 W 'capp\P.dpr' "program P;`n`nuses`n  CVcl, COrder, CFmx, CNone;`n`nbegin`nend.`n"
 W 'c.rules'  "#convert TLabel -> TStaticText`n"
 W 'cq.rules' "#convert Vcl.StdCtrls.TLabel -> Vcl.StdCtrls.TStaticText`n"
-& $Exe index (P 'clib') --db (P 'clib.sqlite') 2>&1 | Out-Null
-& $Exe index --project (P 'capp\P.dpr') --db (P 'capp.sqlite') 2>&1 | Out-Null
-$c0 = (& $Exe sql --db (P 'clib.sqlite') --query "select qualified_name from symbols where name = 'TLabel' and kind = 'class' order by id" 2>$null) -join "`n"
+& { $ErrorActionPreference = 'Continue'; & $Exe index (P 'clib') --db (P 'clib.sqlite') 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (P 'capp\P.dpr') --db (P 'capp.sqlite') 2>&1 | ForEach-Object { "$_" } } | Out-Null
+$c0 = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db (P 'clib.sqlite') --query "select qualified_name from symbols where name = 'TLabel' and kind = 'class' order by id" 2>$null }) -join "`n"
 Check 'C0 premise: the library holds BOTH TLabels and the FMX one comes first (a by-name lookup lands on it)' `
   ($c0 -match '(?s)FMX\.StdCtrls\.TLabel.*Vcl\.StdCtrls\.TLabel') $c0
 function CRun([string]$Unit, [string]$Rules) {
-  $o = (& $Exe convert-apply --unit (P "capp\$Unit.pas") --rules (P $Rules) --db (P 'capp.sqlite') --db (P 'clib.sqlite') --format json 2>$null) -join "`n"
-  $r = [pscustomobject]@{ J = $null; Out = $o }; try { $r.J = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {}
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P "capp\$Unit.pas") --rules (P $Rules) --db (P 'capp.sqlite') --db (P 'clib.sqlite') --format json 2>$null }) -join "`n"
+  $r = [pscustomobject]@{ J = $null; Out = $o }; try { $r.J = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
   return $r
 }
 function IsVcl($x, [string]$Kind) {
@@ -440,7 +443,7 @@ $c = CRun 'CNone' 'c.rules'
 Check 'C7 (owner ruling 2026-10-11) no uses entry declares TLabel, the book is bare, the form is a .dfm: inferred VCL -- WordWrap is Vcl.StdCtrls / TCustomLabel, never an FMX guess' `
   (($null -ne $c.J) -and ($c.J.refused -eq $false) -and (IsVcl (Row $c 'Label1' 'WordWrap') 'property') -and
    ($c.J.qualify_fixes[0].outcome -eq 'inferred') -and ($c.J.qualify_fixes[0].chosen -eq 'Vcl.StdCtrls.TLabel')) $c.Out
-$t = (& $Exe convert-apply --unit (P 'capp\CNone.pas') --rules (P 'c.rules') --db (P 'capp.sqlite') --db (P 'clib.sqlite') 2>$null) -join "`n"
+$t = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'capp\CNone.pas') --rules (P 'c.rules') --db (P 'capp.sqlite') --db (P 'clib.sqlite') 2>$null }) -join "`n"
 Check 'C8 (owner ruling 2026-10-11) text: the warning names the inference and the line to paste' `
   ($t -match '#convert TLabel resolved to Vcl\.StdCtrls\.TLabel \(line 1\): inferred from the form file CNone\.dfm \(VCL\); qualify the line to silence this: #convert Vcl\.StdCtrls\.TLabel -> TStaticText') $t
 $c = CRun 'CNone' 'cq.rules'
@@ -452,8 +455,8 @@ Check 'C10 every member row carries a resolution (X1''s cross-db ancestor too)' 
   (($c.J.pas_uses | ConvertTo-Json -Depth 4 -Compress))
 
 # ---- capability -------------------------------------------------------------
-$info = (& $Exe info --json 2>$null) -join "`n"
-$ij = $null; try { $ij = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json } catch {}
+$info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n"
+$ij = $null; try { $ij = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'K info --json: capabilities.pas_uses is true' (($null -ne $ij) -and ($ij.capabilities.pas_uses -eq $true)) ''
 Check 'K2 info --json: capabilities.pas_uses_resolution is true' (($null -ne $ij) -and ($ij.capabilities.pas_uses_resolution -eq $true)) ''
 

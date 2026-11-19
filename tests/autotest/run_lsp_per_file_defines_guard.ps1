@@ -27,9 +27,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-lsp-pfd-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $script:Failed = $false
 $script:Proc = $null
 try {
@@ -100,7 +103,7 @@ Write-Ascii $Unit  (New-Body 'uUnit')
 Write-Ascii $Loose (New-Body 'uLoose')
 $WithLine = ((Get-Content $Unit) | Select-String -SimpleMatch 'with X do Free').LineNumber
 $Db = "$WorkDir\proj\_D-RAG\App.sqlite"
-$idx = (& $Exe index --project $Dproj --db $Db 2>&1 | Out-String)
+$idx = (& { $ErrorActionPreference = 'Continue'; & $Exe index --project $Dproj --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-String)
 Check 'SETUP project index built' (($idx -match 'Files:\s*(\d+)') -and ([int]$Matches[1] -ge 2))
 
 # ---------- minimal interactive LSP client ----------
@@ -123,7 +126,7 @@ function ReadFrameT {
   $len = [int]([regex]::Match($hdr, 'Content-Length:\s*(\d+)').Groups[1].Value)
   $body = New-Object byte[] $len
   for ($i = 0; $i -lt $len; $i++) { $body[$i] = ReadByteT }
-  return ([System.Text.Encoding]::UTF8.GetString($body) | ConvertFrom-Json)
+  return ([System.Text.Encoding]::UTF8.GetString($body) | ConvertFrom-Json | ForEach-Object { $_ })
 }
 function Start-Lsp([string[]]$LspArgs) {
   $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -170,13 +173,13 @@ function Stop-Lsp {
   $script:Proc = $null
 }
 function CliLines([string]$File, [string[]]$Extra = @()) {
-  $raw = (& $Exe lint $File --json --db $Db @Extra 2>$null) -join "`n"
-  $arr = @(); if ($raw.Trim()) { $arr = @($raw | ConvertFrom-Json) }
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $File --json --db $Db @Extra 2>$null }) -join "`n"
+  $arr = @(); if ($raw.Trim()) { $arr = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   return ,@($arr | Where-Object { $_.rule -eq 'parser-error' } | ForEach-Object { [int]$_.start_line })
 }
 function WithLines { param($File)
-  $raw = (& $Exe lint $File --json --db $Db 2>$null) -join "`n"
-  $arr = @(); if ($raw.Trim()) { $arr = @($raw | ConvertFrom-Json) }
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $File --json --db $Db 2>$null }) -join "`n"
+  $arr = @(); if ($raw.Trim()) { $arr = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   return ,@($arr | Where-Object { $_.rule -eq 'with-statement' } | ForEach-Object { [int]$_.start_line })
 }
 

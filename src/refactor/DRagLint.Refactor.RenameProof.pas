@@ -85,6 +85,8 @@ const
   CRefuseWithNeedsIndex = 'with-needs-index';
   /// <summary>The routine already uses the local's new name.</summary>
   CRefuseCaptureLocal = 'capture-local';
+  /// <summary>A local rename's --col names one local as a UTF-8 byte column and another as a character column.</summary>
+  CRefuseColumnAmbiguous = 'column-ambiguous';
   /// <summary>--apply without --project: nothing could gate the write.</summary>
   CRefuseNoProject = 'no-project';
   /// <summary>--apply with --no-compile: the gate is not optional.</summary>
@@ -98,6 +100,12 @@ const
 
 type
   /// <summary>One occurrence, or one fact about the target, that stops the rewrite.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.RenameProof.pas) ?, DRagLint.Refactor.MultiProjectRename.RenameAcrossOwners (DRagLint.Refactor.MultiProjectRename.pas) ?, DRagLint.Refactor.MultiProjectRename.RenameAcrossOwners.Refuse (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.RenameProof.ProofOf (DRagLint.Refactor.RenameProof.pas) ?, DRagLint.Refactor.RenameProof.TProver.Create (DRagLint.Refactor.RenameProof.pas) ? (+4 more)</para>
+  /// <para>Used in units: DRagLint.Refactor.MultiProjectRename, DRagLint.Refactor.RenameProof</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRenameRefusal = record
     /// <summary>One of the CRefuse* kinds.</summary>
     Kind: string;
@@ -112,6 +120,12 @@ type
   end;
 
   /// <summary>What the proof decided about every occurrence.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.RenameReach (DRagLint.CLI.pas) ?, DRagLint.Refactor.RenameProof.ProofOf (DRagLint.Refactor.RenameProof.pas), DRagLint.Refactor.RenameProof.ProveLocalRename (DRagLint.Refactor.RenameProof.pas), DRagLint.Refactor.RenameProof.ProveRename (DRagLint.Refactor.RenameProof.pas), DRagLint.Refactor.RenameProof.TProver.Run (DRagLint.Refactor.RenameProof.pas) (+10 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Fix.V151.Legacy, DRagLint.LSP.Feature.Rename, DRagLint.Refactor.MultiProjectRename, DRagLint.Refactor.NamingFix, DRagLint.Refactor.RenameProof</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRenameProof = record
     /// <summary>The proved edits, character columns, sorted back to front per file.</summary>
     Edits: TArray<TRenameEdit>;
@@ -130,6 +144,12 @@ type
   end;
 
   /// <summary>How `rename --apply` builds.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.RenameProof.pas) ?, DRagLint.CLI.FinishRename (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.RenameProof.ApplyRenameGated (DRagLint.Refactor.RenameProof.pas) ?</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.MCP.Server, DRagLint.Refactor.RenameProof</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRenameGateOptions = record
     /// <summary>The .dproj; required.</summary>
     Project: string;
@@ -152,7 +172,8 @@ type
 /// <param name="pQName">The target's qualified name. Its overloads, overrides and implementers rename with it.</param>
 /// <param name="pNewName">The new name.</param>
 /// <returns>The proof; Found = False when the target is not in the index.</returns>
-/// <remarks>Reads every source file the index lists that holds either name. Writes nothing. Identity needs a
+/// <remarks>
+/// Reads every source file the index lists that holds either name. Writes nothing. Identity needs a
 /// `type_symbol_id`: a NULL, a missing row or an unresolved ancestor is a refusal, never a guess. A chain that reaches a
 /// library type ends there: a library class cannot descend from a project class (refused when the target's qualified
 /// name is in the library too). A symbol declared inside a routine (a local, a parameter, a local constant or type, a
@@ -160,10 +181,19 @@ type
 /// name, and any bare occurrence of the new name in those lines refuses as CRefuseCaptureLocal. No library is needed.
 /// A published field of a form class is a component: its name in the owning form's and descendants' text .dfm
 /// (`object Name: TType`, `inherited Name: TType`, `Prop = Name`, `Prop = Owner.Name`) is an edit. Another form's
-/// own component of that name is another symbol's. What cannot be told apart (under an `inline`, inside a list, a form
-/// whose root class is not indexed, an enum value of the same name) refuses as CRefuseDfmNameUnbound. A string literal
+/// own component of that name is another symbol's. An item of a `Prop = ( ... )` list is a value like `Prop = Name`
+/// (1.52). What cannot be told apart (under an `inline`, an `Owner.Name` list item, a form whose root class is not
+/// indexed, an enum value of the same name) refuses as CRefuseDfmNameUnbound. A string literal
 /// in any indexed source file that is the component's name, or ends in `.Name`, refuses as CRefuseNameInString
-/// (`FindComponent('Name')` compiles either way and finds nothing after the rename); a comment never refuses.</remarks>
+/// (`FindComponent('Name')` compiles either way and finds nothing after the rename); a comment never refuses.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.MultiProjectRename.RenameAcrossOwners.TakeOwner (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.NamingFix.BuildTargetEdits (DRagLint.Refactor.NamingFix.pas)</para>
+/// <para>Calls: Default, DRagLint.Refactor.RenameProof.TProver.Create, DRagLint.Refactor.RenameProof.TProver.Run</para>
+/// <para>Returns: Default(TRenameProof); Prover.Run</para>
+/// <seealso cref="DRagLint.Refactor.RenameProof.TProver.Create"/>
+/// <seealso cref="DRagLint.Refactor.RenameProof.TProver.Run"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ProveRename(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;
   const pQName, pNewName: string): TRenameProof;
 
@@ -172,15 +202,35 @@ function ProveRename(const pStore: ISymbolStore; const pLibraries: TArray<ISymbo
 /// <param name="pStore">The index, or nil: without one an occurrence under a `with` refuses.</param>
 /// <param name="pFile">The source file.</param>
 /// <param name="pLine">1-based line of the declaration identifier.</param>
-/// <param name="pCol">1-based column of the declaration identifier.</param>
+/// <param name="pCol">1-based column of the declaration identifier: its UTF-8 byte column or its character column.</param>
 /// <param name="pNewName">The new name.</param>
-/// <returns>The proof; Found = False when no local is declared there.</returns>
+/// <returns>The proof; Found = False when no local is declared there. When pCol read as bytes and read as characters
+/// names two different locals, Found = True, no edit and one CRefuseColumnAmbiguous refusal.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.Fix.V151.Legacy.FixLocalShadowsField (DRagLint.Fix.V151.Legacy.pas), DRagLint.Refactor.NamingFix.BuildTargetEdits (DRagLint.Refactor.NamingFix.pas)</para>
+/// <para>Calls: AddRefusal, Default, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan, DRagLint.Refactor.RenameProof.ProofOf, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection, ExpandFileName, Format</para>
+/// <para>Returns: Default(TRenameProof); ProofOf(Edits, Refusals)</para>
+/// <para>Complexity: 17 (cyclomatic, outer body), 126 lines (full implementation)</para>
+/// <para>SQL: reads FILES, REFS, SYMBOLS</para>
+/// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan"/>
+/// <seealso cref="DRagLint.Refactor.RenameProof.ProofOf"/>
+/// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ProveLocalRename(const pStore: ISymbolStore; const pFile: string; pLine, pCol: Integer;
   const pNewName: string): TRenameProof;
 
 /// <summary>One refusal as a line: `file:line:col: refused [kind]: why`.</summary>
 /// <param name="pRefusal">The refusal.</param>
 /// <returns>The line; the place is left out when there is none.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.FinishRename (DRagLint.CLI.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.NamingFix.BuildTargetEdits (DRagLint.Refactor.NamingFix.pas), DRagLint.Refactor.RenameProof.RenderRenamePlan (DRagLint.Refactor.RenameProof.pas)</para>
+/// <para>Calls: Format</para>
+/// <para>Returns: Format('%srefused [%s]: %s', [Place, pRefusal.Kind, pRefusal.Why])</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RefusalLine(const pRefusal: TRenameRefusal): string;
 
 /// <summary>The proof as text: the decided counts, then every refusal.</summary>
@@ -188,6 +238,14 @@ function RefusalLine(const pRefusal: TRenameRefusal): string;
 /// <param name="pQName">The target.</param>
 /// <param name="pNewName">The new name.</param>
 /// <returns>The plan, several lines.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.FinishRename (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Refactor.RenameProof.RefusalLine, Format</para>
+/// <para>Returns: SB.ToString</para>
+/// <seealso cref="DRagLint.Refactor.RenameProof.RefusalLine"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RenderRenamePlan(const pProof: TRenameProof; const pQName, pNewName: string): string;
 
 /// <summary>The proof as a JSON object: target, to, edits, bound, typed, other, group, refusals.</summary>
@@ -195,18 +253,47 @@ function RenderRenamePlan(const pProof: TRenameProof; const pQName, pNewName: st
 /// <param name="pQName">The target.</param>
 /// <param name="pNewName">The new name.</param>
 /// <returns>The document.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.FinishRename (DRagLint.CLI.pas)</para>
+/// <para>Returns: O.ToJSON</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RenamePlanJson(const pProof: TRenameProof; const pQName, pNewName: string): string;
 
 /// <summary>Writes proved edits through the compile gate: baseline build, all-or-nothing write, after build, rollback.</summary>
 /// <param name="pEdits">The proved edits.</param>
 /// <param name="pOpts">The project and how to build it.</param>
 /// <returns>The gate's outcome; Applied, or a CGate* refusal with its detail. Never raises.</returns>
+/// <exception cref="EInOutError"><!-- drag-lint:auto exc -->via DRagLint.Refactor.CompileGate.ApplyGated: nothing staged for %s</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.FinishRename (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+/// <para>Calls: Cardinal, Default, DRagLint.Refactor.CompileGate.ApplyGated, DRagLint.Refactor.CompileGate.FreshScratchName, DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyToText, DRagLint.Refactor.TextEdit.TTextFileFormat.Encode, DRagLint.Refactor.TextEdit.TTextFileFormat.ReadFile, ExpandFileName, Format, FormatDateTime, Writeln</para>
+/// <para>Returns: Default(TGateOutcome); ApplyGated(Req)</para>
+/// <para>Catches: EInOutError (swallowed); Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Refactor.CompileGate.ApplyGated"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.FreshScratchName"/>
+/// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyToText"/>
+/// <seealso cref="DRagLint.Refactor.TextEdit.TTextFileFormat.Encode"/>
+/// <seealso cref="DRagLint.Refactor.TextEdit.TTextFileFormat.ReadFile"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ApplyRenameGated(const pEdits: TArray<TRenameEdit>; const pOpts: TRenameGateOptions): TGateOutcome;
 
 /// <summary>The test seam of the rename guards older than the gate, whose fixtures do not compile:
 /// DRAGLINT_RENAME_TEST_UNGATED=1 with every edit under %TEMP% / C:\TEMP.</summary>
 /// <param name="pEdits">The edits about to be written.</param>
 /// <returns>True when the caller may write without the gate.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.FinishRename (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+/// <para>Calls: DRagLint.Refactor.CompileGate.IsUnderTemp, GetEnvironmentVariable</para>
+/// <para>Returns: GetEnvironmentVariable(CSeamVar) = '1'</para>
+/// <seealso cref="DRagLint.Refactor.CompileGate.IsUnderTemp"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RenameUngatedSeam(const pEdits: TArray<TRenameEdit>): Boolean;
 
 implementation
@@ -224,6 +311,7 @@ uses
   Data.DB,
   FireDAC.Comp.Client,
   TreeSitter,
+  DRagLint.Core.Encoding, // 1.52 EXTGAPS2: Utf8ByteColToCharCol
   DRagLint.Diagnostics.ParseCache,
   DRagLint.Refactor.TextEdit,
   DRagLint.Storage.SQLite;
@@ -960,6 +1048,7 @@ end;
 function TProver.InWith(const pPath: string; pLine, pByteCol: Integer): Boolean;
 var
   Spans: TArray<TWithSpan>;
+  Src: TBytes; { 1.52 EXTGAPS2: spans in CHARACTER columns, the token's index column }
 
   procedure Collect(const pNode: TTSNode);
   begin
@@ -968,9 +1057,9 @@ var
     begin
       var S: TWithSpan;
       S.StartLine:= Integer(pNode.StartPoint.Row) + 1;
-      S.StartCol := Integer(pNode.StartPoint.Column) + 1;
+      S.StartCol := Utf8ByteColToCharCol(Src, pNode.StartByte, pNode.StartPoint.Column) + 1;
       S.EndLine  := Integer(pNode.EndPoint.Row) + 1;
-      S.EndCol   := Integer(pNode.EndPoint.Column) + 1;
+      S.EndCol   := Utf8ByteColToCharCol(Src, pNode.EndByte, pNode.EndPoint.Column) + 1;
       Spans:= Spans + [S];
     end;
     for var I:= 0 to pNode.NamedChildCount - 1 do Collect(pNode.NamedChild(I));
@@ -982,6 +1071,7 @@ begin
   begin
     Spans:= nil;
     var PF:= TAstParseCache.Get(pPath);
+    Src:= PF.Src;
     if PF.Tree <> nil then Collect(PF.Tree.RootNode);
     FWithCache.Add(Key, Spans);
   end;
@@ -1043,6 +1133,7 @@ function TProver.IsDeclArgName(const pPath: string; pLine, pByteCol: Integer; ou
 var
   Found: Boolean;
   FoundLine: Integer;
+  Src: TBytes; { 1.52 EXTGAPS2: pByteCol is an index (character) column; node columns are bytes }
 
   procedure Walk(const pNode, pParent: TTSNode; pHeaderOf: Integer);
   begin
@@ -1050,7 +1141,7 @@ var
     var SL:= Integer(pNode.StartPoint.Row) + 1;
     var EL:= Integer(pNode.EndPoint.Row) + 1;
     if (pLine < SL) or (pLine > EL) then Exit;
-    if (pNode.NodeType = 'identifier') and (SL = pLine) and (Integer(pNode.StartPoint.Column) + 1 = pByteCol) then
+    if (pNode.NodeType = 'identifier') and (SL = pLine) and (Utf8ByteColToCharCol(Src, pNode.StartByte, pNode.StartPoint.Column) + 1 = pByteCol) then
     begin
       if pParent.IsNull or (pParent.NodeType <> 'declArg') then Exit;
       var TypeNode:= pParent.ChildByField('type');
@@ -1073,6 +1164,7 @@ begin
   Found:= False;
   FoundLine:= 0;
   var PF:= TAstParseCache.Get(pPath);
+  Src:= PF.Src;
   if PF.Tree <> nil then Walk(PF.Tree.RootNode, Default(TTSNode), 0);
   Result:= Found;
   pRoutineLine:= FoundLine;
@@ -1452,13 +1544,14 @@ end;
 { The token each symbol's declaration and implementation header sits on, per file: key 'line:charcol'. }
 procedure TProver.AddDeclTokens(const pSyms: TArray<TSymRow>; pFileId: Int64; pLines: TStringList; pMap: TDeclMap);
 begin
+  { 1.52 EXTGAPS2 / BK-COLS2: every index column (.pas and .dfm) is a CHARACTER column. }
   for var S in pSyms do
   begin
     if S.FileId <> pFileId then Continue;
     if InRange(S.Line, 1, pLines.Count) then
     begin
       var L:= pLines[S.Line - 1];
-      var C:= ByteColToCharCol(L, S.Col);
+      var C:= S.Col;
       if not IsIdentAt(L, S.Name, C) then C:= NameAfterDeclKeywords(L, S.Name, C);
       if C > 0 then pMap.AddOrSetValue(Format('%d:%d', [S.Line, C]), S);
     end;
@@ -1993,7 +2086,8 @@ begin
           Tok.FileId := pFileId;
           Tok.Line   := Line;
           Tok.Col    := Start - LineStart + 1;
-          Tok.ByteCol:= TEncoding.UTF8.GetByteCount(Copy(Text, LineStart, Tok.Col - 1)) + 1;
+          { the INDEX column: characters for .pas (1.52 EXTGAPS2), UTF-8 bytes for the DFM parser }
+          Tok.ByteCol:= if SameText(ExtractFileExt(pPath), '.dfm') then TEncoding.UTF8.GetByteCount(Copy(Text, LineStart, Tok.Col - 1)) + 1 else Tok.Col;
           Tok.Text   := Text;
           Tok.Start  := Start;
           var P:= Start - 1;
@@ -2043,7 +2137,7 @@ begin
       try
         Lines.Text:= Text;
         if (R.Line < 1) or (R.Line > Lines.Count) then Continue;
-        AddEdit(Path, R.Line, ByteColToCharCol(Lines[R.Line - 1], R.Col));
+        AddEdit(Path, R.Line, R.Col); { 1.52 BK-COLS2: .dfm ref columns are characters }
         Inc(FBound);
       finally
         Lines.Free;
@@ -2101,8 +2195,8 @@ const
   CValueSep = ' = ';
 var
   S, Value: string;
-  Colon, Eq: Integer;
-  IsHeader, InInline, RootKnown, Mine, IsEnum: Boolean;
+  Colon, Eq, ListFrom: Integer;
+  IsHeader, InInline, RootKnown, Mine, IsEnum, InList, ListLine: Boolean;
 
   { One token of the old name at pAt of line pLine. }
   procedure Decide(pLine, pAt: Integer);
@@ -2113,6 +2207,15 @@ var
     begin
       Undecided:= (pAt < Colon) and (InInline or not RootKnown);
       IsEdit:= (pAt < Colon) and Mine and not Undecided;
+    end
+    else if ListLine and (pAt >= ListFrom) then
+    begin
+      { an item of a `( ... )` list names a component of the form, as `Prop = Name` does; `Owner.Name` stays undecided }
+      if not ((pAt >= 2) and (S[pAt - 1] = '.')) then
+      begin
+        Undecided:= InInline or not RootKnown or (Mine and IsEnum);
+        IsEdit:= Mine and not Undecided;
+      end;
     end
     else if (Eq > 0) and (pAt < Eq) then Undecided:= False { a property's own name }
     else if (Eq > 0) and (SameText(Value, FOld) or StartsText(FOld + '.', Value)) then
@@ -2147,6 +2250,7 @@ begin
     var Depth:= 0;
     var InlineAt:= 0;
     var InBlob:= False;
+    InList:= False;
     for var L:= 0 to Lines.Count - 1 do
     begin
       S:= Lines[L];
@@ -2173,6 +2277,16 @@ begin
       InInline:= InlineAt > 0;
       Eq:= if IsHeader then 0 else Pos(CValueSep, S);
       Value:= if Eq > 0 then Trim(Copy(S, Eq + Length(CValueSep), MaxInt)) else '';
+      { `Prop = (` opens a list (a one-line `Prop = (A B)` closes it at once); its items run to the line ending in `)` }
+      ListLine:= InList;
+      ListFrom:= 1;
+      if InList then InList:= not EndsStr(')', T)
+      else if not IsHeader and (Eq > 0) and StartsStr('(', Value) then
+      begin
+        ListLine:= True;
+        ListFrom:= Eq + Length(CValueSep);
+        InList:= not EndsStr(')', Value);
+      end;
       var At:= 1;
       var InStr:= False;
       while At <= Length(S) do
@@ -2391,9 +2505,23 @@ function ProveLocalRename(const pStore: ISymbolStore; const pFile: string; pLine
   const pNewName: string): TRenameProof;
 var
   WithSites, NewSites: TArray<TRenameEdit>;
+  ColumnNote: string;
 begin
   Result:= Default(TRenameProof);
-  var Base:= TRenameRefactoring.BuildLocalScan(pFile, pLine, pCol, pNewName, WithSites, NewSites);
+  var Base:= TRenameRefactoring.BuildLocalScan(pFile, pLine, pCol, pNewName, WithSites, NewSites, ColumnNote);
+  if ColumnNote <> '' then
+  begin
+    { found, and refused: the place is known, which local is meant is not }
+    Result.Found:= True;
+    var R: TRenameRefusal;
+    R.Kind:= CRefuseColumnAmbiguous;
+    R.FilePath:= pFile;
+    R.Line:= pLine;
+    R.Col:= pCol;
+    R.Why:= ColumnNote;
+    Result.Refusals:= [R];
+    Exit;
+  end;
   Result.Found:= Length(Base) > 0;
   if not Result.Found then Exit;
   var Edits:= TList<TRenameEdit>.Create;
@@ -2428,11 +2556,7 @@ begin
         var Target: Int64:= 0;
         var MemberNew: Boolean;
         var Q:= TFDQuery.Create(nil);
-        var SrcLines:= TStringList.Create; { Site.Col is a character column; refs.start_col is the parse's byte column }
         try
-          var SrcText: string;
-          TTextFileFormat.ReadFile(pFile, SrcText);
-          SrcLines.Text:= SrcText;
           Q.Connection:= Conn;
           Q.SQL.Text:= 'SELECT id FROM files WHERE path = :p COLLATE NOCASE';
           Q.ParamByName('p').AsWideString:= ExpandFileName(pFile);
@@ -2463,7 +2587,7 @@ begin
             Q.Close;
             Q.ParamByName('f').AsLargeInt:= Fid;
             Q.ParamByName('l').AsInteger:= Site.Line;
-            Q.ParamByName('c').AsInteger:= TEncoding.UTF8.GetByteCount(Copy(SrcLines[Site.Line - 1], 1, Site.Col - 1)) + 1;
+            Q.ParamByName('c').AsInteger:= Site.Col; { 1.52 EXTGAPS2: refs.start_col is a CHARACTER column, as Site.Col }
             Q.Open;
             var ToTarget:= False;
             var ToOther := False;
@@ -2489,7 +2613,6 @@ begin
               AddRefusal(CRefuseWithUndecided, Site, 'an occurrence under a `with` the resolver did not bind: the target''s surface is not known');
           end;
         finally
-          SrcLines.Free;
           Q.Free;
         end;
       end;

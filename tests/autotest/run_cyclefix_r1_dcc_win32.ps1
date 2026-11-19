@@ -15,9 +15,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-cyclefix-r1-dcc-win32-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }) }
 $ErrorActionPreference = 'Stop'
 $RsVars = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 if (-not (Test-Path $RsVars)) { Write-Host 'SKIP: RAD Studio not installed' -ForegroundColor Yellow; exit 0 }
@@ -95,13 +98,13 @@ try {
 
   Write-Host '== platform echo' -ForegroundColor Cyan
   $db = Join-Path $WorkDir 'edit.sqlite'
-  & $Exe index --project $ed --db $db *> (Join-Path $WorkDir 'index.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $ed --db $db *> (Join-Path $WorkDir 'index.log') }
   foreach ($pl in 'win32', 'win64') {
     $o = Join-Path $WorkDir "dry-$pl.json"
     $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
       -ArgumentList @('cycles', '--db', ('"' + $db + '"'), '--fix', '--project', ('"' + $ed + '"'), '--platform', $pl, '--library-db', 'none', '--format', 'json') `
-      -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "dry-$pl.err")
-    $j = $null; try { $j = [IO.File]::ReadAllText($o) | ConvertFrom-Json } catch { }
+      -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "dry-$pl.err"); $null = $p.Handle
+    $j = $null; try { $j = [IO.File]::ReadAllText($o) | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
     $tag = if ($pl -eq 'win32') { '2' } else { 'pc1' }
     Check "$tag dry run --platform $pl echoes platform=$pl" (($p.ExitCode -eq 0) -and ($null -ne $j) -and ($j.platform -ceq $pl)) "exit=$($p.ExitCode) platform=$($j.platform)"
   }
@@ -111,7 +114,7 @@ try {
   $ap = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
     -ArgumentList @('cycles', '--fix', '--apply', '--no-backup', '--build-timeout', '600', '--cycle', '1', '--platform', 'win32',
       '--project', ('"' + $ed + '"'), '--db', ('"' + $db + '"'), '--library-db', 'none') `
-    -RedirectStandardOutput $ao -RedirectStandardError (Join-Path $WorkDir 'apply.err')
+    -RedirectStandardOutput $ao -RedirectStandardError (Join-Path $WorkDir 'apply.err'); $null = $ap.Handle
   Check '3 cycles --fix --apply --platform win32 exits 0' ($ap.ExitCode -eq 0) ("exit=$($ap.ExitCode) " + ([IO.File]::ReadAllText($ao) -replace "`r?`n", ' | ').Substring(0, [Math]::Min(300, [IO.File]::ReadAllText($ao).Length)))
   $changed = @(Get-ChildItem $edit -File -Filter *.pas | Where-Object { [IO.File]::ReadAllText($_.FullName) -cne [IO.File]::ReadAllText((Join-Path $base $_.Name)) })
   Check '3b the apply really edited source (>= 1 .pas differs from the untouched copy; else step 5 is vacuous)' ($changed.Count -ge 1) ($changed.Name -join ',')

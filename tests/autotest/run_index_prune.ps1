@@ -40,9 +40,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-index-prune-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -114,16 +117,16 @@ print(json.dumps(rows))
 c.close()
 '@ | Set-Content $pySyms -Encoding ascii
 
-function Get-Files { @((& python $pyFiles $db) -join "`n" | ConvertFrom-Json) }
-function Get-Syms  { @((& python $pySyms  $db) -join "`n" | ConvertFrom-Json) }
+function Get-Files { @(((& python $pyFiles $db) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
+function Get-Syms  { @(((& python $pySyms  $db) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
 function HasLeaf([string[]]$Rows, [string]$Leaf) { return @($Rows | Where-Object { $_ -like "*\$Leaf" }).Count -ge 1 }
 
 # ---------------------------------------------------------------------------
 # BASELINE: both folders indexed into one DB.
 # ---------------------------------------------------------------------------
 Write-Host 'Baseline index (two folders, one DB)' -ForegroundColor Cyan
-& $Exe index $main  --db $db --quiet 2>&1 | Out-Null
-& $Exe index $other --db $db --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $main  --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $other --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $files0 = Get-Files
 Check 'baseline indexed all 4 units' (
   (HasLeaf $files0 'Keep1.pas') -and (HasLeaf $files0 'Keep2.pas') -and
@@ -145,7 +148,7 @@ Remove-Item (Join-Path $other 'OtherGone.pas')
 # ---------------------------------------------------------------------------
 Write-Host ''
 Write-Host 'Re-index with --no-prune (explicit opt-out)' -ForegroundColor Cyan
-& $Exe index $main --db $db --no-prune --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $main --db $db --no-prune --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $files1 = Get-Files
 Check '--no-prune leaves the vanished file row alone' (HasLeaf $files1 'Gone.pas')
 
@@ -155,7 +158,7 @@ Check '--no-prune leaves the vanished file row alone' (HasLeaf $files1 'Gone.pas
 # ---------------------------------------------------------------------------
 Write-Host ''
 Write-Host 'Re-index with NO flag (folder walk prunes by default), scoped to main\' -ForegroundColor Cyan
-$out = & $Exe index $main --db $db --quiet 2>&1 | ForEach-Object { $_.ToString() }
+$out = & { $ErrorActionPreference = 'Continue'; & $Exe index $main --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { $_.ToString() }
 $exit = $LASTEXITCODE
 Check 'default-prune index exits 0' ($exit -eq 0) "exit=$exit"
 Check 'it reports what it removed' (($out -join "`n") -match 'Gone\.pas')
@@ -180,7 +183,7 @@ Check 'a MISSING file OUTSIDE the walked root is NOT pruned' (HasLeaf $files2 'O
 # ---------------------------------------------------------------------------
 Write-Host ''
 Write-Host 'Second run (nothing left to remove)' -ForegroundColor Cyan
-$out3 = & $Exe index $main --db $db --quiet 2>&1 | ForEach-Object { $_.ToString() }
+$out3 = & { $ErrorActionPreference = 'Continue'; & $Exe index $main --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { $_.ToString() }
 Check 'second run reports nothing to remove' (($out3 -join "`n") -match 'no vanished files')
 $files3 = Get-Files
 Check 'second run changed nothing' ($files3.Count -eq $files2.Count) "$($files3.Count) vs $($files2.Count)"

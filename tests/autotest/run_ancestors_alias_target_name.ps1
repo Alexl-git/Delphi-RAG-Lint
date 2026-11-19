@@ -63,9 +63,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-ancestors-alias-target-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -136,7 +139,7 @@ end.
 
 $db = Join-Path $WorkDir 'alias.sqlite'
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($indexOut -join ' | ')"
 
 $script:PySql = Join-Path $WorkDir 'sql.py'
@@ -158,16 +161,16 @@ function JsonFrom([string[]]$Lines) {
   return ''
 }
 function Descends([string]$Name, [string]$Of) {
-  $raw = @(& $Exe query ancestors --name $Name --of $Of --json --db $db 2>$null) | ForEach-Object { "$_" }
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query ancestors --name $Name --of $Of --json --db $db 2>$null }) | ForEach-Object { "$_" }
   $json = JsonFrom $raw
   if (-not $json) { return $null }
-  return [bool](($json | ConvertFrom-Json).is_descendant)
+  return [bool](($json | ConvertFrom-Json | ForEach-Object { $_ }).is_descendant)
 }
 function AncestorRows([string]$Name) {
-  $raw = @(& $Exe query ancestors --name $Name --json --db $db 2>$null) | ForEach-Object { "$_" }
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query ancestors --name $Name --json --db $db 2>$null }) | ForEach-Object { "$_" }
   $json = JsonFrom $raw
   if (-not $json) { return @() }
-  return @(($json | ConvertFrom-Json).ancestors)
+  return @(($json | ConvertFrom-Json | ForEach-Object { $_ }).ancestors)
 }
 
 # --- precondition: the alias edge IS indexed, so this is a query-side gap -------
@@ -193,7 +196,7 @@ Write-Host 'CASE B -- the OTHER direction: the alias name as WRITTEN still answe
 $bHop = Descends 'TAliasChild' 'TAliasHop'
 Check 'CASE B: TAliasChild --of TAliasHop STAYS True (the written alias name)' ($bHop -eq $true) `
   "is_descendant=$bHop -- False means the fix OVERWROTE Name instead of adding the target"
-$rows = AncestorRows 'TAliasChild'
+$rows = @(AncestorRows 'TAliasChild')
 $names = @($rows | ForEach-Object { $_.name })
 Check 'CASE B: the ancestor list still CONTAINS the name TAliasHop' ($names -contains 'TAliasHop') "got: [$($names -join ', ')]"
 

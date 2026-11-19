@@ -34,8 +34,11 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe"
+  [string]$Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -65,16 +68,16 @@ $pas = Join-Path $dir 'objleakowned.pas'
 $db  = Join-Path $env:TEMP "objleak_owned_$PID.sqlite"
 if (Test-Path $db) { Remove-Item $db -Force }
 
-& $Exe index $dir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'index exits 0' ($LASTEXITCODE -eq 0)
 Check 'db built' (Test-Path $db)
 
-$raw = & $Exe check-ast $pas --db $db --format json 2>$null
+$raw = & { $ErrorActionPreference = 'Continue'; & $Exe check-ast $pas --db $db --format json 2>$null }
 # the CLI prints a few preamble lines before the JSON array -- slice from the
 # first '[' so ConvertFrom-Json sees only JSON (mirrors run_objleak_interproc.ps1).
 $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
 $findings = @()
-if ($b -ge 0) { try { $findings = @(($txt.Substring($b) | ConvertFrom-Json)) } catch { $findings = @() } }
+if ($b -ge 0) { try { $findings = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ })) } catch { $findings = @() } }
 
 $leaks = @($findings | Where-Object { $_.rule -eq 'object-leak' })
 Write-Host 'object-leak findings:'

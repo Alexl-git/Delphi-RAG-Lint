@@ -16,7 +16,10 @@ Checks:
   POS  a routine-local class deriving from a routine-local class of the SAME routine still
        resolves (the local type IS visible there).
 #>
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d=''){ Write-Host ("[{0}] {1}{2}" -f (@('FAIL','PASS')[[int]$ok]),$n,$(if($d){" -- $d"}else{''})); if(-not $ok){ $script:fail=$true } }
 function W([string]$p,[string[]]$l){ [IO.File]::WriteAllText($p, (($l -join "`r`n")+"`r`n"), [Text.Encoding]::ASCII) }
@@ -41,14 +44,14 @@ try {
     'implementation','','end.')
 
   $db = Join-Path $work 'fx.sqlite'
-  & $exePath index $work --db $db --rebuild *> $null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $work --db $db --rebuild *> $null }
   Check 'SANITY fixture indexed' (Test-Path $db) $db
 
   function AncOf([string]$cls) {
     $q = "SELECT COALESCE(ta.ancestor_symbol_id, 0), COALESCE(a.qualified_name, '') FROM type_ancestors ta " +
          "JOIN symbols s ON s.id = ta.symbol_id LEFT JOIN symbols a ON a.id = ta.ancestor_symbol_id " +
          "WHERE s.name = '$cls' AND ta.ordinal = 0"
-    $j = (& $exePath sql --db $db --query $q --json 2>$null | Out-String) | ConvertFrom-Json
+    $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null } | Out-String) | ConvertFrom-Json | ForEach-Object { $_ }
     if ($null -eq $j -or $null -eq $j.rows -or $j.rows.Count -eq 0) { return $null }
     return ,@($j.rows[0])
   }

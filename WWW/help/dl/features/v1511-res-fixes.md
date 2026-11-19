@@ -19,7 +19,7 @@ Read this when usages shows a library name such as Application as name-only, whe
 ## How to run it
 
 ```text
-drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file> [--no-create]] [--library-db <lib.sqlite>]
+drag-lint usages --name <X> | --in <file> --line <L> [--col <C>] [--scope symbol|project|group|everywhere] [--group <x.groupproj>] [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file> [--no-create]] [--library-db <lib.sqlite>]
 ```
 
 Example:
@@ -115,7 +115,17 @@ when an enclosing `with` target may supply it, when two used library units decla
 names an overloaded function not every overload of which can be called without arguments. Library
 enum values (`alClient`) are not bound. All of it needs the library store: without `--library-db`
 (or the section's library) the targets are NULL, and a resolve pass run without it clears them.
-See also: Index-DB-Schema (`schema_meta` keys), [info](info.md).
+See also: [Index-DB-Schema](v152-attributes-fact.md) (`schema_meta` keys), [info](info.md).
+
+### Resolver fixes (1.52)
+
+- A generic type receiver is typed: `TObjectList<TFoo>.Create` binds to the project type when the generic head is
+  the project's, else to the library by name plus generic arguments (`TArray<..>` excluded).
+- A `Name(...)` receiver keeps `Name` as its type text only when it reads as a type (a built-in, or T/I/E/P plus a
+  capital); `Copy(...)` and `StyleServices(...)` give an empty type text.
+- `index --resolve-only` with no library store attached KEEPS the library bindings (calls, member accesses and
+  library reads) of the last library run and warns `library bindings are kept from the last library run, not
+  refreshed`; the `external_stores` key is marked partial so the next library run resolves whole.
 
 ---
 

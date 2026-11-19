@@ -15,8 +15,11 @@
 # Positive control: an engine without the rule reports 0 findings and fails the "fires" checks.
 # Usage: pwsh -File tests/autotest/run_ancestor_not_in_project.ps1 [-Exe <path>]
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+param([string]$Exe = '',
       [string]$WorkDir = "$env:TEMP\drag-lint-anip-$PID")
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok) {
@@ -32,13 +35,13 @@ try {
   }
   $db  = Join-Path $WorkDir 'fx.sqlite'
   $lib = Join-Path $WorkDir 'lib.sqlite'
-  & $Exe index (Join-Path $WorkDir 'lib') --db $lib 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $WorkDir 'lib') --db $lib 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'library index exits 0' ($LASTEXITCODE -eq 0)
-  & $Exe index (Join-Path $WorkDir 'proj') --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $WorkDir 'proj') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'project index exits 0' ($LASTEXITCODE -eq 0)
-  $raw = & $Exe lint-all --db $db --db $lib --rule ancestor-not-in-project --format json 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --db $lib --rule ancestor-not-in-project --format json 2>$null }
   $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
-  $f = @(); if ($b -ge 0) { try { $f = @($txt.Substring($b) | ConvertFrom-Json) } catch { $f = @() } }
+  $f = @(); if ($b -ge 0) { try { $f = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $f = @() } }
   $f = @($f | Where-Object { $_.rule -eq 'ancestor-not-in-project' })
   $f | ForEach-Object { Write-Host ("    {0}:{1} {2}" -f (Split-Path $_.file_path -Leaf), $_.start_line, $_.message) -ForegroundColor DarkGray }
   function At([string]$Leaf) { @($f | Where-Object { $_.file_path -match "\\$Leaf$" }) }

@@ -31,17 +31,35 @@ const
 
 type
   /// <summary>Checker entry points of v151 lane DFMA; every method is called by TV151Dispatch.</summary>
-  /// <remarks>Stateless; class methods only. A method that has nothing to check returns nil.
+  /// <remarks>
+  /// Stateless; class methods only. A method that has nothing to check returns nil.
   /// Every rule reads the unit through the shared parse cache and its sibling .dfm as text;
   /// a binary .dfm, a unit that does not declare the form file's root class, or a lookup that
   /// cannot be answered keeps the rule silent. The index (Store / LibStore) only widens what
-  /// can be answered: ancestor chains, unit files of other modules, the project's .dpr.</remarks>
+  /// can be answered: ancestor chains, unit files of other modules, the project's .dpr.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.V151.Dispatch.BuildLanes (DRagLint.V151.Dispatch.pas)</para>
+  /// <para>Used in units: DRagLint.V151.Dispatch</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TV151DFMARules = class
   public
     /// <summary>Declares every rule id this lane may emit: the nine form rules and the host
     /// id unit-missing-from-uses (form-file side).</summary>
     /// <param name="ADecls">List to append to; owned by the caller.</param>
-    /// <remarks>Called ONCE at start-up (unit initialization of DRagLint.V151.Dispatch); must not touch files or stores.</remarks>
+    /// <remarks>
+    /// Called ONCE at start-up (unit initialization of DRagLint.V151.Dispatch); must not touch files or stores.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.Dispatch.BuildLanes (DRagLint.V151.Dispatch.pas)</para>
+    /// <para>Calls: DRagLint.V151.Api.V151Host, DRagLint.V151.Api.V151Rule</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.Api.V151Host"/>
+    /// <seealso cref="DRagLint.V151.Api.V151Rule"/>
+    /// <seealso cref="DRagLint.V151.DFMA.TV151DFMARules.CheckDfm"/>
+    /// <seealso cref="DRagLint.V151.DFMA.TV151DFMARules.CheckFile"/>
+    /// <seealso cref="DRagLint.V151.DFMA.TV151DFMARules.CheckProject"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure Catalog(const ADecls: TList<TV151RuleDecl>); static;
     /// <summary>Per-file checks that need the .dpr or other units:
     /// form-autocreate-and-manual (a global form variable the .dpr creates with
@@ -51,6 +69,20 @@ type
     /// foreign-form-control-access (Form2.Edit1 through another unit's global form variable).</summary>
     /// <param name="ACtx">The file being linted; Store / LibStore may be nil.</param>
     /// <returns>Findings; nil when none.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.Dispatch.BuildLanes (DRagLint.V151.Dispatch.pas)</para>
+    /// <para>Calls: DRagLint.V151.Api.TV151FileCtx.Wants, DRagLint.V151.DFMA.CheckAccessBeforeCreate, DRagLint.V151.DFMA.CheckAutocreateAndManual, DRagLint.V151.DFMA.CheckForeignFormAccess, DRagLint.V151.DFMA.Support.FindDprFor, DRagLint.V151.DFMA.Support.LoadPas, SameText</para>
+    /// <para>Complexity: 11 (cyclomatic, outer body), 17 lines (full implementation)</para>
+    /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.Api.TV151FileCtx.Wants"/>
+    /// <seealso cref="DRagLint.V151.DFMA.CheckAccessBeforeCreate"/>
+    /// <seealso cref="DRagLint.V151.DFMA.CheckAutocreateAndManual"/>
+    /// <seealso cref="DRagLint.V151.DFMA.CheckForeignFormAccess"/>
+    /// <seealso cref="DRagLint.V151.DFMA.Support.FindDprFor"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function CheckFile(const ACtx: TV151FileCtx): TArray<TLintFinding>; static;
     /// <summary>Checks of the unit against its sibling form file: form-field-without-object,
     /// form-object-without-field, form-field-type-mismatch, form-resource-missing,
@@ -58,16 +90,53 @@ type
     /// side of unit-missing-from-uses.</summary>
     /// <param name="ACtx">The file being linted; ACtx.DfmPath is not empty when this is called.</param>
     /// <returns>Findings (FilePath is the .dfm for findings about a form object or property); nil when none.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.Dispatch.BuildLanes (DRagLint.V151.Dispatch.pas)</para>
+    /// <para>Calls: DRagLint.V151.Api.TV151FileCtx.Wants, DRagLint.V151.DFMA.CheckDfmReferenceUnits, DRagLint.V151.DFMA.CheckFieldsWithoutObject, DRagLint.V151.DFMA.CheckFieldTypes, DRagLint.V151.DFMA.CheckHandlerWithoutInherited, DRagLint.V151.DFMA.CheckObjectsWithoutField, DRagLint.V151.DFMA.CheckResourceMissing, DRagLint.V151.DFMA.CheckSelfFree, DRagLint.V151.DFMA.RootClassIndex, DRagLint.V151.DFMA.Support.LoadDfm, DRagLint.V151.DFMA.Support.LoadPas, DRagLint.V151.DFMA.Support.TDfmDoc.IsEmpty</para>
+    /// <para>Complexity: 18 (cyclomatic, outer body), 20 lines (full implementation)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.Api.TV151FileCtx.Wants"/>
+    /// <seealso cref="DRagLint.V151.DFMA.CheckDfmReferenceUnits"/>
+    /// <seealso cref="DRagLint.V151.DFMA.CheckFieldsWithoutObject"/>
+    /// <seealso cref="DRagLint.V151.DFMA.CheckFieldTypes"/>
+    /// <seealso cref="DRagLint.V151.DFMA.CheckHandlerWithoutInherited"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function CheckDfm(const ACtx: TV151FileCtx): TArray<TLintFinding>; static;
     /// <summary>Nothing to check on raw bytes in this lane.</summary>
     /// <param name="ACtx">The file being linted.</param>
     /// <param name="AFilePath">The file the bytes come from (ACtx.Path or ACtx.DfmPath).</param>
     /// <param name="ABytes">The file content exactly as on disk.</param>
     /// <returns>nil.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.Dispatch.BuildLanes (DRagLint.V151.Dispatch.pas)</para>
+    /// <para>Returns: nil</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.DFMA.TV151DFMARules.Catalog"/>
+    /// <seealso cref="DRagLint.V151.DFMA.TV151DFMARules.CheckDfm"/>
+    /// <seealso cref="DRagLint.V151.DFMA.TV151DFMARules.CheckFile"/>
+    /// <seealso cref="DRagLint.V151.DFMA.TV151DFMARules.CheckProject"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function CheckRawBytes(const ACtx: TV151FileCtx; const AFilePath: string; const ABytes: TBytes): TArray<TLintFinding>; static;
     /// <summary>Nothing project-wide in this lane: every rule runs per file in lint and lint-all alike.</summary>
     /// <param name="ACtx">The project; Store is not nil.</param>
     /// <returns>nil.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.Dispatch.BuildLanes (DRagLint.V151.Dispatch.pas)</para>
+    /// <para>Returns: nil</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.V151.DFMA.TV151DFMARules.Catalog"/>
+    /// <seealso cref="DRagLint.V151.DFMA.TV151DFMARules.CheckDfm"/>
+    /// <seealso cref="DRagLint.V151.DFMA.TV151DFMARules.CheckFile"/>
+    /// <seealso cref="DRagLint.V151.DFMA.TV151DFMARules.CheckRawBytes"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function CheckProject(const ACtx: TV151ProjectCtx): TArray<TLintFinding>; static;
   end;
 
@@ -79,6 +148,7 @@ uses
   , System.RegularExpressions
   , TreeSitter
   , DRagLint.V151.DFMA.Support
+  , DRagLint.V152.DEFAULTS
   , DRagLint.V151.Dfm.Common
   ;
 
@@ -95,7 +165,7 @@ begin
     'A published field of the form class has no object of that name in the form file -- it stays nil after the form loads'));
   ADecls.Add(V151Rule(RULE_OBJECT_WITHOUT_FIELD, 'bug-patterns', SEV_HINT,
     'An object of the form file has no field in the form class -- code cannot reach it by name and the designer re-adds the field',
-    False));  // OFF (v151 FP re-measure: 99 CLIENT hints, DevExpress bar / layout items have no field by design)
+    True));  // ON (v152 DEFAULTS C6: DevExpress sub-objects without a field are exempted by rules\form-object-without-field.exempt.txt + project exempt_classes)
   ADecls.Add(V151Rule(RULE_RESOURCE_MISSING, 'bug-patterns', SEV_WARNING,
     'The unit declares the class of its form file but includes no form resource ({$R *.dfm}) -- creating the form raises EResNotFound'));
   ADecls.Add(V151Rule(RULE_HANDLER_NO_INHERITED, 'bug-patterns', SEV_WARNING,
@@ -105,7 +175,7 @@ begin
   ADecls.Add(V151Rule(RULE_ACCESS_BEFORE_CREATE, 'bug-patterns', SEV_WARNING,
     'The creation code of an auto-created form or data module reads the global variable of a module the .dpr creates later -- it is still nil'));
   ADecls.Add(V151Rule(RULE_FOREIGN_FORM_ACCESS, 'structure', SEV_HINT,
-    'Code reaches a control of another unit''s form through its global variable (Form2.Edit1) -- the units are coupled to the form layout', False));
+    'Code reaches a control of another unit''s form through its global variable (Form2.Edit1) -- the units are coupled to the form layout', True));  // ON (v152 DEFAULTS B9g)
   ADecls.Add(V151Rule(RULE_SELF_FREE_IN_HANDLER, 'bug-patterns', SEV_WARNING,
     'A form frees itself in its own event handler -- the VCL still uses the object after the handler returns; use Release'));
   ADecls.Add(V151Host(RULE_HOST_UNIT_MISSING));
@@ -218,6 +288,7 @@ begin
   try
     for var F in Cls.Fields do Known.Add(LowerCase(F.Name));
     var Chain: TArray<string>:= ClassChain(Cls.Name, AUnit, ACtx.Store, ACtx.LibStore, Complete, Left);
+    var Exempt: TArray<string>:= V152FormObjectExemptList(ACtx.Cfg);
     for var A in Chain do
     begin
       var Idx: Integer:= AUnit.ClassIndex(A);
@@ -233,6 +304,7 @@ begin
       var N: TDfmNode:= ADfm.Nodes[I];
       if (N.Kind not in [dnkObject, dnkInline]) or N.InInline or (N.Name = '') then Continue;
       if Known.Contains(LowerCase(N.Name)) then Continue;
+      if V152IsExemptClass(Exempt, N.CompClass) then Continue;  { v152 D3: shipped + project exempt-class list }
       { T03: a DevExpress bar / layout object is built by the designer without a field by design;
         it matters only when the unit's source mentions its name (FindComponent('name') and the like) }
       if IsBarOrLayoutClass(N.CompClass) and not NameUsedIn(AUnit, N.Name) then Continue;
@@ -521,7 +593,7 @@ begin
         begin
           Result:= True;
           if IsSelfFreeStatement(AUnit, N, OwnVar) then
-            Hits.Add(MakeFinding(RULE_SELF_FREE_IN_HANDLER, ACtx.Path, NodeLine(N), NodeCol(N), SEV_WARNING,
+            Hits.Add(MakeFinding(RULE_SELF_FREE_IN_HANDLER, ACtx.Path, NodeLine(N), NodeCol(ACtx.Path, N), SEV_WARNING,
               Format('%s.%s frees the form inside its own event handler -- the VCL still touches the object after '
                 + 'the handler returns (access violation). Call Release instead, or set Action := caFree in OnClose.',
                 [Cls.Name, RName])));
@@ -706,7 +778,7 @@ begin
           if (Cls = '') or not SameText(Cls, ADpr.Creates[Ci].ClassName) then Exit;
           if Rt.HasLocal(VarName) or OwnClassHasField(AUnit, Rt, VarName) then Exit;
           if RoutineGuards(AUnit, Rt, VarName, N.StartByte) then Exit;
-          Hits.Add(MakeFinding(RULE_AUTOCREATE_AND_MANUAL, ACtx.Path, NodeLine(N), NodeCol(N), SEV_WARNING,
+          Hits.Add(MakeFinding(RULE_AUTOCREATE_AND_MANUAL, ACtx.Path, NodeLine(N), NodeCol(ACtx.Path, N), SEV_WARNING,
             Format('%s := %s.Create(...) creates a second instance: %s already creates %s with Application.CreateForm. '
               + 'The first instance stays alive and invisible. Drop the CreateForm line from the .dpr, or test '
               + 'Assigned(%s) first.', [VarName, Cls, TPath.GetFileName(ADpr.Path), VarName, VarName])));
@@ -771,7 +843,7 @@ begin
                 end);
               if Assigned_ then Exit;
               Reported.Add(LowerCase(Name));
-              Hits.Add(MakeFinding(RULE_ACCESS_BEFORE_CREATE, ACtx.Path, NodeLine(N), NodeCol(N), SEV_WARNING,
+              Hits.Add(MakeFinding(RULE_ACCESS_BEFORE_CREATE, ACtx.Path, NodeLine(N), NodeCol(ACtx.Path, N), SEV_WARNING,
                 Format('%s.%s runs while %s creates %s (CreateForm #%d) and reads %s, which the .dpr creates later '
                   + '(CreateForm #%d) -- it is still nil here. Move %s earlier in the .dpr or the access to OnShow.',
                   [Cls, Rt.Name, TPath.GetFileName(ADpr.Path), Cls, Ci + 1, Name, Later + 1, Name])));
@@ -894,7 +966,7 @@ begin
                 var Key: string:= LowerCase(VName + '.' + Member);
                 if Seen.Contains(Key) then Exit;
                 Seen.Add(Key);
-                Hits.Add(MakeFinding(RULE_FOREIGN_FORM_ACCESS, ACtx.Path, NodeLine(N), NodeCol(N), SEV_HINT,
+                Hits.Add(MakeFinding(RULE_FOREIGN_FORM_ACCESS, ACtx.Path, NodeLine(N), NodeCol(ACtx.Path, N), SEV_HINT,
                   Format('%s.%s reaches the control %s of form %s (unit %s) through its global variable -- this unit now '
                     + 'depends on that form''s layout. Give %s a method or property for what is needed.',
                     [VName, Member, Member, FF.ClassName, FF.UnitName, FF.ClassName])));

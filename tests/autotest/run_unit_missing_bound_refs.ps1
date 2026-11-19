@@ -17,9 +17,16 @@
   Run from a NEUTRAL CWD, pwsh 7.
 #>
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-missingbound-$PID"
 )
+# H01-AUTOWRAP (v152 DDFIX-4, DDFIX5 pattern): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+$H01Root = $WorkDir
+try {
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -184,18 +191,18 @@ $manifest = Join-Path $WorkDir 'manifest.drag-lint.json'
 [IO.File]::WriteAllText($manifest, '{ "settings": { "defaultPlatform": "Win64", "sizeGuardMB": 1500, "enginePath": "auto", "maxJobs": 1 }, "indexes": { "outDir": "out", "sections": [ { "name": "SecBound", "db": "b.sqlite", "include": ["src"] } ] } }', [Text.Encoding]::ASCII)
 $db = Join-Path $WorkDir 'out\b.sqlite'
 function LintOf([string]$unit) {
-  @(& $Exe lint (Join-Path $srcDir $unit) --db $db --rule unit-missing-from-uses --quiet 2>&1 | Out-String) -split "`r?`n" |
+  @(& { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $srcDir $unit) --db $db --rule unit-missing-from-uses --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String) -split "`r?`n" |
     Where-Object { $_ -match 'unit-missing-from-uses' }
 }
 function BoundCount([string]$unit, [string]$name) {
   # sql --json rows are POSITIONAL arrays
   $q = "select count(*) from refs r join files f on f.id=r.file_id where f.path like '%$unit' and r.name_text='$name' and r.symbol_id>0"
-  $j = & $Exe sql --db $db --query $q --json 2>&1 | Out-String | ConvertFrom-Json
+  $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query $q --json 2>&1 | ForEach-Object { "$_" } } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }
   [int]$j.rows[0][0]
 }
 Push-Location C:\TEMP
 try {
-  & $Exe index --all --config $manifest --only SecBound --jobs 1 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $manifest --only SecBound --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
   if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2 }
 
   Write-Host 'PRECONDITION: the refs are bound before the text changes' -ForegroundColor Cyan
@@ -205,7 +212,7 @@ try {
   }
 
   # NEG before the edit: a fresh index holds no finding at all
-  $fresh = @(& $Exe lint-all --db $db --rule unit-missing-from-uses --quiet 2>&1 | Out-String) -split "`r?`n" | Where-Object { $_ -match 'unit-missing-from-uses' }
+  $fresh = @(& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule unit-missing-from-uses --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String) -split "`r?`n" | Where-Object { $_ -match 'unit-missing-from-uses' }
   Check 'NEG: fresh index, every unit in uses -> lint-all silent' (@($fresh).Count -eq 0) ($fresh -join ' | ')
 
   Blank 'uGone.pas'     'uses uDecl;'         '//'
@@ -233,9 +240,10 @@ try {
   Check 'the same file fires for the base type' (@($member | Where-Object { $_ -match "'TDeclKlass' is declared in unit uDecl" }).Count -ge 1) ($member -join ' | ')
 
   Write-Host 'FIX' -ForegroundColor Cyan
-  & $Exe lint (Join-Path $srcDir 'uGone.pas') --db $db --rule unit-missing-from-uses --fix --apply --quiet 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $srcDir 'uGone.pas') --db $db --rule unit-missing-from-uses --fix --apply --no-compile-gate --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $txt = [IO.File]::ReadAllText((Join-Path $srcDir 'uGone.pas'))
   Check '--fix puts the unit back in the implementation clause' ($txt -match '(?s)implementation.*uses\s+uDecl;') ($txt -replace "`r`n", '\n')
 } finally { Pop-Location }
 if ($script:Failed) { Write-Host 'RESULT: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'RESULT: PASS' -ForegroundColor Green; exit 0
+} finally { Remove-WorkDir $H01Root -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

@@ -32,9 +32,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\draglint_watch_scope_reset_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -106,7 +112,7 @@ try {
   # ONE log for both streams, so the stderr resolve lines land inside their tick.
   [System.IO.File]::WriteAllText($errLog, '')
   $proc = Start-Process -FilePath $env:ComSpec -ArgumentList @('/c', "`"`"$Exe`" index `"$src`" --db `"$db`" --watch --interval 1 > `"$outLog`" 2>&1`"") `
-            -PassThru -NoNewWindow
+            -PassThru -NoNewWindow; $null = $proc.Handle
   $ok1 = Wait-Done 1 120
   Check 'the first tick finished' $ok1 ''
   Start-Sleep -Milliseconds 1100
@@ -157,7 +163,7 @@ try {
   Write-Host 'CONTROL -- the same one-file change through a one-shot run' -ForegroundColor Cyan
   Start-Sleep -Milliseconds 1100
   Emit-Unit 6 '  ;'
-  $p = & $Exe index $src --db $db 2>&1 | Out-String
+  $p = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   $pann = (($p -split "`n") | Where-Object { $_ -match 'resolve: calls\s+(starting|\.\.\. whole database because)' }) -join ' / '
   Check 'P1 a one-shot run over one changed file is SCOPED' ($p -match 'starting SCOPED pass over 1 changed file') $pann
 }
@@ -172,3 +178,4 @@ catch {
   Write-Host "run_watch_scope_reset: ERROR $_" -ForegroundColor Red
   exit 2
 }
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

@@ -37,7 +37,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -201,7 +204,7 @@ for x in edges:
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $src --db $dbScoped 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $dbScoped 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Copy-Item $dbScoped $dbWhole -Force
 
   # Edit a BODY only -- no type added or removed, so ScopedResolveIsSound holds.
@@ -209,9 +212,9 @@ try {
   $txt  = [System.IO.File]::ReadAllText($core).Replace('Result := AValue * 2;', 'Result := (AValue * 2) + 0;')
   Write-Ascii $core $txt
 
-  $outScoped = & $exePath index $src --db $dbScoped 2>&1 | Out-String
+  $outScoped = & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $dbScoped 2>&1 | ForEach-Object { "$_" } } | Out-String
   $env:DRAGLINT_NO_SCOPED_RESOLVE = '1'
-  try   { $outWhole = & $exePath index $src --db $dbWhole 2>&1 | Out-String }
+  try   { $outWhole = & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $dbWhole 2>&1 | ForEach-Object { "$_" } } | Out-String }
   finally { Remove-Item Env:\DRAGLINT_NO_SCOPED_RESOLVE -ErrorAction SilentlyContinue }
 
   # --- POSITIVE CONTROLS: the two runs really did take DIFFERENT paths ---
@@ -220,8 +223,8 @@ try {
   Check 'POSITIVE CONTROL: run B took the WHOLE DB path' `
         ($outWhole -match 'WHOLE DB') $outWhole
 
-  $dumpS = & python $py $dbScoped 2>&1 | Out-String
-  $dumpW = & python $py $dbWhole  2>&1 | Out-String
+  $dumpS = & { $ErrorActionPreference = 'Continue'; & python $py $dbScoped 2>&1 | ForEach-Object { "$_" } } | Out-String
+  $dumpW = & { $ErrorActionPreference = 'Continue'; & python $py $dbWhole  2>&1 | ForEach-Object { "$_" } } | Out-String
 
   $edgeCount = (($dumpS -split "`r?`n") | Where-Object { $_.StartsWith('EDGE|') }).Count
   Check 'SANITY: there are call edges to compare (an empty A/B proves nothing)' `

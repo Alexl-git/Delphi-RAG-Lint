@@ -30,7 +30,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -76,7 +79,7 @@ foreach ($u in $units) { Write-Unit $u "  ${u}Helper;" }
 Push-Location C:\TEMP
 try {
   # stderr carries the resolve lines; 2>&1 merges them into the stream.
-  $r1 = (& $exePath index $scratch --db $db 2>&1 | Out-String)
+  $r1 = (& { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String)
 
   Check '1a. the WHOLE-DB pass is announced BEFORE it runs' `
         ($r1 -match 'calls\s+starting WHOLE-DB pass over all \d+ indexed file\(s\)')
@@ -112,7 +115,7 @@ try {
   # A BODY edit only: no new/withdrawn type names, so the type-equality gate
   # cannot be what decides this step.
   Write-Unit 'u3' "  u3Helper;`r`n  u3Helper;"
-  $r2 = (& $exePath index $scratch --db $db 2>&1 | Out-String)
+  $r2 = (& { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String)
 
   Check '2a. one changed file of six announces a SCOPED pass' `
         ($r2 -match 'calls\s+starting SCOPED pass over \d+ changed file\(s\)') `

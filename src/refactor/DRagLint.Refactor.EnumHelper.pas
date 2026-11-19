@@ -268,7 +268,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Build (DRagLint.Refactor.EnumHelper.pas)</para>
     /// <para>Calls: Default, DRagLint.Refactor.EnumHelper.TEnumHelperRefactoring.Generate.EmitFromCase</para>
-    /// <para>Returns: Default(TEnumHelperGen); Ord(Self); GetEnumName(TypeInfo(' + EnumName + '), Ord(Self)); ''' + M + '''; ''''; ' + EnumName + '(GetEnumValue(TypeInfo(' + EnumName + '), AValue))</para>
+    /// <para>Returns: Default(TEnumHelperGen); Ord(Self); GetEnumName(TypeInfo(' + EnumName + '), Ord(Self)); ''' + M + '''; ''''; ' + EnumName + '(GetEnumValue(TypeInfo(' + EnumName + '), AValue)); ' + FirstMember + '; ' + AResolve.DescArrayName + '[Self]</para>
     /// <para>Complexity: 21 (cyclomatic, outer body), 174 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <para>Directives: static</para>
@@ -327,6 +327,9 @@ type
 
 implementation
 
+uses
+  DRagLint.Core.Encoding;
+
 { Reads the 1-based AStartLine..AEndLine (inclusive) span of AFilePath, joined
   with a single space between lines, so a multi-line enum declaration (real
   MSCTYPES-shaped enums routinely wrap one member per line) is scanned as one
@@ -345,7 +348,7 @@ begin
   if (AFilePath = '') or (AStartLine < 1) or (AEndLine < AStartLine) then Exit;
   if not TFile.Exists(AFilePath) then Exit;
   try
-    Lines:= TFile.ReadAllLines(AFilePath, TEncoding.ANSI);
+    Lines:= ReadSourceFileLines(AFilePath);
   except
     Exit;
   end;

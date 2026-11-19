@@ -23,7 +23,10 @@
 
   Usage: pwsh -File tests\callresolve\run_include_host_refs.ps1 [-Exe <drag-lint.exe>]
 #>
-param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
@@ -36,8 +39,8 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
   if (-not $Ok) { $script:fail = $true }
 }
 function Invoke-Rows([string]$Db, [string]$Query) {
-  $raw = (& $exePath sql --db $Db --json --query $Query 2>$null) -join "`n"
-  $j = $raw | ConvertFrom-Json
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $Db --json --query $Query 2>$null }) -join "`n"
+  $j = $raw | ConvertFrom-Json | ForEach-Object { $_ }
   $cols = @($j.columns | ForEach-Object { $_.name })
   $out = @()
   foreach ($r in @($j.rows)) {
@@ -53,7 +56,7 @@ try {
   [void](New-Item -ItemType Directory -Force -Path $fx)
   Copy-Item (Join-Path $PSScriptRoot 'fixtures\include_host_refs\*') $fx
   $db = Join-Path $scratch 'inchost.sqlite'
-  & $exePath index $fx --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $fx --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $q = "SELECT f.path AS src, r.name_text AS name, r.kind AS kind, r.start_line AS line, " +
        "COALESCE(tf.path, '') AS target, COALESCE(s.start_line, 0) AS tline, " +
        "(SELECT COUNT(*) FROM call_edges c WHERE c.ref_id = r.id AND c.target_symbol_id = r.symbol_id) AS edges " +
@@ -65,7 +68,7 @@ try {
     return @($rows | Where-Object { (Split-Path $_.src -Leaf) -eq $Src -and $_.line -eq $Line -and $_.name -eq $Name -and $_.kind -eq $Kind })
   }
   function Target([string]$Src, [int]$Line, [string]$Name, [string]$Kind) {
-    $h = Hit $Src $Line $Name $Kind
+    $h = @(Hit $Src $Line $Name $Kind)
     if ($h.Count -ne 1) { return "<$($h.Count) refs>" }
     if ($h[0].target -eq '') { return '' }
     return ('{0}:{1}' -f (Split-Path $h[0].target -Leaf), $h[0].tline)
@@ -87,7 +90,7 @@ try {
   Expect 'single host: UProc (routine of a unit the host uses)' $h 9 'UProc' 'call' 'IncHostU.pas:5'
   Expect 'single host: THost (var type in a free routine)' $h 14 'THost' 'type_use' 'IncHostH.pas:9'
   Expect 'single host: THost (THost.Create receiver)' $h 16 'THost' 'read' 'IncHostH.pas:9'
-  $hp = Hit $h 6 'HostProc' 'call'
+  $hp = @(Hit $h 6 'HostProc' 'call')
   Check 'single host: HostProc has its call edge' (($hp.Count -eq 1) -and ($hp[0].edges -eq 1)) "$($hp.edges)"
   $run = Invoke-Rows $db ("SELECT s.kind AS kind, s.impl_start_line AS a, s.impl_end_line AS b FROM symbols s JOIN files f ON f.id = s.file_id " +
                           "WHERE f.path LIKE '%IncHostH_impl.inc' AND s.qualified_name = 'THost.Run'")

@@ -42,10 +42,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Repo = "$PSScriptRoot\..\..",
+  [string]$Repo = '',
   # Accepted so the battery can pass -Exe uniformly; this guard is a pure source scan and runs no engine.
   [string]$Exe = ""
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Repo) { $Repo = "$PSScriptRoot\..\.." }
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
 function Check($n,$ok,$d){
@@ -97,6 +100,9 @@ function Find-MigrateSites([string]$Path) {
   for ($i = 0; $i -lt $lines.Count; $i++) {
     $l = $lines[$i]
     if ($l -match '^(function|procedure)\s+([A-Za-z_][A-Za-z0-9_.]*)') { $cur = $Matches[2] }
+    # 1.52 DDFIX: a whole-line // or /// comment holds no code; the SELFLZ autodoc facts blocks name
+    # ISymbolStore.Migrate in 'Calls:' lines ABOVE a routine, which attributed to the previous one.
+    if ($l -match '^\s*//') { continue }
     if ($l -match '\.Migrate\b') {
       $sites += [pscustomobject]@{ Routine = $cur; Line = ($i + 1); File = (Split-Path $Path -Leaf) }
     }

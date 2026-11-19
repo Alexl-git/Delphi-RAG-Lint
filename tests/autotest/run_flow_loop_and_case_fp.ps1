@@ -34,9 +34,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-flow-fp-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -83,7 +86,7 @@ end.
 $unit = Join-Path $WorkDir 'flowfp.pas'
 [System.IO.File]::WriteAllText($unit, $src, [System.Text.Encoding]::ASCII)
 
-$out = (& $Exe lint $unit 2>$null | Out-String)
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $unit 2>$null } | Out-String)
 
 Write-Host 'False positives that must be GONE' -ForegroundColor Cyan
 Check 'loop COUNTER is not write-only (the loop reads it every test)' `
@@ -149,7 +152,7 @@ end.
 '@ -replace "`r`n", "`n" -replace "`n", "`r`n"
 $unit2 = Join-Path $WorkDir 'flowfp2.pas'
 [System.IO.File]::WriteAllText($unit2, $src2, [System.Text.Encoding]::ASCII)
-$out2 = (& $Exe lint $unit2 --rule used-before-assignment 2>$null | Out-String)
+$out2 = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $unit2 --rule used-before-assignment 2>$null } | Out-String)
 
 Write-Host ''
 Write-Host 'Definite assignment through a loop that always runs' -ForegroundColor Cyan

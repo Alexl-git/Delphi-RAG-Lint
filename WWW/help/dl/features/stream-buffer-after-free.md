@@ -4,10 +4,10 @@ title: Stream buffer used after free (lint rule)
 summary: "Lint rule, OFF by default: a pointer into a memory stream buffer is used after the stream was freed"
 product: DL
 group: linting
-order: 30040
+order: 30043
 since: 1.42.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Stream buffer used after free (lint rule)
@@ -19,7 +19,7 @@ Read this to see which pointer and free shapes stream-buffer-after-free follows,
 ## How to run it
 
 ```text
-drag-lint lint-all [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]
+drag-lint lint-all [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget]
 ```
 
 Example:

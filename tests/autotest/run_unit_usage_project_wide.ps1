@@ -48,9 +48,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-unit-usage-wide-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -215,12 +218,12 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'wide.sqlite'
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' (Test-Path $db)
 
 function Wide([string]$UnitName) {
   $rows = @()
-  foreach ($line in (& $Exe query unit-usage --unit $UnitName --db $db 2>&1)) {
+  foreach ($line in (& { $ErrorActionPreference = 'Continue'; & $Exe query unit-usage --unit $UnitName --db $db 2>&1 | ForEach-Object { "$_" } })) {
     $t = "$line"
     if ($t -match '^\s{2}(\S.*?\.(?:pas|dpr))\s+uses\(([a-z]+)\)\s+(DEAD IMPORT|(\d+) ref)') {
       $rows += [pscustomobject]@{
@@ -233,7 +236,7 @@ function Wide([string]$UnitName) {
   return ,@($rows)
 }
 function PerFileUsed([string]$File, [string]$UnitName) {
-  foreach ($line in (& $Exe query unit-usage --in (Join-Path $WorkDir $File) --unit $UnitName --db $db 2>&1)) {
+  foreach ($line in (& { $ErrorActionPreference = 'Continue'; & $Exe query unit-usage --in (Join-Path $WorkDir $File) --unit $UnitName --db $db 2>&1 | ForEach-Object { "$_" } })) {
     if ("$line" -match '^(\d+) of (\d+) export\(s\) referenced') { return [int]$Matches[1] }
   }
   return -1
@@ -285,7 +288,7 @@ foreach ($row in $a) {
 
 Write-Host ''
 Write-Host 'AN UNKNOWN UNIT MUST ERROR, NOT REPORT ZERO USERS' -ForegroundColor Cyan
-$out = (& $Exe query unit-usage --unit NoSuchUnitAtAll --db $db 2>&1 | Out-String)
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe query unit-usage --unit NoSuchUnitAtAll --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String)
 $code = $LASTEXITCODE
 Check 'it exits non-zero' ($code -ne 0) "exit=$code"
 Check 'it says the unit is not indexed' ($out -match 'no interface-section symbols found') $out.Trim()
@@ -294,9 +297,9 @@ Check 'and it does NOT claim zero importers' (-not ($out -match 'importing file\
 
 Write-Host ''
 Write-Host 'JSON agrees with the text output' -ForegroundColor Cyan
-$json = (& $Exe query unit-usage --unit A.Lib --db $db --json 2>&1 | Where-Object { "$_" -match '^\[' } | Select-Object -First 1)
+$json = (& { $ErrorActionPreference = 'Continue'; & $Exe query unit-usage --unit A.Lib --db $db --json 2>&1 | ForEach-Object { "$_" } } | Where-Object { "$_" -match '^\[' } | Select-Object -First 1)
 $parsed = $null
-try { $parsed = @($json | ConvertFrom-Json) } catch { }
+try { $parsed = @(($json | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { }
 Check '--json emits a parseable array' ($null -ne $parsed) "$json"
 if ($null -ne $parsed) {
   Check '--json lists the same file count' ($parsed.Count -eq $a.Count) "json=$($parsed.Count) text=$($a.Count)"

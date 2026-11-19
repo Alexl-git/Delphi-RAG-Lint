@@ -36,9 +36,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-consumer-contract-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -82,32 +85,32 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'contract.sqlite'
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 function Rows([string[]]$ExtraArgs) {
   $a = @('query') + $ExtraArgs + @('--db', $db, '--json')
-  $raw = @(& $Exe @a 2>$null) | ForEach-Object { "$_" }
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null }) | ForEach-Object { "$_" }
   $txt = ($raw -join "`n").Trim()
   if (-not $txt.StartsWith('[')) { return @() }
-  return @($txt | ConvertFrom-Json)
+  return @(($txt | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 
 # --- 2.4a --exact -------------------------------------------------------------
 Write-Host ''
 Write-Host '2.4a -- --exact suppresses the fuzzy fallback' -ForegroundColor Cyan
 # A name close enough for the fuzzy fallback to answer, but not present.
-$loose = Rows @('--name', 'TWidgetX')
+$loose = @(Rows @('--name', 'TWidgetX'))
 Check 'without --exact, a near-miss DOES get a suggestion' ($loose.Count -gt 0) "rows=$($loose.Count)"
 if ($loose.Count -gt 0) {
   Check 'and it is labelled match_kind=fuzzy' ($loose[0].match_kind -eq 'fuzzy') "match_kind=$($loose[0].match_kind)"
 }
-$strict = Rows @('--name', 'TWidgetX', '--exact')
+$strict = @(Rows @('--name', 'TWidgetX', '--exact'))
 Check 'with --exact, the same query returns NOTHING' ($strict.Count -eq 0) "rows=$($strict.Count)"
 
 # --exact must not break a genuine hit -- otherwise it would "pass" by returning
 # nothing for everything.
-$stillFinds = Rows @('--name', 'TWidget', '--exact')
+$stillFinds = @(Rows @('--name', 'TWidget', '--exact'))
 Check '--exact still returns a REAL hit' ($stillFinds.Count -eq 1) "rows=$($stillFinds.Count)"
 if ($stillFinds.Count -eq 1) {
   Check 'and labels it match_kind=exact' ($stillFinds[0].match_kind -eq 'exact') "match_kind=$($stillFinds[0].match_kind)"
@@ -116,7 +119,7 @@ if ($stillFinds.Count -eq 1) {
 # --- 2.4b --name accepts a qualified name -------------------------------------
 Write-Host ''
 Write-Host '2.4b -- --name accepts a qualified name' -ForegroundColor Cyan
-$byQualified = Rows @('--name', 'ContractKit.TWidget')
+$byQualified = @(Rows @('--name', 'ContractKit.TWidget'))
 Check '--name with a DOTTED value resolves' ($byQualified.Count -eq 1) "rows=$($byQualified.Count)"
 if ($byQualified.Count -eq 1) {
   Check 'it is the right symbol' ($byQualified[0].qualified_name -eq 'ContractKit.TWidget') `
@@ -125,18 +128,18 @@ if ($byQualified.Count -eq 1) {
     "match_kind=$($byQualified[0].match_kind)"
 }
 # The bare lookup must still win -- the qualified fallback is only tried on a miss.
-$bare = Rows @('--name', 'TWidget')
+$bare = @(Rows @('--name', 'TWidget'))
 Check 'a BARE name still resolves as before' ($bare.Count -eq 1) "rows=$($bare.Count)"
 
 # --- 2.6 enum members are reachable -------------------------------------------
 Write-Host ''
 Write-Host '2.6 -- enum members are reachable without reading source' -ForegroundColor Cyan
-$rawEnum = @(& $Exe surface --qname 'ContractKit.TAlignKind' --db $db --format json 2>$null) | ForEach-Object { "$_" }
+$rawEnum = @(& { $ErrorActionPreference = 'Continue'; & $Exe surface --qname 'ContractKit.TAlignKind' --db $db --format json 2>$null }) | ForEach-Object { "$_" }
 $enumTxt = ($rawEnum -join "`n").Trim()
 Check 'surface accepts an ENUM (no longer refuses)' ($enumTxt.StartsWith('{')) `
   $(if ($enumTxt.Length -gt 60) { $enumTxt.Substring(0, 60) } else { $enumTxt })
 if ($enumTxt.StartsWith('{')) {
-  $enum = $enumTxt | ConvertFrom-Json
+  $enum = $enumTxt | ConvertFrom-Json | ForEach-Object { $_ }
   $names = @($enum.members | ForEach-Object { $_.name })
   Check 'all three members are returned' ($names.Count -eq 3) "members=$($names -join ',')"
   Check 'in DECLARATION order, with ordinals' `
@@ -192,7 +195,7 @@ Check 'with --json --quiet the banner is GONE' (-not ($quiet.Err -match 'loaded 
 # never the only thing keeping stdout parseable.
 foreach ($m in @(@{n='without --quiet'; v=$loud}, @{n='with --quiet'; v=$quiet})) {
   $ok = $false
-  try { $null = $m.v.Out | ConvertFrom-Json; $ok = $true } catch { $ok = $false }
+  try { $null = $m.v.Out | ConvertFrom-Json | ForEach-Object { $_ }; $ok = $true } catch { $ok = $false }
   Check "stdout alone is valid JSON $($m.n)" $ok
 }
 

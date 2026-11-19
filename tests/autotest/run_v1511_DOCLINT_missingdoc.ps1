@@ -11,9 +11,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-doclint1511-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false; $script:Passed = 0
 function Check($n, $ok, $d = '') {
@@ -82,12 +85,12 @@ $lb = @('unit doclint1511b;', '', 'interface', 'type', '  /// <summary>Other.</s
 $dl = @('object Holder: THolder', '  OnClick = btnGoClick', 'end')
 [IO.File]::WriteAllText($dfm, (($dl -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 
-function RowsOf([string]$o) { $r = @(); try { $r = @($o | ConvertFrom-Json) } catch { $r = @() }; return ,$r }
+function RowsOf([string]$o) { $r = @(); try { $r = @(($o | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $r = @() }; return ,$r }
 function At($rows, [string]$rule, [int]$line) { @($rows | Where-Object { $_.rule -eq $rule -and $_.start_line -eq $line }) }
 Push-Location $WorkDir
 try {
-  & $Exe index $WorkDir --db $db --library-db none 2>&1 | Out-Null
-  $la = (& $Exe lint-all --db $db --json --enable missing-doc --library-db none 2>$null | Out-String)
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $la = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --json --enable missing-doc --library-db none 2>$null } | Out-String)
   $rows = RowsOf $la
   Check 'SANITY: lint-all JSON parsed' ($rows.Count -ge 1) $la
   Check 'R2a: GetDocd not missing-doc'  (@(At $rows 'missing-doc' 16).Count -eq 0)

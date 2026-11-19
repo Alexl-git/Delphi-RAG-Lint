@@ -15,9 +15,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_doc_glued_apply_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -59,16 +62,16 @@ end;
 end.
 "@
 $db = Join-Path $WorkDir 'fx.sqlite'
-& $exePath index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $before = [IO.File]::ReadAllText($u)
 
-$o = (& $exePath document --qname uGlue.TStore.Beta --db $db --apply --no-backup 2>&1) -join "`n"
+$o = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname uGlue.TStore.Beta --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 $code = $LASTEXITCODE
 Check 'T1 document Beta (glued block) exits 0, not the REFUSED defect exit' ($code -eq 0) "exit $code : $o"
 Check 'T2 the skip is reported, naming the line' ($o -match 'skipped uGlue\.TStore\.Beta.*line 9') $o
 Check 'T3 nothing was written for the glued declaration' ([IO.File]::ReadAllText($u) -eq $before) ''
 
-$o2 = (& $exePath document --qname uGlue.TStore.Alpha --db $db --apply --no-backup 2>&1) -join "`n"
+$o2 = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname uGlue.TStore.Alpha --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 $after = [IO.File]::ReadAllText($u)
 Check 'P1 POSITIVE CONTROL the neighbour with its own block is still documented' `
       (($LASTEXITCODE -eq 0) -and ($after -ne $before) -and ($after -match 'procedure Alpha;\s+/// <summary>BetaOwnDoc')) $o2

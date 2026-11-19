@@ -18,7 +18,10 @@
   Runs from anywhere, pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Unit = "$PSScriptRoot\..\..\src\delphi-plugin\DragLint.Plugin.SaveNotifier.pas")
+param([string]$Unit = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Unit) { $Unit = "$PSScriptRoot\..\..\src\delphi-plugin\DragLint.Plugin.SaveNotifier.pas" }
 
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false

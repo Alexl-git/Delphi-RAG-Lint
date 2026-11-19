@@ -120,7 +120,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Query.Callers.pas), DRagLint.Charts.MemberAccess.HitsOf (DRagLint.Charts.MemberAccess.pas), DRagLint.CLI.DoImpact (DRagLint.CLI.pas), DRagLint.LSP.Server.HoverResolvedCallers (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.TMCPServer.FindCallersText (DRagLint.MCP.Server.pas) (+3 more)</para>
+  /// <para>Used by: declaration (DRagLint.Query.Callers.pas), DRagLint.Charts.MemberAccess.HitsOf (DRagLint.Charts.MemberAccess.pas), DRagLint.CLI.Wiring.DoImpact (DRagLint.CLI.Wiring.pas), DRagLint.LSP.Server.HoverResolvedCallers (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.TMCPServer.FindCallersText (DRagLint.MCP.Server.pas) (+3 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TQueryCallerRows = TArray<TQueryCallerRow>;
@@ -145,7 +145,7 @@ type
     /// <param name="AKind"><!-- drag-lint:auto type -->const string</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas) ?, DRagLint.Charts.ArchDiagram.DiagramSvg (DRagLint.Charts.ArchDiagram.pas) ?, DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.PrintReferenceLines (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.RenderJson (DRagLint.Context.Bundler.pas) (+699 more)</para>
+    /// <para>Called from: DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas) ?, DRagLint.Charts.ArchDiagram.DiagramSvg (DRagLint.Charts.ArchDiagram.pas) ?, DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.PrintReferenceLines (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.RenderJson (DRagLint.Context.Bundler.pas) (+839 more)</para>
     /// <para>Writes: Exact, Ambiguous, External, NameOnly</para>
     /// <seealso cref="DRagLint.Query.Callers.TResolutionTally.ToText"/>
     /// <!-- drag-lint:auto END -->
@@ -172,7 +172,7 @@ type
 /// edge); 'exact' for every other stored edge ('certain').</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoFindCallees (DRagLint.CLI.pas), DRagLint.Query.Callers.MemberUsersForName.AddRows (DRagLint.Query.Callers.pas), DRagLint.Query.Callers.RowOfCaller (DRagLint.Query.Callers.pas)</para>
+/// <para>Called from: DRagLint.CLI.CallGraph.DoFindCallees (DRagLint.CLI.CallGraph.pas), DRagLint.Query.Callers.MemberUsersForName.AddRows (DRagLint.Query.Callers.pas), DRagLint.Query.Callers.RowOfCaller (DRagLint.Query.Callers.pas)</para>
 /// <para>Calls: SameText</para>
 /// <para>Returns: RESOLUTION_AMBIGUOUS; RESOLUTION_NAME_ONLY; RESOLUTION_EXACT</para>
 /// <!-- drag-lint:auto END -->
@@ -243,7 +243,7 @@ function ResolvedCallersForName(const AStore: ISymbolStore; const AName: string;
 /// edge's confidence is ViaEdge, and an 'ambiguous' edge is marked by the
 /// renderers.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoImpact (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas), DRagLint.LSP.Server.HoverResolvedCallers (DRagLint.LSP.Server.pas), DRagLint.Query.Callers.ResolvedCallersForName (DRagLint.Query.Callers.pas), DRagLint.Query.CrossImpact.AnswerLocalDispatch (DRagLint.Query.CrossImpact.pas) (+1 more)</para>
+/// <para>Called from: DRagLint.CLI.Wiring.DoImpact (DRagLint.CLI.Wiring.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas), DRagLint.LSP.Server.HoverResolvedCallers (DRagLint.LSP.Server.pas), DRagLint.Query.Callers.ResolvedCallersForName (DRagLint.Query.Callers.pas), DRagLint.Query.CrossImpact.AnswerLocalDispatch (DRagLint.Query.CrossImpact.pas) (+1 more)</para>
 /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindDispatchLinks, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Query.Callers.RowOfCaller</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindDispatchLinks"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers"/>
@@ -287,17 +287,21 @@ function NameCallersForName(const AStore: ISymbolStore; const AName: string; ACo
 /// <returns>A bare name: every ref whose name_text matches, kind-blind (the
 /// historical behaviour). A qualified name: the refs named by its LAST segment
 /// that the resolver bound to one of ADecls -- refs.name_text never carries a
-/// dot, so matching the dotted string answered 0 for everything.</returns>
+/// dot, so matching the dotted string answered 0 for everything -- plus (1.52 EXTGAPS) the
+/// unbound refs whose external_target IS AName (a library symbol a project index never
+/// declares, e.g. Vcl.Forms.Application).</returns>
 /// <remarks>
 /// A qualified query drops UNBOUND refs: an unbound `X.Streaming`
 /// cannot be attributed to TJob rather than to any other Streaming.
 /// 1.51.1 INC2 (B10): a ref inside a multi-host code include that one host binds to a queried
 /// declaration (ISymbolStore.GetHostBoundRefIds) IS kept, with that declaration as SymbolId.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoUsages (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleUsages (DRagLint.LSP.Server.pas)</para>
-/// <para>Calls: Copy, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Query.Callers.DropMemberAccessUnderCall, LastDelimiter</para>
-/// <para>Returns: DropMemberAccessUnderCall(Kept.ToArray)</para>
+/// <para>Called from: DRagLint.CLI.DoUsages (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.AddBoundReferences (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleUsages (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.UsagesText (DRagLint.MCP.Server.pas), DRagLint.Query.UsageScope.BoundUsageRefs (DRagLint.Query.UsageScope.pas)</para>
+/// <para>Calls: Copy, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.GetHostBoundRefIds, DRagLint.Query.Callers.DefaultIndexRefsOf, DRagLint.Query.Callers.DropMemberAccessUnderCall, LastDelimiter, SameText</para>
+/// <para>Returns: DropMemberAccessUnderCall(Kept.ToArray) + DefaultIndexRefsOf(AStore, ADecls)</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetHostBoundRefIds"/>
+/// <seealso cref="DRagLint.Query.Callers.DefaultIndexRefsOf"/>
 /// <seealso cref="DRagLint.Query.Callers.DropMemberAccessUnderCall"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -319,7 +323,7 @@ function UsageRefsForName(const AStore: ISymbolStore; const AName: string; const
 /// routine, or unbound, is untouched. Shared by the CLI verb and the LSP
 /// draglint/usages reply. Pinned by run_refs_142_shapes.ps1.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoUsages.GroupFor (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleUsages.GroupFor (DRagLint.LSP.Server.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoUsages.GroupFor (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleUsages.GroupFor (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.UsagesText (DRagLint.MCP.Server.pas)</para>
 /// <para>Calls: DRagLint.Query.Callers.UsageBucketOf</para>
 /// <para>Returns: UsageBucketOf(ARef)</para>
 /// <para>Effect-free (proven)</para>
@@ -451,7 +455,7 @@ type
 /// 12 lines long, and a site the source no longer matches (stale file).
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoUsagesReadersWriters (DRagLint.CLI.pas)</para>
-/// <para>Calls: AccessorSymbol, AddAccessorRows, AddRows, DeclaredAccessors, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Query.Callers.MemberUsersForName.GatherMember, DRagLint.Query.Callers.MemberUsersForName.GatherProperty, DRagLint.Query.Callers.ReadLinesOrNothing (+6 more)</para>
+/// <para>Calls: AccessorSymbol, AddAccessorRows, AddRows, DeclaredAccessors, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Query.Callers.MemberUsersForName.GatherMember, DRagLint.Query.Callers.MemberUsersForName.GatherProperty, DRagLint.Query.Callers.ReadLinesOrNothing (+7 more)</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
 /// <seealso cref="DRagLint.Query.Callers.MemberUsersForName.GatherMember"/>
@@ -478,6 +482,76 @@ function MemberUsersForName(const AStore: ISymbolStore; const AName: string): TA
 /// </remarks>
 function UnboundUsersForName(const AStore: ISymbolStore; const AName: string): TUnboundUsers;
 
+type
+  /// <summary>The direction(s) a moded member-access site is listed under, the way
+  /// `usages --rw` lists it.</summary>
+  /// <remarks>
+  /// The index stores the whole argument of Inc/Dec and of a var / out
+  /// parameter as a READ; this folds those back the way MemberUsersForName does, so the
+  /// autodoc / hover 'Used in:' line (Doc.Facts) and `usages --rw` give one site one
+  /// direction. Caches source lines and verdicts for its lifetime: one per query, not
+  /// thread-safe.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.Callers.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build.AddUseRows (DRagLint.Doc.Facts.pas), DRagLint.Query.Callers.NewUseDirections (DRagLint.Query.Callers.pas), DRagLint.Query.Callers.SetterArgWriteEchoes (DRagLint.Query.Callers.pas)</para>
+  /// <para>Used in units: DRagLint.Doc.Facts, DRagLint.Query.Callers</para>
+  /// <para>Implemented by: TUseDirections</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  IUseDirections = interface
+    ['{6B0F2C9E-4C1D-4E7A-9A51-2D7C3E8B1F04}']
+    /// <summary>The directions of one resolved site.</summary>
+    /// <param name="ARC">A site with Mode, FullPath, CallSiteLine and CallSiteCol.</param>
+    /// <returns>['write'] for an Inc/Dec or out argument, ['read', 'write'] for a var
+    /// argument, else [ARC.Mode]. Only a stored 'read' is classified.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build.AddUseRows (DRagLint.Doc.Facts.pas), DRagLint.Query.Callers.SetterArgWriteEchoes (DRagLint.Query.Callers.pas)</para>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    function ModesOf(const ARC: TResolvedCaller): TArray<string>;
+  end;
+
+/// <summary>A new IUseDirections over one store.</summary>
+/// <param name="AStore">The store the classified sites come from; must not be nil.</param>
+/// <returns>A reference-counted classifier; drop it when the query is done.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build.AddArgWriteEchoes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build.AddUseRows (DRagLint.Doc.Facts.pas)</para>
+/// <para>Calls: DRagLint.Query.Callers.TUseDirections.Create</para>
+/// <para>Returns: TUseDirections.Create(AStore)</para>
+/// <para>Owns returned: new (caller owns)</para>
+/// <seealso cref="DRagLint.Query.Callers.TUseDirections.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function NewUseDirections(const AStore: ISymbolStore): IUseDirections;
+
+/// <summary>The setter echo rows the index cannot store: sites of a property whose WRITE
+/// accessor is ASetter that the index stores as a READ (through the property's read
+/// accessor) but that write it -- the whole argument of Inc/Dec or of an out / var parameter
+/// (1.52 B42). FindAccessorEchoUses lists only the rows stored against ASetter itself.</summary>
+/// <param name="AStore">The store ASetter comes from; must not be nil.</param>
+/// <param name="ASetter">A routine; a routine of no class, or of a class with no writable
+/// property, answers [] without reading a source file.</param>
+/// <param name="ADirs">The direction classifier of the query (NewUseDirections over AStore).</param>
+/// <returns>One TAccessorEchoUse per such site: MemberName = the property's name and
+/// Caller.Mode = 'write', the direction `usages --rw` gives the setter for it.</returns>
+/// <remarks>
+/// Reads the declaring file of ASetter once (the property's accessor names; see
+/// MemberUsersForName) and, through ADirs, the files of the stored-read sites.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build.AddArgWriteEchoes (DRagLint.Doc.Facts.pas)</para>
+/// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Query.Callers.DeclaredAccessors, DRagLint.Query.Callers.IUseDirections.ModesOf, DRagLint.Query.Callers.ReadLinesOrNothing, SameText</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 29 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <seealso cref="DRagLint.Query.Callers.DeclaredAccessors"/>
+/// <seealso cref="DRagLint.Query.Callers.IUseDirections.ModesOf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function SetterArgWriteEchoes(const AStore: ISymbolStore; const ASetter: TSymbol;
+  const ADirs: IUseDirections): TArray<TAccessorEchoUse>;
+
 /// <summary>Is the identifier that starts at (ALine, ACol) a WHOLE argument of a call?
 /// The text half of the var / out / Inc-Dec argument classifier, shared with the calls
 /// pass that persists the mode (150-RS2 (2)).</summary>
@@ -492,7 +566,7 @@ function UnboundUsersForName(const AStore: ISymbolStore; const AName: string): T
 /// <remarks>
 /// Text only: strings are skipped, comments are not parsed; looks back at most 12 lines.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Query.Callers.TArgClassifier.Classify (DRagLint.Query.Callers.pas), DRagLint.Storage.SQLite.PersistArgUses (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Called from: DRagLint.Query.Callers.TArgClassifier.Classify (DRagLint.Query.Callers.pas), DRagLint.Storage.SQLite.PersistArgUses (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.PersistGlobalArgWrites (DRagLint.Storage.SQLite.pas)</para>
 /// <para>Calls: CharInSet, DRagLint.Query.Callers.ArgumentEndsAt, DRagLint.Query.Callers.CalleeBefore, DRagLint.Query.Callers.CharAtPos, DRagLint.Query.Callers.IsIdentChar, DRagLint.Query.Callers.SkipReceiverBack, DRagLint.Query.Callers.StepBack, DRagLint.Query.Callers.WalkToOpenParen, InRange, Max</para>
 /// <para>Returns: False; CharInSet(CharAtPos(ALines, L, C), ['(', ','])</para>
 /// <para>Complexity: 11 (cyclomatic, outer body), 21 lines (full implementation)</para>
@@ -513,10 +587,10 @@ function LocateArgument(const ALines: TArray<string>; ALine, ACol: Integer;
 /// <returns>'var' | 'out' | 'const' | 'in' | '' (by value, or past the list).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Query.Callers.TArgClassifier.Classify (DRagLint.Query.Callers.pas), DRagLint.Storage.SQLite.PersistArgUses (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Called from: DRagLint.Query.Callers.TArgClassifier.Classify (DRagLint.Query.Callers.pas), DRagLint.Storage.SQLite.PersistArgUses (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.PersistGlobalArgWrites (DRagLint.Storage.SQLite.pas)</para>
 /// <para>Calls: CharInSet, Copy, LowerCase, Pos, Trim</para>
 /// <para>Returns: ''</para>
-/// <para>Complexity: 17 (cyclomatic, outer body), 40 lines (full implementation)</para>
+/// <para>Complexity: 18 (cyclomatic, outer body), 40 lines (full implementation)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ParamModeAt(const ASig: string; AIndex: Integer): string;
@@ -826,13 +900,32 @@ begin
   end;
 end; // function
 
+{ E-RENAME-RESIDUE (1.52, lane RENFACT): the implicit sites of a DEFAULT property among ADecls -- `Bag[0]`
+  reads TBag.Items without naming it, so no name lookup finds it. The resolver bound each such subscript's
+  index-access ref to the property; this keeps exactly those. Empty when no declaration is a property. }
+function DefaultIndexRefsOf(const AStore: ISymbolStore; const ADecls: TArray<TSymbol>): TArray<TReference>;
+begin
+  Result:= nil;
+  var AnyProp: Boolean:= False;
+  for var D: TSymbol in ADecls do AnyProp:= AnyProp or (D.Kind = skProperty);
+  if not AnyProp then Exit;
+  for var R: TReference in AStore.FindCallersByName(REF_NAME_INDEX_ACCESS) do
+    if SameText(R.Kind, REF_KIND_INDEX_ACCESS) and (R.SymbolId > 0) then
+      for var D: TSymbol in ADecls do
+        if R.SymbolId = D.Id then
+        begin
+          Result:= Result + [R];
+          Break;
+        end;
+end; // function
+
 function UsageRefsForName(const AStore: ISymbolStore; const AName: string; const ADecls: TArray<TSymbol>): TArray<TReference>;
 var
   DotAt: Integer;
   Kept : TList<TReference>;
 begin
   DotAt:= LastDelimiter('.', AName);
-  if DotAt = 0 then Exit(DropMemberAccessUnderCall(AStore.FindCallersByName(AName)));
+  if DotAt = 0 then Exit(DropMemberAccessUnderCall(AStore.FindCallersByName(AName)) + DefaultIndexRefsOf(AStore, ADecls));
   Kept:= TList<TReference>.Create;
   { 1.51.1 INC2 (B10): refs.id -> the declaration one host of its include binds it to, for a ref
     whose hosts differ (SymbolId 0 on the row). }
@@ -851,6 +944,14 @@ begin
         Kept.Add(HR);
         Continue;
       end;
+      { 1.52 EXTGAPS (D7b): a project index holds no library declaration, so `usages --name
+        Vcl.Forms.Application` found 0 while 261 refs carry that very external_target. A ref the
+        resolver bound to the library name IS a usage of it. }
+      if (R.SymbolId = 0) and SameText(R.ExternalTarget, AName) then
+      begin
+        Kept.Add(R);
+        Continue;
+      end;
       for var D in ADecls do
         if (R.SymbolId <> 0) and (R.SymbolId = D.Id) then
         begin
@@ -858,7 +959,7 @@ begin
           Break;
         end;
     end;
-    Result:= DropMemberAccessUnderCall(Kept.ToArray);
+    Result:= DropMemberAccessUnderCall(Kept.ToArray) + DefaultIndexRefsOf(AStore, ADecls);
   finally
     HostBound.Free;
     Kept.Free;
@@ -868,7 +969,7 @@ end; // function
 /// <summary>Private (1.42: callers go through UsageBucketIn). The `usages` bucket a reference belongs to.</summary>
 /// <param name="ARef">A reference from UsageRefsForName.</param>
 /// <returns>'reads' | 'writes' | 'calls' | 'types' | 'attributes' | 'events' |
-/// 'raises' | 'handles'. A 'member-access' ref goes by its AccessMode
+/// 'raises' | 'handles'. A 'member-access' or (1.52) 'index-access' ref goes by its AccessMode
 /// (member_accesses.mode): 'read' -> 'reads', 'write' -> 'writes'; one with no
 /// mode, and every unknown kind, stays in 'calls' as before. The exception facts
 /// (1.36.0): raise / raise-expr / reraise -> 'raises', handle / handle-all ->
@@ -881,13 +982,14 @@ function UsageBucketOf(const ARef: TReference): string;
 begin
   if ARef.Kind      = 'read'          then Result:= 'reads'
   else if ARef.Kind = 'write'         then Result:= 'writes'
+  else if ARef.Kind = REF_KIND_WRITE_THROUGH then Result:= 'writes'   { 1.52 EXTP H2 }
   else if ARef.Kind = 'type_use'      then Result:= 'types'
   else if ARef.Kind = 'attribute'     then Result:= 'attributes'
   else if ARef.Kind = 'event-binding' then Result:= 'events'
   else if (ARef.Kind = REF_KIND_RAISE) or (ARef.Kind = REF_KIND_RAISE_EXPR) or (ARef.Kind = REF_KIND_RERAISE) then Result:= 'raises'
   else if (ARef.Kind = REF_KIND_HANDLE) or (ARef.Kind = REF_KIND_HANDLE_ALL) then Result:= 'handles'
-  else if (ARef.Kind = 'member-access') and (ARef.AccessMode = 'read' ) then Result:= 'reads'
-  else if (ARef.Kind = 'member-access') and (ARef.AccessMode = 'write') then Result:= 'writes'
+  else if ((ARef.Kind = 'member-access') or (ARef.Kind = REF_KIND_INDEX_ACCESS)) and (ARef.AccessMode = 'read' ) then Result:= 'reads'
+  else if ((ARef.Kind = 'member-access') or (ARef.Kind = REF_KIND_INDEX_ACCESS)) and (ARef.AccessMode = 'write') then Result:= 'writes'  // dl:ok ifthen-to-if-expression@bdd6 -- the tail of a nine-way bucket chain; an if-expression for the last arm only would split the table
   else Result:= 'calls'; { call + anything else }
 end; // function
 
@@ -1422,6 +1524,16 @@ begin
   FUse.Add(Key, Result);
 end;
 
+{ The directions a site is listed under, given its argument use and its stored mode. }
+function ModesForUse(AUse: TArgUse; const AMode: string): TArray<string>;
+begin
+  case AUse of
+    auIncDec, auOutArg: Result:= ['write'];
+    auVarArg          : Result:= ['read', 'write'];
+  else Result:= [AMode];
+  end;
+end;
+
 function MemberUsersForName(const AStore: ISymbolStore; const AName: string): TArray<TMemberUsers>;
 const
   MODE_READ  = 'read' ;
@@ -1438,18 +1550,15 @@ var
     for var RC: TResolvedCaller in AStore.FindResolvedCallers(ASymbolId) do
     begin
       var Mode: string:= if RC.Mode <> '' then RC.Mode else AForce;
-      if (AOnly <> '') and (Mode <> AOnly) then Continue;
-      { A stored read that is really an Inc/Dec or var/out argument: see MemberUsersForName. }
+      { A stored read that is really an Inc/Dec or var/out argument: see MemberUsersForName.
+        1.52 B42: a setter's view (AOnly = write) classifies it too, so `Inc(C.Count)` through a
+        field-read property reaches the setter; a getter's view keeps the stored read as is. }
       var Use: TArgUse:= auNone;
-      if (AOnly = '') and (RC.Mode = MODE_READ) then Use:= Args.Classify(RC);
-      var Modes: TArray<string>;
-      case Use of
-        auIncDec, auOutArg: Modes:= [MODE_WRITE];
-        auVarArg          : Modes:= [MODE_READ, MODE_WRITE];
-      else Modes:= [Mode];
-      end;
+      if ((AOnly = '') or (AOnly = MODE_WRITE)) and (RC.Mode = MODE_READ) then Use:= Args.Classify(RC);
+      var Modes: TArray<string>:= ModesForUse(Use, Mode);
       for var M: string in Modes do
       begin
+        if (AOnly <> '') and (M <> AOnly) then Continue;
         var Key: string:= Format('%s:%d:%s', [LowerCase(RC.FullPath), RC.CallSiteLine, M]);
         if Seen.ContainsKey(Key) then Continue;
         Seen.Add(Key, True);
@@ -1561,5 +1670,70 @@ begin
     else if Bucket = 'calls' then Result.Other:= Result.Other + [R];
   end;
 end; // function
+
+type
+  { IUseDirections over the private TArgClassifier (1.52 BK-USEEDGES). }
+  TUseDirections = class(TInterfacedObject, IUseDirections)
+  strict private
+    FArgs: TArgClassifier;
+  public
+    constructor Create(const AStore: ISymbolStore);
+    destructor Destroy; override;
+    function ModesOf(const ARC: TResolvedCaller): TArray<string>;
+  end;
+
+constructor TUseDirections.Create(const AStore: ISymbolStore);
+begin
+  inherited Create;
+  FArgs:= TArgClassifier.Create(AStore);
+end;
+
+destructor TUseDirections.Destroy;
+begin
+  FArgs.Free;
+  inherited Destroy;
+end;
+
+function TUseDirections.ModesOf(const ARC: TResolvedCaller): TArray<string>;
+begin
+  var Use: TArgUse:= if SameText(ARC.Mode, 'read') then FArgs.Classify(ARC) else auNone;
+  Result:= ModesForUse(Use, ARC.Mode);
+end;
+
+function NewUseDirections(const AStore: ISymbolStore): IUseDirections;
+begin
+  Result:= TUseDirections.Create(AStore);
+end;
+
+function SetterArgWriteEchoes(const AStore: ISymbolStore; const ASetter: TSymbol;
+  const ADirs: IUseDirections): TArray<TAccessorEchoUse>;
+var
+  RName, WName: string;
+  Props: TArray<TSymbol>;
+begin
+  Result:= nil;
+  if (AStore = nil) or (ADirs = nil) or (ASetter.ParentId <= 0) then Exit;
+  Props:= nil;
+  for var C: TSymbol in AStore.FindAllChildSymbols(ASetter.ParentId) do
+    if (C.Kind = skProperty) and not SameText(C.PropAccess, 'ro') then Props:= Props + [C]; { a read-only property has no setter }
+  if Props = nil then Exit;
+  var Lines: TArray<string>:= ReadLinesOrNothing(AStore.GetFilePath(ASetter.FileId));
+  for var P: TSymbol in Props do
+  begin
+    DeclaredAccessors(Lines, P, RName, WName);
+    if not SameText(WName, ASetter.Name) then Continue;
+    for var RC: TResolvedCaller in AStore.FindResolvedCallers(P.Id) do
+    begin
+      if not SameText(RC.Mode, 'read') then Continue;
+      if not TArray.Contains<string>(ADirs.ModesOf(RC), 'write') then Continue;
+      var E: TAccessorEchoUse:= Default(TAccessorEchoUse);
+      E.MemberSymbolId:= P.Id;
+      E.MemberName    := P.Name;
+      E.Caller        := RC;
+      E.Caller.Mode   := 'write';
+      Result:= Result + [E];
+    end;
+  end;
+end;
 
 end.

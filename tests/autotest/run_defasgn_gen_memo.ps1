@@ -38,10 +38,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe      = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$RulesDir = "$PSScriptRoot\..\..\rules",
+  [string]$Exe      = '',
+  [string]$RulesDir = '',
   [string]$WorkDir  = "C:\TEMP\draglint_defasgn_genmemo_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $RulesDir) { $RulesDir = "$PSScriptRoot\..\..\rules" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){ if($d){Write-Host "      $d" -ForegroundColor DarkGray}; $script:fail=$true } }
@@ -123,14 +127,14 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'gen.sqlite'
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 function RunLint([string]$VerifyMode, [bool]$Profile) {
   Remove-Item Env:\DRAGLINT_VERIFY_GEN -ErrorAction SilentlyContinue
   Remove-Item Env:\DRAGLINT_PROFILE    -ErrorAction SilentlyContinue
   if ($VerifyMode) { $env:DRAGLINT_VERIFY_GEN = $VerifyMode }
   if ($Profile)    { $env:DRAGLINT_PROFILE    = '1' }
-  try   { return (& $exePath lint-all --db $db --rules-dir $rules 2>&1 | Out-String) }
+  try   { return (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String) }
   finally {
     Remove-Item Env:\DRAGLINT_VERIFY_GEN -ErrorAction SilentlyContinue
     Remove-Item Env:\DRAGLINT_PROFILE    -ErrorAction SilentlyContinue

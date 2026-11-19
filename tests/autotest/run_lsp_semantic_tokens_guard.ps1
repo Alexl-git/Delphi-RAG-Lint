@@ -25,9 +25,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-semtok-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
@@ -88,7 +91,7 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'sem.sqlite'
-& $Exe index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $idxCode = $LASTEXITCODE
 Check 'fixture indexed' (Test-Path $db)
 if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red; exit 2 } }
@@ -117,7 +120,7 @@ Start-Process $Exe -ArgumentList @('lsp', '--db', $db) -WorkingDirectory $WorkDi
   -RedirectStandardError (Join-Path $WorkDir 'err.txt') -NoNewWindow -Wait | Out-Null
 $init = $null; $res = @{}; $err = @{}
 foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-  try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+  try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
   if ($o.id -eq 1) { $init = $o.result }
   if ($o.id -gt 10) {
     if ($null -ne $o.error) { $err[[int]$o.id] = $o.error } else { $res[[int]$o.id] = $o.result }
@@ -193,7 +196,7 @@ for ($i = 0; $i -lt 10000; $i++) { [void]$sb.Append("  X := X + $i; // step`r`n"
 [void]$sb.Append("end;`r`n`r`nend.`r`n")
 [System.IO.File]::WriteAllText($bigFile, $sb.ToString(), (New-Object System.Text.ASCIIEncoding))
 $bigDb = Join-Path $WorkDir 'big.sqlite'
-$idxOut = & $Exe index $bigSrc --db $bigDb 2>&1
+$idxOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $bigSrc --db $bigDb 2>&1 | ForEach-Object { "$_" } }
 $idxExit = $LASTEXITCODE
 if ($idxExit -ne 0 -or -not (Test-Path $bigDb) -or (Get-Item $bigDb).Length -le 0) {
   $hint = Get-ExeStartFailureHint $idxExit; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }
@@ -213,7 +216,7 @@ Start-Process $Exe -ArgumentList @('lsp', '--db', $bigDb) -WorkingDirectory $Wor
 $sw.Stop()
 $bigData = 0
 foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($bigOut), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-  try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+  try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
   if ($o.id -eq 11 -and $null -ne $o.result) { $bigData = @($o.result.data).Count }
 }
 Check 'CONTROL: the 20k-line request returns tokens' ($bigData -gt 0) "data=$bigData"

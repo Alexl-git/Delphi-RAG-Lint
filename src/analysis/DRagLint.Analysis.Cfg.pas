@@ -153,8 +153,8 @@ type
   /// the routine contains `goto`/labels/`asm` and analyses must bail (return no
   /// findings) -- the graph would otherwise need unsound edges.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.Cfg.pas) ?, declaration (DRagLint.Analysis.DataFlow.pas) ?, DRagLint.Analysis.Cfg.TBuilderState.Create (DRagLint.Analysis.Cfg.pas) ?, DRagLint.Analysis.Cfg.TCfgBuilder.Build (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.DataFlow.TDataFlowSolver.Solve (DRagLint.Analysis.DataFlow.pas) ? (+13 more)</para>
-  /// <para>Used in units: DRagLint.Analysis.Cfg, DRagLint.Analysis.DataFlow, DRagLint.Analysis.Liveness, DRagLint.Diagnostics.FlowChecks, DRagLint.Index.DataFlowFacts, DRagLint.Refactor.ExtractMethod</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.Cfg.pas) ?, declaration (DRagLint.Analysis.DataFlow.pas) ?, DRagLint.Analysis.Cfg.TBuilderState.Create (DRagLint.Analysis.Cfg.pas) ?, DRagLint.Analysis.Cfg.TCfgBuilder.Build (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.DataFlow.TDataFlowSolver.Solve (DRagLint.Analysis.DataFlow.pas) ? (+16 more)</para>
+  /// <para>Used in units: DRagLint.Analysis.Cfg, DRagLint.Analysis.DataFlow, DRagLint.Analysis.Liveness, DRagLint.Diagnostics.FlowChecks, DRagLint.Index.DataFlowFacts, DRagLint.Query.HappensBefore.Intra, DRagLint.Refactor.ExtractMethod</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCfg = class
@@ -216,7 +216,7 @@ type
     /// <returns><!-- drag-lint:auto -->Integer -- Observed: Blocks.Count.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Analysis.DataFlow.TDataFlowSolver.Solve (DRagLint.Analysis.DataFlow.pas), DRagLint.Analysis.Liveness.LiveAtBoundary (DRagLint.Analysis.Liveness.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine.CheckOutArgLiveness (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Index.DataFlowFacts.TCollector.Run (DRagLint.Index.DataFlowFacts.pas) (+2 more)</para>
+    /// <para>Called from: DRagLint.Analysis.DataFlow.TDataFlowSolver.Solve (DRagLint.Analysis.DataFlow.pas), DRagLint.Analysis.Liveness.LiveAtBoundary (DRagLint.Analysis.Liveness.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine.CheckOutArgLiveness (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckStraightLineMembers (DRagLint.Diagnostics.FlowChecks.pas) (+3 more)</para>
     /// <para>Reads: Blocks</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.ComputePreds"/>
@@ -245,22 +245,23 @@ type
   /// <summary>Builds a <see cref="TCfg"/> from a `defProc` node.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Index.DataFlowFacts.TCollector.Run (DRagLint.Index.DataFlowFacts.pas), DRagLint.Refactor.ExtractMethod.ResolveExtractSelection (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas)</para>
-  /// <para>Used in units: DRagLint.Diagnostics.FlowChecks, DRagLint.Index.DataFlowFacts, DRagLint.Refactor.ExtractMethod</para>
+  /// <para>Used by: DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Index.DataFlowFacts.TCollector.Run (DRagLint.Index.DataFlowFacts.pas), DRagLint.Query.HappensBefore.Intra.SolveRoutine (DRagLint.Query.HappensBefore.Intra.pas), DRagLint.Refactor.ExtractMethod.ResolveExtractSelection (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas)</para>
+  /// <para>Used in units: DRagLint.Diagnostics.FlowChecks, DRagLint.Index.DataFlowFacts, DRagLint.Query.HappensBefore.Intra, DRagLint.Refactor.ExtractMethod</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCfgBuilder = class
   public
     /// <summary>Build the CFG of the routine AProc (a `defProc`). Returns a CFG
     /// whose Skipped is True for goto/asm routines.</summary>
-    /// <param name="AProc">The `defProc` AST node.</param>
+    /// <param name="AProc">The `defProc` AST node, or (1.52 EXTGAPS) a program's main `block`
+    /// node, which is then its own body. Any other node yields an empty CFG.</param>
     /// <param name="ASrc">The unit's source bytes (for identifier text).</param>
     /// <param name="APruneConstLoops">True: while-True / until-False loops get no test-exit edge
     /// (see TCfg.PruneConstLoops). False (default) keeps the historic shape (refactorings).</param>
     /// <returns><!-- drag-lint:auto -->TCfg -- Observed: TCfg.Create.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Index.DataFlowFacts.TCollector.Run (DRagLint.Index.DataFlowFacts.pas), DRagLint.Refactor.ExtractMethod.ResolveExtractSelection (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas)</para>
+    /// <para>Called from: DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Index.DataFlowFacts.TCollector.Run (DRagLint.Index.DataFlowFacts.pas), DRagLint.Query.HappensBefore.Intra.SolveRoutine (DRagLint.Query.HappensBefore.Intra.pas), DRagLint.Refactor.ExtractMethod.ResolveExtractSelection (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas)</para>
     /// <para>Calls: DRagLint.Analysis.Cfg.RoutineHasGotoOrAsm, DRagLint.Analysis.Cfg.TBuilderState.Create, DRagLint.Analysis.Cfg.TBuilderState.EmitStmt, DRagLint.Analysis.Cfg.TCfg.ComputePreds, DRagLint.Analysis.Cfg.TCfg.Create, DRagLint.Analysis.Cfg.TCfg.NewBlock, DRagLint.Analysis.Cfg.TCfgBlock.AddSucc, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType</para>
     /// <para>Owns returned: new (caller owns)</para>
     /// <para>Pure</para>
@@ -279,7 +280,7 @@ type
 /// <returns><!-- drag-lint:auto -->TArray&lt;TTSNode&gt; -- Observed: Acc.ToArray.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Diagnostics.FlowChecks.FindCalleeDefProc (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Doc.SymbolFacts.ProcsForFile (DRagLint.Doc.SymbolFacts.pas)</para>
+/// <para>Called from: DRagLint.Diagnostics.FlowChecks.FindCalleeDefProc (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Doc.SymbolFacts.ProcsForFile (DRagLint.Doc.SymbolFacts.pas), DRagLint.Query.HappensBefore.Intra.FindDefProc (DRagLint.Query.HappensBefore.Intra.pas)</para>
 /// <para>Calls: DRagLint.Analysis.Cfg.CfgFindProcs.Walk</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Analysis.Cfg.CfgFindProcs.Walk"/>
@@ -1561,8 +1562,12 @@ begin
   Result.RoutineNode := AProc;
   Result.Src := ASrc;
   Result.PruneConstLoops := APruneConstLoops;
-  if AProc.IsNull or (AProc.NodeType <> 'defProc') then Exit;
-  Body := AProc.ChildByField('body');
+  if AProc.IsNull then Exit;
+  { 1.52 EXTGAPS: a program's MAIN BLOCK (`begin ... end.` of a .dpr) is its own body -- the
+    data_flows pass hands the block node itself; every other caller hands a defProc. }
+  if AProc.NodeType = 'block' then Body := AProc
+  else if AProc.NodeType <> 'defProc' then Exit
+  else Body := AProc.ChildByField('body');
   if Body.IsNull then Exit;
   if RoutineHasGotoOrAsm(AProc) then begin Result.Skipped := True; Exit; end;
 

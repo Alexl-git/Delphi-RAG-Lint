@@ -49,9 +49,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-convert-apply-inherited-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -658,17 +661,17 @@ end
 '@
 
 $db = P 'fx.sqlite'
-$idx = & $Exe index $WorkDir --db $db 2>&1
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'V the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db)) "exit=$LASTEXITCODE; $($idx -join ' | ')"
 
 function ApplyTo([string]$Unit, [string]$Rules, [string[]]$Extra = @()) {
-  $o = (& $Exe convert-apply --unit (P $Unit) --rules (P $Rules) --db $db @Extra 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P $Unit) --rules (P $Rules) --db $db @Extra 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 function Json([string]$s) {
   $a = $s.IndexOf('{'); $b = $s.LastIndexOf('}')
   if ($a -lt 0 -or $b -le $a) { return $null }
-  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json) } catch { return $null }
+  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function LineOf([string]$File, [string]$Needle) {
   $ls = [IO.File]::ReadAllLines((P $File))
@@ -687,21 +690,21 @@ $j = Json $r.Out
 Check 'A1 ChildForm is not refused: exit 0, ok=true, refused=false' `
   (($r.Code -eq 0) -and ($null -ne $j) -and $j.ok -and ($j.refused -eq $false)) $r.Out
 Check 'A2 inherited[] holds exactly btnA, btnN, fbtn' `
-  (($null -ne $j) -and (@($j.inherited).Count -eq 3) -and ((Inh $j 'btnA').Count -eq 1) -and `
-   ((Inh $j 'btnN').Count -eq 1) -and ((Inh $j 'fbtn').Count -eq 1)) ($j.inherited | ConvertTo-Json -Compress)
+  (($null -ne $j) -and (@($j.inherited).Count -eq 3) -and ((@(Inh $j 'btnA')).Count -eq 1) -and `
+   ((@(Inh $j 'btnN')).Count -eq 1) -and ((@(Inh $j 'fbtn')).Count -eq 1)) ($j.inherited | ConvertTo-Json -Compress)
 $keys = if ($j -and @($j.inherited).Count -gt 0) { (@($j.inherited)[0].PSObject.Properties.Name) -join ',' } else { '' }
 Check 'A3 each inherited[] object has exactly the keys name,type,line,ancestor_unit,ancestor_state,reason,action (1.26.0 added action)' `
   ($keys -eq 'name,type,line,ancestor_unit,ancestor_state,reason,action') $keys
 Check 'A3b every unconverted entry has action skipped' `
   (($null -ne $j) -and (@($j.inherited | Where-Object { $_.action -ne 'skipped' }).Count -eq 0)) ($j.inherited | ConvertTo-Json -Compress)
-$a = Inh $j 'btnA'
+$a = @(Inh $j 'btnA')
 Check 'A4 plain inherited btnA: type TSrcA, its .dfm line, declared TWO levels up in BaseForm, unconverted' `
   (($a.Count -eq 1) -and ($a[0].type -eq 'TSrcA') -and ($a[0].line -eq $lnA) -and ($a[0].ancestor_unit -eq 'BaseForm') -and `
    ($a[0].ancestor_state -eq 'unconverted') -and ($a[0].reason -match 'BaseForm')) ($a | ConvertTo-Json -Compress)
-$n = Inh $j 'btnN'
+$n = @(Inh $j 'btnN')
 Check 'A5 nested inherited btnN (inside inherited pnl): BaseForm, unconverted, its own line' `
   (($n.Count -eq 1) -and ($n[0].line -eq $lnN) -and ($n[0].ancestor_unit -eq 'BaseForm') -and ($n[0].ancestor_state -eq 'unconverted')) ($n | ConvertTo-Json -Compress)
-$f = Inh $j 'fbtn'
+$f = @(Inh $j 'fbtn')
 Check 'A6 inline frame child fbtn resolves through the FRAME class: MyFrame, unconverted' `
   (($f.Count -eq 1) -and ($f[0].line -eq $lnF) -and ($f[0].ancestor_unit -eq 'MyFrame') -and ($f[0].ancestor_state -eq 'unconverted')) ($f | ConvertTo-Json -Compress)
 Check 'A7 positive control: the unit''s OWN instance btnOwn is converted (and only it)' `
@@ -737,7 +740,7 @@ Check 'B5 the inherited blocks'' own property lines are unchanged' `
 # ---- N1: a CONVERTED ancestor -- still skipped, reason says why ---------------
 $r = ApplyTo 'ConvChild.pas' 'plain.rules' @('--format', 'json')
 $j = Json $r.Out
-$c = if ($j) { Inh $j 'cbtn' } else { @() }
+$c = @(if ($j) { Inh $j 'cbtn' } else { @() })
 # 1.26.0 (C8 N2) SUPERSEDES N1 here: a converted ancestor's instance is now
 # RETYPED -- run_convert_apply_inherited_retype.ps1 pins the conversion itself.
 Check 'C1 ConvChild (only an inherited instance, book without unit rules): exit 0, ok, cbtn converted (N2)' `
@@ -750,7 +753,7 @@ Check 'C3 cbtn: ancestor ConvBase, state converted, action retyped, reason says 
 # ---- N3: an ancestor OUTSIDE every --db ---------------------------------------
 $r = ApplyTo 'OutChild.pas' 'plain.rules' @('--format', 'json')
 $j = Json $r.Out
-$x = if ($j) { Inh $j 'xbtn' } else { @() }
+$x = @(if ($j) { Inh $j 'xbtn' } else { @() })
 Check 'D1 OutChild: exit 0, xbtn reported outside with an empty ancestor_unit (never guessed), action skipped' `
   (($r.Code -eq 0) -and ($x.Count -eq 1) -and ($x[0].ancestor_state -eq 'outside') -and ($x[0].ancestor_unit -eq '') -and ($x[0].action -eq 'skipped')) $r.Out
 
@@ -812,7 +815,7 @@ Check 'H3 the dry run wrote nothing' ((Get-FileHash (P 'ChildForm.pas')).Hash -e
 # ---- (c) case variants ---------------------------------------------------------
 $r = ApplyTo 'CaseForm.pas' 'plain.rules' @('--format', 'json')
 $j = Json $r.Out
-$c = if ($j) { @($j.inherited) } else { @() }
+$c = @(if ($j) { @($j.inherited) } else { @() })
 Check 'I1 BTNA: tsrca under root TCASEFORM: one entry, BaseForm, unconverted' `
   (($r.Code -eq 0) -and ($c.Count -eq 1) -and ($c[0].name -eq 'BTNA') -and ($c[0].type -eq 'tsrca') -and `
    ($c[0].ancestor_unit -eq 'BaseForm') -and ($c[0].ancestor_state -eq 'unconverted')) $r.Out
@@ -820,27 +823,27 @@ Check 'I1 BTNA: tsrca under root TCASEFORM: one entry, BaseForm, unconverted' `
 # ---- (d) nearest `object` declarer wins ---------------------------------------
 $r = ApplyTo 'Dup2Child.pas' 'plain.rules' @('--format', 'json')
 $j = Json $r.Out
-$c = if ($j) { @($j.inherited) } else { @() }
+$c = @(if ($j) { @($j.inherited) } else { @() })
 Check 'J1 dup declared in Dup2Mid (TSrcA) and Dup2Base (TDstB): the NEAREST, Dup2Mid, unconverted' `
   (($c.Count -eq 1) -and ($c[0].ancestor_unit -eq 'Dup2Mid') -and ($c[0].ancestor_state -eq 'unconverted')) $r.Out
 
 # ---- (e) inherited child under a new parent -----------------------------------
 $r = ApplyTo 'EForm.pas' 'plain.rules' @('--format', 'json')
 $j = Json $r.Out
-$c = if ($j) { @($j.inherited) } else { @() }
+$c = @(if ($j) { @($j.inherited) } else { @() })
 Check 'K1 btnA re-parented under object pnlNew: still resolved through the root class, BaseForm, unconverted' `
   (($r.Code -eq 0) -and ($c.Count -eq 1) -and ($c[0].ancestor_unit -eq 'BaseForm') -and ($c[0].ancestor_state -eq 'unconverted')) $r.Out
 
 # ---- (f) an ancestor with no readable text .dfm stops the walk -----------------
 $r = ApplyTo 'NoDfmChild.pas' 'plain.rules' @('--format', 'json')
 $j = Json $r.Out
-$c = if ($j) { @($j.inherited) } else { @() }
+$c = @(if ($j) { @($j.inherited) } else { @() })
 Check 'L1 NoDfmMid has no .dfm: outside, ancestor_unit "", reason names NoDfmMid.dfm and "missing" -- BaseForm is NOT credited' `
   (($c.Count -eq 1) -and ($c[0].ancestor_state -eq 'outside') -and ($c[0].ancestor_unit -eq '') -and `
    ($c[0].reason -match 'NoDfmMid\.dfm') -and ($c[0].reason -match 'missing')) $r.Out
 $r = ApplyTo 'BinChild.pas' 'plain.rules' @('--format', 'json')
 $j = Json $r.Out
-$c = if ($j) { @($j.inherited) } else { @() }
+$c = @(if ($j) { @($j.inherited) } else { @() })
 Check 'L2 BinMid.dfm is binary: outside, ancestor_unit "", reason names BinMid.dfm and "binary"' `
   (($c.Count -eq 1) -and ($c[0].ancestor_state -eq 'outside') -and ($c[0].ancestor_unit -eq '') -and `
    ($c[0].reason -match 'BinMid\.dfm') -and ($c[0].reason -match 'binary')) $r.Out
@@ -848,13 +851,13 @@ Check 'L2 BinMid.dfm is binary: outside, ancestor_unit "", reason names BinMid.d
 # ---- (g) mismatched ------------------------------------------------------------
 $r = ApplyTo 'MisChild.pas' 'plain.rules' @('--format', 'json')
 $j = Json $r.Out
-$c = if ($j) { @($j.inherited) } else { @() }
+$c = @(if ($j) { @($j.inherited) } else { @() })
 Check 'M1 MisBase declares mis as TBox: mismatched, ancestor_unit MisBase, reason names TBox, action skipped' `
   (($r.Code -eq 0) -and ($c.Count -eq 1) -and ($c[0].ancestor_state -eq 'mismatched') -and ($c[0].ancestor_unit -eq 'MisBase') -and ($c[0].action -eq 'skipped') -and `
    ($c[0].reason -match 'TBox')) $r.Out
 
 # ---- N5: the capability --------------------------------------------------------
-$o = (& $Exe info --json 2>$null) -join "`n"
+$o = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n"
 $ij = Json $o
 Check 'F1 info --json: capabilities.inherited_instances is the JSON literal true' `
   (($null -ne $ij) -and ($ij.capabilities.inherited_instances -is [bool]) -and ($ij.capabilities.inherited_instances -eq $true)) $o

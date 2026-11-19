@@ -13,9 +13,9 @@
 # declared in a lane Catalog in a scratch build makes check 1 fail with 318.
 param(
   [string]$Exe = "third_party\dll-win64\drag-lint.exe",
-  [int]$ExpectTotal = 423,
-  [int]$ExpectFixable = 125,   # live at INT FINAL (1.51.0-alpha)
-  [int]$ExpectOn = 341
+  [int]$ExpectTotal = 435,   # 1.52 (was 423 at 1.51.0)
+  [int]$ExpectFixable = 131,   # live at 1.52 BATTERY152 (125 at 1.51.0-alpha; +6 = fixable-ids.txt)
+  [int]$ExpectOn = 355     # 1.52 (was 341 at 1.51.0)
 )
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
@@ -28,8 +28,8 @@ function Assert($name, $cond) {
 }
 
 # 1. counts
-$raw = & $exe rules --json --rules-dir rules 2>$null
-$json = ($raw -join "`n") | ConvertFrom-Json
+$raw = & { $ErrorActionPreference = 'Continue'; & $exe rules --json --rules-dir rules 2>$null }
+$json = ($raw -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }
 $total = [int]$json.summary.total
 $fixable = @($json.rules | Where-Object { $_.fixable }).Count
 $on = @($json.rules | Where-Object { $_.default_enabled }).Count
@@ -65,7 +65,8 @@ Assert "OFF list is one function over core + provider rows" ($cat -match 'functi
 $cli = [IO.File]::ReadAllText((Join-Path $repo 'src\cli\DRagLint.CLI.pas'))
 Assert "CLI calls TV151Dispatch.CheckFile twice (lint, lint-all loop)" (([regex]::Matches($cli, 'TV151Dispatch\.CheckFile\(')).Count -eq 2)
 Assert "CLI calls TV151Dispatch.CheckProject once (lint-all)" (([regex]::Matches($cli, 'TV151Dispatch\.CheckProject\(')).Count -eq 1)
-# Each CheckFile/CheckProject call must sit under a gate within the 3 lines above it:
+# Each CheckFile/CheckProject call must sit under a gate within the 12 lines above it (1.52 BK-XPROJ
+# put a begin..end with the sibling resolver between `if V151Wanted then` and CheckProject):
 # `if TV151Dispatch.Wants(..)` (one --rule id) or `if V151Wanted` (lint-all since
 # v1511 CLI B16, where --rule may be a list), and V151Wanted must itself be derived
 # from the dispatch's own id list. Counting Wants( alone misread the B16 form.
@@ -73,7 +74,7 @@ $cliLines = $cli -split "`r?`n"
 $ungated = @()
 for ($i = 0; $i -lt $cliLines.Count; $i++) {
   if ($cliLines[$i] -match 'TV151Dispatch\.Check(File|Project)\(') {
-    $above = ($cliLines[[Math]::Max(0, $i - 3)..($i - 1)] -join "`n")
+    $above = ($cliLines[[Math]::Max(0, $i - 12)..($i - 1)] -join "`n")
     if ($above -notmatch '\bif\s+(TV151Dispatch\.Wants\(|V151Wanted\b)') { $ungated += ($i + 1) }
   }
 }

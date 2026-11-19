@@ -21,8 +21,9 @@ uses
 /// (default 10000); Format='json' or AsJson selects JSON; Output redirects to
 /// a file.</param>
 /// <returns>0 on success; 2 for a usage error (no query, both sources, more
-/// than one statement, missing or absent --db); 1 when the guard refuses the
-/// query, the time cap fires, or SQLite rejects it.</returns>
+/// than one statement, missing or absent --db) and when the time cap stops the query (no
+/// answer was produced -- GitHub #17, 1.52); 1 when the guard refuses the query or SQLite
+/// rejects it.</returns>
 /// <remarks>Strictly read-only. The row cap is REPORTED when it truncates --
 /// a silent cap reads as "that is all the data there is" (151 RB-B diffed 200 of
 /// 1226 rows). The JSON carries `truncated`, `row_limit` (0 = no cap; `row_cap`
@@ -30,7 +31,21 @@ uses
 /// the cap are COUNTED, not fetched into the answer, and `total_rows` is null
 /// when the time cap stopped that count. A truncated JSON or --output answer
 /// also prints one NOTE on stderr; the text grid says it in its footer.
-/// Pinned by tests\autotest\run_sql_json_cap_reported.ps1.</remarks>
+/// Pinned by tests\autotest\run_sql_json_cap_reported.ps1.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Common.AddStalenessPairs, DRagLint.CLI.Common.ExplicitDbsExist, DRagLint.CLI.Common.WriteStdoutDocument, DRagLint.CLI.Sql.DoSql.CellJson, DRagLint.CLI.Sql.DoSql.CellText, DRagLint.CLI.Sql.SqlTotalRowsPhrase, DRagLint.Core.OutputEncoding.WriteOutputFile, DRagLint.Sql.Guarded.IsSingleStatement, DRagLint.Sql.Guarded.TSqlGuard.Create, DRagLint.Sql.Guarded.TSqlGuard.ElapsedMs (+8 more)</para>
+/// <para>Returns: 2; 1; 0</para>
+/// <para>Complexity: 53 (cyclomatic, outer body), 384 lines (full implementation)</para>
+/// <para>Catches: ESqlGuardError (swallowed); Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.AddStalenessPairs"/>
+/// <seealso cref="DRagLint.CLI.Common.ExplicitDbsExist"/>
+/// <seealso cref="DRagLint.CLI.Common.WriteStdoutDocument"/>
+/// <seealso cref="DRagLint.CLI.Sql.DoSql.CellJson"/>
+/// <seealso cref="DRagLint.CLI.Sql.DoSql.CellText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoSql(const AArgs: TArgs): Integer;
 
 implementation
@@ -328,6 +343,10 @@ begin
         Writeln(ErrOutput, System.SysUtils.Format(
           'Run "drag-lint schema --db %s --format json" for the real tables, columns and their allowed values.', [DbPath]));
       end;
+      { GitHub #17 (owner ruling 1.52): a query stopped by the time cap produced NO answer --
+        exit 2, the convention's "nothing was answered" code (docs\AI-USAGE.md, exit-code table),
+        never 1, which a script reads as "nothing matched". }
+      if TimedOut then Exit(2);
       Exit(1);
     end;
 

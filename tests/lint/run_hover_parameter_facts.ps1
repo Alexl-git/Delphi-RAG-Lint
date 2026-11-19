@@ -31,10 +31,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe = '',
   # NOTE: not $Db -- CmdletBinding reserves that as an alias of -Debug.
-  [string]$Database = "$PSScriptRoot\..\..\src\cli\_D-RAG\drag-lint.sqlite"
+  [string]$Database = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $Database) { $Database = "$PSScriptRoot\..\..\src\cli\_D-RAG\drag-lint.sqlite" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -53,10 +57,10 @@ function Hover($qname) {
   # that kept only lines starting with '{' then silently dropped the
   # continuations and handed ConvertFrom-Json a truncated object. That failed as
   # "no model returned", which reads like an engine defect and is not one.
-  $raw = (& $Exe hover --qname $qname --db $Database --format json 2>&1 | Out-String -Width 100000)
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname $qname --db $Database --format json 2>&1 | ForEach-Object { "$_" } } | Out-String -Width 100000)
   $a = $raw.IndexOf('{'); $b = $raw.LastIndexOf('}')
   if (($a -lt 0) -or ($b -le $a)) { return $null }
-  try { return $raw.Substring($a, $b - $a + 1) | ConvertFrom-Json } catch { return $null }
+  try { return $raw.Substring($a, $b - $a + 1) | ConvertFrom-Json | ForEach-Object { $_ } } catch { return $null }
 }
 
 # The subject is drag-lint's OWN source, so the fixture cannot drift away from

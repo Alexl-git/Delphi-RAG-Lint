@@ -15,11 +15,14 @@
 #
 # Usage: pwsh -File run_cyclefix_guarded_uses_dcc.ps1 [-Exe <drag-lint.exe>] [-WorkDir <dir>] [-KeepWorkDir]
 param(
-  [string]$Exe     = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-cyclefix-guarded-$PID",
   [string]$RsVars  = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat',
   [switch]$KeepWorkDir
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }) }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false; $script:Passed = 0
 function Check($n, $ok, $d = '') {
@@ -55,14 +58,14 @@ function New-Proj([string]$Fix, [string]$Name, [scriptblock]$Patch = $null) {
   if ($Patch) { & $Patch $root }
   $db = "$root.sqlite"
   Push-Location $WorkDir
-  try { $null | & $Exe index --project (Join-Path $root "$Name.dproj") --db $db --library-db none *> "$db.log" } finally { Pop-Location }
+  try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project (Join-Path $root "$Name.dproj") --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
   return @{ Root = $root; Dproj = (Join-Path $root "$Name.dproj"); Db = $db; Name = $Name }
 }
 function Run-Fix($P, [string[]]$Extra) {
   $a = @('cycles', '--fix', '--build-timeout', '1800', '--project', $P.Dproj, '--db', $P.Db, '--library-db', 'none', '--format', 'json') + $Extra
   Push-Location $WorkDir
-  try { $out = ($null | & $Exe @a 2>$null | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
-  $j = $null; try { $j = $out | ConvertFrom-Json } catch { }
+  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @a 2>$null } | Out-String); $code = $LASTEXITCODE } finally { Pop-Location }
+  $j = $null; try { $j = $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   $k = @()
   foreach ($c in @($j.cycles)) { foreach ($x in @($c.refusals)) { if ($x) { $k += $x.kind } } }
   foreach ($x in @($j.refusals)) { if ($x) { $k += $x.kind } }
@@ -73,13 +76,13 @@ function Run-Fix($P, [string[]]$Extra) {
 function Refused($P) { return Run-Fix $P @('--no-compile', '--shadow-out', "$($P.Root)-shadow") }
 function Get-Plan($P) {
   Push-Location $WorkDir
-  try { return ($null | & $Exe cycles --plan --project $P.Dproj --db $P.Db --library-db none 2>$null | Out-String) } finally { Pop-Location }
+  try { return ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe cycles --plan --project $P.Dproj --db $P.Db --library-db none 2>$null } | Out-String) } finally { Pop-Location }
 }
 function Get-Cycles($P) {
   Push-Location $WorkDir
   try {
-    $null | & $Exe index --project $P.Dproj --db $P.Db --library-db none *> "$($P.Db).relog"
-    return ($null | & $Exe cycles --db $P.Db --library-db none 2>$null | Out-String)
+    $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project $P.Dproj --db $P.Db --library-db none *> "$($P.Db).relog" }
+    return ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe cycles --db $P.Db --library-db none 2>$null } | Out-String)
   } finally { Pop-Location }
 }
 function Invoke-Build($P) {
@@ -137,11 +140,11 @@ try {
   $r = Refused $S
   Check 'n2 an entry of the region stays: refused directive' (($r.Exit -eq 1) -and ($r.Kinds -contains 'directive')) "exit=$($r.Exit) kinds=$($r.Kinds -join ',') $($r.Reasons)"
   $I = New-Proj 'guardeduses' 'GuardedUses' { param($r) Edit-Text (Join-Path $r 'GuardedUses.dproj') 'GU_EXTRA;' '' }
-  $c = ($null | & $Exe cycles --db $I.Db --library-db none 2>$null | Out-String)
+  $c = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe cycles --db $I.Db --library-db none 2>$null } | Out-String)
   Check 'n3 the region inactive in the build: no edge, no cycle' ($c -match 'No circular unit dependencies found\.') $c
   $M = New-Proj 'guardeduses' 'GuardedUses' { param($r) Edit-Text (Join-Path $r 'GuA.pas') "  Result := UpperCase('gu-a');`nend;" "  Result := UpperCase('gu-a');`n  if Result = '' then`n    GuSay;`nend;" }
   Push-Location $WorkDir
-  try { $mp = ($null | & $Exe cycles --plan --db $M.Db --library-db none 2>$null | Out-String) } finally { Pop-Location }
+  try { $mp = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe cycles --plan --db $M.Db --library-db none 2>$null } | Out-String) } finally { Pop-Location }
   Check 'n4 lane 149 CYB: a guarded entry that MOVES to the implementation refuses directive, naming the move   (RED on 1.48.0: moved unguarded)' (($mp -match 'refused: directive -- the interface uses clause, line \d+, .*`GuB` moves from this section to the other one but sits in a conditional region') -and ($mp -match 'Fix it: not available -- directive')) $mp
   Check 'n4b lane 150 CY2: the guarded n4 plan never MOVES GuB unguarded (no **move**, no implementation `uses GuB;` insert)   (RED on 1.48.0)' (($mp -notmatch '`GuA\.pas` / `GuB`:.*\*\*move\*\*') -and ($mp -notmatch '(?m)^uses\r?\n\s+GuB;')) $mp
   # n4c positive control: the SAME move with the guard removed is planned and applied -- the n4 refusal is the guard's, not the move's.

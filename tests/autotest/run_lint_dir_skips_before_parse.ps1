@@ -36,7 +36,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   # NOT "..._skip": the assertion below searches for the engine's `SKIP <path>`
   # line, and a WorkDir containing "skip" put that word into every path the
   # engine printed. The guard then matched its own directory name and reported
@@ -45,6 +45,9 @@ param(
   [string]$WorkDir = "$env:TEMP\draglint_dir_preparse_scope_$PID",
   [switch]$Quiet
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -113,13 +116,13 @@ end.
 '@
 
 $db = Join-Path $WorkDir '_D-RAG\App.sqlite'
-& $Exe index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 Write-Host '== lint <dir> must skip a non-member BEFORE parsing it ==' -ForegroundColor Cyan
 
 # 1. PRECONDITION -- unlocked, the run is clean and the loose file is not reported.
 #    If this is not true, case 2 proves nothing.
-$out1 = (& $Exe lint $WorkDir --db $db 2>&1 | Out-String)
+$out1 = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String)
 # Match a FINDING line (`<path>:<line>:<col>`), not the bare filename. The scope
 # report deliberately NAMES what it dropped ("not a project member: <path>") --
 # that is the repo's "named, never silent" rule, and an assertion on the bare
@@ -139,7 +142,7 @@ try {
                                [System.IO.FileShare]::None)
   Check 'the non-member is genuinely locked (fixture integrity)' ($null -ne $fs) ''
 
-  $out2 = (& $Exe lint $WorkDir --db $db 2>&1 | Out-String)
+  $out2 = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String)
 
   # Report WHAT matched, not just that something did. A bare boolean here cost a
   # debugging round: the assertion fired while a hand-run of the same commands
@@ -168,7 +171,7 @@ finally {
 
 # 4. CONTROL -- with NO --db there is no closure, and an unscoped walk must still
 #    lint everything. Otherwise "no store" would silently become "skip all".
-$out4 = (& $Exe lint $WorkDir 2>&1 | Out-String)
+$out4 = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $WorkDir 2>&1 | ForEach-Object { "$_" } } | Out-String)
 Check 'CONTROL: with no --db the walk is unscoped and still lints the loose file' `
   ($out4 -match 'uLooseNotAMember\.pas:\d+:\d+') `
   'an absent store must mean "no scope", never "empty scope"'

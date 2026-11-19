@@ -11,9 +11,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Dpr    = "$PSScriptRoot\ChartsCoreProbe.dpr",
-  [string]$OutDir = "$PSScriptRoot\..\..\charts\scratch\probe"
+  [string]$Dpr    = '',
+  [string]$OutDir = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Dpr) { $Dpr = "$PSScriptRoot\ChartsCoreProbe.dpr" }
+if (-not $OutDir) { $OutDir = "$PSScriptRoot\..\..\charts\scratch\probe" }
 try {
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '..\autotest\lib\CliBuildPaths.ps1')
@@ -41,7 +45,7 @@ $lines = @(
 [IO.File]::WriteAllText($bat, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 
 $log = Join-Path $OutDir 'build.log'
-$null = Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $log -RedirectStandardError "$log.err" -NoNewWindow -Wait -PassThru
+$null = Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $log -RedirectStandardError "$log.err" -NoNewWindow -Wait -PassThru; $null = $null.Handle
 $out = Get-Content -LiteralPath $log -Raw
 if ($out -notmatch 'BUILD_EXITCODE=0') { Write-Host 'FATAL: probe compile failed' -ForegroundColor Red; Write-Host $out; exit 2 }
 

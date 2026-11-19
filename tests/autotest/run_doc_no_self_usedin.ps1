@@ -53,9 +53,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-doc-no-self-usedin-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -109,8 +112,8 @@ begin
 end;
 end.
 '@
-& $Exe index $dir1 --db $db1 2>&1 | Out-Null
-& $Exe document --qname uSelfOnlyUsedIn.TSelfOnly --db $db1 --apply --no-backup 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dir1 --db $db1 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe document --qname uSelfOnlyUsedIn.TSelfOnly --db $db1 --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $ec1 = $LASTEXITCODE
 Check 'document --qname exit 0' ($ec1 -eq 0) "ec=$ec1"
 
@@ -170,8 +173,8 @@ begin
 end;
 end.
 '@
-& $Exe index $dir2 --db $db2 2>&1 | Out-Null
-& $Exe document --qname uSharedType.TShared --db $db2 --apply --no-backup 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dir2 --db $db2 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe document --qname uSharedType.TShared --db $db2 --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $ec2 = $LASTEXITCODE
 Check 'document --qname exit 0' ($ec2 -eq 0) "ec=$ec2"
 

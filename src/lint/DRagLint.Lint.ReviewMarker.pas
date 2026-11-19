@@ -28,8 +28,8 @@ type
   /// line.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas) ?, DRagLint.CLI.ApplyLineMarkers.SiteMarker (DRagLint.CLI.pas), DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas) ?, DRagLint.CLI.MarkedRuleIds (DRagLint.CLI.pas) ?, DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse (DRagLint.Lint.ReviewMarker.pas) (+9 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.ReviewMarker, DRagLint.LSP.Completion</para>
+  /// <para>Used by: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas) ?, DRagLint.CLI.ApplyLineMarkers.SiteMarker (DRagLint.CLI.pas), DRagLint.CLI.MarkedRuleIds (DRagLint.CLI.pas) ?, DRagLint.CLI.RuleScope.MarkedLine (DRagLint.CLI.RuleScope.pas) ?, DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse (DRagLint.Lint.ReviewMarker.pas) (+11 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.RuleScope, DRagLint.Lint.ReviewMarker, DRagLint.LSP.Completion</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TReviewMarker = record
@@ -66,8 +66,8 @@ type
   /// <remarks>
   /// Thread-safe: no shared state.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.ApplyLineMarkers.SiteMarker (DRagLint.CLI.pas), DRagLint.CLI.CircularUsesForFile.CycleReviewedAt (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas) (+8 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Fix.Hygiene, DRagLint.Lint.ProjectRules, DRagLint.Lint.ReviewMarker, DRagLint.Lint.RuleCatalog, DRagLint.LSP.Completion</para>
+  /// <para>Used by: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.ApplyLineMarkers.SiteMarker (DRagLint.CLI.pas), DRagLint.CLI.CircularUsesForFile.CycleReviewedAt (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas) (+13 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.RuleScope, DRagLint.Fix.Hygiene, DRagLint.Lint.MarkerHash, DRagLint.Lint.ProjectRules, DRagLint.Lint.ReviewMarker, DRagLint.LSP.Completion</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TReviewMarkers = class
@@ -239,7 +239,7 @@ type
     /// <returns>The normalized token string; '' for a blank or comment-only line.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas), DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine (DRagLint.Lint.ReviewMarker.pas), DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow (DRagLint.Lint.ReviewMarker.pas)</para>
+    /// <para>Called from: DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas), DRagLint.CLI.RuleScope.MarkedLine (DRagLint.CLI.RuleScope.pas), DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine (DRagLint.Lint.ReviewMarker.pas), DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow (DRagLint.Lint.ReviewMarker.pas)</para>
     /// <para>Calls: CharInSet, LowerCase</para>
     /// <para>Returns: SB.ToString</para>
     /// <para>Complexity: 34 (cyclomatic, outer body), 115 lines (full implementation)</para>
@@ -301,7 +301,7 @@ type
     /// block state here would mean a second implementation of what
     /// MarkerBearingLines already does; do that only if the noise is observed.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.ApplyLineMarkers.SiteMarker (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas), DRagLint.LSP.Completion.MarkerReviews (DRagLint.LSP.Completion.pas) (+3 more)</para>
+    /// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.ApplyLineMarkers.SiteMarker (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas), DRagLint.LSP.Completion.MarkerReviews (DRagLint.LSP.Completion.pas) (+5 more)</para>
     /// <para>Calls: Copy, DRagLint.Lint.ReviewMarker.NormalizedIsLoneKeyword, DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine, DRagLint.Lint.ReviewMarker.TReviewMarkers.NormalizeLine, LowerCase</para>
     /// <para>Returns: HashLine(ALines[AStartIdx]); LowerCase(Copy(THashSHA2.GetHashString(SB.ToString), 1, 4))</para>
     /// <para>Complexity: 10 (cyclomatic, outer body), 60 lines (full implementation)</para>
@@ -325,7 +325,7 @@ type
     /// each one is a marker with its own reason, entries in written order. A
     /// `dl:ok` inside a reason that is NOT led by its own `//` stays prose.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.ApplyLineMarkers.SiteMarker (DRagLint.CLI.pas), DRagLint.CLI.CircularUsesForFile.CycleReviewedAt (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas) (+9 more)</para>
+    /// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.ApplyLineMarkers.SiteMarker (DRagLint.CLI.pas), DRagLint.CLI.CircularUsesForFile.CycleReviewedAt (DRagLint.CLI.pas), DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas) (+11 more)</para>
     /// <para>Calls: Copy, Default, DRagLint.Lint.ReviewMarker.NextLineCommentTag, DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart, DRagLint.Lint.ReviewMarker.TReviewMarkers.SplitReason, LowerCase, Pos, Trim</para>
     /// <para>Pure</para>
     /// <para>Directives: static</para>
@@ -488,7 +488,7 @@ type
     /// last entry goes the `dl:ok` comment goes too, and the `//` with it if that
     /// comment held nothing else. Pure.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas)</para>
+    /// <para>Called from: DRagLint.CLI.FindSupersededMarker (DRagLint.CLI.pas), DRagLint.CLI.RuleScope.RunLineScope (DRagLint.CLI.RuleScope.pas)</para>
     /// <para>Calls: Copy, DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart, DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse, DRagLint.Lint.ReviewMarker.TReviewMarkers.RuleToken, LowerCase, Pos, SameText, Trim, TrimRight</para>
     /// <para>Returns: ALineText; TrimRight(Copy(ALineText, 1, CStart - 3)); TrimRight(Prefix); TrimRight(Prefix + Body)</para>
     /// <para>Complexity: 10 (cyclomatic, outer body), 70 lines (full implementation)</para>
@@ -502,6 +502,14 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function RemoveFrom(const ALineText, ARuleId: string): string; static;
+    /// <summary>AReason without its `REVIEWED &lt;yyyy-mm-dd&gt;` stamp and the one separator that
+    /// held it; a reason with no well-formed stamp comes back trimmed and otherwise unchanged.</summary>
+    /// <param name="AReason">A dl:ok marker reason, as Parse returns it.</param>
+    /// <returns>The reason, unstamped and trimmed.</returns>
+    /// <remarks>The same strip InsertInto applies when it re-hashes an entry (L3: a re-hash is not
+    /// a re-review); `allow` uses it when it MOVES a superseded marker's reason to the anchor line,
+    /// so the reviewer's text survives and only the vouching date goes. Pure.</remarks>
+    class function WithoutReviewStamp(const AReason: string): string; static;
     /// <summary>ALineText with a `dl:ok` entry for ARuleId recorded at the
     /// current hash: appended as a new marker, merged into the line's existing
     /// one, or -- when that entry's hash is stale -- re-hashed. A re-hash DROPS
@@ -513,6 +521,9 @@ type
     /// <param name="AReason">Optional free text. An existing reason is preserved,
     /// minus any REVIEWED stamp when the entry is re-hashed.</param>
     /// <param name="AHashOverride"><!-- drag-lint:auto type -->const string = ''</param>
+    /// <param name="AReplaceReason">True (`allow --reason`, 1.52): AReason REPLACES the marker's reason,
+    /// stamp included -- the human who passes it is the re-review -- and an entry whose hash still matches
+    /// is rewritten when its reason differs. False (default): the existing reason wins, as above.</param>
     /// <returns>The whole new line: 7-bit ASCII, no trailing whitespace, original
     /// indentation and code untouched.</returns>
     /// <remarks>
@@ -526,7 +537,7 @@ type
     /// is a comment, so the hash it stores is unaffected by its own
     /// insertion.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.Lint.ReviewMarker.InsertIntoSegmented (DRagLint.Lint.ReviewMarker.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions (DRagLint.LSP.Completion.pas)</para>
+    /// <para>Called from: DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.RuleScope.MarkedLine (DRagLint.CLI.RuleScope.pas), DRagLint.Lint.ReviewMarker.InsertIntoSegmented (DRagLint.Lint.ReviewMarker.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions (DRagLint.LSP.Completion.pas)</para>
     /// <para>Calls: Copy, DRagLint.Lint.ReviewMarker.InsertIntoSegmented, DRagLint.Lint.ReviewMarker.StripReviewStamp, DRagLint.Lint.ReviewMarker.TReviewMarkers.HashLine, DRagLint.Lint.ReviewMarker.TReviewMarkers.LineCommentStart, DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse, DRagLint.Lint.ReviewMarker.TReviewMarkers.RuleToken, IndexStr, LowerCase, Pos, SameText, Trim, TrimRight</para>
     /// <para>Returns: TrimRight(Result); TrimRight(Prefix + Body)</para>
     /// <para>Complexity: 18 (cyclomatic, outer body), 95 lines (full implementation)</para>
@@ -539,7 +550,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function InsertInto(const ALineText, ARuleId, AReason: string;
-      const AHashOverride: string = ''): string; static;
+      const AHashOverride: string = ''; AReplaceReason: Boolean = False): string; static;
     /// <summary>True when the legacy `// drag-lint:ignore [&lt;rule-id&gt; ...]`
     /// directive on the line covers ARuleId: bare, it covers every rule; with a
     /// list, only the rules named (space, comma or tab separated).</summary>
@@ -1266,13 +1277,18 @@ begin
   Result:= Trim(TRegEx.Replace(Result, '\s{2,}', ' '));
 end;
 
+class function TReviewMarkers.WithoutReviewStamp(const AReason: string): string;
+begin
+  Result:= StripReviewStamp(AReason);
+end;
+
 { F2: a line carrying SEVERAL `// dl:ok` comments keeps each comment (and its reason) as written.
   InsertInto used to fold them into one comment and join the reasons with `; `, so every rule on
   the line ended up claiming every reason. Here only the comment that already records ARuleId is
   rewritten (the last comment when none does); the others are returned byte for byte.
   Returns False when the line has a single tag, so the caller takes its normal path. }
 function InsertIntoSegmented(const ALineText, ARuleId, AReason, AHash: string; ACStart: Integer;
-  out AResult: string): Boolean;
+  AReplaceReason: Boolean; out AResult: string): Boolean;
 var
   Starts: TArray<Integer>;
   CStart: Integer;
@@ -1330,7 +1346,7 @@ begin
     if I = K then
     begin
       Tail  := Copy(Piece, Length(TrimRight(Piece)) + 1, MaxInt);
-      Edited:= TReviewMarkers.InsertInto(Piece, ARuleId, AReason, AHash);
+      Edited:= TReviewMarkers.InsertInto(Piece, ARuleId, AReason, AHash, AReplaceReason);
       Piece := Edited + (if I < High(Starts) then Tail else '');
     end;
     Parts:= Parts + [Piece];
@@ -1339,7 +1355,7 @@ begin
 end; // function
 
 class function TReviewMarkers.InsertInto(const ALineText, ARuleId, AReason: string;
-  const AHashOverride: string): string;
+  const AHashOverride: string; AReplaceReason: Boolean): string;
 var
   Existing: TArray<TReviewMarker>;
   M       : TReviewMarker        ;
@@ -1371,9 +1387,10 @@ begin
     a silent no-op. A hashless hand-written marker takes the same path and
     acquires a hash. }
   for M in Existing do
-    if SameText(M.RuleId, ARuleId) and SameText(M.Hash, Hash) then Exit(ALineText);
+    if SameText(M.RuleId, ARuleId) and SameText(M.Hash, Hash) and
+       ((not AReplaceReason) or (Trim(M.Reason) = Trim(AReason))) then Exit(ALineText);
 
-  if (Length(Existing) > 1) and InsertIntoSegmented(ALineText, ARuleId, AReason, Hash, LineCommentStart(ALineText), Result) then Exit;
+  if (Length(Existing) > 1) and InsertIntoSegmented(ALineText, ARuleId, AReason, Hash, LineCommentStart(ALineText), AReplaceReason, Result) then Exit;
 
   if Length(Existing) = 0 then
   begin
@@ -1424,7 +1441,8 @@ begin
     human who did re-read the code writes one. Dropping rather than keeping is
     the loud direction. The stamp belongs to the whole marker, so a neighbour
     entry on the same line loses it too; that is also the loud direction. }
-  if Refreshed then Reason:= StripReviewStamp(Reason);
+  if AReplaceReason then Reason:= Trim(AReason)
+  else if Refreshed then Reason:= StripReviewStamp(Reason);
   if Trim(Reason) <> '' then Body:= Body + ' ' + REVIEW_REASON_SEP + ' ' + Trim(Reason);
 
   CStart := LineCommentStart(ALineText);

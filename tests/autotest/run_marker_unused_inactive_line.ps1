@@ -30,9 +30,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_marker_inactive_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'g8-common.ps1')
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
@@ -82,10 +85,10 @@ Check 'fixture index built' (($code -eq 0) -and (Test-Path $db)) "exit=$code"
 # `lint --json` is a bare array and its line field is start_line. The rule id
 # field `rule` is pinned by the positive controls: a wrong name fails checks 4 and 5.
 function UnusedLines([string[]]$CmdArgs) {
-  $raw = (& $Exe @CmdArgs 2>$null | ForEach-Object { "$_" }) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe @CmdArgs 2>$null } | ForEach-Object { "$_" }) -join "`n"
   $start = $raw.IndexOf('[')
   if ($start -lt 0) { return ,@() }
-  $rows = @($raw.Substring($start) | ConvertFrom-Json)
+  $rows = @(($raw.Substring($start) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   return ,@($rows | Where-Object { $_.rule -eq 'review-marker-unused' } | ForEach-Object { [int]$_.start_line })
 }
 

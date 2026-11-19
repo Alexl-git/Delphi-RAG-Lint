@@ -1,0 +1,15 @@
+# v152 NOISE2 (ruling B4, FP-only audit). (a) An integer literal that STARTS the right-hand side of an assignment to a
+# dotted member (Q.Length := 50000, Timer.Interval := 3000) is named by the member, as magic-literal already rules (N-12).
+# (b) The default value of an INI read whose key literal names it (ReadInteger(Sec, 'TimeInJobFolder', 1800000)).
+# Positive controls: a plain local target (12), a literal inside a larger rhs (13, 14), the same argument shape on a
+# call that is not a Read* (17), and a literal after the Read* call (18).
+!large-magic-number 9
+!large-magic-number 10
+!large-magic-number 11
+large-magic-number 12
+large-magic-number 13
+large-magic-number 14
+!large-magic-number 15
+!large-magic-number 16
+large-magic-number 17
+large-magic-number 18

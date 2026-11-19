@@ -23,9 +23,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-schema-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -79,7 +82,7 @@ Write-Fixture (Join-Path $WorkDir 'uSchemaA.pas') $UnitA
 Write-Fixture (Join-Path $WorkDir 'uSchemaB.pas') $UnitB
 $db = Join-Path $WorkDir 'schema.sqlite'
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $idxCode = $LASTEXITCODE
 if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index did not produce a db at $db" -ForegroundColor Red; exit 2 }
 
@@ -91,11 +94,11 @@ Write-Host 'schema --format json' -ForegroundColor Cyan
 $jsonStdout = Join-Path $WorkDir 'schema.json.out'
 $jsonStderr = Join-Path $WorkDir 'schema.json.err'
 $pj = Start-Process -FilePath $Exe -ArgumentList @('schema', '--db', $db, '--format', 'json') -NoNewWindow -Wait -PassThru `
-  -RedirectStandardOutput $jsonStdout -RedirectStandardError $jsonStderr
+  -RedirectStandardOutput $jsonStdout -RedirectStandardError $jsonStderr; $null = $pj.Handle
 $jsonOut = Get-Content $jsonStdout -Raw
 $parsed = $null
 $parseOk = $true
-try { $parsed = $jsonOut | ConvertFrom-Json } catch { $parseOk = $false }
+try { $parsed = $jsonOut | ConvertFrom-Json | ForEach-Object { $_ } } catch { $parseOk = $false }
 Check '--format json: output parses as JSON' $parseOk $jsonOut
 
 if ($parseOk) {
@@ -126,7 +129,7 @@ if ($parseOk) {
 Write-Host ''
 Write-Host 'schema (text, default format)' -ForegroundColor Cyan
 $p = Start-Process -FilePath $Exe -ArgumentList @('schema', '--db', $db) -NoNewWindow -Wait -PassThru `
-  -RedirectStandardOutput (Join-Path $WorkDir 'text.out') -RedirectStandardError (Join-Path $WorkDir 'text.err')
+  -RedirectStandardOutput (Join-Path $WorkDir 'text.out') -RedirectStandardError (Join-Path $WorkDir 'text.err'); $null = $p.Handle
 $textOut = Get-Content (Join-Path $WorkDir 'text.out') -Raw
 Check 'text mode: exit code 0' ($p.ExitCode -eq 0) "exit=$($p.ExitCode)"
 Check 'text mode: prints schema_version line' ($textOut -match 'schema_version:\s*\d+') $textOut

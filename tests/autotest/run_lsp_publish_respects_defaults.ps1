@@ -31,9 +31,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-lsp-publish-defaults-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -115,7 +118,7 @@ function PublishedCodes([string]$PasFile, [string]$Tag) {
   [System.IO.File]::WriteAllText($in, ($msgs -join ''), (New-Object System.Text.UTF8Encoding($false)))
   $p = Start-Process $Exe -ArgumentList 'lsp' -WorkingDirectory $dir `
          -RedirectStandardInput $in -RedirectStandardOutput $so -RedirectStandardError $se `
-         -NoNewWindow -Wait -PassThru
+         -NoNewWindow -Wait -PassThru; $null = $p.Handle
   $out = ''
   if (Test-Path $so) { $out = [System.IO.File]::ReadAllText($so) }
   $codes = @([regex]::Matches($out, '"code":"([a-z0-9\-]+)"') | ForEach-Object { $_.Groups[1].Value })
@@ -140,7 +143,7 @@ Check 'CONTROL: the default-ON finding in the same file IS still published' `
 # ---------- CLI parity, both directions ----------
 Write-Host ''
 Write-Host 'CLI parity -- the LSP must match what the CLI already does' -ForegroundColor Cyan
-$cliDefault = (& $Exe lint $DefFix 2>&1) -join "`n"
+$cliDefault = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $DefFix 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'CLI `lint` also hides nil-comparison by default (this is the parity being enforced)' `
   ($cliDefault -notmatch 'nil-comparison') `
   ($(($cliDefault -split "`r?`n" | Where-Object { $_ -match ':\s+\[' }) -join ' | '))
@@ -148,7 +151,7 @@ Check 'CLI `lint` also hides nil-comparison by default (this is the parity being
 # CONTROL 2 -- the rule must still EXIST and still be reachable. A fix that
 # deleted the rule, or dropped it from the .scm corpus, would pass every check
 # above and fail this one.
-$cliOptIn = (& $Exe lint $DefFix --rule nil-comparison 2>&1) -join "`n"
+$cliOptIn = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $DefFix --rule nil-comparison 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'CONTROL: `--rule nil-comparison` still reports it on the CLI' `
   ($cliOptIn -match 'nil-comparison') `
   ($(($cliOptIn -split "`r?`n" | Where-Object { $_ -match 'nil-comparison' } | Select-Object -First 1)))
@@ -225,7 +228,7 @@ Write-Host 'CATALOGUE: `rules --json` agrees with the engine' -ForegroundColor C
 $ids = @([regex]::Match($catTxt, "BUILTIN_RULES_OFF_BY_DEFAULT_CORE\s*:\s*TArray<string>\s*=\s*\[(?<b>[^\]]*)\]").Groups['b'].Value |
          ForEach-Object { [regex]::Matches($_, "'([a-z0-9\-]+)'") } | ForEach-Object { $_.Groups[1].Value })
 Check 'the constant parsed out of the catalog source is non-empty' ($ids.Count -ge 10) "ids=$($ids.Count)"
-$catalogJson = (& $Exe rules --json 2>$null) -join "`n" | ConvertFrom-Json
+$catalogJson = (& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 $rows = if ($catalogJson.rules) { $catalogJson.rules } else { $catalogJson }
 $onAnyway = @($rows | Where-Object { $ids -contains $_.id -and $_.default_enabled } | ForEach-Object { "$($_.id)($($_.source))" })
 $seen     = @($rows | Where-Object { $ids -contains $_.id } | ForEach-Object { $_.id })

@@ -39,7 +39,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7. Needs `python` on PATH.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Continue'
@@ -309,11 +312,11 @@ try {
   $dbPR = Join-Path $scratch 'proj_rebuild.sqlite'
   $dbPC = Join-Path $scratch 'proj_recompile.sqlite'
 
-  $o = & $exePath index --project $dproj --db $dbPR --platform Win64 --rebuild --quiet 2>&1
+  $o = & { $ErrorActionPreference = 'Continue'; & $exePath index --project $dproj --db $dbPR --platform Win64 --rebuild --quiet 2>&1 | ForEach-Object { "$_" } }
   $rc = $LASTEXITCODE
   Check 'index --project --rebuild exits 0' ($rc -eq 0) "exit=$rc; $(($o | Select-Object -Last 2) -join ' | ')"
 
-  $o = & $exePath index --project $dproj --db $dbPC --platform Win64 --recompile --quiet 2>&1
+  $o = & { $ErrorActionPreference = 'Continue'; & $exePath index --project $dproj --db $dbPC --platform Win64 --recompile --quiet 2>&1 | ForEach-Object { "$_" } }
   $rc = $LASTEXITCODE
   Check 'index --project --recompile exits 0' ($rc -eq 0) "exit=$rc; $(($o | Select-Object -Last 2) -join ' | ')"
 
@@ -328,7 +331,7 @@ try {
 
   # --recompile passed explicitly must be indistinguishable from passing neither
   $dbPD = Join-Path $scratch 'proj_default.sqlite'
-  & $exePath index --project $dproj --db $dbPD --platform Win64 --quiet 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --project $dproj --db $dbPD --platform Win64 --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'PROJECT scan: --recompile == the default (no mode flag)' ((Snap $dbPD) -eq $snapB)
 
   # ==========================================================================
@@ -337,11 +340,11 @@ try {
   $dbLR = Join-Path $scratch 'lib_rebuild.sqlite'
   $dbLC = Join-Path $scratch 'lib_recompile.sqlite'
 
-  $o = & $exePath index $lib --db $dbLR --platform Win64 --rebuild --quiet 2>&1
+  $o = & { $ErrorActionPreference = 'Continue'; & $exePath index $lib --db $dbLR --platform Win64 --rebuild --quiet 2>&1 | ForEach-Object { "$_" } }
   $rc = $LASTEXITCODE
   Check 'index <folder> --rebuild exits 0' ($rc -eq 0) "exit=$rc; $(($o | Select-Object -Last 2) -join ' | ')"
 
-  $o = & $exePath index $lib --db $dbLC --platform Win64 --recompile --quiet 2>&1
+  $o = & { $ErrorActionPreference = 'Continue'; & $exePath index $lib --db $dbLC --platform Win64 --recompile --quiet 2>&1 | ForEach-Object { "$_" } }
   $rc = $LASTEXITCODE
   Check 'index <folder> --recompile exits 0' ($rc -eq 0) "exit=$rc; $(($o | Select-Object -Last 2) -join ' | ')"
 
@@ -358,8 +361,8 @@ try {
   #    file that scope does not contain.
   # ==========================================================================
   $dbPol = Join-Path $scratch 'polluted.sqlite'
-  & $exePath index --project $dproj --db $dbPol --platform Win64 --quiet 2>&1 | Out-Null
-  & $exePath index $outsider --db $dbPol --platform Win64 --quiet 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --project $dproj --db $dbPol --platform Win64 --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $outsider --db $dbPol --platform Win64 --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
   $polluted = Snap $dbPol
   Check '3a. the pollution landed' ($polluted -like '*outsider.pas*') (Leaves $polluted)
@@ -372,12 +375,12 @@ try {
   # shared DB.
   $dbPol2 = Join-Path $scratch 'polluted_recompile.sqlite'
   Copy-Item $dbPol $dbPol2 -Force
-  & $exePath index --project $dproj --db $dbPol2 --platform Win64 --recompile --quiet 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --project $dproj --db $dbPol2 --platform Win64 --recompile --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check '3b. CONTROL: --recompile KEEPS the out-of-root file' ((Snap $dbPol2) -like '*outsider.pas*') `
     'if this ever fails, eviction stopped being bounded and the convergence assertions above stopped meaning anything'
 
   # the REBUILD
-  $o = & $exePath index --project $dproj --db $dbPol --platform Win64 --rebuild --quiet 2>&1
+  $o = & { $ErrorActionPreference = 'Continue'; & $exePath index --project $dproj --db $dbPol --platform Win64 --rebuild --quiet 2>&1 | ForEach-Object { "$_" } }
   $rc = $LASTEXITCODE
   Check '3c. --rebuild over a polluted DB exits 0' ($rc -eq 0) "exit=$rc; $(($o | Select-Object -Last 2) -join ' | ')"
   $rebuilt = Snap $dbPol
@@ -403,7 +406,7 @@ try {
   # ==========================================================================
   # 4. --rebuild is idempotent -- running it twice neither doubles nor loses
   # ==========================================================================
-  & $exePath index --project $dproj --db $dbPol --platform Win64 --rebuild --quiet 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --project $dproj --db $dbPol --platform Win64 --rebuild --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check '4. a second --rebuild produces identical content' ((Snap $dbPol) -eq $snapA) (Leaves (Snap $dbPol))
 
   # ==========================================================================
@@ -411,9 +414,9 @@ try {
   #    index on the way past is the worst possible reading of the flag.
   # ==========================================================================
   $dbDry = Join-Path $scratch 'dryrun.sqlite'
-  & $exePath index --project $dproj --db $dbDry --platform Win64 --quiet 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --project $dproj --db $dbDry --platform Win64 --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $beforeDry = Snap $dbDry
-  & $exePath index --project $dproj --db $dbDry --platform Win64 --rebuild --dry-run --quiet 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index --project $dproj --db $dbDry --platform Win64 --rebuild --dry-run --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check '5. --rebuild --dry-run leaves the index untouched' ((Snap $dbDry) -eq $beforeDry) `
     "before=$(Leaves $beforeDry) after=$(Leaves (Snap $dbDry))"
 
@@ -421,7 +424,7 @@ try {
   # 6. the two modes are mutually exclusive -- a usage error, not a precedence
   #    rule nobody can remember
   # ==========================================================================
-  $bout = & $exePath index --project $dproj --db (Join-Path $scratch 'both.sqlite') --rebuild --recompile 2>&1
+  $bout = & { $ErrorActionPreference = 'Continue'; & $exePath index --project $dproj --db (Join-Path $scratch 'both.sqlite') --rebuild --recompile 2>&1 | ForEach-Object { "$_" } }
   $brc  = $LASTEXITCODE
   Check '6. --rebuild --recompile together exits 2' ($brc -eq 2) "exit=$brc; $(($bout | Select-Object -Last 2) -join ' | ')"
   Check '6. the error names both flags' `
@@ -464,11 +467,11 @@ try {
 
   # 7a. the baseline: a plain `index --all`, mode defaulted.
   Remove-Item $sectionDb -Force -ErrorAction SilentlyContinue
-  $aout = @(& $exePath index --all --config $cfg --only ModeSection --jobs 1 2>&1)
+  $aout = @(& { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only ModeSection --jobs 1 2>&1 | ForEach-Object { "$_" } })
   $arc  = $LASTEXITCODE
   Check '7a. a plain index --all exits 0' ($arc -eq 0) "exit=$arc"
-  Check '7a. NO warning when the mode was merely defaulted' ((WarnLines $aout).Count -eq 0) `
-    "a warning on every run is a warning nobody reads (matched=$((WarnLines $aout).Count))"
+  Check '7a. NO warning when the mode was merely defaulted' ((@(WarnLines $aout)).Count -eq 0) `
+    "a warning on every run is a warning nobody reads (matched=$((@(WarnLines $aout)).Count))"
   $asnap = Snap $sectionDb
   Check '7a. it built a correct index' `
     ((HasContent $asnap) -and ($asnap -like '*app.dpr*') -and ($asnap -like '*formunit.dfm*')) (Leaves $asnap)
@@ -478,20 +481,20 @@ try {
   #     tell an incremental walk apart from a full rebuild that happens to
   #     produce the same rows.
   Sentinel $sectionDb 'set' | Out-Null
-  $bout2 = @(& $exePath index --all --config $cfg --only ModeSection --jobs 1 --recompile 2>&1)
+  $bout2 = @(& { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only ModeSection --jobs 1 --recompile 2>&1 | ForEach-Object { "$_" } })
   $brc2  = $LASTEXITCODE
   Check '7b. index --all --recompile exits 0' ($brc2 -eq 0) "exit=$brc2"
-  Check '7b. NO warning -- the flag now does what it says' ((WarnLines $bout2).Count -eq 0) `
-    "matched=$((WarnLines $bout2).Count); $(($bout2 | Where-Object { $_.ToString() -like '*--recompile*' } | Select-Object -First 1) -join '')"
+  Check '7b. NO warning -- the flag now does what it says' ((@(WarnLines $bout2)).Count -eq 0) `
+    "matched=$((@(WarnLines $bout2)).Count); $(($bout2 | Where-Object { $_.ToString() -like '*--recompile*' } | Select-Object -First 1) -join '')"
   Check '7b. --recompile did NOT recreate the section DB' ((Sentinel $sectionDb 'get') -eq 'survives-a-rebuild') `
     "sentinel=$(Sentinel $sectionDb 'get') -- a deleted-and-recreated .sqlite loses it, and drops the handle the IDE plugin holds"
   Check '7b. and the content is unchanged' ((Snap $sectionDb) -eq $asnap) (Leaves (Snap $sectionDb))
 
   # 7c. --rebuild on the manifest arm: clears ROWS, keeps the FILE. Pollute the
   #     section DB with the out-of-root Outsider first, so "cleared" is visible.
-  & $exePath index $outsider --db $sectionDb --platform Win64 --quiet 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $outsider --db $sectionDb --platform Win64 --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check '7c. the pollution landed' ((Snap $sectionDb) -like '*outsider.pas*') (Leaves (Snap $sectionDb))
-  $cout = @(& $exePath index --all --config $cfg --only ModeSection --jobs 1 --rebuild 2>&1)
+  $cout = @(& { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only ModeSection --jobs 1 --rebuild 2>&1 | ForEach-Object { "$_" } })
   $crc  = $LASTEXITCODE
   Check '7c. index --all --rebuild exits 0' ($crc -eq 0) "exit=$crc"
   Check '7c. --rebuild removed the out-of-scope file' (-not ((Snap $sectionDb) -like '*outsider.pas*')) (Leaves (Snap $sectionDb))

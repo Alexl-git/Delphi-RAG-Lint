@@ -14,9 +14,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe") { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" } else { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }),
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-cyclefix-increfuse-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe") { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" } else { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }) }
 $ErrorActionPreference = 'Stop'; $script:Failed = $false
 function Check($n, $ok, $d = '') {
   $s = if ($ok) { 'PASS' } else { 'FAIL' }; $c = if ($ok) { 'Green' } else { 'Red' }
@@ -40,7 +46,7 @@ function Prepare([string]$Name, [switch]$Inline) {
   }
   $db = Join-Path $WorkDir ($Name + '.sqlite')
   Push-Location $WorkDir
-  try { & $Exe index --project (Join-Path $root 'IncludeClause.dproj') --db $db --library-db none *> "$db.log" } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root 'IncludeClause.dproj') --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
   Check "$Name indexed" ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
   return @{ Root = $root; Db = $db }
 }
@@ -50,7 +56,7 @@ function Get-Plan([string]$Db, [string]$Tag, [string]$Format = 'text') {
   try {
     $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
       -ArgumentList @('cycles', '--db', ('"' + $Db + '"'), '--edges', '--causes', '--plan', '--format', $Format, '--library-db', 'none') `
-      -RedirectStandardOutput $out -RedirectStandardError "$out.err"
+      -RedirectStandardOutput $out -RedirectStandardError "$out.err"; $null = $p.Handle
   } finally { $env:DRAGLINT_TEST_DUMP_PLAN = $null }
   $d = if (Test-Path $dump) { [IO.File]::ReadAllText($dump) } else { '' }
   return @{ Text = [IO.File]::ReadAllText($out); Dump = $d; Exit = $p.ExitCode }
@@ -67,14 +73,14 @@ Check 'b: verdict refused' ($plan.Dump -match 'verdict=refused') $plan.Dump.Trim
 Check 'b: refusal kind uses-in-include' ($plan.Dump -match 'refusals=[^\t]*\buses-in-include\b') $plan.Dump.Trim()
 $dproj = Join-Path $i.Root 'IncludeClause.dproj'
 Push-Location $WorkDir
-try { $dry = & $Exe cycles --fix --project $dproj --db $i.Db --unit cfalpha --no-compile --format json --library-db none 2>$null | Out-String; $dryRc = $LASTEXITCODE } finally { Pop-Location }
+try { $dry = & { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --project $dproj --db $i.Db --unit cfalpha --no-compile --format json --library-db none 2>$null } | Out-String; $dryRc = $LASTEXITCODE } finally { Pop-Location }
 Check 'b: --fix dry run exits 1 (refused)' ($dryRc -eq 1) "rc=$dryRc"
-$ref = @(); try { $ref = @(($dry | ConvertFrom-Json).cycles | ForEach-Object { $_.refusals } | Where-Object { $_.kind -eq 'uses-in-include' }) } catch { }
+$ref = @(); try { $ref = @(($dry | ConvertFrom-Json | ForEach-Object { $_ }).cycles | ForEach-Object { $_.refusals } | Where-Object { $_.kind -eq 'uses-in-include' }) } catch { }
 Check 'b: the cycle-fix/1 JSON has a uses-in-include refusal at CfAlpha.pas line 13' (($ref.Count -eq 1) -and ($ref[0].line -eq 13) -and ($ref[0].file -like '*CfAlpha.pas')) "n=$($ref.Count)"
 
 $before = Hashes $i.Root
 Push-Location $WorkDir
-try { $fx = & $Exe cycles --fix --project $dproj --db $i.Db --unit cfalpha --apply --library-db none 2>&1 | Out-String; $fxRc = $LASTEXITCODE } finally { Pop-Location }
+try { $fx = & { $ErrorActionPreference = 'Continue'; & $Exe cycles --fix --project $dproj --db $i.Db --unit cfalpha --apply --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String; $fxRc = $LASTEXITCODE } finally { Pop-Location }
 Check 'c: cycles --fix --apply exits 1 (refused)' ($fxRc -eq 1) "rc=$fxRc"
 Check 'c: cycles --fix --apply names uses-in-include' ($fx -match 'uses-in-include') ''
 Check 'c: every source byte-identical after --apply' ((Hashes $i.Root) -eq $before) ''
@@ -86,3 +92,4 @@ Check 'd: control (inlined): no uses-in-include' ($cp.Text -notmatch 'uses-in-in
 
 if ($script:Failed) { Write-Host 'run_cyclefix_include_refuse: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'run_cyclefix_include_refuse: PASS' -ForegroundColor Green; exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

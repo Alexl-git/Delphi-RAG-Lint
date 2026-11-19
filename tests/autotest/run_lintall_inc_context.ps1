@@ -16,9 +16,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-lintall-inc-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'; $script:Failed = $false; $script:Passed = 0; $script:FailedN = 0
 function Check($n, $ok, $d = '') {
   $s = if ($ok) { 'PASS' } else { 'FAIL' }; $c = if ($ok) { 'Green' } else { 'Red' }
@@ -38,18 +44,18 @@ $db   = Join-Path $WorkDir 'l.sqlite'
 
 function RunJson([string[]]$argv, [string]$tag) {
   Push-Location $WorkDir
-  try { $o = & $Exe @argv 2> (Join-Path $WorkDir "$tag.err") | Out-String } finally { Pop-Location }
+  try { $o = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath((Join-Path $WorkDir "$tag.err")); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe @argv 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String } finally { Pop-Location }
   [IO.File]::WriteAllText((Join-Path $WorkDir "$tag.json"), $o)
   # lint / lint-all --json: a bare ARRAY of findings with start_line (see
   # feedback_lint_json_is_an_array_with_start_line).
-  try { return ,@($o | ConvertFrom-Json) } catch { return ,@() }
+  try { return ,@(($o | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { return ,@() }
 }
 function BodyHits($findings, [string]$rule) {
   return ,@($findings | Where-Object { ($_.rule -eq $rule) -and ([IO.Path]::GetFileName([string]$_.file_path) -ieq 'Body.inc') })
 }
 
 Push-Location $WorkDir
-try { $null = & $Exe index --project $proj --db $db --library-db none 2>&1 } finally { Pop-Location }
+try { $null = & { $ErrorActionPreference = 'Continue'; & $Exe index --project $proj --db $db --library-db none 2>&1 | ForEach-Object { "$_" } } } finally { Pop-Location }
 
 $all = RunJson @('lint-all', '--db', $db, '--project', $proj, '--json') 'lintall'
 $hits = BodyHits $all 'empty-except'
@@ -62,7 +68,7 @@ Check 'lint-all: line 15 (the branch no includer compiles) is NOT reported' (-no
 # The banner is a note of a TEXT run (EmitNoteLine, stdout): under --json it is dropped
 # and stderr stays empty since LINTJSON-STDERR (1.40), so count it on a text run.
 Push-Location $WorkDir
-try { $err = ((& $Exe lint-all --db $db --project $proj 2>&1) -join "`n") } finally { Pop-Location }
+try { $err = ((& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --project $proj 2>&1 | ForEach-Object { "$_" } }) -join "`n") } finally { Pop-Location }
 Check 'lint-all: the banner counts the include file' ($err -match 'scanning 4 ') (($err -split "`r?`n" | Where-Object { $_ -match 'scanning' }) -join ' ')
 
 # Positive control: standalone `lint` (no includer context) takes the ELSE branch.
@@ -74,3 +80,4 @@ Check 'control: standalone lint Body.inc reports line 15 (no host define)' ($one
   Write-Host ("RESULT: {0} passed, {1} failed" -f $script:Passed, $script:FailedN)
 }
 if ($script:Failed) { exit 1 } else { exit 0 }
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

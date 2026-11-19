@@ -20,10 +20,10 @@ function Check([string]$name, [bool]$ok, [string]$detail) {
   if ($ok) { Write-Host "[PASS] $name" } else { Write-Host "[FAIL] $name  ($detail)"; $script:fail++ }
 }
 function Rows([string]$q) {
-  $j = (& $exePath sql --db $db --query $q --json 2>$null | Out-String | ConvertFrom-Json)
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --query $q --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ })
   return ,@($j.rows)
 }
-& $exePath index $fx --db $db *> $null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $fx --db $db *> $null }
 
 $di = Rows "SELECT start_line FROM refs WHERE kind = 'di-unresolved' ORDER BY start_line"
 $diLines = ($di | ForEach-Object { $_[0] }) -join ','
@@ -39,12 +39,12 @@ $sealed = Rows "SELECT name FROM symbols WHERE kind = 'class' AND directives = '
 $sealedNames = ($sealed | ForEach-Object { $_[0] }) -join ','
 Check 'sealed recorded: plain, generic, nested, full row of the forward' ($sealedNames -eq 'TShFwd,TShGen,TShInner,TShPlain') "got [$sealedNames]"
 
-$raw = & $exePath lint-all --db $db --rule is-never-true --json 2>$null | Out-String
-$lines = @(($raw | ConvertFrom-Json) | Where-Object { $_.file_path -like '*uSealShapes.pas' } | ForEach-Object { $_.start_line } | Sort-Object) -join ','
+$raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rule is-never-true --json 2>$null } | Out-String
+$lines = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $_.file_path -like '*uSealShapes.pas' } | ForEach-Object { $_.start_line } | Sort-Object) -join ','
 Check 'is-never-true fires on the sealed shapes (41-45; 45 = forward row, closed by INC)' ($lines -eq '41,42,43,44,45') "got [$lines]"
 
-$off = & $exePath lint-all --db $db --json 2>$null | Out-String
-$offN = @(($off | ConvertFrom-Json) | Where-Object { $_.rule -eq 'is-never-true' }).Count
+$off = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --json 2>$null } | Out-String
+$offN = @(($off | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $_.rule -eq 'is-never-true' }).Count
 Check 'positive control: is-never-true off by default answers nothing' ($offN -eq 0) "$offN finding(s)"
 
 try { [IO.File]::Delete($db) } catch {}

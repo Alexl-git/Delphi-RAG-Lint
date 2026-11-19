@@ -16,12 +16,15 @@
 #
 # Usage: pwsh -File run_cyclefix_pp_regions_identity.ps1 [-Exe <drag-lint.exe>] [-LegacyExe <exe>] [-WorkDir <dir>] [-KeepWorkDir]
 param(
-  [string]$Exe       = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
+  [string]$Exe       = '',
   [string]$LegacyExe = '',
   [string]$BaselineExe = '',
   [string]$WorkDir   = "$env:TEMP\drag-lint-cyclefix-ppid-$PID",
   [switch]$KeepWorkDir
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }) }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false; $script:Passed = 0
 function Check($n, $ok, $d = '') {
@@ -49,7 +52,7 @@ function New-Proj([string]$Tag, [scriptblock]$Patch, [string]$IndexExe) {
   if ($Patch) { & $Patch $root }
   $db = "$root.sqlite"
   Push-Location $WorkDir
-  try { $null | & $IndexExe index --project (Join-Path $root 'GuardedUses.dproj') --db $db --library-db none *> "$db.log" } finally { Pop-Location }
+  try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $IndexExe index --project (Join-Path $root 'GuardedUses.dproj') --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
   return @{ Root = $root; Dproj = (Join-Path $root 'GuardedUses.dproj'); Db = $db }
 }
 # stdout bytes (base64) and stderr text of `cycles --plan`, DRAGLINT_CYCLES_PP = $Mode ('' = unset)
@@ -60,7 +63,7 @@ function Get-Plan($P, [string]$Mode, [string]$With = $Exe) {
     if ($Mode) { $env:DRAGLINT_CYCLES_PP = $Mode } else { Remove-Item Env:\DRAGLINT_CYCLES_PP -ErrorAction SilentlyContinue }
     $null = Start-Process -FilePath $With -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
       -ArgumentList @('cycles', '--plan', '--project', ('"' + $P.Dproj + '"'), '--db', ('"' + $P.Db + '"'), '--library-db', 'none') `
-      -RedirectStandardOutput $o -RedirectStandardError $e
+      -RedirectStandardOutput $o -RedirectStandardError $e; $null = $null.Handle
   } finally { if ($null -ne $old) { $env:DRAGLINT_CYCLES_PP = $old } else { Remove-Item Env:\DRAGLINT_CYCLES_PP -ErrorAction SilentlyContinue } }
   return @{ Out = [Convert]::ToBase64String([IO.File]::ReadAllBytes($o)); Text = [IO.File]::ReadAllText($o); Err = [IO.File]::ReadAllText($e) }
 }

@@ -243,7 +243,7 @@ function ExtractPascalComments(const AText: string; out ARest: string): string;
 implementation
 
 uses
-  System.IOUtils
+  DRagLint.Core.Encoding, System.IOUtils
   , System.Math                 { Min -- SignatureWithoutComments' line window }
   , DRagLint.Analysis.Purity    { StripCommentsAndStrings -- the one comment masker }
   ;
@@ -346,7 +346,7 @@ begin
   Result:= nil;
   if (AFilePath <> '') and TFile.Exists(AFilePath) then
   try
-    Result:= TFile.ReadAllLines(AFilePath, TEncoding.ANSI);
+    Result:= ReadSourceFileLines(AFilePath);
   except  // an unreadable unit has no better heading to offer: nil makes SignatureWithoutComments return the indexed signature, exactly what it returned before C14
     on Exception do Result:= nil;
   end;
@@ -669,7 +669,7 @@ begin
   Result:= '';
   if (AFilePath = '') or (not TFile.Exists(AFilePath)) then Exit;
   try
-    Lines:= TFile.ReadAllLines(AFilePath, TEncoding.ANSI);
+    Lines:= ReadSourceFileLines(AFilePath);
     if (ALine >= 1) and (ALine <= Length(Lines)) then Result:= Trim(Lines[ALine - 1]);
   except
     Result:= '';

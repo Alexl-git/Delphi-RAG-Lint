@@ -24,9 +24,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_caps_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n, $ok, $d) {
@@ -101,7 +104,7 @@ end.
 "@
 $db = Join-Path $WorkDir 'p.sqlite'
 $env:DRAGLINT_RULE_CACHE = '0'
-$idx = & $exePath index --project (Join-Path $src 'P.dpr') --db $db 2>&1 | Out-String
+$idx = & { $ErrorActionPreference = 'Continue'; & $exePath index --project (Join-Path $src 'P.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 $env:DRAGLINT_RULE_CACHE = $null
 Check 'SANITY: fixture indexed' ($LASTEXITCODE -eq 0) $idx
 $lib = Join-Path $src 'uLib.pas'
@@ -109,47 +112,47 @@ $errF = Join-Path $WorkDir 'err.txt'
 function Rows([string]$Text) { @($Text -split "`r?`n" | Where-Object { $_ -match '^[a-z_]+\s+\S+\s+\d+(\s|$)' }) }
 
 # --- outline ---------------------------------------------------------------------
-$o1 = & $exePath outline --file $lib --db $db 2>&1 | Out-String
+$o1 = & { $ErrorActionPreference = 'Continue'; & $exePath outline --file $lib --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'C1 outline (no option): local_var and param rows are still there' (($o1 -match '(?m)^local_var') -and ($o1 -match '(?m)^param')) $o1
 
-$o2 = & $exePath outline --file $lib --db $db --no-locals 2>&1 | Out-String
+$o2 = & { $ErrorActionPreference = 'Continue'; & $exePath outline --file $lib --db $db --no-locals 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'C2 outline --no-locals: neither kind, the class and its method stay' (($LASTEXITCODE -eq 0) -and ($o2 -notmatch '(?m)^(local_var|param)\b') -and ($o2 -match 'uLib\.TBox\b') -and ($o2 -match 'uLib\.TBox\.Put')) $o2
 
-$o3 = & $exePath outline --file $lib --db $db --kind method 2>&1 | Out-String
+$o3 = & { $ErrorActionPreference = 'Continue'; & $exePath outline --file $lib --db $db --kind method 2>&1 | ForEach-Object { "$_" } } | Out-String
 $r3 = Rows $o3
 Check 'C3 outline --kind method: only method rows' (($r3.Count -ge 1) -and (@($r3 | Where-Object { $_ -notmatch '^method\s' }).Count -eq 0)) $o3
 
 $all = (Rows $o1).Count
-$o4 = & $exePath outline --file $lib --db $db --limit 2 2>&1 | Out-String
+$o4 = & { $ErrorActionPreference = 'Continue'; & $exePath outline --file $lib --db $db --limit 2 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'C4 outline --limit 2: two rows, then how many matched' (((Rows $o4).Count -eq 2) -and ($o4 -match "first 2 of $all row\(s\)")) $o4
 
-$o5 = & $exePath outline --file $lib --db $db --format json --limit 2 2>$errF | Out-String
+$o5 = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errF); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath outline --file $lib --db $db --format json --limit 2 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String
 $e5 = Get-Content $errF -Raw
-$j5 = $null; try { $j5 = $o5 | ConvertFrom-Json } catch { }
+$j5 = $null; try { $j5 = $o5 | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'C5 outline --format json --limit 2: an array of two, the note on stderr' (($null -ne $j5) -and (@($j5).Count -eq 2) -and ($e5 -match "first 2 of $all row\(s\)")) "stdout: $o5 | stderr: $e5"
 
 # --- usages ----------------------------------------------------------------------
-$u6 = & $exePath usages --name GBox --json --db $db 2>$null | Out-String
-$j6 = $u6 | ConvertFrom-Json
+$u6 = & { $ErrorActionPreference = 'Continue'; & $exePath usages --name GBox --json --db $db 2>$null } | Out-String
+$j6 = $u6 | ConvertFrom-Json | ForEach-Object { $_ }
 $reads = @($j6.reads).Count
 Check 'C6 usages --json (no option): no "limit" / "totals" keys' (($null -eq $j6.PSObject.Properties['limit']) -and ($null -eq $j6.PSObject.Properties['totals']) -and ($reads -ge 3)) "reads: $reads"
 
-$u7 = & $exePath usages --name GBox --json --limit 1 --db $db 2>$null | Out-String
-$j7 = $null; try { $j7 = $u7 | ConvertFrom-Json } catch { }
+$u7 = & { $ErrorActionPreference = 'Continue'; & $exePath usages --name GBox --json --limit 1 --db $db 2>$null } | Out-String
+$j7 = $null; try { $j7 = $u7 | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 $groupsOk = $null -ne $j7
 if ($groupsOk) { foreach ($g in 'declarations', 'reads', 'writes', 'calls', 'types', 'attributes', 'events') { if (@($j7.$g).Count -gt 1) { $groupsOk = $false } } }
 Check 'C7 usages --json --limit 1: each group at most one row, totals carry the full counts' ($groupsOk -and ($j7.limit -eq 1) -and ($j7.totals.reads -eq $reads)) $u7
 
 # --- query unit-usage --------------------------------------------------------------
-$q8 = & $exePath query unit-usage --unit uLib --db $db 2>&1 | Out-String
+$q8 = & { $ErrorActionPreference = 'Continue'; & $exePath query unit-usage --unit uLib --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'C8 query unit-usage (no option): every importer listed' ((@($users | Where-Object { $q8 -match "$_\.pas" }).Count -eq 3) -and ($q8 -match '3 of 4 importing file')) $q8
 
-$q9 = & $exePath query unit-usage --unit uLib --db $db --limit 1 2>&1 | Out-String
+$q9 = & { $ErrorActionPreference = 'Continue'; & $exePath query unit-usage --unit uLib --db $db --limit 1 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'C9 query unit-usage --limit 1: one importer, a note, the summary still counts all' ((@($q9 -split "`r?`n" | Where-Object { $_ -match '^\s+\S+\.(pas|dpr)\s+uses\(' }).Count -eq 1) -and ($q9 -match 'first 1 of 4 importing file') -and ($q9 -match '3 of 4 importing file\(s\) reference it')) $q9
 
-$q10 = & $exePath query unit-usage --unit uLib --db $db --json --limit 1 2>$errF | Out-String
+$q10 = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errF); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath query unit-usage --unit uLib --db $db --json --limit 1 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String
 $e10 = Get-Content $errF -Raw
-$j10 = $null; try { $j10 = $q10 | ConvertFrom-Json } catch { }
+$j10 = $null; try { $j10 = $q10 | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'C10 query unit-usage --json --limit 1: an array of one, the note on stderr' (($null -ne $j10) -and (@($j10).Count -eq 1) -and ($e10 -match 'first 1 of 4 importing file')) "stdout: $q10 | stderr: $e10"
 }
 finally {

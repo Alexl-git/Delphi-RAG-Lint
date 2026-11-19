@@ -14,9 +14,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-lsp-usage-buckets-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$detail=''){ Write-Host ("[{0}] {1}{2}" -f (@('FAIL','PASS')[[int]$ok]),$n,$(if($detail){" -- $detail"}else{''})) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
@@ -71,16 +74,16 @@ function Frame($obj) {
   return "Content-Length: $n`r`n`r`n$j"
 }
 function CliUsages([string]$Name) {
-  $raw = (& $exePath usages --name $Name --db $db --format json 2>$null | Out-String)
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath usages --name $Name --db $db --format json 2>$null } | Out-String)
   $j = $raw.Substring($raw.IndexOf('{'))
   $j = $j.Substring(0, $j.LastIndexOf('}') + 1)
-  return ($j | ConvertFrom-Json)
+  return ($j | ConvertFrom-Json | ForEach-Object { $_ })
 }
 function Pos($r) { "$($r.file):$($r.line):$($r.col)" }
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $WorkDir --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check '1. SANITY: the index exists' (Test-Path $db)
 
   $cliE = CliUsages 'EMyFail'
@@ -102,7 +105,7 @@ try {
 
   $lspE = $null; $lspB = $null
   foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 2 -and $o.result) { $lspE = $o.result }
     if ($o.id -eq 3 -and $o.result) { $lspB = $o.result }
   }

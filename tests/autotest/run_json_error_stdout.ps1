@@ -15,9 +15,12 @@
   Run with pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+param([string]$Exe = '',
       [string]$DbPath = 'C:\Projects\Delphi-RAG-lint\src\cli\_D-RAG\drag-lint.sqlite',
       [string]$SrcDir = 'C:\Projects\Delphi-RAG-lint\src\cli')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -27,7 +30,7 @@ function Check($n, $ok, $d = '') {
 }
 function Test-StdoutJsonOrEmpty([string]$text) {
   if ([string]::IsNullOrWhiteSpace($text)) { return $true }
-  try { $null = $text | ConvertFrom-Json -ErrorAction Stop; return $true } catch { return $false }
+  try { $null = $text | ConvertFrom-Json -ErrorAction Stop | ForEach-Object { $_ }; return $true } catch { return $false }
 }
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 if (-not (Test-Path $DbPath)) { Write-Host "FATAL: db not found: $DbPath" -ForegroundColor Red; exit 2 }
@@ -43,9 +46,9 @@ $cases = [ordered]@{
 }
 foreach ($k in $cases.Keys) {
   $a = $cases[$k]
-  $out = (& $Exe @a '--json' 2>$null) -join "`n"
+  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe @a '--json' 2>$null }) -join "`n"
   Check "$k --json: stdout empty or JSON" (Test-StdoutJsonOrEmpty $out) "stdout=[$out]"
-  $plain = (& $Exe @a 2>$null) -join "`n"
+  $plain = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null }) -join "`n"
   Check "control: $k without --json still prints the diagnostic on stdout" ($plain -match 'not found|no doc-comment|No symbol matched|No slice returned') "stdout=[$plain]"
 }
 # --format json asks for the same machine-readable stdout as --json (FLAG lane audit).
@@ -59,10 +62,10 @@ $fmtCases = [ordered]@{
 }
 foreach ($k in $fmtCases.Keys) {
   $a = $fmtCases[$k]
-  $out = (& $Exe @a 2>$null) -join "`n"
+  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>$null }) -join "`n"
   Check "${k}: stdout empty or JSON" (Test-StdoutJsonOrEmpty $out) "stdout=[$out]"
   $errFile = [IO.Path]::GetTempFileName()
-  $null = & $Exe @a 2> $errFile
+  $null = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe @a 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   $err = (Get-Content -LiteralPath $errFile) -join "`n"
   [IO.File]::Delete($errFile)
   Check "control: ${k} still SAYS it on stderr" ($err -match 'not found|No symbol matched|No slice returned') "stderr=[$err]"
@@ -73,7 +76,11 @@ foreach ($k in $fmtCases.Keys) {
 # stdout without it (control: the split is keyed on the JSON flag, the message was not deleted).
 # -SrcDir: the folder whose units -DbPath indexes (the DB stores absolute paths).
 $realUnit = Join-Path $srcDir 'DRagLint.Hover.Renderer.pas'
-$cliUnit  = Join-Path $srcDir 'DRagLint.CLI.pas'
+# The already-in-uses fixture needs a unit that USES DRagLint.Hover.Renderer (where BuildHoverModel lives).
+# v1511 SPLIT moved the hover verb out of DRagLint.CLI.pas into DRagLint.CLI.Hover.pas, so CLI.pas no longer
+# uses it and find-unit (correctly) proposed an insert. Check the premise so a future move fails HERE, by name.
+$cliUnit  = Join-Path $srcDir 'DRagLint.CLI.Hover.pas'
+Check 'fixture premise: the already-in-uses unit uses DRagLint.Hover.Renderer' ((Test-Path -LiteralPath $cliUnit) -and ([IO.File]::ReadAllText($cliUnit) -match '(?s)\buses\b.*\bDRagLint\.Hover\.Renderer\b')) "unit=$cliUnit"
 $noFile   = 'C:\ZzNoSuchDirX26\ZzNoSuchUnitX26.pas'
 $rem = @(
   @{ n = 'query unit-usage, unit in no index';  a = @('query', 'unit-usage', '--unit', $bogus, '--db', $DbPath); j = @('--json'); m = 'no interface-section symbols' }
@@ -101,31 +108,32 @@ $rem = @(
 )
 foreach ($c in $rem) {
   $all = @($c.a) + @($c.j)
-  $out = (& $Exe @all 2>$null) -join "`n"
+  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe @all 2>$null }) -join "`n"
   Check "$($c.n) $($c.j -join ' '): stdout empty or JSON" (Test-StdoutJsonOrEmpty $out) "stdout=[$out]"
   $errFile = [IO.Path]::GetTempFileName()
-  $null = & $Exe @all 2> $errFile
+  $null = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe @all 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   $err = (Get-Content -LiteralPath $errFile) -join "`n"
   [IO.File]::Delete($errFile)
   Check "$($c.n): the diagnostic is still SAID, on stderr" ($err -match [regex]::Escape($c.m)) "stderr=[$err]"
-  $plain = (& $Exe @($c.a) 2>$null) -join "`n"
+  $plain = (& { $ErrorActionPreference = 'Continue'; & $Exe @($c.a) 2>$null }) -join "`n"
   Check "control: $($c.n) without the JSON flag still prints it on stdout" ($plain -match [regex]::Escape($c.m)) "stdout=[$plain]"
 }
 # reverse-calltree: an unresolved qname over a READABLE index is "not found" (exit 1), not "no readable index" (exit 2).
-$null = & $Exe reverse-calltree --qname $bogus --db $DbPath --json 2>$null
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe reverse-calltree --qname $bogus --db $DbPath --json 2>$null }
 Check 'reverse-calltree: unresolved qname exits 1 (not found), not 2' ($LASTEXITCODE -eq 1) "exit=$LASTEXITCODE"
 # find-unit --json when the unit is already used: a valid JSON answer on stdout (the edits array, empty), exit 0.
-$fu = (& $Exe find-unit --name 'BuildHoverModel' --in $cliUnit --db $DbPath --json 2>$null) -join "`n"
+$fu = (& { $ErrorActionPreference = 'Continue'; & $Exe find-unit --name 'BuildHoverModel' --in $cliUnit --db $DbPath --json 2>$null }) -join "`n"
 $fuExit = $LASTEXITCODE
 Check 'find-unit --json, already in uses: stdout is exactly [] and exit 0' (($fu.Trim() -eq '[]') -and ($fuExit -eq 0)) "stdout=[$fu] exit=$fuExit"
 # outline --json is the same request as --format json: identical stdout on an indexed unit.
-$oj = (& $Exe outline --in $realUnit --db $DbPath --json 2>$null) -join "`n"
-$of = (& $Exe outline --in $realUnit --db $DbPath --format json 2>$null) -join "`n"
+$oj = (& { $ErrorActionPreference = 'Continue'; & $Exe outline --in $realUnit --db $DbPath --json 2>$null }) -join "`n"
+$of = (& { $ErrorActionPreference = 'Continue'; & $Exe outline --in $realUnit --db $DbPath --format json 2>$null }) -join "`n"
 Check 'outline --json prints what --format json prints (non-empty JSON)' ((-not [string]::IsNullOrWhiteSpace($oj)) -and ($oj -ceq $of) -and (Test-StdoutJsonOrEmpty $oj))
 # Positive control: success paths of the same verbs were already JSON and stay JSON (non-empty, parses).
-$ok = (& $Exe outline --in $realUnit --db $DbPath --format json 2>$null) -join "`n"
+$ok = (& { $ErrorActionPreference = 'Continue'; & $Exe outline --in $realUnit --db $DbPath --format json 2>$null }) -join "`n"
 Check 'control: outline --format json on an indexed unit is non-empty JSON' ((-not [string]::IsNullOrWhiteSpace($ok)) -and (Test-StdoutJsonOrEmpty $ok))
-$ok = (& $Exe query unit-usage --unit 'DRagLint.Hover.Renderer' --db $DbPath --json 2>$null) -join "`n"
-Check 'control: query unit-usage --json on an indexed unit is non-empty JSON' ((-not [string]::IsNullOrWhiteSpace($ok)) -and (Test-StdoutJsonOrEmpty $ok))Check 'control: the JSON test rejects a planted plain-text line' (-not (Test-StdoutJsonOrEmpty 'symbol not found: Foo'))
+$ok = (& { $ErrorActionPreference = 'Continue'; & $Exe query unit-usage --unit 'DRagLint.Hover.Renderer' --db $DbPath --json 2>$null }) -join "`n"
+Check 'control: query unit-usage --json on an indexed unit is non-empty JSON' ((-not [string]::IsNullOrWhiteSpace($ok)) -and (Test-StdoutJsonOrEmpty $ok))
+Check 'control: the JSON test rejects a planted plain-text line' (-not (Test-StdoutJsonOrEmpty 'symbol not found: Foo'))
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green

@@ -22,9 +22,12 @@ Usage: pwsh -NoProfile -File tests\autotest\run_resolve_dbs_missing_path.ps1 [-E
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\draglint-resolve-missing-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -53,7 +56,7 @@ try {
   function Invoke-Rd([string[]]$A) {
     $o = "$WorkDir\o.txt"; $e = "$WorkDir\e.txt"
     $p = Start-Process -FilePath $Exe -ArgumentList $A -NoNewWindow -Wait -PassThru -WorkingDirectory $WorkDir `
-           -RedirectStandardOutput $o -RedirectStandardError $e
+           -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
     [pscustomobject]@{
       Exit = $p.ExitCode
       Out  = @(([IO.File]::ReadAllText($o)) -split "`r?`n" | Where-Object { $_ -ne '' })

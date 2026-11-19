@@ -4,10 +4,10 @@ title: query --text --near
 summary: Keeps only text hits in routines within N call-graph hops of a symbol
 product: DL
 group: search-navigation
-order: 20024
+order: 20025
 since: 1.38.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # query --text --near

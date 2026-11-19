@@ -15,10 +15,17 @@
 # Usage: pwsh -File tests/autotest/run_menu_tree_guard.ps1 [-Exe <path>]
 [CmdletBinding()]
 param(
-    [string] $Exe        = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-    [string] $FixtureDir = "$PSScriptRoot\..\fixtures\menutree",
+    [string] $Exe        = '',
+    [string] $FixtureDir = '',
     [string] $WorkDir    = "$env:TEMP\drag-lint-menu-tree-guard-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $FixtureDir) { $FixtureDir = "$PSScriptRoot\..\fixtures\menutree" }
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
@@ -60,13 +67,13 @@ $fx = "$WorkDir\fx"
 Copy-Item -LiteralPath (Resolve-Path $FixtureDir).Path -Destination $fx -Recurse
 $proj = "$fx\MenuTreeFixture.dproj"
 $db   = "$WorkDir\fixture.sqlite"
-& $Exe index --project $proj --db $db *> "$WorkDir\index.log"
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project $proj --db $db *> "$WorkDir\index.log" }
 if ($LASTEXITCODE -ne 0) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: fixture index failed (exit $LASTEXITCODE)" -ForegroundColor Red; exit 2 }
 $want = Get-Rows (Get-Content "$fx\expected-paths.txt" -Raw) $false
 Check 'golden has rows' ($want.Count -ge 10) "($($want.Count))"
 
 # --- paths, cell by cell ---
-$paths = (& $Exe menu-tree --project $proj --db $db --format paths 2> "$WorkDir\paths.err" | Out-String)
+$paths = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath("$WorkDir\paths.err"); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe menu-tree --project $proj --db $db --format paths 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
 Check 'menu-tree --format paths exits 0' ($LASTEXITCODE -eq 0) "(exit $LASTEXITCODE)"
 $got = Get-Rows $paths $true
 $bad = Compare-Rows $want $got
@@ -79,23 +86,23 @@ $ctl = Compare-Rows $seeded $got
 Check 'positive control: a one-cell golden edit is reported' ($ctl.Count -eq 1) "($($ctl.Count) mismatch(es))"
 
 # --- json ---
-$jsonText = (& $Exe menu-tree --project $proj --db $db --format json 2> "$WorkDir\json.err" | Out-String)
+$jsonText = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath("$WorkDir\json.err"); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe menu-tree --project $proj --db $db --format json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
 $jsonExit = $LASTEXITCODE
 $j = $null
-try { $j = $jsonText | ConvertFrom-Json } catch { $j = $null }
+try { $j = $jsonText | ConvertFrom-Json | ForEach-Object { $_ } } catch { $j = $null }
 Check 'menu-tree --format json exits 0 and parses' (($jsonExit -eq 0) -and ($null -ne $j)) "(exit $jsonExit)"
 Check 'json schema = menu-tree/1' ($null -ne $j -and $j.schema -eq 'menu-tree/1') "(got [$($j.schema)])"
 # external: TFixtureForm.mnuTools + the four MT.TwoClass field roots (TFirstMenu/TSecondMenu x FMenu/FPopup)
 Check 'json: two roots, five external roots' ($null -ne $j -and @($j.roots).Count -eq 2 -and @($j.external).Count -eq 5) ''
 
 # --- usage: no --db ---
-$err = (& $Exe menu-tree --project $proj 2>&1 | Out-String)
+$err = (& { $ErrorActionPreference = 'Continue'; & $Exe menu-tree --project $proj 2>&1 | ForEach-Object { "$_" } } | Out-String)
 Check 'no --db -> exit 2' ($LASTEXITCODE -eq 2) "(exit $LASTEXITCODE)"
 Check 'no --db -> "menu-tree: need --db"' ($err -match 'menu-tree: need --db') ''
 
 # --- stale: touch a fixture unit after indexing ---
 Add-Content -LiteralPath "$fx\MT.Builder.pas" -Value "`r`n{ touched by run_menu_tree_guard }" -Encoding ascii
-& $Exe menu-tree --project $proj --db $db --format paths *> "$WorkDir\stale.out"
+& { $ErrorActionPreference = 'Continue'; & $Exe menu-tree --project $proj --db $db --format paths *> "$WorkDir\stale.out" }
 Check 'touched unit -> exit 3 (stale index refused)' ($LASTEXITCODE -eq 3) "(exit $LASTEXITCODE)"
 
 Write-Host ''
@@ -106,3 +113,4 @@ exit 0
     Write-Host "FAIL run_menu_tree_guard: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
 }
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

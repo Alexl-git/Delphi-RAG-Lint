@@ -38,10 +38,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\draglint_find_callers_dupsites_$PID",
   [switch]$Quiet
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -107,7 +110,7 @@ end.
 '@
 
 $db = Join-Path $WorkDir '_D-RAG\App.sqlite'
-& $Exe index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 # Line numbers are DERIVED from the fixture, never hardcoded.
 $src = Get-Content (Join-Path $WorkDir 'uProbe.pas')
@@ -122,7 +125,7 @@ Check 'all three fixture lines located' `
   (($lnBare -gt 0) -and ($lnQualified -gt 0) -and ($lnTwoCalls -gt 0) -and ($lnQualified -ne $lnTwoCalls)) `
   "bare=$lnBare qualified=$lnQualified twocalls=$lnTwoCalls"
 
-$out = (& $Exe query find-callers --name Run --db $db 2>&1)
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name Run --db $db 2>&1 | ForEach-Object { "$_" } })
 $sites = @()
 foreach ($l in $out) { if ("$l" -match 'uProbe\.pas:(\d+):(\d+)') { $sites += ('{0}:{1}' -f $Matches[1], $Matches[2]) } }
 if (-not $Quiet) {
@@ -168,7 +171,7 @@ Check "POSITIVE CONTROL: the line with TWO real calls (line $lnTwoCalls) reports
 # 1.42 (USAGES-DOUBLE-COUNT): `usages` now collapses the member-access under a call at READ time, so it
 # can no longer witness the two stored refs. Re-pointed (not deleted) at the refs table through `sql`.
 $sqlq = "SELECT kind FROM refs WHERE name_text='Run' AND start_line=$lnQualified AND start_col=5"
-$sqlOut = (& $Exe sql --query $sqlq --db $db --json 2>&1) -join "`n"
+$sqlOut = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --query $sqlq --db $db --json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 $usgAtQualified = [regex]::Matches($sqlOut, '"call"|"member-access"').Count
 Check 'CONTROL: the store still holds BOTH refs at the qualified site (post-filter, not a store change)' `
   ($usgAtQualified -eq 2) `

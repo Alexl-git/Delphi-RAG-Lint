@@ -35,9 +35,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = (Join-Path ([IO.Path]::GetTempPath()) "draglint-ro-then-writer-$PID")
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -88,11 +91,11 @@ end.
   $dpr = Join-Path $WorkDir 'P.dpr'
   $uA  = Join-Path $WorkDir 'uA.pas'
   $db  = Join-Path $WorkDir 'P.sqlite'
-  & $Exe index --project $dpr --db $db *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $dpr --db $db *> $null }
   Check 'setup: project index built' (($LASTEXITCODE -eq 0) -and (Test-Path $db)) "exit $LASTEXITCODE"
   $before = (Get-FileHash $uA).Hash
 
-  $out = (& $Exe document --project $dpr --db $db --apply --reindex 2>&1) -join "`n"
+  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe document --project $dpr --db $db --apply --reindex 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $ec  = $LASTEXITCODE
   Check 'document --project --apply --reindex exits 0' ($ec -eq 0) "exit=$ec :: $out"
   Check 'no "readonly database" error' ($out -notmatch 'readonly database') $out
@@ -100,7 +103,7 @@ end.
   Check 'the managed block was written' (([IO.File]::ReadAllText($uA)) -match 'drag-lint:auto BEGIN') ''
 
   $h = (Get-FileHash $uA).Hash
-  $out2 = (& $Exe document --project $dpr --db $db --apply --reindex 2>&1) -join "`n"
+  $out2 = (& { $ErrorActionPreference = 'Continue'; & $Exe document --project $dpr --db $db --apply --reindex 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'a second run exits 0' ($LASTEXITCODE -eq 0) $out2
   Check 'a second run is a no-op (the reindex left the index fresh)' ((Get-FileHash $uA).Hash -eq $h) ''
   Check 'the index is still WAL (header byte 18 = 2)' (([IO.File]::ReadAllBytes($db))[18] -eq 2) ''

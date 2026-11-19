@@ -38,6 +38,16 @@ function Get-MenuSourceText {
   foreach ($p in @($editorPas, $aboutForm, $reportTxt)) {
     if (Test-Path -LiteralPath $p) { $menuSrc += (Get-Content -LiteralPath $p -Raw) }
   }
+  # 1.52 Cmd152 table: each command keeps its caption ('Command.Caption:= ...') in its own
+  # DragLint.Plugin.Cmd.<Name>.pas unit. Read them all, in ORDINAL file-name order --
+  # FeatureGen.Live.pas MenuSourceText reads the same set in the same order (parity).
+  $plugDir = Join-Path $Repo 'src\delphi-plugin'
+  if (Test-Path -LiteralPath $plugDir) {
+    [string[]]$cmdUnits = @(Get-ChildItem -LiteralPath $plugDir -File -Filter 'DragLint.Plugin.Cmd.*.pas' |
+      Where-Object { $_.Name -like 'DragLint.Plugin.Cmd.*.pas' } | ForEach-Object { $_.Name })
+    [Array]::Sort($cmdUnits, [StringComparer]::Ordinal)
+    foreach ($n in $cmdUnits) { $menuSrc += (Get-Content -LiteralPath (Join-Path $plugDir $n) -Raw) }
+  }
   return $menuSrc
 }
 
@@ -99,7 +109,8 @@ function Get-LiveMenuCaptions {
       "Add(?:Proc)?Button\(\s*'([^']+)'",
       "\.Caption\s*:=\s*'([^']+)'",
       "\bCaption:\s*'([^']+)'",                      # REPORT_QUESTIONS catalog rows
-      "\brtk\w+\s*:\s*Result\s*:=\s*'([^']+)'")) {   # ReportGroupCaption headers
+      "\brtk\w+\s*:\s*Result\s*:=\s*'([^']+)'",     # ReportGroupCaption headers
+      "\bRegisterRow\(\s*'[^']*'\s*,\s*'([^']+)'\s*,\s*True\b")) {   # 1.52 Cmd.FieldRepo rows (hidden = False, not live); parity: FeatureGen.Live CAPTION_RES
     foreach ($m in [regex]::Matches($menuSrc, $rx)) {
       # '&&' is the Delphi escape for a literal '&' in a caption; docs write one.
       [void]$liveCaptions.Add($m.Groups[1].Value.Replace('&&', '&').Trim())

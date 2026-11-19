@@ -13,10 +13,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Dpr     = "$PSScriptRoot\..\ProcRunEmptyExeTests.dpr",
+  [string]$Dpr     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-procrun-emptyexe-build-$PID",
-  [string]$SrcDir = "$PSScriptRoot\..\..\src\delphi-plugin"
+  [string]$SrcDir = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Dpr) { $Dpr = "$PSScriptRoot\..\ProcRunEmptyExeTests.dpr" }
+if (-not $SrcDir) { $SrcDir = "$PSScriptRoot\..\..\src\delphi-plugin" }
 try {
 $ErrorActionPreference = 'Stop'
 
@@ -48,7 +52,7 @@ $lines = @(
 $buildLog = Join-Path $WorkDir 'build.log'
 $p = Start-Process cmd.exe -ArgumentList "/c","`"$bat`"" `
        -RedirectStandardOutput $buildLog -RedirectStandardError "$buildLog.err" `
-       -NoNewWindow -Wait -PassThru
+       -NoNewWindow -Wait -PassThru; $null = $p.Handle
 $buildOut = Get-Content $buildLog -Raw
 if ($buildOut -notmatch 'BUILD_EXITCODE=0') {
   Write-Host 'FATAL: compile failed' -ForegroundColor Red
@@ -59,7 +63,7 @@ if ($buildOut -notmatch 'BUILD_EXITCODE=0') {
 $exe = Join-Path $WorkDir ([System.IO.Path]::GetFileNameWithoutExtension($DprName) + '.exe')
 if (-not (Test-Path $exe)) { Write-Host "FATAL: exe not produced: $exe" -ForegroundColor Red; exit 2 }
 
-$out = & $exe 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $exe 2>&1 | ForEach-Object { "$_" } } | Out-String
 $rc  = $LASTEXITCODE
 Write-Host $out.TrimEnd()
 
@@ -93,7 +97,9 @@ if (-not $okLsp) { $rc = 1 }
 if ($lsp.Length -lt 2000) { Write-Host '  [FAIL] EnsureLspClient body not found (the anchor would pass vacuously)'; $rc = 1 }
 # Every CreateProcess in the plugin is on this list, so a new direct spawn has to be looked at here.
 # ConvertLaunch starts ConvRulesEditor, whose path was proven by FileExists first (FindEditor).
-$known = 'ConvertLaunch=1 Editor=2 GraphWindow=1 LiveDiagnostics=1 LspClient=1 ProcRun=1 ProjectNotifier=2 StructureCache=1'
+# Cmd.FieldRepo (1.52 Table Tools) LaunchEditor starts the field-repo editor: InvokeOpenEditor requires the
+# engine (ResolveContext -> RequireEngine/ReportEngineMissing) and proves the editor exe by FileExists first.
+$known = 'Cmd.FieldRepo=1 ConvertLaunch=1 Editor=2 GraphWindow=1 LiveDiagnostics=1 LspClient=1 ProcRun=1 ProjectNotifier=2 StructureCache=1'
 $seen = @()
 foreach ($f in (Get-ChildItem $SrcDir -Filter 'DragLint.Plugin.*.pas' | Sort-Object Name)) {
   $n = ([regex]::Matches([IO.File]::ReadAllText($f.FullName), '(?m)^(?!\s*(///|\{)).*\bCreateProcess[W]?\(')).Count

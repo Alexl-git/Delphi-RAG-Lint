@@ -31,6 +31,9 @@
         },
         {
           "name": "--json"
+        },
+        {
+          "name": "--format"
         }
       ],
       "helpOrder": 80,
@@ -55,9 +58,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-30",
+    "date": "2026-11-18",
     "by": "ENGINE",
-    "build": "1.38.0-alpha",
+    "build": "1.52.0-alpha",
     "surfaceHash": "51333b0ebe764effa6e717fc9627eab58a49dd2e2a2794753ee6f78d3512f747"
   }
 }

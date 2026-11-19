@@ -59,9 +59,12 @@
 # Usage: pwsh -File tests/autotest/run_readonly_verbs.ps1 [-Exe <path>]
 [CmdletBinding()]
 param(
-    [string] $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+    [string] $Exe = '',
     [string] $WorkDir = "$env:TEMP\drag-lint-readonly-verbs-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail='') {
@@ -129,7 +132,7 @@ end.
 
 # --- index it with the fresh win64 exe (has FTS5 -> triggers exist) ---
 $db = "$WorkDir\ro.sqlite"
-$idxOut = & $Exe index $srcDir --db $db 2>&1
+$idxOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $srcDir --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index fixture exits 0' ($LASTEXITCODE -eq 0) (($idxOut | Select-Object -Last 1))
 Check 'db created' (Test-Path $db)
 Check 'fixture index (a writer, closed last) leaves no -wal/-shm' ((Sidecars $db) -eq '') "sidecars=$(Sidecars $db)"
@@ -157,7 +160,7 @@ Check 'fixture index is WAL (header byte 18 = 2)' ($b18Base -eq 2) "byte18=$b18B
 # lint-all exit 1. It stores the result instead, so the fixture stays clean.
 function ReadVerbUnchanged([string]$Label, [scriptblock]$Run, [int]$ExpectExit = 0) {
     $md5Base = Md5 $db
-    & $Run *> $null
+    & { $ErrorActionPreference = 'Continue'; & $Run *> $null }
     $ec = $LASTEXITCODE
     Check "$Label exits $ExpectExit" ($ec -eq $ExpectExit) "exit=$ec"
     # Sidecars FIRST: TriggerCount's python connection, closing last, would
@@ -192,14 +195,14 @@ ReadVerbUnchanged 'exceptions-sync (dry)'     { & $Exe exceptions-sync --db $db 
 # A read-only open does not create a missing file, so these two died
 # "FATAL: unable to open database file" (exit 3) until fix round 1.
 foreach ($mv in @(@('safe-delete', @('safe-delete','--name','X','--json')), @('rename --kind symbol', @('rename','--kind','symbol','--name','X.Y','--to','Z','--json')))) {
-    $mo = (& $Exe @($mv[1] + @('--db', "$WorkDir\no-such.sqlite")) 2>&1) -join "`n"
+    $mo = (& { $ErrorActionPreference = 'Continue'; & $Exe @($mv[1] + @('--db', "$WorkDir\no-such.sqlite")) 2>&1 | ForEach-Object { "$_" } }) -join "`n"
     Check "$($mv[0]) with a missing --db exits 2 with 'Database not found'" (($LASTEXITCODE -eq 2) -and ($mo -match 'Database not found')) "exit=$LASTEXITCODE :: $mo"
     Check "$($mv[0]) with a missing --db does not create it" (-not (Test-Path "$WorkDir\no-such.sqlite"))
 }
 
 # The dry verbs above must still ANSWER from the read-only store -- a verb that
 # failed to open would also leave the md5 alone.
-$rn = (& $Exe rename --kind symbol --name Fixture.TFoo.Greet --to Salute --db $db --json 2>&1) -join "`n"
+$rn = (& { $ErrorActionPreference = 'Continue'; & $Exe rename --kind symbol --name Fixture.TFoo.Greet --to Salute --db $db --json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'rename --kind symbol (dry) still computes its edits' ($rn -match '"new"\s*:\s*"Salute"') $rn
 
 # --- D24: genuine WRITERS must keep a WAL index WAL ---
@@ -208,7 +211,7 @@ $impDb = "$WorkDir\imp.sqlite"
 Copy-Item -LiteralPath $db -Destination $impDb
 $log = "$WorkDir\dcc.log"
 Set-Content -LiteralPath $log -Encoding ascii -Value "$pas(82,3): Warning W1036: Variable 'X' might not have been initialized [x.dproj]"
-$impOut = (& $Exe import-log $log --db $impDb 2>&1) -join "`n"
+$impOut = (& { $ErrorActionPreference = 'Continue'; & $Exe import-log $log --db $impDb 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'import-log exits 0' ($LASTEXITCODE -eq 0) $impOut
 Check 'import-log imported the finding' ($impOut -match 'Imported 1 compiler finding') $impOut
 Check 'import-log keeps the index WAL (header byte 18 = 2)' ((HeaderByte18 $impDb) -eq 2) "byte18=$(HeaderByte18 $impDb)"
@@ -221,7 +224,7 @@ $rbDb = "$WorkDir\rollback.sqlite"
 Copy-Item -LiteralPath $db -Destination $rbDb
 python -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('PRAGMA journal_mode=DELETE'); c.close()" $rbDb
 Check 'rollback fixture really is a rollback journal (byte 18 = 1)' ((HeaderByte18 $rbDb) -eq 1) "byte18=$(HeaderByte18 $rbDb)"
-$rbOut = (& $Exe index $srcDir --db $rbDb 2>&1) -join "`n"
+$rbOut = (& { $ErrorActionPreference = 'Continue'; & $Exe index $srcDir --db $rbDb 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'incremental index of a rollback-journal index exits 0' ($LASTEXITCODE -eq 0) $rbOut
 Check 'the writer converts it back to WAL (byte 18 = 2)' ((HeaderByte18 $rbDb) -eq 2) "byte18=$(HeaderByte18 $rbDb)"
 
@@ -232,13 +235,13 @@ $mout  = "$WorkDir\mout" ; New-Item -ItemType Directory $mout  | Out-Null
 Set-Content -LiteralPath "$mproj\App.dproj" -Value '<Project/>' -NoNewline
 Set-Content -LiteralPath "$mproj\App.pas"   -Value "unit App;`r`ninterface`r`nimplementation`r`nend." -Encoding ascii
 $oldDb = "$mout\Old-App.sqlite"
-& $Exe index $mproj --db $oldDb *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $mproj --db $oldDb *> $null }
 Check 'migrate fixture index is WAL before the move' ((HeaderByte18 $oldDb) -eq 2) "byte18=$(HeaderByte18 $oldDb)"
 $mcfg = "$WorkDir\migrate.json"
 $mj = @{ indexes = @{ outDir = $mout; sections = @(
           @{ name = 'Old-App'; db = 'Old-App.sqlite'; include = @("$mproj\App.dproj") } ) } }
 Set-Content -LiteralPath $mcfg -Value ($mj | ConvertTo-Json -Depth 8)
-$migOut = (& $Exe migrate-dbs --config $mcfg --apply 2>&1) -join "`n"
+$migOut = (& { $ErrorActionPreference = 'Continue'; & $Exe migrate-dbs --config $mcfg --apply 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 $newDb = "$mproj\_D-RAG\App.sqlite"
 Check 'migrate-dbs --apply exits 0 and moves the index' (($LASTEXITCODE -eq 0) -and (Test-Path $newDb)) $migOut
 if (Test-Path $newDb) {
@@ -278,7 +281,7 @@ Check 'R21 fixture: the dead writer left committed pages in the -wal' ($walLen -
 Check 'R21 POSITIVE CONTROL: Sidecars sees the dead writer''s -wal/-shm' ((Sidecars $walDb) -ne '') "sidecars=$(Sidecars $walDb)"
 $before = (python $probePy $walDb "$WorkDir\mainonly-before.sqlite").Trim()
 Check 'R21 POSITIVE CONTROL: the main file ALONE lacks the row before the read' ($before -eq 'absent') "main-only=$before"
-$rq = (& $Exe query --name TFoo --db $walDb 2>&1) -join "`n"
+$rq = (& { $ErrorActionPreference = 'Continue'; & $Exe query --name TFoo --db $walDb 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'R21 read verb on the dead writer''s index exits 0' ($LASTEXITCODE -eq 0) $rq
 Check 'R21 the reader, closing last, leaves no -wal/-shm' ((Sidecars $walDb) -eq '') "sidecars=$(Sidecars $walDb)"
 $after = (python $probePy $walDb "$WorkDir\mainonly-after.sqlite").Trim()
@@ -286,7 +289,7 @@ Check 'R21 the main file ALONE now holds the row (the WAL was checkpointed into 
 Check 'R21 the reader leaves header byte 18 (WAL)' ((HeaderByte18 $walDb) -eq 2) "byte18=$(HeaderByte18 $walDb)"
 
 # --- read verbs still produce correct output (guard against a broken read path) ---
-$q = & $Exe query --name TFoo --db $db 2>&1
+$q = & { $ErrorActionPreference = 'Continue'; & $Exe query --name TFoo --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'query --name TFoo finds the class' (($q -join "`n") -match 'TFoo') (($q | Select-Object -First 1))
 
 # --- v12-shaped DB: a read verb must print the actionable stale-schema line ---
@@ -322,7 +325,7 @@ $dbv12 = "$WorkDir\v12.sqlite"
 python $py $dbv12
 Check 'v12 fixture DB created' (($LASTEXITCODE -eq 0) -and (Test-Path $dbv12))
 
-$staleOut = (& $Exe outline --file $pas --db $dbv12 2>&1) -join "`n"
+$staleOut = (& { $ErrorActionPreference = 'Continue'; & $Exe outline --file $pas --db $dbv12 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 $staleEc  = $LASTEXITCODE
 Check 'read verb on v12 db exits nonzero' ($staleEc -ne 0) "exit=$staleEc"
 Check 'read verb on v12 db names the schema gap' `
@@ -340,7 +343,7 @@ Check 'read verb on v12 db does NOT print a field error' `
 
 # --- POSITIVE CONTROL: a genuine write DOES move the sentinel ---
 Add-Content -LiteralPath $pas -Value '{ touched by the positive control }' -Encoding ascii
-& $Exe index $srcDir --db $db *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $srcDir --db $db *> $null }
 Start-Sleep -Milliseconds 100
 Check 'positive control: a real index run after an edit changes the md5' ((Md5 $db) -ne $md5Base)
 } finally {

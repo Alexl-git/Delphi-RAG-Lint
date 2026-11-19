@@ -40,7 +40,7 @@ function Test-DfmChainLoader { return ($null -ne (Get-DfmChainLoader)) }
 function Invoke-DfmChainLoad([string[]]$Chains) {
   $exe = Get-DfmChainLoader
   if ($null -eq $exe) { return @('FATAL <loader>: DfmChainLoad.exe could not be built (rsvars.bat / dcc64)') }
-  return @(& $exe @Chains 2>&1 | ForEach-Object { "$_" })
+  return @(& { $ErrorActionPreference = 'Continue'; & $exe @Chains 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" })
 }
 
 function Get-DfmFieldOrder([string]$Chain, [string]$DataSet) {

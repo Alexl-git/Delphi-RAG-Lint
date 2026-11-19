@@ -40,10 +40,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe      = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$RulesDir = "$PSScriptRoot\..\..\rules",
+  [string]$Exe      = '',
+  [string]$RulesDir = '',
   [string]$WorkDir  = "C:\TEMP\draglint_stand_in_for_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $RulesDir) { $RulesDir = "$PSScriptRoot\..\..\rules" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){ if($d){Write-Host "      $d" -ForegroundColor DarkGray}; $script:fail=$true } }
@@ -105,7 +109,7 @@ Write-Ascii $real $fixture
 $db = Join-Path $WorkDir 'standin.sqlite'
 
 # ABSOLUTE index target -- see the header.
-$idx = & $exePath index $proj --db $db 2>&1 | Out-String
+$idx = & { $ErrorActionPreference = 'Continue'; & $exePath index $proj --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'SANITY: fixture indexed with no errors' `
       ($LASTEXITCODE -eq 0 -and $idx -notmatch '\b[1-9]\d* errors\b') $idx
 
@@ -120,9 +124,9 @@ function UbaCount($text) {
   @($text -split "`r?`n" | Where-Object { $_ -match 'used-before-assignment' }).Count
 }
 
-$realOut = & $exePath lint $real --db $db --rules-dir $rules 2>&1 | Out-String
-$snapBare = & $exePath lint $snap --db $db --rules-dir $rules 2>&1 | Out-String
-$snapStand = & $exePath lint $snap --stand-in-for $real --db $db --rules-dir $rules 2>&1 | Out-String
+$realOut = & { $ErrorActionPreference = 'Continue'; & $exePath lint $real --db $db --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String
+$snapBare = & { $ErrorActionPreference = 'Continue'; & $exePath lint $snap --db $db --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String
+$snapStand = & { $ErrorActionPreference = 'Continue'; & $exePath lint $snap --stand-in-for $real --db $db --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String
 
 Check 'B1  the real file, store-backed, is SILENT about the record local' `
       ((UbaCount $realOut) -eq 0) `
@@ -150,7 +154,7 @@ Check 'B4  no output line names the snapshot path' `
 
 # The membership probe must have answered for the REAL file, not the snapshot.
 $env:DRAGLINT_DEBUG = '1'
-$dbg = & $exePath lint $snap --stand-in-for $real --db $db --rules-dir $rules 2>&1 | Out-String
+$dbg = & { $ErrorActionPreference = 'Continue'; & $exePath lint $snap --stand-in-for $real --db $db --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String
 Remove-Item Env:\DRAGLINT_DEBUG
 Check 'B5  the store resolved for the stand-in identity (store=True, fid<>0)' `
       ($dbg -match 'store=True' -and $dbg -notmatch 'fid=0\b') `
@@ -167,7 +171,7 @@ Check 'B5  the store resolved for the stand-in identity (store=True, fid<>0)' `
 $fwdReal = $real -replace '\\','/'
 $fwdSnap = $snap -replace '\\','/'
 $beforeWrite = (Get-Item $real).LastWriteTimeUtc.Ticks
-$fwdOut = & $exePath lint $fwdSnap --stand-in-for $fwdReal --db $db --rules-dir $rules 2>&1 | Out-String
+$fwdOut = & { $ErrorActionPreference = 'Continue'; & $exePath lint $fwdSnap --stand-in-for $fwdReal --db $db --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String
 $afterWrite  = (Get-Item $real).LastWriteTimeUtc.Ticks
 
 Check 'B6  a forward-slash --stand-in-for does NOT write to the real source file' `
@@ -202,7 +206,7 @@ $oldTemp = $env:TEMP; $oldTmp = $env:TMP
 try {
   $env:TEMP = $tmpRoot; $env:TMP = $tmpRoot
   $p = Start-Process -FilePath $exePath -ArgumentList @('lint', $snap, '--stand-in-for', $real, '--db', $db, '--rules-dir', $rules) `
-         -NoNewWindow -PassThru -Wait -RedirectStandardOutput (Join-Path $WorkDir 'b8.out') -RedirectStandardError (Join-Path $WorkDir 'b8.err')
+         -NoNewWindow -PassThru -Wait -RedirectStandardOutput (Join-Path $WorkDir 'b8.out') -RedirectStandardError (Join-Path $WorkDir 'b8.err'); $null = $p.Handle
 } finally { $env:TEMP = $oldTemp; $env:TMP = $oldTmp }
 $ownDir = Join-Path $tmpRoot ("drag-lint-standin-{0}" -f $p.Id)
 Check 'B8  CONTROL: the stand-in run produced findings (it really materialised)' `

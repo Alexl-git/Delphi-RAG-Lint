@@ -1,0 +1,4 @@
+# contract-unit-declares-class reaches this unit only through a contractUnits glob
+# in drag-lint.json; without one (this runner) it must stay silent. The positive
+# run (glob App.Orders.*) is in tests\autotest\run_v152_ATLA.ps1.
+!contract-unit-declares-class

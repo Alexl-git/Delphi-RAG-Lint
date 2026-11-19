@@ -1,20 +1,20 @@
 ---
 id: mcp-server
 title: MCP server
-summary: Exposes the index to MCP clients as 18 tools
+summary: Exposes the index to MCP clients as 19 tools
 product: DL
 group: editor-integration
-order: 110020
+order: 110021
 since: 0.4.0-alpha
 status: shipped
-updated: 1.48.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # MCP server
 
-Exposes the index to MCP clients as 18 tools.
+Exposes the index to MCP clients as 19 tools.
 
-The drag-lint MCP server lets an MCP client (an AI assistant) query the index and run checks through 18 tools. It opens every index read-only (an old schema is refused, never migrated), find_callers answers from the call graph, a tool that fails answers isError instead of ending the server, and a stale index adds a freshness note.
+The drag-lint MCP server lets an MCP client (an AI assistant) query the index and run checks through 19 tools. It opens every index read-only (an old schema is refused, never migrated), find_callers answers from the call graph, a tool that fails answers isError instead of ending the server, and a stale index adds a freshness note.
 
 ## Details
 

@@ -27,9 +27,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\draglint_info_index_newer_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -73,16 +76,16 @@ $py = Join-Path $WorkDir 'exec.py'
   "import sqlite3,sys`nc=sqlite3.connect(sys.argv[1])`nc.execute(sys.argv[2])`nc.commit();c.close()`n",
   [Text.Encoding]::ASCII)
 
-function Reindex { & $exePath index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | Out-Null }
+function Reindex { & { $ErrorActionPreference = 'Continue'; & $exePath index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null }
 function IndexRow {
-  $j = (& $exePath info --json --db $db 2>$null) -join "`n"
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath info --json --db $db 2>$null }) -join "`n"
   $i = $j.IndexOf('{')
   if ($i -lt 0) { return $null }
-  try { return ($j.Substring($i) | ConvertFrom-Json).indexes[0] } catch { return $null }
+  try { return ($j.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }).indexes[0] } catch { return $null }
 }
 function Plant([string]$Key, [string]$Value) {
   & python $py $db "UPDATE schema_meta SET value='$Value' WHERE key='$Key'" | Out-Null
-  $v = (& $exePath sql --query "SELECT value FROM schema_meta WHERE key='$Key'" --db $db --json 2>$null) -join "`n"
+  $v = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --query "SELECT value FROM schema_meta WHERE key='$Key'" --db $db --json 2>$null }) -join "`n"
   if ($v -notmatch [regex]::Escape($Value)) { throw "FIXTURE: planting $Key=$Value did not take" }
 }
 

@@ -52,7 +52,10 @@
   Run from a NEUTRAL CWD (C:\TEMP) so no drag-lint-lint.json is picked up.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -105,7 +108,7 @@ try {
   # matching the byte-exact-capture convention used by run_include_modes.ps1.
   function Q([string]$s) { return '"' + $s + '"' }
   $line = ((Q $exePath) + ' preprocess-file --file ' + (Q $rawTarget) + ' --include-mode defines-only --define win64 --define mswindows > ' + (Q $ppTarget))
-  $p = Start-Process cmd.exe -ArgumentList '/c', ('"' + $line + '"') -NoNewWindow -Wait -PassThru
+  $p = Start-Process cmd.exe -ArgumentList '/c', ('"' + $line + '"') -NoNewWindow -Wait -PassThru; $null = $p.Handle
   Check 'preprocess-file: exited 0' ($p.ExitCode -eq 0)
 
   $rawBytes = [System.IO.File]::ReadAllBytes($rawTarget)
@@ -130,7 +133,7 @@ try {
   # per-config assertion 2: inactive POSIX branch is ABSENT from the
   # preprocessed index (blanked, not indexed).
   # ============================================================
-  & $exePath query --name PosixOnlyProc --db $ppDb *> $null
+  & { $ErrorActionPreference = 'Continue'; & $exePath query --name PosixOnlyProc --db $ppDb *> $null }
   $posixExit = $LASTEXITCODE
   Check 'PER-CONFIG: PosixOnlyProc is ABSENT from the preprocessed index (inactive branch blanked)' ($posixExit -ne 0)
 
@@ -138,7 +141,7 @@ try {
   # per-config assertion 3: active MSWINDOWS branch IS present in the
   # preprocessed index.
   # ============================================================
-  & $exePath query --name WinOnlyProc --db $ppDb *> $null
+  & { $ErrorActionPreference = 'Continue'; & $exePath query --name WinOnlyProc --db $ppDb *> $null }
   $winExit = $LASTEXITCODE
   Check 'PER-CONFIG: WinOnlyProc IS present in the preprocessed index (active branch survives)' ($winExit -eq 0)
 

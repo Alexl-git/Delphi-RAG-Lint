@@ -27,9 +27,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\draglint_dpr_search_paths_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'
@@ -98,7 +101,7 @@ Write-Ascii (Join-Path $WorkDir 'P.dproj') @'
 </Project>
 '@
 
-$out = (& $Exe reconcile-project (Join-Path $WorkDir 'P.dpr') 2>&1) -join "`n"
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project (Join-Path $WorkDir 'P.dpr') 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 
 Check 'a unit reachable only via the .dproj search path is NOT called EXTRA' `
   (-not ($out -match 'EXTRA[\s\S]{0,300}?Far\.Away')) "out=$out"

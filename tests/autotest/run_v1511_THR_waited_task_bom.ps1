@@ -4,9 +4,12 @@
 # Usage: pwsh -File tests/autotest/run_v1511_THR_waited_task_bom.ps1 -Exe <exe> -DbPath <db copy>
 [CmdletBinding()]
 param(
-    [string] $Exe = (Join-Path $PSScriptRoot '..\..\third_party\dll-win64\drag-lint.exe'),
+    [string] $Exe = '',
     [string] $DbPath
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = (Join-Path $PSScriptRoot '..\..\third_party\dll-win64\drag-lint.exe') }
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail='') {
@@ -14,13 +17,13 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail='') {
     if (-not $Ok) { $script:Failed = $true }
 }
 # No -DbPath: lint the loose file with no --db (read-only; the battery passes neither flag).
-$DbArgs = if ($DbPath) { @('--db', $DbPath) } else { @() }
+$DbArgs = @(if ($DbPath) { @('--db', $DbPath) } else { @() })
 if (-not $Exe -or -not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe"; exit 2 }
 $Fix = Join-Path $PSScriptRoot 'fixtures\v1511-THR'
 function Lines([string]$File, [string]$Rule, [string[]]$Extra) {
-    $raw = (& $Exe lint $File --rule $Rule @DbArgs --json @Extra 2>$null) -join "`n"
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $File --rule $Rule @DbArgs --json @Extra 2>$null }) -join "`n"
     $arr = @()
-    if ($raw.Trim().StartsWith("[")) { try { $arr = @($raw | ConvertFrom-Json) } catch { } }
+    if ($raw.Trim().StartsWith("[")) { try { $arr = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { } }
     return @($arr | ForEach-Object { [int]$_.start_line })
 }
 # waited.pas: NotWaitedAssigned (line 57), NotWaitedBare (line 67) and WaitsOtherTask T (line 78) are the only hits

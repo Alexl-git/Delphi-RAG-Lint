@@ -73,6 +73,7 @@ contains
   DragLint.Plugin.FanOut in 'DragLint.Plugin.FanOut.pas',
   DragLint.Plugin.UsagesForm in 'DragLint.Plugin.UsagesForm.pas',
   DragLint.Plugin.UsagesQuery in 'DragLint.Plugin.UsagesQuery.pas',
+  DragLint.Plugin.PlugUiCore in 'DragLint.Plugin.PlugUiCore.pas',
   DragLint.Plugin.ConvertRequest in 'DragLint.Plugin.ConvertRequest.pas',
   DragLint.Plugin.ConvertLaunch in 'DragLint.Plugin.ConvertLaunch.pas',
   DragLint.Plugin.ConvertSelectionEditor in 'DragLint.Plugin.ConvertSelectionEditor.pas',
@@ -131,6 +132,16 @@ contains
   DragLint.Plugin.About in 'DragLint.Plugin.About.pas',
   DRagLint.Charts.DocInsight in '..\charts\DRagLint.Charts.DocInsight.pas',
   DragLint.Plugin.ReportText in 'DragLint.Plugin.ReportText.pas',
-  DragLint.Plugin.Reports in 'DragLint.Plugin.Reports.pas';
+  DragLint.Plugin.Reports in 'DragLint.Plugin.Reports.pas',
+  DragLint.Plugin.ReportProgress in 'DragLint.Plugin.ReportProgress.pas',
+  DragLint.Plugin.Cmd152 in 'DragLint.Plugin.Cmd152.pas',
+  DragLint.Plugin.Cmd.CheckInit in 'DragLint.Plugin.Cmd.CheckInit.pas',
+  DragLint.Plugin.Cmd.DisableRule in 'DragLint.Plugin.Cmd.DisableRule.pas',
+  DragLint.Plugin.Cmd.IdxRange in 'DragLint.Plugin.Cmd.IdxRange.pas',
+  DragLint.Plugin.Cmd.FixMarker in 'DragLint.Plugin.Cmd.FixMarker.pas',
+  DragLint.Plugin.Cmd.FieldRepo in 'DragLint.Plugin.Cmd.FieldRepo.pas',
+  DragLint.Plugin.Cmd.FindUsagesScope in 'DragLint.Plugin.Cmd.FindUsagesScope.pas',
+  DragLint.Plugin.Cmd.ExtractConst in 'DragLint.Plugin.Cmd.ExtractConst.pas',
+  DragLint.Plugin.EditorLocalMenu in 'DragLint.Plugin.EditorLocalMenu.pas';
 
 end.

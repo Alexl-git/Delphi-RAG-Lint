@@ -14,11 +14,14 @@
   Usage: pwsh -File tests\autotest\run_v1511_CLI_b16_rule_list_narrows.ps1 [-Exe <exe>] [-Db <copy.sqlite>]
 #>
 param(
-  [string]$Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe'),
+  [string]$Exe = '',
   [string]$Db  = (Join-Path 'C:\' 'TEMP\claude\lanes\v1511\_dbs\YADF.sqlite'),
   [string]$RuleA = 'dictionary-get-without-check',
   [string]$RuleB = 'threadvar-managed'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe') }
 $ErrorActionPreference = 'Stop'
 $exePath = (Resolve-Path $Exe).Path
 if (-not (Test-Path -LiteralPath $Db)) { Write-Host "SKIP: no index copy at $Db (pass -Db)"; exit 0 }
@@ -31,10 +34,10 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 function Run-LintAll([string]$Rule) {
   $sw = [Diagnostics.Stopwatch]::StartNew()
   $errF = Join-Path $script:scratch ("err-" + ($Rule -replace '[^a-z]', '') + ".txt")
-  $out = & $exePath lint-all --db $script:dbc --rule $Rule --json 2> $errF | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errF); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath lint-all --db $script:dbc --rule $Rule --json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String
   $sw.Stop()
   $rows = @()
-  if ($out.Trim() -ne '') { $rows = @($out | ConvertFrom-Json) }
+  if ($out.Trim() -ne '') { $rows = @(($out | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   $keys = @($rows | ForEach-Object { '{0}:{1}:{2}' -f $_.rule, $_.file_path, $_.start_line } | Sort-Object)
   [pscustomobject]@{ Secs = $sw.Elapsed.TotalSeconds; Keys = $keys; Err = [IO.File]::ReadAllText($errF) }
 }
@@ -50,7 +53,7 @@ try {
   Check 'control: the union is not empty (the check can fail)' ($union.Count -gt 0) "$($union.Count)"
   $slow = [Math]::Max($a.Secs, $b.Secs)
   Check ('list run < 2 x the slower single-id run ({0:N1}s < {1:N1}s)' -f $l.Secs, (2 * $slow)) ($l.Secs -lt (2 * $slow))
-  $txt = & $exePath lint-all --db $script:dbc --rule "$RuleA,$RuleB" 2>&1 | Out-String
+  $txt = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $script:dbc --rule "$RuleA,$RuleB" 2>&1 | ForEach-Object { "$_" } } | Out-String
   # text mode prints 'lint-all: --shared-db: running <db> ...' per peer (--json is silent): a list must derive none
   Check 'list run derived no --shared-db peer (no whole lint-all of a sibling -- possibly REAL -- DB)' (-not ($txt -match 'shared-db: running')) (($txt -split "`r?`n" | Select-String 'shared-db') -join ' | ')
   Check 'text report: circular-uses is NOT REPORTED, not "none detected"' (-not ($txt -match 'none detected across')) ($txt -split "`r?`n" | Select-String 'circular|NOT REPORTED' | Out-String)

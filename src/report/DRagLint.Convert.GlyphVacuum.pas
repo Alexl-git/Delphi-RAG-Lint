@@ -21,8 +21,8 @@ type
   /// empty rather than guessed. Append merges into an existing OutDir keyed on
   /// (dfm_path, object_path, property); a re-scan is idempotent.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.GlyphVacuum.pas) ?, DRagLint.CLI.DoGlyphVacuum (DRagLint.CLI.pas), DRagLint.Convert.GlyphVacuum.RunGlyphVacuum (DRagLint.Convert.GlyphVacuum.pas) ?</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.GlyphVacuum</para>
+  /// <para>Used by: declaration (DRagLint.Convert.GlyphVacuum.pas) ?, DRagLint.CLI.Convert.DoGlyphVacuum (DRagLint.CLI.Convert.pas), DRagLint.Convert.GlyphVacuum.RunGlyphVacuum (DRagLint.Convert.GlyphVacuum.pas) ?</para>
+  /// <para>Used in units: DRagLint.CLI.Convert, DRagLint.Convert.GlyphVacuum</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TGlyphVacuumOptions = record
@@ -35,8 +35,8 @@ type
   /// <summary>The counts the CLI prints as its one summary line.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.GlyphVacuum.pas) ?, DRagLint.CLI.DoGlyphVacuum (DRagLint.CLI.pas) ?, DRagLint.Convert.GlyphVacuum.RunGlyphVacuum (DRagLint.Convert.GlyphVacuum.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.GlyphVacuum</para>
+  /// <para>Used by: declaration (DRagLint.Convert.GlyphVacuum.pas) ?, DRagLint.CLI.Convert.DoGlyphVacuum (DRagLint.CLI.Convert.pas) ?, DRagLint.Convert.GlyphVacuum.RunGlyphVacuum (DRagLint.Convert.GlyphVacuum.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.Convert, DRagLint.Convert.GlyphVacuum</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TGlyphVacuumSummary = record
@@ -96,7 +96,7 @@ type
 /// Graphics = 0.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoGlyphVacuum (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.Convert.DoGlyphVacuum (DRagLint.CLI.Convert.pas)</para>
 /// <para>Calls: Default, DRagLint.Convert.GlyphVacuum.CompareRowsForWrite, DRagLint.Convert.GlyphVacuum.HarvestFile, DRagLint.Convert.GlyphVacuum.LoadExistingRows, DRagLint.Convert.GlyphVacuum.RowKey, DRagLint.Convert.GlyphVacuum.RowLine, DRagLint.Convert.GlyphVacuum.WriteClassesTsv, DRagLint.Convert.GlyphVacuum.WriteGalleryHtml, DRagLint.Convert.GlyphVacuum.WriteSkippedTsv, DRagLint.Convert.GlyphVacuum.WriteUtf8NoBom</para>
 /// <para>Returns: False; True</para>
 /// <para>Catches: Exception (swallowed)</para>
@@ -237,8 +237,8 @@ const
 
 // The first scalar sibling on the same object whose name is a known count
 // property. Empty when there is none -- the caller must not invent a value.
-procedure FindCountProp(const AObject: TDfmNode; out AName, AValue: string);
-var C: TDfmNode;
+procedure FindCountProp(const AObject: TReemitDfmNode; out AName, AValue: string);
+var C: TReemitDfmNode;
 begin
   AName := '';
   AValue:= '';
@@ -371,7 +371,7 @@ end;
 // Builds and files one row for one decoded payload -- the binary-leaf path and
 // the collection-item path (HarvestCollection) both funnel through here so the
 // derived columns are computed exactly once, the same way, everywhere.
-procedure AddRow(const AObject: TDfmNode; const ADfmPath, APasUnit, ASurface, AFormClass, AObjectPath, AProp: string;  // dl:ok too-many-parameters@1d66
+procedure AddRow(const AObject: TReemitDfmNode; const ADfmPath, APasUnit, ASurface, AFormClass, AObjectPath, AProp: string;  // dl:ok too-many-parameters@1d66
   const APayload: TBytes; AInCollection: Boolean; var AState: TVacuumState);
 var
   G    : TStreamedGraphic;
@@ -436,7 +436,7 @@ end;
 // A collection value is verbatim `< item ... end item ... end>` text; the
 // re-emit parser does not descend into it. Every `<Name> = {hex}` inside becomes
 // one row named <CollectionProp>[i].<Name>, i counting `item` keywords from 0.
-procedure HarvestCollection(const AObject: TDfmNode; const ACollProp: TDfmNode;  // dl:ok too-many-parameters@b1c3
+procedure HarvestCollection(const AObject: TReemitDfmNode; const ACollProp: TReemitDfmNode;  // dl:ok too-many-parameters@b1c3
   const ADfmPath, APasUnit, ASurface, AFormClass, AObjectPath: string; var AState: TVacuumState);
 var
   Text   : string;
@@ -476,10 +476,10 @@ end;
 // (streamed graphic) child in place, and expands every dnkCollection child's
 // items. AObjectPath is ANode's OWN dotted path ('' for the form itself, which
 // never appears in an emitted object_path).
-procedure HarvestObject(const ANode: TDfmNode; const ADfmPath, APasUnit, ASurface, AFormClass, AObjectPath: string;
+procedure HarvestObject(const ANode: TReemitDfmNode; const ADfmPath, APasUnit, ASurface, AFormClass, AObjectPath: string;
   var AState: TVacuumState);
 var
-  Child    : TDfmNode;
+  Child    : TReemitDfmNode;
   ChildPath: string;
   Payload  : TBytes;
 begin
@@ -564,7 +564,7 @@ procedure HarvestFile(const APath: string; var AState: TVacuumState);
 var
   Bytes  : TBytes;
   Text   : string;
-  Root   : TDfmNode;
+  Root   : TReemitDfmNode;
   PasUnit: string;
   Surface: string;
 begin

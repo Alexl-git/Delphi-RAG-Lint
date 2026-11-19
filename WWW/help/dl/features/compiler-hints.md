@@ -4,10 +4,10 @@ title: Compiler Hints
 summary: Uses query hints to surface compiler hint/warning findings that have been imported into the index, filtered by code or severity
 product: DL
 group: search-navigation
-order: 20003
+order: 20004
 since: 0.1.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.51.1-alpha
 ---
 
 # Compiler Hints

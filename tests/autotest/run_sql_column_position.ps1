@@ -16,9 +16,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-sql-colpos-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -56,19 +59,19 @@ function PosOf([string]$Token) {
   return @(-1, -1)
 }
 $expect = [ordered]@{
-  'ID'        = PosOf 'ID INTEGER'
-  'REASON'    = PosOf 'REASON'
-  'NOTE_TEXT' = PosOf 'NOTE_TEXT'
-  'TABLE'     = PosOf '"TABLE"'
-  'AMOUNT'    = PosOf 'AMOUNT'
+  'ID'        = @(PosOf 'ID INTEGER')
+  'REASON'    = @(PosOf 'REASON')
+  'NOTE_TEXT' = @(PosOf 'NOTE_TEXT')
+  'TABLE'     = @(PosOf '"TABLE"')
+  'AMOUNT'    = @(PosOf 'AMOUNT')
 }
 
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' ((Test-Path $db) -and $LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 # sql --json rows are POSITIONAL arrays: map them onto columns[].name.
-$raw = & $Exe sql --db $db --json --query "SELECT name, start_line, start_col FROM symbols WHERE kind = 'sql_column' ORDER BY start_line, start_col" 2>$null | Out-String
-$doc = $raw | ConvertFrom-Json
+$raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --query "SELECT name, start_line, start_col FROM symbols WHERE kind = 'sql_column' ORDER BY start_line, start_col" 2>$null } | Out-String
+$doc = $raw | ConvertFrom-Json | ForEach-Object { $_ }
 $names = @($doc.columns | ForEach-Object { $_.name })
 $got = @{}
 foreach ($r in @($doc.rows)) {
@@ -81,7 +84,7 @@ Check 'all five columns indexed (PRIMARY KEY clause is not a column)' ($got.Coun
 
 foreach ($kv in $expect.GetEnumerator()) {
   $n = $kv.Key; $want = $kv.Value
-  $have = if ($got.ContainsKey($n)) { $got[$n] } else { @(-1, -1) }
+  $have = @(if ($got.ContainsKey($n)) { $got[$n] } else { @(-1, -1) })
   $label = if ($n -eq 'ID') { "ID (on the CREATE line -- the control)" } else { $n }
   Check ("{0} at line {1}" -f $label, $want[0]) ($have[0] -eq $want[0]) ("got line {0}" -f $have[0])
   Check ("{0} at column {1}" -f $label, $want[1]) ($have[1] -eq $want[1]) ("got col {0}" -f $have[1])

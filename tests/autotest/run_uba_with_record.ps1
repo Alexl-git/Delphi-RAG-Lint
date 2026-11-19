@@ -27,9 +27,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-uba-with-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -131,8 +134,8 @@ $db  = Join-Path $drag 'app.sqlite'
 $src = Join-Path $app 'uWith.pas'
 Push-Location $env:TEMP
 try {
-  & $Exe index $app --db $db 2>&1 | Out-Null
-  $out  = & $Exe lint $src --db $db 2>&1 | Out-String
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $app --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $out  = & { $ErrorActionPreference = 'Continue'; & $Exe lint $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 } finally { Pop-Location }
 $uba = @($out -split "`r?`n" | Where-Object { $_ -match 'used-before-assignment' })
 $srcLines = [System.IO.File]::ReadAllLines($src)
@@ -146,7 +149,7 @@ Check 'POSITIVE CONTROL: PlainUnassigned (N: Integer read unassigned) still fire
 Check 'POSITIVE CONTROL: `with B do` on an unassigned CLASS local still fires' `
       (UbaAt (LineOf 'with B do')) ($uba -join "`n")
 Check 'B-14: `with F do` on a RECORD local is not a read (no finding for "f")' `
-      ((UbaFor 'f').Count -eq 0) ($uba -join "`n")
+      ((@(UbaFor 'f')).Count -eq 0) ($uba -join "`n")
 Check 'exactly the 2 true positives are reported' ($uba.Count -eq 2) ($uba -join "`n")
 
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

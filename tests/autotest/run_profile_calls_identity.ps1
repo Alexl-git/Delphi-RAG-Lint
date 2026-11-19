@@ -26,11 +26,17 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe        = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe        = '',
   [string]$WorkDir    = "$env:TEMP\draglint_profile_calls_identity_$PID",
   [string]$ProfileLog = '',
   [double]$MinSeconds = 0
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -222,14 +228,14 @@ end.
 $proj = Join-Path $WorkDir 'ProfApp.dpr'
 $db = Join-Path $WorkDir 'p.sqlite'
 $env:DRAGLINT_PROFILE_CALLS = $null
-& $Exe index --project $proj --db $db *> (Join-Path $WorkDir 'index.log')
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project $proj --db $db *> (Join-Path $WorkDir 'index.log') }
 if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: index exit $LASTEXITCODE" -ForegroundColor Red; exit 2 }
 
 function Invoke-ResolveArm([string]$Tag, [bool]$On) {
   $d = Join-Path $WorkDir "$Tag.sqlite"
   [IO.File]::Copy($db, $d, $true)
   $env:DRAGLINT_PROFILE_CALLS = if ($On) { '1' } else { $null }
-  & $Exe index --project $proj --db $d --resolve-only *> (Join-Path $WorkDir "$Tag.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $proj --db $d --resolve-only *> (Join-Path $WorkDir "$Tag.log") }
   $ec = $LASTEXITCODE
   $env:DRAGLINT_PROFILE_CALLS = $null
   if ($ec -ne 0) { Write-Host "FATAL: resolve-only ($Tag) exit $ec" -ForegroundColor Red; exit 2 }
@@ -257,8 +263,8 @@ $rowsTotal = 0
 foreach ($k in $qs.Keys) {
   $a = Join-Path $WorkDir "on.$k.txt"
   $b = Join-Path $WorkDir "off.$k.txt"
-  & $Exe sql --db $dbOn  --query $qs[$k] --limit 100000000 --output $a *> $null
-  & $Exe sql --db $dbOff --query $qs[$k] --limit 100000000 --output $b *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $dbOn  --query $qs[$k] --limit 100000000 --output $a *> $null }
+  & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $dbOff --query $qs[$k] --limit 100000000 --output $b *> $null }
   # the trailing "N row(s) in M ms" line carries a timing: compare the rows only
   $ra = @([IO.File]::ReadAllLines($a) | Where-Object { $_ -notmatch '^\d+ row\(s\) in ' })
   $rb = @([IO.File]::ReadAllLines($b) | Where-Object { $_ -notmatch '^\d+ row\(s\) in ' })
@@ -267,7 +273,7 @@ foreach ($k in $qs.Keys) {
 }
 # I1 positive control: the same comparison over a dump missing its first call_edges row must differ
 $pc = Join-Path $WorkDir 'on.call_edges.skip1.txt'
-& $Exe sql --db $dbOn --query 'SELECT ref_id, target_symbol_id, confidence, receiver_type_symbol_id FROM call_edges ORDER BY ref_id LIMIT -1 OFFSET 1' --limit 100000000 --output $pc *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $dbOn --query 'SELECT ref_id, target_symbol_id, confidence, receiver_type_symbol_id FROM call_edges ORDER BY ref_id LIMIT -1 OFFSET 1' --limit 100000000 --output $pc *> $null }
 $rp = @([IO.File]::ReadAllLines($pc) | Where-Object { $_ -notmatch '^\d+ row\(s\) in ' })
 $rf = @([IO.File]::ReadAllLines((Join-Path $WorkDir 'on.call_edges.txt')) | Where-Object { $_ -notmatch '^\d+ row\(s\) in ' })
 Check 'I1-control' (($rp -join "`n") -ne ($rf -join "`n")) "(full $($rf.Count) lines vs skip-1 $($rp.Count) lines)"
@@ -279,3 +285,4 @@ exit 0
 } finally {
   $env:DRAGLINT_PROFILE_CALLS = $null
 }
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

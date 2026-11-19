@@ -42,12 +42,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe        = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe        = '',
   [string]$OldExe     = '',
   [string]$WorkDir    = "$env:TEMP\drag-lint-proptree-cache-eq-$PID",
   [string]$LibDb      = '',
   [string]$OldDumpDir = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -72,7 +75,7 @@ function P([string]$n) { return (Join-Path $WorkDir $n) }
 function Json([string]$s) {
   $a = $s.IndexOf('{'); $b = $s.LastIndexOf('}')
   if ($a -lt 0 -or $b -le $a) { return $null }
-  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json) } catch { return $null }
+  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 # One node as a line carrying EVERY key, in key order.
 function NodeLine($n) {
@@ -112,7 +115,7 @@ function TextOf([string]$Root, $Nodes, [bool]$Trunc) {
 }
 function RunPt([string]$E, [string]$Db, [string[]]$A) {
   $sw = [Diagnostics.Stopwatch]::StartNew()
-  $o = (& $E proptree @A --no-write-back --db $Db 2>$null) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $E proptree @A --no-write-back --db $Db 2>$null }) -join "`n"
   $sw.Stop()
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o; Sec = $sw.Elapsed.TotalSeconds }
 }
@@ -230,12 +233,12 @@ end.
 '@
 
 $db = P 'fx.sqlite'
-$idx = & $Exe index $fx --db $db 2>&1
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'a0 the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db)) "exit=$LASTEXITCODE; $($idx -join ' | ')"
 $oldDb = ''
 if ($OldExe) {
   $oldDb = P 'fx-old.sqlite'
-  & $OldExe index $fx --db $oldDb 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $OldExe index $fx --db $oldDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 }
 
 # Golden: the 14396852 engine's proptree --json on CacheFix.TRoot, minus private
@@ -342,13 +345,13 @@ Check 'a10 --refs-as-leaves: Ref is a reference leaf (kind=class, is_class_typed
 
 $bk = P 'r11.rules'
 Write-Ascii $bk "#link Title <- Color`n"
-$o = (& $Exe convert-validate --rules $bk --from CacheFix.TRoot --to CacheFix.TDst --db $db 2>&1) -join "`n"
+$o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules $bk --from CacheFix.TRoot --to CacheFix.TDst --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 # T2h (owner ruling 2026-09-30, R12): the path EXISTS but is private -- an
 # unreachable WARNING naming the descendant's private redeclaration, exit 0.
 Check 'a11 R11: ResolvePath on the shadowed Color is UNREACHABLE, naming TRoot''s private Color (warning, exit 0)' `
   (($LASTEXITCODE -eq 0) -and ($o -match '(?m)^line 1: warning: Color: Color is private in CacheFix\.TRoot; never applied unless a descendant class changes its visibility\r?$') -and `
    -not ($o -match 'not found')) $o
-$o = (& $Exe convert-validate --rules $bk --from CacheFix.TBase --to CacheFix.TDst --db $db 2>&1) -join "`n"
+$o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules $bk --from CacheFix.TBase --to CacheFix.TDst --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'a12 R11 positive control: on TBase (no redeclaration) Color resolves' (($LASTEXITCODE -eq 0) -and ($o -match '(?m)^OK')) $o
 
 # ---- real arms --------------------------------------------------------------
@@ -360,7 +363,7 @@ if (-not $LibDb) {
   $old4 = $null
   if ($OldDumpDir) {
     $f4 = Join-Path $OldDumpDir "$q.d4.json"
-    if (Test-Path $f4) { $old4 = Get-Content -Raw $f4 | ConvertFrom-Json }
+    if (Test-Path $f4) { $old4 = Get-Content -Raw $f4 | ConvertFrom-Json | ForEach-Object { $_ } }
   }
   foreach ($depth in 3, 4) {
     $r = RunPt $Exe $LibDb @('--qname', $q, '--depth', "$depth", '--refs-as-leaves', '--json')
@@ -384,12 +387,12 @@ if (-not $LibDb) {
     }
   }
   if ($OldDumpDir -and (Test-Path (Join-Path $OldDumpDir "$q.d2.json"))) {
-    $old2 = Get-Content -Raw (Join-Path $OldDumpDir "$q.d2.json") | ConvertFrom-Json
+    $old2 = Get-Content -Raw (Join-Path $OldDumpDir "$q.d2.json") | ConvertFrom-Json | ForEach-Object { $_ }
     foreach ($mv in 'public', 'published') {
       $r = RunPt $Exe $LibDb @('--qname', $q, '--depth', '2', '--refs-as-leaves', '--min-visibility', $mv, '--json')
       $nj = Json $r.Out
       $newL = @($nj.properties | ForEach-Object { NodeLine $_ })
-      $ok = if ($mv -eq 'published') { @('published') } else { @('published', 'public') }
+      $ok = @(if ($mv -eq 'published') { @('published') } else { @('published', 'public') })
       $want = @(PrunePrivate @($old2.properties) | Where-Object { ($ok -contains $_.visibility) } | ForEach-Object { NodeLine $_ })
       $d = FirstDiff $want $newL
       Check "d --min-visibility $mv (depth 2) equals the old engine's, minus private ($($want.Count) nodes, $([Math]::Round($r.Sec, 1)) s)" `
@@ -398,13 +401,13 @@ if (-not $LibDb) {
   }
   if ($OldExe) {
     $sa = @('convert-scaffold', '--from', 'Bde.DBTables.TQuery', '--to', $q, '--depth', '2', '--db', $LibDb)
-    $sw = [Diagnostics.Stopwatch]::StartNew(); $oldT = @((& $OldExe @sa 2>$null) -split "`r?`n"); $os = $sw.Elapsed.TotalSeconds
-    $sw = [Diagnostics.Stopwatch]::StartNew(); $newT = @((& $Exe @sa 2>$null) -split "`r?`n"); $ns = $sw.Elapsed.TotalSeconds
+    $sw = [Diagnostics.Stopwatch]::StartNew(); $oldT = @((& { $ErrorActionPreference = 'Continue'; & $OldExe @sa 2>$null }) -split "`r?`n"); $os = $sw.Elapsed.TotalSeconds
+    $sw = [Diagnostics.Stopwatch]::StartNew(); $newT = @((& { $ErrorActionPreference = 'Continue'; & $Exe @sa 2>$null }) -split "`r?`n"); $ns = $sw.Elapsed.TotalSeconds
     Write-Host ("  convert-scaffold TQuery -> TFDQuery --depth 2: old {0:N1} s, new {1:N1} s; {2} / {3} lines" -f $os, $ns, $oldT.Count, $newT.Count)
     # The private members of either side, by leaf path, from the old engine's own trees.
     $priv = New-Object System.Collections.Generic.HashSet[string]
     foreach ($qq in 'Bde.DBTables.TQuery', $q) {
-      $pj = Json ((& $OldExe proptree --qname $qq --depth 2 --no-write-back --json --db $LibDb 2>$null) -join "`n")
+      $pj = Json ((& { $ErrorActionPreference = 'Continue'; & $OldExe proptree --qname $qq --depth 2 --no-write-back --json --db $LibDb 2>$null }) -join "`n")
       $gone = @($pj.properties | ForEach-Object { $_.path })
       $kept = @(PrunePrivate @($pj.properties) | ForEach-Object { $_.path })
       foreach ($p in [Linq.Enumerable]::Except([string[]]$gone, [string[]]$kept)) { [void]$priv.Add($p) }

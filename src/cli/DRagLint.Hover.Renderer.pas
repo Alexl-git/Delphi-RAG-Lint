@@ -25,7 +25,7 @@ uses
 /// 'string (declared in Unit.TBase)'); when non-empty it is printed as a
 /// 'Name: Type' line under the header. '' (the default) prints nothing.</para>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.CLI.RenderHoverPlain (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.Hover.DoHover (DRagLint.CLI.Hover.pas), DRagLint.CLI.Hover.RenderHoverPlain (DRagLint.CLI.Hover.pas)</para>
 /// <para>Calls: DRagLint.Doc.Regions.TDocRegions.StripForDisplay, DRagLint.Doc.Wiki.TWikiParser.StripTopics, DRagLint.Hover.Renderer.HoverHeaderName, DRagLint.Hover.Renderer.UnescapeJsonText, DRagLint.Hover.Renderer.WikiIndicatorLines, Trim</para>
 /// <para>Complexity: 12 (cyclomatic, outer body), 74 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
@@ -65,7 +65,7 @@ function RenderHoverPlain(const ASym: TSymbol; const ADoc: TParsedDoc; const ADe
 /// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.CLI.RenderHoverMarkdown (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas)</para>
+/// <para>Called from: DRagLint.CLI.Hover.DoHover (DRagLint.CLI.Hover.pas), DRagLint.CLI.Hover.RenderHoverMarkdown (DRagLint.CLI.Hover.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas)</para>
 /// <para>Calls: DRagLint.Doc.Regions.TDocRegions.StripForDisplay, DRagLint.Doc.Wiki.TWikiParser.StripTopics, DRagLint.Hover.Renderer.HasAnyParamDescription, DRagLint.Hover.Renderer.HoverHeaderName, DRagLint.Hover.Renderer.RenderSignatureParamsMarkdown, DRagLint.Hover.Renderer.UnescapeJsonText, DRagLint.Hover.Renderer.WikiIndicatorLines, Trim</para>
 /// <para>Complexity: 18 (cyclomatic, outer body), 142 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
@@ -83,7 +83,7 @@ function RenderHoverMarkdown(const ASym: TSymbol; const ADoc: TParsedDoc; const 
 /// <returns><!-- drag-lint:auto type -->string</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas) ?, DRagLint.CLI.RenderHoverJson (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas) ?</para>
+/// <para>Called from: DRagLint.CLI.Hover.DoHover (DRagLint.CLI.Hover.pas) ?, DRagLint.CLI.Hover.RenderHoverJson (DRagLint.CLI.Hover.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas) ?</para>
 /// <para>Calls: DRagLint.Core.Model.DocFormatToStr, DRagLint.Core.Model.JsonEscape, DRagLint.Doc.Regions.TDocRegions.StripForDisplay, IfThen</para>
 /// <para>Overload 1 of 2</para>
 /// <para>Directives: overload</para>
@@ -145,8 +145,8 @@ type
   /// lay out / color without re-parsing a flat string.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Hover.Renderer.pas), DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.Hover.Renderer.BuildHoverModel (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverJson/2 (DRagLint.Hover.Renderer.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas) (+1 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Hover.Renderer, DRagLint.LSP.Server, DRagLint.Query.HoverModel</para>
+  /// <para>Used by: declaration (DRagLint.Hover.Renderer.pas), DRagLint.CLI.Hover.DoHover (DRagLint.CLI.Hover.pas), DRagLint.Hover.Renderer.BuildHoverModel (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverJson/2 (DRagLint.Hover.Renderer.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.CLI.Hover, DRagLint.Hover.Renderer, DRagLint.LSP.Server, DRagLint.Query.HoverModel</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
 type
@@ -176,6 +176,11 @@ type
     EffectFree   : Integer            ;
     EffectSummary: string             ;
     EffectWitness: string             ;
+    /// <summary>v152 HBHOVER (ruling HB2): the check-init writer list of a variable / field as one
+    /// JSON object (state, verdict, proven, summary, writers, shown, budget), emitted verbatim as
+    /// `"set_by"`; '' = not computed (any other kind, plain format, fast step), and then the key is
+    /// absent. Filled by DRagLint.Query.HoverModel.AttachHoverSetBy, never by BuildHoverModel.</summary>
+    SetByJson    : string             ;
   end;
 
 /// <summary>Parses a routine signature's parameter list -- e.g.
@@ -224,7 +229,8 @@ function BuildHoverModel(const ASym: TSymbol; const ADoc: TParsedDoc; const AUni
 /// <summary>Serializes a structured THoverModel to the hover JSON shape:
 /// qname/unit/def_line/return_type/params (modifier/name/type each)/returns
 /// (mined RHS expressions)/returns_more (overflow count beyond the 10-entry
-/// cap)/summary. Used by `drag-lint hover --format json`.</summary>
+/// cap)/summary, plus `set_by` (v152 HBHOVER) when AModel.SetByJson is non-empty.
+/// Used by `drag-lint hover --format json`.</summary>
 /// <param name="AModel">The hover model built by BuildHoverModel.</param>
 /// <param name="AFactLines">v(hover facts fix): the Phase-2 analysis fact lines
 /// (as FormatPhase2FactLines produced them) emitted as a `"facts":[...]` array
@@ -236,6 +242,7 @@ function BuildHoverModel(const ASym: TSymbol; const ADoc: TParsedDoc; const AUni
 /// <para>Returns: SB.ToString</para>
 /// <para>Overload 2 of 2</para>
 /// <para>Pure</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 75 lines (full implementation)</para>
 /// <para>Directives: overload</para>
 /// <seealso cref="DRagLint.Core.Model.JsonEscape"/>
 /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
@@ -829,6 +836,9 @@ begin
       SB.Append(Format('"%s"', [JsonEscape(AFactLines[i])]));
     end;
     SB.Append('],');
+    { v152 HBHOVER: the writer list, already JSON (built from check-init's own renderer, so its
+      writers are byte-equal to `check-init --json`). Absent when not computed. }
+    if AModel.SetByJson <> '' then SB.Append('"set_by":' + AModel.SetByJson + ',');
     // v(ADP3 T1): strip the ownership marker before it reaches a human --
     // see StripForDisplay's own comment; AModel.Doc.Summary itself must keep
     // carrying it for the read path (MergeComment/drift). This is the JSON

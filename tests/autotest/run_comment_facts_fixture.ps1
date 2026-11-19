@@ -48,9 +48,9 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
   else     { $script:fail++; Write-Host "  FAIL  $Name  $Detail" -ForegroundColor Red }
 }
 function Lane-Sql([string]$Db, [string]$Query) {
-  $raw = & $Exe sql --query $Query --db $Db --json 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --query $Query --db $Db --json 2>$null }
   if ($LASTEXITCODE -ne 0 -or -not $raw) { return }
-  try { $j = ($raw -join "`n") | ConvertFrom-Json } catch { return }
+  try { $j = ($raw -join "`n") | ConvertFrom-Json | ForEach-Object { $_ } } catch { return }
   $cols = @($j.columns | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } })
   $out = New-Object System.Collections.Generic.List[object]
   foreach ($r in @($j.rows)) {
@@ -63,7 +63,7 @@ function Lane-Sql([string]$Db, [string]$Query) {
 function Esc([string]$S) { return $S.Replace("`r", '\r').Replace("`n", '\n').Replace("`t", '\t') }
 
 Write-Host "run_comment_facts_fixture: engine $Exe" -ForegroundColor Cyan
-& $Exe index $fx --db $db *> (Join-Path $work 'index.log')
+& { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db *> (Join-Path $work 'index.log') }
 $rc = $LASTEXITCODE
 $rows = @(Lane-Sql $db @"
 SELECT f.path AS path, c.ordinal, c.start_offset, c.end_offset, c.line, c.col, c.end_line, c.kind, c.text,

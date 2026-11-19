@@ -16,9 +16,12 @@
   Needs dcc: SKIPs (exit 0) when rsvars.bat is missing.
 #>
 param(
-  [string]$Exe    = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe    = '',
   [string]$Rsvars = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -32,7 +35,7 @@ $Tmp = Join-Path $env:TEMP ('chan_eili_' + [guid]::NewGuid().ToString('N').Subst
 [IO.Directory]::CreateDirectory($Tmp) | Out-Null
 $PingHost = '127.{0}.{1}.{2}' -f (Get-Random -Min 2 -Max 250), (Get-Random -Min 2 -Max 250), (Get-Random -Min 2 -Max 250)
 function Parked { return @(Get-CimInstance Win32_Process -Filter "Name = 'PING.EXE' OR Name = 'ping.exe'" | Where-Object { "$($_.CommandLine)" -match [regex]::Escape($PingHost) }) }
-function Stop-Parked { foreach ($p in (Parked)) { try { [Diagnostics.Process]::GetProcessById([int]$p.ProcessId).Kill() } catch { } } }
+function Stop-Parked { foreach ($p in (@(Parked))) { try { [Diagnostics.Process]::GetProcessById([int]$p.ProcessId).Kill() } catch { } } }
 function Tree-Hash([string]$Dir) {
   return (Get-ChildItem $Dir -Recurse -File | Where-Object { $_.Name -ne 'nul' -and $_.Extension -notin '.sqlite', '.dcu', '.exe', '.rsm', '.map', '.drc', '.sqlite-wal', '.sqlite-shm', '.res', '.identcache', '.local', '.flag', '.log', '.err', '.out' -and $_.FullName -notmatch '\\Win64\\|\\Win32\\|\\__history\\|\\__recovery\\' } |
       Sort-Object FullName | ForEach-Object { "$($_.Name)|$((Get-FileHash $_.FullName -Algorithm SHA1).Hash)" }) -join "`n"
@@ -41,7 +44,7 @@ function New-Project([string]$Fixture, [string]$Dproj, [string]$Tag) {
   $d = Join-Path $Tmp $Tag
   Copy-Item (Join-Path $Fx $Fixture) $d -Recurse
   $db = Join-Path $d 'p.sqlite'
-  & $Exe index --project (Join-Path $d $Dproj) --db $db --library-db none *> (Join-Path $Tmp "$Tag.index.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $d $Dproj) --db $db --library-db none *> (Join-Path $Tmp "$Tag.index.log") }
   if ($LASTEXITCODE -ne 0) { throw "index $Tag exit $LASTEXITCODE" }
   return @{ Dir = $d; Db = $db; Proj = (Join-Path $d $Dproj) }
 }
@@ -56,14 +59,14 @@ function Cancel-Run([string]$Tag, $P, [string[]]$Args_) {
   $lines = @('@echo off', "call `"$Rsvars`"", "if not exist `"$($P.Dir)\*.BCK*`" goto :eof", "echo.> `"$flag`"", "ping -n 300 $PingHost > nul")
   [IO.File]::WriteAllText($bat, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
   $q = ($Args_ + @('--rsvars', $bat, '--build-timeout', '600') | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' '
-  $run = Start-Process -FilePath $Exe -ArgumentList $q -RedirectStandardOutput (Join-Path $Tmp "$Tag.out") -RedirectStandardError (Join-Path $Tmp "$Tag.err") -NoNewWindow -PassThru
+  $run = Start-Process -FilePath $Exe -ArgumentList $q -RedirectStandardOutput (Join-Path $Tmp "$Tag.out") -RedirectStandardError (Join-Path $Tmp "$Tag.err") -NoNewWindow -PassThru; $null = $run.Handle
   $parked = Wait-For { (Test-Path $flag) -or $run.HasExited } 400
   if (-not ($parked -and (Test-Path $flag) -and -not $run.HasExited)) { try { $run.Kill() } catch { }; Stop-Parked; return @{ Parked = $false; Exit = $null; Left = 0 } }
-  $null = & $Exe shutdown --db $P.Db --wait 60 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe shutdown --db $P.Db --wait 60 2>&1 | ForEach-Object { "$_" } }
   $ended = Wait-For { $run.HasExited } 60
   $code = if ($ended) { $run.ExitCode } else { try { $run.Kill() } catch { }; $null }
   Start-Sleep -Milliseconds 500
-  $left = (Parked).Count
+  $left = (@(Parked)).Count
   Stop-Parked
   return @{ Parked = $true; Exit = $code; Left = $left }
 }
@@ -85,7 +88,7 @@ try {
     $Q = New-Project $c.Fixture $c.Dproj ($t.ToLower() + 'c')
     $qBefore = Tree-Hash $Q.Dir
     $a = $c.Verb + @('--apply', '--project', $Q.Proj, '--db', $Q.Db, '--library-db', 'none', '--rsvars', $Rsvars)
-    $null = & $Exe @a *> (Join-Path $Tmp "$t-control.log")
+    $null = & { $ErrorActionPreference = 'Continue'; & $Exe @a *> (Join-Path $Tmp "$t-control.log") }
     Check "${t}-C POSITIVE CONTROL: the same --apply without shutdown writes (exit 0, tree changed)" (($LASTEXITCODE -eq 0) -and ((Tree-Hash $Q.Dir) -cne $qBefore)) "exit $LASTEXITCODE"
   }
 }

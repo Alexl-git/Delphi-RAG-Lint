@@ -23,11 +23,12 @@ uses
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.Editor.InvokeFindUsages (DragLint.Plugin.Editor.pas), DragLint.Plugin.StructureForm.TDragLintStructureForm.FindUsagesClick (DragLint.Plugin.StructureForm.pas)</para>
-/// <para>Calls: DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create, DragLint.Plugin.UsagesForm.TDragLintUsagesForm.LoadUsages/3</para>
+/// <para>Calls: DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create, DragLint.Plugin.UsagesForm.TDragLintUsagesForm.LoadUsages/3, DragLint.Plugin.UsagesForm.TDragLintUsagesForm.SetPositionFromCaret</para>
 /// <para>Overload 1 of 2</para>
 /// <para>Directives: overload</para>
 /// <seealso cref="DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create"/>
 /// <seealso cref="DragLint.Plugin.UsagesForm.TDragLintUsagesForm.LoadUsages"/>
+/// <seealso cref="DragLint.Plugin.UsagesForm.TDragLintUsagesForm.SetPositionFromCaret"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure ShowFindUsages(const ASymbolName, AExePath, ADbPath: string); overload;
@@ -41,14 +42,45 @@ procedure ShowFindUsages(const ASymbolName, AExePath, ADbPath: string); overload
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.StructureForm.TDragLintStructureForm.FindUsagesClick (DragLint.Plugin.StructureForm.pas)</para>
-/// <para>Calls: DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create, DragLint.Plugin.UsagesForm.TDragLintUsagesForm.LoadUsages/3</para>
+/// <para>Calls: DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create, DragLint.Plugin.UsagesForm.TDragLintUsagesForm.LoadUsages/3, DragLint.Plugin.UsagesForm.TDragLintUsagesForm.SetPositionFromCaret</para>
 /// <para>Overload 2 of 2</para>
 /// <para>Directives: overload</para>
 /// <seealso cref="DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create"/>
 /// <seealso cref="DragLint.Plugin.UsagesForm.TDragLintUsagesForm.LoadUsages"/>
+/// <seealso cref="DragLint.Plugin.UsagesForm.TDragLintUsagesForm.SetPositionFromCaret"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure ShowFindUsages(const ASymbolName, AExePath: string; const ADbPaths: TArray<string>); overload;
+/// <summary>1.52 FUSCOPE: Find Usages in one of the four scopes, bound at the caret.</summary>
+/// <param name="ASymbolName">The symbol (normally the identifier at the caret).</param>
+/// <param name="AExePath">The engine.</param>
+/// <param name="ADbPaths">The project's databases.</param>
+/// <param name="AScope">symbol, project, group or everywhere (the CLI's --scope words).</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Cmd.FindUsagesScope.FindUsagesIn (DragLint.Plugin.Cmd.FindUsagesScope.pas)</para>
+/// <para>Calls: DragLint.Plugin.UsagesForm.ScopeIndexOf, DragLint.Plugin.UsagesForm.ScopeWordAt, DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create, DragLint.Plugin.UsagesForm.TDragLintUsagesForm.LoadUsages/3, DragLint.Plugin.UsagesForm.TDragLintUsagesForm.SetPositionFromCaret</para>
+/// <seealso cref="DragLint.Plugin.UsagesForm.ScopeIndexOf"/>
+/// <seealso cref="DragLint.Plugin.UsagesForm.ScopeWordAt"/>
+/// <seealso cref="DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create"/>
+/// <seealso cref="DragLint.Plugin.UsagesForm.TDragLintUsagesForm.LoadUsages"/>
+/// <seealso cref="DragLint.Plugin.UsagesForm.TDragLintUsagesForm.SetPositionFromCaret"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+procedure ShowFindUsagesScoped(const ASymbolName, AExePath: string; const ADbPaths: TArray<string>; const AScope: string);
+
+/// <summary>The open project group file.</summary>
+/// <returns>Its full path, or '' when no group is open.</returns>
+/// <remarks>
+/// Main thread only (ToolsAPI). Shared with the Search page's scope combo.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.SearchForm.TSearchHandler.RunSearch (DragLint.Plugin.SearchForm.pas), DragLint.Plugin.UsagesForm.TDragLintUsagesForm.RunCliQuery (DragLint.Plugin.UsagesForm.pas)</para>
+/// <para>Calls: Supports</para>
+/// <para>Returns: ''; MS.MainProjectGroup.FileName</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function ActiveGroupFile: string;
+
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.Editor.UnregisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
@@ -68,11 +100,9 @@ procedure HideFindUsages;
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DragLint.Plugin.DockForm.TDragLintDockFrame.HandleInitTimer (DragLint.Plugin.DockForm.pas)</para>
-/// <para>Calls: DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create, DragLint.Plugin.UsagesForm.TUsagesEmbedCtl.ComboChange, DragLint.Plugin.UsagesForm.TUsagesEmbedCtl.EditKeyDown</para>
+/// <para>Calls: DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create</para>
 /// <para>UI thread only -- touches AParent, Frm</para>
 /// <seealso cref="DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create"/>
-/// <seealso cref="DragLint.Plugin.UsagesForm.TUsagesEmbedCtl.ComboChange"/>
-/// <seealso cref="DragLint.Plugin.UsagesForm.TUsagesEmbedCtl.EditKeyDown"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure CreateEmbeddedUsages(AOwner: TComponent; AParent: TWinControl);
@@ -92,6 +122,7 @@ implementation
 uses
   System.JSON
   , System.StrUtils
+  , System.Math { InRange }
   , Vcl.Forms
   , Vcl.ComCtrls
   , Vcl.StdCtrls
@@ -105,6 +136,8 @@ uses
   , DragLint.Plugin.CliAsync
   , DragLint.Plugin.ExeResolver
   , DragLint.Plugin.UsagesQuery
+  , DragLint.Plugin.Theme       { ApplyIdeTheme / ThemedColor: follow the IDE light/dark theme }
+  , DragLint.Plugin.PlugUiCore   { UsageRowColors }
   ;
 
 { v0.40.5: local copy of the BPL build-stamp helper to avoid circular use
@@ -116,8 +149,8 @@ var
   Age    : TDateTime;
 begin
   ModName:= GetModuleName(HInstance);
-  Result:= if (ModName <> '') and FileAge(ModName, Age) then 'v1.51.2-alpha (BPL built ' + FormatDateTime('yyyy-mm-dd hh:nn:ss', Age) + ')'
-    else 'v1.51.2-alpha';
+  Result:= if (ModName <> '') and FileAge(ModName, Age) then 'v1.52.0-alpha (BPL built ' + FormatDateTime('yyyy-mm-dd hh:nn:ss', Age) + ')'
+    else 'v1.52.0-alpha';
 end;
 
 { ---- TUsageNodeData: stores file + line in tree node.Data ---- }
@@ -129,6 +162,31 @@ const
   USAGES_LSP_BUDGET_MS = 10000;
   { How often a question in flight checks that the client it asked is still the running one. }
   LSP_WATCH_MS = 1000;
+  { 1.52 FUSCOPE: the engine's scope words, in the order of the combo's captions. }
+  SCOPE_WORDS: array[0..3] of string = ('symbol', 'project', 'group', 'everywhere');
+
+{ The scope word of a combo index; 'symbol' for anything else. }
+function ScopeWordAt(AIndex: Integer): string;
+begin
+  Result:= if InRange(AIndex, Low(SCOPE_WORDS), High(SCOPE_WORDS)) then SCOPE_WORDS[AIndex] else SCOPE_WORDS[0];
+end;
+
+{ The combo index of a scope word; 0 (This symbol) for an unknown one. }
+function ScopeIndexOf(const AScope: string): Integer;
+begin
+  Result:= 0;
+  for var i:= Low(SCOPE_WORDS) to High(SCOPE_WORDS) do
+    if SameText(SCOPE_WORDS[i], AScope) then Exit(i);
+end;
+
+function ActiveGroupFile: string;
+var
+  MS: IOTAModuleServices;
+begin
+  Result:= '';
+  if Supports(BorlandIDEServices, IOTAModuleServices, MS) and (MS.MainProjectGroup <> nil) then
+    Result:= MS.MainProjectGroup.FileName;
+end;
 
 type
   TUsageNodeData = class
@@ -151,6 +209,13 @@ type
       FDbPath        : string        ; { kept for legacy single-DB callers }
       FDbPaths       : TArray<string>; { v0.40.3: multi-DB list }
       FWidth         : string        ; { v0.42: narrow|wide|very-wide }
+      FScope         : string        ; { 1.52 FUSCOPE: symbol|project|group|everywhere }
+      FScopeCombo    : TComboBox     ; { 1.52 FUSCOPE: the panel's scope switch; changing it re-runs }
+      FPosFile       : string        ; { 1.52 FUSCOPE: the caret that binds scope symbol }
+      FPosLine       : Integer       ;
+      FPosCol        : Integer       ;
+      FScopeNote     : string        ; { the engine's scope note of the last answer }
+      FScopeDbCount  : Integer       ; { how many indexes the last answer read }
       FLastCallerNode: TTreeNode     ;
       FRun           : TCliRunSlot   ; { the query in flight; a newer one supersedes it }
       FLspId         : Integer       ; { the server request in flight, 0 for none }
@@ -173,10 +238,14 @@ type
       procedure ParseUsagesGrouped(const AOutput: string; out AParsed: Boolean);
       procedure NavigateToNode(ANode: TTreeNode);
       procedure ParseTextOutput(const AOutput: string);
+      procedure ScopeComboChange(Sender: TObject);
+      procedure UpdateTitle;
       function AddNodeData(AParent: TTreeNode; const AText, AFile: string; ALine: Integer): TTreeNode;
     public
       constructor Create(AOwner: TComponent); override;
       procedure SetWidth(const AWidth: string); { v0.42: narrow|wide|very-wide }
+      procedure SetScope(const AScope: string); { 1.52 FUSCOPE: re-runs when a symbol is loaded }
+      procedure SetPositionFromCaret; { 1.52 FUSCOPE: the top editor's caret binds scope symbol }
       procedure LoadUsages(const ASymbolName, AExePath, ADbPath: string); overload;
       procedure LoadUsages(const ASymbolName, AExePath: string; const ADbPaths: TArray<string>); overload;
   end;
@@ -233,6 +302,19 @@ begin
   FBtnClose.Caption:= 'Close';
   FBtnClose.OnClick:= BtnCloseClick;
 
+  { 1.52 FUSCOPE: the scope switch; the same four words as `usages --scope` and the
+    Find Usages submenu. Changing it re-runs the search. }
+  FScopeCombo:= TComboBox.Create(FToolBar);
+  FScopeCombo.Parent:= FToolBar;
+  FScopeCombo.Style := csDropDownList;
+  FScopeCombo.Width := 110;
+  FScopeCombo.Items.Add('This symbol');
+  FScopeCombo.Items.Add('Project');
+  FScopeCombo.Items.Add('Group');
+  FScopeCombo.Items.Add('Everywhere');
+  FScopeCombo.ItemIndex:= 0;
+  FScopeCombo.OnChange := ScopeComboChange;
+
   FTree:= TTreeView.Create(Self);
   FTree.Parent       := Self;
   FTree.Align        := alClient;
@@ -246,11 +328,19 @@ begin
 
   FLastCallerNode:= nil;
   FWidth:= 'narrow';
+  FScope:= SCOPE_WORDS[0];
   FRun:= TCliRunSlot.Create;
   FLspWatch:= TTimer.Create(Self);
   FLspWatch.Enabled := False;
   FLspWatch.Interval:= LSP_WATCH_MS;
   FLspWatch.OnTimer := LspWatchTick;
+
+  { N3 (1.52): follow the IDE light/dark theme like the other dock panels. }
+  ApplyIdeTheme(Self, TDragLintUsagesForm);
+  Color           := ThemedColor(clBtnFace);
+  FTree.Color     := ThemedColor(clWindow);
+  FTree.Font.Color:= ThemedColor(clWindowText);
+  FLblTitle.Font.Color:= ThemedColor(clWindowText);
 end; // constructor
 
 procedure TDragLintUsagesForm.FormClose(Sender: TObject; var Action: TCloseAction);
@@ -331,6 +421,9 @@ var
   P       : Integer       ;
   StartAt : Integer       ;
   Seg     : string        ;
+  BackC   : TColor        ;
+  TextC   : TColor        ;
+  MatchC  : TColor        ;
 begin
   DefaultDraw:= True;
   if Stage <> cdPrePaint then Exit;
@@ -348,16 +441,9 @@ begin
   Selected:= (cdsSelected in State) or (cdsMarked in State);
 
   Cv.Font.Assign(FTree.Font);
-  if Selected then
-  begin
-    Cv.Brush.Color:= clHighlight;
-    Cv.Font .Color:= clHighlightText;
-  end
-  else
-  begin
-    Cv.Brush.Color:= clWindow;
-    Cv.Font .Color:= clWindowText;
-  end;
+  UsageRowColors(Selected, ThemedColor, BackC, TextC, MatchC);  { IDE theme, not the Windows palette }
+  Cv.Brush.Color:= BackC;
+  Cv.Font .Color:= TextC;
   Cv.FillRect(R);
   Cv.Brush.Style:= bsClear;
 
@@ -374,7 +460,7 @@ begin
       if Seg <> '' then
       begin
         Cv.Font.Style:= [];
-        if not Selected then Cv.Font.Color:= clWindowText;
+        Cv.Font.Color:= TextC;
         Cv.TextOut(X, R.Top, Seg);
       end;
       Break;
@@ -385,7 +471,7 @@ begin
     begin
       Seg:= Copy(Txt, StartAt, P - StartAt);
       Cv.Font.Style:= [];
-      if not Selected then Cv.Font.Color:= clWindowText;
+      Cv.Font.Color:= TextC;
       Cv.TextOut(X, R.Top, Seg);
       Inc(X, Cv.TextWidth(Seg));
     end;
@@ -393,7 +479,7 @@ begin
     { the matched identifier: bold + amber (plain bold when selected) }
     Seg:= Copy(Txt, P, Length(Term));
     Cv.Font.Style:= [fsBold];
-    if not Selected then Cv.Font.Color:= TColor($004080FF) { amber/orange BGR };
+    Cv.Font.Color:= MatchC;  { amber, lightened/darkened to stay readable on the themed background }
     Cv.TextOut(X, R.Top, Seg);
     Inc(X, Cv.TextWidth(Seg));
 
@@ -407,6 +493,41 @@ procedure TDragLintUsagesForm.SetWidth(const AWidth: string);
 begin
   FWidth:= AWidth;
   if FSymbolName <> '' then RunQuery; { re-run at the new width (cheap; query-time over the index) }
+end;
+
+procedure TDragLintUsagesForm.SetScope(const AScope: string);
+begin
+  FScope:= ScopeWordAt(ScopeIndexOf(AScope));
+  if (FScopeCombo <> nil) and (FScopeCombo.ItemIndex <> ScopeIndexOf(FScope)) then FScopeCombo.ItemIndex:= ScopeIndexOf(FScope);
+  if FSymbolName <> '' then RunQuery;
+end;
+
+procedure TDragLintUsagesForm.ScopeComboChange(Sender: TObject);
+begin
+  SetScope(ScopeWordAt(FScopeCombo.ItemIndex));
+end;
+
+procedure TDragLintUsagesForm.SetPositionFromCaret;
+var
+  ESS: IOTAEditorServices;
+  EV : IOTAEditView      ;
+begin
+  FPosFile:= '';
+  FPosLine:= 0;
+  FPosCol := 0;
+  if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then Exit;
+  EV:= ESS.TopView;
+  if (EV = nil) or (EV.Buffer = nil) then Exit;
+  FPosFile:= EV.Buffer.FileName;
+  FPosLine:= EV.CursorPos.Line; { 1-based }
+  FPosCol := EV.CursorPos.Col;  { 1-based }
+end;
+
+procedure TDragLintUsagesForm.UpdateTitle;
+begin
+  FLblTitle.Caption:= 'Find usages of: ' + FSymbolName + '  [' + FScopeCombo.Text +
+    (if FScopeDbCount > 1 then Format(', %d indexes', [FScopeDbCount]) else '') + ']' +
+    (if FScopeNote <> '' then '  -- ' + FScopeNote else '');
 end;
 
 procedure TDragLintUsagesForm.ParseUsagesGrouped(const AOutput: string; out AParsed: Boolean);
@@ -520,6 +641,11 @@ begin
     AddRefGroup('raises'    , 'Raised at'     ); { exception classes: raise sites (146 p1 tail) }
     AddRefGroup('handles'   , 'Handled at'    ); { ... and the except clauses that catch them }
     AddImpactGroup;
+    { 1.52 FUSCOPE: the indexes the scope read, counted in the title (not a tree group:
+      an empty answer must still read "no usages found"). }
+    var Dbs: TJSONArray;
+    FScopeDbCount:= if Obj.TryGetValue<TJSONArray>('databases', Dbs) then Dbs.Count else 0;
+    UpdateTitle;
   finally
     Root.Free;
   end;
@@ -653,7 +779,10 @@ begin
   Dbs:= FDbPaths;
   if Length(Dbs) = 0 then Dbs:= [FDbPath];
   if not ServerCoversDbs(Dbs, Client.DbPaths) then Exit;
-  Params:= UsagesLspParams(FSymbolName, FWidth);
+  { 1.52 FUSCOPE: the server answers symbol and project from the stores it has open; group and
+    everywhere read other indexes, which the CLI opens for the one question. }
+  if (FScope = 'group') or (FScope = 'everywhere') then Exit;
+  Params:= UsagesLspScopedParams(FSymbolName, FWidth, FScope, FPosFile, FPosLine, FPosCol);
   try
     FLspId:= Client.RequestAsync('draglint/usages', Params, USAGES_LSP_BUDGET_MS, LspAnswered);
   finally
@@ -727,6 +856,10 @@ begin
   { v0.42: the new 'usages' command finds reads/writes/etc. (not just calls)
     and supports the width selector. }
   CmdLine:= Format('"%s" usages --name "%s" --width %s', [FExePath, FSymbolName, FWidth]);
+  { 1.52 FUSCOPE: the scope, the caret that binds scope symbol, the group file of scope group. }
+  CmdLine:= CmdLine + ' --scope ' + FScope;
+  if (FPosFile <> '') and (FPosLine > 0) then CmdLine:= CmdLine + Format(' --in "%s" --line %d --col %d', [FPosFile, FPosLine, FPosCol]);
+  if (FScope = 'group') and (ActiveGroupFile <> '') then CmdLine:= CmdLine + Format(' --group "%s"', [ActiveGroupFile]);
   { v0.40.3: emit one --db per resolved path. Falls back to legacy
     single-DB if FDbPaths is empty but FDbPath is set. }
   if Length(FDbPaths) > 0 then
@@ -759,6 +892,20 @@ begin
     end;
 
     Output:= Trim(AOutput);
+
+    { 1.52 FUSCOPE: the scope the engine answered, when it is not the one asked, in the title. }
+    FScopeNote:= '';
+    FScopeDbCount:= 0;
+    if (Output <> '') and (Output[1] = '{') then
+    begin
+      var Doc: TJSONValue:= TJSONObject.ParseJSONValue(Output);
+      try
+        if Doc is TJSONObject then FScopeNote:= TJSONObject(Doc).GetValue<string>('scope_note', '');
+      finally
+        Doc.Free;
+      end;
+    end;
+    UpdateTitle;
 
     if (Length(Output) > 0) and (Output[1] = '{') then
     begin
@@ -868,7 +1015,8 @@ begin
   FExePath   := AExePath;
   FDbPath    := ADbPath;
   SetLength(FDbPaths, 0);
-  FLblTitle.Caption:= 'Find usages of: ' + ASymbolName;
+  FScopeNote := '';
+  UpdateTitle;
   RunQuery;
 end;
 
@@ -878,7 +1026,8 @@ begin
   FExePath   := AExePath;
   FDbPath    := '';
   FDbPaths   := ADbPaths;
-  FLblTitle.Caption:= 'Find usages of: ' + ASymbolName;
+  FScopeNote := '';
+  UpdateTitle;
   RunQuery;
 end;
 
@@ -891,20 +1040,16 @@ type { Holds the search edit + reparented usages form for a dock tab, and runs t
       FUsages: TDragLintUsagesForm ;
       FEdit  : TEdit               ;
       FCombo : TComboBox           ;
-      function CurrentWidth: string;
+      function CurrentScope: string;
       procedure RunFor(const ASym: string);
       procedure EditKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
       procedure ComboChange(Sender: TObject);
   end;
 
-function TUsagesEmbedCtl.CurrentWidth: string;
+{ 1.52 FUSCOPE (owner N3): the tab's 2-way width switch is folded into the 4-way scope. }
+function TUsagesEmbedCtl.CurrentScope: string;
 begin
-  if FCombo = nil then Exit('narrow');
-  case FCombo.ItemIndex of
-    1: Result:= 'wide';
-    2: Result:= 'very-wide';
-    else Result:= 'narrow';
-  end;
+  Result:= if FCombo = nil then SCOPE_WORDS[0] else ScopeWordAt(FCombo.ItemIndex);
 end;
 
 procedure TUsagesEmbedCtl.RunFor(const ASym: string);
@@ -915,7 +1060,12 @@ begin
   if (ASym = '') or (FUsages = nil) then Exit;
   if not RequireEngine(Exe) then Exit;
   Dbs:= ResolveActiveIndexDbs(LoadSettings);
-  FUsages.SetWidth(CurrentWidth); { set width before the query }
+  { scope before the query; a typed name has no caret position, so scope symbol binds a
+    qualified name only (a bare one is answered as scope project, said in the title) }
+  FUsages.FScope:= CurrentScope;
+  FUsages.FScopeCombo.ItemIndex:= ScopeIndexOf(FUsages.FScope);
+  FUsages.FPosFile:= '';
+  FUsages.FPosLine:= 0;
   FUsages.LoadUsages(ASym, Exe, Dbs);
 end;
 
@@ -928,7 +1078,7 @@ end;
 
 procedure TUsagesEmbedCtl.ComboChange(Sender: TObject);
 begin
-  { re-run at the new width if a symbol is already loaded }
+  { re-run in the new scope if a symbol is already loaded }
   RunFor(Trim(FEdit.Text));
 end;
 
@@ -941,7 +1091,7 @@ var
   Frm  : TDragLintUsagesForm;
   Ctl  : TUsagesEmbedCtl    ;
 begin
-  { search row on top: label + edit + width selector }
+  { search row on top: label + edit + scope selector (1.52 FUSCOPE; was width) }
   Pnl:= TPanel.Create(AOwner);
   Pnl.Parent    := AParent;
   Pnl.Align     := alTop;
@@ -959,9 +1109,10 @@ begin
   Combo.Align := alRight;
   Combo.Width := 110;
   Combo.Style := csDropDownList;
-  Combo.Items.Add('Narrow'   );
-  Combo.Items.Add('Wide'     );
-  Combo.Items.Add('Very wide');
+  Combo.Items.Add('This symbol');
+  Combo.Items.Add('Project'    );
+  Combo.Items.Add('Group'      );
+  Combo.Items.Add('Everywhere' );
   Combo.ItemIndex:= 0;
 
   Edit:= TEdit.Create(AOwner);
@@ -991,6 +1142,7 @@ procedure ShowFindUsages(const ASymbolName, AExePath, ADbPath: string);
 begin
   if GUsagesForm = nil then GUsagesForm:= TDragLintUsagesForm.Create(nil);
 
+  GUsagesForm.SetPositionFromCaret; { 1.52 FUSCOPE: the caret binds the default scope symbol }
   GUsagesForm.LoadUsages(ASymbolName, AExePath, ADbPath);
 
   if not GUsagesForm.Visible then GUsagesForm.Show;
@@ -1001,8 +1153,20 @@ procedure ShowFindUsages(const ASymbolName, AExePath: string; const ADbPaths: TA
 begin
   if GUsagesForm = nil then GUsagesForm:= TDragLintUsagesForm.Create(nil);
 
+  GUsagesForm.SetPositionFromCaret; { 1.52 FUSCOPE: the caret binds the default scope symbol }
   GUsagesForm.LoadUsages(ASymbolName, AExePath, ADbPaths);
 
+  if not GUsagesForm.Visible then GUsagesForm.Show;
+  GUsagesForm.BringToFront;
+end;
+
+procedure ShowFindUsagesScoped(const ASymbolName, AExePath: string; const ADbPaths: TArray<string>; const AScope: string);
+begin
+  if GUsagesForm = nil then GUsagesForm:= TDragLintUsagesForm.Create(nil);
+  GUsagesForm.FScope:= ScopeWordAt(ScopeIndexOf(AScope));
+  GUsagesForm.FScopeCombo.ItemIndex:= ScopeIndexOf(GUsagesForm.FScope);
+  GUsagesForm.SetPositionFromCaret;
+  GUsagesForm.LoadUsages(ASymbolName, AExePath, ADbPaths);
   if not GUsagesForm.Visible then GUsagesForm.Show;
   GUsagesForm.BringToFront;
 end;

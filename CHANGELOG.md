@@ -3,6 +3,249 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## v1.52.0-alpha -- date TBD
+
+In integration (lane/v152-int). One re-parse for the whole 1.52 bundle: extractor 1.40.0 -> 1.41.0-alpha,
+resolver 1.28.0 -> 1.29.0-alpha.
+
+- GitHub fixes (lane GHTRIAGE): `impact --qname` walks the RESOLVED callers (`find-callers --resolved`) and exits 1 for a qname that names no symbol (#14); `context` no longer lists another form's `OnShow = FormShow` DFM binding as a caller unless its root class descends from the handler's class (#15); source text from a unit saved as UTF-8 with a BOM is no longer double-encoded in `context` / `find-callers --context` and 32 other read-only source readers (#16); `usages --width wide` / `impact` no longer count parameters and locals as callers, which made the walk quadratic (#19).
+- Engine verb shutdown renamed **stop-now** (lane Q15REN, owner Q15): the old name tripped the autonomy guard. shutdown stays as a hidden alias (accepted, not in --help). Callers (stage-engine.ps1, pack-lint-release.ps1), docs and the feature entry follow.
+- VS Code extension 1.6.7 (VSTOAST, U9): restart race and toasts. didOpen/didClose are dropped while a planned stop or the new server's start is in progress (the new client replays open documents); the post-stop grace now covers the stop timeout and a second restart cancels the first grace timer; "Stopping server timed out" is teardown noise during a planned stop; the engine-copy update is coalesced (one publish = one restart); the old client is disposed before the new one starts (no "command draglint.showCallers already exists"); "Server process exited with code 0" is logged at info; the Output channel no longer pops up on errors.
+
+### Breaking
+
+- Exit codes (GitHub #17, owner ruling): `find-callees` on a routine that calls nothing now exits **1** (empty answer, as `query find-callers`; was 0), and `sql` stopped by its `--timeout-ms` cap exits **2** (no answer produced; was 1, the empty-result code). An empty `sql` SELECT still exits 0.
+- `cycles`: the hub-surface recipe (R3) is now the DEFAULT for `--fix`, `--plan --apply` and `--causes --format json`
+  wherever R3 breaks the group (B9b); `--no-hub-surface` restores the 1.51 planner default. `--fix` / `--plan --apply`
+  without `--cycle` take the first group R3 breaks. R3 refuses a hub field passed to a var / out parameter at plan time.
+
+### Changed
+
+- Taint rules (`taint-sql-injection`, `taint-command-injection`, `taint-path-traversal`) report **ONE finding per sink site** (file + line + col + rule; lane TAINTDEDUP), not one per path: a `CreateProcess` reached by 4 paths was 3-4 Errors on one line. The message names the best path and ends `(N sources, M paths)` when more than one reaches the sink; `--format json` keeps `path` (best) and adds `paths` (every distinct path, best first). The old `(+N more paths)` tail and the `max_paths_per_sink` cap are gone (the key is accepted and ignored). `dl:ok` markers on the sink line keep working unchanged (the hash input has no message; no marker-algorithm bump). Runner `run_v152_TAINTDEDUP.ps1`.
+- Hover `Set by` / check-init answers inside the wall-clock cap (lane HOVERCAP, B51): the budget is checked before the
+  first expensive phase (program init orders computed once, deadline checks in the field solver, receiver proof and
+  use walks): a hover on the drag-lint index took 7-12 s, now 5.3-6.4 s at a 5 s cap, and uses past the deadline say
+  'stopped on budget'. `DRAGLINT_PROFILE` prints a `used-in directions` timer line.
+- One-file incremental index is faster (GitHub #18, lane INCR18, owner ruling: in 1.52): the scoped resolve pass keeps
+  local / parameter names out of the changed-name scope (unless the changed file hosts or is an include, or
+  `DRAGLINT_SCOPED_LOCAL_NAMES=1`) and collects the scoped ref ids once. One file on the drag-lint index: call
+  resolution 32.6 -> 4.1 s, wall 68.4 -> 34.6 s; scoped incremental = full reindex, 0 diff rows (`run_v1521_INCR18`).
+  The compile-closure walk (~7 s) and the purity stage (~19 s) still run whole; they are the rest of #18 (1.52.1).
+- GitHub issues (lane GHTRIAGE): #14 `impact` walks RESOLVED callers, so a same-named routine of another class is
+  no longer counted, and a qname naming no symbol exits 1; #15 `context` drops DFM bindings of other forms; #16
+  source reads honour a UTF-8 BOM (no double-encoded text in declarations and slices); #19 `usages --width wide`
+  restricts its transitive-caller CTE to container kinds (was quadratic on large indexes).
+- Hover: the 5 s cap covers the whole card, facts + `Set by` (lane HOVERCACHE): check-init init orders and interface
+  answers are cached per index version in LSP / `serve`; on the drag-lint index the hover median is ~4.9 s (was 5.7 s).
+- `ifthen-to-if-expression` no longer fires on an else-if chain (lane SELFLZ; lint-tests 452/452). SELF-LOOPZERO on
+  drag-lint's own projects: main 7465 -> 6409 findings (doc-drift 982 -> 54 after autodoc on 366 units), config
+  236 -> 206, open 13 -> 4, switch 14 -> 0, plugin 2210 -> 1978.
+- Test runners under Windows PowerShell 5.1 (lane PS5STDERR): native stderr redirected under
+  `$ErrorActionPreference='Stop'` is wrapped, piped stdin is forwarded (`$input |`), ConvertFrom-Json arrays are
+  enumerated and `Start-Process -PassThru` caches the handle; guard `run_v152_PS5STDERR` (G/G2/G4/G5 + controls).
+- `allow --reason "<text>"` (INT14, for SELF-LOOPZERO's re-stamps): the text REPLACES the marker's reason, so a
+  reviewer who re-read the code writes `--reason "REVIEWED <yyyy-mm-dd> <why>"` and the stamp survives the re-hash;
+  it also re-stamps a marker whose hash is still current. Without `--reason` a re-hash still drops the stamp (L3).
+- `lint --fix` for `collapsible-if` wrote `end;;` when the inner body was a `begin..end` block (seen on the plugin
+  source by SELF-LOOPZERO): the block capture already ends in `end;`, so an expanded fix ending in `;;` keeps one.
+  Autofix fixture `collapsible-if/begin_end_body`.
+- `allow --apply` on a wrapped statement whose `dl:ok` marker sat on a continuation line (a superseded marker) moved
+  the marker to the anchor line with an EMPTY reason, so the reviewer's text vanished silently (INT14 tail). The
+  reason now moves with it; its `REVIEWED <date>` stamp is dropped with the same note a stale re-hash prints (a
+  re-hash is not a re-review). Runner `run_v152_INT14_allow_moved_reason.ps1`.
+- Test runners run under Windows PowerShell 5 `-File` (lane PS5RUNNERS): 1339 runners resolve `$PSScriptRoot`-derived
+  parameter defaults in the body, not in `param()` (PS5 leaves them empty there); BK-TOOLING2B P1 flags any new one.
+  `migrate-dbs` keeps `ignoreLocalConfig` when it saves edits.
+- Feature registry: 46 ENGINE entries that had drifted from `--help` re-verified (lane DOCSTALE; flags added to
+  rename-symbol, unwith, callgraph and the rules entries).
+- `by-value-arg-before-assignment` (OFF since 1.46) is FOLDED into the ON rule `used-before-assignment` (lane BK-OWNGATED,
+  EX1, owner ruling 2026-11-18): `G.Take(X)` / `G.TakeC(X)` with X unassigned now reports by default under
+  `used-before-assignment` (error definite, warning possible). The old id is removed from the catalogue (with B48 debug-display-placeholder added: 435 rules,
+  322 built-in); a config or `dl:ok` naming it no longer matches anything. `lint-all` runs the by-value replay pass
+  whenever `used-before-assignment` is kept (1.47 PF had skipped it for the OFF id). Wiki `flow-out-arg-rules`.
+- `cyclomatic-complexity`, `cognitive-complexity` and the autodoc `Complexity:` fact count an if-EXPRESSION
+  (`X := if C then A else B`) as a decision point (lane BK-OWNGATED, GA-1, owner ruling 2026-11-18); cognitive scores
+  its `else if` arm as the hybrid +1. Routines using if-expressions score higher and autodoc Complexity lines move;
+  both rules' marker measure-algorithm version 1 -> 2, so a v2-stamped marker on an unchanged routine is re-measured, not stale;
+  a LEGACY 1.51.0-stamped marker on a routine whose score moved goes review-marker-stale (re-stamp with allow --fix-line).
+  Wiki `complexity-if-expression`. Guard `tests\autotest\run_v152_BK-OWNGATED.ps1`.
+- Default flips (owner D7 + DEFAULTS + DOCPOL + PROJ2 + UNCONN + PTW + MARK): ON by default: `datamodule-form-global`
+  (warning, lint-all), `foreign-form-control-access` (hint), `dataset-edit-without-post` (warning),
+  `form-object-without-field` (hint), `doc-placeholder` (hint), `parameter-type-too-wide` (warning, fixable),
+  `unconnected-control` (warning), `hanging-handler` (warning), `unit-used-by-no-unit` (warning),
+  `reserved-word-identifier` (warning), `review-marker-remeasured` (hint). OFF by default: `doc-malformed-summary`,
+  `member-could-be-private` (new; OFF until a shared-unit FP is fixed). `index-possibly-out-of-range` is ON
+  (IDXRANGE3 fixed the FPM2 re-measure's FP classes, 0 FP / 12; see below).
+  `missing-doc` now also reports DFM-bound handlers that have code (reverses the 1.51.1 skip; CLIENT +934). A shipped
+  exempt-class list `rules\form-object-without-field.exempt.txt` plus `form_object_without_field.exempt_classes` /
+  `use_default_list` in the lint config.
+- Default-rule findings 1.51.2 -> 1.52 (FPM re-measure, default rule set): CLIENT 19180 -> 23752, SERVER 16705 -> 20957,
+  LOADER 4437 -> 5135, YADF 477 -> 510.
+- `lint-all` speed and budget (BUDGET, BK-PERF, BK-CLISMALL): a per-rule lint time budget (`--no-budget` turns it off)
+  and a 10x faster RTL collection scan; the taint pass caches library routine lookups (YADF taint 42.2 -> 13.4 s,
+  lint-all 141.8 -> 107.0 s, outputs byte-identical); `lint-all --no-stand-down` skips the engine stand-down.
+- `lint-all` report file (SMALLS): written beside `--project`, else beside the DB (was the current directory);
+  `--report` is an alias of `--output`.
+- `cycles` finalization-order cut (FINCUT, B9a): planned when the consumer already initializes first in every program.
+- `ui-call-in-console-or-service` (APP2): follows calls across units from the closure of a `{$APPTYPE CONSOLE}` .dpr.
+- 'Used in:' (autodoc + hover) (BK-USEEDGES): Inc / Dec / var / out arguments are shown as [w] / [rw].
+- Hover (ASYNC): a fast "computing..." answer first, then the complete one; cancellable (CLIENT p50 376 -> 76 ms).
+- IDE Rules page (PLUGUI): search box with 250 ms debounce and wait cursor (423 rules: 25 s -> 2.5 s); the Find
+  Usages panel follows the IDE theme.
+- IDE Reports (REPPROG): all 27 Reports questions run under a progress window (marquee, elapsed seconds, Cancel);
+  Cancel stops only that report's child process tree.
+- Hover / autodoc `Init:` (HBHOVER): hover shows the check-init verdict (`Init: <VERDICT>`) and a `Set by:` writer list.
+- Engine tooling (BK-TOOLING): manifest setting `ignoreLocalConfig` (opt-in; skips the working-directory
+  .drag-lint.json walk); the encoding guard runs in 11-22 s (was 124 s).
+- Packaging (PACK, TTD): Wiki-Blocks-Authoring ships in the pack and installer; `dl-field-repo.exe` (field
+  repository grid editor) ships beside drag-lint.exe.
+
+### Fixed
+- `lint` (FPS): three false positives fixed (`duplicate-code` end anchor, `exception-escapes-thread` with an inline
+  var, a reftype case).
+- `lint` (NOISE2): `large-magic-number` false positives cut (LOADER 37 -> 25, 0 new); `magic-literal` skips integer
+  subscripts, `Reg(id,'NAME')` and data rows of 6+ numeric arguments; `missing-begin-update` is silent when the
+  control is created in the same routine.
+- `document --project` (FINDOC2): a stale index is a dry-run warning (`staleFactSources` in JSON) and `--apply`
+  refuses; `document-all` / `--unit` honour ownRoots; `--apply --reindex --json` prints clean JSON on stdout
+  (incl. the retry path).
+- Compile gate (GATE2, BK-GATE): the gate fixers stand down correctly (`--no-compile-gate` documented for
+  extract-method / create-enum-helper); `extract-method` was missing from the stand-down channel (product bug); a
+  unit in no project is REFUSED with exit 2; the `.BCK` message names the cause.
+- `extract-constant` (XCONST): fixed, with an IDE command (editor menu).
+- `unwith` (UNWITH): `--exclude-under <dir>` (repeatable) skips the given directories.
+- VS Code (VSFIX): the marker quick fix is offered as a code action.
+- `usages` over LSP (N3WIDE): Wide and Narrow differ again (the impact group was added for very-wide only).
+- `query --substring` (BK-CLISMALL): a needle under 3 characters (after unquoting) falls back to whole-word; a
+  binary DFM gives one "Binary DFM -- not linted" warning instead of a parser error.
+- Index (BK-EXTRA, rides the one 1.52 re-parse): new `attributes` table (additive); `ref_receivers` rows for a
+  dereferenced receiver (`F()^.M`, `P^.M`).
+- YADF / YADFSetup lookup (YADFLOC): Release > Debug > PATH, with a version warning.
+- IDE Field Repository (TTIDE): Refresh Schema password is masked (SMALLS).
+- VS Code extension 1.6.5 (VSRESTART): "Restart Language Server" / "Update Engine Copy Now" no longer flood the drag-lint Output with `write EOF` / `Cannot call write after a stream was destroyed` / `Server process exited with code N` errors; a planned stop logs one "Server stopped for restart" line and does not spend the crash-restart budget. A real crash is still logged as before.
+- IDE Search page (BK-SCOPEUI B31): the Usages kind has the same four scopes as Find Usages (This symbol / Project / Group / Everywhere, advanced row) and the Location column shows the full path.
+- IDE Lint Options (B36): an unsaved rule toggle survives a search refill (it was rebuilt from the saved config and lost); a toggle on a rule the search hides is saved too.
+- IDE Lint Options (B44): an Overrides... button lists the rule_overrides entries (Disable Rule...) and reverts one; checking a rule a project override switches off drops that override on Save. A config Load -> Save no longer copies a project override into the top-level "disabled" array.
+- IDE call graph (B39): the butterfly Call Graph runs both queries under the Reports progress window (elapsed seconds, Cancel); open report text windows are freed when the package unloads.
+- LSP references (B47): a member call (A.Run) is listed once, not twice (call row + member-access row).
+- typeat / hover (EXTGAPS): a bare identifier answers from the ref the resolver bound at that position first, so `Application` in a .dpr names Vcl.Forms.Application, not a same-named class property of a used unit; `usages --name <library qname>` counts refs bound to that library symbol.
+- Index (EXTGAPS, rides the one 1.52 re-parse): a class var read through its class name (`TCfg.CInstances`) is bound; a .dpr main block gets data_flows rows; symbol_facts.dfm_event lists every control a shared handler is bound to; `H.OnEvt := H.Handler` (a procedure as the whole right-hand side) is an address-taken binding, not a call edge.
+- Index (EXTGAPS2, rides the one 1.52 re-parse): an `exports` clause entry is a ref of kind `export` bound to the routine with no call edge (it names the routine, it does not call it: find-callers --resolved, the call graph and call-path no longer list it; the unused rules and find-deadcode still count it; check-init roots read it as the exported escape class); a unit variable passed to a var / out parameter of a project routine gets a data_flows `global` <- `argout` row; every index column is a CHARACTER column -- a non-ASCII character earlier on the line no longer moves refs / symbols / uses / literals / data_flows columns (rename, unwith, the uses fixers, convert-apply and the type oracle read them as such).
+- LSP + naming fix (COLS, follows EXTGAPS2): an LSP position is a UTF-16 column end to end -- definition, hover, rename, call / type hierarchy and implementation on a line with a non-ASCII character before the name now find the identifier and the right same-named member (was: the client column read as a tree byte column, or a byte column handed to the index lookup); `lint-all --fix` naming renames read the identifier at the finding's position on Windows-1252 and UTF-8 files alike and match the declaration by its character column (was: nothing renamed on such a line). No extraction change.
+- Lint columns (BK-COLS2, B40/B41/B45; rides the one 1.52 re-parse): every lint finding, and every .dfm index column, is a CHARACTER (UTF-16) column -- AST, flow and .scm rules reported tree-sitter UTF-8 BYTE columns, so a finding after a non-ASCII character on its line sat 1-3 columns right per character (LSP squiggle, IDE caret, `--fix` declined: deprecated-rtl-function, multiple-statements-per-line). Fixers that walk the tree from a finding (Fix.Stmt, the V151 legacy fix) map back; Rename / RenameProof / the uses fixers drop their .dfm byte conversions. check-init audit (B45): only the program-block site of Handlers carried a byte column (internal); uses / writers were already characters.
+- lint --fix (no --fix-rule) now resolves class with-blocks through the platform library.
+- uses-audit now credits a unit only through symbols it exports (like unused-unit-in-uses); a same-named class member no longer hides an unused unit.
+- control-char: an invalid byte in a UTF-8-BOM file is reported again (the CP1252 fallback hid it).
+- Resolver (EXTR): generic type receivers (`TObjectList<T>.Create`) are typed and bound; a `Name(...)` receiver keeps
+  its type text only when it reads as a type; `index --resolve-only` without a library store KEEPS the library
+  bindings (calls, member accesses, library reads) of the last library run instead of clearing them, warns
+  "library bindings are kept from the last library run, not refreshed" and marks `external_stores` partial.
+- Extractor (EXTP): `A.B.C := X` gives the root and every intermediate member a `write-through` ref, bound to the
+  symbol of the read on the same token; `usages` counts it under writes (ORM3: `usages --name edtF1` shows the write).
+  `on E:` emits a write at E; anonymous-method parameters are `param` symbols. REAL BUG: a `class constructor Create`
+  next to `constructor Create(..)` (or class / instance `Destroy`) swapped bodies and put locals on the wrong routine.
+- Extractor (RENFACT, E-RENAME-RESIDUE): a default array property reached without its name (`Bag[0]`, `Bag[0]:= X`,
+  `Self[0]`, `Shelf.Bag[0]`, `Rack[0][0]`, an interface's `Row[3]`) is now a fact: every subscript records an
+  `index-access` ref (name `[]`) and the resolver binds it to the default property with its read / write mode and
+  accessor. `usages`, `find-callers` of the getter / setter and unused-public-symbol count the implicit sites;
+  rename never edits one. Arrays, strings, library types and an indexed property's own index stay unbound.
+  Guard `tests\autotest\run_v152_RENFACT.ps1`.
+- Internal (INITAPI): InitSections exports ProgramInitOrders and InitializesBefore (yes / no / config-dependent init
+  order per program). A conditional uses entry before the first active one now makes the order config-dependent, so a
+  cycles --fix init-order proof refuses it.
+- Indexer (EXTINC, owner ruling B9i): an include is parsed once per DISTINCT define context of its inclusions (each
+  host's own defines; equal contexts share one parse). Rows every context has are written once; the others carry
+  `inc_variant` = their context and resolve under that context's hosts only, so `find-callers` no longer reports a
+  call from an {$IFDEF} branch the host never compiles. Index schema 26 -> 27 (additive: `inc_variants`,
+  `symbols.inc_variant` / `refs.inc_variant`); filled by the 1.52 re-parse.
+- Cross-project peers without a manifest (BK-XPROJ, B16): `lint-all` now finds `--shared-db` peers no manifest
+  section names -- other `.sqlite` copies beside a `--db` copy, or the `.groupproj` peers (project folder and up to two
+  parents) of a DB in its `_D-RAG` folder. A DB with the same project tag is never a sibling. ORM3 SERVER
+  `unused-global` 381 -> 352 (5/5 sampled are used in CLIENT).
+- `lint-all --project` keeps project-composition findings on closure units outside the roots, with a note (BK-XPROJ,
+  B19); other rules stay scoped to the roots.
+- `member-could-be-private` is judged across projects through the shared scope (BK-XPROJ, FPM finding): a member used
+  only by a sibling project (ORM3 CLIENT `WriteChunk`) is no longer reported. CLIENT 103 -> 102.
+- A `.groupproj` peer that lists a unit but has NO index makes the cross-project verdict undecidable (BK-TAILS-ENG,
+  BK-XPROJ follow-up): `unused-global`, `unused-public` and `member-could-be-private` withhold their findings on the
+  units the peer's `.dproj` / `.dpr` lists, and `lint-all` writes one stderr line per such peer naming it and the
+  `index --project` command that fixes it. Before, the peer was silently skipped and the findings fired.
+- Character columns, three BK-COLS2 tails (BK-TAILS-ENG): the `.dfm` parse-error diagnostic of `index` prints the
+  character column; `invisible-char` / `bidi-control` / `control-char` count a character outside the BMP as two
+  UTF-16 units; `.scm` query rules, `field-by-name-in-loop` and the `raise-bare-exception` site count columns on
+  the source BEFORE an inactive `{$IFDEF}` branch was blanked (a blanked non-ASCII character was one column per byte).
+- Resolver (BK-TAILS-ENG, rides resolver 1.29.0-alpha, hash-only re-pin): `var B:= Br[K]` on a library
+  `TDictionary` / `TObjectDictionary` / `IDictionary` types `B` as the dictionary's VALUE type, so `B.Member`
+  binds (HBFIX index gap: `Charts.Trace.Walk` `B.Side`).
+- Resolver (TAILS-ENG2, rides resolver 1.29.0-alpha, hash-only re-pin): `var B:= M[K]` through the project's OWN
+  class / record / interface that declares an `indexed default` property types `B` as that property's type; for a
+  generic class (`TMyMap<K, V>` with `Items[K]: V; default`) the type argument is put in for the parameter, so
+  `B.Member` binds. Ancestors' default properties are not walked; a property type that wraps a parameter
+  (`TList<V>`) stays unresolved.
+- `member-could-be-private` treats a name another indexed unit spells inside an inactive conditional branch (the
+  index never parsed it, e.g. `{$IFDEF TRACE_CODESITE}`) as a use and stays silent (TAILS-ENG2, FPM2 `MsgToString`).
+- Shared scope (TAILS-ENG2): an unindexed `.groupproj` peer also makes every unit in a folder it SEARCHES (its own
+  folder and its `.dproj` `DCC_UnitSearchPath`) undecidable, not only the units it lists. Not covered: units
+  reached through the IDE library path or an environment macro the `.dproj` parse does not expand.
+
+### New rules
+- `index-possibly-out-of-range` (bug-patterns, default ON -- the FPM2 re-measure after BK-RULEFP found 21 FP / 36 samples, lane IDXRANGE3 fixed those classes (index chains through short-circuit and while-top guards, SetLength / callee / out-param / enclosing-routine sizes, Length equality guards, once-per-trip and constant-capped counters, a rounded float behind an Abs guard) and re-measured 0 FP: YADF 0/12, ORM3 CLIENT 0/12, SERVER 0/5; the six false-positive classes of the first 6/12 FP gate fixed in lane BK-RULEFP: a guard kept across Inc, a parameter bound every local caller proves, `in` set clamps, a Length raise guard with a loop limit from an if-expression or another unit's const array, a dominating SetLength, for-in / non-constant-start count invariants -- lanes IDXRANGE + IDXRANGE2 + BK-RULEFP + IDXRANGE3): an array index that
+  no dominating guard (for over the bounds, if / while condition, `InRange`, an earlier
+  Exit / raise guard) bounds on BOTH sides before `A[idx]` -- reported on the write of the index
+  (warning; an unguarded parameter is a hint on the access). A subrange type is not a guard.
+  Bounds are symbolic (`count(Base) + Off`: SetLength sizes, static bounds, `X.Count`, Length aliases).
+  C1: an index checked against ANOTHER collection's bound (`count + offset`) is silent only when that bound
+  is proven within this array's, else a warning naming it; a `for` over another collection's bound now
+  reports. C2: an unchecked index parameter is cleared when every local caller passes an index proven in
+  range (plain-call routines only, depth 1). An index read from a lookup (`GetValueOrDefault`, `Items[]`,
+  `Map[k]`) is a hint. C3: the autofix (inserts `if not InRange(i, Low(A), High(A)) then raise
+  <class>.CreateFmt(...)` and adds System.Math / System.SysUtils; class = param
+  `params.index-possibly-out-of-range.exception_class`, default EArgumentOutOfRangeException) is MANUAL ONLY:
+  a batch `--fix` withholds it with a stderr note, `--fix-rule index-possibly-out-of-range` (the IDE's Fix it)
+  applies it; `rules --json` carries the new field `fix_manual_only: true`.
+- `member-could-be-private` (project-wide hint, default OFF, ATLB); two contract-glob rules (ATLA, declClass fix);
+  `unconnected-control` and `hanging-handler` (UNCONN, ON, warning, dead-code; CLIENT 100 + 22, 0 FP in samples);
+  `unit-used-by-no-unit` (PROJ2, ON, warning; CLIENT ~270) and `unit-not-in-dpr` findings anchored on the .dpr under
+  `--project`; `review-marker-remeasured` (MARK, hint); `parameter-type-too-wide` is ON and fixable (PTW);
+  `rtti-unavailable` sub-kind `anonymous-field-type` (RTTI5, OFF); `doc-placeholder` ON and `doc-malformed-summary`
+  OFF (DOCPOL).
+- `debug-display-placeholder` (bug-patterns, default OFF, BK-ATTRRULES, B48): a `[DebuggerDisplay]`-style attribute
+  placeholder that names no member of the class, read from the index's attributes table; `member-could-be-private`
+  now reads attributes from that table too (a source scan is the fallback) and stays silent on attributed members.
+- 435 rules, 355 enabled by default, 131 with an auto-fix.
+
+### Added
+- `check-init` (HBSKEL, HBEVENTS, HBINTRA, HBROOTS, HBSOLVER, HBFIELDS, HBTAIL, HBRECV, HBEVORD, HBDOCS, HBMCP, HBIDE,
+  HBHOVER): proves whether a field or global is set before it is used. Verdicts SET / NEVER-SET / MAY-BE-UNSET /
+  UNKNOWN-CALLEE (exit 1, reason `unknown-callee`); `drag-lint-project.json` `checkInit.callees` (reads | sets; a line
+  marker wins); reason `receiver-unproven` and "SET by receiver" when the writer runs on the same object (HBRECV);
+  DFM handler ordering, reason `relied-on-handler-order` (HBEVORD); MCP tool `check_init`; IDE command (drag-lint >
+  Analyze and the editor menu; async, results in Messages, UNKNOWN-CALLEE hint) and the hover `Init:` line (HBIDE,
+  HBHOVER). Wiki page `check-init.md`.
+- Find Usages scopes (FUSCOPE): symbol (default) / project / group / everywhere on the CLI (`usages --scope`,
+  `--group`, `--in --line --col`), LSP (`dragLint.usagesScope`), MCP `find_usages` and the IDE (submenu + panel combo,
+  replaces Narrow / Wide).
+- `rules disable` / `rules enable` verbs and IDE "Disable Rule..." (DISRULE); `rules --json` carries `disabled_by`.
+- `repo` generators (TTA, TTB, TTC, TTCSV, TTPA, TTS, TTGEN, GENPAIMPL): schema, FB import / seed, text backup,
+  CSV -> FDMemTable, `gen-param-array` (print / `--plan` / `--apply`, `--prepare-queries` = the IDE query preparation, U6);
+  `gen-orm`, `update-orm`, `gen-dataservice` public (B33: region 9 emits the ORM3 `FIELD_AS_TYPE` form by default,
+  `--save-form current` for the TableTools 2026-05-19 form; golden 521/528 same ignoring blanks/case, 7 listed drift).
+  IDE Field Repository submenu (Open editor, Refresh Schema, FDMemTable from CSV, ORM source, DataService units,
+  Param Array assistant) and the `dl-field-repo` grid editor (TTIDE, TTD).
+- IDE (PLUGCTX): editor-menu rows register through Surfaces=editor.
+- `repo` verb family (field repository, text backup, Firebird import/seed/refresh): `init`, `info`, `import-fb`, `seed-fb`,
+  `refresh-schema`, `backup`, `restore`, `gen-memtable` (the `gen-orm` / `update-orm` / `gen-dataservice` /
+  `gen-param-array` generators: see the `repo` generators bullet above).
+- VS Code extension 1.6.6 (BK-VSHOVER, B32 + B51): deferred hover -- the fast part answers at once with
+  "computing...", the slow part follows and is cancellable (pre-1.52 engines answer whole); the markdown hover
+  carries `Init:` and the `Set by:` writer list ("and N more" past the cap).
+- "Disable rule" quick fix (BK-VSHOVER, B43): command `drag-lint.disableRule` asks for a reason and runs
+  `rules disable`; disable actions sort last in the quick-fix list (a metric rule offers no line action, only the
+  unit / project disable).
+- `explain <rule-id>`: meaning, why it matters, example, default, fixable, suppress; text or `--json`; an unknown id
+  lists the nearest ids and exits 2.
+- New tests\autotest\run_dfm_grammar_corpus_ab.ps1: corpus A/B for the tree-sitter-dfm grammar.
+
 ## v1.51.2-alpha -- 2026-11-17
 
 Hotfix release. No re-parse: extractor, resolver, grammar and rule counts unchanged.
@@ -14,6 +257,7 @@ Hotfix release. No re-parse: extractor, resolver, grammar and rule counts unchan
   OutputDebugString line); Save on the tab (now "Save *" while unsaved) is the way to keep them. Reload still asks
   first. Decision in `DragLint.Plugin.UnsavedPolicy` (tests\UnsavedPolicyTests.dpr, 11 checks).
 - RPT: the drag-lint > Reports menu items did nothing in the IDE (the click handler read the question from the sender Tag and returned silently). The question index is now bound at menu-build time; every click logs a Reports: line and every early stop logs or shows why. Tests: TReportClickTests (4), ReportTextTests 45/45.
+
 
 ## v1.51.1-alpha -- date TBD
 

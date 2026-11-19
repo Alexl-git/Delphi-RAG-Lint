@@ -1,8 +1,11 @@
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-uurtl-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 # Bug V-D: used-unit-not-resolvable flagged unscoped names of RTL/VCL units
 # (ActiveX, ComObj, CommCtrl, ...) on a Delphi 5 index with no library DB, and its
 # message carried in-house advice (Orpheus/BDE). Positive control: NoSuchUnitXyz
@@ -32,9 +35,9 @@ end.
 '@
 
 $db=Join-Path $WorkDir 'uurtl.sqlite'
-$null = & $Exe index $work --db $db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
-$out = (& $Exe lint-project --db $db --rule used-unit-not-resolvable 2>&1) -join "`n"
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-project --db $db --rule used-unit-not-resolvable 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'flags NoSuchUnitXyz (positive control)' ($out -match 'NoSuchUnitXyz') "out=$out"
 foreach($u in 'ActiveX','ComObj','CommCtrl','ShellAPI','WinSock','Ole2','OleAuto','Registry','Windows','SysUtils'){
   Check "does NOT flag $u" (-not ($out -match "Unit '$u'")) "out=$out"

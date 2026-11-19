@@ -14,7 +14,10 @@
   Usage: pwsh -File tests\callresolve\run_unit_var_array_head_bind.ps1 [-Exe <drag-lint.exe>]
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d=''){ Write-Host ("[{0}] {1} {2}" -f (@('FAIL','PASS')[[int][bool]$ok]),$n,$d) -ForegroundColor (@('Red','Green')[[int][bool]$ok]); if(-not $ok){$script:fail=$true} }
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
@@ -27,16 +30,16 @@ try {
   Copy-Item $fix $src -Force
   $db = Join-Path $scratch 'u.sqlite'
   function Q([string]$Query) {
-    $raw = (& $exePath sql --db $db --json --limit 5000 --query $Query 2>$null) -join "`n"
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --limit 5000 --query $Query 2>$null }) -join "`n"
     $b = $raw.IndexOf('{'); if ($b -lt 0) { throw "sql returned no JSON for: $Query" }
-    $o = $raw.Substring($b) | ConvertFrom-Json
+    $o = $raw.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }
     $names = @($o.columns | ForEach-Object { $_.name }); $out = @()
     foreach ($r in @($o.rows)) { $h = @{}; for ($i=0; $i -lt $names.Count; $i++) { $h[$names[$i]] = $r[$i] }; $out += $h }
     return ,@($out)
   }
   Push-Location C:\TEMP
   try {
-    & $exePath index $src --db $db 2>$null | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>$null } | Out-Null
     Check 'index built' ($LASTEXITCODE -eq 0)
     $rows = Q ("select r.receiver_text as rcv, s.qualified_name as target from refs r " +
                "left join call_edges e on e.ref_id = r.id left join symbols s on s.id = e.target_symbol_id " +

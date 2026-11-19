@@ -23,9 +23,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_migrate_gaps_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 $script:fail = $false
@@ -42,13 +45,13 @@ Copy-Item (Join-Path $PSScriptRoot 'fixtures\migrate\*') $WorkDir
 function P([string]$n) { return (Join-Path $WorkDir $n) }
 
 $db = P 'fx.sqlite'
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the fixture index was built' (Test-Path $db)
 
 function DryRun([string]$Unit, [string]$Rules) {
-  $o = (& $Exe convert-apply --unit (P $Unit) --rules (P $Rules) --db $db --format json 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P $Unit) --rules (P $Rules) --db $db --format json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $j = $null
-  try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {}
+  try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o; J = $j }
 }
 $MigKinds = @('migrate-applied', 'deliberate-break', 'migrate-check')
@@ -102,7 +105,7 @@ Check 'G10-1 the with body site (Click, line after the with) is on the Click row
 Check 'G10-2 ... still exactly 1 migrate-applied (the with body is never rewritten)' (@($w.J.items | Where-Object { $_.kind -eq 'migrate-applied' }).Count -eq 1) $w.Out
 
 # ---- G3 ------------------------------------------------------------------------
-$v = (& $Exe convert-validate --rules (P 'refused.rules') 2>$null) -join "`n"
+$v = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules (P 'refused.rules') 2>$null }) -join "`n"
 $vc = $LASTEXITCODE
 $rl = Get-Content (P 'refused.rules')
 function LineOf([string]$t) { return 1 + [array]::IndexOf($rl, $t) }
@@ -111,7 +114,7 @@ Check 'G3-1 the scoped #migrate is warned on its line' ($v -match ("(?m)^line {0
 Check 'G3-2 the template #migrate is warned on its line' ($v -match ("(?m)^line {0}: warning: #migrate .*replacement templates" -f (LineOf '#migrate Count -> Items.Count'))) $v
 Check 'G3-3 CONTROL: no warning on the realised DL_NONE / rename / file-scope lines' `
   (-not ($v -match ("(?m)^line ({0}|{1}|{2}): warning: #migrate" -f (LineOf '#migrate Hint -> DL_NONE'), (LineOf '#migrate Click -> Press'), (LineOf '#migrate Early -> Later')))) $v
-$v2 = (& $Exe convert-validate --rules (P 'dlnone.rules') 2>$null) -join "`n"
+$v2 = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules (P 'dlnone.rules') 2>$null }) -join "`n"
 Check 'G3-4 CONTROL: a book of realised #migrate rules gets no #migrate warning' (-not ($v2 -match 'warning: #migrate')) $v2
 
 Write-Host ''

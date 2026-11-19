@@ -58,23 +58,23 @@ type
   /// <para>Used in units: DRagLint.Convert.DfmReemit, DRagLint.Convert.GlyphVacuum</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TDfmNode = class
+  TReemitDfmNode = class
   strict private
-    FChildren: TObjectList<TDfmNode>;
+    FChildren: TObjectList<TReemitDfmNode>;
   public
     Name      : string;
     Kind      : TDfmNodeKind;  // dl:ok public-field@a23c -- internal parse-tree node, same rationale as Keyword below
     ValueText : string;  // dl:ok public-field@2fe3 -- internal parse-tree node, same rationale as Keyword below
     ClassName_: string;  // dl:ok public-field@dede -- internal parse-tree node, same rationale as Keyword below
-    Keyword   : string; { 'object' | 'inherited' | 'inline' -- the object line's first token; '' for a property }  // dl:ok public-field@0660 -- TDfmNode is an internal parse-tree node whose public fields ARE its data surface, same shape as the class's four original fields; consumers are this unit's re-emit engine and GlyphVacuum
+    Keyword   : string; { 'object' | 'inherited' | 'inline' -- the object line's first token; '' for a property }  // dl:ok public-field@0660 -- TReemitDfmNode is an internal parse-tree node whose public fields ARE its data surface, same shape as the class's four original fields; consumers are this unit's re-emit engine and GlyphVacuum
     ChildPos  : string; { 1.26.5: the header's child-position marker as written, e.g. '[5]' (ffChildPos: where the parent loads this child); '' when it has none }  // dl:ok public-field@04e5 -- internal parse-tree node, same rationale as Keyword above
-    /// <summary><!-- drag-lint:auto sum -->TDfmNode</summary>
+    /// <summary><!-- drag-lint:auto sum -->TReemitDfmNode</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Convert.DfmReemit.CloneNode (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.PlaceAtPath (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.WalkNodeInto (DRagLint.Convert.DfmReemit.pas)</para>
     /// <para>constructor</para>
     /// <para>Writes: FChildren</para>
-    /// <seealso cref="DRagLint.Convert.DfmReemit.TDfmNode.Destroy"/>
+    /// <seealso cref="DRagLint.Convert.DfmReemit.TReemitDfmNode.Destroy"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     constructor Create;
@@ -83,12 +83,12 @@ type
     /// <para>Reads: FChildren</para>
     /// <para>Pure</para>
     /// <para>Directives: override</para>
-    /// <seealso cref="DRagLint.Convert.DfmReemit.TDfmNode.Create"/>
+    /// <seealso cref="DRagLint.Convert.DfmReemit.TReemitDfmNode.Create"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     destructor Destroy; override;
     /// <summary>The owned child nodes (properties, nested objects, or items).</summary>
-    property Children: TObjectList<TDfmNode> read FChildren;
+    property Children: TObjectList<TReemitDfmNode> read FChildren;
   end;
 
   /// <summary>One applied #mapping that matched NOTHING: the source leaf was
@@ -377,8 +377,8 @@ type
   /// block, or no #convert header in the rules. Error carries the reason when Ok
   /// is False.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas) ?, DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.Apply.BuildApplyPlan.SpliceIntoParent (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.DfmReemit.ReemitBlock (DRagLint.Convert.DfmReemit.pas) (+2 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit</para>
+  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas) ?, DRagLint.CLI.Convert.DoConvertReemit (DRagLint.CLI.Convert.pas) ?, DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.Apply.BuildApplyPlan.SpliceIntoParent (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.DfmReemit.ReemitBlock (DRagLint.Convert.DfmReemit.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.CLI.Convert, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TReemitResult = record
@@ -405,17 +405,17 @@ type
 /// respect to the tree-sitter runtime if called concurrently.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.HandleNested (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitComponent (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphVacuum.HarvestFile (DRagLint.Convert.GlyphVacuum.pas)</para>
-/// <para>Calls: DRagLint.Convert.DfmReemit.ChildPosOf, DRagLint.Convert.DfmReemit.NodeText, DRagLint.Convert.DfmReemit.ObjectKeyword, DRagLint.Convert.DfmReemit.TDfmNode.Create, DRagLint.Convert.DfmReemit.WalkNodeInto, DRagLint.Parser.DFM.tree_sitter_dfm, Integer, Move, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull (+8 more)</para>
+/// <para>Calls: DRagLint.Convert.DfmReemit.ChildPosOf, DRagLint.Convert.DfmReemit.NodeText, DRagLint.Convert.DfmReemit.ObjectKeyword, DRagLint.Convert.DfmReemit.TReemitDfmNode.Create, DRagLint.Convert.DfmReemit.WalkNodeInto, DRagLint.Parser.DFM.tree_sitter_dfm, Integer, Move, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull (+8 more)</para>
 /// <para>Complexity: 10 (cyclomatic, outer body), 55 lines (full implementation)</para>
 /// <para>Mutates: ARoot (out)</para>
 /// <seealso cref="DRagLint.Convert.DfmReemit.ChildPosOf"/>
 /// <seealso cref="DRagLint.Convert.DfmReemit.NodeText"/>
 /// <seealso cref="DRagLint.Convert.DfmReemit.ObjectKeyword"/>
-/// <seealso cref="DRagLint.Convert.DfmReemit.TDfmNode.Create"/>
+/// <seealso cref="DRagLint.Convert.DfmReemit.TReemitDfmNode.Create"/>
 /// <seealso cref="DRagLint.Convert.DfmReemit.WalkNodeInto"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function ParseDfmBlock(const ABlockText: string; out ARoot: TDfmNode): Boolean;
+function ParseDfmBlock(const ABlockText: string; out ARoot: TReemitDfmNode): Boolean;
 
 /// <summary>Re-emit an F component's DFM object block as the T equivalent, driven
 /// by a validated 1:1 rule set and the F/T classes' members. No file I/O.</summary>
@@ -456,7 +456,7 @@ function ParseDfmBlock(const ABlockText: string; out ARoot: TDfmNode): Boolean;
 /// Report.DefaultsResolved, no divergence note), no #default is written, and a
 /// #mapping whose source it does not stream is skipped silently.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitBlock.HandleNested (DRagLint.Convert.DfmReemit.pas)</para>
+/// <para>Called from: DRagLint.CLI.Convert.DoConvertReemit (DRagLint.CLI.Convert.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitBlock.HandleNested (DRagLint.Convert.DfmReemit.pas)</para>
 /// <para>Calls: DRagLint.Convert.DfmReemit.ConvertBlockFor, DRagLint.Convert.DfmReemit.ParseDfmBlock, DRagLint.Convert.DfmReemit.ReemitBlock, DRagLint.Convert.DfmReemit.RulesOfBlock, DRagLint.Convert.Rules.WithoutUnreachableRules</para>
 /// <seealso cref="DRagLint.Convert.DfmReemit.ConvertBlockFor"/>
 /// <seealso cref="DRagLint.Convert.DfmReemit.ParseDfmBlock"/>
@@ -515,15 +515,15 @@ const
   { the keyword that opens one element of a collection value }
   KW_ITEM = 'item';
 
-{ TDfmNode }
+{ TReemitDfmNode }
 
-constructor TDfmNode.Create;
+constructor TReemitDfmNode.Create;
 begin
   inherited Create;
-  FChildren:= TObjectList<TDfmNode>.Create(True { owns });
+  FChildren:= TObjectList<TReemitDfmNode>.Create(True { owns });
 end;
 
-destructor TDfmNode.Destroy;
+destructor TReemitDfmNode.Destroy;
 begin
   FChildren.Free;
   inherited;
@@ -603,17 +603,17 @@ begin
 end;
 
 // Walks the named children of a tree-sitter object/source node, appending a
-// TDfmNode (owned by AParent) per nested `object` (recursed) or `property`.
+// TReemitDfmNode (owned by AParent) per nested `object` (recursed) or `property`.
 procedure WalkNodeInto(const ATsNode: TTSNode; const ASource: TBytes;
-  const AParent: TDfmNode);
+  const AParent: TReemitDfmNode);
 var
   i        : Integer;
   Child    : TTSNode;
   NameNode : TTSNode;
   ValueNode: TTSNode;
   ClassNode: TTSNode;
-  Sub      : TDfmNode;
-  Prop     : TDfmNode;
+  Sub      : TReemitDfmNode;
+  Prop     : TReemitDfmNode;
   K        : TDfmNodeKind;
   VText    : string;
 begin
@@ -622,7 +622,7 @@ begin
     Child:= ATsNode.NamedChild(i);
     if Child.NodeType = 'object' then
     begin
-      Sub:= TDfmNode.Create;
+      Sub:= TReemitDfmNode.Create;
       Sub.Kind:= dnkSubObject;
       Sub.Keyword:= ObjectKeyword(Child, ASource);
       Sub.ChildPos:= ChildPosOf(Child, ASource);
@@ -638,7 +638,7 @@ begin
       NameNode := Child.ChildByField('name');
       ValueNode:= Child.ChildByField('value');
       if NameNode.IsNull then Continue;
-      Prop:= TDfmNode.Create;
+      Prop:= TReemitDfmNode.Create;
       Prop.Name:= NodeText(NameNode, ASource);
       ClassifyValue(Prop.Name, ValueNode, ASource, K, VText);
       Prop.Kind     := K;
@@ -648,7 +648,7 @@ begin
   end;
 end;
 
-function ParseDfmBlock(const ABlockText: string; out ARoot: TDfmNode): Boolean;
+function ParseDfmBlock(const ABlockText: string; out ARoot: TReemitDfmNode): Boolean;
 var
   Src      : TBytes;
   Parser   : TTSParser;
@@ -689,7 +689,7 @@ begin
       if ObjNode.NodeType = 'object' then begin Found:= True; Break; end;
     end;
     if not Found then Exit;
-    ARoot:= TDfmNode.Create;
+    ARoot:= TReemitDfmNode.Create;
     ARoot.Kind:= dnkSubObject;
     ARoot.Keyword:= ObjectKeyword(ObjNode, Src);
     ARoot.ChildPos:= ChildPosOf(ObjNode, Src);
@@ -711,7 +711,7 @@ begin
   Result:= StringOfChar(' ', ALevel * 2);
 end;
 
-function EmitBlock(const ANode: TDfmNode; AIndent: Integer): string; forward;
+function EmitBlock(const ANode: TReemitDfmNode; AIndent: Integer): string; forward;
 
 // Emit the leaves of a CLASSLESS sub-object as DOTTED property names, which is
 // the only form a sub-property path may take in a .dfm.
@@ -728,10 +728,10 @@ function EmitBlock(const ANode: TDfmNode; AIndent: Integer): string; forward;
 // every text-level check because the binary conversion SUCCEEDS.) Delphi's own
 // writer emits sub-property paths dotted, and ConvertProperty parses them by
 // looping on '.' to build `A.B.C`.
-procedure EmitDotted(const ANode: TDfmNode; const APrefix: string;
+procedure EmitDotted(const ANode: TReemitDfmNode; const APrefix: string;
   AIndent: Integer; ASB: TStringBuilder);
 var
-  Child: TDfmNode;
+  Child: TReemitDfmNode;
 begin
   for Child in ANode.Children do
   begin
@@ -752,16 +752,16 @@ begin
   end;
 end;
 
-// Re-serialize a TDfmNode sub-object tree to well-formed DFM text. Scalars/events
+// Re-serialize a TReemitDfmNode sub-object tree to well-formed DFM text. Scalars/events
 // emit `Name = Value`; a nested object WITH a class emits `object Name: TClass
 // ... end`; a synthesized CLASSLESS sub-object is a property path and flattens to
 // dotted leaf names (see EmitDotted -- emitting it as a block loads as a missing
 // class); collections/binary values emit their verbatim ValueText (which already
 // carries the `< ... >` / `{ ... }` structure). Indentation normalized to 2 spaces.
-function EmitBlock(const ANode: TDfmNode; AIndent: Integer): string;
+function EmitBlock(const ANode: TReemitDfmNode; AIndent: Integer): string;
 var
   SB   : TStringBuilder;
-  Child: TDfmNode;
+  Child: TReemitDfmNode;
   Head : string;
   Kw   : string;
 begin
@@ -808,12 +808,12 @@ end;
 // nodes for every segment but the last (each new intermediate recorded in
 // ACreated by its dotted prefix). The final segment becomes/updates a leaf node
 // of AKind with AValueText. Returns the leaf node.
-function PlaceAtPath(const ARoot: TDfmNode; const ADottedPath, AValueText: string;
-  AKind: TDfmNodeKind; var ACreated: TArray<string>): TDfmNode;
+function PlaceAtPath(const ARoot: TReemitDfmNode; const ADottedPath, AValueText: string;
+  AKind: TDfmNodeKind; var ACreated: TArray<string>): TReemitDfmNode;
 var
   Segs   : TArray<string>;
-  Cur    : TDfmNode;
-  Child  : TDfmNode;
+  Cur    : TReemitDfmNode;
+  Child  : TReemitDfmNode;
   i, j   : Integer;
   Prefix : string;
   Found  : Boolean;
@@ -831,7 +831,7 @@ begin
       begin Cur:= Cur.Children[j]; Found:= True; Break; end;
     if not Found then
     begin
-      Child:= TDfmNode.Create;
+      Child:= TReemitDfmNode.Create;
       Child.Name:= Segs[i];
       Child.Kind:= dnkSubObject;
       // A synthesized intermediate has no DFM class of its own (it is a sub-property
@@ -852,7 +852,7 @@ begin
     begin Child:= Cur.Children[j]; Found:= True; Break; end;
   if not Found then
   begin
-    Child:= TDfmNode.Create;
+    Child:= TReemitDfmNode.Create;
     Child.Name:= Segs[High(Segs)];
     Cur.Children.Add(Child);
   end;
@@ -867,10 +867,10 @@ end;
 // "is this path already carried?" BEFORE deciding to write, so a lookup that
 // created its intermediates would manufacture the very node it is testing for
 // and every #default would then look superseded by itself.
-function FindAtPath(const ARoot: TDfmNode; const ADottedPath: string): TDfmNode;
+function FindAtPath(const ARoot: TReemitDfmNode; const ADottedPath: string): TReemitDfmNode;
 var
   Segs : TArray<string>;
-  Cur  : TDfmNode;
+  Cur  : TReemitDfmNode;
   i, j : Integer;
   Found: Boolean;
 begin
@@ -904,12 +904,12 @@ begin
     if SameText(Trim(L), KW_ITEM) or SameText(Trim(L), '<' + KW_ITEM) then Inc(Result);
 end;
 
-// Deep-copy a TDfmNode subtree (for verbatim copies of contained children /
+// Deep-copy a TReemitDfmNode subtree (for verbatim copies of contained children /
 // unconverted owned parts / relocated collections).
-function CloneNode(const ASrc: TDfmNode): TDfmNode;
-var C: TDfmNode;
+function CloneNode(const ASrc: TReemitDfmNode): TReemitDfmNode;
+var C: TReemitDfmNode;
 begin
-  Result:= TDfmNode.Create;
+  Result:= TReemitDfmNode.Create;
   Result.Name      := ASrc.Name;
   Result.Kind      := ASrc.Kind;
   Result.ValueText := ASrc.ValueText;
@@ -1167,7 +1167,7 @@ function ReemitBlock(const AFromBlock: string; const ARules: TConversionRuleSet;
   const AFrom, ATo: TClassRef; const ACastLib: TCastLib;
   const AAllRules: TConversionRuleSet; const AUnreachable: TArray<TUnreachablePath>): TReemitResult;
 var
-  FRoot, TRoot: TDfmNode;
+  FRoot, TRoot: TReemitDfmNode;
   R           : TConversionRule;
   HaveConvert : Boolean;
   ToType      : string;
@@ -1543,7 +1543,7 @@ var
   function FindLeafValue(const ADottedPath: string; out AValue: string): Boolean;
   var
     Segs : TArray<string>;
-    Node : TDfmNode      ;
+    Node : TReemitDfmNode      ;
     i, j : Integer       ;
     Found: Boolean       ;
   begin
@@ -1994,7 +1994,7 @@ var
   // they cannot be honoured -- a renaming item link, or another collection
   // type on T -- it is NOT carried: a Mismatched note says why and it is
   // counted as Dropped, #ignore or not. AHandled: the leaf was dealt with.
-  procedure CarryCollectionByItemLinks(const ALeaf: TDfmNode; const AFromPath: string; out AHandled: Boolean);
+  procedure CarryCollectionByItemLinks(const ALeaf: TReemitDfmNode; const AFromPath: string; out AHandled: Boolean);
   var
     Q        : TConversionRule;
     Lines    : string;
@@ -2065,7 +2065,7 @@ var
   // target's Params item publishes the same member with the same type, else
   // NOT carried and reported item by item. A target with no Params property
   // gets nothing, and the collection counts as dropped.
-  procedure CarryParamData(const ALeaf: TDfmNode);
+  procedure CarryParamData(const ALeaf: TReemitDfmNode);
   const
     ITEMS_PFX = 'Params.Items.';
   type
@@ -2235,7 +2235,7 @@ var
         [ItemNo, Carried, Dropped1, if LinkLines <> '' then '; #link Params.Items.* at line(s) ' + LinkLines else ''])];
   end;
 
-  procedure RemapLeaf(const ALeaf: TDfmNode; const AFromPath: string);
+  procedure RemapLeaf(const ALeaf: TReemitDfmNode; const AFromPath: string);
   var
     ToPath : string;
     Carried: Boolean;
@@ -2387,9 +2387,9 @@ var
   // further-nested dnkSubObject child recurses again (prefix extended one more
   // level), so multi-level F nesting composes without a depth limit here (the
   // #convert-guarded recursion in HandleNested has its own natural base case).
-  procedure RemapUnderPrefix(const ASub: TDfmNode; const APrefix: string);
+  procedure RemapUnderPrefix(const ASub: TReemitDfmNode; const APrefix: string);
   var
-    Child: TDfmNode;
+    Child: TReemitDfmNode;
   begin
     for Child in ASub.Children do
       if Child.Kind = dnkSubObject then
@@ -2412,7 +2412,7 @@ var
     PhVals : TArray<string>;
     BW   : TReemitBookWarning;
     RC   : TReemitRefCheck;
-    CNode: TDfmNode;
+    CNode: TReemitDfmNode;
   begin
     for Q in ARules.Rules do
       if Q.Kind = rkWarn then
@@ -2440,10 +2440,10 @@ var
       end;
   end;
 
-  procedure HandleNested(const ASub: TDfmNode);
+  procedure HandleNested(const ASub: TReemitDfmNode);
   var
     PartResult: TReemitResult;
-    Clone     : TDfmNode;
+    Clone     : TReemitDfmNode;
     NestTo    : string;  { IdentityLinkFor outputs; only the Boolean is used here }
     NestType  : string;
     NestLine  : Integer;
@@ -2456,7 +2456,7 @@ var
       if PartResult.Ok then
       begin
         // Re-parse the converted part text back into a node and graft it.
-        var PartRoot: TDfmNode;
+        var PartRoot: TReemitDfmNode;
         if ParseDfmBlock(PartResult.DfmText, PartRoot) then
         begin
           TRoot.Children.Add(PartRoot); // TRoot owns it now
@@ -2497,8 +2497,8 @@ var
 
 var
   i: Integer;
-  Leaf: TDfmNode;
-  Existing  : TDfmNode;                  { step 5: the node a #default would overwrite }
+  Leaf: TReemitDfmNode;
+  Existing  : TReemitDfmNode;                  { step 5: the node a #default would overwrite }
   Superseded: TReemitDefaultSuperseded;
   ResolvedVal: string;                   { step 4b: F's declared default, resolved }
   Resolved   : TReemitDefaultResolved;
@@ -2566,7 +2566,7 @@ begin
     // is always bare -- BareTypeTail so the emitted 'object Name: Class' line
     // stays well-formed/consistent regardless of the rule header's spelling
     // (Bug 1).
-    TRoot:= TDfmNode.Create;
+    TRoot:= TReemitDfmNode.Create;
     TRoot.Kind      := dnkSubObject;
     TRoot.Name      := FRoot.Name;
     TRoot.ClassName_:= BareTypeTail(ToType);
@@ -2824,7 +2824,7 @@ function ReemitComponent(const AFromBlock: string; const ARules: TConversionRule
   const AFrom, ATo: TClassRef;
   const ACastLib: TCastLib; const AUnreachable: TArray<TUnreachablePath>): TReemitResult;
 var
-  Root : TDfmNode;
+  Root : TReemitDfmNode;
   Block: Integer;
 begin
   Block:= 0;

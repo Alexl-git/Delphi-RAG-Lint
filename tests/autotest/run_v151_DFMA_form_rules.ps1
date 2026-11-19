@@ -32,10 +32,10 @@ function Assert($name, $cond) {
 }
 
 function Get-Findings([string[]]$ArgList) {
-  $raw = & $exe @ArgList 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exe @ArgList 2>$null }
   $text = ($raw -join "`n").Trim()
   if ($text -eq '') { return @() }
-  try { $j = $text | ConvertFrom-Json } catch { return @() }
+  try { $j = $text | ConvertFrom-Json | ForEach-Object { $_ } } catch { return @() }
   if ($null -eq $j) { return @() }
   return @($j)
 }
@@ -51,15 +51,15 @@ $ON_FOREIGN = @('--enable', 'foreign-form-control-access')
 
 # ---- 1. lint, no index ----
 $child = Join-Path $fx 'inherit\UChildForm.pas'
-$f = Get-Findings @('lint', $child, '--json')
+$f = @(Get-Findings @('lint', $child, '--json'))
 # positive-control: inherited-form-handler-without-inherited
 Assert "lint: inherited-form-handler-without-inherited at UChildForm.pas:21" (Has $f 'inherited-form-handler-without-inherited' 21 'UChildForm.pas')
 Assert "lint: only that handler fires (got $(CountOf $f 'inherited-form-handler-without-inherited'))" ((CountOf $f 'inherited-form-handler-without-inherited') -eq 1)
-$f = Get-Findings @('lint', $child, '--json', '--disable', 'inherited-form-handler-without-inherited')
+$f = @(Get-Findings @('lint', $child, '--json', '--disable', 'inherited-form-handler-without-inherited'))
 Assert "control: --disable removes it" (-not (Has $f 'inherited-form-handler-without-inherited' 21 'UChildForm.pas'))
 
 $main = Join-Path $fx 'proj\UMain.pas'
-$f = Get-Findings (@('lint', $main, '--json') + $ON_FOREIGN)
+$f = @(Get-Findings (@('lint', $main, '--json') + $ON_FOREIGN))
 # positive-control: form-access-before-create
 Assert "lint: form-access-before-create at UMain.pas:30" (Has $f 'form-access-before-create' 30 'UMain.pas')
 Assert "lint: one form-access-before-create (got $(CountOf $f 'form-access-before-create'))" ((CountOf $f 'form-access-before-create') -eq 1)
@@ -70,15 +70,18 @@ Assert "lint: one form-autocreate-and-manual (got $(CountOf $f 'form-autocreate-
 Assert "lint: foreign-form-control-access at UMain.pas:52" (Has $f 'foreign-form-control-access' 52 'UMain.pas')
 Assert "lint: one foreign-form-control-access (got $(CountOf $f 'foreign-form-control-access'))" ((CountOf $f 'foreign-form-control-access') -eq 1)
 Assert "lint: UMain.dfm reference to dmMain is covered by uses UDm" (@($f | Where-Object { $_.rule -eq 'unit-missing-from-uses' -and ([string]$_.file_path).EndsWith('UMain.dfm') }).Count -eq 0)
-$f = Get-Findings @('lint', $main, '--json', '--disable', 'form-access-before-create,form-autocreate-and-manual')
+$f = @(Get-Findings @('lint', $main, '--json', '--disable', 'form-access-before-create,form-autocreate-and-manual'))
 Assert "control: --disable removes form-access-before-create" (-not (Has $f 'form-access-before-create' 30 'UMain.pas'))
 Assert "control: --disable removes form-autocreate-and-manual" (-not (Has $f 'form-autocreate-and-manual' 37 'UMain.pas'))
-Assert "control: foreign-form-control-access is OFF by default" ((CountOf $f 'foreign-form-control-access') -eq 0)
+# 1.52 DEFAULTS (2235e5a17) turned foreign-form-control-access ON by default: the run without $ON_FOREIGN reports it too.
+Assert "default: foreign-form-control-access is ON by default (1.52 DEFAULTS)" ((CountOf $f 'foreign-form-control-access') -eq 1)
+$f = @(Get-Findings @('lint', $main, '--json', '--disable', 'foreign-form-control-access'))
+Assert "control: --disable removes foreign-form-control-access" ((CountOf $f 'foreign-form-control-access') -eq 0)
 
 $orphan = Join-Path $fx 'proj\UOrphan.pas'
-$f = Get-Findings @('lint', $orphan, '--json')
+$f = @(Get-Findings @('lint', $orphan, '--json'))
 Assert "lint: unit-missing-from-uses at UOrphan.dfm:7" (Has $f 'unit-missing-from-uses' 7 'UOrphan.dfm')
-$f = Get-Findings @('lint', $orphan, '--json', '--disable', 'unit-missing-from-uses')
+$f = @(Get-Findings @('lint', $orphan, '--json', '--disable', 'unit-missing-from-uses'))
 Assert "control: --disable removes it" (-not (Has $f 'unit-missing-from-uses' 7 'UOrphan.dfm'))
 
 # ---- 2. lint-all over a private index ----
@@ -87,13 +90,13 @@ New-Item -ItemType Directory -Path $tmp | Out-Null
 try {
   foreach ($sub in 'inherit', 'proj') {
     $db = Join-Path $tmp "$sub.sqlite"
-    & $exe index (Join-Path $fx $sub) --db $db *> (Join-Path $tmp "$sub-index.log")
+    & { $ErrorActionPreference = 'Continue'; & $exe index (Join-Path $fx $sub) --db $db *> (Join-Path $tmp "$sub-index.log") }
     Assert "index $sub exit 0" ($LASTEXITCODE -eq 0)
   }
-  $f = Get-Findings @('lint-all', '--db', (Join-Path $tmp 'inherit.sqlite'), '--json')
+  $f = @(Get-Findings @('lint-all', '--db', (Join-Path $tmp 'inherit.sqlite'), '--json'))
   Assert "lint-all: inherited-form-handler-without-inherited at UChildForm.pas:21" (Has $f 'inherited-form-handler-without-inherited' 21 'UChildForm.pas')
   Assert "lint-all: only that handler fires (got $(CountOf $f 'inherited-form-handler-without-inherited'))" ((CountOf $f 'inherited-form-handler-without-inherited') -eq 1)
-  $f = Get-Findings (@('lint-all', '--db', (Join-Path $tmp 'proj.sqlite'), '--json') + $ON_FOREIGN)
+  $f = @(Get-Findings (@('lint-all', '--db', (Join-Path $tmp 'proj.sqlite'), '--json') + $ON_FOREIGN))
   Assert "lint-all: form-access-before-create at UMain.pas:30" (Has $f 'form-access-before-create' 30 'UMain.pas')
   Assert "lint-all: form-autocreate-and-manual at UMain.pas:37" (Has $f 'form-autocreate-and-manual' 37 'UMain.pas')
   Assert "lint-all: foreign-form-control-access at UMain.pas:52" (Has $f 'foreign-form-control-access' 52 'UMain.pas')

@@ -4,10 +4,10 @@ title: "Engine heartbeat: the IDE tells a busy engine from a stuck one"
 summary: A running engine reports what it is doing, so the IDE kills only an engine whose status stopped moving
 product: DL
 group: editor-integration
-order: 110007
+order: 110008
 since: 1.40.0-alpha
 status: shipped
-updated: 1.48.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # Engine heartbeat: the IDE tells a busy engine from a stuck one
@@ -48,7 +48,7 @@ falls back to the old output-or-CPU rule.
 
 A status-only listener on `\\.\pipe\drag-lint-beat-<sid>-s<session>-p<pid>`
 (same user and session rules as the control pipe). It answers `status` and
-refuses `shutdown`. The prefix differs on purpose: `shutdown --all` and the
+refuses `stop-now`. The prefix differs on purpose: `stop-now --all` and the
 engine stager enumerate `drag-lint-ctl-*`, so their behaviour is unchanged.
 
 ### What the plugin does with it
@@ -63,7 +63,7 @@ engine stager enumerate `drag-lint-ctl-*`, so their behaviour is unchanged.
 
 ### Reading it from outside (1.42)
 
-`drag-lint shutdown --all --dry-run` lists every engine of this user and session and adds, per engine, the
+`drag-lint stop-now --all --dry-run` lists every engine of this user and session and adds, per engine, the
 beat line: `pid 1234 beat: index: resolve calls 512000/1100203 (seq 8048, last report 3 s ago)`. It asks
 nothing and changes nothing. Compare two readings: the seq and N are the progress test.
 
@@ -84,7 +84,7 @@ so set the limit above the longest of them: 60 on a library index.
 
 The open transaction rolls back, as after a kill. **Re-run a library killed after its walk with `--resolve-only`:**
 a plain re-run re-parses every file, because the indexer fingerprint is stamped only at the end of a run.
-To stop a run from outside, use the existing `shutdown --force`; there is no separate nudge.
+To stop a run from outside, use the existing `stop-now --force`; there is no separate nudge.
 
 ### A second writer waits on it (1.41)
 

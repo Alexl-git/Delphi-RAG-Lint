@@ -6,10 +6,15 @@
     "Diagnose report copied to the clipboard.": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
     "Problems detected -- the red lines above are the ones that matter.": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
     "Setting updated -- the groups above have been re-read.": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
-    "drag-lint (!)": "structural: the root menu caption shown while the LSP is in trouble (the '(!)' is the LSP-trouble indicator on the drag-lint root, not a separate item) -- the root itself is the container of every registered item; delete this line if the indicator ever becomes its own feature"
+    "drag-lint (!)": "structural: the root menu caption shown while the LSP is in trouble (the '(!)' is the LSP-trouble indicator on the drag-lint root, not a separate item) -- the root itself is the container of every registered item; delete this line if the indicator ever becomes its own feature",
+    "drag-lint Call Graph": "structural: title of the progress window the butterfly Call Graph runs under (1.52 BK-SCOPEUI B39); the feature is registered as call-graph-butterfly; delete this line if the window gains a feature of its own",
+    "drag-lint: Disable Rule": "structural: dialog caption of the Disable Rule... command (1.52 DISRULE), which is registered in v152-disable-rule; no feature of its own",
+    "Verify All Callers Pass an In-Range Index...": "structural: scaffold command of index-possibly-out-of-range, registered with Visible False (DragLint.Plugin.Cmd.IdxRange.pas) and never shown in 1.52; register it in v152-index-possibly-out-of-range and delete this line when it is made visible"
   },
   "exes": {
     "sqlite3.dll": "structural: runtime dependency of drag-lint.exe (FireDAC loads it dynamically), shipped beside the engine so a machine without RAD Studio on PATH works; not a user-facing feature"
   },
-  "verbs": {}
+  "verbs": {
+    "shutdown": "hidden alias of stop-now (1.52 Q15REN, owner Q15): the entry shutdown registers the verb as stop-now; the alias is accepted for old installed callers and kept out of --help on purpose (docs-sync UndocumentedOnPurpose)"
+  }
 }

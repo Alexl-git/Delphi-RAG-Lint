@@ -98,6 +98,12 @@ const
 
 type
   /// <summary>One bare identifier of a with body and what the plan does to it.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.Unwith.pas) ?, DRagLint.CLI.Unwith.RunUnwith.JsonOf (DRagLint.CLI.Unwith.pas) ?, DRagLint.CLI.Unwith.RunUnwith.PrintSite (DRagLint.CLI.Unwith.pas) ?, DRagLint.Refactor.Unwith.TAnalyzer.VisitBody (DRagLint.Refactor.Unwith.pas) ?, DRagLint.Refactor.Unwith.TAnalyzer.VisitBody.Classify (DRagLint.Refactor.Unwith.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.CLI.Unwith, DRagLint.Refactor.Unwith</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUnwithBinding = record
     /// <summary>1-based line in the current file.</summary>
     Line: Integer;
@@ -113,6 +119,12 @@ type
   end;
 
   /// <summary>The verdict on one with statement.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.Unwith.RunUnwith (DRagLint.CLI.Unwith.pas) ?, DRagLint.CLI.Unwith.RunUnwith.JsonOf (DRagLint.CLI.Unwith.pas) ?, DRagLint.CLI.Unwith.RunUnwith.PrintSite (DRagLint.CLI.Unwith.pas) ?, DRagLint.Refactor.Unwith.TAnalyzer.AnalyzeSite (DRagLint.Refactor.Unwith.pas), DRagLint.Refactor.Unwith.TAnalyzer.Run.RefuseAll (DRagLint.Refactor.Unwith.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.CLI.Unwith, DRagLint.Refactor.Unwith</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUnwithSite = record
     /// <summary>1-based line of `with`.</summary>
     Line: Integer;
@@ -131,6 +143,12 @@ type
   end;
 
   /// <summary>One ref of a rewritten body with its position after the rewrite and what it bound to before.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.Unwith.pas) ?, DRagLint.Refactor.Unwith.TAnalyzer.AddBodySplices (DRagLint.Refactor.Unwith.pas), DRagLint.Refactor.Unwith.TAnalyzer.AnalyzeSite (DRagLint.Refactor.Unwith.pas), DRagLint.Refactor.Unwith.TAnalyzer.Create (DRagLint.Refactor.Unwith.pas) ?, DRagLint.Refactor.Unwith.TAnalyzer.Render (DRagLint.Refactor.Unwith.pas) ? (+1 more)</para>
+  /// <para>Used in units: DRagLint.Refactor.Unwith</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUnwithProofPoint = record
     /// <summary>Line before.</summary>
     OldLine: Integer;
@@ -151,6 +169,12 @@ type
   end;
 
   /// <summary>The verdicts on one file and, when any is a candidate, the rewritten bytes.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.Unwith.pas) ?, DRagLint.CLI.Unwith.RunUnwith (DRagLint.CLI.Unwith.pas) ?, DRagLint.CLI.Unwith.RunUnwith.JsonOf (DRagLint.CLI.Unwith.pas) ?, DRagLint.Fix.V151.Legacy.FixWith (DRagLint.Fix.V151.Legacy.pas) ?, DRagLint.Refactor.Unwith.TAnalyzer.Run (DRagLint.Refactor.Unwith.pas) (+4 more)</para>
+  /// <para>Used in units: DRagLint.CLI.Unwith, DRagLint.Fix.V151.Legacy, DRagLint.Refactor.Unwith</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUnwithFilePlan = record
     /// <summary>The file.</summary>
     FilePath: string;
@@ -158,11 +182,20 @@ type
     Sites: TArray<TUnwithSite>;
     /// <summary>The bytes the file is to hold; nil when no site is a candidate.</summary>
     NewBytes: TBytes;
+    /// <summary>NewBytes in UTF-8 (the form the re-index parses): maps the re-indexed character columns back to
+    /// byte columns for the proof check (1.52 EXTGAPS2).</summary>
+    NewUtf8: TBytes;
     /// <summary>What --apply checks after the rewrite.</summary>
     Proof: TArray<TUnwithProofPoint>;
   end;
 
   /// <summary>What UnwithApply needs besides the plans.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.Unwith.pas) ?, DRagLint.CLI.Unwith.RunUnwith (DRagLint.CLI.Unwith.pas), DRagLint.Refactor.Unwith.UnwithApply (DRagLint.Refactor.Unwith.pas) ?</para>
+  /// <para>Used in units: DRagLint.CLI.Unwith, DRagLint.Refactor.Unwith</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUnwithApplyOptions = record
     /// <summary>The .dproj the gate builds and the after-proof indexes.</summary>
     Project: string;
@@ -175,6 +208,12 @@ type
   end;
 
   /// <summary>What UnwithApply did.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.Unwith.pas) ?, DRagLint.CLI.Unwith.RunUnwith (DRagLint.CLI.Unwith.pas), DRagLint.CLI.Unwith.RunUnwith.JsonOf (DRagLint.CLI.Unwith.pas) ?, DRagLint.Refactor.Unwith.UnwithApply (DRagLint.Refactor.Unwith.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.Unwith, DRagLint.Refactor.Unwith</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUnwithApplyResult = record
     /// <summary>True when the files are written, the project builds and every proof point held.</summary>
     Applied: Boolean;
@@ -198,18 +237,43 @@ type
 /// <param name="pFile">The file, absolute.</param>
 /// <param name="pLine">Only the with on this line; 0 = all.</param>
 /// <returns>The verdicts and, when any site is a candidate, the rewritten bytes. Writes nothing.</returns>
-/// <remarks>Sound only with a complete member closure and a stable target; every doubt is a named refusal, never a guess.
+/// <remarks>
+/// Sound only with a complete member closure and a stable target; every doubt is a named refusal, never a guess.
 /// A nested with is decided innermost-first: the outer one refuses (inner-with-first) until the next index.
-/// Parses through TAstParseCache: the caller sets its preprocess profile.</remarks>
+/// Parses through TAstParseCache: the caller sets its preprocess profile.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Unwith.RunUnwith (DRagLint.CLI.Unwith.pas), DRagLint.Fix.V151.Legacy.FixWith (DRagLint.Fix.V151.Legacy.pas)</para>
+/// <para>Calls: DRagLint.Refactor.Unwith.TAnalyzer.Create, DRagLint.Refactor.Unwith.TAnalyzer.Run</para>
+/// <para>Returns: A.Run(pLine)</para>
+/// <seealso cref="DRagLint.Refactor.Unwith.TAnalyzer.Create"/>
+/// <seealso cref="DRagLint.Refactor.Unwith.TAnalyzer.Run"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UnwithPlanFile(const pStore, pLib: ISymbolStore; const pFile: string; pLine: Integer = 0): TUnwithFilePlan;
 
 /// <summary>Writes the candidates of pPlans through the shared compile gate, then proves every binding unchanged.</summary>
 /// <param name="pPlans">The plans; a plan with no NewBytes is skipped.</param>
 /// <param name="pOpts">Project, platform, DB.</param>
 /// <returns>What happened. Not Applied = every file is back byte-identical (unless RollbackFailed).</returns>
-/// <remarks>Order: ApplyGated (baseline build, write under backups, after build); then a child `index --project` into a
+/// <exception cref="EInOutError"><!-- drag-lint:auto exc -->via DRagLint.Refactor.CompileGate.ApplyGated: nothing staged for %s</exception>
+/// <remarks>
+/// Order: ApplyGated (baseline build, write under backups, after build); then a child `index --project` into a
 /// copy of the DB under the gate's scratch; then each proof point is compared; any difference rolls back and refuses
-/// rebind-after, which a compile gate alone can never see. The real DB is not written: reindex after a good apply.</remarks>
+/// rebind-after, which a compile gate alone can never see. The real DB is not written: reindex after a good apply.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Unwith.RunUnwith (DRagLint.CLI.Unwith.pas)</para>
+/// <para>Calls: ContainsText, Copy, Default, DRagLint.Refactor.CompileGate.ApplyGated, DRagLint.Refactor.CompileGate.FreshScratchName, DRagLint.Refactor.CompileGate.RollBack, DRagLint.Refactor.CompileGate.RunBounded, DRagLint.Refactor.Unwith.CopyDbFor, DRagLint.Refactor.Unwith.DropUnwithLogs, DRagLint.Refactor.Unwith.UnwithApply.Compare (+10 more)</para>
+/// <para>Returns: Default(TUnwithApplyResult)</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 115 lines (full implementation)</para>
+/// <para>Catches: ECompileGateCancelled (swallowed); Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Refactor.CompileGate.ApplyGated"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.FreshScratchName"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.RollBack"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.RunBounded"/>
+/// <seealso cref="DRagLint.Refactor.Unwith.CopyDbFor"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UnwithApply(const pPlans: TArray<TUnwithFilePlan>; const pOpts: TUnwithApplyOptions): TUnwithApplyResult;
 
 implementation
@@ -218,7 +282,7 @@ uses
   System.Classes, System.IOUtils, System.Math, System.StrUtils, System.Hash, System.Generics.Collections, System.Generics.Defaults,
   FireDAC.Comp.Client,
   TreeSitter,
-  DRagLint.Core.Model, DRagLint.Core.FileTime,
+  DRagLint.Core.Model, DRagLint.Core.FileTime, DRagLint.Core.Encoding,
   DRagLint.Diagnostics.ParseCache, DRagLint.Storage.SQLite,
   DRagLint.Refactor.TextEdit, DRagLint.Refactor.CompileGate;
 
@@ -371,11 +435,19 @@ begin
 end;
 
 /// <summary>The refs of one file by position, bound row preferred where two share one (`M.Free`: call + member-access).</summary>
-procedure LoadRowsOf(const pStore: ISymbolStore; pFileId: Int64; pRows: TRows; out pHasFacts: Boolean);
+/// <remarks>1.52 EXTGAPS2: index columns are CHARACTER columns; this unit keys by tree-sitter BYTE column, so each
+/// start_col is mapped back to its byte column on pBytes (the UTF-8 form the analysis parsed).</remarks>
+procedure LoadRowsOf(const pStore: ISymbolStore; pFileId: Int64; const pBytes: TBytes; pRows: TRows; out pHasFacts: Boolean);
+const
+  LF = 10;
 var
   Q: TFDQuery;
+  LineStarts: TArray<Integer>;
 begin
   pHasFacts:= False;
+  LineStarts:= [0];
+  for var I: Integer:= 0 to High(pBytes) do
+    if pBytes[I] = LF then LineStarts:= LineStarts + [I + 1];
   if pStore is not TSQLiteSymbolStore then Exit;
   Q:= TFDQuery.Create(nil);
   try
@@ -404,7 +476,9 @@ begin
       R.TypeSymbolId:= Q.FieldByName('type_symbol_id').AsLargeInt;
       R.TypeQName:= Q.FieldByName('type_qname').AsString;
       R.Via:= Q.FieldByName('via').AsString;
-      var Key:= PosKey(Q.FieldByName('start_line').AsInteger, Q.FieldByName('start_col').AsInteger);
+      var Ln: Integer:= Q.FieldByName('start_line').AsInteger;
+      var Key:= PosKey(Ln, if InRange(Ln, 1, Length(LineStarts)) then
+        Utf8CharColToByteCol(pBytes, LineStarts[Ln - 1], Q.FieldByName('start_col').AsInteger) else Q.FieldByName('start_col').AsInteger);
       var Old: TRow;
       if (not pRows.TryGetValue(Key, Old)) or RowIsBetter(R, Old) then pRows.AddOrSetValue(Key, R);
       Q.Next;
@@ -468,7 +542,7 @@ procedure TAnalyzer.LoadRows;
 var
   Has: Boolean;
 begin
-  LoadRowsOf(FStore, FFileId, FRows, Has);
+  LoadRowsOf(FStore, FFileId, FSrc, FRows, Has);
   if not Has then Refuse(CUwNoFacts, 'this DB holds no ref_types (F1): reindex it with this engine');
 end;
 
@@ -499,7 +573,7 @@ begin
   var Path:= FStore.GetFilePath(S.FileId);
   if (Path <> '') and TFile.Exists(Path) and (S.EndLine >= S.StartLine) then
   begin
-    var Lines:= TFile.ReadAllLines(Path, TEncoding.ANSI);
+    var Lines:= ReadSourceFileLines(Path);
     for var I: Integer:= S.StartLine - 1 to S.EndLine - 1 do
       if (I >= 0) and (I < Length(Lines)) then
         for var C: string in CConditionals do
@@ -792,7 +866,7 @@ begin
   pWhere:= '';
   var Path:= FStore.GetFilePath(pRef.FileId);
   if (Path = '') or not TFile.Exists(Path) then Exit;
-  Lines:= TFile.ReadAllLines(Path, TEncoding.ANSI);
+  Lines:= ReadSourceFileLines(Path);
   if (pRef.StartLine < 1) or (pRef.StartLine > Length(Lines)) then Exit;
   var Ln:= Lines[pRef.StartLine - 1];
   var Before:= TrimRight(Copy(Ln, 1, pRef.StartCol - 1));
@@ -880,7 +954,7 @@ procedure TAnalyzer.CheckTargetStable(const pLinks: TArray<TLink>; pCast: Boolea
     { The property's declaration text names its getter; the index keeps the accessor shape, not the name. }
     var Path:= FStore.GetFilePath(pProp.FileId);
     if (Path = '') or not TFile.Exists(Path) then Exit;
-    Src:= TFile.ReadAllLines(Path, TEncoding.ANSI);
+    Src:= ReadSourceFileLines(Path);
     var Decl:= '';
     for var I: Integer:= pProp.StartLine - 1 to pProp.EndLine - 1 do
       if (I >= 0) and (I < Length(Src)) then Decl:= Decl + ' ' + Src[I];
@@ -1486,6 +1560,7 @@ begin
     SetLength(NewRaw, Out1.Size);
     if Out1.Size > 0 then Move(Out1.Bytes[0], NewRaw[0], Out1.Size);
     pPlan.NewBytes:= pFmt.Encode(TEncoding.UTF8.GetString(NewRaw));
+    pPlan.NewUtf8 := NewRaw;
     { Map every proof point to its position after the rewrite. }
     var NewStarts: TList<Integer>:= TList<Integer>.Create;
     try
@@ -1588,7 +1663,7 @@ var
     var Fid:= pAfter.FindFileIdByPath(pPlan.FilePath);
     Rows:= TRows.Create;
     try
-      if Fid > 0 then LoadRowsOf(pAfter, Fid, Rows, Has);
+      if Fid > 0 then LoadRowsOf(pAfter, Fid, pPlan.NewUtf8, Rows, Has);
       for var PP: TUnwithProofPoint in pPlan.Proof do
       begin
         Inc(Result.ProofPoints);

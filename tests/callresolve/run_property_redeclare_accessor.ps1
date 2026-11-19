@@ -15,7 +15,10 @@
   CONTROL checks are green on both engines, and find-callers on a redeclared property
   still answers with the redeclaration as the member.
 #>
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
 function Check([string]$n, [bool]$ok, [string]$d = '') {
@@ -139,12 +142,12 @@ end.
 Push-Location C:\TEMP
 try {
   $db = Join-Path $scratch 'r.sqlite'
-  & $exePath index $scratch --db $db *> (Join-Path $scratch 'i.log')
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db *> (Join-Path $scratch 'i.log') }
   $q = "SELECT enc.name AS site, r.name_text AS member, ma.mode AS mode, m.qualified_name AS bound, ma.accessor_kind AS kind, a.qualified_name AS accessor " +
        "FROM refs r JOIN symbols enc ON enc.id = r.enclosing_symbol_id " +
        "LEFT JOIN member_accesses ma ON ma.ref_id = r.id LEFT JOIN symbols m ON m.id = ma.member_symbol_id " +
        "LEFT JOIN symbols a ON a.id = ma.accessor_symbol_id WHERE r.kind = 'member-access'"
-  $j = & $exePath sql --db $db --query $q --json | Out-String | ConvertFrom-Json
+  $j = & $exePath sql --db $db --query $q --json | Out-String | ConvertFrom-Json | ForEach-Object { $_ }
   $cols = @($j.columns | ForEach-Object { $_.name })
   $m = @{}
   foreach ($row in $j.rows) {
@@ -170,7 +173,7 @@ try {
   Acc 'CONTROL: a full redeclaration shadows'           'ShadowRead' 'uProp.TLeaf.Plain' 'read' 'uProp.TBase.FField'
   Acc 'CONTROL: no ancestor declares it, no accessor'   'LostRead' 'uProp.TNoAnc.Lost' 'read' ''
 
-  $c = & $exePath query find-callers --name GetVal --resolved --db $db *>&1 | Out-String
+  $c = & { $ErrorActionPreference = 'Continue'; & $exePath query find-callers --name GetVal --resolved --db $db *>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'END TO END: find-callers GetVal lists the redeclared reads' (($c -match 'RedRead') -and ($c -match 'RedTwice')) ($c -replace '\s+', ' ')
 } finally {
   Pop-Location

@@ -26,9 +26,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_resolver_advice_form_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -74,15 +77,15 @@ $py    = Join-Path $WorkDir 'exec.py'
   "import sqlite3,sys`nc=sqlite3.connect(sys.argv[1])`nc.execute(sys.argv[2])`nc.commit();c.close()`n",
   [Text.Encoding]::ASCII)
 
-& $exePath index --project $dpr --db $dbP 2>&1 | Out-Null
-& $exePath index $lib --db $dbL 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index --project $dpr --db $dbP 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $lib --db $dbL 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V both fixture indexes were built' ((Test-Path $dbP) -and (Test-Path $dbL)) ''
 
 function InfoRow([string]$Db) {
-  $j = (& $exePath info --json --db $Db 2>$null) -join "`n"
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath info --json --db $Db 2>$null }) -join "`n"
   $i = $j.IndexOf('{')
   if ($i -lt 0) { return $null }
-  try { return ($j.Substring($i) | ConvertFrom-Json).indexes[0] } catch { return $null }
+  try { return ($j.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }).indexes[0] } catch { return $null }
 }
 function PlantOldResolver([string]$Db) {
   $row = InfoRow $Db
@@ -93,7 +96,7 @@ function PlantOldResolver([string]$Db) {
 }
 function StderrNote([string]$Db) {
   # A read verb prints the freshness notes once, on stderr.
-  return ((& $exePath query --name Go --db $Db 2>&1 | ForEach-Object { "$_" }) -join "`n")
+  return ((& { $ErrorActionPreference = 'Continue'; & $exePath query --name Go --db $Db 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n")
 }
 
 PlantOldResolver $dbP
@@ -119,7 +122,7 @@ $lLine = (($ln -split "`n") | Where-Object { $_ -match 'resolver: edges were der
 Check 'P1b CONTROL library DB: the stderr note keeps the `<dir>` form' ($lLine -match 'index <dir> .*--resolve-only') $lLine
 
 # ---- the advice runs ---------------------------------------------------------
-& $exePath index --project $dpr --db $dbP --resolve-only 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index --project $dpr --db $dbP --resolve-only 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $rc = $LASTEXITCODE
 Check 'P2 the advised project command exits 0' ($rc -eq 0) "exit=$rc"
 $after = InfoRow $dbP

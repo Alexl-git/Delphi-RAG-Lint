@@ -81,13 +81,16 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe       = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe       = '',
   [string]$WorkDir   = "$env:TEMP\drag-lint-outspeed-$PID",
   [string]$OldExe    = '',
   [string]$LibDb     = '',
   [string]$OldD5Json = '',
   [double]$LimitS    = 60
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 $PSNativeCommandUseErrorActionPreference = $false
@@ -164,7 +167,7 @@ function Ascii([byte[]]$B) { return [System.Text.Encoding]::ASCII.GetString($B) 
 function SliceJson([string]$S) {
   $a = $S.IndexOf('{'); $b = $S.LastIndexOf('}')
   if ($a -lt 0 -or $b -le $a) { return $null }
-  try { return ($S.Substring($a, $b - $a + 1) | ConvertFrom-Json) } catch { return $null }
+  try { return ($S.Substring($a, $b - $a + 1) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 
 # The editor's pipe drain, ConvRules.Engine.pas TEngineAdapter.RunCaptureTimed:
@@ -298,7 +301,7 @@ implementation
 end.
 '@
 $db = P 'fx.sqlite'
-$null = & $Exe index $fx --db $db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'fixture: index built' (Test-Path $db) "db=$db"
 # Make it stale: the freshness note goes to STDERR on every open from now on.
 [System.IO.File]::AppendAllText((Join-Path $fx 'OutFix.pas'), "// touched after indexing`r`n")
@@ -397,13 +400,13 @@ Write-Ascii (Join-Path $ex 'r.rules') "#convert EdFix.TSrcComp -> EdFix.TDstComp
 Write-Ascii (Join-Path $ex 'blk.txt') "object S1: TSrcComp`n  Caption = 'x'`nend`n"
 Write-Ascii (Join-Path $ex '.drag-lint.json') '{"docs":{}}'
 $exDb = Join-Path $ex 'ex.sqlite'
-$null = & $Exe index $ex --db $exDb 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $ex --db $exDb 2>&1 | ForEach-Object { "$_" } }
 # convert-apply --apply edits the unit: it runs on its own indexed copy, one per engine run.
 function ApplyCopy([string]$Tag) {
   $dir = Join-Path $ex $Tag
   New-Item -ItemType Directory $dir -Force | Out-Null
   Copy-Item (Join-Path $ex 'EdFix.pas') $dir -Force
-  $null = & $Exe index $dir --db (Join-Path $dir 'c.sqlite') 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db (Join-Path $dir 'c.sqlite') 2>&1 | ForEach-Object { "$_" } }
   return (Join-Path $dir 'EdFix.pas')
 }
 function RunRawIn([string]$Cwd, [string]$E, [string[]]$A) {
@@ -498,9 +501,9 @@ foreach ($c in $edCases) {
 #     not fail on this Windows build, so this cannot go RED here.
 Write-Host ''
 Write-Host 'k: stdout on a console' -ForegroundColor Cyan
-$kArgs = if ($LibDb) { @('proptree', '--qname', 'Bde.DBTables.TQuery', '--depth', '3', '--refs-as-leaves', '--no-write-back', '--json', '--db', $LibDb) }
-         else { @('proptree', '--qname', 'OutFix.TSrcComp', '--json', '--no-write-back', '--db', $db) }
-$pk = Start-Process -FilePath $Exe -ArgumentList $kArgs -WindowStyle Hidden -PassThru
+$kArgs = @(if ($LibDb) { @('proptree', '--qname', 'Bde.DBTables.TQuery', '--depth', '3', '--refs-as-leaves', '--no-write-back', '--json', '--db', $LibDb) }
+         else { @('proptree', '--qname', 'OutFix.TSrcComp', '--json', '--no-write-back', '--db', $db) })
+$pk = Start-Process -FilePath $Exe -ArgumentList $kArgs -WindowStyle Hidden -PassThru; $null = $pk.Handle
 $finK = $pk.WaitForExit(300000)
 if (-not $finK) { try { $pk.Kill() } catch {} }
 Check ("k: proptree --json to a console exits 0 ({0})" -f $(if ($LibDb) { 'TQuery depth 3, ~180 KB' } else { 'fixture' })) ($finK -and $pk.ExitCode -eq 0) "exit=$(if ($finK) { $pk.ExitCode } else { 'TIMEOUT' })"
@@ -569,13 +572,13 @@ exit $answer.Code
   foreach ($rn in $runners) {
     $before = if (Test-Path $shimLog) { @(Get-Content $shimLog).Count } else { 0 }
     $rw = P ("w-" + $rn.BaseName)
-    $null = & pwsh -NoProfile -File $rn.FullName -Exe $shimCmd -WorkDir $rw *>&1
+    $null = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $rn.FullName -Exe $shimCmd -WorkDir $rw *>&1 | ForEach-Object { "$_" } }
     $rc = $LASTEXITCODE
     $after = if (Test-Path $shimLog) { @(Get-Content $shimLog).Count } else { 0 }
     Write-Host ("      {0}: {1} compared case(s), runner exit {2} (informational)" -f $rn.Name, ($after - $before), $rc) -ForegroundColor DarkGray
   }
   Remove-Item Env:\DLT2I_NEW, Env:\DLT2I_OLD, Env:\DLT2I_LOG -ErrorAction SilentlyContinue
-  $rows = if (Test-Path $shimLog) { @(Get-Content $shimLog | ForEach-Object { , ($_ -split "`t") }) } else { @() }
+  $rows = @(if (Test-Path $shimLog) { @(Get-Content $shimLog | ForEach-Object { , ($_ -split "`t") }) } else { @() })
   $okRows = @($rows | Where-Object { $_[2] -eq 'True' -and $_[3] -eq 'True' })
   $bad = @($rows | Where-Object { -not ($_[2] -eq 'True' -and $_[3] -eq 'True') })
   $pt = @($rows | Where-Object { $_[0] -eq 'proptree' }).Count

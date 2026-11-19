@@ -19,10 +19,14 @@
 # Usage: pwsh -File tests/autotest/run_rule_filter_scope.ps1 [-Exe <path>]
 [CmdletBinding()]
 param(
-    [string] $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-    [string] $RulesDir = "$PSScriptRoot\..\..\rules",
+    [string] $Exe = '',
+    [string] $RulesDir = '',
     [string] $WorkDir = "$env:TEMP\drag-lint-rule-filter-scope-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $RulesDir) { $RulesDir = "$PSScriptRoot\..\..\rules" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -65,7 +69,7 @@ function RuleIds([string]$Text) {
      ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
 }
 
-$unfiltered = & $Exe lint $file --rules-dir $RulesDir 2>&1 | Out-String
+$unfiltered = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file --rules-dir $RulesDir 2>&1 | ForEach-Object { "$_" } } | Out-String
 $idsAll = RuleIds $unfiltered
 Write-Host ("  unfiltered rule ids: {0}" -f ($idsAll -join ',')) -ForegroundColor DarkGray
 
@@ -74,13 +78,13 @@ Write-Host ("  unfiltered rule ids: {0}" -f ($idsAll -join ',')) -ForegroundColo
 Check 'fixture yields a QUERY-rule finding (bare-except) with no filter' ($idsAll -contains 'bare-except')
 
 # THE DEFECT, half 1 -- a query rule id must be accepted, not called "unknown".
-$q = & $Exe lint $file --rule bare-except --rules-dir $RulesDir 2>&1 | Out-String
+$q = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file --rule bare-except --rules-dir $RulesDir 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'a query-rule id is accepted by --rule' (-not ($q -match 'unknown rule'))
 Check 'filtering to a query rule returns ONLY that rule' `
     (((RuleIds $q) -join ',') -eq 'bare-except') ("got: " + ((RuleIds $q) -join ','))
 
 # THE DEFECT, half 2 -- filtering to a BUILT-IN must not leak query-rule findings.
-$b = & $Exe lint $file --rule write-only-local --rules-dir $RulesDir 2>&1 | Out-String
+$b = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file --rule write-only-local --rules-dir $RulesDir 2>&1 | ForEach-Object { "$_" } } | Out-String
 $idsB = RuleIds $b
 Check 'filtering to a built-in does NOT leak query-rule findings' (-not ($idsB -contains 'bare-except')) `
     ("got: " + ($idsB -join ','))
@@ -88,7 +92,7 @@ Check 'every id returned under --rule write-only-local IS write-only-local' `
     (@($idsB | Where-Object { $_ -ne 'write-only-local' }).Count -eq 0) ("got: " + ($idsB -join ','))
 
 # The error path must describe the WHOLE catalogue, not one registry.
-$u = & $Exe lint $file --rule no-such-rule-xyz --rules-dir $RulesDir 2>&1 | Out-String
+$u = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file --rule no-such-rule-xyz --rules-dir $RulesDir 2>&1 | ForEach-Object { "$_" } } | Out-String
 $uExit = $LASTEXITCODE
 Check 'an unknown rule still exits 2' ($uExit -eq 2) "exit=$uExit"
 Check 'the known-rules list includes QUERY rules' ($u -match 'bare-except')

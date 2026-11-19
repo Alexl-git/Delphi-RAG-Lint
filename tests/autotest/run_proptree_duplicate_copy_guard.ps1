@@ -75,9 +75,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-proptree-duplicate-copy-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -197,16 +200,16 @@ end.
 # CWD dependency. The engine writes '(loaded defaults from ...)' to stderr during
 # these very commands.
 function Invoke-Json([string[]]$DragArgs) {
-  $raw = (& $Exe @DragArgs 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe @DragArgs 2>$null }) -join "`n"
   if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
-  return $raw | ConvertFrom-Json
+  return $raw | ConvertFrom-Json | ForEach-Object { $_ }
 }
 
 function Build-Db([string]$Name, [hashtable]$Files) {
   $work = Join-Path $WorkDir $Name
   foreach ($rel in $Files.Keys) { Write-Ascii (Join-Path $work $rel) $Files[$rel] }
   $db = Join-Path $WorkDir "$Name.sqlite"
-  $out = & $Exe index $work --db $db 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>$null }
   Check "$Name`: index exits 0" ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($out -join ' | ')"
   return $db
 }

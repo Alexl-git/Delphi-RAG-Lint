@@ -8,11 +8,24 @@ unit DRagLint.CLI.Wiring;
 interface
 
 uses
-  DRagLint.CLI.Common;
+  DRagLint.CLI.Common, DRagLint.Core.Model, DRagLint.Core.Interfaces;
 
 /// <summary>drag-lint wiring --qname Interface | --coverage [--db path] [--format text|json]: the Spring4D DI wiring of an interface (implementations with lifetime, resolve sites), or the registrations not resolved into an interface-to-type edge.</summary>
 /// <param name="AArgs">--qname or --coverage, --db, --format.</param>
 /// <returns>0 on an answer; 2 on a usage error or a missing / stale --db.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Common.ExplicitDbsExist, DRagLint.CLI.Common.FirstProjectDb, DRagLint.CLI.Common.OpenReadOnlyStore, DRagLint.CLI.Common.ReportNotFoundFor, DRagLint.CLI.Common.StaleDbRefusesRun, DRagLint.CLI.ConsumerDbs.ResolveConsumerDbs, DRagLint.Core.Interfaces.ISymbolStore.FindDiResolveSites, DRagLint.Core.Interfaces.ISymbolStore.FindDiUnresolved, DRagLint.Core.Interfaces.ISymbolStore.FindEventHandlersForForm, DRagLint.Core.Interfaces.ISymbolStore.FindImplementationsOf, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Wiring.BuildWiringJson, Format, SameText, Writeln</para>
+/// <para>Returns: 2; 0</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 103 lines (full implementation)</para>
+/// <seealso cref="DRagLint.CLI.Common.ExplicitDbsExist"/>
+/// <seealso cref="DRagLint.CLI.Common.FirstProjectDb"/>
+/// <seealso cref="DRagLint.CLI.Common.OpenReadOnlyStore"/>
+/// <seealso cref="DRagLint.CLI.Common.ReportNotFoundFor"/>
+/// <seealso cref="DRagLint.CLI.Common.StaleDbRefusesRun"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoWiring(const AArgs: TArgs): Integer;
 
 /// <summary>The `implementors` verb: the interface report for --target (spec
@@ -21,6 +34,21 @@ function DoWiring(const AArgs: TArgs): Integer;
 /// --uses, --max-sites N, --include-library, --format text|json|dot|mermaid, --json, --output.</param>
 /// <returns>0 answered (also zero implementors), 1 target not found, 2 usage error,
 /// ambiguous target or missing/stale db.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Common.NoDbResolved, DRagLint.CLI.Common.OpenReadOnlyStore, DRagLint.CLI.Common.ReportNotFoundFor, DRagLint.CLI.Common.StaleDbRefusesRun, DRagLint.Core.OutputEncoding.WriteOutputFile, DRagLint.Query.Implementors.BuildImplementorsReport, DRagLint.Query.Implementors.ImplementorsReportToChart, DRagLint.Query.Implementors.ImplementorsReportToJson, DRagLint.Query.Implementors.ImplementorsReportToText, DRagLint.Query.Implementors.TImplementorsOptions.Defaults, LowerCase, MatchText, Write, Writeln</para>
+/// <para>Returns: 2; if E.Ambiguous then 2 else 1; 0</para>
+/// <para>Complexity: 22 (cyclomatic, outer body), 65 lines (full implementation)</para>
+/// <para>Catches: EImplementorsTarget (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.NoDbResolved"/>
+/// <seealso cref="DRagLint.CLI.Common.OpenReadOnlyStore"/>
+/// <seealso cref="DRagLint.CLI.Common.ReportNotFoundFor"/>
+/// <seealso cref="DRagLint.CLI.Common.StaleDbRefusesRun"/>
+/// <seealso cref="DRagLint.Core.OutputEncoding.WriteOutputFile"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoImplementors(const AArgs: TArgs): Integer;
 
 /// <summary>`impact --all-projects`: asks every database the manifest names, one row
@@ -30,27 +58,74 @@ function DoImplementors(const AArgs: TArgs): Integer;
 /// <returns>0 the target was found somewhere, also with sections unanswered (the
 /// report says so); 1 found nowhere, or depth 0; 2 usage error, --db given, or a
 /// manifest that did not load.</returns>
-/// <remarks>Read-only. --db is refused rather than ignored: it would name one
-/// database while the answer came from all of them.</remarks>
+/// <remarks>
+/// Read-only. --db is refused rather than ignored: it would name one
+/// database while the answer came from all of them.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.CLI.Common.IndexSectionCommand, DRagLint.CLI.Common.ReportNotFoundFor, DRagLint.Index.Manifest.TManifestIO.Load, DRagLint.Index.Manifest.TManifestIO.ParseText, DRagLint.Index.Manifest.TManifestIO.Validate, DRagLint.Index.Plan.ResolvePlan, DRagLint.Project.Resolver.TProjectResolver.Create, DRagLint.Query.CrossImpact.BuildCrossImpact, DRagLint.Query.CrossImpact.CrossImpactToJson (+7 more)</para>
+/// <para>Returns: 2; 1; if Report.Found then 0</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 73 lines (full implementation)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.IndexSectionCommand"/>
+/// <seealso cref="DRagLint.CLI.Common.ReportNotFoundFor"/>
+/// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
+/// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseText"/>
+/// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Validate"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoImpactAllProjects(const AArgs: TArgs): Integer;
 
-/// <summary>drag-lint impact --qname X [--depth N] [--db path] [--format text|json]: the transitive callers of the last segment of X, up to depth N.</summary>
+/// <summary>drag-lint impact --qname X [--depth N] [--db path] [--format text|json]: the transitive callers of X, up to depth N.</summary>
 /// <param name="AArgs">--qname (required), --depth, --db, --format.</param>
-/// <returns>0 when callers are found, 1 when none; 2 on a usage error or a missing / stale db.</returns>
+/// <returns>0 when callers are found; 1 when none, or when X names no symbol in the database; 2 on a usage error or a missing / stale db.</returns>
+/// <remarks>GitHub #14 (1.52): when X resolves to routines, the walk follows the RESOLVED caller rows
+/// (ISymbolStore.FindResolvedCallers, the rows `query find-callers --resolved` prints), so a homonym of
+/// another class is never counted; each caller counts once, at the first depth that reaches it. A
+/// non-routine target (a type, a variable) keeps the by-name walk. Pinned by tests\autotest\run_v152_GH14.ps1.</remarks>
 function DoImpact(const AArgs: TArgs): Integer;
 
+/// <summary>The transitive callers of ASyms over the RESOLVED caller rows (ISymbolStore.FindResolvedCallers:
+/// call edges, bound member accesses, bound usages -- the rows `query find-callers --resolved` prints), one
+/// TImpactLevel per depth.</summary>
+/// <param name="AStore">The open store; borrowed.</param>
+/// <param name="ASyms">The target symbols (every declaration of the asked name or qname).</param>
+/// <param name="ADepth">How many caller levels to walk (1 = direct callers).</param>
+/// <param name="ALevels">Out: the levels, nil when nothing calls a routine of ASyms.</param>
+/// <returns>False when ASyms holds no routine -- the caller keeps the by-name walk
+/// (ISymbolStore.FindTransitiveCallers) for a type or variable target; True otherwise.</returns>
+/// <remarks>GitHub #14 (impact) and its 1.52 follow-up (usages --width wide). Breadth first; each caller counts
+/// once, at the first level that reaches it; a site with no enclosing routine counts once per file and is not
+/// walked on. Read-only. Pinned by tests\autotest\run_v152_GH14.ps1.</remarks>
+function ResolvedImpactLevels(const AStore: ISymbolStore; const ASyms: TArray<TSymbol>; ADepth: Integer;
+  out ALevels: TArray<TImpactLevel>): Boolean;
 /// <summary>drag-lint surface --qname Foo.TBar [--db path] [--include-impl] [--all-visibility] [--format text|json]: the interface-section declaration of a class, read from its source lines.</summary>
 /// <param name="AArgs">--qname (required), --db, --include-impl, --all-visibility, --format.</param>
 /// <returns>0 on success; 1 when the symbol is not found or not a class; 2 on a usage error or a missing / stale db.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Common.NoDbResolved, DRagLint.CLI.Common.OpenReadOnlyStore, DRagLint.CLI.Common.ReportNotFoundFor, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetClassSurface, DRagLint.Core.Model.TSymbolKindHelper.ToText, SameText, Writeln</para>
+/// <para>Returns: 2; 1; 0</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 107 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.NoDbResolved"/>
+/// <seealso cref="DRagLint.CLI.Common.OpenReadOnlyStore"/>
+/// <seealso cref="DRagLint.CLI.Common.ReportNotFoundFor"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoSurface(const AArgs: TArgs): Integer;
 
 implementation
 
 uses
-  DRagLint.Core.Model, DRagLint.CLI.ConsumerDbs, Winapi.Windows, DRagLint.Query.Implementors,
+  DRagLint.CLI.ConsumerDbs, Winapi.Windows, DRagLint.Query.Implementors,
   DRagLint.Query.CrossImpact, DRagLint.Core.OutputEncoding, System.SysUtils, System.IOUtils,
   System.NetEncoding, System.JSON, System.StrUtils, System.DateUtils, System.Generics.Collections,
-  System.SyncObjs, Data.DB, FireDAC.Stan.Async, FireDAC.Stan.Param, FireDAC.DApt, DRagLint.Core.Interfaces,
+  System.SyncObjs, Data.DB, FireDAC.Stan.Async, FireDAC.Stan.Param, FireDAC.DApt,
   DRagLint.Project.Resolver, DRagLint.Index.Manifest, DRagLint.Index.Plan, DRagLint.Wiring,
   DRagLint.Query.Callers;
 
@@ -307,6 +382,56 @@ begin
   Result:= if Report.Found then 0 else 1;
 end; // function
 
+{ GitHub #14: the transitive callers of ASyms over the RESOLVED caller rows
+  (FindResolvedCallers: call edges, bound member accesses, bound usages) -- the
+  rows find-callers --resolved prints, so impact and find-callers agree. Breadth
+  first; a caller counts once, at the first level that reaches it; a site with no
+  enclosing routine (initialization code) counts per file and is not walked on.
+  False when ASyms holds no routine: the caller keeps the by-name walk for a type
+  or variable target. An empty ALevels with True is a routine nobody calls. }
+function ResolvedImpactLevels(const AStore: ISymbolStore; const ASyms: TArray<TSymbol>; ADepth: Integer;
+  out ALevels: TArray<TImpactLevel>): Boolean;
+begin
+  ALevels:= nil;
+  var Frontier: TArray<Int64>:= [];
+  for var S in ASyms do
+    if S.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor] then Frontier:= Frontier + [S.Id];
+  Result:= Length(Frontier) > 0;
+  if not Result then Exit;
+  var Seen := TDictionary<string, Boolean>.Create;
+  var Units: TDictionary<string, Boolean>:= nil;
+  try
+    for var Id in Frontier do Seen.AddOrSetValue(IntToStr(Id), True);
+    for var Lvl:= 1 to ADepth do
+    begin
+      var Next : TArray<Int64>:= [];
+      var Count: Integer:= 0;
+      FreeAndNil(Units);
+      Units:= TDictionary<string, Boolean>.Create;
+      for var Id in Frontier do
+        for var C in AStore.FindResolvedCallers(Id) do
+        begin
+          var Key:= if C.EnclosingSymbolId > 0 then IntToStr(C.EnclosingSymbolId) else 'file:' + LowerCase(C.FullPath);
+          if Seen.ContainsKey(Key) then Continue;
+          Seen.Add(Key, True);
+          Inc(Count);
+          Units.AddOrSetValue(LowerCase(C.FullPath), True);
+          if C.EnclosingSymbolId > 0 then Next:= Next + [C.EnclosingSymbolId];
+        end;
+      if Count = 0 then Break;
+      var L:= Default(TImpactLevel);
+      L.Depth      := Lvl;
+      L.CallerCount:= Count;
+      L.UnitCount  := Units.Count;
+      ALevels:= ALevels + [L];
+      Frontier:= Next;
+    end;
+  finally
+    Units.Free;
+    Seen.Free;
+  end; // try
+end; // function
+
 function DoImpact(const AArgs: TArgs): Integer;
 var
   Store     : ISymbolStore        ;
@@ -329,19 +454,27 @@ begin
   end;
   Depth:= AArgs.Depth;
   if Depth <= 0 then begin Writeln(AArgs.QName); Writeln('  (depth 0 returns nothing)'); Exit (1 ); end;
-  // Use the bare name (last segment) as the target for the CTE ref lookup,
+  // Use the bare name (last segment) as the target for the by-name CTE ref lookup,
   // since refs store the bare identifier name, not the qualified name.
   TargetName:= LastSegmentAfter(AArgs.QName, '.');
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
   if (not RoOk) and StaleDbRefusesRun(AArgs, 'impact', AArgs.DbPath) then Exit(2);
-  Levels:= Store.FindTransitiveCallers(TargetName, Depth);
   { RB-5 P1: what dispatches to / from this method. An interface method lists
     its implementors; an implementor lists the interface sites that reach it. }
   var DispImpls: TArray<TDispatchLink>:= [];
   var DispVia  : TQueryCallerRows     := [];
   var DispSyms : TArray<TSymbol>      := Store.FindSymbolsByQualifiedName(AArgs.QName);
   if Length(DispSyms) = 0 then DispSyms:= Store.FindSymbolsByExactName(AArgs.QName);
+  { GitHub #14: a qname that names no symbol has no callers -- the by-name walk
+    used to count every routine sharing its last segment and exit 0. }
+  if Length(DispSyms) = 0 then
+  begin
+    ReportNotFoundFor(SameText(AArgs.Format, 'json'), Format('impact: no symbol %s in this database '
+      + '(by name: drag-lint query find-callers --name %s)', [AArgs.QName, TargetName]));
+    Exit(1);
+  end;
+  if not ResolvedImpactLevels(Store, DispSyms, Depth, Levels) then Levels:= Store.FindTransitiveCallers(TargetName, Depth);
   for var DS in DispSyms do
     if DS.Kind in [skProcedure, skFunction, skMethod] then
     begin

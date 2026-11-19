@@ -12,8 +12,11 @@
   hold a FIX, a NONE and a REFUSE; L4 a project that holds no marker line reports no fix for it.
 #>
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe"
+  [string]$Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -57,9 +60,9 @@ try {
   Copy-Item $Fx $d -Recurse
   $lib = Join-Path $d 'lib.sqlite'
   $db = Join-Path $d 'p.sqlite'
-  & $Exe index (Join-Path $d 'lib') --db $lib --library-db none *> (Join-Path $Tmp 'lib.index.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $d 'lib') --db $lib --library-db none *> (Join-Path $Tmp 'lib.index.log') }
   Check 'I1 the stand-in library indexes' ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
-  & $Exe index --project (Join-Path $d 'RcLib.dproj') --db $db --library-db $lib *> (Join-Path $Tmp 'p.index.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $d 'RcLib.dproj') --db $db --library-db $lib *> (Join-Path $Tmp 'p.index.log') }
   Check 'I2 the project indexes' ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
   $use = Join-Path $d 'RcLibUse.pas'
   $proj = Join-Path $d 'RcLib.dproj'
@@ -67,14 +70,14 @@ try {
   $flat = @($want.Values)
   Check 'L3 control: the markers hold FIX, NONE and REFUSE' (($flat -contains 'FIX') -and ($flat -contains 'NONE') -and (@($flat | Where-Object { $_ -like 'REFUSE*' }).Count -ge 2)) ($flat -join ' ')
 
-  $o = & $Exe lint --fix --fix-rule redundant-cast --db $db --project $proj --library-db $lib --format json 2> (Join-Path $Tmp 'plan.err')
-  $plan = (($o -join "`n") | ConvertFrom-Json)
+  $o = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath((Join-Path $Tmp 'plan.err')); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe lint --fix --fix-rule redundant-cast --db $db --project $proj --library-db $lib --format json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
+  $plan = (($o -join "`n") | ConvertFrom-Json | ForEach-Object { $_ })
   $got = Outcomes $plan
   $bad = Compare-Map $want $got
   Check 'D1 every marked line gets its outcome with the library' ($bad.Count -eq 0) ("`n    " + ($bad -join "`n    "))
 
-  $o2 = & $Exe lint --fix --fix-rule redundant-cast --db $db --project $proj --library-db none --format json 2> (Join-Path $Tmp 'plan2.err')
-  $plan2 = (($o2 -join "`n") | ConvertFrom-Json)
+  $o2 = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath((Join-Path $Tmp 'plan2.err')); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe lint --fix --fix-rule redundant-cast --db $db --project $proj --library-db none --format json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
+  $plan2 = (($o2 -join "`n") | ConvertFrom-Json | ForEach-Object { $_ })
   $lcLine = @($want.Keys | Where-Object { $want[$_] -eq 'FIX' } | Sort-Object)[0]
   $g2 = Outcomes $plan2
   Check 'L1 control: without the library the class cast is refused type-not-indexed' ($g2[[int]$lcLine] -eq 'REFUSE type-not-indexed') "$($g2[[int]$lcLine])"

@@ -40,7 +40,13 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot '..\autotest\lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -150,7 +156,7 @@ end.
 $db = Join-Path $scratch 'f.sqlite'
 
 function Get-CalledFrom([string]$qname) {
-  $out = (& $exePath document --qname $qname --db $db 2>$null) -join "`n"
+  $out = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname $qname --db $db 2>$null }) -join "`n"
   $l = ($out -split "`r?`n" | Where-Object { $_ -match '^\s*///' -and $_ -match 'Called from:' } | Select-Object -First 1)
   if ($null -eq $l) { return '' }
   return $l.Trim()
@@ -158,11 +164,11 @@ function Get-CalledFrom([string]$qname) {
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db --quiet 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db --quiet 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
   # --- FIX 1: the type-name receiver rung ----------------------------------
-  $edges = (& $exePath dump-call-edges --db $db 2>$null) -join "`n"
+  $edges = (& { $ErrorActionPreference = 'Continue'; & $exePath dump-call-edges --db $db 2>$null }) -join "`n"
   Write-Host "  edges:`n$edges" -ForegroundColor DarkGray
   Check 'RESOLVED: TMaker.Create has a real call edge (type-name receiver)' `
     ($edges -match 'fab\.TMaker\.Create') $edges
@@ -204,3 +210,4 @@ try {
 } finally { Pop-Location }
 
 if($script:Failed){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally { Remove-WorkDir $scratch -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

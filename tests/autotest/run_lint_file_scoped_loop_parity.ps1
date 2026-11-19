@@ -21,10 +21,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe      = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$RulesDir = "$PSScriptRoot\..\..\rules",
+  [string]$Exe      = '',
+  [string]$RulesDir = '',
   [string]$WorkDir  = "C:\TEMP\draglint_file_scoped_loop_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $RulesDir) { $RulesDir = "$PSScriptRoot\..\..\rules" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){ if($d){Write-Host "      $d" -ForegroundColor DarkGray}; $script:fail=$true } }
@@ -150,14 +154,14 @@ end.
 '@
 
 $db  = Join-Path $WorkDir 'loop.sqlite'
-$idx = & $exePath index $proj --db $db 2>&1 | Out-String
+$idx = & { $ErrorActionPreference = 'Continue'; & $exePath index $proj --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'SANITY: fixture indexed with no errors' `
       ($LASTEXITCODE -eq 0 -and $idx -notmatch '\b[1-9]\d* errors\b') $idx
 
 $LOOP = @('unused-unit-in-uses','god-class','unused-public-symbol','unused-private-member')
 
 function LoopTuples($json, $fileAbs) {
-  $rows = @(if ($json.Trim()) { $json | ConvertFrom-Json } else { @() })
+  $rows = @(if ($json.Trim()) { $json | ConvertFrom-Json | ForEach-Object { $_ } } else { @() })
   @($rows | Where-Object { $LOOP -contains $_.rule -and
                            $_.file_path.ToLowerInvariant() -eq $fileAbs.ToLowerInvariant() } |
            ForEach-Object { '{0}|{1}|{2}|{3}|{4}' -f $_.rule, $_.severity, $_.start_line, $_.start_col, $_.message } |
@@ -166,10 +170,10 @@ function LoopTuples($json, $fileAbs) {
 
 $env:DRAGLINT_PROFILE = '1'
 $allErr  = Join-Path $WorkDir 'all.err'
-$allJson = & $exePath lint-all --db $db --rules-dir $rules --json 2>$allErr | Out-String
+$allJson = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($allErr); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath lint-all --db $db --rules-dir $rules --json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String
 $allProf = Get-Content $allErr -Raw
 
-$allRules = @(($allJson | ConvertFrom-Json) | Where-Object { $LOOP -contains $_.rule } | ForEach-Object { $_.rule } | Sort-Object -Unique)
+$allRules = @(($allJson | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $LOOP -contains $_.rule } | ForEach-Object { $_.rule } | Sort-Object -Unique)
 foreach ($r in $LOOP) {
   Check "P2  CONTROL: lint-all reports $r on the fixture" ($allRules -contains $r) `
         "if lint-all does not report it, P1 compares empty sets for it and proves nothing"
@@ -177,7 +181,7 @@ foreach ($r in $LOOP) {
 
 foreach ($leaf in @('uLib.pas','uGod.pas','uMain.pas','uUser.pas','Proj.dpr')) {
   $abs      = Join-Path $proj $leaf
-  $fileJson = & $exePath lint $abs --db $db --rules-dir $rules --json 2>$null | Out-String
+  $fileJson = & { $ErrorActionPreference = 'Continue'; & $exePath lint $abs --db $db --rules-dir $rules --json 2>$null } | Out-String
   $want     = @(LoopTuples $allJson  $abs)
   $got      = @(LoopTuples $fileJson $abs)
   $diff     = @(Compare-Object $want $got)
@@ -189,7 +193,7 @@ foreach ($leaf in @('uLib.pas','uGod.pas','uMain.pas','uUser.pas','Proj.dpr')) {
 
 $mainAbs  = Join-Path $proj 'uMain.pas'
 $oneErr   = Join-Path $WorkDir 'one.err'
-& $exePath lint $mainAbs --db $db --rules-dir $rules --json 2>$oneErr | Out-Null
+& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($oneErr); [IO.File]::WriteAllText($dlErrFile, ''); & $exePath lint $mainAbs --db $db --rules-dir $rules --json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-Null
 $oneProf  = Get-Content $oneErr -Raw
 $oneN = if ($oneProf -match 'per-file loop\s+(\d+) file\(s\)') { [int]$Matches[1] } else { -1 }
 $allN = if ($allProf -match 'per-file loop\s+(\d+) file\(s\)') { [int]$Matches[1] } else { -1 }
@@ -197,7 +201,7 @@ Check 'P3  single-file lint visits exactly 1 file in the per-file loop' ($oneN -
 Check 'P3b CONTROL: lint-all still visits every file' ($allN -ge 5) "visited: $allN (fixture has 5 files)"
 Remove-Item Env:\DRAGLINT_PROFILE
 
-$ruleJson = & $exePath lint $mainAbs --db $db --rules-dir $rules --rule unused-unit-in-uses --json 2>$null | Out-String
+$ruleJson = & { $ErrorActionPreference = 'Continue'; & $exePath lint $mainAbs --db $db --rules-dir $rules --rule unused-unit-in-uses --json 2>$null } | Out-String
 $ruleGot  = @(LoopTuples $ruleJson $mainAbs)
 $ruleWant = @(LoopTuples $allJson $mainAbs | Where-Object { $_ -like 'unused-unit-in-uses|*' })
 Check 'P4  --rule unused-unit-in-uses composes with the scoping (uGod only, not uLib)' `

@@ -59,7 +59,10 @@
   Runs from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Continue'
@@ -98,7 +101,7 @@ function Get-FixtureDeclLine([string[]]$lines, [string]$name, [string]$section) 
 # Reason is '' when no REASON= line was printed at all, which the non-vacuity
 # control asserts against before any per-case check reads it.
 function Invoke-Harvest([string]$file, [int]$line) {
-  $out  = & $exePath selftest harvest --file $file --line $line 2>&1
+  $out  = & { $ErrorActionPreference = 'Continue'; & $exePath selftest harvest --file $file --line $line 2>&1 | ForEach-Object { "$_" } }
   $code = $LASTEXITCODE
   $txt  = @($out | ForEach-Object { "$_" })
   $res  = @{ Exit = $code; Reason = ''; Lines = -1; Start = -1; End = -1; Raw = @(); Out = ($txt -join ' | ') }

@@ -39,9 +39,12 @@
 # Usage: pwsh -File tests/autotest/run_lintall_infers_project_for_unit_not_in_dpr.ps1 [-Exe <path>]
 [CmdletBinding()]
 param(
-    [string] $Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+    [string] $Exe     = '',
     [string] $WorkDir = "$env:TEMP\drag-lint-lintall-infers-project-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 . "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG3: no machine drag-lint.json
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
@@ -130,18 +133,18 @@ Write-Ascii (Join-Path $WorkDir '.drag-lint.json') @"
 "@
 
 $db = Join-Path $WorkDir '_D-RAG\P.sqlite'
-& $Exe index --project $dproj --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project $dproj --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index not created at $db" -ForegroundColor Red; exit 2 }
 
 Push-Location $WorkDir
 try {
-    $inferred = (& $Exe lint-all --db $db --rule unit-not-in-dpr 2>&1) -join "`n"
-    $explicit = (& $Exe lint-all --db $db --project $dproj --rule unit-not-in-dpr 2>&1) -join "`n"
+    $inferred = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule unit-not-in-dpr 2>&1 | ForEach-Object { "$_" } }) -join "`n"
+    $explicit = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --project $dproj --rule unit-not-in-dpr 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 
     # A DB no manifest section claims. Inference must decline, not invent one.
     $strayDb = Join-Path $WorkDir 'stray.sqlite'
     Copy-Item $db $strayDb
-    $stray = (& $Exe lint-all --db $strayDb --rule unit-not-in-dpr 2>&1) -join "`n"
+    $stray = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $strayDb --rule unit-not-in-dpr 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 } finally { Pop-Location }
 
 # MATCH THE FINDING, NOT THE FILENAME. lint-all prints a per-file PROGRESS line

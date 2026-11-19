@@ -13,8 +13,11 @@
   runs exactly once on first use; E12 a run that never uses the unit never runs the work nor its finalization.
 #>
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe"
+  [string]$Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -30,7 +33,7 @@ function Tree-Hash([string]$Dir) {
 function Build-Project([string]$Proj, [string]$Tmp) {
   $bat = Join-Path $Tmp ([guid]::NewGuid().ToString('N') + '.bat')
   [IO.File]::WriteAllText($bat, "@echo off`r`ncall `"$Rsvars`"`r`ncd /d `"$(Split-Path $Proj)`"`r`nmsbuild /t:Build /p:Config=Debug /p:Platform=Win64 /v:minimal `"$(Split-Path $Proj -Leaf)`"`r`nexit /b %ERRORLEVEL%`r`n", [Text.Encoding]::ASCII)
-  $p = Start-Process -Wait -PassThru -NoNewWindow cmd.exe -ArgumentList "/c `"$bat`"" -RedirectStandardOutput "$bat.log" -RedirectStandardError "$bat.err"
+  $p = Start-Process -Wait -PassThru -NoNewWindow cmd.exe -ArgumentList "/c `"$bat`"" -RedirectStandardOutput "$bat.log" -RedirectStandardError "$bat.err"; $null = $p.Handle
   return $p.ExitCode
 }
 function Bare-Lf([string]$Path) {
@@ -46,14 +49,14 @@ function New-Project([string]$Name) {
   $d = Join-Path $Tmp $Name
   Copy-Item $Fx $d -Recurse
   $db = Join-Path $d 'p.sqlite'
-  & $Exe index --project (Join-Path $d 'LiProj.dproj') --db $db --library-db none *> (Join-Path $Tmp "$Name.index.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $d 'LiProj.dproj') --db $db --library-db none *> (Join-Path $Tmp "$Name.index.log") }
   if ($LASTEXITCODE -ne 0) { throw "index $Name exit $LASTEXITCODE" }
   return @{ Dir = $d; Db = $db; Proj = (Join-Path $d 'LiProj.dproj'); Heavy = (Join-Path $d 'LiHeavy.pas'); Prog = (Join-Path $d 'Win64\Debug\LiProj.exe') }
 }
 function Run-Json($P, [string[]]$More) {
-  $o = & $Exe lazy-init --db $P.Db --project $P.Proj --library-db none --format json @More 2> (Join-Path $Tmp 'run.err')
+  $o = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath((Join-Path $Tmp 'run.err')); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe lazy-init --db $P.Db --project $P.Proj --library-db none --format json @More 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   $script:LastExit = $LASTEXITCODE
-  try { return (($o -join "`n") | ConvertFrom-Json) } catch { return $null }  # not JSON (an unknown flag): every check on it fails
+  try { return (($o -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }  # not JSON (an unknown flag): every check on it fails
 }
 
 try {
@@ -92,13 +95,13 @@ try {
   Check 'D11 the plans wrote nothing' ((Tree-Hash $A.Dir) -ceq $before)
 
   Write-Host 'surface'
-  & $Exe lazy-init --db $A.Db --library-db none *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe lazy-init --db $A.Db --library-db none *> $null }
   Check 'S1 no scope exits 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
   $null = Run-Json $A @('--unit', 'LiHeavy', '--all', '--plan')
   Check 'S2 --unit and --all together exit 2' ($script:LastExit -eq 2) "exit $script:LastExit"
   $null = Run-Json $A @('--all', '--apply')
   Check 'S3 --all --apply exits 2' ($script:LastExit -eq 2) "exit $script:LastExit"
-  & $Exe lazy-init --db $A.Db --library-db none --unit LiHeavy --apply *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe lazy-init --db $A.Db --library-db none --unit LiHeavy --apply *> $null }
   Check 'S4 --apply without --project exits 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
   $null = Run-Json $A @('--unit', 'LiHeavy', '--apply', '--no-compile')
   Check 'S5 --apply --no-compile exits 2' ($script:LastExit -eq 2) "exit $script:LastExit"
@@ -132,7 +135,7 @@ try {
     Check 'A8 the program prints the same lines in the same order' (($out1 -join "`n") -ceq ($out2 -join "`n")) (($out2) -join ' | ')
     $swapped = @($out2); $t0 = $swapped[0]; $swapped[0] = $swapped[1]; $swapped[1] = $t0
     Check 'P1 control: the comparison sees a swap' (($out1 -join "`n") -cne ($swapped -join "`n"))
-    & $Exe index --project $B.Proj --db $B.Db --library-db none *> $null
+    & { $ErrorActionPreference = 'Continue'; & $Exe index --project $B.Proj --db $B.Db --library-db none *> $null }
     $fp = (Run-Json $B @('--unit', 'LiHeavy', '--plan')).sections[0]
     Check 'A9 fixed point: a second run after a re-index is name-taken' ($fp.refusal.kind -eq 'name-taken') "$($fp.refusal.kind)"
     $r = Run-Json $B @('--unit', 'LiLight', '--apply')
@@ -160,7 +163,7 @@ try {
     $L = Join-Path $Tmp 'defer'
     Copy-Item (Resolve-Path "$PSScriptRoot\..\fixtures\refactor\lazydefer").Path $L -Recurse
     $D = @{ Dir = $L; Db = (Join-Path $L 'p.sqlite'); Proj = (Join-Path $L 'LdProj.dproj'); Prog = (Join-Path $L 'Win64\Debug\LdProj.exe') }
-    & $Exe index --project $D.Proj --db $D.Db --library-db none *> (Join-Path $Tmp 'defer.index.log')
+    & { $ErrorActionPreference = 'Continue'; & $Exe index --project $D.Proj --db $D.Db --library-db none *> (Join-Path $Tmp 'defer.index.log') }
     $src = Join-Path $L 'LdHeavy.pas'
     $dOrig = [IO.File]::ReadAllText($src)
     Check 'E0 the untouched program builds' ((Build-Project $D.Proj $Tmp) -eq 0)
@@ -185,7 +188,7 @@ try {
     Check 'E11 the same lines as before, only moved' ((($o0 | Sort-Object) -join "`n") -ceq (($o1 | Sort-Object) -join "`n")) ($o1 -join ' | ')
     $o2 = @(& $D.Prog none); $x2 = $LASTEXITCODE
     Check 'E12 never used: the work and its finalization never run, exit 0' ((($o2 -join '|') -ceq 'main start 7|main end') -and ($x2 -eq 0)) "exit $x2; $($o2 -join ' | ')"
-    & $Exe index --project $D.Proj --db $D.Db --library-db none *> $null
+    & { $ErrorActionPreference = 'Continue'; & $Exe index --project $D.Proj --db $D.Db --library-db none *> $null }
     $fpd = @((Run-Json $D @('--unit', 'LdHeavy', '--plan', '--defer')).sections)[0]
     Check 'E13 fixed point: a second --defer after a re-index is empty-section (the section no longer calls anything; refusal order)' ($fpd.refusal.kind -eq 'empty-section') "$($fpd.refusal.kind)"
   }

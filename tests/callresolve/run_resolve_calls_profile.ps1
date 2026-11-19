@@ -20,9 +20,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_calls_profile_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot '..\autotest\lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -116,14 +122,14 @@ end.
 
 $db = Join-Path $WorkDir 'p.sqlite'
 $env:DRAGLINT_PROFILE_CALLS = $null
-& $Exe index --project (Join-Path $WorkDir 'ProfApp.dpr') --db $db *> (Join-Path $WorkDir 'index.log')
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $WorkDir 'ProfApp.dpr') --db $db *> (Join-Path $WorkDir 'index.log') }
 if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: index exit $LASTEXITCODE" -ForegroundColor Red; exit 2 }
 
 function Resolve-Arm([string]$Tag, [bool]$On) {
   $d = Join-Path $WorkDir "$Tag.sqlite"
   Copy-Item $db $d -Force
   $env:DRAGLINT_PROFILE_CALLS = if ($On) { '1' } else { $null }
-  & $Exe index --project (Join-Path $WorkDir 'ProfApp.dpr') --db $d --resolve-only *> (Join-Path $WorkDir "$Tag.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $WorkDir 'ProfApp.dpr') --db $d --resolve-only *> (Join-Path $WorkDir "$Tag.log") }
   $ec = $LASTEXITCODE
   $env:DRAGLINT_PROFILE_CALLS = $null
   if ($ec -ne 0) { Write-Host "FATAL: resolve-only ($Tag) exit $ec" -ForegroundColor Red; exit 2 }
@@ -154,8 +160,8 @@ $rowsTotal = 0
 foreach ($k in $qs.Keys) {
   $a = Join-Path $WorkDir "on.$k.txt"
   $b = Join-Path $WorkDir "off.$k.txt"
-  & $Exe sql --db $dbOn  --query $qs[$k] --limit 100000000 --output $a *> $null
-  & $Exe sql --db $dbOff --query $qs[$k] --limit 100000000 --output $b *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $dbOn  --query $qs[$k] --limit 100000000 --output $a *> $null }
+  & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $dbOff --query $qs[$k] --limit 100000000 --output $b *> $null }
   # the trailing "N row(s) in M ms" line carries a timing: compare the rows only
   $ra = @([IO.File]::ReadAllLines($a) | Where-Object { $_ -notmatch '^\d+ row\(s\) in ' })
   $rb = @([IO.File]::ReadAllLines($b) | Where-Object { $_ -notmatch '^\d+ row\(s\) in ' })
@@ -167,8 +173,8 @@ Check 'I1' (($diff.Count -eq 0) -and ($rowsTotal -gt 10)) "(tables differing: $(
 $q = "SELECT r.start_line, ma.accessor_kind FROM member_accesses ma JOIN refs r ON r.id = ma.ref_id JOIN files f ON f.id = r.file_id WHERE f.path LIKE '%uUser.pas' AND r.name_text = 'FCount' ORDER BY r.start_line"
 $ka = Join-Path $WorkDir 'on.kinds.txt'
 $kb = Join-Path $WorkDir 'off.kinds.txt'
-& $Exe sql --db $dbOn  --query $q --limit 1000 --output $ka *> $null
-& $Exe sql --db $dbOff --query $q --limit 1000 --output $kb *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $dbOn  --query $q --limit 1000 --output $ka *> $null }
+& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $dbOff --query $q --limit 1000 --output $kb *> $null }
 foreach ($pair in @(@('on', $ka), @('off', $kb))) {
   $t = [IO.File]::ReadAllText($pair[1])
   $v = [regex]::IsMatch($t, '(?m)^17\s+var-arg\s*$')
@@ -183,3 +189,4 @@ exit 0
 } finally {
   $env:DRAGLINT_PROFILE_CALLS = $null
 }
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

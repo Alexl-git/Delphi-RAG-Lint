@@ -44,7 +44,13 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot '..\autotest\lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -124,16 +130,16 @@ end.
 # array of nulls, which makes every "reports nothing" assertion pass VACUOUSLY.
 # That is exactly how this test first went green against an unfixed engine.
 function Get-Drift($qname) {
-  $out = & $exePath doc-drift --qname $qname --db $db --json 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath doc-drift --qname $qname --db $db --json 2>$null }
   $rows = @()
-  foreach ($ln in $out) { $t = "$ln".Trim(); if ($t.StartsWith('{')) { $rows += ($t | ConvertFrom-Json) } }
+  foreach ($ln in $out) { $t = "$ln".Trim(); if ($t.StartsWith('{')) { $rows += ($t | ConvertFrom-Json | ForEach-Object { $_ }) } }
   return ,$rows
 }
 function Messages($rows) { return @($rows | ForEach-Object { $_.detail }) }
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db --quiet 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db --quiet 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
   # =========================================================================
@@ -149,27 +155,27 @@ try {
   $ctor = Get-Drift 'ctorbody.TThing.Create'
   Check 'FIX 1: constructor draws NO "no <returns> tag" finding' `
     ((Messages $ctor | Where-Object { $_ -like '*no <returns> tag*' }).Count -eq 0) `
-    ((Messages $ctor) -join ' | ')
+    ((@(Messages $ctor)) -join ' | ')
 
   $iface0 = Get-Drift 'ctorbody.IThing.ClearAll'
   Check 'FIX 2: interface method draws NO "body never raises it" finding' `
     ((Messages $iface0 | Where-Object { $_ -like '*never raises it*' }).Count -eq 0) `
-    ((Messages $iface0) -join ' | ')
+    ((@(Messages $iface0)) -join ' | ')
 
   $named0 = Get-Drift 'ctorbody.TThing.Named'
   Check 'CONTROL: a real function with no <returns> is STILL reported' `
     ((Messages $named0 | Where-Object { $_ -like '*no <returns> tag*' }).Count -ge 1) `
-    ((Messages $named0) -join ' | ')
+    ((@(Messages $named0)) -join ' | ')
 
   $bogus0 = Get-Drift 'ctorbody.TThing.Bogus'
   Check 'CONTROL: a routine WITH a body that never raises its documented cref is STILL reported' `
     ((Messages $bogus0 | Where-Object { $_ -like '*ENeverRaised*' }).Count -ge 1) `
-    ((Messages $bogus0) -join ' | ')
+    ((@(Messages $bogus0)) -join ' | ')
 
   # =========================================================================
   # PHASE 2 -- the engine's own output, and the constructor marker it writes.
   # =========================================================================
-  & $exePath document --unit $src --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $src --db $db --apply 2>$null } | Out-Null
   Check 'document --apply exits 0' ($LASTEXITCODE -eq 0)
   $md5First = Get-FileMd5 $src
   $text = [IO.File]::ReadAllText($src)
@@ -215,8 +221,8 @@ try {
     ($text -match '<exception cref="EDatabaseError">Raised when the delete cannot be applied\.</exception>') $text
 
   # === idempotency ==========================================================
-  & $exePath index $scratch --db $db --quiet 2>$null | Out-Null
-  & $exePath document --unit $src --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db --quiet 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $src --db $db --apply 2>$null } | Out-Null
   Check 'IDEMPOTENT: reindex + a second --apply is byte-identical' `
     ((Get-FileMd5 $src) -eq $md5First) ("first=$md5First second=" + (Get-FileMd5 $src))
 
@@ -225,10 +231,11 @@ try {
   $ctor2 = Get-Drift 'ctorbody.TThing.Create'
   Check 'constructor is still clean after a second apply' `
     ((Messages $ctor2 | Where-Object { $_ -like '*no <returns> tag*' }).Count -eq 0) `
-    ((Messages $ctor2) -join ' | ')
+    ((@(Messages $ctor2)) -join ' | ')
 
   Check 'every emitted /// line is 7-bit ASCII' `
     (@([IO.File]::ReadAllLines($src) | Where-Object { $_ -match '^\s*///' -and ($_.ToCharArray() | Where-Object { [int]$_ -gt 126 }) }).Count -eq 0)
 } finally { Pop-Location }
 
 if($script:Failed){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally { Remove-WorkDir $scratch -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

@@ -9,7 +9,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Continue'
@@ -29,7 +32,7 @@ Copy-Item $fixture $target -Force
 Push-Location C:\TEMP
 try {
   # Index fixture into fresh scratch DB
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
   # Verify schema columns exist with correct type
@@ -57,7 +60,7 @@ print("mutates_params" in cols, cols.get("mutates_params") == "TEXT",
   Check 'schema_version = 19' ($schemaResult[8] -eq 'True')
 
   # Round-trip the four new fields via doc-facts-selftest
-  $out = & $exePath doc-facts-selftest --db $db 2>$null
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath doc-facts-selftest --db $db 2>$null }
   $exitCode = $LASTEXITCODE
   $raw = ($out -join "`n")
 

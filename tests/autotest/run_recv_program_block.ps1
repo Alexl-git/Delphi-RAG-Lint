@@ -12,9 +12,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_recv_program_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -92,11 +95,11 @@ end.
 
 $libDb = Join-Path $WorkDir 'lib.sqlite'; $appDb = Join-Path $WorkDir 'app.sqlite'
 Push-Location C:\TEMP
-& $exePath index $lib --db $libDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $lib --db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V library index built' (Test-Path $libDb) $libDb
-& $exePath index --project (Join-Path $app 'App.dpr') --db $appDb --library-db $libDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index --project (Join-Path $app 'App.dpr') --db $appDb --library-db $libDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V app index built' (Test-Path $appDb) $appDb
-$j = & $exePath sql --db $appDb --json --limit 2000 --query "SELECT '' p, f.path, r.receiver_text, r.name_text, coalesce(r.external_target,''), coalesce(t.qualified_name,'') FROM refs r JOIN files f ON f.id = r.file_id LEFT JOIN call_edges c ON c.ref_id = r.id LEFT JOIN symbols t ON t.id = c.target_symbol_id WHERE r.kind = 'call' AND r.receiver_text <> ''" | Out-String | ConvertFrom-Json
+$j = & $exePath sql --db $appDb --json --limit 2000 --query "SELECT '' p, f.path, r.receiver_text, r.name_text, coalesce(r.external_target,''), coalesce(t.qualified_name,'') FROM refs r JOIN files f ON f.id = r.file_id LEFT JOIN call_edges c ON c.ref_id = r.id LEFT JOIN symbols t ON t.id = c.target_symbol_id WHERE r.kind = 'call' AND r.receiver_text <> ''" | Out-String | ConvertFrom-Json | ForEach-Object { $_ }
 Pop-Location
 
 $rows = foreach ($r in $j.rows) { [pscustomobject]@{ File=[IO.Path]::GetFileName([string]$r[1]); Rcv=[string]$r[2]; Name=[string]$r[3]; Ext=[string]$r[4]; Edge=[string]$r[5] } }

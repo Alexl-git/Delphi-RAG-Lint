@@ -25,12 +25,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe       = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
+  [string]$Exe       = '',
   [switch]$KeepScratch,
   [string]$WorkDir   = "$env:TEMP\drag-lint-cyclefix-atomic-$PID",
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite',
   [string]$Rsvars    = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }) }
 # E18 T13: removes this run's scratch (WorkDir) however the run ends; kept only on failure when
 # -KeepScratch is passed (the path is printed).
 function Remove-Scratch {
@@ -77,7 +80,7 @@ function New-Demo([string]$Tag) {
   $proj = Join-Path $WorkDir "$Tag-proj"
   Copy-Tree $Demo $proj
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project (Join-Path $proj 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "$Tag-index.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $proj 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "$Tag-index.log") }
   return @{ Proj = $proj; Dproj = (Join-Path $proj 'CircularDemo.dproj'); Db = $db }
 }
 function Run-Fix([hashtable]$D, [string[]]$Extra, [hashtable]$Env = @{}, [bool]$Json = $true) {
@@ -86,12 +89,12 @@ function Run-Fix([hashtable]$D, [string[]]$Extra, [hashtable]$Env = @{}, [bool]$
   if ($Json) { $a += @('--format', 'json') }
   foreach ($k in $Env.Keys) { Set-Item "Env:$k" $Env[$k] }
   try {
-    $out = (& $Exe @a 2>$errf | Out-String)
+    $out = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errf); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe @a 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
     $code = $LASTEXITCODE
   } finally { foreach ($k in $Env.Keys) { Remove-Item "Env:$k" -ErrorAction SilentlyContinue } }
   $err = if (Test-Path $errf) { [IO.File]::ReadAllText($errf) } else { '' }
   $j = $null
-  if ($Json) { try { $j = $out | ConvertFrom-Json } catch { $j = $null } }
+  if ($Json) { try { $j = $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $j = $null } }
   return @{ Exit = $code; Out = $out; Err = $err; Json = $j }
 }
 function Cy($r) { if ($r.Json) { return @($r.Json.cycles)[0] } return $null }
@@ -108,13 +111,13 @@ $written = @($cy.written)
 Check 'a: written[] = 5 files (4 edited + 1 new)' ($written.Count -eq 5) ($written -join ', ')
 Check 'a: the new leaf DemoGagePort.Untangle.pas is written' (@($written | Where-Object { "$_" -like '*DemoGagePort.Untangle.pas' }).Count -eq 1) ($written -join ', ')
 Check 'a: the new leaf exists' (Test-Path (Join-Path $A.Proj 'DemoGagePort.Untangle.pas')) ''
-Check 'a: one .BCK<n> backup per edited file (4)' ((Backups $A.Proj).Count -eq 4) ((Backups $A.Proj | ForEach-Object Name) -join ', ')
+Check 'a: one .BCK<n> backup per edited file (4)' ((@(Backups $A.Proj)).Count -eq 4) ((Backups $A.Proj | ForEach-Object Name) -join ', ')
 Check 'a: backups[] has 4 entries' (@($cy.backups).Count -eq 4) ($cy.backups | ConvertTo-Json -Compress)
 Check 'a: recovery.txt written' (Test-Path (Join-Path $A.Proj 'recovery.txt')) ''
 Check 'a: compile.status = ok' ($cy.compile.status -eq 'ok') ($cy.compile | ConvertTo-Json -Compress -Depth 4)
 Check 'a: reindex.status = done' ($cy.reindex.status -eq 'done') ($cy.reindex | ConvertTo-Json -Compress)
 Check 'a: verified = true' ($cy.verified -eq $true) "verified=$($cy.verified) reason=$($cy.verify_reason)`npredicted:`n$($cy.predicted)`nactual:`n$($cy.actual)"
-$cyc = (& $Exe cycles --db $A.Db 2>$null | Out-String)
+$cyc = (& { $ErrorActionPreference = 'Continue'; & $Exe cycles --db $A.Db 2>$null } | Out-String)
 Check 'a: cycles on the re-indexed DB prints 2 groups' ($cyc -match '(?m)^2 circular unit group\(s\) found:') $cyc
 Check 'a: ok = true, exit_code 0' (($r.Json.ok -eq $true) -and ($r.Json.exit_code -eq 0)) $r.Out
 
@@ -130,7 +133,7 @@ $cy = Cy $r
 Check 'b: refusal write-failed in the cycle' (@($cy.refusals | Where-Object { $_.kind -eq 'write-failed' }).Count -ge 1) $r.Out
 Check 'b: tree byte-identical' ((Get-TreeHash $B.Proj) -eq $hB) ''
 Check 'b: no .Untangle.pas left' (@(Get-ChildItem $B.Proj -Filter '*.Untangle.pas').Count -eq 0) ''
-Check 'b: no .BCK left' ((Backups $B.Proj).Count -eq 0) ''
+Check 'b: no .BCK left' ((@(Backups $B.Proj)).Count -eq 0) ''
 Check 'b: no recovery.txt left' (-not (Test-Path (Join-Path $B.Proj 'recovery.txt'))) ''
 Check 'b: DB copy unchanged' ((Get-FileSha $B.Db) -eq $dbB) ''
 $t = Run-Fix $B @('--unit', 'demogageport', '--apply') @{ DRAGLINT_TEST_FAIL_WRITE_AT = '3' } -Json $false
@@ -175,7 +178,7 @@ Check 'f: compile.status = error with the dcc lines' (($cy.compile.status -eq 'e
 Check 'f: no repair was made' (@($cy.repairs).Count -eq 0) ($cy.repairs | ConvertTo-Json -Compress)
 Check 'f: rolled_back = true' ($cy.rolled_back -eq $true) ''
 Check 'f: tree byte-identical' ((Get-TreeHash $F.Proj) -eq $hF) ''
-Check 'f: no new leaf, no .BCK, no recovery.txt' ((@(Get-ChildItem $F.Proj -Filter '*.Untangle.pas').Count -eq 0) -and ((Backups $F.Proj).Count -eq 0) -and
+Check 'f: no new leaf, no .BCK, no recovery.txt' ((@(Get-ChildItem $F.Proj -Filter '*.Untangle.pas').Count -eq 0) -and ((@(Backups $F.Proj)).Count -eq 0) -and
   -not (Test-Path (Join-Path $F.Proj 'recovery.txt'))) ''
 Check 'f: DB copy unchanged' ((Get-FileSha $F.Db) -eq $dbF) ''
 
@@ -184,7 +187,7 @@ Write-Host '== (g) re-index target guard' -ForegroundColor Cyan
 $G = @{ Proj = (Join-Path $WorkDir 'g-proj'); Db = (Join-Path $WorkDir 'g-dir.sqlite') }
 Copy-Tree $Demo $G.Proj
 $G.Dproj = Join-Path $G.Proj 'CircularDemo.dproj'
-& $Exe index $G.Proj --db $G.Db *> (Join-Path $WorkDir 'g-index.log')
+& { $ErrorActionPreference = 'Continue'; & $Exe index $G.Proj --db $G.Db *> (Join-Path $WorkDir 'g-index.log') }
 $dbG = Get-FileSha $G.Db
 $r = Run-Fix $G @('--unit', 'demogageport', '--apply')
 $cy = Cy $r
@@ -210,7 +213,7 @@ function New-BomDemo([string]$Tag) {
   [IO.File]::WriteAllText($rec, "[2020-01-01 00:00:00] an earlier run`r`n", [Text.Encoding]::ASCII)
   foreach ($f in Get-ChildItem $proj -File) { $f.LastWriteTimeUtc = [datetime]::new(2021, 3, 4, 5, 6, 7, [DateTimeKind]::Utc) }
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project (Join-Path $proj 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "$Tag-index.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $proj 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "$Tag-index.log") }
   return @{ Proj = $proj; Dproj = (Join-Path $proj 'CircularDemo.dproj'); Db = $db }
 }
 $I = New-BomDemo 'i'
@@ -242,7 +245,7 @@ try {
   $kp = Join-Path $outRoot 'k-proj'
   Copy-Tree $Demo $kp
   $K = @{ Proj = $kp; Dproj = (Join-Path $kp 'CircularDemo.dproj'); Db = (Join-Path $outRoot 'k.sqlite') }
-  & $Exe index --project $K.Dproj --db $K.Db *> (Join-Path $WorkDir 'k-index.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $K.Dproj --db $K.Db *> (Join-Path $WorkDir 'k-index.log') }
   $r = Run-Fix $K @('--unit', 'demogageport', '--apply', '--no-reindex') @{ DRAGLINT_TEST_FAIL_WRITE_AT = '1' }
   Check 'k: outside TEMP the seam is ignored: exit 0, 5 files written' (($r.Exit -eq 0) -and (@((Cy $r).written).Count -eq 5)) "exit=$($r.Exit) $($r.Out)"
 } finally {

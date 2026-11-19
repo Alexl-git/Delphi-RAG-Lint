@@ -43,7 +43,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7. Needs `python` on PATH.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Continue'
@@ -294,11 +297,11 @@ try {
   $dproj = Join-Path $proj 'App.dproj'
   $db    = Join-Path $scratch 'closure.sqlite'
 
-  $out = & $exePath index --project $dproj --db $db --platform Win64 --quiet 2>&1
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath index --project $dproj --db $db --platform Win64 --quiet 2>&1 | ForEach-Object { "$_" } }
   $rc  = $LASTEXITCODE
   Check 'index --project exits 0' ($rc -eq 0) "exit=$rc; $(($out | Select-Object -Last 2) -join ' | ')"
 
-  $indexed = @((& python $py $db) -join "`n" | ConvertFrom-Json)
+  $indexed = @(((& python $py $db) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Write-Host ("  indexed {0} file(s): {1}" -f $indexed.Count,
     (($indexed | ForEach-Object { Split-Path $_ -Leaf }) -join ', '))
 
@@ -322,7 +325,7 @@ try {
   $edproj = Join-Path $empty 'Empty.dproj'
   $edb    = Join-Path $scratch 'guard.sqlite'
 
-  $gout = & $exePath index --project $edproj --db $edb --platform Win64 --quiet 2>&1
+  $gout = & { $ErrorActionPreference = 'Continue'; & $exePath index --project $edproj --db $edb --platform Win64 --quiet 2>&1 | ForEach-Object { "$_" } }
   $grc  = $LASTEXITCODE
   Check 'a .dproj with an empty closure exits 2' ($grc -eq 2) `
     "exit=$grc; $(($gout | Select-Object -Last 2) -join ' | ')"
@@ -332,7 +335,7 @@ try {
     (@($gout | Where-Object { $t = $_.ToString(); ($t -like '*ERROR*') -and ($t -like '*Empty.dproj*') }).Count -ge 1) `
     "output: $(($gout | Select-Object -Last 3) -join ' | ')"
 
-  $gfiles = @((& python $py $edb) -join "`n" | ConvertFrom-Json)
+  $gfiles = @(((& python $py $edb) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Check 'the guarded run wrote ZERO files rows' ($gfiles.Count -eq 0) `
     ("count=" + $gfiles.Count + "; e.g. " + (($gfiles | Select-Object -First 3) -join ' | '))
 
@@ -357,12 +360,12 @@ try {
 }
 "@ | Set-Content $cfg -Encoding ascii
 
-  $mout = & $exePath index --all --config $cfg --only ProjClosure 2>&1
+  $mout = & { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only ProjClosure 2>&1 | ForEach-Object { "$_" } }
   $mrc  = $LASTEXITCODE
   Check 'index --all (smClosure section) exits 0' ($mrc -eq 0) `
     "exit=$mrc; $(($mout | Select-Object -Last 2) -join ' | ')"
 
-  $mfiles = @((& python $py (Join-Path $scratch "out\$mdb")) -join "`n" | ConvertFrom-Json)
+  $mfiles = @(((& python $py (Join-Path $scratch "out\$mdb")) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Write-Host ("  section indexed {0} file(s): {1}" -f $mfiles.Count,
     (($mfiles | ForEach-Object { Split-Path $_ -Leaf }) -join ', '))
   function HasM([string]$Leaf) { return @($mfiles | Where-Object { $_ -like "*\$Leaf" }).Count -ge 1 }
@@ -400,7 +403,7 @@ try {
 }
 "@ | Set-Content $cfg2 -Encoding ascii
 
-  $2out = @((& $exePath index --all --config $cfg2 --jobs 1 2>&1) | ForEach-Object { $_.ToString() })
+  $2out = @((& { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg2 --jobs 1 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { $_.ToString() })
   $2rc  = $LASTEXITCODE
 
   # (b) the run as a whole must not report success
@@ -424,12 +427,12 @@ try {
     (($missing | Select-Object -First 1) -join '')
 
   # (a) THE ONE THAT MATTERS: the healthy section still built, after the dead one
-  $hfiles = @((& python $py (Join-Path $scratch 'out2\healthy.sqlite')) -join "`n" | ConvertFrom-Json)
+  $hfiles = @(((& python $py (Join-Path $scratch 'out2\healthy.sqlite')) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Write-Host ("  healthy section indexed {0} file(s)" -f $hfiles.Count)
   Check 'the HEALTHY section still indexed its files' ($hfiles.Count -eq $mfiles.Count) `
     "healthy=$($hfiles.Count) vs expected=$($mfiles.Count) -- one bad section must not starve the others"
 
-  $dfiles = @((& python $py (Join-Path $scratch 'out2\dead.sqlite')) -join "`n" | ConvertFrom-Json)
+  $dfiles = @(((& python $py (Join-Path $scratch 'out2\dead.sqlite')) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Check 'the dead section wrote no source rows' ($dfiles.Count -eq 0) `
     ("count=" + $dfiles.Count + "; e.g. " + (($dfiles | Select-Object -First 3) -join ' | '))
 
@@ -447,12 +450,12 @@ try {
   $sdpr = Join-Path $solo 'Solo.dpr'
   $sdb  = Join-Path $scratch 'solo.sqlite'
 
-  $sout = & $exePath index --project $sdpr --db $sdb --platform Win64 --quiet 2>&1
+  $sout = & { $ErrorActionPreference = 'Continue'; & $exePath index --project $sdpr --db $sdb --platform Win64 --quiet 2>&1 | ForEach-Object { "$_" } }
   $src  = $LASTEXITCODE
   Check 'a single-file program (library uses only) exits 0' ($src -eq 0) `
     "exit=$src; $(($sout | Select-Object -Last 2) -join ' | ')"
 
-  $sfiles = @((& python $py $sdb) -join "`n" | ConvertFrom-Json)
+  $sfiles = @(((& python $py $sdb) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Write-Host ("  solo indexed {0} file(s): {1}" -f $sfiles.Count,
     (($sfiles | ForEach-Object { Split-Path $_ -Leaf }) -join ', '))
   Check 'Solo.dpr IS in the index' `
@@ -463,12 +466,12 @@ try {
   $sdproj = Join-Path $solo 'Solo.dproj'
   $sdb2   = Join-Path $scratch 'solo_dproj.sqlite'
 
-  $s2out = & $exePath index --project $sdproj --db $sdb2 --platform Win64 --quiet 2>&1
+  $s2out = & { $ErrorActionPreference = 'Continue'; & $exePath index --project $sdproj --db $sdb2 --platform Win64 --quiet 2>&1 | ForEach-Object { "$_" } }
   $s2rc  = $LASTEXITCODE
   Check 'the .dproj shape of a single-file program exits 0' ($s2rc -eq 0) `
     "exit=$s2rc; $(($s2out | Select-Object -Last 2) -join ' | ')"
 
-  $s2files = @((& python $py $sdb2) -join "`n" | ConvertFrom-Json)
+  $s2files = @(((& python $py $sdb2) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Check 'Solo.dpr IS in the index when reached via Solo.dproj' `
     (@($s2files | Where-Object { $_ -like '*\Solo.dpr' }).Count -ge 1) `
     ("count=" + $s2files.Count)
@@ -488,12 +491,12 @@ try {
 }
 "@ | Set-Content $cfg3 -Encoding ascii
 
-  $3out = @((& $exePath index --all --config $cfg3 --only SoloSection 2>&1) | ForEach-Object { $_.ToString() })
+  $3out = @((& { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg3 --only SoloSection 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { $_.ToString() })
   $3rc  = $LASTEXITCODE
   Check 'a manifest section over a single-file program exits 0' ($3rc -eq 0) `
     "exit=$3rc; $(($3out | Select-Object -Last 2) -join ' | ')"
 
-  $3files = @((& python $py (Join-Path $scratch 'out3\solo.sqlite')) -join "`n" | ConvertFrom-Json)
+  $3files = @(((& python $py (Join-Path $scratch 'out3\solo.sqlite')) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Check 'section: Solo.dpr IS in the index' `
     (@($3files | Where-Object { $_ -like '*\Solo.dpr' }).Count -ge 1) `
     ("count=" + $3files.Count)

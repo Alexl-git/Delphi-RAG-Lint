@@ -26,9 +26,12 @@
 # Usage: pwsh -File tests/autotest/run_unit_not_in_dpr_qualified.ps1 [-Exe <path>]
 [CmdletBinding()]
 param(
-    [string] $Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+    [string] $Exe     = '',
     [string] $WorkDir = "$env:TEMP\drag-lint-dpr-qualified-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -132,7 +135,7 @@ Write-Ascii (Join-Path $WorkDir 'P.dproj') @'
 '@
 
 $db = Join-Path $WorkDir 'p.sqlite'
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $out = (& $Exe lint --project (Join-Path $WorkDir 'P.dproj') --rule unit-not-in-dpr) -join "`n"
 Write-Host ''
 foreach ($l in ($out -split "`n" | Select-String 'unit-not-in-dpr')) { Write-Host ("  " + $l) -ForegroundColor DarkGray }

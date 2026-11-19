@@ -45,8 +45,11 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe"
+  [string]$Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -133,12 +136,12 @@ end.
 '@ -replace "`r`n", "`n") -replace "`n", "`r`n"), (New-Object System.Text.ASCIIEncoding))
 
 $db = Join-Path $WorkDir '_D-RAG\App.sqlite'
-& $Exe index --project $dpr --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project $dpr --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' ((Test-Path $db) -and ($LASTEXITCODE -eq 0))
 
 function Report {
   $out = @()
-  foreach ($line in (& $Exe lint-all --db $db --output (Join-Path $WorkDir 'lint-report.txt') 2>&1)) {
+  foreach ($line in (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --output (Join-Path $WorkDir 'lint-report.txt') 2>&1 | ForEach-Object { "$_" } })) {
     if ("$line" -match ':(\d+):\d+\s+\[\w+\]\s+([a-z0-9-]+):') { $out += [pscustomobject]@{ Line = [int]$Matches[1]; Rule = $Matches[2] } }
   }
   return $out
@@ -167,12 +170,12 @@ Check 'precondition: the anchor is a WRAPPED statement (it does not end in ";")'
 
 $before = Report
 Check 'precondition: the wrapped statement reports concat-in-loop before allow' `
-  ((LinesFor $before 'concat-in-loop') -contains $anchor) "got: $((LinesFor $before 'concat-in-loop') -join ', ')"
+  ((@(LinesFor $before 'concat-in-loop')) -contains $anchor) "got: $((@(LinesFor $before 'concat-in-loop')) -join ', ')"
 
 # Follow the remedy the engine itself prints.
-& $Exe allow $pas --fix-line $anchor --fix-rule concat-in-loop --apply 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe allow $pas --fix-line $anchor --fix-rule concat-in-loop --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'allow --apply exits 0' ($LASTEXITCODE -eq 0)
-& $Exe index --project $dpr --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project $dpr --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 $after = Report
 $post  = [System.IO.File]::ReadAllLines($pas)
@@ -182,7 +185,7 @@ $after | ForEach-Object { Write-Host ("  {0}:{1}" -f $_.Line, $_.Rule) }
 
 # 1. the reviewed finding is actually suppressed
 Check "1. the wrapped statement's concat-in-loop is SUPPRESSED (line $anchor)" `
-  (-not ((LinesFor $after 'concat-in-loop') -contains $anchor))
+  (-not ((@(LinesFor $after 'concat-in-loop')) -contains $anchor))
 
 # 2. THE FIX -- no new hint ON THE REVIEWED STATEMENT.
 #
@@ -192,10 +195,10 @@ Check "1. the wrapped statement's concat-in-loop is SUPPRESSED (line $anchor)" `
 #    reported. The two assertions contradicted each other: a file-wide "zero
 #    unused" is only satisfiable by the wrong fix this runner exists to rule out.
 #    Scoping it to the statement is what makes cases 2 and 5 independent.
-$unusedOnStmt = @((LinesFor $after 'review-marker-unused') | Where-Object { $_ -ge $anchor -and $_ -le $wrapEnd })
+$unusedOnStmt = @((@(LinesFor $after 'review-marker-unused')) | Where-Object { $_ -ge $anchor -and $_ -le $wrapEnd })
 Check "2. no review-marker-unused on the reviewed statement (lines $anchor-$wrapEnd)" `
   ($unusedOnStmt.Count -eq 0) `
-  "got lines: $($unusedOnStmt -join ', ')  (all unused: $((LinesFor $after 'review-marker-unused') -join ', '))"
+  "got lines: $($unusedOnStmt -join ', ')  (all unused: $((@(LinesFor $after 'review-marker-unused')) -join ', '))"
 
 # 3. exactly one marker for the rule on that statement
 $stmtMarkers = @($post[($anchor - 1)..($wrapEnd - 1)] | Where-Object { $_ -match 'dl:ok[^/]*concat-in-loop' }).Count
@@ -206,7 +209,7 @@ Check "4. CONTROL: the same rule's marker on a DIFFERENT statement is byte-ident
   ($post[$otherLn - 1] -ceq $src[$otherLn - 1]) `
   "before='$($src[$otherLn - 1])' after='$($post[$otherLn - 1])'"
 Check "4b. CONTROL: and that statement still reports concat-in-loop" `
-  ((LinesFor $after 'concat-in-loop') -contains $otherLn)
+  ((@(LinesFor $after 'concat-in-loop')) -contains $otherLn)
 
 # 5. CONTROL -- the unused reporter is still alive
 Check "5. CONTROL: the unrelated dead marker is STILL reported stale-or-unused (line $quietLn)" `

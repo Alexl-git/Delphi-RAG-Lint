@@ -48,9 +48,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string] $Exe    = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string] $DbFile = "$PSScriptRoot\..\..\src\cli\_D-RAG\drag-lint.sqlite"
+  [string] $Exe    = '',
+  [string] $DbFile = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $DbFile) { $DbFile = "$PSScriptRoot\..\..\src\cli\_D-RAG\drag-lint.sqlite" }
 
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -76,7 +80,7 @@ $errFile = Join-Path ([IO.Path]::GetTempPath()) ("draglint-namelike-" + [Guid]::
 # 'Stop' turns that banner into an ErrorRecord, which has already corrupted a
 # JSON slice in this repo.
 function Run([string[]]$A) {
-  $out = & $Exe @A 2>$errFile
+  $out = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe @A 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   $rc  = $LASTEXITCODE
   $err = if (Test-Path -LiteralPath $errFile) { (Get-Content -LiteralPath $errFile -Raw) } else { '' }
   if ($null -eq $err) { $err = '' }
@@ -175,7 +179,7 @@ Write-Host '-- check 7: --json and the <3 char bound' -ForegroundColor Cyan
 
 $j = Run @('query','--name-like','qlitesymbol','--db',$DbFile,'--limit','5','--json')
 $doc = $null
-try { $doc = $j.Out | ConvertFrom-Json } catch { }
+try { $doc = $j.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'stdout is valid JSON (the banner is on stderr)' ($null -ne $doc) $j.Out
 Check 'and it carries the match' (($null -ne $doc) -and (($doc | ConvertTo-Json -Depth 6) -match 'TSQLiteSymbolStore')) ''
 # `exact` is a claim ABOUT THE NAME -- "this symbol IS what you asked for". It is

@@ -13,9 +13,16 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Dpr     = "$PSScriptRoot\..\JobQueueDbHoldTests.dpr",
+  [string]$Dpr     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-jobqueue-dbhold-build-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot '..\autotest\lib\WorkDirCleanup.ps1')
+$script:RunStart = (Get-Date).AddSeconds(-2)
+try {
+if (-not $Dpr) { $Dpr = "$PSScriptRoot\..\JobQueueDbHoldTests.dpr" }
 $ErrorActionPreference = 'Stop'
 
 if (-not (Test-Path $Dpr)) { Write-Host "FATAL: dpr not found: $Dpr" -ForegroundColor Red; exit 2 }
@@ -53,7 +60,7 @@ if ($buildOut -notmatch 'BUILD_EXITCODE=0') {
 $exe = Join-Path $WorkDir ([System.IO.Path]::GetFileNameWithoutExtension($DprName) + '.exe')
 if (-not (Test-Path $exe)) { Write-Host "FATAL: exe not produced: $exe" -ForegroundColor Red; exit 2 }
 
-$out = & $exe 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $exe 2>&1 | ForEach-Object { "$_" } } | Out-String
 $rc  = $LASTEXITCODE
 Write-Host $out.TrimEnd()
 
@@ -65,3 +72,10 @@ if ($out -notmatch '(\d+) passed, 0 failed') {
 }
 Write-Host 'PASS' -ForegroundColor Green
 exit 0
+} finally {
+  Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1')
+  # the test program's own scratch: TPath.GetTempPath\drag-lint-jobqueue-dbhold-<its pid> (JobQueueDbHoldTests.dpr)
+  Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) -Directory -Filter 'drag-lint-jobqueue-dbhold-*' -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -match '^drag-lint-jobqueue-dbhold-\d+$' -and $_.CreationTime -ge $script:RunStart } |
+    ForEach-Object { Remove-WorkDir $_.FullName -Keep:($env:DL_KEEP_WORKDIR -eq '1') }
+}

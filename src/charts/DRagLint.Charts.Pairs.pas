@@ -255,7 +255,7 @@ type
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Charts.AskVerb.TAskRun.ResolveOthers (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Producer.Delphi.PairedIndexes (DRagLint.Charts.Producer.Delphi.pas)</para>
 /// <para>Calls: DRagLint.Charts.Pairs.CheckConfigured, DRagLint.Charts.Pairs.EReportPairStop.CreateCode, DRagLint.Charts.Pairs.FindReportPair, DRagLint.Charts.Pairs.RefuseUnpaired, DRagLint.Charts.Pairs.SameIndexPath, Format</para>
-/// <para>Complexity: 14 (cyclomatic, outer body), 35 lines (full implementation)</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 35 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Charts.Pairs.CheckConfigured"/>
 /// <seealso cref="DRagLint.Charts.Pairs.EReportPairStop.CreateCode"/>
 /// <seealso cref="DRagLint.Charts.Pairs.FindReportPair"/>

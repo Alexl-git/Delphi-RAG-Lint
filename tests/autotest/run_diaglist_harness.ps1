@@ -19,9 +19,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$FixtureDir = "$PSScriptRoot\fixtures\diaglist",
+  [string]$FixtureDir = '',
   [string]$WorkDir    = "$env:TEMP\drag-lint-diaglist-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $FixtureDir) { $FixtureDir = "$PSScriptRoot\fixtures\diaglist" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -50,14 +53,14 @@ $batBody = (@(
 ) -join "`r`n")
 [System.IO.File]::WriteAllText($batPath, $batBody, [System.Text.Encoding]::ASCII)
 $null = Start-Process cmd.exe -ArgumentList "/c", "`"$batPath`"" `
-          -RedirectStandardOutput $logPath -RedirectStandardError "$logPath.err" -NoNewWindow -Wait -PassThru
+          -RedirectStandardOutput $logPath -RedirectStandardError "$logPath.err" -NoNewWindow -Wait -PassThru; $null = $null.Handle
 $log = Get-Content $logPath -Raw -ErrorAction SilentlyContinue
 $buildOk = ($log -match 'BUILD_EXITCODE=0') -and ($log -notmatch 'Error:')
 Check 'DiagListHarness.dpr builds (Win64 Debug)' $buildOk (($log -split "`r?`n" | Select-Object -Last 4) -join ' | ')
 $exe = "$outDir\DiagListHarness.exe"
 if (-not $buildOk -or -not (Test-Path $exe)) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 
-$out = & $exe 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $exe 2>&1 | ForEach-Object { "$_" } } | Out-String
 $kv = @{}
 foreach ($line in ($out -split "`r?`n")) { if ($line -match '^([A-Za-z0-9_.]+)=(.*)$') { $kv[$matches[1]] = $matches[2] } }
 Check 'harness ran to completion' ($out -match '(?m)^DONE') ''

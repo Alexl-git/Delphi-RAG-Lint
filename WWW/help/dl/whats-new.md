@@ -9,13 +9,38 @@ product: DL
 
 drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.com](https://www.htrmicronite.com)), our quality and production-control software.
 
+## 1.52.0-alpha
+
+* [check-init](features/check-init.md) -- Answers whether a variable or field is set before a given use on every execution (SET / NEVER-SET / MAY-BE-UNSET).
+* [Complexity counts the if-expression](features/complexity-if-expression.md) -- cyclomatic-complexity, cognitive-complexity and the autodoc Complexity fact count a Delphi 13 if-expression as a decision point.
+* [explain](features/explain.md) -- Explains one lint rule in plain words: what it means, why it matters, a bad and a good example, its default, whether it can be fixed, and how to suppress it.
+* [Field repository](features/field-repository.md) -- Keeps the TableTools field registry in one SQLite file per database, filled from Firebird (read-only), with a diffable text backup.
+* [Reserved words as names, implicit package imports, contract-unit globs](features/v152-atla-rules.md) -- reserved-word-identifier and implicit-package-import rules; contractUnits globs in drag-lint.json for contract-unit-declares-class.
+* [member-could-be-private lint rule (lane ATLB)](features/v152-atlb-rules.md) -- Hint (OFF in 1.52) on a public member used only in its own unit; published, virtual, interface, attributed and shared-unit members stay silent.
+* [debug-display-placeholder + attribute-aware member-could-be-private](features/v152-attrrules.md) -- Warning (OFF in 1.52) on a DebuggerDisplay placeholder naming no member; member-could-be-private reads attributes from the index.
+* [Default-on form, dataset and data-module rules](features/v152-defaults.md) -- Four lint rules on by default since 1.52 (form object/field, foreign form access, edit without post, data module form global); a shipped exempt-class list.
+* [Disable rule (this line, this unit, this project)](features/v152-disable-rule.md) -- Silence one lint rule for a line (dl:ok marker), a unit or the project (rule_overrides in drag-lint-lint.json), with a reason and date; rules enable undoes it.
+* [Documentation policy: missing-doc, doc-placeholder, doc-malformed-summary](features/v152-docpol.md) -- missing-doc covers DFM-bound handlers with code; doc-placeholder (ON, hint) flags template summaries; doc-malformed-summary (OFF) flags declaration-like ones.
+* [Extract constant (manual fix for magic literals)](features/v152-extract-constant.md) -- Turns one number or string literal into a named constant and replaces every occurrence in the unit; manual fix of the magic-literal rules.
+* [extract-method and create-enum-helper through the compile gate by default](features/v152-fixer-compile-gate.md) -- extract-method / create-enum-helper --apply build the project before and after the write; no project found = REFUSED, --no-compile-gate writes unbuilt.
+* [Array index possibly out of range lint rule (index-possibly-out-of-range)](features/v152-index-possibly-out-of-range.md) -- Warns on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only.
+* [Per-rule time budget in the rule frame (rule-skipped-budget)](features/v152-per-rule-budget.md) -- A v151/v152 rule slower than rule_time_budget_ms (2000 ms) on a file is skipped there with one rule-skipped-budget note; index warns near the parse limit.
+* [unit-used-by-no-unit rule; unit-not-in-dpr outside the project roots](features/v152-proj2.md) -- Warns (ON) on a unit only the .dpr lists that nothing reaches; a form counts only when opened. unit-not-in-dpr also reports shared-folder units.
+* [parameter-type-too-wide ON by default, with an autofix](features/v152-ptw.md) -- parameter-type-too-wide ships ON as a warning in lint-all / lint-project with an autofix that retypes the parameter through the compile gate.
+* [Lint rules unconnected-control and hanging-handler](features/v152-unconn-rules.md) -- Warns on a form control that nothing wires and on an event-handler-shaped method that no form binds and no code assigns or calls.
+* [Fix with drag-lint (VS Code and RAD Studio)](features/v152-vsfix.md) -- Fix the finding at the cursor, all of one rule, or every fixable finding in a file: VS Code code actions and menus, plus a RAD Studio menu entry.
+
 ## 1.51.1-alpha
 
+* [Editor right-click submenu](features/editor-context-menu.md) -- The drag-lint submenu of the code editor's right-click menu: the 1.52 caret commands, enabled by what the caret is on.
+* [review-marker-remeasured hint](features/review-marker-remeasured.md) -- A dl:ok on a routine-metric rule stamped under an older hash still suppresses its finding; a hint names the allow command that re-stamps it.
 * [CLI fixes in 1.51.1](features/v1511-cli-fixes.md) -- lint-all --rule a,b runs only those rules, a DB copy stays on the copy; rules --rule; info versions; index parse-errors; resolve-only warning.
 * [Cycles fix through recipe R3 (hub surface, compile-gated)](features/v1511-cyc-fixes.md) -- cycles --fix --hub-surface writes recipe R3 through the compile gate: build before and after, rollback, re-index and verify.
 * [References for declaration positions](features/v1511-ext-fixes.md) -- The index keeps a reference for pointer base types, generic constraints, generic method headers, dotted property specifiers and message constants.
 * [Per-host bindings for refs in a shared include](features/v1511-inc2-fixes.md) -- A ref inside an include that several units include keeps one binding per host (table ref_host_bindings, schema 26); find-callers and usages read it.
 * [Library bindings for bare reads, paren-less calls and function-result receivers](features/v1511-res-fixes.md) -- Bare reads of library vars (Application), paren-less library calls and members on a library function result bind to refs.external_target.
+* [Custom attributes in the index](features/v152-attributes-fact.md) -- Every custom attribute is stored with its argument text and the symbol it decorates (table attributes), library indexes too.
+* [Resolver fixes in 1.52](features/v152-extr-resolve.md) -- Generic receivers (`TObjectList<T>.Create`) typed; index --resolve-only without a library keeps the last library bindings.
 
 ## 1.51.0-alpha
 
@@ -56,9 +81,9 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 * [bookmarks](features/bookmarks.md) -- Lists or finds the dl:bk comment-anchor bookmarks in a unit or a folder, and strips / restores them on request.
 * [Convert Components](features/convert-components.md) -- Opens ConvRulesEditor on the components selected in the form designer.
 * [exception-facts](features/exception-facts.md) -- Lists which routine raises and handles which exception type, by routine or by type.
-* [Data-flow rules that know a parameter's mode](features/flow-out-arg-rules.md) -- Three OFF rules: a local that only receives out arguments, a store overwritten by an out argument, a local passed by value to a method before it is assigned.
+* [Data-flow rules that know a parameter's mode](features/flow-out-arg-rules.md) -- Two OFF out-argument rules; since 1.52 a local passed by value to a method before assignment reports under the default used-before-assignment.
 * [MCP get_neighbors](features/mcp-get-neighbors.md) -- MCP tool: the call-graph neighbourhood of a symbol within 1..3 hops.
-* [Parameter type too wide (lint rule)](features/parameter-type-too-wide.md) -- Project lint rule, OFF by default: a class-typed parameter that an ancestor type could carry, proved by the narrow-param plan.
+* [Parameter type too wide (lint rule)](features/parameter-type-too-wide.md) -- Project lint rule, ON since 1.52 (warning, autofix): a class-typed parameter that an ancestor type could carry, proved by the narrow-param plan.
 
 ## 1.44.1-alpha
 
@@ -74,7 +99,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 ## 1.42.0-alpha
 
 * [Ancestor not in project (lint rule)](features/ancestor-not-in-project.md) -- Project-wide lint rule (error): a form, frame or data module whose ancestor class is declared in no project unit and not in the platform library.
-* [Data module reaching a global form (lint rule)](features/datamodule-form-global.md) -- Project lint rule, OFF by default: a data module unit reads or writes another unit's global form variable.
+* [Data module reaching a global form (lint rule)](features/datamodule-form-global.md) -- Project lint rule, ON by default since 1.52: a data module unit reads or writes another unit's global form variable.
 * [Effect-free call in a loop that could move out (lint rule)](features/effect-free-in-loop-invariant.md) -- Project-wide lint rule, ON by default since 1.43: a proven effect-free call inside a loop whose arguments, and the state it reads, cannot change in that loop.
 * [Identifier case mismatch (lint rule)](features/identifier-case-mismatch.md) -- Lint rule, OFF by default: a name spelled in a different case from its declaration.
 * [Interfaced object set to nil (lint rule)](features/interfaced-object-nil-leak.md) -- Lint rule, OFF by default: an object reference to a TInterfacedObject descendant is set to nil while it holds a fresh instance, which leaks it.
@@ -109,7 +134,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 ## 1.37.0-alpha
 
-* [Autofix for fixable rules](features/autofix-wave.md) -- lint --fix repairs findings of the 125 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
+* [Autofix for fixable rules](features/autofix-wave.md) -- lint --fix repairs findings of the 131 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
 * [Compliance labels (CWE, CERT, MISRA)](features/compliance-labels.md) -- Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field.
 * [Gap-wave lint rules](features/gap-wave-rules.md) -- About 50 new lint rules (bug patterns, dead code, data flow, platform, structure) added in the 1.37.0 gap wave.
 * [Include-file indexing and IF evaluation](features/inc-indexing.md) -- Include files are indexed under the active build, value defines and IF expressions are evaluated, and an undecidable IF is reported as a pp-unresolved-if hint.
@@ -428,9 +453,9 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 ## 0.33.0-alpha
 
-* [Find Usages](features/find-usages.md) -- Lists every reference to the symbol under the editor caret across the indexed project.
+* [Find Usages](features/find-usages.md) -- Lists every reference to the symbol under the editor caret, in one of four scopes: this bound symbol (default), project, group or everywhere.
 * [Find Usages](features/find-usages-context.md) -- Lists references to the symbol represented by a Structure-tree node.
-* [usages](features/usages.md) -- Finds usage sites of a named symbol, with a choice of report width.
+* [usages](features/usages.md) -- Finds usage sites of a symbol in one of four scopes (this bound symbol, project, group, everywhere), with a choice of report width.
 
 ## 0.31.0-alpha
 
@@ -514,7 +539,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 * [Export Graph (DOT)](features/export-graph-dot.md) -- Uses graph to export the indexed call/reference graph in DOT format, whole or rooted at a name substring; json and html add the Markdown text nodes.
 * [Export to Obsidian](features/export-to-obsidian.md) -- Uses export obsidian to write the indexed project out as a set of Obsidian vault markdown pages.
 * [lsp](features/lsp.md) -- Starts the LSP (Language Server Protocol) stdio server.
-* [shutdown](features/shutdown.md) -- Ask running engines (lsp, cycles --fix, index, lint-all) to stand down cleanly, so an index can be rebuilt or an engine replaced.
+* [stop-now](features/shutdown.md) -- Ask running engines (lsp, cycles --fix, index, lint-all) to stand down cleanly, so an index can be rebuilt or an engine replaced.
 * [Top Symbols (fan-in)](features/top-symbols-fan-in.md) -- Ranks indexed symbols by fan-in -- how many places reference them.
 * [workspace add](features/workspace-add.md) -- Registers a project file into a .drag-lint-workspace.json workspace config, so multi-project workspace commands know about it.
 * [workspace index](features/workspace-index.md) -- Indexes every project registered in a .drag-lint-workspace.json workspace config in one pass.
@@ -522,7 +547,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 ## 0.4.0-alpha
 
-* [MCP server](features/mcp-server.md) -- Exposes the index to MCP clients as 18 tools.
+* [MCP server](features/mcp-server.md) -- Exposes the index to MCP clients as 19 tools.
 * [serve](features/serve.md) -- Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index.
 
 ## 0.2.0-alpha

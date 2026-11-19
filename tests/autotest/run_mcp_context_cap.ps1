@@ -13,9 +13,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_mcp_context_cap_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -61,21 +64,21 @@ $impl
 end.
 "@
 $db = Join-Path $WorkDir 'fx.sqlite'
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V the fixture index was built' (Test-Path $db) $db
 
 function Call([string]$Name, [hashtable]$ToolArgs) {
   $req = Join-Path $WorkDir 'req.json'
   $msg = @{ jsonrpc = '2.0'; id = 1; method = 'tools/call'; params = @{ name = $Name; arguments = $ToolArgs } } | ConvertTo-Json -Depth 6 -Compress
   Write-Ascii $req ($msg + "`n")
-  $out = (Get-Content -Raw $req | & $exePath serve --db $db 2>$null) -join "`n"
+  $out = (Get-Content -Raw $req | & { $ErrorActionPreference = 'Continue'; $input | & $exePath serve --db $db 2>$null }) -join "`n"
   $line = @($out -split "`n" | Where-Object { $_ -match '"id":1' })[0]
-  try { return ((ConvertFrom-Json -InputObject $line).result.content[0].text) } catch { return $out }
+  try { return ((ConvertFrom-Json -InputObject $line | ForEach-Object { $_ }).result.content[0].text) } catch { return $out }
 }
 function Bundle([hashtable]$Extra) {
   $a = @{ qname = 'uCap.TBig' } + $Extra
   $t = Call 'get_context_bundle' $a
-  try { return (ConvertFrom-Json -InputObject $t) } catch { return $null }
+  try { return (ConvertFrom-Json -InputObject $t | ForEach-Object { $_ }) } catch { return $null }
 }
 
 $m = Bundle @{ max_body_tokens = 350 }
@@ -87,7 +90,7 @@ Check 'C2 CONTROL max_body_tokens=0 is uncapped (no body_cap)' (($null -ne $z) -
 
 $reqL = Join-Path $WorkDir 'list.json'
 Write-Ascii $reqL ('{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' + "`n")
-$lst = (Get-Content -Raw $reqL | & $exePath serve --db $db 2>$null) -join "`n"
+$lst = (Get-Content -Raw $reqL | & { $ErrorActionPreference = 'Continue'; $input | & $exePath serve --db $db 2>$null }) -join "`n"
 Check 'M2 the tool schema advertises max_body_tokens' ($lst -match 'max_body_tokens') ($lst.Substring(0, [Math]::Min(200, $lst.Length)))
 
 Write-Host ''

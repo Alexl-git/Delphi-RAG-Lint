@@ -18,7 +18,7 @@
     {
       "type": "cli",
       "verb": "document",
-      "usage": "drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment",
+      "usage": "drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--format json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment",
       "flags": [
         {
           "name": "--qname",

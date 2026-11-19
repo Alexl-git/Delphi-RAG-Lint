@@ -75,9 +75,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-forward-decl-shadow-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -186,7 +189,7 @@ end.
 
 $db = Join-Path $WorkDir 'shadow.sqlite'
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($indexOut -join ' | ')"
 
 # --- Probes. ----------------------------------------------------------------------
@@ -212,25 +215,25 @@ function JsonFrom([string[]]$Lines) {
   return ''
 }
 function Ancestors([string]$Name) {
-  $raw = @(& $Exe query ancestors --name $Name --json --db $db 2>$null) | ForEach-Object { "$_" }
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query ancestors --name $Name --json --db $db 2>$null }) | ForEach-Object { "$_" }
   $code = $LASTEXITCODE
   $json = JsonFrom $raw
   $names = @()
   if ($json) {
-    $o = $json | ConvertFrom-Json
+    $o = $json | ConvertFrom-Json | ForEach-Object { $_ }
     $names = @(@($o.ancestors) | ForEach-Object { $_.name })
   }
   return @{ Code = $code; Names = $names; Raw = ($raw -join ' | ') }
 }
 function AncestorsText([string]$Name) {
-  $raw = @(& $Exe query ancestors --name $Name --db $db 2>$null) | ForEach-Object { "$_" }
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query ancestors --name $Name --db $db 2>$null }) | ForEach-Object { "$_" }
   return @{ Code = $LASTEXITCODE; Text = ($raw -join "`n") }
 }
 function Descends([string]$Name, [string]$Of) {
-  $raw = @(& $Exe query ancestors --name $Name --of $Of --json --db $db 2>$null) | ForEach-Object { "$_" }
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query ancestors --name $Name --of $Of --json --db $db 2>$null }) | ForEach-Object { "$_" }
   $json = JsonFrom $raw
   if (-not $json) { return $null }
-  return [bool](($json | ConvertFrom-Json).is_descendant)
+  return [bool](($json | ConvertFrom-Json | ForEach-Object { $_ }).is_descendant)
 }
 
 # The engine's own stub predicate, transcribed (IsStub / IsForwardDeclClass).

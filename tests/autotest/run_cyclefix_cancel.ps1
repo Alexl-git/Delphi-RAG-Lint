@@ -34,12 +34,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe       = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
+  [string]$Exe       = '',
   [switch]$KeepScratch,
   [string]$WorkDir   = "$env:TEMP\drag-lint-cyclefix-cancel-$PID",
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite',
   [string]$Rsvars    = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }) }
 function Remove-Scratch {
   if ($script:Failed -and $KeepScratch) { Write-Host "scratch kept: $WorkDir" -ForegroundColor Yellow; return }
   Set-Location -LiteralPath $env:TEMP
@@ -73,7 +76,7 @@ Copy-Item $LibraryDb $Lib -Force
 # A loopback address no other process pings: the parked build is found by it, and only it.
 $PingHost = '127.{0}.{1}.{2}' -f (Get-Random -Min 2 -Max 250), (Get-Random -Min 2 -Max 250), (Get-Random -Min 2 -Max 250)
 function Parked { return @(Get-CimInstance Win32_Process -Filter "Name = 'PING.EXE' OR Name = 'ping.exe'" | Where-Object { "$($_.CommandLine)" -match [regex]::Escape($PingHost) }) }
-function Stop-Parked { foreach ($p in (Parked)) { try { [Diagnostics.Process]::GetProcessById([int]$p.ProcessId).Kill() } catch { } } }
+function Stop-Parked { foreach ($p in (@(Parked))) { try { [Diagnostics.Process]::GetProcessById([int]$p.ProcessId).Kill() } catch { } } }
 
 function Copy-Tree([string]$From, [string]$To) {
   New-Item -ItemType Directory -Force $To | Out-Null
@@ -92,7 +95,7 @@ function New-Demo([string]$Tag) {
   $proj = Join-Path $WorkDir "$Tag-proj"
   Copy-Tree $Demo $proj
   $db = Join-Path $WorkDir "$Tag.sqlite"
-  & $Exe index --project (Join-Path $proj 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "$Tag-index.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $proj 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "$Tag-index.log") }
   return @{ Proj = $proj; Dproj = (Join-Path $proj 'CircularDemo.dproj'); Db = $db }
 }
 # The fake build environment. pWhen = 'after': park only once a .BCK backup exists; 'always': park at once.
@@ -110,7 +113,7 @@ function Start-Fix([hashtable]$D, [string[]]$Extra, [string]$Tag) {
   $a = @('cycles', '--fix', '--project', $D.Dproj, '--db', $D.Db, '--library-db', $Lib, '--format', 'json') + $Extra
   $q = ($a | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' '
   $out = Join-Path $WorkDir "$Tag.out"; $err = Join-Path $WorkDir "$Tag.err"
-  $p = Start-Process -FilePath $Exe -ArgumentList $q -RedirectStandardOutput $out -RedirectStandardError $err -NoNewWindow -PassThru
+  $p = Start-Process -FilePath $Exe -ArgumentList $q -RedirectStandardOutput $out -RedirectStandardError $err -NoNewWindow -PassThru; $null = $p.Handle
   return @{ P = $p; Out = $out; Err = $err }
 }
 function Wait-For([scriptblock]$Cond, [int]$Seconds) {
@@ -136,7 +139,7 @@ $fake = New-FakeRsvars 'c' $C.Proj 'after'
 $run = Start-Fix $C @('--unit', 'demogageport', '--apply', '--build-timeout', '600', '--rsvars', $fake.Bat) 'c'
 $parked = Wait-For { (Test-Path $fake.Flag) -or $run.P.HasExited } 240
 Check 'setup: the after-build parked (the run reached it)' ($parked -and (Test-Path $fake.Flag) -and -not $run.P.HasExited) ("exited=" + $run.P.HasExited + ' ' + (Read-Text $run.Out) + (Read-Text $run.Err))
-$bck = Backups $C.Proj
+$bck = @(Backups $C.Proj)
 $changed = @($srcBefore.Keys | Where-Object { (Test-Path (Join-Path $C.Proj $_)) -and ((Get-FileSha (Join-Path $C.Proj $_)) -ne $srcBefore[$_]) })
 Check 'c1 the edits are on disk when the cancel is sent (mid-apply)' (($bck.Count -gt 0) -and ($changed.Count -gt 0)) ("backups=" + $bck.Count + ' changed=' + ($changed -join ','))
 # each backup, as it is mid-run: <File>.<ext>.BCK<n> holds the pre-run bytes of <File>.<ext>
@@ -144,7 +147,7 @@ $bckSha = @{}
 foreach ($b in $bck) { $bckSha[($b.Name -replace '\.BCK\d+$', '')] = Get-FileSha $b.FullName }
 $bad = @($bckSha.Keys | Where-Object { $bckSha[$_] -ne $srcBefore[$_] })
 Check 'c2 every backup holds the pre-run bytes of its source' (($bckSha.Count -gt 0) -and ($bad.Count -eq 0)) ("mismatch: " + ($bad -join ','))
-$sdOut = (& $Exe shutdown --db $C.Db --wait 60 2>&1 | Out-String)
+$sdOut = (& { $ErrorActionPreference = 'Continue'; & $Exe shutdown --db $C.Db --wait 60 2>&1 | ForEach-Object { "$_" } } | Out-String)
 $sw = [Diagnostics.Stopwatch]::StartNew()
 $exited = Wait-For { $run.P.HasExited } 60
 $secs = [math]::Round($sw.Elapsed.TotalSeconds, 1)
@@ -158,7 +161,7 @@ foreach ($k in $bckSha.Keys) { $srcAfter[$k] = if (Test-Path (Join-Path $C.Proj 
 $bad = @($bckSha.Keys | Where-Object { $srcAfter[$_] -ne $bckSha[$_] })
 Check 'c5 every source is byte-identical to its backup (as captured mid-run)' (($bckSha.Count -gt 0) -and ($bad.Count -eq 0)) ("differ: " + ($bad -join ','))
 Check 'c6 the tree is byte-identical to before (no new leaf, no .BCK, no recovery.txt)' ((Get-TreeHash $C.Proj) -eq $before) (Get-TreeHash $C.Proj)
-Check 'c7 the parked build is gone (the engine killed its own build tree)' ((Parked).Count -eq 0) ("still alive: " + ((Parked | ForEach-Object ProcessId) -join ','))
+Check 'c7 the parked build is gone (the engine killed its own build tree)' ((@(Parked)).Count -eq 0) ("still alive: " + ((Parked | ForEach-Object ProcessId) -join ','))
 Stop-Parked
 
 # ---------------------------------------------------------------- (c-text) the text verdict of a cancelled run
@@ -168,7 +171,7 @@ $fakeCT = New-FakeRsvars 'ct' $CT.Proj 'after'
 $runCT = Start-Fix $CT @('--unit', 'demogageport', '--apply', '--build-timeout', '600', '--rsvars', $fakeCT.Bat, '--format', 'text') 'ct'
 $parkedCT = Wait-For { (Test-Path $fakeCT.Flag) -or $runCT.P.HasExited } 240
 Check 'setup: the text run reached the after-build' ($parkedCT -and (Test-Path $fakeCT.Flag)) ''
-$null = & $Exe shutdown --db $CT.Db --wait 60 2>&1 | Out-String
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe shutdown --db $CT.Db --wait 60 2>&1 | ForEach-Object { "$_" } } | Out-String
 $exitedCT = Wait-For { $runCT.P.HasExited } 60
 if (-not $exitedCT) { try { $runCT.P.Kill($true) } catch { } ; $runCT.P.WaitForExit(10000) | Out-Null }
 $textCT = Read-Text $runCT.Out
@@ -185,7 +188,7 @@ $fakeT = New-FakeRsvars 't' $T.Proj 'always'
 $runT = Start-Fix $T @('--unit', 'demogageport', '--apply', '--build-timeout', '3', '--rsvars', $fakeT.Bat) 't'
 $exitedT = Wait-For { $runT.P.HasExited } 60
 if (-not $exitedT) { try { $runT.P.Kill($true) } catch { } ; $runT.P.WaitForExit(10000) | Out-Null }
-$jT = $null; try { $jT = (Read-Text $runT.Out) | ConvertFrom-Json } catch { }
+$jT = $null; try { $jT = (Read-Text $runT.Out) | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 # a baseline refusal is the run's own (top-level refusals[]), not a cycle's
 $kindT = if ($jT) { "$(@($jT.refusals)[0].kind)" } else { '' }
 Check 't1 exit 1 with refusal build-timeout within 60 s' ($exitedT -and ($runT.P.ExitCode -eq 1) -and ($kindT -eq 'build-timeout')) ("exited=$exitedT exit=" + $runT.P.ExitCode + " kind=$kindT " + (Read-Text $runT.Out) + (Read-Text $runT.Err))
@@ -195,7 +198,7 @@ Stop-Parked
 # ---------------------------------------------------------------- (v) a bad value
 Write-Host '== (v) --build-timeout with a bad value' -ForegroundColor Cyan
 $errV = Join-Path $WorkDir 'v.err'
-$outV = (& $Exe cycles --fix --project $T.Dproj --db $T.Db --library-db $Lib --build-timeout 2m 2>$errV | Out-String)
+$outV = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errV); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe cycles --fix --project $T.Dproj --db $T.Db --library-db $Lib --build-timeout 2m 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
 $codeV = $LASTEXITCODE
 $allV = $outV + (Read-Text $errV)
 Check 'v1 exit 2 and the message names --build-timeout' (($codeV -eq 2) -and ($allV -match '--build-timeout')) "exit=$codeV $allV"

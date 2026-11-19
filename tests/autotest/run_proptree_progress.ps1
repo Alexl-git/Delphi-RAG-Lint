@@ -49,10 +49,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-progress-$PID",
   [string]$LibDb   = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 $PSNativeCommandUseErrorActionPreference = $false
@@ -84,10 +87,10 @@ function P([string]$n) { return (Join-Path $WorkDir $n) }
 function Json([string]$s) {
   $a = $s.IndexOf('{'); $b = $s.LastIndexOf('}')
   if ($a -lt 0 -or $b -le $a) { return $null }
-  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json) } catch { return $null }
+  try { return ($s.Substring($a, $b - $a + 1) | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 function Run([string[]]$A) {
-  $o = (& $Exe @A 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @A 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 # Separate raw streams, as bytes on disk (a 10 MB stdout is not pushed through
@@ -95,7 +98,7 @@ function Run([string[]]$A) {
 function RunSplit([string]$Tag, [string[]]$A) {
   $so = P "$Tag.out"; $se = P "$Tag.err"
   $p = Start-Process -FilePath $Exe -ArgumentList $A -NoNewWindow -PassThru `
-    -RedirectStandardOutput $so -RedirectStandardError $se
+    -RedirectStandardOutput $so -RedirectStandardError $se; $null = $p.Handle
   $p.WaitForExit()
   return [pscustomobject]@{ Code = $p.ExitCode; OutFile = $so; ErrFile = $se }
 }
@@ -173,7 +176,7 @@ object ProgForm: TProgForm
 end
 '@
 $db = P 'fx.sqlite'
-$idx = & $Exe index $fx --db $db 2>&1
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'fx the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db)) "exit=$LASTEXITCODE; $($idx -join ' | ')"
 $book = P 'b.rules'
 Write-Ascii $book "#convert ProgFix.TProgA -> ProgFix.TProgB, ProgFix`n#link Mid.W <- Mid.W`n"
@@ -255,7 +258,7 @@ if (($LibDb -eq '') -or -not (Test-Path $LibDb)) {
   $parsed = @()
   $shapeOk = $true; $bad = ''
   foreach ($l in $errLines) {
-    try { $o = $l | ConvertFrom-Json } catch { $o = $null }
+    try { $o = $l | ConvertFrom-Json | ForEach-Object { $_ } } catch { $o = $null }
     if (($null -eq $o) -or (@($o.PSObject.Properties.Name) -join ',') -ne 'progress' -or
         ((@($o.progress.PSObject.Properties.Name) -join ',') -ne $KEYS)) { $shapeOk = $false; $bad = $l; break }
     $parsed += $o.progress
@@ -287,7 +290,7 @@ if (($LibDb -eq '') -or -not (Test-Path $LibDb)) {
   Copy-Item -LiteralPath $LibDb -Destination $copy
   $kso = P 'f.out'; $kse = P 'f.err'
   $ka = @('proptree', '--qname', $Q, '--depth', '5', '--refs-as-leaves', '--json', '--progress-interval', '1', '--db', $copy)
-  $kp = Start-Process -FilePath $Exe -ArgumentList $ka -NoNewWindow -PassThru -RedirectStandardOutput $kso -RedirectStandardError $kse
+  $kp = Start-Process -FilePath $Exe -ArgumentList $ka -NoNewWindow -PassThru -RedirectStandardOutput $kso -RedirectStandardError $kse; $null = $kp.Handle
   $sawLine = $false
   $deadline = (Get-Date).AddSeconds(180)
   while (-not $kp.HasExited -and (Get-Date) -lt $deadline) {
@@ -307,7 +310,7 @@ if (($LibDb -eq '') -or -not (Test-Path $LibDb)) {
   if ($null -eq $py) {
     Check 'f2 python is available for PRAGMA integrity_check' $false 'python not found'
   } else {
-    $ic = (& $py.Source -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); print(c.execute('PRAGMA integrity_check').fetchone()[0])" $copy 2>&1) -join ' '
+    $ic = (& { $ErrorActionPreference = 'Continue'; & $py.Source -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); print(c.execute('PRAGMA integrity_check').fetchone()[0])" $copy 2>&1 | ForEach-Object { "$_" } }) -join ' '
     Check 'f2 PRAGMA integrity_check on the killed copy = ok' ($ic.Trim() -eq 'ok') $ic
   }
   # stdout alone: this library copy prints a stale-resolver note on stderr, and

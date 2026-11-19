@@ -31,7 +31,10 @@
   Runs from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Continue'
@@ -44,8 +47,8 @@ $fx      = (Resolve-Path (Join-Path $PSScriptRoot 'fixtures\docp3\mutates.pas'))
 function Get-FileMd5([string]$p) { (Get-FileHash -Algorithm MD5 -Path $p).Hash }
 
 function Get-DeclLine([string]$db, [string]$name) {
-  $j = (& $exePath query --name $name --db $db --json 2>$null) -join "`n"
-  $o = $null; try { $o = ($j | ConvertFrom-Json) } catch { return 0 }
+  $j = (& { $ErrorActionPreference = 'Continue'; & $exePath query --name $name --db $db --json 2>$null }) -join "`n"
+  $o = $null; try { $o = ($j | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return 0 }
   if ($null -eq $o) { return 0 }
   foreach ($r in @($o)) { if ($r.section -eq 'interface') { return [int]$r.start_line } }
   return 0
@@ -88,7 +91,7 @@ r = c.execute('''SELECT f.mutates_params FROM symbols s
 if not r: print('<norow>')
 else: print('<null>' if r[0][0] is None else r[0][0])
 "@
-  return ((python -c $py 2>&1) -join ' ').Trim()
+  return ((& { $ErrorActionPreference = 'Continue'; python -c $(if ($PSVersionTable.PSVersion.Major -lt 7) { $py.Replace('"', '\"') } else { $py }) 2>&1 | ForEach-Object { "$_" } }) -join ' ').Trim()
 }
 
 Push-Location C:\TEMP
@@ -104,7 +107,7 @@ $tgt = Join-Path $sc 'mutates.pas'
 $db  = Join-Path $sc 'm.sqlite'
 Copy-Item $fx $tgt -Force
 
-& $exePath index $sc --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc --db $db 2>$null } | Out-Null
 Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
 # PRECONDITIONS -- the fixture still carries the three parameter modes and both
@@ -116,10 +119,10 @@ Check 'PRECONDITION: the body carries BOTH the SetLength form and a real indexed
   ((@($pre | Where-Object { $_ -match 'SetLength\(AList, AConst\);' }).Count -eq 1) -and
    (@($pre | Where-Object { $_ -match 'AList\[0\] := AConst;' }).Count -eq 1)) ''
 
-& $exePath document --unit $tgt --db $db --apply 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $tgt --db $db --apply 2>$null } | Out-Null
 Check 'apply exits 0' ($LASTEXITCODE -eq 0)
 $md5Cycle1 = Get-FileMd5 $tgt
-& $exePath index $sc --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $sc --db $db 2>$null } | Out-Null
 
 $blkFill = Get-Block $db $tgt 'FillBoth'
 $blkPure = Get-Block $db $tgt 'PureAdd'
@@ -152,7 +155,7 @@ Check '4. symbol_facts.mutates_params is empty or NULL for PureAdd' `
   (($storedPure -eq '') -or ($storedPure -eq '<null>') -or ($storedPure -eq '<norow>')) "got=[$storedPure]"
 
 # --- (5) idempotency. -------------------------------------------------------
-& $exePath document --unit $tgt --db $db --apply 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $tgt --db $db --apply 2>$null } | Out-Null
 Check '5. a second apply after a reindex is byte-identical' `
   ((Get-FileMd5 $tgt) -eq $md5Cycle1) ("c1=$md5Cycle1 c2=" + (Get-FileMd5 $tgt))
 Check '5. the Mutates: line survived the second apply' `

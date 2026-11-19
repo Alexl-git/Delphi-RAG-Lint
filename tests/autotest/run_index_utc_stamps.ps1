@@ -19,9 +19,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-utcstamps-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'g8-common.ps1')
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
@@ -45,8 +48,8 @@ $code = Invoke-G8Index $Exe $src $db
 $after = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 Check 'fixture index built' (($code -eq 0) -and (Test-Path $db)) "exit=$code"
 
-$raw = (& $Exe sql --db $db --json --query 'SELECT path, mtime_unix, parsed_at FROM files ORDER BY path' 2>$null) -join "`n"
-$j = $raw.Substring($raw.IndexOf('{')) | ConvertFrom-Json
+$raw = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --query 'SELECT path, mtime_unix, parsed_at FROM files ORDER BY path' 2>$null }) -join "`n"
+$j = $raw.Substring($raw.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ }
 $cols = @($j.columns | ForEach-Object { $_.name })
 $rows = @($j.rows | ForEach-Object { $r = $_; $o = @{}; for ($i = 0; $i -lt $cols.Count; $i++) { $o[$cols[$i]] = $r[$i] }; $o })
 Check 'three files stored' ($rows.Count -eq 3) "rows=$($rows.Count)"

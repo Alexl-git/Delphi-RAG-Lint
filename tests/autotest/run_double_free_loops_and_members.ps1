@@ -51,9 +51,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-double-free-loops-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -195,7 +198,7 @@ Write-Host ("  anchors: " + (($rows.Keys | ForEach-Object { "$_=$($rows[$_])" })
 # FlowChecks runs on the bare per-file path, so `lint <file>` is sufficient here.
 # (Whole-index rules like doc-drift would need lint-all -- see
 # INBOX-lint-single-file-silently-omits-lint-all-rules.md.)
-$out  = & $Exe lint $file 2>&1 | Out-String
+$out  = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file 2>&1 | ForEach-Object { "$_" } } | Out-String
 $hits = @([regex]::Matches($out, 'uDoubleFreeLoops\.pas:(\d+):\d+\s+\[\w+\]\s+double-free') |
           ForEach-Object { [int]$_.Groups[1].Value })
 function Proc-Of([int]$Row) {

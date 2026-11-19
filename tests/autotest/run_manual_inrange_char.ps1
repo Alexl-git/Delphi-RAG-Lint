@@ -13,9 +13,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-inrange-char-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -93,8 +96,8 @@ end.
     }
   }
   Check 'all routine headers located' ($start.Count -eq $names.Count)
-  $raw = (& $Exe lint $fx --rule manual-inrange --json 2>$null) -join "`n"
-  $f = if ([string]::IsNullOrWhiteSpace($raw)) { @() } else { @($raw | ConvertFrom-Json) }
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fx --rule manual-inrange --json 2>$null }) -join "`n"
+  $f = @(if ([string]::IsNullOrWhiteSpace($raw)) { @() } else { @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) })
   function CountIn($name) {
     $lo = $start[$name]
     $idx = [array]::IndexOf(@($names), $name)

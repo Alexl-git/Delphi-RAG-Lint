@@ -27,9 +27,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-rename-encoding-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $env:DRAGLINT_RENAME_TEST_UNGATED = '1' # lane 144: these fixtures do not compile; run_rename_precise.ps1 proves the gate
@@ -72,13 +75,13 @@ function New-Fixture([string]$Name, [byte[]]$Bytes) {
   [IO.File]::WriteAllBytes($pas, $Bytes)
   $db = Join-Path $dir 'idx.sqlite'
   Push-Location $dir
-  try { & $Exe index $src --db $db 2>&1 | Out-Null } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null } finally { Pop-Location }
   Check "$Name index exits 0" ($LASTEXITCODE -eq 0)
   [pscustomobject]@{ Dir = $dir; Pas = $pas; Db = $db }
 }
 function Run-Rename($fx, [string[]]$RenameArgs) {
   Push-Location $fx.Dir
-  try { $o = & $Exe rename --kind symbol --name Unit1.Compute @RenameArgs --db $fx.Db 2>$null } finally { Pop-Location }
+  try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe rename --kind symbol --name Unit1.Compute @RenameArgs --db $fx.Db 2>$null } } finally { Pop-Location }
   [pscustomobject]@{ Exit = $LASTEXITCODE; Out = ($o -join "`n") }
 }
 # Every edit's (line, col, len(old)) slice of the DECODED file must be old.
@@ -86,7 +89,7 @@ function Check-Ranges([string]$Label, $fx, [Text.Encoding]$Enc) {
   $r = Run-Rename $fx @('--to', 'Compute2', '--json')
   Check "$Label --json exits 0" ($r.Exit -eq 0) "exit=$($r.Exit) $($r.Out)"
   $edits = $null
-  try { $edits = @($r.Out | ConvertFrom-Json) } catch { }
+  try { $edits = @(($r.Out | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { }
   Check "$Label --json has 3 edits" (@($edits).Count -eq 3) "count=$(@($edits).Count)"
   if ($null -eq $edits) { return }
   $bytes = [IO.File]::ReadAllBytes($fx.Pas)

@@ -41,7 +41,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -62,7 +65,7 @@ $uShared = Join-Path $shr 'uShared.pas'
 function Write-Ascii([string]$Path, [string]$Body) {
   [IO.File]::WriteAllText($Path, ($Body -replace "`r`n", "`n" -replace "`n", "`r`n"), [Text.Encoding]::ASCII)
 }
-function Run([string[]]$xs) { $o = & $exePath @xs 2>&1 | Out-String; [pscustomobject]@{ Out = $o; Code = $LASTEXITCODE } }
+function Run([string[]]$xs) { $o = & { $ErrorActionPreference = 'Continue'; & $exePath @xs 2>&1 | ForEach-Object { "$_" } } | Out-String; [pscustomobject]@{ Out = $o; Code = $LASTEXITCODE } }
 function BlockAbove([string]$path, [string]$declPat) {
   $ls = [IO.File]::ReadAllLines($path); $d = -1
   for ($i = 0; $i -lt $ls.Count; $i++) { if ($ls[$i] -match $declPat) { $d = $i; break } }
@@ -391,8 +394,9 @@ Check 'NAME: no entry is ever tagged with the DB file name' (([IO.File]::ReadAll
 # deleting the row from a scratch copy.
 $dbL = Join-Path $root 'LegacyName.sqlite'
 Copy-Item -LiteralPath $dbX -Destination $dbL
-python -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute(`"DELETE FROM schema_meta WHERE key='project_tag'`"); c.commit(); print(c.execute(`"SELECT COUNT(*) FROM schema_meta WHERE key='project_tag'`").fetchone()[0]); c.close()" $dbL | Out-Null
-$left = python -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); print(c.execute(`"SELECT COUNT(*) FROM schema_meta WHERE key='project_tag'`").fetchone()[0]); c.close()" $dbL
+# No embedded double quotes in -c: Windows PowerShell 5.1 passes them to a native exe unescaped.
+python -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('DELETE FROM schema_meta WHERE key=?', ('project_tag',)); c.commit(); print(c.execute('SELECT COUNT(*) FROM schema_meta WHERE key=?', ('project_tag',)).fetchone()[0]); c.close()" $dbL | Out-Null
+$left = python -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); print(c.execute('SELECT COUNT(*) FROM schema_meta WHERE key=?', ('project_tag',)).fetchone()[0]); c.close()" $dbL
 Check 'FALLBACK setup: the copy has no project_tag row' ("$left".Trim() -eq '0') "rows=$left"
 $r = Run @('document', '--unit', $uShared, '--db', $dbL, '--apply', '--no-backup')
 $cf = CalledFrom (Shared)

@@ -64,9 +64,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-deep-expr-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -201,7 +204,7 @@ c.close()
 
 function Read-Db([string]$Db) {
   if (-not (Test-Path $Db)) { return $null }
-  return ((& python $qpy $Db) -join "`n" | ConvertFrom-Json)
+  return ((& python $qpy $Db) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ })
 }
 function HasLeaf($Rows, [string]$Leaf) { return @($Rows | Where-Object { $_ -like "*\$Leaf" }).Count -ge 1 }
 
@@ -213,7 +216,7 @@ function HasLeaf($Rows, [string]$Leaf) { return @($Rows | Where-Object { $_ -lik
 Write-Host ''
 Write-Host 'Case 1: index <folder> (pre-fix: exit 0 but the file is SILENTLY SKIPPED)' -ForegroundColor Cyan
 $walkDb = Join-Path $WorkDir 'walk.sqlite'
-$walkOut = @((& $Exe index $walkDir --db $walkDb 2>&1) | ForEach-Object { $_.ToString() })
+$walkOut = @((& { $ErrorActionPreference = 'Continue'; & $Exe index $walkDir --db $walkDb 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { $_.ToString() })
 $walkExit = $LASTEXITCODE
 Check 'index <folder> exits 0' ($walkExit -eq 0) "exit=$walkExit"
 
@@ -241,7 +244,7 @@ if ($null -ne $walkDbRows) {
 Write-Host ''
 Write-Host 'Case 2: index --project (pre-fix: process death, exit -1073741819)' -ForegroundColor Cyan
 $projDb = Join-Path $WorkDir 'proj.sqlite'
-$projOut = @((& $Exe index --project (Join-Path $projDir 'App.dproj') --db $projDb --platform Win64 2>&1) |
+$projOut = @((& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $projDir 'App.dproj') --db $projDb --platform Win64 2>&1 | ForEach-Object { "$_" } }) |
              ForEach-Object { $_.ToString() })
 $projExit = $LASTEXITCODE
 Check 'index --project exits 0 (not 0xC0000005)' ($projExit -eq 0) `

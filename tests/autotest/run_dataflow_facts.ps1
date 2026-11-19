@@ -20,9 +20,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-dataflow-facts-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -56,7 +59,7 @@ for ($i = 0; $i -lt 4100; $i++) { [void]$sb.Append("  BigSink(A);`r`n") }
 [System.IO.File]::WriteAllText((Join-Path $SrcDir 'uTaintBig.pas'), $sb.ToString(), [System.Text.Encoding]::ASCII)
 
 $db  = Join-Path $WorkDir 'dataflow.sqlite'
-$out1 = (& $Exe index $SrcDir --db $db 2>&1 | Out-String)
+$out1 = (& { $ErrorActionPreference = 'Continue'; & $Exe index $SrcDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String)
 
 $pyFile = Join-Path $WorkDir 'df.py'
 @'
@@ -102,7 +105,7 @@ out['src_join_total'] = c.execute("select count(*) from data_flows where src_kin
 print(json.dumps(out))
 '@ | Set-Content $pyFile -Encoding ascii
 
-function Read-Facts { (& python $pyFile $db $probe) -join "`n" | ConvertFrom-Json }
+function Read-Facts { (& python $pyFile $db $probe) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ } }
 $r = Read-Facts
 $Rw = $r.rows
 $M = $r.markers
@@ -178,11 +181,11 @@ Check 'every src ref row lands on a refs row' ($r.src_join_miss.Count -eq 0 -and
 Write-Host 'Invalidation' -ForegroundColor Cyan
 $total1 = $r.total
 Add-Content -LiteralPath $probe -Value "{ touched }" -Encoding ascii
-& $Exe index $SrcDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $SrcDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $r2 = Read-Facts
 Check 'reindex of a touched file: count unchanged (cascade, no duplicates)' ($total1 -gt 0 -and $r2.total -eq $total1) "before=$total1 after=$($r2.total)"
 Check 'no orphan rows' ($r2.orphans -eq 0) "orphans=$($r2.orphans)"
-$schema = (& $Exe schema --db $db 2>&1 | Out-String)
+$schema = (& { $ErrorActionPreference = 'Continue'; & $Exe schema --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String)
 Check '`schema` lists data_flows' ($schema -match 'data_flows')
 
 Write-Host 'Pre-1.26 DB re-parses' -ForegroundColor Cyan
@@ -206,7 +209,7 @@ print(len(keys), c.execute('select count(*) from data_flows').fetchone()[0])
 $fpFile = Join-Path $WorkDir 'fp.py'
 $fp | Set-Content $fpFile -Encoding ascii
 $fpOut = (& python $fpFile $db $curExtractor) -join ' '
-& $Exe index $SrcDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $SrcDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $r3 = Read-Facts
 Check 'a DB stamped 1.25.0 (rows emptied) re-parses and gets its rows back' (($fpOut -match '^[1-9]\d* 0$') -and ($total1 -gt 0 -and $r3.total -eq $total1)) "fingerprint keys/rows after wipe=$fpOut, rows after index=$($r3.total) (expected $total1)"
 

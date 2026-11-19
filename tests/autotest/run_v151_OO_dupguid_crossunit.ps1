@@ -7,9 +7,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_oo_dupguid_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){ if($d){Write-Host "      $d" -ForegroundColor DarkGray}; $script:fail=$true } }
@@ -83,8 +86,8 @@ implementation
 end.
 '@
 $db = Join-Path (Join-Path $proj '_D-RAG') 'p.sqlite'
-& $exePath index $proj --db $db 2>&1 | Out-Null
-$out = & $exePath lint-all --db $db --rule duplicate-interface-guid 2>$null | Out-String
+& { $ErrorActionPreference = 'Continue'; & $exePath index $proj --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+$out = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rule duplicate-interface-guid 2>$null } | Out-String
 $hits = @(($out -split "`r?`n") | Where-Object { $_ -match 'duplicate-interface-guid' })
 Check 'A1 cross-unit duplicate GUID is reported (exactly one, on the second unit)' `
   (($hits.Count -eq 1) -and ($hits[0] -match 'uB\.pas')) "hits=$($hits.Count): $($hits -join ' | ')"

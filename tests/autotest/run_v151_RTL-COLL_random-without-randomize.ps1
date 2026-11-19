@@ -5,8 +5,11 @@
 # Positive control: --disable random-without-randomize must remove the finding.
 # Usage: pwsh -File tests/autotest/run_v151_RTL-COLL_random-without-randomize.ps1 [-Exe <path>]
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+param([string]$Exe = '',
       [string]$WorkDir = "$env:TEMP\drag-lint-rtlcoll-rnd-$PID")
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok) {
@@ -20,20 +23,20 @@ function Findings([string]$Case, [string[]]$Extra) {
   New-Item -ItemType Directory -Force $d | Out-Null
   Get-ChildItem (Join-Path $src $Case) -File | ForEach-Object { Copy-Item $_.FullName $d -Force }
   $db = Join-Path $WorkDir "$Case.sqlite"
-  & $Exe index $d --db $db 2>&1 | Out-Null
-  $raw = & $Exe lint-all --db $db --rule random-without-randomize --json @Extra 2>$null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $d --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule random-without-randomize --json @Extra 2>$null }
   $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
-  $f = @(); if ($b -ge 0) { try { $f = @($txt.Substring($b) | ConvertFrom-Json) } catch { $f = @() } }
+  $f = @(); if ($b -ge 0) { try { $f = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $f = @() } }
   return @($f | Where-Object { $_.rule -eq 'random-without-randomize' })
 }
 try {
-  $u = Findings 'unseeded' @('--enable', 'random-without-randomize')
+  $u = @(Findings 'unseeded' @('--enable', 'random-without-randomize'))
   Check 'unseeded: exactly one finding' ($u.Count -eq 1)
   # positive-control: random-without-randomize
   Check 'unseeded: at uDice.pas:11' (($u.Count -eq 1) -and ($u[0].file_path -match 'uDice\.pas$') -and ([int]$u[0].start_line -eq 11))
-  $s = Findings 'seeded' @('--enable', 'random-without-randomize')
+  $s = @(Findings 'seeded' @('--enable', 'random-without-randomize'))
   Check 'seeded (Randomize in another unit): silent' ($s.Count -eq 0)
-  $x = Findings 'unseeded' @('--disable', 'random-without-randomize')
+  $x = @(Findings 'unseeded' @('--disable', 'random-without-randomize'))
   Check 'positive control: disabled rule reports nothing' ($x.Count -eq 0)
 } finally { [IO.Directory]::Delete($WorkDir, $true) }
 Write-Host ''

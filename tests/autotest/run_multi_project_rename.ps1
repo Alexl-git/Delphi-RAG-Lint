@@ -26,7 +26,10 @@
   Exit code: 0 on full pass, 1 on any failure.
 #>
 [CmdletBinding()]
-param([string]$EngineDir = "$PSScriptRoot\..\..\src\cli\Win64\Debug")
+param([string]$EngineDir = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $EngineDir) { $EngineDir = "$PSScriptRoot\..\..\src\cli\Win64\Debug" }
 $ErrorActionPreference = 'Stop'
 # E-RENAME-OTHER-PATHS: a naming fix now runs the rename proof, and these fixtures have no library: the proof's own test seam.
 $env:DRAGLINT_RENAME_TEST_UNGATED = '1'
@@ -64,7 +67,7 @@ $script:AllOut = ''
 
 function Run([string[]]$EngArgs) {
   Push-Location $work
-  try { $o = (& $Exe @EngArgs 2>&1 | Out-String) } finally { Pop-Location }
+  try { $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @EngArgs 2>&1 | ForEach-Object { "$_" } } | Out-String) } finally { Pop-Location }
   $script:AllOut += $o
   return $o
 }
@@ -72,7 +75,7 @@ function Run([string[]]$EngArgs) {
 # stdout ONLY (stderr dropped): for --json, whose rename- lines go to stderr
 function RunStdout([string[]]$EngArgs) {
   Push-Location $work
-  try { $o = (& $Exe @EngArgs 2>$null | Out-String) } finally { Pop-Location }
+  try { $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @EngArgs 2>$null } | Out-String) } finally { Pop-Location }
   $script:AllOut += $o
   return $o
 }
@@ -168,7 +171,7 @@ try {
     ($o -match '(?m)^rename-target: L6 My_Const -> MyConst apply A=1 B=1 C=1\r?$') (Lines $o '^rename-target')
   Check 'P5 preview writes nothing' ((Hashes) -eq $h0) ''
   $oj = RunStdout @('lint', '--file', $Shared, '--db', "$work\A.sqlite", '--fix', '--fix-line', '6', '--fix-rule', 'const-casing', '--json')
-  $js = $null; try { $js = $oj | ConvertFrom-Json } catch { }
+  $js = $null; try { $js = $oj | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   $el = @($js | Where-Object { $_.line -eq 6 })[0]
   Check 'P6 --json: the finding carries projects[] with name/index/refs (criterion 14)' `
     (($null -ne $el) -and (@($el.projects).Count -eq 3) -and ((@($el.projects) | ForEach-Object { "$($_.name)=$($_.index)=$($_.refs)" }) -join ',') -eq 'A=fresh=1,B=fresh=1,C=fresh=1') `
@@ -304,12 +307,12 @@ try {
   $null = Run @('index', '--project', $cDproj, '--db', "$work\C.sqlite")
   # symbols AND refs: the declaration is renamed in every case; a reference left behind in uExtra is a refs row
   $sq = RunStdout @('sql', '--query', "select (select count(*) from symbols where name = 'My_Const') + (select count(*) from refs where name_text = 'My_Const')", '--db', "$work\C.sqlite", '--json')
-  $left = try { [string](($sq | ConvertFrom-Json).rows[0][0]) } catch { "unparsed: $sq" }
+  $left = try { [string](($sq | ConvertFrom-Json | ForEach-Object { $_ }).rows[0][0]) } catch { "unparsed: $sq" }
   Check 'TM6 ... re-indexed C holds no My_Const symbol or reference' ($left -eq '0') "got: $left"
   $cOut = "$work\C\out"
   New-Item -ItemType Directory -Force $cOut | Out-Null
   WriteAscii "$work\C\build_c.bat" @('@echo off', 'call "C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat"', "cd /d `"$work\C`"", "dcc64 -U`"..\shared`" -E`"$cOut`" -N0`"$cOut`" C.dpr", 'echo BUILD_EXITCODE=%ERRORLEVEL%')
-  $null = Start-Process cmd.exe -ArgumentList '/c', "`"$work\C\build_c.bat`"" -RedirectStandardOutput "$work\C\build_c.log" -RedirectStandardError "$work\C\build_c.err" -NoNewWindow -Wait -PassThru
+  $null = Start-Process cmd.exe -ArgumentList '/c', "`"$work\C\build_c.bat`"" -RedirectStandardOutput "$work\C\build_c.log" -RedirectStandardError "$work\C\build_c.err" -NoNewWindow -Wait -PassThru; $null = $null.Handle
   $cLog = Get-Content "$work\C\build_c.log" -Raw -ErrorAction SilentlyContinue
   Check 'TM7 ... and project C COMPILES after the apply (dcc64, C.exe produced)' (($cLog -match 'BUILD_EXITCODE=0') -and (Test-Path "$cOut\C.exe")) (Lines $cLog 'Error|Fatal|BUILD_EXITCODE')
   # ---------------------------------------------------------------- unindexed (Ruling 14)

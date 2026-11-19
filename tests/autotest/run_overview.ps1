@@ -25,9 +25,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_overview_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $script:fail = $false
 try {
 $ErrorActionPreference = 'Stop'
@@ -57,13 +63,13 @@ W "$WorkDir\Empty.dpr" "program Empty;`nbegin`nend.`n"
 
 $db  = "$WorkDir\app.sqlite"
 $dbE = "$WorkDir\empty.sqlite"
-& $exePath index --project "$WorkDir\App.dpr" --db $db 2>&1 | Out-Null
-& $exePath index --project "$WorkDir\Empty.dpr" --db $dbE 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index --project "$WorkDir\App.dpr" --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index --project "$WorkDir\Empty.dpr" --db $dbE 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V both fixture indexes were built' ((Test-Path $db) -and (Test-Path $dbE)) ''
 
 $sections = 'freshness','counts','layers','fanin','entrypoints','forms'
 function Run([string[]]$A) {
-  $o = & $exePath overview @A 2>&1 | ForEach-Object { "$_" }
+  $o = & { $ErrorActionPreference = 'Continue'; & $exePath overview @A 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }
   return [pscustomobject]@{ Exit = $LASTEXITCODE; Text = ($o -join "`n") }
 }
 
@@ -73,8 +79,8 @@ $ordered = ($pos -notcontains -1) -and (@($pos | Sort-Object) -join ',') -eq ($p
 Check 'T1 six section headers in the fixed order' ($r.Exit -eq 0 -and $ordered) ("exit=$($r.Exit) pos=$($pos -join ',')")
 
 $j = Run @('--db',$db,'--json')
-$obj = $null; try { $obj = $j.Text | ConvertFrom-Json } catch {}
-$keys = if ($obj) { @($obj.PSObject.Properties.Name) } else { @() }
+$obj = $null; try { $obj = $j.Text | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
+$keys = @(if ($obj) { @($obj.PSObject.Properties.Name) } else { @() })
 Check 'T2 --json has exactly the six section keys, in order' (($keys -join ',') -eq ($sections -join ',')) ("keys=$($keys -join ',')")
 
 if ($obj) {
@@ -88,14 +94,14 @@ if ($obj) {
 }
 
 $c2 = Run @('--db',$db,'--max-rows','2')
-$c2j = $null; try { $c2j = (Run @('--db',$db,'--max-rows','2','--json')).Text | ConvertFrom-Json } catch {}
+$c2j = $null; try { $c2j = (Run @('--db',$db,'--max-rows','2','--json')).Text | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'T5 --max-rows 2 text says "omitted by cap 2; rerun with --max-rows", exit unchanged' ($c2.Exit -eq 0 -and $c2.Text -match 'omitted by cap 2; rerun with --max-rows \d+') $c2.Text
 Check 'T5b --max-rows 2 JSON: counts.cap=2, omitted>0, rows<=2' ($c2j -and $c2j.counts.cap -eq 2 -and $c2j.counts.omitted -gt 0 -and @($c2j.counts.rows).Count -le 2) ($c2j.counts | ConvertTo-Json -Compress)
 
 Check 'T6 default output under 4000 tokens' (($r.Text.Length / 4) -lt 4000) "chars=$($r.Text.Length)"
 
 $p1 = Run @('--db',$db,'--max-rows','500')
-$p1j = $null; try { $p1j = (Run @('--db',$db,'--max-rows','500','--json')).Text | ConvertFrom-Json } catch {}
+$p1j = $null; try { $p1j = (Run @('--db',$db,'--max-rows','500','--json')).Text | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 $allZero = $p1j -and (@($sections | Where-Object { $p1j.$_.omitted -ne 0 }).Count -eq 0)
 Check 'P1 CONTROL --max-rows 500: no omitted line, every omitted is 0' ($p1.Exit -eq 0 -and $p1.Text -notmatch 'omitted by cap' -and $allZero) ''
 
@@ -105,3 +111,4 @@ $eZero = ($e.Text -match '== fanin: 0 ==') -and ($e.Text -match '== entrypoints:
 Check 'P2 CONTROL empty project prints all six headers, forms/fanin/entrypoints = 0' ($e.Exit -eq 0 -and $eHeaders -and $eZero) $e.Text
 } catch { Write-Host ("ERROR: $_") -ForegroundColor Red; $script:fail = $true
 } finally { if ($script:fail) { Write-Host 'FAILED' -ForegroundColor Red; exit 1 } else { Write-Host 'ALL PASS' -ForegroundColor Green } }
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

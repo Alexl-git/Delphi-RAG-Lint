@@ -24,7 +24,10 @@
   Run from a NEUTRAL CWD (C:\TEMP).
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -43,9 +46,9 @@ $db = Join-Path $scratch 'cap.sqlite'
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
-  $out = (& $exePath document --qname cap_target.Target --db $db 2>$null | Out-String) -replace '</?para>',''
+  $out = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname cap_target.Target --db $db 2>$null } | Out-String) -replace '</?para>',''
   # Grab the single "Called from:" line.
   $line = ($out -split "`r?`n" | Where-Object { $_ -match 'Called from:' } | Select-Object -First 1)
   Check 'preview: a "Called from:" line is present' ($null -ne $line -and $line -ne '')
@@ -61,8 +64,8 @@ try {
   Check 'cap: Caller06 NOT shown (past cap)' (-not ($line -match 'cap_callers\.Caller06\b'))
 
   # Also confirm the JSON dry-run classifies it as created (facts non-empty).
-  $j = & $exePath document --qname cap_target.Target --db $db --json 2>$null | Out-String
-  $o = $null; try { $o = ($j | ConvertFrom-Json) } catch { $o = $null }
+  $j = & { $ErrorActionPreference = 'Continue'; & $exePath document --qname cap_target.Target --db $db --json 2>$null } | Out-String
+  $o = $null; try { $o = ($j | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $o = $null }
   Check 'json: action = created' ($null -ne $o -and $o.action -eq 'created')
 } finally { Pop-Location }
 

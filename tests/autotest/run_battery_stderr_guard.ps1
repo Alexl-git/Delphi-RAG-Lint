@@ -75,9 +75,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$RepoRoot = (Resolve-Path "$PSScriptRoot\..\..").Path,
+  [string]$RepoRoot = '',
   [string]$WorkDir  = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $RepoRoot) { $RepoRoot = (Resolve-Path "$PSScriptRoot\..\..").Path }
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 
@@ -119,7 +122,7 @@ $pOut = Join-Path $WorkDir 'list.out'
 $pErr = Join-Path $WorkDir 'list.err'
 $proc = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', "`$ErrorView = 'NormalView'; & '$battery' -List; exit `$LASTEXITCODE" `
           -WorkingDirectory $RepoRoot -RedirectStandardOutput $pOut `
-          -RedirectStandardError $pErr -NoNewWindow -Wait -PassThru
+          -RedirectStandardError $pErr -NoNewWindow -Wait -PassThru; $null = $proc.Handle
 
 $errBytes = (Get-Item $pErr).Length
 $errText  = if ($errBytes -gt 0) { [IO.File]::ReadAllText($pErr) } else { '' }
@@ -159,7 +162,7 @@ $cOut = Join-Path $WorkDir 'corrupt.out'
 $cErr = Join-Path $WorkDir 'corrupt.err'
 $cProc = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', "`$ErrorView = 'NormalView'; & '$corrupt'; exit `$LASTEXITCODE" `
            -WorkingDirectory $WorkDir -RedirectStandardOutput $cOut `
-           -RedirectStandardError $cErr -NoNewWindow -Wait -PassThru
+           -RedirectStandardError $cErr -NoNewWindow -Wait -PassThru; $null = $cProc.Handle
 $cErrText = [IO.File]::ReadAllText($cErr)
 $cOutText = [IO.File]::ReadAllText($cOut)
 

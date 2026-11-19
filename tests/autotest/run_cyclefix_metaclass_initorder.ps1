@@ -18,10 +18,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe") { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" } else { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }),
+  [string]$Exe     = '',
   [string]$WorkDir   = "$env:TEMP\drag-lint-cyclefix-metainit-$PID",
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win32.sqlite'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe") { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" } else { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }) }
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\lib\HermeticEngine.ps1"
 $script:Failed = $false; $script:Passed = 0
@@ -48,8 +51,8 @@ function Get-Plan([string]$Tag, [string[]]$Order) {
   $db = "$root.sqlite"
   Push-Location $WorkDir
   try {
-    $null | & $Exe index --project $dproj --db $db --library-db $LibraryDb *> "$db.log"
-    return ($null | & $Exe cycles --plan --project $dproj --db $db --library-db $LibraryDb 2>$null | Out-String)
+    $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project $dproj --db $db --library-db $LibraryDb *> "$db.log" }
+    return ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe cycles --plan --project $dproj --db $db --library-db $LibraryDb 2>$null } | Out-String)
   } finally { Pop-Location }
 }
 

@@ -20,9 +20,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-doc152b-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 $script:Passed = 0
@@ -66,16 +69,16 @@ $lines = @(
 [IO.File]::WriteAllText($src, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 
 function DriftAt($rows, [int]$line) { @($rows | Where-Object { $_.rule -eq 'doc-drift' -and $_.start_line -eq $line }) }
-function RowsOf([string]$o) { $r = @(); try { $r = @($o | ConvertFrom-Json) } catch { $r = @() }; return ,$r }
+function RowsOf([string]$o) { $r = @(); try { $r = @(($o | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $r = @() }; return ,$r }
 function TagLines([string]$path, [string[]]$names) {
   @([IO.File]::ReadAllLines($path) | Where-Object { $l = $_; @($names | Where-Object { $l.Contains('<param name="' + $_ + '"') }).Count -gt 0 })
 }
 
 Push-Location $WorkDir
 try {
-  & $Exe index $WorkDir --db $db --library-db none 2>&1 | Out-Null
-  $la = (& $Exe lint-all --db $db --json --library-db none 2>$null | Out-String)
-  $lo = (& $Exe lint $src --db $db --project-rules --format json --library-db none 2>$null | Out-String)
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $la = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --json --library-db none 2>$null } | Out-String)
+  $lo = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $src --db $db --project-rules --format json --library-db none 2>$null } | Out-String)
   foreach ($scope in @(@{ N = 'lint-all'; O = $la }, @{ N = 'lint'; O = $lo })) {
     $rows = RowsOf $scope.O
     $n = $scope.N
@@ -89,7 +92,7 @@ try {
   # --- orphan path -------------------------------------------------------
   $before = TagLines $src @('S, WordDelims', 'var Pos', 'AViewInfo')
   Check 'SANITY: fixture has the 3 tags' ($before.Count -eq 3) ($before -join '|')
-  & $Exe document --unit $src --apply --db $db --library-db none 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe document --unit $src --apply --db $db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $after = TagLines $src @('S, WordDelims', 'var Pos', 'AViewInfo')
   $text = [IO.File]::ReadAllText($src)
   $keep = @($after | Where-Object { $_.Contains('S, WordDelims') -or $_.Contains('var Pos') })
@@ -99,9 +102,9 @@ try {
   $orph = @($after | Where-Object { $_.Contains('AViewInfo') })
   Check 'C: CONTROL true orphan AViewInfo is marked' ($orph.Count -eq 1 -and $orph[0] -match 'param no longer exists') ($orph -join '|')
   Check 'C: ...and keeps its bytes before the marker' ($orph.Count -eq 1 -and $orph[0].StartsWith($before[2])) ($orph -join '|')
-  & $Exe index $WorkDir --db $db --library-db none 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $h1 = (Get-FileHash $src).Hash
-  & $Exe document --unit $src --apply --db $db --library-db none 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe document --unit $src --apply --db $db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'D: second --apply is idempotent (file unchanged)' ((Get-FileHash $src).Hash -eq $h1)
 } finally {
   Pop-Location

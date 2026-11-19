@@ -20,7 +20,7 @@ type
   /// <remarks>
   /// The caller owns the returned store's lifetime for the whole run.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Lint.ProjectRules.pas), DRagLint.CLI.MakeSiblingStoreResolver (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.CollectDependentProjectNotRecompiled (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas) (+2 more)</para>
+  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Lint.ProjectRules.pas), DRagLint.CLI.MakeSiblingStoreResolver (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.CollectDependentProjectNotRecompiled (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas) (+3 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSiblingStoreResolver = reference to function(const AProjectName: string): ISymbolStore;
@@ -29,7 +29,7 @@ type
   /// <returns>Section names; empty when no manifest loads.</returns>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Lint.ProjectRules.pas), declaration (DRagLint.Lint.SharedScope.pas), DRagLint.CLI.MakeSiblingProjectLister (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas) (+1 more)</para>
+  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Lint.ProjectRules.pas), declaration (DRagLint.Lint.SharedScope.pas), DRagLint.CLI.MakeSiblingProjectLister (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas) (+2 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSiblingProjectLister = reference to function: TArray<string>;
@@ -51,7 +51,7 @@ type
   /// listing project was checked, fresh, and none uses it -- report. svUndecided: a listing
   /// project's index is missing, will not open or is stale -- do not report.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Lint.SharedScope.pas), DRagLint.Lint.SharedScope.TSharedScope.Judge (DRagLint.Lint.SharedScope.pas), DRagLint.Lint.UnusedGlobal.CollectUnusedGlobal (DRagLint.Lint.UnusedGlobal.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Lint.SharedScope.pas), DRagLint.Lint.SharedScope.TSharedScope.Judge (DRagLint.Lint.SharedScope.pas), DRagLint.Lint.UnusedGlobal.CollectUnusedGlobal (DRagLint.Lint.UnusedGlobal.pas), DRagLint.V152.ATLB.TV152ATLBRules.CheckProject (DRagLint.V152.ATLB.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSharedVerdict = (svNotShared, svUsedElsewhere, svUnusedEverywhere, svUndecided);
@@ -64,12 +64,13 @@ type
   /// `.dproj` compile closure). The run's own store is excluded. A header-named project
   /// whose index is missing, will not open or is not fresh makes every verdict on P
   /// svUndecided; a manifest section that will not open is ignored (nothing says it lists
-  /// P). LAZY: nothing is opened until the first Judge; the listing set, the self test and
+  /// P). A `.groupproj` peer with no index whose project file lists P (AddDiscoveredPeers) makes
+  /// every verdict on P svUndecided too (1.52 BK-TAILS-ENG). LAZY: nothing is opened until the first Judge; the listing set, the self test and
   /// the freshness probe are cached per path / per project for the object's life.
   /// Not thread-safe; one per lint run.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Lint.UnusedGlobal.pas) ?, DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.UnusedGlobal.CollectUnusedGlobal (DRagLint.Lint.UnusedGlobal.pas) ?</para>
-  /// <para>Used in units: DRagLint.Lint.ProjectRules, DRagLint.Lint.UnusedGlobal</para>
+  /// <para>Used by: declaration (DRagLint.Lint.UnusedGlobal.pas) ?, DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.UnusedGlobal.CollectUnusedGlobal (DRagLint.Lint.UnusedGlobal.pas) ?, DRagLint.V152.ATLB.TV152ATLBRules.CheckProject (DRagLint.V152.ATLB.pas)</para>
+  /// <para>Used in units: DRagLint.Lint.ProjectRules, DRagLint.Lint.UnusedGlobal, DRagLint.V152.ATLB</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSharedScope = class
@@ -87,7 +88,7 @@ type
     /// FResolve(Trim(AName)).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoExportObsidian (DRagLint.CLI.pas) ?, DRagLint.Lint.SharedScope.TSharedScope.Judge (DRagLint.Lint.SharedScope.pas), DRagLint.Lint.SharedScope.TSharedScope.ResolvePath (DRagLint.Lint.SharedScope.pas)</para>
+    /// <para>Called from: DRagLint.Lint.SharedScope.TSharedScope.Judge (DRagLint.Lint.SharedScope.pas), DRagLint.Lint.SharedScope.TSharedScope.ResolvePath (DRagLint.Lint.SharedScope.pas)</para>
     /// <para>Calls: FResolve, Trim</para>
     /// <para>Reads: FResolve</para>
     /// <para>Catches: Exception (swallowed)</para>
@@ -138,15 +139,15 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Lint.SharedScope.TSharedScope.Judge (DRagLint.Lint.SharedScope.pas)</para>
-    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Lint.SharedScope.TSharedScope.IsSelf, DRagLint.Lint.SharedScope.TSharedScope.Open, DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOf, FLister, Format, LowerCase, Trim</para>
-    /// <para>Complexity: 13 (cyclomatic, outer body), 49 lines (full implementation)</para>
-    /// <para>Reads: FLister, FNamesOk, FNames, FListing, FWhyNot   Writes: FNamesOk, FNames</para>
+    /// <para>Calls: ChangeFileExt, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue, DRagLint.Lint.SharedScope.AnnounceUnindexedPeer, DRagLint.Lint.SharedScope.TSharedScope.IsSelf, DRagLint.Lint.SharedScope.TSharedScope.Open, DRagLint.Lint.SharedScope.UnindexedPeerListing, DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOf, ExtractFileName, FLister, Format, LowerCase, SameText, Trim</para>
+    /// <para>Complexity: 18 (cyclomatic, outer body), 65 lines (full implementation)</para>
+    /// <para>Reads: FLister, FNamesOk, FNames, FStore, FListing, FWhyNot   Writes: FNamesOk, FNames</para>
     /// <para>Catches: Exception (swallowed)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue"/>
+    /// <seealso cref="DRagLint.Lint.SharedScope.AnnounceUnindexedPeer"/>
     /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.IsSelf"/>
     /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.Open"/>
-    /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOf"/>
-    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.Create"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure ResolvePath(const APath: string);
@@ -157,7 +158,7 @@ type
     /// <param name="ALister">Lists the manifest's section names; nil = header names only.</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
+    /// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas), DRagLint.V152.ATLB.TV152ATLBRules.CheckProject (DRagLint.V152.ATLB.pas)</para>
     /// <para>constructor</para>
     /// <para>Writes: FStore, FResolve, FLister, FListing, FWhyNot, FUsable</para>
     /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.Destroy"/>
@@ -190,7 +191,7 @@ type
     /// <returns>The verdict; see TSharedVerdict.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.UnusedGlobal.CollectUnusedGlobal (DRagLint.Lint.UnusedGlobal.pas)</para>
+    /// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.UnusedGlobal.CollectUnusedGlobal (DRagLint.Lint.UnusedGlobal.pas), DRagLint.V152.ATLB.TV152ATLBRules.CheckProject (DRagLint.V152.ATLB.pas)</para>
     /// <para>Calls: AUsed, DRagLint.Lint.SharedScope.TSharedScope.IsUsable, DRagLint.Lint.SharedScope.TSharedScope.Open, DRagLint.Lint.SharedScope.TSharedScope.ResolvePath, Format, LowerCase</para>
     /// <para>Returns: svUndecided; svUnusedEverywhere</para>
     /// <para>Reads: FListing, FWhyNot</para>
@@ -215,7 +216,7 @@ type
 /// whose finding was withheld for want of a fresh sibling index reads as "cannot judge", not
 /// "suppresses nothing" (DLOK-UNDECIDED).
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.UnusedGlobal.CollectUnusedGlobal (DRagLint.Lint.UnusedGlobal.pas)</para>
+/// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.UnusedGlobal.CollectUnusedGlobal (DRagLint.Lint.UnusedGlobal.pas), DRagLint.V152.ATLB.TV152ATLBRules.CheckProject (DRagLint.V152.ATLB.pas)</para>
 /// <para>Calls: DRagLint.Lint.SharedScope.SiteKey</para>
 /// <seealso cref="DRagLint.Lint.SharedScope.SiteKey"/>
 /// <!-- drag-lint:auto END -->
@@ -237,14 +238,62 @@ procedure NoteUndecidedSite(const AFile: string; ALine: Integer; const ARule: st
 /// </remarks>
 function IsUndecidedSite(const AFile: string; ALine: Integer; const ARule: string): Boolean;
 
+/// <summary>B16 (1.52 BK-XPROJ): adds the sibling indexes a run can find WITHOUT a manifest
+/// section, so a unit another project compiles is judged there too.</summary>
+/// <param name="APrimaryDb">The run's --db ('' = the manifest picked it).</param>
+/// <param name="AProjectPath">The run's --project ('' when none).</param>
+/// <param name="AIsCopy">True when APrimaryDb is not a DB the manifest registers.</param>
+/// <param name="ANameToDb">Lowercased project name -> DB path; an existing non-empty entry is
+/// never replaced.</param>
+/// <remarks>
+/// Two sources. (a) COPY: --db is a copy outside any `_D-RAG` folder -- every other
+/// `.sqlite` beside it is a candidate (a copy set keeps its peers together; v1511 F1 never
+/// opens a real DB from a copy run, and neither does this). (b) REAL: --db sits in its
+/// project's `_D-RAG` folder (or the run is not on a copy and names --project) -- every
+/// `.groupproj` in the project folder or up to two parents lists peer `.dproj` files, each
+/// one's index at `peer folder\_D-RAG\peer base name.sqlite` when that file exists. A
+/// candidate is only a candidate: TSharedScope still keeps a peer only when its index holds
+/// the unit's file, and judges only a fresh one. Reads directory listings and `.groupproj`
+/// text; opens no store. Exceptions from the file system are swallowed per entry.
+/// 1.52 BK-TAILS-ENG: a `.groupproj` peer whose index file does NOT exist is recorded as unindexed
+/// (its `.dproj` DCCReference entries and `.dpr` / `.dpk` `in '...'` paths are read); TSharedScope.Judge
+/// then answers svUndecided for every unit it lists and writes one stderr line per such peer.
+/// 1.52 TAILS-ENG2: the same for every unit in a folder the unindexed peer searches (its own folder and
+/// its `.dproj` DCC_UnitSearchPath) -- the peer may compile such a unit without listing it.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.LoadSiblingNameToDb (DRagLint.CLI.pas)</para>
+/// <para>Calls: ChangeFileExt, DRagLint.Lint.SharedScope.AddGroupPeers, DRagLint.Lint.SharedScope.AddPeer, DRagLint.Lint.SharedScope.GroupProjsIn, ExcludeTrailingPathDelimiter, ExpandFileName, ExtractFileDir, ExtractFileName, ExtractFilePath, SameText</para>
+/// <para>Complexity: 17 (cyclomatic, outer body), 41 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Lint.SharedScope.AddGroupPeers"/>
+/// <seealso cref="DRagLint.Lint.SharedScope.AddPeer"/>
+/// <seealso cref="DRagLint.Lint.SharedScope.GroupProjsIn"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+procedure AddDiscoveredPeers(const APrimaryDb, AProjectPath: string; AIsCopy: Boolean;
+  const ANameToDb: TDictionary<string, string>);
+
 implementation
 
 uses
+  System.IOUtils,
+  System.RegularExpressions,
   DRagLint.Lint.SharedUnit,  { TSharedUnit.ProjectsOf -- the header-declared projects }
+  DRagLint.Lint.ProjectChecks.Parse,  { ReadDCCReferences / FindSiblingProgramFile -- what an unindexed peer lists }
+  DRagLint.Index.Closure,  { TClosureResolver.ProjectSearchPaths -- the folders an unindexed peer searches }
   DRagLint.Index.Freshness;  { ProbeIndexFreshness -- a stale sibling proves nothing }
+
+const
+  { 1.52 TAILS-ENG2: GUnindexedPeerOf key prefix of a FOLDER an unindexed peer searches (vs a listed file) }
+  SEARCH_DIR_KEY = 'dir:';
 
 var
   GUndecided: TDictionary<string, Boolean>;
+  { 1.52 BK-TAILS-ENG: lowercased full unit path -> the .dproj of a .groupproj peer that LISTS the unit
+    but has no index; rebuilt by every AddDiscoveredPeers. }
+  GUnindexedPeerOf: TDictionary<string, string>;
+  { lowercased .dproj -> its info line was written (once per process) }
+  GPeerAnnounced: TDictionary<string, Boolean>;
 
 function SiteKey(const AFile: string; ALine: Integer; const ARule: string): string;
 var
@@ -272,6 +321,182 @@ begin
     Result:= GUndecided.ContainsKey(SiteKey(AFile, ALine, ARule));
   finally
     TMonitor.Exit(GUndecided);
+  end;
+end;
+
+const
+  DRAG_DIR = '_D-RAG';
+  GROUPPROJ_PARENT_LEVELS = 2;  { the project folder, its parent and grandparent }
+
+procedure AddPeer(const ANameToDb: TDictionary<string, string>; const AName, ADb: string);
+var
+  Cur: string;
+begin
+  if (AName = '') or (ADb = '') then Exit;
+  if ANameToDb.TryGetValue(LowerCase(AName), Cur) and (Cur <> '') then Exit;
+  for var Known: string in ANameToDb.Values do  { a manifest section already opens this DB }
+    if SameText(ExpandFileName(Known), ExpandFileName(ADb)) then Exit;
+  ANameToDb.AddOrSetValue(LowerCase(AName), ADb);
+end;
+
+{ 1.52 BK-TAILS-ENG: records every unit the unindexed peer ADproj LISTS -- its .dproj DCCReference entries
+  and its .dpr / .dpk `in '...'` paths -- so TSharedScope reads a verdict on such a unit as undecidable.
+  1.52 TAILS-ENG2: also every folder it searches (its own folder + DCC_UnitSearchPath, via
+  TClosureResolver.ProjectSearchPaths): a unit in one of them MAY be compiled by the peer unlisted, so it
+  is undecidable too. Deliberately over-approximate (no closure walk without an index); not covered: a
+  unit reached through a library path / IDE-global search path or an environment macro the .dproj parse
+  does not expand. }
+procedure NoteUnindexedPeer(const ADproj: string);
+var
+  Dir : string;
+  Refs: TArray<string>;
+  Prog: string;
+begin
+  Dir:= ExtractFilePath(ADproj);
+  Prog:= '';
+  try
+    Refs:= ReadDCCReferences(ADproj);
+    var ProgFile: string:= FindSiblingProgramFile(ADproj);
+    if ProgFile <> '' then Prog:= StripPasCommentsKeepLayout(TFile.ReadAllText(ProgFile));
+  except  // dl:ok try-except-swallowed@2bb3 -- an unreadable peer project lists nothing; the run judges as before
+    on E: Exception do Exit;
+  end;
+  for var M: TMatch in TRegEx.Matches(Prog, '\bin\s+''([^'']+)''', [roIgnoreCase]) do
+    Refs:= Refs + [M.Groups[1].Value];
+  { 1.52 TAILS-ENG2: the folders the compiler searches for this peer -- its own folder and its
+    DCC_UnitSearchPath. A unit there may be compiled by the peer without being listed. }
+  var SearchDirs: TArray<string>:= TClosureResolver.ProjectSearchPaths(ADproj);
+  TMonitor.Enter(GUnindexedPeerOf);
+  try
+    for var Ref: string in Refs do
+    begin
+      var Full: string:= LowerCase(ExpandFileName(TPath.Combine(Dir, Ref)));
+      if not GUnindexedPeerOf.ContainsKey(Full) then GUnindexedPeerOf.Add(Full, ADproj);
+    end;
+    for var SDir: string in SearchDirs do
+    begin
+      var Key: string:= SEARCH_DIR_KEY + LowerCase(ExcludeTrailingPathDelimiter(ExpandFileName(TPath.Combine(Dir, SDir))));
+      if not GUnindexedPeerOf.ContainsKey(Key) then GUnindexedPeerOf.Add(Key, ADproj);
+    end;
+  finally
+    TMonitor.Exit(GUnindexedPeerOf);
+  end;
+end;
+
+{ The .dproj of an unindexed peer that lists APath, or (1.52 TAILS-ENG2) whose search path holds its
+  folder (AViaSearchPath); '' when none does. }
+function UnindexedPeerListing(const APath: string; out AViaSearchPath: Boolean): string;
+begin
+  AViaSearchPath:= False;
+  var Full: string:= LowerCase(ExpandFileName(StringReplace(APath, '/', '\', [rfReplaceAll])));
+  TMonitor.Enter(GUnindexedPeerOf);
+  try
+    if GUnindexedPeerOf.TryGetValue(Full, Result) then Exit;
+    AViaSearchPath:= GUnindexedPeerOf.TryGetValue(SEARCH_DIR_KEY + ExcludeTrailingPathDelimiter(ExtractFilePath(Full)), Result);
+    if not AViaSearchPath then Result:= '';
+  finally
+    TMonitor.Exit(GUnindexedPeerOf);
+  end;
+end;
+
+{ One stderr line per unindexed peer per process: which project could not be asked and how to fix it.
+  Console processes only -- a GUI host has no ErrOutput to write to. }
+procedure AnnounceUnindexedPeer(const ADproj: string);
+begin
+  TMonitor.Enter(GPeerAnnounced);
+  try
+    if GPeerAnnounced.ContainsKey(LowerCase(ADproj)) then Exit;
+    GPeerAnnounced.Add(LowerCase(ADproj), True);
+  finally
+    TMonitor.Exit(GPeerAnnounced);
+  end;
+  if not IsConsole then Exit;
+  try
+    Writeln(ErrOutput, Format('drag-lint: cross-project: project %s (%s) lists units of this run but has no index -- ' +
+      'unused-global / unused-public / member-could-be-private findings on those units are withheld as undecidable. ' +
+      'Index it: drag-lint index --project "%s"', [ChangeFileExt(ExtractFileName(ADproj), ''), ADproj, ADproj]));
+  except  // dl:ok try-except-swallowed@2bb3 -- an info line that cannot be written must not fail the lint run
+    on E: Exception do Exit;
+  end;
+end;
+
+procedure AddGroupPeers(const AGroupProj, AOwnBase, APrimary: string;
+  const ANameToDb: TDictionary<string, string>);
+var
+  Text: string;
+begin
+  try
+    Text:= TFile.ReadAllText(AGroupProj);
+  except  // dl:ok try-except-swallowed@2bb3 -- an unreadable .groupproj names no peer; the run judges as before
+    on E: Exception do Exit;
+  end;
+  for var M: TMatch in TRegEx.Matches(Text, '<Projects\s+Include="([^"]+)"', [roIgnoreCase]) do
+  begin
+    var Peer: string:= ExpandFileName(TPath.Combine(ExtractFilePath(AGroupProj), M.Groups[1].Value));
+    if not SameText(ExtractFileExt(Peer), '.dproj') then Continue;
+    var Base: string:= ChangeFileExt(ExtractFileName(Peer), '');
+    if SameText(Base, AOwnBase) then Continue;
+    var Db: string:= TPath.Combine(TPath.Combine(ExtractFilePath(Peer), DRAG_DIR), Base + '.sqlite');
+    if SameText(Db, APrimary) then Continue;
+    if not TFile.Exists(Db) then
+    begin
+      NoteUnindexedPeer(Peer);  { 1.52 BK-TAILS-ENG: no index to ask -- its units are undecidable }
+      Continue;
+    end;
+    AddPeer(ANameToDb, Base, Db);
+  end;
+end;
+
+{ The .groupproj files directly in ADir; empty when the folder cannot be listed. }
+function GroupProjsIn(const ADir: string): TArray<string>;
+begin
+  try
+    Result:= TDirectory.GetFiles(ADir, '*.groupproj');  // dl:ok taint-path-traversal@d6af -- ADir is the run's own --project / --db folder or a parent; only a listing is read
+  except  { a folder that cannot be listed names no peer }
+    on E: Exception do Result:= nil;
+  end;
+end;
+
+procedure AddDiscoveredPeers(const APrimaryDb, AProjectPath: string; AIsCopy: Boolean;
+  const ANameToDb: TDictionary<string, string>);
+var
+  Primary, DbDir, Dir, OwnBase: string;
+  InDRag: Boolean;
+begin
+  TMonitor.Enter(GUnindexedPeerOf);  { 1.52 BK-TAILS-ENG: this run's unindexed peers only }
+  try
+    GUnindexedPeerOf.Clear;
+  finally
+    TMonitor.Exit(GUnindexedPeerOf);
+  end;
+  Primary:= if APrimaryDb = '' then '' else ExpandFileName(APrimaryDb);
+  DbDir  := if Primary = '' then '' else ExcludeTrailingPathDelimiter(ExtractFilePath(Primary));
+  InDRag := (DbDir <> '') and SameText(ExtractFileName(DbDir), DRAG_DIR);
+  { (a) a copy set: the other DBs beside the copy }
+  if AIsCopy and (DbDir <> '') and not InDRag and TDirectory.Exists(DbDir) then
+    for var Db: string in TDirectory.GetFiles(DbDir, '*.sqlite') do  // dl:ok taint-path-traversal@398e -- DbDir is the folder of the run's own --db; only a listing is read
+      if not SameText(Db, Primary) then AddPeer(ANameToDb, ChangeFileExt(ExtractFileName(Db), ''), Db);
+  { (b) a real DB: the peers the project group lists }
+  if AIsCopy and not InDRag then Exit;
+  if AProjectPath <> '' then
+  begin
+    Dir    := ExcludeTrailingPathDelimiter(ExtractFilePath(ExpandFileName(AProjectPath)));
+    OwnBase:= ChangeFileExt(ExtractFileName(AProjectPath), '');
+  end
+  else if InDRag then
+  begin
+    Dir    := ExtractFileDir(DbDir);
+    OwnBase:= ChangeFileExt(ExtractFileName(Primary), '');
+  end
+  else Exit;
+  for var Level: Integer:= 0 to GROUPPROJ_PARENT_LEVELS do
+  begin
+    if (Dir = '') or not TDirectory.Exists(Dir) then Break;
+    for var G: string in GroupProjsIn(Dir) do
+      AddGroupPeers(G, OwnBase, Primary, ANameToDb);
+    var Up: string:= ExtractFileDir(Dir);
+    if SameText(Up, Dir) then Break;
+    Dir:= Up;
   end;
 end;
 
@@ -375,7 +600,23 @@ begin
       Seen.Add(LowerCase(Trim(N)), True);
       St:= Open(N);
       if (St = nil) or (St.FindFileIdByPath(APath) <= 0) or IsSelf(St) then Continue;
+      { 1.52 BK-XPROJ: another DB of THIS project (an older copy beside a --db copy, the same
+        folder indexed twice) is not a sibling project -- its stale answer must not withhold. }
+      if (FStore <> nil) and SameText(St.GetMetaValue(META_PROJECT_TAG), FStore.GetMetaValue(META_PROJECT_TAG)) then Continue;
       Names.Add(Trim(N));
+    end;
+    { 3. 1.52 BK-TAILS-ENG: a .groupproj peer that lists the unit but has no index cannot be asked -- as
+      undecidable as a header-named project whose index is missing (AddDiscoveredPeers records them). }
+    if Why = '' then
+    begin
+      var ViaSearchPath: Boolean;
+      var Peer: string:= UnindexedPeerListing(APath, ViaSearchPath);
+      if Peer <> '' then
+      begin
+        Why:= Format('project %s %s but has no index (%s)', [ChangeFileExt(ExtractFileName(Peer), ''),
+          (if ViaSearchPath then 'may compile the unit through its search path' else 'lists the unit'), Peer]);
+        AnnounceUnindexedPeer(Peer);
+      end;
     end;
     FListing.AddOrSetValue(LowerCase(APath), Names.ToArray);
     FWhyNot.AddOrSetValue(LowerCase(APath), Why);
@@ -418,8 +659,12 @@ end;
 
 initialization
   GUndecided:= TDictionary<string, Boolean>.Create;
+  GUnindexedPeerOf:= TDictionary<string, string>.Create;
+  GPeerAnnounced:= TDictionary<string, Boolean>.Create;
 
 finalization
+  GPeerAnnounced.Free;
+  GUnindexedPeerOf.Free;
   GUndecided.Free;
 
 end.

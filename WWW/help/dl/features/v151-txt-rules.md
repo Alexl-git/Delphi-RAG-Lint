@@ -4,10 +4,10 @@ title: "Text rules: bidi, invisible, control chars, TODO, header, strings"
 summary: "Six raw-text lint rules: bidi-control, invisible-char, control-char, todo-comment, file-header, hardcoded-string"
 product: DL
 group: linting
-order: 30058
+order: 30061
 since: 1.51.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # Text rules: bidi, invisible, control chars, TODO, header, strings
@@ -19,7 +19,7 @@ Reads the bytes of a unit and its form file to find Trojan-Source characters, in
 ## How to run it
 
 ```text
-drag-lint lint-all [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]
+drag-lint lint-all [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>[,<id>...]] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget]
 ```
 
 Full flag list: [lint-all in the CLI reference](../cli.md#lint-all).

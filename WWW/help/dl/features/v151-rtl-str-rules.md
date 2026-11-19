@@ -4,10 +4,10 @@ title: RTL string and path lint rules
 summary: "Seven lint rules for RTL string, path and conversion mistakes: swapped Pos arguments, StrictDelimiter, FormatSettings writes, path joins, file-name compares"
 product: DL
 group: linting
-order: 30054
+order: 30057
 since: 1.51.0-alpha
 status: experimental
-updated: 1.51.0-alpha
+updated: 1.52.0-alpha
 ---
 
 # RTL string and path lint rules
@@ -19,7 +19,7 @@ Use these when a codebase builds paths and parses text by hand. Each rule is a t
 ## How to run it
 
 ```text
-drag-lint lint <path> [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>|help] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]
+drag-lint lint <path> [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>|help] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>] [--no-budget]
 ```
 
 Example:

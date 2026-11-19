@@ -41,10 +41,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe      = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$RulesDir = "$PSScriptRoot\..\..\rules",
+  [string]$Exe      = '',
+  [string]$RulesDir = '',
   [string]$WorkDir  = "C:\TEMP\draglint_uba_parammodes_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $RulesDir) { $RulesDir = "$PSScriptRoot\..\..\rules" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){ if($d){Write-Host "      $d" -ForegroundColor DarkGray}; $script:fail=$true } }
@@ -142,7 +146,7 @@ end.
 # membership probe misses, the store is SILENTLY dropped, and every case below
 # reverts to the store-free answer while still looking like a store run.
 $db = Join-Path $WorkDir 'uba.sqlite'
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $consumer = Join-Path $src 'uConsumer.pas'
 
 function Reported([string]$Text) {
@@ -151,7 +155,7 @@ function Reported([string]$Text) {
 
 Push-Location C:\TEMP
 try {
-  $allOut = (& $exePath lint-all --db $db --rules-dir $rules --quiet 2>&1 | Out-String)
+  $allOut = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rules-dir $rules --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $all    = Reported $allOut
   Write-Host ("  lint-all reported: {0}" -f $(if($all){$all -join ','}else{'(none)'})) -ForegroundColor DarkGray
 
@@ -187,7 +191,7 @@ try {
   # ---- THE STORE IS THE MECHANISM. With no --db there is no signature to
   #      consult, so all four must STILL be reported. This pins that the fix is
   #      store-driven and that the bare `lint <file>` path is untouched.
-  $bare = Reported ((& $exePath lint $consumer --rules-dir $rules 2>&1 | Out-String))
+  $bare = Reported ((& { $ErrorActionPreference = 'Continue'; & $exePath lint $consumer --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String))
   foreach ($v in @('avar','aout','aconst','aval')) {
     Check "C4 store-free ``lint <file>`` still reports $v" ($bare -contains $v) ($bare -join ',')
   }
@@ -195,7 +199,7 @@ try {
   # ---- lint <file> --db and lint-all must not disagree. run_lint_file_flow_
   #      matches_lintall pins that generally; it cannot see THIS shape, because
   #      its fixture has no call whose parameter mode matters.
-  $one = Reported ((& $exePath lint $consumer --db $db --rules-dir $rules 2>&1 | Out-String))
+  $one = Reported ((& { $ErrorActionPreference = 'Continue'; & $exePath lint $consumer --db $db --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String))
   Check 'C5 `lint <file> --db` agrees with `lint-all`' `
         (($one -join ',') -eq ($all -join ',')) "lint=$($one -join ','); lint-all=$($all -join ',')"
 }

@@ -15,9 +15,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-mcp-rename-refusals-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -74,7 +77,7 @@ function New-Fixture([string]$Name, [string]$IncBody) {
   Write-Ascii (Join-Path $src 'body.inc')  $IncBody
   $db = Join-Path $dir 'idx.sqlite'
   Push-Location $dir
-  try { & $Exe index $src --db $db 2>&1 | Out-Null } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null } finally { Pop-Location }
   Check "$Name index exits 0" ($LASTEXITCODE -eq 0)
   [pscustomobject]@{ Dir = $dir; Db = $db }
 }
@@ -94,8 +97,8 @@ function Invoke-Rename($fx, [string[]]$Targets) {
     -RedirectStandardInput $req -RedirectStandardOutput $so -RedirectStandardError $se -NoNewWindow -Wait | Out-Null
   $res = @{}
   foreach ($ln in (Get-Content $so)) {
-    try { $o = $ln | ConvertFrom-Json } catch { continue }
-    if ($o.id -ge 2 -and $o.result) { $res[[int]$o.id] = ($o.result.content[0].text | ConvertFrom-Json) }
+    try { $o = $ln | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
+    if ($o.id -ge 2 -and $o.result) { $res[[int]$o.id] = ($o.result.content[0].text | ConvertFrom-Json | ForEach-Object { $_ }) }
   }
   $res
 }

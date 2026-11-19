@@ -5,14 +5,62 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "0.33.0-alpha",
-  "summary": "Lists every reference to the symbol under the editor caret across the indexed project",
-  "intro": "Read this before changing or removing a symbol, to see every place it is used. With the caret on the symbol choose drag-lint > Find Usages... (Ctrl+Alt+F); the same list comes from the command line as `drag-lint usages --name <X> --db <db>`.",
+  "summary": "Lists every reference to the symbol under the editor caret, in one of four scopes: this bound symbol (default), project, group or everywhere",
+  "intro": "Read this before changing or removing a symbol, to see every place it is used. With the caret on the symbol choose drag-lint > Find Usages... (Ctrl+Alt+F): by default it lists the usages of exactly that object in this project. drag-lint > Find Usages > This symbol / Project / Group / Everywhere (also on the editor right-click drag-lint submenu) and the scope box on the results panel widen it to every object of the name in the project, the project group or every index; the same list comes from the command line as `drag-lint usages --scope <scope>`.",
   "wikiPage": "Find-Usages",
   "surfaces": [
     {
       "type": "ide-menu",
       "path": "drag-lint > Find Usages...",
       "steps": ["Needs an index of the project", "Put the editor caret on the symbol", "drag-lint > Find Usages..."]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Find Usages > This symbol",
+      "steps": ["Needs an index of the project", "Put the editor caret on the symbol", "drag-lint > Find Usages > This symbol"]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Find Usages > Project",
+      "steps": ["Needs an index of the project", "Put the editor caret on the symbol", "drag-lint > Find Usages > Project"]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Find Usages > Group",
+      "steps": ["Needs an index of the project", "Put the editor caret on the symbol", "drag-lint > Find Usages > Group"]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Find Usages > Everywhere",
+      "steps": ["Needs an index of the project", "Put the editor caret on the symbol", "drag-lint > Find Usages > Everywhere"]
+    },
+    {
+      "type": "ide-context",
+      "host": "Editor",
+      "caption": "drag-lint > Find Usages > This symbol",
+      "steps": ["Put the caret on the symbol", "Right-click in the code editor and open drag-lint > Find Usages", "Choose This symbol"]
+    },
+    {
+      "type": "ide-context",
+      "host": "Editor",
+      "caption": "drag-lint > Find Usages > Project",
+      "steps": ["Put the caret on the symbol", "Right-click in the code editor and open drag-lint > Find Usages", "Choose Project"]
+    },
+    {
+      "type": "ide-context",
+      "host": "Editor",
+      "caption": "drag-lint > Find Usages > Group",
+      "steps": ["Put the caret on the symbol", "Right-click in the code editor and open drag-lint > Find Usages", "Choose Group"]
+    },
+    {
+      "type": "ide-context",
+      "host": "Editor",
+      "caption": "drag-lint > Find Usages > Everywhere",
+      "steps": ["Put the caret on the symbol", "Right-click in the code editor and open drag-lint > Find Usages", "Choose Everywhere"]
+    },
+    {
+      "type": "mcp",
+      "tool": "find_usages"
     }
   ],
   "audience": "both",
@@ -24,12 +72,16 @@
     {
       "ask": "Who calls this routine?",
       "command": "drag-lint query find-callers --name <Bar> --db <db>"
+    },
+    {
+      "ask": "Why does Find Usages list only one of several same-named fields?",
+      "command": "The default scope is This symbol (the object under the caret); pick Project in the panel scope box for every object of the name: drag-lint usages --name <X> --scope project --db <db>"
     }
   ],
   "verified": {
-    "date": "2026-11-07",
+    "date": "2026-11-18",
     "by": "ENGINE",
-    "build": "1.46.0-alpha",
-    "surfaceHash": "9002cd9fe23ab0cff78aa754409d8ffbf6c163a63c1816ac99ab8fba2fb3f61d"
+    "build": "1.51.1-alpha",
+    "surfaceHash": "8e6042913e725f2729344084e87784ac244f370736b7796af7a18f9a0c2d31fd"
   }
 }

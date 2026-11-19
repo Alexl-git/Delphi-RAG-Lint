@@ -7,7 +7,7 @@ group: compiler
 order: 90006
 since: 1.51.0-alpha
 status: shipped
-updated: 1.51.0-alpha
+updated: 1.52.0-alpha
 ---
 
 # Compiler messages: pass-through and overlap with our rules
@@ -62,7 +62,7 @@ the detection is the same, the table says so.
 |---|---|
 | `implicit-package-import` | Refused as a rule: exactly dcc W1033, and it needs the unit list of binary .dcp packages that no source index has. Covered by the pass-through. |
 | `component-create-without-override` | Refused as a new id: exactly dcc W1010 and already `hides-ancestor-virtual`; the component lane adds a fixture that proves the existing rule covers `constructor Create(AOwner: TComponent)` without override. |
-| `debug-display-placeholder` | Refused for a different reason, not a compiler message: it would validate another tool's own debugger annotation that our product does not have. |
+| `debug-display-placeholder` | Not a compiler message (dcc never checks a DebuggerDisplay template). Built in 1.52 (lane BK-ATTRRULES) on the attributes index fact, default OFF: [v152-attrrules](v152-attrrules.md). |
 | `noreturn-returns` (W1080, lane OO) | Conditional: the lane compiles its RED fixture with dcc first; if dcc already reports the construct (W1080), it is a compiler message and is not added as a rule. |
 
 The rule of thumb: a NEW rule is not added when dcc reports that exact construct; an EXISTING rule is never removed

@@ -12,9 +12,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-fixutf8-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'g8-common.ps1')
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
@@ -41,7 +47,8 @@ function Fire-Count($C) {
 }
 function Apply-Fix($C) {
   Push-Location $C.Dir
-  try { & $Exe lint-all --db $C.Db --fix --fix-rule unused-unit-in-uses --apply --no-backup *> (Join-Path $C.Dir '_fix.log') } finally { Pop-Location }
+  # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $C.Db --fix --fix-rule unused-unit-in-uses --apply --no-compile-gate --no-backup *> (Join-Path $C.Dir '_fix.log') } } finally { Pop-Location }
 }
 
 $ascii = New-Case 'ascii' 'ae' 'ue'
@@ -69,3 +76,4 @@ if ($valid -and $newText) {
 if ($script:Failed) { Write-Host 'run_fixutf8_uses: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'run_fixutf8_uses: PASS' -ForegroundColor Green
 exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

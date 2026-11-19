@@ -18,7 +18,10 @@
   Run from a NEUTRAL CWD (C:\TEMP).
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -36,21 +39,21 @@ Copy-Item $fixture $target -Force
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # --- run 1: apply, capture bytes ---
-  $r1 = & $exePath document --qname doc_generate.Add --db $db --apply --json 2>$null | Out-String
-  $o1 = $null; try { $o1 = ($r1 | ConvertFrom-Json) } catch { $o1 = $null }
+  $r1 = & { $ErrorActionPreference = 'Continue'; & $exePath document --qname doc_generate.Add --db $db --apply --json 2>$null } | Out-String
+  $o1 = $null; try { $o1 = ($r1 | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $o1 = $null }
   Check 'run1: action = created'  ($null -ne $o1 -and $o1.action -eq 'created')
   Check 'run1: applied = true'    ($null -ne $o1 -and $o1.applied -eq $true)
   $bytes1 = [IO.File]::ReadAllBytes($target)
 
   # --- CRITICAL: re-index so the store sees the post-insert line numbers ---
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # --- run 2: apply again; must be a no-op ---
-  $r2 = & $exePath document --qname doc_generate.Add --db $db --apply --json 2>$null | Out-String
-  $o2 = $null; try { $o2 = ($r2 | ConvertFrom-Json) } catch { $o2 = $null }
+  $r2 = & { $ErrorActionPreference = 'Continue'; & $exePath document --qname doc_generate.Add --db $db --apply --json 2>$null } | Out-String
+  $o2 = $null; try { $o2 = ($r2 | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $o2 = $null }
   Check 'run2: action = unchanged' ($null -ne $o2 -and $o2.action -eq 'unchanged')
   Check 'run2: edits = 0'          ($null -ne $o2 -and [int]$o2.edits -eq 0)
   Check 'run2: applied = false'    ($null -ne $o2 -and $o2.applied -eq $false)

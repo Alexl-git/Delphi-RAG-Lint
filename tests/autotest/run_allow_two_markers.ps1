@@ -16,7 +16,10 @@
     5. CONTROL: a rule not on the line is appended to the LAST comment, earlier comments untouched
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -39,7 +42,7 @@ $src = @(
 [IO.File]::WriteAllText($pas, $src + "`r`n", (New-Object System.Text.ASCIIEncoding))
 
 function Line($n) { (Get-Content $pas)[$n - 1] }
-function Allow($line, $rule) { & $Exe allow $pas --fix-line $line --fix-rule $rule --apply 2>&1 | Out-Null }
+function Allow($line, $rule) { & { $ErrorActionPreference = 'Continue'; & $Exe allow $pas --fix-line $line --fix-rule $rule --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null }
 
 Allow 16 'concat-in-loop'
 $l = Line 16

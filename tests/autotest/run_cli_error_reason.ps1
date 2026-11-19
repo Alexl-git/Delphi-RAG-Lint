@@ -13,10 +13,17 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$FixtureDir = "$PSScriptRoot\..\fixtures\menutree",
+  [string]$Exe = '',
+  [string]$FixtureDir = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-cli-error-reason-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $FixtureDir) { $FixtureDir = "$PSScriptRoot\..\fixtures\menutree" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -28,7 +35,7 @@ function Check($n, $ok, $d = '') {
 # runs the exe, returns @{ Exit; Out; Err } with the streams kept apart
 function Run($exeArgs) {
   $o = [IO.Path]::GetTempFileName(); $e = [IO.Path]::GetTempFileName()
-  $p = Start-Process -FilePath $Exe -ArgumentList $exeArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput $o -RedirectStandardError $e
+  $p = Start-Process -FilePath $Exe -ArgumentList $exeArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   $r = @{ Exit = $p.ExitCode; Out = [IO.File]::ReadAllText($o); Err = [IO.File]::ReadAllText($e) }
   [IO.File]::Delete($o); [IO.File]::Delete($e)
   return $r
@@ -36,7 +43,7 @@ function Run($exeArgs) {
 function ErrObj($text) {
   # the first stderr line that parses as a JSON object with an "error" member
   foreach ($l in ($text -split "`r?`n")) {
-    if ($l.StartsWith('{')) { try { $j = $l | ConvertFrom-Json; if ($j.error) { return $j } } catch { } }
+    if ($l.StartsWith('{')) { try { $j = $l | ConvertFrom-Json | ForEach-Object { $_ }; if ($j.error) { return $j } } catch { } }
   }
   return $null
 }
@@ -112,7 +119,7 @@ $r = RunEnv @('compare', '--old', $cvOld, '--db', $cvDb)
 Check 'compare stale, text: exit 3, an error[stale-index]: line' (($r.Exit -eq 3) -and ($r.Err -match '(?m)^error\[stale-index\]: compare: ')) "exit=$($r.Exit) err=$($r.Err)"
 $r = RunEnv @('compare', '--old', $cvOld, '--db', $cvDb, '--format', 'json')
 $j = ErrObj $r.Err
-$env1 = $null; try { $env1 = $r.Out | ConvertFrom-Json } catch { }
+$env1 = $null; try { $env1 = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'compare stale, --format json: exit 3, stderr JSON error=stale-index' (($r.Exit -eq 3) -and ($null -ne $j) -and ($j.error -eq 'stale-index')) "exit=$($r.Exit) err=$($r.Err)"
 Check 'compare stale, --format json: the compare/1 envelope still parses on stdout' (($null -ne $env1) -and ($env1.exit_code -eq 3)) $r.Out
 
@@ -121,3 +128,4 @@ $r = RunEnv @('compare')
 Check 'control: compare usage refusal (exit 2) has no error[stale-index]' (($r.Exit -eq 2) -and ($r.Err -notmatch 'stale-index')) "exit=$($r.Exit)"
 
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

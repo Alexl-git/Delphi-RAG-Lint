@@ -23,9 +23,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-lsp-c15-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
@@ -51,7 +54,7 @@ function ReadFrames([string]$out) {
     if (-not $mm.Success) { break }
     $start = $i + $mm.Index + $mm.Length; $len = [int]$mm.Groups[1].Value
     if ($start + $len -gt $out.Length) { break }
-    $o = $out.Substring($start, $len) | ConvertFrom-Json
+    $o = $out.Substring($start, $len) | ConvertFrom-Json | ForEach-Object { $_ }
     if ($null -ne $o.id -and [int]$o.id -gt 10) { $res[[int]$o.id] = $o.result }
     $i = $start + $len
   }
@@ -65,7 +68,7 @@ function RunLspMsgs([string]$Tag, [string[]]$Msgs, [string[]]$LspArgs) {
   # Start-Process joins ArgumentList with spaces: quote the items that hold one
   $a = @($LspArgs | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } })
   $null = Start-Process $Exe -ArgumentList $a -WorkingDirectory $WorkDir `
-    -RedirectStandardInput $in -RedirectStandardOutput $so -RedirectStandardError $se -NoNewWindow -Wait -PassThru
+    -RedirectStandardInput $in -RedirectStandardOutput $so -RedirectStandardError $se -NoNewWindow -Wait -PassThru; $null = $null.Handle
   $out = if (Test-Path $so) { [IO.File]::ReadAllText($so) } else { '' }
   return @{ Out = $out; Frames = (ReadFrames $out) }
 }
@@ -112,7 +115,7 @@ New-Item -ItemType Directory -Force $src | Out-Null
 $file = Join-Path $src 'uC15.pas'
 [IO.File]::WriteAllText($file, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 $db = Join-Path $WorkDir 'c15.sqlite'
-$null = & $Exe index $src --db $db 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } }
 if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host 'FATAL: fixture not indexed' -ForegroundColor Red; exit 2 }
 $uri = 'file:///' + ($file -replace '\\', '/')
 $td = @{ uri = $uri }
@@ -151,7 +154,7 @@ $csc = @('Framework64', 'Framework') | ForEach-Object { Join-Path $env:WINDIR "M
 $stubDir = Join-Path $WorkDir 'stub'
 New-Item -ItemType Directory -Force $stubDir | Out-Null
 $stubExe = Join-Path $stubDir 'FullRulesChildStub.exe'
-if ($csc) { $null = & $csc /nologo /out:$stubExe (Join-Path $PSScriptRoot 'fixtures\lsp\FullRulesChildStub.cs') 2>&1 }
+if ($csc) { $null = & { $ErrorActionPreference = 'Continue'; & $csc /nologo /out:$stubExe (Join-Path $PSScriptRoot 'fixtures\lsp\FullRulesChildStub.cs') 2>&1 | ForEach-Object { "$_" } } }
 Check 'SANITY: the stub child compiled' (Test-Path $stubExe) ('csc=' + $csc)
 $projDir = Join-Path $WorkDir 'my proj'
 New-Item -ItemType Directory -Force $projDir | Out-Null

@@ -9,8 +9,11 @@
   project, so the library routine is planned there (proves L1 is the anchor and not a vacuous filter).
 #>
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe"
+  [string]$Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -26,15 +29,15 @@ try {
   $Proj = Join-Path $Tmp 'fx\proj\P.dproj'
   $Db = Join-Path $Tmp 'fx\proj\_D-RAG\P.sqlite'
   [IO.Directory]::CreateDirectory((Split-Path $Db)) | Out-Null
-  & $Exe index --project $Proj --db $Db --library-db none *> (Join-Path $Tmp 'index.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $Proj --db $Db --library-db none *> (Join-Path $Tmp 'index.log') }
   if ($LASTEXITCODE -ne 0) { throw "index exit $LASTEXITCODE" }
   $Loose = Join-Path $Tmp 'loose.sqlite'
   Copy-Item $Db $Loose
 
   function Run-Json([string]$DbPath, [string[]]$More) {
-    $o = & $Exe narrow-param --db $DbPath --library-db none --all --plan --format json @More 2> (Join-Path $Tmp 'run.err')
+    $o = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath((Join-Path $Tmp 'run.err')); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe narrow-param --db $DbPath --library-db none --all --plan --format json @More 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
     $script:LastExit = $LASTEXITCODE
-    return (($o -join "`n") | ConvertFrom-Json)
+    return (($o -join "`n") | ConvertFrom-Json | ForEach-Object { $_ })
   }
   function Has([object[]]$Rows, [string]$Routine) { return @($Rows | Where-Object { $_.routine -like "*$Routine" }).Count -gt 0 }
 
@@ -52,7 +55,7 @@ try {
   Check 'B1 a bound array with a row for OwnRoutine' ($own.Count -ge 1)
   Check 'B2 the row names member, class and a reason' (($own.Count -ge 1) -and ($own[0].member -eq 'Foo') -and ($own[0].class -eq 'TNpBase') -and $own[0].reason)
   Check 'B3 no bound key without the flag' ($null -eq $p.PSObject.Properties['bound'])
-  $txt = (& $Exe narrow-param --db $Db --library-db none --all --plan --show-bound 2>&1) -join "`n"
+  $txt = (& { $ErrorActionPreference = 'Continue'; & $Exe narrow-param --db $Db --library-db none --all --plan --show-bound 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check 'B4 the text form prints a bound line' ($txt -match '(?m)^bound\s+.*OwnRoutine.*Foo.*TNpBase')
 
   Write-Host 'D1 unpublished handler bound only in a .dfm'

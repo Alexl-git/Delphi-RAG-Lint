@@ -36,10 +36,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe      = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$RulesDir = "$PSScriptRoot\..\..\rules",
+  [string]$Exe      = '',
+  [string]$RulesDir = '',
   [string]$WorkDir  = "C:\TEMP\draglint_file_project_parity_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $RulesDir) { $RulesDir = "$PSScriptRoot\..\..\rules" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){ if($d){Write-Host "      $d" -ForegroundColor DarkGray}; $script:fail=$true } }
@@ -106,13 +110,13 @@ $db = Join-Path $WorkDir 't4.sqlite'
 # ABSOLUTE index target: a relative one writes relative rows, the membership
 # probe misses, and the store is silently dropped -- which would make every
 # assertion below pass for a store-free run.
-$idx = & $exePath index $proj --db $db 2>&1 | Out-String
+$idx = & { $ErrorActionPreference = 'Continue'; & $exePath index $proj --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'SANITY: fixture indexed with no errors' `
       ($LASTEXITCODE -eq 0 -and $idx -notmatch '\b[1-9]\d* errors\b') $idx
 
 $mainPas = Join-Path $proj 'uT4Main.pas'
 $allOut  = Join-Path $WorkDir 'all.txt'
-& $exePath lint-all --db $db --rules-dir $rules --output $allOut 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rules-dir $rules --output $allOut 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $allTxt  = if (Test-Path $allOut) { Get-Content $allOut -Raw } else { '' }
 
 function IdsFor($text, $fileLeaf) {
@@ -126,7 +130,7 @@ function IdsOf($text) {
       ForEach-Object { if ($_ -match '\]\s+([a-z0-9-]+):') { $Matches[1] } }) | Sort-Object -Unique
 }
 
-$perFile = & $exePath lint $mainPas --db $db --rules-dir $rules 2>&1 | Out-String
+$perFile = & { $ErrorActionPreference = 'Continue'; & $exePath lint $mainPas --db $db --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String
 
 Check 'D1  the 25% rule -- unused-unit-in-uses is now reported PER FILE' `
       ($perFile -match 'unused-unit-in-uses') `
@@ -154,8 +158,8 @@ Check 'D2b REVERSE: the per-file run reports NOTHING lint-all does not' `
       ("extra in the per-file run: " + ($extra -join ', ') + " -- the off-by-default list must be SHARED, not kept per verb")
 
 # --project-rules is the documented escape hatch for the per-decl doc rules.
-$withDoc = & $exePath lint (Join-Path $proj 'uT4Lib.pas') --db $db --rules-dir $rules --project-rules 2>&1 | Out-String
-$noDoc   = & $exePath lint (Join-Path $proj 'uT4Lib.pas') --db $db --rules-dir $rules 2>&1 | Out-String
+$withDoc = & { $ErrorActionPreference = 'Continue'; & $exePath lint (Join-Path $proj 'uT4Lib.pas') --db $db --rules-dir $rules --project-rules 2>&1 | ForEach-Object { "$_" } } | Out-String
+$noDoc   = & { $ErrorActionPreference = 'Continue'; & $exePath lint (Join-Path $proj 'uT4Lib.pas') --db $db --rules-dir $rules 2>&1 | ForEach-Object { "$_" } } | Out-String
 
 # Match a FINDING LINE, not the bare word. The closing stderr note NAMES
 # doc-drift as the thing you opt into, so `-match 'doc-drift'` is satisfied by

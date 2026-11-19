@@ -34,9 +34,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_project_facts_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -136,7 +139,7 @@ end.
 '@
 
 function Facts([string]$Dproj, [string]$Plat, [string]$Cfg, [string[]]$Extra = @()) {
-  $o = & $exePath project-facts --dproj $Dproj --platform $Plat --config $Cfg @Extra 2>$null
+  $o = & { $ErrorActionPreference = 'Continue'; & $exePath project-facts --dproj $Dproj --platform $Plat --config $Cfg @Extra 2>$null }
   return [pscustomobject]@{ Exit = $LASTEXITCODE; Text = ($o -join "`n") }
 }
 function DefineLine([string]$Text, [string]$Name) {
@@ -175,7 +178,7 @@ Check 'P1 CONTROL EUREKALOG is ON in the control project too' ($null -ne (Define
 Check 'P1 CONTROL with EurekaLog7.targets imported there is no notice' ($r3.Text -match 'notices\s+: none') $r3.Text
 
 # ---- T6 --json ---------------------------------------------------------------
-$j = (Facts $app 'win64' 'Release' @('--json')).Text | ConvertFrom-Json
+$j = (Facts $app 'win64' 'Release' @('--json')).Text | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'T6 --json carries EUREKALOG with source Base_Win64' `
       (@($j.defines | Where-Object { $_.name -eq 'EUREKALOG' -and ($_.sources -contains 'Base_Win64') }).Count -eq 1) ''
 Check 'T6 --json carries the notice' (@($j.notices | Where-Object { $_ -match 'EurekaLog' }).Count -eq 1) ''
@@ -183,11 +186,11 @@ Check 'T6 --json imports have kinds' (@($j.imports | Where-Object { $_.kind -eq 
 
 # ---- T7 --db referenced by ---------------------------------------------------
 $db = Join-Path $WorkDir 'App.sqlite'
-& $exePath index --project $dpr --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index --project $dpr --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $r4 = Facts $app 'win64' 'Release' @('--db', $db)
 Check 'T7 --db lists uLog.pas as referencing ExceptionLog7' ($r4.Text -match 'uLog\.pas\s+\(ExceptionLog7\)') $r4.Text
 Check 'T7b and not uPlain.pas' ($r4.Text -notmatch 'uPlain\.pas') ''
-$j4 = (Facts $app 'win64' 'Release' @('--db', $db, '--json')).Text | ConvertFrom-Json
+$j4 = (Facts $app 'win64' 'Release' @('--db', $db, '--json')).Text | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'T7c --json referenced_by.EurekaLog has one entry' (@($j4.referenced_by.EurekaLog).Count -eq 1) ''
 
 # ---- T8 exit codes -----------------------------------------------------------

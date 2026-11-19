@@ -1,8 +1,11 @@
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-uunr-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -55,11 +58,11 @@ end.
 '@
 
 $db=Join-Path $WorkDir 'uunr.sqlite'
-$idx = & $Exe index $work --db $db 2>&1
+$idx = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 # Run the rule (no library DB passed -> ovctcmmn cannot resolve; SysUtils via RTL net).
-$out = (& $Exe lint-project --db $db --rule used-unit-not-resolvable 2>&1) -join "`n"
+$out = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-project --db $db --rule used-unit-not-resolvable 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'flags ovctcmmn' ($out -match 'ovctcmmn')  "out=$out"
 Check 'does NOT flag TakeJob (project member)'   (-not ($out -match '\bTakeJob\b.*used-unit-not-resolvable')) "out=$out"
 Check 'does NOT flag System.SysUtils (RTL net)'  (-not ($out -match 'SysUtils')) "out=$out"

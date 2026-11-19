@@ -13,10 +13,33 @@ uses
 /// <summary>drag-lint hover --qname Foo.Bar [--db path] [--format md|plain|json]: the hover card of one symbol.</summary>
 /// <param name="AArgs">--qname (required), --db, --format.</param>
 /// <returns>0 when rendered; 2 on a usage error or a missing --db.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.Common.ExplicitDbsExist, DRagLint.CLI.Common.OpenReadOnlyStore, DRagLint.CLI.Common.ReportNotFoundFor, DRagLint.CLI.Common.StaleDbRefusesRun, DRagLint.CLI.ConsumerDbs.ResolveConsumerDbs, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc, DRagLint.Hover.Renderer.RenderHoverJson/2, DRagLint.Hover.Renderer.RenderHoverMarkdown, DRagLint.Hover.Renderer.RenderHoverPlain (+6 more)</para>
+/// <para>Returns: 2; 1; 0</para>
+/// <para>Complexity: 23 (cyclomatic, outer body), 113 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.ExplicitDbsExist"/>
+/// <seealso cref="DRagLint.CLI.Common.OpenReadOnlyStore"/>
+/// <seealso cref="DRagLint.CLI.Common.ReportNotFoundFor"/>
+/// <seealso cref="DRagLint.CLI.Common.StaleDbRefusesRun"/>
+/// <seealso cref="DRagLint.CLI.ConsumerDbs.ResolveConsumerDbs"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoHover(const AArgs: TArgs): Integer;
 
 /// <summary>Hidden self-test verb of the WCAG contrast unit: prints known-answer ratios (BLACK_ON_WHITE, SAME, DARKFAIL, FIXED) for the test script to assert; no --db, no fixture.</summary>
 /// <returns>Always 0 (the script judges the printed values).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Hover.Contrast.ContrastRatio, DRagLint.Hover.Contrast.EnsureReadable, Format, Writeln</para>
+/// <para>Returns: 0</para>
+/// <seealso cref="DRagLint.Hover.Contrast.ContrastRatio"/>
+/// <seealso cref="DRagLint.Hover.Contrast.EnsureReadable"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoContrastSelfTest: Integer;
 
 implementation
@@ -25,7 +48,7 @@ uses
   DRagLint.Core.Model, DRagLint.CLI.ConsumerDbs, Winapi.Windows, System.SysUtils, System.IOUtils,
   System.NetEncoding, System.DateUtils, System.Generics.Collections, FireDAC.Stan.Async, FireDAC.DApt,
   DRagLint.Core.Interfaces, Vcl.Graphics, DRagLint.Hover.Renderer, DRagLint.Hover.Contrast,
-  DRagLint.Query.HoverModel;
+  DRagLint.Query.HoverModel, System.Diagnostics, System.RegularExpressions, DRagLint.Doc.Facts;
 
 // --- hover ------------------------------------------------------------------
 
@@ -134,7 +157,9 @@ begin
       var ExSt: ISymbolStore:= OpenReadOnlyStore(ExDb, ExOk);
       if ExOk and (ExSt <> nil) then HovExtra:= HovExtra + [ExSt];
     end;
+  var AsmWatch: TStopwatch:= TStopwatch.StartNew;
   var Asm_ : THoverAssembly:= AssembleHover(Store, Syms[0], (Fmt = 'json') or (Fmt = 'md'), HovExtra);
+  var AsmMs: Int64:= AsmWatch.ElapsedMilliseconds;
   var Rhs  : TArray<string>:= Asm_.ReturnRhs;
   var Model: THoverModel   := Asm_.Model    ;
 
@@ -163,6 +188,17 @@ begin
   begin
     Write(DRagLint.Hover.Renderer.RenderHoverPlain(Syms[0], Doc, Asm_.DeclaredType));
     for var ImplLine in Asm_.ImplLines do Writeln(ImplLine); { C22: plain skips FactLines, so the answering-methods line is printed here }
+  end;
+  { v152 HOVERCAP: DRAGLINT_PROFILE prints where the hover's time went -- the whole assembly, the check-init
+    'Set by:' solve inside it, and the facts breakdown (its 'used-in directions' line printed only under
+    lint doc-drift before, which hover never runs). stderr, so --format json stays one object.
+    v152 HOVERCACHE: printed after the card, with 'total' = assembly + render, the span the hover cap covers. }
+  if GetEnvironmentVariable('DRAGLINT_PROFILE') <> '' then
+  begin
+    var SetByMs: string:= TRegEx.Match(Asm_.Model.SetByJson, '"ms":(\d+)').Groups[1].Value;
+    Writeln(ErrOutput, System.SysUtils.Format('  HOVER PROFILE assemble %d ms | set-by (check-init) %s ms | total %d ms',
+      [AsmMs, if SetByMs = '' then '--' else SetByMs, AsmWatch.ElapsedMilliseconds]));
+    Writeln(ErrOutput, DocFactsBuildProfile);
   end;
   Result:= 0;
 end; // function

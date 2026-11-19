@@ -29,15 +29,39 @@ uses
 type
   /// <summary>Answers the three call-hierarchy methods and advertises
   /// callHierarchyProvider.</summary>
-  /// <remarks>Stateless; registered from this unit's initialization. Lines and
-  /// characters in replies are 0-based.</remarks>
+  /// <remarks>
+  /// Stateless; registered from this unit's initialization. Lines and
+  /// characters in replies are 0-based.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.LSP.Feature.CallHierarchy.initialization (DRagLint.LSP.Feature.CallHierarchy.pas)</para>
+  /// <para>Used in units: DRagLint.LSP.Feature.CallHierarchy</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TLspCallHierarchyFeature = class(TLspFeature)
   public
     /// <summary>The three methods this feature answers.</summary>
     /// <returns>prepareCallHierarchy, incomingCalls, outgoingCalls.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Returns: [PREPARE_METHOD, INCOMING_METHOD, OUTGOING_METHOD]</para>
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Methods</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.CallHierarchy.TLspCallHierarchyFeature.AddCapabilities"/>
+    /// <seealso cref="DRagLint.LSP.Feature.CallHierarchy.TLspCallHierarchyFeature.Handle"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Methods: TArray<string>; override;
     /// <summary>Adds `callHierarchyProvider: true`.</summary>
     /// <param name="ACaps">initialize.result.capabilities under construction.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.AddCapabilities</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.CallHierarchy.TLspCallHierarchyFeature.Handle"/>
+    /// <seealso cref="DRagLint.LSP.Feature.CallHierarchy.TLspCallHierarchyFeature.Methods"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure AddCapabilities(ACaps: TJSONObject); override;
     /// <summary>prepare: a CallHierarchyItem[] with one item, or null. incoming /
     /// outgoing: CallHierarchyIncomingCall[] / CallHierarchyOutgoingCall[], [] when
@@ -46,6 +70,19 @@ type
     /// <param name="AMethod">One of the three methods.</param>
     /// <param name="AId">The request id; a notification gets no reply.</param>
     /// <param name="AParams">prepare: textDocument + position; the others: {item}.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DRagLint.LSP.Context.ILspServerContext.Reply, DRagLint.LSP.Feature.CallHierarchy.Incoming, DRagLint.LSP.Feature.CallHierarchy.Outgoing, DRagLint.LSP.Feature.CallHierarchy.Prepare, DRagLint.LSP.HierarchyUtil.FindItemSymbol</para>
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Handle</para>
+    /// <para>Catches: Exception (re-raise)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Reply"/>
+    /// <seealso cref="DRagLint.LSP.Feature.CallHierarchy.Incoming"/>
+    /// <seealso cref="DRagLint.LSP.Feature.CallHierarchy.Outgoing"/>
+    /// <seealso cref="DRagLint.LSP.Feature.CallHierarchy.Prepare"/>
+    /// <seealso cref="DRagLint.LSP.HierarchyUtil.FindItemSymbol"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Handle(const ACtx: ILspServerContext; const AMethod: string; const AId: TJSONValue; const AParams: TJSONObject); override;
   end;
 

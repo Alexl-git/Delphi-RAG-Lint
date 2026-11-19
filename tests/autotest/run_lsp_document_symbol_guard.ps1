@@ -27,9 +27,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-docsym-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -155,7 +158,7 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'sym.sqlite'
-& $Exe index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' (Test-Path $db)
 
 $lines = [System.IO.File]::ReadAllLines($file)
@@ -179,7 +182,7 @@ function Session([string]$uri, [string]$openText = $null) {
     -RedirectStandardError (Join-Path $WorkDir 'err.txt') -NoNewWindow -Wait | Out-Null
   $r = @{ init = $null; sym = $null; err = $null; raw = [System.IO.File]::ReadAllText($outF) }
   foreach ($mm in [regex]::Matches($r.raw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 1) { $r.init = $o.result }
     if ($o.id -eq 2) {
       if ($null -ne $o.error) { $r.err = $o.error }
@@ -248,7 +251,7 @@ function ContainmentBad($arr) {
   Walk $arr $acc
   return @($acc | Where-Object { -not ((Before $_.range.start $_.selectionRange.start) -and (Before $_.selectionRange.end $_.range.end)) } | ForEach-Object { $_.name })
 }
-$bad = ContainmentBad $top
+$bad = @(ContainmentBad $top)
 Check 'range contains selectionRange for every symbol (uLens)' ($bad.Count -eq 0) "bad=$($bad -join ',')"
 
 # I2: edge-case declarations.
@@ -261,7 +264,7 @@ if ($null -ne $re.sym) {
   function ELineOf([string]$p) { for ($i = 0; $i -lt $elines.Count; $i++) { if ($elines[$i] -match $p) { return $i } } return -1 }
   $etop = @($re.sym[0])
   Check 'edge control: top level = TEdge,Spare,Wrapped2' ((($etop | % { $_.name }) -join ',') -eq 'TEdge,Spare,Wrapped2') "got=$(($etop | % { $_.name }) -join ',')"
-  $bad = ContainmentBad $etop
+  $bad = @(ContainmentBad $etop)
   Check 'range contains selectionRange for every symbol (uEdge)' ($bad.Count -eq 0) "bad=$($bad -join ',')"
   $edgeCls = Find $etop 'TEdge'
   $ech = @($edgeCls.children)

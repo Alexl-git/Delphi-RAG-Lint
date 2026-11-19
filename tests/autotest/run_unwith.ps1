@@ -23,14 +23,24 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe       = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe       = '',
   [string]$WorkDir   = "$env:TEMP\drag-lint-unwith-$PID",
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite',
   [string]$Rsvars    = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat',
   [switch]$KeepScratch
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $UwStart = Get-Date
+# (g)/(j) look only at THIS run's scratch folders: the engine names them
+# C:\TEMP\draglint_cyclefix_<pid>[_<guid>]_unwith, and DRAGLINT_TEST_SCRATCH_PID
+# stands in for <pid>. The trailing 'x' keeps uw12x from matching uw123x, so a
+# concurrent run (another shell, another lane) can no longer fail (g)/(j).
+$UwToken = "uw$($PID)x"
+$env:DRAGLINT_TEST_SCRATCH_PID = $UwToken
+function Get-RunScratch { return @(Get-ChildItem -LiteralPath 'C:\TEMP' -Directory -Filter "draglint_cyclefix_$($UwToken)*_unwith") }
 $script:Failed = $false
 $script:Passed = 0
 function Check($n, $ok, $d = '') {
@@ -53,19 +63,19 @@ function New-Copy([string]$Name) {
 function Hash-Of([string]$Path) { return (Get-FileHash $Path -Algorithm SHA256).Hash }
 function Invoke-Index([string]$Dir) {
   $env:UW_HIDDEN = ''
-  $null = & $Exe index --project "$Dir\UwDemo.dproj" --db "$Dir\uw.sqlite" 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index --project "$Dir\UwDemo.dproj" --db "$Dir\uw.sqlite" 2>&1 | ForEach-Object { "$_" } }
   $env:UW_HIDDEN = 'hidden'
   if ($LASTEXITCODE -ne 0) { throw "index failed in $Dir" }
 }
 function Invoke-Plan([string]$Dir, [string]$File, [string[]]$Extra = @('--library-db', $LibraryDb)) {
-  $o = & $Exe unwith --db "$Dir\uw.sqlite" --in "$Dir\$File" --plan --json @Extra 2>$null
-  return ($o | Where-Object { $_ -like '{*' } | Select-Object -Last 1) | ConvertFrom-Json
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe unwith --db "$Dir\uw.sqlite" --in "$Dir\$File" --plan --json @Extra 2>$null }
+  return ($o | Where-Object { $_ -like '{*' } | Select-Object -Last 1) | ConvertFrom-Json | ForEach-Object { $_ }
 }
 function Invoke-Apply([string]$Dir, [string]$File, [int]$Line = 0) {
-  $LineArgs = if ($Line -gt 0) { @('--line', "$Line") } else { @() }
-  $o = & $Exe unwith --db "$Dir\uw.sqlite" --library-db $LibraryDb --in "$Dir\$File" @LineArgs --apply --project "$Dir\UwDemo.dproj" --json 2>$null
+  $LineArgs = @(if ($Line -gt 0) { @('--line', "$Line") } else { @() })
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe unwith --db "$Dir\uw.sqlite" --library-db $LibraryDb --in "$Dir\$File" @LineArgs --apply --project "$Dir\UwDemo.dproj" --json 2>$null }
   $script:ApplyCode = $LASTEXITCODE
-  return ($o | Where-Object { $_ -like '{*' } | Select-Object -Last 1) | ConvertFrom-Json
+  return ($o | Where-Object { $_ -like '{*' } | Select-Object -Last 1) | ConvertFrom-Json | ForEach-Object { $_ }
 }
 function Build-And-Run([string]$Dir) {
   $bat = Join-Path $Dir '_b.bat'
@@ -89,9 +99,9 @@ try {
   # (a) usage
   $D = New-Copy 'plan'
   Invoke-Index $D
-  $null = & $Exe unwith --db "$D\uw.sqlite" 2>$null; Check '(a) neither --plan nor --apply -> exit 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
-  $null = & $Exe unwith --db "$D\uw.sqlite" --apply 2>$null; Check '(a) --apply without --project -> exit 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
-  $null = & $Exe unwith --db "$D\uw.sqlite" --plan --line 3 2>$null; Check '(a) --line without --in -> exit 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe unwith --db "$D\uw.sqlite" 2>$null }; Check '(a) neither --plan nor --apply -> exit 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe unwith --db "$D\uw.sqlite" --apply 2>$null }; Check '(a) --apply without --project -> exit 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe unwith --db "$D\uw.sqlite" --plan --line 3 2>$null }; Check '(a) --line without --in -> exit 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
 
   # (b) every refusal, by the comment before it
   $Before = Hash-Of "$D\UwRefused.pas"
@@ -181,7 +191,7 @@ try {
   Invoke-Index $D
   $Res = Invoke-Apply $D 'UwCases.pas'
   Check '(g) applied, exit 0' (($script:ApplyCode -eq 0) -and $Res.apply.applied) "exit $script:ApplyCode $($Res.apply.refusal): $($Res.apply.detail)"
-  Check '(g) no copy of the DB outlives the run' (@(Get-ChildItem -LiteralPath 'C:\TEMP' -Directory -Filter 'draglint_cyclefix_*_unwith' | Where-Object { $_.CreationTime -ge $UwStart } | ForEach-Object { Get-ChildItem -LiteralPath $_.FullName -Filter 'after-proof.sqlite*' }).Count -eq 0)
+  Check '(g) no copy of the DB outlives the run' (@(Get-RunScratch | ForEach-Object { Get-ChildItem -LiteralPath $_.FullName -Filter 'after-proof.sqlite*' }).Count -eq 0)
   Check '(g) the after-proof compared refs' ($Res.apply.proof_points -gt 30) "$($Res.apply.proof_points)"
   $Text = [IO.File]::ReadAllBytes("$D\UwCases.pas")
   Check '(g) 7-bit ASCII' (@($Text | Where-Object { $_ -gt 127 }).Count -eq 0)
@@ -197,7 +207,7 @@ try {
   Check '(g) the program prints exactly what it printed' ($Out -ceq $Golden) "--- golden`n$Golden--- now`n$Out"
 
   # (h) second pass
-  $null = & $Exe index --project "$D\UwDemo.dproj" --db "$D\uw.sqlite" 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index --project "$D\UwDemo.dproj" --db "$D\uw.sqlite" 2>&1 | ForEach-Object { "$_" } }
   $Res = Invoke-Apply $D 'UwCases.pas'
   Check '(h) the outer with applies after a reindex' (($script:ApplyCode -eq 0) -and $Res.apply.applied) "exit $script:ApplyCode $($Res.apply.refusal): $($Res.apply.detail)"
   $S = [IO.File]::ReadAllText("$D\UwCases.pas")
@@ -212,10 +222,25 @@ try {
   Check '(i) a file edited after the index refuses stale-file' (@($Plan.sites | Where-Object { $_.refusal -ne 'stale-file' }).Count -eq 0 -and $Plan.sites.Count -gt 0) "$($Plan.refused)"
 
   # (j) int2 1.44.1: a failed apply (rebind-after, gate refusal, nothing-to-apply) names no log, so it leaves no folder.
-  $LeftDirs = @(Get-ChildItem -LiteralPath 'C:\TEMP' -Directory -Filter 'draglint_cyclefix_*_unwith' | Where-Object { $_.CreationTime -ge $UwStart })
+  $LeftDirs = @(Get-RunScratch)
   Check '(j) no log folder is left in C:\TEMP by this run' ($LeftDirs.Count -eq 0) (($LeftDirs | ForEach-Object Name) -join ' ')
+
+  # (k) positive control for the (g)/(j) scope: a planted folder of THIS run is
+  # seen (plain and GUID-suffixed forms); a foreign run's folder is not.
+  $Own1 = "C:\TEMP\draglint_cyclefix_uw$($PID)x_unwith"   # = $UwToken, spelled with $PID for the scratch guard
+  $Own2 = "C:\TEMP\draglint_cyclefix_uw$($PID)x_0badf00d_unwith"
+  $Alien = "C:\TEMP\draglint_cyclefix_uw$($PID)9x_unwith"
+  try {
+    foreach ($p in $Own1, $Own2, $Alien) { [void][IO.Directory]::CreateDirectory($p) }
+    $Seen = @(Get-RunScratch | ForEach-Object { $_.FullName.TrimEnd('\') })
+    Check '(k) the scope sees both forms of this run''s folder and not a foreign run''s' `
+      (($Seen.Count -eq 2) -and ($Seen -contains $Own1) -and ($Seen -contains $Own2) -and ($Seen -notcontains $Alien)) ($Seen -join ' ')
+  } finally {
+    foreach ($p in $Own1, $Own2, $Alien) { if ([IO.Directory]::Exists($p)) { [IO.Directory]::Delete($p, $true) } }
+  }
 }
 finally {
+  $env:DRAGLINT_TEST_SCRATCH_PID = ''
   $env:UW_HIDDEN = ''
   $env:DRAGLINT_UNWITH_TEST_SKIP_PREFIX = ''
   Set-Location -LiteralPath $env:TEMP

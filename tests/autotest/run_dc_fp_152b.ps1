@@ -26,9 +26,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-dc-fp-152b-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 . "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe
@@ -73,7 +76,7 @@ try {
 
   Write-Host 'A  default-encoding-io: name segments, not a substring' -ForegroundColor Cyan
   $dei = Join-Path $Fix 'dei\dcdei.pas'
-  $raw = @(& $Exe lint $dei --rule default-encoding-io 2>&1 | ForEach-Object { "$_" })
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe lint $dei --rule default-encoding-io 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" })
   Assert-Markers 'A' $dei (Get-Lines $raw 'dcdei.pas' 'default-encoding-io')
 
   Write-Host 'B  read-never-assigned: out / var formal of a procedural-type callee' -ForegroundColor Cyan
@@ -82,16 +85,16 @@ try {
   $rna = Join-Path $Fix 'rna\uDcRna.pas'
   [IO.File]::Copy($rna, (Join-Path $rnaSrc 'uDcRna.pas'), $true)
   $db = Join-Path $WorkDir 'rna.sqlite'
-  & $Exe index $rnaSrc --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $rnaSrc --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'B index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
-  $raw = @(& $Exe lint-all --db $db --rule read-never-assigned 2>&1 | ForEach-Object { "$_" })
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule read-never-assigned 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" })
   $hits = Get-Lines $raw 'uDcRna.pas' 'read-never-assigned'
   Check 'B lint-all produced findings (rule ran)' ($hits.Count -gt 0) "count=$($hits.Count)"
   Assert-Markers 'B' $rna $hits
 
   Write-Host 'C  referenced-never-set: write through a hard cast' -ForegroundColor Cyan
   $rns = Join-Path $Fix 'rns\dcrns.pas'
-  $raw = @(& $Exe lint $rns --rule referenced-never-set 2>&1 | ForEach-Object { "$_" })
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe lint $rns --rule referenced-never-set 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" })
   Assert-Markers 'C' $rns (Get-Lines $raw 'dcrns.pas' 'referenced-never-set')
 }
 finally {

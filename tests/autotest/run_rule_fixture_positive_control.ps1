@@ -81,8 +81,7 @@ $Allowlist += @('side-effect-in-short-circuit', 'property-getter-with-effect', '
 $Allowlist += @('ui-access-in-thread-typed')
 # quit-from-thread -> tests\lint-project\quit-from-thread\run_quit_from_thread.ps1 (same walk as ui-access-in-thread-typed, needs a library DB; 1.47 wave 148 lane PQ)
 $Allowlist += @('quit-from-thread')
-# by-value-arg-before-assignment -> tests\autotest\run_flow_out_arg_rules.ps1 (the mode comes from ref_types, so it needs an index; 1.46 lane t1)
-$Allowlist += @('by-value-arg-before-assignment')
+# by-value-arg-before-assignment: folded into used-before-assignment in 1.52 EX1 (guard tests\autotest\run_v152_BK-OWNGATED.ps1); id removed.
 # The clippy-parity wave is fully fixtured (tests\lint) and integrated; the list is kept empty so a future wave can reuse it.
 $Pending = @()
 
@@ -121,6 +120,15 @@ $OwnRunner = @{
     'form-autocreate-and-manual'= 'tests\autotest\run_v151_DFMA_form_rules.ps1'
     'foreign-form-control-access' = 'tests\autotest\run_v151_DFMA_form_rules.ps1'
     'random-without-randomize'  = 'tests\autotest\run_v151_RTL-COLL_random-without-randomize.ps1'
+    # v152 rules whose fixture is store-backed or a project, held by their lane runner (BK-VERIFY mapped them):
+    'doc-placeholder'           = 'tests\autotest\run_v152_DOCPOL.ps1'
+    'doc-malformed-summary'     = 'tests\autotest\run_v152_DOCPOL.ps1'
+    'rule-skipped-budget'       = 'tests\autotest\run_v152_BUDGET.ps1'
+    'member-could-be-private'   = 'tests\autotest\run_v152_ATLB.ps1'
+    'debug-display-placeholder' = 'tests\autotest\run_v152_BK-ATTRRULES.ps1'
+    'unit-used-by-no-unit'      = 'tests\autotest\run_v152_PROJ2.ps1'
+    'extract-constant'          = 'tests\autotest\run_v152_XCONST_fix.ps1'
+    'review-marker-remeasured'  = 'tests\autotest\run_v152_MARK_remeasured.ps1'
 }
 function HasOwnRunner([string]$Id, [hashtable]$Map = $OwnRunner) {
   if (-not $Map.ContainsKey($Id)) { return $false }
@@ -146,7 +154,7 @@ foreach ($f in Get-ChildItem (Join-Path $Repo 'tests\lint') -Filter '*.expected'
 }
 function HasFixture([string]$Id) { return ((([int]$hits[$Id]) -ge 1) -and (([int]$negs[$Id]) -ge 1)) -or (HasOwnRunner $Id) }
 
-$ids = @((& $exePath rules --json --rules-dir (Join-Path $Repo 'rules') 2>$null | Out-String | ConvertFrom-Json).rules | ForEach-Object { $_.id })
+$ids = @((& { $ErrorActionPreference = 'Continue'; & $exePath rules --json --rules-dir (Join-Path $Repo 'rules') 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }).rules | ForEach-Object { $_.id })
 Check 'P0 CONTROL: rule catalogue parsed' ($ids.Count -gt 100) "($($ids.Count) id(s))"
 Check 'P0 CONTROL: fixtures parsed' ($hits.Count -gt 50) "($($hits.Count) id(s) with hits)"
 

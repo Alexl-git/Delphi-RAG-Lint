@@ -153,7 +153,7 @@ end.
 $db = Join-Path $WorkDir 'impl.sqlite'
 # PS5 turns native stderr under 2>&1 into a terminating error when ErrorActionPreference is Stop.
 $ea = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-& $Exe index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $ErrorActionPreference = $ea
 Check 'fixture indexed' (Test-Path $db)
 
@@ -182,7 +182,7 @@ function Session([array]$reqs) {
     -RedirectStandardError (Join-Path $WorkDir 'err.txt') -NoNewWindow -Wait | Out-Null
   $r = @{ init = $null; res = @{}; err = @{} }
   foreach ($mm in [regex]::Matches([System.IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 1) { $r.init = $o.result }
     if ($o.id -gt 10) {
       if ($null -ne $o.error) { $r.err[[int]$o.id] = $o.error }

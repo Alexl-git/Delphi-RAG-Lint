@@ -12,7 +12,7 @@
     {
       "type": "cli",
       "verb": "extract-method",
-      "usage": "drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] - pull a statement run into a new method",
+      "usage": "drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] [--no-compile-gate] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] - pull a statement run into a new method",
       "flags": [
         {
           "name": "--in",
@@ -54,10 +54,13 @@
         },
         {
           "name": "--no-backup"
+        },
+        {
+          "name": "--no-compile-gate"
         }
       ],
       "helpOrder": 61,
-      "help": ["  drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]  - pull a statement run into a new method"]
+      "help": ["  drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] [--no-compile-gate] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]  - pull a statement run into a new method"]
     },
     {
       "type": "ide-menu",
@@ -78,9 +81,9 @@
   ],
   "notes": "issued by the plugin from InvokeExtractMethod (DragLint.Plugin.Keyboard.pas)",
   "verified": {
-    "date": "2026-11-07",
+    "date": "2026-11-18",
     "by": "ENGINE",
-    "build": "1.46.0-alpha",
-    "surfaceHash": "d99567feb498e6f2a0adc2759a647f525cfc667d7d776caabe0b882c938e0f80"
+    "build": "1.52.0-alpha",
+    "surfaceHash": "bbb22fa0a9ca1359963ff2c3f9886abdc7b3f918e0d47fe2d8dd16ec4e58a76a"
   }
 }

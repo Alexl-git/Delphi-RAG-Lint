@@ -36,7 +36,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Continue'
@@ -77,18 +80,18 @@ end;
 end.
 '@
 
-  & $exePath index $scratchA --db $dbA 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratchA --db $dbA 2>$null } | Out-Null
   Check 'A: index exits 0' ($LASTEXITCODE -eq 0)
 
-  & $exePath document --qname ws.Add1 --db $dbA --apply --json 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --qname ws.Add1 --db $dbA --apply --json 2>$null } | Out-Null
   Check 'A: apply #1 exits 0' ($LASTEXITCODE -eq 0)
   $afterFirst = [IO.File]::ReadAllBytes($targetA)
   $textFirst  = [IO.File]::ReadAllText($targetA)
   Check 'A: fresh <returns> carries the two-space mined case, marked' `
     ($textFirst -match [regex]::Escape('<returns>' + $MARK) + '(?:[^<]*-- )?Observed:\s*AValue {2}\+ {2}1\.') $textFirst
 
-  & $exePath index $scratchA --db $dbA 2>$null | Out-Null
-  $reApplyJsonA = (& $exePath document --qname ws.Add1 --db $dbA --apply --json 2>$null) -join "`n"
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratchA --db $dbA 2>$null } | Out-Null
+  $reApplyJsonA = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname ws.Add1 --db $dbA --apply --json 2>$null }) -join "`n"
   Check 'A: 2nd apply action=unchanged (marker NOT misclassified as hand-edited by whitespace drift)' `
     ($reApplyJsonA -match '"action":"unchanged"') $reApplyJsonA
   Check 'A: 2nd apply edits=0' ($reApplyJsonA -match '"edits":0') $reApplyJsonA
@@ -124,10 +127,10 @@ end;
 end.
 '@
 
-  & $exePath index $scratchB --db $dbB 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratchB --db $dbB 2>$null } | Out-Null
   Check 'B: index exits 0' ($LASTEXITCODE -eq 0)
 
-  & $exePath document --qname dr.Pick --db $dbB --apply --json 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --qname dr.Pick --db $dbB --apply --json 2>$null } | Out-Null
   Check 'B: apply #1 exits 0' ($LASTEXITCODE -eq 0)
   $textBefore = [IO.File]::ReadAllText($targetB)
   Check 'B: fresh <returns> carries ONE mined case (AValue only)' `
@@ -139,8 +142,8 @@ end.
     "begin`r`n  if AValue > 0 then`r`n    Result := AValue`r`n  else`r`n    Result := 0;`r`nend;"
   [System.IO.File]::WriteAllText($targetB, $drifted, [System.Text.Encoding]::ASCII)
 
-  & $exePath index $scratchB --db $dbB 2>$null | Out-Null
-  $driftApplyJson = (& $exePath document --qname dr.Pick --db $dbB --apply --json 2>$null) -join "`n"
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratchB --db $dbB 2>$null } | Out-Null
+  $driftApplyJson = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname dr.Pick --db $dbB --apply --json 2>$null }) -join "`n"
   Check 'B: post-drift apply exits 0' ($LASTEXITCODE -eq 0)
   Check 'B: post-drift apply actually changed the file (action=extended)' `
     ($driftApplyJson -match '"action":"extended"') $driftApplyJson
@@ -150,8 +153,8 @@ end.
 
   # Idempotent at the NEW fixed point too.
   $afterDriftBytes = [IO.File]::ReadAllBytes($targetB)
-  & $exePath index $scratchB --db $dbB 2>$null | Out-Null
-  $reApplyJsonB = (& $exePath document --qname dr.Pick --db $dbB --apply --json 2>$null) -join "`n"
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratchB --db $dbB 2>$null } | Out-Null
+  $reApplyJsonB = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname dr.Pick --db $dbB --apply --json 2>$null }) -join "`n"
   Check 'B: 3rd apply (post-drift) action=unchanged' ($reApplyJsonB -match '"action":"unchanged"') $reApplyJsonB
   Check 'B: 3rd apply edits=0' ($reApplyJsonB -match '"edits":0') $reApplyJsonB
   $afterThirdBytes = [IO.File]::ReadAllBytes($targetB)

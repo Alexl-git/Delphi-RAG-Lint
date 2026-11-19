@@ -16,9 +16,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-parenless-chain-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 $script:Count = 0
@@ -231,7 +234,7 @@ end.
   [IO.File]::WriteAllText("$WorkDir\uChainB.pas", ($b -replace "`r?`n", "`r`n") + "`r`n")
   $db = "$WorkDir\t.sqlite"
   Push-Location $WorkDir
-  try { & $Exe index $WorkDir --db $db *>&1 | Out-Null } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db *>&1 | ForEach-Object { "$_" } } | Out-Null } finally { Pop-Location }
   Check 'index ran' (Test-Path $db)
 
   $q = "select e.qualified_name as encl, r.kind, r.name_text as name, r.receiver_text as rcv, " +
@@ -240,7 +243,7 @@ end.
        "left join call_edges ce on ce.ref_id = r.id left join symbols t on t.id = ce.target_symbol_id " +
        "left join symbols s on s.id = r.symbol_id and r.symbol_id > 0 left join ref_types ty on ty.ref_id = r.id " +
        "where r.receiver_text is not null and r.receiver_text <> '' order by r.start_line, r.start_col"
-  $j = & $Exe sql --db $db --query $q --json | Out-String | ConvertFrom-Json
+  $j = & $Exe sql --db $db --query $q --json | Out-String | ConvertFrom-Json | ForEach-Object { $_ }
   $names = @($j.columns | ForEach-Object { $_.name })
   $rows = foreach ($r in $j.rows) {
     $o = [ordered]@{}

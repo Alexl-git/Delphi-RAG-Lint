@@ -27,9 +27,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-reverse-calltree-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -178,7 +181,7 @@ Write-Ascii (Join-Path $work 'cyc.pas')    $CycBody
 $db = Join-Path $WorkDir 'rct.sqlite'
 
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 $indexExit = $LASTEXITCODE
 Check 'index exits 0' ($indexExit -eq 0) "exit=$indexExit; $($indexOut -join ' | ')"
 
@@ -197,7 +200,7 @@ Check 'reverse-calltree --qname C exits 0' ($rctExit1 -eq 0) "exit=$rctExit1"
 
 $tree = $null
 try {
-  $tree = $jsonRaw1 | ConvertFrom-Json
+  $tree = $jsonRaw1 | ConvertFrom-Json | ForEach-Object { $_ }
 } catch {
   Check 'reverse-calltree --json parses as JSON' $false "parse error: $($_.Exception.Message); raw=$jsonRaw1"
 }
@@ -251,7 +254,7 @@ Write-Host 'reverse-calltree --qname C --depth 1 --json (truncation)' -Foregroun
 $depth1Raw = (& $Exe reverse-calltree --qname C --db $db --depth 1 --json) -join "`n"
 $depth1 = $null
 try {
-  $depth1 = $depth1Raw | ConvertFrom-Json
+  $depth1 = $depth1Raw | ConvertFrom-Json | ForEach-Object { $_ }
 } catch {
   Check 'reverse-calltree --depth 1 --json parses as JSON' $false "parse error: $($_.Exception.Message); raw=$depth1Raw"
 }
@@ -279,7 +282,7 @@ $cycExit = $LASTEXITCODE
 Check 'reverse-calltree --qname P exits 0 (no hang/crash on cycle)' ($cycExit -eq 0) "exit=$cycExit"
 $cycTree = $null
 try {
-  $cycTree = $cycRaw | ConvertFrom-Json
+  $cycTree = $cycRaw | ConvertFrom-Json | ForEach-Object { $_ }
 } catch {
   Check 'reverse-calltree --qname P --json parses as JSON' $false "parse error: $($_.Exception.Message); raw=$cycRaw"
 }

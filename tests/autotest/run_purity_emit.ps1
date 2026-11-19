@@ -35,9 +35,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\draglint_purity_emit_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 if (Test-Path Variable:PSNativeCommandUseErrorActionPreference) { $PSNativeCommandUseErrorActionPreference = $false }
@@ -104,20 +107,20 @@ end.
 $db = Join-Path $WorkDir 'e.sqlite'
 Push-Location C:\TEMP
 try {
-  $null = & $Exe index $src --db $db 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } }
   $code = $LASTEXITCODE
 } finally { Pop-Location }
 Check '0. index exits 0' ($code -eq 0) "exit=$code"
 
 function Get-HoverFacts([string]$QName) {
-  $raw = (& $Exe hover --qname $QName --db $db --format json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname $QName --db $db --format json 2>$null }) -join "`n"
   if ([string]::IsNullOrWhiteSpace($raw)) { return @() }
-  return @(($raw | ConvertFrom-Json).facts)
+  return @(($raw | ConvertFrom-Json | ForEach-Object { $_ }).facts)
 }
 function Get-HoverJson([string]$QName) {
-  $raw = (& $Exe hover --qname $QName --db $db --format json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe hover --qname $QName --db $db --format json 2>$null }) -join "`n"
   if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
-  return ($raw | ConvertFrom-Json)
+  return ($raw | ConvertFrom-Json | ForEach-Object { $_ })
 }
 function Count-Exact([string[]]$Facts, [string]$Text) {
   return @($Facts | Where-Object { $_.Trim() -eq $Text }).Count
@@ -125,9 +128,9 @@ function Count-Exact([string[]]$Facts, [string]$Text) {
 
 Write-Host ''
 Write-Host 'THE FACT LINE (hover, the CLI surface that renders without a doc row)' -ForegroundColor Cyan
-$fa = Get-HoverFacts 'uEmit.AddUp'
-$fw = Get-HoverFacts 'uEmit.WriteGlobal'
-$fd = Get-HoverFacts 'uEmit.Driver'
+$fa = @(Get-HoverFacts 'uEmit.AddUp')
+$fw = @(Get-HoverFacts 'uEmit.WriteGlobal')
+$fd = @(Get-HoverFacts 'uEmit.Driver')
 Check '26a. proven routine hover carries "Effect-free (proven)" exactly once' `
   ((Count-Exact $fa 'Effect-free (proven)') -eq 1) ("AddUp facts: " + ($fa -join ' | '))
 # @(...) around each: a one-element array RETURNS as a bare string, and then
@@ -157,7 +160,7 @@ Check '12b. proven: effect_free 1, empty summary, empty witness' `
 Write-Host ''
 Write-Host 'THE MANAGED DOC BLOCK (document --apply)' -ForegroundColor Cyan
 Push-Location $src
-try { $null = & $Exe document --unit $unit --db $db --apply --no-backup 2>&1 } finally { Pop-Location }
+try { $null = & { $ErrorActionPreference = 'Continue'; & $Exe document --unit $unit --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } } } finally { Pop-Location }
 $text = [System.IO.File]::ReadAllText($unit)
 # The line keeps the slot 'Pure' held -- last of the Phase 3 lines, before
 # 'Directives:'. AddUp renders no seealso, so on ITS block the fact is the last
@@ -184,9 +187,9 @@ if (-not $py) {
   # engine's back. This is what separates "reads the column" from "recomputes
   # the old five-fact guess and happens to agree".
   $clear = "import sqlite3; c = sqlite3.connect(r'$db'); n = c.execute('UPDATE symbol_facts SET effect_free=NULL, effect_summary=NULL, effect_witness=NULL').rowcount; c.commit(); c.close(); print(n)"
-  $rows  = (& python -c $clear 2>&1) -join "`n"
+  $rows  = (& { $ErrorActionPreference = 'Continue'; & python -c $(if ($PSVersionTable.PSVersion.Major -lt 7) { $clear.Replace('"', '\"') } else { $clear }) 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check '27a. the verdict was cleared on every facts row' ($rows.Trim() -match '^[1-9]\d*$') "rows=[$($rows.Trim())]"
-  $fn = Get-HoverFacts 'uEmit.AddUp'
+  $fn = @(Get-HoverFacts 'uEmit.AddUp')
   Check '27b. a NULL verdict prints no effect line (and no Pure)' `
     ((@($fn | Where-Object { $_ -match 'Effect-free' -or $_.Trim() -eq 'Pure' })).Count -eq 0) ($fn -join ' | ')
   $jn = Get-HoverJson 'uEmit.AddUp'

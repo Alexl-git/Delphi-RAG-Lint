@@ -1,0 +1,31 @@
+{
+  "id": "v152-atlb-rules",
+  "title": "member-could-be-private lint rule (lane ATLB)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.52.0-alpha",
+  "summary": "Hint (OFF in 1.52) on a public member used only in its own unit; published, virtual, interface, attributed and shared-unit members stay silent",
+  "intro": "Read this to see when member-could-be-private reports a public member, which members it never touches, and why component-create-without-override was refused in favour of hides-ancestor-virtual.",
+  "wikiPage": "v152-atlb-rules",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "usage": "drag-lint lint-all --rule member-could-be-private --db <db> (default OFF in 1.52; naming it with --rule runs it, category project-wide, hint)",
+      "flags": [
+        {
+          "name": "--rule",
+          "arg": "<id>"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-18",
+    "by": "ENGINE",
+    "build": "1.51.1-alpha",
+    "surfaceHash": "b47eb66bf0cb814b73ab6883a63435ae8219a7ec857a578350c86dfa85120e65"
+  }
+}

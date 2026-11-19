@@ -19,9 +19,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-lsp-midproj-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 . (Join-Path $PSScriptRoot 'lsp_stdio_helpers.ps1')
@@ -49,7 +52,7 @@ $kept = "$R\kept\uKept.pas";  WriteAnsi $kept (PasText 'uKept')
 WriteAnsi "$R\kept\Kept.dproj" (DprojText 'uKept.pas')
 WriteAnsi "$WorkDir\lib\uLib.pas" (PasText 'uLib')
 $db = "$WorkDir\library-Win64.sqlite"
-& $Exe index "$WorkDir\lib" --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\lib" --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 $psi = [Diagnostics.ProcessStartInfo]::new($Exe)
 foreach ($a in @('lsp', '--db', $db)) { $psi.ArgumentList.Add($a) }
@@ -81,7 +84,7 @@ if (-not $p.WaitForExit(60000)) { $p.Kill($true); Write-Host 'FATAL: server did 
 $out = $outTask.Result
 $ctx = @{}
 foreach ($mm in [regex]::Matches($out, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-  try { $o = $mm.Value.Trim() | ConvertFrom-Json } catch { continue }
+  try { $o = $mm.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
   if ($o.method -eq 'draglint/context') { $k = [string]$o.params.uri; if (-not $ctx.ContainsKey($k)) { $ctx[$k] = @() }; $ctx[$k] += ,$o.params }
 }
 function Ctx($f, $i) { $l = $ctx[(Uri $f)]; if ($l -and $l.Count -gt $i) { return $l[$i] } else { return $null } }

@@ -58,7 +58,7 @@ $manifest = Join-Path $WorkDir 'manifest.drag-lint.json'
 [IO.File]::WriteAllText($manifest, '{ "settings": { "defaultPlatform": "Win64", "sizeGuardMB": 1500, "enginePath": "auto", "maxJobs": 1 }, "indexes": { "outDir": "out", "sections": [ { "name": "SecMemo", "db": "f.sqlite", "include": ["src"] } ] } }', [Text.Encoding]::ASCII)
 $db = Join-Path $WorkDir 'out\f.sqlite'
 Push-Location $WorkDir
-try { & $Exe index --all --config $manifest --only SecMemo --jobs 1 2>&1 | Out-Null } finally { Pop-Location }
+try { & { $ErrorActionPreference = 'Continue'; & $Exe index --all --config $manifest --only SecMemo --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null } finally { Pop-Location }
 if (-not (Test-Path $db)) { throw "index did not produce $db" }
 # take the entries out of the TEXT only: ', uDnn' -> '' keeps the line count
 foreach ($b in $blanks) {

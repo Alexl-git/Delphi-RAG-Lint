@@ -60,8 +60,22 @@ const
 /// <returns>One finding per offending declaration or directive. RuleId is rtti-unavailable;
 /// Message starts with the sub-kind and a colon; Severity is 'warning', or 'info' for a
 /// published record property its class streams in DefineProperties.</returns>
-/// <remarks>Reads every scanned file from disk; a file that is missing or unreadable is skipped.
-/// Not thread-safe; writes nothing.</remarks>
+/// <remarks>
+/// Reads every scanned file from disk; a file that is missing or unreadable is skipped.
+/// Not thread-safe; writes nothing.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Lint.RttiRules.CollectRttiUnavailable.Seed, DRagLint.Lint.RttiRules.InList, DRagLint.Lint.RttiRules.TRttiScan.Create, DRagLint.Lint.RttiRules.TRttiScan.Run, ExtractFileExt, LowerCase</para>
+/// <para>Returns: nil; Sh.Findings.ToArray</para>
+/// <para>Catches: EEncodingError (swallowed); EInOutError (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <seealso cref="DRagLint.Lint.RttiRules.CollectRttiUnavailable.Seed"/>
+/// <seealso cref="DRagLint.Lint.RttiRules.InList"/>
+/// <seealso cref="DRagLint.Lint.RttiRules.TRttiScan.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CollectRttiUnavailable(const AStore: ISymbolStore; const ALibraryStore: ISymbolStore = nil;
   const AOnlyFileId: Int64 = 0): TArray<TLintFinding>;
 

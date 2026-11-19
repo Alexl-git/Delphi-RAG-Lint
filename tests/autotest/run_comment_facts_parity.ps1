@@ -60,7 +60,7 @@ Check 'P1 CommentFactsParity.dpr builds (dcc64)' $built $(if ($built) { '' } els
 if (-not $built) { Write-Host "run_comment_facts_parity: 0 passed, 1 failed (build log $log)" -ForegroundColor Red; exit 1 }
 
 function Run-Harness([string[]]$HArgs) {
-  $out = & $exe @HArgs 2>&1 | ForEach-Object { "$_" }
+  $out = & { $ErrorActionPreference = 'Continue'; & $exe @HArgs 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }
   [pscustomobject]@{ Rc = $LASTEXITCODE; Lines = @($out); Summary = (@($out) | Where-Object { $_ -like 'SUMMARY *' } | Select-Object -Last 1) }
 }
 function Summary-Field([string]$Summary, [string]$Name) {
@@ -72,12 +72,12 @@ function Summary-Field([string]$Summary, [string]$Name) {
 $r = Run-Harness $Roots
 Write-Host "  INFO  $($r.Summary)"
 $r.Lines | Where-Object { $_ -like 'FATAL *' } | ForEach-Object { Write-Host "        $_" -ForegroundColor Red }
-$mm = Summary-Field $r.Summary 'mismatches'
+$mm = @(Summary-Field $r.Summary 'mismatches')
 Check 'P2 parity: no tuple on one side only' (($r.Rc -eq 0) -and ($mm[0] -eq 0)) "(rc $($r.Rc), mismatches $($mm[0]))"
 if ($mm[0] -gt 0) { $r.Lines | Where-Object { $_ -like 'MISMATCH *' } | Select-Object -First 15 | ForEach-Object { $s = "$_"; if ($s.Length -gt 220) { $s = $s.Substring(0, 220) + ' ...' }; Write-Host "        $s" } }
-$doc = Summary-Field $r.Summary 'doc'
-$ok  = Summary-Field $r.Summary 'ok'
-$bk  = Summary-Field $r.Summary 'bk'
+$doc = @(Summary-Field $r.Summary 'doc')
+$ok  = @(Summary-Field $r.Summary 'ok')
+$bk  = @(Summary-Field $r.Summary 'bk')
 Check 'P3 non-vacuous (doc >= 1000, ok >= 50, bk >= 1 on both sides)' (
   ($doc[0] -ge 1000) -and ($doc[1] -ge 1000) -and ($ok[0] -ge 50) -and ($ok[1] -ge 50) -and ($bk[0] -ge 1) -and ($bk[1] -ge 1)) "(doc $($doc -join '/'), ok $($ok -join '/'), bk $($bk -join '/'))"
 

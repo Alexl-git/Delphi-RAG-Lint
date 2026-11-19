@@ -31,7 +31,10 @@ because putting the narrative there would corrupt every consumer of that format.
 Run from a NEUTRAL CWD, pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$detail=''){
@@ -73,11 +76,11 @@ W (Join-Path $work 'uDel.pas') @(
   'var','  G: TGamThing;','begin','  G:= TGamThing.Create;','  G.GamRun;','end;','','end.')
 
 $db = Join-Path $work 'fx.sqlite'
-& $Exe index $work --db $db --rebuild *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db --rebuild *> $null }
 Check '0. fixture indexed' (Test-Path $db) $db
 
 Push-Location $work
-try { & $Exe lint-all --db $db --quiet *> $null } finally { Pop-Location }
+try { & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --quiet *> $null } } finally { Pop-Location }
 
 $rep = Get-ChildItem (Join-Path $work '_D-RAG') -Filter 'lint-report-*.txt' -ErrorAction SilentlyContinue |
        Sort-Object LastWriteTime -Descending | Select-Object -First 1

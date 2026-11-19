@@ -49,10 +49,10 @@ function Get-GaLine([string]$File, [string]$Text) {
 }
 # lint --json is a bare array of findings (rule, start_line, ...); an empty run prints [] or nothing.
 function Get-GaFindings([string[]]$LintArgs) {
-  $raw = & $exePath @LintArgs 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath @LintArgs 2>$null }
   $txt = ($raw -join "`n").Trim()
   if ($txt -eq '') { return ,@() }
-  return ,@($txt | ConvertFrom-Json)
+  return ,@(($txt | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 function Test-GaHit($Findings, [string]$Rule, [int]$Line) {
   return [bool](@($Findings | Where-Object { $_.rule -eq $Rule -and $_.start_line -eq $Line }).Count -gt 0)
@@ -65,7 +65,7 @@ try {
   $isDir = Join-Path $fx 'isdotted'
   $isPas = Join-Path $isDir 'GA_IsDotted.pas'
   $db = Join-Path $tmp 'isdotted.sqlite'
-  & $exePath index $isDir --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $isDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $f = Get-GaFindings @('lint', $isPas, '--db', $db, '--rule', 'is-always-true', '--json')
   Check 'B1 is-always-true on `is TBase` (positive control)' (Test-GaHit $f 'is-always-true' (Get-GaLine $isPas 'pLeaf is TBase then'))
   Check 'B2 is-always-true on `is GA_IsDotted.TBase` (typerefDot)' (Test-GaHit $f 'is-always-true' (Get-GaLine $isPas 'pLeaf is GA_IsDotted.TBase then'))

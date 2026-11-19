@@ -29,9 +29,16 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-lsp-ruca-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+$WorkDirBase = $WorkDir   # the body narrows $WorkDir to a per-run GUID child; remove the base
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -57,7 +64,7 @@ function New-Case([string]$Name) {
 function Index-Case([string]$Dir) {
   $db = Join-Path $Dir 'app.sqlite'
   . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
-  & $Exe index $Dir --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $Dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $idxCode = $LASTEXITCODE
   if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2 }
   return $db
@@ -65,8 +72,8 @@ function Index-Case([string]$Dir) {
 # The LSP diagnostics the client would hold: lint --json, mapped the way
 # TLspCompletion.DiagnosticsFromLintJson maps it.
 function Get-LintDiags([string]$Dir, [string]$Db, [string]$Unit) {
-  $j = & $Exe lint (Join-Path $Dir $Unit) --db $Db --json --rule unused-unit-in-uses 2>$null
-  $arr = @(($j -join "`n") | ConvertFrom-Json)
+  $j = & { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $Dir $Unit) --db $Db --json --rule unused-unit-in-uses 2>$null }
+  $arr = @((($j -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   return ,@($arr | Where-Object { $_.rule -eq 'unused-unit-in-uses' } | ForEach-Object {
     [ordered]@{
       range    = @{ start = @{ line = $_.start_line - 1; character = $_.start_col - 1 }
@@ -86,7 +93,7 @@ function Read-Frames([string]$Out) {
     $start = $i + $m.Index + $m.Length
     $len = [int]$m.Groups[1].Value
     if ($start + $len -gt $Out.Length) { break }
-    $res += ($Out.Substring($start, $len) | ConvertFrom-Json)
+    $res += ($Out.Substring($start, $len) | ConvertFrom-Json | ForEach-Object { $_ })
     $i = $start + $len
   }
   return $res
@@ -160,10 +167,12 @@ try {
     $applied = Apply-Action $disk $src[0]
     Check 'P1 the edit removes uDead and keeps uOther' ((-not $applied.Contains('uDead')) -and $applied.Contains('uOther;')) ($applied -replace "`r`n", '\n')
     # parity: the same fixture through `lint --fix --apply` in its own directory
+# (--no-compile-gate: no .dproj here, and since 1.52 B23 a gated --apply on a unit no project builds is
+# REFUSED (no-project); the LSP edit itself is never gated, so parity compares the fixer bytes only)
     $a2 = New-Case 'a2'
     Emit $a2 'uDead.pas' $deadUnit; Emit $a2 'uOther.pas' $otherUnit; Emit $a2 'uHost.pas' $hostUnit
     $dbA2 = Index-Case $a2
-    & $Exe lint (Join-Path $a2 'uHost.pas') --db $dbA2 --fix --apply --no-backup --rule unused-unit-in-uses 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $Exe lint (Join-Path $a2 'uHost.pas') --db $dbA2 --fix --apply --no-backup --no-compile-gate --rule unused-unit-in-uses 2>&1 | ForEach-Object { "$_" } } | Out-Null
     $fixed = [IO.File]::ReadAllText((Join-Path $a2 'uHost.pas'))
     Check 'P1 POSITIVE CONTROL: lint --fix changed the file' ($fixed -ne $disk) ''
     Check 'P1 applied edit equals lint --fix output byte for byte' ($applied -ceq $fixed) ($fixed -replace "`r`n", '\n')
@@ -236,3 +245,4 @@ try {
 } finally { Pop-Location }
 if ($script:Failed) { Write-Host 'RESULT: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'RESULT: PASS' -ForegroundColor Green; exit 0
+} finally { Remove-WorkDir $WorkDirBase -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

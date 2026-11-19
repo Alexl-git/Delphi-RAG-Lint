@@ -23,8 +23,11 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe"
+  [string]$Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -105,7 +108,7 @@ Write-Host ''
 Write-Host '=== case 1-2: no --db ===' -ForegroundColor Cyan
 $m = RunMerged @('lint', $unit, '--enable', $rules)
 Write-Host $m -ForegroundColor DarkGray
-$ls = Lines $m
+$ls = @(Lines $m)
 $note = @($ls | Where-Object { $_ -match '^drag-lint: note: no index covers this file' })
 Check '1. the no-index note is one whole line' `
   ($note.Count -eq 1 -and $note[0] -match 'A 0 above does not mean they are clean\.\s*$') "note=$($note -join ' | ')"
@@ -120,7 +123,7 @@ $db = Join-Path $work 'x.sqlite'
 $null = RunMerged @('index', '--project', (Join-Path $dir 'LintNote.dpr'), '--db', $db)
 $m2 = RunMerged @('lint', $unit, '--enable', $rules, '--db', $db)
 Write-Host $m2 -ForegroundColor DarkGray
-$note2 = @((Lines $m2) | Where-Object { $_ -match '^drag-lint: note: project rules ran for this file' })
+$note2 = @((@(Lines $m2)) | Where-Object { $_ -match '^drag-lint: note: project rules ran for this file' })
 Check '3. the project-rules note is one whole line' `
   ($note2.Count -eq 1 -and $note2[0] -match 'unit-not-in-dpr without --project\.\s*$') "note=$($note2 -join ' | ')"
 

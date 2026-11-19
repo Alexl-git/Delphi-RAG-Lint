@@ -26,9 +26,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-doc-body-call-site-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -94,12 +97,12 @@ end.
 $file = Join-Path $dir 'uBody.pas'
 $db   = Join-Path $dir 'fx.sqlite'
 
-& $Exe index $dir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Push-Location $dir
 try {
-  & $Exe document --qname uBody.Ping --db $db --apply --no-backup 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe document --qname uBody.Ping --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $ec1 = $LASTEXITCODE
-  & $Exe document --qname uBody.TRec --db $db --apply --no-backup 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe document --qname uBody.TRec --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $ec2 = $LASTEXITCODE
 } finally {
   Pop-Location

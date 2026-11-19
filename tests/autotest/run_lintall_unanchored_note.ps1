@@ -19,9 +19,12 @@ Usage: pwsh -NoProfile -File tests\autotest\run_lintall_unanchored_note.ps1 [-Ex
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\draglint-lintall-unanchored-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 . "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG3: no machine drag-lint.json
 $ErrorActionPreference = 'Stop'
@@ -44,7 +47,7 @@ function Write-Ascii([string]$Path, [string]$Body) {
 function Invoke-Dl([string[]]$Arguments) {
   $o = "$WorkDir\o.txt"; $e = "$WorkDir\e.txt"
   $p = Start-Process -FilePath $Exe -ArgumentList $Arguments -NoNewWindow -Wait -PassThru -WorkingDirectory $WorkDir `
-         -RedirectStandardOutput $o -RedirectStandardError $e
+         -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   [pscustomobject]@{ Exit = $p.ExitCode; All = [IO.File]::ReadAllText($o) + [IO.File]::ReadAllText($e) }
 }
 $notePat = 'NOTE: .*no ownership scoping'

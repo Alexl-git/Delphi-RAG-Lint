@@ -18,11 +18,14 @@
 #
 # Usage: pwsh -File run_v1511_CYC_fix_hubsurface.ps1 -Exe <drag-lint.exe> [-WorkDir <dir>] [-KeepWorkDir]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-v1511-cyc-$PID",
   [string]$RsVars  = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat',
   [switch]$KeepWorkDir
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false; $script:Passed = 0
 function Check($n, $ok, $d = '') {
@@ -56,7 +59,7 @@ function New-Proj([string]$Fix, [string]$Name, [scriptblock]$Patch = $null) {
   if ($Patch) { & $Patch $root }
   $db = "$root.sqlite"
   Push-Location $WorkDir
-  try { $null | & $Exe index --project (Join-Path $root "$Name.dproj") --db $db --library-db none *> "$db.log" } finally { Pop-Location }
+  try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project (Join-Path $root "$Name.dproj") --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
   return @{ Root = $root; Dproj = (Join-Path $root "$Name.dproj"); Db = $db; Name = $Name }
 }
 # One `cycles --fix` run; stdout and stderr apart (the build progress lines go to stderr).
@@ -65,14 +68,14 @@ function Invoke-Fix($P, [string[]]$Extra = @(), [hashtable]$EnvVars = @{}) {
   $errFile = "$($P.Root).fix$script:N.err"
   foreach ($k in $EnvVars.Keys) { [Environment]::SetEnvironmentVariable($k, $EnvVars[$k]) }
   Push-Location $WorkDir
-  try { $out = ($null | & $Exe @a 2> $errFile | Out-String); $code = $LASTEXITCODE }
+  try { $out = ($null | & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); $input | & $Exe @a 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String); $code = $LASTEXITCODE }
   finally {
     Pop-Location
     foreach ($k in $EnvVars.Keys) { [Environment]::SetEnvironmentVariable($k, $null) }
   }
   $err = if (Test-Path $errFile) { [IO.File]::ReadAllText($errFile) } else { '' }
   $doc = $null
-  if ($Extra -contains 'json') { try { $doc = $out | ConvertFrom-Json } catch { $doc = $null } }
+  if ($Extra -contains 'json') { try { $doc = $out | ConvertFrom-Json | ForEach-Object { $_ } } catch { $doc = $null } }
   return @{ Exit = $code; Out = $out; Err = $err; Doc = $doc }
 }
 function Has([string]$Text, [string]$Literal) { return $Text.Contains($Literal) }
@@ -128,13 +131,13 @@ try {
   Check 'f6 --part with --hub-surface: exit 2' ($q.Exit -eq 2) "exit=$($q.Exit) $($q.Out) $($q.Err)"
 
   $Ctl = New-Proj 'hubsurface' 'HubSurface'
-  $d = Invoke-Fix $Ctl @('--cycle', '1', '--format', 'json', '--no-compile')
+  $d = Invoke-Fix $Ctl @('--cycle', '1', '--format', 'json', '--no-compile', '--no-hub-surface')
   $dc = if ($d.Doc) { @($d.Doc.cycles)[0] } else { $null }
   Check 'f7 control (O11 not flipped): --fix without the switch is the planner''s, not r3' (($null -ne $dc) -and ($dc.part -ne 'r3') -and ($dc.recipe -ne 'hub-surface')) "exit=$($d.Exit) $($d.Out)"
 
   Push-Location $WorkDir
-  try { $js = ($null | & $Exe cycles --causes --format json --hub-surface --project $Ctl.Dproj --db $Ctl.Db --library-db none 2>$null | Out-String); $jsCode = $LASTEXITCODE } finally { Pop-Location }
-  $fx = try { @($js | ConvertFrom-Json)[0].fix } catch { $null }
+  try { $js = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe cycles --causes --format json --hub-surface --project $Ctl.Dproj --db $Ctl.Db --library-db none 2>$null } | Out-String); $jsCode = $LASTEXITCODE } finally { Pop-Location }
+  $fx = try { @(($js | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })[0].fix } catch { $null }
   Check 'f8 --causes json --hub-surface: the fix commands are the gated cycles --fix --hub-surface' (($jsCode -eq 0) -and ($null -ne $fx) -and
     ($fx.part -eq 'r3') -and ($fx.dry_run -match '^drag-lint cycles --fix --hub-surface --project ".*HubSurface\.dproj" --db ".*" --cycle 1$') -and
     ($fx.apply -match '^drag-lint cycles --fix --hub-surface --project .* --cycle 1 --apply$')) "exit=$jsCode $js"

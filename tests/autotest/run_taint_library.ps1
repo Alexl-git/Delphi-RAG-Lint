@@ -38,9 +38,9 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
   if ($Ok) { Write-Host "PASS  $Name" } else { Write-Host "FAIL  $Name  $Detail"; $script:fail++ }
 }
 function TaintFindings([string[]]$CliArgs) {
-  $raw = & $exePath @CliArgs 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath @CliArgs 2>$null }
   $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
-  $all = @(); if ($b -ge 0) { try { $all = @($txt.Substring($b) | ConvertFrom-Json) } catch { $all = @() } }
+  $all = @(); if ($b -ge 0) { try { $all = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $all = @() } }
   return ,@($all | Where-Object { $_.rule -eq 'taint-sql-injection' })
 }
 function Line([string]$Anchor) {
@@ -51,9 +51,9 @@ function Line([string]$Anchor) {
 
 Push-Location $env:TEMP
 try {
-  & $exePath index $libFx --db $lib 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $libFx --db $lib 2>&1 | ForEach-Object { "$_" } } | Out-Null
   if ($Mode -eq 'fixture') {
-    $n = (& python -I $rowsPy $lib $libFx minirtl 2>&1) -join ' '
+    $n = (& { $ErrorActionPreference = 'Continue'; & python -I $rowsPy $lib $libFx minirtl 2>&1 | ForEach-Object { "$_" } }) -join ' '
     Check 'library rows inserted' ($n -eq '3') "fixture_rows.py said: $n"
   }
   $trimLine  = Line 'MyTrim(ParamStr(1))'
@@ -61,10 +61,10 @@ try {
   $lineLine  = Line 'GDb.ExecSQL(S)'
   foreach ($idxMode in @('with-library-db', 'without-library-db')) {
     $db = Join-Path $tmp "proj-$idxMode.sqlite"
-    if ($idxMode -eq 'with-library-db') { & $exePath index $projFx --db $db --library-db $lib 2>&1 | Out-Null }
-    else { & $exePath index $projFx --db $db 2>&1 | Out-Null }
+    if ($idxMode -eq 'with-library-db') { & { $ErrorActionPreference = 'Continue'; & $exePath index $projFx --db $db --library-db $lib 2>&1 | ForEach-Object { "$_" } } | Out-Null }
+    else { & { $ErrorActionPreference = 'Continue'; & $exePath index $projFx --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null }
     if ($Mode -eq 'fixture') {
-      $n = (& python -I $rowsPy $db $projFx uselib 2>&1) -join ' '
+      $n = (& { $ErrorActionPreference = 'Continue'; & python -I $rowsPy $db $projFx uselib 2>&1 | ForEach-Object { "$_" } }) -join ' '
       Check "[$idxMode] project rows inserted" ($n -eq '5') "fixture_rows.py said: $n"
     }
     $f = TaintFindings @('lint-all', '--db', $db, '--db', $lib, '--json', '--quiet', '--config', $empty)

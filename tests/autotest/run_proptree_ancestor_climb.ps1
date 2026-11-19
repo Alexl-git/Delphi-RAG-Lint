@@ -106,9 +106,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-proptree-ancestor-climb-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -481,16 +484,16 @@ end.
 
 $db = Join-Path $WorkDir 'climb.sqlite'
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>$null
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>$null }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($indexOut -join ' | ')"
 
 function Get-Tree([string]$QName) {
   Push-Location $WorkDir
   try {
-    $raw = (& $Exe proptree --qname $QName --format json --db $db --no-write-back 2>$null) -join "`n"
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe proptree --qname $QName --format json --db $db --no-write-back 2>$null }) -join "`n"
   } finally { Pop-Location }
   if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
-  return ($raw | ConvertFrom-Json)
+  return ($raw | ConvertFrom-Json | ForEach-Object { $_ })
 }
 
 # --- Sanity: the fixture really does present an UNRESOLVED 'TAmb9' edge, i.e. -----
@@ -547,7 +550,7 @@ $outC = Join-Path $WorkDir 'cyc.json'
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 $pC = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir `
       -ArgumentList @('proptree','--qname','Cyc9.TCycHub','--format','json','--db',$db,'--no-write-back') `
-      -RedirectStandardOutput $outC -RedirectStandardError "$outC.err" -NoNewWindow -PassThru
+      -RedirectStandardOutput $outC -RedirectStandardError "$outC.err" -NoNewWindow -PassThru; $null = $pC.Handle
 $finC = $pC.WaitForExit(60000)
 $sw.Stop()
 if (-not $finC) { try { $pC.Kill() } catch {} }
@@ -557,7 +560,7 @@ Check "branching cycle: exits 0 (no stack overflow)" ($finC -and $pC.ExitCode -e
 $tC = $null
 if ($finC -and (Test-Path $outC)) {
   $rawC = Get-Content $outC -Raw
-  if (-not [string]::IsNullOrWhiteSpace($rawC)) { $tC = $rawC | ConvertFrom-Json }
+  if (-not [string]::IsNullOrWhiteSpace($rawC)) { $tC = $rawC | ConvertFrom-Json | ForEach-Object { $_ } }
 }
 Check "branching cycle: root_type='TCycHub'" ($null -ne $tC -and $tC.root_type -eq 'TCycHub') "root_type=$($tC.root_type)"
 $selfMarks = @(@($tC.properties) | Where-Object { $_.path -eq 'SelfMark' })

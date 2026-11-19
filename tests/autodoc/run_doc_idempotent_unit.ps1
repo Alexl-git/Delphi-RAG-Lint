@@ -33,7 +33,10 @@
   Run from a NEUTRAL CWD (C:\TEMP).
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -51,27 +54,27 @@ Copy-Item $fixture $target -Force
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # --- pass A: document the whole unit ---
-  $a = & $exePath document --unit $target --db $db --apply --json 2>$null | Out-String
-  $oa = $null; try { $oa = ($a | ConvertFrom-Json) } catch { $oa = $null }
+  $a = & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply --json 2>$null } | Out-String
+  $oa = $null; try { $oa = ($a | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $oa = $null }
   Check 'passA: produced edits' ($null -ne $oa -and [int]$oa.edits -gt 0)
   $bytesA = [IO.File]::ReadAllBytes($target)
   Get-ChildItem $scratch -Filter *.bak | Remove-Item -Force -ErrorAction SilentlyContinue
 
   # --- CRITICAL: re-index so facts are computed against the post-insert file ---
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
 
   # --- pass B: DRY RUN. This is the gate. ---
-  $b = & $exePath document --unit $target --db $db --json 2>$null | Out-String
-  $ob = $null; try { $ob = ($b | ConvertFrom-Json) } catch { $ob = $null }
+  $b = & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --json 2>$null } | Out-String
+  $ob = $null; try { $ob = ($b | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $ob = $null }
   Check 'passB parsed'            ($null -ne $ob)
   Check 'GATE passB: edits = 0 (reproducible)' ($null -ne $ob -and [int]$ob.edits -eq 0)
 
   if ($null -ne $ob -and [int]$ob.edits -ne 0) {
     Write-Host ("  pass B still wants {0} edit(s) -- applying to show WHAT moves:" -f $ob.edits) -ForegroundColor Yellow
-    & $exePath document --unit $target --db $db --apply 2>$null | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply 2>$null } | Out-Null
     $bytesB2 = [IO.File]::ReadAllBytes($target)
     $tmpA = Join-Path $scratch '_passA.pas'
     [IO.File]::WriteAllBytes($tmpA, $bytesA)
@@ -82,7 +85,7 @@ try {
   }
 
   # --- applying pass B must change nothing ---
-  & $exePath document --unit $target --db $db --apply 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --apply 2>$null } | Out-Null
   Get-ChildItem $scratch -Filter *.bak | Remove-Item -Force -ErrorAction SilentlyContinue
   $bytesB = [IO.File]::ReadAllBytes($target)
   Check 'IDEMPOTENT: bytes identical after pass B vs pass A' `

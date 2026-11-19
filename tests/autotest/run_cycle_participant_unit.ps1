@@ -29,9 +29,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_cycle_participant_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -61,14 +64,14 @@ W (Join-Path $impl 'Imp.dpr') "program Imp;`nuses`n  uP in 'uP.pas',`n  uQ in 'u
 
 $dbI = Join-Path $WorkDir 'intf.sqlite'
 $dbP = Join-Path $WorkDir 'impl.sqlite'
-& $exePath index --project (Join-Path $intf 'App.dpr') --db $dbI 2>&1 | Out-Null
-& $exePath index --project (Join-Path $impl 'Imp.dpr') --db $dbP 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index --project (Join-Path $intf 'App.dpr') --db $dbI 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index --project (Join-Path $impl 'Imp.dpr') --db $dbP 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V both fixture indexes were built' ((Test-Path $dbI) -and (Test-Path $dbP)) ''
 
 # Callers wrap the call in @(): PowerShell unrolls a one-element array on return,
 # and $x[0] of the resulting STRING is its first character.
 function Findings([string[]]$ArgList, [string]$Rule) {
-  $o = & $exePath @ArgList 2>&1 | ForEach-Object { "$_" }
+  $o = & { $ErrorActionPreference = 'Continue'; & $exePath @ArgList 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }
   return @($o | Where-Object { $_ -match (' ' + [regex]::Escape($Rule) + ': ') })
 }
 function FileOf([string]$Line) { if ($Line -match '([^\\/]+\.pas):(\d+):') { return "$($Matches[1]):$($Matches[2])" } return '' }

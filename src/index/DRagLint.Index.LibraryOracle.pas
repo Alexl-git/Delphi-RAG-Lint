@@ -70,21 +70,21 @@ type
   /// Not thread-safe. One instance per resolve pass or reader; the caches assume the
   /// stores do not change while it lives.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.CLI.DoFindCallees (DRagLint.CLI.pas), DRagLint.CLI.EmitExternalCallees (DRagLint.CLI.pas) ?, DRagLint.Index.CallResolver.TCallResolver.Create (DRagLint.Index.CallResolver.pas), DRagLint.Lint.OpaqueToAnalysis.TOpaqueScan.Create (DRagLint.Lint.OpaqueToAnalysis.pas) (+6 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Context.Bundler, DRagLint.Index.CallResolver, DRagLint.Lint.OpaqueToAnalysis</para>
+  /// <para>Used by: DRagLint.CLI.CallGraph.DoFindCallees (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.CallGraph.EmitExternalCallees (DRagLint.CLI.CallGraph.pas) ?, DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.Index.CallResolver.TCallResolver.Create (DRagLint.Index.CallResolver.pas), DRagLint.Lint.OpaqueToAnalysis.TOpaqueScan.Create (DRagLint.Lint.OpaqueToAnalysis.pas) (+6 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.CallGraph, DRagLint.Context.Bundler, DRagLint.Index.CallResolver, DRagLint.Lint.OpaqueToAnalysis</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TLibraryOracle = class
   strict private type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Used by: declaration (DRagLint.Index.LibraryOracle.pas) ?, DRagLint.Index.LibraryOracle.TLibraryOracle.Collect.Add (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.HelperCands (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.Pick (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.PickType (DRagLint.Index.LibraryOracle.pas) (+20 more)</para>
+    /// <para>Used by: DRagLint.Index.LibraryOracle.TLibraryOracle.BareUnitLevel (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.BareUnitLevel.CountVisible (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.Collect.Add (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.HelperCands (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.Pick (DRagLint.Index.LibraryOracle.pas) (+24 more)</para>
     /// <para>Used in units: DRagLint.Index.LibraryOracle</para>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.AgreedMember"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Ancestors"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BareUnitLevel"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Bind"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BindBare"/>
-    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BindHead"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     TLibCand = record
@@ -171,9 +171,9 @@ type
     /// <para>Calls: Copy, LowerCase, Pos, Trim</para>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.AgreedMember"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Ancestors"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BareUnitLevel"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Bind"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BindBare"/>
-    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BindHead"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function InQualifier(const AText: string; const ACands: TArray<TLibCand>): TArray<TLibCand>;
@@ -235,7 +235,7 @@ type
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindHelpersOfType"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.AgreedMember"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Ancestors"/>
-    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Bind"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BareUnitLevel"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function HelpersDeclare(const AStore: ISymbolStore; const AStoreTag, ATypeName, AMember: string): Boolean;
@@ -267,9 +267,9 @@ type
     /// <para>Calls: IntToStr</para>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.AgreedMember"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Ancestors"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BareUnitLevel"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Bind"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BindBare"/>
-    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BindHead"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Key(AStore: Integer; AId: Int64): string;
@@ -287,7 +287,7 @@ type
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Key"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.AgreedMember"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Ancestors"/>
-    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Bind"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BareUnitLevel"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function UnitStemOf(AStore: Integer; AFileId: Int64): string;
@@ -333,13 +333,13 @@ type
     /// AKinds, AFollowAlias).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Index.LibraryOracle.TLibraryOracle.AgreedMember (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.BindHead (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.ImplicitRootMember (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.IsDynArrayType (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.MemberProvablyAbsent (DRagLint.Index.LibraryOracle.pas) (+4 more)</para>
+    /// <para>Called from: DRagLint.Index.LibraryOracle.TLibraryOracle.AgreedMember (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.BareUnitLevel (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.BindHead (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.ImplicitRootMember (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.IsDynArrayType (DRagLint.Index.LibraryOracle.pas) (+5 more)</para>
     /// <para>Calls: DRagLint.Index.LibraryOracle.TLibraryOracle.Collect, LowerCase</para>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Collect"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.AgreedMember"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Ancestors"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BareUnitLevel"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Bind"/>
-    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BindBare"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Cached(ACache: TDictionary<string, TArray<TLibCand>>; const AName: string;
@@ -362,7 +362,7 @@ type
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.ScopeVisible"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.AgreedMember"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Ancestors"/>
-    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Bind"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BareUnitLevel"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Pick(const ACands: TArray<TLibCand>; const AUses: TArray<string>; out ACand: TLibCand;
@@ -375,7 +375,7 @@ type
     /// ACand, AReason, Decl).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Index.LibraryOracle.TLibraryOracle.BindBare (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.BindHead (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.PickTypeOrHelper (DRagLint.Index.LibraryOracle.pas)</para>
+    /// <para>Called from: DRagLint.Index.LibraryOracle.TLibraryOracle.BindBare (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.BindBareRead (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.BindHead (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.PickTypeOrHelper (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.RoutineResultText (DRagLint.Index.LibraryOracle.pas)</para>
     /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Index.LibraryOracle.GenericArity, DRagLint.Index.LibraryOracle.NormalizeTypeLeaf, DRagLint.Index.LibraryOracle.TLibraryOracle.Cached, DRagLint.Index.LibraryOracle.TLibraryOracle.Pick</para>
     /// <para>Complexity: 10 (cyclomatic, outer body), 34 lines (full implementation)</para>
     /// <para>Reads: FTypes, FDeclUses, FStores   Writes: FDeclUses</para>
@@ -402,7 +402,7 @@ type
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Key"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.AgreedMember"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Ancestors"/>
-    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Bind"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BareUnitLevel"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Kids(AStore: Integer; AId: Int64): TArray<TSymbol>;
@@ -418,8 +418,8 @@ type
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Key"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.AgreedMember"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BareUnitLevel"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Bind"/>
-    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BindBare"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Ancestors(AStore: Integer; AId: Int64): TArray<TTypeAncestor>;
@@ -430,14 +430,14 @@ type
     /// ImplicitRootMember(ACand, AName, AHit).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Index.LibraryOracle.TLibraryOracle.AgreedMember (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.BindBare (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.BindHead (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.CandProvesAbsent (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.MemberOf (DRagLint.Index.LibraryOracle.pas) (+1 more)</para>
+    /// <para>Called from: DRagLint.Index.LibraryOracle.TLibraryOracle.AgreedMember (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.BindBare (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.BindBareRead (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.BindHead (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.CandProvesAbsent (DRagLint.Index.LibraryOracle.pas) (+3 more)</para>
     /// <para>Calls: Default, DRagLint.Index.LibraryOracle.TLibraryOracle.Ancestors, DRagLint.Index.LibraryOracle.TLibraryOracle.ImplicitRootMember, DRagLint.Index.LibraryOracle.TLibraryOracle.Kids, SameText</para>
     /// <para>Mutates: AHit (out)</para>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Ancestors"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.ImplicitRootMember"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Kids"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.AgreedMember"/>
-    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Bind"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BareUnitLevel"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function DeclaringMember(const ACand: TLibCand; const AName: string; out AHit: TSymbol): Boolean;
@@ -492,13 +492,13 @@ type
     /// <returns><!-- drag-lint:auto type -->TArray&lt;TLibCand&gt;</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Index.LibraryOracle.TLibraryOracle.AgreedMember (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.BindHead (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.IsDynArrayType (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.NamesVisibleType (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.PickTypeOrHelper (DRagLint.Index.LibraryOracle.pas) (+1 more)</para>
+    /// <para>Called from: DRagLint.Index.LibraryOracle.TLibraryOracle.AgreedMember (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.BareUnitLevel (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.BindHead (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.IsDynArrayType (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.NamesVisibleType (DRagLint.Index.LibraryOracle.pas) (+2 more)</para>
     /// <para>Calls: DRagLint.Index.LibraryOracle.InUses</para>
     /// <seealso cref="DRagLint.Index.LibraryOracle.InUses"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.AgreedMember"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Ancestors"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BareUnitLevel"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Bind"/>
-    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BindBare"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function VisibleOf(const ACands: TArray<TLibCand>; const AUses: TArray<string>): TArray<TLibCand>;
@@ -520,7 +520,7 @@ type
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.VisibleOf"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.AgreedMember"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Ancestors"/>
-    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Bind"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BareUnitLevel"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function UnitRoutine(const AChain, AMember: string; const AUses: TArray<string>; out AQName: string): Integer;
@@ -556,12 +556,36 @@ type
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.DeclaringMember"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.AgreedMember"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Ancestors"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BareUnitLevel"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Bind"/>
-    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BindBare"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function MemberOf(const ACand: TLibCand; const AMember: string; AKind: TExternalKind;
       out AReason: string): string;
+    /// <summary>1.51.1 (B02 / B04 / B06): the library unit-level var, const, function or
+    /// procedure a bare AName stands for.</summary>
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AUsesUnits"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
+    /// <param name="AOwnUses"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
+    /// <param name="ACand"><!-- drag-lint:auto type -->out TLibCand</param>
+    /// <returns><!-- drag-lint:auto -->Integer -- Observed: 0; CountVisible(AOwnUses +
+    /// ['system', 'sysinit'], ACand); CountVisible(Visible, ACand).</returns>
+    /// <returns>How many visible declarations carry the name (ACand set only for exactly 1); 0
+    /// also when a visible library TYPE has the name. AOwnUses decide first, as in BindBare.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.LibraryOracle.TLibraryOracle.BindBareRead (DRagLint.Index.LibraryOracle.pas), DRagLint.Index.LibraryOracle.TLibraryOracle.RoutineResultText (DRagLint.Index.LibraryOracle.pas)</para>
+    /// <para>Calls: Default, DRagLint.Index.LibraryOracle.TLibraryOracle.BareUnitLevel.CountVisible, DRagLint.Index.LibraryOracle.TLibraryOracle.Cached, DRagLint.Index.LibraryOracle.TLibraryOracle.VisibleOf, InUses</para>
+    /// <para>Reads: FTypes, FRoutines, FValues</para>
+    /// <para>Mutates: ACand (out)</para>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BareUnitLevel.CountVisible"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Cached"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.VisibleOf"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.AgreedMember"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Ancestors"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    function BareUnitLevel(const AName: string; const AUsesUnits, AOwnUses: TArray<string>; out ACand: TLibCand): Integer;
     /// <param name="AResult"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AReason"><!-- drag-lint:auto type -->const string</param>
     /// <returns><!-- drag-lint:auto -->string -- Observed: AResult.</returns>
@@ -571,29 +595,24 @@ type
     /// <para>Reads: FStats   Writes: FLastKind</para>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.AgreedMember"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Ancestors"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BareUnitLevel"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Bind"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BindBare"/>
-    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BindHead"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    /// <summary>1.51.1 (B02 / B04 / B06): the library unit-level var, const, function or
-    /// procedure a bare AName stands for.</summary>
-    /// <returns>How many visible declarations carry the name (ACand set only for exactly 1); 0
-    /// also when a visible library TYPE has the name. AOwnUses decide first, as in BindBare.</returns>
-    function BareUnitLevel(const AName: string; const AUsesUnits, AOwnUses: TArray<string>; out ACand: TLibCand): Integer;
     function Count(const AResult, AReason: string): string;
   public
     /// <param name="AStores">The open extra stores; the oracle does not own them.</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.CLI.DoFindCallees (DRagLint.CLI.pas), DRagLint.Index.CallResolver.TCallResolver.Create (DRagLint.Index.CallResolver.pas), DRagLint.Lint.OpaqueToAnalysis.TOpaqueScan.Create (DRagLint.Lint.OpaqueToAnalysis.pas)</para>
+    /// <para>Called from: DRagLint.CLI.CallGraph.DoFindCallees (DRagLint.CLI.CallGraph.pas), DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.Index.CallResolver.TCallResolver.Create (DRagLint.Index.CallResolver.pas), DRagLint.Lint.OpaqueToAnalysis.TOpaqueScan.Create (DRagLint.Lint.OpaqueToAnalysis.pas)</para>
     /// <para>constructor</para>
     /// <para>Writes: FStores, FTypes, FValues, FRoutines, FKids, FAncestors, FStems, FFileUses (+3 more)</para>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.AgreedMember"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Ancestors"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BareUnitLevel"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Bind"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BindBare"/>
-    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BindHead"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     constructor Create(const AStores: TArray<ISymbolStore>);
@@ -604,9 +623,9 @@ type
     /// <para>Directives: override</para>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.AgreedMember"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Ancestors"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BareUnitLevel"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Bind"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BindBare"/>
-    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BindHead"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     destructor Destroy; override;
@@ -625,7 +644,7 @@ type
     /// as a pending segment's type) is answered by its one library helper visible from the
     /// calling file (`S.Split` -> TStringHelper.Split); two visible helpers decline.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.EmitExternalCallees (DRagLint.CLI.pas), DRagLint.Context.Bundler.OracleTarget (DRagLint.Context.Bundler.pas), DRagLint.Index.CallResolver.TCallResolver.BindExternally (DRagLint.Index.CallResolver.pas)</para>
+    /// <para>Called from: DRagLint.CLI.CallGraph.EmitExternalCallees (DRagLint.CLI.CallGraph.pas), DRagLint.Context.Bundler.OracleTarget (DRagLint.Context.Bundler.pas), DRagLint.Index.CallResolver.TCallResolver.BindExternally (DRagLint.Index.CallResolver.pas)</para>
     /// <para>Calls: DRagLint.Index.LibraryOracle.TLibraryOracle.AgreedMember, DRagLint.Index.LibraryOracle.TLibraryOracle.BindBare, DRagLint.Index.LibraryOracle.TLibraryOracle.Count, DRagLint.Index.LibraryOracle.TLibraryOracle.MemberOf, DRagLint.Index.LibraryOracle.TLibraryOracle.PickTypeOrHelper, DRagLint.Index.LibraryOracle.TLibraryOracle.StepPending</para>
     /// <para>Reads: FStores</para>
     /// <para>Mutates: AReason (out)</para>
@@ -741,8 +760,22 @@ type
     /// <returns>The qualified name, or '' when no store is open, a visible library TYPE has the
     /// name (the read names the type), or the visible declarations of the name are none or
     /// several.</returns>
-    /// <remarks>Never counted into Stats: the `receivers:` line describes the calls stream only.
-    /// Enum values are not unit-level declarations and are not bound.</remarks>
+    /// <remarks>
+    /// Never counted into Stats: the `receivers:` line describes the calls stream only.
+    /// Enum values are not unit-level declarations and are not bound.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.ResolveLibraryRead (DRagLint.Index.CallResolver.pas)</para>
+    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Index.LibraryOracle.TLibraryOracle.BareUnitLevel, DRagLint.Index.LibraryOracle.TLibraryOracle.DeclaringMember, DRagLint.Index.LibraryOracle.TLibraryOracle.PickType, SameText</para>
+    /// <para>Returns: ''; Hit.QualifiedName; C.QName</para>
+    /// <para>Reads: FStores</para>
+    /// <para>Mutates: AKind (out), ASignatures (out)</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BareUnitLevel"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.DeclaringMember"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.PickType"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.AgreedMember"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function BindBareRead(const AName: string; const AUsesUnits: TArray<string>; const AScopeType: string;
       out AKind: TSymbolKind; out ASignatures: TArray<string>; const AOwnUses: TArray<string> = nil): string;
     /// <summary>1.51.1 B06: the declared result type text of the ONE library unit-level
@@ -755,8 +788,22 @@ type
     /// <returns>The type text as the library declares it; '' when the name is not exactly one
     /// visible library function, a visible library type or value shares the name, or its
     /// overloads disagree on the result type.</returns>
-    /// <remarks>The text names a type in the LIBRARY unit's scope; the caller looks it up by
-    /// name from the project file, so a type name two visible units declare stays undecided.</remarks>
+    /// <remarks>
+    /// The text names a type in the LIBRARY unit's scope; the caller looks it up by
+    /// name from the project file, so a type name two visible units declare stays undecided.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.LibraryFunctionResultText (DRagLint.Index.CallResolver.pas)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Index.LibraryOracle.MemberTypeText, DRagLint.Index.LibraryOracle.TLibraryOracle.BareUnitLevel, DRagLint.Index.LibraryOracle.TLibraryOracle.DeclaringMember, DRagLint.Index.LibraryOracle.TLibraryOracle.PickType, SameText</para>
+    /// <para>Returns: ''; Text</para>
+    /// <para>Complexity: 10 (cyclomatic, outer body), 20 lines (full implementation)</para>
+    /// <para>Reads: FStores</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.MemberTypeText"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BareUnitLevel"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.DeclaringMember"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.PickType"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function RoutineResultText(const AName: string; const AUsesUnits: TArray<string>; const AScopeType: string;
       const AOwnUses: TArray<string> = nil): string;
     /// <summary>True only when the library PROVES that a type named ATypeText cannot supply
@@ -825,9 +872,9 @@ type
     /// <para>Reads: FNamespaces</para>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.AgreedMember"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Ancestors"/>
+    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BareUnitLevel"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.Bind"/>
     /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BindBare"/>
-    /// <seealso cref="DRagLint.Index.LibraryOracle.TLibraryOracle.BindHead"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function ScopeVisible(const AStem: string; const AUses: TArray<string>): Boolean;  end;
@@ -839,7 +886,7 @@ type
 /// name (`array of T`, `class of T`, a set, a procedural type).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.TargetStaticType (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.TypeOfCallChain.ChainStep (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.TypeOfFunctionResult/3 (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.TypeOfInheritedReceiver (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.TypeOfSelectorChain (DRagLint.Index.CallResolver.pas) (+8 more)</para>
+/// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.LibraryFunctionResultText (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.TargetStaticType (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.TypeOfCallChain.ChainStep (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.TypeOfFunctionResult/3 (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.TypeOfInheritedReceiver (DRagLint.Index.CallResolver.pas) (+9 more)</para>
 /// <para>Calls: Copy, DRagLint.Index.LibraryOracle.IsIdent, Pos, Trim</para>
 /// <seealso cref="DRagLint.Index.LibraryOracle.IsIdent"/>
 /// <!-- drag-lint:auto END -->

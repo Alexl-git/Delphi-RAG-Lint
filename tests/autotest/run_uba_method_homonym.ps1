@@ -27,10 +27,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe      = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
-  [string]$RulesDir = "$PSScriptRoot\..\..\rules",
+  [string]$Exe      = '',
+  [string]$RulesDir = '',
   [string]$WorkDir  = "C:\TEMP\draglint_uba_homonym_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
+if (-not $RulesDir) { $RulesDir = "$PSScriptRoot\..\..\rules" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){ if($d){Write-Host "      $d" -ForegroundColor DarkGray}; $script:fail=$true } }
@@ -93,7 +97,7 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'uba.sqlite'
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 function Reported([string]$Text) {
   ,@([regex]::Matches($Text, 'used-before-assignment: Local "(\w+)"') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
@@ -101,7 +105,7 @@ function Reported([string]$Text) {
 
 Push-Location C:\TEMP
 try {
-  $all = Reported ((& $exePath lint-all --db $db --rules-dir $rules --quiet 2>&1 | Out-String))
+  $all = Reported ((& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rules-dir $rules --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String))
   Write-Host ("  lint-all reported: {0}" -f $(if($all){$all -join ','}else{'(none)'})) -ForegroundColor DarkGray
   Check 'H1 an out-arg to a homonym METHOD is NOT reported (the free routine must not answer)' `
         (-not ($all -contains 'hinfo')) ($all -join ',')

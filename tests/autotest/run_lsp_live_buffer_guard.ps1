@@ -43,9 +43,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-live-buffer-guard-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -142,7 +145,7 @@ WriteAnsi $appFile $diskText
 $bufferText = $diskText -replace '  Src := nil;', '  Thing.Assign(Src);'
 
 $db = Join-Path $WorkDir 'live.sqlite'
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'built the fixture index' (Test-Path $db)
 
 # Positions are 0-based for LSP.
@@ -197,7 +200,7 @@ function Invoke-Lsp([string]$Method, [int]$Line0, [int]$Char0, [string]$Sync) {
 
   $raw = [System.IO.File]::ReadAllText($outF)
   foreach ($m in [regex]::Matches($raw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $m.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $m.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 2) { return $o }
   }
   return $null
@@ -236,7 +239,7 @@ Check 'shows the real parameter ASource' ($h -match 'ASource') "got: [$h]"
 # path cannot work at all without the overlay.
 Write-Host ''
 Write-Host 'CASE 2: completion after didChange' -ForegroundColor Cyan
-$labels = CompletionLabels (Invoke-Lsp 'textDocument/completion' $liveLine $dotCol 'change')
+$labels = @(CompletionLabels (Invoke-Lsp 'textDocument/completion' $liveLine $dotCol 'change'))
 Check 'completion returns items at the unsaved dot' ($labels.Count -gt 0) "count=$($labels.Count)"
 Check 'offers Assign'             ($labels -contains 'Assign')             "got: $($labels -join ',')"
 Check 'offers AlreadySavedMethod' ($labels -contains 'AlreadySavedMethod') "got: $($labels -join ',')"
@@ -261,7 +264,7 @@ Start-Process $Exe -ArgumentList @('lsp', '--db', $db) -WorkingDirectory $WorkDi
 $capRaw = [System.IO.File]::ReadAllText($outF)
 $syncVal = $null
 foreach ($m in [regex]::Matches($capRaw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-  try { $o = $m.Value.Trim() | ConvertFrom-Json } catch { continue }
+  try { $o = $m.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
   if ($o.id -eq 1 -and $o.result) { $syncVal = $o.result.capabilities.textDocumentSync }
 }
 Check 'capabilities carry textDocumentSync' ($null -ne $syncVal) "got: [$syncVal]"

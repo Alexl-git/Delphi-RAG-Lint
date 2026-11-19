@@ -66,7 +66,7 @@ type
   /// keyword); Start then points past the ampersand.
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.IsSym (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.IsWord (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.ParseClause (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.TUsesLexer.Next (DRagLint.Convert.UnitRules.pas) (+7 more)</para>
-  /// <para>Used in units: DRagLint.Convert.UnitRules, DRagLint.Diagnostics.CloneChecks, DRagLint.Diagnostics.DisallowedChecks, DRagLint.Refactor.RenameProof, DRagLint.Report.CyclePlan</para>
+  /// <para>Used in units: DRagLint.Convert.UnitRules, DRagLint.Diagnostics.CloneChecks, DRagLint.Diagnostics.DisallowedChecks, DRagLint.Refactor.RenameProof, DRagLint.Report.CyclePlan, DRagLint.V152.RTTI5.Support</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TTok = record
@@ -178,7 +178,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Convert.UnitRules.TUsesLexer.Next (DRagLint.Convert.UnitRules.pas)</para>
     /// <para>Calls: Copy, DRagLint.Convert.UnitRules.TUsesLexer.Directive, DRagLint.Convert.UnitRules.TUsesLexer.SkipTo</para>
-    /// <para>Complexity: 11 (cyclomatic, outer body), 26 lines (full implementation)</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 26 lines (full implementation)</para>
     /// <para>Reads: FPos, FText   Writes: FPos</para>
     /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Directive"/>
     /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.SkipTo"/>
@@ -255,7 +255,7 @@ type
     /// end of the text, and on every call after it.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Convert.UnitRules.ImplementationKeywordLine (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.ParseClause (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.ReadUnit (DRagLint.Convert.UnitRules.pas), DRagLint.Report.CyclePlan.EntryHasTrivia (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.ScanClause (DRagLint.Report.CyclePlan.pas) (+15 more)</para>
+    /// <para>Called from: DRagLint.Convert.UnitRules.ImplementationKeywordLine (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.ParseClause (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.ReadUnit (DRagLint.Convert.UnitRules.pas), DRagLint.Report.CyclePlan.EntryHasTrivia (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.ScanClause (DRagLint.Report.CyclePlan.pas) (+17 more)</para>
     /// <para>Calls: CharInSet, Copy, Default, DRagLint.Convert.UnitRules.IsIdentChar, DRagLint.Convert.UnitRules.IsIdentStart, DRagLint.Convert.UnitRules.TUsesLexer.ReadString, DRagLint.Convert.UnitRules.TUsesLexer.SkipTrivia</para>
     /// <para>Returns: Default(TTok)</para>
     /// <para>Complexity: 12 (cyclomatic, outer body), 43 lines (full implementation)</para>
@@ -299,8 +299,8 @@ type
   /// compile error is the intended signal). Section is the .pas section of the
   /// reference ('interface' / 'implementation'), or 'dfm'.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas), DRagLint.CLI.PrintApplyReport (DRagLint.CLI.pas), DRagLint.Convert.Apply.DemoteOnlySkips (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.NeedInstance (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.NeedNames (DRagLint.Convert.Apply.pas) (+6 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.UnitRules, DRagLint.Convert.UsesReconcile</para>
+  /// <para>Used by: DRagLint.CLI.ConvertApplyJson.EmitApplyJson (DRagLint.CLI.ConvertApplyJson.pas), DRagLint.CLI.ConvertApplyJson.PrintApplyReport (DRagLint.CLI.ConvertApplyJson.pas), DRagLint.Convert.Apply.DemoteOnlySkips (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.NeedInstance (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.NeedNames (DRagLint.Convert.Apply.pas) (+6 more)</para>
+  /// <para>Used in units: DRagLint.CLI.ConvertApplyJson, DRagLint.Convert.Apply, DRagLint.Convert.UnitRules, DRagLint.Convert.UsesReconcile</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TUsesNeed = record
@@ -337,8 +337,8 @@ type
   /// or 'convert' (the #convert surface's own To-type add, reported only when
   /// it MOVES a unit). NeededBy (C9) is why the row exists -- see TUsesNeed.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.PrintApplyReport (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.DemoteOnlySkips (DRagLint.Convert.Apply.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.RecordChanges (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.RecordKeeps (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.RequestAdd (DRagLint.Convert.UnitRules.pas) (+12 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.UnitRules</para>
+  /// <para>Used by: DRagLint.CLI.ConvertApplyJson.PrintApplyReport (DRagLint.CLI.ConvertApplyJson.pas) ?, DRagLint.Convert.Apply.DemoteOnlySkips (DRagLint.Convert.Apply.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.RecordChanges (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.RecordKeeps (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.RequestAdd (DRagLint.Convert.UnitRules.pas) (+12 more)</para>
+  /// <para>Used in units: DRagLint.CLI.ConvertApplyJson, DRagLint.Convert.Apply, DRagLint.Convert.UnitRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TUsesChange = record
@@ -485,7 +485,7 @@ type
 /// <remarks>
 /// Pure.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.ConvertApplyComponentPart (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply.RunUnit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan.PlanUsesAdditions (DRagLint.Convert.Apply.pas)</para>
+/// <para>Called from: DRagLint.CLI.ConvertApply.DoConvertApply (DRagLint.CLI.ConvertApply.pas), DRagLint.CLI.ConvertApply.DoConvertApply.RunUnit (DRagLint.CLI.ConvertApply.pas), DRagLint.CLI.ConvertApplyJson.ConvertApplyComponentPart (DRagLint.CLI.ConvertApplyJson.pas), DRagLint.Convert.Apply.BuildApplyPlan.PlanUsesAdditions (DRagLint.Convert.Apply.pas)</para>
 /// <para>Returns: False</para>
 /// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->

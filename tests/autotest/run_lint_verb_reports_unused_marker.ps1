@@ -26,10 +26,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\draglint_lint_verb_markers_$PID",
   [switch]$Quiet
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -106,7 +109,7 @@ end.
 '@
 
 $db = Join-Path $WorkDir '_D-RAG\App.sqlite'
-& $Exe index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $WorkDir 'App.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 $member = Join-Path $WorkDir 'uMember.pas'
 
@@ -123,18 +126,18 @@ Write-Host '== the lint verb and the marker meta-rules ==' -ForegroundColor Cyan
 # Establish what lint-all says, so the per-file expectation is derived from the
 # engine rather than from this script's opinion. If lint-all cannot see them
 # either, the fixture is wrong and everything below would be measuring nothing.
-$allOut = (& $Exe lint-all --db $db 2>&1)
-$allUnused    = RuleLines $allOut 'review-marker-unused'
-$allMalformed = RuleLines $allOut 'review-marker-malformed'
+$allOut = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db 2>&1 | ForEach-Object { "$_" } })
+$allUnused    = @(RuleLines $allOut 'review-marker-unused')
+$allMalformed = @(RuleLines $allOut 'review-marker-malformed')
 Check 'PRECONDITION: lint-all sees an unused marker in the member' ($allUnused.Count -ge 1) `
   "lint-all found none -- the fixture does not contain the case under test"
 Check 'PRECONDITION: lint-all sees a malformed marker in the member' ($allMalformed.Count -ge 1) `
   "lint-all found none -- the fixture does not contain the case under test"
 
 # 1 + 2. THE DEFECT: the same file, through the per-file verb.
-$fileOut = (& $Exe lint $member --db $db 2>&1)
-$fileUnused    = RuleLines $fileOut 'review-marker-unused'
-$fileMalformed = RuleLines $fileOut 'review-marker-malformed'
+$fileOut = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $member --db $db 2>&1 | ForEach-Object { "$_" } })
+$fileUnused    = @(RuleLines $fileOut 'review-marker-unused')
+$fileMalformed = @(RuleLines $fileOut 'review-marker-malformed')
 
 Check 'lint <file> reports review-marker-unused' ($fileUnused.Count -ge 1) `
   'RED today: DoLint passes nil for AScannedFiles, so the rule cannot fire at all'
@@ -151,15 +154,15 @@ Check 'CONTROL: the LIVE marker is not reported unused' `
   (($concatLine -gt 0) -and (-not ($fileUnused -contains $concatLine))) `
   "line $concatLine was reported -- a working marker is being called dead"
 Check 'CONTROL: and the finding it covers stays suppressed' `
-  ((RuleLines $fileOut 'concat-in-loop').Count -eq 0) `
+  ((@(RuleLines $fileOut 'concat-in-loop')).Count -eq 0) `
   'the marker stopped suppressing -- the scanned set must not change suppression'
 
 # 4. >>> THE SCOPE ASSERTION. The directory form must report the member's
 #    markers and NOT the non-member's.
-$dirOut = (& $Exe lint $WorkDir --db $db 2>&1)
+$dirOut = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } })
 $dirText = ($dirOut | Out-String)
 Check 'lint <dir> reports the MEMBER''s unused marker' `
-  ((RuleLines $dirOut 'review-marker-unused').Count -ge 1) ''
+  ((@(RuleLines $dirOut 'review-marker-unused')).Count -ge 1) ''
 Check 'CONTROL: lint <dir> does NOT report the NON-MEMBER''s marker' `
   (-not ($dirText -match 'uLoose\.pas.*review-marker')) `
   'the raw walk was used as the scanned set -- markers are now reported in files the run drops'

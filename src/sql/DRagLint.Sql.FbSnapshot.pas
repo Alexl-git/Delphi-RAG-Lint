@@ -74,7 +74,7 @@ type
       /// (TFbSnapshotStats).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoFbSnapshot (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas) ?</para>
+      /// <para>Called from: DRagLint.CLI.DoFbSnapshot (DRagLint.CLI.pas), DRagLint.CLI.RunCommand (DRagLint.CLI.pas) ?</para>
       /// <para>Calls: Copy, DateTimeToUnix, Default, DRagLint.Sql.FbSnapshot.ClearPriorSnapshot, DRagLint.Sql.FbSnapshot.ResolveSqlSymbolLinks, DRagLint.Sql.FbSnapshot.TableExists, DRagLint.Sql.FbSnapshot.TFbSnapshot.Run.ConnectFb, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection, Pos, Trim, UpCase, UpperCase, Writeln</para>
       /// <para>Complexity: 11 (cyclomatic, outer body), 299 lines (full implementation)</para>
       /// <para>Catches: Exception (re-raise); Exception (swallowed)</para>

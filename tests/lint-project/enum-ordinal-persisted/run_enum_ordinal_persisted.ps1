@@ -44,7 +44,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 function Parse-Findings([string[]]$Raw) {
   $txt = ($Raw -join "`n"); $b = $txt.IndexOf('[')
-  $out = @(); if ($b -ge 0) { try { $out = @($txt.Substring($b) | ConvertFrom-Json) } catch { $out = @() } }
+  $out = @(); if ($b -ge 0) { try { $out = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $out = @() } }
   if ($null -eq $out) { $out = @() }
   return ,@($out)
 }
@@ -54,14 +54,14 @@ function LineOf([string]$Marker) {
   return [int]$m[0].LineNumber
 }
 
-& $exePath index (Join-Path $scratch 'src') --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index (Join-Path $scratch 'src') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 $tOut = LineOf 'TRIGGER-OUT'; $tIn = LineOf 'TRIGGER-IN'; $tCom = LineOf 'TRIGGER-COMMENT'
 $controls = @('CONTROL-PINNED', 'CONTROL-NOSINK', 'CONTROL-SPLIT')
 
 # RUN 1 -- default lint-all: the rule is ON by default
-$all = Parse-Findings (& $exePath lint-all --db $db --format json 2>$null)
+$all = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json 2>$null })
 $a = @($all | Where-Object { $_.rule -eq $Rule })
 $a | ForEach-Object { Write-Host ("    {0}:{1} {2}" -f (Split-Path $_.file_path -Leaf), $_.start_line, $_.message) }
 function MsgAt($Set, [int]$L) { $m = @($Set | Where-Object { [int]$_.start_line -eq $L }); if ($m.Count -eq 1) { return [string]$m[0].message }; return '' }
@@ -86,7 +86,7 @@ Check 'sink table is tracked in rules\' (Test-Path $tbl)
 $kept = @(Get-Content $tbl | Where-Object { $_.Trim() -ne 'WriteBuffer' })
 Check 'sink table names WriteBuffer (control is meaningful)' ($kept.Count -lt @(Get-Content $tbl).Count)
 [IO.File]::WriteAllText((Join-Path $eng 'rules\enum-persist-sinks.txt'), (($kept -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
-$b2 = Parse-Findings (& (Join-Path $eng 'drag-lint.exe') lint-all --db $db --format json --rule $Rule 2>$null)
+$b2 = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & (Join-Path $eng 'drag-lint.exe') lint-all --db $db --format json --rule $Rule 2>$null })
 $b = @($b2 | Where-Object { $_.rule -eq $Rule })
 Check 'run 2 WriteBuffer removed -> TKindOut silent' ((MsgAt $b $tOut) -eq '') (MsgAt $b $tOut)
 Check 'run 2 WriteBuffer removed -> TKindComment silent' ((MsgAt $b $tCom) -eq '') (MsgAt $b $tCom)
@@ -99,8 +99,8 @@ $sc = Join-Path $scratch 'src\uEnumPersist.pas'
 $txt = [IO.File]::ReadAllText($sc)
 Check 'fixture spells the pinned list' ($txt.Contains('(kpA = 0, kpB = 1, kpC = 2)'))
 [IO.File]::WriteAllText($sc, $txt.Replace('(kpA = 0, kpB = 1, kpC = 2)', '(kpA, kpB, kpC)'), [Text.Encoding]::ASCII)
-& $exePath index (Join-Path $scratch 'src') --db $db 2>&1 | Out-Null
-$p3 = Parse-Findings (& $exePath lint-all --db $db --format json --rule $Rule 2>$null)
+& { $ErrorActionPreference = 'Continue'; & $exePath index (Join-Path $scratch 'src') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+$p3 = Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --format json --rule $Rule 2>$null })
 $c3 = @($p3 | Where-Object { $_.rule -eq $Rule })
 $lp = LineOf 'CONTROL-PINNED'
 Check 'run 3 unpinned TKindPinned now fires (3 of 3)' ((MsgAt $c3 $lp) -like '*TKindPinned*Ord*WriteBuffer*3 of 3*') (MsgAt $c3 $lp)

@@ -46,7 +46,8 @@ uses
 function RemoveUsesEntry(const AFinding: TLintFinding; ALines: TStringList; AEdits: TList<TTextEdit>): Boolean;
 
 /// <summary>A copy of AFinding whose StartCol / EndCol count CHARACTERS of the decoded
-/// source line, as the text-edit applier does, instead of the UTF-8 BYTES the index stores.</summary>
+/// source line, as the text-edit applier does. Since 1.52 EXTGAPS2 a .pas index column already is one, and since
+/// 1.52 BK-COLS2 a .dfm index column and every lint finding column are too: AFinding is returned unchanged.</summary>
 /// <param name="AFinding">A finding on one line (StartLine); its columns are index columns.</param>
 /// <param name="ALines">The file as the applier decodes it (TTextFileFormat.ReadFile).</param>
 /// <returns>AFinding with character columns; unchanged when the line is out of range or pure ASCII.</returns>
@@ -55,9 +56,8 @@ function RemoveUsesEntry(const AFinding: TLintFinding; ALines: TStringList; AEdi
 /// the span moves (CLIFIX C3: such a file used to be declined by the uses fixers).
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Fix.ProjectWide.FixUsesMovable (DRagLint.Fix.ProjectWide.pas), DRagLint.Fix.Store.FixClassNameCompare (DRagLint.Fix.Store.pas), DRagLint.Fix.Store.FixUnusedUnits (DRagLint.Fix.Store.pas), DRagLint.LSP.UsesOnSave.TUsesOnSave.RemoveUnusedEntries (DRagLint.LSP.UsesOnSave.pas)</para>
-/// <para>Calls: DRagLint.Convert.UsesReconcile.CharColumn</para>
 /// <para>Returns: AFinding</para>
-/// <seealso cref="DRagLint.Convert.UsesReconcile.CharColumn"/>
+/// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function WithCharColumns(const AFinding: TLintFinding; ALines: TStrings): TLintFinding;
@@ -71,7 +71,6 @@ uses
   , System.StrUtils
   , System.RegularExpressions
   , DRagLint.Lint.Autofix
-  , DRagLint.Convert.UsesReconcile
   ;
 
 const
@@ -138,10 +137,9 @@ end;
 
 function WithCharColumns(const AFinding: TLintFinding; ALines: TStrings): TLintFinding;
 begin
+  { 1.52 EXTGAPS2: .pas index columns are characters; 1.52 BK-COLS2: .dfm index columns and every lint
+    finding's columns are characters too, so nothing is left to convert. ALines stays for the callers. }
   Result:= AFinding;
-  if (AFinding.StartLine < 1) or (AFinding.StartLine > ALines.Count) or (AFinding.EndLine <> AFinding.StartLine) then Exit;
-  Result.StartCol:= CharColumn(ALines[AFinding.StartLine - 1], AFinding.StartCol);
-  Result.EndCol  := CharColumn(ALines[AFinding.StartLine - 1], AFinding.EndCol);
 end;
 
 function IsUsesKeywordLine(const ALine: string): Boolean;
@@ -485,7 +483,7 @@ begin
     begin
       if not SameText(F0.RuleId, RULE_ID) or not SameText(F0.FilePath, APath) then Continue;
       if (F0.StartLine < 1) or (F0.StartLine > ImplAt + 1) then Continue;      { only interface entries are movable }
-      F:= WithCharColumns(F0, Lines);                                      { index columns are UTF-8 bytes }
+      F:= WithCharColumns(F0, Lines);                                      { index columns are characters (1.52) }
       { a column-aligned dotted name (`DRagLint.Core    .Model`) is compared and moved compacted }
       Name:= StringReplace(Copy(Lines[F.StartLine - 1], F.StartCol, F.EndCol - F.StartCol), ' ', '', [rfReplaceAll]);
       { stale index: the span must still hold the unit the finding names (its message starts with it) }

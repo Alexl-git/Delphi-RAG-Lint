@@ -16,9 +16,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-lsp-uri-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 . (Join-Path $PSScriptRoot 'lsp_stdio_helpers.ps1')
@@ -37,7 +40,7 @@ function ClientUri([string]$path, [string]$style) {
 function EditKeys([string]$outF, [int]$id) {
   $keys = @()
   foreach ($mm in [regex]::Matches([IO.File]::ReadAllText($outF), '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $mm.Value.Trim() | ConvertFrom-Json -AsHashtable } catch { continue }
+    try { $o = $mm.Value.Trim() | ConvertFrom-Json -AsHashtable | ForEach-Object { $_ } } catch { continue }
     if ($o.ContainsKey('id') -and $o['id'] -eq $id -and $o['result']) {
       foreach ($a in $o['result']) { if ($a['edit'] -and $a['edit']['changes']) { $keys += @($a['edit']['changes'].Keys) } }
     }
@@ -62,7 +65,7 @@ function RunCase([string]$dirName, [string]$style) {
   WriteAnsi $file $text
   $db = Join-Path $WorkDir "$style-$($dirName -replace '[ #]', '_').sqlite"
   $ea = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-  & $Exe index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $ErrorActionPreference = $ea
   $uri = ClientUri $file $style
   $m  = Frame @{ jsonrpc='2.0'; id=1; method='initialize'; params=@{ processId=$null; rootUri=$null; capabilities=@{} } }
@@ -85,10 +88,10 @@ function RunUsesCase([string]$dirName, [string]$style) {
   WriteAnsi $file $mainText
   $db = Join-Path $WorkDir "uses-$style-$($dirName -replace '[ #]', '_').sqlite"
   $ea = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-  & $Exe index $src --db $db 2>&1 | Out-Null
-  $j = & $Exe lint $file --db $db --json --rule unused-unit-in-uses 2>$null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $j = & { $ErrorActionPreference = 'Continue'; & $Exe lint $file --db $db --json --rule unused-unit-in-uses 2>$null }
   $ErrorActionPreference = $ea
-  $diags = @(@(($j -join "`n") | ConvertFrom-Json) | Where-Object { $_.rule -eq 'unused-unit-in-uses' } | ForEach-Object {
+  $diags = @(@((($j -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) | Where-Object { $_.rule -eq 'unused-unit-in-uses' } | ForEach-Object {
     @{ range = @{ start = @{ line = $_.start_line - 1; character = $_.start_col - 1 }; end = @{ line = $_.end_line - 1; character = $_.end_col - 1 } }
        severity = 2; source = 'drag-lint'; code = $_.rule; message = $_.message } })
   $uri = ClientUri $file $style

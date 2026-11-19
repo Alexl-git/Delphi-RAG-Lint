@@ -35,9 +35,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-shared-callers-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -134,7 +137,7 @@ end.
 WriteAnsi (Join-Path $SrcDir 'uSharedCallers.pas') $Fixture
 
 $Db = Join-Path $WorkDir 'fix.sqlite'
-& $Exe index $SrcDir --db $Db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $SrcDir --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $idxCode = $LASTEXITCODE
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (CLIFIX C2)
 if (-not (Test-Path $Db)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host 'FATAL: index produced no DB' -ForegroundColor Red; exit 2 }
@@ -142,24 +145,24 @@ if (-not (Test-Path $Db)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint)
 # ---- text form ------------------------------------------------------------
 # Capture stdout ONLY. 2>&1 interleaves the config banner into the captured
 # stream and has already, in this repo, landed a banner inside generated source.
-$txt = (& $Exe query find-callers --name ApplyDelta --resolved --db $Db 2>$null | Out-String)
+$txt = (& { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name ApplyDelta --resolved --db $Db 2>$null } | Out-String)
 Check 'text: the target header is printed' ($txt -match 'TWorker\.ApplyDelta:') "got: $($txt.Trim())"
 Check 'text: the caller is listed with a confidence tag' ($txt -match 'C_Driver\s+\(.*\)\s+\[(certain|ambiguous)\]') `
   "got: $($txt.Trim())"
 
-$cbTxt = (& $Exe query find-callers --name A_Predicate --resolved --db $Db 2>$null | Out-String)
+$cbTxt = (& { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name A_Predicate --resolved --db $Db 2>$null } | Out-String)
 Check 'CONTROL: the callback reach is still marked [callback]' ($cbTxt -match '\[callback\]') "got: $($cbTxt.Trim())"
 Check 'text: a callback row is printed WITHOUT a target header' ($cbTxt -notmatch '(?m)^\s+A_Predicate:') `
   "got: $($cbTxt.Trim())"
 
-$orphanTxt = (& $Exe query find-callers --name D_Orphan --resolved --db $Db 2>$null | Out-String)
+$orphanTxt = (& { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name D_Orphan --resolved --db $Db 2>$null } | Out-String)
 $orphanExit = $LASTEXITCODE
 Check 'CONTROL: the orphan reports 0 caller(s)' ($orphanTxt -match '0 caller\(s\)') "got: $($orphanTxt.Trim())"
 Check 'CONTROL: the orphan exits 1' ($orphanExit -eq 1) "exit=$orphanExit"
 
 # ---- json form ------------------------------------------------------------
 function ResolvedJson([string]$name) {
-  $raw = & $Exe query find-callers --name $name --resolved --json --db $Db 2>$null | Out-String
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name $name --resolved --json --db $Db 2>$null } | Out-String
   $m = [regex]::Match($raw, '\[.*\]', 'Singleline')
   if (-not $m.Success) { return $null }
   return $m.Value
@@ -168,7 +171,7 @@ function ResolvedJson([string]$name) {
 $jsonRaw = ResolvedJson 'ApplyDelta'
 Check 'json: a balanced array is emitted' ($null -ne $jsonRaw)
 if ($null -ne $jsonRaw) {
-  $rows = @($jsonRaw | ConvertFrom-Json)
+  $rows = @(($jsonRaw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Check 'json: exactly one resolved caller' ($rows.Count -eq 1) "count=$($rows.Count)"
   if ($rows.Count -ge 1) {
     $r = $rows[0]
@@ -213,7 +216,7 @@ if ($null -ne $jsonRaw) {
 # `W.Pick(1)` to Pick(Integer), both certain. Two targets now have callers, so
 # the per-target grouping matters and this case IS the real control: name-grouping
 # would print ONE header here; FirstOfTarget must print TWO, one row under each.
-$ovTxt = (& $Exe query find-callers --name Pick --resolved --db $Db 2>$null | Out-String)
+$ovTxt = (& { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name Pick --resolved --db $Db 2>$null } | Out-String)
 $ovHeaders = ([regex]::Matches($ovTxt, '(?m)^\s+\S*TWorker\.Pick:\s*$')).Count
 $ovRowLines = ([regex]::Matches($ovTxt, '(?m)^\s+\S*C_Driver\s+\(')).Count
 Check 'OVERLOADS: both call sites are reported' ($ovRowLines -eq 2) `
@@ -226,13 +229,13 @@ Check 'OVERLOADS: both literal-argument call sites resolve certain (argument sha
 
 $ovJson = ResolvedJson 'Pick'
 if ($null -ne $ovJson) {
-  $ovRows = @($ovJson | ConvertFrom-Json)
+  $ovRows = @(($ovJson | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Check 'OVERLOADS: both call sites survive into json' ($ovRows.Count -eq 2) "count=$($ovRows.Count)"
 }
 
 $cbJson = ResolvedJson 'A_Predicate'
 if ($null -ne $cbJson) {
-  $cbRows = @($cbJson | ConvertFrom-Json)
+  $cbRows = @(($cbJson | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   $cbOnly = @($cbRows | Where-Object { $_.confidence -eq 'callback' })
   Check 'CONTROL json: the callback row survives with confidence=callback' ($cbOnly.Count -gt 0) `
     "confidences=$(($cbRows | ForEach-Object { $_.confidence }) -join ',')"

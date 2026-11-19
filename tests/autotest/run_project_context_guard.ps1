@@ -13,8 +13,11 @@
         tree's deployed engine measured another binary in every worktree; run_exe_freshness caught it).
 #>
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe"
+  [string]$Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $repo = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $fixture = Join-Path $repo 'src\cli\drag-lint.dproj'
@@ -25,10 +28,10 @@ function Check([string]$name, [bool]$ok) {
   if ($ok) { Write-Host "ok   $name" } else { Write-Host "FAIL $name"; $script:fail++ }
 }
 function Run([string[]]$a) {
-  $out = & $Exe @a 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } } | Out-String
   [pscustomobject]@{ Code = $LASTEXITCODE; Out = $out }
 }
-function Defines([string]$file) { (Get-Content $file -Raw | ConvertFrom-Json).defines }
+function Defines([string]$file) { (Get-Content $file -Raw | ConvertFrom-Json | ForEach-Object { $_ }).defines }
 try {
   $dproj = Join-Path $tmp 'App.dproj'
   Copy-Item $fixture $dproj
@@ -39,7 +42,7 @@ try {
   Check 'context file exists' (Test-Path $ctx)
   $bytes = [IO.File]::ReadAllBytes($ctx)
   Check 'no BOM' ($bytes[0] -eq [byte][char]'{')
-  Check 'schema 1' ((Get-Content $ctx -Raw | ConvertFrom-Json).schema -eq 1)
+  Check 'schema 1' ((Get-Content $ctx -Raw | ConvertFrom-Json | ForEach-Object { $_ }).schema -eq 1)
   Check 'Debug has DEBUG (positive control)' ((Defines $ctx) -contains 'debug')
   Check 'Win64 has WIN64' ((Defines $ctx) -contains 'win64')
 

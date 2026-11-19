@@ -12,17 +12,17 @@ $fail = 0
 function Assert($n,$c){ if($c){Write-Host "PASS  $n"}else{Write-Host "FAIL  $n" -ForegroundColor Red;$script:fail++} }
 
 # dry-run (default): prints the edit plan, writes nothing
-$dry = (& $exe rename --kind symbol --name Subject.TSubject.Foo --to Bar --db $db 2>$null) -join "`n"
+$dry = (& { $ErrorActionPreference = 'Continue'; & $exe rename --kind symbol --name Subject.TSubject.Foo --to Bar --db $db 2>$null }) -join "`n"
 Assert "dry-run shows decl rename Foo->Bar" ($dry -match 'Foo -> Bar')
 Assert "dry-run shows the caller site"      (([regex]::Matches($dry,'Foo -> Bar')).Count -ge 2)
 
 # --json edit set
-$json = & $exe rename --kind symbol --name Subject.TSubject.Foo --to Bar --json --db $db 2>$null | ConvertFrom-Json
+$json = & { $ErrorActionPreference = 'Continue'; & $exe rename --kind symbol --name Subject.TSubject.Foo --to Bar --json --db $db 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
 Assert "json edit set non-empty" ($json.Count -ge 2)
 Assert "json edit has line/col/old/new" ($null -ne $json[0].line -and $json[0].old -eq 'Foo' -and $json[0].new -eq 'Bar')
 
 # conflict: refuse a reserved word
-$kw = (& $exe rename --kind symbol --name Subject.TSubject.Foo --to begin --db $db 2>&1) -join "`n"
+$kw = (& { $ErrorActionPreference = 'Continue'; & $exe rename --kind symbol --name Subject.TSubject.Foo --to begin --db $db 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Assert "refuses reserved-word target" ($kw -match 'reserved word')
 
 Write-Host ""

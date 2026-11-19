@@ -75,9 +75,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\draglint-project-db-resolve-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 . "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG3: no machine drag-lint.json
 try {
@@ -137,7 +140,7 @@ function Resolve-Project([string]$ProjPath, [switch]$Json) {
   $a = @('resolve-dbs', '--project', $ProjPath, '--config', $cfg)
   if ($Json) { $a += '--json' }
   $p = Start-Process -FilePath $Exe -ArgumentList $a -NoNewWindow -Wait -PassThru `
-         -RedirectStandardOutput $out -RedirectStandardError $err
+         -RedirectStandardOutput $out -RedirectStandardError $err; $null = $p.Handle
   # Cast to [string]: Get-Content -Raw yields $null for an EMPTY file, and an
   # empty stdout is exactly what the refusal cases produce. Left uncast, the
   # -like comparisons below return an empty array rather than a Boolean and the
@@ -199,7 +202,7 @@ function Resolve-Read([string]$EditorFile, [string]$ProjPath) {
   $a = @('resolve-dbs', '--in', $EditorFile, '--config', $cfg)
   if ($ProjPath) { $a += @('--project', $ProjPath) }
   $p = Start-Process -FilePath $Exe -ArgumentList $a -NoNewWindow -Wait -PassThru `
-         -RedirectStandardOutput $out -RedirectStandardError $err
+         -RedirectStandardOutput $out -RedirectStandardError $err; $null = $p.Handle
   $lines = @(Get-Content -LiteralPath $out -ErrorAction SilentlyContinue |
              Where-Object { $_.Trim() -ne '' })
   [pscustomobject]@{ Exit = $p.ExitCode; Lines = $lines }
@@ -275,7 +278,7 @@ $dbB = Join-Path $WorkDir 'PB.sqlite'
 #   PA holds AlphaOnly + Shared;  PB holds BetaOnly + Shared;  neither holds Stranger.
 foreach ($pair in @(@($dbA, 'AlphaOnly.pas'), @($dbA, 'Shared.pas'),
                     @($dbB, 'BetaOnly.pas'),  @($dbB, 'Shared.pas'))) {
-  & $Exe index (Join-Path $memDir $pair[1]) --db $pair[0] *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index (Join-Path $memDir $pair[1]) --db $pair[0] *> $null }
 }
 Check 'membership fixture: both project DBs were built' `
   ((Test-Path -LiteralPath $dbA) -and (Test-Path -LiteralPath $dbB)) ''
@@ -319,7 +322,7 @@ function Resolve-Mem([string]$EditorFile, [string]$ProjPath, [string]$Cfg) {
   $a = @('resolve-dbs', '--in', $EditorFile, '--config', $Cfg)
   if ($ProjPath) { $a += @('--project', $ProjPath) }
   $p = Start-Process -FilePath $Exe -ArgumentList $a -NoNewWindow -Wait -PassThru `
-         -RedirectStandardOutput $out -RedirectStandardError $err
+         -RedirectStandardOutput $out -RedirectStandardError $err; $null = $p.Handle
   ,@(Get-Content -LiteralPath $out -ErrorAction SilentlyContinue |
      Where-Object { $_.Trim() -ne '' })
 }
@@ -405,10 +408,10 @@ c = sqlite3.connect(sys.argv[1])
 print(c.execute("PRAGMA journal_mode").fetchone()[0])
 c.close()
 '@
-  function Get-JournalMode([string]$Db) { return ([string](python $jmPy $Db 2>&1 | Select-Object -Last 1)).Trim().ToLowerInvariant() }
+  function Get-JournalMode([string]$Db) { return ([string](& { $ErrorActionPreference = 'Continue'; python $jmPy $Db 2>&1 | ForEach-Object { "$_" } } | Select-Object -Last 1)).Trim().ToLowerInvariant() }
 
   foreach ($s in @($dbD, "$dbD-wal", "$dbD-shm")) { if (Test-Path -LiteralPath $s) { Remove-Item -LiteralPath $s -Force } }
-  python $mkPy $dbD (Join-Path $memDir 'AlphaOnly.pas') 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; python $mkPy $dbD (Join-Path $memDir 'AlphaOnly.pas') 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Set-Content -LiteralPath (Join-Path $memDir 'PD.dproj') -Value '<Project/>' -Encoding Ascii
   $memCfgD = New-MemManifest 'd' 'PD' 'PB'   # folder match -> PD; PB is the ACTIVE project
 
@@ -432,7 +435,7 @@ c.close()
 # --- 6: --json carries the section name ------------------------------------
 $j = Resolve-Project (Join-Path $shared 'Alpha.dproj') -Json
 $obj = $null
-try { $obj = $j.Stdout | ConvertFrom-Json } catch { }
+try { $obj = $j.Stdout | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check '--json emits an object with section + db' `
   (($null -ne $obj) -and ($obj.section -eq 'Alpha') -and ($obj.db -like '*Alpha.sqlite')) $j.Stdout.Trim()
 

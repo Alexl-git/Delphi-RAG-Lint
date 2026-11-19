@@ -31,9 +31,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = (Join-Path ([IO.Path]::GetTempPath()) ("draglint-unitusage-" + [Guid]::NewGuid().ToString('N')))
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -56,7 +59,7 @@ Copy-Item (Join-Path $srcDir '*.pas') $fixDir
 $db      = Join-Path $WorkDir 'unitusage.sqlite'
 $errFile = Join-Path $WorkDir 'stderr.txt'
 
-& $Exe index $fixDir --db $db 2>$errFile | Out-Null
+& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe index $fixDir --db $db 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-Null
 if ($LASTEXITCODE -ne 0) {
   $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }
   Write-Host "FATAL: indexing the fixture failed ($LASTEXITCODE)" -ForegroundColor Red
@@ -65,7 +68,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 function Ask([string[]]$A) {
-  $out = & $Exe @A 2>$errFile
+  $out = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe @A 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   [pscustomobject]@{ Out = (($out | Out-String) -replace "`r`n", "`n"); Code = $LASTEXITCODE }
 }
 
@@ -93,7 +96,7 @@ Check 'CONTROL: it never says DEAD IMPORT (that would be an artefact, not a fact
 
 $degJson = Ask @('query', 'unit-usage', '--unit', 'ZzAbsentLibUnit', '--db', $db, '--json')
 $parsed = $null
-try { $parsed = $degJson.Out | ConvertFrom-Json } catch { }
+try { $parsed = $degJson.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
 Check 'the JSON form parses' ($null -ne $parsed) $degJson.Out
 if ($null -ne $parsed) {
   $rowsJ = @($parsed)
@@ -126,7 +129,7 @@ Check 'and still says so' ($none.Out -match 'no interface-section symbols found'
 # DOCS-IN-SYNC: --help used to state the old behaviour flatly.
 Write-Host ''
 Write-Host '-- DOCS-IN-SYNC: the banner no longer claims a flat exit 2' -ForegroundColor Cyan
-$help = (& $Exe --help 2>$null | Out-String)
+$help = (& { $ErrorActionPreference = 'Continue'; & $Exe --help 2>$null } | Out-String)
 Check 'the banner mentions unit-usage at all (scan is not vacuous)' ($help -match 'unit-usage') ''
 Check 'it does not still say the project DB alone exits 2' `
   ($help -notmatch 'with the project DB alone it exits 2') `

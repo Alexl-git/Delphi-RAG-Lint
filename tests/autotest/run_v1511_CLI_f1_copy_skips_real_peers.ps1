@@ -16,9 +16,12 @@
   Usage: pwsh -File tests\autotest\run_v1511_CLI_f1_copy_skips_real_peers.ps1 [-Exe <exe>] [-YadfDb <copy.sqlite>]
 #>
 param(
-  [string]$Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe'),
+  [string]$Exe = '',
   [string]$YadfDb = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe') }
 $ErrorActionPreference = 'Stop'
 $exePath = (Resolve-Path $Exe).Path
 $scratch = Join-Path $env:TEMP ("v1511_cli_f1_" + $PID)
@@ -68,15 +71,15 @@ end.
   $dbA = Join-Path $scratch 'out\a.sqlite'; $dbB = Join-Path $scratch 'out\b.sqlite'
   Push-Location $scratch
   try {
-    & $exePath index --all --config $cfg --only SecA --jobs 1 2>&1 | Out-Null
-    & $exePath index --all --config $cfg --only SecB --jobs 1 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only SecA --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index --all --config $cfg --only SecB --jobs 1 2>&1 | ForEach-Object { "$_" } } | Out-Null
   } finally { Pop-Location }
   Check '0. sanity: both registered DBs exist' ((Test-Path $dbA) -and (Test-Path $dbB))
 
   # A -- positive control: the registered DB still runs its peer
   $trA = Join-Path $scratch 'traceA.txt'
   $env:DRAGLINT_PEER_TRACE = $trA
-  $outA = (& $exePath lint-all --db $dbA --config $cfg 2>&1 | Out-String)
+  $outA = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $dbA --config $cfg 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $tA = ReadTrace $trA
   Check 'A1. registered --db: the peer b.sqlite is run (text note)' ($outA -match 'shared-db: running [^\r\n]*b\.sqlite') (($outA -split "`r?`n" | Select-String 'shared-db') -join ' | ')
   Check 'A2. registered --db: the trace records the peer run' ($tA -match '(?m)^peer [^\r\n]*\\out\\b\.sqlite') $tA
@@ -87,7 +90,7 @@ end.
   Copy-Item $dbA $cpA; Copy-Item $dbB $cpB
   $trB = Join-Path $scratch 'traceB.txt'
   $env:DRAGLINT_PEER_TRACE = $trB
-  $outB = (& $exePath lint-all --db $cpA --config $cfg 2>&1 | Out-String)
+  $outB = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $cpA --config $cfg 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $tB = ReadTrace $trB
   Check 'B1. copy --db: no peer lint-all is run' (-not ($outB -match 'shared-db: running')) (($outB -split "`r?`n" | Select-String 'shared-db') -join ' | ')
   Check 'B2. copy --db: one note says the peer DBs were skipped' ($outB -match 'peer DBs skipped: --db [^\r\n]*not the registered project DB')
@@ -95,7 +98,7 @@ end.
   $outDir = [regex]::Escape((Join-Path $scratch 'out') + '\')
   Check 'B4. copy --db: no trace line opens or runs a registered out\ DB' (-not ($tB -match "(?m)^(peer|sibling-open) [^\r\n]*$outDir")) $tB
   Check 'B5. copy --db: the sibling b.sqlite is remapped to the copy beside --db' ($tB -match ('(?m)^sibling-remap [^\r\n]*\\out\\b\.sqlite -> ' + [regex]::Escape($cpB))) $tB
-  Check 'B6. copy --db: --shared-db (explicit peers) still runs' ((& $exePath lint-all --db $cpA --config $cfg --shared-db $cpB 2>&1 | Out-String) -match 'shared-db: running [^\r\n]*copy\\b\.sqlite')
+  Check 'B6. copy --db: --shared-db (explicit peers) still runs' ((& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $cpA --config $cfg --shared-db $cpB 2>&1 | ForEach-Object { "$_" } } | Out-String) -match 'shared-db: running [^\r\n]*copy\\b\.sqlite')
 
   # C -- the real-world shape, only on an engine that passed B
   if ($YadfDb -ne '') {
@@ -106,7 +109,7 @@ end.
       Copy-Item -LiteralPath $YadfDb $cpY
       $trC = Join-Path $scratch 'traceC.txt'
       $env:DRAGLINT_PEER_TRACE = $trC
-      & $exePath lint-all --db $cpY --rule review-marker-unused --json 1>$null 2> (Join-Path $scratch 'c.err')
+      & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $cpY --rule review-marker-unused --json 1>$null 2> (Join-Path $scratch 'c.err') }
       $tC = ReadTrace $trC
       Check 'C1. YADF copy: the peer pass was reached and skipped' ($tC -match '(?m)^peers-skipped ') $tC
       Check 'C2. YADF copy: no trace line names C:\Projects\YADF\_D-RAG' (-not ($tC -match '(?m)^(peer|sibling-open) [^\r\n]*C:\\Projects\\YADF\\_D-RAG')) $tC

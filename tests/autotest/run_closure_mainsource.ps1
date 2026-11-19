@@ -12,9 +12,12 @@
   pass on the old engine too, which proves the closure parser below still matches.
 #>
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe = '',
   [string]$Scratch = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Continue'
 $Exe = (Resolve-Path $Exe).Path
 if ($Scratch -eq '') { $Scratch = Join-Path ([IO.Path]::GetTempPath()) ("dl-closmain-" + [Guid]::NewGuid().ToString('N')) }
@@ -41,7 +44,7 @@ function WriteDproj([string]$Dir, [string]$Main) {
 }
 function Closure([string]$Dir) {
   $db = Join-Path $Scratch ("dry-" + [Guid]::NewGuid().ToString('N') + '.sqlite')
-  $raw = & $Exe index --project "$Dir\P.dproj" --db $db --library-db "$Scratch\no-library.sqlite" --dry-run 2>&1 | Out-String
+  $raw = & { $ErrorActionPreference = 'Continue'; & $Exe index --project "$Dir\P.dproj" --db $db --library-db "$Scratch\no-library.sqlite" --dry-run 2>&1 | ForEach-Object { "$_" } } | Out-String
   $lines = @($raw -split "`r?`n")
   $files = @()
   $start = -1

@@ -58,9 +58,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-proptree-scope-rule-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -488,15 +491,15 @@ end.
 
 $db = Join-Path $WorkDir 'scoperule.sqlite'
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>$null
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>$null }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($indexOut -join ' | ')"
 
 function Get-MarkerType([string]$Database, [string]$QName) {
   Push-Location $WorkDir
   try {
-    $raw = (& $Exe proptree --qname $QName --format json --db $Database --no-write-back 2>$null) -join "`n"
+    $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe proptree --qname $QName --format json --db $Database --no-write-back 2>$null }) -join "`n"
   } finally { Pop-Location }
-  $tree = $raw | ConvertFrom-Json
+  $tree = $raw | ConvertFrom-Json | ForEach-Object { $_ }
   $prop = @($tree.properties) | Where-Object { $_.path -eq 'Marker' } | Select-Object -First 1
   if ($null -eq $prop) { return $null }
   return $prop.type

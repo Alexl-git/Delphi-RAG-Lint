@@ -25,7 +25,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -111,22 +114,22 @@ Write-Ascii $pyf $py
 Push-Location C:\TEMP
 try {
   $db = Join-Path $scratch 'idx.sqlite'
-  $out1 = & $exePath index $src --db $db 2>&1 | Out-String
+  $out1 = & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'bulk load from an empty table REBUILDS the text indexes' ($out1 -match 'fts +rebuilt both text indexes') $out1
 
   # A changed literal, a removed one, an added one -- and a whole file pruned.
   Write-Unit 'uA' @('omega_new keep', 'SELECT * FROM CUSTOMER', 'added_later text')
   Remove-Item (Join-Path $src 'uF.pas')
-  $out2 = & $exePath index $src --db $db 2>&1 | Out-String
+  $out2 = & { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'the incremental run PATCHES the text indexes instead of rebuilding' ($out2 -match 'fts +patched both text indexes') $out2
 
-  $integ = & python $pyf integrity $db 2>&1 | Out-String
+  $integ = & { $ErrorActionPreference = 'Continue'; & python $pyf integrity $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'FTS5 integrity-check passes on both patched indexes' ($integ -match 'OK') $integ
 
-  $cmp = & python $pyf vs-rebuild $db 2>&1 | Out-String
+  $cmp = & { $ErrorActionPreference = 'Continue'; & python $pyf vs-rebuild $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'the patched indexes equal a rebuild of the same table (fts5vocab instance rows)' ($cmp -match 'SAME') $cmp
 
-  $m = & python $pyf match $db 'omega_new' 'alpha_one' 'added_later' 'gone_soon' 'foxtrot_six' 'bravo_two' 2>&1 | Out-String
+  $m = & { $ErrorActionPreference = 'Continue'; & python $pyf match $db 'omega_new' 'alpha_one' 'added_later' 'gone_soon' 'foxtrot_six' 'bravo_two' 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'queries see the new text, not the old, and untouched files stay' `
         ($m -match 'omega_new=1/1' -and $m -match 'alpha_one=0/0' -and $m -match 'added_later=1/1' -and
          $m -match 'gone_soon=0/0' -and $m -match 'foxtrot_six=0/0' -and $m -match 'bravo_two=1/1') $m

@@ -34,9 +34,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = (Join-Path ([IO.Path]::GetTempPath()) ("draglint-allowparity-" + [Guid]::NewGuid().ToString('N')))
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -98,14 +101,14 @@ $L.Add('end.')
 [IO.File]::WriteAllText($pas, (($L -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 
 function LintJson {
-  $o = & $Exe lint $pas '--json' 2>$errFile
+  $o = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe lint $pas '--json' 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   $t = ($o | Out-String).Trim()
   if ($t -eq '') { return ,@() }
-  return ,@($t | ConvertFrom-Json)
+  return ,@(($t | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 }
 function Has($Fs, [string]$Rule, [int]$Line) { @($Fs | Where-Object { $_.rule -eq $Rule -and $_.start_line -eq $Line }).Count -gt 0 }
 function Allow([int]$Line, [string]$Rule) {
-  $o = & $Exe allow $pas '--fix-line' $Line '--fix-rule' $Rule '--apply' 2>$errFile
+  $o = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe allow $pas '--fix-line' $Line '--fix-rule' $Rule '--apply' 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   [pscustomobject]@{ Out = (($o | Out-String) -replace "`r`n", "`n").Trim(); Code = $LASTEXITCODE }
 }
 
@@ -145,10 +148,10 @@ Check 'no review-marker-stale anywhere' ($st.Count -eq 0) ("count=" + $st.Count)
 # --- 6. lint-all --file is a usage error ------------------------------------------
 Write-Host '-- 6. lint-all --file is refused, not ignored' -ForegroundColor Cyan
 $noDb = Join-Path $WorkDir 'none.sqlite'
-$o = & $Exe lint-all '--db' $noDb '--file' $pas 2>&1; $code = $LASTEXITCODE
+$o = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all '--db' $noDb '--file' $pas 2>&1 | ForEach-Object { "$_" } }; $code = $LASTEXITCODE
 $txt = ($o | Out-String)
 Check 'lint-all --file exits 2 naming --file' ($code -eq 2 -and $txt -match 'lint-all does not take --file') $txt.Trim()
-$o = & $Exe lint-all '--db' $noDb 2>&1
+$o = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all '--db' $noDb 2>&1 | ForEach-Object { "$_" } }
 $txt = ($o | Out-String)
 Check 'control: lint-all without --file does not print the --file refusal' ($txt -notmatch 'does not take --file') $txt.Trim()
 

@@ -47,9 +47,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-alias-edges-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -165,7 +168,7 @@ end.
 '@
 
 $db = Join-Path $WorkDir 'alias.sqlite'
-& $Exe index $WorkDir --db $db --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 $py = Join-Path $WorkDir 'edges.py'
 @'
@@ -214,7 +217,7 @@ out['der_anc_rows'] = c.execute("""
 print(json.dumps(out))
 c.close()
 '@ | Set-Content $py -Encoding ascii
-$r = (& python $py $db) -join "`n" | ConvertFrom-Json
+$r = (& python $py $db) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }
 
 Write-Host 'call_edges' -ForegroundColor Cyan
 Check 'HAZARD: alias-typed receiver resolves to the base method' ($r.alias_to_base -ge 1) "edges=$($r.alias_to_base)"
@@ -236,7 +239,7 @@ Check 'CONTROL: a real descendant still has its row'   ($r.der_anc_rows -ge 1) "
 
 Write-Host ''
 Write-Host 'find-callers (user-facing; a NAME match, not a resolution)' -ForegroundColor Cyan
-$fc = (& $Exe query find-callers --name Ping --db $db 2>$null | Out-String)
+$fc = (& { $ErrorActionPreference = 'Continue'; & $Exe query find-callers --name Ping --db $db 2>$null } | Out-String)
 Check 'find-callers Ping lists the alias-typed site' ($fc -match 'uCaller\.pas')
 
 Write-Host ''

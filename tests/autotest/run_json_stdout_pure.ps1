@@ -30,7 +30,7 @@ try {
   [IO.File]::WriteAllText((Join-Path $Sub 'P.dpr'), $dpr)
   $Db = Join-Path $Work 't.sqlite'
   Push-Location $Sub
-  try { & $Exe index . --db $Db *> $null } finally { Pop-Location }
+  try { & { $ErrorActionPreference = 'Continue'; & $Exe index . --db $Db *> $null } } finally { Pop-Location }
 
   $cases = @(
     @('lint', 'Foo.pas', '--db', $Db, '--json'),
@@ -54,12 +54,12 @@ try {
   foreach ($c in $cases) {
     $out = Join-Path $Work 'out.txt'; $err = Join-Path $Work 'err.txt'
     Push-Location $Sub
-    try { $p = Start-Process -FilePath $Exe -ArgumentList $c -NoNewWindow -Wait -PassThru -RedirectStandardOutput $out -RedirectStandardError $err }
+    try { $p = Start-Process -FilePath $Exe -ArgumentList $c -NoNewWindow -Wait -PassThru -RedirectStandardOutput $out -RedirectStandardError $err; $null = $p.Handle }
     finally { Pop-Location }
     $text = [IO.File]::ReadAllText($out)
     $name = $c[0] + $(if ($c[1] -and $c[1] -notmatch '^-') { ' ' + $c[1] } else { '' })
     if ($text.Trim() -eq '') { Write-Host "SKIP $name (empty stdout, exit $($p.ExitCode))"; continue }
-    try { [void]($text | ConvertFrom-Json); $parsed++; Write-Host "PASS $name" }
+    try { [void]($text | ConvertFrom-Json | ForEach-Object { $_ }); $parsed++; Write-Host "PASS $name" }
     catch { $fail++; $first = ($text -split "`r?`n")[0]; Write-Host "FAIL $name : stdout not pure JSON, first line: $first" }
   }
   # Merged-stream consumers (the converter's RunCapture, the editor) read stdout
@@ -77,7 +77,7 @@ try {
     Push-Location $Sub
     try {
       $ErrorActionPreference = 'Continue'
-      $text = (& $Exe @c 2>&1 | ForEach-Object { "$_" }) -join "`n"
+      $text = (& { $ErrorActionPreference = 'Continue'; & $Exe @c 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n"
       $ErrorActionPreference = 'Stop'
     } finally { Pop-Location }
     $name = 'merged ' + $c[0]

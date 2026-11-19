@@ -16,10 +16,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe      = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$RulesDir = "$PSScriptRoot\..\..\rules",
+  [string]$Exe      = '',
+  [string]$RulesDir = '',
   [string]$WorkDir  = "C:\TEMP\draglint_dpr_parity_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
+if (-not $RulesDir) { $RulesDir = "$PSScriptRoot\..\..\rules" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){ if($d){Write-Host "      $d" -ForegroundColor DarkGray}; $script:fail=$true } }
@@ -68,7 +72,7 @@ end.
 '@
 
 function Sets($json) {
-  $a = @($json | ConvertFrom-Json)
+  $a = @(($json | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   @($a | ForEach-Object { '{0}@{1}' -f $_.rule, $_.start_line } | Sort-Object)
 }
 function Run($name, $mark) {
@@ -77,10 +81,10 @@ function Run($name, $mark) {
   $f = Join-Path $d 'PDprParity.dpr'
   Write-Ascii $f ($template -replace '@@MARK@@', $mark)
   $db = Join-Path $d 'x.sqlite'
-  $null = & $exePath index $d --db $db 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $exePath index $d --db $db 2>&1 | ForEach-Object { "$_" } }
   $en = 'review-marker-unused,review-marker-stale'
-  $pf  = (& $exePath lint $f --db $db --rules-dir $rules --enable $en --json 2>$null | Out-String)
-  $all = (& $exePath lint-all --db $db --rules-dir $rules --enable $en --json 2>$null | Out-String)
+  $pf  = (& { $ErrorActionPreference = 'Continue'; & $exePath lint $f --db $db --rules-dir $rules --enable $en --json 2>$null } | Out-String)
+  $all = (& { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --rules-dir $rules --enable $en --json 2>$null } | Out-String)
   [pscustomobject]@{ PerFile = (Sets $pf); All = (Sets $all) }
 }
 
@@ -106,8 +110,8 @@ Check 'A3b PARITY with the marker present' `
 # A4: .dpk per-file stays as it was (no AST checks); lint-all never scans .dpk.
 $dk = Join-Path $WorkDir 'dpk'; New-Item -ItemType Directory -Path $dk -Force | Out-Null
 Write-Ascii (Join-Path $dk 'PDpk.dpk') (($template -replace '@@MARK@@','') -replace '^program PDprParity;','package PDpk;')
-$o = (& $exePath lint (Join-Path $dk 'PDpk.dpk') --rules-dir $rules --json 2>$null | Out-String)
-$ids = if ($o.Trim()) { Sets $o } else { @() }
+$o = (& { $ErrorActionPreference = 'Continue'; & $exePath lint (Join-Path $dk 'PDpk.dpk') --rules-dir $rules --json 2>$null } | Out-String)
+$ids = @(if ($o.Trim()) { Sets $o } else { @() })
 Check 'A4  .dpk per-file: no AST findings (unchanged; lint-all does not scan .dpk)' `
       (($ids -match '^(try-except-swallowed|write-only-local)@').Count -eq 0) ($ids -join ', ')
 

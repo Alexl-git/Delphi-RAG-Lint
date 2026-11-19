@@ -30,8 +30,11 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe"
+  [string]$Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -88,20 +91,20 @@ $db = Join-Path $work 'ww.sqlite'
 $marker = $db + '.rule-cache-warm.pid'
 $started = New-Object System.Collections.Generic.List[System.Diagnostics.Process]
 
-$o = & $Exe index --project $dpr --db $db --rule-cache-warm off 2>&1 | Out-String
+$o = & { $ErrorActionPreference = 'Continue'; & $Exe index --project $dpr --db $db --rule-cache-warm off 2>&1 | ForEach-Object { "$_" } } | Out-String
 if ($LASTEXITCODE -ne 0) { throw "fixture index failed ($LASTEXITCODE): $o" }
 
 Write-Host '=== K1: shutdown --all stops a background warm ===' -ForegroundColor Cyan
 $env:DRAGLINT_TEST_WARM_HOLD_MS = '60000'
 try {
-  $warm = Start-Process -FilePath $Exe -ArgumentList @('warm-rule-cache', '--detached', '--db', "`"$db`"") -WindowStyle Hidden -PassThru
+  $warm = Start-Process -FilePath $Exe -ArgumentList @('warm-rule-cache', '--detached', '--db', "`"$db`"") -WindowStyle Hidden -PassThru; $null = $warm.Handle
 } finally { Remove-Item Env:\DRAGLINT_TEST_WARM_HOLD_MS -ErrorAction SilentlyContinue }
 $started.Add($warm)
 $ok0 = Wait-Until { (Test-Path -LiteralPath $marker) -and ((Get-Content -LiteralPath $marker -Raw).Trim() -eq "$($warm.Id)") } 15
 Start-Sleep -Milliseconds 500
 Check 'W0 CONTROL: the held warm is alive and wrote its marker' ($ok0 -and -not $warm.HasExited) "pid $($warm.Id) exited=$($warm.HasExited)"
 # --db, never a bare --all: --all would stand down every engine of this user (the IDE's LSP, other runs).
-$sd = & $Exe shutdown --db $db --wait 10 2>&1 | Out-String
+$sd = & { $ErrorActionPreference = 'Continue'; & $Exe shutdown --db $db --wait 10 2>&1 | ForEach-Object { "$_" } } | Out-String
 $sdCode = $LASTEXITCODE
 Check 'W1 shutdown (--db filter of --all) lists the warm and exits 0' (($sdCode -eq 0) -and ($sd -match "pid $($warm.Id)\b")) "exit=$sdCode $($sd.Trim() -replace '\s+', ' ')"
 # 1.39.1: the listing names the engine's real role; it used to print 'lsp' for every engine.
@@ -112,12 +115,12 @@ Check 'W2 ... and the warm process is gone' $gone "exited=$($warm.HasExited)"
 Write-Host '=== K2: index stops a stale warm of the same database ===' -ForegroundColor Cyan
 # Stand-in stale warm: a long-lived process of THIS engine image (as run_rule_cache_warm_background B9).
 $otherDb = Join-Path $work 'other.sqlite'
-$stale = Start-Process -FilePath $Exe -ArgumentList @('index', "`"$dir`"", '--db', "`"$otherDb`"", '--watch', '--interval', '60') -WindowStyle Hidden -PassThru
+$stale = Start-Process -FilePath $Exe -ArgumentList @('index', "`"$dir`"", '--db', "`"$otherDb`"", '--watch', '--interval', '60') -WindowStyle Hidden -PassThru; $null = $stale.Handle
 $started.Add($stale)
 Start-Sleep -Seconds 3
 [System.IO.File]::WriteAllText($marker, "$($stale.Id)", [System.Text.Encoding]::ASCII)
 Check 'W3 CONTROL: the stand-in stale warm is alive before the index' (-not $stale.HasExited) "pid $($stale.Id)"
-$o5 = & $Exe index --project $dpr --db $db --rule-cache-warm off 2>&1 | Out-String
+$o5 = & { $ErrorActionPreference = 'Continue'; & $Exe index --project $dpr --db $db --rule-cache-warm off 2>&1 | ForEach-Object { "$_" } } | Out-String
 $code5 = $LASTEXITCODE
 $stopped = Wait-Until { $stale.HasExited } 10
 Check 'W4 index --project stops the stale warm of its database' $stopped "pid $($stale.Id) exited=$($stale.HasExited)"
@@ -126,12 +129,12 @@ Check 'W5 ... and the index exits 0' ($code5 -eq 0) "exit=$code5 $(if ($code5 -n
 Write-Host '=== K3: index --watch holds the lock only during a tick ===' -ForegroundColor Cyan
 $wOut = Join-Path $work 'watch.out'
 $watch = Start-Process -FilePath $Exe -ArgumentList @('index', '--project', "`"$dpr`"", '--db', "`"$db`"", '--watch', '--interval', '3', '--rule-cache-warm', 'off') `
-  -RedirectStandardOutput $wOut -RedirectStandardError (Join-Path $work 'watch.err') -WindowStyle Hidden -PassThru
+  -RedirectStandardOutput $wOut -RedirectStandardError (Join-Path $work 'watch.err') -WindowStyle Hidden -PassThru; $null = $watch.Handle
 $started.Add($watch)
 $tick1 = Wait-Until { (Test-Path -LiteralPath $wOut) -and ((Get-Content -LiteralPath $wOut -Raw) -match 'Done\.') } 30
 Start-Sleep -Milliseconds 300
 Check 'W6 CONTROL: the watch finished its first tick and is running' ($tick1 -and -not $watch.HasExited) "exited=$($watch.HasExited)"
-$o7 = & $Exe index --project $dpr --db $db --rule-cache-warm off 2>&1 | Out-String
+$o7 = & { $ErrorActionPreference = 'Continue'; & $Exe index --project $dpr --db $db --rule-cache-warm off 2>&1 | ForEach-Object { "$_" } } | Out-String
 $code7 = $LASTEXITCODE
 Check 'W7 a second index of the watched database exits 0 (not 2)' ($code7 -eq 0) "exit=$code7 $(if ($code7 -ne 0) { $o7.Trim() -replace '\s+', ' ' })"
 $ticksBefore = ([regex]::Matches((Get-Content -LiteralPath $wOut -Raw), 'Indexing tick')).Count

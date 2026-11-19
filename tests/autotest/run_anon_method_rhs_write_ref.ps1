@@ -14,9 +14,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-anonrhs-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'; $script:Passed = 0; $script:FailedN = 0
 function Check($n, $ok, $d = '') {
   $s = if ($ok) { 'PASS' } else { 'FAIL' }; $c = if ($ok) { 'Green' } else { 'Red' }
@@ -27,7 +30,7 @@ if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -Foreground
 $Exe = (Resolve-Path $Exe).Path
 function Writes([string]$db, [string]$name) {
   Push-Location $WorkDir
-  try { $o = & $Exe usages --name $name --db $db 2>&1 | Out-String } finally { Pop-Location }
+  try { $o = & { $ErrorActionPreference = 'Continue'; & $Exe usages --name $name --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String } finally { Pop-Location }
   if ($o -match 'writes:\s*(\d+)') { return [int]$Matches[1] }
   return -1
 }
@@ -38,7 +41,7 @@ try {
   Copy-Item (Resolve-Path "$PSScriptRoot\fixtures\anonrhs").Path $fx -Recurse
   $db = Join-Path $WorkDir 'a.sqlite'
   Push-Location $WorkDir
-  try { $null = & $Exe index $fx --db $db --library-db none 2>&1 | Out-String } finally { Pop-Location }
+  try { $null = & { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String } finally { Pop-Location }
   $w = Writes $db 'Plain'
   Check 'control: LHost.Plain := <int> counted as 2 writes' ($w -eq 2) "writes=$w"
   foreach ($n in 'FeedHarvest', 'Counter', 'FeedPaths') {

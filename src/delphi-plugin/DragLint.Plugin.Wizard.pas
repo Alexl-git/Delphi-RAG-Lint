@@ -22,13 +22,13 @@ type
       procedure BeforeSave;
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: DragLint.Plugin.About.UnregisterDragLintAbout, DragLint.Plugin.DockForm.UnregisterDragLintDock, DragLint.Plugin.EditViewNotifier.UnregisterDragLintEditViewNotifier, DragLint.Plugin.FanOut.ShutdownFanOut, DragLint.Plugin.OpenSourceServer.StopOpenSourceServer, DragLint.Plugin.Options.UnregisterDragLintOptions, DragLint.Plugin.ProjectMenu.UnregisterProjectMenu, DragLint.Plugin.ProjectNotifier.UnregisterProjectNotifier, DragLint.Plugin.SaveNotifier.UnregisterAllSaveNotifiers</para>
+      /// <para>Calls: DragLint.Plugin.About.UnregisterDragLintAbout, DragLint.Plugin.DockForm.UnregisterDragLintDock, DragLint.Plugin.EditorLocalMenu.UnregisterDragLintEditorLocalMenu, DragLint.Plugin.EditViewNotifier.UnregisterDragLintEditViewNotifier, DragLint.Plugin.FanOut.ShutdownFanOut, DragLint.Plugin.OpenSourceServer.StopOpenSourceServer, DragLint.Plugin.Options.UnregisterDragLintOptions, DragLint.Plugin.ProjectMenu.UnregisterProjectMenu, DragLint.Plugin.ProjectNotifier.UnregisterProjectNotifier, DragLint.Plugin.SaveNotifier.UnregisterAllSaveNotifiers</para>
       /// <para>Catches: Exception (empty)</para>
       /// <seealso cref="DragLint.Plugin.About.UnregisterDragLintAbout"/>
       /// <seealso cref="DragLint.Plugin.DockForm.UnregisterDragLintDock"/>
+      /// <seealso cref="DragLint.Plugin.EditorLocalMenu.UnregisterDragLintEditorLocalMenu"/>
       /// <seealso cref="DragLint.Plugin.EditViewNotifier.UnregisterDragLintEditViewNotifier"/>
       /// <seealso cref="DragLint.Plugin.FanOut.ShutdownFanOut"/>
-      /// <seealso cref="DragLint.Plugin.OpenSourceServer.StopOpenSourceServer"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure Destroyed;
@@ -56,13 +56,13 @@ type
 
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Calls: DragLint.Plugin.About.RegisterDragLintAbout, DragLint.Plugin.DbResolver.PublishLibraryDefaults, DragLint.Plugin.DockForm.RegisterDragLintDockable, DragLint.Plugin.Editor.RegisterDragLintMenu, DragLint.Plugin.GraphWindow.RegisterDragLintGraphDockable, DragLint.Plugin.OpenSourceServer.StartOpenSourceServer, DragLint.Plugin.Options.RegisterDragLintOptions, DragLint.Plugin.ProjectMenu.RegisterProjectMenu, DragLint.Plugin.Settings.MigrateGhostTextDefault, RegisterPackageWizard</para>
+/// <para>Calls: DragLint.Plugin.About.RegisterDragLintAbout, DragLint.Plugin.ConvertSelectionEditor.RegisterConvertSelectionEditor, DragLint.Plugin.DbResolver.PublishLibraryDefaults, DragLint.Plugin.DockForm.RegisterDragLintDockable, DragLint.Plugin.Editor.RegisterDragLintMenu, DragLint.Plugin.GraphWindow.RegisterDragLintGraphDockable, DragLint.Plugin.OpenSourceServer.StartOpenSourceServer, DragLint.Plugin.Options.RegisterDragLintOptions, DragLint.Plugin.ProjectMenu.RegisterProjectMenu, DragLint.Plugin.Settings.MigrateGhostTextDefault, RegisterPackageWizard</para>
 /// <para>Catches: Exception (empty)</para>
 /// <seealso cref="DragLint.Plugin.About.RegisterDragLintAbout"/>
+/// <seealso cref="DragLint.Plugin.ConvertSelectionEditor.RegisterConvertSelectionEditor"/>
 /// <seealso cref="DragLint.Plugin.DbResolver.PublishLibraryDefaults"/>
 /// <seealso cref="DragLint.Plugin.DockForm.RegisterDragLintDockable"/>
 /// <seealso cref="DragLint.Plugin.Editor.RegisterDragLintMenu"/>
-/// <seealso cref="DragLint.Plugin.GraphWindow.RegisterDragLintGraphDockable"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure Register;
@@ -76,6 +76,7 @@ uses
   , DragLint.Plugin.Options
   , DragLint.Plugin.ProjectMenu
   , DragLint.Plugin.EditViewNotifier
+  , DragLint.Plugin.EditorLocalMenu
   , DragLint.Plugin.ProjectNotifier
   , DragLint.Plugin.SaveNotifier
   , DragLint.Plugin.OpenSourceServer
@@ -115,6 +116,7 @@ begin
   try ShutdownFanOut; except end;
   try UnregisterAllSaveNotifiers; except end;
   try UnregisterDragLintEditViewNotifier; except end;
+  UnregisterDragLintEditorLocalMenu;  { never raises: it catches and logs its own IDE-services failure }
   try UnregisterProjectNotifier; except end;
   try StopOpenSourceServer; except end;
   try UnregisterDragLintDock; except end;

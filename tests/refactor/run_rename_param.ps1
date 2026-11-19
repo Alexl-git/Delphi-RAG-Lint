@@ -12,7 +12,7 @@ function Assert($n,$c){ if($c){Write-Host "PASS  $n"}else{Write-Host "FAIL  $n" 
 # asserts on the rename arrows, not the exact col). Find the col with a quick scan:
 $line5 = (Get-Content $src)[4]
 $col = $line5.IndexOf('Value') + 1   # 1-based
-$dry = (& $exe rename --kind param --file $src --line 5 --col $col --to pValue 2>$null) -join "`n"
+$dry = (& { $ErrorActionPreference = 'Continue'; & $exe rename --kind param --file $src --line 5 --col $col --to pValue 2>$null }) -join "`n"
 Assert "param dry-run renames Value->pValue" ($dry -match 'Value -> pValue')
 Assert "param dry-run hits multiple sites" (([regex]::Matches($dry,'Value -> pValue')).Count -ge 3)
 
@@ -23,14 +23,14 @@ New-Item -ItemType Directory -Path $tmp | Out-Null
 Copy-Item $src (Join-Path $tmp "Param.pas")
 $t = Join-Path $tmp "Param.pas"
 $c2 = (Get-Content $t)[4]; $col2 = $c2.IndexOf('Value') + 1
-$bare = & $exe rename --kind param --file $t --line 5 --col $col2 --to pValue --apply --no-backup 2>&1 | Out-String
+$bare = & { $ErrorActionPreference = 'Continue'; & $exe rename --kind param --file $t --line 5 --col $col2 --to pValue --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-String
 Assert "apply without a project refuses [no-project]" (($LASTEXITCODE -eq 2) -and ($bare -match 'refused \[no-project\]'))
 Assert "... and writes nothing" ((Get-Content $t -Raw) -match 'procedure Go\(Value: Integer\)')
 # the compile gate needs a project that builds
 $proj = Join-Path $tmp 'Prm.dproj'
 [IO.File]::WriteAllText($proj, [IO.File]::ReadAllText((Join-Path $repo 'tests\fixtures\refactor\redcast\RedCast.dproj')).Replace('RedCast', 'Prm'))
 [IO.File]::WriteAllText((Join-Path $tmp 'Prm.dpr'), "program Prm;`r`n{`$APPTYPE CONSOLE}`r`nuses Param in 'Param.pas';`r`nbegin`r`n  Go(1);`r`nend.`r`n")
-& $exe rename --kind param --file $t --line 5 --col $col2 --to pValue --project $proj --library-db none --apply --no-backup 2>&1 | Out-String | Write-Host
+& { $ErrorActionPreference = 'Continue'; & $exe rename --kind param --file $t --line 5 --col $col2 --to pValue --project $proj --library-db none --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-String | Write-Host
 $after = Get-Content $t -Raw
 Assert "apply renamed the param decl"  ($after -match 'procedure Go\(pValue: Integer\)')
 Assert "apply renamed body uses"        ($after -match 'Writeln\(pValue\)')

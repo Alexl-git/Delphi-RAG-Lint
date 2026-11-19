@@ -32,9 +32,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_link_class_scope_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 $script:fail = $false
@@ -171,24 +174,24 @@ W 'q_vcl.rules'     "#convert Vcl.StdCtrls.TLabel -> LibSolo.TSolo`n#link Wrap <
 W 'nest.rules'      "#convert Vcl.StdCtrls.TLabel -> TSolo`n#link NestFlag <- WordWrap`n"
 W 'q_vcl_bad.rules' "#convert Vcl.StdCtrls.TLabel -> LibSolo.TSolo`n#link Wrap <- FmxOnly`n"
 
-& $Exe index (P 'lib') --db (P 'lib.sqlite') 2>&1 | Out-Null
-& $Exe index --project (P 'app\P.dpr') --db (P 'app.sqlite') 2>&1 | Out-Null
-& $Exe index --project (P 'app2\Q.dpr') --db (P 'app2.sqlite') 2>&1 | Out-Null
-$c0 = (& $Exe sql --db (P 'lib.sqlite') --query "select qualified_name from symbols where kind = 'class' and name in ('TLabel','TSolo') order by id" 2>$null) -join "`n"
+& { $ErrorActionPreference = 'Continue'; & $Exe index (P 'lib') --db (P 'lib.sqlite') 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (P 'app\P.dpr') --db (P 'app.sqlite') 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (P 'app2\Q.dpr') --db (P 'app2.sqlite') 2>&1 | ForEach-Object { "$_" } } | Out-Null
+$c0 = (& { $ErrorActionPreference = 'Continue'; & $Exe sql --db (P 'lib.sqlite') --query "select qualified_name from symbols where kind = 'class' and name in ('TLabel','TSolo') order by id" 2>$null }) -join "`n"
 Check 'P0 premise: FMX.StdCtrls.TLabel and the NESTED TLabel / TSolo are indexed before the classes a guess must not replace' `
   ($c0 -match '(?s)FMX\.StdCtrls\.TLabel.*LibNest\.TNestHost\.TLabel.*LibNest\.TNestHost\.TSolo.*LibSolo\.TSolo.*Vcl\.StdCtrls\.TLabel') $c0
 
 function Apply([string]$Unit, [string]$Rules) {
-  $o = (& $Exe convert-apply --unit (P "app\$Unit.pas") --rules (P $Rules) --db (P 'app.sqlite') --db (P 'lib.sqlite') 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P "app\$Unit.pas") --rules (P $Rules) --db (P 'app.sqlite') --db (P 'lib.sqlite') 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 function ApplyJ([string]$Unit, [string]$Rules) {
-  $o = (& $Exe convert-apply --unit (P "app\$Unit.pas") --rules (P $Rules) --db (P 'app.sqlite') --db (P 'lib.sqlite') --format json 2>$null) -join "`n"
-  $r = [pscustomobject]@{ Code = $LASTEXITCODE; J = $null; Out = $o }; try { $r.J = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {}
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P "app\$Unit.pas") --rules (P $Rules) --db (P 'app.sqlite') --db (P 'lib.sqlite') --format json 2>$null }) -join "`n"
+  $r = [pscustomobject]@{ Code = $LASTEXITCODE; J = $null; Out = $o }; try { $r.J = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
   return $r
 }
 function Validate([string]$Rules, [string]$From, [string]$To) {
-  $o = (& $Exe convert-validate --rules (P $Rules) --from $From --to $To --db (P 'lib.sqlite') 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules (P $Rules) --from $From --to $To --db (P 'lib.sqlite') 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
 }
 $amb = 'FMX\.StdCtrls, Vcl\.StdCtrls'
@@ -220,7 +223,7 @@ Check 'Q4 convert-validate --from FMX.StdCtrls.TLabel: WordWrap rejected' (($r.C
 # A .dfm form is VCL (FMX streams .fmx), so an FMX.* candidate is excluded:
 # UNone (no .dproj, no uses declarer, nothing streamed) converts as VCL.
 $j = ApplyJ 'UNone' 'bare_vcl.rules'
-$fx = if ($null -ne $j.J) { @($j.J.qualify_fixes) } else { @() }
+$fx = @(if ($null -ne $j.J) { @($j.J.qualify_fixes) } else { @() })
 Check 'F1 no .dproj, ambiguous bare TLabel, a .dfm form: inferred Vcl.StdCtrls.TLabel from the form file, converts, exit 0' `
   (($j.Code -eq 0) -and ($fx.Count -eq 1) -and ($fx[0].outcome -eq 'inferred') -and ($fx[0].chosen -eq 'Vcl.StdCtrls.TLabel') -and
    ($fx[0].inference -eq 'the form file UNone.dfm (VCL)') -and ($fx[0].suggestions[1].candidate -eq 'FMX.StdCtrls.TLabel') -and
@@ -255,9 +258,9 @@ $want = ConvertTo-Json -InputObject @($wantFix) -Depth 6 -Compress
 Check 'G2b ... JSON qualify_fixes[] is EXACTLY one refused fix with both suggestions (replacement, candidate, why, alternative)' ($got -eq $want) ("got:  $got`nwant: $want")
 
 # ---- I: INFERENCE before refusing (owner ruling 2026-10-11) ------------------
-$r = (& $Exe convert-apply --unit (P 'app2\W.pas') --rules (P 'bare_vcl.rules') --db (P 'app2.sqlite') --db (P 'lib.sqlite') --format json 2>$null) -join "`n"
-$ij = $null; try { $ij = $r.Substring($r.IndexOf('{')) | ConvertFrom-Json } catch {}
-$fx = if ($null -ne $ij) { @($ij.qualify_fixes) } else { @() }
+$r = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit (P 'app2\W.pas') --rules (P 'bare_vcl.rules') --db (P 'app2.sqlite') --db (P 'lib.sqlite') --format json 2>$null }) -join "`n"
+$ij = $null; try { $ij = $r.Substring($r.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
+$fx = @(if ($null -ne $ij) { @($ij.qualify_fixes) } else { @() })
 Check 'I1 (a) project framework: Q.dproj says VCL -- the bare TLabel converts as Vcl.StdCtrls.TLabel (WordWrap validates), exit 0' `
   (($null -ne $ij) -and $ij.ok -and ($fx.Count -eq 1) -and ($fx[0].outcome -eq 'inferred') -and ($fx[0].chosen -eq 'Vcl.StdCtrls.TLabel') -and
    ($fx[0].inference -eq 'the project framework VCL (Q.dproj)') -and ($fx[0].suggestions[0].replacement -eq '#convert Vcl.StdCtrls.TLabel -> TSolo') -and
@@ -266,7 +269,7 @@ $want = '#convert TLabel resolved to Vcl.StdCtrls.TLabel (line 1): inferred from
 Check 'I2 ... a WARNING names the inference and the line to paste; items[] kind convert-class-inferred' `
   (($null -ne $ij) -and (@($ij.warnings) -contains $want) -and (@($ij.items | Where-Object { $_.kind -eq 'convert-class-inferred' -and $_.text -eq $want -and $_.rule_line -eq 1 }).Count -eq 1)) $r
 $j = ApplyJ 'UTwinP' 'twin.rules'
-$fx = if ($null -ne $j.J) { @($j.J.qualify_fixes) } else { @() }
+$fx = @(if ($null -ne $j.J) { @($j.J.qualify_fixes) } else { @() })
 Check 'I3 (b) .dfm evidence: Twin1 streams AOnly, which only Vcl.TwinA.TTwin declares -- inferred, converts, exit 0' `
   (($j.Code -eq 0) -and ($fx.Count -eq 1) -and ($fx[0].outcome -eq 'inferred') -and ($fx[0].chosen -eq 'Vcl.TwinA.TTwin') -and
    ($fx[0].inference -eq '.dfm properties AOnly') -and ($fx[0].suggestions[1].candidate -eq 'Vcl.TwinB.TTwin') -and
@@ -278,8 +281,8 @@ Check 'I4 POSITIVE CONTROL: a qualified #convert -- no inference warning, no ref
 $j = ApplyJ 'UVcl' 'bare_vcl.rules'
 Check 'I5 POSITIVE CONTROL: a bare #convert the unit''s uses settle -- no inference, qualify_fixes []' `
   (($j.Code -eq 0) -and ($null -ne $j.J) -and (@($j.J.qualify_fixes).Count -eq 0)) $j.Out
-$info = (& $Exe info --json 2>$null) -join "`n"
-$inj = $null; try { $inj = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json } catch {}
+$info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json 2>$null }) -join "`n"
+$inj = $null; try { $inj = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
 Check 'K info --json: capabilities.convert_qualify_fix is true' (($null -ne $inj) -and ($inj.capabilities.convert_qualify_fix -eq $true)) ''
 $r = Validate 'bare_vcl.rules' 'TLabel' 'TSolo'
 Check 'G3 convert-validate --from TLabel (no unit, bare book): refuses, exit 1, both candidates named, asks to qualify; never OK' `
@@ -291,7 +294,7 @@ $r = Validate 'q_vcl_bad.rules' 'TLabel' 'TSolo'
 Check 'G4b ... and it is a REAL check, not a parse-only pass: the FMX-only FmxOnly is rejected under the same --from TLabel' `
   (($r.Code -eq 1) -and ($r.Out -match '(?m)^line 2: .*FmxOnly')) $r.Out
 W 'blk.dfm' "object Label1: TLabel`n  WordWrap = True`nend`n"
-$o = (& $Exe convert-reemit --from-block (P 'blk.dfm') --rules (P 'bare_vcl.rules') --from TLabel --to TSolo --db (P 'lib.sqlite') 2>&1) -join "`n"
+$o = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-reemit --from-block (P 'blk.dfm') --rules (P 'bare_vcl.rules') --from TLabel --to TSolo --db (P 'lib.sqlite') 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'G5 convert-reemit --from TLabel (bare, ambiguous): refuses, exit 1, candidates named' `
   (($LASTEXITCODE -eq 1) -and ($o -match ('(?m)^ERROR: --from TLabel is ambiguous.*' + $amb))) $o
 

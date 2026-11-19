@@ -53,7 +53,9 @@ type
   /// <remarks>
   /// Reusable across many files of the same store: the stem-to-file map and the
   /// symbol-name-to-defining-units cache are built once and shared. Only project units that
-  /// are in the index are audited (never RTL / library uses). Not thread-safe; the store must
+  /// are in the index are audited (never RTL / library uses). A reference credits a unit only through
+  /// a symbol the unit EXPORTS (top-level interface name, enum value), the same notion the rule
+  /// unused-unit-in-uses uses; a same-named class member elsewhere credits nothing. Not thread-safe; the store must
   /// outlive the auditor, which does not own it.
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: DRagLint.CLI.DoUsesAudit (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.CollectUsesMovableToImplementation (DRagLint.Lint.ProjectRules.pas)</para>
@@ -65,24 +67,71 @@ type
     FStore       : ISymbolStore;
     FIndexedUnits: TDictionary<string, Int64>;
     FNameCache   : TDictionary<string, TArray<string>>;
-    /// <summary><!-- drag-lint:auto sum -->distinct indexed-unit stems that define a
+    /// <summary><!-- drag-lint:auto sum -->v1511 PROJ R5: the unit stems a reference
+    /// credits. A reference the resolver bound to a symbol credits ONLY that symbol's
+    /// unit (a local / parameter credits none). An unbound reference falls back to the
+    /// name match -- never through a local / parameter of another unit, which only shares
+    /// the name.</summary>
+    /// <param name="ARef"><!-- drag-lint:auto type -->const TReference</param>
+    /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: nil;
+    /// TArray&lt;string&gt;.Create(StemOf(FStore.GetFilePath(Sm.FileId)));
+    /// UnitsDefining(ARef.NameText).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.UsesAudit.TUsesAuditor.Audit (DRagLint.Lint.UsesAudit.pas)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Lint.UsesAudit.TUsesAuditor.StemOf, DRagLint.Lint.UsesAudit.TUsesAuditor.UnitsDefining</para>
+    /// <para>Reads: FStore</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
+    /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.StemOf"/>
+    /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.UnitsDefining"/>
+    /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.Audit"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    function UnitsCredited(const ARef: TReference): TArray<string>;
+    /// <summary><!-- drag-lint:auto sum -->distinct indexed-unit stems that EXPORT a
     /// symbol named AName (cached)</summary>
     /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
     /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: Us.ToArray.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Lint.UsesAudit.TUsesAuditor.Audit (DRagLint.Lint.UsesAudit.pas)</para>
-    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Lint.UsesAudit.TUsesAuditor.StemOf</para>
+    /// <para>Called from: DRagLint.Lint.UsesAudit.TUsesAuditor.UnitsCredited (DRagLint.Lint.UsesAudit.pas)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Lint.UsesAudit.TUsesAuditor.IsExportOfItsUnit, DRagLint.Lint.UsesAudit.TUsesAuditor.StemOf</para>
     /// <para>Reads: FNameCache, FStore</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+    /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.IsExportOfItsUnit"/>
     /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.StemOf"/>
     /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.Audit"/>
-    /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.Create"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    function UnitsCredited(const ARef: TReference): TArray<string>;
     function UnitsDefining(const AName: string): TArray<string>;
+    /// <summary><!-- drag-lint:auto sum -->1.52 USESAUD: does a unit EXPORT this symbol?
+    /// Same notion as the rule unused-unit-in-uses: a top-level interface declaration (or
+    /// a top-level declaration of an include, which has no parent), or an enum value of
+    /// one. A class / record MEMBER, a local, a parameter and an implementation-section
+    /// helper are not exports -- a unit that merely declares a field `Format` must not
+    /// stay alive for every unbound `Format(...)` call
+    /// (docs\INBOX-uses-audit-undercount.md: 5 unused reported where the rule reports
+    /// 186).</summary>
+    /// <param name="ASym"><!-- drag-lint:auto type -->const TSymbol</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: (Par.ParentId &lt;= 0) or
+    /// ((Gra.Id = Par.ParentId) and (Gra.Kind = skUnit) and SameText(Par.Section,
+    /// 'interface')); False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.UsesAudit.TUsesAuditor.UnitsDefining (DRagLint.Lint.UsesAudit.pas)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, SameText</para>
+    /// <para>Complexity: 11 (cyclomatic, outer body), 16 lines (full implementation)</para>
+    /// <para>Reads: FStore</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
+    /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.Audit"/>
+    /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.Create"/>
+    /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.Destroy"/>
+    /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.StemOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    function IsExportOfItsUnit(const ASym: TSymbol): Boolean;
   public
     /// <summary>Builds the stem-to-file map from the store.</summary>
     /// <param name="AStore">An open store; must not be nil.</param>
@@ -106,9 +155,9 @@ type
     /// <para>Directives: override</para>
     /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.Audit"/>
     /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.Create"/>
+    /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.IsExportOfItsUnit"/>
     /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.StemOf"/>
     /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.TryFindFile"/>
-    /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.UnitsDefining"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     destructor Destroy; override;
@@ -117,14 +166,14 @@ type
     /// <returns>The stem, '' for an empty path.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Lint.UsesAudit.TUsesAuditor.Audit (DRagLint.Lint.UsesAudit.pas), DRagLint.Lint.UsesAudit.TUsesAuditor.Create (DRagLint.Lint.UsesAudit.pas), DRagLint.Lint.UsesAudit.TUsesAuditor.TryFindFile (DRagLint.Lint.UsesAudit.pas), DRagLint.Lint.UsesAudit.TUsesAuditor.UnitsDefining (DRagLint.Lint.UsesAudit.pas)</para>
+    /// <para>Called from: DRagLint.Lint.UsesAudit.TUsesAuditor.Audit (DRagLint.Lint.UsesAudit.pas), DRagLint.Lint.UsesAudit.TUsesAuditor.Create (DRagLint.Lint.UsesAudit.pas), DRagLint.Lint.UsesAudit.TUsesAuditor.TryFindFile (DRagLint.Lint.UsesAudit.pas), DRagLint.Lint.UsesAudit.TUsesAuditor.UnitsCredited (DRagLint.Lint.UsesAudit.pas), DRagLint.Lint.UsesAudit.TUsesAuditor.UnitsDefining (DRagLint.Lint.UsesAudit.pas)</para>
     /// <para>Calls: ChangeFileExt, ExtractFileName, LowerCase, StringReplace</para>
     /// <para>Returns: LowerCase(ChangeFileExt(ExtractFileName(StringReplace(APath, '/', '\', [rfReplaceAll])), ''))</para>
     /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.Audit"/>
     /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.Create"/>
     /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.Destroy"/>
+    /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.IsExportOfItsUnit"/>
     /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.TryFindFile"/>
-    /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.UnitsDefining"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function StemOf(const APath: string): string;
@@ -142,7 +191,7 @@ type
     /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.Audit"/>
     /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.Create"/>
     /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.Destroy"/>
-    /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.UnitsDefining"/>
+    /// <seealso cref="DRagLint.Lint.UsesAudit.TUsesAuditor.IsExportOfItsUnit"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function TryFindFile(const APath: string; out AFileId: Int64): Boolean;
@@ -153,8 +202,8 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoUsesAudit (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.CollectUsesMovableToImplementation (DRagLint.Lint.ProjectRules.pas)</para>
-    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Core.Model.TUnitUse.FromInclude, DRagLint.Core.Model.TUnitUse.HostCol, DRagLint.Core.Model.TUnitUse.HostLine, DRagLint.Core.Model.TUnitUse.IncludeSuffix, DRagLint.Lint.UsesAudit.TUsesAuditor.StemOf, DRagLint.Lint.UsesAudit.TUsesAuditor.UnitsDefining, FileExists, LowerCase, SameText, Trim</para>
-    /// <para>Complexity: 13 (cyclomatic, outer body), 74 lines (full implementation)</para>
+    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Core.Model.TUnitUse.FromInclude, DRagLint.Core.Model.TUnitUse.HostCol, DRagLint.Core.Model.TUnitUse.HostLine, DRagLint.Core.Model.TUnitUse.IncludeSuffix, DRagLint.Lint.UsesAudit.TUsesAuditor.StemOf, DRagLint.Lint.UsesAudit.TUsesAuditor.UnitsCredited, FileExists, LowerCase, SameText, Trim</para>
+    /// <para>Complexity: 15 (cyclomatic, outer body), 74 lines (full implementation)</para>
     /// <para>Reads: FStore, FIndexedUnits</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile"/>
@@ -221,7 +270,30 @@ begin
   Result:= UnitsDefining(ARef.NameText);
 end;
 
-{ distinct indexed-unit stems that define a symbol named AName (cached) }
+{ 1.52 USESAUD: does a unit EXPORT this symbol? Same notion as the rule unused-unit-in-uses: a top-level
+  interface declaration (or a top-level declaration of an include, which has no parent), or an enum value of
+  one. A class / record MEMBER, a local, a parameter and an implementation-section helper are not exports --
+  a unit that merely declares a field `Format` must not stay alive for every unbound `Format(...)` call
+  (docs\INBOX-uses-audit-undercount.md: 5 unused reported where the rule reports 186). }
+function TUsesAuditor.IsExportOfItsUnit(const ASym: TSymbol): Boolean;
+var
+  Par: TSymbol;
+  Gra: TSymbol;
+begin
+  if (ASym.Kind = skLocalVar) or (ASym.Kind = skParam) then Exit(False);
+  if ASym.ParentId <= 0 then Exit(True);
+  Par:= FStore.GetSymbolById(ASym.ParentId);
+  if Par.Id <> ASym.ParentId then Exit(True);
+  if Par.Kind = skUnit then Exit(SameText(ASym.Section, 'interface'));
+  if (Par.Kind = skEnum) and (ASym.Kind = skEnumValue) then
+  begin
+    Gra:= FStore.GetSymbolById(Par.ParentId);
+    Exit((Par.ParentId <= 0) or ((Gra.Id = Par.ParentId) and (Gra.Kind = skUnit) and SameText(Par.Section, 'interface')));
+  end;
+  Result:= False;
+end;
+
+{ distinct indexed-unit stems that EXPORT a symbol named AName (cached) }
 
 function TUsesAuditor.UnitsDefining(const AName: string): TArray<string>;
 var
@@ -234,7 +306,7 @@ begin
   try
     for Sm in FStore.FindSymbolsByExactName(AName) do
     begin
-      if (Sm.Kind = skLocalVar) or (Sm.Kind = skParam) then Continue;
+      if not IsExportOfItsUnit(Sm) then Continue;
       St:= StemOf(FStore.GetFilePath(Sm.FileId));
       if (St <> '') and not Us.Contains(St) then Us.Add(St);
     end;

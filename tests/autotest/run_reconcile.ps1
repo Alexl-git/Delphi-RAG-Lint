@@ -1,7 +1,7 @@
 try {
 $Exe = . "$PSScriptRoot\_manifest_common.ps1"
 $fx = "$PSScriptRoot\..\fixtures\reconcile"
-$rep = & $Exe reconcile-project "$fx\App.dpr" 2>&1 | Out-String
+$rep = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$fx\App.dpr" 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'reconcile exits 0'        ($LASTEXITCODE -eq 0)
 Check 'missing uHelper'          ($rep -match 'MISSING[\s\S]*uHelper')
 Check 'missing uFoo_OLD'         ($rep -match 'MISSING[\s\S]*uFoo_OLD_20230828')
@@ -19,7 +19,7 @@ Check 'stale uData_20240101'     ($rep -match 'STALE[\s\S]*uData_20240101')
 $work = "$env:TEMP\drag-lint-reconcile-$PID"
 if (Test-Path $work) { Remove-Item -Recurse -Force $work }
 Copy-Item -Recurse $fx $work
-& $Exe reconcile-project "$work\App.dpr" --apply 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$work\App.dpr" --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'apply exits 0'         ($LASTEXITCODE -eq 0)
 Check 'dpr backup made'       (Test-Path $work\App.dpr.bak)
 Check 'dproj backup made'     (Test-Path $work\App.dproj.bak)
@@ -28,7 +28,7 @@ Check 'dpr now has uHelper'   ($dpr -match 'uHelper\s+in\s+''uHelper\.pas''')
 Check 'dpr now has uFoo_OLD'  ($dpr -match 'uFoo_OLD_20230828\s+in\s+''uFoo_OLD_20230828\.pas''')
 $dproj = Get-Content "$work\App.dproj" -Raw
 Check 'dproj has uHelper ref' ($dproj -match 'DCCReference Include="uHelper\.pas"')
-$rep2 = & $Exe reconcile-project "$work\App.dpr" 2>&1 | Out-String
+$rep2 = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$work\App.dpr" 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'reapply 0 missing'     ($rep2 -match 'MISSING \(0\)')
 Check 'uOrphan untouched'     ($rep2 -match 'EXTRA[\s\S]*uOrphan')
 
@@ -36,10 +36,10 @@ Check 'uOrphan untouched'     ($rep2 -match 'EXTRA[\s\S]*uOrphan')
 # Capture STDOUT ONLY (2>$null): the engine emits a "(loaded defaults ...)"
 # advisory to stderr that can interleave mid-JSON under 2>&1 and break parsing.
 # Real consumers read stdout, which is clean JSON.
-$j = & $Exe reconcile-project "$fx\App.dpr" --json 2>$null | Out-String
+$j = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$fx\App.dpr" --json 2>$null } | Out-String
 Check 'json has missing array' ($j -match '"missing"\s*:\s*\[')
 Check 'json has stale array'   ($j -match '"stale"\s*:\s*\[')
-Check 'json parses'            ([bool]($j | ConvertFrom-Json))
+Check 'json parses'            ([bool]($j | ConvertFrom-Json | ForEach-Object { $_ }))
 
 # FIX 1 regression: EditDpr must not corrupt .dpr when a uses entry carries a
 # brace comment containing ';' (e.g. uMain in 'uMain.pas' {Form: TBar; note}).
@@ -59,7 +59,7 @@ Copy-Item "$fx\uMain.pas"             $work2
 Copy-Item "$fx\uHelper.pas"           $work2
 Copy-Item "$fx\uFoo_OLD_20230828.pas" $work2
 Copy-Item "$fx\uData_20240101.pas"    $work2
-& $Exe reconcile-project "$work2\BraceApp.dpr" --apply 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$work2\BraceApp.dpr" --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'brace-comment apply exits 0'   ($LASTEXITCODE -eq 0)
 $dprAfter = Get-Content "$work2\BraceApp.dpr" -Raw
 # The brace comment must survive intact.
@@ -104,7 +104,7 @@ if (Test-Path $py) {
             "print(1 if n > 0 else 0)`n"
   [System.IO.File]::WriteAllText("$cx\hasfile.py", $pyBody, $enc)
   function Coh-HasFile([string]$db, [string]$needle) {
-    $r = (& $py "$cx\hasfile.py" $db $needle 2>$null | Out-String).Trim()
+    $r = (& { $ErrorActionPreference = 'Continue'; & $py "$cx\hasfile.py" $db $needle 2>$null } | Out-String).Trim()
     return ($r -eq '1')
   }
 
@@ -112,8 +112,8 @@ if (Test-Path $py) {
   # each see the incoherent baseline (the text run heals its own DB).
   $cdb  = "$cx\cohere.sqlite"
   $cdb2 = "$cx\cohere2.sqlite"
-  & $Exe index "$cx\uMain.pas" --db $cdb  2>$null | Out-Null
-  & $Exe index "$cx\uMain.pas" --db $cdb2 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index "$cx\uMain.pas" --db $cdb  2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index "$cx\uMain.pas" --db $cdb2 2>$null } | Out-Null
 
   # Baseline: uForm.pas / uForm.dfm are NOT in the seeded DB yet.
   Check 'coh: uForm.pas absent pre-reconcile' (-not (Coh-HasFile $cdb 'uForm.pas'))
@@ -121,7 +121,7 @@ if (Test-Path $py) {
   Check 'coh: uMain.pas present pre-reconcile' (Coh-HasFile $cdb 'uMain.pas')
 
   # Text run: reconcile with --db, NO --apply. stderr -> $null (advisory noise).
-  $ctext = & $Exe reconcile-project "$cx\App.dpr" --db $cdb 2>$null | Out-String
+  $ctext = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$cx\App.dpr" --db $cdb 2>$null } | Out-String
   Check 'coh: reconcile --db exits 0'         ($LASTEXITCODE -eq 0)
   Check 'coh: coherence line incoherent>=1'   ($ctext -match 'coherence:.*incoherent=[1-9]')
 
@@ -135,9 +135,9 @@ if (Test-Path $py) {
   Check 'coh: no App.dpr.bak (no --apply)'    (-not (Test-Path "$cx\App.dpr.bak"))
 
   # JSON run (fresh DB): one valid JSON object with coherence.incoherent >= 1.
-  $cjson = & $Exe reconcile-project "$cx\App.dpr" --db $cdb2 --json 2>$null | Out-String
+  $cjson = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$cx\App.dpr" --db $cdb2 --json 2>$null } | Out-String
   $cobj = $null
-  try { $cobj = $cjson | ConvertFrom-Json } catch { $cobj = $null }
+  try { $cobj = $cjson | ConvertFrom-Json | ForEach-Object { $_ } } catch { $cobj = $null }
   Check 'coh: --json parses as one object'    ($null -ne $cobj)
   Check 'coh: json coherence.incoherent>=1'   ($null -ne $cobj -and $null -ne $cobj.coherence -and [int]$cobj.coherence.incoherent -ge 1)
   # JSON stays a superset of the original report (missing/stale still present).
@@ -157,7 +157,7 @@ if (Test-Path $noDbCwd) { Remove-Item -Recurse -Force $noDbCwd }
 New-Item -ItemType Directory -Force $noDbCwd | Out-Null
 Push-Location $noDbCwd
 try {
-  $repNoDb = & $Exe reconcile-project "$fx\App.dpr" 2>$null | Out-String
+  $repNoDb = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$fx\App.dpr" 2>$null } | Out-String
   Check 'no-db: exits 0'                   ($LASTEXITCODE -eq 0)
   Check 'no-db: no coherence line'         ($repNoDb -notmatch 'coherence:')
   Check 'no-db: no stray drag-lint.sqlite' (-not (Test-Path '.\drag-lint.sqlite'))

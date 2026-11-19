@@ -5,7 +5,10 @@
   Run under pwsh 7:  pwsh -File tests\autotest\run_battery_pwsh7_guard.ps1
 #>
 [CmdletBinding()]
-param([string]$Repo = (Resolve-Path "$PSScriptRoot\..\..").Path)
+param([string]$Repo = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Repo) { $Repo = (Resolve-Path "$PSScriptRoot\..\..").Path }
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -17,11 +20,11 @@ Write-Host '== battery pwsh7 guard ==' -ForegroundColor Cyan
 $bat = Join-Path $Repo 'tests\run_battery.ps1'
 $ps5 = (Get-Command powershell.exe -ErrorAction SilentlyContinue)
 if ($ps5) {
-  $o = (& $ps5.Source -NoProfile -File $bat -List 2>&1 | Out-String); $c = $LASTEXITCODE
+  $o = (& { $ErrorActionPreference = 'Continue'; & $ps5.Source -NoProfile -File $bat -List 2>&1 | ForEach-Object { "$_" } } | Out-String); $c = $LASTEXITCODE
   Check 'PS5: battery refuses, exit 2, names pwsh 7' (($c -eq 2) -and ($o -match 'pwsh 7')) "(exit $c)"
   Check 'PS5: refusal is one line' (@($o -split "\r?\n" | Where-Object { $_.Trim() }).Count -eq 1)
 } else { Write-Host '  [SKIP] powershell.exe (PS5) not present' -ForegroundColor Yellow }
-$o7 = (& pwsh -NoProfile -File $bat -List 2>&1 | Out-String); $c7 = $LASTEXITCODE
+$o7 = (& { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $bat -List 2>&1 | ForEach-Object { "$_" } } | Out-String); $c7 = $LASTEXITCODE
 Check 'CONTROL pwsh 7: -List enumerates and exits 0' (($c7 -eq 0) -and ($o7 -match 'run_.*\.ps1')) "(exit $c7)"
 foreach ($d in 'tests\README.md', 'docs\AI-USAGE.md') {
   Check "doc states pwsh 7: $d" ([IO.File]::ReadAllText((Join-Path $Repo $d)) -match 'run under \*\*pwsh 7\*\*|Guards run under pwsh 7')

@@ -1,0 +1,5 @@
+# v152 NOISE2 / YADF NOTE-8: a list control constructed in the same routine (Cmb := TComboBox.Create) is not on screen
+# yet, so Items.Add in a loop repaints nothing. Positive controls: a declared-but-not-created local (14) and a form field (15).
+!missing-begin-update 13
+missing-begin-update 14
+missing-begin-update 15

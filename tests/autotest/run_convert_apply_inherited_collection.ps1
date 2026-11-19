@@ -23,9 +23,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_convert_apply_inherited_collection_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 $script:fail = $false
@@ -47,11 +50,11 @@ foreach ($f in 'CvBase.pas', 'CvBase.dfm', 'CvChild.pas', 'CvChild.dfm') { $orig
 function Restore { foreach ($k in $orig.Keys) { [IO.File]::WriteAllBytes((P $k), $orig[$k]) } }
 
 $db = P 'fx.sqlite'
-function Reindex { & $Exe index $WorkDir --db $db 2>&1 | Out-Null }
+function Reindex { & { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null }
 function Apply([string[]]$Extra) {
-  $o = (& $Exe @(@('convert-apply', '--unit', (P 'CvChild.pas'), '--rules', (P 'child.rules'), '--db', $db) + $Extra) 2>&1) -join "`n"
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @(@('convert-apply', '--unit', (P 'CvChild.pas'), '--rules', (P 'child.rules'), '--db', $db) + $Extra) 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $j = $null
-  if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {} }
+  if ($Extra -contains 'json') { try { $j = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ } } catch {} }
   return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o; J = $j }
 }
 Reindex
@@ -59,7 +62,7 @@ Check 'V the fixture index was built' (Test-Path $db)
 
 # ---- ancestor converted: dry run ------------------------------------------------
 $r = Apply @('--format', 'json')
-$inh = if ($r.J) { @($r.J.inherited) } else { @() }
+$inh = @(if ($r.J) { @($r.J.inherited) } else { @() })
 Check 'Q1 dry run: exit 0, ok' (($r.Code -eq 0) -and ($null -ne $r.J) -and $r.J.ok) $r.Out
 Check 'Q2 ... Q and F retyped (ancestor CvBase, converted)' `
   ((@($inh | Where-Object { $_.ancestor_state -eq 'converted' -and $_.action -eq 'retyped' -and $_.ancestor_unit -eq 'CvBase' }).Count -eq 2) -and
@@ -87,7 +90,7 @@ Restore
 [IO.File]::WriteAllText((P 'CvBase.dfm'), (Text 'CvBase.dfm').Replace('TNewQuery', 'TOldQuery').Replace('TNewField', 'TOldField'), [Text.Encoding]::ASCII)
 Reindex
 $r = Apply @('--format', 'json')
-$inh = if ($r.J) { @($r.J.inherited) } else { @() }
+$inh = @(if ($r.J) { @($r.J.inherited) } else { @() })
 Check 'C1 CONTROL unconverted ancestor: Q and F skipped, ancestor_state unconverted' `
   ((@($inh | Where-Object { $_.ancestor_state -eq 'unconverted' -and $_.action -eq 'skipped' }).Count -eq 2) -and
    (@($inh | Where-Object { $_.action -eq 'retyped' }).Count -eq 0)) "$($r.Out)"

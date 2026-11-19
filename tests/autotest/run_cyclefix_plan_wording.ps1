@@ -13,9 +13,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }),
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-cycle-wording-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(if (Test-Path -LiteralPath "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe") { "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" } else { "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }) }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -33,7 +36,7 @@ function Get-Plan([string]$Db, [string]$Tag) {
   $o = Join-Path $WorkDir "plan-$Tag.out"; $e = Join-Path $WorkDir "plan-$Tag.err"
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
     -ArgumentList @('cycles', '--db', ('"' + $Db + '"'), '--edges', '--causes', '--plan', '--format', 'text', '--library-db', 'none') `
-    -RedirectStandardOutput $o -RedirectStandardError $e
+    -RedirectStandardOutput $o -RedirectStandardError $e; $null = $p.Handle
   return @{ Exit = $p.ExitCode; Out = [IO.File]::ReadAllText($o); Err = [IO.File]::ReadAllText($e); File = $o }
 }
 
@@ -45,7 +48,7 @@ $root = Join-Path $WorkDir 'circular-demo'
 New-Item -ItemType Directory -Force $root | Out-Null
 Get-ChildItem (Join-Path $Repo 'circular-demo') -File | ForEach-Object { Copy-Item $_.FullName (Join-Path $root $_.Name) -Force }
 $db = Join-Path $WorkDir 'demo.sqlite'
-& $Exe index --project (Join-Path $root 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir 'index1.log')
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir 'index1.log') }
 Check 'demo indexed' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
 Write-Host '== (c) trailer on stderr' -ForegroundColor Cyan
@@ -65,12 +68,12 @@ Check 'b1 edge line names the routine and the interface unit' ($flat.Contains($w
 
 Write-Host '== (a) companion type after Part A' -ForegroundColor Cyan
 $before = (Get-ChildItem $root -Filter *.pas | Sort-Object Name | ForEach-Object { (Get-FileHash $_.FullName).Hash }) -join ','
-$fo = & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $p0.File -Cycle 1 -Root $root 2>&1 | Out-String
+$fo = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $p0.File -Cycle 1 -Root $root 2>&1 | ForEach-Object { "$_" } } | Out-String
 $rcA = $LASTEXITCODE
 $after = (Get-ChildItem $root -Filter *.pas | Sort-Object Name | ForEach-Object { (Get-FileHash $_.FullName).Hash }) -join ','
 Check 'Part A of cycle 1 applied (exit 0)' ($rcA -eq 0) ('exit=' + $rcA + ' ' + ($fo.Trim() -replace "`r?`n", ' | '))
 Check 'Part A changed the demo sources' ($before -ne $after)
-& $Exe index --project (Join-Path $root 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir 'index2.log')
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $root 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir 'index2.log') }
 Check 'demo re-indexed' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 $p1 = Get-Plan $db '1'
 $lines = @($p1.Out -split "`r?`n")

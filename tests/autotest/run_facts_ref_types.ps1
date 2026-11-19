@@ -18,9 +18,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-facts-types-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -110,7 +113,7 @@ end.
 '@
 
 function Rows([string]$Sql) {
-  $j = (& $Exe sql --query $Sql --db $db --json) | Out-String | ConvertFrom-Json
+  $j = (& $Exe sql --query $Sql --db $db --json) | Out-String | ConvertFrom-Json | ForEach-Object { $_ }
   return , @($j.rows)
 }
 function Scalar([string]$Sql) { return (Rows $Sql)[0][0] }
@@ -130,7 +133,7 @@ function LineOf([string]$Text) {
 try {
   [IO.File]::WriteAllText($pas, ($unitText -replace "`r?`n", "`r`n"))
   [IO.File]::WriteAllText($pasB, ($unitB -replace "`r?`n", "`r`n"))
-  & $Exe index $src --db $db *> (Join-Path $WorkDir 'index1.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db *> (Join-Path $WorkDir 'index1.log') }
   Check 'fixture indexes' ($LASTEXITCODE -eq 0)
 
   $count = 0
@@ -170,7 +173,7 @@ try {
   $pos = "${pas}:${lResult}:${col}"
   $t = (& $Exe typeat $pos --db $db) | Out-String
   Check 'typeat prints the stored static type' ($t -match 'StaticType:\s+TypeFx\.TThing \(via ctor\)') $t.Trim().Replace("`r`n", ' / ')
-  $j = (& $Exe typeat $pos --format json --db $db) | Out-String | ConvertFrom-Json
+  $j = (& $Exe typeat $pos --format json --db $db) | Out-String | ConvertFrom-Json | ForEach-Object { $_ }
   Check 'typeat --format json carries it' (($j.static_type -eq 'TypeFx.TThing') -and ($j.static_type_via -eq 'ctor')) "$($j.static_type) $($j.static_type_via)"
   Check 'typeat --format json keeps its old fields' ($j.resolved -eq 'TypeFx.TBase.Create') "$($j.resolved)"
 
@@ -182,7 +185,7 @@ try {
   $t2 = (& $Exe typeat $pos --db $db) | Out-String
   Check 'POSITIVE: no table -> the old path, no static type line' (($t2 -notmatch 'StaticType') -and ($t2 -match 'TBase\.Create')) $t2.Trim().Replace("`r`n", ' / ')
 
-  & $Exe index $src --db $db --resolve-only *> (Join-Path $WorkDir 'resolve.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db --resolve-only *> (Join-Path $WorkDir 'resolve.log') }
   Check 'resolve-only runs' ($LASTEXITCODE -eq 0)
   $back = Scalar 'SELECT COUNT(*) FROM ref_types'
   Check 'resolve-only recreates and refills the table' ($back -eq $count) "count=$back of $count"
@@ -192,7 +195,7 @@ try {
   [IO.File]::WriteAllText($pas, $edited)
   $editedB = ($unitB -replace "`r?`n", "`r`n") -replace 'TOther = class', 'TOtherGone = class'
   [IO.File]::WriteAllText($pasB, $editedB)
-  & $Exe index $src --db $db *> (Join-Path $WorkDir 'index2.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db *> (Join-Path $WorkDir 'index2.log') }
   Check 'incremental reindex runs' ($LASTEXITCODE -eq 0)
   Check 'an edited declaration re-types its refs' ((Fact 'Lib' 'write' $lLib) -eq 'TStrings|decl|0') (Fact 'Lib' 'write' $lLib)
   Check 'a removed type leaves no id in the row' ((Fact 'GOther' 'read' $lGOther) -eq 'TOther|decl|0') (Fact 'GOther' 'read' $lGOther)
@@ -207,16 +210,16 @@ try {
   [IO.File]::WriteAllText((Join-Path $libDir 'LibFx.pas'), "unit LibFx;`r`n`r`ninterface`r`n`r`ntype`r`n  TLibList = class`r`n  public`r`n    constructor Create;`r`n  end;`r`n`r`nimplementation`r`n`r`nconstructor TLibList.Create;`r`nbegin`r`nend;`r`n`r`nend.`r`n")
   [IO.File]::WriteAllText((Join-Path $appDir 'AppFx.pas'), "unit AppFx;`r`n`r`ninterface`r`n`r`nuses`r`n  LibFx;`r`n`r`nprocedure Go;`r`n`r`nimplementation`r`n`r`nprocedure Go;`r`nvar`r`n  L: TLibList;`r`nbegin`r`n  L:= TLibList.Create;`r`nend;`r`n`r`nend.`r`n")
   $libDb = Join-Path $WorkDir 'lib.sqlite'
-  & $Exe index $libDir --db $libDb *> (Join-Path $WorkDir 'lib.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $libDir --db $libDb *> (Join-Path $WorkDir 'lib.log') }
   $db = Join-Path $WorkDir 'app.sqlite'
-  & $Exe index $appDir --db $db --library-db $libDb *> (Join-Path $WorkDir 'app.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $appDir --db $db --library-db $libDb *> (Join-Path $WorkDir 'app.log') }
   Check 'app with a library store indexes' ($LASTEXITCODE -eq 0)
   Check 'via ctor: a library class by name, NULL id' ((Fact 'Create' 'member-access' 16) -eq 'TLibList|ctor|0') (Fact 'Create' 'member-access' 16)
 
   # Acceptance on the repository's own demo project.
   $demo = (Resolve-Path "$PSScriptRoot\..\..\circular-demo\CircularDemo.dproj").Path
   $db = Join-Path $WorkDir 'demo.sqlite'
-  & $Exe index --project $demo --db $db *> (Join-Path $WorkDir 'demo.log')
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $demo --db $db *> (Join-Path $WorkDir 'demo.log') }
   Check 'circular-demo indexes' ($LASTEXITCODE -eq 0)
   $demoRows = Scalar 'SELECT COUNT(*) FROM ref_types'
   Check 'circular-demo: ref_types has rows' ($demoRows -gt 0) "count=$demoRows"

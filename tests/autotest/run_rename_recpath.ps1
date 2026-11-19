@@ -15,11 +15,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-rename-recpath-$PID",
   [string]$RsVars  = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat',
   [switch]$KeepWorkDir
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false; $script:Passed = 0; $script:FailCount = 0
 function Check($n, $ok, $d = '') {
@@ -40,13 +43,13 @@ $script:N = 0
 function Build-Lab([string]$Root) {
   $bat = "$Root.bld.bat"
   [IO.File]::WriteAllText($bat, "@echo off`r`ncall `"$RsVars`"`r`ncd /D `"$Root`"`r`nmsbuild /t:Build /p:Config=Debug /p:Platform=Win64 /v:minimal RpRen.dproj`r`nexit /b %ERRORLEVEL%`r`n", $Ascii)
-  $p = Start-Process cmd.exe -ArgumentList "/c `"$bat`"" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$Root.bld.log" -RedirectStandardError "$Root.bld.err"
+  $p = Start-Process cmd.exe -ArgumentList "/c `"$bat`"" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$Root.bld.log" -RedirectStandardError "$Root.bld.err"; $null = $p.Handle
   return ($p.ExitCode -eq 0)
 }
 function Stdout-Of([string]$Root) {
   $x = Get-ChildItem $Root -Recurse -Filter RpRen.exe | Sort-Object LastWriteTime -Descending | Select-Object -First 1
   if (-not $x) { return '<no exe>' }
-  return (& $x.FullName 2>&1 | Out-String)
+  return (& { $ErrorActionPreference = 'Continue'; & $x.FullName 2>&1 | ForEach-Object { "$_" } } | Out-String)
 }
 function New-Lab([string]$Extra = '') {
   $script:N++
@@ -62,18 +65,18 @@ function New-Lab([string]$Extra = '') {
   }
   $db = "$root.sqlite"
   Push-Location $WorkDir
-  try { $null | & $Exe index --project (Join-Path $root 'RpRen.dproj') --db $db --library-db none *> "$db.log" } finally { Pop-Location }
+  try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project (Join-Path $root 'RpRen.dproj') --db $db --library-db none *> "$db.log" } } finally { Pop-Location }
   return @{ Root = $root; Dproj = (Join-Path $root 'RpRen.dproj'); Db = $db; Types = (Join-Path $root 'RpTypes.pas') }
 }
 function Plan($P, [string]$Q, [string]$To) {
   Push-Location $WorkDir
-  try { $o = ($null | & $Exe rename --kind symbol --name $Q --to $To --db $P.Db --library-db $script:Lib --plan --json 2>$null | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
-  $j = $null; try { $j = $o | ConvertFrom-Json } catch { }
+  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe rename --kind symbol --name $Q --to $To --db $P.Db --library-db $script:Lib --plan --json 2>$null } | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
+  $j = $null; try { $j = $o | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   return @{ Exit = $c; Json = $j; Out = $o; Kinds = @($j.refusals | ForEach-Object { $_.kind }); Edits = @($j.edits) }
 }
 function Apply($P, [string]$Q, [string]$To) {
   Push-Location $WorkDir
-  try { $o = ($null | & $Exe rename --kind symbol --name $Q --to $To --db $P.Db --library-db $script:Lib --project $P.Dproj --build-timeout 600 --apply --no-backup 2>&1 | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
+  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe rename --kind symbol --name $Q --to $To --db $P.Db --library-db $script:Lib --project $P.Dproj --build-timeout 600 --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
   return @{ Exit = $c; Out = $o }
 }
 function Text-Of([string]$Path) { return [IO.File]::ReadAllText($Path, $Ascii) }
@@ -83,7 +86,7 @@ $libDir = Join-Path $WorkDir 'libsrc'
 New-Item -ItemType Directory -Force $libDir | Out-Null
 Copy-Item "$Fx\libsrc\*.pas" $libDir
 $script:Lib = Join-Path $WorkDir 'lib.sqlite'
-Push-Location $WorkDir; try { $null | & $Exe index $libDir --db $script:Lib --library-db none *> "$script:Lib.log" } finally { Pop-Location }
+Push-Location $WorkDir; try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index $libDir --db $script:Lib --library-db none *> "$script:Lib.log" } } finally { Pop-Location }
 
 function New-RpLab {
   $root = Join-Path $WorkDir 'rp'
@@ -91,7 +94,7 @@ function New-RpLab {
   Copy-Item "$Fx\*.pas", "$Fx\*.dpr", "$Fx\*.dproj" $root
   $db = "$root.sqlite"
   Push-Location $WorkDir
-  try { $null | & $Exe index --project (Join-Path $root 'RpRen.dproj') --db $db --library-db $script:Lib *> "$db.log" } finally { Pop-Location }
+  try { $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe index --project (Join-Path $root 'RpRen.dproj') --db $db --library-db $script:Lib *> "$db.log" } } finally { Pop-Location }
   return @{ Root = $root; Dproj = (Join-Path $root 'RpRen.dproj'); Db = $db; Types = (Join-Path $root 'RpTypes.pas') }
 }
 $p = New-RpLab

@@ -18,13 +18,20 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe         = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe         = '',
   [string]$BaselineExe = '',
-  [string]$OffBaseline = "$PSScriptRoot\fixtures\lsp\c1-off-baseline.txt",
+  [string]$OffBaseline = '',
   [switch]$CaptureOffBaseline,
   [switch]$AllowChildExeSkip, # only for an OLD engine (pre lane S): one that ignores DRAGLINT_FULLRULES_CHILD_EXE SKIPs instead of FAILing
   [string]$WorkDir     = "$env:TEMP\drag-lint-lsp-fr-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
+if (-not $OffBaseline) { $OffBaseline = "$PSScriptRoot\fixtures\lsp\c1-off-baseline.txt" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -49,7 +56,7 @@ $LibSrc = Join-Path $WorkDir 'libsrc'; New-Item -ItemType Directory -Force $LibS
 [IO.File]::WriteAllText((Join-Path $LibSrc 'FxLib.pas'), "unit FxLib;`r`n`r`ninterface`r`n`r`nimplementation`r`n`r`nend.`r`n", [Text.Encoding]::ASCII)
 $LibDb = Join-Path $WorkDir 'library-Win64.sqlite'
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
-& $Exe index $LibSrc --db $LibDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $LibSrc --db $LibDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $idxCode = $LASTEXITCODE
 if (-not (Test-Path $LibDb)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host 'FATAL: index produced no library DB' -ForegroundColor Red; exit 2 }
 $env:DRAGLINT_CONTEXT_DEFAULTS = Join-Path $WorkDir 'context-defaults.json'
@@ -86,7 +93,7 @@ function RunLsp([string]$Engine, [string]$PasFile, [string[]]$Flags, [string]$Ta
   [IO.File]::WriteAllText($in, ($msgs -join ''), (New-Object Text.UTF8Encoding($false)))
   $a = @('lsp') + $Flags
   $p = Start-Process $Engine -ArgumentList $a -WorkingDirectory $WorkDir `
-         -RedirectStandardInput $in -RedirectStandardOutput $so -RedirectStandardError $se -NoNewWindow -Wait -PassThru
+         -RedirectStandardInput $in -RedirectStandardOutput $so -RedirectStandardError $se -NoNewWindow -Wait -PassThru; $null = $p.Handle
   $out = if (Test-Path $so) { [IO.File]::ReadAllText($so) } else { '' }
   $err = if (Test-Path $se) { [IO.File]::ReadAllText($se) } else { '' }
   $codes = @([regex]::Matches($out, '"code":"([a-z0-9\-]+)"') | ForEach-Object { $_.Groups[1].Value })
@@ -95,7 +102,7 @@ function RunLsp([string]$Engine, [string]$PasFile, [string[]]$Flags, [string]$Ta
 }
 
 Write-Host 'LSP --full-rules (opt-in, out-of-process, cost on stderr)' -ForegroundColor Cyan
-$cli = (& $Exe lint $DirtyF --json 2>&1) -join "`n"
+$cli = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $DirtyF --json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'CONTROL: `lint --json` reports missing-inherited-ctor on the fixture' ($cli -match '"missing-inherited-ctor"') ''
 
 $off = RunLsp $Exe $DirtyF @() 'off'
@@ -137,9 +144,9 @@ New-Item -ItemType Directory -Force $dbDir | Out-Null
 $UsesF = Join-Path $dbDir 'FxUses.pas'
 [IO.File]::WriteAllText($UsesF, (@('unit FxUses;','','interface','','implementation','','uses FxBase, NoSuchUnitAnywhere;','','end.') -join "`r`n") + "`r`n", [Text.Encoding]::ASCII)
 $dbFile = Join-Path $WorkDir 'fx.sqlite'
-$null = & $Exe index $dbDir --db $dbFile 2>&1
-$cliNoDb = (& $Exe lint $UsesF --json 2>&1) -join "`n"
-$cliDb   = (& $Exe lint $UsesF --db $dbFile --json 2>&1) -join "`n"
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe index $dbDir --db $dbFile 2>&1 | ForEach-Object { "$_" } }
+$cliNoDb = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $UsesF --json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
+$cliDb   = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $UsesF --db $dbFile --json 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'CONTROL: lint --json WITHOUT --db lacks used-unit-not-resolvable' ($cliNoDb -notmatch '"used-unit-not-resolvable"') ''
 Check 'CONTROL: lint --json WITH --db reports used-unit-not-resolvable' ($cliDb -match '"used-unit-not-resolvable"') ''
 $dbOn = RunLsp $Exe $UsesF @('--db', $dbFile, '--full-rules') 'dbon'
@@ -159,7 +166,7 @@ New-Item -ItemType Directory -Force $stubDir | Out-Null
 $stubExe = Join-Path $stubDir 'FullRulesChildStub.exe'
 $stubOk = $false
 if ($csc) {
-  $null = & $csc /nologo /out:$stubExe (Join-Path $PSScriptRoot 'fixtures\lsp\FullRulesChildStub.cs') 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $csc /nologo /out:$stubExe (Join-Path $PSScriptRoot 'fixtures\lsp\FullRulesChildStub.cs') 2>&1 | ForEach-Object { "$_" } }
   $stubOk = Test-Path $stubExe
 }
 # The wait budget is a CONSTANT in the engine (LINT_CHILD_TIMEOUT_MS in DRagLint.Core.LintBudget since C13, then LSP_FULL_RULES_REAP_MS to reap the
@@ -321,3 +328,4 @@ if ($CaptureOffBaseline) {
 } catch { Write-Host "FATAL: $_" -ForegroundColor Red; exit 2 }
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green; exit 0
+} finally { Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

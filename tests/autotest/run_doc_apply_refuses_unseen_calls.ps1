@@ -18,7 +18,10 @@
   Bytes are compared on the applied file. Run from a NEUTRAL CWD, pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$detail=''){ Write-Host ("[{0}] {1}{2}" -f (@('FAIL','PASS')[[int]$ok]),$n,$(if($detail){" -- $detail"}else{''})) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
 $Exe  = (Resolve-Path $Exe).Path
@@ -26,7 +29,7 @@ $root = Join-Path ([System.IO.Path]::GetTempPath()) ("dl-refuse-" + [Guid]::NewG
 $a = Join-Path $root 'a'; $b = Join-Path $root 'b'
 New-Item -ItemType Directory -Force -Path $a, $b | Out-Null
 function WriteAscii($path, $lines) { [IO.File]::WriteAllText($path, (($lines -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding)) }
-function Run([string[]]$xs) { $o = & $Exe @xs 2>&1 | Out-String; [pscustomobject]@{ Out = $o; Code = $LASTEXITCODE } }
+function Run([string[]]$xs) { $o = & { $ErrorActionPreference = 'Continue'; & $Exe @xs 2>&1 | ForEach-Object { "$_" } } | Out-String; [pscustomobject]@{ Out = $o; Code = $LASTEXITCODE } }
 WriteAscii (Join-Path $b 'uB.pas') @('unit uB;','interface','procedure Q;','implementation','procedure Q; begin end;','end.')
 $ua = Join-Path $a 'uA.pas'
 $srcLines = @('unit uA;','interface','uses uB;','procedure P;','implementation','procedure P; begin Q; end;','procedure R; begin P; end;','end.')

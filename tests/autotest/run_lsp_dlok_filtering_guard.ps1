@@ -38,9 +38,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-lsp-dlok-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -104,7 +107,7 @@ function Read-Frames([string]$Out) {
     $start = $i + $m.Index + $m.Length
     $len = [int]$m.Groups[1].Value
     if ($start + $len -gt $Out.Length) { break }
-    $res += ($Out.Substring($start, $len) | ConvertFrom-Json)
+    $res += ($Out.Substring($start, $len) | ConvertFrom-Json | ForEach-Object { $_ })
     $i = $start + $len
   }
   return $res
@@ -138,9 +141,9 @@ function LspLines([string]$PasFile) {
 }
 # `lint --json` is a bare array; the line field is start_line, the id is rule.
 function CliLines([string]$PasFile) {
-  $raw = (& $Exe lint $PasFile --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $PasFile --json 2>$null }) -join "`n"
   $arr = @()
-  if ($raw.Trim()) { $arr = @($raw | ConvertFrom-Json) }
+  if ($raw.Trim()) { $arr = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   return ,@($arr | Where-Object { $_.rule -eq $Rule } | ForEach-Object { [int]$_.start_line })
 }
 function Verify([string]$Name, [string]$PasFile, [int]$Expect) {
@@ -154,7 +157,7 @@ function Verify([string]$Name, [string]$PasFile, [int]$Expect) {
 
 # ---------- the hash, computed by the CLI's own `allow` ----------
 $hashedFile = New-Fixture 'hashed' @{}
-& $Exe allow $hashedFile --fix-line 11 --fix-rule $Rule --apply 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe allow $hashedFile --fix-line 11 --fix-rule $Rule --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $hashedLine = ([System.IO.File]::ReadAllLines($hashedFile))[10]
 $hm = [regex]::Match($hashedLine, 'dl:ok with-statement@([0-9a-f]{4})')
 Check 'SETUP: allow --apply wrote a hashed marker on line 11' $hm.Success $hashedLine
@@ -273,16 +276,16 @@ if ($cli0.Count -eq 1) {
   $anchor = [int]$cli0[0]
   Verify 'dup none (POSITIVE CONTROL)' $dupNone 1 | Out-Null
   $dupA = New-DupFixture 'dupanchor'
-  & $Exe allow $dupA --fix-line $anchor --fix-rule $Rule --apply 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe allow $dupA --fix-line $anchor --fix-rule $Rule --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'SETUP: allow wrote the anchor marker' ((([IO.File]::ReadAllLines($dupA))[$anchor - 1]) -match 'dl:ok duplicate-code@[0-9a-f]{4}')
   Verify 'dup marker on the ANCHOR end' $dupA 0 | Out-Null
   $partner = 0
-  $m = [regex]::Match(((& $Exe lint $dupNone --json 2>$null) -join "`n"), 'also at [^"]*?:(\d+)')
+  $m = [regex]::Match(((& { $ErrorActionPreference = 'Continue'; & $Exe lint $dupNone --json 2>$null }) -join "`n"), 'also at [^"]*?:(\d+)')
   if ($m.Success) { $partner = [int]$m.Groups[1].Value }
   Check 'SETUP: the partner line is known' ($partner -gt 0) "partner=$partner"
   if ($partner -gt 0) {
     $dupB = New-DupFixture 'duppartner'
-    & $Exe allow $dupB --fix-line $partner --fix-rule $Rule --apply 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $Exe allow $dupB --fix-line $partner --fix-rule $Rule --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
     Check 'SETUP: allow wrote the partner marker' ((([IO.File]::ReadAllLines($dupB))[$partner - 1]) -match 'dl:ok duplicate-code@[0-9a-f]{4}')
     Verify 'dup marker on the PARTNER end' $dupB 0 | Out-Null
     $dupS = New-DupFixture 'dupstale'
@@ -344,7 +347,13 @@ $nmReq = @{ jsonrpc='2.0'; id=2; method='textDocument/codeAction';
             params=@{ textDocument=@{ uri=('file:///' + ($nm -replace '\\', '/')) }; range=$nmDiag.range; context=@{ diagnostics=@($nmDiag) } } }
 $nmR = Invoke-Lsp $nm @($nmReq)
 $nmResp = @($nmR.Frames | Where-Object { $_.id -eq 2 }) | Select-Object -First 1
-Check 'metric rule without data.metric : NO action offered' ($null -ne $nmResp -and @($nmResp.result).Count -eq 0)
+# v152 BK-VSHOVER (B43): the refusal is the LINE marker. 'disable in this unit / project'
+# (command drag-lint.disableRule, no edit) stays offered -- the documented way out for a metric
+# rule (docs\wiki\v152-disable-rule.md "Limits").
+$nmActs = @($nmResp.result)
+$nmMark = @($nmActs | Where-Object { -not ($_.command -and $_.command.command -eq 'drag-lint.disableRule') })
+Check 'metric rule without data.metric : NO marker action offered' ($null -ne $nmResp -and $nmMark.Count -eq 0)
+Check 'metric rule without data.metric : unit + project disable still offered' (($nmActs.Count - $nmMark.Count) -eq 2)
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
 } finally {

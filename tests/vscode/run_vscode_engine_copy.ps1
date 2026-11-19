@@ -38,8 +38,11 @@
 #>
 [CmdletBinding()]
 param(
-  [string] $Harness = "$PSScriptRoot\engine-copy-harness.js"
+  [string] $Harness = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Harness) { $Harness = "$PSScriptRoot\engine-copy-harness.js" }
 
 $ErrorActionPreference = 'Stop'
 
@@ -64,7 +67,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $extDir 'node_modules'))) {
   exit 0
 }
 
-$out = & $node.Source $Harness 2>&1
+$out = & { $ErrorActionPreference = 'Continue'; & $node.Source $Harness 2>&1 | ForEach-Object { "$_" } }
 $rc  = $LASTEXITCODE
 
 foreach ($line in $out) {

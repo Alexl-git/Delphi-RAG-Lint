@@ -32,7 +32,13 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1"))
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = $(& "$PSScriptRoot\lib\DefaultEngineExe.ps1") }
 
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){ if($d){Write-Host "      $d" -ForegroundColor DarkGray}; $script:fail=$true } }
@@ -93,12 +99,12 @@ end
 "@
 
 $db = Join-Path $scratch 't.sqlite'
-& $exePath index $src --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 function TextHits([string]$Needle, [string]$ExtraArg) {
   $a = @('query','--text',$Needle,'--db',$db,'--source','dfm')
   if ($ExtraArg) { $a += $ExtraArg }
-  $out = & $exePath @a 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $exePath @a 2>&1 | ForEach-Object { "$_" } } | Out-String
   return $out
 }
 
@@ -126,3 +132,4 @@ Check 'N1 a type NOT in the DFM returns nothing' (-not ($absent -match 'uTypeFor
 Write-Host ''
 if ($fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green; exit 0
+} finally { Remove-WorkDir $scratch -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

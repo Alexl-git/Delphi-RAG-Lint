@@ -15,8 +15,11 @@
     -SkipBuild  run the exe already on disk
 #>
 [CmdletBinding()]
-param([string]$Repo = (Resolve-Path "$PSScriptRoot\..\..").Path,
+param([string]$Repo = '',
       [switch]$SkipBuild)
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Repo) { $Repo = (Resolve-Path "$PSScriptRoot\..\..").Path }
 $ErrorActionPreference = 'Stop'
 Write-Host '== featuregen tests ==' -ForegroundColor Cyan
 $bat = Join-Path $Repo 'build\_build_featuregen_tests_local.bat'
@@ -36,7 +39,7 @@ try {
   }
   if (-not (Test-Path -LiteralPath $bin)) { Write-Host "FEATUREGEN TESTS: FAIL -- test exe not found: $bin" -ForegroundColor Red; exit 1 }
   $log = Join-Path $work 'run.log'
-  & $bin *> $log
+  & { $ErrorActionPreference = 'Continue'; & $bin *> $log }
   $code = $LASTEXITCODE
   $sum = Select-String -LiteralPath $log -Pattern '^SUMMARY ' | Select-Object -Last 1
   Select-String -LiteralPath $log -Pattern '^FAIL|^SKIP' | ForEach-Object { Write-Host "  $($_.Line)" -ForegroundColor Red }

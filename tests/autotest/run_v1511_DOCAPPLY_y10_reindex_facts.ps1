@@ -27,9 +27,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = (Join-Path ([IO.Path]::GetTempPath()) "dl-v1511-y10-$PID")
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -99,24 +102,24 @@ try {
   $lib  = Join-Path $app 'uLib.pas'
   $q    = "select s.name, sf.cyclomatic from symbol_facts sf join symbols s on s.id = sf.symbol_id join files f on f.id = s.file_id where f.path like '%uLib.pas' and s.name in ('Classify','SumTo') order by s.name"
   function Cyclo() {
-    $j = & $Exe sql --query $q --db $db --json 2>$null | Out-String | ConvertFrom-Json
+    $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --query $q --db $db --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }
     ($j.rows | ForEach-Object { '{0}={1}' -f $_[0], $_[1] }) -join ','
   }
 
-  $null = & $Exe index --project $proj --db $db 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe index --project $proj --db $db 2>&1 | ForEach-Object { "$_" } }
   Check 'setup: index built' ($LASTEXITCODE -eq 0) "exit $LASTEXITCODE"
   $c0 = Cyclo
   Check 'setup: plain index computes the complexity' (($c0 -match 'Classify=[2-9]') -and ($c0 -match 'SumTo=[2-9]')) $c0
 
   $before = [IO.File]::ReadAllText($lib)
-  $o = & $Exe document --project $proj --db $db --apply --reindex --no-backup 2>&1 | Out-String
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe document --project $proj --db $db --apply --reindex --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'setup: document --apply --reindex ran' ($LASTEXITCODE -eq 0) (($o -split "`r?`n" | Where-Object { $_ -match '^doc: \d' }) -join ' ')
   Check 'CONTROL the apply edited (shifted) uLib.pas' ([IO.File]::ReadAllText($lib) -ne $before) ''
 
   $c1 = Cyclo
   Check 'FACTS complexity survives the in-process --reindex' ($c1 -eq $c0) "before=$c0 after=$c1"
 
-  $o = & $Exe document --project $proj --db $db 2>&1 | Out-String
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe document --project $proj --db $db 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'FIXED a dry run right after has nothing to document' ($o -notmatch '(?m)^File:') (($o -split "`r?`n" | Where-Object { $_ -match '^doc: \d|^File:' }) -join ' ')
 } finally {
   if (Test-Path -LiteralPath $WorkDir) { try { [IO.Directory]::Delete($WorkDir, $true) } catch { } }

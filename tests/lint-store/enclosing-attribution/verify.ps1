@@ -33,9 +33,9 @@ $sample  = Join-Path $caseDir "sample.pas"
 $db = Join-Path $env:TEMP "enclosing_attribution_verify.sqlite"
 if (Test-Path $db) { Remove-Item $db -Force }
 
-& $exePath index $caseDir --db $db 2>$null | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $caseDir --db $db 2>$null } | Out-Null
 
-$raw = & $exePath dump-refs $sample --db $db 2>$null
+$raw = & { $ErrorActionPreference = 'Continue'; & $exePath dump-refs $sample --db $db 2>$null }
 
 if (Test-Path $db) { Remove-Item $db -Force }
 

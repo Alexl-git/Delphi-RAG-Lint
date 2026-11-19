@@ -18,6 +18,10 @@ Code inside an include is resolved in the scope of the unit that includes it. Wh
 
 `find-callers --name X` reports such a site `exact` when every host binds it; `find-callers --resolved` and a qualified `usages --name Unit.X` list the site under each declaration a host binds it to. Other readers (rename, lint, `refs.symbol_id` joins) still see the ref as unbound where the hosts differ. The rows are written by the resolve pass: an index made by an older engine gets them on its next re-resolve. Example: `drag-lint sql --query "SELECT r.name_text, hf.path AS host, s.qualified_name FROM ref_host_bindings hb JOIN refs r ON r.id = hb.ref_id JOIN files hf ON hf.id = hb.host_file_id LEFT JOIN symbols s ON s.id = hb.symbol_id" --db <file.sqlite>`. Guard: `tests\autotest\run_v1511_INC2_per_host_bindings.ps1`.
 
+### An include parsed per inclusion (1.52)
+
+An include is parsed in the define context of EACH unit that includes it (owner ruling B9i: the contexts need not agree). Units whose context is byte-equal share one parse. When the contexts differ, a declaration or reference every context has is stored once (`inc_variant` 0); one that only some contexts have is stored per context, tagged `inc_variant` = k, and the table `inc_variants(file_id, host_file_id, variant, ctx_sha)` (schema 27) names the hosts of context k. The resolver binds a tagged reference under those hosts only: in `ExBody.inc` with `{$IFDEF COMPILE1} PingA; {$ELSE} PingB; {$ENDIF}`, `find-callers --resolved` lists the `PingA` site under the unit that defines COMPILE1 and the `PingB` site under the one that does not, never the other way round. An incremental run that re-parses the include takes the stored context of a host it skipped (`ctx_sha`) and preprocesses that host again only when the context is unknown or the include itself changed. Example: `drag-lint sql --query "SELECT s.name, s.signature, s.inc_variant FROM symbols s JOIN files f ON f.id = s.file_id WHERE s.inc_variant > 0" --db <file.sqlite>`. Guard: `tests\autotest\run_v152_EXTINC_per_inclusion.ps1`.
+
 ## Reaching it in the IDE
 No IDE surface; the IDE plugin uses the same index.
 

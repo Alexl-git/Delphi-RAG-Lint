@@ -17,15 +17,15 @@ if (Test-Path $db) { Remove-Item $db -Force }
 function UsedBefore($raw) {
   $txt = ($raw -join "`n"); $b = $txt.IndexOf('[')
   if ($b -lt 0) { return @() }
-  try { return @(($txt.Substring($b) | ConvertFrom-Json) | Where-Object { $_.rule -eq 'used-before-assignment' }) }
+  try { return @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $_.rule -eq 'used-before-assignment' }) }
   catch { return @() }
 }
 
 # heuristic (no store): I-prefix convention -> treated as managed -> skipped
-$noStore = UsedBefore (& $exePath lint $pas --json 2>$null)
+$noStore = @(UsedBefore (& { $ErrorActionPreference = 'Continue'; & $exePath lint $pas --json 2>$null }))
 # store-backed: IThing resolves to a class (unmanaged) -> the read is checked
 & $exePath index $dir --db $db | Out-Null
-$withStore = UsedBefore (& $exePath check-ast $pas --db $db --format json 2>$null)
+$withStore = @(UsedBefore (& { $ErrorActionPreference = 'Continue'; & $exePath check-ast $pas --db $db --format json 2>$null }))
 
 Write-Host ("  store-free used-before: {0}; store-backed used-before: {1}" -f $noStore.Count, $withStore.Count)
 if (($noStore.Count -eq 0) -and ($withStore.Count -ge 1)) {

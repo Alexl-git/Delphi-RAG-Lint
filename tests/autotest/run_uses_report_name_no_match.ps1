@@ -17,7 +17,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -73,7 +76,7 @@ $db = Join-Path $scratch 'ur.sqlite'
 function Invoke-UsesReport([string[]]$extra) {
   $out = Join-Path $scratch 'stdout.txt'; $err = Join-Path $scratch 'stderr.txt'
   $p = Start-Process -FilePath $exePath -ArgumentList (@('uses-report') + $extra) -NoNewWindow -Wait -PassThru `
-         -RedirectStandardOutput $out -RedirectStandardError $err
+         -RedirectStandardOutput $out -RedirectStandardError $err; $null = $p.Handle
   return [pscustomobject]@{
     Code = $p.ExitCode
     # [string] so an EMPTY stream is '' and `-match` yields a Boolean; $null -match
@@ -85,13 +88,13 @@ function Invoke-UsesReport([string[]]$extra) {
 
 Push-Location C:\TEMP
 try {
-  & $exePath index $scratch --db $db --quiet 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db --quiet 2>$null } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
   # --- (1) positive control: --name that MATCHES still works ------------------
   $csv1 = Join-Path $scratch 'match.csv'
   $r1 = Invoke-UsesReport @('--output', $csv1, '--name', 'urA', '--db', $db)
-  $rows1 = if (Test-Path $csv1) { @(Get-Content $csv1 | Select-Object -Skip 1 | Where-Object { $_ -ne '' }) } else { @() }
+  $rows1 = @(if (Test-Path $csv1) { @(Get-Content $csv1 | Select-Object -Skip 1 | Where-Object { $_ -ne '' }) } else { @() })
   Check '1a --name urA exits 0' ($r1.Code -eq 0) "exit=$($r1.Code) err=$($r1.Err)"
   Check '1b --name urA writes >= 1 data row (urA -> urB)' ($rows1.Count -ge 1) "rows=$($rows1.Count)"
   # (4) the guard can fail: the summary line format is pinned VERBATIM, so a

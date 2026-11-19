@@ -20,9 +20,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string] $Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string] $Exe     = '',
   [string] $WorkDir = "$env:TEMP\drag-lint-fincnoreader-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = 0
 $script:Passed = 0
@@ -47,10 +50,10 @@ if (Test-Path $Exe) {
   New-Item -ItemType Directory $WorkDir | Out-Null
   try {
     $db = Join-Path $WorkDir 'ff.sqlite'
-    & $Exe index $fix --db $db 2>&1 | Out-Null
-    $raw = & $Exe sql --db $db --query 'SELECT count(*) FROM file_includes' --json 2>$null
+    & { $ErrorActionPreference = 'Continue'; & $Exe index $fix --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+    $raw = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --query 'SELECT count(*) FROM file_includes' --json 2>$null }
     $n = -1
-    if ($LASTEXITCODE -eq 0) { $n = [int](($raw -join "`n") | ConvertFrom-Json).rows[0][0] }
+    if ($LASTEXITCODE -eq 0) { $n = [int](($raw -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }).rows[0][0] }
     Check 'K4 index still fills file_includes' ($n -gt 0) "rows=$n"
   }
   finally { if (Test-Path $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) } }

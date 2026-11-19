@@ -50,9 +50,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-framework-pref-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -243,7 +246,7 @@ $bothDb = Join-Path $WorkDir 'bothproj.sqlite'
 
 Write-Host 'Indexing fixtures' -ForegroundColor Cyan
 foreach ($pair in @(@($libSrc, $libDb), @($vclSrc, $vclDb), @($fmxSrc, $fmxDb), @($bothSrc, $bothDb))) {
-  $out = & $Exe index $pair[0] --db $pair[1] --quiet 2>&1
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe index $pair[0] --db $pair[1] --quiet 2>&1 | ForEach-Object { "$_" } }
   Check ("index {0}" -f (Split-Path $pair[1] -Leaf)) ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($out -join ' | ')"
 }
 
@@ -254,18 +257,18 @@ foreach ($pair in @(@($libSrc, $libDb), @($vclSrc, $vclDb), @($fmxSrc, $fmxDb), 
 function QNames([string[]]$Dbs) {
   $dbArgs = @()
   foreach ($d in $Dbs) { $dbArgs += '--db'; $dbArgs += $d }
-  $raw = @(& $Exe query --name TEdit @dbArgs --json --quiet 2>&1) | ForEach-Object { "$_" }
+  $raw = @(& { $ErrorActionPreference = 'Continue'; & $Exe query --name TEdit @dbArgs --json --quiet 2>&1 | ForEach-Object { "$_" } }) | ForEach-Object { "$_" }
   $script:LastExit = $LASTEXITCODE
   $json = ($raw | Where-Object { -not $_.TrimStart().StartsWith('(') }) -join "`n"
   if (-not $json.Trim()) { return @() }
-  return @(($json | ConvertFrom-Json) | ForEach-Object { $_.qualified_name })
+  return @(($json | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_.qualified_name })
 }
 
 # --- POSITIVE CONTROL: no project context, so the tie is reported as it always was. --
 Write-Host ''
 Write-Host 'POSITIVE CONTROL -- library alone: every row, in the SQL order' -ForegroundColor Cyan
 
-$bare = QNames @($libDb)
+$bare = @(QNames @($libDb))
 Check 'precondition: the library fixture declares TEdit three times' ($bare.Count -eq 3) `
   "rows=$($bare.Count) [$($bare -join ', ')] -- fewer and the whole suite is vacuous"
 Check 'ASSERT: with NO project context the FMX row is still first (ORDER BY qualified_name)' `
@@ -277,7 +280,7 @@ Check 'control: the bare lookup exits 0' ($script:LastExit -eq 0) "exit=$script:
 Write-Host ''
 Write-Host 'a VCL project in the scan set' -ForegroundColor Cyan
 
-$vcl = QNames @($libDb, $vclDb)
+$vcl = @(QNames @($libDb, $vclDb))
 Check 'ASSERT: Vcl.StdCtrls.TEdit is first' ($vcl[0] -eq 'Vcl.StdCtrls.TEdit') "order=[$($vcl -join ', ')]"
 Check 'ASSERT: FMX.Edit.TEdit is LAST -- the rejected framework, not merely not-first' `
   ($vcl[-1] -eq 'FMX.Edit.TEdit') "order=[$($vcl -join ', ')]"
@@ -293,7 +296,7 @@ Check 'control: nothing was FILTERED -- still three rows' ($vcl.Count -eq 3) "ro
 Write-Host ''
 Write-Host 'an FMX project in the scan set -- same library index, opposite answer' -ForegroundColor Cyan
 
-$fmx = QNames @($libDb, $fmxDb)
+$fmx = @(QNames @($libDb, $fmxDb))
 Check 'ASSERT: FMX.Edit.TEdit is first' ($fmx[0] -eq 'FMX.Edit.TEdit') "order=[$($fmx -join ', ')]"
 Check 'ASSERT: Vcl.StdCtrls.TEdit is LAST' ($fmx[-1] -eq 'Vcl.StdCtrls.TEdit') "order=[$($fmx -join ', ')]"
 Check 'ASSERT: shared ground stays in the MIDDLE here too' ($fmx[1] -eq 'Shared.Common.TEdit') "order=[$($fmx -join ', ')]"
@@ -305,7 +308,7 @@ Check 'ASSERT: the two project cases disagree, so the project is what decided' `
 Write-Host ''
 Write-Host 'a project that writes both frameworks equally -- a tie is not an answer' -ForegroundColor Cyan
 
-$both = QNames @($libDb, $bothDb)
+$both = @(QNames @($libDb, $bothDb))
 Check 'ASSERT: a tied project leaves the order exactly as the no-context case' `
   (($both -join '|') -eq ($bare -join '|')) `
   "tied=[$($both -join ', ')] bare=[$($bare -join ', ')]"
@@ -316,7 +319,7 @@ Check 'ASSERT: a tied project leaves the order exactly as the no-context case' `
 Write-Host ''
 Write-Host 'two project indexes at once -- ambiguous, so no preference' -ForegroundColor Cyan
 
-$amb = QNames @($libDb, $vclDb, $fmxDb)
+$amb = @(QNames @($libDb, $vclDb, $fmxDb))
 Check 'ASSERT: two candidate projects leave the order untouched' `
   (($amb -join '|') -eq ($bare -join '|')) `
   "ambiguous=[$($amb -join ', ')] bare=[$($bare -join ', ')]"
@@ -326,16 +329,16 @@ Write-Host ''
 Write-Host 'controls' -ForegroundColor Cyan
 
 # A single-row name cannot be ordered wrong, and the reorder must not disturb it.
-$one = @(& $Exe query --name TVclThing --db $libDb --db $vclDb --json --quiet 2>&1) |
+$one = @(& { $ErrorActionPreference = 'Continue'; & $Exe query --name TVclThing --db $libDb --db $vclDb --json --quiet 2>&1 | ForEach-Object { "$_" } }) |
          ForEach-Object { "$_" } | Where-Object { -not $_.TrimStart().StartsWith('(') }
 $oneExit = $LASTEXITCODE
-$oneRows = @(($one -join "`n" | ConvertFrom-Json))
+$oneRows = @(($one -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }))
 Check 'control: a single-match name is unaffected and still exits 0' `
   (($oneExit -eq 0) -and ($oneRows.Count -eq 1) -and ($oneRows[0].qualified_name -eq 'VclApp.TVclThing')) `
   "exit=$oneExit rows=$($oneRows.Count)"
 
 # Zero hits keeps its documented contract (exit 1), which the reorder sits after.
-& $Exe query --name TNoSuchThingAnywhere --db $libDb --db $vclDb --exact --json --quiet 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe query --name TNoSuchThingAnywhere --db $libDb --db $vclDb --exact --json --quiet 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'control: zero hits still exits 1' ($LASTEXITCODE -eq 1) "exit=$LASTEXITCODE"
 
 Write-Host ''

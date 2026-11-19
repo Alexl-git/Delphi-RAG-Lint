@@ -12,9 +12,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-bookmarks-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -47,10 +50,10 @@ try {
   $src = Join-Path $WorkDir 'uBk.pas'
   [IO.File]::WriteAllText($src, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 
-  $o = & $Exe bookmarks --in $src --json 2>&1
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe bookmarks --in $src --json 2>&1 | ForEach-Object { "$_" } }
   $code = $LASTEXITCODE
   $rows = $null
-  try { $rows = @($o | Out-String | ConvertFrom-Json) } catch { }
+  try { $rows = @(($o | Out-String | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { }
   Check 'list: exit 0' ($code -eq 0) "exit=$code"
   Check 'list: exactly 4 anchors (bare array, raw shape)' ($rows -and $rows.Count -eq 4) ("count=" + @($rows).Count + ' raw=' + (($o | Out-String).Trim().Substring(0, [Math]::Min(120, ($o | Out-String).Trim().Length))))
   if ($rows -and $rows.Count -eq 4) {
@@ -60,20 +63,20 @@ try {
     Check 'hash on numbered' ($rows[2].code -eq '12' -and $rows[2].hash -eq '7f3a')
   }
 
-  $o = & $Exe bookmarks --in $src --name a7k3qx --json 2>&1
-  $f = @($o | Out-String | ConvertFrom-Json)
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe bookmarks --in $src --name a7k3qx --json 2>&1 | ForEach-Object { "$_" } }
+  $f = @(($o | Out-String | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
   Check 'find: tagged code is case-insensitive, one hit at line 7' ($LASTEXITCODE -eq 0 -and $f.Count -eq 1 -and $f[0].line -eq 7)
-  $null = & $Exe bookmarks --in $src --name 99 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe bookmarks --in $src --name 99 2>&1 | ForEach-Object { "$_" } }
   Check 'find: no hit exits 3' ($LASTEXITCODE -eq 3) "exit=$LASTEXITCODE"
-  $null = & $Exe bookmarks --in (Join-Path $WorkDir 'nope.pas') 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe bookmarks --in (Join-Path $WorkDir 'nope.pas') 2>&1 | ForEach-Object { "$_" } }
   Check 'missing path exits 2' ($LASTEXITCODE -eq 2) "exit=$LASTEXITCODE"
-  $null = & $Exe bookmarks 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe bookmarks 2>&1 | ForEach-Object { "$_" } }
   Check 'no --in exits 1' ($LASTEXITCODE -eq 1) "exit=$LASTEXITCODE"
-  $o = & $Exe bookmarks --in $WorkDir 2>&1 | Out-String
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe bookmarks --in $WorkDir 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'directory scan lists text form' ($o -match 'uBk\.pas:6\s+user\s+3') ($o.Trim())
 
   $before = [IO.File]::ReadAllText($src)
-  $null = & $Exe bookmarks --in $src 2>&1
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe bookmarks --in $src 2>&1 | ForEach-Object { "$_" } }
   Check 'read-only: file bytes unchanged' ([IO.File]::ReadAllText($src) -eq $before)
 }
 finally { [IO.Directory]::Delete($WorkDir, $true) }

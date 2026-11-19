@@ -15,9 +15,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-uses-audit-include-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 if ($PSVersionTable.PSVersion.Major -lt 7) { Write-Host 'run_uses_audit_include_anchor: needs pwsh 7' -ForegroundColor Red; exit 2 }
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
@@ -32,21 +35,21 @@ function Check($n, $ok, $d = '') {
 }
 New-Item -ItemType Directory -Force $WorkDir | Out-Null
 $db = Join-Path $WorkDir 'mv.sqlite'
-& $Exe index $fx --db $db *> (Join-Path $WorkDir 'index.log')
+& { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db *> (Join-Path $WorkDir 'index.log') }
 Check 'V the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db)) "exit=$LASTEXITCODE"
 
 # Raw shape first: lint-all --json is a bare ARRAY with file_path + start_line.
-$raw = (& $Exe lint-all --db $db --rule uses-movable-to-implementation --json 2>$null) -join "`n"
-$f = @($raw | ConvertFrom-Json)
+$raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule uses-movable-to-implementation --json 2>$null }) -join "`n"
+$f = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 $host1 = @($f | Where-Object { $_.file_path -like '*\MvHost.pas' })
 $inl   = @($f | Where-Object { $_.file_path -like '*\MvInline.pas' })
 Check 'LINT include entry: exactly one finding in MvHost.pas' ($host1.Count -eq 1) "count=$($host1.Count)"
 Check 'LINT include entry anchored at the {$I} directive (line 6, col 1)' (($host1.Count -eq 1) -and ($host1[0].start_line -eq 6) -and ($host1[0].start_col -eq 1) -and ($host1[0].end_line -eq 6)) "got $($host1[0].start_line):$($host1[0].start_col)-$($host1[0].end_line):$($host1[0].end_col)"
 Check 'LINT control: inline entry keeps its own coordinates (line 6, col 13)' (($inl.Count -eq 1) -and ($inl[0].start_line -eq 6) -and ($inl[0].start_col -eq 13)) "got $($inl[0].start_line):$($inl[0].start_col)"
 
-$a = @((& $Exe uses-audit (Join-Path $fx 'MvHost.pas') --db $db --format json 2>$null) -join "`n" | ConvertFrom-Json)
+$a = @(((& { $ErrorActionPreference = 'Continue'; & $Exe uses-audit (Join-Path $fx 'MvHost.pas') --db $db --format json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 Check 'VERB include entry: uses-audit reports line 6' (($a.Count -eq 1) -and ($a[0].unit -eq 'MvB') -and ($a[0].line -eq 6)) "got $($a[0].unit) line $($a[0].line)"
-$b = @((& $Exe uses-audit (Join-Path $fx 'MvInline.pas') --db $db --format json 2>$null) -join "`n" | ConvertFrom-Json)
+$b = @(((& { $ErrorActionPreference = 'Continue'; & $Exe uses-audit (Join-Path $fx 'MvInline.pas') --db $db --format json 2>$null }) -join "`n" | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 Check 'VERB control: inline entry reports its own line 6' (($b.Count -eq 1) -and ($b[0].line -eq 6)) "got line $($b[0].line)"
 
 try { [IO.Directory]::Delete($WorkDir, $true) } catch { Write-Host "  (scratch not removed: $WorkDir)" }

@@ -7,7 +7,7 @@ group: refactoring
 order: 50003
 since: 0.94.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # create-enum-helper
@@ -32,6 +32,7 @@ Full flag list: [create-enum-helper in the CLI reference](../cli.md#create-enum-
 | `--apply` |  |  |  |
 | `--json` |  |  |  |
 | `--no-backup` |  |  |  |
+| `--no-compile-gate` |  |  |  |
 | `--methods` | `<csv>` |  |  |
 | `--tostring` |  |  |  |
 | `--db` | `PATH` |  |  |

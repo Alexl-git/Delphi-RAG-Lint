@@ -78,9 +78,9 @@
     "by": "ENGINE"
   },
   "verified": {
-    "date": "2026-11-07",
+    "date": "2026-11-18",
     "by": "ENGINE",
-    "build": "1.46.0-alpha",
+    "build": "1.52.0-alpha",
     "surfaceHash": "a9b3674f6f8ea21550bbfdac27a045d2cba3fc23effdfe3cefc995f768599fb4"
   }
 }

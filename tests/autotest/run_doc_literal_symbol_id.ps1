@@ -31,9 +31,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -108,7 +111,7 @@ $src = @(
 [IO.File]::WriteAllText((Join-Path $WorkDir 'DocLit.pas'), $src + "`r`n", [Text.Encoding]::ASCII)
 
 # Fresh scratch DB, directory scan: not a project DB, so no widening concern.
-$idxOut = & $exePath index $WorkDir --db $db 2>&1
+$idxOut = & { $ErrorActionPreference = 'Continue'; & $exePath index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } }
 $idxExit = $LASTEXITCODE
 Check 'the fixture indexed' ($idxExit -eq 0 -and (Test-Path $db)) "exit=$idxExit"
 if (-not (Test-Path $db)) {
@@ -121,9 +124,9 @@ if (-not (Test-Path $db)) {
 function OwnerOf([string]$Word) {
   $q = "SELECT COALESCE(s.qualified_name, '') AS q FROM string_literals sl " +
        "LEFT JOIN symbols s ON s.id = sl.symbol_id WHERE sl.text LIKE '%$Word%'"
-  $raw = (& $exePath sql --query $q --db $db --json 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --query $q --db $db --json 2>$null }) -join "`n"
   if (-not $raw.Trim()) { return '<no output>' }
-  $d = $raw | ConvertFrom-Json
+  $d = $raw | ConvertFrom-Json | ForEach-Object { $_ }
   $rows = @($d.rows)
   if ($rows.Count -ne 1) { return "<$($rows.Count) rows>" }
   return [string]$rows[0][0]

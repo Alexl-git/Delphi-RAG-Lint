@@ -19,9 +19,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$EngineDir = "$PSScriptRoot\..\..\src\cli\Win64\Debug",
+  [string]$EngineDir = '',
   [string]$RsVars    = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $EngineDir) { $EngineDir = "$PSScriptRoot\..\..\src\cli\Win64\Debug" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false; $script:Passed = 0; $script:FailCount = 0
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -47,7 +50,7 @@ Copy-Item (Join-Path $Repo 'rules') "$eng\rules" -Recurse
 $Exe = Join-Path $eng 'drag-lint.exe'
 function Run([string[]]$EngArgs) {
   Push-Location $work
-  try { $o = ($null | & $Exe @EngArgs 2>&1 | Out-String); $script:LastExit = $LASTEXITCODE } finally { Pop-Location }
+  try { $o = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe @EngArgs 2>&1 | ForEach-Object { "$_" } } | Out-String); $script:LastExit = $LASTEXITCODE } finally { Pop-Location }
   return $o
 }
 $libDir = Join-Path $work 'libsrc'; New-Item -ItemType Directory -Force $libDir | Out-Null

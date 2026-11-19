@@ -17,10 +17,10 @@ unit DRagLint.LSP.Feature.Rename;
   the index says (stale index or unsaved buffer), the declaration's
   edit included -- no edit is ever retargeted by a forward scan.
 
-  Column units: the store holds tree-sitter UTF-8 BYTE columns (and so does
-  IdentifierAtPosition) while rename ranges are UTF-16; the edit check converts the
-  byte column to a UTF-16 one before comparing text, so a non-ASCII character
-  earlier on the line is fine.
+  Column units (1.52 COLS): the client's position, the store's .pas columns (since
+  1.52 EXTGAPS2), Build's edit columns and IdentifierAtPosition's argument are all
+  CHARACTER (UTF-16) columns; only IdentifierAtPosition maps to the tree's UTF-8 byte
+  column, inside. A non-ASCII character earlier on the line is fine.
 
   Registered through the S0 feature registry exactly as
   DRagLint.LSP.Feature.ImplDecl is. No extractor change. }
@@ -111,7 +111,6 @@ uses
   , DRagLint.Refactor.Rename
   , DRagLint.Refactor.RenameProof
   , DRagLint.Refactor.TextEdit
-  , DRagLint.Core.LiveDocs
   ;
 
 const
@@ -181,8 +180,7 @@ type
   TRenameTarget = record
     Path : string;
     Line0: Integer;
-    Col0 : Integer;      // the client's UTF-16 column (RangeJson, text scans)
-    ByteCol0: Integer;   // the same column as a UTF-8 byte column (ResolveSymbolAt, IdentifierAtPosition)
+    Col0 : Integer;      // the client's UTF-16 column: RangeJson, text scans, ResolveSymbolAt, IdentifierAtPosition
     Sym  : TSymbol;
     Store: ISymbolStore; // the document's own store: StoresForFile(Path)[0]
   end;
@@ -209,13 +207,9 @@ begin
   if not ParamsShapeOk(AParams, Doc, PosObj) then Exit;
   ATarget.Path:= ACtx.FileFromUri(Doc.GetValue('uri').Value);
   if (ATarget.Path = '') or not IntField(PosObj, 'line', ATarget.Line0) or not IntField(PosObj, 'character', ATarget.Col0) then Exit;
-  // S7: the client's column is UTF-16; the resolver wants a UTF-8 byte column. Converted ONCE, from the open buffer (or disk).
-  ATarget.ByteCol0:= ATarget.Col0;
-  var BufLines: TArray<string>:= TLiveDocuments.ReadLines(ATarget.Path);
-  if (ATarget.Line0 >= 0) and (ATarget.Line0 < Length(BufLines)) and (ATarget.Col0 > 0) then
-    ATarget.ByteCol0:= Length(TEncoding.UTF8.GetBytes(Copy(BufLines[ATarget.Line0], 1, ATarget.Col0)));
+  // S7 / 1.52 COLS: the client's UTF-16 column is the resolver's unit too (the tree's byte column is mapped inside).
   var HitStore: ISymbolStore;
-  if not ACtx.ResolveSymbolAt(ATarget.Path, ATarget.Line0, ATarget.ByteCol0, ATarget.Sym, HitStore) then Exit;
+  if not ACtx.ResolveSymbolAt(ATarget.Path, ATarget.Line0, ATarget.Col0, ATarget.Sym, HitStore) then Exit;
   var Own: TArray<ISymbolStore>:= ACtx.StoresForFile(ATarget.Path); // a copy; the server's list is untouched
   if Length(Own) = 0 then Exit;
   ATarget.Store:= Own[0];
@@ -230,7 +224,7 @@ begin
     ACtx.Reply(AId, nil);
     Exit;
   end;
-  var Ident: string:= ACtx.IdentifierAtPosition(T.Path, T.Line0, T.ByteCol0);
+  var Ident: string:= ACtx.IdentifierAtPosition(T.Path, T.Line0, T.Col0);
   var Start0: Integer:= T.Col0;
   var Cache: TLineCache:= TLineCache.Create([doOwnsValues]);
   try
@@ -268,18 +262,15 @@ begin
     begin
       var DiskTxt: string:= DiskLine(Cache, Ed.FilePath, Ed.Line);
       var Col0: Integer;
-      // S7 / W5-D: Ed.Col is a 1-based CHARACTER (UTF-16) column of the decoded file -- Build converts the store's
-      // UTF-8 byte columns -- so it is the edit range's column as is; IdentifierAtPosition below takes the tree-sitter
-      // BYTE column, rebuilt from the UTF-8 length of the text before it.
+      // S7 / W5-D: Ed.Col is a 1-based CHARACTER (UTF-16) column of the decoded file, so it is the edit range's
+      // column as is -- and (1.52 COLS) IdentifierAtPosition's unit too.
       var Col16   : Integer:= if (Ed.Col >= 1) and (Ed.Col <= Length(DiskTxt) + 1) then Ed.Col else 0;
-      var ByteCol0: Integer:= if Col16 > 0 then Length(TEncoding.UTF8.GetBytes(Copy(DiskTxt, 1, Col16 - 1))) else Ed.Col - 1;
       // Build reports the identifier token's column for EVERY edit, the declaration included: each must start exactly there
       // as a whole word, or the file changed after indexing (a forward scan could retarget a shifted token).
       if (Col16 > 0) and IsWholeWordAt(DiskTxt, Col16, Ed.OldName) then Col0:= Col16 - 1
       else Col0:= -1;
       // The live buffer must hold the same token, or the client would rewrite the wrong text.
-      // IdentifierAtPosition takes the tree-sitter BYTE column, i.e. the store's own.
-      if (Col0 < 0) or not SameText(ACtx.IdentifierAtPosition(Ed.FilePath, Ed.Line - 1, ByteCol0), Ed.OldName) then
+      if (Col0 < 0) or not SameText(ACtx.IdentifierAtPosition(Ed.FilePath, Ed.Line - 1, Col0), Ed.OldName) then
         Exit(Format('index out of date for %s:%d (no "%s" there) -- save and reindex, then retry', [Ed.FilePath, Ed.Line, Ed.OldName]));
       var Key: string:= UpperCase(Ed.FilePath) + '|' + IntToStr(Ed.Line) + '|' + IntToStr(Col0);
       if Seen.ContainsKey(Key) then Continue;

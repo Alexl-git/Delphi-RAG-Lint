@@ -10,8 +10,12 @@
   Real bytes: the program prints the same before and after; a NEW program compiles against the interface and calls through it.
 #>
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe"
+  [string]$Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
+$script:DdfixStart = (Get-Date).AddSeconds(-2)
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -27,7 +31,7 @@ function Tree-Hash([string]$Dir) {
 function Build-Project([string]$Proj, [string]$Tmp) {
   $bat = Join-Path $Tmp ([guid]::NewGuid().ToString('N') + '.bat')
   [IO.File]::WriteAllText($bat, "@echo off`r`ncall `"$Rsvars`"`r`ncd /d `"$(Split-Path $Proj)`"`r`nmsbuild /t:Build /p:Config=Debug /p:Platform=Win64 /v:minimal `"$(Split-Path $Proj -Leaf)`"`r`nexit /b %ERRORLEVEL%`r`n", [Text.Encoding]::ASCII)
-  $p = Start-Process -Wait -PassThru -NoNewWindow cmd.exe -ArgumentList "/c `"$bat`"" -RedirectStandardOutput "$bat.log" -RedirectStandardError "$bat.err"
+  $p = Start-Process -Wait -PassThru -NoNewWindow cmd.exe -ArgumentList "/c `"$bat`"" -RedirectStandardOutput "$bat.log" -RedirectStandardError "$bat.err"; $null = $p.Handle
   return $p.ExitCode
 }
 function Bare-Lf([string]$Path) {
@@ -43,14 +47,14 @@ function New-Project([string]$Name) {
   $d = Join-Path $Tmp $Name
   Copy-Item $Fx $d -Recurse
   $db = Join-Path $d 'p.sqlite'
-  & $Exe index --project (Join-Path $d 'EiProj.dproj') --db $db --library-db none *> (Join-Path $Tmp "$Name.index.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $d 'EiProj.dproj') --db $db --library-db none *> (Join-Path $Tmp "$Name.index.log") }
   if ($LASTEXITCODE -ne 0) { throw "index $Name exit $LASTEXITCODE" }
   return @{ Dir = $d; Db = $db; Proj = (Join-Path $d 'EiProj.dproj'); Unit = (Join-Path $d 'EiWidget.pas'); Prog = (Join-Path $d 'Win64\Debug\EiProj.exe') }
 }
 function Run-Json($P, [string[]]$More) {
-  $o = & $Exe extract-interface --db $P.Db --project $P.Proj --library-db none --format json @More 2> (Join-Path $Tmp 'run.err')
+  $o = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath((Join-Path $Tmp 'run.err')); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe extract-interface --db $P.Db --project $P.Proj --library-db none --format json @More 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   $script:LastExit = $LASTEXITCODE
-  return (($o -join "`n") | ConvertFrom-Json)
+  return (($o -join "`n") | ConvertFrom-Json | ForEach-Object { $_ })
 }
 function Read-Markers([string]$Path) {
   $map = @{}; $inClass = $false
@@ -124,7 +128,7 @@ try {
   $N = New-Project 'norefcount'
   $nt = [IO.File]::ReadAllText($N.Unit)
   [IO.File]::WriteAllText($N.Unit, ($nt -replace '(?m)^implementation\s*$', "implementation`r`n`r`nuses System.Generics.Defaults;"), [Text.Encoding]::ASCII)
-  & $Exe index --project $N.Proj --db $N.Db --library-db none *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $N.Proj --db $N.Db --library-db none *> $null }
   $r = Run-Json $N @('--class', 'TEiPlain', '--plan', '--reparent-interfaced=norefcount')
   Check 'D17 norefcount: the parent is TSingletonImplementation' ($r.heritage_after -eq 'TEiPlain = class(TSingletonImplementation, IEiPlain)') "$($r.heritage_after) $($r.refusal.kind)"
   $r = Run-Json $N @('--class', 'TEiPlain', '--plan', '--reparent-interfaced')
@@ -132,9 +136,9 @@ try {
   Check 'D14 the plans wrote nothing' ((Tree-Hash $A.Dir) -ceq $before)
 
   Write-Host 'surface'
-  & $Exe extract-interface --db $A.Db --library-db none *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe extract-interface --db $A.Db --library-db none *> $null }
   Check 'S1 no --class exits 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
-  & $Exe extract-interface --db $A.Db --library-db none --class TEiWidget --apply *> $null
+  & { $ErrorActionPreference = 'Continue'; & $Exe extract-interface --db $A.Db --library-db none --class TEiWidget --apply *> $null }
   Check 'S2 --apply without --project exits 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
   $null = Run-Json $A @('--class', 'TEiWidget', '--apply', '--no-compile')
   Check 'S3 --apply --no-compile exits 2' ($script:LastExit -eq 2) "exit $script:LastExit"
@@ -168,11 +172,11 @@ try {
     [IO.File]::WriteAllText($proof, "program EiProof;`r`n{`$APPTYPE CONSOLE}`r`nuses EiWidget;`r`nvar I: IEiWidget;`r`nbegin`r`n  I:= TEiDesc.Create;`r`n  I.Count:= 11;`r`n  I.Over('abc');`r`n  Writeln(I.Virt, ' ', I.Count, ' ', I.Sum(1, 2), ' ', I.Value);`r`nend.`r`n", [Text.Encoding]::ASCII)
     $bat = Join-Path $Tmp 'proof.bat'
     [IO.File]::WriteAllText($bat, "@echo off`r`ncall `"$Rsvars`"`r`ncd /d `"$($B.Dir)`"`r`ndcc64 -B -Q EiProof.dpr`r`nexit /b %ERRORLEVEL%`r`n", [Text.Encoding]::ASCII)
-    $p = Start-Process -Wait -PassThru -NoNewWindow cmd.exe -ArgumentList "/c `"$bat`"" -RedirectStandardOutput "$bat.log" -RedirectStandardError "$bat.err"
+    $p = Start-Process -Wait -PassThru -NoNewWindow cmd.exe -ArgumentList "/c `"$bat`"" -RedirectStandardOutput "$bat.log" -RedirectStandardError "$bat.err"; $null = $p.Handle
     Check 'A8 a NEW program compiles against the interface' ($p.ExitCode -eq 0) "exit $($p.ExitCode)"
     $po = (& (Join-Path $B.Dir 'EiProof.exe')) -join ''
     Check 'A9 a call through the interface reaches the override and the class' ($po -eq 'desc 3 3 42') "[$po]"
-    & $Exe index --project $B.Proj --db $B.Db --library-db none *> $null
+    & { $ErrorActionPreference = 'Continue'; & $Exe index --project $B.Proj --db $B.Db --library-db none *> $null }
     $fp = Run-Json $B @('--class', 'TEiWidget', '--plan')
     Check 'A10 fixed point: a second run after a re-index is name-taken' ($fp.refusal.kind -eq 'name-taken') "$($fp.refusal.kind)"
 
@@ -225,5 +229,11 @@ try {
 }
 finally {
   try { [IO.Directory]::Delete($Tmp, $true) } catch { Write-Host "note: scratch left: $Tmp" }
+  # v152 DDFIX5: a gate refusal that cites its build log (dirty-baseline, compile-error) KEEPS the engine's gate
+  # scratch on purpose (C:\TEMP\draglint_cyclefix_<pid>[_<hex>]_build, E18 F5); remove the ones this run caused
+  # (made since it started, holding this runner's EiProj mirror).
+  Get-ChildItem 'C:\TEMP' -Directory -Filter 'draglint_cyclefix_*' -ErrorAction SilentlyContinue |
+    Where-Object { $_.CreationTime -ge $script:DdfixStart -and (Test-Path -LiteralPath (Join-Path $_.FullName 'mirror\EiProj.dproj')) } |
+    ForEach-Object { $kd = $_.FullName; try { [IO.Directory]::Delete($kd, $true) } catch { Write-Host "note: kept gate scratch left: $kd" } }
 }
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

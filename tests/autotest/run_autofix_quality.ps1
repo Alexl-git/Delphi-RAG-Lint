@@ -40,7 +40,7 @@ function Get-Text([string]$Path) { return [IO.File]::ReadAllText($Path, $Enc) }
 function Fix([string]$Path, [string]$Rules, [switch]$NoBackup) {
   $a = @('lint', '--in', $Path, '--fix', '--apply', '--enable', $Rules)
   if ($NoBackup) { $a += '--no-backup' }
-  $out = & $Exe @a 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } } | Out-String
   return $out
 }
 

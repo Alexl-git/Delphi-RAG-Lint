@@ -54,9 +54,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = (Join-Path ([IO.Path]::GetTempPath()) "draglint-dispatch-$PID")
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -80,7 +83,7 @@ $db      = Join-Path $WorkDir 'dispatch.sqlite'
 $target  = Join-Path $fixDir 'dispatch.pas'
 $errFile = Join-Path $WorkDir 'stderr.txt'
 
-& $Exe index $fixDir --db $db 2>$errFile | Out-Null
+& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe index $fixDir --db $db 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-Null
 if ($LASTEXITCODE -ne 0) {
   Write-Host "FATAL: indexing the fixture failed ($LASTEXITCODE)" -ForegroundColor Red
   Write-Host (Get-Content -LiteralPath $errFile -Raw); exit 1
@@ -89,7 +92,7 @@ if ($LASTEXITCODE -ne 0) {
 # ---------------------------------------------------------------------------
 Write-Host ''
 Write-Host '-- fixture premise: the `with` site really has no receiver' -ForegroundColor Cyan
-$recv = (& $Exe sql --db $db --query "select r.start_line, coalesce(nullif(r.receiver_text,''),'<EMPTY>') as recv, s.qualified_name as encl from refs r left join symbols s on s.id=r.enclosing_symbol_id where r.name_text='TransferFile' order by r.start_line" 2>$errFile | Out-String)
+$recv = (& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe sql --db $db --query "select r.start_line, coalesce(nullif(r.receiver_text,''),'<EMPTY>') as recv, s.qualified_name as encl from refs r left join symbols s on s.id=r.enclosing_symbol_id where r.name_text='TransferFile' order by r.start_line" 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String)
 Write-Host ($recv -split "`r?`n" | Where-Object { $_ -match 'TDispatchTests' } | ForEach-Object { "  $_" }) -ForegroundColor DarkGray
 Check 'Alpha_with recorded an EMPTY receiver' `
   ($recv -match '<EMPTY>\s+dispatchtest\.TDispatchTests\.Alpha_with') ''
@@ -102,7 +105,7 @@ Check 'CONTROL: the nested-in-arguments call DID capture its receiver M' `
   'the plan predicted EMPTY here; it is not -- see the header'
 
 # ---------------------------------------------------------------------------
-& $Exe document --unit $target --db $db --apply 2>$errFile | Out-Null
+& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe document --unit $target --db $db --apply 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-Null
 if ($LASTEXITCODE -ne 0) {
   Write-Host "FATAL: document --apply failed ($LASTEXITCODE)" -ForegroundColor Red
   Write-Host (Get-Content -LiteralPath $errFile -Raw); exit 1
@@ -186,8 +189,8 @@ Write-Host '-- idempotence: the marking must not fight doc-drift' -ForegroundCol
 # its fixture has a single caller per target -- and it is filed separately. A
 # guard for the marking must not fail on it, and must not paper over it either.
 $before = @(((Get-Content -LiteralPath $target -Raw) -replace "`r`n", "`n") -split "`n" | Where-Object { $_ -match 'Covered by:' })
-& $Exe index $fixDir --db $db 2>$errFile | Out-Null
-& $Exe document --unit $target --db $db --apply 2>$errFile | Out-Null
+& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe index $fixDir --db $db 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe document --unit $target --db $db --apply 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-Null
 $after = @(((Get-Content -LiteralPath $target -Raw) -replace "`r`n", "`n") -split "`n" | Where-Object { $_ -match 'Covered by:' })
 Check 'the Covered by: lines are non-empty (the check is not vacuous)' ($before.Count -ge 3) "count=$($before.Count)"
 Check 'and identical after reindex + a second apply' `

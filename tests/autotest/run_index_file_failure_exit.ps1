@@ -28,7 +28,13 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -104,9 +110,9 @@ Check 'F1 exit 1'                          ($r.Code -eq 1) "exit $($r.Code)"
 Check 'F1 ERROR line names the file on STDERR' ($r.Err -match 'ERROR indexing .*uBroken\.pas') "stderr: $($r.Err)"
 Check 'F1 ERROR line NOT on stdout'        ($r.Out -notmatch 'ERROR indexing')
 Check 'F1 Done. summary counts the failure' ($r.Out -match '(?m)^Done\. .*1 file\(s\) FAILED to index') "stdout tail: $(($r.Out -split "`n" | Select-Object -Last 3) -join ' | ')"
-$q = & $exePath query --name TuHealthyA --db $dbF --exact 2>&1 | Out-String
+$q = & { $ErrorActionPreference = 'Continue'; & $exePath query --name TuHealthyA --db $dbF --exact 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'F2 healthy sibling still indexed'   ($q -match '(?m)^class\s+TuHealthyA\b') $q
-$q = & $exePath query --name TuBroken --db $dbF --exact 2>&1 | Out-String
+$q = & { $ErrorActionPreference = 'Continue'; & $exePath query --name TuBroken --db $dbF --exact 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'F2 failed file has no rows (rolled back)' ($q -notmatch '(?m)^class\s+TuBroken\b') $q
 
 # ---- A1/A2: index --all counts the section as failed ----
@@ -149,3 +155,4 @@ Check 'A0 DEC-15 no fault: committed = attempted = 2' (($null -ne $c0) -and ($c0
   Set-Location C:\TEMP
 }
 if ($fail) { Write-Host 'RESULT: FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'RESULT: PASS' -ForegroundColor Green; exit 0 }
+} finally { Remove-WorkDir $scratch -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

@@ -54,8 +54,11 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Dir = "$PSScriptRoot\..\..\editors\vscode\drag-lint"
+  [string]$Dir = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Dir) { $Dir = "$PSScriptRoot\..\..\editors\vscode\drag-lint" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -74,9 +77,9 @@ foreach ($p in @($grammarPath, $themePath, $libPath, $pkgPath)) {
 }
 
 $grammarRaw = Get-Content $grammarPath -Raw
-$grammar    = $grammarRaw | ConvertFrom-Json
-$theme      = Get-Content $themePath -Raw | ConvertFrom-Json
-$pkg        = Get-Content $pkgPath -Raw | ConvertFrom-Json
+$grammar    = $grammarRaw | ConvertFrom-Json | ForEach-Object { $_ }
+$theme      = Get-Content $themePath -Raw | ConvertFrom-Json | ForEach-Object { $_ }
+$pkg        = Get-Content $pkgPath -Raw | ConvertFrom-Json | ForEach-Object { $_ }
 
 # ---------------------------------------------------------------------------
 Write-Host 'CHECK 1 -- TColor conversion is BGR, and the traps are honoured' -ForegroundColor Cyan
@@ -107,9 +110,9 @@ process.stdout.write(JSON.stringify(out));
 '@
 Set-Content -LiteralPath $probe -Value $probeSrc -Encoding ASCII
 try {
-  $json = & node $probe $libPath 2>&1
+  $json = & { $ErrorActionPreference = 'Continue'; & node $probe $libPath 2>&1 | ForEach-Object { "$_" } }
   if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: node probe failed: $json" -ForegroundColor Red; exit 2 }
-  $r = $json | ConvertFrom-Json
+  $r = $json | ConvertFrom-Json | ForEach-Object { $_ }
 } finally {
   Remove-Item -LiteralPath $probe -ErrorAction SilentlyContinue
 }

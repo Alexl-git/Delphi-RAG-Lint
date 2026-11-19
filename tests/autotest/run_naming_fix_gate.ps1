@@ -19,9 +19,12 @@
   Needs dcc: SKIPs (exit 0) when rsvars.bat is missing.
 #>
 param(
-  [string]$Exe    = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe    = '',
   [string]$Rsvars = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -49,12 +52,12 @@ function New-Case([string]$Tag, [bool]$Broken) {
     [IO.File]::WriteAllText($dpr, ([IO.File]::ReadAllText($dpr).Replace("GfUnit in 'GfUnit.pas';", "GfUnit in 'GfUnit.pas',`r`n  GfBroken in 'GfBroken.pas';")), $Ascii)
   }
   $db = Join-Path $d 'p.sqlite'
-  & $Exe index --project (Join-Path $d 'GfDemo.dproj') --db $db --library-db none *> (Join-Path $Tmp "$Tag.index.log")
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $d 'GfDemo.dproj') --db $db --library-db none *> (Join-Path $Tmp "$Tag.index.log") }
   return @{ Dir = $d; Db = $db; Proj = (Join-Path $d 'GfDemo.dproj'); Unit = $u }
 }
 function Fix($C, [string]$Rule, [string[]]$More) {
   $a = @('lint', '--in', $C.Unit, '--db', $C.Db, '--enable', $Rule, '--fix', '--fix-rule', $Rule, '--apply', '--no-backup', '--rsvars', $Rsvars) + $More
-  $out = & $Exe @a 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } } | Out-String
   return @{ Code = $LASTEXITCODE; Out = $out }
 }
 function Hash($p) { return (Get-FileHash $p -Algorithm SHA1).Hash }
@@ -73,7 +76,7 @@ try {
   Check 'g2 local renamed' ($t2 -cnotmatch 'my_count' -and $t2 -match 'Inc\(\w+\)') $t2
   $bat = Join-Path $Tmp 'b.bat'
   [IO.File]::WriteAllText($bat, "@echo off`r`ncall `"$Rsvars`"`r`ncd /D `"$($G2.Dir)`"`r`nmsbuild /t:Build /p:Config=Debug /p:Platform=Win64 /v:minimal GfDemo.dproj`r`n", $Ascii)
-  $p = Start-Process -Wait -PassThru -NoNewWindow -FilePath cmd.exe -ArgumentList '/c', $bat -RedirectStandardOutput (Join-Path $Tmp 'b.out')
+  $p = Start-Process -Wait -PassThru -NoNewWindow -FilePath cmd.exe -ArgumentList '/c', $bat -RedirectStandardOutput (Join-Path $Tmp 'b.out'); $null = $p.Handle
   Check 'g2 written project builds' ($p.ExitCode -eq 0) "msbuild exit $($p.ExitCode)"
 
   $C1 = New-Case 'c1' $true

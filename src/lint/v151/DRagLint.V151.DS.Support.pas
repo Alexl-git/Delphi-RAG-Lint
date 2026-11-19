@@ -20,6 +20,12 @@ uses
 
 type
   /// <summary>One call seen in a routine: Recv.Meth(...), or a bare Meth inside a with.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.DS.Support.pas) ?, DRagLint.V151.DS.Support.TDsAnalysis.CallOf (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.Collect (DRagLint.V151.DS.Support.pas) ?, DRagLint.V151.DS.Support.TDsAnalysis.IsAdvance (DRagLint.V151.DS.Support.pas) ?, DRagLint.V151.DS.Support.TDsFacts.Create (DRagLint.V151.DS.Support.pas) ? (+6 more)</para>
+  /// <para>Used in units: DRagLint.V151.DS.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDsCall = record
     Recv   : string;    // normalised receiver text; '' when there is none
     Meth   : string;    // lower-cased method / property name
@@ -30,6 +36,12 @@ type
   end;
 
   /// <summary>One assignment seen in a routine.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.Collect (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.HasAdvance (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.IsFieldWrite (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsFacts.Create (DRagLint.V151.DS.Support.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.V151.DS.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDsAssign = record
     Lhs     : string;   // normalised left-hand side
     WithTop : string;   // innermost with-target at that point, '' when none
@@ -37,12 +49,24 @@ type
   end;
 
   /// <summary>A try ... except statement: where it starts and ends (byte offsets).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.CheckTransactions (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.Collect (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsFacts.Create (DRagLint.V151.DS.Support.pas)</para>
+  /// <para>Used in units: DRagLint.V151.DS.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDsTry = record
     First: Integer;
     Last : Integer;
   end;
 
   /// <summary>Everything one subtree contains that the dataset rules look at.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.V151.DS.Support.pas) ?, DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeLoop (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeRoutine (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.CheckContinues (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.PreScanPosts (DRagLint.V151.DS.Support.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.V151.DS.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDsFacts = class
   strict private
     FCalls  : TList<TDsCall>;
@@ -50,7 +74,23 @@ type
     FArgs   : TDictionary<string, Boolean>;
     FTries  : TList<TDsTry>;
   public
+    /// <summary><!-- drag-lint:auto sum -->TDsFacts</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeLoop (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeRoutine (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.CheckContinues (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.PreScanPosts (DRagLint.V151.DS.Support.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FCalls, FAssigns, FArgs, FTries</para>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsFacts.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FTries, FArgs, FAssigns, FCalls</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsFacts.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>Every call, in source order.</summary>
     property Calls: TList<TDsCall> read FCalls;
@@ -63,7 +103,13 @@ type
   end;
 
   /// <summary>The v151 DS analysis of one parsed file.</summary>
-  /// <remarks>Create it per file and call Run once. Stateless between files.</remarks>
+  /// <remarks>
+  /// Create it per file and call Run once. Stateless between files.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.V151.DS.Support.DsCheckFile (DRagLint.V151.DS.Support.pas)</para>
+  /// <para>Used in units: DRagLint.V151.DS.Support</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDsAnalysis = class  // dl:ok high-response@302d -- REVIEWED 2026-11-13 v151 DS: one walker class holds the three rules; they share the fact collection
   strict private
     FSrc     : TBytes;
@@ -73,38 +119,429 @@ type
     FWith    : TList<string>;
     FPosted  : TDictionary<string, Integer>;  { receiver -> routines of the unit that Post / Cancel it }
     FDecl    : TDictionary<string, Boolean>;  { parameters and locals of the routine being checked }
+    /// <summary><!-- drag-lint:auto sum -->Counts, per receiver, the routines of the file
+    /// that call Post / Cancel / ... on it (T04).</summary>
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DS.Support.TDsAnalysis.PreScanPosts (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.Run (DRagLint.V151.DS.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.DS.Support.InSet, DRagLint.V151.DS.Support.TDsAnalysis.Collect, DRagLint.V151.DS.Support.TDsAnalysis.PreScanPosts, DRagLint.V151.DS.Support.TDsFacts.Create, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <para>Reads: FPosted</para>
+    /// <para>Recursive</para>
+    /// <seealso cref="DRagLint.V151.DS.Support.InSet"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.Collect"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsFacts.Create"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure PreScanPosts(const N: TTSNode);
+    /// <summary><!-- drag-lint:auto sum -->Gathers the lower-cased names of the
+    /// parameters and locals declared in one routine (not in nested routines).</summary>
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeRoutine (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.CollectDecls (DRagLint.V151.DS.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.DS.Support.TDsAnalysis.CollectDecls, DRagLint.V151.DS.Support.TDsAnalysis.Norm, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.StartByte</para>
+    /// <para>Complexity: 11 (cyclomatic, outer body), 25 lines (full implementation)</para>
+    /// <para>Reads: FDecl</para>
+    /// <para>Recursive</para>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.Norm"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CollectDecls(const N: TTSNode);
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: '';
+    /// TEncoding.UTF8.GetString(FSrc, S, E - S).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DS.Support.TDsAnalysis.CheckContinues (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.Emit (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.EndsLoop (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.Norm (DRagLint.V151.DS.Support.pas)</para>
+    /// <para>Calls: Integer, TreeSitter.TTSNodeHelper.EndByte, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.StartByte</para>
+    /// <para>Reads: FSrc</para>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.EndByte"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.StartByte"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AddArgs"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeLoop"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Txt(const N: TTSNode): string;
+    /// <summary><!-- drag-lint:auto sum -->Lower-cased text without blanks, so `Q .
+    /// FieldByName ('A')` and `q.fieldbyname('a')` compare equal.</summary>
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DS.Support.TDsAnalysis.AddArgs (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.CallOf (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.Collect (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.CollectDecls (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.EofReceiver (DRagLint.V151.DS.Support.pas) (+1 more)</para>
+    /// <para>Calls: CharInSet, DRagLint.V151.DS.Support.TDsAnalysis.Txt, LowerCase</para>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.Txt"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AddArgs"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeLoop"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeRoutine"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.CallOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Norm(const N: TTSNode): string;
+    /// <returns><!-- drag-lint:auto -->string -- Observed: if FWith.Count &gt; 0 then
+    /// FWith[FWith.Count - 1].</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DS.Support.TDsAnalysis.CallOf (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.Collect (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.EofReceiver (DRagLint.V151.DS.Support.pas)</para>
+    /// <para>Reads: FWith</para>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AddArgs"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeLoop"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeRoutine"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.CallOf"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.CheckContinues"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function WithTop: string;
+    /// <param name="ANode"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="ARuleId"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AMessage"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeLoop (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.CheckContinues (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.CheckEdits (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.CheckTransactions (DRagLint.V151.DS.Support.pas)</para>
+    /// <para>Calls: Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol, DRagLint.V151.DS.Support.TDsAnalysis.Txt, Integer, TreeSitter.TTSNodeHelper.StartPoint, Trim</para>
+    /// <para>Reads: FFile, FFindings</para>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.CharCol"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.Txt"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.StartPoint"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AddArgs"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeLoop"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Emit(const ANode: TTSNode; const ARuleId, AMessage: string);
+    /// <summary><!-- drag-lint:auto sum -->Fills AFacts with the calls, assignments and
+    /// plain arguments under N. A nested routine is a scope of its own and is not
+    /// entered; an anonymous method is part of the routine around it.</summary>
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AFacts"><!-- drag-lint:auto type -->TDsFacts</param>
+    /// <param name="ARoot"><!-- drag-lint:auto type -->Boolean</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeLoop (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeRoutine (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.CheckContinues (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.Collect (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.PreScanPosts (DRagLint.V151.DS.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.DS.Support.TDsAnalysis.AddArgs, DRagLint.V151.DS.Support.TDsAnalysis.CallOf, DRagLint.V151.DS.Support.TDsAnalysis.Collect, DRagLint.V151.DS.Support.TDsAnalysis.Norm, DRagLint.V151.DS.Support.TDsAnalysis.WithTop, Integer, TreeSitter.TTSNodeHelper.Child, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.ChildCount, TreeSitter.TTSNodeHelper.EndByte, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.StartByte</para>
+    /// <para>Complexity: 21 (cyclomatic, outer body), 60 lines (full implementation)</para>
+    /// <para>Reads: FWith</para>
+    /// <para>Recursive</para>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AddArgs"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.CallOf"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.Norm"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.WithTop"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.Child"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Collect(const N: TTSNode; AFacts: TDsFacts; ARoot: Boolean);
+    /// <summary><!-- drag-lint:auto sum -->Reads a call out of an exprCall, an exprDot
+    /// used as a call, or (inside a with) a bare identifier.</summary>
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="ACall"><!-- drag-lint:auto type -->out TDsCall</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeLoop (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.Collect (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.IsAdvanceStmt (DRagLint.V151.DS.Support.pas)</para>
+    /// <para>Calls: Default, DRagLint.V151.DS.Support.TDsAnalysis.Norm, DRagLint.V151.DS.Support.TDsAnalysis.WithTop, Integer, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.Parent, TreeSitter.TTSNodeHelper.StartByte</para>
+    /// <para>Mutates: ACall (out)</para>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.Norm"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.WithTop"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function CallOf(const N: TTSNode; out ACall: TDsCall): Boolean;
+    /// <param name="AArgs"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AFacts"><!-- drag-lint:auto type -->TDsFacts</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DS.Support.TDsAnalysis.Collect (DRagLint.V151.DS.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.DS.Support.TDsAnalysis.Norm, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.Norm"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure AddArgs(const AArgs: TTSNode; AFacts: TDsFacts);
+    /// <param name="ACall"><!-- drag-lint:auto type -->const TDsCall</param>
+    /// <param name="ARecv"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: (ACall.Recv = ARecv) and
+    /// InSet(ACall.Meth, ADVANCE_METHODS).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeLoop (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.HasAdvance (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.IsAdvanceStmt (DRagLint.V151.DS.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.DS.Support.InSet</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.V151.DS.Support.InSet"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AddArgs"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeLoop"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeRoutine"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.CallOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsAdvance(const ACall: TDsCall; const ARecv: string): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->A statement that is exactly one advancing call
+    /// on ARecv (Q.Next;).</summary>
+    /// <param name="S"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="ARecv"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: (S.NodeType = 'statement')
+    /// and (S.NamedChildCount = 1) and CallOf(S.NamedChild(0), Call) and IsAdvance(Call,
+    /// ARecv).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DS.Support.TDsAnalysis.CheckContinues (DRagLint.V151.DS.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.DS.Support.TDsAnalysis.CallOf, DRagLint.V151.DS.Support.TDsAnalysis.IsAdvance, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.CallOf"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.IsAdvance"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsAdvanceStmt(const S: TTSNode; const ARecv: string): Boolean;
+    /// <param name="AFacts"><!-- drag-lint:auto type -->const TDsFacts</param>
+    /// <param name="ARecv"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeLoop (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.CheckContinues (DRagLint.V151.DS.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.DS.Support.TDsAnalysis.IsAdvance</para>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.IsAdvance"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AddArgs"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeLoop"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeRoutine"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.CallOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function HasAdvance(const AFacts: TDsFacts; const ARecv: string): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->True when N itself ends the enclosing loop for
+    /// good: raise, goto, asm, Exit, Halt, Abort, RunError, or a Break that belongs to
+    /// this loop (AInner = 0).</summary>
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AInner"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: (T = 'raise') or (T = 'goto')
+    /// or (T = 'asm'); StartsWithAny(W, ['exit', 'halt', 'abort', 'runerror']) or ((W =
+    /// 'break') and (AInner = 0)).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DS.Support.TDsAnalysis.HasLoopExit (DRagLint.V151.DS.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.DS.Support.StartsWithAny, DRagLint.V151.DS.Support.TDsAnalysis.Txt, LowerCase, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, Trim</para>
+    /// <seealso cref="DRagLint.V151.DS.Support.StartsWithAny"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.Txt"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function EndsLoop(const N: TTSNode; AInner: Integer): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->True when the code under N can leave the loop
+    /// for good (see EndsLoop); nested routines and anonymous methods are not entered, a
+    /// Break inside an inner loop only leaves that loop.</summary>
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="AInner"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; EndsLoop(N, AInner);
+    /// HasLoopExit(N.NamedChild(I), Inner).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeLoop (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.HasLoopExit (DRagLint.V151.DS.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.DS.Support.IsLoopNode, DRagLint.V151.DS.Support.TDsAnalysis.EndsLoop, DRagLint.V151.DS.Support.TDsAnalysis.HasLoopExit, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <para>Recursive</para>
+    /// <seealso cref="DRagLint.V151.DS.Support.IsLoopNode"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.EndsLoop"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function HasLoopExit(const N: TTSNode; AInner: Integer): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->Recognises "not X.Eof" / "not X.Bof" (while)
+    /// and "X.Eof" / "X.Bof" (until); ARecv is the dataset.</summary>
+    /// <param name="ACond"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="ARepeat"><!-- drag-lint:auto type -->Boolean</param>
+    /// <param name="ARecv"><!-- drag-lint:auto type -->out string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeLoop (DRagLint.V151.DS.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.DS.Support.TDsAnalysis.Norm, DRagLint.V151.DS.Support.TDsAnalysis.WithTop, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <para>Complexity: 19 (cyclomatic, outer body), 32 lines (full implementation)</para>
+    /// <para>Mutates: ARecv (out)</para>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.Norm"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.WithTop"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function EofReceiver(const ACond: TTSNode; ARepeat: Boolean; out ARecv: string): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->Reports each Continue of this loop that runs
+    /// before the loop's own advance statement and is not covered by a try/finally whose
+    /// finally part advances.</summary>
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <param name="ARecv"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AAdvancePos"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="ACovered"><!-- drag-lint:auto type -->Boolean</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeLoop (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.CheckContinues (DRagLint.V151.DS.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.DS.Support.IsLoopNode, DRagLint.V151.DS.Support.TDsAnalysis.CheckContinues, DRagLint.V151.DS.Support.TDsAnalysis.Collect, DRagLint.V151.DS.Support.TDsAnalysis.Emit, DRagLint.V151.DS.Support.TDsAnalysis.HasAdvance, DRagLint.V151.DS.Support.TDsAnalysis.IsAdvanceStmt, DRagLint.V151.DS.Support.TDsAnalysis.Txt, DRagLint.V151.DS.Support.TDsFacts.Create, Integer, SameText (+8 more)</para>
+    /// <para>Complexity: 19 (cyclomatic, outer body), 44 lines (full implementation)</para>
+    /// <para>Recursive</para>
+    /// <seealso cref="DRagLint.V151.DS.Support.IsLoopNode"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.Collect"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.Emit"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.HasAdvance"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.IsAdvanceStmt"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CheckContinues(const N: TTSNode; const ARecv: string; AAdvancePos: Integer; ACovered: Boolean);
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DS.Support.TDsAnalysis.Visit (DRagLint.V151.DS.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.DS.Support.TDsAnalysis.CallOf, DRagLint.V151.DS.Support.TDsAnalysis.CheckContinues, DRagLint.V151.DS.Support.TDsAnalysis.Collect, DRagLint.V151.DS.Support.TDsAnalysis.Emit, DRagLint.V151.DS.Support.TDsAnalysis.EofReceiver, DRagLint.V151.DS.Support.TDsAnalysis.HasAdvance, DRagLint.V151.DS.Support.TDsAnalysis.HasLoopExit, DRagLint.V151.DS.Support.TDsAnalysis.IsAdvance, DRagLint.V151.DS.Support.TDsFacts.Create, Format (+8 more)</para>
+    /// <para>Complexity: 15 (cyclomatic, outer body), 44 lines (full implementation)</para>
+    /// <para>Reads: FWanted</para>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.CallOf"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.CheckContinues"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.Collect"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.Emit"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.EofReceiver"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure AnalyzeLoop(const N: TTSNode);
+    /// <param name="A"><!-- drag-lint:auto type -->const TDsAssign</param>
+    /// <param name="ARecv"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: A.Lhs.StartsWith(ARecv + '.')
+    /// or A.Lhs.StartsWith(ARecv + '['); A.Lhs.StartsWith('fieldbyname(') or
+    /// A.Lhs.StartsWith('fields').</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DS.Support.TDsAnalysis.CheckEdits (DRagLint.V151.DS.Support.pas)</para>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AddArgs"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeLoop"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeRoutine"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.CallOf"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.CheckContinues"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsFieldWrite(const A: TDsAssign; const ARecv: string): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->dataset-edit-without-post for one routine's
+    /// facts.</summary>
+    /// <param name="AFacts"><!-- drag-lint:auto type -->TDsFacts</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeRoutine (DRagLint.V151.DS.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.DS.Support.InSet, DRagLint.V151.DS.Support.TDsAnalysis.Emit, DRagLint.V151.DS.Support.TDsAnalysis.IsFieldWrite, Format</para>
+    /// <para>Complexity: 20 (cyclomatic, outer body), 29 lines (full implementation)</para>
+    /// <para>Reads: FDecl, FPosted</para>
+    /// <seealso cref="DRagLint.V151.DS.Support.InSet"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.Emit"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.IsFieldWrite"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AddArgs"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeLoop"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CheckEdits(AFacts: TDsFacts);
+    /// <summary><!-- drag-lint:auto sum -->transaction-without-rollback for one routine's
+    /// facts: a start that is committed later, a try ... except at or after the start
+    /// (the error is caught), and no Rollback on that connection anywhere.</summary>
+    /// <param name="AFacts"><!-- drag-lint:auto type -->TDsFacts</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeRoutine (DRagLint.V151.DS.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.DS.Support.InSet, DRagLint.V151.DS.Support.RelatedRecv, DRagLint.V151.DS.Support.TDsAnalysis.Emit, Format</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 24 lines (full implementation)</para>
+    /// <seealso cref="DRagLint.V151.DS.Support.InSet"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.RelatedRecv"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.Emit"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AddArgs"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeLoop"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CheckTransactions(AFacts: TDsFacts);
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DS.Support.TDsAnalysis.Visit (DRagLint.V151.DS.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.DS.Support.TDsAnalysis.CheckEdits, DRagLint.V151.DS.Support.TDsAnalysis.CheckTransactions, DRagLint.V151.DS.Support.TDsAnalysis.Collect, DRagLint.V151.DS.Support.TDsAnalysis.CollectDecls, DRagLint.V151.DS.Support.TDsFacts.Create, FWanted, TreeSitter.TTSNodeHelper.ChildByField/1</para>
+    /// <para>Reads: FDecl, FWanted</para>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.CheckEdits"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.CheckTransactions"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.Collect"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.CollectDecls"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsFacts.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure AnalyzeRoutine(const N: TTSNode);
+    /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DS.Support.TDsAnalysis.Run (DRagLint.V151.DS.Support.pas), DRagLint.V151.DS.Support.TDsAnalysis.Visit (DRagLint.V151.DS.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeLoop, DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeRoutine, DRagLint.V151.DS.Support.TDsAnalysis.Norm, DRagLint.V151.DS.Support.TDsAnalysis.Visit, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+    /// <para>Complexity: 10 (cyclomatic, outer body), 36 lines (full implementation)</para>
+    /// <para>Reads: FWith   Writes: FWith</para>
+    /// <para>Recursive</para>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeLoop"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeRoutine"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.Norm"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+    /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Visit(const N: TTSNode);
   public
     /// <summary>Builds an analysis of one file.</summary>
     /// <param name="AFile">Path reported in the findings.</param>
     /// <param name="ASrc">The parsed source bytes (UTF-8) the tree was built from.</param>
     /// <param name="AWanted">Tells whether the run reports a rule id; a rule that is not wanted is not computed.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.V151.DS.Support.DsCheckFile (DRagLint.V151.DS.Support.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FFile, FSrc, FWanted, FFindings, FWith, FPosted, FDecl</para>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AddArgs"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeLoop"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeRoutine"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.CallOf"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.CheckContinues"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(const AFile: string; const ASrc: TBytes; const AWanted: TFunc<string, Boolean>);
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FPosted, FDecl, FWith, FFindings</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AddArgs"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeLoop"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeRoutine"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.CallOf"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.CheckContinues"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>Walks the tree once and returns the findings of the three DS rules.</summary>
     /// <param name="ARoot">Root node of the file's tree.</param>
     /// <returns>The findings; empty when the file is clean.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas) ?, DRagLint.V151.DS.Support.DsCheckFile (DRagLint.V151.DS.Support.pas)</para>
+    /// <para>Calls: DRagLint.V151.DS.Support.TDsAnalysis.PreScanPosts, DRagLint.V151.DS.Support.TDsAnalysis.Visit, FWanted</para>
+    /// <para>Returns: FFindings.ToArray</para>
+    /// <para>Reads: FWanted, FFindings</para>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.PreScanPosts"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.Visit"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AddArgs"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeLoop"/>
+    /// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.AnalyzeRoutine"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Run(const ARoot: TTSNode): TArray<TLintFinding>;
   end;
 
@@ -112,6 +549,17 @@ type
 /// <param name="AFile">Absolute path of the .pas.</param>
 /// <param name="AWanted">Which rule ids to compute.</param>
 /// <returns>The findings; nil when the file cannot be parsed.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.V151.DS.TV151DSRules.CheckFile (DRagLint.V151.DS.pas)</para>
+/// <para>Calls: DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.V151.DS.Support.TDsAnalysis.Create, DRagLint.V151.DS.Support.TDsAnalysis.Run, TreeSitter.TTSTree.RootNode</para>
+/// <para>Returns: nil; Run.Run(PF.Tree.RootNode)</para>
+/// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+/// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.Create"/>
+/// <seealso cref="DRagLint.V151.DS.Support.TDsAnalysis.Run"/>
+/// <seealso cref="TreeSitter.TTSTree.RootNode"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DsCheckFile(const AFile: string; const AWanted: TFunc<string, Boolean>): TArray<TLintFinding>;
 
 implementation
@@ -264,7 +712,7 @@ begin
   F.Message  := AMessage;
   F.FilePath := FFile;
   F.StartLine:= Integer(P.Row) + 1;
-  F.StartCol := Integer(P.Column) + 1;
+  F.StartCol := TAstParseCache.CharCol(F.FilePath, P); { 1.52 BK-COLS2: character column }
   F.EndLine  := F.StartLine;
   F.EndCol   := F.StartCol + Length(Trim(Txt(ANode)));
   FFindings.Add(F);

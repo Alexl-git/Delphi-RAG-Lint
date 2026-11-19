@@ -1,5 +1,8 @@
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
@@ -18,8 +21,8 @@ Copy-Item $fixture $target -Force
 
 Push-Location $scratch
 try {
-  $raw = & $exePath lint --file $target --fix --json --apply 2>$null | Out-String
-  $arr = $null; try { $arr = ($raw | ConvertFrom-Json) } catch { $arr = $null }
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $target --fix --json --apply 2>$null } | Out-String
+  $arr = $null; try { $arr = ($raw | ConvertFrom-Json | ForEach-Object { $_ }) } catch { $arr = $null }
   if ($null -ne $arr -and $arr -isnot [System.Array]) { $arr = @($arr) }
 
   $sa = $arr | Where-Object { $_.rule -eq 'self-assignment' } | Select-Object -First 1

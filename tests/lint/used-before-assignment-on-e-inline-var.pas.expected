@@ -1,0 +1,4 @@
+# 37 positive control: plain unassigned local still fires
+used-before-assignment 37
+# 27 on E: read before the later inline var E must stay silent
+!used-before-assignment 27

@@ -22,10 +22,13 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$Filter  = '*',
   [string]$WorkDir = "$env:TEMP\drag-lint-fix-declines-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:pass = 0; $script:fail = 0
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -36,8 +39,8 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
   }
 }
 function RuleRows([string]$ExePath, [string]$File, [string]$Id, [string[]]$Extra) {
-  $raw = & $ExePath lint --file $File --rule $Id --json @Extra 2>$null | Out-String
-  try { return @(@($raw | ConvertFrom-Json) | Where-Object { $_.rule -eq $Id }).Count } catch { return -1 }
+  $raw = & { $ErrorActionPreference = 'Continue'; & $ExePath lint --file $File --rule $Id --json @Extra 2>$null } | Out-String
+  try { return @(@(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) | Where-Object { $_.rule -eq $Id }).Count } catch { return -1 }
 }
 
 $exePath = (Resolve-Path $Exe).Path
@@ -65,7 +68,7 @@ try {
         $n = RuleRows $exePath $copy $id $extra
         Check "${tag}: '$id' fires (positive control, got $n)" ($n -ge 1)
         $before = [IO.File]::ReadAllBytes($copy)
-        $txt = & $exePath lint --file $copy --fix --fix-rule $id --apply --no-backup @extra 2>&1 | Out-String
+        $txt = & { $ErrorActionPreference = 'Continue'; & $exePath lint --file $copy --fix --fix-rule $id --apply --no-backup @extra 2>&1 | ForEach-Object { "$_" } } | Out-String
         $after = [IO.File]::ReadAllBytes($copy)
         $same = ($before.Length -eq $after.Length) -and (-not (Compare-Object $before $after -SyncWindow 0))
         Check "${tag}: --fix --apply left the file unchanged (declined)" $same $txt.Trim()

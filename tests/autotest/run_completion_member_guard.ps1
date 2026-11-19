@@ -38,9 +38,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-completion-member-guard-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -224,7 +227,7 @@ function Get-CompletionLabels([string[]]$Dbs) {
   $labels = @()
   $script:LastDetails = @{}
   foreach ($m in [regex]::Matches($raw, '\{"jsonrpc".*?(?=Content-Length:|$)', 'Singleline')) {
-    try { $o = $m.Value.Trim() | ConvertFrom-Json } catch { continue }
+    try { $o = $m.Value.Trim() | ConvertFrom-Json | ForEach-Object { $_ } } catch { continue }
     if ($o.id -eq 2 -and $o.result) {
       foreach ($it in $o.result.items) { $labels += $it.label; $script:LastDetails[$it.label] = $it.detail }
     }
@@ -238,7 +241,7 @@ $expected = @('ThingMethod', 'ThingFunc', 'ThingField', 'BaseOnlyMethod')
 Write-Host ''
 Write-Host 'CASE 1: type and usage in the SAME index (pins the kind check)' -ForegroundColor Cyan
 $db1 = Join-Path $WorkDir 'both.sqlite'
-& $Exe index $WorkDir --db $db1 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db1 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'built the combined index' (Test-Path $db1)
 $got1 = Get-CompletionLabels @($db1)
 Check 'completion returned items at all' ($got1.Count -gt 0) "count=$($got1.Count)"
@@ -256,8 +259,8 @@ Write-Host 'CASE 2: type in a SEPARATE index (pins the single-store lookup)' -Fo
 $env:DRAGLINT_CONTEXT_DEFAULTS = Join-Path $WorkDir 'no-defaults.json'
 $dbT = Join-Path $WorkDir 'library-Win64.sqlite'
 $dbU = Join-Path $WorkDir 'usage.sqlite'
-& $Exe index $typesDir --db $dbT 2>&1 | Out-Null
-& $Exe index $usageDir --db $dbU 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $typesDir --db $dbT 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $usageDir --db $dbU 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'built both split indexes' ((Test-Path $dbT) -and (Test-Path $dbU))
 # usage db FIRST: it owns the file, exactly how the plugin orders project-then-library.
 $got2 = Get-CompletionLabels @($dbU, $dbT)

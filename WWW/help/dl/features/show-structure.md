@@ -4,10 +4,10 @@ title: Show Structure
 summary: Shows a structural outline of the current unit
 product: DL
 group: search-navigation
-order: 20030
+order: 20031
 since: 0.30.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.51.1-alpha
 ---
 
 # Show Structure

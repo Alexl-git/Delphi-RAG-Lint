@@ -12,7 +12,10 @@
   `graph` refuses json/html). CONTROL: dot output still starts with `digraph`.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -33,7 +36,7 @@ try {
   }
   foreach ($k in $u.Keys) { [IO.File]::WriteAllText((Join-Path $Src $k), $u[$k], [Text.Encoding]::ASCII) }
   $Db = Join-Path $Work 'nb.sqlite'
-  & $Exe index $Src --db $Db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $Src --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   if (-not (Test-Path $Db)) { Write-Host 'FATAL: index produced no DB'; exit 2 }
 
   $req = Join-Path $Work 'req.txt'
@@ -47,10 +50,10 @@ try {
   Start-Process $Exe -ArgumentList 'serve','--db',$Db -RedirectStandardInput $req -RedirectStandardOutput $so `
     -RedirectStandardError (Join-Path $Work 'se.txt') -NoNewWindow -Wait | Out-Null
   $r = @{}
-  foreach ($l in (Get-Content $so)) { try { $o = $l | ConvertFrom-Json; if ($o.id) { $r[[string]$o.id] = $o } } catch {} }
+  foreach ($l in (Get-Content $so)) { try { $o = $l | ConvertFrom-Json | ForEach-Object { $_ }; if ($o.id) { $r[[string]$o.id] = $o } } catch {} }
   $ins = [string]$r['1'].result.instructions
   Check '1 initialize carries instructions saying drag-lint first' ($ins -match 'drag-lint first') "got='$ins'"
-  function Nb($id) { $c = $r[$id].result.content; if ($c) { $t = $c[0].text; $t | ConvertFrom-Json } else { $null } }
+  function Nb($id) { $c = $r[$id].result.content; if ($c) { $t = $c[0].text; $t | ConvertFrom-Json | ForEach-Object { $_ } } else { $null } }
   $n1 = Nb '2'; $n2 = Nb '3'; $n0 = Nb '4'
   $q1 = @($n1.neighbors | ForEach-Object { $_.qname })
   $q2 = @($n2.neighbors | ForEach-Object { $_.qname })
@@ -60,15 +63,15 @@ try {
   Check '2d unknown qname: empty neighbors' (($null -ne $n0) -and (@($n0.neighbors).Count -eq 0))
   Check '2e hops 2 is a superset of hops 1' ($q2.Count -ge $q1.Count)
 
-  $j = (& $Exe graph --db $Db --format json 2>$null | Out-String)
-  $jo = $null; try { $jo = $j | ConvertFrom-Json } catch {}
+  $j = (& { $ErrorActionPreference = 'Continue'; & $Exe graph --db $Db --format json 2>$null } | Out-String)
+  $jo = $null; try { $jo = $j | ConvertFrom-Json | ForEach-Object { $_ } } catch {}
   Check '3a graph --format json parses with edges' (($null -ne $jo) -and (@($jo.edges).Count -ge 2)) "raw=$($j.Substring(0, [Math]::Min(120,$j.Length)))"
   Check '3b json edge has from/to/weight' ($null -ne $jo -and $jo.edges[0].from -and $jo.edges[0].to -and $jo.edges[0].weight -gt 0)
-  $h = (& $Exe graph --db $Db --format html 2>$null | Out-String)
+  $h = (& { $ErrorActionPreference = 'Continue'; & $Exe graph --db $Db --format html 2>$null } | Out-String)
   Check '3c graph --format html is a self-contained page' (($h -match '<!DOCTYPE html>') -and ($h -match 'application/json') -and ($h -match 'uNbA'))
-  & $Exe graph --db $Db --format svg 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe graph --db $Db --format svg 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check '3d unknown format still exits 2' ($LASTEXITCODE -eq 2) "exit=$LASTEXITCODE"
-  $d = (& $Exe graph --db $Db 2>$null | Out-String)
+  $d = (& { $ErrorActionPreference = 'Continue'; & $Exe graph --db $Db 2>$null } | Out-String)
   # 3e MUST-FIX (x3 finding): the json edge writer used a local escaper whose backslash replace was a no-op. A unit name
   # cannot hold a backslash on Windows, so no fixture can reach it: this reads the source. RED on the old code.
   # v1511 SPLIT moved the graph verb to DRagLint.CLI.Graph.pas: read every CLI unit (DRagLint.CLI*.pas), not one.

@@ -42,8 +42,11 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe"
+  [string]$Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -78,7 +81,7 @@ Check 'the shipped sample still carries the cast line this pins' `
   "if sample.rules changed, re-point this guard rather than deleting it"
 
 if (Test-Path $libDb) {
-  $val = (& $Exe convert-validate --rules $sample --from Vcl.Graphics.TFont --to Vcl.Graphics.TFont --db $libDb 2>&1) -join "`n"
+  $val = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules $sample --from Vcl.Graphics.TFont --to Vcl.Graphics.TFont --db $libDb 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   # Scoped to the CAST LINE. The same run reports line 15/16 errors, which are an
   # artifact of passing one --from/--to pair against a two-block rule book and are
   # NOT this defect -- asserting "no errors at all" would fail against correct code.
@@ -91,7 +94,7 @@ if (Test-Path $libDb) {
   Write-Host "  [SKIP] library db not present at $libDb -- cases 1/1b need it" -ForegroundColor Yellow
 }
 
-$parsed = (& $Exe convert-validate --rules $sample --print-parsed 2>&1) -join "`n"
+$parsed = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules $sample --print-parsed 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 $line6  = ($parsed -split "`n" | Where-Object { $_ -match '^line 6:' }) -join ''
 Check '2. --print-parsed shows Cast as a SEPARATE labelled field' `
   (($line6 -match '\[cast\s+Round\]') -and ($line6 -notmatch 'Size\s*:\s*Round')) `
@@ -112,11 +115,11 @@ $rules = Join-Path $WorkDir 'cast.rules'
 #link Pitch <- Pitch
 '@ -replace "`r`n", "`n") -replace "`n", "`r`n"), (New-Object System.Text.ASCIIEncoding))
 
-$p2 = (& $Exe convert-validate --rules $rules --print-parsed 2>&1) -join "`n"
+$p2 = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules $rules --print-parsed 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 function ParsedLine($n) { return (($p2 -split "`n" | Where-Object { $_ -match "^line ${n}:" }) -join '') }
 
 if (Test-Path $libDb) {
-  $v2 = (& $Exe convert-validate --rules $rules --from Vcl.Graphics.TFont --to Vcl.Graphics.TFont --db $libDb 2>&1) -join "`n"
+  $v2 = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules $rules --from Vcl.Graphics.TFont --to Vcl.Graphics.TFont --db $libDb 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   Check '3. CONTROL: a genuinely missing FromPath IS still reported' `
     ($v2 -match 'line 2: link FromPath not found') `
     'if this went silent the validator is dead and cases 1/1b prove nothing'

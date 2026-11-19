@@ -40,9 +40,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-ghost-ownership-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -94,7 +97,7 @@ New-Item -ItemType Directory $WorkDir | Out-Null
 # --------------------------------------------------------------------------
 Write-Host 'Case 1: overlay still ours -> restore' -ForegroundColor Cyan
 $c1 = New-Case 'mine' $BUFFER $true
-& $Exe ghost-recover $c1.Dir 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe ghost-recover $c1.Dir 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $after1 = [System.IO.File]::ReadAllText($c1.Unit)
 Check 'overlay owned by us is restored to the original' ($after1 -eq $ORIG)
 Check 'journal cleared after a real restore' (-not (Test-Path $c1.Journal))
@@ -107,7 +110,7 @@ Check 'journal cleared after a real restore' (-not (Test-Path $c1.Journal))
 Write-Host ''
 Write-Host 'Case 2: user saved the SAME buffer we overlaid -> must NOT revert' -ForegroundColor Cyan
 $c2 = New-Case 'saved-same-bytes' $BUFFER $false
-$out2 = (& $Exe ghost-recover $c2.Dir 2>&1 | ForEach-Object { $_.ToString() }) -join "`n"
+$out2 = (& { $ErrorActionPreference = 'Continue'; & $Exe ghost-recover $c2.Dir 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { $_.ToString() }) -join "`n"
 $after2 = [System.IO.File]::ReadAllText($c2.Unit)
 Check 'the user save SURVIVES (file not reverted to the original)' ($after2 -eq $BUFFER) `
   'this is the exact data-loss report'
@@ -121,7 +124,7 @@ Write-Host ''
 Write-Host 'Case 3: unrelated later edit -> must NOT revert' -ForegroundColor Cyan
 $LATER = "unit U;`r`ninterface`r`n// typed after the crash`r`nimplementation`r`nend.`r`n"
 $c3 = New-Case 'later-edit' $LATER $false
-& $Exe ghost-recover $c3.Dir 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe ghost-recover $c3.Dir 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $after3 = [System.IO.File]::ReadAllText($c3.Unit)
 Check 'a later edit SURVIVES' ($after3 -eq $LATER)
 
@@ -135,7 +138,7 @@ Write-Host 'Case 4: journal without an ownership token' -ForegroundColor Cyan
 $c4 = New-Case 'no-token' $BUFFER $true
 $j = [System.IO.File]::ReadAllText($c4.Journal) -replace '(?m)^ovlft=.*\r?\n', ''
 [System.IO.File]::WriteAllText($c4.Journal, $j, [System.Text.Encoding]::ASCII)
-& $Exe ghost-recover $c4.Dir 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe ghost-recover $c4.Dir 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $after4 = [System.IO.File]::ReadAllText($c4.Unit)
 # No token means the old contract: restore. Documented here so a decision to
 # tighten it further is deliberate rather than accidental.

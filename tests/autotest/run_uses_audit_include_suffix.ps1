@@ -10,9 +10,12 @@
 
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-uses-audit-include-sfx-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 if ($PSVersionTable.PSVersion.Major -lt 7) { Write-Host 'run_uses_audit_include_suffix: needs pwsh 7' -ForegroundColor Red; exit 2 }
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
@@ -27,11 +30,11 @@ function Check($n, $ok, $d = '') {
 }
 New-Item -ItemType Directory -Force $WorkDir | Out-Null
 $db = Join-Path $WorkDir 'mv.sqlite'
-& $Exe index $fx --db $db *> (Join-Path $WorkDir 'index.log')
+& { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db *> (Join-Path $WorkDir 'index.log') }
 Check 'V the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db)) "exit=$LASTEXITCODE"
 
-$raw = (& $Exe lint-all --db $db --rule uses-movable-to-implementation --json 2>$null) -join "`n"
-$f = @($raw | ConvertFrom-Json)
+$raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --rule uses-movable-to-implementation --json 2>$null }) -join "`n"
+$f = @(($raw | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ })
 $h = @($f | Where-Object { $_.file_path -like '*\MvHost.pas' })
 $n = @($f | Where-Object { $_.file_path -like '*\MvInline.pas' })
 Check 'include entry: one finding in MvHost.pas' ($h.Count -eq 1) "count=$($h.Count)"

@@ -7,14 +7,14 @@ They run in `lint <file.pas>` (the sibling `.dfm` with the same base name is rea
 | Rule | Default | What it reports |
 |---|---|---|
 | `form-field-without-object` | see below | a published field of the form class with no object of that name in the form file: it stays nil after loading |
-| `form-object-without-field` | off (hint; `--enable form-object-without-field`) -- DevExpress bar and layout items carry no field by design | an object (or frame instance) of the form file with no field in the form class or its ancestors |
+| `form-object-without-field` | on since 1.52 (hint) -- DevExpress bar, layout and grid sub-objects are skipped by the shipped `rules\form-object-without-field.exempt.txt` | an object (or frame instance) of the form file with no field in the form class or its ancestors |
 | `form-field-type-mismatch` | see below | a published field whose class is not the class of the form object, nor an ancestor of it |
 | `form-resource-missing` | see below | the unit declares the form file's root class but includes no `{$R *.dfm}`: creating the form raises EResNotFound |
 | `inherited-form-handler-without-inherited` | see below | an inherited form re-declares a handler that an ancestor form file assigns, under the same name, without calling `inherited` |
 | `self-free-in-event-handler` | see below | a form frees itself (Free, Destroy, DisposeOf, FreeAndNil) in one of its own event handlers |
 | `form-autocreate-and-manual` | see below | the `.dpr` creates a form with `Application.CreateForm` and the code assigns `TForm.Create(...)` to the same global variable |
 | `form-access-before-create` | see below | the constructor, AfterConstruction or OnCreate handler of an auto-created module reads the global variable of a module the `.dpr` creates later |
-| `foreign-form-control-access` | off | code reaches a control of another unit's form through its global variable (`Form2.Edit1.Text`) |
+| `foreign-form-control-access` | on since 1.52 | code reaches a control of another unit's form through its global variable (`Form2.Edit1.Text`) |
 | `unit-missing-from-uses` (form file side) | on (host rule) | a `.dfm` property points at a component of another module (`DataSet = dmMain.qryItems`) whose unit is not in the uses clause |
 
 ## Examples

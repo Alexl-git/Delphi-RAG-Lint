@@ -26,11 +26,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_convert_glyph_strip_$PID",
   [string]$RealDfm = 'C:\Projects\DB\ORM3\CLIENT\VARINSP.DFM',
   [string]$CaptureDir = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Continue'
 $script:fail = $false
@@ -297,17 +300,17 @@ Write-Ascii $rulesPlain @'
 #link OptionsImage.NumGlyphs <- NumGlyphs
 '@
 $dbA = Join-Path $WorkDir 'dbA.sqlite'; $dbB = Join-Path $WorkDir 'dbB.sqlite'; $dbApp = Join-Path $WorkDir 'dbApp.sqlite'
-& $Exe index $libA --db $dbA 2>&1 | Out-Null
-& $Exe index $libB --db $dbB 2>&1 | Out-Null
-& $Exe index $app --db $dbApp 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $libA --db $dbA 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $libB --db $dbB 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $app --db $dbApp 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V1 the three fixture indexes were built' ((Test-Path $dbA) -and (Test-Path $dbB) -and (Test-Path $dbApp))
 
 function Run([string]$Dir, [string]$Db, [string]$Book, [string[]]$Extra) {
   Push-Location $Dir
-  try { $raw = (& $Exe convert-apply --unit 'GlyphForm.pas' --rules $Book --db $Db --db $dbA --db $dbB @Extra 2>&1) -join "`n"; $ec = $LASTEXITCODE }
+  try { $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-apply --unit 'GlyphForm.pas' --rules $Book --db $Db --db $dbA --db $dbB @Extra 2>&1 | ForEach-Object { "$_" } }) -join "`n"; $ec = $LASTEXITCODE }
   finally { Pop-Location }
   $line = ($raw -split "`n" | Where-Object { $_.TrimStart().StartsWith('{') } | Select-Object -First 1)
-  $j = $null; if ($line) { try { $j = $line | ConvertFrom-Json } catch { } }
+  $j = $null; if ($line) { try { $j = $line | ConvertFrom-Json | ForEach-Object { $_ } } catch { } }
   return @{ Raw = $raw; J = $j; Exit = $ec }
 }
 
@@ -315,7 +318,7 @@ function Run([string]$Dir, [string]$Db, [string]$Book, [string[]]$Extra) {
 $off = Run $app $dbApp $rules @('--castlib', $cast)
 Check 'O1 without the switch a G-link book is still REFUSED (exit 1, not yet realised)' `
       (($off.Exit -eq 1) -and ($off.Raw -match 'not yet realised')) $off.Raw
-$info = (& $Exe info --json --db $dbApp 2>&1) -join "`n"
+$info = (& { $ErrorActionPreference = 'Continue'; & $Exe info --json --db $dbApp 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 Check 'I1 info --json does not advertise glyph_stitch while the switch is OFF' `
       (($info -match 'lazy_validate') -and ($info -notmatch 'glyph_stitch')) $info
 
@@ -345,7 +348,7 @@ Check 'A12 the source count property is not reported dropped: G[count] replaced 
 Check 'A13 Picture.Data is not reported dropped or mismatched' ($allNotes -notmatch '(dropped|mismatched) Picture') $allNotes
 if ($CaptureDir) {
   [IO.Directory]::CreateDirectory($CaptureDir) | Out-Null
-  $ver = ((& $Exe --version 2>&1) -join ' ')
+  $ver = ((& { $ErrorActionPreference = 'Continue'; & $Exe --version 2>&1 | ForEach-Object { "$_" } }) -join ' ')
   $line = ($dry.Raw -split "`n" | Where-Object { $_.TrimStart().StartsWith('{') } | Select-Object -First 1)
   [IO.File]::WriteAllText((Join-Path $CaptureDir 'apply-glyphs-capture.json'), $line.Replace($WorkDir, 'FIXTURE') + "`r`n", [Text.Encoding]::ASCII)
   $txt = Run $app $dbApp $rules @('--glyph-stitch', '--castlib', $cast)
@@ -356,7 +359,7 @@ if ($CaptureDir) {
 $appW = Join-Path $WorkDir 'appw'; [IO.Directory]::CreateDirectory($appW) | Out-Null
 foreach ($n in 'GlyphForm.pas', 'GlyphForm.dfm') { [IO.File]::Copy((Join-Path $app $n), (Join-Path $appW $n), $true) }
 $dbW = Join-Path $WorkDir 'dbW.sqlite'
-& $Exe index $appW --db $dbW 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $appW --db $dbW 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $w = Run $appW $dbW $rules @('--glyph-stitch', '--castlib', $cast, '--apply')
 $wDfm = Join-Path $appW 'GlyphForm.dfm'; $wPas = Join-Path $appW 'GlyphForm.pas'
 $written = [IO.File]::ReadAllText($wDfm); $writtenPas = [IO.File]::ReadAllText($wPas)
@@ -423,19 +426,19 @@ Check 'K1 no --castlib: nothing is stitched, every glyph is a TODO naming the ca
 # ---- V: N4, a G-link on a class with no N reader -----------------------------
 $vb = Join-Path $WorkDir 'v.rules'
 Write-Ascii $vb "#link OptionsImage.Glyph <- Picture G[*/4] : AssignGraphic`r`n"
-$vOut = (& $Exe convert-validate --glyph-stitch --rules $rules --castlib $cast --from Abcbtn.TabcToggleBtn --to LibB.TGlyphDstBtn --db $dbA --db $dbB 2>&1) -join "`n"; $vEc = $LASTEXITCODE
+$vOut = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --glyph-stitch --rules $rules --castlib $cast --from Abcbtn.TabcToggleBtn --to LibB.TGlyphDstBtn --db $dbA --db $dbB 2>&1 | ForEach-Object { "$_" } }) -join "`n"; $vEc = $LASTEXITCODE
 Check 'V2 a descendant of a table class validates under the switch' ($vEc -eq 0) $vOut
 $nb = Join-Path $WorkDir 'n.rules'
 Write-Ascii $nb @"
 #convert Abcbtn.TNoReaderBtn -> LibB.TGlyphDstBtn, LibB
 #link OptionsImage.Glyph <- Picture G[*/4] : AssignGraphic
 "@
-$vOut = (& $Exe convert-validate --glyph-stitch --rules $nb --castlib $cast --from Abcbtn.TNoReaderBtn --to LibB.TGlyphDstBtn --db $dbA --db $dbB 2>&1) -join "`n"; $vEc = $LASTEXITCODE
+$vOut = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --glyph-stitch --rules $nb --castlib $cast --from Abcbtn.TNoReaderBtn --to LibB.TGlyphDstBtn --db $dbA --db $dbB 2>&1 | ForEach-Object { "$_" } }) -join "`n"; $vEc = $LASTEXITCODE
 Check 'V3 a class outside the table is a validate ERROR under the switch, naming the class' `
       (($vEc -eq 1) -and ($vOut -match 'line 2: link OptionsImage\.Glyph <- Picture: no glyph-count reader for Abcbtn\.TNoReaderBtn')) $vOut
-$vOut = (& $Exe convert-validate --rules $nb --castlib $cast --from Abcbtn.TNoReaderBtn --to LibB.TGlyphDstBtn --db $dbA --db $dbB 2>&1) -join "`n"; $vEc = $LASTEXITCODE
+$vOut = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --rules $nb --castlib $cast --from Abcbtn.TNoReaderBtn --to LibB.TGlyphDstBtn --db $dbA --db $dbB 2>&1 | ForEach-Object { "$_" } }) -join "`n"; $vEc = $LASTEXITCODE
 Check 'V4 POSITIVE CONTROL without the switch the same book is not refused for its reader' ($vOut -notmatch 'no glyph-count reader') $vOut
-$vOut = (& $Exe convert-validate --glyph-stitch --rules $nb 2>&1) -join "`n"; $vEc = $LASTEXITCODE
+$vOut = (& { $ErrorActionPreference = 'Continue'; & $Exe convert-validate --glyph-stitch --rules $nb 2>&1 | ForEach-Object { "$_" } }) -join "`n"; $vEc = $LASTEXITCODE
 Check 'V5 parse-only stays silent: nothing to resolve' (($vEc -eq 0) -and ($vOut -notmatch 'no glyph-count reader')) $vOut
 
 # ---- S: a .pas site of a G-linked member -------------------------------------
@@ -448,7 +451,7 @@ Write-Ascii $sb @"
 $appS = Join-Path $WorkDir 'apps'; [IO.Directory]::CreateDirectory($appS) | Out-Null
 foreach ($n in 'GlyphForm.pas', 'GlyphForm.dfm') { [IO.File]::Copy((Join-Path $app $n), (Join-Path $appS $n), $true) }
 $dbS = Join-Path $WorkDir 'dbS.sqlite'
-& $Exe index $appS --db $dbS 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $appS --db $dbS 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $s = Run $appS $dbS $sb @('--glyph-stitch', '--apply', '--format', 'json')
 $sPas = [IO.File]::ReadAllText((Join-Path $appS 'GlyphForm.pas'))
 Check 'S1 a plain-path G-link does NOT rename its .pas access site' (($sPas -match 'btn4\.Picture') -and ($sPas -notmatch 'btn4\.FlatGlyph')) $sPas
@@ -488,7 +491,7 @@ if ($RealDfm -and (Test-Path -LiteralPath $RealDfm)) {
   $fld = ($names | ForEach-Object { "    ${_}: TabcToggleBtn;" }) -join "`r`n"
   Write-Ascii (Join-Path $appR 'GlyphForm.pas') "unit GlyphForm;`r`n`r`ninterface`r`n`r`nuses`r`n  Classes, Abcbtn;`r`n`r`ntype`r`n  TGlyphForm = class(TDataModule)`r`n$fld`r`n  end;`r`n`r`nimplementation`r`n`r`n{`$R *.dfm}`r`n`r`nend.`r`n"
   $dbR = Join-Path $WorkDir 'dbR.sqlite'
-  & $Exe index $appR --db $dbR 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $appR --db $dbR 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $rb = Join-Path $WorkDir 'r.rules'
   Write-Ascii $rb @"
 #convert Abcbtn.TabcToggleBtn -> LibB.TGlyphDstBtn, LibB

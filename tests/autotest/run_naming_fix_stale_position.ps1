@@ -31,7 +31,10 @@
   Exit code: 0 on full pass, 1 on any failure.
 #>
 [CmdletBinding()]
-param([string]$Exe = $(. "$PSScriptRoot\lib\FreshEngineExe.ps1"; Get-FreshEngineExe))
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = $(. "$PSScriptRoot\lib\FreshEngineExe.ps1"; Get-FreshEngineExe) }
 $ErrorActionPreference = 'Stop'
 # E-RENAME-OTHER-PATHS: a naming fix now runs the rename proof, and these fixtures have no library: the proof's own test seam.
 $env:DRAGLINT_RENAME_TEST_UNGATED = '1'
@@ -66,7 +69,7 @@ end.
   [IO.File]::WriteAllText($dpr, "program Cc;`r`nuses`r`n  uCc in 'uCc.pas';`r`nbegin`r`nend.`r`n", [Text.Encoding]::ASCII)
   $db = Join-Path $work '_D-RAG\Cc.sqlite'
 
-  & $Exe index --project $dpr --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $dpr --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
   # Make the index stale: three comment lines above the const, NO reindex.
   # The const moves from line 5 to line 8.
@@ -74,7 +77,7 @@ end.
   [IO.File]::WriteAllText($u, ($stale -replace "`n", "`r`n"), [Text.Encoding]::ASCII)
   $before = [IO.File]::ReadAllBytes($u)
 
-  $o = (& $Exe lint --file $u --db $db --fix --fix-line 8 --fix-rule const-casing 2>&1 | Out-String)
+  $o = (& { $ErrorActionPreference = 'Continue'; & $Exe lint --file $u --db $db --fix --fix-line 8 --fix-rule const-casing 2>&1 | ForEach-Object { "$_" } } | Out-String)
   $summary = ($o -split "`r?`n" | Where-Object { $_ -match 'autofix|reindex' }) -join ' | '
   Check 'S1 stale: summary does NOT say "no fixable findings"' ($o -notmatch 'no fixable findings') $summary
   Check 'S2 stale: summary says "1 skipped (stale index)"' ($o -match '1 skipped \(stale index\)') ''
@@ -83,8 +86,8 @@ end.
   $after = [IO.File]::ReadAllBytes($u)
   Check 'S4 stale: the file is unchanged' ([Linq.Enumerable]::SequenceEqual([byte[]]$before, [byte[]]$after)) ''
 
-  & $Exe index --project $dpr --db $db 2>&1 | Out-Null
-  $o2 = (& $Exe lint --file $u --db $db --fix --fix-line 8 --fix-rule const-casing 2>&1 | Out-String)
+  & { $ErrorActionPreference = 'Continue'; & $Exe index --project $dpr --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+  $o2 = (& { $ErrorActionPreference = 'Continue'; & $Exe lint --file $u --db $db --fix --fix-line 8 --fix-rule const-casing 2>&1 | ForEach-Object { "$_" } } | Out-String)
   Check 'P1 positive control: after reindex, 1 fixable finding' ($o2 -match '1 fixable finding') `
     (($o2 -split "`r?`n" | Where-Object { $_ -match 'autofix' }) -join ' | ')
 } finally {

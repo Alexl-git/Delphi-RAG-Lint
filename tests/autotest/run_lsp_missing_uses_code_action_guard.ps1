@@ -13,9 +13,16 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-lsp-muca-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+$WorkDirBase = $WorkDir   # the body narrows $WorkDir to a per-run GUID child; remove the base
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -106,7 +113,7 @@ function Read-Frames([string]$Out) {
     $start = $i + $m.Index + $m.Length
     $len = [int]$m.Groups[1].Value
     if ($start + $len -gt $Out.Length) { break }
-    $res += ($Out.Substring($start, $len) | ConvertFrom-Json)
+    $res += ($Out.Substring($start, $len) | ConvertFrom-Json | ForEach-Object { $_ })
     $i = $start + $len
   }
   return $res
@@ -158,7 +165,7 @@ $db = Join-Path $WorkDir 'app.sqlite'
 Push-Location C:\TEMP
 try {
   . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
-  & $Exe index $src --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $src --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $idxCode = $LASTEXITCODE
   if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2 }
 
@@ -211,7 +218,7 @@ try {
     ((@('unit uAmbig;', 'interface', 'procedure DoIt;', 'implementation', 'procedure DoIt;', 'begin',
         "  CsSite.Send('x');", 'end;', 'end.') -join $crlf) + $crlf), [Text.Encoding]::ASCII)
   $db2 = Join-Path $WorkDir 'app2.sqlite'
-  & $Exe index $src2 --db $db2 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $Exe index $src2 --db $db2 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $null = Get-Actions 'uAmbig.pas' $src2 $db2
   $ambDiag = @($script:LastDiags | Where-Object { ($_.code -eq 'unit-missing-from-uses') -and ($_.message -match 'uCsLog2') })
   Check 'P0 POSITIVE CONTROL: the ambiguous finding is published (names uCsLog2)' ($ambDiag.Count -ge 1) ("n=" + $ambDiag.Count)
@@ -221,3 +228,4 @@ try {
 } finally { Pop-Location }
 if ($script:Failed) { Write-Host 'RESULT: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'RESULT: PASS' -ForegroundColor Green; exit 0
+} finally { Remove-WorkDir $WorkDirBase -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

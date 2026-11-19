@@ -15,10 +15,14 @@
 # Usage: pwsh -File tests/autotest/run_coherence.ps1
 [CmdletBinding()]
 param(
-    [string] $FixtureDir = "$PSScriptRoot\fixtures\coherence",
-    [string] $MembersDir = "$PSScriptRoot\fixtures\members",
+    [string] $FixtureDir = '',
+    [string] $MembersDir = '',
     [string] $WorkDir    = "$env:TEMP\drag-lint-coherence-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $FixtureDir) { $FixtureDir = "$PSScriptRoot\fixtures\coherence" }
+if (-not $MembersDir) { $MembersDir = "$PSScriptRoot\fixtures\members" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -60,7 +64,7 @@ $batBody = ($batLines -join "`r`n")
 
 $p = Start-Process cmd.exe -ArgumentList "/c", "`"$batPath`"" `
        -RedirectStandardOutput $logPath -RedirectStandardError "$logPath.err" `
-       -NoNewWindow -Wait -PassThru
+       -NoNewWindow -Wait -PassThru; $null = $p.Handle
 $log = Get-Content $logPath -Raw -ErrorAction SilentlyContinue
 $buildOk = ($log -match 'BUILD_EXITCODE=0') -and ($log -notmatch 'Error:')
 Check 'CoherenceHarness.dpr builds (Win64 Debug)' $buildOk (($log -split "`r?`n" | Select-Object -Last 12) -join ' | ')
@@ -80,7 +84,7 @@ $freshPas        = "$MembersDir\uWithForm.pas"
 $staleCompilePas = "$MembersDir\uNoForm.pas"
 $absentPas       = "$WorkDir\does-not-exist\uGhost.pas"
 
-$out = (& $exe $db $freshPas $staleCompilePas $absentPas 2>&1 | Out-String).Trim()
+$out = (& { $ErrorActionPreference = 'Continue'; & $exe $db $freshPas $staleCompilePas $absentPas 2>&1 | ForEach-Object { "$_" } } | Out-String).Trim()
 $lines = @($out -split "`r?`n")
 foreach ($line in $lines) {
     if ($line -match '^\s*(PASS|FAIL)\s') {

@@ -27,9 +27,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-lsp-target-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -56,7 +59,7 @@ Write-Ascii "$WorkDir\L\L.dlcontext.json" ((@{ schema = 1; project = "$WorkDir\L
   targetCompiler = '10.3'; source = @{ file = "$WorkDir\L\L.dpr"; sha1 = '' } } | ConvertTo-Json -Depth 5))
 
 $db = "$WorkDir\fixture.sqlite"
-& $Exe index "$WorkDir\loose" --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index "$WorkDir\loose" --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'SETUP: fixture index built' (Test-Path $db)
 
 function Uri($p) { 'file:///' + ($p -replace '\\', '/') }
@@ -72,7 +75,7 @@ function Read-Frames([string]$Out) {
     $start = $i + $m.Index + $m.Length
     $len = [int]$m.Groups[1].Value
     if ($start + $len -gt $Out.Length) { break }
-    $res += ($Out.Substring($start, $len) | ConvertFrom-Json)
+    $res += ($Out.Substring($start, $len) | ConvertFrom-Json | ForEach-Object { $_ })
     $i = $start + $len
   }
   return $res

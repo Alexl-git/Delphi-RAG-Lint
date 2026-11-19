@@ -25,6 +25,16 @@ interface
 /// stores one files row per recovered header (language 'hpp') with its includes as interface
 /// unit_uses rows and re-runs the unit-uses resolve pass, so the project's rows bind to the
 /// headers; a run without --apply writes nothing. Not thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.HelpText.WriteVerbHelp, DRagLint.CLI.UsesRecover.Execute, DRagLint.CLI.UsesRecover.ParseUsesRecoverArgs, DRagLint.CLI.UsesRecover.Usage, DRagLint.Core.CliError.CommandLineWantsJson, DRagLint.Core.CliError.WriteCliError, ParamStr</para>
+/// <para>Returns: CExitUnknownFlag; Usage(LError, CommandLineWantsJson); CExitOk; if LOpts.DbPath = '' then Usage('give --db &lt;file.sqlite&gt;', LOpts.AsJson)</para>
+/// <seealso cref="DRagLint.CLI.HelpText.WriteVerbHelp"/>
+/// <seealso cref="DRagLint.CLI.UsesRecover.Execute"/>
+/// <seealso cref="DRagLint.CLI.UsesRecover.ParseUsesRecoverArgs"/>
+/// <seealso cref="DRagLint.CLI.UsesRecover.Usage"/>
+/// <seealso cref="DRagLint.Core.CliError.CommandLineWantsJson"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function RunUsesRecoverVerb: Integer;
 

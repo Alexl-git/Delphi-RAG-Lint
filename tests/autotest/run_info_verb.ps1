@@ -1,8 +1,11 @@
 # run_info_verb.ps1 -- drag-lint info --json emits info/1 with the required self-info fields
 # Usage: pwsh -File tests/autotest/run_info_verb.ps1 [-Exe <path>]
 param(
-  [string]$Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe')
+  [string]$Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = (Join-Path $PSScriptRoot '..\..\src\cli\Win64\Debug\drag-lint.exe') }
 if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 . "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG3: no machine drag-lint.json
 $ErrorActionPreference = 'Stop'
@@ -11,7 +14,7 @@ $fail = 0
 function Check($c,$m){ if(-not $c){Write-Host "FAIL: $m";$script:fail++}else{Write-Host "PASS: $m"} }
 
 $json = & $exe info --json
-$o = $json | ConvertFrom-Json
+$o = $json | ConvertFrom-Json | ForEach-Object { $_ }
 Check ($o.schema -eq 'info/1') 'schema is info/1'
 Check ($o.name -eq 'drag-lint') 'name is drag-lint'
 Check ($o.version -and $o.version.Length -ge 3) 'version present'
@@ -75,22 +78,22 @@ try {
   $missing = Join-Path $wd 'NoSuch.sqlite'
   Push-Location $wd
   try {
-    & $exe index --project (Join-Path $wd 'App.dpr') --db $db 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exe index --project (Join-Path $wd 'App.dpr') --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
     Check (Test-Path -LiteralPath $db) 'FIXTURE: scratch index built with explicit --db'
 
     function JsonIdx([string[]]$dbs) {
       $a = @('info', '--json'); foreach ($d in $dbs) { $a += @('--db', $d) }
-      $j = (& $exe @a 2>$null) -join "`n"
+      $j = (& { $ErrorActionPreference = 'Continue'; & $exe @a 2>$null }) -join "`n"
       $i = $j.IndexOf('{'); if ($i -lt 0) { return @() }
-      return @(($j.Substring($i) | ConvertFrom-Json).indexes)
+      return @(($j.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }).indexes)
     }
     function TextOut([string[]]$dbs) {
       $a = @('info'); foreach ($d in $dbs) { $a += @('--db', $d) }
-      return ((& $exe @a 2>$null) -join "`n")
+      return ((& { $ErrorActionPreference = 'Continue'; & $exe @a 2>$null }) -join "`n")
     }
 
     # current + missing in ONE call: --db is repeatable in text mode as in JSON.
-    $jr = JsonIdx @($db, $missing)
+    $jr = @(JsonIdx @($db, $missing))
     $t  = TextOut @($db, $missing)
     Check ($LASTEXITCODE -eq 0) 'info --db (text) exits 0'
     Check (($jr.Count -eq 2) -and ($jr[0].verdict -eq 'current') -and ($jr[1].verdict -eq 'missing')) `
@@ -131,7 +134,7 @@ public static class DlInfoVerbSqlite {
       $old = $rfp -replace '^r=[^;]+;', 'r=0.0.1-alpha;'
       $rc = [DlInfoVerbSqlite]::Exec($sqliteDll, $db, "UPDATE schema_meta SET value='$old' WHERE key='resolver_fingerprint'")
       Check ($rc -eq 0) "FIXTURE: older resolver stamp planted (sqlite rc=$rc)"
-      $jo = JsonIdx @($db)
+      $jo = @(JsonIdx @($db))
       $to = TextOut @($db)
       Check (($jo.Count -eq 1) -and ($jo[0].verdict -eq 'resolve-owed') -and $jo[0].remedy) `
         "FIXTURE: planted older resolver stamp reads resolve-owed with a remedy (got '$($jo[0].verdict)')"

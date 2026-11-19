@@ -16,9 +16,14 @@
        a duplicate: no warning for it in the unmodified rules dir
   Runs a COPY of the engine in scratch; never touches the real rules dir.
 #>
-param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
-      [string]$Companions = "$PSScriptRoot\..\..\third_party\dll-win64",
-      [string]$Rules = "$PSScriptRoot\..\..\rules")
+param([string]$Exe = '',
+      [string]$Companions = '',
+      [string]$Rules = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
+if (-not $Companions) { $Companions = "$PSScriptRoot\..\..\third_party\dll-win64" }
+if (-not $Rules) { $Rules = "$PSScriptRoot\..\..\rules" }
 $ErrorActionPreference = 'Stop'
 $script:fail = 0
 function Check($name, $ok, $detail) {
@@ -43,9 +48,9 @@ function New-Engine($name) {
 }
 function Run-Lint($e) {
   $err = Join-Path $Work 'err.txt'
-  $out = & (Join-Path $e (Split-Path $Exe -Leaf)) lint $Fix --json 2>$err
+  $out = & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($err); [IO.File]::WriteAllText($dlErrFile, ''); & (Join-Path $e (Split-Path $Exe -Leaf)) lint $Fix --json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } }
   $json = ($out | Where-Object { $_ -notmatch '^\(loaded defaults' }) -join "`n"
-  $f = @(); if ($json.Trim()) { $f = @($json | ConvertFrom-Json) }
+  $f = @(); if ($json.Trim()) { $f = @(($json | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) }
   [pscustomobject]@{ Findings = $f; Err = @((@(Get-Content $err -ErrorAction SilentlyContinue) -join ' ') -split '(?=RULE-DUPLICATE-ID)' | Where-Object { $_.Trim() }) }
 }
 function Dups($r) { @($r.Err | Where-Object { $_ -match 'RULE-DUPLICATE-ID' }) }

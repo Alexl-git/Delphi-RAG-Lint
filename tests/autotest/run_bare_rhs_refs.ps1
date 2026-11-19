@@ -56,9 +56,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-bare-rhs-refs-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -116,7 +119,7 @@ Write-Ascii (Join-Path $work 'u.pas') $UBody
 $db = Join-Path $WorkDir 'bareRhs.sqlite'
 
 Write-Host 'Indexing fixture (deep usage refs on by default for a project index)' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 $indexExit = $LASTEXITCODE
 Check 'index exits 0' ($indexExit -eq 0) "exit=$indexExit; $($indexOut -join ' | ')"
 
@@ -139,7 +142,7 @@ c.close()
 
 function Get-Refs([string]$Name, [string]$Kind) {
   $raw = (python $py $db $Name $Kind) -join "`n"
-  return ($raw | ConvertFrom-Json)
+  return ($raw | ConvertFrom-Json | ForEach-Object { $_ })
 }
 
 Write-Host ''
@@ -189,7 +192,7 @@ try {
 Check 'find-callers --name MaxItems exits 0' ($fcExit -eq 0) "exit=$fcExit"
 $fc = $null
 try {
-  $fc = $fcRaw | ConvertFrom-Json
+  $fc = $fcRaw | ConvertFrom-Json | ForEach-Object { $_ }
 } catch {
   Check 'find-callers --json parses as JSON' $false "parse error: $($_.Exception.Message); raw=$fcRaw"
 }

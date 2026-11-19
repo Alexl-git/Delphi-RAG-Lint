@@ -11,9 +11,12 @@
 [CmdletBinding()]
 param(
   [switch]$KeepWorkDir,
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-corruptlib-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 . "$PSScriptRoot\lib\WorkDirCleanup.ps1"
 if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 . "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG3: no machine drag-lint.json
@@ -50,7 +53,7 @@ Copy-Item $bad (Join-Path $eng 'library-Win64.sqlite') -Force
 
 function Run-Cmd([string]$Cmd, [string[]]$A) {
   Push-Location $WorkDir   # cwd under TEMP: the manifest walk-up must not find C:\Projects\.drag-lint.json
-  try { $o = & $Cmd @A 2>&1 | ForEach-Object { "$_" }; $code = $LASTEXITCODE } finally { Pop-Location }
+  try { $o = & { $ErrorActionPreference = 'Continue'; & $Cmd @A 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }; $code = $LASTEXITCODE } finally { Pop-Location }
   return @{ Out = ($o -join "`n"); Code = $code }
 }
 function Count-Findings([string]$Out) {

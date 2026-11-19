@@ -63,10 +63,10 @@ a release step, a script that copies over `third_party\dll-win64\drag-lint.exe`
 
 ```
 drag-lint ide-release --seconds 900      # the IDE plugin stops respawning for 15 min
-drag-lint shutdown --all --wait 30       # running lsp engines close every store and exit 0
+drag-lint stop-now --all --wait 30       # running lsp engines close every store and exit 0
 ```
 
-`shutdown` asks running `lsp` engines (over their per-user maintenance pipe) to
+`stop-now` (1.52; formerly `shutdown`, still accepted as a hidden alias) asks running `lsp` engines (over their per-user maintenance pipe) to
 stand down: close every store, exit 0. Its flags (`--db`, `--wait`, `--dry-run`,
 `--all`, `--force`) are on its `drag-lint --help` line. `ide-release --resume`
 lifts the hold early. Measured 2026-10-16: without this, a release pack lost the
@@ -133,7 +133,7 @@ Replacing a running engine -- the installer swapping an old install, or
 a kill only as the last resort:
 
 1. `drag-lint ide-release --seconds N` -- the IDE plugin stops respawning.
-2. The maintenance verb with `--all --wait 30` (see the shutdown feature page) --
+2. The maintenance verb with `--all --wait 30` (see the stop-now feature page) --
    every engine of this user that listens on the control channel is asked to
    stand down: `lsp`, `cycles --fix`, and (since DEC-13) the long one-shot runs
    `index` (single root, `--project`, `--all` with its `--jobs` pool) and `lint-all`.
@@ -145,6 +145,7 @@ a kill only as the last resort:
    * `lint-all` stops between files, prints the findings so far marked PARTIAL
      on stderr, exits **4**; project-wide rules did not run.
    * `sql` does not listen: one guarded SELECT, a kill is harmless.
+   * `lint-all --no-stand-down` (1.52, B50) does not open the channel at all: a measurement run is never cut to PARTIAL by a peer's request, and the maintenance verb does not list it. `index` has no such flag.
 3. Anything still holding the image after the wait: `stage-engine.ps1` refuses
    when an `index` run is still alive (it did not comply), and otherwise kills
    only the processes running the target image, then retries the copy.

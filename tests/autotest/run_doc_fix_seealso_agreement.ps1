@@ -40,9 +40,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-seealso-agreement-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -115,12 +118,12 @@ $pas = Join-Path $srcDir 'SeeAlsoAgree.pas'
 [System.IO.File]::WriteAllText($pas, ($Fixture -replace "`r`n","`n" -replace "`n","`r`n"), [System.Text.Encoding]::ASCII)
 
 $db = Join-Path $WorkDir 'agree.sqlite'
-& $Exe index $srcDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $srcDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' (Test-Path $db)
 
 # 1. Let the WRITER produce correct blocks under the default flags.
-& $Exe document --unit $pas --db $db --apply --no-backup 2>&1 | Out-Null
-& $Exe index $srcDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe document --unit $pas --db $db --apply --no-backup 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $srcDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 $withSeeAlso = Get-Content $pas -Raw
 Check 'writer emitted <seealso> crefs' ($withSeeAlso -match '<seealso cref=') `
   'fixture must actually exercise the option the two paths disagreed about'
@@ -129,25 +132,26 @@ Check 'writer emitted <seealso> crefs' ($withSeeAlso -match '<seealso cref=') `
 #    flag is in. Everything else about the block stays correct.
 $stripped = ($withSeeAlso -split "`r`n" | Where-Object { $_ -notmatch '<seealso cref=' }) -join "`r`n"
 [System.IO.File]::WriteAllText($pas, $stripped, [System.Text.Encoding]::ASCII)
-& $Exe index $srcDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $srcDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'seealso lines stripped' (-not ((Get-Content $pas -Raw) -match '<seealso cref='))
 
 # 3. The CHECKER must see that as drift.
-$lint0 = & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --quiet 2>&1 | Out-String
+$lint0 = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String
 $drift0 = ([regex]::Matches($lint0, 'doc-drift')).Count
 Check 'checker reports the drift' ($drift0 -gt 0) `
   'if the checker is silent here the fixture no longer exercises the seam'
 
 # 4. THE ASSERTION. The repairer must plan a fix for what the checker reported.
-$fix = & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --quiet --fix 2>&1 | Out-String
+$fix = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --quiet --fix 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'repairer plans a fix for what the checker reported' `
   ($fix -notmatch 'autofix: no fixable findings') `
   'checker said stale, repairer said nothing to do -- the two render under different options'
 
 # 5. And it must actually converge: apply, reindex, drift gone.
-& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --quiet --fix --apply 2>&1 | Out-Null
-& $Exe index $srcDir --db $db 2>&1 | Out-Null
-$lint1 = & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --quiet 2>&1 | Out-String
+# 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --quiet --fix --apply --no-compile-gate 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $srcDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+$lint1 = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --quiet 2>&1 | ForEach-Object { "$_" } } | Out-String
 $drift1 = ([regex]::Matches($lint1, 'doc-drift')).Count
 Check 'the repair converges: doc-drift reaches 0' ($drift1 -eq 0) `
   "was $drift0, now $drift1 -- a finding that survives fix+reindex is unrepairable by any command"
@@ -155,7 +159,7 @@ Check 'the repair converges: doc-drift reaches 0' ($drift1 -eq 0) `
 Check 'the repair restored the <seealso> crefs' ((Get-Content $pas -Raw) -match '<seealso cref=')
 
 # 6. Idempotent: a second pass plans nothing.
-$fix2 = & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --quiet --fix 2>&1 | Out-String
+$fix2 = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db --quiet --fix 2>&1 | ForEach-Object { "$_" } } | Out-String
 Check 'second pass is a no-op' ($fix2 -match 'autofix: no fixable findings') $fix2
 
 Write-Host ''

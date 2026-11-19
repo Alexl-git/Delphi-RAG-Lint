@@ -39,7 +39,9 @@ uses
 /// TApplyResult.Refusal -- goes through RefuseUnit: 'REFUSED: <reason>', apply/1 refused=true,
 /// reason, nothing written); 2 on bad args (missing --unit/--rules, file not
 /// found, no readable db (an explicit --db that is missing or stale is exit 2)).</returns>
-/// <remarks>Resolves the sibling .dfm as the same base name + '.dfm' next to --unit;
+/// <exception cref="EConvertApplyWrite"><!-- drag-lint:auto exc -->cannot write %s: the file is read-only -- unit not changed, nothing written; cannot write %s: %s -- unit not changed, nothing written; write failed for %s: %s: %s -- rolled back, unit not changed; write failed for %s: %s: %s -- rollback FAILED for %s: the unit may be PARTLY converted; %s</exception>
+/// <remarks>
+/// Resolves the sibling .dfm as the same base name + '.dfm' next to --unit;
 /// missing .dfm is a hard error (exit 1) for a book with NO unit rules, since every #convert
 /// rule needs DFM instances to locate. A book with unit rules (#unuse / #use / #useswap,
 /// 1.20.6) applies them to the unit's uses clauses (PlanUnitRules) -- alone when there is no
@@ -84,7 +86,21 @@ uses
 /// it used to plan its unit rules and skip every instance, so --apply half-converted it.
 /// G3: every apply/1 object carries exit_code (that unit's). G1: --progress writes one
 /// stderr JSON line per finished unit ({"progress":{"verb":"convert-apply","unit_done",
-/// "units","unit","ok","refused","exit_code"}}, flushed); stdout is unchanged by it.</remarks>
+/// "units","unit","ok","refused","exit_code"}}, flushed); stdout is unchanged by it.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: AmbiguousReason, AppendDescendantReport, AppendInheritedReport, BackupFiles, BookChainWarnings, BookScopeKey, BoolToStr, BuildApplyPlan, BuildUnitRulesOnlyPlan, CheckFreshness (+67 more)</para>
+/// <para>Returns: FailUnit(Format('sibling .dfm not found: %s (every #convert rule needs .dfm instances to locate)', [DfmPath]), 1); Code; 1; 0; 2; RunUnit(Units[0])</para>
+/// <para>Complexity: 40 (cyclomatic, outer body), 873 lines (full implementation)</para>
+/// <para>Catches: Exception (raises EConvertApplyWrite); Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.Common.ExplicitDbsExist"/>
+/// <seealso cref="DRagLint.CLI.Common.OpenReadOnlyStore"/>
+/// <seealso cref="DRagLint.CLI.Common.StaleDbRefusesRun"/>
+/// <seealso cref="DRagLint.CLI.Common.WriteStdoutDocument"/>
+/// <seealso cref="DRagLint.CLI.ConsumerDbs.ResolveConsumerDbs"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DoConvertApply(const AArgs: TArgs): Integer;
 
 implementation
@@ -828,7 +844,7 @@ var
   // (and its freshness checked) the FIRST time a unit reaches that step, then
   // reused: a single --unit run keeps its old order, a batch pays for both and
   // for every class's members once. Returns the unit's exit code (0 / 1 / 2).
-  function RunUnit(const AUnitPas: string): Integer;  // dl:ok too-many-exit-points@ab98, cyclomatic-complexity@4c61, method-too-long@9bf6, cognitive-complexity@fa3c -- (lint sweep b0bad3cf..HEAD): the branch count and length are that same early-outcome chain; splitting it is a convert-apply refactor, not a sweep fix. Each Exit is a distinct per-unit outcome (refusal incl. an unindexed unit (1.33.0), rule errors, freshness, an unexecutable castlib (1.27.0), plan failure, write failure, dry run) moved from DoConvertApply, which carried the same shape; one result per early outcome is the convert-apply contract
+  function RunUnit(const AUnitPas: string): Integer;  // dl:ok too-many-exit-points@ab98, cyclomatic-complexity@eae5, method-too-long@9bf6, cognitive-complexity@4135 -- (lint sweep b0bad3cf..HEAD): the branch count and length are that same early-outcome chain; splitting it is a convert-apply refactor, not a sweep fix. Each Exit is a distinct per-unit outcome (refusal incl. an unindexed unit (1.33.0), rule errors, freshness, an unexecutable castlib (1.27.0), plan failure, write failure, dry run) moved from DoConvertApply, which carried the same shape; one result per early outcome is the convert-apply contract (REVIEWED 2026-11-18 INT13: re-measured after 1.52 GA-1 counts if-expressions; shape and reason unchanged)
   var
     UnitStart: Integer; { Trees.ClassesBuilt when this unit started }
     ValHere  : Integer; { classes this unit's call to the book validation built (0 after the first) }

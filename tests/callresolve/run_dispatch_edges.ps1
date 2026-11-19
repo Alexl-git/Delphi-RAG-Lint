@@ -31,7 +31,13 @@
   Usage: pwsh -File tests\callresolve\run_dispatch_edges.ps1 [-Exe <drag-lint.exe>]
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot '..\autotest\lib\WorkDirCleanup.ps1')
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -47,10 +53,10 @@ if (Test-Path $root) { [System.IO.Directory]::Delete($root, $true) }
 New-Item -ItemType Directory -Path $root | Out-Null
 
 function Sql([string]$Db, [string]$Query) {
-  $raw = (& $exePath sql --db $Db --json --limit 1000 --query $Query 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $Db --json --limit 1000 --query $Query 2>$null }) -join "`n"
   $b = $raw.IndexOf('{')
   if ($b -lt 0) { throw "sql returned no JSON for: $Query" }
-  $o = $raw.Substring($b) | ConvertFrom-Json
+  $o = $raw.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }
   $names = @($o.columns | ForEach-Object { $_.name })
   $out = @()
   foreach ($r in @($o.rows)) {
@@ -66,7 +72,7 @@ function IndexCopy([string]$Name, [scriptblock]$Mutate) {
   Copy-Item (Join-Path $fixDir '*') $dir
   if ($Mutate) { & $Mutate $dir }
   $db = Join-Path $dir "$Name.sqlite"
-  $log = & $exePath index $dir --db $db 2>&1
+  $log = & { $ErrorActionPreference = 'Continue'; & $exePath index $dir --db $db 2>&1 | ForEach-Object { "$_" } }
   Check "$Name index exits 0" ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
   return @{ Db = $db; Log = @($log | ForEach-Object { "$_" }) }
 }
@@ -105,7 +111,7 @@ if ($line.Count -eq 1) {
 }
 
 # ---- resolve-only rebuilds the same set (wipe + rewrite, no duplicates) ----
-& $exePath index (Split-Path $m.Db) --db $m.Db --resolve-only 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index (Split-Path $m.Db) --db $m.Db --resolve-only 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'resolve-only exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 $got2 = EdgeSet $m.Db
 Check 'resolve-only rebuilds the identical set' ((($got2 -join '|') -ceq ($want -join '|'))) ("got=[" + ($got2 -join '; ') + "]")
@@ -130,3 +136,4 @@ exit 0
   Write-Host "FATAL: $_"
   exit 2
 }
+} finally { Remove-WorkDir $root -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

@@ -39,9 +39,15 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe  = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
-  [string]$Repo = "$PSScriptRoot\..\.."
+  [string]$Exe  = '',
+  [string]$Repo = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Repo) { $Repo = "$PSScriptRoot\..\.." }
 if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 . "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG3: no machine drag-lint.json
 $ErrorActionPreference = 'Continue'
@@ -120,7 +126,7 @@ try {
 
   # C-JSON
   $r = Invoke-Compare @('compare','--old',$Old,'--db',$Db,'--format','json')
-  $j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   Check 'C-JSON parses' ($null -ne $j) $r.Out
   Check 'C-JSON schema compare/1' ($j -and $j.schema -eq 'compare/1')
   Check 'C-JSON exit_code 1' ($j -and $j.exit_code -eq 1 -and $r.Code -eq 1) "exit=$($r.Code)"
@@ -157,7 +163,7 @@ try {
   Check 'C-STALE exit 3' ($r.Code -eq 3) "exit=$($r.Code) err=$($r.Err)"
   Check 'C-STALE ERROR on stderr' ($r.Err -match '(?m)^ERROR: .*stale') $r.Err
   $r = Invoke-Compare @('compare','--old',$Old,'--db',$Db,'--format','json')
-  $j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   Check 'C-STALE json envelope parses' ($r.Code -eq 3 -and $j -and $j.exit_code -eq 3 -and $j.message) "exit=$($r.Code) out=$($r.Out)"
   Update-Index
   # positive control: the same compare after the reindex is no longer refused as stale
@@ -197,7 +203,7 @@ try {
   Copy-Item (Join-Path $Fix 'graph\who-writes-b.dot') (Join-Path $gb 'graph.dot')
   Copy-Item (Join-Path $Fix 'graph\who-writes-a.svg') (Join-Path $gb 'graph.svg')
   $r = Invoke-Compare @('compare','--old',$ga,'--new',$gb,'--format','json')
-  $j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   Check 'C-GRAPH exit 1' ($r.Code -eq 1) "exit=$($r.Code) err=$($r.Err)"
   Check 'C-GRAPH json has graph counts' ($j -and $null -ne $j.graph.nodes_added) $r.Out
 
@@ -266,7 +272,7 @@ try {
   foreach ($fmt in 'json', 'html') {
     $out = Join-Path $Work "entity.$fmt"
     $r = Invoke-Compare @('compare','--old',$ha,'--new',$ea,'--format',$fmt,'--output',$out)
-    $j = $null; if ($fmt -eq 'json' -and (Test-Path $out)) { try { $j = Get-Content $out -Raw | ConvertFrom-Json } catch { } }
+    $j = $null; if ($fmt -eq 'json' -and (Test-Path $out)) { try { $j = Get-Content $out -Raw | ConvertFrom-Json | ForEach-Object { $_ } } catch { } }
     $ok = ($r.Code -in 0, 1) -or ($r.Code -eq 2 -and $r.Err -match '(?m)^ERROR: ' -and ($fmt -ne 'json' -or $j))
     Check "C-ENTITY $fmt not exit 3" ($ok -and $r.Code -ne 3) "exit=$($r.Code) err=$($r.Err)"
   }
@@ -281,12 +287,12 @@ try {
   [IO.File]::WriteAllText($ma, "graph G {`r`n  a -- b;`r`n}`r`n", [Text.Encoding]::ASCII)
   [IO.File]::WriteAllText($mb, "graph G {`r`n  c -- d;`r`n}`r`n", [Text.Encoding]::ASCII)
   $r = Invoke-Compare @('compare','--old',$ma,'--new',$mb,'--format','json')
-  $j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   Check 'C-EMPTY unreadable chart refused, exit 2 + envelope' ($r.Code -eq 2 -and $r.Err -match 'parsed as empty' -and $j -and $j.exit_code -eq 2) "exit=$($r.Code) err=$($r.Err)"
 
   # C-THROW: writing --output into a folder raises; that is a setup error, never the stale exit
   $r = Invoke-Compare @('compare','--old',$ga,'--new',$gb,'--format','json','--output',$Work)
-  $j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   Check 'C-THROW exit 2 + ERROR class + envelope' ($r.Code -eq 2 -and $r.Err -match '(?m)^ERROR: E\w+: ' -and $j -and $j.exit_code -eq 2) "exit=$($r.Code) err=$($r.Err) out=$($r.Out)"
 
   # C-SAVE / C-AUTO
@@ -306,18 +312,18 @@ try {
 
   # C-USAGE: every exit 2/3 the verb decides itself still prints the compare/1 envelope in json mode
   $r = Invoke-Compare @('compare','--format','json')
-  $j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   Check 'C-NOCMD json envelope (exit 2 + message)' ($r.Code -eq 2 -and $j -and $j.schema -eq 'compare/1' -and $j.exit_code -eq 2 -and $j.message) "exit=$($r.Code) out=$($r.Out)"
   $r = Invoke-Compare @('compare','--show',(Join-Path $Work 'no-such-file.txt'),'--format','json')
-  $j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   Check 'C-SHOW refusal json envelope' ($r.Code -eq 2 -and $j -and $j.exit_code -eq 2 -and $j.message) "exit=$($r.Code) out=$($r.Out)"
   $r = Invoke-Compare @('compare','--question','who-writes','--format','json')
-  $j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   Check 'C-USAGE --question without --target: json envelope' ($r.Code -eq 2 -and $j -and $j.exit_code -eq 2) "exit=$($r.Code) out=$($r.Out)"
   $r = Invoke-Compare @('compare','--question','who-writes','--target','T','--save','--update-doc','--snapshot-dir',$snaps)
   Check 'C-USAGE snapshot-only refuses --update-doc' ($r.Code -eq 2 -and $r.Err -match 'only takes a snapshot') "exit=$($r.Code) err=$($r.Err)"
   $r = Invoke-Compare @('compare','--question','who-writes','--target','T','--save','--format','json','--snapshot-dir',$snaps)
-  $j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   Check 'C-USAGE snapshot-only refuses --format json (envelope)' ($r.Code -eq 2 -and $j -and $j.exit_code -eq 2) "exit=$($r.Code) out=$($r.Out)"
   Check 'C-USAGE --new without --old' ((Invoke-Compare @('compare','--new',$Old)).Code -eq 2)
   Check 'C-USAGE --old-db without a command' ((Invoke-Compare @('compare','--old-db',$Old)).Code -eq 2)

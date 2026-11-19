@@ -22,10 +22,14 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe      = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
-  [string]$Starter  = "$PSScriptRoot\..\..\installer\drag-lint.starter.json",
+  [string]$Exe      = '',
+  [string]$Starter  = '',
   [string]$WorkDir  = "C:\TEMP\draglint_starter_manifest_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
+if (-not $Starter) { $Starter = "$PSScriptRoot\..\..\installer\drag-lint.starter.json" }
 if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 . "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG3: no machine drag-lint.json
 try {
@@ -48,7 +52,7 @@ $manifest = Join-Path $WorkDir 'drag-lint.json'
 function Invoke-Engine([string[]]$EngineArgs){
   Push-Location -LiteralPath $WorkDir
   try {
-    $o = ((& $copy @EngineArgs 2>&1 | ForEach-Object { "$_" }) -join "`n")
+    $o = ((& { $ErrorActionPreference = 'Continue'; & $copy @EngineArgs 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n")
     return [pscustomobject]@{ Rc = $LASTEXITCODE; Out = $o }
   } finally { Pop-Location }
 }

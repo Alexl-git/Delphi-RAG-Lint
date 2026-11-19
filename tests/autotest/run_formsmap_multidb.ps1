@@ -14,9 +14,12 @@
 # Usage: pwsh -File tests/autotest/run_formsmap_multidb.ps1 [-Exe <path>]
 [CmdletBinding()]
 param(
-    [string] $Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+    [string] $Exe     = '',
     [string] $WorkDir = "$env:TEMP\drag-lint-formsmap-multidb-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -166,16 +169,16 @@ end.
 $clientDb = "$WorkDir\client.sqlite"
 $commonDb = "$WorkDir\common.sqlite"
 
-& $Exe index $client --db $clientDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $client --db $clientDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'client db indexed exits 0' ($LASTEXITCODE -eq 0)
-& $Exe index $common --db $commonDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $common --db $commonDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'common db indexed exits 0' ($LASTEXITCODE -eq 0)
 Check 'dbs built' ((Test-Path $clientDb) -and (Test-Path $commonDb))
 
 function Invoke-FormsCsv([string[]]$Dbs) {
     $dbArgs = @()
     foreach ($d in $Dbs) { $dbArgs += @('--db', $d) }
-    return (& $Exe forms-csv --project $clientDproj @dbArgs --root TfrmRootMulti 2>&1) -join "`n"
+    return (& { $ErrorActionPreference = 'Continue'; & $Exe forms-csv --project $clientDproj @dbArgs --root TfrmRootMulti 2>&1 | ForEach-Object { "$_" } }) -join "`n"
 }
 
 # 1. CLIENT-only: frmPlanEditMulti's only launch body lives in COMMON, which is
@@ -197,7 +200,7 @@ Check 'multi-db PlanEditMulti traced, not unresolved' ($planEditRow -match '"tra
 
 # 3. Provenance/version footer present in the --out file.
 $outFile = "$WorkDir\out.csv"
-& $Exe forms-csv --project $clientDproj --db $clientDb --db $commonDb --root TfrmRootMulti --out $outFile 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe forms-csv --project $clientDproj --db $clientDb --db $commonDb --root TfrmRootMulti --out $outFile 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'forms-csv (multi-db, --out) exits 0' ($LASTEXITCODE -eq 0)
 $outContent = Get-Content $outFile -Raw
 Check 'footer has forms-csv algorithm version' ($outContent -match 'forms-csv algorithm v')

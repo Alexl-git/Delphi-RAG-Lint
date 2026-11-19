@@ -17,10 +17,10 @@ if (Test-Path $db) { Remove-Item $db -Force }
 
 # Returns the transitive ancestor objects for $symName (name + kind + resolved).
 function Ancestors($symName) {
-  $raw = (& $exe query ancestors --name $symName --db $db --json 2>$null | Out-String)
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exe query ancestors --name $symName --db $db --json 2>$null } | Out-String)
   $idx = $raw.IndexOf('{')
   if ($idx -lt 0) { return $null }
-  return ($raw.Substring($idx) | ConvertFrom-Json)
+  return ($raw.Substring($idx) | ConvertFrom-Json | ForEach-Object { $_ })
 }
 
 function AncestorNames($symName) {
@@ -29,12 +29,12 @@ function AncestorNames($symName) {
   return @($o.ancestors | ForEach-Object { $_.name })
 }
 
-$tchild = AncestorNames 'TChild'
+$tchild = @(AncestorNames 'TChild')
 Check 'TChild ancestors include TBase'  ($tchild -contains 'TBase')
 Check 'TChild ancestors include TGrand (transitive, cross-unit)' ($tchild -contains 'TGrand')
 Check 'TChild ancestors include IBase (implemented iface)' ($tchild -contains 'IBase')
 
-$ichild = AncestorNames 'IChild'
+$ichild = @(AncestorNames 'IChild')
 Check 'IChild ancestors include IBase (cross-unit iface parent)' ($ichild -contains 'IBase')
 
 # Resolved cross-unit: TBase must carry kind=class and resolved=true.
@@ -42,14 +42,14 @@ $tbase = (Ancestors 'TChild').ancestors | Where-Object { $_.name -eq 'TBase' } |
 Check 'TBase edge resolved to a class symbol' ($null -ne $tbase -and $tbase.kind -eq 'class' -and $tbase.resolved)
 
 # TGrand has no ancestors -> empty closure.
-$tgrand = AncestorNames 'TGrand'
+$tgrand = @(AncestorNames 'TGrand')
 Check 'TGrand has no ancestors' ($tgrand.Count -eq 0)
 
 # IsDescendantOf / ImplementsInterface via `--of`.
 function OfCheck($name, $of) {
-  $raw = (& $exe query ancestors --name $name --of $of --db $db --json 2>$null | Out-String)
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exe query ancestors --name $name --of $of --db $db --json 2>$null } | Out-String)
   $idx = $raw.IndexOf('{'); if ($idx -lt 0) { return $null }
-  return ($raw.Substring($idx) | ConvertFrom-Json)
+  return ($raw.Substring($idx) | ConvertFrom-Json | ForEach-Object { $_ })
 }
 $o1 = OfCheck 'TChild' 'TGrand'
 Check 'TChild descends TGrand (class chain)' ($o1.is_descendant -and -not $o1.implements)

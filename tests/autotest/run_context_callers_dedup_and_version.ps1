@@ -29,9 +29,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "C:\TEMP\draglint_context_callers_dedup_$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -111,13 +114,13 @@ end.
 
 $dbA = Join-Path $WorkDir 'one.sqlite'
 $dbB = Join-Path $WorkDir 'two.sqlite'
-& $exePath index $srcA --db $dbA 2>&1 | Out-Null
-& $exePath index $srcB --db $dbB 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $srcA --db $dbA 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $exePath index $srcB --db $dbB 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'V fixture index A was built' (Test-Path $dbA) $dbA
 Check 'V fixture index B was built' (Test-Path $dbB) $dbB
 
 function Bundle([string]$Db, [string[]]$Extra = @()) {
-  return ((& $exePath context --task 'modify uW.TW.Save' --db $Db --format markdown @Extra 2>$null) -join "`n")
+  return ((& { $ErrorActionPreference = 'Continue'; & $exePath context --task 'modify uW.TW.Save' --db $Db --format markdown @Extra 2>$null }) -join "`n")
 }
 function CallerCount([string]$Text) {
   if ($Text -match '## Callers \((\d+)\)') { return [int]$Matches[1] }
@@ -129,7 +132,7 @@ function CallerLines([string]$Text) {
 
 # The fixture must reproduce the SHAPE: two refs at one position. Without it the
 # single-site assertion below passes on the broken engine and proves nothing.
-$shape = & $exePath sql --db $dbA --json --query "SELECT COUNT(*) AS n FROM refs r JOIN files f ON f.id = r.file_id WHERE r.name_text = 'Save' AND f.path LIKE '%uUse.pas'" 2>$null | ConvertFrom-Json
+$shape = & { $ErrorActionPreference = 'Continue'; & $exePath sql --db $dbA --json --query "SELECT COUNT(*) AS n FROM refs r JOIN files f ON f.id = r.file_id WHERE r.name_text = 'Save' AND f.path LIKE '%uUse.pas'" 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
 $nRefs = [int]$shape.rows[0][0]
 Check "V the fixture holds more than one ref at the single call site (got $nRefs)" ($nRefs -ge 2) `
       'the extractor no longer emits call + member-access at one span; T1 would be vacuous -- rebuild the fixture'
@@ -137,7 +140,7 @@ Check "V the fixture holds more than one ref at the single call site (got $nRefs
 # ---- T1: one site -> one caller ----------------------------------------------
 $a = Bundle $dbA
 Check 'T1 a single call site is listed ONCE: Callers (1)' ((CallerCount $a) -eq 1) ("Callers count = $(CallerCount $a)")
-Check 'T1b and exactly one caller line is printed' ((CallerLines $a).Count -eq 1) ((CallerLines $a) -join ' | ')
+Check 'T1b and exactly one caller line is printed' ((@(CallerLines $a)).Count -eq 1) ((@(CallerLines $a)) -join ' | ')
 
 # ---- P1: two sites -> two callers (the dedupe is on position) ---------------
 $b = Bundle $dbB
@@ -147,10 +150,10 @@ Check 'P1b and the two lines name two different positions' (($bl | Select-Object
 
 # ---- P2: the cap still applies after the dedupe -----------------------------
 $c = Bundle $dbB @('--max-callers', '1')
-Check 'P2 --max-callers 1 prints exactly one caller line' ((CallerLines $c).Count -eq 1) ((CallerLines $c) -join ' | ')
+Check 'P2 --max-callers 1 prints exactly one caller line' ((@(CallerLines $c)).Count -eq 1) ((@(CallerLines $c)) -join ' | ')
 
 # ---- T2: the header names the running engine --------------------------------
-$ver = ((& $exePath --version 2>$null) -join ' ')
+$ver = ((& { $ErrorActionPreference = 'Continue'; & $exePath --version 2>$null }) -join ' ')
 $verNum = if ($ver -match '(\d+\.\d+\.\d+[-\w]*)') { $Matches[1] } else { '' }
 Check 'V --version printed a version number' ($verNum -ne '') $ver
 Check "T2 the bundle header names the running engine (v$verNum)" `

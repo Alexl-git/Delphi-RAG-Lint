@@ -4,7 +4,10 @@
   A backup-shaped name (uCache_BACKUP) must still be stale: that is the positive control.
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $fail = $false
 function Check($n, $ok) { Write-Host ("  [{0}] {1}" -f $(if ($ok) {'PASS'} else {'FAIL'}), $n) -ForegroundColor $(if ($ok) {'Green'} else {'Red'}); if (-not $ok) { $script:fail = $true } }
@@ -28,7 +31,7 @@ Put 'Conv.Backup.pas' "unit Conv.Backup;`ninterface`nimplementation`nend.`n"
 Put 'uCache_BACKUP.pas' "unit uCache_BACKUP;`ninterface`nimplementation`nend.`n"
 Push-Location C:\TEMP
 try {
-  $rep = & $Exe reconcile-project "$w\App.dpr" 2>&1 | Out-String
+  $rep = & { $ErrorActionPreference = 'Continue'; & $Exe reconcile-project "$w\App.dpr" 2>&1 | ForEach-Object { "$_" } } | Out-String
   Check 'both units reach the report as MISSING (scenario fires)' (($rep -match 'MISSING[\s\S]*Conv\.Backup') -and ($rep -match 'MISSING[\s\S]*uCache_BACKUP'))
   $stale = if ($rep -match '(?s)STALE.*?(?=SUGGESTED|\z)') { $Matches[0] } else { '' }
   Check 'a backup-shaped name stays STALE (positive control)' ($stale -match 'uCache_BACKUP')

@@ -51,7 +51,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Continue'
@@ -148,9 +151,9 @@ try {
   # --- three apply cycles ---------------------------------------------------
   $md5s = @()
   for ($cycle = 1; $cycle -le 3; $cycle++) {
-    & $exePath index $scratch --db $db 2>$null | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
     Check "cycle $cycle : index exits 0" ($LASTEXITCODE -eq 0)
-    & $exePath document --unit $target --db $db --stubs --apply --json 2>$null | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --stubs --apply --json 2>$null } | Out-Null
     Check "cycle $cycle : document --unit --apply exits 0" ($LASTEXITCODE -eq 0)
     $md5s += (Get-Md5 $target)
   }
@@ -236,11 +239,11 @@ try {
     ($null -ne $sinceAfter -and $sinceAfter.Contains('<summary>Two since tags; the parser models only one.</summary>')) $sinceAfter
 
   # --- per-decl settled action ---------------------------------------------
-  & $exePath index $scratch --db $db 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>$null } | Out-Null
   Check 're-index before settled-action check exits 0' ($LASTEXITCODE -eq 0)
   foreach ($q in @('guards.UnterminatedFenceHandProse','guards.StrayFenceEndHandProse','guards.ValueBesideDecayedFence',
                    'guards.UnfencedRemarksTail','guards.AbortBlastRadius','guards.TwoSinceTags')) {
-    $j = (& $exePath document --qname $q --db $db --json 2>$null) -join ' '
+    $j = (& { $ErrorActionPreference = 'Continue'; & $exePath document --qname $q --db $db --json 2>$null }) -join ' '
     Check "$q : document --qname exits 0" ($LASTEXITCODE -eq 0) $j
     Check "settled: $q reports unchanged with 0 edits" `
       ($j -match '"action":"unchanged"' -and $j -match '"edits":0[,}]') $j

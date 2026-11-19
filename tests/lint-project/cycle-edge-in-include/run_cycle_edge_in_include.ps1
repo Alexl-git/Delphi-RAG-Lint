@@ -14,7 +14,10 @@
 
   Usage: pwsh -File tests\lint-project\cycle-edge-in-include\run_cycle_edge_in_include.ps1 [-Exe <drag-lint.exe>]
 #>
-param([string]$Exe = "$PSScriptRoot\..\..\..\src\cli\Win64\Debug\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
@@ -29,12 +32,12 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 function Parse-Findings([string[]]$Raw) {
   $txt = ($Raw -join "`n"); $b = $txt.IndexOf('[')
-  $out = @(); if ($b -ge 0) { try { $out = @($txt.Substring($b) | ConvertFrom-Json) } catch { $out = @() } }
+  $out = @(); if ($b -ge 0) { try { $out = @(($txt.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }) | ForEach-Object { $_ }) } catch { $out = @() } }
   if ($null -eq $out) { $out = @() }
   return ,@($out)
 }
 function LintAll([string]$Db, [string[]]$LintArgs) {
-  $raw = & $exePath lint-all --db $Db --library-db none @LintArgs --format json 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $Db --library-db none @LintArgs --format json 2>$null }
   $parsed = Parse-Findings $raw
   return ,@($parsed)
 }
@@ -49,7 +52,7 @@ function IndexScenario([string]$Name) {
   [void](New-Item -ItemType Directory -Force -Path $dir)
   Copy-Item (Join-Path $PSScriptRoot "$Name\*") $dir
   $db = Join-Path $scratch "$Name.sqlite"
-  & $exePath index $dir --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $dir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check "index $Name exits 0" ($LASTEXITCODE -eq 0)
   return @{ Dir = $dir; Db = $db }
 }
@@ -88,7 +91,7 @@ try {
   Check 'plain lint-all: the rule ships ON' ($dflt.Count -eq 4) "$($dflt.Count)"
   $off = @((LintAll $fire.Db @('--disable', $Rule)) | Where-Object { $_.rule -eq $Rule })
   Check 'control d: --disable = 0' ($off.Count -eq 0) "$($off.Count)"
-  $one = @((Parse-Findings (& $exePath lint (Join-Path $fire.Dir 'IncUA.pas') --db $fire.Db --library-db none --rule $Rule --json 2>$null)) | Where-Object { $_.rule -eq $Rule })
+  $one = @((Parse-Findings (& { $ErrorActionPreference = 'Continue'; & $exePath lint (Join-Path $fire.Dir 'IncUA.pas') --db $fire.Db --library-db none --rule $Rule --json 2>$null })) | Where-Object { $_.rule -eq $Rule })
   Check 'lint <file> --rule: the same U finding' ($one.Count -eq 1) "$($one.Count)"
 
   foreach ($sc in @('inline', 'outside')) {
@@ -110,7 +113,7 @@ try {
   Copy-Item (Join-Path $PSScriptRoot 'fire\IncUB.pas') $mk0
   Copy-Item (Join-Path $PSScriptRoot 'fire\IncUUses.inc') $mk0
   $db0 = Join-Path $scratch 'unmarked.sqlite'
-  & $exePath index $mk0 --db $db0 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $mk0 --db $db0 2>&1 | ForEach-Object { "$_" } } | Out-Null
   $m0 = @((LintAll $db0 @('--rule', $Rule)) | Where-Object { $_.rule -eq $Rule })
   Check 'control e: the same pair WITHOUT the marker fires (the marker is what silenced it)' ($m0.Count -eq 1) "$($m0.Count)"
 } finally {

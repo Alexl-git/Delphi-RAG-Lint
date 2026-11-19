@@ -27,9 +27,12 @@ Needs dcc64. Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe = '',
   [string]$Work = "$env:TEMP\dl-probe-guard-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok,$d=''){
@@ -63,15 +66,15 @@ W "$Work\buf.pas" @(
   'procedure KeepProc; begin end;','end.')
 
 $db = "$Work\probe.sqlite"
-& $Exe index $Work --db $db --rebuild *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $Work --db $db --rebuild *> $null }
 Check 'fixture indexed' (Test-Path $db)
 
 $base = "$Work\base.json"
-& $Exe lint-tree --unit "$Work\ProbeB.pas" --db $db --write-baseline $base --project "$Work\ProbeProj.dpr" --platform Win64 --format json *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe lint-tree --unit "$Work\ProbeB.pas" --db $db --write-baseline $base --project "$Work\ProbeProj.dpr" --platform Win64 --format json *> $null }
 Check 'baseline captured' (Test-Path $base)
 
-$raw = & $Exe lint-tree --unit "$Work\ProbeB.pas" --db $db --buffer "$Work\buf.pas" --baseline $base --project "$Work\ProbeProj.dpr" --platform Win64 --compile --format json 2>$null
-$r = try { ($raw | Out-String) | ConvertFrom-Json } catch { $null }
+$raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-tree --unit "$Work\ProbeB.pas" --db $db --buffer "$Work\buf.pas" --baseline $base --project "$Work\ProbeProj.dpr" --platform Win64 --compile --format json 2>$null }
+$r = try { ($raw | Out-String) | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
 Check 'lint-tree returned JSON' ($null -ne $r)
 $cc = @($r.findings | Where-Object { $_.ref_kind -eq 'compile' })
 Write-Host ("  compile findings: " + (($cc | ForEach-Object { (Split-Path $_.file -Leaf) + ':' + $_.message }) -join ' | ')) -ForegroundColor DarkGray
@@ -106,8 +109,8 @@ Check 'the generated probe unit never appears as a finding' `
       (@($cc | Where-Object { $_.file -match 'draglint_probe' }).Count -eq 0)
 
 # NEG: an unchanged buffer must not compile anything at all.
-$raw2 = & $Exe lint-tree --unit "$Work\ProbeB.pas" --db $db --buffer "$Work\ProbeB.pas" --baseline $base --project "$Work\ProbeProj.dpr" --platform Win64 --compile --format json 2>$null
-$r2 = try { ($raw2 | Out-String) | ConvertFrom-Json } catch { $null }
+$raw2 = & { $ErrorActionPreference = 'Continue'; & $Exe lint-tree --unit "$Work\ProbeB.pas" --db $db --buffer "$Work\ProbeB.pas" --baseline $base --project "$Work\ProbeProj.dpr" --platform Win64 --compile --format json 2>$null }
+$r2 = try { ($raw2 | Out-String) | ConvertFrom-Json | ForEach-Object { $_ } } catch { $null }
 Check 'NEG unchanged buffer -> tier 3 does not run' ($r2.compiled -ne $true) `
       'compiling a closure on an unchanged interface burns a core per keystroke'
 

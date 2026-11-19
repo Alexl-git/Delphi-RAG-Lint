@@ -11,9 +11,12 @@
 # Usage: pwsh -File tests/autotest/run_dbresolver_probe.ps1
 [CmdletBinding()]
 param(
-    [string] $DprojDir = "$PSScriptRoot\fixtures\dbprobe",
+    [string] $DprojDir = '',
     [string] $WorkDir  = "$env:TEMP\drag-lint-dbresolver-probe-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $DprojDir) { $DprojDir = "$PSScriptRoot\fixtures\dbprobe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -55,7 +58,7 @@ $batBody = ($batLines -join "`r`n")
 
 $p = Start-Process cmd.exe -ArgumentList "/c", "`"$batPath`"" `
        -RedirectStandardOutput $logPath -RedirectStandardError "$logPath.err" `
-       -NoNewWindow -Wait -PassThru
+       -NoNewWindow -Wait -PassThru; $null = $p.Handle
 $log = Get-Content $logPath -Raw -ErrorAction SilentlyContinue
 $buildOk = ($log -match 'BUILD_EXITCODE=0') -and ($log -notmatch 'Error:')
 Check 'DbProbeHarness.dpr builds (Win64 Debug)' $buildOk (($log -split "`r?`n" | Select-Object -Last 8) -join ' | ')
@@ -78,7 +81,7 @@ $templateFile = "$projDir\drag-lint.sqlite"
 $byNameFile   = "$projDir\MyProj.sqlite"
 
 function RunHarness([string]$ProjPath, [string]$Template) {
-    (& $exe $ProjPath $Template 2>&1 | Out-String).Trim()
+    (& { $ErrorActionPreference = 'Continue'; & $exe $ProjPath $Template 2>&1 | ForEach-Object { "$_" } } | Out-String).Trim()
 }
 
 # CASE A: only <projname>.sqlite present, non-empty -> chosen over absent template file

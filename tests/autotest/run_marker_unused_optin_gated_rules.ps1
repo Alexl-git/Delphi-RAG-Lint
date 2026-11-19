@@ -23,9 +23,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = (Join-Path ([IO.Path]::GetTempPath()) ("draglint-marker-optin-" + [Guid]::NewGuid().ToString('N')))
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -60,11 +63,11 @@ foreach ($id in $ids) { $body.Add("// dl:ok $id -- REVIEWED 2026-10-25: fixture,
 $body.AddRange([string[]]@('', 'end.'))
 [IO.File]::WriteAllText($pas, (($body -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 
-& $Exe index $WorkDir --db $db *> $null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db *> $null }
 Check 'fixture indexed' ($LASTEXITCODE -eq 0) ''
 
-function LintAll { ((& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db 2>$err | Out-String) -replace "`r`n", "`n") }
-function LintFile([string]$P) { ((& $Exe lint $P --db $db 2>$err | Out-String) -replace "`r`n", "`n") }
+function LintAll { ((& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($err); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String) -replace "`r`n", "`n") }
+function LintFile([string]$P) { ((& { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($err); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe lint $P --db $db 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-String) -replace "`r`n", "`n") }
 
 Write-Host ''
 Write-Host '-- 1. per-file run, index present: no OptedIn-gated marker is called unused' -ForegroundColor Cyan

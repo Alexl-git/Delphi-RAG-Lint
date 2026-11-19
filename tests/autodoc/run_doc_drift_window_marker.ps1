@@ -79,7 +79,10 @@
   Usage: pwsh -File tests\autodoc\run_doc_drift_window_marker.ps1 [-Exe <path>]
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -100,7 +103,7 @@ function WriteAscii($path, $lines) {
   [IO.File]::WriteAllText($path, (($lines -join $crlf) + $crlf), (New-Object Text.ASCIIEncoding))
 }
 function Run([string[]]$xs) {
-  $o = & $Exe @xs 2>&1 | Out-String
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe @xs 2>&1 | ForEach-Object { "$_" } } | Out-String
   [pscustomobject]@{ Out = $o; Code = $LASTEXITCODE }
 }
 # The /// block directly above the first line matching $declPat, joined.
@@ -316,7 +319,8 @@ try {
   Check 'CASE-CONFIDENCE the fix is refused' ($t8 -match 'not auto-fixed') $t8.Trim()
 
   # --- end to end: --fix --apply repairs the vouched ones, preserves the rest -
-  $null = Run @('lint-all', '--db', $db, '--rule', 'doc-drift', '--fix', '--apply')
+  # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
+  $null = Run @('lint-all', '--db', $db, '--rule', 'doc-drift', '--fix', '--apply', '--no-compile-gate')
   $after1 = BlockAbove $tgt '^procedure Target;'
   $after2 = BlockAbove $tgt '^procedure Target2;'
   $after3 = BlockAbove $tgt '^procedure Target3;'

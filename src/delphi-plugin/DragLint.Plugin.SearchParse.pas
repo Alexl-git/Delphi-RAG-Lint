@@ -80,10 +80,95 @@ function ParseUsagesJson(const AJson: string): TSearchRows;
 /// </remarks>
 function KindMatchesFilter(const AKind, AFilter: string): Boolean;
 
+const
+  /// <summary>The engine's `usages --scope` words, in the order of the Search
+  /// page's scope combo (the same four as the Find Usages panel).</summary>
+  SEARCH_SCOPE_WORDS: array[0..3] of string = ('symbol', 'project', 'group', 'everywhere');
+  /// <summary>Combo index the Search page starts on: Project, which is what a bare
+  /// name answers anyway (no caret position binds a symbol).</summary>
+  SEARCH_SCOPE_DEFAULT = 1;
+
+/// <summary>The scope word of a scope-combo index.</summary>
+/// <param name="AIndex">Combo ItemIndex; anything outside 0..3 (e.g. -1) is the default.</param>
+/// <returns>symbol, project, group or everywhere.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.SearchParse.SearchUsagesScopeArgs (DragLint.Plugin.SearchParse.pas)</para>
+/// <para>Returns: SEARCH_SCOPE_WORDS[AIndex]</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function SearchScopeWord(AIndex: Integer): string;  // dl:ok unused-public-symbol@b38a -- public as the test seam: SearchParseTests pins the index -> word mapping
+/// <summary>The scope part of a `usages` command line for the Search page.</summary>
+/// <param name="AIndex">Combo ItemIndex.</param>
+/// <param name="AGroupFile">Open project group file; used only for scope group.</param>
+/// <returns>' --scope &lt;word&gt;', plus ' --group "&lt;file&gt;"' for group when a file is known.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.SearchForm.TSearchHandler.RunSearch (DragLint.Plugin.SearchForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.SearchParse.SearchScopeWord, Format</para>
+/// <seealso cref="DragLint.Plugin.SearchParse.SearchScopeWord"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function SearchUsagesScopeArgs(AIndex: Integer; const AGroupFile: string): string;
+/// <summary>The Location column text of a row.</summary>
+/// <param name="AFilePath">Full path of the row's file.</param>
+/// <param name="ALine">1-based line; 0 = not navigable.</param>
+/// <returns>'full\path.pas:123', or '' when ALine &lt;= 0.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.SearchForm.TSearchHandler.Fill (DragLint.Plugin.SearchForm.pas)</para>
+/// <para>Calls: Format</para>
+/// <para>Returns: if ALine &gt; 0 then Format('%s:%d', [AFilePath, ALine])</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function SearchLocationText(const AFilePath: string; ALine: Integer): string;
+/// <summary>The engine's scope_note of a `usages --format json` answer.</summary>
+/// <param name="AJson">The raw answer.</param>
+/// <returns>The note, or '' when absent or not JSON.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.SearchForm.TSearchHandler.ShowResult (DragLint.Plugin.SearchForm.pas)</para>
+/// <para>Calls: TJSONObject</para>
+/// <para>Returns: ''</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function ParseUsagesScopeNote(const AJson: string): string;
 implementation
 
 uses
   System.JSON, System.Generics.Collections;
+
+function SearchScopeWord(AIndex: Integer): string;
+begin
+  if (AIndex < Low(SEARCH_SCOPE_WORDS)) or (AIndex > High(SEARCH_SCOPE_WORDS)) then AIndex:= SEARCH_SCOPE_DEFAULT;
+  Result:= SEARCH_SCOPE_WORDS[AIndex];
+end;
+
+function SearchUsagesScopeArgs(AIndex: Integer; const AGroupFile: string): string;
+begin
+  Result:= ' --scope ' + SearchScopeWord(AIndex);
+  if (SearchScopeWord(AIndex) = 'group') and (AGroupFile <> '') then
+    Result:= Result + Format(' --group "%s"', [AGroupFile]);
+end;
+
+function SearchLocationText(const AFilePath: string; ALine: Integer): string;
+begin
+  Result:= if ALine > 0 then Format('%s:%d', [AFilePath, ALine]) else '';
+end;
+
+function ParseUsagesScopeNote(const AJson: string): string;
+var
+  Root: TJSONValue;
+begin
+  Result:= '';
+  Root:= TJSONObject.ParseJSONValue(AJson);
+  try
+    if Root is TJSONObject then TJSONObject(Root).TryGetValue<string>('scope_note', Result);
+  finally
+    Root.Free;
+  end;
+end;
 
 function MakeRow(const ACat, AColA, AColB, AFile: string; ALine: Integer): TSearchRow;
 begin

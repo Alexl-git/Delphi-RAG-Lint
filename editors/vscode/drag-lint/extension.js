@@ -11,15 +11,20 @@
 // advertising hover, definition, references, workspaceSymbol, completion and
 // signatureHelp.
 
-const { workspace, window, commands, languages, ConfigurationTarget, StatusBarAlignment, ThemeColor, Uri, Position, Range } = require('vscode');
-const { LanguageClient, TransportKind, CloseAction, ErrorAction } = require('vscode-languageclient/node');
+const { workspace, window, commands, languages, ConfigurationTarget, StatusBarAlignment, ThemeColor, Uri, Position, Range, Hover, MarkdownString } = require('vscode');
+const { LanguageClient, TransportKind, CloseAction, ErrorAction, RevealOutputChannelOn } = require('vscode-languageclient/node');
+const { execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const radcolors = require('./lib/radcolors');
 const dlctx = require('./lib/context');
+const plannedstop = require('./lib/plannedstop');
+const restartguard = require('./lib/restartguard');
 const serverargs = require('./lib/serverargs');
 const enginestale = require('./lib/enginestale');
 const exceptionfacts = require('./lib/exceptionfacts');
+const deferredhover = require('./lib/deferredhover');
+const disablerule = require('./lib/disablerule');
 
 // Set once in activate(). restartServer() and updateEngineNow() both need the
 // extension context to locate the private engine copy, and neither is called
@@ -28,6 +33,14 @@ let extContext;
 let engineLog;
 
 let client;
+// 1.52 VSRESTART: open while WE stop the client on purpose (restart / engine-copy update), so the
+// old connection's teardown errors are not logged as faults. See lib/plannedstop.js.
+const stopGate = plannedstop.createGate();
+let clientChannel;
+const STOP_TIMEOUT_MS = 2000;
+const PLANNED_STOP_GRACE_MS = restartguard.graceMs(STOP_TIMEOUT_MS);
+const restartState = restartguard.createRestartState(stopGate);
+const graceGate = restartguard.createGraceGate(stopGate, setTimeout, clearTimeout);
 // Held so a restart can dispose the previous one. The LanguageClient does NOT
 // take ownership of a watcher handed to it via synchronize.fileEvents, so
 // building a fresh client per restart -- which is what the restart command does
@@ -57,6 +70,24 @@ const RESTART_WINDOW_MS = 3 * 60 * 1000;
 let restartTimes = [];
 
 function makeErrorHandler() {
+  return plannedstop.wrapErrorHandler(makeBudgetErrorHandler(), stopGate, { Continue: ErrorAction.Continue, DoNotRestart: CloseAction.DoNotRestart });
+}
+
+// Stops the running client on purpose. The gate stays open for a short grace period after stop()
+// resolves because the child's exit and the last write errors can still arrive just after it.
+async function stopClientPlanned() {
+  if (!client) return;
+  const old = client;
+  client = undefined;
+  graceGate.open();
+  try { await old.stop(STOP_TIMEOUT_MS); } catch (e) { /* already gone, or the stop timed out: the client ends the old server itself */ }
+  // Dispose so the old client's server-registered commands (draglint.showCallers ...) are gone
+  // before the new client registers them again.
+  try { old.dispose(); } catch (e) { /* already disposed */ }
+  graceGate.closeLater(PLANNED_STOP_GRACE_MS);
+}
+
+function makeBudgetErrorHandler() {
   return {
     error(error, message, count) {
       // A write error is what a replaced-binary EPIPE looks like. Keep going;
@@ -341,14 +372,12 @@ function resolveExe() {
   return res.exe;
 }
 
-async function updateEngineNow() {
+const updateEngineNow = restartguard.coalesce(updateEngineNowImpl, 10000);
+async function updateEngineNowImpl() {
   if (!extContext) return;
   // The running server holds the copy, so it has to stop before the file can be
   // replaced. Same lock this whole mechanism is about, one level in.
-  if (client) {
-    try { await client.stop(); } catch (e) { /* already gone */ }
-    client = undefined;
-  }
+  await stopClientPlanned();
   const res = mirrorEngine(true);
   if (!res.exe) {
     window.showErrorMessage('drag-lint: could not update the engine copy -- ' + res.reason);
@@ -361,7 +390,23 @@ async function updateEngineNow() {
   await restartServer();
 }
 
+// One Output channel for every client this window ever builds (the wrapper's dispose is a no-op).
+function sharedClientChannel() {
+  if (!clientChannel) {
+    clientChannel = plannedstop.wrapChannel(window.createOutputChannel('drag-lint'), stopGate);
+  }
+  return clientChannel;
+}
+
+// v152 BK-VSHOVER (B32): the deferred hover's one slot (see lib/deferredhover.js),
+// shared by the LSP hover middleware (first step) and the companion provider
+// (second step). serverExe = the engine the client runs, for `rules disable`.
+const hoverSlot = deferredhover.createSlot();
+let serverExe = '';
+let lastCtx;
+
 function makeClient(exe) {
+  serverExe = exe;
   // No --db by default. drag-lint resolves databases from the drag-lint.json
   // sitting beside the exe, which is the same manifest the Delphi IDE reads --
   // so VS Code follows the project layout automatically instead of pinning a
@@ -400,17 +445,45 @@ function makeClient(exe) {
 
   const clientOptions = {
     documentSelector: [{ scheme: 'file', language: 'pascal' }],
-    outputChannelName: 'drag-lint',
+    outputChannel: sharedClientChannel(),
+    revealOutputChannelOn: RevealOutputChannelOn.Never,
     errorHandler: makeErrorHandler(),
     initializationOptions: dlctx.initOptions((k) => workspace.getConfiguration('dragLint').get(k)),
     synchronize: { configurationSection: 'dragLint', fileEvents: [manifestWatcher, sourceWatcher] },
     middleware: {
+      didOpen: restartState.wrap((document, next) => next(document)),
+      didClose: restartState.wrap((document, next) => next(document)),
       // Wave 149 LX (spec P1): the exception lens runs draglint.exceptionFacts; the server
       // answers the routine's raise / handler sites and this shows them in a quick pick.
       executeCommand: async (command, args, next) => {
         const result = await next(command, args);
         if (exceptionfacts.isExceptionFactsCommand(command)) await showExceptionFacts(result);
         return result;
+      },
+      // v152 BK-VSHOVER (B32): announce the position, then ask. A 1.52 engine answers
+      // the FAST markdown (placeholder where the slow facts go), shown at once; the
+      // companion provider (registerDeferredHoverCompanion) asks again for the rest.
+      // An older engine answers whole and the companion adds nothing.
+      provideHover: async (document, position, token, next) => {
+        const uri = document.uri.toString();
+        const k = deferredhover.key(uri, position.line, position.character);
+        hoverSlot.reset(k);
+        if (client) client.sendNotification(deferredhover.DEFER_METHOD, { textDocument: { uri }, position: { line: position.line, character: position.character } });
+        let hover;
+        try {
+          hover = await next(document, position, token);
+        } catch (e) {
+          hoverSlot.settle(k, null);
+          throw e;
+        }
+        const text = deferredhover.hoverText(hover);
+        if (!hover || !deferredhover.isPartial(text)) {
+          hoverSlot.settle(k, null);
+          return hover;
+        }
+        const shown = deferredhover.fastPart(text);
+        hoverSlot.settle(k, { shown });
+        return new Hover(new MarkdownString(shown), hover.range);
       }
     }
   };
@@ -469,18 +542,17 @@ async function restartServer() {
   // Build a FRESH client rather than calling client.restart(). Once the stock
   // policy has latched, the failure state lives in the client object, and the
   // whole point of this command is to be the way back from that.
-  if (client) {
-    try {
-      await client.stop();
-    } catch (e) {
-      // A server that is already gone cannot be stopped cleanly, which is
-      // precisely the case this command exists for.
-    }
-    client = undefined;
-  }
+  // A server that is already gone cannot be stopped cleanly, which is precisely the case this
+  // command exists for; stopClientPlanned swallows that.
+  await stopClientPlanned();
   restartTimes = [];
-  client = makeClient(exe);
-  await client.start();
+  restartState.starting = true;
+  try {
+    client = makeClient(exe);
+    await client.start();
+  } finally {
+    restartState.starting = false;
+  }
   window.setStatusBarMessage('drag-lint: language server restarted', 3000);
 }
 
@@ -591,6 +663,7 @@ function updateContextVisibility() {
 }
 
 function showContext(ctx) {
+  lastCtx = ctx;
   if (!ctxStatus) return;
   const f = dlctx.formatStatus(ctx);
   ctxStatus.text = f.text;
@@ -638,6 +711,71 @@ async function selectProject() {
     value = sel[0].fsPath;
   }
   await applyContext({ project: value });
+}
+
+// v152 BK-VSHOVER (B32): the second half of the deferred hover. VS Code renders each
+// provider's part as it resolves, so this provider waits for the LSP middleware's
+// first step at the same position and, when that was partial, asks the same
+// position again (the engine's cancellable WHOLE answer) and shows only what the
+// fast part did not. Moving away cancels the token -> $/cancelRequest -> the engine
+// abandons the work. Registered before the client starts.
+function registerDeferredHoverCompanion(context) {
+  context.subscriptions.push(languages.registerHoverProvider({ scheme: 'file', language: 'pascal' }, {
+    async provideHover(document, position, token) {
+      // VS Code calls both providers in one synchronous pass; yield once so the
+      // middleware has opened this position's slot before we wait on it.
+      await new Promise((r) => setTimeout(r, 0));
+      const k = deferredhover.key(document.uri.toString(), position.line, position.character);
+      const first = await hoverSlot.wait(k, deferredhover.FIRST_STEP_WAIT_MS, () => token.isCancellationRequested);
+      if (!first || !client || token.isCancellationRequested) return null;
+      let res;
+      try {
+        res = await client.sendRequest('textDocument/hover', client.code2ProtocolConverter.asTextDocumentPositionParams(document, position), token);
+      } catch (e) {
+        return null; // RequestCancelled: the user moved on
+      }
+      const rest = deferredhover.remainder(first.shown, deferredhover.hoverText(res));
+      return rest ? new Hover(new MarkdownString(rest)) : null;
+    }
+  }));
+}
+
+// v152 BK-VSHOVER (B43, DISRULE H1): the engine's "drag-lint: disable <rule> in this
+// unit / project..." code action carries this command. Ask the reason, run
+// `drag-lint rules disable`, show the answer, re-lint the files with findings.
+async function disableRule(...args) {
+  const req = disablerule.fromCommandArgs(args);
+  if (!req) {
+    window.showWarningMessage('drag-lint: "Disable rule" is run from a drag-lint finding\'s quick fix (light bulb).');
+    return;
+  }
+  const where = req.scope === 'line' ? 'on this line' : 'in this ' + req.scope;
+  const reason = await window.showInputBox({
+    prompt: `drag-lint: why does ${req.rule} not apply ${where}? (saved with the override, with today's date)`,
+    placeHolder: 'reason (required)',
+    ignoreFocusOut: true,
+    validateInput: (v) => disablerule.reasonProblem(v, req.scope) || null
+  });
+  if (reason === undefined) return;
+  if (!serverExe || !fs.existsSync(serverExe)) {
+    window.showErrorMessage('drag-lint: engine not found; set "dragLint.serverPath".');
+    return;
+  }
+  const project = lastCtx && lastCtx.project ? String(lastCtx.project) : '';
+  const argv = disablerule.buildArgs(Object.assign({}, req, { reason, project: /\.dproj$/i.test(project) ? project : '' }));
+  log('disable rule: ' + argv.join(' '));
+  const { out, code } = await new Promise((resolve) => {
+    execFile(serverExe, argv, { cwd: path.dirname(req.file), windowsHide: true, timeout: 60000 }, (err, so, se) => {
+      resolve({ out: String(so || '') + String(se || ''), code: err ? (typeof err.code === 'number' ? err.code : 2) : 0 });
+    });
+  });
+  const r = disablerule.describeResult(out, code);
+  if (!r.ok) {
+    window.showErrorMessage('drag-lint: ' + r.message);
+    return;
+  }
+  window.showInformationMessage('drag-lint: ' + r.message);
+  await refreshProblems();
 }
 
 // DEC-14: opt-in staleness notice (dragLint.engineStaleNoticeMinutes, 0 = off).
@@ -696,11 +834,24 @@ function activate(context) {
   }));
   context.subscriptions.push(commands.registerCommand('dragLint.updateEngine', updateEngineNow));
   context.subscriptions.push(commands.registerCommand('dragLint.refreshProblems', refreshProblems));
+  // "Fix with drag-lint": both commands ask the LSP server for its own code actions (Fix: <rule>,
+  // kind quickfix, and the whole-file fix, kind source.fixAll.drag-lint) and apply the first one.
+  // Registered before the exe check, like the others: they are no-ops until a server answers.
+  context.subscriptions.push(commands.registerCommand('dragLint.fixFinding', () =>
+    commands.executeCommand('editor.action.codeAction', { kind: 'quickfix', apply: 'first' })));
+  context.subscriptions.push(commands.registerCommand('dragLint.fixAllInFile', () =>
+    commands.executeCommand('editor.action.codeAction', { kind: 'source.fixAll.drag-lint', apply: 'first' })));
   // Colour commands are registered before the exe check too: they read the
   // registry and touch no engine, so they must keep working on a machine where
   // the server path is wrong.
   context.subscriptions.push(commands.registerCommand('dragLint.applyRadStudioColours', applyRadStudioColours));
   context.subscriptions.push(commands.registerCommand('dragLint.generateTheme', generateThemeFile));
+  // v152 BK-VSHOVER: the disable-rule code action's command (B43) and the deferred
+  // hover's second step (B32). The companion is registered BEFORE the client starts:
+  // VS Code orders hover parts newest provider first, so the LSP's fast part shows
+  // above the companion's remainder.
+  context.subscriptions.push(commands.registerCommand(disablerule.COMMAND, disableRule));
+  registerDeferredHoverCompanion(context);
 
   // Fail LOUDLY and specifically. A language client that cannot spawn its
   // server otherwise just produces no hovers, which reads as "the index has

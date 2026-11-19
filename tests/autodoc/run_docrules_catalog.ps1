@@ -28,7 +28,10 @@
   Run against the repo rules/ dir so the count is deterministic (scm rules are
   excluded from the built-in tally by filtering source=builtin).
 #>
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $repo    = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $exePath = (Resolve-Path $Exe).Path
@@ -38,7 +41,7 @@ function Assert($name, $cond) {
   if ($cond) { Write-Host "PASS  $name" } else { Write-Host "FAIL  $name" -ForegroundColor Red; $script:fail++ }
 }
 
-$json = & $exePath rules --json --rules-dir $rulesDir 2>$null | ConvertFrom-Json
+$json = & { $ErrorActionPreference = 'Continue'; & $exePath rules --json --rules-dir $rulesDir 2>$null } | ConvertFrom-Json | ForEach-Object { $_ }
 Assert 'rules --json has a rules array' ($null -ne $json.rules)
 
 $md = $json.rules | Where-Object { $_.id -eq 'missing-doc' } | Select-Object -First 1
@@ -265,11 +268,11 @@ $builtins = @($json.rules | Where-Object { $_.source -eq 'builtin' })
 #   thread-use-after-free-on-terminate, threadvar-managed, tls-verification-disabled, todo-comment,
 #   transaction-without-rollback, trivial-accessor, ui-call-in-console-or-service, unneeded-forward-declaration,
 #   unrelated-class-cast, weak-cipher, write-only-property, writeln-in-gui-app
-$ExpectedBuiltins = 310
-Assert ("built-in rule count = {0} (118 + doc-orphan-block + stat-gated-destructive + global-only-uses-edge + duplicate-global-decl + uses-global-census + with-hides-outer-symbol + review-marker-malformed + hardcoded-absolute-path + dfm-property-not-declared + dependent-project-not-recompiled + discarded-effect-free-result + query-name-with-effect + enum-read-inside-with + assert-with-side-effect + ifdef-undefined-symbol + review-marker-placeholder-hash + review-marker-reason-unreviewed + cycle-participant-unit + confusable-identifier + line-too-long + enum-bare-read-scoped + platform-divergent-define + enum-ordinal-persisted + 49 gaps-wave built-ins + ancestor-not-in-project + 6 wave-3 rules + 87 wave-v151 built-ins); got {1}" -f $ExpectedBuiltins, $builtins.Count) ($builtins.Count -eq $ExpectedBuiltins)
+$ExpectedBuiltins = 322
+Assert ("built-in rule count = {0} (118 + doc-orphan-block + stat-gated-destructive + global-only-uses-edge + duplicate-global-decl + uses-global-census + with-hides-outer-symbol + review-marker-malformed + hardcoded-absolute-path + dfm-property-not-declared + dependent-project-not-recompiled + discarded-effect-free-result + query-name-with-effect + enum-read-inside-with + assert-with-side-effect + ifdef-undefined-symbol + review-marker-placeholder-hash + review-marker-reason-unreviewed + cycle-participant-unit + confusable-identifier + line-too-long + enum-bare-read-scoped + platform-divergent-define + enum-ordinal-persisted + 49 gaps-wave built-ins + ancestor-not-in-project + 6 wave-3 rules + 87 wave-v151 built-ins + 12 net v152 built-ins (1.52 INT12: OWNGATED -1 by-value-arg-before-assignment, ATTRRULES +1 debug-display-placeholder)); got {1}" -f $ExpectedBuiltins, $builtins.Count) ($builtins.Count -eq $ExpectedBuiltins)
 
 $docBuiltins = @($builtins | Where-Object { $_.category -eq 'documentation' })
-Assert ("exactly 5 documentation-category built-ins; got {0}" -f $docBuiltins.Count) ($docBuiltins.Count -eq 5)
+Assert ("exactly 7 documentation-category built-ins (1.52 DOCPOL: +doc-placeholder, +doc-malformed-summary); got {0}" -f $docBuiltins.Count) ($docBuiltins.Count -eq 7)
 
 Write-Host ''
 if ($fail -gt 0) { Write-Host "docrules-catalog: $fail FAIL" -ForegroundColor Red; exit 1 } else { Write-Host 'docrules-catalog: all pass' -ForegroundColor Green; exit 0 }

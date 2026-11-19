@@ -50,7 +50,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Continue'
@@ -90,11 +93,11 @@ Push-Location C:\TEMP
 try {
   $before = [IO.File]::ReadAllBytes($target)
 
-  & $exePath index $scratch --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'index exits 0' ($LASTEXITCODE -eq 0)
 
   # --stubs is required so Plain (no facts) is documented too -- see header.
-  & $exePath document --unit $target --db $db --stubs --apply 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --stubs --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'document --stubs --apply exits 0' ($LASTEXITCODE -eq 0)
 
   $afterApply = [IO.File]::ReadAllBytes($target)
@@ -130,7 +133,7 @@ try {
 
   # --- dry-run --strip (no --apply), run against the STILL-documented file --
   # (before the real strip below) so there is engine content to report on.
-  $dryRunOut = (& $exePath document --unit $target --db $db --strip 2>&1) -join "`n"
+  $dryRunOut = (& { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --strip 2>&1 | ForEach-Object { "$_" } }) -join "`n"
   $dryRunExit = $LASTEXITCODE
   Check 'dry-run --strip exits 0' ($dryRunExit -eq 0)
   $afterDryRun = [IO.File]::ReadAllBytes($target)
@@ -148,7 +151,7 @@ try {
     ($dryRunOut -match 'stripped:\s*3\s*tags,\s*0\s*blocks') $dryRunOut
 
   # --- real strip --apply: round-trip back to the pre-apply snapshot ---
-  & $exePath document --unit $target --db $db --strip --apply 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --strip --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'strip --apply exits 0' ($LASTEXITCODE -eq 0)
 
   $afterStrip = [IO.File]::ReadAllBytes($target)
@@ -156,7 +159,7 @@ try {
     ([System.Linq.Enumerable]::SequenceEqual([byte[]]$before,[byte[]]$afterStrip))
 
   # --- second strip --apply is a no-op ---
-  & $exePath document --unit $target --db $db --strip --apply 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath document --unit $target --db $db --strip --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'second strip --apply exits 0' ($LASTEXITCODE -eq 0)
   $afterStrip2 = [IO.File]::ReadAllBytes($target)
   Check 'second strip --apply is a no-op (byte-identical)' `

@@ -8,9 +8,16 @@
   The base build (1.49.0-alpha) prints only 'NamingChecker.Check' -> RED. pwsh 7, neutral CWD.
 #>
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-slotlabels-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+# H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+$WorkDirBase = $WorkDir   # the body narrows $WorkDir to a per-run GUID child; remove the base
+try {
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -28,7 +35,7 @@ try {
   if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: no fixture DB" -ForegroundColor Red; exit 2 }
   $errFile = Join-Path $WorkDir 'lint-all.err'
   $env:DRAGLINT_PROFILE = '1'
-  try { & $Exe lint-all --db $db --json 2> $errFile | Out-Null } finally { $env:DRAGLINT_PROFILE = $null }
+  try { & { $ErrorActionPreference = 'Continue'; $dlErrFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($errFile); [IO.File]::WriteAllText($dlErrFile, ''); & $Exe lint-all --db $db --json 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [IO.File]::AppendAllText($dlErrFile, "$_" + [Environment]::NewLine) } else { $_ } } } | Out-Null } finally { $env:DRAGLINT_PROFILE = $null }
   $err = [IO.File]::ReadAllText($errFile)
   $m = [regex]::Match($err, 'PER-FILE SCAN BREAKDOWN \((\d+) file')
   Check 'the profile prints the per-file breakdown' $m.Success
@@ -43,3 +50,4 @@ try {
 } finally { Pop-Location }
 if ($script:Failed) { Write-Host 'RESULT: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'RESULT: PASS' -ForegroundColor Green; exit 0
+} finally { Remove-WorkDir $WorkDirBase -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

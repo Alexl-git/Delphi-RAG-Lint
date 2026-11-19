@@ -102,9 +102,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-proptree-bridge-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -313,7 +316,7 @@ end.
 
 $db = Join-Path $WorkDir 'bridge.sqlite'
 Write-Host 'Indexing fixture' -ForegroundColor Cyan
-$indexOut = & $Exe index $work --db $db 2>&1
+$indexOut = & { $ErrorActionPreference = 'Continue'; & $Exe index $work --db $db 2>&1 | ForEach-Object { "$_" } }
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($indexOut -join ' | ')"
 
 # A PRISTINE snapshot of the freshly-indexed DB, taken BEFORE any query runs.
@@ -348,7 +351,7 @@ function Get-Tree([string]$Database, [string]$QName) {
   try {
     $raw = (& $Exe proptree --qname $QName --format json --db $Database) -join "`n"
   } finally { Pop-Location }
-  return ($raw | ConvertFrom-Json)
+  return ($raw | ConvertFrom-Json | ForEach-Object { $_ })
 }
 
 # Same, but with explicit extra CLI arguments -- used by the write-back probes,
@@ -359,7 +362,7 @@ function Get-TreeArgs([string]$Database, [string]$QName, [string[]]$Extra) {
     $raw = (& $Exe proptree --qname $QName --format json --db $Database @Extra) -join "`n"
   } finally { Pop-Location }
   if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
-  return ($raw | ConvertFrom-Json)
+  return ($raw | ConvertFrom-Json | ForEach-Object { $_ })
 }
 
 # --- 1. Read-only resolution: Align must resolve to TAlign (was 'unknown'). ------

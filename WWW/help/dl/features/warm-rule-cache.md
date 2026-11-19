@@ -4,10 +4,10 @@ title: warm-rule-cache
 summary: Fills the lint rule cache for a project index; index runs warm it, or start it in the background (--rule-cache-warm)
 product: DL
 group: linting
-order: 30063
+order: 30076
 since: 1.39.0-alpha
 status: shipped
-updated: 1.51.1-alpha
+updated: 1.52.0-alpha
 ---
 
 # warm-rule-cache

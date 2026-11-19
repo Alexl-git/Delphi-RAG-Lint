@@ -25,8 +25,11 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe"
+  [string]$Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -53,7 +56,7 @@ New-Item -ItemType Directory $work -Force | Out-Null
 function Ubas([string]$name, [string]$body) {
   $p = Join-Path $work "$name.pas"
   Write-Ascii $p $body
-  $out = (& $Exe lint $p --enable used-before-assignment 2>$null) -join "`n"
+  $out = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $p --enable used-before-assignment 2>$null }) -join "`n"
   return @{ Out = $out; Hits = @($out -split "`n" | Where-Object { $_ -match 'used-before-assignment' }) }
 }
 

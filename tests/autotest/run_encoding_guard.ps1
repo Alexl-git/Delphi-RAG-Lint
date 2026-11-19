@@ -156,8 +156,11 @@
 #>
 [CmdletBinding()]
 param(
-  [string] $Repo = "$PSScriptRoot\..\.."
+  [string] $Repo = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Repo) { $Repo = "$PSScriptRoot\..\.." }
 
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -294,6 +297,23 @@ $badHi  = New-Object System.Collections.Generic.List[string]
 # Population when the clause was added: 0 offenders in 918 files (a python
 # emulation of $roots below; command, unit and classifier in the fix-round-1
 # report). Proved RED by writing a 0x0C into a scratch .pas under tests\.
+if (-not ('DragLintEncScan' -as [type])) {
+  Add-Type -TypeDefinition @"
+public static class DragLintEncScan {
+  // returns { lone LF, bytes > 127, C0 controls other than TAB/CR/LF }
+  public static int[] Count(byte[] b) {
+    int lone = 0, hi = 0, ctl = 0;
+    for (int i = 0; i < b.Length; i++) {
+      byte c = b[i];
+      if (c == 10) { if (i == 0 || b[i - 1] != 13) lone++; }
+      else if (c > 127) hi++;
+      else if (c < 32 && c != 9 && c != 13) ctl++;
+    }
+    return new int[] { lone, hi, ctl };
+  }
+}
+"@
+}
 $badCtl = New-Object System.Collections.Generic.List[string]
 $scanned = 0
 
@@ -303,7 +323,7 @@ $scanned = 0
 # new unadded .pas is still visible, but it does not turn the battery red. No git / not a repo => scan all.
 function Get-GitKnownFiles([string]$Root) {
   $set = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
-  $raw = & git -C $Root ls-files -z 2>$null
+  $raw = & { $ErrorActionPreference = 'Continue'; & git -C $Root ls-files -z 2>$null }
   if ($LASTEXITCODE -ne 0 -or $null -eq $raw) { return $null }
   foreach ($e in (($raw -join '') -split "`0")) { if ($e -ne '') { [void]$set.Add($e.Replace('\', '/')) } }
   return $set
@@ -320,15 +340,10 @@ foreach ($ext in $roots.Keys) {
       $scanned++
       if ($DeliberateFixtures.Contains($rel)) { return }
       $b = [System.IO.File]::ReadAllBytes($_.FullName)
-      $lone = 0; $hi = 0; $ctl = 0
-      for ($i = 0; $i -lt $b.Length; $i++) {
-        $c = $b[$i]
-        if ($c -eq 10) { if ($i -eq 0 -or $b[$i - 1] -ne 13) { $lone++ } }
-        elseif ($c -gt 127) { $hi++ }
-        # v(ADP3 T4f fix round 1): a C0 control byte that is not TAB / CR / LF.
-        # See '$badCtl' below for why this is an assertion and not a nicety.
-        elseif ($c -lt 32 -and $c -ne 9 -and $c -ne 13) { $ctl++ }
-      }
+      # B37 (1.52 BK-TOOLING): the per-byte loop was a PowerShell for-loop (about 2 minutes over the
+      # whole tree); the same classification now runs in a compiled helper (seconds). Same counts.
+      $cnt = [DragLintEncScan]::Count($b)
+      $lone = $cnt[0]; $hi = $cnt[1]; $ctl = $cnt[2]
       $bom = ($b.Length -ge 3 -and $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF) -or
              ($b.Length -ge 2 -and (($b[0] -eq 0xFF -and $b[1] -eq 0xFE) -or ($b[0] -eq 0xFE -and $b[1] -eq 0xFF)))
       if ($null -ne $gitKnown -and -not $gitKnown.Contains($rel)) {

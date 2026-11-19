@@ -14,25 +14,66 @@ interface
 /// <summary>Enables the three items of the submenu for what is current now. Assigned to
 /// the submenu's OnClick; cheap OTA calls only.</summary>
 /// <param name="Sender">The submenu (TMenuItem); its children carry the CONVERT_TAG_ values.</param>
-/// <remarks>Only a convenience: where the IDE does not fire it, a click on an item with
-/// nothing to act on says so.</remarks>
+/// <remarks>
+/// Only a convenience: where the IDE does not fire it, a click on an item with
+/// nothing to act on says so.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: ChangeFileExt, DragLint.Plugin.ConvertLaunch.CurrentModule, DragLint.Plugin.ConvertLaunch.ReadSelection, DragLint.Plugin.Telemetry.DLT, ExtractFileExt, FileExists, SameText, TMenuItem</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <seealso cref="DragLint.Plugin.ConvertLaunch.CurrentModule"/>
+/// <seealso cref="DragLint.Plugin.ConvertLaunch.ReadSelection"/>
+/// <seealso cref="DragLint.Plugin.Telemetry.DLT"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure UpdateConvertComponentsMenu(Sender: TObject);
 
 /// <summary>Opens the editor with the selected components as a `selected` request.</summary>
 /// <param name="Sender">The menu item.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.ConvertSelectionEditor.TDragLintConvertSelectionEditor.ExecuteVerb (DragLint.Plugin.ConvertSelectionEditor.pas), DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.ConvertLaunch.StartConversion</para>
+/// <seealso cref="DragLint.Plugin.ConvertLaunch.StartConversion"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure InvokeConvertSelectedComponents(Sender: TObject);
 
 /// <summary>Opens the editor with a `form` request: every instance on the form of the
 /// selected components' types. The editor expands it; the plugin never walks the .dfm.</summary>
 /// <param name="Sender">The menu item.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.ConvertSelectionEditor.TDragLintConvertSelectionEditor.ExecuteVerb (DragLint.Plugin.ConvertSelectionEditor.pas), DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.ConvertLaunch.StartConversion</para>
+/// <seealso cref="DragLint.Plugin.ConvertLaunch.StartConversion"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure InvokeConvertAllOfTypeOnForm(Sender: TObject);
 
 /// <summary>Opens the editor on the current unit with no request; the unit stays open.</summary>
 /// <param name="Sender">The menu item.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: ChangeFileExt, DragLint.Plugin.ConvertLaunch.CurrentModule, DragLint.Plugin.ConvertLaunch.FindEditor, DragLint.Plugin.ConvertLaunch.RefusedForLivingChild, DragLint.Plugin.ConvertLaunch.StartChild, DragLint.Plugin.ConvertRequest.ConvertLaunchCommand, DragLint.Plugin.DbResolver.GetActivePlatformForLibrary, DragLint.Plugin.DbResolver.GetActiveProjectFilePath, DragLint.Plugin.DbResolver.PrimaryDbForProject, DragLint.Plugin.Settings.LoadSettings, ShowMessage, SysErrorMessage</para>
+/// <seealso cref="DragLint.Plugin.ConvertLaunch.CurrentModule"/>
+/// <seealso cref="DragLint.Plugin.ConvertLaunch.FindEditor"/>
+/// <seealso cref="DragLint.Plugin.ConvertLaunch.RefusedForLivingChild"/>
+/// <seealso cref="DragLint.Plugin.ConvertLaunch.StartChild"/>
+/// <seealso cref="DragLint.Plugin.ConvertRequest.ConvertLaunchCommand"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure InvokeOpenConversionEditor(Sender: TObject);
 
 /// <summary>Stops watching a running editor, on plugin unload. The editor is NOT killed
 /// and the unit is not reopened. Returns within one wait slice.</summary>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.UnregisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: FreeAndNil</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ShutdownConvertLaunch;
 
 const

@@ -22,7 +22,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 
 $ErrorActionPreference = 'Stop'; $fail = $false
@@ -41,7 +44,7 @@ function Get-Findings($rawOut) {
   $arrEnd   = $raw.LastIndexOf(']')
   if ($arrStart -ge 0 -and $arrEnd -gt $arrStart) {
     $jsonText = $raw.Substring($arrStart, $arrEnd - $arrStart + 1)
-    return @(ConvertFrom-Json $jsonText)
+    return @((ConvertFrom-Json $jsonText | ForEach-Object { $_ }) | ForEach-Object { $_ })
   }
   return @()
 }
@@ -58,10 +61,10 @@ try {
   Copy-Item (Join-Path $enumHelperFixtures 'Mode.pas') $crossDir
   Copy-Item (Join-Path $enumHelperFixtures 'ModeHelperUnit.pas') $crossDir
   $crossDb = Join-Path $scratch 'cross.sqlite'
-  & $exePath index $crossDir --db $crossDb 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $crossDir --db $crossDb 2>$null } | Out-Null
 
-  $crossAllOut = & $exePath lint-all --db $crossDb --json 2>$null
-  $crossAllFindings = Get-Findings $crossAllOut
+  $crossAllOut = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $crossDb --json 2>$null }
+  $crossAllFindings = @(Get-Findings $crossAllOut)
   $crossAllHits = @($crossAllFindings | Where-Object { $_.rule -eq 'enum-helper-separate-units' })
   Check 'lint-all: cross-unit fixture FIRES enum-helper-separate-units' ($crossAllHits.Count -ge 1)
   if ($crossAllHits.Count -ge 1) {
@@ -71,8 +74,8 @@ try {
     Check 'lint-all: message names the enum type (TMode)' ($crossAllHits[0].message -match 'TMode')
   }
 
-  $crossProjOut = & $exePath lint-project --db $crossDb --json 2>$null
-  $crossProjFindings = Get-Findings $crossProjOut
+  $crossProjOut = & { $ErrorActionPreference = 'Continue'; & $exePath lint-project --db $crossDb --json 2>$null }
+  $crossProjFindings = @(Get-Findings $crossProjOut)
   $crossProjHits = @($crossProjFindings | Where-Object { $_.rule -eq 'enum-helper-separate-units' })
   Check 'lint-project: cross-unit fixture FIRES enum-helper-separate-units' ($crossProjHits.Count -ge 1)
 
@@ -84,15 +87,15 @@ try {
   New-Item -ItemType Directory -Path $sameDir | Out-Null
   Copy-Item (Join-Path $enumHelperFixtures 'already_has_helper.pas') $sameDir
   $sameDb = Join-Path $scratch 'same.sqlite'
-  & $exePath index $sameDir --db $sameDb 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $sameDir --db $sameDb 2>$null } | Out-Null
 
-  $sameAllOut = & $exePath lint-all --db $sameDb --json 2>$null
-  $sameAllFindings = Get-Findings $sameAllOut
+  $sameAllOut = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $sameDb --json 2>$null }
+  $sameAllFindings = @(Get-Findings $sameAllOut)
   $sameAllHits = @($sameAllFindings | Where-Object { $_.rule -eq 'enum-helper-separate-units' })
   Check 'lint-all: same-unit fixture -> NO enum-helper-separate-units finding' ($sameAllHits.Count -eq 0)
 
-  $sameProjOut = & $exePath lint-project --db $sameDb --json 2>$null
-  $sameProjFindings = Get-Findings $sameProjOut
+  $sameProjOut = & { $ErrorActionPreference = 'Continue'; & $exePath lint-project --db $sameDb --json 2>$null }
+  $sameProjFindings = @(Get-Findings $sameProjOut)
   $sameProjHits = @($sameProjFindings | Where-Object { $_.rule -eq 'enum-helper-separate-units' })
   Check 'lint-project: same-unit fixture -> NO enum-helper-separate-units finding' ($sameProjHits.Count -eq 0)
 
@@ -114,18 +117,18 @@ try {
   Copy-Item (Join-Path $enumHelperFixtures 'ModeHelperUnit.pas') $fpDir
   Copy-Item (Join-Path $enumHelperFixtures 'ModeUnrelated.pas') $fpDir
   $fpDb = Join-Path $scratch 'fp.sqlite'
-  & $exePath index $fpDir --db $fpDb 2>$null | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $fpDir --db $fpDb 2>$null } | Out-Null
 
-  $fpAllOut = & $exePath lint-all --db $fpDb --json 2>$null
-  $fpAllFindings = Get-Findings $fpAllOut
+  $fpAllOut = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $fpDb --json 2>$null }
+  $fpAllFindings = @(Get-Findings $fpAllOut)
   $fpAllHits = @($fpAllFindings | Where-Object { $_.rule -eq 'enum-helper-separate-units' })
   $fpGenuineHits   = @($fpAllHits | Where-Object { $_.message -match 'ModeUnrelated' })
   Check 'lint-all: genuine TMode/TModeHelper pair still FIRES (identity match preserved)' (@($fpAllHits | Where-Object { $_.message -match '\bMode\.pas\b|\bMode\b' -and $_.message -match 'ModeHelperUnit' }).Count -ge 1)
   Check 'lint-all: unrelated ModeUnrelated.pas TMode produces NO finding (symbol-id match kills the FP)' ($fpGenuineHits.Count -eq 0)
   Check 'lint-all: exactly 1 finding total (genuine pair only, no FP duplicate)' ($fpAllHits.Count -eq 1)
 
-  $fpProjOut = & $exePath lint-project --db $fpDb --json 2>$null
-  $fpProjFindings = Get-Findings $fpProjOut
+  $fpProjOut = & { $ErrorActionPreference = 'Continue'; & $exePath lint-project --db $fpDb --json 2>$null }
+  $fpProjFindings = @(Get-Findings $fpProjOut)
   $fpProjHits = @($fpProjFindings | Where-Object { $_.rule -eq 'enum-helper-separate-units' })
   $fpProjGenuineHits = @($fpProjHits | Where-Object { $_.message -match 'ModeUnrelated' })
   Check 'lint-project: unrelated ModeUnrelated.pas TMode produces NO finding' ($fpProjGenuineHits.Count -eq 0)
@@ -134,9 +137,9 @@ try {
   # ===================================================================
   # Catalog: rule is ON by default (rules --json).
   # ===================================================================
-  $rulesOut = & $exePath rules --json 2>$null
+  $rulesOut = & { $ErrorActionPreference = 'Continue'; & $exePath rules --json 2>$null }
   $rulesRaw = ($rulesOut -join "`n")
-  $rulesJson = $rulesRaw | ConvertFrom-Json
+  $rulesJson = $rulesRaw | ConvertFrom-Json | ForEach-Object { $_ }
   $ruleEntry = $rulesJson.rules | Where-Object { $_.id -eq 'enum-helper-separate-units' }
   Check 'catalog: enum-helper-separate-units is registered' ($null -ne $ruleEntry)
   if ($null -ne $ruleEntry) {
@@ -150,13 +153,13 @@ try {
   # enum-helper-separate-units was NOT accidentally added to either
   # function's DefDisabled/inline-disabled array. Reuses the cross-unit db.
   # ===================================================================
-  $bareAllOut = & $exePath lint-all --db $crossDb --json 2>$null
-  $bareAllFindings = Get-Findings $bareAllOut
+  $bareAllOut = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $crossDb --json 2>$null }
+  $bareAllFindings = @(Get-Findings $bareAllOut)
   $bareAllHits = @($bareAllFindings | Where-Object { $_.rule -eq 'enum-helper-separate-units' })
   Check 'BARE lint-all (no config/disable) FIRES enum-helper-separate-units (ON by default at runtime)' ($bareAllHits.Count -ge 1)
 
-  $bareProjOut = & $exePath lint-project --db $crossDb --json 2>$null
-  $bareProjFindings = Get-Findings $bareProjOut
+  $bareProjOut = & { $ErrorActionPreference = 'Continue'; & $exePath lint-project --db $crossDb --json 2>$null }
+  $bareProjFindings = @(Get-Findings $bareProjOut)
   $bareProjHits = @($bareProjFindings | Where-Object { $_.rule -eq 'enum-helper-separate-units' })
   Check 'BARE lint-project (no config/disable/--rule) FIRES enum-helper-separate-units (ON by default at runtime)' ($bareProjHits.Count -ge 1)
 

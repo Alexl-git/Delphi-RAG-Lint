@@ -18,8 +18,11 @@
 # Usage: pwsh -File tests/autotest/run_cli_narrowing_is_reported.ps1 [-Exe <path>]
 [CmdletBinding()]
 param(
-    [string] $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe"
+    [string] $Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail='') {
@@ -66,7 +69,7 @@ try {
         # section named DragLint-Cli being registered on the machine running it.
 
         # --- 1. a selector matching nothing -----------------------------------------
-        $o = & $exe4 index --all --only 'NoSuchSectionXYZ' --dry-run 2>&1 | Out-String
+        $o = & { $ErrorActionPreference = 'Continue'; & $exe4 index --all --only 'NoSuchSectionXYZ' --dry-run 2>&1 | ForEach-Object { "$_" } } | Out-String
         $e = $LASTEXITCODE
         Check 'a non-matching --only exits non-zero' ($e -ne 0) "exit=$e"
         Check 'it names the selector that matched nothing' ($o -match 'NoSuchSectionXYZ')
@@ -85,7 +88,7 @@ try {
                       Items = $items; Names = $names }
         }
         $sel = Get-Selectable $o
-        $dups = if ($sel) { @($sel.Names | Group-Object | Where-Object { $_.Count -gt 1 } | ForEach-Object Name) } else { @('<no list>') }
+        $dups = @(if ($sel) { @($sel.Names | Group-Object | Where-Object { $_.Count -gt 1 } | ForEach-Object Name) } else { @('<no list>') })
         Check 'no section name appears twice in the selectable list' ($dups.Count -eq 0) ("dups=" + ($dups -join ','))
         Check 'the selectable count is the number of distinct names' `
               ($sel -and ($sel.Count -eq @($sel.Names | Select-Object -Unique).Count)) ("count=" + $(if ($sel) { $sel.Count }) + " names=" + $(if ($sel) { $sel.Names.Count }))
@@ -95,7 +98,7 @@ try {
         # The case a bare "did anything match?" check cannot catch: the valid name
         # satisfies it while the typo is silently dropped. This is the arm that forces
         # per-selector reporting.
-        $o2 = & $exe4 index --all --only 'P-Foo,NoSuchSectionXYZ' --dry-run 2>&1 | Out-String
+        $o2 = & { $ErrorActionPreference = 'Continue'; & $exe4 index --all --only 'P-Foo,NoSuchSectionXYZ' --dry-run 2>&1 | ForEach-Object { "$_" } } | Out-String
         $e2 = $LASTEXITCODE
         Check 'a partially-matching --only still exits non-zero' ($e2 -ne 0) "exit=$e2"
         Check 'it names the typo' ($o2 -match 'NoSuchSectionXYZ')
@@ -103,12 +106,12 @@ try {
 
         # --- 3. POSITIVE CONTROL ----------------------------------------------------
         # Without this, "always exit non-zero on --only" would pass every arm above.
-        $o3 = & $exe4 index --all --only 'P-Foo' --dry-run 2>&1 | Out-String
+        $o3 = & { $ErrorActionPreference = 'Continue'; & $exe4 index --all --only 'P-Foo' --dry-run 2>&1 | ForEach-Object { "$_" } } | Out-String
         $e3 = $LASTEXITCODE
         Check 'a VALID --only still exits 0' ($e3 -eq 0) "exit=$e3"
         Check 'a valid --only reports no error' (-not ($o3 -match 'matched no configured section'))
 
-        $o4 = & $exe4 index --all --only 'NoSuchSectionXYZ' --dry-run 2>&1 | Out-String
+        $o4 = & { $ErrorActionPreference = 'Continue'; & $exe4 index --all --only 'NoSuchSectionXYZ' --dry-run 2>&1 | ForEach-Object { "$_" } } | Out-String
         $e4 = $LASTEXITCODE
         $s4 = Get-Selectable $o4
         Check '4a (no --platform) still exits non-zero and lists the selectable names' (($e4 -ne 0) -and ($null -ne $s4)) "exit=$e4 out=[$($o4.Trim())]"
@@ -121,7 +124,7 @@ try {
                   (@($s4.Items | Where-Object { $_ -eq 'Library (Win32, Win64)' }).Count -eq 1) ($s4.Items -join ' | ')
         }
 
-        $o5 = & $exe4 index --all --only 'NoSuchSectionXYZ' --platform Win64 --dry-run 2>&1 | Out-String
+        $o5 = & { $ErrorActionPreference = 'Continue'; & $exe4 index --all --only 'NoSuchSectionXYZ' --platform Win64 --dry-run 2>&1 | ForEach-Object { "$_" } } | Out-String
         $s5 = Get-Selectable $o5
         Check '4e (--platform Win64) is worded "selectable for this platform"' ([bool]($s5 -and $s5.ForPlatform)) $o5.Trim()
         if ($s5) {
@@ -130,7 +133,7 @@ try {
         }
 
         # Positive control on the same copy: the de-duplicated name still SELECTS.
-        $o6 = & $exe4 index --all --only 'Library' --dry-run 2>&1 | Out-String
+        $o6 = & { $ErrorActionPreference = 'Continue'; & $exe4 index --all --only 'Library' --dry-run 2>&1 | ForEach-Object { "$_" } } | Out-String
         $e6 = $LASTEXITCODE
         Check '4g positive control: --only Library (the listed name) exits 0' ($e6 -eq 0) "exit=$e6 out=[$($o6.Trim())]"
     } finally { Pop-Location }

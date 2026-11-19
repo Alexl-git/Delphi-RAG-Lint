@@ -33,7 +33,7 @@ uses
 /// lookup (Bars[n], MainMenuBar, BarBy*) become derived. Binary and inherited
 /// .dfm files are skipped with a note; a bar item linked nowhere gives a note.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas), DRagLint.CLI.DoMenuTree (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.Workspace.DoMenuDrift (DRagLint.CLI.Workspace.pas), DRagLint.CLI.Workspace.DoMenuTree (DRagLint.CLI.Workspace.pas)</para>
 /// <para>Calls: DRagLint.MenuTree.Dfm.TDfmRootBuilder.Create, DRagLint.MenuTree.Dfm.TDfmRootBuilder.Run</para>
 /// <seealso cref="DRagLint.MenuTree.Dfm.TDfmRootBuilder.Create"/>
 /// <seealso cref="DRagLint.MenuTree.Dfm.TDfmRootBuilder.Run"/>

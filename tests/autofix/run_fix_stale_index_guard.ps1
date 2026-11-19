@@ -35,7 +35,10 @@
   unchanged and are what caught it.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
 function Check($n,$ok){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),$n) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:fail=$true} }
@@ -65,7 +68,7 @@ Copy-Item $fixture $target -Force
 Push-Location $scratch
 try {
   # ---- 1. index the PRISTINE file --------------------------------------------
-  & $exePath index $srcDir --db $db 2>&1 | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath index $srcDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
   Check 'stale-guard: index exits 0' ($LASTEXITCODE -eq 0)
   Check 'stale-guard: db built' (Test-Path $db)
 
@@ -84,7 +87,7 @@ try {
   Check 'stale-guard: shifted file has `  else` at the stale reference line 25' (([IO.File]::ReadAllLines($target))[24] -eq '  else')
 
   # ---- 3. run the naming autofix against the STALE store ---------------------
-  $out  = & $exePath lint-all --db $db --config $cfg --rule const-casing --fix --apply --quiet 2>&1
+  $out  = & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --config $cfg --rule const-casing --fix --apply --quiet 2>&1 | ForEach-Object { "$_" } }
   $code = $LASTEXITCODE
   Write-Host ($out -join "`n")
   $after = [IO.File]::ReadAllText($target)

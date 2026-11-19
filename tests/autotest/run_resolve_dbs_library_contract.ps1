@@ -31,7 +31,10 @@
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 . "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG3: no machine drag-lint.json
 try {
@@ -63,7 +66,7 @@ if (-not (Test-Path $manifest)) {
 }
 
 function RunResolve([string[]]$ExtraArgs) {
-  $o = (& $exePath resolve-dbs @ExtraArgs 2>&1 | Out-String)
+  $o = (& { $ErrorActionPreference = 'Continue'; & $exePath resolve-dbs @ExtraArgs 2>&1 | ForEach-Object { "$_" } } | Out-String)
   return @{ Out = $o; Code = $LASTEXITCODE
             Lines = @($o -split "`r?`n" | Where-Object { $_.Trim() -ne '' }) }
 }
@@ -84,7 +87,7 @@ try {
         (Test-Path $manifest) $manifest
   if (-not (Test-Path $manifest)) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 
-  $mf     = Get-Content $manifest -Raw | ConvertFrom-Json
+  $mf     = Get-Content $manifest -Raw | ConvertFrom-Json | ForEach-Object { $_ }
   $outDir = $mf.indexes.outDir
 
   foreach ($plat in @('Win32','Win64')) {
@@ -182,7 +185,7 @@ try {
 
   Push-Location $nRoot
   try {
-    $nOut  = (& $nExe resolve-dbs --platform win64 2>&1 | Out-String)
+    $nOut  = (& { $ErrorActionPreference = 'Continue'; & $nExe resolve-dbs --platform win64 2>&1 | ForEach-Object { "$_" } } | Out-String)
     $notes = @($nOut -split "`r?`n" | Where-Object { $_ -match '^NOTE: .* has never been built -- run: ' })
     $fooDb = Join-Path $nProj '_D-RAG\Foo.sqlite'
     Check 'N0 precondition: neither fixture DB exists' `
@@ -201,7 +204,7 @@ try {
       # rest verbatim, and append --dry-run so nothing is built.
       Check "$($case.Tag) ... which starts with the engine name" ($cmd -match '^drag-lint ') $cmd
       $argv = @([regex]::Matches(($cmd -replace '^drag-lint\s+', ''), '"[^"]*"|\S+') | ForEach-Object { $_.Value.Trim('"') }) + '--dry-run'
-      $dOut = (& $nExe @argv 2>&1 | Out-String)
+      $dOut = (& { $ErrorActionPreference = 'Continue'; & $nExe @argv 2>&1 | ForEach-Object { "$_" } } | Out-String)
       $dCode = $LASTEXITCODE
       Check "$($case.Tag) ... and that command, run with --dry-run, exits 0" ($dCode -eq 0) `
             ("exit=$dCode cmd=[$cmd] out=[" + $dOut.Trim() + ']')
@@ -227,13 +230,13 @@ try {
     [IO.File]::WriteAllText($cfgMf, ($altMf -replace "`r?`n", "`r`n"), [Text.Encoding]::ASCII)
     Push-Location $cfgDir
     try {
-      $cOut  = (& $nExe resolve-dbs --platform win64 --config $cfgMf 2>&1 | Out-String)
+      $cOut  = (& { $ErrorActionPreference = 'Continue'; & $nExe resolve-dbs --platform win64 --config $cfgMf 2>&1 | ForEach-Object { "$_" } } | Out-String)
       $cLine = @($cOut -split "`r?`n" | Where-Object { $_ -match '^NOTE: .*\\proj\\_D-RAG\\Foo\.sqlite .* -- run: ' })
       $cCmd  = if ($cLine.Count -eq 1) { ($cLine[0] -split ' -- run: ', 2)[1].Trim() } else { '' }
       Check 'N5 with --config, the advice names P-Alt and carries the same --config' `
             (($cCmd -match '--only P-Alt(\s|$)') -and ($cCmd -match ('--config "' + [regex]::Escape($cfgMf) + '"'))) "cmd=[$cCmd] out=[$($cOut.Trim())]"
       $cArgv = @([regex]::Matches(($cCmd -replace '^drag-lint\s+', ''), '"[^"]*"|\S+') | ForEach-Object { $_.Value.Trim('"') }) + '--dry-run'
-      $cRun  = (& $nExe @cArgv 2>&1 | Out-String)
+      $cRun  = (& { $ErrorActionPreference = 'Continue'; & $nExe @cArgv 2>&1 | ForEach-Object { "$_" } } | Out-String)
       Check 'N5 ... and that command, run with --dry-run, exits 0' ($LASTEXITCODE -eq 0) "cmd=[$cCmd] out=[$($cRun.Trim())]"
     } finally { Pop-Location }
   } finally { Pop-Location }

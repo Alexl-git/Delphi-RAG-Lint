@@ -11,9 +11,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-sigcomment-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'; $script:Passed = 0; $script:FailedN = 0
 function Check($n, $ok, $d = '') {
   $s = if ($ok) { 'PASS' } else { 'FAIL' }; $c = if ($ok) { 'Green' } else { 'Red' }
@@ -30,12 +33,12 @@ try {
   $db = Join-Path $WorkDir 's.sqlite'
   Push-Location $WorkDir
   try {
-    $null = & $Exe index $fx --db $db --library-db none 2>&1 | Out-String
-    $j = & $Exe sql --db $db --json --query "SELECT name, signature FROM symbols WHERE name IN ('MethodWithComment','MethodWithBlock','LineCommented','BlockCommented','DefaultValued','TProcWithBlock','ArrConst')" 2>$null | Out-String
-    $hover = & $Exe hover --qname uSigComment.LineCommented --db $db --format md 2>&1 | Out-String
+    $null = & { $ErrorActionPreference = 'Continue'; & $Exe index $fx --db $db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String
+    $j = & { $ErrorActionPreference = 'Continue'; & $Exe sql --db $db --json --query "SELECT name, signature FROM symbols WHERE name IN ('MethodWithComment','MethodWithBlock','LineCommented','BlockCommented','DefaultValued','TProcWithBlock','ArrConst')" 2>$null } | Out-String
+    $hover = & { $ErrorActionPreference = 'Continue'; & $Exe hover --qname uSigComment.LineCommented --db $db --format md 2>&1 | ForEach-Object { "$_" } } | Out-String
   } finally { Pop-Location }
   # sql --json rows are POSITIONAL arrays: [0]=name, [1]=signature.
-  $rows = @((($j | ConvertFrom-Json).rows) | ForEach-Object { ,@([string]$_[0], [string]$_[1]) })
+  $rows = @((($j | ConvertFrom-Json | ForEach-Object { $_ }).rows) | ForEach-Object { ,@([string]$_[0], [string]$_[1]) })
   Check 'symbols rows found for the 7 fixture symbols' ($rows.Count -ge 7) ("rows=" + $rows.Count)
   foreach ($r in $rows) {
     if ($r[0] -in 'DefaultValued','TProcWithBlock','ArrConst') { continue }

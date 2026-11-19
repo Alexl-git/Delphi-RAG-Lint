@@ -18,9 +18,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-qcli-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 if (-not (Test-Path -LiteralPath $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 . "$PSScriptRoot\lib\HermeticEngine.ps1"; $Exe = Get-HermeticEngine $Exe   # 152 HG3: no machine drag-lint.json
 $ErrorActionPreference = 'Stop'
@@ -84,7 +87,7 @@ $srcFile = Join-Path $src 'uQ.pas'
 $db = Join-Path $WorkDir 'q.sqlite'
 $code = Invoke-G8Index $Exe $src $db
 Check 'fixture index built' (($code -eq 0) -and (Test-Path $db)) "exit=$code"
-function Run($a) { $o = (& $Exe @a 2>&1 | ForEach-Object { "$_" }) -join "`n"; return @{ Out = $o; Code = $LASTEXITCODE } }
+function Run($a) { $o = (& { $ErrorActionPreference = 'Continue'; & $Exe @a 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n"; return @{ Out = $o; Code = $LASTEXITCODE } }
 function LineOf($needle) { return ((Get-Content $srcFile) | Select-String -SimpleMatch $needle | Select-Object -First 1).LineNumber }
 
 # 1 FC-QUALIFIED-HINT
@@ -118,16 +121,16 @@ $cwd = Join-Path $WorkDir 'cwd'
 New-Item -ItemType Directory -Force $cwd | Out-Null
 Push-Location $cwd
 try {
-  $o = (& $bareExe usages --name Feed 2>&1 | ForEach-Object { "$_" }) -join "`n"; $c = $LASTEXITCODE
+  $o = (& { $ErrorActionPreference = 'Continue'; & $bareExe usages --name Feed 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n"; $c = $LASTEXITCODE
   Check '3 usages with a manifest beside the exe and no --db exits 2' ($c -eq 2) "exit=$c"
   Check '3 the message says usages does not read the manifest and asks for --db' (($o -match 'does not read the manifest') -and ($o -match '--db')) ($o -replace "`n", ' | ')
-  $o = (& $bareExe query find-callers --name Feed 2>&1 | ForEach-Object { "$_" }) -join "`n"; $c = $LASTEXITCODE
+  $o = (& { $ErrorActionPreference = 'Continue'; & $bareExe query find-callers --name Feed 2>&1 | ForEach-Object { "$_" } } | ForEach-Object { "$_" }) -join "`n"; $c = $LASTEXITCODE
   Check '3 CONTROL find-callers with the same manifest answers without --db' (($c -eq 0) -and ($o -match '[1-9]\d* caller\(s\)')) "exit=$c $($o -replace "`n", ' | ')"
 } finally { Pop-Location }
 
 # 4 USAGES-DOUBLE-COUNT
 $r = Run @('usages', '--name', 'Feed', '--db', $db, '--json')
-$j = $r.Out | ConvertFrom-Json
+$j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ }
 $all = @($j.calls) + @($j.reads)
 $sites = @($all | ForEach-Object { "$($_.line):$($_.col)" })
 Check '4 four H.Feed(..) call sites are four usages, not eight' ($all.Count -eq 4) "calls=$(@($j.calls).Count) reads=$(@($j.reads).Count)"
@@ -135,7 +138,7 @@ Check '4 no position is listed twice' ($sites.Count -eq @($sites | Sort-Object -
 $lnTwo = LineOf 'H.Feed(3); H.Feed(4);'
 Check "4 POSITIVE CONTROL two calls on one line (line $lnTwo) stay two usages" (@($sites | Where-Object { $_ -like "$lnTwo`:*" }).Count -eq 2) ($sites -join ',')
 $r = Run @('usages', '--name', 'Raw', '--db', $db, '--json')
-$j = $r.Out | ConvertFrom-Json
+$j = $r.Out | ConvertFrom-Json | ForEach-Object { $_ }
 Check '4 POSITIVE CONTROL a plain property read still counts' ((@($j.reads).Count + @($j.calls).Count) -ge 1) ($r.Out -replace "`n", ' ')
 $lnOne = LineOf '  H.Feed(1);'
 $r = Run @('sql', '--query', "SELECT kind FROM refs WHERE name_text='Feed' AND start_line=$lnOne", '--db', $db, '--json')

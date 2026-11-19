@@ -16,11 +16,14 @@
 #Requires -Version 7
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-lsp-ide-parity-$PID",
   [string]$MeasureDb = '',
   [string[]]$MeasureUnits = @()
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -39,7 +42,7 @@ function Frame($obj) {
 }
 # The plugin's view: the text report, parsed the way TryParseFindingLine reads it.
 function IdeKeys([string]$Pas, [string]$Db) {
-  $keys = foreach ($l in (& $Exe lint $Pas --db $Db 2>$null)) {
+  $keys = foreach ($l in (& { $ErrorActionPreference = 'Continue'; & $Exe lint $Pas --db $Db 2>$null })) {
     $m = [regex]::Match([string]$l, ':(\d+):\d+\s+\[\w+\]\s+([a-z0-9\-]+):\s(.*)$')
     if ($m.Success) { '{0}|{1}|{2}' -f $m.Groups[1].Value, $m.Groups[2].Value, $m.Groups[3].Value.Trim() }
   }
@@ -64,7 +67,7 @@ function LspKeys([string]$Pas, [string[]]$Flags, [string]$Tag) {
   $last = $null
   foreach ($part in ([IO.File]::ReadAllText($so) -split 'Content-Length: \d+\r\n\r\n')) {
     if ($part -notmatch 'publishDiagnostics') { continue }
-    $o = $part | ConvertFrom-Json -Depth 30
+    $o = $part | ConvertFrom-Json -Depth 30 | ForEach-Object { $_ }
     if ($o.method -eq 'textDocument/publishDiagnostics') { $last = $o }
   }
   $keys = if ($last) { foreach ($d in $last.params.diagnostics) { '{0}|{1}|{2}' -f ([int]$d.range.start.line + 1), $d.code, ([string]$d.message).Trim() } }
@@ -101,7 +104,7 @@ $NoMarker = Join-Path $NoMarkerDir 'FxParity.pas'
 $Db = Join-Path $WorkDir 'fx.sqlite'
 $env:DRAGLINT_CONTEXT_DEFAULTS = Join-Path $WorkDir 'context-defaults.json'
 [IO.File]::WriteAllText($env:DRAGLINT_CONTEXT_DEFAULTS, '{}', (New-Object Text.UTF8Encoding($false)))
-& $Exe index $Src --db $Db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $Src --db $Db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 if (-not (Test-Path $Db)) { Write-Host 'FATAL: index produced no DB' -ForegroundColor Red; exit 2 }
 
 Write-Host 'G0: IDE live lint vs LSP Problems tab, same file, same DB' -ForegroundColor Cyan

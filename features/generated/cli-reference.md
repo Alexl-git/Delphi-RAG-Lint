@@ -9,7 +9,7 @@ Every drag-lint command, with its usage and the features that describe it.
 Records a dl:ok review of one finding, so it stops being reported without being fixed.
 
 ```text
-drag-lint allow <file> --fix-line <L> --fix-rule <id> [--apply] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>] (record a dl:ok review of ONE finding; dry-run without --apply; the lint options decide which findings the line has)
+drag-lint allow <file> --fix-line <L> --fix-rule <id> [--apply] [--reason "<text>"] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>] (record a dl:ok review of ONE finding; dry-run without --apply; --reason replaces the marker's reason, e.g. "REVIEWED <yyyy-mm-dd> <why>" -- without it a re-hash of a stale marker drops its REVIEWED stamp; the lint options decide which findings the line has)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -17,6 +17,7 @@ drag-lint allow <file> --fix-line <L> --fix-rule <id> [--apply] [--rules-dir <di
 | `--fix-line` | `<L>` |  |  |
 | `--fix-rule` | `<id>` |  |  |
 | `--apply` |  |  |  |
+| `--reason` | `<text>` |  |  |
 | `--rules-dir` | `<dir>` |  |  |
 | `--config` | `<file>` |  |  |
 | `--profile` | `<name>` |  |  |
@@ -215,6 +216,7 @@ drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db P
 | `--depth` | `N` |  |  |
 | `--db` | `PATH` |  |  |
 | `--json` |  |  |  |
+| `--format` |  |  |  |
 
 Described in [callgraph](../../docs/wiki/callgraph.md).
 
@@ -233,6 +235,25 @@ drag-lint check-ast <file> [--profile <name>] [--db PATH] [--library-db <lib.sql
 | `--format` |  |  |  |
 
 Described in [Run AST Checks](../../docs/wiki/Run-AST-Checks.md).
+
+### check-init
+
+Answers whether a variable or field is set before a given use on every execution (SET / NEVER-SET / MAY-BE-UNSET).
+
+```text
+drag-lint check-init <QName>|--qname <QName> [--at <file>:<line>[:<col>]] --db <db> [--json|--format json] [--explain] [--max-routines N] [--max-seconds S]
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--at` | `<file>:<line>[:<col>]` |  |  |
+| `--db` | `<db>` |  |  |
+| `--json` |  |  |  |
+| `--explain` |  |  |  |
+| `--max-routines` | `N` |  |  |
+| `--max-seconds` | `S` |  |  |
+
+Described in [check-init](../../docs/wiki/check-init.md).
 
 ### check-unit
 
@@ -393,7 +414,7 @@ Described in [convert-validate](../../docs/wiki/convert-validate.md).
 Generates a Byte-family record helper (ToByte/FromByte/ToInteger/ FromInteger/ToString/FromString) for an enum type.
 
 ```text
-drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--methods <csv>] [--tostring rtti|case] [--db PATH] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] - generate a Byte-family record helper for an enum
+drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--no-compile-gate] [--methods <csv>] [--tostring rtti|case] [--db PATH] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] - generate a Byte-family record helper for an enum
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -406,6 +427,7 @@ drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--met
 | `--apply` |  |  |  |
 | `--json` |  |  |  |
 | `--no-backup` |  |  |  |
+| `--no-compile-gate` |  |  |  |
 | `--methods` | `<csv>` |  |  |
 | `--tostring` |  |  |  |
 | `--db` | `PATH` |  |  |
@@ -414,13 +436,14 @@ Described in:
 
 * [create-enum-helper](../../docs/wiki/create-enum-helper.md)
 * [Create helper class](../../docs/wiki/Create-helper-class.md)
+* [extract-method and create-enum-helper through the compile gate by default](../../docs/wiki/fixer-compile-gate.md)
 
 ### cycles
 
 Finds uses cycles among indexed units and, on request, proposes a followable refactoring plan to break them.
 
 ```text
-drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--hub] [--plan [--no-hub-surface | --hub-surface [--apply]] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--hub-surface] [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --hub = per group its hub units (removal leaves the rest acyclic): edges, ref weights and surfaces per side, dead uses; read-only, no planner; --f2047 = only the interface-only cycles dcc rejects with F2047, each edge with its forcing symbols and the next --plan / --fix commands; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a "Fix it" block per group naming the exact --fix dry-run and --apply commands; --fix = the mechanical fix of one group, see the cycles-fix entry)
+drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--hub] [--plan [--no-hub-surface | --hub-surface] [--apply] [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--hub-surface | --no-hub-surface] [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--ctor-wide] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --hub = per group its hub units (removal leaves the rest acyclic): edges, ref weights and surfaces per side, dead uses; read-only, no planner; --f2047 = only the interface-only cycles dcc rejects with F2047, each edge with its forcing symbols and the next --plan / --fix commands; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a "Fix it" block per group naming the exact --fix dry-run and --apply commands; --ctor-wide = the wider constructor-inversion whitelist for --plan / --fix (off by default); --fix = the mechanical fix of one group, see the cycles-fix entry)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -532,7 +555,7 @@ Described in [doc-forget](../../docs/wiki/Features.md).
 Writes DocInsight documentation into every public declaration a project owns.
 
 ```text
-drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment
+drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--format json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -556,7 +579,7 @@ Described in:
 Documents every public declaration in every indexed unit, with no project scope.
 
 ```text
-drag-lint document-all [--profile <name>] [--stubs|--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH] - document every public decl in every indexed unit (no project scope)
+drag-lint document-all [--profile <name>] [--stubs|--apply|--json|--format json|--no-backup|--include-accessors|--document-third-party|--migrate-pure] [--db PATH] - document every public decl in every indexed unit (no project scope)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -633,6 +656,21 @@ drag-lint exceptions-sync [--profile <name>] [--db <file.sqlite>] [--config <lin
 
 Described in [exceptions-sync](../../docs/wiki/Features.md).
 
+### explain
+
+Explains one lint rule in plain words: what it means, why it matters, a bad and a good example, its default, whether it can be fixed, and how to suppress it.
+
+```text
+drag-lint explain <rule-id> [--json|--format json] [--rules-dir <dir>]   (what one lint rule means, why it matters, bad / good example, default, fixable, and how to suppress it; an unknown id lists the nearest ids and exits 2)
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--json` |  |  |  |
+| `--rules-dir` | `<dir>` |  |  |
+
+Described in [explain](../../docs/wiki/explain.md).
+
 ### export
 
 Uses export enums with --format delphi-const to dump indexed enum types as Delphi const declarations.
@@ -689,7 +727,7 @@ Described in [Extract an interface from the members used (scratch + compile gate
 Pulls a run of statements out of a routine into a new method.
 
 ```text
-drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] - pull a statement run into a new method
+drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] [--no-compile-gate] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] - pull a statement run into a new method
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -705,8 +743,12 @@ drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--
 | `--json` |  |  |  |
 | `--apply` |  |  |  |
 | `--no-backup` |  |  |  |
+| `--no-compile-gate` |  |  |  |
 
-Described in [extract-method](../../docs/wiki/extract-method.md).
+Described in:
+
+* [extract-method](../../docs/wiki/extract-method.md)
+* [extract-method and create-enum-helper through the compile gate by default](../../docs/wiki/fixer-compile-gate.md)
 
 ### fb-snapshot
 
@@ -783,7 +825,7 @@ Described in [find-unit](../../docs/wiki/find-unit.md).
 Runs YADF formatting across a project's files, with indexing involved as part of the same action.
 
 ```text
-drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff] (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5))
+drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff] (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5). Exit 0 also when YADF declines the file (its content guard leaves it unchanged; prints "Declined: <file>", not a failure))
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1072,6 +1114,8 @@ Described in:
 * [CLI fixes in 1.51.1](../../docs/wiki/v1511-cli-fixes.md)
 * [References for declaration positions](../../docs/wiki/index-declaration-refs.md)
 * [Library bindings for bare reads, paren-less calls and function-result receivers](../../docs/wiki/library-first-resolve.md)
+* [Resolver fixes in 1.52](../../docs/wiki/library-first-resolve.md)
+* [Per-rule time budget in the rule frame (rule-skipped-budget)](../../docs/wiki/rule-time-budget.md)
 
 ### info
 
@@ -1169,7 +1213,7 @@ Described in [link-orm](../../docs/wiki/link-orm.md).
 
 ### lint
 
-lint --fix repairs findings of the 125 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
+lint --fix repairs findings of the 131 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
 
 ```text
 drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]
@@ -1201,6 +1245,13 @@ drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--j
 | `--rsvars` | `<bat>` |  |  |
 | `--build-timeout` | `<s>` |  |  |
 | `--no-compile` |  |  |  |
+| `--profile` | `<name>` |  |  |
+| `--target-compiler` | `<ver\|auto>` |  |  |
+| `--output` | `<file>` |  |  |
+| `--col` | `<c>` |  |  |
+| `--name` | `<ident>` |  |  |
+| `--config` | `<file>` |  |  |
+| `--no-budget` |  |  |  |
 
 Described in:
 
@@ -1233,6 +1284,14 @@ Described in:
 * [Typing and ownership lint rules (casts, Self as interface, destructors)](../../docs/wiki/typing-and-ownership-rules.md)
 * [Wider built-in rules (1.51)](../../docs/wiki/v151-wid-ast-rules.md)
 * [Wider scm rules and three new fixers](../../docs/wiki/v151-wid-scm-rules.md)
+* [Reserved words as names, implicit package imports, contract-unit globs](../../docs/wiki/v152-atla-rules.md)
+* [debug-display-placeholder + attribute-aware member-could-be-private](../../docs/wiki/v152-attrrules.md)
+* [Default-on form, dataset and data-module rules](../../docs/wiki/rule-defaults-152.md)
+* [Extract constant (manual fix for magic literals)](../../docs/wiki/v152-extract-constant.md)
+* [Array index possibly out of range lint rule (index-possibly-out-of-range)](../../docs/wiki/index-possibly-out-of-range.md)
+* [Per-rule time budget in the rule frame (rule-skipped-budget)](../../docs/wiki/rule-time-budget.md)
+* [parameter-type-too-wide ON by default, with an autofix](../../docs/wiki/v152-ptw.md)
+* [Lint rules unconnected-control and hanging-handler](../../docs/wiki/v152-unconn-rules.md)
 
 ### lint-all
 
@@ -1258,11 +1317,14 @@ drag-lint lint-all [--profile <name>] [--db <file.sqlite>] [--project <.dproj>] 
 | `--fix` |  |  |  |
 | `--fix-naming` |  |  |  |
 | `--apply` |  |  |  |
+| `--no-stand-down` |  | measurement runs: open no stand-down channel, so a maintenance stand-down from another process cannot cut the run to PARTIAL (exit 4) |  |
 | `--shared-db` | `<db>` | another project index, repeatable: evidence for a closure-dependent dl:ok on a dl:shared unit |  |
+| `--no-budget` |  |  |  |
 
 Described in:
 
 * [Ancestor not in project (lint rule)](../../docs/wiki/ancestor-not-in-project.md)
+* [Complexity counts the if-expression](../../docs/wiki/complexity-if-expression.md)
 * [Compliance labels (CWE, CERT, MISRA)](../../docs/wiki/compliance-labels.md)
 * [Cycle edge written in an include (lint rule)](../../docs/wiki/cycle-edge-in-include.md)
 * [Data module reaching a global form (lint rule)](../../docs/wiki/datamodule-form-global.md)
@@ -1296,6 +1358,12 @@ Described in:
 * [Text rules: bidi, invisible, control chars, TODO, header, strings](../../docs/wiki/text-rules.md)
 * [Typing and ownership lint rules (casts, Self as interface, destructors)](../../docs/wiki/typing-and-ownership-rules.md)
 * [CLI fixes in 1.51.1](../../docs/wiki/v1511-cli-fixes.md)
+* [Reserved words as names, implicit package imports, contract-unit globs](../../docs/wiki/v152-atla-rules.md)
+* [member-could-be-private lint rule (lane ATLB)](../../docs/wiki/v152-atlb-rules.md)
+* [Documentation policy: missing-doc, doc-placeholder, doc-malformed-summary](../../docs/wiki/v152-docpol.md)
+* [Per-rule time budget in the rule frame (rule-skipped-budget)](../../docs/wiki/rule-time-budget.md)
+* [unit-used-by-no-unit rule; unit-not-in-dpr outside the project roots](../../docs/wiki/v152-proj2.md)
+* [parameter-type-too-wide ON by default, with an autofix](../../docs/wiki/v152-ptw.md)
 
 ### lint-project
 
@@ -1783,8 +1851,64 @@ drag-lint rename --kind symbol --name <QName> --to <New> [--json|--plan|--apply|
 | `--library-db` | `<lib>` |  |  |
 | `--no-backup` |  |  |  |
 | `--db` | `<db>` |  |  |
+| `--platform` | `<p>` |  |  |
+| `--rsvars` | `<bat>` |  |  |
+| `--build-timeout` | `<s>` |  |  |
+| `--no-compile` |  |  |  |
 
 Described in [Rename Symbol](../../docs/wiki/Rename-Symbol.md).
+
+### repo
+
+Keeps the TableTools field registry in one SQLite file per database, filled from Firebird (read-only), with a diffable text backup.
+
+```text
+drag-lint repo <init|info|import-fb|seed-fb|refresh-schema|backup|restore|gen-memtable|gen-param-array|gen-orm|update-orm|gen-dataservice> (--repo <file> | --project <project file>) [--connection "<Firebird connection string>"] [--in <file>] [--output <file>] [--name <Name>] [--replace] [--dry-run] [--json]   (the field repository: one SQLite file per database; Firebird is only read; gen-param-array needs no repository)
+drag-lint repo init (--repo <file> | --project <project file>) (create an empty field repository; exit 1 when the file exists)
+drag-lint repo info (--repo <file> | --project <project file>) [--json|--format json] (path, schema version, rows per table, DL_META keys; exit 1 when not a repository)
+drag-lint repo import-fb --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--replace] (copy the FIB$ registry tables; read-only on Firebird; --replace writes a before-import text backup first; exit 1 failure, 2 schema drift)
+drag-lint repo seed-fb --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--dry-run] (fill an EMPTY repository from the Firebird schema; read-only on Firebird)
+drag-lint repo refresh-schema --connection "<Firebird connection string>" (--repo <file> | --project <project file>) [--dry-run] (re-read the Firebird schema into a filled repository, keep hand-edited columns, mark vanished columns; --dry-run prints the diff only)
+drag-lint repo backup (--repo <file> | --project <project file>) [--output <file>] (write the diffable text backup; default <repo>.txt)
+drag-lint repo restore --in <backup file> (--repo <file> | --project <project file>) [--replace] (create the repository when missing; a malformed backup prints "line <n>: ..." and exits 2, nothing changed)
+drag-lint repo gen-memtable --in <csv file> [--name <Name>] [--output <file>] (Pascal source that builds the fields of a TFDMemTable from a field-definition CSV; exit 2 on a bad CSV)
+drag-lint repo gen-param-array (--in <unit.pas> [--dfm <file>] | --project <X.dproj> --all [--only <unit,...>]) [--query <Name>] [--table <Name>] [--step-size <n>] [--progress-form <Form>] [--prepare-queries] [--plan | --apply --project <X.dproj> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] [--json] (FireDAC Array-DML loop from the unit's DFM, inserted as a braced comment before the final end.; no flag prints the block, --plan the diff, --apply writes through ONE compile gate; --prepare-queries first does the IDE assistant's query preparation (each SELECT TFDQuery gets its TFDUpdateSQL INSERT SQL, ObjectView=False, no CachedUpdates; update object / schema adapter renamed ZZZ*, persistent fields removed with their declarations; .dfm + .pas diffs in --plan, both written through the gate); exit 1 a unit refused or no block, 2 bad flags or a baseline that does not build)
+drag-lint repo gen-orm (--repo <file> | --project <project file>) --code-dir <folder> [--table <T,...>] [--apply [--no-backup]] (new i<T>.PAS + u<T>.PAS ORM units per repository table; dry run prints the diff, --apply writes 7-bit ASCII, an existing file is first copied to <file>.BCKn; prints add to project: per new file)
+drag-lint repo update-orm (--repo <file> | --project <project file>) --code-dir <folder> [--server-dir <folder>] [--client-dir <folder>] [--table <T,...>] [--save-form legacy|current] [--apply [--no-backup]] (rewrites ONLY the DB-RAD regions of the existing i/u/_SERVER/_CLIENT units, every other byte kept; --save-form legacy (default) = the FIELD_AS_TYPE parameter binding the ORM3 units carry, current = TableTools 2026-05-19 .Value / .AsWideMemo / Set1Byte / NULL-timestamp Clear)
+drag-lint repo gen-dataservice (--repo <file> | --project <project file>) --server-dir <folder> --client-dir <folder> [--table <T,...>] [--save-form legacy|current] [--apply [--no-backup]] (new u<T>_SERVER.PAS + u<T>_CLIENT.PAS per table and the two DI container units; prints add to project: per new file)
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--all` |  |  |  |
+| `--apply` |  |  |  |
+| `--build-timeout` | `<s>` |  |  |
+| `--dfm` | `<file>` |  |  |
+| `--no-backup` |  |  |  |
+| `--only` | `<unit,...>` |  |  |
+| `--plan` |  |  |  |
+| `--platform` | `<p>` |  |  |
+| `--progress-form` | `<Form>` |  |  |
+| `--query` | `<Name>` |  |  |
+| `--rsvars` | `<bat>` |  |  |
+| `--step-size` | `<n>` |  |  |
+| `--table` | `<Name>` |  |  |
+| `--connection` | `<Firebird connection string>` |  |  |
+| `--dry-run` |  |  |  |
+| `--in` | `<backup file>` |  |  |
+| `--json` |  |  |  |
+| `--name` | `<Name>` |  |  |
+| `--output` | `<file>` |  |  |
+| `--project` | `<project file>` |  |  |
+| `--replace` |  |  |  |
+| `--repo` | `<file>` |  |  |
+| `--prepare-queries` |  |  |  |
+| `--code-dir` | `<folder>` |  |  |
+| `--server-dir` | `<folder>` |  |  |
+| `--client-dir` | `<folder>` |  |  |
+| `--save-form` | `<legacy\|current>` |  |  |
+
+Described in [Field repository](../../docs/wiki/field-repository.md).
 
 ### resolve-dbs
 
@@ -1807,7 +1931,7 @@ Described in [Show Resolved DBs (debug)](../../docs/wiki/Show-Resolved-DBs-debug
 Shows callers and callees of one symbol together in a single "butterfly" view.
 
 ```text
-drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...] (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)
+drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] [--output F] --db PATH [--db ...] (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1842,6 +1966,13 @@ drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rule
 | `--standard` | `cwe\|cert\|misra` |  |  |
 | `--rule` | `<id>[,<id>]` |  |  |
 | `--rules-dir` | `<dir>` |  |  |
+| `--project` | `<X.dproj>` |  |  |
+| `--target-compiler` | `<ver\|auto>` |  |  |
+| `--scope` | `line\|unit\|project` |  |  |
+| `--in` | `<F>` |  |  |
+| `--line` | `<N>` |  |  |
+| `--reason` | `<text>` |  |  |
+| `--config` | `<drag-lint-lint.json>` |  |  |
 
 Described in:
 
@@ -1851,6 +1982,8 @@ Described in:
 * [Lint rules](../../docs/wiki/rules.md)
 * [Target compiler (--target-compiler)](../../docs/wiki/target-compiler.md)
 * [CLI fixes in 1.51.1](../../docs/wiki/v1511-cli-fixes.md)
+* [Default-on form, dataset and data-module rules](../../docs/wiki/rule-defaults-152.md)
+* [Disable rule (this line, this unit, this project)](../../docs/wiki/v152-disable-rule.md)
 
 ### safe-delete
 
@@ -1917,24 +2050,6 @@ drag-lint shared-unit --in <file.pas> [--add-project <name>] [--apply] [--json] 
 
 Described in [shared-unit](../../docs/wiki/shared-unit.md).
 
-### shutdown
-
-Ask running engines (lsp, cycles --fix, index, lint-all) to stand down cleanly, so an index can be rebuilt or an engine replaced.
-
-```text
-drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force] (ask running engines to stand down: close every store, exit 0; `index` and `lint-all` runs exit 4)
-```
-
-| Flag | Argument | Meaning | Default |
-| --- | --- | --- | --- |
-| `--db` | `<file.sqlite>` |  |  |
-| `--wait` | `<sec>` |  |  |
-| `--dry-run` |  |  |  |
-| `--all` |  |  |  |
-| `--force` |  |  |  |
-
-Described in [shutdown](../../docs/wiki/Features.md).
-
 ### slice
 
 Shows the slice of code relevant to one symbol: its declaration, body, and immediate context.
@@ -1974,6 +2089,25 @@ Described in:
 
 * [Output encoding (--output-encoding)](../../docs/wiki/output-encoding.md)
 * [sql](../../docs/wiki/sql.md)
+* [Custom attributes in the index](../../docs/wiki/Index-DB-Schema.md)
+
+### stop-now
+
+Ask running engines (lsp, cycles --fix, index, lint-all) to stand down cleanly, so an index can be rebuilt or an engine replaced.
+
+```text
+drag-lint stop-now [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force] (ask running engines to stand down: close every store, exit 0; `index` and `lint-all` runs exit 4)
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<file.sqlite>` |  |  |
+| `--wait` | `<sec>` |  |  |
+| `--dry-run` |  |  |  |
+| `--all` |  |  |  |
+| `--force` |  |  |  |
+
+Described in [stop-now](../../docs/wiki/Features.md).
 
 ### surface
 
@@ -2063,7 +2197,7 @@ Described in [Type at Cursor](../../docs/wiki/Type-at-Cursor.md).
 Removes with blocks, proving every name binds to what it bound before.
 
 ```text
-drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--build-config <c>] [--no-preprocess] [--json|--format json] - remove with blocks, proved binding by binding
+drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--exclude-under <dir>]... [--no-backup] [--build-config <c>] [--no-preprocess] [--json|--format json] - remove with blocks, proved binding by binding
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -2078,8 +2212,12 @@ drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <
 | `--rsvars` | `<bat>` |  |  |
 | `--build-timeout` | `<s>` |  |  |
 | `--library-db` | `<L>\|none` |  |  |
+| `--exclude-under` | `<dir>` |  |  |
 | `--no-backup` |  |  |  |
 | `--json` |  |  |  |
+| `--build-config` | `<c>` |  |  |
+| `--no-preprocess` |  |  |  |
+| `--format` | `json` |  |  |
 
 Described in [unwith](../../docs/wiki/unwith.md).
 
@@ -2104,6 +2242,10 @@ drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--dep
 | `--in` | `<file>` |  |  |
 | `--library-db` | `<lib.sqlite>` |  |  |
 | `--no-create` |  |  |  |
+| `--scope` | `symbol\|project\|group\|everywhere` |  |  |
+| `--group` | `<x.groupproj>` |  |  |
+| `--line` | `<L>` |  |  |
+| `--col` | `<C>` |  |  |
 
 Described in:
 
@@ -2272,6 +2414,6 @@ A verb's usage line names the canonical flag only. Each alias is accepted wherev
 | `--force-reparse` | `--no-skip` | back-compat: the first spelling of the index re-parse switch |
 | `--help` | `-h`, `-?` | convention: the short help tokens every CLI user tries first |
 | `--in` | `--file` | one input-file option (TArgs.InFile); --in is the spelling the ask verb's own parser accepts, so it is the one that works on every verb |
-| `--output` | `--out` | back-compat: owner ruling ENG-6 (2026-09-22/23) -- scripts that use --out keep working |
+| `--output` | `--out`, `--report` | back-compat: owner ruling ENG-6 (2026-09-22/23) -- scripts that use --out keep working; --report (1.52 SMALLS 8611fb1d1) names the lint-all report file |
 | `--scan-libraries-win` | `--scan-libraries` | back-compat: the spelling before --scan-libraries-all existed |
 

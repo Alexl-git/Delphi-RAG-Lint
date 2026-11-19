@@ -21,8 +21,11 @@
     E  `rules --json` lists it with default_enabled = true.
 #>
 param(
-  [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe"
+  [string]$Exe = ''
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 $Exe = (Resolve-Path $Exe).Path
@@ -58,9 +61,9 @@ function Code-Line([int]$Len) {
   return $head + ('b' * ($Len - $head.Length - $tail.Length)) + $tail
 }
 function Lint-Rows([string]$Path, [string[]]$Extra = @()) {
-  $raw = (& $Exe lint $Path --json @Extra 2>$null | Out-String)
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $Exe lint $Path --json @Extra 2>$null } | Out-String)
   if ([string]::IsNullOrWhiteSpace($raw)) { return ,@() }
-  try { $all = $raw | ConvertFrom-Json } catch { Write-Host "  (not JSON: $($raw.Trim()))"; return ,@() }
+  try { $all = $raw | ConvertFrom-Json | ForEach-Object { $_ } } catch { Write-Host "  (not JSON: $($raw.Trim()))"; return ,@() }
   return ,@($all | Where-Object { $_.rule -eq 'line-too-long' })
 }
 
@@ -87,7 +90,7 @@ try {
   Check 'D: --rule line-too-long still reports' ($rows.Count -eq 1) "got $($rows.Count)"
 
   Write-Host '== E catalogue'
-  $cat = (& $Exe rules --json 2>$null | Out-String | ConvertFrom-Json).rules | Where-Object { $_.id -eq 'line-too-long' }
+  $cat = (& { $ErrorActionPreference = 'Continue'; & $Exe rules --json 2>$null } | Out-String | ConvertFrom-Json | ForEach-Object { $_ }).rules | Where-Object { $_.id -eq 'line-too-long' }
   Check 'E: rules --json lists line-too-long' ($null -ne $cat)
   Check 'E: default_enabled = true' (($null -ne $cat) -and ($cat.default_enabled -eq $true))
 }

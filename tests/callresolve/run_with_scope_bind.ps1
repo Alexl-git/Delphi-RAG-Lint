@@ -39,7 +39,10 @@
   Usage: pwsh -File tests\callresolve\run_with_scope_bind.ps1 [-Exe <drag-lint.exe>]
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 
 $ErrorActionPreference = 'Stop'
 $script:fail = $false
@@ -60,10 +63,10 @@ $use = Join-Path $scratch 'uWsUse.pas'
 $db  = Join-Path $scratch 'withscope.sqlite'
 
 function Sql([string]$Query) {
-  $raw = (& $exePath sql --db $db --json --limit 1000 --query $Query 2>$null) -join "`n"
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $db --json --limit 1000 --query $Query 2>$null }) -join "`n"
   $b = $raw.IndexOf('{')
   if ($b -lt 0) { throw "sql returned no JSON for: $Query" }
-  $o = $raw.Substring($b) | ConvertFrom-Json
+  $o = $raw.Substring($b) | ConvertFrom-Json | ForEach-Object { $_ }
   $names = @($o.columns | ForEach-Object { $_.name })
   $out = @()
   foreach ($r in @($o.rows)) {
@@ -98,7 +101,7 @@ function Show($rows) { return (@($rows | ForEach-Object { "$($_.kind):sid=$($_.s
 
 Push-Location C:\TEMP
 try {
-  $log = (& $exePath index $scratch --db $db *>&1) -join "`n"
+  $log = (& { $ErrorActionPreference = 'Continue'; & $exePath index $scratch --db $db *>&1 | ForEach-Object { "$_" } }) -join "`n"
 
   Write-Host '--- controls: the same names OUTSIDE any with keep their ordinary binding'
   $r = RefsAt 'CTRL-OUTSIDE' 'Execute'

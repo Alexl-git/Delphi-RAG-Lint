@@ -40,9 +40,12 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe     = '',
   [string]$WorkDir = "$env:TEMP\drag-lint-marker-span-$PID"
 )
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe" }
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -112,7 +115,7 @@ Check 'all four fixture lines located' (
   "wrap $lnWrapStart-$lnWrapEnd, single $lnSingle, unmarked $lnUnmarked"
 
 $concat = @()
-foreach ($line in (& $Exe lint $fixture 2>$null)) {
+foreach ($line in (& { $ErrorActionPreference = 'Continue'; & $Exe lint $fixture 2>$null })) {
   if ("$line" -match ':(\d+):\d+\s+\[\w+\]\s+concat-in-loop:')        { $concat += [int]$Matches[1] }
 }
 $concat = @($concat | Sort-Object -Unique)
@@ -146,11 +149,11 @@ Check "exactly one finding survives" ($concat.Count -eq 1) "got: $($concat -join
 Write-Host ''
 Write-Host 'THE OTHER HALF -- the span marker must not be reported UNUSED' -ForegroundColor Cyan
 $db = Join-Path $WorkDir 'MarkerSpan.sqlite'
-& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index $WorkDir --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
 Check 'fixture indexed' (Test-Path $db)
 
 $unused = @()
-foreach ($line in (& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db 2>&1)) {
+foreach ($line in (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $db 2>&1 | ForEach-Object { "$_" } })) {
   if ("$line" -match ':(\d+):\d+\s+\[\w+\]\s+review-marker-unused:') { $unused += [int]$Matches[1] }
 }
 $unused = @($unused | Sort-Object -Unique)
@@ -238,18 +241,18 @@ end.
 '@ -replace "`r`n", "`n") -replace "`n", "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
 
 $rtDb = Join-Path $rtDir '_D-RAG\App.sqlite'
-& $Exe index --project (Join-Path $rtDir 'App.dpr') --db $rtDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $rtDir 'App.dpr') --db $rtDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 function RtLines($pattern) {
   $out = @()
-  foreach ($line in (& $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $rtDb 2>&1)) {
+  foreach ($line in (& { $ErrorActionPreference = 'Continue'; & $Exe lint-all --output "$env:TEMP\dl-lintall-$PID.txt" --db $rtDb 2>&1 | ForEach-Object { "$_" } })) {
     if ("$line" -match (':(\d+):\d+\s+\[\w+\]\s+' + $pattern + ':')) { $out += [int]$Matches[1] }
   }
   return @($out | Sort-Object -Unique)
 }
 
 # 1. The reported line is read out of the report, exactly as an operator would.
-$rtConcat = RtLines 'concat-in-loop'
+$rtConcat = @(RtLines 'concat-in-loop')
 Check 'the wrapped concat fires before annotation' ($rtConcat.Count -eq 1) "got: $($rtConcat -join ', ')"
 $rtLine = if ($rtConcat.Count -ge 1) { $rtConcat[0] } else { 0 }
 
@@ -262,15 +265,15 @@ Check 'the fixture really is a WRAPPED statement (anchor line has no ";")' `
   "line $rtLine = '$($rtSrc[$rtLine - 1])' -- if this ends the statement the round trip is trivial"
 
 # 3. Round-trip it with the line the report named.
-& $Exe allow $rtPas --fix-line $rtLine --fix-rule concat-in-loop --apply 2>&1 | Out-Null
-& $Exe index --project (Join-Path $rtDir 'App.dpr') --db $rtDb 2>&1 | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe allow $rtPas --fix-line $rtLine --fix-rule concat-in-loop --apply 2>&1 | ForEach-Object { "$_" } } | Out-Null
+& { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $rtDir 'App.dpr') --db $rtDb 2>&1 | ForEach-Object { "$_" } } | Out-Null
 
 Check 'after allow --fix-line <reported line>, the finding is SUPPRESSED' `
-  ((RtLines 'concat-in-loop').Count -eq 0) `
+  ((@(RtLines 'concat-in-loop')).Count -eq 0) `
   'the marker the writer produced is not one the checker accepts -- writer and checker disagree again'
-Check 'and no review-marker-unused appeared' ((RtLines 'review-marker-unused').Count -eq 0) `
+Check 'and no review-marker-unused appeared' ((@(RtLines 'review-marker-unused')).Count -eq 0) `
   'the marker landed somewhere the checker does not associate with the finding'
-Check 'and no review-marker-stale appeared' ((RtLines 'review-marker-stale').Count -eq 0) `
+Check 'and no review-marker-stale appeared' ((@(RtLines 'review-marker-stale')).Count -eq 0) `
   'the hash the writer recorded is not the hash the checker computes'
 
 Write-Host ''

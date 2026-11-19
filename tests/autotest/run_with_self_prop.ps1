@@ -20,7 +20,10 @@
   Run from a NEUTRAL CWD, pwsh 7.
 #>
 [CmdletBinding()]
-param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe")
+param([string]$Exe = '')
+# Defaults that need the script path are resolved HERE, not in param(): Windows PowerShell 5 run with
+# -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
+if (-not $Exe) { $Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe" }
 $ErrorActionPreference = 'Stop'; $script:fail = $false
 function Check($n, $ok, $d = '') { Write-Host ("[{0}] {1} {2}" -f (@('FAIL', 'PASS')[[int][bool]$ok]), $n, $d); if (-not $ok) { $script:fail = $true } }
 $exePath = (Resolve-Path $Exe).Path
@@ -32,8 +35,8 @@ function Get-Sites([string]$Db) {
   $q = "select e.name, r.name_text, r.kind, (select qualified_name from symbols where id = coalesce(ce.target_symbol_id, r.symbol_id)) " +
        "from refs r join symbols e on e.id = r.enclosing_symbol_id left join call_edges ce on ce.ref_id = r.id " +
        "where e.name like 'Site%' and r.kind in ('call','read','write') order by r.start_line, r.start_col"
-  $raw = (& $exePath sql --db $Db --json --limit 500 --query $q 2>$null) -join "`n"
-  $j = $raw.Substring($raw.IndexOf('{')) | ConvertFrom-Json
+  $raw = (& { $ErrorActionPreference = 'Continue'; & $exePath sql --db $Db --json --limit 500 --query $q 2>$null }) -join "`n"
+  $j = $raw.Substring($raw.IndexOf('{')) | ConvertFrom-Json | ForEach-Object { $_ }
   $map = @{}
   foreach ($row in $j.rows) { $map[("{0}/{1}" -f $row[0], $row[1])] = [string]$row[3] }
   return $map
@@ -43,11 +46,11 @@ try {
   Push-Location C:\TEMP
   try {
     $lib = Join-Path $root 'lib.sqlite'; $off = Join-Path $root 'off.sqlite'; $on = Join-Path $root 'on.sqlite'
-    & $exePath index (Join-Path $fix 'lib') --db $lib 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index (Join-Path $fix 'lib') --db $lib 2>&1 | ForEach-Object { "$_" } } | Out-Null
     Check 'library fixture indexed' ($LASTEXITCODE -eq 0)
-    & $exePath index (Join-Path $fix 'app') --db $off 2>&1 | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $exePath index (Join-Path $fix 'app') --db $off 2>&1 | ForEach-Object { "$_" } } | Out-Null
     Check 'app indexed without a library' ($LASTEXITCODE -eq 0)
-    $txt = & $exePath index (Join-Path $fix 'app') --db $on --library-db $lib 2>&1 | Out-String
+    $txt = & { $ErrorActionPreference = 'Continue'; & $exePath index (Join-Path $fix 'app') --db $on --library-db $lib 2>&1 | ForEach-Object { "$_" } } | Out-String
     Check 'app indexed with the library' ($txt -match '\+ library-db')
 
     $noLib = Get-Sites $off; $withLib = Get-Sites $on
