@@ -109,7 +109,7 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 > | `2` | usage error (including an unknown `callgraph --format`), or a `--db` that is missing or at an OLD SCHEMA -- nothing was answered. Also `sql` stopped by its `--timeout-ms` cap (1.52, GitHub #17; was 1), a manifest-resolved list whose EVERY database is stale, and an index that does not cover the asked path (`lint-tree` on an empty index answers "does not cover", exit 2 -- not 0) |
 > | `3` | FATAL: an unrecognised flag or an unexpected exception (message on stderr); also a stdout pipe the reader closed early (`| head`) -- a truncated run never exits 0, so pipefail / CI cannot read it as clean |
 >
-> These answer `0` even when empty: `usages`, `outline`, `ambiguous-calls`, `query name-like|type-usage|unit-usage`.
+> These answer `0` even when empty: `usages`, `outline`, `ambiguous-calls`, `query name-like|type-usage|unit-usage`, and `sql` (zero rows is exit `0`, owner ruling 1.52 -- the one exception to the grep convention among the query verbs).
 > `lint` / `lint-all` use the opposite polarity: `1` = findings survived (see `--fail-on`).
 
 
