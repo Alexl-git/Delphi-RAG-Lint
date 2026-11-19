@@ -110,8 +110,10 @@ function Run([string[]]$ArgList) {
          -RedirectStandardOutput $o -RedirectStandardError $e
   return @{ Out = [IO.File]::ReadAllText($o); Err = [IO.File]::ReadAllText($e); Code = $p.ExitCode }
 }
+# ConvertFrom-Json has no -Depth before PowerShell 6 (PS5 -File: every parse threw 'parameter Depth not found').
+$script:JsonDepth = if ($PSVersionTable.PSVersion.Major -ge 6) { @{ Depth = 100 } } else { @{} }
 function TryParse([string]$Text) {
-  try { return @{ Ok = $true; Doc = ($Text | ConvertFrom-Json -Depth 100) } } catch { return @{ Ok = $false; Doc = $null; Why = $_.Exception.Message } }
+  try { return @{ Ok = $true; Doc = ($Text | ConvertFrom-Json @script:JsonDepth) } } catch { return @{ Ok = $false; Doc = $null; Why = $_.Exception.Message } }
 }
 
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)

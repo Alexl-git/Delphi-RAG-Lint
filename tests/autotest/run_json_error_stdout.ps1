@@ -76,7 +76,11 @@ foreach ($k in $fmtCases.Keys) {
 # stdout without it (control: the split is keyed on the JSON flag, the message was not deleted).
 # -SrcDir: the folder whose units -DbPath indexes (the DB stores absolute paths).
 $realUnit = Join-Path $srcDir 'DRagLint.Hover.Renderer.pas'
-$cliUnit  = Join-Path $srcDir 'DRagLint.CLI.pas'
+# The already-in-uses fixture needs a unit that USES DRagLint.Hover.Renderer (where BuildHoverModel lives).
+# v1511 SPLIT moved the hover verb out of DRagLint.CLI.pas into DRagLint.CLI.Hover.pas, so CLI.pas no longer
+# uses it and find-unit (correctly) proposed an insert. Check the premise so a future move fails HERE, by name.
+$cliUnit  = Join-Path $srcDir 'DRagLint.CLI.Hover.pas'
+Check 'fixture premise: the already-in-uses unit uses DRagLint.Hover.Renderer' ((Test-Path -LiteralPath $cliUnit) -and ([IO.File]::ReadAllText($cliUnit) -match '(?s)\buses\b.*\bDRagLint\.Hover\.Renderer\b')) "unit=$cliUnit"
 $noFile   = 'C:\ZzNoSuchDirX26\ZzNoSuchUnitX26.pas'
 $rem = @(
   @{ n = 'query unit-usage, unit in no index';  a = @('query', 'unit-usage', '--unit', $bogus, '--db', $DbPath); j = @('--json'); m = 'no interface-section symbols' }
@@ -129,6 +133,7 @@ Check 'outline --json prints what --format json prints (non-empty JSON)' ((-not 
 $ok = (& { $ErrorActionPreference = 'Continue'; & $Exe outline --in $realUnit --db $DbPath --format json 2>$null }) -join "`n"
 Check 'control: outline --format json on an indexed unit is non-empty JSON' ((-not [string]::IsNullOrWhiteSpace($ok)) -and (Test-StdoutJsonOrEmpty $ok))
 $ok = (& { $ErrorActionPreference = 'Continue'; & $Exe query unit-usage --unit 'DRagLint.Hover.Renderer' --db $DbPath --json 2>$null }) -join "`n"
-Check 'control: query unit-usage --json on an indexed unit is non-empty JSON' ((-not [string]::IsNullOrWhiteSpace($ok)) -and (Test-StdoutJsonOrEmpty $ok))Check 'control: the JSON test rejects a planted plain-text line' (-not (Test-StdoutJsonOrEmpty 'symbol not found: Foo'))
+Check 'control: query unit-usage --json on an indexed unit is non-empty JSON' ((-not [string]::IsNullOrWhiteSpace($ok)) -and (Test-StdoutJsonOrEmpty $ok))
+Check 'control: the JSON test rejects a planted plain-text line' (-not (Test-StdoutJsonOrEmpty 'symbol not found: Foo'))
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green
