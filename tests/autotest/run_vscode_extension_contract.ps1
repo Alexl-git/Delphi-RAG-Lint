@@ -98,12 +98,13 @@ Check "dragLint.fullRules defaults to true (the old default was none)" ($null -n
 $sa = Join-Path $Dir 'lib/serverargs.js'
 Check "lib/serverargs.js exists and extension.js uses it" ((Test-Path $sa) -and ($ext -match "serverargs")) ""
 if (Test-Path $sa) {
-  $js = 'const a=require(process.argv[1]);const o=[a.buildArgs([],undefined),a.buildArgs([],true),a.buildArgs([],false),a.buildArgs(["X.sqlite"],true)];console.log(JSON.stringify(o))'
-  # One row per buildArgs call. pwsh 7 ConvertFrom-Json already enumerates the outer array and a
-  # `ForEach-Object { $_ }` then re-enumerates each inner argv into ONE flat list (out[0] = 'lsp');
-  # PS 5.1 emits the outer array as a single object. foreach over the result is right on both.
+  $js = 'const a=require(process.argv[1]);const o=[a.buildArgs([],undefined),a.buildArgs([],true),a.buildArgs([],false),a.buildArgs(["X.sqlite"],true)];console.log(JSON.stringify({r:o}))'
+  # One row per buildArgs call. A bare outer array would be enumerated by pwsh 7 and a following
+  # `ForEach-Object { $_ }` would flatten every inner argv into ONE list (out[0] = 'lsp').
   $out = [System.Collections.ArrayList]::new()
-  foreach ($row in ((& node -e $js (Resolve-Path $sa).Path) | ConvertFrom-Json)) { [void]$out.Add(@($row)) }
+  # wrapped in an object so the pipe yields ONE value on PS 5.1 and 7 alike (run_v152_PS5STDERR G2)
+  $doc = (& node -e $js (Resolve-Path $sa).Path) | ConvertFrom-Json | ForEach-Object { $_ }
+  foreach ($row in $doc.r) { [void]$out.Add(@($row)) }
   Check "unset setting (nothing saved) runs the server WITH --full-rules" ($out[0] -contains "--full-rules") ($out[0] -join " ")
   Check "true runs the server with --full-rules" ($out[1] -contains "--full-rules") ""
   Check "false (user switched it off) runs the plain lsp with NO --full-rules" (($out[2] -join " ") -eq "lsp") ($out[2] -join " ")

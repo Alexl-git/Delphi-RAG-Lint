@@ -51,7 +51,7 @@ $lines = @(
 $buildLog = Join-Path $WorkDir 'build.log'
 $p = Start-Process cmd.exe -ArgumentList "/c","`"$bat`"" `
        -RedirectStandardOutput $buildLog -RedirectStandardError "$buildLog.err" `
-       -NoNewWindow -Wait -PassThru
+       -NoNewWindow -Wait -PassThru; $null = $p.Handle
 $buildOut = Get-Content $buildLog -Raw
 if ($buildOut -notmatch 'BUILD_EXITCODE=0') {
   Write-Host 'FATAL: compile failed' -ForegroundColor Red
@@ -62,7 +62,7 @@ if ($buildOut -notmatch 'BUILD_EXITCODE=0') {
 $exe = Join-Path $WorkDir ([System.IO.Path]::GetFileNameWithoutExtension($DprName) + '.exe')
 if (-not (Test-Path $exe)) { Write-Host "FATAL: exe not produced: $exe" -ForegroundColor Red; exit 2 }
 
-$out = & $exe 2>&1 | Out-String
+$out = & { $ErrorActionPreference = 'Continue'; & $exe 2>&1 | ForEach-Object { "$_" } } | Out-String
 $rc  = $LASTEXITCODE
 Write-Host $out.TrimEnd()
 

@@ -75,7 +75,7 @@ exit 0
 } finally {
   Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1')
   # the test program's own scratch: TPath.GetTempPath\drag-lint-jobqueue-dbhold-<its pid> (JobQueueDbHoldTests.dpr)
-  Get-ChildItem -LiteralPath $env:TEMP -Directory -Filter 'drag-lint-jobqueue-dbhold-*' -ErrorAction SilentlyContinue |
+  Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) -Directory -Filter 'drag-lint-jobqueue-dbhold-*' -ErrorAction SilentlyContinue |
     Where-Object { $_.Name -match '^drag-lint-jobqueue-dbhold-\d+$' -and $_.CreationTime -ge $script:RunStart } |
     ForEach-Object { Remove-WorkDir $_.FullName -Keep:($env:DL_KEEP_WORKDIR -eq '1') }
 }

@@ -63,6 +63,8 @@ param(
 # -File leaves $PSScriptRoot/$MyInvocation empty inside an advanced script's param block (Repo became C:\).
 # H01-AUTOWRAP (v152 DDFIX5): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
 . (Join-Path $PSScriptRoot '..\autotest\lib\WorkDirCleanup.ps1')
+# the test program reuses ONE fixed folder (TPath.GetTempPath, i.e. TMP first); remove it only when this run created it
+$script:HoldPreexisted = @(Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) -Directory -Filter 'drag-lint-jobqueue-hold' -ErrorAction SilentlyContinue).Count -gt 0
 try {
 if (-not $Dpr) { $Dpr = "$PSScriptRoot\..\JobQueueHoldTests.dpr" }
 try {
@@ -132,5 +134,8 @@ exit 0
 } finally {
   Remove-WorkDir $WorkDir -Keep:($env:DL_KEEP_WORKDIR -eq '1')
   # the test program's own fixed scratch: TPath.GetTempPath\drag-lint-jobqueue-hold (JobQueueHoldTests.dpr)
-  Remove-WorkDir (Join-Path $env:TEMP 'drag-lint-jobqueue-hold') -Keep:($env:DL_KEEP_WORKDIR -eq '1')
+  # removed only when this run created it (see $script:HoldPreexisted)
+  Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) -Directory -Filter 'drag-lint-jobqueue-hold' -ErrorAction SilentlyContinue |
+    Where-Object { -not $script:HoldPreexisted } |
+    ForEach-Object { Remove-WorkDir $_.FullName -Keep:($env:DL_KEEP_WORKDIR -eq '1') }
 }
