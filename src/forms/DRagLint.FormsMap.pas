@@ -476,8 +476,7 @@ begin
           end;
         if not InProject then Continue;
       end;
-      if TFile.Exists(Node.PasPath) then Node.PasLineCount:= Length(ReadSourceFileLines(Node.PasPath))
-      else Node.PasLineCount:= 0;
+      Node.PasLineCount:= if TFile.Exists(Node.PasPath) then Length(ReadSourceFileLines(Node.PasPath)) else 0;
       if IsNavigableForm(AStore, Node.FormClass) then Result.Add(Node);
     end; // while
   finally

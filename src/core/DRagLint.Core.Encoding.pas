@@ -102,8 +102,7 @@ function Utf8CharColToByteCol(const ASource: TBytes; ALineStart, ACharCol: Integ
 /// <param name="APath">The source file; it must exist.</param>
 /// <returns>One string per line, CR / LF / CRLF breaks removed, no trailing empty line for a final
 /// line break (the TFile.ReadAllLines shape).</returns>
-/// <exception cref="EInOutError">Raised (as TFile.ReadAllBytes raises) when the file cannot be read.</exception>
-/// <remarks>GitHub #16 (1.52): TFile.ReadAllLines(APath, TEncoding.ANSI) kept a UTF-8 BOM as the
+/// <remarks>TFile.ReadAllBytes' own exceptions (file missing / unreadable) propagate unchanged. GitHub #16 (1.52): TFile.ReadAllLines(APath, TEncoding.ANSI) kept a UTF-8 BOM as the
 /// text (three ANSI characters) and decoded every UTF-8 character as two ANSI ones, so context printed
 /// mojibake for a unit saved as UTF-8. Thread-safe. Pinned by tests\autotest\run_v152_GH16.ps1.</remarks>
 function ReadSourceFileLines(const APath: string): TArray<string>;
@@ -112,8 +111,7 @@ function ReadSourceFileLines(const APath: string): TArray<string>;
 /// and dropped, BOM-less valid UTF-8 as UTF-8, else Windows-1252); line breaks are kept as in the file.</summary>
 /// <param name="APath">The source file; it must exist.</param>
 /// <returns>The decoded text, without a BOM.</returns>
-/// <exception cref="EInOutError">Raised (as TFile.ReadAllBytes raises) when the file cannot be read.</exception>
-/// <remarks>GitHub #16 follow-up (1.52): replaces TFile.ReadAllText(APath, TEncoding.ANSI) in the
+/// <remarks>TFile.ReadAllBytes' own exceptions (file missing / unreadable) propagate unchanged. GitHub #16 follow-up (1.52): replaces TFile.ReadAllText(APath, TEncoding.ANSI) in the
 /// read-only source readers. Thread-safe. The decoder it shares with ReadSourceFileLines is pinned by tests\autotest\run_v152_GH16.ps1.</remarks>
 function ReadSourceFileText(const APath: string): string;
 
@@ -294,7 +292,7 @@ var
 begin
   Lines:= TStringList.Create;
   try
-    Lines.Text:= TEncoding.UTF8.GetString(EnsureUtf8Bytes(TFile.ReadAllBytes(APath)));
+    Lines.Text:= TEncoding.UTF8.GetString(EnsureUtf8Bytes(TFile.ReadAllBytes(APath)));  // dl:ok taint-path-traversal@7bfa -- REVIEWED 2026-11-18 a source reader: APath is the file the caller indexes or shows (manifest/project roots); confining it is the caller's job, not this decoder's
     Result:= Lines.ToStringArray;
   finally
     Lines.Free;
@@ -303,7 +301,7 @@ end; // function
 
 function ReadSourceFileText(const APath: string): string;
 begin
-  Result:= TEncoding.UTF8.GetString(EnsureUtf8Bytes(TFile.ReadAllBytes(APath)));
+  Result:= TEncoding.UTF8.GetString(EnsureUtf8Bytes(TFile.ReadAllBytes(APath)));  // dl:ok taint-path-traversal@011e -- REVIEWED 2026-11-18 a source reader: APath is the file the caller indexes or shows (manifest/project roots); confining it is the caller's job, not this decoder's
 end; // function
 
 end.

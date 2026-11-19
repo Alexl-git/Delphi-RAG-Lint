@@ -25995,7 +25995,7 @@ begin
       if SameText(M.RuleId, AArgs.FixRule) and (Trim(M.Reason) <> '') then
       begin
         SupReason := TReviewMarkers.WithoutReviewStamp(M.Reason);
-        SupStamped:= (Pos('REVIEWED', M.Reason) > 0) and (Pos('REVIEWED', SupReason) = 0);
+        SupStamped:= M.Reason.Contains('REVIEWED') and not SupReason.Contains('REVIEWED');
         Break;
       end;
 
@@ -26052,7 +26052,7 @@ begin
   { L3: InsertInto drops a `REVIEWED <date>` stamp when it RE-HASHES a stale
     marker, because a re-hash is not a re-review. Say so, or the operator never
     learns the stamp has to be re-written after actually re-reading the code. }
-  if (not Restamp) and (SupStamped or ((Pos('REVIEWED', OldLine) > 0) and (Pos('REVIEWED', NewLine) = 0))) then
+  if (not Restamp) and (SupStamped or (OldLine.Contains('REVIEWED') and not NewLine.Contains('REVIEWED'))) then
     Writeln(Format('note: %s:%d -- the marker was re-hashed to changed code, so its REVIEWED stamp was dropped ' +
       '(a re-hash is not a re-review). Re-stamp the reason once you have re-read the code.',
       [AArgs.Target, AArgs.FixLine]));
