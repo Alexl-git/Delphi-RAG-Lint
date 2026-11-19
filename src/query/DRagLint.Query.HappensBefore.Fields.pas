@@ -904,8 +904,12 @@ begin
     UseHop.Col:= U.Site.Col;
     UseHop.Note:= 'reads ' + FFieldName;
     var First: TArray<THbHop>:= nil;
-    var Foreign:= IsForeignUse(U);
-    if IsCtorOf(U.Site.RoutineId, True) and not Foreign then
+    { v152 HOVERCAP: past the wall-clock cap every remaining use is answered by the budget alone -- the
+      reasoning below reads the index per use (hundreds of uses: seconds past the cap on a real index) }
+    var Stop:= HbTimeUp;
+    var Foreign:= (not Stop) and IsForeignUse(U);
+    if Stop then FExhausted:= True
+    else if IsCtorOf(U.Site.RoutineId, True) and not Foreign then
     begin
       if not DoneAt(Solve(U.Site.RoutineId), U.Site.Line, U.Site.Col) then
       begin
@@ -969,7 +973,8 @@ begin
       if (A.Verdict = hvMayBeUnset) and (Why = '') then Why:= Copy(A.Why, Length(WHY_PREFIX) + 1, MaxInt);
     if (Why = '') and (ClassB <> nil) then Why:= ClassB[0].Why;
     pAnswer.Summary:= '(not proven: ' + Why + ')';
-    var Note:= WriterRoutineNote;
+    { v152 HOVERCAP: the note walks callers per writer routine; past the cap the summary goes without it }
+    var Note:= if HbTimeUp then '' else WriterRoutineNote;
     if Note <> '' then pAnswer.Summary:= pAnswer.Summary + ' ' + Note;
   end;
   pAnswer.Budget.Routines:= FSolved.Count;

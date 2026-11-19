@@ -25,7 +25,7 @@ uses
   DRagLint.Core.Model, DRagLint.CLI.ConsumerDbs, Winapi.Windows, System.SysUtils, System.IOUtils,
   System.NetEncoding, System.DateUtils, System.Generics.Collections, FireDAC.Stan.Async, FireDAC.DApt,
   DRagLint.Core.Interfaces, Vcl.Graphics, DRagLint.Hover.Renderer, DRagLint.Hover.Contrast,
-  DRagLint.Query.HoverModel;
+  DRagLint.Query.HoverModel, System.Diagnostics, System.RegularExpressions, DRagLint.Doc.Facts;
 
 // --- hover ------------------------------------------------------------------
 
@@ -134,7 +134,18 @@ begin
       var ExSt: ISymbolStore:= OpenReadOnlyStore(ExDb, ExOk);
       if ExOk and (ExSt <> nil) then HovExtra:= HovExtra + [ExSt];
     end;
+  var AsmWatch: TStopwatch:= TStopwatch.StartNew;
   var Asm_ : THoverAssembly:= AssembleHover(Store, Syms[0], (Fmt = 'json') or (Fmt = 'md'), HovExtra);
+  { v152 HOVERCAP: DRAGLINT_PROFILE prints where the hover's time went -- the whole assembly, the check-init
+    'Set by:' solve inside it, and the facts breakdown (its 'used-in directions' line printed only under
+    lint doc-drift before, which hover never runs). stderr, so --format json stays one object. }
+  if GetEnvironmentVariable('DRAGLINT_PROFILE') <> '' then
+  begin
+    var SetByMs: string:= TRegEx.Match(Asm_.Model.SetByJson, '"ms":(\d+)').Groups[1].Value;
+    Writeln(ErrOutput, System.SysUtils.Format('  HOVER PROFILE assemble %d ms | set-by (check-init) %s ms',
+      [AsmWatch.ElapsedMilliseconds, if SetByMs = '' then '--' else SetByMs]));
+    Writeln(ErrOutput, DocFactsBuildProfile);
+  end;
   var Rhs  : TArray<string>:= Asm_.ReturnRhs;
   var Model: THoverModel   := Asm_.Model    ;
 

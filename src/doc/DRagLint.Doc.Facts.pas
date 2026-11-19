@@ -973,7 +973,7 @@ type
 
 /// <summary>Per-section cost of every TDocFactsBuilder.Build call so far, as two
 /// printable lines. Diagnostic only; read by the DRAGLINT_PROFILE doc-drift
-/// breakdown.</summary>
+/// breakdown and (v152 HOVERCAP) by `hover --format md|json` under DRAGLINT_PROFILE.</summary>
 /// <returns><!-- drag-lint:auto type -->string</returns>
 /// <remarks>
 /// Build runs once per declaration and dominates both `document` and

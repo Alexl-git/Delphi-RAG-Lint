@@ -344,6 +344,7 @@ begin
   FSolved:= THashSet<Int64>.Create;
   FVisiting:= THashSet<Int64>.Create;
   FEscape:= THbEscapeClassifier.Create(pStore);
+  FEscape.StopCheck:= function: Boolean begin Result:= HbTimeUp; end;  { v152 HOVERCAP, as TSolver's }
 end;
 
 destructor TRecvSolver.Destroy;
@@ -1035,15 +1036,28 @@ begin
   var Any:= False;
   for var U in pAnswer.JudgedUses do
     if Eligible(U) then Any:= True;
-  if not Any then Exit;
+  { v152 HOVERCAP: past the wall-clock cap no use is proven, so the receiver walk is not started (FinishLimits
+    marks the answer stopped); inside the loop below the same check ends it }
+  if not Any or HbTimeUp then Exit;
   var Solver:= TRecvSolver.Create(pIndex, pStore, if pMaxRoutines > 0 then pMaxRoutines
     else HB_DEFAULT_MAX_ROUTINES);
   try
     Solver.Prepare(pAnswer);
+    var Stopped:= False;
     for var I:= 0 to High(pAnswer.JudgedUses) do
     begin
       if not Eligible(pAnswer.JudgedUses[I]) then Continue;
+      if HbTimeUp then
+      begin
+        Stopped:= True;
+        Break;
+      end;
       var Res:= Solver.ProveUse(pAnswer.JudgedUses[I]);
+      if HbTimedOut then  { v152 HOVERCAP: a proof that met the cap may stand on a partial lazy load }
+      begin
+        Stopped:= True;
+        Break;
+      end;
       var Guarded:= TArray.Contains<THbReason>(pAnswer.JudgedUses[I].Reasons, hrGuardedTest);
       if Res.Ok then
       begin
@@ -1062,7 +1076,7 @@ begin
       end;
     end;
     pAnswer.Budget.Routines:= pAnswer.Budget.Routines + Solver.SolvedCount;
-    if Solver.Exhausted then
+    if Solver.Exhausted or Stopped then
     begin
       pAnswer.Budget.Exhausted:= True;
       AddReason(pAnswer.Reasons, hrBudget);

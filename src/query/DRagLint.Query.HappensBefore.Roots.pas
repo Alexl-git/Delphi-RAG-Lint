@@ -20,9 +20,11 @@ unit DRagLint.Query.HappensBefore.Roots;
 interface
 
 uses
-  System.Generics.Collections
+  System.SysUtils
+, System.Generics.Collections
 , DRagLint.Core.Model
 , DRagLint.Core.Interfaces
+, DRagLint.Lint.InitSections
   ;
 
 type
@@ -79,6 +81,7 @@ type
     FAnswersLoaded: Boolean;
     FThreadsLoaded: Boolean;
     FFileIds: TDictionary<string, Int64>;
+    FStopCheck: TFunc<Boolean>;
     procedure LoadAnswers;
     function IsThreadClass(const pName: string): Boolean;
     function ParentClassOf(const pSym: TSymbol): TSymbol;
@@ -94,6 +97,11 @@ type
     constructor Create(const pStore: ISymbolStore);
     /// <summary>Frees the caches.</summary>
     destructor Destroy; override;
+    /// <summary>v152 HOVERCAP: asked once per interface while the interface-answer set loads (the classifier's
+    /// one whole-index walk, ~2.5 s on the drag-lint index); True ends the walk with the set PARTIAL.</summary>
+    /// <remarks>nil (the default) never stops. check-init passes its wall-clock check (HbTimeUp) and discards
+    /// every answer computed after it returned True, so a partial set never decides a verdict.</remarks>
+    property StopCheck: TFunc<Boolean> read FStopCheck write FStopCheck;
     /// <summary>The escape class of one routine.</summary>
     /// <param name="pRoutineId">symbols.id of a routine, an initialization / finalization section or the
     /// program symbol.</param>
@@ -114,6 +122,13 @@ type
 /// sections in the order init-order-hazard computes, then the program block.</returns>
 /// <remarks>Read-only. Not thread-safe; reads the index once per call, nothing is cached.</remarks>
 function LoadRoots(const pStore: ISymbolStore): THbRoots;  // dl:ok unused-public-symbol@a866 -- REVIEWED 2026-11-17 v152 HBROOTS: check-init roots API for lanes HBSOLVER / HBEVORD (merge after HBROOTS); today only tests\fixtures\happens-before\roots-harness\RootsHarness.dpr calls it
+
+/// <summary>The ordered root chains of init orders a caller already holds (LoadRoots without the walk).</summary>
+/// <param name="pOrders">ProgramInitOrders of the index; nil yields no chains.</param>
+/// <returns>Exactly what LoadRoots returns for the index those orders came from.</returns>
+/// <remarks>Pure. v152 HOVERCAP: check-init's solver needs the orders AND the chains; computing the orders
+/// once halves its setup (~1.1 s on the drag-lint index).</remarks>
+function RootsOfOrders(const pOrders: TArray<TProgramInitOrder>): THbRoots;
 
 /// <summary>True when the routine is an unordered root (any escape class but hecNone).</summary>
 /// <param name="pStore">The project index; must not be nil.</param>
@@ -137,9 +152,7 @@ function EscapeClassCode(pClass: THbEscapeClass): string;  // dl:ok unused-publi
 implementation
 
 uses
-  System.SysUtils
-, DRagLint.Lint.InitSections
-, DRagLint.Query.Implementors
+  DRagLint.Query.Implementors
   ;
 
 const
@@ -160,7 +173,13 @@ function LoadRoots(const pStore: ISymbolStore): THbRoots;
 begin
   Result:= Default(THbRoots);
   if pStore = nil then Exit;
-  for var O: TProgramInitOrder in ProgramInitOrders(pStore) do
+  Result:= RootsOfOrders(ProgramInitOrders(pStore));
+end;
+
+function RootsOfOrders(const pOrders: TArray<TProgramInitOrder>): THbRoots;
+begin
+  Result:= Default(THbRoots);
+  for var O: TProgramInitOrder in pOrders do
   begin
     var C:= Default(THbRootChain);
     C.ProgramFileId:= O.ProgramFileId;
@@ -217,10 +236,16 @@ begin
   if FAnswersLoaded then Exit;
   FAnswersLoaded:= True;
   for var Intf: TSymbol in FStore.FindSymbolsByKind('interface', False, MaxInt) do
+  begin
     for var Member: TSymbol in FStore.FindAllChildSymbols(Intf.Id) do
+    begin
+      { per member, not per interface: one interface of the drag-lint index (ISymbolStore) holds hundreds }
+      if Assigned(FStopCheck) and FStopCheck() then Exit;
       if Member.Kind in [skProcedure, skFunction, skMethod] then
         for var Answer: TSymbol in ImplementingMethodsOf(FStore, Member) do
           FAnswers.Add(Answer.Id);
+    end;
+  end;
 end;
 
 { True when pName descends from TThread (the descendant set is loaded on the first question). }

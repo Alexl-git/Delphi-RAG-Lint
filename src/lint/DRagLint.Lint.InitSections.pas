@@ -18,7 +18,8 @@ unit DRagLint.Lint.InitSections;
 interface
 
 uses
-  DRagLint.Core.Model
+  System.SysUtils
+  , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   ;
 
@@ -155,8 +156,11 @@ type
 /// <param name="AStore">The project index; nil yields none.</param>
 /// <returns>One entry per program file (a file with a program uses clause), in GetAllFileIds order; a unit no
 /// program reaches, or whose name the index holds twice, is in no entry.</returns>
-/// <remarks>Not thread-safe; reads the index once per call. Nothing is cached between calls.</remarks>
-function ProgramInitOrders(const AStore: ISymbolStore): TArray<TProgramInitOrder>;  // dl:ok unused-public-symbol@04c9 -- REVIEWED 2026-11-17: 1.52 API for lanes HBROOTS and FINCUT (merge after INITAPI); today only tests\fixtures\v152-initapi\InitApiHarness.dpr calls it
+/// <param name="AStop">v152 HOVERCAP: asked per unit while the graph loads and per unit of each order; True ends
+/// the walk and the result is PARTIAL. nil (the default) never stops.</param>
+/// <remarks>Not thread-safe; reads the index once per call. Nothing is cached between calls. check-init passes
+/// its wall-clock check and judges nothing after it returned True, so a partial result never decides.</remarks>
+function ProgramInitOrders(const AStore: ISymbolStore; const AStop: TFunc<Boolean> = nil): TArray<TProgramInitOrder>;
 
 /// <summary>Lane INITAPI (1.52, ruling B9a): does AUnitA initialize before AUnitB in AProgram?</summary>
 /// <param name="AStore">The project index; nil answers ioaUnplaced.</param>
@@ -177,8 +181,7 @@ function InitializesBefore(const AStore: ISymbolStore; const AProgram, AUnitA, A
 implementation
 
 uses
-  System.SysUtils
-  , System.IOUtils
+  System.IOUtils
   , System.StrUtils
   , System.Math
   , System.RegularExpressions
@@ -293,12 +296,13 @@ type
     FLiveRefs  : TDictionary<Int64, TArray<TReference>>;
     FClosureRef: TDictionary<Int64, Boolean>;
     FProcVars  : TProcVarIndex;
+    FStop      : TFunc<Boolean>;  { v152 HOVERCAP: LoadUnits ends early when it answers True; nil never }
     procedure LoadUnits;
     function UsesOfFile(AFileId: Int64): TArray<string>;
     procedure LoadRefsOfFile(AFileId: Int64);
     function LinesOf(AFileId: Int64): TArray<string>;
   public
-    constructor Create(const AStore: ISymbolStore);
+    constructor Create(const AStore: ISymbolStore; const AStop: TFunc<Boolean> = nil);
     destructor Destroy; override;
     /// <summary>The files whose uses clause is a program's.</summary>
     function ProgramFiles: TArray<Int64>;
@@ -462,10 +466,11 @@ begin
   end;
 end;
 
-constructor TInitGraph.Create(const AStore: ISymbolStore);
+constructor TInitGraph.Create(const AStore: ISymbolStore; const AStop: TFunc<Boolean>);
 begin
   inherited Create;
   FStore     := AStore;
+  FStop      := AStop;
   FUnits     := TDictionary<string, TUnitNode>.Create;
   FAmbiguous := TDictionary<string, Boolean>.Create;
   FByFile    := TDictionary<Int64, string>.Create;
@@ -506,6 +511,7 @@ procedure TInitGraph.LoadUnits;
 begin
   for var U in FStore.FindSymbolsByKind(KIND_UNIT, False, MaxInt) do
   begin
+    if Assigned(FStop) and FStop() then Exit;  { v152 HOVERCAP: a stopped caller discards the graph }
     var Key: string:= LowerCase(U.Name);
     if FUnits.ContainsKey(Key) then
     begin
@@ -1795,14 +1801,15 @@ begin
     if S.FileId = AFileId then Exit(S.Id);
 end;
 
-function ProgramInitOrders(const AStore: ISymbolStore): TArray<TProgramInitOrder>;
+function ProgramInitOrders(const AStore: ISymbolStore; const AStop: TFunc<Boolean>): TArray<TProgramInitOrder>;
 begin
   Result:= nil;
   if AStore = nil then Exit;
-  var Graph: TInitGraph:= TInitGraph.Create(AStore);
+  var Graph: TInitGraph:= TInitGraph.Create(AStore, AStop);
   try
     for var P in Graph.ProgramFiles do
     begin
+      if Assigned(AStop) and AStop() then Exit;
       var Entry: TProgramInitOrder:= Default(TProgramInitOrder);
       Entry.ProgramFileId:= P;
       Entry.ProgramName:= ExtractFileName(AStore.GetFilePath(P));
@@ -1812,6 +1819,7 @@ begin
       try
         for var Key in UnitsInOrder(Order) do
         begin
+          if Assigned(AStop) and AStop() then Exit;  { the order's unit walk reads source per unit (OrderDependsOnConfig) }
           var Node:= Graph.Units[Key];
           var U: TProgramInitUnit:= Default(TProgramInitUnit);
           U.Name   := Node.Name;

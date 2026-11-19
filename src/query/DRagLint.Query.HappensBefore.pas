@@ -168,6 +168,8 @@ type
     Why: string;
     /// <summary>For a Done use: the HbReliedText of every ordered handler root it relied on (ruling HB5).</summary>
     Relied: string;
+    /// <summary>v152 HOVERCAP: the wall-clock cap ran out inside the walk; nothing else in the record holds.</summary>
+    Stopped: Boolean;
   end;
 
   /// <summary>The solver of one CheckInit call. Owns its caches; the index and store belong to CheckInit.</summary>
@@ -483,6 +485,8 @@ begin
   FSkipped:= THashSet<Int64>.Create;
   FUnorderedRoots:= THashSet<Int64>.Create;
   FClassifier:= THbEscapeClassifier.Create(pStore);
+  { v152 HOVERCAP: its interface-answer walk honours the wall-clock cap }
+  FClassifier.StopCheck:= function: Boolean begin Result:= HbTimeUp; end;
   FHandlers:= THbHandlerOrderer.Create(pIndex);
   FRunSites:= TDictionary<Int64, THbSite>.Create;
   for var W in FEvents.Writers do
@@ -777,7 +781,9 @@ begin
     TArray.Sort<Int64>(Seeds);
     for var W in Seeds do
       if FReachA.Add(W) then Work.Add(W);
-    while Work.Count > 0 do
+    { v152 HOVERCAP: a walk cut by the wall-clock cap leaves REACH-A short; every use is then answered
+      'stopped' (Run checks HbTimeUp first), so the short set never decides a verdict }
+    while (Work.Count > 0) and not HbTimeUp do
     begin
       var Cur:= Work[Work.Count - 1];
       Work.Delete(Work.Count - 1);
@@ -800,6 +806,13 @@ begin
     Changed:= False;
     for var R in Ids do
     begin
+      { v152 HOVERCAP: past the cap RawSolve answers 'exhausted' for every routine, but only after an index
+        read per routine (QueriesOf) -- thousands on a real index; stop the sweep instead }
+      if HbTimeUp then
+      begin
+        FExhausted:= True;
+        Break;
+      end;
       if FMustA.Contains(R) then Continue;
       var St:= RawSolve(R, False);
       if St.Found and St.ExitDone then
@@ -815,8 +828,13 @@ end;
 procedure TSolver.LoadPrograms;
 begin
   FPrograms:= nil;
-  var Roots:= LoadRoots(FStore);
-  for var O in ProgramInitOrders(FStore) do
+  { v152 HOVERCAP: the init orders are a whole-index walk (~1.1 s on the drag-lint index); it ran TWICE here
+    (LoadRoots computed them again) and after the cap had run out. Past the cap no use is judged (Run stops
+    on HbTimeUp), so a PARTIAL walk, or the one placeholder program below, is all Run needs. }
+  var Orders: TArray<TProgramInitOrder>:= nil;
+  if not HbTimeUp then Orders:= ProgramInitOrders(FStore, function: Boolean begin Result:= HbTimeUp; end);
+  var Roots:= RootsOfOrders(Orders);
+  for var O in Orders do
   begin
     var P:= Default(TProgramView);
     P.Name:= O.ProgramName;
@@ -1018,7 +1036,14 @@ begin
   end;
 end;
 
-function TSolver.JudgeUse(const pProg: TProgramView; const pUse: THbSite): TUseInProgram;  // dl:ok cyclomatic-complexity@4965, cognitive-complexity@7d35 -- REVIEWED 2026-11-18 INT11 (re-stamped after HBFIX added the receiver / wall-clock cases, 60 / 78): one walk of spec 5.4 per use (root, hop, budget, closure cases); split pieces would share every local, so kept whole and covered by the verdict + HBFIX fixtures
+{ v152 HOVERCAP: JudgeUse's answer when the wall-clock cap ran out inside it. }
+function StoppedUse: TUseInProgram;
+begin
+  Result:= Default(TUseInProgram);
+  Result.Stopped:= True;
+end;
+
+function TSolver.JudgeUse(const pProg: TProgramView; const pUse: THbSite): TUseInProgram;  // dl:ok cyclomatic-complexity@536f, cognitive-complexity@f84f, too-many-exit-points@cc5b -- REVIEWED 2026-11-18 v152 HOVERCAP (re-stamped after the wall-clock checks inside the three walks, 64 / 88, 6 exits): one walk of spec 5.4 per use (root, hop, budget, closure cases); split pieces would share every local, so kept whole; the three new exits are the same one-line cap check (Exit(StoppedUse)); covered by the verdict + HBFIX + HOVERCAP runners
 var
   Entry: Boolean;
   Note: string;
@@ -1039,6 +1064,9 @@ begin
     var Head:= 0;
     while Head < Anc.Count do
     begin
+      { v152 HOVERCAP: each step reads the index (IsRoot, CallersOf); past the wall-clock cap the use is
+        answered 'stopped' by Run, so the walk ends here instead of finishing on borrowed time }
+      if HbTimeUp then Exit(StoppedUse);
       var R:= Anc[Head];
       Inc(Head);
       if IsRoot(pProg, R, Entry, Note) then
@@ -1071,6 +1099,7 @@ begin
       Changed:= False;
       for var R in Ids do
       begin
+        if HbTimeUp then Exit(StoppedUse);  { v152 HOVERCAP: as in the ancestor walk }
         if RootSet.Contains(R) or not ED[R] then Continue;
         var V:= True;
         for var C in CallersOf(R) do
@@ -1125,6 +1154,7 @@ begin
       else
         while (H < Queue.Count) and (Found = 0) do
         begin
+          if HbTimeUp then Exit(StoppedUse);  { v152 HOVERCAP: as in the ancestor walk }
           var R:= Queue[H];
           Inc(H);
           if (RootSet.Contains(R) or Unknown.Contains(R)) and not ED[R] then
@@ -1269,6 +1299,14 @@ begin
           Break;
         end;
         var J:= JudgeUse(P, Use.Site);
+        if J.Stopped or HbTimedOut then
+        begin
+          { v152 HOVERCAP: the cap ran out inside the walk -- as above. HbTimedOut: it ran out inside a lazy load
+            (the escape classifier's interface answers stop PARTIAL), so nothing judged past it is trusted }
+          FExhausted:= True;
+          Stopped:= True;
+          Break;
+        end;
         if not J.Judged then Continue;
         Judged:= True;
         Inc(Count);
