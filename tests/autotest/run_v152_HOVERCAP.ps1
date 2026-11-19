@@ -64,7 +64,7 @@ Write-Host "  db  $copy (copy of $DbPath)"
 # the engine's stderr notes (stale-file, resolver) must not stop the run under Windows PowerShell 5
 $ErrorActionPreference = 'Continue'
 # warm-up, untimed: the first open of a fresh 300 MB copy pays the file cache / on-access scan, not check-init
-$null = & $Exe query --name GBeat --db $copy 2>&1
+$null = & { $ErrorActionPreference = 'Continue'; & $Exe query --name GBeat --db $copy 2>&1 | ForEach-Object { "$_" } }
 
 $capTargets = @(
   'DRagLint.Core.ControlChannel.GBeat',
@@ -100,11 +100,11 @@ function ParseJson($lines) {
 }
 function WritersText($arr) { if ($null -eq $arr -or @($arr).Count -eq 0) { return '[]' }; return (ConvertTo-Json -InputObject @($arr) -Compress -Depth 8) }
 function CheckInitRaw($exe, $qn, $secs) {
-  return ((& $exe check-init $qn --db $copy --json --max-seconds $secs 2>$null) -join "`n")
+  return ((& { $ErrorActionPreference = 'Continue'; & $exe check-init $qn --db $copy --json --max-seconds $secs 2>$null }) -join "`n")
 }
 function WithoutMs($raw) { return ($raw -replace '"ms":\d+', '"ms":0') }
 
-$b0 = Timed { & $Exe query --name GBeat --db $copy 2>$null }
+$b0 = Timed { & { $ErrorActionPreference = 'Continue'; & $Exe query --name GBeat --db $copy 2>$null } }
 $base = $b0.Secs
 Write-Host ("  B0 process baseline (query --name, best of 2): {0:N2} s" -f $base)
 $limit = $Cap + $Margin
@@ -115,7 +115,7 @@ $uncapped = @{}
 foreach ($q in $capTargets) {
   $env:DRAGLINT_HOVER_SETBY_MAX_SECONDS = $capText
   try {
-    $r = Timed { & $Exe hover --qname $q --db $copy --format json 2>$null }
+    $r = Timed { & { $ErrorActionPreference = 'Continue'; & $Exe hover --qname $q --db $copy --format json 2>$null } }
   } finally { $env:DRAGLINT_HOVER_SETBY_MAX_SECONDS = $null }
   $h = ParseJson $r.Out
   $hasSetBy = ($null -ne $h) -and ($h.PSObject.Properties.Name -contains 'set_by')
@@ -162,7 +162,7 @@ foreach ($q in $verdictTargets) {
 $env:DRAGLINT_PROFILE = '1'
 try {
   $err = Join-Path $WorkDir 'prof.err'
-  $null = & $Exe hover --qname 'DRagLint.Storage.SQLite.TSQLiteSymbolStore.FConn' --db $copy --format md 2>$err
+  $null = & { $ErrorActionPreference = 'Continue'; & $Exe hover --qname 'DRagLint.Storage.SQLite.TSQLiteSymbolStore.FConn' --db $copy --format md 2>$err }
 } finally { $env:DRAGLINT_PROFILE = $null }
 $prof = if (Test-Path -LiteralPath $err) { [IO.File]::ReadAllText($err) } else { '' }
 $m = [regex]::Match($prof, 'used-in directions\s+([0-9.]+) s \((\d+) call\(s\)')
