@@ -10092,7 +10092,6 @@ var
   Nm  : string  ;
   KeepLocals: Boolean;
 begin
-  KeepLocals:= False;
   FConn.ExecSQL('DROP TABLE IF EXISTS temp.dl_scope_files');
   FConn.ExecSQL('DROP TABLE IF EXISTS temp.dl_scope_names');
   FConn.ExecSQL('DROP TABLE IF EXISTS temp.dl_scope_refs');
