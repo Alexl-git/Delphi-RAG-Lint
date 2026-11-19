@@ -245,6 +245,20 @@ src/storage/DRagLint.Storage.SQLite.pas::DumpAllMemberAccesses
 # effects along. Leaving the two halves of one load on opposite sides of the
 # manifest would have been an exclusion whose reason no longer held.
 src/storage/DRagLint.Storage.SQLite.pas::DumpAllCallEdges
+# SCOPED PURITY (1.52.1 INCR18 step 4, 2026-11-19). After a scoped call-target
+# pass the purity stage re-derives only what that pass moved, so the routines
+# that SAY what moved, and the scoped readers the stage then loads through,
+# decide what purity writes exactly as the two dumps above do: a wrong answer
+# from any of them leaves a stale verdict in a row the stage did not rewrite.
+src/storage/DRagLint.Storage.SQLite.pas::InstallPurityMoveTriggers
+src/storage/DRagLint.Storage.SQLite.pas::DropPurityMoveTriggers
+src/storage/DRagLint.Storage.SQLite.pas::CollectPurityScope
+src/storage/DRagLint.Storage.SQLite.pas::ResetPurityScope
+src/storage/DRagLint.Storage.SQLite.pas::LastCallsScope
+src/storage/DRagLint.Storage.SQLite.pas::CallerRoutinesOf
+src/storage/DRagLint.Storage.SQLite.pas::DumpCallerTargets
+src/storage/DRagLint.Storage.SQLite.pas::DumpCallEdgesInFiles
+src/storage/DRagLint.Storage.SQLite.pas::DumpMemberAccessesInFiles
 #
 # NOT ADDED HERE, AND NAMED SO THE GAP IS AUDITABLE RATHER THAN INVISIBLE. The
 # stage reads eight further store routines -- FindAllChildSymbols,

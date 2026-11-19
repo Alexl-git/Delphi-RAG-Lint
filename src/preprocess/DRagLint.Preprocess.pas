@@ -131,6 +131,7 @@ type
   /// </remarks>
   TPPReport = record
     Sites     : TArray<TPPIncludeSite>;   // as Preprocess(..., out ASites)
+    Probes    : TArray<TPPIncludeProbe>;  // INCR18: every include directive the run tried to resolve
     Unresolved: TArray<TPPUnresolvedIf>;  // top-level file only (not inside includes)
     Exported  : TArray<TPPDecl>;          // the file's interface declarations
     UsedUnits : TArray<string>;           // the active uses clauses, source order
@@ -274,6 +275,19 @@ function PPTracePath: string;
 /// </remarks>
 procedure PPTraceAppend(const ALine: string);
 
+/// <summary>INCR18: resolves an include name exactly as a 'defines-only'
+/// preprocess run resolves it.</summary>
+/// <param name="AName">The include name as written, quotes stripped.</param>
+/// <param name="ABaseDir">The folder of the file that holds the directive.</param>
+/// <param name="ANearSearch">TPPOptions.NearSearch of the run.</param>
+/// <param name="ASearchPaths">TPPOptions.SearchPaths of the run.</param>
+/// <returns>The absolute path of the file that answers, '' when none does.</returns>
+/// <remarks>The same routine the run calls: ABaseDir, then ASearchPaths in
+/// order, then (ANearSearch) the nearest-first widened search. Directory
+/// listings of the widened search are cached for the process lifetime.</remarks>
+function PPResolveInclude(const AName, ABaseDir: string; ANearSearch: Boolean;
+  const ASearchPaths: TArray<string>): string;
+
 implementation
 
 uses
@@ -324,6 +338,7 @@ type
     Lookup    : TPPNameLookup;
     Unresolved: TList<TPPUnresolvedIf>;
     Regions   : TList<TPPRegion>; // 149 EX2: top-level branches; nil = not collected
+    Probes    : TList<TPPIncludeProbe>; // INCR18: include directives tried; nil = not collected
   end;
 
   // One nested-IF state frame (preprocess.js stack entries):
@@ -470,6 +485,12 @@ begin
       Dir:= Parent;
     end;
   end;
+end;
+
+function PPResolveInclude(const AName, ABaseDir: string; ANearSearch: Boolean;
+  const ASearchPaths: TArray<string>): string;
+begin
+  Result:= ResolveInclude(AName, ABaseDir, ANearSearch, ASearchPaths);
 end;
 
 // Lane INC2: a directive's opening bytes (brace + dollar), and the length of
@@ -723,6 +744,14 @@ var
     K        : Integer;
   begin
     Resolved:= ResolveInclude(AName, ABaseDir, ANearSearch, ASearchPaths);
+    if ACtx.Probes <> nil then
+    begin
+      var Probe: TPPIncludeProbe;
+      Probe.Name   := AName;
+      Probe.BaseDir:= ABaseDir;
+      Probe.Path   := Resolved;
+      ACtx.Probes.Add(Probe);
+    end;
     if Resolved = '' then Exit; // unresolved -> nothing to apply (blank only)
     SubBytes:= TFile.ReadAllBytes(Resolved);
     SetLength(SubOut, Length(SubBytes)); // throwaway (child text is discarded)
@@ -937,6 +966,7 @@ begin
   Ctx.Scanner   := TPPDeclScanner.Create;
   Ctx.Unresolved:= TList<TPPUnresolvedIf>.Create;
   Ctx.Regions   := TList<TPPRegion>.Create; // 149 EX2
+  Ctx.Probes    := TList<TPPIncludeProbe>.Create; // INCR18
   Src:= PPUnitSource;
   try
     { Lane INC3: an IF name resolves in the constants declared earlier in the
@@ -1003,6 +1033,7 @@ begin
     AReport.Exported  := Ctx.Scanner.ExportedDecls;
     AReport.UsedUnits := Ctx.Scanner.UsedUnits;
     AReport.Regions   := Ctx.Regions.ToArray; // 149 EX2
+    AReport.Probes    := Ctx.Probes.ToArray;  // INCR18
   finally
     // The two closures share one frame that holds Lookup: clear every
     // reference or the frame keeps itself alive.
@@ -1011,6 +1042,7 @@ begin
     Lookup:= nil;
     Ctx.Unresolved.Free;
     Ctx.Regions.Free; // 149 EX2
+    Ctx.Probes.Free;  // INCR18
     Ctx.Scanner.Free;
     Switches.Free;
     Numeric.Free;

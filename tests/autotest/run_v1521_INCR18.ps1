@@ -23,6 +23,26 @@
   say it left local / parameter names out of the name scope; on the include edits it must say
   it kept them (a routine body split over an include is the one cross-file reach of a local).
 
+  PART 1b (step 3, closure cache; a 12-unit project fixture): `index --project` keeps what the
+  compile-closure walk read out of each unit and reuses it while the unit and EVERY include file
+  its scan read are unchanged. Edits: a nested include (its define switches a uses entry on),
+  a missing include created, an include deleted, a constant another unit's IF reads. Per edit
+  C (cache on) = U (DRAGLINT_NO_CLOSURE_CACHE) = F (fresh full index), 0 diff rows, the closure
+  really changed, and run C really reused stored scans. POSITIVE CONTROL: the seam
+  DRAGLINT_TEST_CC_STAMP_ONLY=1 (unit stamp only, the key main declined) must
+  leave a stale closure and diff rows on the nested-include edit.
+
+  PART 1c (step 4, scoped purity; an 8-unit fixture): after a scoped resolve pass the purity
+  stage re-derives only what the pass can have moved and keeps every other stored verdict.
+  Edits: a callee gains a global write (callers two files away must flip), a called routine is
+  withdrawn, a base class gains a field a descendant writes, a body edit that moves no verdict,
+  a procedural type appears (the run must fall back to the whole database and say why). Per edit
+  S (scoped purity) = P (DRAGLINT_NO_SCOPED_PURITY) = F (fresh full index), 0 diff rows over
+  symbol_facts and every other table. POSITIVE CONTROL: the seam
+  DRAGLINT_TEST_PURITY_SEEDS_ONLY=1 (callers not followed) must leave a stale verdict and diff
+  rows. Part 1 and Part 2 assert the same equality on their own edits: their S run now runs
+  purity scoped and their W run whole.
+
   PART 2 (drag-lint's own CLI project; OPT-IN with -Dl -- the battery's run_*.ps1 discovery runs
   this script without arguments, and Part 2 costs a full index plus four whole-database resolves,
   30 minutes and more): a copy of src\ is indexed in full, then
@@ -366,6 +386,9 @@ try {
 
     Check "$($sc.Name): run S took the SCOPED path" ($outS -match 'starting SCOPED pass') ($outS -split "`n" | Select-String 'calls ' | Select-Object -First 4 | Out-String)
     Check "$($sc.Name): run W took the WHOLE-DB path" ($outW -match 'starting WHOLE-DB pass') ''
+    # Step 4: S also ran the purity stage SCOPED and W ran it whole, so the two 0-row diffs below
+    # compare scoped purity with whole purity and with a full reindex (symbol_facts included).
+    Check "$($sc.Name): run S re-derived a purity scope, run W every routine" ($outS -match 'resolve: purity scope -- \d+ of \d+ routine\(s\) re-derived' -and $outW -notmatch 'resolve: purity scope -- \d+ of') ($outS -split "`n" | Select-String 'purity' | Out-String)
     $d = Compare-Db $dbS $dbW
     Check "$($sc.Name): scoped = whole-database resolve (0 diff rows)" $d.Same $d.Text
     $d = Compare-Db $dbS $dbF
@@ -382,6 +405,646 @@ try {
       Check "$($sc.Name): POSITIVE CONTROL -- a files-only scope shows diff rows" (-not $d.Same -and $d.Code -eq 1) "index_db_diff exit $($d.Code): the diff cannot see a lost edge`n      $($d.Text)"
     }
     [System.IO.File]::Copy($keep, $file, $true)
+  }
+} finally { Pop-Location }
+
+# ------------------------------------------------------------------ PART 1c: scoped purity (step 4)
+# After a SCOPED call-target pass the purity stage re-derives only what that pass can have moved
+# (the rewritten files' routines, the routines around a ref whose binding changed, the methods of
+# a class whose own or inherited members can have moved, and every transitive caller) and keeps
+# every other stored verdict. Per edit, three databases from the same edited tree:
+#   S  scoped resolve + scoped purity       P  scoped resolve + DRAGLINT_NO_SCOPED_PURITY=1
+#   F  fresh full index
+# Required: S = P and S = F, 0 diff rows (index_db_diff compares symbol_facts.effect_free /
+# effect_summary / effect_witness with every other table). POSITIVE CONTROL: the test seam
+# DRAGLINT_TEST_PURITY_SEEDS_ONLY=1 (seeds re-derived, callers not followed) must show diff rows.
+$psrc = Join-Path $scratch 'src_pur'
+New-Item -ItemType Directory -Path $psrc | Out-Null
+
+Write-Ascii (Join-Path $psrc 'uPurA.pas') @'
+unit uPurA;
+
+interface
+
+var
+  GCount: Integer;
+
+function Leaf(AValue: Integer): Integer;
+function Mid(AValue: Integer): Integer;
+function Gone(AValue: Integer): Integer;
+
+implementation
+
+function Leaf(AValue: Integer): Integer;
+begin
+  Result := AValue + 1;
+end;
+
+function Mid(AValue: Integer): Integer;
+begin
+  Result := Leaf(AValue) * 2;
+end;
+
+function Gone(AValue: Integer): Integer;
+begin
+  GCount := AValue;
+  Result := AValue;
+end;
+
+end.
+'@
+
+Write-Ascii (Join-Path $psrc 'uPurB.pas') @'
+unit uPurB;
+
+interface
+
+function Top(AValue: Integer): Integer;
+function Over(AValue: Integer): Integer;
+function UsesGone(AValue: Integer): Integer;
+function Apart(AValue: Integer): Integer;
+
+implementation
+
+uses
+  uPurA;
+
+function Top(AValue: Integer): Integer;
+begin
+  Result := Mid(AValue) + 1;
+end;
+
+function Over(AValue: Integer): Integer;
+begin
+  Result := Top(AValue) + 1;
+end;
+
+function UsesGone(AValue: Integer): Integer;
+begin
+  Result := Gone(AValue);
+end;
+
+function Apart(AValue: Integer): Integer;
+begin
+  Result := AValue * 3;
+end;
+
+end.
+'@
+
+Write-Ascii (Join-Path $psrc 'uPurC.pas') @'
+unit uPurC;
+
+interface
+
+function Far(AValue: Integer): Integer;
+
+implementation
+
+uses
+  uPurB;
+
+function Far(AValue: Integer): Integer;
+begin
+  Result := Over(AValue);
+end;
+
+end.
+'@
+
+# A call cycle in a file the edits never touch: its witnesses must come out the same text
+# whether the cycle is re-derived alone (scoped) or with everything else (whole).
+Write-Ascii (Join-Path $psrc 'uPurCyc.pas') @'
+unit uPurCyc;
+
+interface
+
+function Ping(AValue: Integer): Integer;
+function Pong(AValue: Integer): Integer;
+
+implementation
+
+uses
+  uPurA;
+
+function Ping(AValue: Integer): Integer;
+begin
+  if AValue > 0 then Result := Pong(AValue - 1)
+  else Result := 0;
+end;
+
+function Pong(AValue: Integer): Integer;
+begin
+  if AValue > 0 then Result := Ping(AValue - 1)
+  else Result := Leaf(AValue);
+end;
+
+end.
+'@
+
+Write-Ascii (Join-Path $psrc 'uPurBase.pas') @'
+unit uPurBase;
+
+interface
+
+type
+  TPurBase = class
+  private
+    FSeen: Integer;
+  public
+    function Seen: Integer;
+  end;
+
+implementation
+
+function TPurBase.Seen: Integer;
+begin
+  Result := FSeen;
+end;
+
+end.
+'@
+
+Write-Ascii (Join-Path $psrc 'uPurKid.pas') @'
+unit uPurKid;
+
+interface
+
+uses
+  uPurBase;
+
+type
+  TPurKid = class(TPurBase)
+  public
+    procedure Work;
+  end;
+
+procedure DriveKid(AKid: TPurKid);
+
+implementation
+
+var
+  Extra: Integer;
+
+procedure TPurKid.Work;
+begin
+  Extra := 1;
+end;
+
+procedure DriveKid(AKid: TPurKid);
+begin
+  AKid.Work;
+end;
+
+end.
+'@
+
+Write-Ascii (Join-Path $psrc 'uPurT.pas') @'
+unit uPurT;
+
+interface
+
+type
+  THook = Integer;
+
+implementation
+
+end.
+'@
+
+Write-Ascii (Join-Path $psrc 'uPurP.pas') @'
+unit uPurP;
+
+interface
+
+uses
+  uPurT;
+
+var
+  Hook: THook;
+
+procedure CallHook;
+
+implementation
+
+procedure CallHook;
+var
+  Kept: THook;
+begin
+  Kept := Hook;
+  if Kept = Hook then Exit;
+end;
+
+end.
+'@
+
+$NOSCOPEDPURITY = @{ DRAGLINT_NO_SCOPED_PURITY = '1' }
+$SEEDSONLY      = @{ DRAGLINT_TEST_PURITY_SEEDS_ONLY = '1' }
+$SCOPE_LINE     = 'resolve: purity scope -- (\d+) of (\d+) routine\(s\) re-derived'
+
+# The effect_free value of the one routine named $name (-1 = no such row / NULL).
+function Get-EffectFree($db, $name) {
+  $o = Invoke-Engine @('sql', '--query', "SELECT ifnull(sf.effect_free, -1) AS e FROM symbol_facts sf JOIN symbols s ON s.id = sf.symbol_id WHERE s.name = '$name'", '--db', $db, '--json') $null
+  if ($o -match '"rows"\s*:\s*\[\s*\[\s*(-?\d+)') { return [int]$Matches[1] }
+  return -1
+}
+
+# name, file, find, replace; Whole = the run must fall back to the whole database and say why;
+# Small = the scope must be smaller than the database; Control = run the seeds-only seam too;
+# Flip = a routine of ANOTHER file whose verdict the edit must move (effect-free 1 -> 0).
+$purScenarios = @(
+  @{ Name = 'PUR a callee gains a global write'; File = 'uPurA.pas'; Find = '  Result := AValue + 1;'; Repl = "  GCount := AValue;`r`n  Result := AValue + 1;"; Control = $true; Flip = 'Far'; Small = $true },
+  @{ Name = 'PUR a called routine is withdrawn'; File = 'uPurA.pas'; Find = 'Gone'; Repl = 'Gone2'; Small = $true },
+  @{ Name = 'PUR a base class gains a field a descendant writes'; File = 'uPurBase.pas'; Find = '    FSeen: Integer;'; Repl = "    FSeen: Integer;`r`n    Extra: Integer;"; Small = $true; FullGap = 'symbol_facts.writes_fields of the descendant is filled by the facts-inherited pass of a file''s own parse, and the descendant was not re-parsed' },
+  @{ Name = 'PUR a body edit that moves no verdict'; File = 'uPurC.pas'; Find = 'Result := Over(AValue);'; Repl = 'Result := Over(AValue) + 0;'; Small = $true },
+  @{ Name = 'PUR a procedural type appears'; File = 'uPurT.pas'; Find = 'THook = Integer;'; Repl = 'THook = procedure;'; Whole = $true }
+)
+
+Push-Location C:\TEMP
+try {
+  $dbPur = Join-Path $scratch 'pur_base.sqlite'
+  $outBase = Invoke-Engine @('index', $psrc, '--db', $dbPur) $null
+  Check 'PUR SANITY: the full index of the fixture ran purity over the whole database (no scope line)' ($outBase -match 'resolve: purity -- \d+ routine' -and $outBase -notmatch 'resolve: purity scope') ($outBase -split "`n" | Select-String 'purity' | Out-String)
+  Check 'PUR SANITY: Far is effect-free and UsesGone is not, before any edit' ((Get-EffectFree $dbPur 'Far') -eq 1 -and (Get-EffectFree $dbPur 'UsesGone') -eq 0) "Far=$(Get-EffectFree $dbPur 'Far') UsesGone=$(Get-EffectFree $dbPur 'UsesGone')"
+
+  foreach ($sc in $purScenarios) {
+    $file = Join-Path $psrc $sc.File
+    $keep = Join-Path $scratch ($sc.File + '.orig')
+    [System.IO.File]::Copy($file, $keep, $true)
+    $text = [System.IO.File]::ReadAllText($file)
+    if (-not $text.Contains($sc.Find)) { Check "$($sc.Name): the edit applies" $false "no '$($sc.Find)' in $($sc.File)"; continue }
+    Write-Ascii $file $text.Replace($sc.Find, $sc.Repl)
+
+    $dbS = Join-Path $scratch 'ps.sqlite'; $dbP = Join-Path $scratch 'pp.sqlite'; $dbF = Join-Path $scratch 'pf.sqlite'
+    Copy-Db $dbPur $dbS; Copy-Db $dbPur $dbP; Remove-Db $dbF
+    $outS = Invoke-Engine @('index', $psrc, '--db', $dbS) $null
+    $outP = Invoke-Engine @('index', $psrc, '--db', $dbP) $NOSCOPEDPURITY
+    Invoke-Engine @('index', $psrc, '--db', $dbF) $null | Out-Null
+    $purLines = ($outS -split "`n" | Select-String 'purity|SCOPED|WHOLE' | Out-String)
+
+    Check "$($sc.Name): run S resolved SCOPED" ($outS -match 'starting SCOPED pass') $purLines
+    if ($sc.Whole) {
+      Check "$($sc.Name): run S fell back to the whole database and said why" ($outS -match 'resolve: purity scope -- whole database: the procedural type names') $purLines
+    } else {
+      $scoped = $outS -match $SCOPE_LINE
+      $n = 0; $m = 0; if ($scoped) { $n = [int]$Matches[1]; $m = [int]$Matches[2] }
+      Check "$($sc.Name): run S re-derived a purity scope" $scoped $purLines
+      if ($sc.Small) { Check "$($sc.Name): the scope is smaller than the database ($n of $m)" ($scoped -and $n -ge 1 -and $n -lt $m) $purLines }
+    }
+    Check "$($sc.Name): run P re-derived every routine (DRAGLINT_NO_SCOPED_PURITY)" ($outP -match 'resolve: purity scope -- whole database: DRAGLINT_NO_SCOPED_PURITY is set') ($outP -split "`n" | Select-String 'purity' | Out-String)
+    $d = Compare-Db $dbS $dbP
+    Check "$($sc.Name): scoped purity = whole purity (0 diff rows)" $d.Same $d.Text
+    $d = Compare-Db $dbS $dbF
+    if ($sc.FullGap) {
+      # An incremental index that differs from a full one BEFORE purity runs (the input rows
+      # differ, with scoped purity on or off: S = P above). Reported, not asserted.
+      Write-Host "[NOTE] $($sc.Name): incremental $(if ($d.Same) { '=' } else { '<>' }) full reindex -- known input gap: $($sc.FullGap)" -ForegroundColor Yellow
+    } else {
+      Check "$($sc.Name): scoped purity = full reindex (0 diff rows)" $d.Same $d.Text
+    }
+    if ($sc.Flip) {
+      Check "$($sc.Name): the verdict of $($sc.Flip), two files away, moved to not-effect-free" ((Get-EffectFree $dbS $sc.Flip) -eq 0) "effect_free=$(Get-EffectFree $dbS $sc.Flip)"
+    }
+    if ($sc.Control) {
+      $dbC = Join-Path $scratch 'pc.sqlite'
+      Copy-Db $dbPur $dbC
+      $outC = Invoke-Engine @('index', $psrc, '--db', $dbC) $SEEDSONLY
+      $d = Compare-Db $dbC $dbF
+      Check "$($sc.Name): POSITIVE CONTROL -- the seeds-only seam ran scoped" ($outC -match 'TEST SEAM DRAGLINT_TEST_PURITY_SEEDS_ONLY') ($outC -split "`n" | Select-String 'purity' | Out-String)
+      Check "$($sc.Name): POSITIVE CONTROL -- a scope that does not follow callers shows diff rows" (-not $d.Same -and $d.Code -eq 1) "index_db_diff exit $($d.Code): the diff cannot see a stale verdict`n      $($d.Text)"
+      Check "$($sc.Name): POSITIVE CONTROL -- $($sc.Flip) kept its stale effect-free verdict" ((Get-EffectFree $dbC $sc.Flip) -eq 1) "effect_free=$(Get-EffectFree $dbC $sc.Flip)"
+    }
+    [System.IO.File]::Copy($keep, $file, $true)
+  }
+} finally { Pop-Location }
+
+# ------------------------------------------------------------------ PART 1b: closure cache (step 3)
+# `index --project` keeps what the compile-closure walk read out of each unit (table
+# closure_cache) and reuses it while the unit AND every include file its scan read are
+# unchanged. A unit's uses clause can hang on a define an include sets, so the include files
+# are part of the key: editing, creating or deleting one must change the closure exactly as an
+# uncached walk does. Per edit three databases from the same edited tree --
+#     C  base + incremental, closure cache on         (the shipped path)
+#     U  base + incremental, DRAGLINT_NO_CLOSURE_CACHE (cold walk, same binary)
+#     F  a fresh full index
+# -- and C = U, C = F (0 differing rows), the closure really changed, and run C really reused
+# stored scans. POSITIVE CONTROL: the seam DRAGLINT_TEST_CC_STAMP_ONLY=1 validates a
+# stored scan by the unit's own stamp only (the key main declined as unsound); on the
+# nested-include edit it must leave the new unit OUT of the closure and show diff rows against F.
+# A scan that asked another unit for a constant ({$IF} on a used unit's const) is never stored.
+# Two edits (HostGap) end in a database that differs from F with the cache on AND off: the
+# incremental indexer does not re-parse an unchanged host whose preprocess result moved. They
+# assert C = U and the closure membership; the difference to F is printed as a NOTE.
+$cc = Join-Path $scratch 'cc'
+New-Item -ItemType Directory -Path $cc | Out-Null
+$ccProj = Join-Path $cc 'Proj.dpr'
+
+Write-Ascii $ccProj @'
+program Proj;
+
+uses
+  uMain in 'uMain.pas';
+
+begin
+  Run;
+end.
+'@
+
+Write-Ascii (Join-Path $cc 'uMain.pas') @'
+unit uMain;
+
+interface
+
+procedure Run;
+
+implementation
+
+uses
+  uA, uB, uD, uIf;
+
+procedure Run;
+begin
+  ValueA;
+  ValueB;
+  ValueD;
+  ValueIf;
+end;
+
+end.
+'@
+
+# uA: the uses entry hangs on a define set two includes down (cc18cfg.inc -> cc18cfg2.inc).
+Write-Ascii (Join-Path $cc 'uA.pas') @'
+unit uA;
+
+{$I cc18cfg.inc}
+
+interface
+
+uses
+  uBase
+  {$IFDEF WITH_EXTRA}, uExtra{$ENDIF}
+  ;
+
+function ValueA: Integer;
+
+implementation
+
+function ValueA: Integer;
+begin
+  Result := BaseValue;
+end;
+
+end.
+'@
+Write-Ascii (Join-Path $cc 'cc18cfg.inc') @'
+{$I cc18cfg2.inc}
+'@
+Write-Ascii (Join-Path $cc 'cc18cfg2.inc') @'
+{ no define yet }
+'@
+
+# uB: its include does not exist yet.
+Write-Ascii (Join-Path $cc 'uB.pas') @'
+unit uB;
+
+{$I cc18opt.inc}
+
+interface
+
+uses
+  uBase
+  {$IFDEF OPT_ON}, uOpt{$ENDIF}
+  ;
+
+function ValueB: Integer;
+
+implementation
+
+function ValueB: Integer;
+begin
+  Result := BaseValue + 1;
+end;
+
+end.
+'@
+
+# uD: its include exists and switches a unit ON; deleting it takes the unit out.
+Write-Ascii (Join-Path $cc 'uD.pas') @'
+unit uD;
+
+{$I cc18on.inc}
+
+interface
+
+uses
+  uBase
+  {$IFDEF D_ON}, uDx{$ENDIF}
+  ;
+
+function ValueD: Integer;
+
+implementation
+
+function ValueD: Integer;
+begin
+  Result := BaseValue + 2;
+end;
+
+end.
+'@
+Write-Ascii (Join-Path $cc 'cc18on.inc') @'
+{$DEFINE D_ON}
+'@
+
+# uIf: an {$IF} on a constant of ANOTHER unit decides its uses clause -- no include involved.
+Write-Ascii (Join-Path $cc 'uIf.pas') @'
+unit uIf;
+
+interface
+
+uses
+  uConsts;
+
+function ValueIf: Integer;
+
+implementation
+
+{$IF CC_LEVEL > 1}
+uses
+  uIfX;
+{$IFEND}
+
+function ValueIf: Integer;
+begin
+  Result := CC_LEVEL;
+end;
+
+end.
+'@
+Write-Ascii (Join-Path $cc 'uConsts.pas') @'
+unit uConsts;
+
+interface
+
+const
+  CC_LEVEL = 1;
+
+implementation
+
+end.
+'@
+
+Write-Ascii (Join-Path $cc 'uBase.pas') @'
+unit uBase;
+
+interface
+
+function BaseValue: Integer;
+
+implementation
+
+function BaseValue: Integer;
+begin
+  Result := 1;
+end;
+
+end.
+'@
+foreach ($u in 'uExtra', 'uOpt', 'uDx', 'uIfX') {
+  Write-Ascii (Join-Path $cc "$u.pas") @"
+unit $u;
+
+interface
+
+function ${u}Value: Integer;
+
+implementation
+
+function ${u}Value: Integer;
+begin
+  Result := 7;
+end;
+
+end.
+"@
+}
+
+$PROF    = @{ DRAGLINT_PROFILE = '1' }
+$NOCACHE = @{ DRAGLINT_PROFILE = '1'; DRAGLINT_NO_CLOSURE_CACHE = '1' }
+$NOINCS  = @{ DRAGLINT_PROFILE = '1'; DRAGLINT_TEST_CC_STAMP_ONLY = '1' }
+# A file modified under two seconds before a walk is never stored (its stamp could repeat).
+$SETTLE_MS = 2500
+
+# 'CLOSURE CACHE: 9 unit scan(s) reused, 2 computed (2 not cacheable)' -> the three counts, or $null.
+function Get-ClosureCacheLine($out) {
+  if ($out -match 'CLOSURE CACHE: (\d+) unit scan\(s\) reused, (\d+) computed \((\d+) not cacheable\)') {
+    return @{ Reused = [int]$Matches[1]; Computed = [int]$Matches[2]; NotCacheable = [int]$Matches[3] }
+  }
+  return $null
+}
+# How many files rows the database holds for a unit file name (0 = not in the closure).
+function Get-FileRows($db, $fileName) {
+  $q = "SELECT count(*) AS n FROM files WHERE lower(path) LIKE '%\" + $fileName.ToLower() + "'"
+  $r = Invoke-Engine @('sql', '--query', $q, '--db', $db, '--json') $null
+  if ($r -match '"rows"\s*:\s*\[\s*\[\s*(\d+)') { return [int]$Matches[1] }
+  return -1
+}
+
+Push-Location C:\TEMP
+try {
+  $ccBase = Join-Path $scratch 'cc_base.sqlite'
+  Start-Sleep -Milliseconds $SETTLE_MS
+  $outBase = Invoke-Engine @('index', '--project', $ccProj, '--db', $ccBase) $PROF
+  $lineBase = Get-ClosureCacheLine $outBase
+  Check 'CC: the base index ran the closure walk with the cache on and computed scans it can store' ($null -ne $lineBase -and $lineBase.Computed -gt $lineBase.NotCacheable) (($outBase -split "`n") | Select-Object -Last 8 | Out-String)
+  Check 'CC: the base closure holds uDx (include cc18on.inc defines D_ON) and not uExtra / uOpt / uIfX' `
+    ((Get-FileRows $ccBase 'udx.pas') -eq 1 -and (Get-FileRows $ccBase 'uextra.pas') -eq 0 -and (Get-FileRows $ccBase 'uopt.pas') -eq 0 -and (Get-FileRows $ccBase 'uifx.pas') -eq 0) `
+    "uDx=$(Get-FileRows $ccBase 'udx.pas') uExtra=$(Get-FileRows $ccBase 'uextra.pas') uOpt=$(Get-FileRows $ccBase 'uopt.pas') uIfX=$(Get-FileRows $ccBase 'uifx.pas')"
+  Check 'CC: the unit whose IF asks another unit for a constant is not cacheable' ($null -ne $lineBase -and $lineBase.NotCacheable -ge 1) "$($lineBase | Out-String)"
+
+  # Nothing changed: every stored scan answers; only the uncacheable unit is computed again.
+  $dbN = Join-Path $scratch 'cc_n.sqlite'
+  Copy-Db $ccBase $dbN
+  $outN = Invoke-Engine @('index', '--project', $ccProj, '--db', $dbN) $PROF
+  $lineN = Get-ClosureCacheLine $outN
+  Check 'CC nothing changed: stored scans are reused and no cacheable unit is computed again' `
+    ($null -ne $lineN -and $lineN.Reused -ge 6 -and $lineN.Computed -eq $lineN.NotCacheable) (($outN -split "`n") | Select-String 'CLOSURE CACHE' | Out-String)
+  $d = Compare-Db $dbN $ccBase
+  Check 'CC nothing changed: the cached run leaves the database as it was (0 diff rows)' $d.Same $d.Text
+
+  # name; the edit (returns the undo); the unit file whose membership flips; whether it joins.
+  $ccEdits = @(
+    @{ Name = 'edit a NESTED include (a define two includes down switches a uses entry on)'; Unit = 'uextra.pas'; Joins = $true; Control = $true; Settle = $true
+       File = 'cc18cfg2.inc'; Text = '{$DEFINE WITH_EXTRA}' },
+    @{ Name = 'create a MISSING include'; Unit = 'uopt.pas'; Joins = $true; HostGap = 'uB.pas is not re-parsed when the include it could not resolve appears'
+       File = 'cc18opt.inc'; Text = '{$DEFINE OPT_ON}' },
+    @{ Name = 'delete an include'; Unit = 'udx.pas'; Joins = $false
+       File = 'cc18on.inc'; Text = $null },
+    @{ Name = 'edit a constant another unit''s IF reads (no include)'; Unit = 'uifx.pas'; Joins = $true; HostGap = 'uIf.pas is not re-parsed when the constant its IF reads changes in uConsts.pas'
+       File = 'uConsts.pas'; Find = 'CC_LEVEL = 1;'; Repl = 'CC_LEVEL = 2;' }
+  )
+  foreach ($e in $ccEdits) {
+    $file = Join-Path $cc $e.File
+    $keep = Join-Path $scratch ('cc_' + $e.File + '.orig')
+    $had = [System.IO.File]::Exists($file)
+    if ($had) { [System.IO.File]::Copy($file, $keep, $true); $stamp = [System.IO.File]::GetLastWriteTimeUtc($file) }
+    try {
+      if ($e.Find) { Write-Ascii $file ([System.IO.File]::ReadAllText($file).Replace($e.Find, $e.Repl)) }
+      elseif ($null -eq $e.Text) { [System.IO.File]::Delete($file) }
+      else { Write-Ascii $file ($e.Text + "`r`n") }
+
+      $dbC = Join-Path $scratch 'cc_c.sqlite'; $dbU = Join-Path $scratch 'cc_u.sqlite'; $dbF = Join-Path $scratch 'cc_f.sqlite'
+      Copy-Db $ccBase $dbC; Copy-Db $ccBase $dbU; Remove-Db $dbF
+      $outC = Invoke-Engine @('index', '--project', $ccProj, '--db', $dbC) $PROF
+      $outU = Invoke-Engine @('index', '--project', $ccProj, '--db', $dbU) $NOCACHE
+      Invoke-Engine @('index', '--project', $ccProj, '--db', $dbF) $NOCACHE | Out-Null
+
+      $want = [int][bool]$e.Joins
+      $lineC = Get-ClosureCacheLine $outC
+      Check "CC $($e.Name): run C reused stored scans" ($null -ne $lineC -and $lineC.Reused -gt 0) (($outC -split "`n") | Select-String 'CLOSURE CACHE' | Out-String)
+      Check "CC $($e.Name): run U walked cold" ($null -eq (Get-ClosureCacheLine $outU)) ''
+      Check "CC $($e.Name): the closure changed ($($e.Unit) rows: full index $want, cached $want)" `
+        ((Get-FileRows $dbF $e.Unit) -eq $want -and (Get-FileRows $dbC $e.Unit) -eq $want -and (Get-FileRows $ccBase $e.Unit) -ne $want) `
+        "base=$(Get-FileRows $ccBase $e.Unit) F=$(Get-FileRows $dbF $e.Unit) C=$(Get-FileRows $dbC $e.Unit)"
+      $d = Compare-Db $dbC $dbU
+      Check "CC $($e.Name): cached = uncached (0 diff rows)" $d.Same $d.Text
+      $d = Compare-Db $dbC $dbF
+      if ($e.HostGap) {
+        # Not the closure's doing and the same with the cache off (C = U above), measured on
+        # 1251010cd too: the INDEXER keeps the unchanged host's rows (unit_uses, pp_regions,
+        # file_includes). The closure itself is right -- the membership check above reads F.
+        $state = if ($d.Same) { 'now equal: drop HostGap from this edit' } else { 'still differ' }
+        Write-Host "[NOTE] CC $($e.Name): cached vs full index $state -- known incremental-indexer gap ($($e.HostGap))" -ForegroundColor Yellow
+      } else {
+        Check "CC $($e.Name): cached = full index (0 diff rows)" $d.Same $d.Text
+      }
+
+      if ($e.Control) {
+        $dbK = Join-Path $scratch 'cc_k.sqlite'
+        Copy-Db $ccBase $dbK
+        $outK = Invoke-Engine @('index', '--project', $ccProj, '--db', $dbK) $NOINCS
+        $lineK = Get-ClosureCacheLine $outK
+        Check "CC $($e.Name): POSITIVE CONTROL -- the unit-stamp-only key (test seam) reused stored scans" ($null -ne $lineK -and $lineK.Reused -gt 0) ''
+        Check "CC $($e.Name): POSITIVE CONTROL -- the unit-stamp-only key leaves a STALE closure ($($e.Unit) missing)" ((Get-FileRows $dbK $e.Unit) -eq 0) "rows=$(Get-FileRows $dbK $e.Unit)"
+        $d = Compare-Db $dbK $dbF
+        Check "CC $($e.Name): POSITIVE CONTROL -- the unit-stamp-only key shows diff rows" (-not $d.Same -and $d.Code -eq 1) "index_db_diff exit $($d.Code): the diff cannot see a stale closure`n      $($d.Text)"
+      }
+      if ($e.Settle) {
+        # Once the edit is older than the racy window the new scan is stored, then reused.
+        Start-Sleep -Milliseconds $SETTLE_MS
+        $out2 = Invoke-Engine @('index', '--project', $ccProj, '--db', $dbC) $PROF
+        $out3 = Invoke-Engine @('index', '--project', $ccProj, '--db', $dbC) $PROF
+        $line2 = Get-ClosureCacheLine $out2; $line3 = Get-ClosureCacheLine $out3
+        Check "CC $($e.Name): the settled edit is scanned once more and stored" ($null -ne $line2 -and $line2.Computed -gt $line2.NotCacheable) (($out2 -split "`n") | Select-String 'CLOSURE CACHE' | Out-String)
+        Check "CC $($e.Name): then every stored scan answers again" ($null -ne $line3 -and $line3.Computed -eq $line3.NotCacheable -and $line3.Reused -gt $lineC.Reused) (($out3 -split "`n") | Select-String 'CLOSURE CACHE' | Out-String)
+        $d = Compare-Db $dbC $dbF
+        Check "CC $($e.Name): the re-stored cache still equals the full index (0 diff rows)" $d.Same $d.Text
+      }
+    } finally {
+      if ($had) { [System.IO.File]::Copy($keep, $file, $true); [System.IO.File]::SetLastWriteTimeUtc($file, $stamp) }
+      elseif ([System.IO.File]::Exists($file)) { [System.IO.File]::Delete($file) }
+    }
   }
 } finally { Pop-Location }
 
@@ -484,6 +1147,8 @@ print(hit)
         $outW = Invoke-Engine @('index', '--project', $proj, '--platform', 'win32', '--db', $dbW) $WHOLE
         Check "DL $name`: run S took the SCOPED path" ($outS -match 'starting SCOPED pass') (($outS -split "`n") | Select-String 'calls ' | Select-Object -First 4 | Out-String)
         Check "DL $name`: run W took the WHOLE-DB path" ($outW -match 'starting WHOLE-DB pass') ''
+        $dlScope = (($outS -split "`n") | Select-String 'resolve: purity scope' | Select-Object -First 1 | Out-String).Trim()
+        Check "DL $name`: run S re-derived a purity scope, run W every routine [$dlScope]" ($outS -match 'resolve: purity scope -- \d+ of \d+ routine\(s\) re-derived' -and $outW -notmatch 'resolve: purity scope -- \d+ of') (($outS -split "`n") | Select-String 'purity' | Out-String)
         $d = Compare-Db $dbS $dbW
         Check "DL $name`: scoped = whole-database resolve (0 diff rows)" $d.Same $d.Text
       } finally {

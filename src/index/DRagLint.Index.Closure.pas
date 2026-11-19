@@ -54,6 +54,43 @@ type
     SearchPaths: TArray<string>;
   end;
 
+  /// <summary>INCR18: one include directive a unit's closure scan tried to
+  /// resolve, with the stamp of the file that answered.</summary>
+  /// <remarks>Name / BaseDir / Path are TPPIncludeProbe's (Path '' = no file
+  /// answered). Size is the byte size and MTime the last-write FILETIME (100 ns
+  /// ticks, UTC) of Path at scan time; both 0 for an unresolved directive.</remarks>
+  TClosureDep = record
+    Name   : string;
+    BaseDir: string;
+    Path   : string;
+    Size   : Int64 ;
+    MTime  : Int64 ;
+  end;
+
+  /// <summary>INCR18: what the closure walk reads out of one unit -- the units
+  /// its active uses clauses name and the project-local include files it pulls
+  /// in -- together with everything that answer was derived from.</summary>
+  /// <remarks>
+  /// Path / Size / MTime stamp the unit itself (MTime as in TClosureDep). Deps
+  /// lists EVERY include directive the scan tried to resolve, transitively and
+  /// in scan order, library includes and unresolved ones too: the scan result
+  /// is a function of the unit's bytes, the walk's fingerprint
+  /// (TClosureResolver.ScanFingerprint), how each Deps name resolves and the
+  /// bytes of each file that answered. Cacheable is False when the scan
+  /// depended on anything else (it asked the used-unit source, the preprocess
+  /// fell back, a file was modified while the walk ran): such a scan is never
+  /// reused and a caller drops the row it stored for Path.
+  /// </remarks>
+  TClosureScan = record
+    Path     : string             ;
+    Size     : Int64              ;
+    MTime    : Int64              ;
+    UsesList : TArray<string>     ;
+    Includes : TArray<string>     ;
+    Deps     : TArray<TClosureDep>;
+    Cacheable: Boolean            ;
+  end;
+
   /// <summary>Resolves the compile closure of a Delphi .dpr or .dproj project.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
@@ -75,6 +112,40 @@ type
       FPreprocessEnabled : Boolean;
       FProfile           : TDefineProfile;
       FPreprocessFellBack: Boolean;
+
+      // INCR18 scan cache (see EnableScanCache). FScanCache: lowercased unit
+      // path -> a scan that was cacheable; FScanFresh: every scan this instance
+      // computed; FStampMemo / FIncludeMemo: one stat / one include resolution
+      // per path per instance (an include shared by every unit is asked once).
+      FScanCacheOn        : Boolean;
+      FIgnoreIncludeStamps: Boolean;
+      FScanVersionKey     : string;
+      FScanFingerprint    : string;
+      FScanCache          : TDictionary<string, TClosureScan>;
+      FScanFresh          : TList<TClosureScan>;
+      FStampMemo          : TDictionary<string, TPair<Int64, Int64>>;
+      FIncludeMemo        : TDictionary<string, string>;
+      FScanHits           : Integer;
+      FScanUncacheable    : Integer;
+      FScanStartTicks     : Int64;
+
+      // The byte size and last-write FILETIME of AFile; False when it is not a file.
+      function FileStamp(const AFile: string; out ASize, AMTime: Int64): Boolean;
+      // PPResolveInclude over ASearchPaths, once per (name, base folder).
+      function ResolveIncludeOnce(const AName, ABaseDir: string; const ASearchPaths: TArray<string>): string;
+      // The fingerprint of a walk over ASearchPaths (see ScanFingerprint).
+      function BuildScanFingerprint(const ASearchPaths: TArray<string>): string;
+      // Sets FScanFingerprint; a changed one empties FScanCache and FIncludeMemo.
+      procedure PrepareScanCache(const ASearchPaths: TArray<string>);
+      // True when AScan's unit and every Deps entry still answer as recorded.
+      function ScanStillValid(const AScan: TClosureScan; const ASearchPaths: TArray<string>): Boolean;
+      // True when ADep's name still resolves to the same file (or to none) and that file kept its stamp.
+      function DepStillValid(const ADep: TClosureDep; const ASearchPaths: TArray<string>): Boolean;
+      // Fills AScan.Deps from AProbes; False when a probe cannot be recorded or
+      // a file that answered is gone or was modified while the walk ran.
+      function StampDeps(const AProbes: TArray<TPPIncludeProbe>; var AScan: TClosureScan): Boolean;
+      // True when AMTime is too close to (or after) the walk's start to trust.
+      function StampIsRacy(AMTime: Int64): Boolean;
 
       // Run the directive preprocessor over AContent under FProfile when
       // FPreprocessEnabled, returning the resolved text (inactive-branch bytes
@@ -161,7 +232,7 @@ type
       /// </remarks>
       function TryPreprocessWithSites(const AContent, AFilePath: string;
         const ASearchPaths: TArray<string>; out AScanText: string;
-        out ASites: TArray<TPPIncludeSite>): Boolean;
+        out ASites: TArray<TPPIncludeSite>; out AProbes: TArray<TPPIncludeProbe>): Boolean;
 
       // ---- unit-file resolution helpers ----------------------------------------
 
@@ -375,6 +446,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(const ALibraryRoots: TArray<string>);
+      /// <summary>Frees the scan cache.</summary>
+      destructor Destroy; override;
       /// <summary>Lane INC2: the search path a project's walk resolves units and
       /// includes against, as Resolve builds it for a .dproj: the project folder first,
       /// then each existing DCC_UnitSearchPath directory (macros skipped).</summary>
@@ -438,6 +511,52 @@ type
       /// </remarks>
       procedure SetLibraryTail(const ATail: TArray<string>);
 
+      /// <summary>INCR18: turns the per-unit scan cache on for later Resolve calls:
+      /// a unit whose scan is known and still valid is not read and preprocessed
+      /// again.</summary>
+      /// <param name="AVersionKey">What the caller's engine build contributes to
+      /// ScanFingerprint (product and extractor version): scans of another build
+      /// are never reused.</param>
+      /// <param name="AIgnoreIncludeStamps">TEST SEAM, False in production. True
+      /// validates a scan by the unit's own stamp only -- the key that is
+      /// unsound once a uses scan depends on include files -- so a guard can show
+      /// the include stamps are what keeps the cache right.</param>
+      /// <remarks>
+      /// Off by default: every other caller keeps the uncached walk. The cache
+      /// works only while a used-unit source is installed (PPUnitSource) and
+      /// preprocessing is on; while a unit is scanned the installed source is
+      /// wrapped to count what the scan asks it, so call this only from a
+      /// single-threaded walk with no other preprocess run in flight.
+      /// </remarks>
+      procedure EnableScanCache(const AVersionKey: string; AIgnoreIncludeStamps: Boolean);
+
+      /// <summary>INCR18: hands back scans an earlier walk recorded.</summary>
+      /// <param name="AFingerprint">The ScanFingerprint they were recorded under;
+      /// when the next Resolve computes another one they are all dropped.</param>
+      /// <param name="AScans">The scans; each is used only while its unit and
+      /// every one of its Deps still answer as recorded.</param>
+      procedure SeedScanCache(const AFingerprint: string; const AScans: TArray<TClosureScan>);
+
+      /// <summary>INCR18: the scans this instance had to compute (new, changed
+      /// or uncacheable units), in walk order, over every Resolve so far.</summary>
+      /// <returns>Empty while the scan cache is off. An entry with Cacheable =
+      /// False must not be stored (drop any stored row of its Path).</returns>
+      function FreshScans: TArray<TClosureScan>;
+
+      /// <summary>INCR18: what a scan depends on besides the unit and its include
+      /// files, as the last Resolve saw it: the version key, whether the
+      /// preprocessor runs and its define profile (defines, numeric defines,
+      /// switches), the ordered search path the includes resolve on (the library
+      /// tail included) and the library roots.</summary>
+      /// <returns>A SHA-256 hex digest; '' before the first Resolve with the
+      /// scan cache on.</returns>
+      function ScanFingerprint: string;
+
+      /// <summary>INCR18: how many unit scans the cache answered, over every Resolve so far.</summary>
+      property ScanHits: Integer read FScanHits;
+      /// <summary>INCR18: how many computed scans could not be cached.</summary>
+      property ScanUncacheable: Integer read FScanUncacheable;
+
       /// <summary>Resolve the compile closure of a .dpr or .dproj project.
       /// Returns the set of project-local .pas/.inc files that get compiled:
       /// the project member units + transitive project-local uses + {$I} files.
@@ -476,8 +595,13 @@ type
 implementation
 
 uses
-  DRagLint.Index.Glob
+  Winapi.Windows              // INCR18: GetFileAttributesEx (size + write time in one call)
+  , System.Hash               // INCR18: the scan fingerprint digest
+  , System.Generics.Defaults  // INCR18: TArray.Sort<string>
+  , DRagLint.Index.Glob
   , DRagLint.Preprocess       // PP-Task-10: Preprocess(bytes, profile)
+  , DRagLint.Preprocess.Decls // INCR18: IPPUnitSource, PPUnitSource (the scan's lookup count)
+  , DRagLint.Preprocess.Expr  // INCR18: TPPValue, TPPNameKind (IPPUnitSource's signature)
   , DRagLint.Core.Encoding    // PP-Task-10: EnsureUtf8Bytes
   { StripPasCommentsKeepLayout -- ONE implementation, shared with
     ParseUsesFromContent, so the .dpr and .pas uses-clause readers cannot drift.
@@ -500,6 +624,229 @@ begin
   FPreprocessEnabled := False;
   FProfile           := Default(TDefineProfile);
   FPreprocessFellBack:= False;
+  FScanCache  := TDictionary<string, TClosureScan>.Create;
+  FScanFresh  := TList<TClosureScan>.Create;
+  FStampMemo  := TDictionary<string, TPair<Int64, Int64>>.Create;
+  FIncludeMemo:= TDictionary<string, string>.Create;
+end;
+
+destructor TClosureResolver.Destroy;
+begin
+  FIncludeMemo.Free;
+  FStampMemo.Free;
+  FScanFresh.Free;
+  FScanCache.Free;
+  inherited Destroy;
+end;
+
+const
+  // INCR18: bump when the meaning of a stored scan changes without a version change.
+  SCAN_CACHE_FORMAT = 'cc2';
+  // The field and list separators a stored scan is joined with (see the CLI's
+  // row conversion); an include name holding one cannot be recorded.
+  SCAN_FIELD_SEP = '|';
+  SCAN_LINE_SEP  = #10;
+  SCAN_CR        = #13;
+  // A file modified this close to the walk's start (or later) may change again
+  // without its stamp moving -- FILETIME ticks of 100 ns; two seconds covers the
+  // coarsest file system clock (FAT).
+  RACY_WINDOW_TICKS = 2 * 10_000_000;
+  // The preprocessor's nearest-first include search, as TPPOptionsDefault sets it.
+  SCAN_NEAR_SEARCH = True;
+  HIGH_DWORD_SHIFT = 32;
+
+type
+  // Counts what a unit's scan asks the installed used-unit source; every
+  // question is passed on unchanged.
+  TCountingUnitSource = class(TInterfacedObject, IPPUnitSource)
+  private
+    FInner: IPPUnitSource;
+    FAsked: Integer;
+  public
+    constructor Create(const AInner: IPPUnitSource);
+    function LookupInUnit(const AUnit, AName: string; out AValue: TPPValue): TPPNameKind;
+    function HasLibraryEvidence: Boolean;
+    property Asked: Integer read FAsked;
+  end;
+
+constructor TCountingUnitSource.Create(const AInner: IPPUnitSource);
+begin
+  inherited Create;
+  FInner:= AInner;
+end;
+
+function TCountingUnitSource.LookupInUnit(const AUnit, AName: string; out AValue: TPPValue): TPPNameKind;
+begin
+  AtomicIncrement(FAsked);
+  Result:= FInner.LookupInUnit(AUnit, AName, AValue);
+end;
+
+function TCountingUnitSource.HasLibraryEvidence: Boolean;
+begin
+  AtomicIncrement(FAsked);
+  Result:= FInner.HasLibraryEvidence;
+end;
+
+procedure TClosureResolver.EnableScanCache(const AVersionKey: string; AIgnoreIncludeStamps: Boolean);
+var
+  StartTime: TFileTime;
+begin
+  FScanCacheOn        := True;
+  FScanVersionKey     := AVersionKey;
+  FIgnoreIncludeStamps:= AIgnoreIncludeStamps;
+  GetSystemTimeAsFileTime(StartTime);
+  FScanStartTicks:= Int64(StartTime);
+end;
+
+procedure TClosureResolver.SeedScanCache(const AFingerprint: string; const AScans: TArray<TClosureScan>);
+begin
+  FScanCache.Clear;
+  FScanFingerprint:= AFingerprint;
+  for var S: TClosureScan in AScans do
+    if S.Cacheable then FScanCache.AddOrSetValue(LowerCase(S.Path), S);
+end;
+
+function TClosureResolver.FreshScans: TArray<TClosureScan>;
+begin
+  Result:= FScanFresh.ToArray;
+end;
+
+function TClosureResolver.ScanFingerprint: string;
+begin
+  Result:= FScanFingerprint;
+end;
+
+function TClosureResolver.FileStamp(const AFile: string; out ASize, AMTime: Int64): Boolean;
+var
+  Key  : string;
+  Memo : TPair<Int64, Int64>;
+  Data : TWin32FileAttributeData;
+begin
+  Key:= LowerCase(AFile);
+  if not FStampMemo.TryGetValue(Key, Memo) then
+  begin
+    // Size -1 = not a file (absent, a folder, unreadable attributes).
+    Memo:= TPair<Int64, Int64>.Create(-1, 0);
+    if GetFileAttributesEx(PChar(AFile), GetFileExInfoStandard, @Data)
+      and (Data.dwFileAttributes and FILE_ATTRIBUTE_DIRECTORY = 0) then
+      Memo:= TPair<Int64, Int64>.Create(
+        (Int64(Data.nFileSizeHigh) shl HIGH_DWORD_SHIFT) or Data.nFileSizeLow, Int64(Data.ftLastWriteTime));
+    FStampMemo.Add(Key, Memo);
+  end;
+  ASize := Memo.Key;
+  AMTime:= Memo.Value;
+  Result:= ASize >= 0;
+end;
+
+function TClosureResolver.ResolveIncludeOnce(const AName, ABaseDir: string; const ASearchPaths: TArray<string>): string;
+var
+  Key: string;
+begin
+  Key:= LowerCase(ABaseDir) + SCAN_FIELD_SEP + AName;
+  if not FIncludeMemo.TryGetValue(Key, Result) then
+  begin
+    Result:= PPResolveInclude(AName, ABaseDir, SCAN_NEAR_SEARCH, ASearchPaths);
+    FIncludeMemo.Add(Key, Result);
+  end;
+end;
+
+function TClosureResolver.BuildScanFingerprint(const ASearchPaths: TArray<string>): string;
+var
+  Defs : TArray<string>;
+  Nums : TArray<string>;
+  Parts: TStringBuilder;
+begin
+  Defs:= Copy(FProfile.Defines);
+  TArray.Sort<string>(Defs);
+  SetLength(Nums, Length(FProfile.NumericDefines));
+  for var I: Integer:= 0 to High(FProfile.NumericDefines) do
+    Nums[I]:= FProfile.NumericDefines[I].Key + '=' + IntToStr(FProfile.NumericDefines[I].Value);
+  TArray.Sort<string>(Nums);
+  Parts:= TStringBuilder.Create;
+  try
+    Parts.Append(SCAN_CACHE_FORMAT).Append(SCAN_LINE_SEP).Append(FScanVersionKey).Append(SCAN_LINE_SEP);
+    Parts.Append('pp=').Append(Ord(FPreprocessEnabled)).Append(SCAN_LINE_SEP);
+    Parts.Append('d=').Append(string.Join(',', Defs)).Append(SCAN_LINE_SEP);
+    Parts.Append('n=').Append(string.Join(',', Nums)).Append(SCAN_LINE_SEP);
+    // Switches keep their order: a later pair for the same letter wins.
+    for var Sw: TPair<string, Boolean> in FProfile.Switches do
+      Parts.Append('s=').Append(Sw.Key).Append(Ord(Sw.Value)).Append(SCAN_LINE_SEP);
+    // Search order decides which file an include name resolves to.
+    for var Dir: string in ASearchPaths do
+      Parts.Append('p=').Append(LowerCase(Dir)).Append(SCAN_LINE_SEP);
+    for var Root: string in FLibraryRoots do
+      Parts.Append('l=').Append(LowerCase(Root)).Append(SCAN_LINE_SEP);
+    Result:= THashSHA2.GetHashString(Parts.ToString);
+  finally
+    Parts.Free;
+  end;
+end;
+
+procedure TClosureResolver.PrepareScanCache(const ASearchPaths: TArray<string>);
+var
+  Fp: string;
+begin
+  if not FScanCacheOn then Exit;
+  Fp:= BuildScanFingerprint(ASearchPaths);
+  if Fp = FScanFingerprint then Exit;
+  FScanCache.Clear;
+  FIncludeMemo.Clear;
+  FScanFingerprint:= Fp;
+end;
+
+function TClosureResolver.StampIsRacy(AMTime: Int64): Boolean;
+begin
+  Result:= AMTime >= FScanStartTicks - RACY_WINDOW_TICKS;
+end;
+
+function TClosureResolver.DepStillValid(const ADep: TClosureDep; const ASearchPaths: TArray<string>): Boolean;
+var
+  Size : Int64;
+  MTime: Int64;
+begin
+  // A new file that now answers the name (or answers it first), or a file that
+  // is gone, resolves differently; a changed file fails its stamp.
+  if not SameText(ResolveIncludeOnce(ADep.Name, ADep.BaseDir, ASearchPaths), ADep.Path) then Exit(False);
+  if ADep.Path = '' then Exit(True);
+  Result:= FileStamp(ADep.Path, Size, MTime) and (Size = ADep.Size) and (MTime = ADep.MTime);
+end;
+
+function TClosureResolver.ScanStillValid(const AScan: TClosureScan; const ASearchPaths: TArray<string>): Boolean;
+var
+  Size : Int64;
+  MTime: Int64;
+begin
+  Result:= FileStamp(AScan.Path, Size, MTime) and (Size = AScan.Size) and (MTime = AScan.MTime);
+  // FIgnoreIncludeStamps is the test seam: the unsound unit-only key stops here.
+  if (not Result) or FIgnoreIncludeStamps then Exit;
+  for var D: TClosureDep in AScan.Deps do
+  begin
+    Result:= DepStillValid(D, ASearchPaths);
+    if not Result then Exit;
+  end;
+end;
+
+function TClosureResolver.StampDeps(const AProbes: TArray<TPPIncludeProbe>; var AScan: TClosureScan): Boolean;
+var
+  Dep: TClosureDep;
+begin
+  SetLength(AScan.Deps, Length(AProbes));
+  for var I: Integer:= 0 to High(AProbes) do
+  begin
+    if AProbes[I].Name.Contains(SCAN_FIELD_SEP) or AProbes[I].Name.Contains(SCAN_LINE_SEP) or AProbes[I].Name.Contains(SCAN_CR) then
+      Exit(False);
+    Dep:= Default(TClosureDep);
+    Dep.Name   := AProbes[I].Name;
+    Dep.BaseDir:= AProbes[I].BaseDir;
+    Dep.Path   := AProbes[I].Path;
+    if Dep.Path <> '' then
+    begin
+      if not FileStamp(Dep.Path, Dep.Size, Dep.MTime) then Exit(False);
+      if StampIsRacy(Dep.MTime) then Exit(False);
+    end;
+    AScan.Deps[I]:= Dep;
+  end;
+  Result:= True;
 end;
 
 procedure TClosureResolver.SetPreprocess(AEnabled: Boolean; const AProfile: TDefineProfile);
@@ -551,12 +898,14 @@ end;
 
 function TClosureResolver.TryPreprocessWithSites(const AContent, AFilePath: string;
   const ASearchPaths: TArray<string>; out AScanText: string;
-  out ASites: TArray<TPPIncludeSite>): Boolean;
+  out ASites: TArray<TPPIncludeSite>; out AProbes: TArray<TPPIncludeProbe>): Boolean;
 var
-  Opts: TPPOptions;
+  Opts  : TPPOptions;
+  Report: TPPReport;
 begin
   AScanText:= AContent;
   ASites   := nil;
+  AProbes  := nil;
   if not FPreprocessEnabled then Exit(False);
   try
     Opts:= TPPOptionsDefault;
@@ -564,8 +913,13 @@ begin
     Opts.IncludeMode:= 'defines-only';
     Opts.BaseDir    := TPath.GetDirectoryName(AFilePath);
     Opts.SearchPaths:= ASearchPaths;
+    Opts.NearSearch := SCAN_NEAR_SEARCH;
+    // PreprocessReport = Preprocess(bytes, Opts, sites) plus the report: the
+    // same bytes and sites, and every include directive the run tried (INCR18).
     AScanText:= TEncoding.UTF8.GetString(
-      Preprocess(EnsureUtf8Bytes(TEncoding.UTF8.GetBytes(AContent)), Opts, ASites));
+      PreprocessReport(EnsureUtf8Bytes(TEncoding.UTF8.GetBytes(AContent)), Opts, Report));
+    ASites := Report.Sites;
+    AProbes:= Report.Probes;
     Result:= True;
   except
     on E: Exception do
@@ -574,6 +928,7 @@ begin
 
       AScanText:= AContent;
       ASites   := nil;
+      AProbes  := nil;
       Result   := False;
     end;
   end;
@@ -1140,14 +1495,16 @@ var
     every define an include sets applied to the host's later branches.
     Preprocessing off (or a preprocess failure): the old all-branch raw scan,
     one level deep. }
-  function ScanIncludes(const AFile, ARaw: string; out AScanText: string): TArray<string>;
+  function ScanIncludes(const AFile, ARaw: string; out AScanText: string;
+    out AProbes: TArray<TPPIncludeProbe>; out APreprocessed: Boolean): TArray<string>;
   var
     Sites: TArray<TPPIncludeSite>;
     Site : TPPIncludeSite;
     R    : string;
   begin
     Result:= nil;
-    if TryPreprocessWithSites(ARaw, AFile, SearchArr, AScanText, Sites) then
+    APreprocessed:= TryPreprocessWithSites(ARaw, AFile, SearchArr, AScanText, Sites, AProbes);
+    if APreprocessed then
     begin
       for Site in Sites do
         if not IsLibraryFile(Site.Path) then Result:= Result + [Site.Path];
@@ -1159,6 +1516,65 @@ var
       R:= FindIncFile(IncName, TPath.GetDirectoryName(AFile), SearchArr);
       if (R <> '') and not IsLibraryFile(R) then Result:= Result + [R];
     end;
+  end;
+
+  { INCR18: the uses names (AUses) and the project-local include files (the
+    result) of one unit. With the scan cache on, a recorded scan answers while
+    the unit and every include directive it tried still answer as recorded;
+    otherwise the unit is read and preprocessed, and the scan is kept when it
+    depended on nothing but those files (see TClosureScan). }
+  function ScanUnit(const AFile: string; out AUses: TArray<string>): TArray<string>;
+  var
+    Outer   : IPPUnitSource;
+    Counter : TCountingUnitSource;
+    Hold    : IPPUnitSource;
+    Scan    : TClosureScan;
+    Prior   : TClosureScan;
+    Text    : string;
+    Probes  : TArray<TPPIncludeProbe>;
+    PPOk    : Boolean;
+    Key     : string;
+  begin
+    Outer:= nil;
+    if FScanCacheOn and FPreprocessEnabled then Outer:= PPUnitSource;
+    if Outer = nil then
+    begin
+      Result:= ScanIncludes(AFile, TFile.ReadAllText(AFile), Text, Probes, PPOk);
+      AUses := ExtractUses(Text);
+      Exit;
+    end;
+    Key:= LowerCase(AFile);
+    if FScanCache.TryGetValue(Key, Prior) and ScanStillValid(Prior, SearchArr) then
+    begin
+      Inc(FScanHits);
+      AUses:= Prior.UsesList;
+      Exit(Prior.Includes);
+    end;
+    Scan:= Default(TClosureScan);
+    Scan.Path:= AFile;
+    // Stamped BEFORE the read: a write in between leaves an older stamp, which
+    // the next walk sees as a change.
+    Scan.Cacheable:= FileStamp(AFile, Scan.Size, Scan.MTime) and not StampIsRacy(Scan.MTime);
+    Counter:= TCountingUnitSource.Create(Outer);
+    Hold:= Counter;
+    PPSetUnitSource(Hold);
+    try
+      Result:= ScanIncludes(AFile, TFile.ReadAllText(AFile), Text, Probes, PPOk);
+    finally
+      PPSetUnitSource(Outer);
+    end;
+    AUses:= ExtractUses(Text);
+    Scan.UsesList:= AUses;
+    Scan.Includes:= Result;
+    // Asked > 0: an IF was decided by another unit's constants or the library DB.
+    Scan.Cacheable:= Scan.Cacheable and PPOk and (Counter.Asked = 0) and StampDeps(Probes, Scan);
+    if Scan.Cacheable then FScanCache.AddOrSetValue(Key, Scan)
+    else
+    begin
+      Inc(FScanUncacheable);
+      FScanCache.Remove(Key);
+    end;
+    FScanFresh.Add(Scan);
   end;
 
 begin
@@ -1259,6 +1675,7 @@ begin
     for var TailDir: string in FLibraryTail do
       if SearchPaths.IndexOf(TailDir) < 0 then SearchPaths.Add(TailDir);
     SearchArr:= SearchPaths.ToStringArray;
+    PrepareScanCache(SearchArr);
 
     // --- Step 2: the project's own bindings, before anything asks a path --------
     BindListedUnits;
@@ -1292,7 +1709,9 @@ begin
     if ProjSource <> '' then
     begin
       var DprScan: string;
-      for var PI_: string in ScanIncludes(ProjSource, TFile.ReadAllText(ProjSource), DprScan) do
+      var DprProbes: TArray<TPPIncludeProbe>;
+      var DprPreprocessed: Boolean;
+      for var PI_: string in ScanIncludes(ProjSource, TFile.ReadAllText(ProjSource), DprScan, DprProbes, DprPreprocessed) do  // dl:ok taint-path-traversal@e8d3 -- REVIEWED 2026-11-18 (INCR18): ProjSource is the project's own .dpr / .dpk, the file the walk was asked to resolve; reading it is the purpose (the finding predates this line's new out-parameters)
         EnqueueFile(PI_, '<project>');
     end;
 
@@ -1314,11 +1733,9 @@ begin
       // preprocess reports the ACTIVE include sites (nested ones too), and the
       // defines those includes set reach the uses scan; with preprocessing off
       // ScanIncludes keeps the old all-branch raw include scan.
-      var UnitContent: string;
-      SubIncs:= ScanIncludes(Item.FilePath, TFile.ReadAllText(Item.FilePath), UnitContent);
+      SubIncs:= ScanUnit(Item.FilePath, SubUses);
 
       // (a) Recurse into `uses` references
-      SubUses:= ExtractUses(UnitContent);
       for SubName in SubUses do
       begin
         if SubName = '' then Continue;
