@@ -3663,6 +3663,14 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function PurityNeedsRun: Boolean;
+      /// <summary>Implements ISymbolStore.LoadClosureCache (see there).</summary>
+      /// <param name="AFingerprint">Receives the stored fingerprint.</param>
+      /// <returns>The stored rows.</returns>
+      function LoadClosureCache(out AFingerprint: string): TArray<TClosureCacheRow>;
+      /// <summary>Implements ISymbolStore.SaveClosureCache (see there).</summary>
+      /// <param name="AFingerprint">The walk's scan fingerprint.</param>
+      /// <param name="ARows">The scans to store or drop.</param>
+      procedure SaveClosureCache(const AFingerprint: string; const ARows: TArray<TClosureCacheRow>);
       /// <summary>Concept-search stage: syncs symbol_search with symbols.</summary>
       /// <returns>Rows inserted.</returns>
       /// <remarks>
@@ -7508,6 +7516,19 @@ begin
     without reading the file (STAMP FAST PATH in TIndexer.IndexFile). NULL on a
     row written before; such a row takes the full test once and is filled. }
   TryExec('ALTER TABLE files ADD COLUMN size INTEGER');
+  { INCR18 (1.52.1; PR #10's closure_cache, made sound): what the compile-closure
+    walk read out of each unit, so the next `index --project` does not read and
+    preprocess every unit again to learn the same uses clauses. A cache, not
+    index data: nothing reads it but that walk, and a row is used only while the
+    unit AND every include file its scan read (deps) still carry their stamps,
+    every include name still resolves to the same file, and the walk's
+    fingerprint (schema_meta closure_cache_fp) is unchanged. deps is nullable
+    and added by ALTER too: a database a PR #10 build wrote has the table
+    without it, and its rows (deps NULL) are never loaded. An older engine never
+    looks at the table. }
+  TryExec('CREATE TABLE IF NOT EXISTS closure_cache (path TEXT PRIMARY KEY, mtime INTEGER NOT NULL, ' +
+          'size INTEGER NOT NULL, uses TEXT NOT NULL, includes TEXT NOT NULL, deps TEXT)');
+  TryExec('ALTER TABLE closure_cache ADD COLUMN deps TEXT');
   { v16: per-file last-successful-compile timestamp (Unix seconds). NULL = never
     compiled. Additive column; ALTER onto pre-v16 files tables for the same
     reason as the symbols/refs columns above. Read by the freshness engine to
@@ -8959,6 +8980,110 @@ begin
   except
     { non-writable / pre-schema_meta DB -- recording the fingerprint is best-effort }
   end;
+end; // procedure
+
+const
+  CLOSURE_CACHE_FP_KEY = 'closure_cache_fp';
+
+function TSQLiteSymbolStore.LoadClosureCache(out AFingerprint: string): TArray<TClosureCacheRow>;
+var
+  Q   : TFDQuery;
+  List: TList<TClosureCacheRow>;
+  Row : TClosureCacheRow;
+begin
+  Result:= nil;
+  AFingerprint:= GetMetaValue(CLOSURE_CACHE_FP_KEY);
+  if AFingerprint = '' then Exit;
+  List:= TList<TClosureCacheRow>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    { The stamps are read as TEXT: FireDAC types an INTEGER column as 32-bit, and
+      a FILETIME (or a size past 2 GB) does not fit. }
+    Q.SQL.Text:= 'SELECT path, CAST(mtime AS TEXT) AS mtime, CAST(size AS TEXT) AS size, uses, includes, deps ' +
+                 'FROM closure_cache WHERE deps IS NOT NULL';
+    try
+      Q.Open;
+      var FPath: TField:= Q.FieldByName('path'    );
+      var FTime: TField:= Q.FieldByName('mtime'   );
+      var FSize: TField:= Q.FieldByName('size'    );
+      var FUses: TField:= Q.FieldByName('uses'    );
+      var FIncs: TField:= Q.FieldByName('includes');
+      var FDeps: TField:= Q.FieldByName('deps'    );
+      while not Q.Eof do
+      begin
+        Row.Path        := FPath.AsString;
+        Row.UsesText    := FUses.AsString;
+        Row.IncludesText:= FIncs.AsString;
+        Row.DepsText    := FDeps.AsString;
+        Row.Cacheable   := True;
+        // A stamp that does not read back as a number leaves the row out (its unit is scanned again).
+        if TryStrToInt64(FTime.AsString, Row.MTime) and TryStrToInt64(FSize.AsString, Row.Size) then List.Add(Row);
+        Q.Next;
+      end;
+      Result:= List.ToArray;
+    except
+      { A read-only open of a database from before the table: no cache, and the
+        fingerprint must not claim one. }
+      on E: Exception do
+      begin
+        Result:= nil;
+        AFingerprint:= '';
+      end;
+    end;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
+procedure TSQLiteSymbolStore.SaveClosureCache(const AFingerprint: string; const ARows: TArray<TClosureCacheRow>);
+var
+  Q   : TFDQuery;
+  Same: Boolean;
+begin
+  if FReadOnly then Exit;
+  Same:= GetMetaValue(CLOSURE_CACHE_FP_KEY) = AFingerprint;
+  if Same and (Length(ARows) = 0) then Exit;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    FConn.StartTransaction;
+    try
+      if not Same then
+      begin
+        FConn.ExecSQL('DELETE FROM closure_cache');  // dl:ok sql-update-delete-without-where@0a3a -- REVIEWED 2026-11-18 (INCR18): a new walk fingerprint invalidates every stored closure scan; closure_cache is a cache, nothing else reads it
+        FConn.ExecSQL('INSERT OR REPLACE INTO schema_meta(key, value) VALUES (?, ?)', [CLOSURE_CACHE_FP_KEY, AFingerprint]);
+      end;
+      for var R: TClosureCacheRow in ARows do
+        if not R.Cacheable then FConn.ExecSQL('DELETE FROM closure_cache WHERE path = ?', [R.Path]);
+      Q.SQL.Text:= 'INSERT OR REPLACE INTO closure_cache(path, mtime, size, uses, includes, deps) ' +
+                   'VALUES (:p, :m, :s, :u, :i, :d)';
+      Q.ParamByName('u').DataType:= ftWideMemo;
+      Q.ParamByName('i').DataType:= ftWideMemo;
+      Q.ParamByName('d').DataType:= ftWideMemo;
+      for var R: TClosureCacheRow in ARows do
+      begin
+        if not R.Cacheable then Continue;
+        Q.ParamByName('p').AsWideString:= R.Path;
+        Q.ParamByName('m').AsLargeInt  := R.MTime;
+        Q.ParamByName('s').AsLargeInt  := R.Size;
+        Q.ParamByName('u').AsWideMemo  := R.UsesText;
+        Q.ParamByName('i').AsWideMemo  := R.IncludesText;
+        Q.ParamByName('d').AsWideMemo  := R.DepsText;
+        Q.ExecSQL;
+      end;
+      FConn.Commit;
+    except
+      on E: Exception do
+      begin
+        FConn.Rollback;
+        raise;
+      end;
+    end;
+  finally
+    Q.Free;
+  end; // try
 end; // procedure
 
 { DEFERRED TEXT INDEX (PR #10, Jonathas Paiva, 2026-09-28 / 2026-10-14).

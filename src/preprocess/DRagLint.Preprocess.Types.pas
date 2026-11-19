@@ -125,6 +125,24 @@ type
     Resolved: TBytes ;
   end;
 
+  /// <summary>INCR18: one ACTIVE {$I} / {$INCLUDE} directive a 'defines-only'
+  /// run tried to resolve, whether a file answered or not.</summary>
+  /// <remarks>
+  /// Name is the include name as written (quotes stripped), BaseDir the folder
+  /// it was resolved from (the top-level file's folder at depth 0, the including
+  /// file's folder below), Path the absolute file that answered or '' when none
+  /// did. Probes come in the order the run met them, nested ones after their
+  /// parent; inactive and over-depth directives are not probed. Together with
+  /// the top-level bytes they name everything the run read from disk, so a
+  /// caller that keeps a result between runs can tell when it went stale:
+  /// PPResolveInclude answers another Path, or a Path's content changed.
+  /// </remarks>
+  TPPIncludeProbe = record
+    Name   : string;
+    BaseDir: string;
+    Path   : string;
+  end;
+
 /// <summary>Returns a TPPOptions initialized to the JS-oracle defaults:
 /// IncludeMode 'off', empty BaseDir, and NearSearch True (matching
 /// preprocess.js's options.nearSearch !== false default). Use this instead of

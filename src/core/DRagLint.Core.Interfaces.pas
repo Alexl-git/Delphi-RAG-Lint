@@ -225,6 +225,27 @@ type
   /// <para>Implemented by: TSQLiteSymbolStore</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
+  /// <summary>INCR18: one stored compile-closure scan (table closure_cache) --
+  /// DRagLint.Index.Closure.TClosureScan with its lists joined to text.</summary>
+  /// <remarks>
+  /// Path is the unit; Size its byte size and MTime its last-write FILETIME
+  /// (100 ns ticks, UTC) when it was scanned. UsesText: the unit names, joined
+  /// with '|'. IncludesText: the project-local include paths, joined with '|'.
+  /// DepsText: one line (LF) per include directive the scan tried to resolve,
+  /// 'name|base folder|resolved path|size|mtime' (path empty, size and mtime 0
+  /// when no file answered). Cacheable = False asks SaveClosureCache to DELETE
+  /// the row of Path instead of writing one; LoadClosureCache returns True only.
+  /// </remarks>
+  TClosureCacheRow = record
+    Path        : string ;
+    Size        : Int64  ;
+    MTime       : Int64  ;
+    UsesText    : string ;
+    IncludesText: string ;
+    DepsText    : string ;
+    Cacheable   : Boolean;
+  end;
+
   ISymbolStore = interface
     ['{6B9F8AC4-3F19-4E1A-9D38-1A2C3B7EF501}']
     /// <remarks>
@@ -3289,6 +3310,22 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function PurityNeedsRun: Boolean;
+    /// <summary>INCR18: the compile-closure scans an earlier index run stored
+    /// (table closure_cache) and the fingerprint they were stored under.</summary>
+    /// <param name="AFingerprint">Receives schema_meta closure_cache_fp, '' when
+    /// nothing was stored.</param>
+    /// <returns>Every stored row that carries its include dependencies; none on
+    /// a database without the table. A cache, not index data: only the closure
+    /// walk reads it, and it validates each row before use.</returns>
+    function LoadClosureCache(out AFingerprint: string): TArray<TClosureCacheRow>;
+    /// <summary>INCR18: stores closure scans under AFingerprint, one row per
+    /// path (a row with Cacheable = False deletes the stored row of its path).</summary>
+    /// <param name="AFingerprint">The walk's scan fingerprint; when it differs
+    /// from the stored one every stored row is deleted first.</param>
+    /// <param name="ARows">The scans the walk computed; nothing is written when
+    /// the list is empty and the fingerprint is unchanged.</param>
+    /// <remarks>One transaction. A no-op on a read-only store.</remarks>
+    procedure SaveClosureCache(const AFingerprint: string; const ARows: TArray<TClosureCacheRow>);
     /// <summary>Concept-search stage (XERJ item 5): brings the derived
     /// symbol_search table (and, through its triggers, symbol_search_fts) in
     /// line with symbols. Deletes rows whose symbol is gone, then inserts one

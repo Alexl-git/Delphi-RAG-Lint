@@ -322,7 +322,7 @@ const
   /// tests\autotest\run_help_env_table.ps1: every quoted 'DRAGLINT_*' literal
   /// under src\ must be a Name here and --help must print every Name. A new
   /// variable is added HERE in the same change, or that guard fails.</remarks>
-  ENV_VARS_HELP: array[0..83] of TEnvVarHelp = (
+  ENV_VARS_HELP: array[0..85] of TEnvVarHelp = (
     (Name: 'DRAGLINT_BUSY_TIMEOUT_MS';                Purpose: 'writer busy timeout in ms (overrides the built-in default; a non-negative integer)'),
     (Name: 'DRAGLINT_CHARTS_ALLOW_LIVE_DB';           Purpose: 'charts: lets CloneDb accept a non-clone (live) database'),
     (Name: 'DRAGLINT_CHARTS_DIR';                     Purpose: 'charts: folder of the charts scripts'),
@@ -359,6 +359,7 @@ const
     (Name: 'DRAGLINT_MERGE_TEST_EMPTY_REPLACEMENT';   Purpose: 'test hook: merge gets an empty replacement'),
     (Name: 'DRAGLINT_MERGE_TEST_FASTPATH';            Purpose: 'test hook: merge fast path'),
     (Name: 'DRAGLINT_NO_AUTOCREATE';                  Purpose: '1 = a query verb never builds a missing project index on first use'),
+    (Name: 'DRAGLINT_NO_CLOSURE_CACHE';               Purpose: 'any value makes index --project walk the compile closure cold: no stored unit scan is read or written (A/B)'),
     (Name: 'DRAGLINT_NO_FILE_FACTS';                  Purpose: 'forces the text read of a .dfm instead of the stored file facts'),
     (Name: 'DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE';     Purpose: '1|on|yes|true switches off the scoped receiver closure of the resolve pass (A/B)'),
     (Name: 'DRAGLINT_NO_SCOPED_RESOLVE';              Purpose: 'any value switches the scoped resolve pass off (whole-database A/B)'),
@@ -392,6 +393,7 @@ const
     (Name: 'DRAGLINT_TEST_LINT_FILE_DELAY_MS';        Purpose: 'test hook: delay per linted file'),
     (Name: 'DRAGLINT_TEST_METRIC_ALGO_BUMP';          Purpose: 'test hook: bumps the routine-metric marker hash version'),
     (Name: 'DRAGLINT_TEST_REINDEX_TIMEOUT_MS';       Purpose: 'test hook: reindex timeout'),
+    (Name: 'DRAGLINT_TEST_CLOSURE_CACHE_NO_INCLUDES'; Purpose: 'test hook: a stored closure scan is validated by the unit stamp only, not its include files (an unsound key)'),
     (Name: 'DRAGLINT_TEST_RESOLVE_DELAY_MS';          Purpose: 'test hook: delay in the resolve pass'),
     (Name: 'DRAGLINT_TEST_SCRATCH_PID';               Purpose: 'test hook: scratch-folder owner pid'),
     (Name: 'DRAGLINT_TEST_STORE_CLOSE_GRACE_MS';      Purpose: 'test hook: store-close grace period'),
@@ -3094,6 +3096,88 @@ end;
 /// stage completes would report the silence rather than break it. Exceptions
 /// propagate unchanged -- the heartbeat is stopped in a finally so a failing
 /// pass cannot leave a thread beating over the error message.</remarks>
+{ INCR18 CLOSURE CACHE: TClosureScan (the walk's view) <-> TClosureCacheRow (the
+  store's row). Lists are joined with '|' -- no unit name, Windows path or
+  recorded include name holds one (TClosureResolver refuses to record a name
+  that does) -- and a dependency per LF-terminated line. A stored row that does
+  not split back into whole dependencies is left out: its unit is scanned again. }
+const
+  CLOSURE_LIST_SEP   = '|';
+  CLOSURE_LINE_SEP   = #10;
+  CLOSURE_DEP_FIELDS = 5;
+  CLOSURE_DEP_NAME   = 0;
+  CLOSURE_DEP_BASE   = 1;
+  CLOSURE_DEP_PATH   = 2;
+  CLOSURE_DEP_SIZE   = 3;
+  CLOSURE_DEP_MTIME  = 4;
+
+function ClosureScansOf(const ARows: TArray<TClosureCacheRow>): TArray<TClosureScan>;
+var
+  List : TList<TClosureScan>;
+  Scan : TClosureScan;
+  Lines: TArray<string>;
+  Parts: TArray<string>;
+  Whole: Boolean;
+begin
+  List:= TList<TClosureScan>.Create;
+  try
+    for var Row: TClosureCacheRow in ARows do
+    begin
+      Scan:= Default(TClosureScan);
+      Scan.Path     := Row.Path;
+      Scan.Size     := Row.Size;
+      Scan.MTime    := Row.MTime;
+      Scan.UsesList := Row.UsesText.Split([CLOSURE_LIST_SEP], TStringSplitOptions.ExcludeEmpty);
+      Scan.Includes := Row.IncludesText.Split([CLOSURE_LIST_SEP], TStringSplitOptions.ExcludeEmpty);
+      Scan.Cacheable:= True;
+      Lines:= Row.DepsText.Split([CLOSURE_LINE_SEP], TStringSplitOptions.ExcludeEmpty);
+      SetLength(Scan.Deps, Length(Lines));
+      Whole:= True;
+      for var I: Integer:= 0 to High(Lines) do
+      begin
+        Parts:= Lines[I].Split([CLOSURE_LIST_SEP]);
+        Whole:= (Length(Parts) = CLOSURE_DEP_FIELDS)
+          and TryStrToInt64(Parts[CLOSURE_DEP_SIZE], Scan.Deps[I].Size)
+          and TryStrToInt64(Parts[CLOSURE_DEP_MTIME], Scan.Deps[I].MTime);
+        if not Whole then Break;
+        Scan.Deps[I].Name   := Parts[CLOSURE_DEP_NAME];
+        Scan.Deps[I].BaseDir:= Parts[CLOSURE_DEP_BASE];
+        Scan.Deps[I].Path   := Parts[CLOSURE_DEP_PATH];
+      end;
+      if Whole then List.Add(Scan);
+    end;
+    Result:= List.ToArray;
+  finally
+    List.Free;
+  end;
+end;
+
+function ClosureCacheRowsOf(const AScans: TArray<TClosureScan>): TArray<TClosureCacheRow>;
+var
+  Deps: TStringBuilder;
+begin
+  SetLength(Result, Length(AScans));
+  Deps:= TStringBuilder.Create;
+  try
+    for var I: Integer:= 0 to High(AScans) do
+    begin
+      Result[I].Path        := AScans[I].Path;
+      Result[I].Size        := AScans[I].Size;
+      Result[I].MTime       := AScans[I].MTime;
+      Result[I].Cacheable   := AScans[I].Cacheable;
+      Result[I].UsesText    := string.Join(CLOSURE_LIST_SEP, AScans[I].UsesList);
+      Result[I].IncludesText:= string.Join(CLOSURE_LIST_SEP, AScans[I].Includes);
+      Deps.Clear;
+      for var D: TClosureDep in AScans[I].Deps do
+        Deps.Append(D.Name).Append(CLOSURE_LIST_SEP).Append(D.BaseDir).Append(CLOSURE_LIST_SEP).Append(D.Path)
+          .Append(CLOSURE_LIST_SEP).Append(D.Size).Append(CLOSURE_LIST_SEP).Append(D.MTime).Append(CLOSURE_LINE_SEP);
+      Result[I].DepsText:= Deps.ToString;
+    end;
+  finally
+    Deps.Free;
+  end;
+end;
+
 procedure Stage(const AIndent, ALabel: string; AProc: TProc);
 var
   T0  : TDateTime;
@@ -6313,6 +6397,26 @@ begin
         var PPSrc: TPPUnitSourceResolver:= nil;
         if not AArgs.NoPreprocess then
           PPSrc:= InstallPPUnitSource(IdxBuild.Profile, nil, [LintLibraryDb(AArgs)]);
+        { INCR18 CLOSURE CACHE: what the last walk read out of each unit, reused
+          while the unit, every include file its scan read and the walk's
+          fingerprint are unchanged (TClosureResolver.EnableScanCache). Not on a
+          dry run (its store is in memory) and not with --no-preprocess (the
+          walk then has no used-unit source to count against). --rebuild walks
+          cold and replaces what is stored. DRAGLINT_NO_CLOSURE_CACHE: neither
+          read nor written. }
+        var UseClosureCache: Boolean:= (PPSrc <> nil) and (not AArgs.DryRun)
+          and (GetEnvironmentVariable('DRAGLINT_NO_CLOSURE_CACHE') = '');
+        if UseClosureCache then
+        begin
+          Cl.EnableScanCache(DRAGLINT_VERSION + '|' + DRAGLINT_EXTRACTOR_VERSION,
+            GetEnvironmentVariable('DRAGLINT_TEST_CLOSURE_CACHE_NO_INCLUDES') <> '');
+          if not AArgs.Rebuild then
+          begin
+            var StoredFp: string;
+            var StoredScans: TArray<TClosureScan>:= ClosureScansOf(Store.LoadClosureCache(StoredFp));
+            Cl.SeedScanCache(StoredFp, StoredScans);
+          end;
+        end;
         var CR: TClosureResult:= ResolveTargetClosure(Cl, AArgs.ProjectPath, AArgs.ExcludeGlobs, IdxTail);
         { The first pass could not see the project's own units yet; when an IF
           asked for a name it could not answer, resolve once more with them. }
@@ -6325,6 +6429,22 @@ begin
             CR:= ResolveTargetClosure(Cl, AArgs.ProjectPath, AArgs.ExcludeGlobs, IdxTail);
             PPSrc.AddUnitFiles(CR.Files, CR.SearchPaths);
           end;
+        end;
+        if UseClosureCache then
+        begin
+          var FreshScans: TArray<TClosureScan>:= Cl.FreshScans;
+          { Best effort: the walk's answer is already in CR. Rows a failed save
+            leaves behind are validated like any other before they are used. }
+          try
+            Store.SaveClosureCache(Cl.ScanFingerprint, ClosureCacheRowsOf(FreshScans));
+          except
+            on E: Exception do
+              Writeln(ErrOutput, Format('NOTE: the closure cache was not stored (%s: %s); the next index walks those units again.',
+                [E.ClassName, E.Message]));
+          end;
+          if GetEnvironmentVariable('DRAGLINT_PROFILE') <> '' then
+            Writeln(ErrOutput, Format('CLOSURE CACHE: %d unit scan(s) reused, %d computed (%d not cacheable)',
+              [Cl.ScanHits, Length(FreshScans), Cl.ScanUncacheable]));
         end;
         { Lane INC: each .inc is parsed in its includer's define context, with
           include names resolved on the same search path the closure used. }
