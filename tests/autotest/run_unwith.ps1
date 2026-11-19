@@ -227,8 +227,8 @@ try {
 
   # (k) positive control for the (g)/(j) scope: a planted folder of THIS run is
   # seen (plain and GUID-suffixed forms); a foreign run's folder is not.
-  $Own1 = "C:\TEMP\draglint_cyclefix_$($UwToken)_unwith"
-  $Own2 = "C:\TEMP\draglint_cyclefix_$($UwToken)_0badf00d_unwith"
+  $Own1 = "C:\TEMP\draglint_cyclefix_uw$($PID)x_unwith"   # = $UwToken, spelled with $PID for the scratch guard
+  $Own2 = "C:\TEMP\draglint_cyclefix_uw$($PID)x_0badf00d_unwith"
   $Alien = "C:\TEMP\draglint_cyclefix_uw$($PID)9x_unwith"
   try {
     foreach ($p in $Own1, $Own2, $Alien) { [void][IO.Directory]::CreateDirectory($p) }

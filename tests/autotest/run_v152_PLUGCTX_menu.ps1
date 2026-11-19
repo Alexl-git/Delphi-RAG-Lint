@@ -27,6 +27,10 @@ param(
   [switch]$Build,
   [string]$WorkDir = "$env:TEMP\drag-lint-v152-plugctx-$PID"
 )
+# H01-AUTOWRAP (v152 DDFIX-4, DDFIX5 pattern): the work dir is removed in the finally below; DL_KEEP_WORKDIR=1 keeps it.
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+$H01Root = $WorkDir
+try {
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path "$PSScriptRoot\..\..").Path
 $plug = Join-Path $repo 'src\delphi-plugin'
@@ -42,7 +46,7 @@ function Code([string]$text) {
 $hookUnit = 'DragLint.Plugin.EditorLocalMenu'
 $stubs = @('CheckInit', 'DisableRule', 'IdxRange', 'FixMarker', 'FieldRepo', 'ExtractConst')
 # rows whose unit needs the IDE (ToolsAPI) and cannot compile headless: id -> unit; their shape is read from the source
-$ideOnly = @{ 'fix-marker' = 'FixMarker'; 'disable-rule' = 'DisableRule' }  # DISRULE H5: Cmd.DisableRule uses ToolsAPI; VSFIX made Cmd.FixMarker a real command (ToolsAPI, Plugin.Editor)
+$ideOnly = @{ 'fix-marker' = 'FixMarker'; 'disable-rule' = 'DisableRule'; 'extract-constant' = 'ExtractConst' }  # DISRULE H5: Cmd.DisableRule uses ToolsAPI; VSFIX made Cmd.FixMarker a real command (ToolsAPI, Plugin.Editor); XCONST 97206eacd made Cmd.ExtractConst one (ToolsAPI)
 # id -> surfaces|needs (the PLUGCTX defaults; an owning lane that changes its row updates this map)
 $expect = [ordered]@{
   'check-init'       = 'main+editor|cnSymbol'
@@ -270,3 +274,4 @@ if ($Build) {
 if ($fail) { Write-Host "FAIL ($fail)" -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green
 exit 0
+} finally { Remove-WorkDir $H01Root -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

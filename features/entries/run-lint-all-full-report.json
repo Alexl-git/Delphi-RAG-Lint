@@ -17,7 +17,7 @@
     {
       "type": "cli",
       "verb": "lint-all",
-      "usage": "drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output|--report <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget] [--no-stand-down]",
+      "usage": "drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none] [--no-budget] [--no-stand-down]",
       "flags": [
         {
           "name": "--db",
@@ -37,7 +37,7 @@
         {
           "name": "--output",
           "arg": "<report.txt>",
-          "summary": "alias --report; default lint-report-YYYYMMDD.txt beside --project, else beside the DB"
+          "summary": "default lint-report-YYYYMMDD.txt beside --project, else beside the DB"
         },
         {
           "name": "--json"

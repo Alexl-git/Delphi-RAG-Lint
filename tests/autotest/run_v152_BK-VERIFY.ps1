@@ -62,13 +62,15 @@ end.
     [IO.File]::WriteAllText($u, (($Unit -replace "`r`n", "`n") -replace "`n", "`r`n"), $Ascii)
     [IO.File]::WriteAllText($dpr, "program SeamTmp;`r`nuses`r`n  uSeamTmp in 'uSeamTmp.pas';`r`nbegin`r`nend.`r`n", $Ascii)
     if (Test-Path $db) { [IO.File]::Delete($db) }
-    & { $ErrorActionPreference = 'Continue'; & $Exe index --project $dpr --db $db 2>&1 | ForEach-Object { "$_" } } | Out-Null
+    & { $ErrorActionPreference = 'Continue'; & $Exe index --project $dpr --db $db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-Null
   }
   function Fix-Line6 {
-    (& { $ErrorActionPreference = 'Continue'; & $Exe lint --file $u --db $db --fix --fix-line 6 --fix-rule const-casing --apply --no-compile-gate 2>&1 | ForEach-Object { "$_" } } | Out-String)
+    (& { $ErrorActionPreference = 'Continue'; & $Exe lint --file $u --db $db --library-db none --fix --fix-line 6 --fix-rule const-casing --apply --no-compile-gate 2>&1 | ForEach-Object { "$_" } } | Out-String)
   }
 
-  # A2 first: the positive control (no seam -> refused, file untouched)
+  # A2 first: the positive control (no seam -> refused, file untouched). --library-db none on index and fix:
+  # since 1.52 a missing --library-db falls back to the manifest platform library, which on a dev box exists
+  # and lifts [no-library] -- the fixture must not depend on (or read) the machine's real library.
   Reset-Fixture
   $env:DRAGLINT_RENAME_TEST_UNGATED = $null
   $o = Fix-Line6

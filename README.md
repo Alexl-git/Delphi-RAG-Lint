@@ -1305,7 +1305,7 @@ A verb's usage line names the canonical flag only. Each alias is accepted wherev
 | `--force-reparse` | `--no-skip` | back-compat: the first spelling of the index re-parse switch |
 | `--help` | `-h`, `-?` | convention: the short help tokens every CLI user tries first |
 | `--in` | `--file` | one input-file option (TArgs.InFile); --in is the spelling the ask verb's own parser accepts, so it is the one that works on every verb |
-| `--output` | `--out` | back-compat: owner ruling ENG-6 (2026-09-22/23) -- scripts that use --out keep working |
+| `--output` | `--out`, `--report` | back-compat: owner ruling ENG-6 (2026-09-22/23) -- scripts that use --out keep working; --report (1.52 SMALLS 8611fb1d1) names the lint-all report file |
 | `--scan-libraries-win` | `--scan-libraries` | back-compat: the spelling before --scan-libraries-all existed |
 
 <!-- dl:registry:end flag-aliases -->
