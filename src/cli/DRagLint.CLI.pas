@@ -982,7 +982,10 @@ begin
   if ParamCount > 0 then Result.Command:= ParamStr(1); { LoadConfigDefaults keys on the verb }
   { `ask`, `protocol` and `mcp-config` parse their own flags (DRagLint.Charts.AskVerb, DRagLint.Core.ProtocolReg,
     DRagLint.MCP.ClientConfig) and print nothing else: no defaults note on stderr }
-  if MatchStr(Result.Command, ['ask', 'protocol', 'mcp-config', 'init', 'syntax-count', 'uses-recover']) then Exit;
+  { 1.52.2: the no-config warning (TManifestIO.Load) stays off where stderr must stay clean. }
+  var SelfParsing:= MatchStr(Result.Command, ['ask', 'protocol', 'mcp-config', 'init', 'syntax-count', 'uses-recover']);
+  TManifestIO.QuietNoManifest:= SelfParsing or HasSwitch('--quiet') or JsonOutputRequested;
+  if SelfParsing then Exit;
   LoadConfigDefaults(Result);
   if ParamCount = 0 then begin Result.ShowHelp:= True; Exit; end;
   Result.Command:= ParamStr(1);
