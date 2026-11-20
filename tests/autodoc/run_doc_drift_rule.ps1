@@ -139,7 +139,7 @@ try {
 
   # ---- Part B: fix the safe subset -----------------------------------------
   # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
-  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --apply --no-compile-gate --no-backup 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --apply --no-compile-gate --no-backup --disable param-name-prefix 2>$null } | Out-Null
   $afterFix = Get-Content -Raw $target
   $afterFLines = [IO.File]::ReadAllLines($target)
   $afterFSpan  = GetSpanThroughF $afterFLines
@@ -165,7 +165,7 @@ try {
   # ---- Part C: idempotency -------------------------------------------------
   $before2 = Get-Content -Raw $target
   # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
-  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --apply --no-compile-gate --no-backup 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --apply --no-compile-gate --no-backup --disable param-name-prefix 2>$null } | Out-Null
   $after2 = Get-Content -Raw $target
   Check '2nd --fix is byte-identical (idempotent)' ($before2 -eq $after2)
 
