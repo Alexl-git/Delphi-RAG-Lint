@@ -38,7 +38,9 @@ it is missing or older than its sources.
 2. Write/update the wiki page named in `wikiPage` (yours; the registry links to it).
 3. `featuregen normalise`, then `featuregen build --all`; commit the regenerated `docs\wiki`
    pages, README / AI-USAGE blocks, `features\generated\` (manifest.json, cli-reference.md,
-   site-pages.json) and the website set `WWW\help\dl\` WITH the feature.
+   site-pages.json) WITH the feature. `WWW\` is NOT in this repo (owner 2026-11-20: not on
+   GitHub; it is its own local repo, ignored here): featuregen still writes `WWW\help\dl\` on
+   disk and WEBSITE commits it in the WWW repo -- never `git add` anything under `WWW\` here.
 4. `tests\autotest\run_feature_registry_guard.ps1` -- names what is missing.
 5. Never hand-edit `Home.md`, `Features.md`, `Feature-Index.md`, `Quick-Help.md`, a
    `dl:registry` block or anything under `WWW\help\dl\`; edit the entry or `features\templates\`
