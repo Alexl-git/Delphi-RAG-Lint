@@ -94,7 +94,7 @@ type
 /// <seealso cref="DRagLint.FieldRepo.Schema.OpenRepository"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function RunOrmGenVerb(const pOptions: TOrmVerbOptions; pOut: TStrings): Integer;  // dl:ok unused-public-symbol@bfa6 -- REVIEWED 2026-11-17 v152 TTGEN: public API used by tests\fieldrepo\OrmGenTests.dpr and by CLI.Repo after the TTGEN handover
+function RunOrmGenVerb(const pOptions: TOrmVerbOptions; pOut: TStrings): Integer;
 implementation
 
 uses

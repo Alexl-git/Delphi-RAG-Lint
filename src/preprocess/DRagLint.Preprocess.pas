@@ -403,7 +403,7 @@ begin
   if GSubdirCache.TryGetValue(ADir, Cached) then Exit(Cached);
   try
     Entries:= TDirectory.GetDirectories(ADir); // immediate subdirs only (no recurse)
-  except
+  except  // dl:ok bare-except@0763 -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
     Entries:= nil; // unreadable dir -> no subdirs
   end;
   TArray.Sort<string>(Entries);

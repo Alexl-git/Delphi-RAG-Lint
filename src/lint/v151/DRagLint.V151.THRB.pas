@@ -206,7 +206,7 @@ end;
 destructor TThrbRun.Destroy;
 begin
   FParsedFile.Free;
-  inherited;  // dl:ok inherited-bare@246d -- REVIEWED 2026-11-14 v151 INT: bare inherited calls the same-named ancestor method, intended
+  inherited;
 end;
 
 { The nearest enclosing defProc or lambda of ANode (not ANode itself). }

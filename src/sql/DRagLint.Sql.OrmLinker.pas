@@ -276,7 +276,7 @@ begin
     OutStore.GetConnection.StartTransaction;
     try
       { Clear prior orm_links so we don't accumulate stale rows. }
-      OutStore.GetConnection.ExecSQL('DELETE FROM orm_links');
+      OutStore.GetConnection.ExecSQL('DELETE FROM orm_links');  // dl:ok sql-update-delete-without-where@2a0e -- REVIEWED 2026-11-19 SLZ-MARK: orm_links is cleared inside the transaction before the rebuild
 
       QIns:= TFDQuery.Create(nil);
       try

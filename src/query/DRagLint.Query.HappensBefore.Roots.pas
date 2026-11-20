@@ -391,7 +391,7 @@ function EscapeClassOf(const pStore: ISymbolStore; pRoutineId: Int64): THbEscape
 /// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function EscapeClassCode(pClass: THbEscapeClass): string;  // dl:ok unused-public-symbol@fe2b -- REVIEWED 2026-11-17 v152 HBROOTS: check-init roots API for lanes HBSOLVER / HBEVORD (merge after HBROOTS); today only tests\fixtures\happens-before\roots-harness\RootsHarness.dpr calls it
+function EscapeClassCode(pClass: THbEscapeClass): string;
 
 implementation
 

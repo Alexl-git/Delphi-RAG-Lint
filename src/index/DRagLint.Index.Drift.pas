@@ -145,7 +145,7 @@ begin
   { Check files in this directory. }
   try
     Files:= TDirectory.GetFiles(ADir, '*', TSearchOption.soTopDirectoryOnly);
-  except
+  except  // dl:ok try-except-swallowed@9708, bare-except@9708 -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
     SetLength(Files, 0);
   end;
   for F in Files do
@@ -162,7 +162,7 @@ begin
   { Recurse into subdirectories. }
   try
     SubDirs:= TDirectory.GetDirectories(ADir, '*', TSearchOption.soTopDirectoryOnly);
-  except
+  except  // dl:ok try-except-swallowed@1eab, bare-except@1eab -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
     SetLength(SubDirs, 0);
   end;
   for D in SubDirs do

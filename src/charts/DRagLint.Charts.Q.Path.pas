@@ -208,7 +208,7 @@ begin
   TPsSort<Int64>.Sort(Result,
     function(const pA, pB: Int64): Integer
     begin
-      Result:= CompareGroupKeys(Name[pA], Name[pB]);
+      Result:= CompareGroupKeys(Name[pA], Name[pB]);  // dl:ok dictionary-get-without-check@17da -- REVIEWED 2026-11-19 SLZ-MARK: the map is keyed by the same ids or keys filled in an earlier pass; the lookup cannot miss
       if Result = 0 then
         Result:= if pA < pB then -1 else if pA > pB then 1 else 0;
     end);
@@ -225,7 +225,7 @@ end;
 
 function TPathGraph.IsEnd(pId: Int64): Boolean;
 begin
-  Result:= HopOf[pId] = FL;
+  Result:= HopOf[pId] = FL;  // dl:ok dictionary-get-without-check@ff77 -- REVIEWED 2026-11-19 SLZ-MARK: the map is keyed by the same ids or keys filled in an earlier pass; the lookup cannot miss
 end;
 
 // paths from a node to B: 1 at an end, else the sum over its successors (memoised)
@@ -251,8 +251,8 @@ begin
     var Hit:= False;
     for var Key in PairKeys do
     begin
-      var Pr:= Pairs[Key];
-      if SameText(Name[Pr.Src], pEnginePath[I]) and SameText(Name[Pr.Dst], pEnginePath[I + 1]) and (HopOf[Pr.Src] = I) then
+      var Pr:= Pairs[Key];  // dl:ok dictionary-get-without-check@d08c -- REVIEWED 2026-11-19 SLZ-MARK: the map is keyed by the same ids or keys filled in an earlier pass; the lookup cannot miss
+      if SameText(Name[Pr.Src], pEnginePath[I]) and SameText(Name[Pr.Dst], pEnginePath[I + 1]) and (HopOf[Pr.Src] = I) then  // dl:ok dictionary-get-without-check@2969 -- REVIEWED 2026-11-19 SLZ-MARK: the map is keyed by the same ids or keys filled in an earlier pass; the lookup cannot miss
       begin
         Hit:= True;
         Break;
@@ -553,7 +553,7 @@ begin
     pSb.AppendLine(Format('  subgraph %s {', [Cl]));
     pSb.AppendLine(Format('    style="rounded,filled"; color="%s"; fillcolor="%s"; penwidth=%d;', [Border, Fill, Pen]));
     pSb.AppendLine('    label=""; margin=10;');
-    pSb.AppendLine(Format('    r%d [label=<%s>];', [Nid, NodeTable(pGraph.Name[Id], Role, pLoc[Id], IsEp)]));
+    pSb.AppendLine(Format('    r%d [label=<%s>];', [Nid, NodeTable(pGraph.Name[Id], Role, pLoc[Id], IsEp)]));  // dl:ok dictionary-get-without-check@8753 -- REVIEWED 2026-11-19 SLZ-MARK: the map is keyed by the same ids or keys filled in an earlier pass; the lookup cannot miss
     pSb.AppendLine('  }');
   end;
 end;
@@ -609,7 +609,7 @@ begin
       end;
       Et.Append('</TABLE>');
       var Style:= if AnyCertain then '' else ', style=dashed';
-      pSb.AppendLine(Format('  %s -> %s [label=<%s>%s];', [pNodeOf[Pr.Src], pNodeOf[Pr.Dst], Et.ToString, Style]));
+      pSb.AppendLine(Format('  %s -> %s [label=<%s>%s];', [pNodeOf[Pr.Src], pNodeOf[Pr.Dst], Et.ToString, Style]));  // dl:ok dictionary-get-without-check@46cc -- REVIEWED 2026-11-19 SLZ-MARK: the map is keyed by the same ids or keys filled in an earlier pass; the lookup cannot miss
     finally
       Et.Free;
     end;

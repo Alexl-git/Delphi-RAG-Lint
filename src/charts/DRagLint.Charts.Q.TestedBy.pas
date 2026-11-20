@@ -204,7 +204,7 @@ begin
     end;
     var FixtureNames: TArray<string>:= [];
     for var T in Tests do
-      FixtureNames:= FixtureNames + [T.Fixture];  // dl:ok duplicate-code@0c7d -- REVIEWED 2026-10-14: each Q unit ports ONE Emit-*.ps1 line for line (spec P3), and the PS emitters repeat this block verbatim; sharing it would make one parity finding span two questions
+      FixtureNames:= FixtureNames + [T.Fixture];
     var Fixtures:= SortUniqueNames(FixtureNames);
     var TestsOf:= function(const pFixture: string): TArray<TCoveringTest>
       begin
@@ -306,7 +306,7 @@ begin
           AddRowCluster(Sb, 'cluster_fx_' + IntToStr(NodeId), Nid, Fx,
             Format('%d test%s', [Length(Ft), if Length(Ft) <> 1 then 's' else '']), Cells, Style);
           Sb.AppendLine(Format('  %s -> %s:p1 [color="%s"];', [Nid, FNid, TEST_BORDER]));
-        end;  // dl:ok duplicate-code@56fd -- REVIEWED 2026-10-14: each Q unit ports ONE Emit-*.ps1 line for line (spec P3), and the PS emitters repeat this block verbatim; sharing it would make one parity finding span two questions
+        end;
       end;
       Sb.AppendLine('}');
 

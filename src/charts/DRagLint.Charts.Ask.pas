@@ -1031,7 +1031,7 @@ begin
   ForceDirectories(Dir);
   try
     Chart:= RunEmitter(Emitter, pArgs, Dir);
-  except  // dl:ok bare-except@1755 -- REVIEWED 2026-10-13: removes the bundle folder this call made when it is still empty, then re-raises; the refusal is the answer
+  except
     if DirWasNew and TDirectory.Exists(Dir) and IsEmptyDir(Dir) then
       TDirectory.Delete(Dir);
     raise;

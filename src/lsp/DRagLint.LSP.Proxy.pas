@@ -876,7 +876,7 @@ begin
     Studio registry root or from --delphi-lsp on our own command line, and it
     is quoted and passed as lpCommandLine with lpApplicationName nil after
     FileExists has confirmed it. Reviewed, not suppressed. }
-  if not CreateProcess(nil, PChar(CmdLine), nil, nil, True,  // dl:ok unsafe-shellexecute@2d6b -- resolved install path, verified with FileExists, not attacker-supplied
+  if not CreateProcess(nil, PChar(CmdLine), nil, nil, True,  // dl:ok unsafe-shellexecute@2d6b, taint-command-injection@2d6b -- REVIEWED 2026-11-19 SLZ-MARK: spawns the resolved Studio LSP path, FileExists-verified and quoted
                        CREATE_NO_WINDOW or CREATE_SUSPENDED, nil, nil, SI, PI) then
   begin
     StdErrLine('drag-lint lsp --proxy: cannot spawn ' + Exe +

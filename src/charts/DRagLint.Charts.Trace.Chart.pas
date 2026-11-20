@@ -1050,8 +1050,8 @@ begin
   var Parts:= TList<string>.Create;
   try
     for var Ch in pItem.Children do
-      Parts.Add(if Ch.Kind = KIND_COND then 'c:' + Ch.Keyword + '|' + Ch.Condition + '|' + Ch.Anchor + '|' + Ch.Note  // dl:ok hardcoded-absolute-path@a84e -- REVIEWED 2026-10-18: 'c:' is the row-signature tag of a condition child (the PS $sig 'c:'), not a drive path
-        else 'f:' + Ch.Head + '|' + Ch.Text + '|' + Ch.Anchor + '|' + Ch.Note);  // dl:ok hardcoded-absolute-path@a401 -- REVIEWED 2026-10-18: 'f:' is the row-signature tag of a facet child (the PS $sig 'f:'), not a drive path
+      Parts.Add(if Ch.Kind = KIND_COND then 'c:' + Ch.Keyword + '|' + Ch.Condition + '|' + Ch.Anchor + '|' + Ch.Note
+        else 'f:' + Ch.Head + '|' + Ch.Text + '|' + Ch.Anchor + '|' + Ch.Note);
     var Sig:= pItem.Kind + '|' + pItem.Text + '|' + pItem.Grade + '|' + pItem.Anchor + '|'
       + string.Join('||', Parts.ToArray);
     for var R in pNode.Rows do
@@ -1610,7 +1610,7 @@ begin
         + Ink[0] + '"; fillcolor="' + Ink[1] + '"; penwidth=1.5; margin=12;');
       for var N in InLane do
         if N.Kind <> KIND_ALSO then
-          L(pNodeLines[N.Key]);
+          L(pNodeLines[N.Key]);  // dl:ok dictionary-get-without-check@1a33 -- REVIEWED 2026-11-19 SLZ-MARK: the map is keyed by the same ids or keys filled in an earlier pass; the lookup cannot miss
       for var N in InLane do
         if N.Kind = KIND_ALSO then
         begin

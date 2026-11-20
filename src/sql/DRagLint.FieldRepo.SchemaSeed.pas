@@ -106,7 +106,7 @@ type
 /// <seealso cref="DRagLint.FieldRepo.SchemaSeed.TSeedRun.Execute"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function RunSchemaSeed(pTarget: TFDConnection; const pSources: TSchemaSources;  // dl:ok unused-public-symbol@d7b0 -- consumed by lane TTE (CLI.Repo) and SchemaSeedTests
+function RunSchemaSeed(pTarget: TFDConnection; const pSources: TSchemaSources;
   pMode: TSchemaSeedMode; pDryRun: Boolean; pStampUtc: TDateTime): TSchemaSeedResult;
 
 /// <summary>Opens the four schema queries on a live Firebird connection.</summary>
@@ -124,7 +124,7 @@ function RunSchemaSeed(pTarget: TFDConnection; const pSources: TSchemaSources;  
 /// <seealso cref="DRagLint.FieldRepo.SchemaSeed.OpenSchemaSources.OpenQuery"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function OpenSchemaSources(pFb: TFDConnection): TSchemaSources;  // dl:ok unused-public-symbol@0b64 -- consumed by lane TTE (CLI.Repo)
+function OpenSchemaSources(pFb: TFDConnection): TSchemaSources;
 
 /// <summary>Frees the datasets of pSources and sets them to nil.</summary>
 /// <param name="pSources">Sources from OpenSchemaSources; nil members are skipped.</param>
@@ -134,7 +134,7 @@ function OpenSchemaSources(pFb: TFDConnection): TSchemaSources;  // dl:ok unused
 /// <para>Calls: FreeAndNil</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-procedure FreeSchemaSources(var pSources: TSchemaSources);  // dl:ok unused-public-symbol@9833 -- consumed by lane TTE (CLI.Repo)
+procedure FreeSchemaSources(var pSources: TSchemaSources);
 
 implementation
 
@@ -801,7 +801,7 @@ begin
         pTarget.Rollback
       else
         pTarget.Commit;
-    except  // dl:ok bare-except@46a7 -- rollback then re-raise, nothing swallowed
+    except
       pTarget.Rollback;
       raise;
     end;
@@ -820,7 +820,7 @@ function OpenSchemaSources(pFb: TFDConnection): TSchemaSources;
       Result.FetchOptions.Unidirectional := False;
       Result.Open(pSql);  // dl:ok dataset-open-without-close@9c7f -- the open dataset IS the result; FreeSchemaSources releases it
       Result.FetchAll;
-    except  // dl:ok bare-except@041e -- free the half-built query, then re-raise
+    except
       Result.Free;
       raise;
     end;
@@ -833,7 +833,7 @@ begin
     Result.RelationFields := OpenQuery(SQL_RELATION_FIELDS);
     Result.PrimaryKeys := OpenQuery(SQL_PRIMARY_KEYS);
     Result.Generators := OpenQuery(SQL_GENERATORS);
-  except  // dl:ok bare-except@92a7 -- free the queries opened so far, then re-raise
+  except
     FreeSchemaSources(Result);
     raise;
   end;

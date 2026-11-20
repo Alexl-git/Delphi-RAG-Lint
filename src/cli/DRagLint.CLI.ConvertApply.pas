@@ -1427,7 +1427,7 @@ begin
       var Reordered: TJSONArray:= ReorderBatchJson(BatchJson, SliceStart, Units, CmdOrder);
       if Reordered <> nil then
       begin
-        BatchJson.Free;  // dl:ok unprotected-object-free@c94d -- REVIEWED 2026-11-03: BatchJson is owned by DoConvertApply's outer try-finally (BatchJson.Free); this swaps in the reordered copy, which that finally then frees
+        BatchJson.Free;
         BatchJson:= Reordered;
       end;
       EmitBatchJson(Result, NOk, NRefused);

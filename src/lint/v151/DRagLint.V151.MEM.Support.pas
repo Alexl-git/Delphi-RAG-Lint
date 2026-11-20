@@ -1634,9 +1634,9 @@ var
         if (Nm = 'getmem') or ((Nm = 'new') and (Length(Args) = 1)) then
           AddAlloc(N, Args[0], Disp, RULE_RAWLEAK)
         else if MatchStr(Nm, ['regopenkeyex', 'regopenkeyexw', 'regopenkeyexa']) and (Length(Args) = 5) then // dl:ok magic-literal@7ae6 -- Win32 API argument position / count
-          AddAllocHandle(N, Args[4], Disp, 'RegCloseKey')  // dl:ok magic-literal@ac81 -- REVIEWED 2026-11-14 v151 MEM: Win32 API argument position (phkResult of RegOpenKeyEx)
+          AddAllocHandle(N, Args[4], Disp, 'RegCloseKey')
         else if MatchStr(Nm, ['regcreatekeyex', 'regcreatekeyexw', 'regcreatekeyexa']) and (Length(Args) = 9) then // dl:ok magic-literal@da5c -- Win32 API argument position / count
-          AddAllocHandle(N, Args[7], Disp, 'RegCloseKey')  // dl:ok magic-literal@8a19 -- REVIEWED 2026-11-14 v151 MEM: Win32 API argument position (phkResult of RegCreateKeyEx)
+          AddAllocHandle(N, Args[7], Disp, 'RegCloseKey')
         else if MatchStr(Nm, ['regopenkey', 'regcreatekey']) and (Length(Args) = 3) then // dl:ok magic-literal@09e2 -- Win32 API argument position / count
           AddAllocHandle(N, Args[2], Disp, 'RegCloseKey')
         else if (Nm = 'findfirst') and (Length(Args) = 3) then // dl:ok magic-literal@0cca -- Win32 API argument position / count

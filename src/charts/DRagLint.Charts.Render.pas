@@ -1316,7 +1316,7 @@ end;
 
 procedure OpenInBrowser(const pPath: string);
 begin
-  ShellExecute(0, 'open', PChar(pPath), nil, nil, SW_SHOWNORMAL);
+  ShellExecute(0, 'open', PChar(pPath), nil, nil, SW_SHOWNORMAL);  // dl:ok taint-command-injection@ea37 -- REVIEWED 2026-11-19 SLZ-MARK: ShellExecute open on the report file this run just wrote; the path comes from the out-dir
 end;
 
 end.

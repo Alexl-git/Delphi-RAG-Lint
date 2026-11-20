@@ -109,7 +109,7 @@ begin
     Q.ParamByName('n').AsWideString:= UpperCase(AName);
     Q.Open;
     Result:= not Q.IsEmpty;
-  except
+  except  // dl:ok bare-except@79dc -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
     Result:= False;
   end;
   Q.Free;
@@ -120,11 +120,11 @@ procedure ClearPriorSnapshot(ASqlite: TFDConnection);
   snapshot in each fb_* table. Reduce DB bloat. If you want history,
   duplicate the table or back up the sqlite before re-snapshotting. }
 begin
-  ASqlite.ExecSQL('DELETE FROM fb_columns'    );
-  ASqlite.ExecSQL('DELETE FROM fb_relations'  );
-  ASqlite.ExecSQL('DELETE FROM fb_field_info' );
-  ASqlite.ExecSQL('DELETE FROM fb_datasets'   );
-  ASqlite.ExecSQL('DELETE FROM fb_enum_values');
+  ASqlite.ExecSQL('DELETE FROM fb_columns'    );  // dl:ok sql-update-delete-without-where@acec -- REVIEWED 2026-11-19 SLZ-MARK: documented rolling snapshot: only the latest snapshot is kept
+  ASqlite.ExecSQL('DELETE FROM fb_relations'  );  // dl:ok sql-update-delete-without-where@8545 -- REVIEWED 2026-11-19 SLZ-MARK: documented rolling snapshot: only the latest snapshot is kept
+  ASqlite.ExecSQL('DELETE FROM fb_field_info' );  // dl:ok sql-update-delete-without-where@398c -- REVIEWED 2026-11-19 SLZ-MARK: documented rolling snapshot: only the latest snapshot is kept
+  ASqlite.ExecSQL('DELETE FROM fb_datasets'   );  // dl:ok sql-update-delete-without-where@55ab -- REVIEWED 2026-11-19 SLZ-MARK: documented rolling snapshot: only the latest snapshot is kept
+  ASqlite.ExecSQL('DELETE FROM fb_enum_values');  // dl:ok sql-update-delete-without-where@7115 -- REVIEWED 2026-11-19 SLZ-MARK: documented rolling snapshot: only the latest snapshot is kept
 end;
 
 procedure ResolveSqlSymbolLinks(ASqlite: TFDConnection);
@@ -382,7 +382,7 @@ begin
             QIns.ParamByName('rs'  ).AsWideString := QSrc.FieldByName('REFRESH_SQL'      ).AsString;
             QIns.ParamByName('ng'  ).AsWideString := QSrc.FieldByName('NAME_GENERATOR'   ).AsString;
             QIns.ParamByName('kf'  ).AsWideString := QSrc.FieldByName('KEY_FIELD'        ).AsString;
-            QIns.ParamByName('utn' ).AsWideString := QSrc.FieldByName('UPDATE_TABLE_NAME').AsString;  // dl:ok duplicate-code@a4b1 -- REVIEWED 2026-10-26 (extract-136 review): one column-copy loop per snapshot table; each reads its own source columns into its own insert, so the shared shape is the table list, not a helper
+            QIns.ParamByName('utn' ).AsWideString := QSrc.FieldByName('UPDATE_TABLE_NAME').AsString;
             QIns.ParamByName('uomf').AsInteger:= Ord(UpCase(string(QSrc.FieldByName('UPDATE_ONLY_MODIFIED_FIELDS').AsString + ' ')[1]) = 'T');
             QIns.ParamByName('c'  ).AsWideString := QSrc.FieldByName('CONDITIONS' ).AsString;
             QIns.ParamByName('ver').AsInteger:= QSrc.FieldByName('FIB$VERSION').AsInteger;

@@ -989,7 +989,7 @@ begin
   else if (ARef.Kind = REF_KIND_RAISE) or (ARef.Kind = REF_KIND_RAISE_EXPR) or (ARef.Kind = REF_KIND_RERAISE) then Result:= 'raises'
   else if (ARef.Kind = REF_KIND_HANDLE) or (ARef.Kind = REF_KIND_HANDLE_ALL) then Result:= 'handles'
   else if ((ARef.Kind = 'member-access') or (ARef.Kind = REF_KIND_INDEX_ACCESS)) and (ARef.AccessMode = 'read' ) then Result:= 'reads'
-  else if ((ARef.Kind = 'member-access') or (ARef.Kind = REF_KIND_INDEX_ACCESS)) and (ARef.AccessMode = 'write') then Result:= 'writes'  // dl:ok ifthen-to-if-expression@bdd6 -- the tail of a nine-way bucket chain; an if-expression for the last arm only would split the table
+  else if ((ARef.Kind = 'member-access') or (ARef.Kind = REF_KIND_INDEX_ACCESS)) and (ARef.AccessMode = 'write') then Result:= 'writes'
   else Result:= 'calls'; { call + anything else }
 end; // function
 

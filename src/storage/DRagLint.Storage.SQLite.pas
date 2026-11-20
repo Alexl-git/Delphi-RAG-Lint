@@ -6007,7 +6007,7 @@ procedure TSQLiteSymbolStore.PutFileFacts(const AToken: TFileTxToken; const AInc
           P.DataType:= if MatchText(P.Name, FF_TEXT_PARAMS) then ftWideString else ftLargeint;
         end;
         Result.Prepare;
-      except  // dl:ok bare-except@041e -- frees the half-prepared query and re-raises; nothing is swallowed
+      except
         Result.Free;
         raise;
       end;
@@ -6130,7 +6130,7 @@ begin
   begin
     Q:= Prepared(FF_DEL_ATR);
     Q.ParamByName('fid').AsLargeInt:= AToken.FileId;
-    Q.ExecSQL;  // dl:ok duplicate-code@6087 -- each optional fact table (comment_facts, attributes) has its own probe + delete + insert block over the shared FF_* prepared statements; columns differ, a generic writer would hide them
+    Q.ExecSQL;
     Q:= Prepared(FF_INS_ATR);
     for I:= 0 to High(AAttributes) do
     begin
@@ -7132,8 +7132,8 @@ begin
     QE.SQL.Text  := 'INSERT INTO dispatch_edges(base_symbol_id, impl_symbol_id, kind, confidence) VALUES (:b, :i, :k, :c)';
     QA.Connection:= FConn;
     QA.SQL.Text  := 'INSERT INTO classref_args(ref_id, arg_index, param_symbol_id, class_symbol_id, confidence) VALUES (:r, :a, :p, :k, :c)';
-      FConn.ExecSQL('DELETE FROM dispatch_edges');
-      FConn.ExecSQL('DELETE FROM classref_args');
+      FConn.ExecSQL('DELETE FROM dispatch_edges');  // dl:ok sql-update-delete-without-where@f993 -- REVIEWED 2026-11-19 SLZ-MARK: intentional full clear of a derived table inside the rebuild transaction
+      FConn.ExecSQL('DELETE FROM classref_args');  // dl:ok sql-update-delete-without-where@34d7 -- REVIEWED 2026-11-19 SLZ-MARK: intentional full clear of a derived table inside the rebuild transaction
       for E in Res.Edges do
       begin
         QE.ParamByName('b').AsLargeInt  := E.BaseId;
@@ -7152,7 +7152,7 @@ begin
         QA.ExecSQL;
       end;
       FConn.Commit;
-    except // dl:ok bare-except@4bef -- rollback and RE-RAISE: nothing is swallowed, any failure must undo the wipe
+    except
       FConn.Rollback;
       raise;
     end;
@@ -7317,7 +7317,7 @@ begin
     try
       Q.Open;
       Result := not Q.IsEmpty;
-    except
+    except  // dl:ok bare-except@79dc -- REVIEWED 2026-11-19 SLZ-MARK: probe or read on an old, absent or locked DB; the handler answers with the documented fallback, nothing is lost silently
       Result := False;
     end;
   finally
@@ -8415,7 +8415,7 @@ begin
       try
         StatQ.Open;
         HaveStats:= not StatQ.IsEmpty;
-      except
+      except  // dl:ok bare-except@df16 -- REVIEWED 2026-11-19 SLZ-MARK: probe or read on an old, absent or locked DB; the handler answers with the documented fallback, nothing is lost silently
         HaveStats:= True; { cannot tell -> do not attempt a write }
       end;
     finally
@@ -8657,7 +8657,7 @@ begin
     try
       Q.Open;
       if not Q.IsEmpty then AFound := StrToIntDef(Q.Fields[0].AsString, 0);
-    except
+    except  // dl:ok bare-except@d322 -- REVIEWED 2026-11-19 SLZ-MARK: probe or read on an old, absent or locked DB; the handler answers with the documented fallback, nothing is lost silently
       { table absent (pre-schema_meta DB) -> leave AFound = 0. }
       AFound := 0;
     end;
@@ -9680,8 +9680,8 @@ begin
   if not FFtsDeferred then Exit; { triggers still live: row-by-row, correct anyway }
   FConn.ExecSQL('CREATE TEMP TABLE IF NOT EXISTS dl_fts_gone (id INTEGER PRIMARY KEY, text TEXT NOT NULL)');
   FConn.ExecSQL('CREATE TEMP TABLE IF NOT EXISTS dl_fts_files (f INTEGER PRIMARY KEY)');
-  FConn.ExecSQL('DELETE FROM temp.dl_fts_gone');
-  FConn.ExecSQL('DELETE FROM temp.dl_fts_files');
+  FConn.ExecSQL('DELETE FROM temp.dl_fts_gone');  // dl:ok sql-update-delete-without-where@9d8d -- REVIEWED 2026-11-19 SLZ-MARK: intentional full clear of a derived table inside the rebuild transaction
+  FConn.ExecSQL('DELETE FROM temp.dl_fts_files');  // dl:ok sql-update-delete-without-where@6a5d -- REVIEWED 2026-11-19 SLZ-MARK: intentional full clear of a derived table inside the rebuild transaction
   FFtsTargeted:= True;
 end; // procedure
 
@@ -10222,7 +10222,7 @@ end;
 
 procedure TSQLiteSymbolStore.ClearCallEdges;
 begin
-  FConn.ExecSQL('DELETE FROM call_edges');
+  FConn.ExecSQL('DELETE FROM call_edges');  // dl:ok sql-update-delete-without-where@e720 -- REVIEWED 2026-11-19 SLZ-MARK: intentional full clear of a derived table inside the rebuild transaction
   { AND THE IDENTITIES THOSE EDGES PUT ON THE REFS. UpsertCallEdge writes
     refs.symbol_id for a certain edge, so dropping the edges without clearing
     the column would leave a ref pointing at a declaration this run has decided
@@ -10254,7 +10254,7 @@ begin
     which never reaches here. }
   FConn.ExecSQL('UPDATE refs SET symbol_id = NULL WHERE symbol_id IS NOT NULL');
   { and the member accesses the same pass wrote -- same lifetime as the edges }
-  if HasMemberAccesses then FConn.ExecSQL('DELETE FROM member_accesses');
+  if HasMemberAccesses then FConn.ExecSQL('DELETE FROM member_accesses');  // dl:ok sql-update-delete-without-where@ca8a -- REVIEWED 2026-11-19 SLZ-MARK: intentional full clear of a derived table inside the rebuild transaction
   { 1.51.1 INC2: and the per-host bindings of the same pass -- same lifetime as the edges }
   if HasRefHostBindings then FConn.ExecSQL('DELETE FROM ref_host_bindings');  // dl:ok sql-update-delete-without-where@5ff7 -- REVIEWED 2026-11-16: a whole-database pass rewrites every row of this derived table, like call_edges above
 end;
@@ -13032,8 +13032,8 @@ begin
   FFtsTargeted:= False; { the DELETE below keeps no receipt, so the end must rebuild }
   FConn.StartTransaction;
   try
-    FConn.ExecSQL('DELETE FROM string_literals'); { FTS5 sync triggers fire unless deferred above }
-    FConn.ExecSQL('DELETE FROM files');           { cascades everything else    }
+    FConn.ExecSQL('DELETE FROM string_literals'); { FTS5 sync triggers fire unless deferred above }  // dl:ok sql-update-delete-without-where@4ebf -- REVIEWED 2026-11-19 SLZ-MARK: intentional full clear of a derived table inside the rebuild transaction
+    FConn.ExecSQL('DELETE FROM files');           { cascades everything else    }  // dl:ok sql-update-delete-without-where@f038 -- REVIEWED 2026-11-19 SLZ-MARK: intentional full clear of a derived table inside the rebuild transaction
     SetMetaValue(REBUILD_IN_PROGRESS_META_KEY, '1'); { same commit as the clear }
     FConn.Commit;
   except
@@ -13840,7 +13840,7 @@ begin
   if Result >= 0 then Exit;
 
   WantFull:= '';
-  try WantFull:= TPath.GetFullPath(APath); except WantFull:= APath; end;
+  try WantFull:= TPath.GetFullPath(APath); except WantFull:= APath; end;  // dl:ok bare-except@7253 -- REVIEWED 2026-11-19 SLZ-MARK: probe or read on an old, absent or locked DB; the handler answers with the documented fallback, nothing is lost silently
   if not SameText(WantFull, APath) then
   begin
     Result:= FindFileIdByPath(WantFull);
@@ -13869,7 +13869,7 @@ begin
         Inc(CandCount);
         OnlyId:= Q.FieldByName('id').AsLargeInt;
         CandFull:= '';
-        try CandFull:= TPath.GetFullPath(StoredPath); except CandFull:= StoredPath; end;
+        try CandFull:= TPath.GetFullPath(StoredPath); except CandFull:= StoredPath; end;  // dl:ok bare-except@d83d -- REVIEWED 2026-11-19 SLZ-MARK: probe or read on an old, absent or locked DB; the handler answers with the documented fallback, nothing is lost silently
         if (MatchId < 0) and SameText(CandFull, WantFull) then MatchId:= OnlyId;
       end;
       Q.Next;
@@ -14401,7 +14401,7 @@ begin
   try
     Result:= (not ProbeExists('SELECT 1 FROM call_edges LIMIT 1'))
              and ProbeExists('SELECT 1 FROM refs WHERE ' + CallSiteRefKindSql('refs') + ' LIMIT 1');
-  except
+  except  // dl:ok bare-except@5bb3 -- REVIEWED 2026-11-19 SLZ-MARK: probe or read on an old, absent or locked DB; the handler answers with the documented fallback, nothing is lost silently
     { call_edges absent altogether, or the probe failed for any other reason. We
       cannot show the edges are intact, and the cost of being wrong is asymmetric
       -- a needless rebuild costs seconds, a skipped one leaves a permanently
@@ -14709,7 +14709,7 @@ begin
         Q.ExecSQL;
       end;
       FConn.Commit;
-    except  // dl:ok bare-except@4bef -- rollback-then-reraise: every exception must undo the partial write, and none is swallowed
+    except
       FConn.Rollback;
       raise;
     end;
@@ -15045,7 +15045,7 @@ begin
       finally
         Ins.Free;
       end; // try
-    except  // dl:ok bare-except@4bef -- rollback then RE-RAISE: nothing is swallowed, any failure must undo the partial write
+    except
       FConn.Rollback;
       raise;
     end;
@@ -16343,7 +16343,7 @@ begin
       Q.ParamByName('id' ).AsLargeInt:= ASymbolId;
       Q.ExecSQL;
       Result:= Q.RowsAffected > 0;
-    except
+    except  // dl:ok bare-except@79dc -- REVIEWED 2026-11-19 SLZ-MARK: probe or read on an old, absent or locked DB; the handler answers with the documented fallback, nothing is lost silently
       Result:= False; // best-effort memoization: a query must never fail on write error
     end;
   finally
@@ -16532,7 +16532,7 @@ end; // function
 
 procedure TSQLiteSymbolStore.ClearCompilerFindings;
 begin
-  FConn.ExecSQL('DELETE FROM compiler_findings');
+  FConn.ExecSQL('DELETE FROM compiler_findings');  // dl:ok sql-update-delete-without-where@ff60 -- REVIEWED 2026-11-19 SLZ-MARK: intentional full clear of a derived table inside the rebuild transaction
 end;
 
 procedure TSQLiteSymbolStore.InsertCompilerFinding( const AFinding: TCompilerFinding);
@@ -17690,7 +17690,7 @@ begin
     Q.SQL.Text  := SQL;
     try
       Q.Open;
-    except
+    except  // dl:ok bare-except@6b17, try-except-swallowed@6b17 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
       { An index predating unit_uses.target_file_id answers nothing rather than
         failing the run -- tolerable only because the rule is opt-in, so an
         empty result is read by someone who deliberately asked and can reindex. }
@@ -17810,7 +17810,7 @@ end; // function
 
 // The shared reader behind FindDuplicateGlobalDecls and FindGlobalDeclSites:
 // runs ASQL, which must project nm/kd/fid/ln/cl/sg, into site rows.
-function TSQLiteSymbolStore.ReadDeclSiteRows(const ASQL: string): TArray<TDuplicateDeclSite>;  // dl:ok duplicate-code@f247 -- the unit's house reader shape (TFDQuery open / row loop / close), shared with FindUsesGlobalCensus and every other typed reader here; a generic reader would need a TFunc<TFDQuery, T> per record type, which is more code than the duplication it removes
+function TSQLiteSymbolStore.ReadDeclSiteRows(const ASQL: string): TArray<TDuplicateDeclSite>;
 var
   Q   : TFDQuery                   ;
   List: TList<TDuplicateDeclSite>  ;
@@ -18005,7 +18005,7 @@ begin
     Q.SQL.Text  := SQL;
     try
       Q.Open;
-    except
+    except  // dl:ok try-except-swallowed@0fdd -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
       { An index predating unit_uses.target_file_id answers nothing rather than
         taking lint-all down with it. That reports "no edges", which is
         indistinguishable from a project that genuinely has none -- tolerable
@@ -18056,7 +18056,7 @@ begin
       if Sift then
         try
           if HasSecondLink(E) then Continue;
-        except
+        except  // dl:ok try-except-swallowed@27fa, bare-except@27fa -- REVIEWED 2026-11-19 SLZ-MARK: probe or read on an old, absent or locked DB; the handler answers with the documented fallback, nothing is lost silently
           Sift:= False;
         end;
       Kept.Add(E);
@@ -18305,7 +18305,7 @@ begin
         so no other producer's work is being discarded. The transaction is what
         makes the clear safe: a failure rolls back to the previous values rather
         than leaving the column empty. }
-      FConn.ExecSQL('UPDATE unit_uses SET target_file_id = NULL');
+      FConn.ExecSQL('UPDATE unit_uses SET target_file_id = NULL');  // dl:ok sql-update-delete-without-where@36f0 -- REVIEWED 2026-11-19 SLZ-MARK: intentional full clear of a derived table inside the rebuild transaction
       for i:= 0 to UsedFulls.Count - 1 do
       begin
         Stem:= UsedFulls[i];
@@ -18800,7 +18800,7 @@ begin
       CLIENT, 2 on SERVER, 3 in this repo. }
     Q.SQL.Text:= 'SELECT id, file_id, heritage, COALESCE(parent_id, 0) AS parent_id FROM symbols ' +
                  'WHERE kind IN (''class'',''interface'',''type'',''classref'') AND heritage IS NOT NULL AND heritage <> ''''';   { E1 (2026-10-26): a `class of X` row carries X as heritage -> one ordinal-0 row }
-      FConn.ExecSQL('DELETE FROM type_ancestors');
+      FConn.ExecSQL('DELETE FROM type_ancestors');  // dl:ok sql-update-delete-without-where@d787 -- REVIEWED 2026-11-19 SLZ-MARK: intentional full clear of a derived table inside the rebuild transaction
       Q.Open;
       while not Q.Eof do
       begin
@@ -18984,7 +18984,7 @@ begin
     QIns.Params.ParamByName('tfid').DataType:= ftLargeint;
     Q.SQL.Text:= 'SELECT id, file_id, kind, heritage FROM symbols ' +
                  'WHERE is_helper = 1 AND heritage IS NOT NULL AND heritage <> ''''';
-      FConn.ExecSQL('DELETE FROM type_helpers');
+      FConn.ExecSQL('DELETE FROM type_helpers');  // dl:ok sql-update-delete-without-where@d821 -- REVIEWED 2026-11-19 SLZ-MARK: intentional full clear of a derived table inside the rebuild transaction
       Q.Open;
       while not Q.Eof do
       begin
@@ -20465,7 +20465,7 @@ begin
                 [FScopeTypesBefore.Count, FScopeTypesAfter.Count]));
 end;
 
-procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);  // dl:ok method-too-long@a1a9, cyclomatic-complexity@b54e, cognitive-complexity@fbce -- (1.51.1 INC2 added the ref_host_bindings deletes and one write call): one transaction over one resolver with shared maps; a split is its own change with its own re-resolve measurement, and lane facts (1.44) added only two calls, three counters and two log lines here (REVIEWED 2026-11-18 INT13: +1.52 EXTGAPS2 exports ref kind / var-out global writes -> 816 lines, cc 71, cog 117; still the one-transaction resolver; the split is backlog, not a sweep fix)
+procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);
 { v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
   (wipe the table, resolve in memory, batch-write in one transaction). Builds one
   TCallResolver (its name/scope maps cost O(symbols) to build ONCE), then streams
@@ -20666,7 +20666,7 @@ begin
   TReadBound     := 0;
   Streamed:= 0;
   Resolver:= TCallResolver.Create(Self, AExtraStores); // prepare name/scope maps ONCE
-  except // dl:ok bare-except@4bef -- rollback and RE-RAISE: the lock taken above must not outlive a failed set-up
+  except
     FConn.Rollback;
     raise;
   end;
@@ -21089,7 +21089,7 @@ begin
         if StaleWhere <> '' then WtSuffix:= WtSuffix + ' AND (' + StaleWhere + ')';
         FConn.ExecSQL('UPDATE refs SET symbol_id = (SELECT r2.symbol_id FROM refs r2 WHERE r2.file_id = refs.file_id ' +
           'AND r2.start_line = refs.start_line AND r2.start_col = refs.start_col AND r2.kind IN (''read'', ''member-access'') ' +
-          'AND r2.symbol_id IS NOT NULL ORDER BY r2.id LIMIT 1) WHERE refs.kind = ''' + REF_KIND_WRITE_THROUGH + '''' + WtSuffix);  // dl:ok sql-injection-concat -- REVIEWED 2026-11-17 (1.52 INT): WtSuffix is SQL this pass BUILT (the same ScopeWhere / StaleWhere predicates ResolveLibraryReadRefs appends), never user text
+          'AND r2.symbol_id IS NOT NULL ORDER BY r2.id LIMIT 1) WHERE refs.kind = ''' + REF_KIND_WRITE_THROUGH + '''' + WtSuffix);
       end;
       { 150-RS2 (2): after every member_accesses writer, before the derived streams. }
       var ArgCandidates, ArgStored: Int64;

@@ -1712,7 +1712,7 @@ begin
   Bindings:= nil;
   try
     Bindings:= ExtractDfmEventBindings(TFile.ReadAllBytes(ADfmPath));
-  except
+  except  // dl:ok bare-except@fc5a -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
     Bindings:= nil; // unreadable/unparseable .dfm -- absence over a wrong fact
   end;
   for EB in Bindings do

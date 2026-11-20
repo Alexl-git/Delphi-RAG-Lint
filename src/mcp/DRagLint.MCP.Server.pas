@@ -1108,7 +1108,7 @@ begin
   try
     { file:line:col, as the tool description has always promised: the row used to
       carry only `line L:C`, so a caller had to search for the file separately. }
-    for var I:= 0 to High(ASymbols) do
+    for var I:= 0 to High(ASymbols) do  // dl:ok index-possibly-out-of-range@e579 -- REVIEWED 2026-11-19 SLZ-MARK: AFiles is parallel to ASymbols (caller contract)
       Sb.AppendLine(Format('%s %s (%s) - %s:%d:%d', [ASymbols[I].Kind.ToText, ASymbols[I].QualifiedName, ASymbols[I].Name,
         AFiles[I], ASymbols[I].StartLine, ASymbols[I].StartCol]));
     if Length(ASymbols) = 0 then Sb.AppendLine('No matches.')

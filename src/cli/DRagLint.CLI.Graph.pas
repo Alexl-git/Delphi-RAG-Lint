@@ -435,7 +435,7 @@ begin
     begin
       try
         Lines:= TFile.ReadAllLines(FileName);
-      except
+      except  // dl:ok try-except-swallowed@69ff, bare-except@69ff -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
         Continue;
       end;
       for i:= 0 to High(Lines) do

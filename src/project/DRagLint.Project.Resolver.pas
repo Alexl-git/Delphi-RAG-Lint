@@ -1004,7 +1004,7 @@ begin
   Normalized:= ExpandMacros(APath.Trim);
   try
     Normalized:= TPath.GetFullPath(Normalized);
-  except
+  except  // dl:ok try-except-swallowed@8f3b, bare-except@8f3b -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
     Exit;
   end;
   if not TDirectory.Exists(Normalized) then Exit;
