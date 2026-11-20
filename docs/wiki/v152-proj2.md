@@ -50,6 +50,30 @@ path: `Found at <path>, outside the project roots.`
 
 Without `--project` nothing changes: that run already hands the rule every indexed file.
 
+### Library / third-party roots are left out (1.52.2, owner ruling Q5)
+
+The rule covers the WHOLE compile closure -- own roots, shared folders, units reached only
+transitively -- minus the library / third-party roots. Those are the same folders
+`unit-not-in-library` and `reconcile-project` call "the library":
+
+* the registry library paths of the project's Delphi (`MembershipLibraryRoots`);
+* every folder a manifest `Library` section lists in `"include"`.
+
+A closure unit under one of them is the library's, not the project's, and `unit-not-in-dpr` does
+not report it, with or without `--project`, in `lint`, `lint-all` and the `index --project`
+report alike. A shared folder that is NOT a library root stays a finding (and, outside the own
+roots, `unit-not-in-library` names it too: list it in the project, or add its folder to the
+library, and both go quiet).
+
+| Unit (fixture) | Where | Result |
+|---|---|---|
+| `UDeep` | own root, reached only through `UMain -> UMid -> UDeep` | reported |
+| `UShared` | `..\shared`, on the search path, not a library folder | reported once, on the `.dpr` |
+| `UVendor` | `..\vendor`, listed in the manifest Library `"include"` | **not reported** |
+
+Guard: `tests\autotest\run_v1522_Q5_unit_not_in_dpr_closure.ps1` (positive control: the same run
+without the `"include"` reports `UVendor`).
+
 ## Tests
 
 `tests\autotest\run_v152_PROJ2.ps1` over the fixture `tests\lint\unit-used-by-no-unit\` (`app\` is the

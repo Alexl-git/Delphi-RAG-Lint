@@ -130,6 +130,10 @@ type
     /// <summary>Lists the sibling project names the run can ask; nil when the caller has none.</summary>
     /// <remarks>1.52 BK-XPROJ: set together with SiblingStore. Make leaves it nil.</remarks>
     SiblingNames: TSiblingProjectLister;
+    /// <summary>1.52.2 Q5: the library / third-party folders of the run's project (registry library
+    /// paths plus the manifest Library "include" folders); nil when the caller has none.</summary>
+    /// <remarks>Set by lint-all after Make; unit-not-in-dpr drops closure units under them. Make leaves it nil.</remarks>
+    LibraryRoots: TArray<string>;
     /// <summary>True when this run reports ARuleId.</summary>
     /// <param name="ARuleId">A rule id the lane is about to compute.</param>
     /// <returns>False only when --rule names another rule.</returns>

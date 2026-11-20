@@ -595,7 +595,7 @@ begin
   Writeln('       see wiki page: v152-docpol');
   Writeln('  drag-lint lint-all --db <file.sqlite> [--no-budget] (same budget; one "rule budget:" note line lists the skipped rules of the run)');
   Writeln('       see wiki page: rule-time-budget');
-  Writeln('  drag-lint lint-all --db <file.sqlite> [--project <file.dproj>] [--rule unit-used-by-no-unit|unit-not-in-dpr] (unit-used-by-no-unit: default ON, category project-wide, warning, lint-all only; exempt: initialization section or container registration, a form only when the program code or a FindClass(''TName'') string opens it; unit-not-in-dpr: closure units outside the project roots reported on the .dpr, with --project)');
+  Writeln('  drag-lint lint-all --db <file.sqlite> [--project <file.dproj>] [--rule unit-used-by-no-unit|unit-not-in-dpr] (unit-used-by-no-unit: default ON, category project-wide, warning, lint-all only; exempt: initialization section or container registration, a form only when the program code or a FindClass(''TName'') string opens it; unit-not-in-dpr: the whole compile closure minus the library / third-party roots (registry library paths + manifest Library include), units outside the project roots reported on the .dpr)');
   Writeln('       see wiki page: v152-proj2');
   Writeln('  drag-lint lsp --db <file.sqlite> [--no-exception-facts]');
   Writeln('       see wiki page: editor-exception-facts');

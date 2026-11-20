@@ -636,6 +636,9 @@ const
 { Forward: DoLint and DoLintAll run unit-not-in-library; it is implemented beside
   DoReconcileProject, whose analysis it reuses. }
 function UnitNotInLibraryFindings(const AProjectFile: string): TArray<TLintFinding>; forward;
+{ Forward: 1.52.2 Q5 -- the library / third-party roots unit-not-in-dpr leaves out; it sits
+  beside UnitNotInLibraryFindings, which judges the same folders. }
+function UnitNotInDprLibraryRoots(const AProjectFile: string): TArray<string>; forward;
 { Forward: the naming autofix's stale-index hint (FinalizeAndOutput) lives
   beside IfdefProjectFile, far below. }
 function NamingReindexHint(const AArgs: TArgs; const ADbPath: string): string; forward;
@@ -6501,7 +6504,7 @@ begin
           say so now, so they are added (lint --rule unit-not-in-dpr, reconcile-project --apply). }
         if SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') then
           for var PF: TLintFinding in DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(
-            AArgs.ProjectPath, CR.Files, False) do
+            AArgs.ProjectPath, CR.Files, False, UnitNotInDprLibraryRoots(AArgs.ProjectPath)) do
             Writeln(Format('  unit-not-in-dpr: %s', [PF.Message]));
 
         { FAIL LOUDLY. A project that resolves to nothing must NOT fall back to
@@ -15402,7 +15405,8 @@ begin
         ClosureList:= nil;
       end;
       try
-        ProjFindings:= DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(AArgs.ProjectPath, ClosureList);
+        ProjFindings:= DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(AArgs.ProjectPath, ClosureList, True,
+          UnitNotInDprLibraryRoots(AArgs.ProjectPath));
       finally
         ScopeDict.Free;
       end;
@@ -21259,6 +21263,15 @@ begin
   LintPhase('doc-drift');
   if LintRuleWants(Nr, LINT_GATE_DOC_DRIFT) then
     Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store, DocRenderOptionsFor(AArgs, ProjectDb));
+  { 1.52.2 Q5 (owner): unit-not-in-dpr covers the whole compile closure minus the library /
+    third-party roots; computed once, for the host check below and the v152 PROJ2 lane (O05). }
+  var DprLibRoots: TArray<string>:= nil;
+  if LintRuleWants(Nr, ['unit-not-in-dpr']) then
+  begin
+    var DprProj: string:= AArgs.ProjectPath;
+    if DprProj = '' then DprProj:= ManifestProjectFileForDb(ProjectDb);
+    if (DprProj <> '') and TFile.Exists(DprProj) then DprLibRoots:= UnitNotInDprLibraryRoots(DprProj);
+  end;
   { v151 lane FRAME: the v151 rule lanes' project-wide checks, once per run. }
   if V151Wanted then
   begin
@@ -21272,6 +21285,7 @@ begin
         var PCtx: TV151ProjectCtx:= TV151ProjectCtx.Make(Store, LibStore, Cfg, V151Nr, FilePaths, AArgs.ProjectPath);
         PCtx.SiblingStore:= MakeSiblingStoreResolver(AArgs, V151SibKeep, V151SibOwned);
         PCtx.SiblingNames:= MakeSiblingProjectLister(AArgs);
+        PCtx.LibraryRoots:= DprLibRoots;
         for var PF: TLintFinding in TV151Dispatch.CheckProject(PCtx) do
           if (Length(V151Runs) = 1) or SameText(PF.RuleId, V151Nr) then Findings:= Findings + [PF];
       end;
@@ -21298,7 +21312,7 @@ begin
   { DPR/dproj membership cross-check (unit-not-in-dpr) }
   LintPhase('unit-not-in-dpr');
   if (AArgs.ProjectPath <> '') and LintRuleWants(Nr, ['unit-not-in-dpr']) then
-    Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(AArgs.ProjectPath, FilePaths)
+    Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(AArgs.ProjectPath, FilePaths, True, DprLibRoots)
   else if LintRuleWants(Nr, ['unit-not-in-dpr']) then
   begin
     { WITHOUT --project this rule was skipped ENTIRELY, so the canonical
@@ -21315,7 +21329,7 @@ begin
       default has to stay byte-identical. }
     var InferredProj: string:= ManifestProjectFileForDb(ProjectDb);
     if (InferredProj <> '') and TFile.Exists(InferredProj) then
-      Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(InferredProj, FilePaths);
+      Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(InferredProj, FilePaths, True, DprLibRoots);
   end;
   { T-22: used third-party units that are neither project members nor in the
     library. Same project inference as unit-not-in-dpr above, and as narrow. }
@@ -28289,6 +28303,31 @@ begin
   ARes.Applied:= True;
 end;
 
+/// <summary>1.52.2 Q5: the folders unit-not-in-dpr leaves out of the compile closure -- the
+/// library / third-party roots of AProjectFile's Delphi.</summary>
+/// <param name="AProjectFile">The project's .dproj or .dpr.</param>
+/// <returns>The registry library paths (MembershipLibraryRoots) plus the manifest Library
+/// section's "include" folders; nil when the project file does not exist.</returns>
+/// <remarks>The same "in the library" set unit-not-in-library and reconcile-project use. The
+/// manifest is the engine's merged with the .drag-lint.json the working-directory walk finds.
+/// A library resolver that cannot be opened is not a lint failure: nil (nothing excluded).</remarks>
+function UnitNotInDprLibraryRoots(const AProjectFile: string): TArray<string>;
+begin
+  Result:= nil;
+  if (AProjectFile = '') or not TFile.Exists(AProjectFile) then Exit;
+  try
+    var Resolver: DRagLint.Project.Resolver.TProjectResolver:= ResolveTargetStudio(TPath.GetFullPath(AProjectFile)).OpenResolver;
+    try
+      Result:= Resolver.MembershipLibraryRoots;
+    finally
+      Resolver.Free;
+    end;
+    Result:= Result + ManifestLibraryIncludeRoots(TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir));
+  except
+    { No library roots resolvable = exclude nothing (the pre-Q5 answer), never a lint failure. }
+    on E: Exception do Result:= nil;
+  end;
+end;
 /// <summary>unit-not-in-library: one finding per third-party unit the project
 /// compiles that is neither a project member nor in the library.</summary>
 /// <param name="AProjectFile">The project's .dproj or .dpr.</param>

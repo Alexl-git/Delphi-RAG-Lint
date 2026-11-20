@@ -788,7 +788,7 @@ begin
       [MkParam('max_age_days', 'int', '180')]);
 
     { --- project-wide --- }
-    B('unit-not-in-dpr',       'project-wide', 'warning', 'Unit is referenced but not listed in the .dpr');
+    B('unit-not-in-dpr',       'project-wide', 'warning', 'Unit in the compile closure (library / third-party roots excluded) but not listed in the .dpr / .dproj');
     { T-22 (owner ruling 2026-10-25): the THIRD-PARTY half of "used, but neither
       in the project nor in the library". The own-roots half is unit-not-in-dpr's
       third direction. Fix: `reconcile-project --apply --to library` (or --apply). }
