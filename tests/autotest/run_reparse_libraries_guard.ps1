@@ -41,6 +41,9 @@ echo   C:\a\One.pas -^> 14 symbols, 3 refs, 0 errors
 echo   C:\a\Two.dfm -^> 1 symbols, 0 refs, 0 errors
 ping -n 4 127.0.0.1 >nul
 echo   stage: calls -- started 12:00:00
+if "%STUB_SEARCH%"=="1" echo   stage: search -- started 12:00:01
+if "%STUB_SEARCH%"=="1" echo   stage: search -- still running, 1m00s elapsed, search write 6000 of 1404914, 100/s
+if "%STUB_SEARCH%"=="1" ping -n 5 127.0.0.1 >nul
 ping -n 3 127.0.0.1 >nul
 echo === Library [X] -^> C:\x\l.sqlite : files=2 symbols=15 refs=3 walked=2 attempted=2 up-to-date=0 committed=2 [1.0s, 4 attempted/min] ===
 >>"%STUB_CALLS%" echo END %NAME% %PLAT%
@@ -81,13 +84,14 @@ function Invoke-Runner([string]$Tag, [string]$FailPlat = '', [string[]]$Extra = 
   $p = Start-Process $shell -ArgumentList $argList -PassThru -WindowStyle Hidden; $null = $p.Handle
   [void]$p.Handle
   $seen = @{}
+  $snaps = New-Object System.Collections.Generic.List[string]
   $sum = Join-Path $out 'SUMMARY.txt'
   $sw = [Diagnostics.Stopwatch]::StartNew()
   while (-not $p.HasExited -and $sw.Elapsed.TotalSeconds -lt 120) {
     if (Test-Path $sum) {
       try {
         $first = [IO.File]::ReadAllLines($sum) | Select-Object -First 1
-        if ($first -match 'phase=(\w+)') { $key = $Matches[1]; $all = [IO.File]::ReadAllLines($sum); if (-not $seen.ContainsKey($key) -or $first -match 'eta=\d') { $seen[$key] = $all } }
+        if ($first -match 'phase=(\w+)') { $key = $Matches[1]; $all = [IO.File]::ReadAllLines($sum); if (-not $seen.ContainsKey($key) -or $first -match 'eta=\d') { $seen[$key] = $all }; $snaps.Add(($all -join "`n")) }
       } catch { }
     }
     Start-Sleep -Milliseconds 300
@@ -99,7 +103,15 @@ function Invoke-Runner([string]$Tag, [string]$FailPlat = '', [string[]]$Extra = 
     Calls = if (Test-Path $calls) { @([IO.File]::ReadAllLines($calls)) } else { @() }
     Summary = if (Test-Path $sum) { @([IO.File]::ReadAllLines($sum)) } else { @() }
     Seen = $seen
+    Snaps = $snaps
   }
+}
+
+# Hours in a summary's `(left 5h40m)`; 0 for `(left 12m00s)`, -1 when there is none.
+function Get-LeftHours([string]$Text) {
+  if ($Text -match '\(left (\d+)h(\d\d)m\)') { return [double]$Matches[1] + [double]$Matches[2] / 60 }
+  if ($Text -match '\(left \d+m\d\ds\)') { return 0.0 }
+  return -1.0
 }
 
 # Positive control of the checker: the 1.42 shape.
@@ -126,6 +138,22 @@ $r = Invoke-Runner 'commas' '' @('-AllowBusy', '-Platforms', 'win32,win64')
 $v = @(Get-OrderViolations $r.Calls)
 Check 'D1 one comma string = two parallel libraries, exit 0' ($r.Exit -eq 0 -and $v.Count -eq 0 -and $r.Calls.Count -eq 8) ("exit=$($r.Exit) " + ($v -join '; ') + " calls=$($r.Calls.Count)")
 Check 'D2 each platform got its own library call' (@($r.Calls | Where-Object { $_ -match '^START library win32 index --all --only Library --platform win32 ' }).Count -eq 1 -and @($r.Calls | Where-Object { $_ -match '^START library win64 index --all --only Library --platform win64 ' }).Count -eq 1) ($r.Calls -join ' | ')
+# E (1.52.2): the library `search` stage counts in the ETA. 1.52.1 wrote ~1.4M search rows per
+# library at ~100/s while SUMMARY said "left 1h19m". Here 6000 of 1404914 rows took 60 s, so the
+# search alone has ~3.9 h left; the old ETA capped every post-parse stage at -PostParseMin (60 min).
+$env:STUB_SEARCH = '1'
+try { $r = Invoke-Runner 'search' } finally { $env:STUB_SEARCH = '' }
+$inSearch = @($r.Snaps | Where-Object { $_ -match '^REPARSE phase=libraries .*eta=\d' -and $_ -match '(?m)^library-\S+\s+running .*stage=search' })
+$hours = if ($inSearch.Count -gt 0) { Get-LeftHours $inSearch[0] } else { -1 }
+Check 'E1 exit 0' ($r.Exit -eq 0) "exit=$($r.Exit)"
+Check 'E2 a mid-search summary was seen' ($inSearch.Count -gt 0) (@($r.Snaps)[-1])
+Check 'E3 mid-search ETA includes the search rows left (>= 4 h)' ($hours -ge 4) "left=$hours h; $(if ($inSearch.Count) { $inSearch[-1] })"
+Check 'E4 the library line shows the search progress' ($inSearch.Count -gt 0 -and $inSearch[-1] -match 'stage=search 6000/1404914 rows') "$(if ($inSearch.Count) { $inSearch[-1] })"
+# E5: before any stage starts, the estimate already counts the search (7000 files x 200 rows / 100/s = 3.9 h).
+$pre = @($r.Snaps | Where-Object { $_ -match '^REPARSE phase=libraries .*eta=\d' -and $_ -notmatch 'stage=' })
+Check 'E5 parse-time ETA includes the search estimate (>= 4 h)' ($pre.Count -gt 0 -and (Get-LeftHours $pre[0]) -ge 4) "$(if ($pre.Count) { $pre[0] })"
+Check 'E6 control: the old ETA shape (left 59m) reads as < 4 h' ((Get-LeftHours 'eta=2026-11-20T10:00 (left 2h17m)') -lt 4 -and (Get-LeftHours '(left 59m00s)') -eq 0)
+
 # B: a failed library stops the run before the projects.
 $r = Invoke-Runner 'fail' 'win64'
 Check 'B1 exit 1' ($r.Exit -eq 1) "exit=$($r.Exit)"

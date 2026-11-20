@@ -110,6 +110,15 @@ survivable:
 * **The whole-database announce** -- a long call-target resolve now says so, with
   its reason, *before* it runs.
 
+**Windows Defender can slow a re-parse.** A scheduled Defender scan
+(`MpCmdRun.exe`, or `MsMpEng.exe` scanning each file the engine opens and the
+SQLite database it writes) can pin the CPU for the length of a library re-parse,
+and the run then looks slow for no reason in drag-lint's own output. Check Task
+Manager before a long re-parse; if a scan is running, let it finish or schedule
+the re-parse outside the scan window. An exclusion for the folders that hold your index databases
+(see "Where indexes live" above) is your security
+team's call, not something drag-lint sets up.
+
 ---
 
 ## Reading a long run

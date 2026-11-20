@@ -21,6 +21,8 @@ uses
   ToolsAPI,
   DragLint.Plugin.Cmd152,
   DragLint.Plugin.DiagnosticCache,
+  DragLint.Plugin.DbResolver,
+  DragLint.Plugin.FixCommand,
   DragLint.Plugin.ExeResolver,
   DragLint.Plugin.ProcRun,
   DragLint.Plugin.Editor;
@@ -58,13 +60,6 @@ begin
     if (D.Code <> '') and StartsText('drag-lint', D.Source) then Exit(D.Code);
 end;
 
-{ The engine command for the fix of one rule on one line; pApply False = a dry-run preview. }
-function FixCommandLine(const pExe, pFileName, pDb, pRule: string; pLine1: Integer; pApply: Boolean): string;
-begin
-  Result:= Format('"%s" lint --in "%s" --db "%s" --fix --fix-line %d --fix-rule "%s"%s',
-    [pExe, pFileName, pDb, pLine1, pRule, IfThen(pApply, ' --apply', '')]);
-end;
-
 procedure InvokeFixMarker(Sender: TObject);
 var
   FileName: string ;
@@ -74,6 +69,8 @@ var
   Exe     : string ;
   Apply   : Boolean;
   Cmd     : string ;
+  Project : string ;
+  Blocked : string ;
 begin
   if not CaretPosition(FileName, Line0) then
   begin
@@ -93,6 +90,14 @@ begin
     ShowMessage('drag-lint: no engine or no project index.');
     Exit;
   end;
+  { the with rules run unwith, which builds the project: --project is required, so refuse here rather than run a command that exits 2 }
+  Project:= GetActiveProjectFilePath;
+  Blocked:= FixBlockedReason(Rule, Project);
+  if Blocked <> '' then
+  begin
+    ShowMessage(Blocked);
+    Exit;
+  end;
   case MessageDlg(Format('Fix %s on line %d with drag-lint?', [Rule, Line0 + 1]) + sLineBreak + sLineBreak +
                   'Yes = apply now (the engine keeps a backup copy)' + sLineBreak +
                   'No  = preview only (nothing is changed)', mtConfirmation, [mbYes, mbNo, mbCancel], 0) of
@@ -106,7 +111,7 @@ begin
     var MS: IOTAModuleServices;
     if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll; { the engine edits the file on disk }
   end;
-  Cmd:= FixCommandLine(Exe, FileName, Db, Rule, Line0 + 1, Apply);
+  Cmd:= FixCommandLine(Exe, FileName, Db, Rule, Line0 + 1, Apply, Project);
   { Off the main thread: the engine may take seconds. Only the process run is in the worker; the dialog runs back on the main thread (Synchronize, not Queue: nothing stays queued if the package unloads). }
   TThread.CreateAnonymousThread(
     procedure

@@ -9,6 +9,13 @@ uses
   , DRagLint.Preprocess.Types
   ;
 
+const
+  /// <summary>INCRPP: marks an entry of a host's recorded include list
+  /// (ISymbolStore.SetFileIncludes) as a path an include the host could NOT resolve
+  /// would be found at. The entry is the mark followed by that absolute path; the host
+  /// is out of date once a file exists there. A plain entry is a file that exists.</summary>
+  UNRESOLVED_INCLUDE_MARK = '?';
+
 type
   /// <summary>Walk-filter settings passed to IIndexer.SetWalkFilter.
   /// Controls which files and directories are included or excluded during
@@ -432,7 +439,10 @@ type
     /// parse (every active include, nested ones too), replacing any earlier list.
     /// IncludeOriginsChanged reads it back.</summary>
     /// <param name="AHostPath">The host file, as for FileIsUpToDate.</param>
-    /// <param name="AIncludes">Absolute include paths; empty clears the record.</param>
+    /// <param name="AIncludes">Absolute include paths; empty clears the record. INCRPP:
+    /// may also hold the project unit files an IF of the host read (a plain entry: the
+    /// host is stale once the file is newer than its parse) and UNRESOLVED_INCLUDE_MARK
+    /// entries (the host is stale once a file exists at that path).</param>
     /// <remarks>
     /// Stored in schema_meta under the key 'file_includes:' plus the
     /// lowercased stored host path (one row per host, values separated by '|'),

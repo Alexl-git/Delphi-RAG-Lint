@@ -55,6 +55,27 @@ editor shows the same findings as the CLI, including `dl:ok` review markers.
 Without the flag the server keeps its small built-in check set unchanged. It
 applies to the plain server only; `lsp --proxy` ignores it (see above).
 
+## VS Code extension: DelphiLSP proxy (1.6.8)
+
+The drag-lint VS Code extension starts plain `lsp` by default. Setting
+`dragLint.delphiLsp` = `true` makes it start `lsp --proxy` plus the flags of
+`dragLint.delphiLspMerge` (default all five `--merge-*` flags; an empty list is a
+plain relay), then the usual `--db` pairs and `--full-rules` (ignored by the
+proxy). The args line is written to the drag-lint output channel. Changing
+either setting restarts the server.
+
+What DelphiLSP needs to start (measured headless against
+`Studio\37.0\bin64\DelphiLSP.exe`, 2026-11-20): the proxy finds `bin64\DelphiLSP.exe`
+itself, but DelphiLSP learns the project only from a
+`workspace/didChangeConfiguration` carrying the `settings` of the IDE's
+`<Project>.delphilsp.json` (RAD Studio writes it when the project is opened).
+Without it DelphiLSP publishes no diagnostics and hover answers null. The
+extension sends it after every server start, taking the first
+`*.delphilsp.json` in the workspace or `dragLint.delphiLspConfig`, and shows a
+warning when none is found. The `.delphilsp.json` must carry the unit search
+path (`-U`/`-I` in `dccOptions`); a file without it gives `F1027 Unit not found:
+'System'` from DelphiLSP.
+
 ## VS Code switch
 
 `drag-lint-switch.exe` switches VS Code's Delphi MCP entry off and on

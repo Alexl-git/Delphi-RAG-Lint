@@ -44,7 +44,7 @@ type
   /// <para>Used in units: DRagLint.CLI, DRagLint.Index.PPUnitSource</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TPPUnitSourceResolver = class(TInterfacedObject, IPPUnitSource)
+  TPPUnitSourceResolver = class(TInterfacedObject, IPPUnitSource, IPPUnitFiles)
   private type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -257,6 +257,11 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function HasLibraryEvidence: Boolean;
+    /// <summary>INCRPP (IPPUnitFiles): the project source file AUnit is answered from.</summary>
+    /// <param name="AUnit">The unit name as the uses clause spells it.</param>
+    /// <returns>The absolute path, or '' for a library or unknown unit.</returns>
+    /// <remarks>Thread-safe (the lookup lock).</remarks>
+    function UnitFilePath(const AUnit: string): string;
     /// <summary>How many lookups answered pnkUnknown since the last AddUnitFiles
     /// -- zero means no IF needed a unit the source could not see, so a second
     /// closure pass would decide nothing differently.</summary>
@@ -550,6 +555,16 @@ begin
   try
     OpenStores;
     Result:= Length(FLibStores) > 0;
+  finally
+    FLock.Leave;
+  end;
+end;
+
+function TPPUnitSourceResolver.UnitFilePath(const AUnit: string): string;
+begin
+  FLock.Enter;
+  try
+    Result:= UnitFile(AUnit);
   finally
     FLock.Leave;
   end;

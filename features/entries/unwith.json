@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "1.44.1-alpha",
   "summary": "Removes with blocks, proving every name binds to what it bound before",
-  "intro": "Read this when you want a with statement gone without a name silently changing meaning. --plan names, for every with in a file or a project, whether it can be removed and exactly why not; --apply rewrites through the compile gate, then re-indexes a copy of the DB and rolls back if any reference binds elsewhere.",
+  "intro": "Read this when you want a with statement gone without a name silently changing meaning. --plan names, for every with in a file or a project, whether it can be removed and exactly why not; --apply rewrites through the compile gate, then re-indexes a copy of the DB and rolls back if any reference binds elsewhere. Since 1.52.2 the with fixes of lint --fix (fix all, the IDE's Fix all in unit) carry the same after proof and are declined when a binding would change.",
   "wikiPage": "unwith",
   "surfaces": [
     {
@@ -126,9 +126,9 @@
   ],
   "notes": "lane 144 unwith; guard tests\\autotest\\run_unwith.ps1",
   "verified": {
-    "date": "2026-11-18",
+    "date": "2026-11-20",
     "by": "ENGINE",
-    "build": "1.52.0-alpha",
+    "build": "1.52.2-alpha",
     "surfaceHash": "8433300beda108050279e7ee108a80c70294d2a5b1d82fa7b1fa165f9551b425"
   }
 }

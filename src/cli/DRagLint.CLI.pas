@@ -315,7 +315,7 @@ const
   /// tests\autotest\run_help_env_table.ps1: every quoted 'DRAGLINT_*' literal
   /// under src\ must be a Name here and --help must print every Name. A new
   /// variable is added HERE in the same change, or that guard fails.</remarks>
-  ENV_VARS_HELP: array[0..93] of TEnvVarHelp = (
+  ENV_VARS_HELP: array[0..95] of TEnvVarHelp = (
     (Name: 'DRAGLINT_BUSY_TIMEOUT_MS';                Purpose: 'writer busy timeout in ms (overrides the built-in default; a non-negative integer)'),
     (Name: 'DRAGLINT_CHARTS_ALLOW_LIVE_DB';           Purpose: 'charts: lets CloneDb accept a non-clone (live) database'),
     (Name: 'DRAGLINT_CHARTS_DIR';                     Purpose: 'charts: folder of the charts scripts'),
@@ -354,6 +354,8 @@ const
     (Name: 'DRAGLINT_MERGE_TEST_ANSWER_INLINE';       Purpose: 'test hook: merge answers inline'),
     (Name: 'DRAGLINT_MERGE_TEST_EMPTY_REPLACEMENT';   Purpose: 'test hook: merge gets an empty replacement'),
     (Name: 'DRAGLINT_MERGE_TEST_FASTPATH';            Purpose: 'test hook: merge fast path'),
+    (Name: 'DRAGLINT_MERGE_TEST_LINT_DELAY_MS';       Purpose: 'test hook: every LSP diagnostics lint sleeps N ms first'),
+    (Name: 'DRAGLINT_MERGE_TEST_SC_WRITE_DELAY_MS';   Purpose: 'test hook: the LSP proxy delays each server-to-client write by N ms'),
     (Name: 'DRAGLINT_NO_AUTOCREATE';                  Purpose: '1 = a query verb never builds a missing project index on first use'),
     (Name: 'DRAGLINT_NO_BUDGET';                       Purpose: 'lint: any value other than 0 turns the per-rule time budget off for the process (as --no-budget)'),
     (Name: 'DRAGLINT_NO_CLOSURE_CACHE';               Purpose: 'any value makes index --project walk the compile closure cold: no stored unit scan is read or written (A/B)'),
@@ -636,6 +638,9 @@ const
 { Forward: DoLint and DoLintAll run unit-not-in-library; it is implemented beside
   DoReconcileProject, whose analysis it reuses. }
 function UnitNotInLibraryFindings(const AProjectFile: string): TArray<TLintFinding>; forward;
+{ Forward: 1.52.2 Q5 -- the library / third-party roots unit-not-in-dpr leaves out; it sits
+  beside UnitNotInLibraryFindings, which judges the same folders. }
+function UnitNotInDprLibraryRoots(const AProjectFile: string): TArray<string>; forward;
 { Forward: the naming autofix's stale-index hint (FinalizeAndOutput) lives
   beside IfdefProjectFile, far below. }
 function NamingReindexHint(const AArgs: TArgs; const ADbPath: string): string; forward;
@@ -982,7 +987,10 @@ begin
   if ParamCount > 0 then Result.Command:= ParamStr(1); { LoadConfigDefaults keys on the verb }
   { `ask`, `protocol` and `mcp-config` parse their own flags (DRagLint.Charts.AskVerb, DRagLint.Core.ProtocolReg,
     DRagLint.MCP.ClientConfig) and print nothing else: no defaults note on stderr }
-  if MatchStr(Result.Command, ['ask', 'protocol', 'mcp-config', 'init', 'syntax-count', 'uses-recover']) then Exit;
+  { 1.52.2: the no-config warning (TManifestIO.Load) stays off where stderr must stay clean. }
+  var SelfParsing:= MatchStr(Result.Command, ['ask', 'protocol', 'mcp-config', 'init', 'syntax-count', 'uses-recover']);
+  TManifestIO.QuietNoManifest:= SelfParsing or HasSwitch('--quiet') or JsonOutputRequested;
+  if SelfParsing then Exit;
   LoadConfigDefaults(Result);
   if ParamCount = 0 then begin Result.ShowHelp:= True; Exit; end;
   Result.Command:= ParamStr(1);
@@ -6501,7 +6509,7 @@ begin
           say so now, so they are added (lint --rule unit-not-in-dpr, reconcile-project --apply). }
         if SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') then
           for var PF: TLintFinding in DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(
-            AArgs.ProjectPath, CR.Files, False) do
+            AArgs.ProjectPath, CR.Files, False, UnitNotInDprLibraryRoots(AArgs.ProjectPath)) do
             Writeln(Format('  unit-not-in-dpr: %s', [PF.Message]));
 
         { FAIL LOUDLY. A project that resolves to nothing must NOT fall back to
@@ -13069,6 +13077,7 @@ begin
     var Braked: TArray<TLintFinding>:= nil;
     var BrakedIds: TArray<string>:= nil;
     var ManualIds: TArray<string>:= nil;
+    var OptInIds: TArray<string>:= nil;
     for F in Targeted do
       if Cfg.IsAutoFixOff(F.RuleId) and not ((AArgs.FixLine > 0) and SameText(AArgs.FixRule, F.RuleId)) then
       begin
@@ -13079,12 +13088,20 @@ begin
       begin
         if not MatchText(F.RuleId, ManualIds) then ManualIds:= ManualIds + [F.RuleId];
       end
+      { owner card D 2026-11-20: an opt-in fix (param-name-prefix) runs only when the run names the rule }
+      else if IsFixOptIn(F.RuleId) and not (SameText(AArgs.FixRule, F.RuleId) or SameText(AArgs.Rule, F.RuleId) or
+        MatchText(F.RuleId, AArgs.RuleList.Split([','])) or MatchText(F.RuleId, AArgs.Enable.Split([',']))) then
+      begin
+        if not MatchText(F.RuleId, OptInIds) then OptInIds:= OptInIds + [F.RuleId];
+      end
       else Braked:= Braked + [F];
     Targeted:= Braked;
     if Length(BrakedIds) > 0 then
       Writeln(ErrOutput, Format('drag-lint: note: %d rule(s) here are not fixed because "autofix_off" lists them: %s.',
         [Length(BrakedIds), string.Join(', ', BrakedIds)]));
-    if Length(ManualIds) > 0 then
+    if Length(OptInIds) > 0 then
+      Writeln(ErrOutput, Format('drag-lint: note: %d rule(s) here have an opt-in fix, applied only when the run names the rule ' +
+        '(--rule <id>, --enable <id> or --fix-rule <id>): %s.', [Length(OptInIds), string.Join(', ', OptInIds)]));    if Length(ManualIds) > 0 then
       Writeln(ErrOutput, Format('drag-lint: note: %d rule(s) here have a manual only fix, applied only with --fix-rule <id> (the IDE''s Fix it): %s.',
         [Length(ManualIds), string.Join(', ', ManualIds)]));
 
@@ -15402,7 +15419,8 @@ begin
         ClosureList:= nil;
       end;
       try
-        ProjFindings:= DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(AArgs.ProjectPath, ClosureList);
+        ProjFindings:= DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(AArgs.ProjectPath, ClosureList, True,
+          UnitNotInDprLibraryRoots(AArgs.ProjectPath));
       finally
         ScopeDict.Free;
       end;
@@ -20312,7 +20330,8 @@ begin
       var Listed: string:= AStore.GetMetaValue(FILE_INCLUDES_META_KEY + LowerCase(Host));
       var Wanted: Boolean:= False;
       for var L: string in Listed.Split(['|']) do
-        if (L <> '') and Pending.ContainsKey(LowerCase(TPath.GetFullPath(L))) then Wanted:= True;
+        if (L <> '') and not L.StartsWith(UNRESOLVED_INCLUDE_MARK) { INCRPP: not a file that exists }
+          and Pending.ContainsKey(LowerCase(TPath.GetFullPath(L))) then Wanted:= True;
       if not Wanted then Continue;
       { The build's search path, as the closure walk resolved includes against it. }
       var Dproj: string:= AProjectPath;
@@ -21259,6 +21278,15 @@ begin
   LintPhase('doc-drift');
   if LintRuleWants(Nr, LINT_GATE_DOC_DRIFT) then
     Findings:= Findings + DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift(Store, DocRenderOptionsFor(AArgs, ProjectDb));
+  { 1.52.2 Q5 (owner): unit-not-in-dpr covers the whole compile closure minus the library /
+    third-party roots; computed once, for the host check below and the v152 PROJ2 lane (O05). }
+  var DprLibRoots: TArray<string>:= nil;
+  if LintRuleWants(Nr, ['unit-not-in-dpr']) then
+  begin
+    var DprProj: string:= AArgs.ProjectPath;
+    if DprProj = '' then DprProj:= ManifestProjectFileForDb(ProjectDb);
+    if (DprProj <> '') and TFile.Exists(DprProj) then DprLibRoots:= UnitNotInDprLibraryRoots(DprProj);
+  end;
   { v151 lane FRAME: the v151 rule lanes' project-wide checks, once per run. }
   if V151Wanted then
   begin
@@ -21272,6 +21300,7 @@ begin
         var PCtx: TV151ProjectCtx:= TV151ProjectCtx.Make(Store, LibStore, Cfg, V151Nr, FilePaths, AArgs.ProjectPath);
         PCtx.SiblingStore:= MakeSiblingStoreResolver(AArgs, V151SibKeep, V151SibOwned);
         PCtx.SiblingNames:= MakeSiblingProjectLister(AArgs);
+        PCtx.LibraryRoots:= DprLibRoots;
         for var PF: TLintFinding in TV151Dispatch.CheckProject(PCtx) do
           if (Length(V151Runs) = 1) or SameText(PF.RuleId, V151Nr) then Findings:= Findings + [PF];
       end;
@@ -21298,7 +21327,7 @@ begin
   { DPR/dproj membership cross-check (unit-not-in-dpr) }
   LintPhase('unit-not-in-dpr');
   if (AArgs.ProjectPath <> '') and LintRuleWants(Nr, ['unit-not-in-dpr']) then
-    Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(AArgs.ProjectPath, FilePaths)
+    Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(AArgs.ProjectPath, FilePaths, True, DprLibRoots)
   else if LintRuleWants(Nr, ['unit-not-in-dpr']) then
   begin
     { WITHOUT --project this rule was skipped ENTIRELY, so the canonical
@@ -21315,7 +21344,7 @@ begin
       default has to stay byte-identical. }
     var InferredProj: string:= ManifestProjectFileForDb(ProjectDb);
     if (InferredProj <> '') and TFile.Exists(InferredProj) then
-      Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(InferredProj, FilePaths);
+      Findings:= Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUnitsInDpr(InferredProj, FilePaths, True, DprLibRoots);
   end;
   { T-22: used third-party units that are neither project members nor in the
     library. Same project inference as unit-not-in-dpr above, and as narrow. }
@@ -21876,8 +21905,15 @@ end;
 
 { Lane 144 item 3: the platform libraries rename's proof reads, read-only and silent on stdout: every --library-db,
   'none' = none, or the one the manifest names. }
-function RenameLibraries(const AArgs: TArgs): TArray<ISymbolStore>;
+function RenameLibraries(const AArgs: TArgs; pWriting: Boolean): TArray<ISymbolStore>;
 begin
+  { Q17 (owner 2026-11-19): a WRITE reads a library only when --library-db was passed explicitly; the manifest's
+    platform library is never consulted implicitly (dry runs keep the manifest default). }
+  if pWriting and (Length(AArgs.LibraryDbs) = 0) then
+  begin
+    Writeln(ErrOutput, 'drag-lint: NOTE: a rename write reads a library only with an explicit --library-db <file>; none given, so the proof uses no library.');
+    Exit(nil);
+  end;
   Result:= RefactorLibraries(AArgs);
 end;
 
@@ -21905,7 +21941,7 @@ begin
   Req.PrimaryProject:= RenameGateProject(AArgs);
   Req.QName         := pQName;
   Req.NewName       := AArgs.RenameTo;
-  Req.Libraries     := if pQName <> '' then RenameLibraries(AArgs) else nil;
+  Req.Libraries     := if pQName <> '' then RenameLibraries(AArgs, pWriting) else nil;
   Req.Writing       := pWriting;
   if pWriting then
     Req.Reindex:= function(pProject, pDb: string): Boolean
@@ -22109,7 +22145,7 @@ begin
         Writeln('ERROR: cannot rename -- ' + Reason);
         Exit(2);
       end;
-      Proof:= ProveRename(KStore, RenameLibraries(AArgs), QN, AArgs.RenameTo);
+      Proof:= ProveRename(KStore, RenameLibraries(AArgs, AArgs.Apply and not AArgs.Plan), QN, AArgs.RenameTo);
       if not Proof.Found or ((Length(Proof.Edits) = 0) and (Length(Proof.Refusals) = 0)) then
       begin
         Writeln('No edits computed.');
@@ -22162,7 +22198,7 @@ begin
     Writeln('ERROR: cannot rename -- ' + IncReason);
     Exit(2);
   end;
-  Proof:= ProveRename(Store, RenameLibraries(AArgs), AArgs.QName, AArgs.RenameTo);
+  Proof:= ProveRename(Store, RenameLibraries(AArgs, not AArgs.DryRun and not AArgs.Plan), AArgs.QName, AArgs.RenameTo);
   if not Proof.Found or ((Length(Proof.Edits) = 0) and (Length(Proof.Refusals) = 0)) then
   begin
     Writeln(Format('No edits computed for %s (symbol may not exist)', [AArgs.QName]));
@@ -28289,6 +28325,31 @@ begin
   ARes.Applied:= True;
 end;
 
+/// <summary>1.52.2 Q5: the folders unit-not-in-dpr leaves out of the compile closure -- the
+/// library / third-party roots of AProjectFile's Delphi.</summary>
+/// <param name="AProjectFile">The project's .dproj or .dpr.</param>
+/// <returns>The registry library paths (MembershipLibraryRoots) plus the manifest Library
+/// section's "include" folders; nil when the project file does not exist.</returns>
+/// <remarks>The same "in the library" set unit-not-in-library and reconcile-project use. The
+/// manifest is the engine's merged with the .drag-lint.json the working-directory walk finds.
+/// A library resolver that cannot be opened is not a lint failure: nil (nothing excluded).</remarks>
+function UnitNotInDprLibraryRoots(const AProjectFile: string): TArray<string>;
+begin
+  Result:= nil;
+  if (AProjectFile = '') or not TFile.Exists(AProjectFile) then Exit;
+  try
+    var Resolver: DRagLint.Project.Resolver.TProjectResolver:= ResolveTargetStudio(TPath.GetFullPath(AProjectFile)).OpenResolver;
+    try
+      Result:= Resolver.MembershipLibraryRoots;
+    finally
+      Resolver.Free;
+    end;
+    Result:= Result + ManifestLibraryIncludeRoots(TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir));
+  except
+    { No library roots resolvable = exclude nothing (the pre-Q5 answer), never a lint failure. }
+    on E: Exception do Result:= nil;
+  end;
+end;
 /// <summary>unit-not-in-library: one finding per third-party unit the project
 /// compiles that is neither a project member nor in the library.</summary>
 /// <param name="AProjectFile">The project's .dproj or .dpr.</param>

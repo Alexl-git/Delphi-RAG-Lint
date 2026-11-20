@@ -146,6 +146,7 @@ uses
     DragLint.Plugin.StructureCache
   , DragLint.Plugin.UsagesForm
   , DragLint.Plugin.DbResolver
+  , DragLint.Plugin.FixCommand
   , DragLint.Plugin.Settings
   , DragLint.Plugin.ExeResolver
   , Vcl.ImgList
@@ -1488,14 +1489,17 @@ begin
         CUsesFixTimeoutMs, UnitName);
       Exit;
     end;
-    if SameText(ND.Code, CRedundantCastRule) then
+    if SameText(ND.Code, CRedundantCastRule) or FixRuleNeedsProject(ND.Code) then
     begin
       { builds the project before and after and rolls back on an error, so the uses-fix time limit, not 60 s }
       var CastProj, CastWhy: string;
       var CastDb: string:= ActiveProjectWriteDb(CastProj, CastWhy);
       if CastDb = '' then
       begin
-        DLT('autofix', 'redundant-cast NOT run: ' + CastWhy);
+        DLT('autofix', ND.Code + ' NOT run: ' + CastWhy);
+        { the with rules run unwith (compile gate): say why nothing happened instead of staying silent }
+        var Blocked: string:= FixBlockedReason(ND.Code, CastProj);
+        if FixRuleNeedsProject(ND.Code) then ShowMessage(if Blocked <> '' then Blocked else 'drag-lint: ' + CastWhy);
         Exit;
       end;
       RunFixJob(Format('Fix %s line %d', [ND.Code, ND.Line]),

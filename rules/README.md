@@ -359,7 +359,9 @@ Built-in defaults follow common Delphi conventions; tune the `naming` block per 
 "naming": {
   "type_prefix":  { "class": "T", "exception": "E", "interface": "I", "pointer": "P" },
   "field_prefix": "F",
-  "param_prefix": "",
+  "param_prefix": "p",
+  "param_prefixes": ["p", "A"],
+  "param_hungarian": "allowed",
   "method_case":  "PascalCase",
   "const_case":   ["PascalCase", "UPPER_CASE"],
   "local_case":   "PascalCase",
@@ -379,7 +381,9 @@ Built-in defaults follow common Delphi conventions; tune the `naming` block per 
 | `type_prefix.interface` | string | `"I"` | Required prefix for interface type declarations |
 | `type_prefix.pointer` | string | `"P"` | Required prefix for pointer type declarations |
 | `field_prefix` | string | `"F"` | Required prefix for class instance fields |
-| `param_prefix` | string | `""` | Prefix for routine parameters -- **empty = disabled by default**; set `"p"`, `"A"`, etc. to enable |
+| `param_prefix` | string | `"p"` | PREFERRED parameter prefix: the one the `param-name-prefix` autofix adds. Legacy single-prefix key: set alone it is also the whole accepted list, and `""` disables the rule |
+| `param_prefixes` | array | `["p","A"]` | ACCEPTED parameter prefixes for `param-name-prefix` (1.52.2); `[]` disables the rule. When `param_prefix` is absent the first entry is the preferred one |
+| `param_hungarian` | string | `"allowed"` | `"allowed"`: a typed (Hungarian/Microsoft) prefix from `hungarian_prefixes` (`strName`, `bDone`) also satisfies `param-name-prefix` -- accepted, not required. `"off"`: it does not |
 | `method_case` | string | `"PascalCase"` | Required casing for method/routine names |
 | `const_case` | string or array | `["PascalCase","UPPER_CASE"]` | Allowed casing(s) for constants and enum members |
 | `local_case` | string | `"PascalCase"` | Required casing for local variable names |
@@ -412,7 +416,7 @@ entirely by id, use the top-level `disabled` list:
 |---------|----------|-------------|
 | `type-name-prefix` | info | Class/interface/pointer/exception type names must carry the configured prefix (`T`/`I`/`P`/`E`). Exception-class detection uses M1 ancestry when a DB is present; falls back to the `T` rule on the no-DB path. |
 | `field-name-prefix` | info | Class instance field names must start with the configured prefix (`F`). Published/DFM-generated fields on form and frame classes are skipped. |
-| `param-name-prefix` | info | Routine parameter names must start with the configured prefix. **Disabled by default** (`param_prefix: ""`); set a prefix like `"p"` or `"A"` to enable. Skips `Self`; override/interface-impl/event-handler/message-method parameters are also skipped (signature compatibility). |
+| `param-name-prefix` | info | **ON by default since 1.52.2.** Routine parameter names must start with one of the accepted prefixes (`param_prefixes`, default `p`, `A`; next character uppercase), or a typed Hungarian prefix while `param_hungarian` is `"allowed"`. A parameter wearing the field prefix (`FName`) is ALWAYS reported, even if `F` is listed. Skips `Self`, `Sender` (the VCL/FMX event signature) and single-letter names (`N`, `S`, `B`, ...; owner ruling 2026-11-20). **Autofix is OPT-IN** (owner ruling 2026-11-20): the rule reports by default, but its fix runs only when the run names it (`--rule param-name-prefix`, `--enable param-name-prefix` or `--fix-rule param-name-prefix`), never in a blanket `lint --fix --apply` / `lint-all --fix --apply`. The fix (`--fix`) adds the preferred prefix (`param_prefix`, default `p`; `FName` -> `pName`) at the declaration, the implementation header and every body use; it DECLINES (reported as a note, nothing written) for a virtual / override / dynamic / abstract / message method, a method of an interface type, and a non-private method of a class that implements an interface -- that parameter list is shared with partners the fix does not rename. |
 | `method-pascalcase` | info | Method and free-routine names must be PascalCase (configurable via `method_case`). |
 | `const-casing` | info | Declared constants and enum members must match one of the configured casing styles (default: `PascalCase` or `UPPER_CASE`). |
 | `local-var-casing` | info | Local variable names must be PascalCase (configurable via `local_case`) and must not carry the field or param prefix (`FFoo`/`pFoo` as a local is a naming smell). |

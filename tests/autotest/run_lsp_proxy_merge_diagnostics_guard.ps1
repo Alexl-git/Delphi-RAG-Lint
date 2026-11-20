@@ -216,9 +216,10 @@ Check 'exactly one stderr line names the merge' ($cLines.Count -eq 1) ("lines=$(
 
 # --- (d) budget 0 -----------------------------------------------------------
 Write-Host ''
-Write-Host '(d) --merge-budget-ms 0: byte-identical' -ForegroundColor Cyan
+Write-Host '(d) --merge-budget-ms 0: the publish is forwarded as is (a late merged one may follow, see l)' -ForegroundColor Cyan
 $dZero = Push $zeroArgs $dirtyBody
-Check 'budget 0, dirty fixture: = plain relay' (Same $dZero.Out $ePlain.Out) ("zero=$($dZero.Out.Length) plain=$($ePlain.Out.Length)")
+$dPub  = Publishes $dZero.Out
+Check 'budget 0, dirty fixture: the first publish is the original bytes' ($dPub.Count -ge 1 -and $dPub[0].Frame.Body -ceq $dirtyBody) ("count=$($dPub.Count)")
 
 # --- (f) scripted completion reply ------------------------------------------
 Write-Host ''
@@ -320,7 +321,7 @@ Write-Host '(k) didOpen + an immediate publish (default budget): no "over its bu
 $pubK = PublishBody $dirtyUri 'stub-during-warmup-6666'
 $k1   = Invoke-Raw $Exe $defArgs ([byte[]]((DocNote 'textDocument/didOpen' $dirtyUri) + (Frame $pubK)))
 $kp   = @(Publishes $k1.Out | Where-Object { $_.Frame.Body.Contains('stub-during-warmup-6666') })
-Check 'the publish arrived during the warm-up (forwarded unmerged)' ($kp.Count -eq 1 -and -not ($kp[0].Sources -contains 'drag-lint')) ("count=$($kp.Count) sources=$($kp[0].Sources -join ',')")
+Check 'the publish arrived during the warm-up (forwarded unmerged)' ($kp.Count -ge 1 -and -not ($kp[0].Sources -contains 'drag-lint')) ("count=$($kp.Count) sources=$($kp[0].Sources -join ',')")
 Check 'no "over its ... budget" line during the warm-up' (-not ((Utf8 $k1.Err) -match 'over its \d+ ms budget')) ("err=$(Utf8 $k1.Err)")
 $oneArgs = @('lsp', '--proxy', '--merge-diagnostics', '--merge-budget-ms', '1', '--delphi-lsp', $stub)
 $k2 = Push $oneArgs (PublishBody $dirtyUri 'stub-no-warmup-7777')
@@ -336,6 +337,50 @@ Check 'the frame was merged (drag-lint present)' ($hOk -and ($hPub[0].Sources -c
 Check 'Content-Length = UTF-8 byte length of the body' ($hOk -and $hPub[0].Frame.Declared -eq $hPub[0].Frame.Actual -and $hPub[0].Frame.Declared -eq [Text.Encoding]::UTF8.GetByteCount($hPub[0].Frame.Body)) ("declared=$($hPub[0].Frame.Declared) bytes=$([Text.Encoding]::UTF8.GetByteCount([string]$hPub[0].Frame.Body))")
 Check 'the stub message survives intact' ($hOk -and (@($hPub[0].Json['params']['diagnostics'] | Where-Object { $_['message'] -ceq $uMsg }).Count -eq 1)) ''
 
+# --- (l) a lint over the budget is delivered LATE, never dropped (1.52.2 PROXYMERGE) ---
+# Owner 2026-11-20: DelphiLSP's set goes out at once; the moment drag-lint's lint
+# finishes, the merged set for that URI is published again. A later unmerged
+# forward carries the last known drag-lint set. Test seam
+# DRAGLINT_MERGE_TEST_LINT_DELAY_MS makes every lint sleep first, so the lint is
+# over its 300 ms budget on any machine.
+Write-Host ''
+Write-Host '(l) slow lint over the budget: forwarded at once, the merged set re-published when the lint ends' -ForegroundColor Cyan
+$slowArgs = @('lsp', '--proxy', '--merge-diagnostics', '--merge-budget-ms', '300', '--delphi-lsp', $stub)
+$pubL1 = PublishBody $dirtyUri 'stub-slow-lint-8888'
+$pubL2 = PublishBody $dirtyUri 'stub-second-publish-9999'
+$initP = Frame '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"window":{"workDoneProgress":true}}}}'
+$progReply = Frame '{"jsonrpc":"2.0","id":"drag-lint-progress-1","result":null}'
+$l = Invoke-Raw $Exe $slowArgs ([byte[]]($initP + (Frame $pubL1))) @{ DRAGLINT_MERGE_TEST_LINT_DELAY_MS = '1500' } ([byte[]]($progReply + (Frame $pubL2))) 8000
+$lp1 = @((Publishes $l.Out) | Where-Object { $_.Frame.Body.Contains('stub-slow-lint-8888') })
+$lp2 = @((Publishes $l.Out) | Where-Object { $_.Frame.Body.Contains('stub-second-publish-9999') })
+Check 'the first publish went out at once, unmerged (no drag-lint set known yet)' ($lp1.Count -ge 1 -and -not ($lp1[0].Sources -contains 'drag-lint')) ("count=$($lp1.Count) sources=$($lp1[0].Sources -join ',')")
+Check 'a LATE publish for the URI carries both sources' ($lp1.Count -ge 2 -and ($lp1[-1].Sources -contains 'delphilsp-stub') -and ($lp1[-1].Sources -contains 'drag-lint')) ("count=$($lp1.Count) sources=$($lp1[-1].Sources -join ',')")
+Check 'its Content-Length is exact' ($lp1.Count -ge 2 -and $lp1[-1].Frame.Declared -eq $lp1[-1].Frame.Actual -and $lp1[-1].Frame.Declared -eq [Text.Encoding]::UTF8.GetByteCount($lp1[-1].Frame.Body)) ''
+Check 'the next (over-budget) forward carries the last known drag-lint set' ($lp2.Count -ge 1 -and ($lp2[0].Sources -contains 'delphilsp-stub') -and ($lp2[0].Sources -contains 'drag-lint')) ("count=$($lp2.Count) sources=$($lp2[0].Sources -join ',')")
+# Work-done progress, only because the client advertised window.workDoneProgress.
+$lAll = Utf8 $l.Out
+Check 'progress: window/workDoneProgress/create was sent' ($lAll.Contains('"method":"window/workDoneProgress/create"')) ''
+Check 'progress: a begin naming the unit' ($lAll -match '"\$/progress".*"kind":"begin".*Dirty\.pas') ''
+Check 'progress: an end' ($lAll -match '"\$/progress".*"kind":"end"') ''
+Check 'progress: the client''s reply to create is consumed (never echoed back by DelphiLSP)' (-not $lAll.Contains('"id":"drag-lint-progress-1","result"')) ''
+Check 'control: no progress without the client capability (run a)' (-not (Utf8 $aOn.Out).Contains('$/progress')) ''
+
+# --- (m) the publish race (1.52.2 HOVER): a lint that ends between the S>C pump ---
+# composing a publishDiagnostics frame and writing it must not leave the client
+# on the older set. Seam DRAGLINT_MERGE_TEST_SC_WRITE_DELAY_MS holds the pump in
+# that window (5000 ms) while the slow lint (500 ms, budget 100 ms) ends inside it
+# and the worker publishes the merged set; the pump's frame is written after it.
+# Before the fix the LAST publish for the URI was the pump's unmerged one.
+Write-Host ''
+Write-Host '(m) a lint ending while the pump holds a composed publish: the client ends on the merged set' -ForegroundColor Cyan
+$raceArgs = @('lsp', '--proxy', '--merge-diagnostics', '--merge-budget-ms', '100', '--delphi-lsp', $stub)
+$pubM = PublishBody $dirtyUri 'stub-race-7777'
+$initM = Frame '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
+$keep  = Frame '{"jsonrpc":"2.0","method":"$/setTrace","params":{"value":"off"}}'
+$m = Invoke-Raw $Exe $raceArgs ([byte[]]($initM + (Frame $pubM))) @{ DRAGLINT_MERGE_TEST_LINT_DELAY_MS = '500'; DRAGLINT_MERGE_TEST_SC_WRITE_DELAY_MS = '5000' } $keep 14000
+$mp = @((Publishes $m.Out) | Where-Object { $_.Frame.Body.Contains('stub-race-7777') })
+Check 'the worker''s merged publish went out INSIDE the window, before the pump''s frame (the race happened)' ($mp.Count -ge 2 -and ($mp[0].Sources -contains 'drag-lint')) ("count=$($mp.Count)")
+Check 'the LAST publish for the URI carries both sources' ($mp.Count -ge 1 -and ($mp[-1].Sources -contains 'delphilsp-stub') -and ($mp[-1].Sources -contains 'drag-lint')) ("count=$($mp.Count) last=$($mp[-1].Sources -join ',') all=$(($mp | ForEach-Object { $_.Sources -join '+' }) -join ' | ')")
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
 } finally {

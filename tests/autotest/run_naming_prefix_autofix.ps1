@@ -13,7 +13,7 @@
 
     CASE 1 field-name-prefix  -- `client: TObject;` field -> FClient at decl +
                                   a bare in-method use.
-    CASE 2 param-name-prefix  -- `procedure P(x: Integer);` + body use of x ->
+    CASE 2 param-name-prefix  -- `procedure P(xv: Integer);` + body use of xv ->
                                   pX at decl header, impl header, AND body
                                   (BuildLocal syncs all three). Nothing outside
                                   the routine changes.
@@ -21,12 +21,12 @@
                                   decl + refs.
     OPT-IN GATE               -- CASE 3's fixture re-run with the rule NOT
                                   listed in "autofix" -> identifier UNCHANGED.
-    COLLISION SKIP            -- `procedure P(x: Integer); var pX: Integer;`
+    COLLISION SKIP            -- `procedure P(xv: Integer); var pXv: Integer;`
                                   -- synthesized 'pX' already exists as a local
                                   in scope -> NO edit applied anywhere, exit 0,
                                   x unchanged.
-    SAME-LINE STRESS          -- `procedure P(a, b: Integer);` both params
-                                  prefixed -> both become pA, pB on the same
+    SAME-LINE STRESS          -- (multi-letter names: single-letter params are exempt since 1.52.2 card C) `procedure P(lo, hi: Integer);` both params
+                                  prefixed -> both become pLo, pHi on the same
                                   decl line (exercises Task 1's column-DESC
                                   same-line edit ordering).
     DRY-RUN                   -- `--fix` (no --apply) previews only; file on
@@ -156,14 +156,14 @@ unit ParamPrefixAutofix;
 
 interface
 
-procedure P(x: Integer);
+procedure P(xv: Integer);
 procedure OtherRoutine(pUntouched: Integer);
 
 implementation
 
-procedure P(x: Integer);
+procedure P(xv: Integer);
 begin
-  x:= x + 1;
+  xv:= xv + 1;
 end;
 
 procedure OtherRoutine(pUntouched: Integer);
@@ -183,15 +183,15 @@ $out2 = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $c2Db --co
 Write-Host ($out2 -join "`n")
 
 $after2 = Get-Content -Raw $c2File
-$declRenamed = $after2 -cmatch 'interface\r?\n\r?\nprocedure\s+P\(pX\s*:\s*Integer\);'
-$implRenamed = $after2 -cmatch 'procedure\s+P\(pX\s*:\s*Integer\);\s*\r?\nbegin'
-$bodyRenamed = $after2 -cmatch 'pX\s*:=\s*pX\s*\+\s*1;'
-$noStaleLowerX = -not ($after2 -cmatch '(?<![.\w])x(?!\w)')
+$declRenamed = $after2 -cmatch 'interface\r?\n\r?\nprocedure\s+P\(pXv\s*:\s*Integer\);'
+$implRenamed = $after2 -cmatch 'procedure\s+P\(pXv\s*:\s*Integer\);\s*\r?\nbegin'
+$bodyRenamed = $after2 -cmatch 'pXv\s*:=\s*pXv\s*\+\s*1;'
+$noStaleLowerX = -not ($after2 -cmatch '(?<![.\w])xv(?!\w)')
 $otherUntouched = $after2 -cmatch 'OtherRoutine\(pUntouched\s*:\s*Integer\);' -and $after2 -cmatch 'pUntouched\s*:=\s*5;'
-Check 'CASE2: interface decl header renamed to P(pX: Integer)'  $declRenamed  $after2
-Check 'CASE2: impl header renamed to P(pX: Integer)'            $implRenamed  $after2
-Check 'CASE2: body use renamed to pX := pX + 1;'                $bodyRenamed  $after2
-Check 'CASE2: no stale lower-case bare x remains'                $noStaleLowerX $after2
+Check 'CASE2: interface decl header renamed to P(pXv: Integer)'  $declRenamed  $after2
+Check 'CASE2: impl header renamed to P(pXv: Integer)'            $implRenamed  $after2
+Check 'CASE2: body use renamed to pXv := pXv + 1;'                $bodyRenamed  $after2
+Check 'CASE2: no stale lower-case bare xv remains'                $noStaleLowerX $after2
 Check 'CASE2: unrelated OtherRoutine param (already-prefixed pUntouched) unchanged' $otherUntouched $after2
 
 # =============================================================================
@@ -302,7 +302,7 @@ Check 'GATE: file is byte-identical to the pre-fix fixture (no edit applied at a
   ($gateAfter -ceq $gateBefore) 'gate file drifted from source fixture'
 
 # =============================================================================
-# COLLISION SKIP: `procedure P(x: Integer); var pX: Integer;` -- synthesized
+# COLLISION SKIP: `procedure P(xv: Integer); var pXv: Integer;` -- synthesized
 # 'pX' already exists as a local in the SAME routine scope -> the NEW
 # BuildLocal collision guard fires -> BuildNamingFixEdits skips the finding ->
 # x stays unchanged everywhere, exit code still 0.
@@ -321,16 +321,16 @@ unit CollisionAutofix;
 
 interface
 
-procedure P(x: Integer);
+procedure P(xv: Integer);
 
 implementation
 
-procedure P(x: Integer);
+procedure P(xv: Integer);
 var
-  pX: Integer;
+  pXv: Integer;
 begin
-  pX:= 0;
-  x:= x + pX;
+  pXv:= 0;
+  xv:= xv + pXv;
 end;
 
 end.
@@ -347,16 +347,16 @@ Write-Host ($colOut -join "`n")
 
 $colAfter = Get-Content -Raw $colFile
 Check 'COLLISION: exit code still 0' ($colExit -eq 0) "exit=$colExit"
-Check 'COLLISION: param decl UNCHANGED (still x, collision with existing local pX)' `
-  ($colAfter -cmatch 'procedure\s+P\(x\s*:\s*Integer\);') $colAfter
-Check 'COLLISION: existing local pX untouched (still declared, still 0)' `
-  ($colAfter -cmatch 'pX\s*:\s*Integer;' -and $colAfter -cmatch 'pX\s*:=\s*0;') $colAfter
-Check 'COLLISION: body use of x unchanged (x:= x + pX;)' `
-  ($colAfter -cmatch 'x\s*:=\s*x\s*\+\s*pX;') $colAfter
+Check 'COLLISION: param decl UNCHANGED (still xv, collision with existing local pXv)' `
+  ($colAfter -cmatch 'procedure\s+P\(xv\s*:\s*Integer\);') $colAfter
+Check 'COLLISION: existing local pXv untouched (still declared, still 0)' `
+  ($colAfter -cmatch 'pXv\s*:\s*Integer;' -and $colAfter -cmatch 'pXv\s*:=\s*0;') $colAfter
+Check 'COLLISION: body use of xv unchanged (xv:= xv + pXv;)' `
+  ($colAfter -cmatch 'xv\s*:=\s*xv\s*\+\s*pXv;') $colAfter
 
 # =============================================================================
-# SAME-LINE STRESS: `procedure P(a, b: Integer);` both params prefixed -> both
-# become pA, pB on the SAME decl line (exercises Task 1's column-DESC same-
+# SAME-LINE STRESS: `procedure P(lo, hi: Integer);` both params prefixed -> both
+# become pLo, pHi on the SAME decl line (exercises Task 1's column-DESC same-
 # line edit ordering for differing-length replacements).
 # =============================================================================
 Write-Host ''
@@ -373,14 +373,14 @@ unit SameLinePrefixAutofix;
 
 interface
 
-procedure RunBoth(a, b: Integer);
+procedure RunBoth(lo, hi: Integer);
 
 implementation
 
-procedure RunBoth(a, b: Integer);
+procedure RunBoth(lo, hi: Integer);
 begin
-  a:= a + 1;
-  b:= b + 2;
+  lo:= lo + 1;
+  hi:= hi + 2;
 end;
 
 end.
@@ -400,17 +400,17 @@ Write-Host '--- SAME-LINE result (for evidence) ---' -ForegroundColor Yellow
 Write-Host $slAfter
 Write-Host '--- end result ---' -ForegroundColor Yellow
 
-$slDeclLineOk = $slAfter -cmatch 'RunBoth\(pA,\s*pB\s*:\s*Integer\);'
-$slUse1Ok     = $slAfter -cmatch 'pA\s*:=\s*pA\s*\+\s*1;'
-$slUse2Ok     = $slAfter -cmatch 'pB\s*:=\s*pB\s*\+\s*2;'
-$slNoStale    = (-not ($slAfter -cmatch '(?<![.\w])a(?!\w)')) -and (-not ($slAfter -cmatch '(?<![.\w])b(?!\w)'))
-$slNoGarbage  = -not ($slAfter -cmatch 'pApB') -and -not ($slAfter -cmatch 'pBpA')
+$slDeclLineOk = $slAfter -cmatch 'RunBoth\(pLo,\s*pHi\s*:\s*Integer\);'
+$slUse1Ok     = $slAfter -cmatch 'pLo\s*:=\s*pLo\s*\+\s*1;'
+$slUse2Ok     = $slAfter -cmatch 'pHi\s*:=\s*pHi\s*\+\s*2;'
+$slNoStale    = (-not ($slAfter -cmatch '(?<![.\w])lo(?!\w)')) -and (-not ($slAfter -cmatch '(?<![.\w])hi(?!\w)'))
+$slNoGarbage  = -not ($slAfter -cmatch 'pLopHi') -and -not ($slAfter -cmatch 'pHipLo')
 
 Check 'SAMELINE: exit code 0' ($slExit -eq 0) "exit=$slExit"
-Check 'SAMELINE: decl line correctly shows "RunBoth(pA, pB: Integer);" (both renamed, not corrupted)' $slDeclLineOk $slAfter
-Check 'SAMELINE: first body use renamed (pA := pA + 1)'  $slUse1Ok $slAfter
-Check 'SAMELINE: second body use renamed (pB := pB + 2)' $slUse2Ok $slAfter
-Check 'SAMELINE: no stale bare a/b remains' $slNoStale $slAfter
+Check 'SAMELINE: decl line correctly shows "RunBoth(pLo, pHi: Integer);" (both renamed, not corrupted)' $slDeclLineOk $slAfter
+Check 'SAMELINE: first body use renamed (pLo := pLo + 1)'  $slUse1Ok $slAfter
+Check 'SAMELINE: second body use renamed (pHi := pHi + 2)' $slUse2Ok $slAfter
+Check 'SAMELINE: no stale bare lo/hi remains' $slNoStale $slAfter
 Check 'SAMELINE: no interleaved/concatenated garbage from a same-line ordering bug' $slNoGarbage $slAfter
 if (-not ($slDeclLineOk -and $slNoGarbage)) {
   Write-Host '  *** SAME-LINE APPLIER RISK: differing-length same-line prefix edit corrupted (Task 1 regression). ***' -ForegroundColor Red

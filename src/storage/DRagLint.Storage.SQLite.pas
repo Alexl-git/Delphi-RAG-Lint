@@ -9285,6 +9285,13 @@ begin
   for var Inc_ in List.Split([FILE_INCLUDES_SEP]) do
   begin
     if Inc_ = '' then Continue;
+    { INCRPP: where an include the host could not resolve would be found -- once a file
+      exists there, the host's preprocess result moves. }
+    if Inc_.StartsWith(UNRESOLVED_INCLUDE_MARK) then
+    begin
+      if TFile.Exists(Inc_.Substring(Length(UNRESOLVED_INCLUDE_MARK))) then Exit(True);
+      Continue;
+    end;
     if (not TFile.Exists(Inc_)) or (FileMTimeUnix(Inc_) > ParsedAt) then
       Exit(True);
   end;

@@ -123,6 +123,8 @@ type
     MinIdentifierLen        : Integer;       // shortest allowed identifier (hungarian-or-short rule)
     HungarianPrefixes       : TArray<string>;// type-prefix denylist for the hungarian rule
     ShortIdentifierCheck    : Boolean;       // master on/off for hungarian-or-short-identifier (default False)
+    ParamPrefixes           : TArray<string>;// param-name-prefix: ACCEPTED prefixes (default p, A); empty disables the rule
+    ParamHungarian          : string;        // 'allowed' (default): a hungarian_prefixes typed prefix also satisfies param-name-prefix; 'off': it does not
     /// <returns><!-- drag-lint:auto type -->TNamingConfig</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -965,7 +967,7 @@ begin
   Result.InterfacePrefix:= 'I';
   Result.PointerPrefix  := 'P';
   Result.FieldPrefix    := 'F';
-  Result.ParamPrefix    := '';  { off by default; set to 'p' in config to enable }
+  Result.ParamPrefix    := 'p'; { the PREFERRED param prefix: the one the autofix adds (owner Q7, 1.52.2) }
   Result.MethodCase     := 'PascalCase';
   Result.LocalCase      := 'PascalCase';
   Result.ConstCase      := ['PascalCase', 'UPPER_CASE'];
@@ -973,6 +975,8 @@ begin
   Result.MinIdentifierLen    := 3;
   Result.HungarianPrefixes   := ['lpsz', 'psz', 'sz', 'lp', 'int', 'str', 'dw', 'b', 'p', 'n'];
   Result.ShortIdentifierCheck:= False;        { hungarian-or-short-identifier OFF by default }
+  Result.ParamPrefixes       := ['p', 'A'];   { param-name-prefix ON by default (owner Q7, 1.52.2) }
+  Result.ParamHungarian      := 'allowed';    { a typed (Hungarian) prefix is accepted, not required }
 end;
 
 class function TLintConfig.Contains(const AArr: TArray<string>; const AId: string): Boolean;
@@ -1000,7 +1004,25 @@ begin
     if TP.GetValue('pointer')   <> nil then Naming.PointerPrefix  := TP.GetValue('pointer').Value;
   end;
   if NJ.GetValue('field_prefix') <> nil then Naming.FieldPrefix:= NJ.GetValue('field_prefix').Value;
-  if NJ.GetValue('param_prefix') <> nil then Naming.ParamPrefix:= NJ.GetValue('param_prefix').Value;
+  { Legacy single param_prefix: it is BOTH the preferred (autofix) prefix and
+    the whole accepted list; "" disables param-name-prefix. A param_prefixes
+    list read afterwards replaces the accepted list and, when param_prefix is
+    absent, its first entry becomes the preferred prefix. }
+  if NJ.GetValue('param_prefix') <> nil then
+  begin
+    Naming.ParamPrefix:= NJ.GetValue('param_prefix').Value;
+    Naming.ParamPrefixes:= if Naming.ParamPrefix = '' then nil else [Naming.ParamPrefix];
+  end;
+  if NJ.GetValue('param_prefixes') is TJSONArray then
+  begin
+    Naming.ParamPrefixes:= nil;
+    for var PV in (NJ.GetValue('param_prefixes') as TJSONArray) do
+      if Trim(PV.Value) <> '' then Naming.ParamPrefixes:= Naming.ParamPrefixes + [Trim(PV.Value)];
+    if NJ.GetValue('param_prefix') = nil then
+      Naming.ParamPrefix:= if Length(Naming.ParamPrefixes) > 0 then Naming.ParamPrefixes[0] else '';
+  end;
+  if NJ.GetValue('param_hungarian') <> nil then
+    Naming.ParamHungarian:= LowerCase(Trim(NJ.GetValue('param_hungarian').Value));
   if NJ.GetValue('method_case')  <> nil then Naming.MethodCase := NJ.GetValue('method_case').Value;
   if NJ.GetValue('local_case')   <> nil then Naming.LocalCase  := NJ.GetValue('local_case').Value;
   if NJ.GetValue('const_case') is TJSONArray then

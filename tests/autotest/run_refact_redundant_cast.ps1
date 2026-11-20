@@ -159,7 +159,7 @@ try {
     & { $ErrorActionPreference = 'Continue'; & $Exe lint @iBase --project $I.Proj --platform win64 *> $null }
     Check 'I2 with --project it exits 0 and removes that cast' (($LASTEXITCODE -eq 0) -and ([IO.File]::ReadAllLines($I.Use)[$iLine - 1] -ceq '  B:= B; // FIX')) "exit $LASTEXITCODE"
     $iForm = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\..\src\delphi-plugin\DragLint.Plugin.StructureForm.pas'))
-    Check 'I3 the plugin sends --project for this rule' ($iForm -match 'CRedundantCastRule\) then' -and $iForm.Contains('--fix-rule "%s" --project "%s" --db "%s" --platform %s --apply'))
+    Check 'I3 the plugin sends --project for this rule' ($iForm -match 'CRedundantCastRule\)( then| or FixRuleNeedsProject)' -and $iForm.Contains('--fix-rule "%s" --project "%s" --db "%s" --platform %s --apply'))
 
     Write-Host 'rollback'
     $C = New-Project 'broken'

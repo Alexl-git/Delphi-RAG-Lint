@@ -224,6 +224,15 @@ var
     takes (True) is answered by the merge engine and NOT forwarded. Assigned
     with GInterceptor, never cleared. }
   GAnswerer: TFrameAnswerer = nil;
+  { 1.52.2 HOVER: called on the S>C pump under GClientLock right before an
+    intercepted frame is written (TProxyMergeEngine.FinishServerFrame), so a
+    publishDiagnostics composed before a lint ended is recomposed. Assigned
+    with GInterceptor, never cleared. }
+  GFinisher: TFrameFinisher = nil;
+  { Test seam (DRAGLINT_MERGE_TEST_SC_WRITE_DELAY_MS): widens the S>C window
+    between the interceptor's answer and the write, where the publish race
+    lived. 0 outside the guards. }
+  GTestScWriteDelayMs: Integer = 0;
   { Serialises whole-frame writes to the client while an interceptor is set:
     the S>C pump and the merge worker (a proxy-answered request) both write
     there. Unused on the plain relay. }
@@ -492,6 +501,7 @@ var
   Use   : Boolean;
   Traced: Boolean;
   LBuf  : TBytes;
+  Fin   : TBytes;
 begin
   Dir:= if ADir = 'C>S' then mdClientToServer else mdServerToClient;
   { A5: a C>S request the merge engine answers itself is consumed here; the
@@ -526,8 +536,21 @@ begin
   except  // dl:ok bare-except@67c3 -- fail-open by design: any merge exception forwards the original frame
     Use:= False;   { swallowed on purpose: a merge bug must not cost the session }
   end;
-  if Dir = mdServerToClient then EnterCriticalSection(GClientLock);
+  if Dir = mdServerToClient then
+  begin
+    if GTestScWriteDelayMs > 0 then Sleep(GTestScWriteDelayMs);
+    EnterCriticalSection(GClientLock);
+  end;
   try
+    if (Dir = mdServerToClient) and Assigned(GFinisher) then
+    begin
+      Fin:= GFinisher();   { never raises: the closure RunLspProxy assigns catches }
+      if Length(Fin) > 0 then
+      begin
+        Repl:= Fin;
+        Use := True;
+      end;
+    end;
     if Use and (Length(Repl) > 0) then
     begin
       TraceFrame(ADir, Repl, Length(Repl));
@@ -777,6 +800,7 @@ begin
     interceptor. }
   GInterceptor:= nil;
   GAnswerer   := nil;
+  GFinisher   := nil;
   MergeEngine := nil;
   Exe:= ResolveDelphiLspPath(AOptions.DelphiLspExe, AOptions.DelphiLspBits);
   if Exe = '' then
@@ -808,7 +832,29 @@ begin
         Result:= MergeEngine.Intercept(ADir, AFrame, ALen, AReplacement);
       end;
     MergeEngine.ClientWriter:= WriteToClient;
-    if AOptions.MergeDefinition or AOptions.MergeNavigation then
+    MergeEngine.ClientLocker:=
+      procedure(const AProc: TProc)
+      begin
+        EnterCriticalSection(GClientLock);
+        try
+          AProc();
+        finally
+          LeaveCriticalSection(GClientLock);
+        end;
+      end;
+    GFinisher:=
+      function: TBytes
+      begin
+        Result:= nil;
+        try
+          Result:= MergeEngine.FinishServerFrame;
+        except  // fail-open: a finisher fault forwards what the interceptor answered
+          on E: Exception do StdErrLine('drag-lint lsp --proxy: merge finisher skipped a frame (' + E.ClassName + ': ' + E.Message + ').');
+        end;
+      end;
+    GTestScWriteDelayMs:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_MERGE_TEST_SC_WRITE_DELAY_MS'), 0);    { 1.52.2: hover (the deferred hover's whole step) and diagnostics (the
+      client's replies to our progress create) need the answerer too. }
+    if AOptions.MergeDefinition or AOptions.MergeNavigation or AOptions.MergeHover or AOptions.MergeDiagnostics then
     begin
       GAnswerer:=
         function(const AFrame: TBytes; ALen: Integer; const AOnTake: TProc): Boolean

@@ -525,6 +525,22 @@ type
   /// </remarks>
   TManifestIO = class
     public
+      /// <summary>True suppresses the no-config warning Load writes when it finds no manifest
+      /// at all (1.52.2). The CLI sets it for --quiet, JSON output and the verbs that print
+      /// nothing else (init, ask, ...).</summary>
+      /// <remarks>Process-wide; set once before the first Load. False by default.</remarks>
+      class var QuietNoManifest: Boolean;
+
+      /// <summary>The one-line no-config warning: every place Load looked for a manifest.</summary>
+      /// <param name="AEngineDir">Directory containing the drag-lint EXE.</param>
+      /// <param name="AStartDir">Directory the upward .drag-lint.json walk starts from.</param>
+      /// <returns>'' when a global manifest (DRAGLINT_MANIFEST, %APPDATA%, exe-side) exists or a
+      /// .drag-lint.json is found walking up from AStartDir (unless ignoreLocalConfig); otherwise
+      /// a 'drag-lint: warning: no drag-lint.json found ...' line naming those paths.</returns>
+      /// <remarks>Without a manifest the run has no library index, so every rule that needs
+      /// library types reports nothing, silently (backlog 2026-11-19). Touches: file system.</remarks>
+      class function NoManifestNote(const AEngineDir, AStartDir: string): string; static;
+
       /// <summary>True when the engine-side manifest (the one TInstalledLayout.ManifestLocation
       /// finds for AEngineDir) carries <c>"settings": {"ignoreLocalConfig": true}</c>.</summary>
       /// <param name="AEngineDir">Directory containing the drag-lint EXE.</param>
@@ -1791,9 +1807,41 @@ begin
     Result.Settings:= TIndexSettings.Defaults;
     Result.Docs:= TDocSettings.Defaults;
     Result.RootDir:= AStartDir;
+    { 1.52.2: say so, once per process, on a console only (the IDE plugin loads this too). }
+    if IsConsole and not QuietNoManifest and (Errors = '') and FirstLoadWarning('no-manifest') then
+      Writeln(ErrOutput, NoManifestNote(AEngineDir, AStartDir));
   end;
   Result.LoadError:= Errors;
 end; // begin
+
+class function TManifestIO.NoManifestNote(const AEngineDir, AStartDir: string): string;
+const
+  LOCAL_FILE = '.drag-lint.json';
+begin
+  Result:= '';
+  var Located:= TInstalledLayout.ManifestLocation(AEngineDir);
+  if Located.Exists then Exit;
+  var Walk:= not IgnoresLocalConfig(AEngineDir);
+  if Walk then
+  begin
+    var Dir:= TPath.GetFullPath(AStartDir);
+    while Dir <> '' do
+    begin
+      if TFile.Exists(TPath.Combine(Dir, LOCAL_FILE)) then Exit;
+      var Parent:= TPath.GetDirectoryName(Dir);
+      if (Parent = '') or (Parent = Dir) then Break;
+      Dir:= Parent;
+    end;
+  end;
+  var Looked:= Located.Path;
+  var Roaming:= TInstalledLayout.AppDataManifestFor(GetEnvironmentVariable('APPDATA'));
+  if TInstalledLayout.Enabled and (Roaming <> '') and not SameText(Roaming, Looked) then
+    Looked:= Roaming + ', ' + Looked;
+  if Walk then Looked:= Looked + ', and ' + LOCAL_FILE + ' from ' + TPath.GetFullPath(AStartDir) + ' up to the root';
+  Result:= 'drag-lint: warning: no drag-lint.json found (looked at ' + Looked + '). Running on defaults: ' +
+    'no library index, so rules that need library types report nothing. Put a drag-lint.json beside the ' +
+    'engine or set ' + TInstalledLayout.MANIFEST_ENV + ' (--quiet hides this note).';
+end;
 
 { ---------------------------------------------------------------------- }
 {  TManifestIO.Validate                                                    }

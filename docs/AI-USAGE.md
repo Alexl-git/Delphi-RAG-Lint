@@ -1025,7 +1025,7 @@ have a `cli` surface). Do not edit it by hand; edit the entry and regenerate.
 | `lint-all` | [member-could-be-private lint rule (lane ATLB)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/v152-atlb-rules) | Hint (OFF in 1.52) on a public member used only in its own unit; published, virtual, interface, attributed and shared-unit members stay silent |  |
 | `lint-all` | [Documentation policy: missing-doc, doc-placeholder, doc-malformed-summary](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/v152-docpol) | missing-doc covers DFM-bound handlers with code; doc-placeholder (ON, hint) flags template summaries; doc-malformed-summary (OFF) flags declaration-like ones |  |
 | `lint-all` | [Per-rule time budget in the rule frame (rule-skipped-budget)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/rule-time-budget) | A v151/v152 rule slower than rule_time_budget_ms (2000 ms) on a file is skipped there with one rule-skipped-budget note; index warns near the parse limit |  |
-| `lint-all` | [unit-used-by-no-unit rule; unit-not-in-dpr outside the project roots](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/v152-proj2) | Warns (ON) on a unit only the .dpr lists that nothing reaches; a form counts only when opened. unit-not-in-dpr also reports shared-folder units |  |
+| `lint-all` | [unit-used-by-no-unit rule; unit-not-in-dpr outside the project roots](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/v152-proj2) | Warns (ON) on a unit only the .dpr lists that nothing reaches (a form counts when opened); unit-not-in-dpr covers the closure minus library roots |  |
 | `lint-all` | [parameter-type-too-wide ON by default, with an autofix](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/v152-ptw) | parameter-type-too-wide ships ON as a warning in lint-all / lint-project with an autofix that retypes the parameter through the compile gate |  |
 | `lint-project` | [lint-project](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/lint-project) | Runs project-scoped structural lint rules against an index -- checks such as god-class, unused-public-symbol | index |
 | `lint-tree` | [lint-tree](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/lint-tree) | Answers one question lint-all cannot: does an interface edit to this unit reach any dependent? |  |
@@ -1204,7 +1204,7 @@ of the CLI -- exactly **19 tools**:
 > listings; `find_symbol` searches every database (first database's symbols
 > first); `get_symbol_doc`, `get_surface`, `get_slice` and `get_context_bundle`
 > answer from the first database that declares the qname; `rename_symbol`'s
-> proof reads the served library sections when no `library_db` is passed. A
+> dry-run proof reads the served library sections, but a write (`dry_run=false`) reads a library only when `library_db` is passed. A
 > per-call `"db"` argument still answers from that one index only.
 
 | Tool | Purpose |
@@ -1311,6 +1311,12 @@ withhold it. All are **dry-run unless `--apply`**. Two phases:
   param `x -> pX`, `myclass -> TMyClass`). (Shipped v0.97.)
   - `param-name-prefix` is **fully safe**: routine-local scope, pure-AST, with a
     collision guard that skips if the prefixed name already exists in scope.
+    Since 1.52.2 the rule is ON by default (accepted prefixes `param_prefixes`,
+    default `p`, `A`; `FName` always reported; typed Hungarian prefixes accepted
+    while `param_hungarian` is `allowed`). The fix is OPT-IN (owner 2026-11-20): it runs only when the run names the rule (`--rule`, `--enable` or `--fix-rule param-name-prefix`), never in a blanket `--fix --apply`. It adds `param_prefix` (default
+    `p`; `FName -> pName`) at decl + impl header + body, and DECLINES with a note
+    for virtual/override/abstract/message methods, interface-type methods and
+    non-private methods of a class that implements an interface.
   - **Caveat -- review the diff for `field-name-prefix` / `type-name-prefix`.**
     These rely on the reference index, which does **not yet** capture
     `Self.`-qualified field uses or type-annotation references, so those

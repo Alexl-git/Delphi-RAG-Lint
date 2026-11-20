@@ -798,7 +798,17 @@ begin
       ClassPrefix when ambiguous/unresolved, mirroring the checker's own
       conservative default). }
     if SameText(AF.RuleId, 'field-name-prefix') then Prefix:= ANaming.FieldPrefix
-    else if SameText(AF.RuleId, 'param-name-prefix') then Prefix:= ANaming.ParamPrefix
+    else if SameText(AF.RuleId, 'param-name-prefix') then
+    begin
+      { The PREFERRED prefix (param_prefix; else the first accepted one). A
+        parameter wearing the field prefix (FName) loses it: pName, not pFName. }
+      Prefix:= if ANaming.ParamPrefix <> '' then ANaming.ParamPrefix
+               else if Length(ANaming.ParamPrefixes) > 0 then ANaming.ParamPrefixes[0] else '';
+      var FLen: Integer:= Length(ANaming.FieldPrefix);
+      if (Prefix <> '') and (FLen > 0) and (Length(AOldName) > FLen)
+        and (Copy(AOldName, 1, FLen) = ANaming.FieldPrefix) and CharInSet(AOldName[FLen + 1], ['A'..'Z']) then
+        Exit(TArray<string>.Create(Prefix + Copy(AOldName, FLen + 1, MaxInt)));
+    end
     else if TryExpectedPrefixFromTypePrefixMessage(AF.Message, Prefix) then
     begin
       // type-name-prefix: the letter comes from the finding itself. A second
@@ -917,6 +927,166 @@ begin
     { ASK THE INDEX (owner, 2026-10-13): a name that already exists is not free. }
     else if TRenameRefactoring.ConflictReason(AStore, ATarget.QName, Cand) = '' then
       Result:= Result + [Cand];
+end;
+
+{ Owner ruling Q7 (1.52.2): a param-name-prefix rename covers decl + impl +
+  body, and an override / interface parameter list is renamed together with
+  its partners or NOT AT ALL. The partners (an ancestor's virtual, the other
+  overrides, the interface's declaration -- often in a library) are not
+  renamed here, so the fix DECLINES. Returns '' when the parameter at
+  (ALine, ACol) named AName may be renamed, else the reason it is declined:
+    - the routine is a method of an interface type;
+    - its class-body declaration carries virtual / dynamic / override /
+      abstract / message (an implementation header TFoo.Bar is resolved to
+      the TFoo.Bar declaration in the same file -- Delphi requires it there;
+      not found = declined, conservatively);
+    - it is a non-private method of a class whose heritage list names an
+      interface (two or more entries, or a single I-prefixed one).
+  An unparsable file or an identifier not found answers '' (nothing proves a
+  contract; the rename proof downstream still guards the edit). }
+function ParamContractReason(const AFile: string; ALine, ACol: Integer; const AName: string): string; // dl:ok too-many-exit-points@8cdf -- guard clauses: each Exit is either "nothing proves a contract" or one decline reason
+const
+  CONTRACT_KEYWORDS: array[0..4] of string = ('kVirtual', 'kDynamic', 'kOverride', 'kAbstract', 'kMessage');
+  MSG_INTF_TYPE   = 'a method of an interface type';
+  MSG_HIERARCHY   = 'a virtual / override / dynamic / abstract / message method: the parameter list is shared along the class hierarchy';
+  MSG_IMPLEMENTS  = 'a method of a class that implements an interface';
+  MSG_NO_DECL     = 'the class declaration of this method is not in this file';
+var
+  PF : TParsedFile;
+  Src: TBytes;
+
+  function NStr(const pNode: TTSNode): string;
+  begin
+    Result:= '';
+    if pNode.IsNull then Exit;
+    var S: Integer:= Integer(pNode.StartByte);
+    var L: Integer:= Integer(pNode.EndByte) - S;
+    if (L > 0) and (S >= 0) and (S + L <= Length(Src)) then Result:= Trim(TEncoding.UTF8.GetString(Src, S, L));
+  end;
+
+  { The parameter identifier: on ALine, named AName; the one at ACol when
+    several share the line (byte or character column -- equal on ASCII). }
+  function FindParam(const pNode: TTSNode; var ABest: TTSNode): Boolean;
+  begin
+    Result:= False;
+    if pNode.IsNull or (Integer(pNode.StartPoint.Row) + 1 > ALine) then Exit;
+    if (pNode.NodeType = 'identifier') and (Integer(pNode.StartPoint.Row) + 1 = ALine) and SameText(NStr(pNode), AName) then
+    begin
+      if ABest.IsNull or (Integer(pNode.StartPoint.Column) + 1 = ACol) then ABest:= pNode;
+      Result:= Integer(pNode.StartPoint.Column) + 1 = ACol;
+    end;
+    for var I:= 0 to pNode.NamedChildCount - 1 do
+      if (not Result) and FindParam(pNode.NamedChild(I), ABest) then Result:= True;
+  end;
+
+  function HasContractDirective(const ADecl: TTSNode): Boolean;
+  begin
+    Result:= False;
+    for var I:= 0 to ADecl.NamedChildCount - 1 do
+    begin
+      var Attr: TTSNode:= ADecl.NamedChild(I);
+      if Attr.NodeType <> 'procAttribute' then Continue;
+      for var J:= 0 to Attr.NamedChildCount - 1 do
+        if MatchStr(Attr.NamedChild(J).NodeType, CONTRACT_KEYWORDS) then Exit(True);
+    end;
+  end;
+
+  function ClassImplementsInterface(const AClass: TTSNode): Boolean;
+  var
+    Count: Integer;
+    First: string ;
+  begin
+    Count:= 0;
+    First:= '';
+    for var I:= 0 to AClass.NamedChildCount - 1 do
+      if AClass.NamedChild(I).NodeType = 'typeref' then
+      begin
+        Inc(Count);
+        if Count = 1 then First:= NStr(AClass.NamedChild(I));
+      end;
+    Result:= (Count >= 2)
+      or ((Count = 1) and (Length(First) > 1) and (First[1] = 'I') and CharInSet(First[2], ['A'..'Z']));
+  end;
+
+  { Why a CLASS-BODY (or interface-body) declProc's parameters are shared. }
+  function DeclReason(const ADecl: TTSNode): string;
+  var
+    P        : TTSNode;
+    IsPrivate: Boolean;
+  begin
+    Result:= '';
+    if HasContractDirective(ADecl) then Exit(MSG_HIERARCHY);
+    IsPrivate:= False;
+    P:= ADecl.Parent;
+    while not P.IsNull do
+    begin
+      if P.NodeType = 'declIntf' then Exit(MSG_INTF_TYPE);
+      if P.NodeType = 'declSection' then
+        for var I:= 0 to P.NamedChildCount - 1 do
+          if P.NamedChild(I).NodeType = 'kPrivate' then IsPrivate:= True;
+      if P.NodeType = 'declClass' then
+      begin
+        if (not IsPrivate) and ClassImplementsInterface(P) then Exit(MSG_IMPLEMENTS);
+        Exit;
+      end;
+      P:= P.Parent;
+    end;
+  end;
+
+  { Every declProc named AMeth in the class body of type AClassName. }
+  procedure CollectClassDecls(const pNode: TTSNode; const AClassName, AMeth: string; var AOut: TArray<TTSNode>);
+  begin
+    if pNode.IsNull then Exit;
+    if (pNode.NodeType = 'declType') and SameText(NStr(pNode.ChildByField('name')), AClassName) then
+    begin
+      var Stack: TArray<TTSNode>:= [pNode];
+      while Length(Stack) > 0 do
+      begin
+        var Cur: TTSNode:= Stack[High(Stack)];
+        SetLength(Stack, Length(Stack) - 1);
+        if (Cur.NodeType = 'declProc') and SameText(NStr(Cur.ChildByField('name')), AMeth) then
+          AOut:= AOut + [Cur]
+        else if (Cur = pNode) or (Cur.NodeType <> 'declType') then
+          for var I:= 0 to Cur.NamedChildCount - 1 do Stack:= Stack + [Cur.NamedChild(I)];
+      end;
+      Exit;
+    end;
+    for var I:= 0 to pNode.NamedChildCount - 1 do CollectClassDecls(pNode.NamedChild(I), AClassName, AMeth, AOut);
+  end;
+
+var
+  Id     : TTSNode;
+  Routine: TTSNode;
+begin
+  Result:= '';
+  PF:= TAstParseCache.Get(AFile);
+  if PF.Tree = nil then Exit;
+  Src:= PF.Src;
+  Id:= Default(TTSNode);
+  FindParam(PF.Tree.RootNode, Id);
+  if Id.IsNull then Exit;
+  Routine:= Id.Parent;
+  while (not Routine.IsNull) and (Routine.NodeType <> 'declProc') and (Routine.NodeType <> 'defProc') do
+    Routine:= Routine.Parent;
+  if Routine.IsNull then Exit;
+  { A defProc's `header` is itself a declProc: climb to the defProc. }
+  if (Routine.NodeType = 'declProc') and (not Routine.Parent.IsNull) and (Routine.Parent.NodeType = 'defProc') then
+    Routine:= Routine.Parent;
+  if Routine.NodeType = 'declProc' then Exit(DeclReason(Routine));
+  { defProc: an implementation header. Unqualified = a plain routine. }
+  var QName: string:= NStr(Routine.ChildByField('header').ChildByField('name'));
+  var Dot: Integer:= LastDelimiter('.', QName);
+  if Dot = 0 then Exit;
+  var Owner: string:= Copy(QName, 1, Dot - 1);
+  Owner:= Copy(Owner, LastDelimiter('.', Owner) + 1, MaxInt); { TOuter.TInner.Meth -> TInner }
+  var Decls: TArray<TTSNode>:= nil;
+  CollectClassDecls(PF.Tree.RootNode, Owner, Copy(QName, Dot + 1, MaxInt), Decls);
+  if Length(Decls) = 0 then Exit(MSG_NO_DECL);
+  for var D: TTSNode in Decls do
+  begin
+    Result:= DeclReason(D);
+    if Result <> '' then Exit;
+  end;
 end;
 
 function BuildTargetEdits(const AStore: ISymbolStore; const ALibraries: TArray<ISymbolStore>; const ATarget: TNamingTarget;
@@ -1049,6 +1219,16 @@ begin
   if (ATarget.Status <> tsReady) or (ANewName = '') then Exit;
   if (ATarget.Scope = nsGlobal) and (AStore = nil) then Exit;
   F:= ATarget.Finding;
+  if SameText(F.RuleId, 'param-name-prefix') then
+  begin
+    var Why: string:= ParamContractReason(F.FilePath, F.StartLine, F.StartCol, ATarget.OldName);
+    if Why <> '' then
+    begin
+      ARefusal:= Format('param-name-prefix: declined %s:%d "%s" -> "%s" -- %s',
+        [ExtractFileName(F.FilePath), F.StartLine, ATarget.OldName, ANewName, Why]);
+      Exit;
+    end;
+  end;
   { 1.52 COLS: the finding carries the checker's tree-sitter BYTE column; the edits, the span guard and the
     applier count characters. BuildLocal (tree-based) keeps the byte column. }
   if not FindingLine(F.FilePath, F.StartLine, F.StartCol, FindLn, FindCol) then FindCol:= F.StartCol;

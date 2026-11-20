@@ -276,6 +276,21 @@ function UnwithPlanFile(const pStore, pLib: ISymbolStore; const pFile: string; p
 /// </remarks>
 function UnwithApply(const pPlans: TArray<TUnwithFilePlan>; const pOpts: TUnwithApplyOptions): TUnwithApplyResult;
 
+/// <summary>The AFTER proof of one plan without the compile gate, for the with fixer of lint --fix (1.52.2 Q8): every ref
+/// of every rewritten body must bind, after the rewrite, to what it bound before.</summary>
+/// <param name="pPlan">The plan; its NewBytes are the rewrite under proof. A plan with no NewBytes proves nothing (False).</param>
+/// <param name="pDb">The project DB the plan was made from; only a copy of it is written.</param>
+/// <param name="pDetail">'' on success; else "rebind-after: ..." or "after-proof-unavailable: ...", one line for the user.</param>
+/// <returns>True only when the re-index ran and every proof point held.</returns>
+/// <exception cref="EInOutError">The source file could not be restored after the proof (it then holds the rewrite).</exception>
+/// <remarks>
+/// Writes NewBytes over the file, re-indexes that one file into a copy of pDb in a child "index", compares, and always
+/// restores the original bytes AND last-write time before returning: the caller sees the file as it was and decides
+/// whether to write the edit. The copy and its logs never outlive the call (unless a detail cites a log). Not
+/// thread-safe: the file is briefly rewritten in place.
+/// </remarks>
+function UnwithProveFile(const pPlan: TUnwithFilePlan; const pDb: string; out pDetail: string): Boolean;
+
 implementation
 
 uses
@@ -297,6 +312,8 @@ const
   CSpace = 32;
   CTab = 9;
   CSemicolon = Ord(';');
+  /// <summary>UnwithProveFile's bound on its child re-index of ONE file (10 min).</summary>
+  CFixProofTimeoutMs = 600000;
 
 type
   TRow = record
@@ -1649,23 +1666,19 @@ begin
   end;
 end;
 
-function UnwithApply(const pPlans: TArray<TUnwithFilePlan>; const pOpts: TUnwithApplyOptions): TUnwithApplyResult;
+/// <summary>Compares every proof point of pPlan against the re-indexed store; counts them and lists each rebind.</summary>
+procedure CompareProof(const pPlan: TUnwithFilePlan; const pAfter: ISymbolStore; var pPoints: Integer; var pRebinds: TArray<string>);
 var
-  Req: TGateRequest;
-  Dir: string;
-
-  procedure Compare(const pPlan: TUnwithFilePlan; const pAfter: ISymbolStore);
-  var
-    Has: Boolean;
-    Rows: TRows;
-  begin
+  Has: Boolean;
+  Rows: TRows;
+begin
     var Fid:= pAfter.FindFileIdByPath(pPlan.FilePath);
     Rows:= TRows.Create;
     try
       if Fid > 0 then LoadRowsOf(pAfter, Fid, pPlan.NewUtf8, Rows, Has);
       for var PP: TUnwithProofPoint in pPlan.Proof do
       begin
-        Inc(Result.ProofPoints);
+        Inc(pPoints);
         var R: TRow;
         var After:= '';
         if Rows.TryGetValue(PosKey(PP.NewLine, PP.NewCol), R) then
@@ -1675,40 +1688,44 @@ var
           or (PP.Prefixed and (PP.Before = '') and not StartsText('ext:', After)
               and ContainsText(PP.Members, LowerCase(Copy(After, 1, Pos('|', After) - 1)) + ';'));
         if not Good then
-          Result.Rebinds:= Result.Rebinds + [Format('%s:%d:%d %s: %s -> %s', [ExtractFileName(pPlan.FilePath), PP.OldLine, PP.OldCol, PP.Name,
+          pRebinds:= pRebinds + [Format('%s:%d:%d %s: %s -> %s', [ExtractFileName(pPlan.FilePath), PP.OldLine, PP.OldCol, PP.Name,
             if PP.Before = '' then '(unbound)' else PP.Before, if After = '' then '(unbound)' else After])];
       end;
     finally
       Rows.Free;
     end;
-  end;
+end;
 
+function UnwithApply(const pPlans: TArray<TUnwithFilePlan>; const pOpts: TUnwithApplyOptions): TUnwithApplyResult;
+var
+  Req: TGateRequest;
+  Dir: string;
 begin
   Result:= Default(TUnwithApplyResult);
   Req:= Default(TGateRequest);
   Req.Project:= pOpts.Project;
-  Req.Platform:= pOpts.Platform;
-  Req.Verb:= 'unwith';
-  Req.Header:= 'unwith --apply';
-  Req.NoBackup:= pOpts.NoBackup;
-  Dir:= FreshScratchName('_unwith');
-  Req.LogDir:= Dir;
-  TDirectory.CreateDirectory(Dir);  // dl:ok taint-path-traversal@159a -- REVIEWED 2026-11-05: the path is the user's own --db or a fresh scratch dir; a CLI writing where its user says is the contract
-  for var P: TUnwithFilePlan in pPlans do
-    if Length(P.NewBytes) > 0 then
-    begin
-      var F: TGateFile:= Default(TGateFile);
-      F.Path:= P.FilePath;
-      F.Bytes:= P.NewBytes;
-      Req.Files:= Req.Files + [F];
-    end;
-  if Length(Req.Files) = 0 then
+Req.Platform:= pOpts.Platform;
+Req.Verb:= 'unwith';
+Req.Header:= 'unwith --apply';
+Req.NoBackup:= pOpts.NoBackup;
+Dir:= FreshScratchName('_unwith');
+Req.LogDir:= Dir;
+TDirectory.CreateDirectory(Dir);  // dl:ok taint-path-traversal@159a -- REVIEWED 2026-11-05: the path is the user's own --db or a fresh scratch dir; a CLI writing where its user says is the contract
+for var P: TUnwithFilePlan in pPlans do
+  if Length(P.NewBytes) > 0 then
   begin
-    Result.Refusal:= 'nothing-to-apply';
-    Result.Detail:= 'no with statement is a candidate';
-    DropUnwithLogs(Dir, Result.Detail);
-    Exit;
+    var F: TGateFile:= Default(TGateFile);
+    F.Path:= P.FilePath;
+    F.Bytes:= P.NewBytes;
+    Req.Files:= Req.Files + [F];
   end;
+if Length(Req.Files) = 0 then
+begin
+  Result.Refusal:= 'nothing-to-apply';
+  Result.Detail:= 'no with statement is a candidate';
+  DropUnwithLogs(Dir, Result.Detail);
+  Exit;
+end;
   GGateVerb:= 'unwith';
   var Gate:= ApplyGated(Req);
   Result.Written:= Gate.Tx.Written;
@@ -1733,7 +1750,7 @@ begin
     begin
       var AfterStore: ISymbolStore:= TSQLiteSymbolStore.CreateReadable(AfterDb, True);
       for var P: TUnwithFilePlan in pPlans do
-        if Length(P.NewBytes) > 0 then Compare(P, AfterStore);
+        if Length(P.NewBytes) > 0 then CompareProof(P, AfterStore, Result.ProofPoints, Result.Rebinds);
       AfterStore:= nil;
     end;
   except
@@ -1766,4 +1783,52 @@ begin
   DropUnwithLogs(Dir, Result.Detail);
 end;
 
+
+function UnwithProveFile(const pPlan: TUnwithFilePlan; const pDb: string; out pDetail: string): Boolean;
+var
+  Points: Integer;
+  Rebinds: TArray<string>;
+begin
+  Result:= False;
+  pDetail:= '';
+  if Length(pPlan.NewBytes) = 0 then Exit;
+  var Dir:= FreshScratchName('_unwithfix');
+  TDirectory.CreateDirectory(Dir);  // dl:ok taint-path-traversal@159a -- a fresh scratch dir; only its PID part can come from the environment, a test seam
+  var Log:= TPath.Combine(Dir, 'after-proof-index.log');
+  var Orig:= TFile.ReadAllBytes(pPlan.FilePath);  // dl:ok taint-path-traversal@a1e3 -- REVIEWED 2026-11-20 v1522 INT: the indexed file the fix itself edits, read to restore it below
+  var Stamp:= TFile.GetLastWriteTimeUtc(pPlan.FilePath);
+  Points:= 0;
+  Rebinds:= nil;
+  try
+    try
+      var AfterDb:= CopyDbFor(pDb, Dir);
+      TFile.WriteAllBytes(pPlan.FilePath, pPlan.NewBytes);  // dl:ok taint-path-traversal@fce7 -- the indexed file the fix itself edits; restored below
+      var TimedOut: Boolean;
+      var Code:= RunBounded('after-proof re-index', Format('"%s" index "%s" --db "%s"', [ParamStr(0), pPlan.FilePath, AfterDb]),
+        Log, CFixProofTimeoutMs, TimedOut);
+      if Code <> 0 then pDetail:= Format('%s: the re-index exited %d (log %s)', [CUwProofUnavailable, Code, Log])
+      else
+      begin
+        var AfterStore: ISymbolStore:= TSQLiteSymbolStore.CreateReadable(AfterDb, True);
+        CompareProof(pPlan, AfterStore, Points, Rebinds);
+        AfterStore:= nil;
+        if Length(Rebinds) > 0 then
+          pDetail:= Format('%s: %d of %d ref(s) bind elsewhere after the rewrite, first: %s',
+            [CUwRebindAfter, Length(Rebinds), Points, Rebinds[0]]);
+      end;
+    except
+      on E: ECompileGateCancelled do pDetail:= CUwProofUnavailable + ': cancelled';
+      on E: Exception do pDetail:= CUwProofUnavailable + ': ' + E.ClassName + ': ' + E.Message;
+    end;
+  finally
+    { The caller writes the edit, never this proof: the file goes back byte- and time-identical, so the index still
+      holds it fresh for the next finding of the same run. A failure here raises (the file holds the rewrite). }
+    TFile.WriteAllBytes(pPlan.FilePath, Orig);  // dl:ok taint-path-traversal@39cf -- restores the file's own bytes
+    TFile.SetLastWriteTimeUtc(pPlan.FilePath, Stamp);
+    for var Tail: string in ['', '-wal', '-shm'] do
+      System.SysUtils.DeleteFile(TPath.Combine(Dir, 'after-proof.sqlite') + Tail);  // dl:ok taint-path-traversal@ce76 -- a fresh scratch dir
+    DropUnwithLogs(Dir, pDetail);
+  end;
+  Result:= pDetail = '';
+end;
 end.

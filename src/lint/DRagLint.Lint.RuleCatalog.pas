@@ -710,8 +710,12 @@ begin
        MkParam('interface_prefix','string','I'), MkParam('pointer_prefix','string','P')]);
     B('field-name-prefix',   'naming', 'info', 'Field name must carry the configured prefix', True,
       [MkParam('field_prefix','string','F')]);
-    B('param-name-prefix',   'naming', 'info', 'Parameter name must carry the configured prefix', False,
-      [MkParam('param_prefix','string','')]);
+    { ON since 1.52.2 (owner ruling Q7): accepted-prefix LIST, F always reported,
+      typed Hungarian prefixes accepted unless param_hungarian = off. }
+    B('param-name-prefix',   'naming', 'info', 'Parameter name must carry one of the accepted prefixes (default p, A); a field-prefixed (F) parameter is always reported', True,
+      [MkParam('param_prefix','string','p'),
+       MkParam('param_prefixes','stringlist','p,A'),
+       MkParam('param_hungarian','string','allowed')]);
     B('method-pascalcase',   'naming', 'info', 'Method/routine name casing', True,
       [MkParam('method_case','string','PascalCase')]);
     B('const-casing',        'naming', 'info', 'Constant name casing', True,
@@ -728,7 +732,7 @@ begin
       has ONE answer across the whole naming family. }
     B('local-field-prefix',  'naming', 'info', 'Local variable wears the field/param prefix', True,
       [MkParam('field_prefix','string','F'),
-       MkParam('param_prefix','string','')]);
+       MkParam('param_prefix','string','p')]);
     B('unit-name-matches-file','naming','info', 'Unit name must equal the file base name');
     B('reserved-word-casing','naming', 'info', 'Reserved words must be lowercase', True,
       [MkParam('keyword_case','string','lowercase')]);
@@ -788,7 +792,7 @@ begin
       [MkParam('max_age_days', 'int', '180')]);
 
     { --- project-wide --- }
-    B('unit-not-in-dpr',       'project-wide', 'warning', 'Unit is referenced but not listed in the .dpr');
+    B('unit-not-in-dpr',       'project-wide', 'warning', 'Unit in the compile closure (library / third-party roots excluded) but not listed in the .dpr / .dproj');
     { T-22 (owner ruling 2026-10-25): the THIRD-PARTY half of "used, but neither
       in the project nor in the library". The own-roots half is unit-not-in-dpr's
       third direction. Fix: `reconcile-project --apply --to library` (or --apply). }

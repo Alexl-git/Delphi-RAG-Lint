@@ -1,5 +1,5 @@
 {
-  "product": "1.52.1-alpha",
+  "product": "1.52.2-alpha",
   "extractor": "1.42.0-alpha",
   "resolver": "1.30.0-alpha",
   "schema": 27,
@@ -6465,14 +6465,14 @@
       "owner": "ENGINE",
       "status": "shipped",
       "since": "1.52.0-alpha",
-      "summary": "Warns (ON) on a unit only the .dpr lists that nothing reaches; a form counts only when opened. unit-not-in-dpr also reports shared-folder units",
+      "summary": "Warns (ON) on a unit only the .dpr lists that nothing reaches (a form counts when opened); unit-not-in-dpr covers the closure minus library roots",
       "intro": "Read this to see when unit-used-by-no-unit warns, which self-registering units it leaves alone, why a form with an initialization section still fires, and how lint-all --project now reports shared-folder units missing from the project files.",
       "wikiPage": "v152-proj2",
       "surfaces": [
         {
           "type": "cli",
           "verb": "lint-all",
-          "usage": "drag-lint lint-all --db <file.sqlite> [--project <file.dproj>] [--rule unit-used-by-no-unit|unit-not-in-dpr] (unit-used-by-no-unit: default ON, category project-wide, warning, lint-all only; exempt: initialization section or container registration, a form only when the program code or a FindClass('TName') string opens it; unit-not-in-dpr: closure units outside the project roots reported on the .dpr, with --project)",
+          "usage": "drag-lint lint-all --db <file.sqlite> [--project <file.dproj>] [--rule unit-used-by-no-unit|unit-not-in-dpr] (unit-used-by-no-unit: default ON, category project-wide, warning, lint-all only; exempt: initialization section or container registration, a form only when the program code or a FindClass('TName') string opens it; unit-not-in-dpr: the whole compile closure minus the library / third-party roots (registry library paths + manifest Library include), units outside the project roots reported on the .dpr)",
           "flags": [
             {
               "name": "--rule",
@@ -6487,10 +6487,10 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-17",
+        "date": "2026-11-20",
         "by": "ENGINE",
-        "build": "1.51.1-alpha",
-        "surfaceHash": "2d0c23565c009383cfcd928a0869cb75532a87f1d17ce233d0603d793354b85c"
+        "build": "1.52.2-alpha",
+        "surfaceHash": "563d6196bbf11d9e058857f5620b69f23c822d22ea12b0326457de84c8a42b71"
       }
     },
     {
@@ -8610,7 +8610,7 @@
             }
           ],
           "helpOrder": 52,
-          "help": ["  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--plan|--apply|--no-backup] [--project <X.dproj>] [--library-db <lib>] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] --db <db>   - cross-unit rename, every occurrence proved; --apply refuses what it cannot prove (exit 2) and passes the compile gate", "  drag-lint rename --kind param  --in <F> --line <L> --col <C> --to <New> [--db <db>] [--json|--plan|--apply|--no-backup] [--project <X.dproj>]  - routine-local rename (param/var autofix)", "  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--in <F>] [--db PATH] [--dry-run] [--no-backup]   (--in: file the name was asked from; ranks the not-found candidates)", "      (--qname and --kind symbol refuse, exit 2, and name the file(s) when the old name is used as an identifier in an .inc file: the index records no identifier references inside {$I} included text)", "      (an event handler rename also rewrites its text .dfm binding, OnClick = Name; a binary .dfm that holds the name refuses, exit 2, naming the file; other binary or unindexed .dfm files are reported as not rewritten, never skipped silently)"]
+          "help": ["  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--plan|--apply|--no-backup] [--project <X.dproj>] [--library-db <lib>] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] --db <db>   - cross-unit rename, every occurrence proved; --apply refuses what it cannot prove (exit 2) and passes the compile gate; --apply reads a library only with an explicit --library-db (never the manifest library)", "  drag-lint rename --kind param  --in <F> --line <L> --col <C> --to <New> [--db <db>] [--json|--plan|--apply|--no-backup] [--project <X.dproj>]  - routine-local rename (param/var autofix)", "  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--in <F>] [--db PATH] [--dry-run] [--no-backup]   (--in: file the name was asked from; ranks the not-found candidates)", "      (--qname and --kind symbol refuse, exit 2, and name the file(s) when the old name is used as an identifier in an .inc file: the index records no identifier references inside {$I} included text)", "      (an event handler rename also rewrites its text .dfm binding, OnClick = Name; a binary .dfm that holds the name refuses, exit 2, naming the file; other binary or unindexed .dfm files are reported as not rewritten, never skipped silently)"]
         }
       ],
       "audience": "both",
@@ -8630,10 +8630,10 @@
         }
       ],
       "verified": {
-        "date": "2026-11-18",
+        "date": "2026-11-20",
         "by": "ENGINE",
-        "build": "1.52.0-alpha",
-        "surfaceHash": "2ad7b9ef33864a962ae7322cd83bce57a429f1a62803c79ae4b6101492e32595"
+        "build": "1.52.2-alpha",
+        "surfaceHash": "c032a8882e6a7b885c23a41419f4be4d4574b9f4f9a0d44c16e384b2fc207955"
       }
     },
     {
@@ -8757,7 +8757,7 @@
       "status": "shipped",
       "since": "1.44.1-alpha",
       "summary": "Removes with blocks, proving every name binds to what it bound before",
-      "intro": "Read this when you want a with statement gone without a name silently changing meaning. --plan names, for every with in a file or a project, whether it can be removed and exactly why not; --apply rewrites through the compile gate, then re-indexes a copy of the DB and rolls back if any reference binds elsewhere.",
+      "intro": "Read this when you want a with statement gone without a name silently changing meaning. --plan names, for every with in a file or a project, whether it can be removed and exactly why not; --apply rewrites through the compile gate, then re-indexes a copy of the DB and rolls back if any reference binds elsewhere. Since 1.52.2 the with fixes of lint --fix (fix all, the IDE's Fix all in unit) carry the same after proof and are declined when a binding would change.",
       "wikiPage": "unwith",
       "surfaces": [
         {
@@ -8877,9 +8877,9 @@
       ],
       "notes": "lane 144 unwith; guard tests\\autotest\\run_unwith.ps1",
       "verified": {
-        "date": "2026-11-18",
+        "date": "2026-11-20",
         "by": "ENGINE",
-        "build": "1.52.0-alpha",
+        "build": "1.52.2-alpha",
         "surfaceHash": "8433300beda108050279e7ee108a80c70294d2a5b1d82fa7b1fa165f9551b425"
       }
     },
@@ -21899,7 +21899,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Parameter name must carry the configured prefix (naming, info, fixable)",
+        "summary": "Parameter name must carry one of the accepted prefixes (default p, A); a field-prefixed (F) parameter is always reported (naming, info, fixable)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -23999,7 +23999,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Unit is referenced but not listed in the .dpr (project-wide, warning)",
+        "summary": "Unit in the compile closure (library / third-party roots excluded) but not listed in the .dpr / .dproj (project-wide, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
