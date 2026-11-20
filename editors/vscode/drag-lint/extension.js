@@ -858,6 +858,10 @@ function activate(context) {
   context.subscriptions.push(workspace.onDidChangeConfiguration((e) => {
     if (e.affectsConfiguration('dragLint.fullRules') || e.affectsConfiguration('dragLint.delphiLsp') ||
         e.affectsConfiguration('dragLint.delphiLspMerge') || e.affectsConfiguration('dragLint.delphiLspConfig')) restartServer();
+    // synchronize.configurationSection forwards every other dragLint change as a
+    // didChangeConfiguration WITHOUT the DelphiLSP settings; re-push them so the proxied
+    // DelphiLSP never loses its project (no-op unless dragLint.delphiLsp is on).
+    else if (e.affectsConfiguration('dragLint')) setTimeout(() => pushDelphiLspConfig(client), 500);
   }));
   context.subscriptions.push(commands.registerCommand('dragLint.updateEngine', updateEngineNow));
   context.subscriptions.push(commands.registerCommand('dragLint.refreshProblems', refreshProblems));
