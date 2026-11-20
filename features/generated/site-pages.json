@@ -552,8 +552,8 @@
     "version": "1.51.1-alpha"
   },
   "features/installation.md": {
-    "hash": "38ea8e38ed738e7acfb1056f0e67351682e6a2e65665cd21fe37f69eca2fcd4a",
-    "version": "1.51.1-alpha"
+    "hash": "96b2df6bf8de2ff4986efea2e4c422f634c8586fdacc29145525fe11c9aa7560",
+    "version": "1.52.2-alpha"
   },
   "features/installed-layout-v2.md": {
     "hash": "e8fe7f8899cc50dbf02cebe4353396d2452710700a21df404ee18eae0c3b7f0f",
@@ -828,8 +828,8 @@
     "version": "1.51.1-alpha"
   },
   "features/setup-installer.md": {
-    "hash": "bfb7abc615652783933f3782969725fcb23af146d5e05f4a42a03eb48a3fda33",
-    "version": "1.51.1-alpha"
+    "hash": "9644b0fb08f160826cbbf66a0157a595154352f791cbbf5f32075731fee8e695",
+    "version": "1.52.2-alpha"
   },
   "features/shared-unit.md": {
     "hash": "789eaf34a2b305bbdf295c2404e0cf1b5682e536e48732b2943ef0dec306a74a",
