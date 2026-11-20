@@ -83,7 +83,10 @@ drag-lint lint --in <path.pas> --fix --fix-naming --apply --db <project.sqlite> 
 To withhold a rule, list it in `"autofix_off": [...]` in `drag-lint-lint.json`
 (the retired `"autofix": [...]` key is ignored). A rename the engine cannot
 prove complete is skipped and counted (`skipped (dfm-referenced): N`,
-`skipped (with-block): N`) -- nothing is written for it.
+`skipped (with-block): N`) -- nothing is written for it. A `with` removal
+(`with-statement`, `nested-with`, `with-hides-outer-symbol`) is re-indexed into
+a copy of the DB first and declined, with a `declined -- rebind-after` note, when
+any name would bind to something else (1.52.2; see [unwith](unwith)).
 
 Without `--apply` the command is a DRY RUN: it reports what it would fix
 and writes no source file and no index. With `--apply`, naming fixes may
