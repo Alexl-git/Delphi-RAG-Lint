@@ -2,7 +2,7 @@
   "name": "drag-lint",
   "displayName": "drag-lint (Delphi)",
   "description": "Delphi/Pascal language server backed by the drag-lint index: hover, go-to-definition, find-references, workspace symbols, completion and signature help.",
-  "version": "1.6.7",
+  "version": "1.6.8",
   "publisher": "drag-lint",
   "license": "SEE LICENSE IN LICENSE",
   "engines": {
@@ -149,6 +149,25 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "Run the language server with `--full-rules` (default ON since 1.43): Problems shows the same rule set as the Delphi IDE panel, including circular-uses, cognitive/cyclomatic complexity, deep-nesting, method-too-long, try-except-swallowed and used-before-assignment. Cost: one out-of-process lint per save, measured 2.2-3.0 s on a 36-finding plugin unit while the machine was busy; 8 s budget per file. Turn OFF for the plain, cheaper rule subset. Not a new meaning for a saved value: this key did not exist before 1.43, so a profile only gets `false` if you set it; an unset key means ON. Changing it restarts the server."
+        },
+        "dragLint.delphiLsp": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Run the engine as a **DelphiLSP proxy** (`lsp --proxy`): RAD Studio's DelphiLSP compiler diagnostics and hover appear next to drag-lint's. Needs RAD Studio installed (bin64/DelphiLSP.exe) and a `<Project>.delphilsp.json` in the workspace (RAD Studio writes it when the project is opened; or set `#dragLint.delphiLspConfig#`). `#dragLint.fullRules#` does nothing in this mode. Default OFF. Changing it restarts the server."
+        },
+        "dragLint.delphiLspMerge": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["--merge-diagnostics", "--merge-hover", "--merge-completion", "--merge-definition", "--merge-navigation"]
+          },
+          "default": ["--merge-diagnostics", "--merge-hover", "--merge-completion", "--merge-definition", "--merge-navigation"],
+          "markdownDescription": "Which drag-lint answers are merged into DelphiLSP's when `#dragLint.delphiLsp#` is on. An empty list = plain relay."
+        },
+        "dragLint.delphiLspConfig": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Full path of the `.delphilsp.json` DelphiLSP should use. Empty = the first `*.delphilsp.json` found in the workspace."
         },
         "dragLint.databases": {
           "type": "array",
