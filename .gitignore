@@ -206,3 +206,5 @@ src/tools/project-setup/dcu_t/
 src/tools/project-setup/*.exe
 src/tools/project-setup/tests/*.exe
 src/tools/project-setup/*.smoke.txt
+# Website: its own local repo (owner 2026-11-20: not on GitHub)
+/WWW/
