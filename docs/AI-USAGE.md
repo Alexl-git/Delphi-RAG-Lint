@@ -1313,7 +1313,7 @@ withhold it. All are **dry-run unless `--apply`**. Two phases:
     collision guard that skips if the prefixed name already exists in scope.
     Since 1.52.2 the rule is ON by default (accepted prefixes `param_prefixes`,
     default `p`, `A`; `FName` always reported; typed Hungarian prefixes accepted
-    while `param_hungarian` is `allowed`). The fix adds `param_prefix` (default
+    while `param_hungarian` is `allowed`). The fix is OPT-IN (owner 2026-11-20): it runs only when the run names the rule (`--rule`, `--enable` or `--fix-rule param-name-prefix`), never in a blanket `--fix --apply`. It adds `param_prefix` (default
     `p`; `FName -> pName`) at decl + impl header + body, and DECLINES with a note
     for virtual/override/abstract/message methods, interface-type methods and
     non-private methods of a class that implements an interface.

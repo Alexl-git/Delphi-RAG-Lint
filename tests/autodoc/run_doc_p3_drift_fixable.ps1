@@ -218,7 +218,7 @@ try {
     ($null -ne $noMinBefore -and $null -ne $blankBefore -and $null -ne $markedBefore)
 
   # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
-  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --apply --no-compile-gate --no-backup --disable param-name-prefix 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --apply --no-compile-gate --no-backup 2>$null } | Out-Null
   Check 'lint-all --fix --apply (fixable subset) exits 0' ($LASTEXITCODE -eq 0)
   $after = [IO.File]::ReadAllLines($target)
 
@@ -263,7 +263,7 @@ try {
   # --- Idempotency ----------------------------------------------------------
   $bytes1 = [IO.File]::ReadAllBytes($target)
   # 1.52 BK-GATE B23 (owner ruling 2026-11-18): lint/lint-all --fix --apply --db on a unit no project builds is REFUSED (no-project); this fixture is a loose dir index, so it opts out with --no-compile-gate.
-  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --apply --no-compile-gate --no-backup --disable param-name-prefix 2>$null } | Out-Null
+  & { $ErrorActionPreference = 'Continue'; & $exePath lint-all --db $db --fix --apply --no-compile-gate --no-backup 2>$null } | Out-Null
   Check 'idempotency: 2nd lint-all --fix --apply exits 0' ($LASTEXITCODE -eq 0)
   $bytes2 = [IO.File]::ReadAllBytes($target)
   Check 'idempotent: a 2nd lint-all --fix --apply is byte-identical' `
