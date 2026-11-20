@@ -5,7 +5,7 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.52.0-alpha",
-  "summary": "Warns (ON) on a unit only the .dpr lists that nothing reaches; a form counts only when opened. unit-not-in-dpr also reports shared-folder units (the whole compile closure minus library / third-party roots)",
+  "summary": "Warns (ON) on a unit only the .dpr lists that nothing reaches (a form counts when opened); unit-not-in-dpr covers the closure minus library roots",
   "intro": "Read this to see when unit-used-by-no-unit warns, which self-registering units it leaves alone, why a form with an initialization section still fires, and how lint-all --project now reports shared-folder units missing from the project files.",
   "wikiPage": "v152-proj2",
   "surfaces": [
@@ -27,9 +27,9 @@
   ],
   "audience": "both",
   "verified": {
-    "date": "2026-11-17",
+    "date": "2026-11-20",
     "by": "ENGINE",
-    "build": "1.51.1-alpha",
-    "surfaceHash": "2d0c23565c009383cfcd928a0869cb75532a87f1d17ce233d0603d793354b85c"
+    "build": "1.52.2-alpha",
+    "surfaceHash": "563d6196bbf11d9e058857f5620b69f23c822d22ea12b0326457de84c8a42b71"
   }
 }

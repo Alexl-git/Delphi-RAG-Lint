@@ -126,9 +126,9 @@
   ],
   "notes": "lane 144 unwith; guard tests\\autotest\\run_unwith.ps1",
   "verified": {
-    "date": "2026-11-18",
+    "date": "2026-11-20",
     "by": "ENGINE",
-    "build": "1.52.0-alpha",
+    "build": "1.52.2-alpha",
     "surfaceHash": "8433300beda108050279e7ee108a80c70294d2a5b1d82fa7b1fa165f9551b425"
   }
 }
