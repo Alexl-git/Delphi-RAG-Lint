@@ -21,6 +21,7 @@ const dlctx = require('./lib/context');
 const plannedstop = require('./lib/plannedstop');
 const restartguard = require('./lib/restartguard');
 const serverargs = require('./lib/serverargs');
+const delphilsp = require('./lib/delphilsp');
 const enginestale = require('./lib/enginestale');
 const exceptionfacts = require('./lib/exceptionfacts');
 const deferredhover = require('./lib/deferredhover');
@@ -425,8 +426,11 @@ function makeClient(exe) {
   // the server then publishes the same rule set as the Delphi IDE panel, at the
   // cost of one out-of-process lint per save (budget 8 s, measured 2.2-3.0 s on a large unit).
   const fullRules = workspace.getConfiguration('dragLint').get('fullRules');
-  const args = serverargs.buildArgs(dbs, fullRules);
-  log('server args: ' + args.join(' ') + (fullRules === false ? ' (full rules switched OFF by dragLint.fullRules)' : ''));
+  // dragLint.delphiLsp (1.6.8): ON runs `lsp --proxy` + the dragLint.delphiLspMerge flags in front of DelphiLSP.
+  const delphiLsp = workspace.getConfiguration('dragLint').get('delphiLsp');
+  const merge = workspace.getConfiguration('dragLint').get('delphiLspMerge');
+  const args = serverargs.buildArgs(dbs, fullRules, delphiLsp, merge);
+  log('server args: ' + args.join(' ') + (fullRules === false ? ' (full rules switched OFF by dragLint.fullRules)' : '') + (delphiLsp === true ? ' (DelphiLSP proxy ON by dragLint.delphiLsp)' : ''));
 
   const serverOptions = {
     run: { command: exe, args, transport: TransportKind.stdio },
@@ -451,8 +455,10 @@ function makeClient(exe) {
     initializationOptions: dlctx.initOptions((k) => workspace.getConfiguration('dragLint').get(k)),
     synchronize: { configurationSection: 'dragLint', fileEvents: [manifestWatcher, sourceWatcher] },
     middleware: {
-      didOpen: restartState.wrap((document, next) => next(document)),
-      didClose: restartState.wrap((document, next) => next(document)),
+      // Only a stopped client's traffic is dropped; this client's own start replays the open
+      // documents through here and must reach the new server (`c` is assigned below).
+      didOpen: restartState.wrap((document, next) => next(document), () => client === c),
+      didClose: restartState.wrap((document, next) => next(document), () => client === c),
       // Wave 149 LX (spec P1): the exception lens runs draglint.exceptionFacts; the server
       // answers the routine's raise / handler sites and this shows them in a quick pick.
       executeCommand: async (command, args, next) => {
@@ -531,6 +537,33 @@ async function refreshProblems() {
   window.setStatusBarMessage(`drag-lint: refreshing ${uris.length} file(s)`, 3000);
 }
 
+// dragLint.delphiLsp: DelphiLSP learns its project only from a workspace/didChangeConfiguration
+// carrying the settings of the IDE's <Project>.delphilsp.json (measured headless 2026-11-20: without
+// it DelphiLSP publishes nothing and hover is null). Pushed once after every (re)start.
+let lastDelphiLspFile = '';
+async function pushDelphiLspConfig(c, onlyIfChanged) {
+  const cfg = workspace.getConfiguration('dragLint');
+  if (cfg.get('delphiLsp') !== true || !c) return;
+  let file = '';
+  try {
+    const found = (await workspace.findFiles('**/*.delphilsp.json', '**/{node_modules,.git,.claude,worktrees}/**', 50)).map((u) => u.fsPath);
+    const ed = window.activeTextEditor;
+    const active = ed && ed.document && ed.document.uri.scheme === 'file' ? ed.document.uri.fsPath : '';
+    const folder = active ? workspace.getWorkspaceFolder(ed.document.uri) : (workspace.workspaceFolders || [])[0];
+    file = delphilsp.pick(cfg.get('delphiLspConfig') || '', found, active, folder ? folder.uri.fsPath : '');
+  } catch (e) { log('delphilsp.json search failed: ' + e); }
+  if (onlyIfChanged && (!file || file === lastDelphiLspFile)) return;
+  const params = file ? delphilsp.loadParams(file) : null;
+  if (!params) {
+    log('DelphiLSP config missing or unreadable: ' + (file || '(none found)'));
+    window.showWarningMessage(delphilsp.MISSING_WARNING);
+    return;
+  }
+  log('DelphiLSP config: ' + file);
+  lastDelphiLspFile = file;
+  c.sendNotification('workspace/didChangeConfiguration', params);
+}
+
 async function restartServer() {
   const exe = resolveExe();
   if (!exe || !fs.existsSync(exe)) {
@@ -550,6 +583,7 @@ async function restartServer() {
   try {
     client = makeClient(exe);
     await client.start();
+    await pushDelphiLspConfig(client);
   } finally {
     restartState.starting = false;
   }
@@ -816,6 +850,10 @@ function activate(context) {
   context.subscriptions.push(ctxStatus);
   showContext(undefined);
   context.subscriptions.push(window.onDidChangeActiveTextEditor(updateContextVisibility));
+  // dragLint.delphiLsp: follow the active unit's project (no server restart).
+  context.subscriptions.push(window.onDidChangeActiveTextEditor((ed) => {
+    if (ed && ed.document && ed.document.languageId === 'pascal') pushDelphiLspConfig(client, true);
+  }));
   context.subscriptions.push(commands.registerCommand('dragLint.selectPlatform', selectPlatform));
   context.subscriptions.push(commands.registerCommand('dragLint.selectProject', selectProject));
 
@@ -830,7 +868,12 @@ function activate(context) {
   // A running server keeps the argv it was started with, so flipping the switch
   // must restart it or the setting would appear to do nothing until a reload.
   context.subscriptions.push(workspace.onDidChangeConfiguration((e) => {
-    if (e.affectsConfiguration('dragLint.fullRules')) restartServer();
+    if (e.affectsConfiguration('dragLint.fullRules') || e.affectsConfiguration('dragLint.delphiLsp') ||
+        e.affectsConfiguration('dragLint.delphiLspMerge') || e.affectsConfiguration('dragLint.delphiLspConfig')) restartServer();
+    // synchronize.configurationSection forwards every other dragLint change as a
+    // didChangeConfiguration WITHOUT the DelphiLSP settings; re-push them so the proxied
+    // DelphiLSP never loses its project (no-op unless dragLint.delphiLsp is on).
+    else if (e.affectsConfiguration('dragLint')) setTimeout(() => pushDelphiLspConfig(client), 500);
   }));
   context.subscriptions.push(commands.registerCommand('dragLint.updateEngine', updateEngineNow));
   context.subscriptions.push(commands.registerCommand('dragLint.refreshProblems', refreshProblems));
@@ -864,7 +907,7 @@ function activate(context) {
   }
 
   client = makeClient(exe);
-  client.start();
+  client.start().then(() => pushDelphiLspConfig(client), () => {});
   startStaleNotice(context);
   context.subscriptions.push({
     dispose: () => {

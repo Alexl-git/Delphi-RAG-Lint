@@ -15,13 +15,32 @@ const ps = require(path.join(__dirname, '..', 'lib', 'plannedstop.js'));
     const next = (d) => { sent.push(d); return 'ok'; };
     assert.strictEqual(st.wrap((d, n) => n(d))('a', next), 'ok');
     gate.begin();
-    assert.strictEqual(st.wrap((d, n) => n(d))('b', next), undefined, 'dropped during planned stop');
+    const dropped = st.wrap((d, n) => n(d))('b', next);
+    assert.ok(dropped instanceof Promise, 'a dropped call still returns a Promise (languageclient calls .catch on it)');
     gate.end();
     st.starting = true;
-    assert.strictEqual(st.wrap((d, n) => n(d))('c', next), undefined, 'dropped while the new server initialises');
+    assert.ok(st.wrap((d, n) => n(d))('c', next) instanceof Promise, 'dropped while the new server initialises');
     st.starting = false;
     st.wrap((d, n) => n(d))('d', next);
     assert.deepStrictEqual(sent, ['a', 'd']);
+  }
+  // 1a. 1.6.8 owner crash (2026-11-20): with an owner check, the CURRENT client's traffic flows even
+  //     while it starts (that is the replay of the open documents); only a stale client's is dropped.
+  {
+    const gate = ps.createGate();
+    const st = rg.createRestartState(gate);
+    const sent = [];
+    const next = (d) => { sent.push(d); return Promise.resolve('ok'); };
+    let current = 'new';
+    const mwNew = st.wrap((d, n) => n(d), () => current === 'new');
+    const mwOld = st.wrap((d, n) => n(d), () => current === 'old');
+    gate.begin(); st.starting = true;
+    const r = mwNew('replay', next);
+    assert.ok(r instanceof Promise, 'current client result is the Promise from next');
+    const o = mwOld('stale', next);
+    assert.ok(o instanceof Promise, 'stale client drop returns a Promise');
+    gate.end(); st.starting = false;
+    assert.deepStrictEqual(sent, ['replay'], 'replay sent, stale dropped');
   }
   // 1b. grace covers the stop timeout, and a new begin cancels the earlier grace timer
   {

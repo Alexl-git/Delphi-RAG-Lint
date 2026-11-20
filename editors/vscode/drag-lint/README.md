@@ -53,6 +53,9 @@ rebuild, the copy is stale until you reload the window** or run
 |---|---|---|
 | `dragLint.engineSource` | the deployed `drag-lint.exe` | The binary the private copy MIRRORS FROM |
 | `dragLint.engineUpdate` | `onActivate` | When the copy is refreshed: `onActivate`, `manual`, or `off` |
+| `dragLint.delphiLsp` | `false` | Run `lsp --proxy` in front of RAD Studio DelphiLSP (compiler diagnostics + hover next to drag-lint). Needs a `*.delphilsp.json` in the workspace; see docs/wiki/lsp-proxy-merge.md |
+| `dragLint.delphiLspMerge` | all five `--merge-*` | Which merge flags the proxy gets; `[]` = plain relay |
+| `dragLint.delphiLspConfig` | *(empty)* | Path of the `.delphilsp.json` to use (empty = first one in the workspace) |
 | `dragLint.serverPath` | *(empty)* | Absolute path to an exe to run AS-IS; disables the copy |
 | `dragLint.databases` | *(empty)* | Explicit `--db` paths; empty means auto-select from the manifest |
 | `dragLint.colors.bdsVersion` | `auto` | Which RAD Studio install the colour commands read, e.g. `37.0`; `auto` picks the newest |
