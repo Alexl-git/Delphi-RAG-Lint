@@ -308,6 +308,9 @@
         "name": "Library",
         "db": "C:\\Projects\\.drag-lint\\library-{platform}.sqlite",
         "source": "registry-libraries",
+        "include": [
+          "C:\\Program Files (x86)\\Embarcadero\\Studio\\37.0\\source\\ToolsAPI"
+        ],
         "platforms": [
           "Win32",
           "Win64"
