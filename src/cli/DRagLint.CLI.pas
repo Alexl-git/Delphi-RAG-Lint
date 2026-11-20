@@ -21876,8 +21876,15 @@ end;
 
 { Lane 144 item 3: the platform libraries rename's proof reads, read-only and silent on stdout: every --library-db,
   'none' = none, or the one the manifest names. }
-function RenameLibraries(const AArgs: TArgs): TArray<ISymbolStore>;
+function RenameLibraries(const AArgs: TArgs; pWriting: Boolean): TArray<ISymbolStore>;
 begin
+  { Q17 (owner 2026-11-19): a WRITE reads a library only when --library-db was passed explicitly; the manifest's
+    platform library is never consulted implicitly (dry runs keep the manifest default). }
+  if pWriting and (Length(AArgs.LibraryDbs) = 0) then
+  begin
+    Writeln(ErrOutput, 'drag-lint: NOTE: a rename write reads a library only with an explicit --library-db <file>; none given, so the proof uses no library.');
+    Exit(nil);
+  end;
   Result:= RefactorLibraries(AArgs);
 end;
 
@@ -21905,7 +21912,7 @@ begin
   Req.PrimaryProject:= RenameGateProject(AArgs);
   Req.QName         := pQName;
   Req.NewName       := AArgs.RenameTo;
-  Req.Libraries     := if pQName <> '' then RenameLibraries(AArgs) else nil;
+  Req.Libraries     := if pQName <> '' then RenameLibraries(AArgs, pWriting) else nil;
   Req.Writing       := pWriting;
   if pWriting then
     Req.Reindex:= function(pProject, pDb: string): Boolean
@@ -22109,7 +22116,7 @@ begin
         Writeln('ERROR: cannot rename -- ' + Reason);
         Exit(2);
       end;
-      Proof:= ProveRename(KStore, RenameLibraries(AArgs), QN, AArgs.RenameTo);
+      Proof:= ProveRename(KStore, RenameLibraries(AArgs, AArgs.Apply and not AArgs.Plan), QN, AArgs.RenameTo);
       if not Proof.Found or ((Length(Proof.Edits) = 0) and (Length(Proof.Refusals) = 0)) then
       begin
         Writeln('No edits computed.');
@@ -22162,7 +22169,7 @@ begin
     Writeln('ERROR: cannot rename -- ' + IncReason);
     Exit(2);
   end;
-  Proof:= ProveRename(Store, RenameLibraries(AArgs), AArgs.QName, AArgs.RenameTo);
+  Proof:= ProveRename(Store, RenameLibraries(AArgs, not AArgs.DryRun and not AArgs.Plan), AArgs.QName, AArgs.RenameTo);
   if not Proof.Found or ((Length(Proof.Edits) = 0) and (Length(Proof.Refusals) = 0)) then
   begin
     Writeln(Format('No edits computed for %s (symbol may not exist)', [AArgs.QName]));

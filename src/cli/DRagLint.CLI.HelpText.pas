@@ -347,7 +347,7 @@ begin
   Writeln('                               library-resolve-owed: the DB was resolved without its platform library (marker schema_meta library_resolve_state = pending); --json adds library_resolve {state, reason, since_unix, library_state}, the text form a library_resolve line.');
   Writeln('  drag-lint fb-snapshot --connection "Database=...;User=...;Password=...;DriverID=FB" --db <sql.sqlite>');
   Writeln('  drag-lint link-orm    --db <projDb.sqlite> --db <sqlDb.sqlite>');
-  Writeln('  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--plan|--apply|--no-backup] [--project <X.dproj>] [--library-db <lib>] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] --db <db>   - cross-unit rename, every occurrence proved; --apply refuses what it cannot prove (exit 2) and passes the compile gate');
+  Writeln('  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--plan|--apply|--no-backup] [--project <X.dproj>] [--library-db <lib>] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] --db <db>   - cross-unit rename, every occurrence proved; --apply refuses what it cannot prove (exit 2) and passes the compile gate; --apply reads a library only with an explicit --library-db (never the manifest library)');
   Writeln('  drag-lint rename --kind param  --in <F> --line <L> --col <C> --to <New> [--db <db>] [--json|--plan|--apply|--no-backup] [--project <X.dproj>]  - routine-local rename (param/var autofix)');
   Writeln('  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--in <F>] [--db PATH] [--dry-run] [--no-backup]   (--in: file the name was asked from; ranks the not-found candidates)');
   Writeln('      (--qname and --kind symbol refuse, exit 2, and name the file(s) when the old name is used as an identifier in an .inc file: the index records no identifier references inside {$I} included text)');
@@ -1163,7 +1163,7 @@ begin
   end;
   if pVerb = 'rename' then
   begin
-    Writeln('  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--plan|--apply|--no-backup] [--project <X.dproj>] [--library-db <lib>] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] --db <db>   - cross-unit rename, every occurrence proved; --apply refuses what it cannot prove (exit 2) and passes the compile gate');
+    Writeln('  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--plan|--apply|--no-backup] [--project <X.dproj>] [--library-db <lib>] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] --db <db>   - cross-unit rename, every occurrence proved; --apply refuses what it cannot prove (exit 2) and passes the compile gate; --apply reads a library only with an explicit --library-db (never the manifest library)');
     Writeln('  drag-lint rename --kind param  --in <F> --line <L> --col <C> --to <New> [--db <db>] [--json|--plan|--apply|--no-backup] [--project <X.dproj>]  - routine-local rename (param/var autofix)');
     Writeln('  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--in <F>] [--db PATH] [--dry-run] [--no-backup]   (--in: file the name was asked from; ranks the not-found candidates)');
     Writeln('      (--qname and --kind symbol refuse, exit 2, and name the file(s) when the old name is used as an identifier in an .inc file: the index records no identifier references inside {$I} included text)');
