@@ -315,7 +315,7 @@ const
   /// tests\autotest\run_help_env_table.ps1: every quoted 'DRAGLINT_*' literal
   /// under src\ must be a Name here and --help must print every Name. A new
   /// variable is added HERE in the same change, or that guard fails.</remarks>
-  ENV_VARS_HELP: array[0..93] of TEnvVarHelp = (
+  ENV_VARS_HELP: array[0..95] of TEnvVarHelp = (
     (Name: 'DRAGLINT_BUSY_TIMEOUT_MS';                Purpose: 'writer busy timeout in ms (overrides the built-in default; a non-negative integer)'),
     (Name: 'DRAGLINT_CHARTS_ALLOW_LIVE_DB';           Purpose: 'charts: lets CloneDb accept a non-clone (live) database'),
     (Name: 'DRAGLINT_CHARTS_DIR';                     Purpose: 'charts: folder of the charts scripts'),
@@ -354,6 +354,8 @@ const
     (Name: 'DRAGLINT_MERGE_TEST_ANSWER_INLINE';       Purpose: 'test hook: merge answers inline'),
     (Name: 'DRAGLINT_MERGE_TEST_EMPTY_REPLACEMENT';   Purpose: 'test hook: merge gets an empty replacement'),
     (Name: 'DRAGLINT_MERGE_TEST_FASTPATH';            Purpose: 'test hook: merge fast path'),
+    (Name: 'DRAGLINT_MERGE_TEST_LINT_DELAY_MS';       Purpose: 'test hook: every LSP diagnostics lint sleeps N ms first'),
+    (Name: 'DRAGLINT_MERGE_TEST_SC_WRITE_DELAY_MS';   Purpose: 'test hook: the LSP proxy delays each server-to-client write by N ms'),
     (Name: 'DRAGLINT_NO_AUTOCREATE';                  Purpose: '1 = a query verb never builds a missing project index on first use'),
     (Name: 'DRAGLINT_NO_BUDGET';                       Purpose: 'lint: any value other than 0 turns the per-rule time budget off for the process (as --no-budget)'),
     (Name: 'DRAGLINT_NO_CLOSURE_CACHE';               Purpose: 'any value makes index --project walk the compile closure cold: no stored unit scan is read or written (A/B)'),

@@ -32,6 +32,7 @@ $Reported = @(
   # own manifests (already hermetic); converting them moved their "real drag-lint.json beside the exe
   # untouched" watch onto the hermetic copy, so HG3's conversion of these two was reverted.
   'run_heavy_initialization.ps1'  # v151 INT: names drag-lint.json only to explain why its control passes --library-db none -- it no longer depends on the manifest
+  'run_no_manifest_warning.ps1'               # 1.52.2: tests the absent-manifest warning itself, on its own bare engine copy
   'run_installed_layout_v2_guard.ps1'         # own manifest-less engine copy; watches the real exe dir
   'run_installed_layout_v2_phase2_guard.ps1'  # own manifest-less engine copies; watches the real exe dir
   # 152 DDFIX review: the phrase names something other than the engine's manifest, or the guard builds its own engine copies.
