@@ -1266,4 +1266,6 @@
 #   2026-11-19 v1521 INT: merges of lane/v1521-slz-rule1 and lane/v1521-idxperf (Storage.SQLite deferred trigrams: search-index write order, no parse/extraction change) -- hash-only re-pin, no second bump.
 # superseded (hash-only): 1.42.0-alpha|76ca0b2ebfefc0daac112136561b0e44ced14ec13966d72d09fcb1b2f656da1c
 #   2026-11-19 v1521 INT: merge of lane/v1521-slzmark 1650c1699 -- dl:ok marker comments only (91 files; stripping // comments leaves both trees identical) -- hash-only re-pin, no bump.
-1.42.0-alpha|7f6745aaa5b788837b0b797f00e2cf68f360c5f9035ee032d77f00811f3a48ce
+# superseded (hash-only): 1.42.0-alpha|7f6745aaa5b788837b0b797f00e2cf68f360c5f9035ee032d77f00811f3a48ce
+#   2026-11-20 v1522 INCRPP (INBOX-incremental-preproc-inputs): hash-only re-pin, no bump. Indexer.RememberIncludeSites also records a host's unresolved include candidates ('?'-marked) and the project units its IFs read into the schema_meta file_includes list, and the up-to-date test (Storage RecordedIncludesChanged) re-parses the host when one appears / changes; PPUnitSource gains IPPUnitFiles.UnitFilePath. Decides WHICH files an incremental run re-parses -- no parsed or emitted row of a parse changes.
+1.42.0-alpha|2ab4b5beeeeb559b09abd10b75bf1b4d5535785c6e572e3bdef0f6130ec1eaee

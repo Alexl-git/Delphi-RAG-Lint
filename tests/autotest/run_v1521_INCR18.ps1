@@ -732,9 +732,10 @@ try {
 # stored scan by the unit's own stamp only (the key main declined as unsound); on the
 # nested-include edit it must leave the new unit OUT of the closure and show diff rows against F.
 # A scan that asked another unit for a constant ({$IF} on a used unit's const) is never stored.
-# Two edits (HostGap) end in a database that differs from F with the cache on AND off: the
-# incremental indexer does not re-parse an unchanged host whose preprocess result moved. They
-# assert C = U and the closure membership; the difference to F is printed as a NOTE.
+# An edit may carry HostGap (a known incremental-indexer gap): it then asserts C = U and the
+# closure membership and prints the difference to F as a NOTE. 1.52.2 INCRPP closed the two
+# that had it (a missing include created; a constant another unit's IF reads), so every edit
+# now asserts C = F (run_v1522_INCRPP_incremental.ps1 is their own RED/GREEN test).
 $cc = Join-Path $scratch 'cc'
 New-Item -ItemType Directory -Path $cc | Out-Null
 $ccProj = Join-Path $cc 'Proj.dpr'
@@ -977,11 +978,11 @@ try {
   $ccEdits = @(
     @{ Name = 'edit a NESTED include (a define two includes down switches a uses entry on)'; Unit = 'uextra.pas'; Joins = $true; Control = $true; Settle = $true
        File = 'cc18cfg2.inc'; Text = '{$DEFINE WITH_EXTRA}' },
-    @{ Name = 'create a MISSING include'; Unit = 'uopt.pas'; Joins = $true; HostGap = 'uB.pas is not re-parsed when the include it could not resolve appears'
+    @{ Name = 'create a MISSING include'; Unit = 'uopt.pas'; Joins = $true
        File = 'cc18opt.inc'; Text = '{$DEFINE OPT_ON}' },
     @{ Name = 'delete an include'; Unit = 'udx.pas'; Joins = $false
        File = 'cc18on.inc'; Text = $null },
-    @{ Name = 'edit a constant another unit''s IF reads (no include)'; Unit = 'uifx.pas'; Joins = $true; HostGap = 'uIf.pas is not re-parsed when the constant its IF reads changes in uConsts.pas'
+    @{ Name = 'edit a constant another unit''s IF reads (no include)'; Unit = 'uifx.pas'; Joins = $true
        File = 'uConsts.pas'; Find = 'CC_LEVEL = 1;'; Repl = 'CC_LEVEL = 2;' }
   )
   foreach ($e in $ccEdits) {

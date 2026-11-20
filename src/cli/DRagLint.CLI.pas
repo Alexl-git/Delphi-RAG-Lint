@@ -20315,7 +20315,8 @@ begin
       var Listed: string:= AStore.GetMetaValue(FILE_INCLUDES_META_KEY + LowerCase(Host));
       var Wanted: Boolean:= False;
       for var L: string in Listed.Split(['|']) do
-        if (L <> '') and Pending.ContainsKey(LowerCase(TPath.GetFullPath(L))) then Wanted:= True;
+        if (L <> '') and not L.StartsWith(UNRESOLVED_INCLUDE_MARK) { INCRPP: not a file that exists }
+          and Pending.ContainsKey(LowerCase(TPath.GetFullPath(L))) then Wanted:= True;
       if not Wanted then Continue;
       { The build's search path, as the closure walk resolved includes against it. }
       var Dproj: string:= AProjectPath;

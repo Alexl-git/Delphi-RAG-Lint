@@ -101,6 +101,21 @@ type
     function HasLibraryEvidence: Boolean;
   end;
 
+  /// <summary>INCRPP: the source file an IPPUnitSource answers a unit from, so an
+  /// incremental index can tell when the constants an IF read have changed.</summary>
+  /// <remarks>
+  /// Optional: query it with Supports on the installed IPPUnitSource. Thread-safe
+  /// like IPPUnitSource.
+  /// </remarks>
+  IPPUnitFiles = interface
+    ['{0D7A41C2-9B3E-4F65-8C1A-52E6B7D90A33}']
+    /// <summary>The project source file AUnit is answered from.</summary>
+    /// <param name="AUnit">The unit name as the uses clause spells it.</param>
+    /// <returns>The absolute path, or '' when the unit is not a project unit
+    /// (a library unit, or unknown).</returns>
+    function UnitFilePath(const AUnit: string): string;
+  end;
+
   /// <summary>The declaration scanner (see the unit header).</summary>
   /// <remarks>
   /// Not thread-safe; one instance per preprocess run, shared by
