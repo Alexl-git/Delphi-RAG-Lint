@@ -15,9 +15,15 @@ function createRestartState(gate) {
     starting: false,
     shouldDrop() { return gate.planned || state.starting; },
     // Wraps a middleware (arg, next) so it is a no-op while traffic must not flow.
-    wrap(fn) {
+    // isCurrent (optional): true while the wrapped middleware's client is the live one. When
+    // given it decides alone: the live client's traffic always flows -- during its own start that
+    // traffic IS the replay of the open documents -- and only a stopped client's is dropped.
+    // A drop returns a resolved Promise: vscode-languageclient calls .catch() on the result
+    // (1.6.8 owner crash 2026-11-20: "Cannot read properties of undefined (reading 'catch')").
+    wrap(fn, isCurrent) {
       return function (...args) {
-        if (state.shouldDrop()) return undefined;
+        const drop = isCurrent ? !isCurrent() : state.shouldDrop();
+        if (drop) return Promise.resolve();
         return fn(...args);
       };
     }

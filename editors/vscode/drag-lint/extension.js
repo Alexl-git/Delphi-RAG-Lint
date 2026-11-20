@@ -455,8 +455,10 @@ function makeClient(exe) {
     initializationOptions: dlctx.initOptions((k) => workspace.getConfiguration('dragLint').get(k)),
     synchronize: { configurationSection: 'dragLint', fileEvents: [manifestWatcher, sourceWatcher] },
     middleware: {
-      didOpen: restartState.wrap((document, next) => next(document)),
-      didClose: restartState.wrap((document, next) => next(document)),
+      // Only a stopped client's traffic is dropped; this client's own start replays the open
+      // documents through here and must reach the new server (`c` is assigned below).
+      didOpen: restartState.wrap((document, next) => next(document), () => client === c),
+      didClose: restartState.wrap((document, next) => next(document), () => client === c),
       // Wave 149 LX (spec P1): the exception lens runs draglint.exceptionFacts; the server
       // answers the routine's raise / handler sites and this shows them in a quick pick.
       executeCommand: async (command, args, next) => {
