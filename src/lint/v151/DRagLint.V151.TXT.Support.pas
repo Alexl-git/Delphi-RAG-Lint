@@ -419,7 +419,7 @@ begin
   APending.Clear;
 end;
 
-procedure TxtScanText(const ASource, AFilePath: string; AWantTodo, AWantHard: Boolean; AOut: TList<TLintFinding>);  // dl:ok deep-nesting@c74a, cyclomatic-complexity@3a70, cognitive-complexity@5ca8 -- REVIEWED 2026-11-14 v151 INT: tree walk with per-shape branches; flattening would scatter one rule
+procedure TxtScanText(const ASource, AFilePath: string; AWantTodo, AWantHard: Boolean; AOut: TList<TLintFinding>);  // dl:ok deep-nesting@2330, cyclomatic-complexity@b880, cognitive-complexity@de90, too-many-locals@cb16 -- REVIEWED 2026-11-20 v1522 INT: one hand-written scanner over the source text; each branch is one lexical shape, splitting it would scatter the scanner state
 var
   S: string;
   I, N, Line, LineStart, Depth, J, StartLine, StartCol, NTodo, NHard, K: Integer;
@@ -432,7 +432,7 @@ begin
   S:= ASource;
   N:= Length(S);
   I:= 1; Line:= 1; LineStart:= 1; Depth:= 0; NTodo:= 0; NHard:= 0;  // dl:ok multiple-statements-per-line@e733 -- REVIEWED 2026-11-14 v151 INT: compact state reset in a scanner step, kept on one line like its siblings
-  StmtSql:= False; StmtPlus:= False;  // dl:ok multiple-statements-per-line@a1b2 -- REVIEWED 2026-11-20 Q19: compact state reset in a scanner step, kept on one line like its siblings
+  StmtSql:= False; StmtPlus:= False;  // dl:ok multiple-statements-per-line@81da -- REVIEWED 2026-11-20 Q19: compact state reset in a scanner step, kept on one line like its siblings
   LastIdent:= ''; PrevOp:= '';  // dl:ok multiple-statements-per-line@24f9 -- REVIEWED 2026-11-14 v151 INT: compact state reset in a scanner step, kept on one line like its siblings
   Parens:= TList<string>.Create;
   Pending:= TList<TLintFinding>.Create;
@@ -594,17 +594,14 @@ begin
             Inc(Depth)
           else if (Lower = 'end') and (Depth > 0) then
             Dec(Depth);
-          if (Parens.Count = 0) and ((Lower = 'begin') or (Lower = 'end') or (Lower = 'else') or (Lower = 'then')
-            or (Lower = 'do') or (Lower = 'try') or (Lower = 'finally') or (Lower = 'except')) then
+          if (Parens.Count = 0)
+            and MatchStr(Lower, ['begin', 'end', 'else', 'then', 'do', 'try', 'finally', 'except']) then
           begin
             FlushStatement(Pending, AOut, StmtSql and StmtPlus, NHard);
-            StmtSql:= False; StmtPlus:= False;  // dl:ok multiple-statements-per-line@a1b2 -- REVIEWED 2026-11-20 Q19: compact state reset in a scanner step, kept on one line like its siblings
+            StmtSql:= False; StmtPlus:= False;  // dl:ok multiple-statements-per-line@81da -- REVIEWED 2026-11-20 Q19: compact state reset in a scanner step, kept on one line like its siblings
           end;
         end;
-        if PrecededByDot and (LastIdent <> '') then
-          LastIdent:= LastIdent + '.' + Word
-        else
-          LastIdent:= Word;
+        LastIdent:= if PrecededByDot and (LastIdent <> '') then LastIdent + '.' + Word else Word;
         PrevOp:= '';
         I:= J;
       end
@@ -635,7 +632,7 @@ begin
         if C = ';' then
         begin
           FlushStatement(Pending, AOut, StmtSql and StmtPlus, NHard);
-          StmtSql:= False; StmtPlus:= False;  // dl:ok multiple-statements-per-line@a1b2 -- REVIEWED 2026-11-20 Q19: compact state reset in a scanner step, kept on one line like its siblings
+          StmtSql:= False; StmtPlus:= False;  // dl:ok multiple-statements-per-line@81da -- REVIEWED 2026-11-20 Q19: compact state reset in a scanner step, kept on one line like its siblings
         end;
         if C <> '.' then LastIdent:= '';
         Inc(I);
