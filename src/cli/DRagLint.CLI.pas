@@ -13075,6 +13075,7 @@ begin
     var Braked: TArray<TLintFinding>:= nil;
     var BrakedIds: TArray<string>:= nil;
     var ManualIds: TArray<string>:= nil;
+    var OptInIds: TArray<string>:= nil;
     for F in Targeted do
       if Cfg.IsAutoFixOff(F.RuleId) and not ((AArgs.FixLine > 0) and SameText(AArgs.FixRule, F.RuleId)) then
       begin
@@ -13085,12 +13086,20 @@ begin
       begin
         if not MatchText(F.RuleId, ManualIds) then ManualIds:= ManualIds + [F.RuleId];
       end
+      { owner card D 2026-11-20: an opt-in fix (param-name-prefix) runs only when the run names the rule }
+      else if IsFixOptIn(F.RuleId) and not (SameText(AArgs.FixRule, F.RuleId) or SameText(AArgs.Rule, F.RuleId) or
+        MatchText(F.RuleId, AArgs.RuleList.Split([','])) or MatchText(F.RuleId, AArgs.Enable.Split([',']))) then
+      begin
+        if not MatchText(F.RuleId, OptInIds) then OptInIds:= OptInIds + [F.RuleId];
+      end
       else Braked:= Braked + [F];
     Targeted:= Braked;
     if Length(BrakedIds) > 0 then
       Writeln(ErrOutput, Format('drag-lint: note: %d rule(s) here are not fixed because "autofix_off" lists them: %s.',
         [Length(BrakedIds), string.Join(', ', BrakedIds)]));
-    if Length(ManualIds) > 0 then
+    if Length(OptInIds) > 0 then
+      Writeln(ErrOutput, Format('drag-lint: note: %d rule(s) here have an opt-in fix, applied only when the run names the rule ' +
+        '(--rule <id>, --enable <id> or --fix-rule <id>): %s.', [Length(OptInIds), string.Join(', ', OptInIds)]));    if Length(ManualIds) > 0 then
       Writeln(ErrOutput, Format('drag-lint: note: %d rule(s) here have a manual only fix, applied only with --fix-rule <id> (the IDE''s Fix it): %s.',
         [Length(ManualIds), string.Join(', ', ManualIds)]));
 

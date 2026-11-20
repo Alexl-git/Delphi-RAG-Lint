@@ -261,6 +261,15 @@ procedure MarkFixManualOnly(const ARuleId: string);
 /// </remarks>
 function IsFixManualOnly(const ARuleId: string): Boolean;
 
+/// <summary>True when ARuleId's fix is OPT-IN: the rule keeps reporting by default, but its
+/// fix runs only when the run names the rule.</summary>
+/// <param name="ARuleId">The rule id; compared case-insensitively.</param>
+/// <returns>True for param-name-prefix (owner ruling 2026-11-20, card D); False otherwise.</returns>
+/// <remarks>The CLI treats the rule as named when --rule, --enable or --fix-rule lists it. A blanket
+/// lint --fix --apply or lint-all --fix --apply never runs an opt-in fix. The id list is fixed
+/// here (no registration), so unit initialization order does not matter.</remarks>
+function IsFixOptIn(const ARuleId: string): Boolean;
+
 /// <summary>How many findings the LAST BuildAutofixEdits left unfixed because
 /// their fixer's ANeedsCompiler is newer than ActiveTargetCompiler.</summary>
 /// <returns>0 at the default target, and whenever no registered fixer is gated.</returns>
@@ -602,6 +611,11 @@ end;
 function IsFixManualOnly(const ARuleId: string): Boolean;
 begin
   Result:= MatchText(ARuleId, GManualOnlyFixes);
+end;
+
+function IsFixOptIn(const ARuleId: string): Boolean;
+begin
+  Result:= SameText(ARuleId, 'param-name-prefix');
 end;
 { The set of rule-ids that have a registered, mechanical, side-effect-free
   quick-fix. Single source of truth for both the rules-catalog 'fixable' flag
