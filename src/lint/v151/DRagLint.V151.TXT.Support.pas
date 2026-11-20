@@ -329,6 +329,30 @@ begin
   Result:= StartsText(AWord + ' ', Trim(AText)) or SameText(Trim(AText), AWord);
 end;
 
+{ RULES-S (1.52.3): text led by Select/Set/With whose next word is a plain-English lead-in ("Select a file")
+  is a UI sentence, not SQL. }
+function IsUiLeadIn(const AText: string): Boolean;
+const
+  CSqlLike: array[0..2] of string = ('select', 'set', 'with');
+  CLeadIn: array[0..17] of string = ('a', 'an', 'the', 'your', 'one', 'all', 'any', 'this', 'that', 'at',
+    'which', 'some', 'each', 'no', 'new', 'another', 'my', 'to');
+var
+  I: Integer;
+  Words: TArray<string>;
+  Hit: Boolean;
+begin
+  Result:= False;
+  Words:= Trim(AText).Split([' ']);
+  if Length(Words) < 2 then Exit;  // dl:ok magic-literal@a1c1 -- REVIEWED 2026-11-20 v1523 RULES-S: a lead word plus one more is the minimum shape
+  Hit:= False;
+  for I:= Low(CSqlLike) to High(CSqlLike) do
+    if SameText(Words[0], CSqlLike[I]) then Hit:= True;
+  if not Hit then Exit;
+  if ContainsText(' ' + Trim(AText) + ' ', ' from ') then Exit;  // 'select a from t' keeps its column a
+  for I:= Low(CLeadIn) to High(CLeadIn) do
+    if SameText(Words[1], CLeadIn[I]) then Exit(True);
+end;
+
 { hardcoded-string: words a person would read, not a key, path, SQL or format token. }
 function IsHumanText(const AText: string): Boolean;
 const
@@ -344,7 +368,7 @@ begin
   if (Pos(' ', S) = 0) or (WordCount(S) < 2) then Exit;  // dl:ok pos-for-contains@f95d -- REVIEWED 2026-11-14 v151 INT: Pos over a delimited keyword list, as the rest of the unit does
   if S.IndexOfAny(['\', '/', '<', '>', '{', '}', '=', ';', '|']) >= 0 then Exit;
   for I:= Low(CSQL) to High(CSQL) do
-    if StartsWithWord(S, CSQL[I]) then Exit;
+    if StartsWithWord(S, CSQL[I]) and not IsUiLeadIn(S) then Exit;
   Letters:= 0;
   for I:= 1 to Length(S) do
     if S[I].IsLetter or (S[I] = ' ') then Inc(Letters);
@@ -359,13 +383,19 @@ const
     'WriteDateTime', 'ReadTime', 'WriteTime', 'ReadSection', 'ReadSections', 'ReadSectionValues',
     'EraseSection', 'DeleteKey', 'ValueExists', 'SectionExists', 'OpenKey', 'OpenKeyReadOnly',
     'KeyExists', 'ReadBinaryStream');
+  { RULES-S (1.52.3): known logger call names only; Logout / Login / LogoffUser carry UI text. }
+  CLogCalls: array[0..19] of string = ('Log', 'LogMsg', 'LogMessage', 'LogError', 'LogErr', 'LogWarn',
+    'LogWarning', 'LogInfo', 'LogDebug', 'LogTrace', 'LogFmt', 'LogFormat', 'LogException', 'LogEvent',
+    'LogText', 'LogLine', 'LogFatal', 'LogVerbose', 'LogToFile', 'LogStr');
   COptPrefix: array[0..4] of string = ('MakeOpt', 'AddOpt', 'RegisterOption', 'DefineOption', 'NewOpt');
 var
   I: Integer;
 begin
   Result:= SameText(ASeg, 'Assert') or SameText(ASeg, 'OutputDebugString')
-    or StartsText('Log', ASeg) or StartsText('Trace', ASeg);
+    or StartsText('Trace', ASeg);
   if Result or StartsText('Debug', ASeg) or StartsText('CodeSite', ASeg) then Exit(True);
+  for I:= Low(CLogCalls) to High(CLogCalls) do
+    if SameText(ASeg, CLogCalls[I]) then Exit(True);
   for I:= Low(CKeyCalls) to High(CKeyCalls) do
     if SameText(ASeg, CKeyCalls[I]) then Exit(True);
   for I:= Low(COptPrefix) to High(COptPrefix) do
@@ -403,7 +433,7 @@ var
 begin
   Result:= False;
   for I:= Low(CSQLStart) to High(CSQLStart) do
-    if StartsWithWord(AText, CSQLStart[I]) then Exit(True);
+    if StartsWithWord(AText, CSQLStart[I]) and not IsUiLeadIn(AText) then Exit(True);
 end;
 
 { Q19: a statement that joins pieces with '+' and holds a SQL piece is SQL text: drop its pending findings. }
