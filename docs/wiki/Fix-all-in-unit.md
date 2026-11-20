@@ -24,7 +24,7 @@ then right-click a tree node and choose "Fix all in unit".
 * `param-name-prefix` is ON by default since 1.52.2 (accepted prefixes
   `naming.param_prefixes`, default `p`, `A`; a parameter wearing the field
   prefix `F` is always reported; a typed Hungarian prefix is accepted while
-  `naming.param_hungarian` is `allowed`; `Sender` is exempt). Its fix adds
+  `naming.param_hungarian` is `allowed`; `Sender` and single-letter names are exempt). Its fix adds
   `naming.param_prefix` (default `p`; `FName` becomes `pName`) at the
   declaration, the implementation header and every body use, and DECLINES --
   a note, nothing written -- for a virtual / override / dynamic / abstract /

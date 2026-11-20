@@ -67,9 +67,9 @@ function Get-Flagged($C) {
 $CheckBody = @'
 unit UNITNAME;
 interface
-procedure Go(Value: Integer; AValue: Integer; pName: string; FName: string; strName: string; Sender: TObject);
+procedure Go(Value: Integer; AValue: Integer; pName: string; FName: string; strName: string; Sender: TObject; N: Integer);
 implementation
-procedure Go(Value: Integer; AValue: Integer; pName: string; FName: string; strName: string; Sender: TObject);
+procedure Go(Value: Integer; AValue: Integer; pName: string; FName: string; strName: string; Sender: TObject; N: Integer);
 begin
 end;
 end.
@@ -84,6 +84,7 @@ Check 'CHECK1: AValue accepted (A in default list)'     (-not ($f1 -contains 'AV
 Check 'CHECK1: pName accepted (p in default list)'      (-not ($f1 -contains 'pName'))  ($f1 -join ',')
 Check 'CHECK1: strName accepted (Hungarian allowed)'    (-not ($f1 -contains 'strName')) ($f1 -join ',')
 Check 'CHECK1: Sender exempt (event signature)'          (-not ($f1 -contains 'Sender')) ($f1 -join ',')
+Check 'CHECK1: single-letter N exempt (owner card C)'    (-not ($f1 -contains 'N')) ($f1 -join ',')
 Check 'CHECK1: both header sites reported for Value'    (@($f1 | Where-Object { $_ -eq 'Value' }).Count -eq 2) ($f1 -join ',')
 
 Write-Host 'CHECK 2: param_hungarian = off' -ForegroundColor Cyan
@@ -123,6 +124,7 @@ type
     procedure Plain(Count: Integer);
     procedure Hook(Depth: Integer); virtual;
     procedure Store(FName: string);
+    procedure Single(N: Integer);
   end;
 
   TChild = class(TBase)
@@ -152,6 +154,11 @@ begin
   FName:= FName + 'x';
 end;
 
+procedure TBase.Single(N: Integer);
+begin
+  N:= N + 4;
+end;
+
 procedure TChild.Hook(Depth: Integer);
 begin
   Depth:= Depth + 2;
@@ -179,6 +186,7 @@ Check 'FIX: override Hook declined (decl)'      ($a -cmatch 'procedure Hook\(Dep
 Check 'FIX: Hook impls + bodies unchanged'      ($a -cmatch 'TBase\.Hook\(Depth: Integer\);' -and $a -cmatch 'TChild\.Hook\(Depth: Integer\);' -and $a -cmatch 'Depth:= Depth \+ 2;') $a
 Check 'FIX: interface method declined'          ($a -cmatch '    procedure Draw\(Size: Integer\);\r?\n  end;\r?\n\r?\n  TBase') $a
 Check 'FIX: interface-implementing method declined' ($a -cmatch 'TShape\.Draw\(Size: Integer\);' -and $a -cmatch 'Size:= Size \+ 3;') $a
+Check 'FIX: single-letter N not renamed (owner card C)' ($a -cmatch 'procedure Single\(N: Integer\);' -and $a -cmatch 'TBase\.Single\(N: Integer\);' -and $a -cmatch 'N:= N \+ 4;') $a
 Check 'FIX: output names the declined override rename'     (($out -join "`n") -match 'param-name-prefix: declined .*Depth.* -- a virtual') ($out -join "`n")
 
 if ($script:Failed) { Write-Host 'RESULT: FAIL' -ForegroundColor Red; exit 1 }

@@ -744,11 +744,14 @@ var
     the accepted list: it reads as an object field and is not one. An empty
     accepted list disables the rule. `Sender` is exempt: the VCL/FMX event
     signature (TNotifyEvent and kin) names it, every IDE-generated handler
-    carries it, and pSender would be noise on every form. }
+    carries it, and pSender would be noise on every form. A single-letter
+    name (N, S, B, ...) is exempt too (owner ruling card C, 2026-11-20): it is
+    a deliberate throwaway, and pN reads worse than N. }
   procedure ParamPrefixCheck(const ANameNode: TTSNode; const AName: string);
   begin
     if Length(ANaming.ParamPrefixes) = 0 then Exit;
     if SameText(AName, 'Sender') then Exit;
+    if Length(AName) = 1 then Exit;
     if (ANaming.FieldPrefix <> '') and HasPrefix(AName, ANaming.FieldPrefix) then
     begin
       EmitAt(ANameNode, 'param-name-prefix',
