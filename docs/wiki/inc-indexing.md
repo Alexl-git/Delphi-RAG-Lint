@@ -22,6 +22,17 @@ Code inside an include is resolved in the scope of the unit that includes it. Wh
 
 An include is parsed in the define context of EACH unit that includes it (owner ruling B9i: the contexts need not agree). Units whose context is byte-equal share one parse. When the contexts differ, a declaration or reference every context has is stored once (`inc_variant` 0); one that only some contexts have is stored per context, tagged `inc_variant` = k, and the table `inc_variants(file_id, host_file_id, variant, ctx_sha)` (schema 27) names the hosts of context k. The resolver binds a tagged reference under those hosts only: in `ExBody.inc` with `{$IFDEF COMPILE1} PingA; {$ELSE} PingB; {$ENDIF}`, `find-callers --resolved` lists the `PingA` site under the unit that defines COMPILE1 and the `PingB` site under the one that does not, never the other way round. An incremental run that re-parses the include takes the stored context of a host it skipped (`ctx_sha`) and preprocesses that host again only when the context is unknown or the include itself changed. Example: `drag-lint sql --query "SELECT s.name, s.signature, s.inc_variant FROM symbols s JOIN files f ON f.id = s.file_id WHERE s.inc_variant > 0" --db <file.sqlite>`. Guard: `tests\autotest\run_v152_EXTINC_per_inclusion.ps1`.
 
+### What an incremental run re-parses although the unit did not change (1.52.2, 1.52.3)
+
+An incremental `index` skips a unit whose bytes are unchanged unless something its parse depended on changed. The index records those inputs per unit (`schema_meta` keys `file_includes:<path>` and `file_ancestors:<path>`) and re-parses the unit when:
+
+* an include it took is edited or deleted;
+* an include it could NOT resolve appears: beside the unit, on the project search path, or (1.52.3) anywhere the include search looks near the unit -- a subfolder of the unit's folder, or up to three parent folders and their subfolders;
+* a unit whose constant one of its `{$IF}`s reads is edited, including (1.52.3) a unit that constant is defined through: `{$IF PP_DEEP > 1}` with `PP_DEEP = PP_ROOT` in uConstsA re-parses the unit when uConstsB's `PP_ROOT` changes;
+* (1.52.3) a file declaring an ancestor of one of its classes is edited, when a method of that class uses a name the facts pass could only match against inherited fields: a base class gaining a field `Extra` moves `writes_fields` of a descendant method that writes `Extra`.
+
+The result equals a full index of the same tree (`index_db_diff`, 0 differing rows). Guards: `tests\autotest\run_v1522_INCRPP_incremental.ps1`, `tests\autotest\run_v1523_INCR_incremental.ps1`. A database written by an older engine records these inputs as each unit is next re-parsed; `index --rebuild` records them all at once.
+
 ## Reaching it in the IDE
 No IDE surface; the IDE plugin uses the same index.
 

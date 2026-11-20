@@ -15,6 +15,21 @@ const
   /// would be found at. The entry is the mark followed by that absolute path; the host
   /// is out of date once a file exists there. A plain entry is a file that exists.</summary>
   UNRESOLVED_INCLUDE_MARK = '?';
+  /// <summary>1.52.3 INCRPP-LIMITS: marks an include-list entry as a NEAR-SEARCH rule for an
+  /// include the host could not resolve: the mark, the folder the host resolved it from,
+  /// '*', then the include name as written. The host is out of date once the include
+  /// resolver's near search finds the name there (a subfolder of that folder, or up to
+  /// three parent levels and their subfolders). It starts with UNRESOLVED_INCLUDE_MARK,
+  /// so an older engine reads it as a candidate path that never exists.</summary>
+  UNRESOLVED_NEAR_MARK = '?*';
+  /// <summary>1.52.3 INCR-BASEFIELD: the schema_meta key prefix of a file's ancestor-file
+  /// list, written by IIndexer.ApplyInheritedFieldFacts: the OTHER files declaring an
+  /// ancestor of a class whose routines in the file held names for the facts-inherited
+  /// pass. Full key = this plus the lowercased full path; value = paths joined by '|'.
+  /// The store's up-to-date test reads it beside the include list: a listed file that is
+  /// missing or newer than the file's parse makes the file out of date. An empty value is
+  /// stored as no row.</summary>
+  ANCESTOR_FILES_META_KEY = 'file_ancestors:';
 
 type
   /// <summary>Walk-filter settings passed to IIndexer.SetWalkFilter.

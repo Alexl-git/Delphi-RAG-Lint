@@ -35,6 +35,20 @@ uses
   DRagLint.Preprocess.Decls;
 
 type
+  /// <summary>1.52.3 INCRPP-LIMITS: the project files a unit's constants depend on, so a
+  /// host whose IF read that unit can be re-parsed when one of them changes.</summary>
+  /// <remarks>Implemented by TPPUnitSourceResolver; asked for through Supports.</remarks>
+  IPPUnitDeps = interface
+    ['{8533D028-07F6-4699-B842-C49E284F3F10}']
+    /// <summary>The project file of AUnit plus the project file of every unit its scan
+    /// asked a constant of, transitively (a constant defined through another unit's
+    /// constant).</summary>
+    /// <param name="AUnit">The unit name as the uses clause spells it.</param>
+    /// <returns>Absolute paths, de-duplicated, AUnit's own first; library units are left
+    /// out; empty when AUnit is not a project unit.</returns>
+    function UnitFileClosure(const AUnit: string): TArray<string>;
+  end;
+
   /// <summary>The IPPUnitSource the index and lint runs install (see the unit
   /// header for how each unit is answered).</summary>
   /// <remarks>
@@ -44,7 +58,7 @@ type
   /// <para>Used in units: DRagLint.CLI, DRagLint.Index.PPUnitSource</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TPPUnitSourceResolver = class(TInterfacedObject, IPPUnitSource, IPPUnitFiles)
+  TPPUnitSourceResolver = class(TInterfacedObject, IPPUnitSource, IPPUnitFiles, IPPUnitDeps)  // dl:ok high-response@267d -- REVIEWED 2026-11-20: the resolver IS the per-run IF symbol table (IPPUnitSource + IPPUnitFiles + IPPUnitDeps over one lock and one scan cache); 1.52.3 INCRPP-LIMITS added UnitFileClosure, which must read the same scan cache under the same lock
   private type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -70,6 +84,10 @@ type
     FUnitFiles  : TDictionary<string, string>;
     FScanned    : TObjectDictionary<string, TDictionary<string, TPPDecl>>;
     FInProgress : TDictionary<string, Boolean>;
+    { 1.52.3 INCRPP-LIMITS: the scans in progress, innermost last, and per scanned unit
+      key the units its scan asked (lowercased) -- IPPUnitDeps.UnitFileClosure. }
+    FScanStack  : TList<string>;
+    FScanDeps   : TObjectDictionary<string, TList<string>>;
     FAnswers    : TDictionary<string, TAnswer>;
     FProjectDbs : TArray<string>;
     FLibraryDbs : TArray<string>;
@@ -262,6 +280,12 @@ type
     /// <returns>The absolute path, or '' for a library or unknown unit.</returns>
     /// <remarks>Thread-safe (the lookup lock).</remarks>
     function UnitFilePath(const AUnit: string): string;
+    /// <summary>1.52.3 INCRPP-LIMITS (IPPUnitDeps): AUnit's project file and those of the
+    /// units its scan read constants of, transitively.</summary>
+    /// <param name="AUnit">The unit name as the uses clause spells it.</param>
+    /// <returns>Absolute paths, AUnit's own first; empty for a library or unknown unit.</returns>
+    /// <remarks>Thread-safe (the lookup lock). Only units scanned this run carry deps.</remarks>
+    function UnitFileClosure(const AUnit: string): TArray<string>;
     /// <summary>How many lookups answered pnkUnknown since the last AddUnitFiles
     /// -- zero means no IF needed a unit the source could not see, so a second
     /// closure pass would decide nothing differently.</summary>
@@ -314,6 +338,8 @@ begin
   FUnitFiles  := TDictionary<string, string>.Create;
   FScanned    := TObjectDictionary<string, TDictionary<string, TPPDecl>>.Create([doOwnsValues]);
   FInProgress := TDictionary<string, Boolean>.Create;
+  FScanStack  := TList<string>.Create;
+  FScanDeps   := TObjectDictionary<string, TList<string>>.Create([doOwnsValues]);
   FAnswers    := TDictionary<string, TAnswer>.Create;
   for var D: string in AProfile.Defines do
     if D <> '' then FDefines.AddOrSetValue(LowerCase(D), True);
@@ -326,6 +352,8 @@ begin
   FProjStores:= nil;
   FLibStores := nil;
   FAnswers.Free;
+  FScanDeps.Free;
+  FScanStack.Free;
   FInProgress.Free;
   FScanned.Free;
   FUnitFiles.Free;
@@ -405,6 +433,7 @@ begin
   if FScanned.TryGetValue(AKey, Result) then Exit;
   Result:= TDictionary<string, TPPDecl>.Create;
   FInProgress.AddOrSetValue(AKey, True);
+  FScanStack.Add(AKey); { INCRPP-LIMITS: lookups from here on are AKey's deps }
   try
     try
       Opts:= TPPOptionsDefault;
@@ -419,6 +448,7 @@ begin
       on E: Exception do Result.Clear;
     end;
   finally
+    FScanStack.Delete(FScanStack.Count - 1);
     FInProgress.Remove(AKey);
   end;
   FScanned.Add(AKey, Result);
@@ -521,6 +551,18 @@ begin
   FLock.Enter;
   try
     Key:= LowerCase(AUnit);
+    { INCRPP-LIMITS: a lookup made while a unit is being scanned is that unit's dependency. }
+    if FScanStack.Count > 0 then
+    begin
+      var Scanning: string:= FScanStack[FScanStack.Count - 1];
+      var Deps: TList<string>;
+      if not FScanDeps.TryGetValue(Scanning, Deps) then
+      begin
+        Deps:= TList<string>.Create;
+        FScanDeps.Add(Scanning, Deps);
+      end;
+      if (Key <> Scanning) and not Deps.Contains(Key) then Deps.Add(Key);
+    end;
     Path:= UnitFile(AUnit);
     if Path <> '' then
     begin
@@ -556,6 +598,41 @@ begin
     OpenStores;
     Result:= Length(FLibStores) > 0;
   finally
+    FLock.Leave;
+  end;
+end;
+
+function TPPUnitSourceResolver.UnitFileClosure(const AUnit: string): TArray<string>;
+var
+  Todo : TList<string>;
+  Seen : TDictionary<string, Boolean>;
+  Deps : TList<string>;
+  I    : Integer;
+begin
+  Result:= nil;
+  FLock.Enter;
+  Todo:= TList<string>.Create;
+  Seen:= TDictionary<string, Boolean>.Create;
+  try
+    Todo.Add(LowerCase(AUnit));
+    Seen.Add(LowerCase(AUnit), True);
+    I:= 0;
+    while I < Todo.Count do
+    begin
+      var P: string:= UnitFile(Todo[I]);
+      if P <> '' then Result:= Result + [P];
+      if FScanDeps.TryGetValue(Todo[I], Deps) then
+        for var D: string in Deps do
+          if not Seen.ContainsKey(D) then
+          begin
+            Seen.Add(D, True);
+            Todo.Add(D);
+          end;
+      Inc(I);
+    end;
+  finally
+    Seen.Free;
+    Todo.Free;
     FLock.Leave;
   end;
 end;

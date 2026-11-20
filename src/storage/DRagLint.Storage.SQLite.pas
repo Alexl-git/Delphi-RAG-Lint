@@ -5645,6 +5645,7 @@ uses
   , DRagLint.Index.DispatchResolver { 2026-10-26: ResolveDispatch }
   , FireDAC.Stan.Error          { F2: EFDDBEngineException -- ExecAdditiveDDL's one tolerated failure }
   , DRagLint.Core.ControlChannel { 1.40 heartbeat: BeatStep / BeatProgress from the resolve pass }
+  , DRagLint.Preprocess { 1.52.3 INCRPP-LIMITS: PPResolveInclude re-asks a near-search include rule }
   ;
 
 var
@@ -9256,7 +9257,10 @@ const
   FILE_INCLUDES_SEP = '|';
 
 // True when one of the includes recorded for APath by SetFileIncludes is
-// missing or newer than APath's last parse.
+// missing or newer than APath's last parse. 1.52.3: also an entry of APath's
+// ancestor-file list (ANCESTOR_FILES_META_KEY, INCR-BASEFIELD), read by the same
+// query, and a near-search rule (UNRESOLVED_NEAR_MARK, INCRPP-LIMITS) whose include
+// the resolver now finds.
 function RecordedIncludesChanged(AConn: TFDConnection; const APath: string): Boolean;
 var
   Q: TFDQuery;
@@ -9264,27 +9268,45 @@ var
   List: string;
 begin
   Result:= False;
+  List:= '';
+  ParsedAt:= 0;
   Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= AConn;
     Q.SQL.Text:= 'SELECT m.value, f.parsed_at FROM schema_meta m JOIN files f ' +
-                 'ON (f.path = :p OR LOWER(f.path) = LOWER(:p)) WHERE m.key = :k LIMIT 1';
+                 'ON (f.path = :p OR LOWER(f.path) = LOWER(:p)) WHERE m.key IN (:k, :a)';
     Q.ParamByName('p').AsWideString:= NormalizeStoredPath(APath);
     Q.ParamByName('k').AsWideString:= FILE_INCLUDES_KEY + LowerCase(NormalizeStoredPath(APath));
+    Q.ParamByName('a').AsWideString:= ANCESTOR_FILES_META_KEY + LowerCase(NormalizeStoredPath(APath));
     try
       Q.Open;
     except
       { no schema_meta table (a pre-schema_meta DB): nothing was recorded }
     end;
     if (not Q.Active) or Q.IsEmpty then Exit;
-    List    := Q.Fields[0].AsString;
-    ParsedAt:= Q.Fields[1].AsLargeInt;
+    while not Q.Eof do
+    begin
+      List    := List + FILE_INCLUDES_SEP + Q.Fields[0].AsString;
+      ParsedAt:= Q.Fields[1].AsLargeInt;
+      Q.Next;
+    end;
   finally
     Q.Free;
   end;
   for var Inc_ in List.Split([FILE_INCLUDES_SEP]) do
   begin
     if Inc_ = '' then Continue;
+    { INCRPP-LIMITS: an include the host could not resolve, re-asked with the near search
+      (subfolders, parent levels) the preprocess used -- a candidate list cannot name a
+      folder created later. }
+    if Inc_.StartsWith(UNRESOLVED_NEAR_MARK) then
+    begin
+      var Rule: string:= Inc_.Substring(Length(UNRESOLVED_NEAR_MARK));
+      var Star: Integer:= Rule.LastIndexOf('*');
+      if (Star > 0) and (PPResolveInclude(Rule.Substring(Star + 1), Rule.Substring(0, Star), True, nil) <> '') then
+        Exit(True);
+      Continue;
+    end;
     { INCRPP: where an include the host could not resolve would be found -- once a file
       exists there, the host's preprocess result moves. }
     if Inc_.StartsWith(UNRESOLVED_INCLUDE_MARK) then
@@ -9412,6 +9434,12 @@ end;
 procedure TSQLiteSymbolStore.SetMetaValue(const AKey, AValue: string);
 begin
   try
+    { 1.52.3 INCR-BASEFIELD: an empty ancestor-file list is no row, as a full index leaves it. }
+    if (AValue = '') and AKey.StartsWith(ANCESTOR_FILES_META_KEY) then
+    begin
+      FConn.ExecSQL('DELETE FROM schema_meta WHERE key = ?', [AKey]);
+      Exit;
+    end;
     FConn.ExecSQL('INSERT OR REPLACE INTO schema_meta(key, value) VALUES (?, ?)', [AKey, AValue]);
   except
     { non-writable / pre-schema_meta DB -- recording the fingerprint is best-effort }
