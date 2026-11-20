@@ -20,6 +20,10 @@
 // (pinned by tests\autotest\run_v152_BK-VSHOVER.ps1 W1).
 const DEFER_METHOD = 'draglint/deferHover';
 const PLACEHOLDER = 'computing...';
+// 1.52.2 PROXYMERGE: the placeholder `drag-lint lsp --proxy` puts after DelphiLSP's hover
+// (behind a '---' rule) when drag-lint's part is past its budget; must equal
+// DRagLint.LSP.Proxy.Merge HOVER_PLACEHOLDER without its _emphasis_.
+const PROXY_PLACEHOLDER = 'drag-lint: analysing...';
 
 // How long the companion waits for the fast step before giving up (ms).
 const FIRST_STEP_WAIT_MS = 15000;
@@ -33,7 +37,8 @@ function splitLines(text) {
 }
 
 function isPlaceholderLine(line) {
-  return line.trim().replace(/^[-*]\s+/, '').replace(/^_(.*)_$/, '$1') === PLACEHOLDER;
+  const t = line.trim().replace(/^[-*]\s+/, '').replace(/^_(.*)_$/, '$1');
+  return t === PLACEHOLDER || t === PROXY_PLACEHOLDER;
 }
 
 function isPartial(text) {
@@ -57,6 +62,8 @@ function fastPart(text) {
     let j = out.length - 1;
     while (j >= 0 && out[j].trim() === '') j--;
     if (next === '' && j >= 0 && isHeading(out[j])) out.splice(j);
+    // the proxy's placeholder sits behind a '---' rule: drop the rule left dangling
+    else if (next === '' && j >= 0 && out[j].trim() === '---') out.splice(j);
   }
   return out.join('\n');
 }
@@ -133,4 +140,4 @@ function createSlot() {
   };
 }
 
-module.exports = { DEFER_METHOD, PLACEHOLDER, FIRST_STEP_WAIT_MS, key, isPartial, fastPart, remainder, hoverText, createSlot };
+module.exports = { DEFER_METHOD, PLACEHOLDER, PROXY_PLACEHOLDER, FIRST_STEP_WAIT_MS, key, isPartial, fastPart, remainder, hoverText, createSlot };

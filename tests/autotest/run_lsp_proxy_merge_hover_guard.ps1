@@ -77,7 +77,7 @@ if (Test-Path $WorkDir) { Remove-Item -Recurse -Force $WorkDir }
 New-Item -ItemType Directory $WorkDir | Out-Null
 
 function Invoke-Raw {
-  param([string]$exe, [string[]]$argv, [byte[]]$c1, [hashtable]$envs = @{})
+  param([string]$exe, [string[]]$argv, [byte[]]$c1, [hashtable]$envs = @{}, [byte[]]$c2 = $null, [int]$delayMs = 0)
   $psi = New-Object System.Diagnostics.ProcessStartInfo
   $psi.FileName               = $exe
   foreach ($a in $argv) { [void]$psi.ArgumentList.Add($a) }
@@ -96,6 +96,7 @@ function Invoke-Raw {
   try {
     $sin = $p.StandardInput.BaseStream
     if ($c1 -and $c1.Length) { $sin.Write($c1, 0, $c1.Length); $sin.Flush() }
+    if ($c2 -and $c2.Length) { Start-Sleep -Milliseconds $delayMs; $sin.Write($c2, 0, $c2.Length); $sin.Flush() }
     $sin.Close()
   } catch { }
   $done = $p.WaitForExit(60000)
@@ -277,12 +278,17 @@ Check 'ON differs from the plain relay (positive control)' ($r1.Out.Length -gt 0
 
 # --- 7 budget ----------------------------------------------------------------------------------
 Write-Host ''
-Write-Host '(7) stub delay 200 ms, --merge-budget-ms 10: theirs byte-identical' -ForegroundColor Cyan
+Write-Host '(7) stub delay 200 ms, --merge-budget-ms 10: theirs + separator + the "analysing" placeholder' -ForegroundColor Cyan
+# 1.52.2 PROXYMERGE (owner 2026-11-20): never drop the drag-lint part silently --
+# the over-budget answer says it is coming; the part is cached (case 10) and the
+# VS Code companion provider fetches it (case 11).
+$Placeholder = '_drag-lint: analysing..._'
 $env7 = Script $theirs1 200
 $r7 = Invoke-Raw $Exe $tightArgs $fieldReq $env7
-$p7 = Invoke-Raw $Exe $plainArgs $fieldReq $env7
-Check 'over budget: ON = plain relay' (Same $r7.Out $p7.Out) ("on=$($r7.Out.Length) plain=$($p7.Out.Length)")
-Check 'it was the budget that declined (stderr names it)' ((Utf8 $r7.Err) -match 'merge-hover over its 10 ms budget') ("err=$(Utf8 $r7.Err)")
+$m7 = Reply7 $r7.Out
+Check 'over budget: value = theirs + separator + placeholder' ($m7 -and $m7.Kind -eq 'markdown' -and $m7.Value -eq ('THEIRS-MD' + $Sep + $Placeholder)) ("value=$(Show $m7.Value)")
+Check 'over budget: range kept' ($m7 -and $m7.Result['range'] -and $m7.Result['range']['start']['character'] -eq 6) ''
+Check 'it was the budget (stderr names it)' ((Utf8 $r7.Err) -match 'merge-hover over its 10 ms budget') ("err=$(Utf8 $r7.Err)")
 
 # --- 8 no position (A4 fix M2) -------------------------------------------------------------------
 Write-Host ''
@@ -316,6 +322,50 @@ Check 'all 56 hovers answered' ($rep9.Count -eq 56) ("n=$($rep9.Count)")
 Check 'positive control: some hovers merged' (($rep9.Count - $unmerged) -gt 0) ("merged=$($rep9.Count - $unmerged)")
 Check 'no over-budget line (an overflowed request no longer waits for an answer nobody computes)' (-not ((Utf8 $r9.Err) -match 'merge-hover over its')) ("unmerged=$unmerged err=$(Utf8 $r9.Err)")
 Check 'positive control: the queue DID overflow (some replies unmerged)' ($unmerged -gt 0) ("unmerged=$unmerged")
+
+# --- 10 the late drag-lint part is cached per position (1.52.2 PROXYMERGE) ---------------------
+function ReplyN([byte[]]$b, [int]$id) {
+  $res = @()
+  foreach ($f in (Split-Frames $b)) {
+    try { $j = $f.Body | ConvertFrom-Json -AsHashtable | ForEach-Object { $_ } } catch { continue }
+    if ($j -and $j.ContainsKey('id') -and ($j['id'] -eq $id) -and $j.ContainsKey('result') -and -not $j.ContainsKey('method')) {
+      $r = $j['result']; $val = $null
+      if (($r -is [System.Collections.IDictionary]) -and ($r['contents'] -is [System.Collections.IDictionary])) { $val = $r['contents']['value'] }
+      $res += [pscustomobject]@{ Result = $r; Value = $val }
+    }
+  }
+  return ,$res
+}
+function HoverReqId([int]$id, [int]$line, [int]$ch) {
+  return Frame ('{"jsonrpc":"2.0","id":' + $id + ',"method":"textDocument/hover","params":{"textDocument":{"uri":"' + $uri + '"},"position":{"line":' + $line + ',"character":' + $ch + '}}}')
+}
+Write-Host ''
+Write-Host '(10) over budget, then the same position again: the cached drag-lint part makes the second hover complete' -ForegroundColor Cyan
+$r10 = Invoke-Raw $Exe $tightArgs ([byte[]]($didOpen + (HoverReqId 7 13 8))) (Script $theirs1 200) ([byte[]](HoverReqId 9 13 8)) 6000
+$a10 = @(ReplyN $r10.Out 7)
+$b10 = @(ReplyN $r10.Out 9)
+Check 'first hover: the placeholder' ($a10.Count -eq 1 -and $a10[0].Value -eq ('THEIRS-MD' + $Sep + $Placeholder)) ("value=$(Show $a10[0].Value)")
+Check 'second hover: theirs + separator + ours (from the cache, inside a 10 ms budget)' ($b10.Count -eq 1 -and $b10[0].Value -eq ('THEIRS-MD' + $Sep + $ours)) ("value=$(Show $b10[0].Value)")
+
+# --- 11 the VS Code companion's second request is answered in --proxy mode (BK-VSHOVER) ---------
+# The extension sends draglint/deferHover, then hover (fast step), then -- when the
+# fast step was partial -- hover again at the same position (the whole step). The
+# proxy answers that second request itself with drag-lint's part, however long it
+# takes; DelphiLSP never sees it (its part is already on screen).
+Write-Host ''
+Write-Host '(11) draglint/deferHover + two hovers at one position: the second is drag-lint''s part, answered by the proxy' -ForegroundColor Cyan
+$defer = Frame ('{"jsonrpc":"2.0","method":"draglint/deferHover","params":{"textDocument":{"uri":"' + $uri + '"},"position":{"line":13,"character":8}}}')
+$env11 = Script $theirs1 200
+$log11 = Join-Path $WorkDir 'stub11.log'
+$env11['DRAGLINT_STUB_LOG'] = $log11
+$r11 = Invoke-Raw $Exe $tightArgs ([byte[]]($didOpen + $defer + (HoverReqId 7 13 8) + (HoverReqId 8 13 8))) $env11
+$seen11 = if (Test-Path $log11) { [IO.File]::ReadAllText($log11) } else { '' }
+$a11 = @(ReplyN $r11.Out 7)
+$b11 = @(ReplyN $r11.Out 8)
+Check 'fast step (id 7): the placeholder' ($a11.Count -eq 1 -and $a11[0].Value -eq ('THEIRS-MD' + $Sep + $Placeholder)) ("value=$(Show $a11[0].Value)")
+Check 'whole step (id 8): exactly one reply, drag-lint''s part alone' ($b11.Count -eq 1 -and $b11[0].Value -eq $ours) ("n=$($b11.Count) value=$(Show $b11[0].Value)")
+Check 'control: the stub log saw the fast-step hover' ($seen11.Contains('textDocument/hover')) ''
+Check 'DelphiLSP never saw draglint/deferHover nor the whole-step request' (-not $seen11.Contains('draglint/deferHover') -and @([regex]::Matches($seen11, 'textDocument/hover')).Count -eq 1) ("log=$(Show $seen11)")
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

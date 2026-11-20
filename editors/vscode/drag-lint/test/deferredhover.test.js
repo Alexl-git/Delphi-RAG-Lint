@@ -32,6 +32,14 @@ assert.strictEqual(dh.fastPart(mixed), '**Analysis facts:**\n- Complexity: 3\n')
 // No placeholder: unchanged apart from line ends.
 assert.strictEqual(dh.fastPart('a\r\nb'), 'a\nb');
 
+// 1.52.2 PROXYMERGE: the --proxy over-budget hover = DelphiLSP's part, a rule, the
+// proxy placeholder (DRagLint.LSP.Proxy.Merge HOVER_PLACEHOLDER).
+assert.strictEqual(dh.PROXY_PLACEHOLDER, 'drag-lint: analysing...');
+const proxyFast = 'function Format(Indentation: Integer = 4): string\n\n---\n\n_drag-lint: analysing..._';
+assert.strictEqual(dh.isPartial(proxyFast), true);
+assert.strictEqual(dh.fastPart(proxyFast), 'function Format(Indentation: Integer = 4): string\n');
+// The whole step (answered by the proxy) is drag-lint's part alone: all of it is new.
+assert.strictEqual(dh.remainder(dh.fastPart(proxyFast), '**TJSONAncestor.Format**\n- line 1656'), '**TJSONAncestor.Format**\n- line 1656');
 // The companion part: what the whole answer adds, heading included, footer not repeated.
 assert.strictEqual(dh.remainder(shown, whole),
   '**Analysis facts:**\n- Called from: u.TWorker.CallerA, u.TWorker.CallerB\n- Effect-free: yes');
