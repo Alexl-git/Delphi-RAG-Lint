@@ -1793,16 +1793,16 @@ begin
   pDetail:= '';
   if Length(pPlan.NewBytes) = 0 then Exit;
   var Dir:= FreshScratchName('_unwithfix');
-  TDirectory.CreateDirectory(Dir);  // dl:ok taint-path-traversal@c1a0 -- a fresh scratch dir; only its PID part can come from the environment, a test seam
+  TDirectory.CreateDirectory(Dir);  // dl:ok taint-path-traversal@159a -- a fresh scratch dir; only its PID part can come from the environment, a test seam
   var Log:= TPath.Combine(Dir, 'after-proof-index.log');
-  var Orig:= TFile.ReadAllBytes(pPlan.FilePath);
+  var Orig:= TFile.ReadAllBytes(pPlan.FilePath);  // dl:ok taint-path-traversal@a1e3 -- REVIEWED 2026-11-20 v1522 INT: the indexed file the fix itself edits, read to restore it below
   var Stamp:= TFile.GetLastWriteTimeUtc(pPlan.FilePath);
   Points:= 0;
   Rebinds:= nil;
   try
     try
       var AfterDb:= CopyDbFor(pDb, Dir);
-      TFile.WriteAllBytes(pPlan.FilePath, pPlan.NewBytes);  // dl:ok taint-path-traversal@c1a1 -- the indexed file the fix itself edits; restored below
+      TFile.WriteAllBytes(pPlan.FilePath, pPlan.NewBytes);  // dl:ok taint-path-traversal@fce7 -- the indexed file the fix itself edits; restored below
       var TimedOut: Boolean;
       var Code:= RunBounded('after-proof re-index', Format('"%s" index "%s" --db "%s"', [ParamStr(0), pPlan.FilePath, AfterDb]),
         Log, CFixProofTimeoutMs, TimedOut);
@@ -1823,10 +1823,10 @@ begin
   finally
     { The caller writes the edit, never this proof: the file goes back byte- and time-identical, so the index still
       holds it fresh for the next finding of the same run. A failure here raises (the file holds the rewrite). }
-    TFile.WriteAllBytes(pPlan.FilePath, Orig);  // dl:ok taint-path-traversal@c1a2 -- restores the file's own bytes
+    TFile.WriteAllBytes(pPlan.FilePath, Orig);  // dl:ok taint-path-traversal@39cf -- restores the file's own bytes
     TFile.SetLastWriteTimeUtc(pPlan.FilePath, Stamp);
     for var Tail: string in ['', '-wal', '-shm'] do
-      System.SysUtils.DeleteFile(TPath.Combine(Dir, 'after-proof.sqlite') + Tail);  // dl:ok taint-path-traversal@c1a3 -- a fresh scratch dir
+      System.SysUtils.DeleteFile(TPath.Combine(Dir, 'after-proof.sqlite') + Tail);  // dl:ok taint-path-traversal@ce76 -- a fresh scratch dir
     DropUnwithLogs(Dir, pDetail);
   end;
   Result:= pDetail = '';
