@@ -419,7 +419,7 @@ begin
   APending.Clear;
 end;
 
-procedure TxtScanText(const ASource, AFilePath: string; AWantTodo, AWantHard: Boolean; AOut: TList<TLintFinding>);  // dl:ok deep-nesting@2330, cyclomatic-complexity@b880, cognitive-complexity@de90, too-many-locals@cb16 -- REVIEWED 2026-11-20 v1522 INT: one hand-written scanner over the source text; each branch is one lexical shape, splitting it would scatter the scanner state
+procedure TxtScanText(const ASource, AFilePath: string; AWantTodo, AWantHard: Boolean; AOut: TList<TLintFinding>);  // dl:ok deep-nesting@2330, cyclomatic-complexity@7de0, cognitive-complexity@6060, too-many-locals@cb16 -- REVIEWED 2026-11-20 v1522 INT: one hand-written scanner over the source text; each branch is one lexical shape, splitting it would scatter the scanner state
 var
   S: string;
   I, N, Line, LineStart, Depth, J, StartLine, StartCol, NTodo, NHard, K: Integer;
