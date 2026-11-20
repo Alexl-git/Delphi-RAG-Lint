@@ -21,6 +21,16 @@ then right-click a tree node and choose "Fix all in unit".
 * The item is ENABLED only when at least one finding in the unit has a
   registered fix, and its caption says how many: "Fix all in unit (3)". It is
   offered from the Diagnostics root and from any Diagnostics row.
+* `param-name-prefix` is ON by default since 1.52.2 (accepted prefixes
+  `naming.param_prefixes`, default `p`, `A`; a parameter wearing the field
+  prefix `F` is always reported; a typed Hungarian prefix is accepted while
+  `naming.param_hungarian` is `allowed`; `Sender` is exempt). Its fix adds
+  `naming.param_prefix` (default `p`; `FName` becomes `pName`) at the
+  declaration, the implementation header and every body use, and DECLINES --
+  a note, nothing written -- for a virtual / override / dynamic / abstract /
+  message method, a method of an interface type, and a non-private method of
+  a class that implements an interface: that parameter list is shared with
+  partners the fix does not rename.
 * The seven NAMING fixes (`const-casing`, `type-name-prefix`,
   `method-pascalcase`, `local-var-casing`, `field-name-prefix`,
   `param-name-prefix`, `local-field-prefix`) ARE counted when the project has

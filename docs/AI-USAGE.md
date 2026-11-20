@@ -1311,6 +1311,12 @@ withhold it. All are **dry-run unless `--apply`**. Two phases:
   param `x -> pX`, `myclass -> TMyClass`). (Shipped v0.97.)
   - `param-name-prefix` is **fully safe**: routine-local scope, pure-AST, with a
     collision guard that skips if the prefixed name already exists in scope.
+    Since 1.52.2 the rule is ON by default (accepted prefixes `param_prefixes`,
+    default `p`, `A`; `FName` always reported; typed Hungarian prefixes accepted
+    while `param_hungarian` is `allowed`). The fix adds `param_prefix` (default
+    `p`; `FName -> pName`) at decl + impl header + body, and DECLINES with a note
+    for virtual/override/abstract/message methods, interface-type methods and
+    non-private methods of a class that implements an interface.
   - **Caveat -- review the diff for `field-name-prefix` / `type-name-prefix`.**
     These rely on the reference index, which does **not yet** capture
     `Self.`-qualified field uses or type-annotation references, so those
