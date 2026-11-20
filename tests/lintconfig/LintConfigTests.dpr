@@ -36,7 +36,10 @@ begin
   Cfg:= TLintConfig.Load('', '');
   Check('naming default class prefix T', Cfg.Naming.ClassPrefix = 'T');
   Check('naming default field prefix F', Cfg.Naming.FieldPrefix = 'F');
-  Check('naming default param prefix empty (off by default)', Cfg.Naming.ParamPrefix = '');
+  { 1.52.2 owner ruling Q7: param-name-prefix ON, accepted list p, A, Hungarian accepted. }
+  Check('naming default param prefix p (preferred)', Cfg.Naming.ParamPrefix = 'p');
+  Check('naming default param prefixes p,A', (Length(Cfg.Naming.ParamPrefixes) = 2) and (Cfg.Naming.ParamPrefixes[0] = 'p') and (Cfg.Naming.ParamPrefixes[1] = 'A'));
+  Check('naming default param_hungarian allowed', Cfg.Naming.ParamHungarian = 'allowed');
   Check('naming default method PascalCase', Cfg.Naming.MethodCase = 'PascalCase');
 
   // 2. Override: disable param prefix, change field prefix.
@@ -46,6 +49,7 @@ begin
   try
     Cfg:= TLintConfig.Load(Path, '');
     Check('naming param prefix disabled (empty)', Cfg.Naming.ParamPrefix = '');
+    Check('naming legacy empty param_prefix empties the accepted list', Length(Cfg.Naming.ParamPrefixes) = 0);
     Check('naming field prefix overridden', Cfg.Naming.FieldPrefix = 'Fld');
     Check('naming class prefix still default', Cfg.Naming.ClassPrefix = 'T');
   finally

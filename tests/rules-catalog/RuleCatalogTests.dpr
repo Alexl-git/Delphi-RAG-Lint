@@ -145,7 +145,7 @@ begin
   Check('reserved-word-casing category naming', Info.Category = 'naming');
   Check('reserved-word-casing default enabled', Info.DefaultEnabled = True);
   Check('hungarian-or-short-identifier default DISABLED', Find(Reg, 'hungarian-or-short-identifier', Info) and (Info.DefaultEnabled = False));
-  Check('param-name-prefix default DISABLED', Find(Reg, 'param-name-prefix', Info) and (Info.DefaultEnabled = False));
+  Check('param-name-prefix default ENABLED (1.52.2, owner Q7)', Find(Reg, 'param-name-prefix', Info) and Info.DefaultEnabled);
 
   // representative: data-flow + dead-code + project-wide present
   Check('used-before-assignment is data-flow', Find(Reg, 'used-before-assignment', Info) and (Info.Category = 'data-flow'));

@@ -735,6 +735,36 @@ var
         Format('Identifier "%s" uses a Hungarian type prefix', [AName]));
   end;
 
+  { param-name-prefix (owner ruling Q7, 1.52.2). A parameter passes when it
+    carries ONE of the accepted prefixes (ANaming.ParamPrefixes, default p and
+    A; HasPrefix, so the next character must be uppercase), or -- while
+    ANaming.ParamHungarian is 'allowed' (the default) -- a typed Hungarian
+    prefix from ANaming.HungarianPrefixes (strName, bDone). A parameter
+    wearing the FIELD prefix (FName) is ALWAYS reported, even when F is on
+    the accepted list: it reads as an object field and is not one. An empty
+    accepted list disables the rule. `Sender` is exempt: the VCL/FMX event
+    signature (TNotifyEvent and kin) names it, every IDE-generated handler
+    carries it, and pSender would be noise on every form. }
+  procedure ParamPrefixCheck(const ANameNode: TTSNode; const AName: string);
+  begin
+    if Length(ANaming.ParamPrefixes) = 0 then Exit;
+    if SameText(AName, 'Sender') then Exit;
+    if (ANaming.FieldPrefix <> '') and HasPrefix(AName, ANaming.FieldPrefix) then
+    begin
+      EmitAt(ANameNode, 'param-name-prefix',
+        Format('Parameter "%s" wears the field prefix "%s"; use one of: %s',
+          [AName, ANaming.FieldPrefix, string.Join(', ', ANaming.ParamPrefixes)]));
+      Exit;
+    end;
+    for var Pfx: string in ANaming.ParamPrefixes do
+      if HasPrefix(AName, Pfx) then Exit;
+    if SameText(ANaming.ParamHungarian, 'allowed')
+      and HasHungarianPrefix(AName, ANaming.HungarianPrefixes) then Exit;
+    EmitAt(ANameNode, 'param-name-prefix',
+      Format('Parameter "%s" should start with one of the prefixes: %s',
+        [AName, string.Join(', ', ANaming.ParamPrefixes)]));
+  end;
+
   { True when ATypeNode (the `type:` field child of a declType) is a pointer
     type declaration: a `declType` whose type child is a `typeref` prefixed
     with '^' (the tree-sitter grammar represents `^T` as a `typeptr` or similar).
@@ -1115,7 +1145,7 @@ var
               Format('Method "%s" should be %s', [MethName, ANaming.MethodCase]));
         end;
       end;
-      if (ANaming.ParamPrefix <> '') or ANaming.ShortIdentifierCheck then
+      if (Length(ANaming.ParamPrefixes) > 0) or ANaming.ShortIdentifierCheck then
       begin
         ArgsNode:= N.ChildByField('args');
         if not ArgsNode.IsNull then
@@ -1134,10 +1164,7 @@ var
               if Integer(NameId.StartByte) >= TypeStart then Continue;
               ArgName:= Trim(NodeStr(NameId));
               if SameText(ArgName, 'Self') then Continue;
-              if (ANaming.ParamPrefix <> '') and (not HasPrefix(ArgName, ANaming.ParamPrefix)) then
-                EmitAt(NameId, 'param-name-prefix',
-                  Format('Parameter "%s" should start with the "%s" prefix',
-                    [ArgName, ANaming.ParamPrefix]));
+              ParamPrefixCheck(NameId, ArgName);
               EmitShortHungarian(NameId, ArgName);
             end;
           end;
@@ -1195,7 +1222,7 @@ var
           end;
         end;
         { param-name-prefix on the defProc args }
-        if (ANaming.ParamPrefix <> '') or ANaming.ShortIdentifierCheck then
+        if (Length(ANaming.ParamPrefixes) > 0) or ANaming.ShortIdentifierCheck then
         begin
           ArgsNode:= HdrNode.ChildByField('args');
           if not ArgsNode.IsNull then
@@ -1214,10 +1241,7 @@ var
                 if Integer(NameId.StartByte) >= TypeStart then Continue;
                 ArgName:= Trim(NodeStr(NameId));
                 if SameText(ArgName, 'Self') then Continue;
-                if (ANaming.ParamPrefix <> '') and (not HasPrefix(ArgName, ANaming.ParamPrefix)) then
-                  EmitAt(NameId, 'param-name-prefix',
-                    Format('Parameter "%s" should start with the "%s" prefix',
-                      [ArgName, ANaming.ParamPrefix]));
+                ParamPrefixCheck(NameId, ArgName);
                 EmitShortHungarian(NameId, ArgName);
               end;
             end;
