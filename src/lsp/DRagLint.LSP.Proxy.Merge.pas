@@ -126,6 +126,16 @@ type
   /// </remarks>
   TClientWriter = reference to function(const AFrame: TBytes): Boolean;
 
+  /// <summary>Runs AProc while holding the relay's client-write lock, so a
+  /// frame composed inside it and written by it cannot be overtaken by an
+  /// S&gt;C frame the relay forwards (1.52.2 HOVER, the publish race).</summary>
+  /// <param name="AProc">Composes and writes; must not wait on a pump.</param>
+  TClientLocker = reference to procedure(const AProc: TProc);
+
+  /// <summary>The relay's last S&gt;C step before writing an intercepted frame,
+  /// under its client-write lock (TProxyMergeEngine.FinishServerFrame).</summary>
+  TFrameFinisher = reference to function: TBytes;
+
   /// <summary>Owns the merge state of one proxy process: the options, the
   /// lazily-created drag-lint LSP server over the index, and the single merge
   /// worker thread.</summary>
@@ -136,15 +146,14 @@ type
   /// relay's pump threads are unjoined daemons (see TPumpThread) and may still
   /// be inside Intercept when RunLspProxy returns, so the engine lives until
   /// process exit.</para>
-  /// <para>Thread-safety: Intercept and RunWithinBudget are called from both
-  /// pump threads concurrently; Server and RunWithinBudget serialise
+  /// <para>Thread-safety: Intercept is called from both
+  /// pump threads concurrently; Server serialises
   /// internally. The dirty-URI set has its own lock (written by the C&gt;S pump,
   /// read by the S&gt;C pump). The linter is created and used ONLY on the merge
   /// worker thread, so it needs none.</para>
-  /// <para>Latency (P0 review I3): only the S&gt;C diagnostics merge calls
-  /// RunWithinBudget; the C&gt;S side (document tracking, the live-document
-  /// tap, recording a completion request) runs inline and never takes
-  /// FCallLock: a completion job and the warm-up are QUEUED on the worker
+  /// <para>Latency (P0 review I3): no pump thread waits for a queued job beyond
+  /// its budget; the C&gt;S side (document tracking, the live-document
+  /// tap, recording a completion request) runs inline : a completion job and the warm-up are QUEUED on the worker
   /// (Enqueue, no wait), so a diagnostics merge never delays a client request.
   /// The S&gt;C completion merge waits on its own request's event, at most the
   /// part of the budget left since the request.</para>
@@ -206,13 +215,8 @@ type
     FServerTried: Boolean;
     FServerLock : TCriticalSection;
     FPendingSettingsFile: string; { LSP-1 CORE: the .delphilsp.json the IDE named, applied to FServer on the next Server call; under FServerLock }
-    FCallLock   : TCriticalSection;
     FStateLock  : TCriticalSection;
     FJobReady   : TEvent;
-    FJobDone    : TEvent;
-    FJob        : TProc;
-    FBusy       : Boolean;
-    FJobFailed  : Boolean;
     FWorker     : TThread;
     FTestEmptyReplacement: Boolean;
     FLinter      : TLinter;
@@ -236,6 +240,9 @@ type
     FTheirSymbols    : Integer;
     FTheirNavigation : Integer;   { bit per NAV_CAPS entry DelphiLSP advertised; written once by MergeInitialize }
     FClientWriter    : TClientWriter;
+    FClientLocker    : TClientLocker;
+    FPublishPending  : TObject;   { S>C pump only: the TDiagState of the publishDiagnostics frame being forwarded }
+    FPublishOurs     : string;    { S>C pump only: the drag-lint set that frame was composed with }
     FAnswersOut      : Integer;
     FAnswersIdle     : TEvent;
     FAnsweredIds     : TDictionary<string, Boolean>;   { C>S pump only: ids Answer took }
@@ -361,10 +368,9 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.LSP.Proxy.Merge.TMergeWorker.Execute (DRagLint.LSP.Proxy.Merge.pas)</para>
-    /// <para>Calls: DRagLint.LSP.Proxy.Merge.TakeJob, Work</para>
-    /// <para>Reads: FJobReady, FStateLock, FJob, FQueue, FJobDone   Writes: FJobFailed, FBusy</para>
+    /// <para>Calls: Work</para>
+    /// <para>Reads: FJobReady, FStateLock, FQueue</para>
     /// <para>Catches: Exception (swallowed)</para>
-    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TakeJob"/>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker"/>
@@ -415,7 +421,7 @@ type
     /// <summary><!-- drag-lint:auto sum -->Queues AWork on the merge worker and returns
     /// at once; nobody waits on it, so it must publish its result through its own
     /// captured state. False (AWork is dropped, never run) when QUEUE_MAX jobs are
-    /// already waiting. A budgeted job that arrives meanwhile runs first.</summary>
+    /// already waiting.</summary>
     /// <param name="AWork"><!-- drag-lint:auto type -->const TProc</param>
     /// <returns><!-- drag-lint:auto -->Boolean -- Observed: FQueue.Count &lt; QUEUE_MAX.</returns>
     /// <remarks>
@@ -451,7 +457,7 @@ type
     /// <!-- drag-lint:auto -->C&gt;S: with MergeDiagnostics, didChange marks the document dirty and
     /// didSave / didOpen / didClose clear it; with MergeCompletion or MergeHover, the text the
     /// notification implies is queued for the live-document overlay. A first didOpen also warms the
-    /// worker. Runs on the C&gt;S pump thread, inline (no worker, no FCallLock). C&gt;S, didOpen:
+    /// worker. Runs on the C&gt;S pump thread, inline (no worker). C&gt;S, didOpen:
     /// queues (never waits) the announcement of the file's context on the merge worker: the
     /// embedded server then sends draglint/context with its notice through the client writer and
     /// starts the background re-index of a project DB marked needs-re-resolve (once per DB: the
@@ -722,7 +728,7 @@ type
     /// the budget.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Intercept (DRagLint.LSP.Proxy.Merge.pas)</para>
-    /// <para>Calls: DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/3, DRagLint.LSP.Proxy.Merge.BuildFrame, DRagLint.LSP.Proxy.Merge.FrameBody, DRagLint.LSP.Proxy.Merge.FrameContains, DRagLint.LSP.Proxy.Merge.MergeErrLine, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.EnsureLinter, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.IsDirty, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics.Skip, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.RunWithinBudget, DRagLint.LSP.Server.TLSPServer.FileFromUri, IntToStr, TJSONArray, TJSONValue</para>
+    /// <para>Calls: DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/3, DRagLint.LSP.Proxy.Merge.BuildFrame, DRagLint.LSP.Proxy.Merge.FrameBody, DRagLint.LSP.Proxy.Merge.FrameContains, DRagLint.LSP.Proxy.Merge.MergeErrLine, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.EnsureLinter, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.IsDirty, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics.Skip, DRagLint.LSP.Server.TLSPServer.FileFromUri, IntToStr, TJSONArray, TJSONValue</para>
     /// <para>Complexity: 14 (cyclomatic, outer body), 102 lines (full implementation)</para>
     /// <para>Reads: FLinter, FOptions, FBudgetWarned, FWarming   Writes: FBudgetWarned</para>
     /// <para>Catches: Exception (swallowed)</para>
@@ -753,7 +759,7 @@ type
     /// <para>Called from: DRagLint.LSP.Proxy.RunLspProxy (DRagLint.LSP.Proxy.pas)</para>
     /// <para>Calls: DRagLint.LSP.Proxy.Merge.TMergeWorker.Create, GetEnvironmentVariable</para>
     /// <para>constructor</para>
-    /// <para>Writes: FOptions, FServerLock, FCallLock, FStateLock, FJobReady, FJobDone, FWorker, FTestEmptyReplacement (+11 more)</para>
+    /// <para>Writes: FOptions, FServerLock, FStateLock, FJobReady, FWorker, FTestEmptyReplacement (+11 more)</para>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.TMergeWorker.Create"/>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
@@ -849,32 +855,6 @@ type
     /// </remarks>
     function Intercept(ADir: TMergeDirection; const AFrame: TBytes; ALen: Integer;
       out AReplacement: TBytes): Boolean;
-    /// <summary>Runs AWork on the single merge worker thread and waits at most
-    /// ABudgetMs for it.</summary>
-    /// <param name="AWork">The work; it must publish its result only through
-    /// state the caller reads after a True return.</param>
-    /// <param name="ABudgetMs">Wait budget in milliseconds; 0 waits not at
-    /// all.</param>
-    /// <returns>True when AWork finished, without raising, within the budget.
-    /// False when it overran (its late result is to be discarded), raised, or
-    /// could not start because a previous over-budget job still occupies the
-    /// worker.</returns>
-    /// <remarks>
-    /// Callers are serialised. A job that overruns keeps running to
-    /// completion on the worker; it is never killed.
-    /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics (DRagLint.LSP.Proxy.Merge.pas)</para>
-    /// <para>Calls: Cardinal</para>
-    /// <para>Returns: False; not FJobFailed</para>
-    /// <para>Reads: FCallLock, FStateLock, FBusy, FJobDone, FJobReady, FJobFailed   Writes: FBusy, FJobFailed, FJob</para>
-    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
-    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
-    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker"/>
-    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion"/>
-    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeDefinition"/>
-    /// <!-- drag-lint:auto END -->
-    /// </remarks>
-    function RunWithinBudget(const AWork: TProc; ABudgetMs: Integer): Boolean;
     /// <summary>The relay's C&gt;S answerer (TFrameAnswerer) for this engine.</summary>
     /// <param name="AFrame">Buffer holding the frame at offset 0.</param>
     /// <param name="ALen">Byte length of the frame.</param>
@@ -940,6 +920,19 @@ type
     /// <summary>Where Answer's replies go; set by RunLspProxy before any pump
     /// starts. Unset, Answer declines every frame.</summary>
     property ClientWriter: TClientWriter write FClientWriter;
+    /// <summary>The relay's client-write lock (TClientLocker); set by
+    /// RunLspProxy with ClientWriter. Unset, the worker writes without it.</summary>
+    property ClientLocker: TClientLocker write FClientLocker;
+    /// <summary>S&gt;C, under the relay's client-write lock, right before the
+    /// relay writes the frame Intercept just answered: when that frame is a
+    /// publishDiagnostics whose drag-lint set went stale since Intercept
+    /// composed it (a lint finished in between), recomposes it with the
+    /// current set, so the client never ends on an older set (1.52.2 HOVER).</summary>
+    /// <returns>The recomposed frame to write instead of the one Intercept
+    /// answered; nil when that one is still current.</returns>
+    /// <remarks>S&gt;C pump thread only. Takes FDiagLock inside the client
+    /// lock -- the same order as the worker's publish.</remarks>
+    function FinishServerFrame: TBytes;
     /// <summary>The drag-lint LSP server over the index, created on first
     /// use: Options.DbPaths, or Options.ResolveDbs() when that list is empty
     /// (P0 review I1: resolved lazily, never on the relay's startup path).
@@ -1602,10 +1595,8 @@ begin
   inherited Create;
   FOptions   := AOptions;
   FServerLock:= TCriticalSection.Create;
-  FCallLock  := TCriticalSection.Create;
   FStateLock := TCriticalSection.Create;
   FJobReady  := TEvent.Create(nil, False, False, '');
-  FJobDone   := TEvent.Create(nil, True , False, '');
   FWorker    := TMergeWorker.Create(Self);
   FTestEmptyReplacement:= GetEnvironmentVariable('DRAGLINT_MERGE_TEST_EMPTY_REPLACEMENT') = '1';
   FTestAnswerInline    := GetEnvironmentVariable('DRAGLINT_MERGE_TEST_ANSWER_INLINE') = '1';
@@ -1653,33 +1644,15 @@ begin
   FDirty.Free;
   FDirtyLock.Free;
   FAnsweredIds.Free;
-  FJobDone.Free;
   FJobReady.Free;
   FStateLock.Free;
-  FCallLock.Free;
   FServerLock.Free;
   inherited Destroy;
 end;
 
-{ Takes the next job: the budgeted one (RunWithinBudget's, which a caller is
-  waiting on) before the queued ones (Enqueue's, which nobody waits on). }
-function TakeJob(var ABudgetJob: TProc; AQueue: TQueue<TProc>; out ABudgeted: Boolean): TProc;
-begin
-  ABudgeted:= Assigned(ABudgetJob);
-  if ABudgeted then
-  begin
-    Result    := ABudgetJob;
-    ABudgetJob:= nil;
-  end
-  else if AQueue.Count > 0 then Result:= AQueue.Dequeue()
-  else Result:= nil;
-end;
-
 procedure TProxyMergeEngine.WorkerLoop;
 var
-  Work    : TProc;
-  Failed  : Boolean;
-  Budgeted: Boolean;
+  Work: TProc;
 begin
   while not TThread.CheckTerminated do
   begin
@@ -1689,35 +1662,24 @@ begin
     begin
       FStateLock.Enter;
       try
-        Work:= TakeJob(FJob, FQueue, Budgeted);
+        Work:= if FQueue.Count > 0 then FQueue.Dequeue() else nil;
       finally
         FStateLock.Leave;
       end;
       if not Assigned(Work) then Break;
-      Failed:= False;
       try
         Work();
-      except  // dl:ok bare-except@e0ea -- fail-open by design: any merge exception forwards the original frame
-        Failed:= True;   { fail-open: the caller forwards the original frame }
+      except  // a queued job publishes through its own state; a raise must not end the worker
+        on E: Exception do MergeErrLine('drag-lint lsp --proxy: a merge job raised (' + E.ClassName + ': ' + E.Message + ').');
       end;
       Work:= nil;  // dl:ok overwrite-before-read@f29e -- releases the job closure (and what it captured) before blocking for the next job
-      if not Budgeted then Continue;   { a queued job signals through its own state }
-      FStateLock.Enter;
-      try
-        FJobFailed:= Failed;
-        FBusy     := False;
-        FJobDone.SetEvent;
-      finally
-        FStateLock.Leave;
-      end;
     end;
   end;
 end;
 
 { Queues AWork on the merge worker and returns at once; nobody waits on it, so
   it must publish its result through its own captured state. False (AWork is
-  dropped, never run) when QUEUE_MAX jobs are already waiting. A budgeted job
-  that arrives meanwhile runs first. }
+  dropped, never run) when QUEUE_MAX jobs are already waiting. }
 function TProxyMergeEngine.Enqueue(const AWork: TProc): Boolean;
 begin
   FStateLock.Enter;
@@ -1728,38 +1690,6 @@ begin
     FStateLock.Leave;
   end;
   if Result then FJobReady.SetEvent;
-end;
-
-function TProxyMergeEngine.RunWithinBudget(const AWork: TProc; ABudgetMs: Integer): Boolean;
-begin
-  Result:= False;
-  if not Assigned(AWork) then Exit;
-  if ABudgetMs < 0 then ABudgetMs:= 0;
-  FCallLock.Enter;
-  try
-    FStateLock.Enter;
-    try
-      { A previous job overran its budget and is still running: this frame
-        cannot be served in time, so it is forwarded untouched. }
-      if FBusy then Exit(False);
-      FBusy     := True;
-      FJobFailed:= False;
-      FJob      := AWork;
-      FJobDone.ResetEvent;
-    finally
-      FStateLock.Leave;
-    end;
-    FJobReady.SetEvent;
-    if FJobDone.WaitFor(Cardinal(ABudgetMs)) <> wrSignaled then Exit(False);
-    FStateLock.Enter;
-    try
-      Result:= not FJobFailed;
-    finally
-      FStateLock.Leave;
-    end;
-  finally
-    FCallLock.Leave;
-  end;
 end;
 
 function TProxyMergeEngine.Server: TLSPServer;
@@ -1868,7 +1798,7 @@ end;
 { C>S: with MergeDiagnostics, didChange marks the document dirty and didSave /
   didOpen / didClose clear it; with MergeCompletion or MergeHover, the text the notification
   implies is queued for the live-document overlay. A first didOpen also warms
-  the worker. Runs on the C>S pump thread, inline (no worker, no FCallLock). }
+  the worker. Runs on the C>S pump thread, inline (no worker). }
 { C>S, didOpen: queues (never waits) the announcement of the file's context on the
   merge worker: the embedded server then sends draglint/context with its notice
   through the client writer and starts the background re-index of a project DB
@@ -2706,6 +2636,7 @@ var
 begin
   Result:= False;
   AReplacement:= nil;
+  FPublishPending:= nil;
   if not FrameContains(AFrame, ALen, METHOD_PUBLISH_DIAGNOSTICS) then Exit;
   try
     Json:= TJSONObject.ParseJSONValue(FrameBody(AFrame, ALen));
@@ -2769,6 +2700,8 @@ begin
         end;
         Ours:= St.FOurs;
         St.FShown:= if HasFindings(Ours) then Ours else '';
+        FPublishPending:= St;   { FinishServerFrame re-checks it under the client lock }
+        FPublishOurs   := Ours;
       finally
         FDiagLock.Leave;
       end;
@@ -2803,6 +2736,37 @@ begin
   end;
 end;
 
+function TProxyMergeEngine.FinishServerFrame: TBytes;
+var
+  St   : TDiagState;
+  Cur  : string;
+  Shown: string;
+  Was  : string;
+  Frame: TBytes;
+begin
+  Result:= nil;
+  if FPublishPending = nil then Exit;
+  St:= TDiagState(FPublishPending);
+  FPublishPending:= nil;
+  FDiagLock.Enter;
+  try
+    Cur:= St.FOurs;
+    { Locals on purpose: comparing two if-expressions directly
+      (`(if A then X else '') = (if B then Y else '')`) answered equal here
+      under Delphi 13 Win64 Debug and the recomposed frame was never sent. }
+    Shown:= if HasFindings(Cur) then Cur else '';
+    Was  := if HasFindings(FPublishOurs) then FPublishOurs else '';
+    if Shown = Was then Exit;
+    { a lint ended after Intercept composed this frame: send the current set }
+    Frame:= ComposePublish(St.FBody, Cur);
+    if Frame = nil then Exit;
+    Result   := Frame;
+    St.FShown:= Shown;
+  finally
+    FDiagLock.Leave;
+  end;
+end;
+
 function TProxyMergeEngine.StartLint(AState: TObject; const APath: string): Boolean;
 var
   St: TDiagState;
@@ -2834,6 +2798,7 @@ var
   Shown: string;
   Rerun: Boolean;
   Token: string;
+  Publish: TProc;
 begin
   St   := TDiagState(AState);
   Items:= '';
@@ -2853,30 +2818,38 @@ begin
     except   { not swallowed: the message is logged below and the last known set stays }
       on E: Exception do Err:= E.ClassName + ': ' + E.Message;
     end;
-    FDiagLock.Enter;
-    try
-      if Err = '' then St.FOurs:= Items;
-      { Nobody waits inline any more: publish the merged set ourselves, when
-        it differs from what the client was last sent. }
-      if not St.FWaiting then
-      begin
-        Shown:= if HasFindings(St.FOurs) then St.FOurs else '';
-        if Shown <> St.FShown then
-        begin
-          Frame:= ComposePublish(St.FBody, St.FOurs);
-          if Frame <> nil then St.FShown:= Shown;
-        end;
-      end;
-      St.FWaiting:= False;
-      Rerun:= St.FRerun;
-      St.FRerun:= False;
-      St.FRunning:= Rerun;
-      if not Rerun then St.FDone.SetEvent;
-    finally
-      FDiagLock.Leave;
-    end;
     if Err <> '' then MergeErrLine(MERGE_ERR_PREFIX + 'skipped a lint (' + Err + '); the last known findings stay.');
-    if (Frame <> nil) and Assigned(FClientWriter) then FClientWriter(Frame);
+    { 1.52.2 HOVER: compose AND write under the relay's client lock, so a
+      publish the S>C pump is forwarding cannot land after this one with an
+      older set (FinishServerFrame re-checks the pump's frame under it). }
+    Publish:=
+      procedure
+      begin
+        FDiagLock.Enter;
+        try
+          if Err = '' then St.FOurs:= Items;
+          { Nobody waits inline any more: publish the merged set ourselves, when
+            it differs from what the client was last sent. }
+          if not St.FWaiting then
+          begin
+            Shown:= if HasFindings(St.FOurs) then St.FOurs else '';
+            if Shown <> St.FShown then
+            begin
+              Frame:= ComposePublish(St.FBody, St.FOurs);
+              if Frame <> nil then St.FShown:= Shown;
+            end;
+          end;
+          St.FWaiting:= False;
+          Rerun:= St.FRerun;
+          St.FRerun:= False;
+          St.FRunning:= Rerun;
+          if not Rerun then St.FDone.SetEvent;
+        finally
+          FDiagLock.Leave;
+        end;
+        if (Frame <> nil) and Assigned(FClientWriter) then FClientWriter(Frame);
+      end;
+    if Assigned(FClientLocker) then FClientLocker(Publish) else Publish();
   finally
     ProgressEnd(Token);
   end;

@@ -367,6 +367,19 @@ Check 'whole step (id 8): exactly one reply, drag-lint''s part alone' ($b11.Coun
 Check 'control: the stub log saw the fast-step hover' ($seen11.Contains('textDocument/hover')) ''
 Check 'DelphiLSP never saw draglint/deferHover nor the whole-step request' (-not $seen11.Contains('draglint/deferHover') -and @([regex]::Matches($seen11, 'textDocument/hover')).Count -eq 1) ("log=$(Show $seen11)")
 
+# --- 12 DelphiLSP answers null, drag-lint is over its budget (1.52.2 HOVER) --------------------
+# The owner's "no hover popup at all" (engine 1.52.1, vsix 1.6.9): DelphiLSP had no
+# project context and answered null; the merge was over budget, so the null was
+# forwarded as is -- nothing to show, and drag-lint's part was thrown away. Now the
+# fast step is a hover whose only content is the placeholder (the companion strips
+# it and shows nothing yet) and the companion's second request gets drag-lint's part.
+Write-Host ''
+Write-Host '(12) theirs null + over budget + companion: the fast step is not null; the whole step is drag-lint''s part' -ForegroundColor Cyan
+$r12 = Invoke-Raw $Exe $tightArgs ([byte[]]($didOpen + $defer + (HoverReqId 7 13 8))) (Script 'null' 200) ([byte[]](HoverReqId 8 13 8)) 3000
+$a12 = @(ReplyN $r12.Out 7)
+$b12 = @(ReplyN $r12.Out 8)
+Check 'fast step (id 7): a hover (not null) whose content is the placeholder alone' ($a12.Count -eq 1 -and $null -ne $a12[0].Result -and $a12[0].Value -eq $Placeholder) ("n=$($a12.Count) value=$(Show $a12[0].Value)")
+Check 'whole step (id 8): drag-lint''s part' ($b12.Count -eq 1 -and $b12[0].Value -eq $ours) ("n=$($b12.Count) value=$(Show $b12[0].Value)")
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
 } finally {

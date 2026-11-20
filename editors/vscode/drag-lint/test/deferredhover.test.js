@@ -40,6 +40,13 @@ assert.strictEqual(dh.isPartial(proxyFast), true);
 assert.strictEqual(dh.fastPart(proxyFast), 'function Format(Indentation: Integer = 4): string\n');
 // The whole step (answered by the proxy) is drag-lint's part alone: all of it is new.
 assert.strictEqual(dh.remainder(dh.fastPart(proxyFast), '**TJSONAncestor.Format**\n- line 1656'), '**TJSONAncestor.Format**\n- line 1656');
+// 1.52.2 HOVER: DelphiLSP answered null (no project context) and drag-lint was over
+// budget -- the proxy's fast step is the placeholder ALONE (1.52.1 forwarded the null:
+// no popup at all). It is partial, shows nothing yet, and the whole step is all new.
+const proxyOnly = '_drag-lint: analysing..._';
+assert.strictEqual(dh.isPartial(proxyOnly), true);
+assert.strictEqual(dh.fastPart(proxyOnly).trim(), '');
+assert.strictEqual(dh.remainder(dh.fastPart(proxyOnly), '**Format** `method`\n- line 1656'), '**Format** `method`\n- line 1656');
 // The companion part: what the whole answer adds, heading included, footer not repeated.
 assert.strictEqual(dh.remainder(shown, whole),
   '**Analysis facts:**\n- Called from: u.TWorker.CallerA, u.TWorker.CallerB\n- Effect-free: yes');
