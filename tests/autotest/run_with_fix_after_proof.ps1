@@ -49,9 +49,7 @@ function With-Line([string]$Dir) {
   throw 'silent-rebind site not found in the fixture'
 }
 function Invoke-Fix([string]$Dir, [int]$Line) {
-  $o = & { $ErrorActionPreference = 'Continue'
-    & $Exe lint --in "$Dir\UwCases.pas" --db "$Dir\uw.sqlite" --library-db $LibraryDb --enable with-statement `
-      --fix --fix-line $Line --apply --no-compile-gate 2>&1 | ForEach-Object { "$_" } }
+  $o = & { $ErrorActionPreference = 'Continue'; & $Exe lint --in "$Dir\UwCases.pas" --db "$Dir\uw.sqlite" --library-db $LibraryDb --enable with-statement --fix --fix-line $Line --apply --no-compile-gate 2>&1 | ForEach-Object { "$_" } }
   return ($o -join "`n")
 }
 

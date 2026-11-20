@@ -4,10 +4,10 @@
 
   Each unsound rename here COMPILES or leaves a token nobody mentions, and the old paths wrote it:
     Width  -> a read inside an inactive {$IFDEF}: no ref, so Build leaves it behind  [no-ref-occurrence]
-    x -> pX -> the routine already reads the GLOBAL pX: it would bind to the param   [capture-local]
+    xv -> pXv -> the routine already reads the GLOBAL pXv (multi-letter: card C exempts single letters): it would bind to the param   [capture-local]
     Height -> ClassName -> the library's TObject declares it: the new member hides it [new-name-in-library]
 
-  POSITIVE CONTROLS: Height -> Tall / FHeight and y -> pY are renamed in the same runs, so a path that refuses everything
+  POSITIVE CONTROLS: Height -> Tall / FHeight and yv -> pYv are renamed in the same runs, so a path that refuses everything
   fails; a proof handed no library refuses [no-library] instead of naming [new-name-in-library], so L2 and L3 also prove
   the LSP passes its library stores on. (No "no library" case: the LSP's context set finds the machine's platform library.)
   doIt -> DoIt keeps working over an inactive-branch token: a case-only rename cannot change a binding.
@@ -55,13 +55,13 @@ $null = Run @('index', $libDir, '--db', $Lib, '--library-db', 'none')
 
 $ShapeLines = @(
   'unit uShape;', '', 'interface', '', 'type', '  TShape = class', '  private', '    Width: Integer;', '    Height: Integer;', '  public',
-  '    function GetW: Integer;', '    function GetH: Integer;', '    procedure doIt;', '  end;', '', 'var', '  pX: Integer;', '',
-  'function UseCapture(x: Integer): Integer;', 'function UseClean(y: Integer): Integer;', '', 'implementation', '',
+  '    function GetW: Integer;', '    function GetH: Integer;', '    procedure doIt;', '  end;', '', 'var', '  pXv: Integer;', '',
+  'function UseCapture(xv: Integer): Integer;', 'function UseClean(yv: Integer): Integer;', '', 'implementation', '',
   'function TShape.GetW: Integer;', 'begin', '  {$IFDEF NEVER_DEFINED}', '  Result:= Width + 1;', '  {$ELSE}', '  Result:= Width;', '  {$ENDIF}', 'end;', '',
   'function TShape.GetH: Integer;', 'begin', '  Result:= Height;', 'end;', '',
   'procedure TShape.doIt;', 'begin', '  {$IFDEF NEVER_DEFINED}', '  doIt;', '  {$ENDIF}', 'end;', '',
-  'function UseCapture(x: Integer): Integer;', 'begin', '  Result:= x + pX;', 'end;', '',
-  'function UseClean(y: Integer): Integer;', 'begin', '  Result:= y;', 'end;', '', 'end.')
+  'function UseCapture(xv: Integer): Integer;', 'begin', '  Result:= xv + pXv;', 'end;', '',
+  'function UseClean(yv: Integer): Integer;', 'begin', '  Result:= yv;', 'end;', '', 'end.')
 
 # A fresh project S around uShape.pas, plus the two-project shared unit of the owners case; the manifest lists them.
 function New-Lab([string]$Name) {
@@ -151,9 +151,9 @@ try {
   $r2 = New-Lab 'paramfix'
   $o = Run @('lint-all', '--db', "$r2\S.sqlite", '--config', "$r2\cfg.json", '--library-db', $Lib, '--rule', 'param-name-prefix', '--fix', '--apply', '--no-compile-gate', '--quiet')
   $t = Txt "$r2\S\uShape.pas"
-  Check 'N4 x -> pX is refused: the routine reads the global pX, and it would compile' ($t -cmatch 'Result:= x \+ pX;' -and $t -cmatch 'UseCapture\(x: Integer\)') $t
+  Check 'N4 xv -> pXv is refused: the routine reads the global pXv, and it would compile' ($t -cmatch 'Result:= xv \+ pXv;' -and $t -cmatch 'UseCapture\(xv: Integer\)') $t
   Check 'N5 the run names [capture-local]' ($o -match 'capture-local') $o
-  Check 'N6 control: y -> pY in header, body and interface' ($t -cmatch 'Result:= pY;' -and ([regex]::Matches($t, 'UseClean\(pY: Integer\)')).Count -eq 2) $t
+  Check 'N6 control: yv -> pYv in header, body and interface' ($t -cmatch 'Result:= pYv;' -and ([regex]::Matches($t, 'UseClean\(pYv: Integer\)')).Count -eq 2) $t
 
   $r3 = New-Lab 'casefix'
   $o = Run @('lint-all', '--db', "$r3\S.sqlite", '--config', "$r3\cfg.json", '--library-db', $Lib, '--rule', 'method-pascalcase', '--fix', '--apply', '--no-compile-gate', '--quiet')

@@ -94,7 +94,7 @@ Check 'fixture index built' (Test-Path $db)
 
 function TypeAt([int]$line, [int]$col) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe typeat "$($unit):$($line):$($col)" --format json --db $db 2>$null } | Out-String
-  try { return ($raw | ConvertFrom-Json) } catch { return $null }
+  try { return ($raw | ConvertFrom-Json | ForEach-Object { $_ }) } catch { return $null }
 }
 # col = 1-based column inside the member name ("  L.Format" -> F at 5).
 $cases = @(

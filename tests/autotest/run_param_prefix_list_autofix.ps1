@@ -59,7 +59,7 @@ function Get-Flagged($C) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $C.Db --config $C.Cfg --rule param-name-prefix --json 2>$null }
   $txt = ($raw | Where-Object { $_ -is [string] }) -join "`n"
   $i = $txt.IndexOf('['); if ($i -lt 0) { return @() }
-  $arr = $txt.Substring($i) | ConvertFrom-Json
+  $arr = $txt.Substring($i) | ConvertFrom-Json | ForEach-Object { $_ }
   return ,@($arr | Where-Object { $_.rule -eq 'param-name-prefix' -or $_.rule_id -eq 'param-name-prefix' } |
             ForEach-Object { if ($_.message -match '"([^"]+)"') { $Matches[1] } })
 }

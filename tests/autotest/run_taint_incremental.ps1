@@ -46,7 +46,7 @@ function TaintKeys([string]$Db) {
 }
 function Count([string]$Db, [string]$Table) {
   $raw = & { $ErrorActionPreference = 'Continue'; & $exePath sql --db $Db --json --query "SELECT COUNT(*) AS n FROM $Table" 2>$null }
-  return (($raw -join "`n") | ConvertFrom-Json).rows[0][0]
+  return (($raw -join "`n") | ConvertFrom-Json | ForEach-Object { $_ }).rows[0][0]
 }
 
 Push-Location $env:TEMP

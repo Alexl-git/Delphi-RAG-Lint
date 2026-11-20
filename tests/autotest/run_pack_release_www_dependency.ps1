@@ -27,7 +27,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 
 function Invoke-Pack {
   $shell = (Get-Process -Id $PID).Path
-  $out = & $shell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $fake 'build\pack-lint-release.ps1') -Version 0.0.0-test -SkipBuild -NoProfileInstall 2>&1 | ForEach-Object { "$_" }
+  $out = & { $ErrorActionPreference = 'Continue'; & $shell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $fake 'build\pack-lint-release.ps1') -Version 0.0.0-test -SkipBuild -NoProfileInstall 2>&1 | ForEach-Object { "$_" } }
   [pscustomobject]@{ Exit = $LASTEXITCODE; Text = ($out -join "`n") }
 }
 
