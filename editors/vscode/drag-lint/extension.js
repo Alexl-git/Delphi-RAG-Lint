@@ -540,14 +540,19 @@ async function refreshProblems() {
 // dragLint.delphiLsp: DelphiLSP learns its project only from a workspace/didChangeConfiguration
 // carrying the settings of the IDE's <Project>.delphilsp.json (measured headless 2026-11-20: without
 // it DelphiLSP publishes nothing and hover is null). Pushed once after every (re)start.
-async function pushDelphiLspConfig(c) {
+let lastDelphiLspFile = '';
+async function pushDelphiLspConfig(c, onlyIfChanged) {
   const cfg = workspace.getConfiguration('dragLint');
   if (cfg.get('delphiLsp') !== true || !c) return;
   let file = '';
   try {
-    const found = (await workspace.findFiles('**/*.delphilsp.json', '**/node_modules/**', 20)).map((u) => u.fsPath);
-    file = delphilsp.pick(cfg.get('delphiLspConfig') || '', found);
+    const found = (await workspace.findFiles('**/*.delphilsp.json', '**/{node_modules,.git,.claude,worktrees}/**', 50)).map((u) => u.fsPath);
+    const ed = window.activeTextEditor;
+    const active = ed && ed.document && ed.document.uri.scheme === 'file' ? ed.document.uri.fsPath : '';
+    const folder = active ? workspace.getWorkspaceFolder(ed.document.uri) : (workspace.workspaceFolders || [])[0];
+    file = delphilsp.pick(cfg.get('delphiLspConfig') || '', found, active, folder ? folder.uri.fsPath : '');
   } catch (e) { log('delphilsp.json search failed: ' + e); }
+  if (onlyIfChanged && (!file || file === lastDelphiLspFile)) return;
   const params = file ? delphilsp.loadParams(file) : null;
   if (!params) {
     log('DelphiLSP config missing or unreadable: ' + (file || '(none found)'));
@@ -555,6 +560,7 @@ async function pushDelphiLspConfig(c) {
     return;
   }
   log('DelphiLSP config: ' + file);
+  lastDelphiLspFile = file;
   c.sendNotification('workspace/didChangeConfiguration', params);
 }
 
@@ -844,6 +850,10 @@ function activate(context) {
   context.subscriptions.push(ctxStatus);
   showContext(undefined);
   context.subscriptions.push(window.onDidChangeActiveTextEditor(updateContextVisibility));
+  // dragLint.delphiLsp: follow the active unit's project (no server restart).
+  context.subscriptions.push(window.onDidChangeActiveTextEditor((ed) => {
+    if (ed && ed.document && ed.document.languageId === 'pascal') pushDelphiLspConfig(client, true);
+  }));
   context.subscriptions.push(commands.registerCommand('dragLint.selectPlatform', selectPlatform));
   context.subscriptions.push(commands.registerCommand('dragLint.selectProject', selectProject));
 

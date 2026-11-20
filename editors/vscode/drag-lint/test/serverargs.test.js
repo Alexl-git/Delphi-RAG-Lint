@@ -33,3 +33,25 @@ assert.strictEqual(dl.loadParams(f).settings.project, 'file:///x.dpr');
 fs.unlinkSync(f);
 assert.strictEqual(dl.loadParams(f), null);
 console.log('serverargs.test.js: ok');
+
+// 1.6.9 config pick: skip tool/worktree dirs, prefer the json nearest the active file
+{
+  const R = path.join(os.tmpdir(), 'dlroot');
+  const j = (...p) => path.join(R, ...p);
+  assert.strictEqual(dl.isExcluded('.claude\\worktrees\\a\\x.delphilsp.json'), true);
+  assert.strictEqual(dl.isExcluded('a\\node_modules\\x.json'), true);
+  assert.strictEqual(dl.isExcluded('src/worktrees/x.json'), true);
+  assert.strictEqual(dl.isExcluded('src\\delphi-plugin\\x.json'), false);
+  const fake = { [j('src', 'cli')]: ['a.pas'], [j('src')]: ['b.delphilsp.json'], [j('src', 'plug')]: ['dcl.delphilsp.json'] };
+  const ls = (d) => { if (!(d in fake)) throw new Error('nodir'); return fake[d]; };
+  assert.strictEqual(dl.nearest(j('src', 'cli', 'a.pas'), R, ls), j('src', 'b.delphilsp.json'));
+  assert.strictEqual(dl.nearest(j('src', 'plug', 'u.pas'), R, ls), j('src', 'plug', 'dcl.delphilsp.json'));
+  assert.strictEqual(dl.nearest(j('other', 'u.pas'), R, ls), '');
+  assert.strictEqual(dl.nearest(path.join(os.tmpdir(), 'elsewhere', 'u.pas'), R, ls), '');
+  const found = [j('.claude', 'worktrees', 'agent-1', 'w.delphilsp.json'), j('src', 'plug', 'dcl.delphilsp.json')];
+  assert.strictEqual(dl.pick('', found, '', R, ls), j('src', 'plug', 'dcl.delphilsp.json'), 'excluded skipped');
+  assert.strictEqual(dl.pick('', found, j('src', 'cli', 'a.pas'), R, ls), j('src', 'b.delphilsp.json'), 'nearest wins');
+  assert.strictEqual(dl.pick('C:\\x\\mine.json', found, j('src', 'cli', 'a.pas'), R, ls), 'C:\\x\\mine.json', 'explicit wins');
+  assert.strictEqual(dl.pick('', [], '', R, ls), '');
+  console.log('delphilsp config pick tests ok');
+}
