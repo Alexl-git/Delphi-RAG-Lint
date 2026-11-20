@@ -750,8 +750,7 @@ var
   procedure ParamPrefixCheck(const ANameNode: TTSNode; const AName: string);
   begin
     if Length(ANaming.ParamPrefixes) = 0 then Exit;
-    if SameText(AName, 'Sender') then Exit;
-    if Length(AName) = 1 then Exit;
+    if SameText(AName, 'Sender') or (Length(AName) = 1) then Exit;
     if (ANaming.FieldPrefix <> '') and HasPrefix(AName, ANaming.FieldPrefix) then
     begin
       EmitAt(ANameNode, 'param-name-prefix',
