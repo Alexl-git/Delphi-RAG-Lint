@@ -182,9 +182,16 @@ function ResolveDelphiLspPath(const AOverride: string; ABits: Integer = LSP_BITS
 /// <summary>Runs the transparent relay until the child exits or either stream
 /// closes, then returns the child's exit code.</summary>
 /// <param name="AOptions">Child selection; see TLspProxyOptions.</param>
-/// <returns>The child's exit code on a normal relay; 3 when the child could
+/// <returns>The child's exit code on a normal relay; 0 when the client's
+/// `shutdown` request passed through before the child ended, whatever the child
+/// exited with (the non-zero code is reported on stderr); 3 when the child could
 /// not be found or spawned (criterion 3), which is reported on stderr.</returns>
 /// <remarks>
+/// PROXY-AV (1.52.3): DelphiLSP.exe exits 0xC0000005 or 1 in about a third of
+/// sessions AFTER a correct shutdown/exit sequence. The LSP contract (exit 0
+/// after shutdown) is the proxy's to keep toward its client, so that crash is
+/// not relayed as the proxy's own exit code. A child that dies BEFORE a
+/// shutdown still has its code relayed. Guard: run_v1523_PROXY_shutdown.ps1.
 /// Blocking; call from the main thread. Writes NOTHING to stdout
 /// except bytes received from the child -- anything else would land inside the
 /// JSON-RPC stream and desynchronise the client.
@@ -208,6 +215,7 @@ implementation
 uses
     System.SysUtils
   , System.Classes
+  , System.JSON
   , DRagLint.Core.JobObject
   , DRagLint.Core.StudioEnv { TStudioEnv: the ONLY source of a RAD Studio path }
   , DRagLint.LSP.Proxy.Merge { TFrameInterceptor, TProxyMergeEngine -- implementation-only: Merge's interface uses this unit }  // dl:ok circular-uses@5b36 -- implementation-only cycle forced by the P0 contract: Merge's interface takes TLspProxyOptions from this unit, this unit installs TProxyMergeEngine from Merge's implementation uses; it compiles
@@ -233,6 +241,11 @@ var
     between the interceptor's answer and the write, where the publish race
     lived. 0 outside the guards. }
   GTestScWriteDelayMs: Integer = 0;
+  { PROXY-AV: set once by the C>S pump when the client's `shutdown` request
+    has been seen (before it is forwarded, so it is set before the child can
+    act on it); read by RunLspProxy after the child's stdout closed. Reset per
+    RunLspProxy call. }
+  GShutdownSeen: Boolean = False;
   { Serialises whole-frame writes to the client while an interceptor is set:
     the S>C pump and the merge worker (a proxy-answered request) both write
     there. Unused on the plain relay. }
@@ -595,6 +608,43 @@ begin
   end;
 end;
 
+{ PROXY-AV: True when the frame body ABuf[AStart..AStart+ALen) is a JSON-RPC
+  request whose top-level method is `shutdown`. Read-only. The byte scan for
+  "shutdown" keeps every other frame (didOpen/didChange carry whole files) off
+  the JSON parser; the parse then rejects the word inside a document text. }
+function IsShutdownRequest(const ABuf: TBytes; AStart, ALen: Integer): Boolean;
+const
+  NEEDLE: array[0..9] of Byte = (34, 115, 104, 117, 116, 100, 111, 119, 110, 34);  { "shutdown" }
+var
+  I, J  : Integer;
+  Hit   : Boolean;
+  Json  : TJSONValue;
+  Method: string;
+begin
+  Result:= False;
+  Hit   := False;
+  for I:= AStart to AStart + ALen - Length(NEEDLE) do
+  begin
+    J:= 0;
+    while (J < Length(NEEDLE)) and (ABuf[I + J] = NEEDLE[J]) do Inc(J);
+    if J = Length(NEEDLE) then
+    begin
+      Hit:= True;
+      Break;
+    end;
+  end;
+  if not Hit then Exit;
+  { ALength of this overload is the END offset, not a count (System.JSON:
+    the parse succeeds only when it stops exactly at ALength). }
+  Json:= TJSONObject.ParseJSONValue(ABuf, AStart, AStart + ALen);
+  try
+    Result:= (Json is TJSONObject) and TJSONObject(Json).TryGetValue<string>('method', Method) and
+             (Method = 'shutdown');
+  finally
+    Json.Free;
+  end;
+end;
+
 function DrainFramed(ADst: THandle; var ABuf: TBytes; var ALen: Integer;
   const ADir: string): Boolean;
 var
@@ -657,6 +707,11 @@ begin
 
     Total:= HeaderEnd + 4 + BodyLen;
     if ALen < Total then Exit;    { body still arriving }
+
+    { PROXY-AV: observed, never altered -- set BEFORE the frame is forwarded. }
+    if (ADir = 'C>S') and not GShutdownSeen and
+       IsShutdownRequest(ABuf, HeaderEnd + Length(CRLF_CRLF), BodyLen) then
+      GShutdownSeen:= True;
 
     { Traced HERE, on the complete frame, and BEFORE the write -- the recorded
       bytes are exactly the bytes forwarded. With no interceptor this is the
@@ -801,6 +856,7 @@ begin
   GInterceptor:= nil;
   GAnswerer   := nil;
   GFinisher   := nil;
+  GShutdownSeen:= False;
   MergeEngine := nil;
   Exe:= ResolveDelphiLspPath(AOptions.DelphiLspExe, AOptions.DelphiLspBits);
   if Exe = '' then
@@ -979,6 +1035,14 @@ begin
       Code:= 0;
     end;
     Result:= Integer(Code);
+    if (Code <> 0) and GShutdownSeen then
+    begin
+      { PROXY-AV: DelphiLSP's own crash at exit, after the session ended
+        cleanly. Visible on stderr, not in the proxy's exit code. }
+      StdErrLine(Format('drag-lint lsp --proxy: DelphiLSP exited with code 0x%.8X after the client''s ' +
+                        'shutdown request; the session ended cleanly, so the proxy exits 0.', [Code]));
+      Result:= 0;
+    end;
   finally
     if ChildOutRd <> 0 then CloseHandle(ChildOutRd);
     CloseHandle(PI.hThread );

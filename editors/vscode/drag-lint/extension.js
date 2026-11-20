@@ -550,7 +550,7 @@ async function pushDelphiLspConfig(c, onlyIfChanged) {
     const ed = window.activeTextEditor;
     const active = ed && ed.document && ed.document.uri.scheme === 'file' ? ed.document.uri.fsPath : '';
     const folder = active ? workspace.getWorkspaceFolder(ed.document.uri) : (workspace.workspaceFolders || [])[0];
-    file = delphilsp.pick(cfg.get('delphiLspConfig') || '', found, active, folder ? folder.uri.fsPath : '');
+    file = delphilsp.pick(cfg.get('delphiLspConfig') || '', found, active, folder ? folder.uri.fsPath : '', undefined, lastDelphiLspFile);
   } catch (e) { log('delphilsp.json search failed: ' + e); }
   if (onlyIfChanged && (!file || file === lastDelphiLspFile)) return;
   const params = file ? delphilsp.loadParams(file) : null;

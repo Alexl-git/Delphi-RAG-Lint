@@ -68,18 +68,22 @@ function nearest(activeFile, root, listDir) {
 
 /**
  * Picks the config file: an explicit setting wins, then the json nearest the active
- * file, then the first non-excluded candidate.
+ * file, then the config already pushed (when the active file has no usable nearest
+ * json -- e.g. a unit opened from a stale .claude\worktrees agent dir, LSPCFG-WORKTREE),
+ * then the first non-excluded candidate.
  * @param {string} configured  dragLint.delphiLspConfig ('' = auto)
  * @param {string[]} found     .delphilsp.json paths found in the workspace
  * @param {string} [activeFile] active pascal file
  * @param {string} [root]       workspace root
  * @param {function(string):string[]} [listDir] directory lister (tests)
+ * @param {string} [current]    the config already pushed ('' = none yet)
  * @returns {string} path or ''
  */
-function pick(configured, found, activeFile, root, listDir) {
+function pick(configured, found, activeFile, root, listDir, current) {
   if (typeof configured === 'string' && configured.trim() !== '') return configured.trim();
   const near = nearest(activeFile, root, listDir);
   if (near && !isExcluded(path.relative(root, near))) return near;
+  if (activeFile && current) return current;
   const ok = (found || []).filter((f) => !isExcluded(root ? path.relative(root, f) : f));
   return ok.length ? ok[0] : '';
 }
