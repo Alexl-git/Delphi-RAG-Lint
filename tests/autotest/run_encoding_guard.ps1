@@ -335,7 +335,11 @@ foreach ($ext in $roots.Keys) {
   foreach ($r in $roots[$ext]) {
     $dir = Join-Path $Repo $r
     if (-not (Test-Path $dir)) { continue }
-    Get-ChildItem -LiteralPath $dir -Recurse -File -Filter "*$ext" -ErrorAction SilentlyContinue | ForEach-Object {
+    # PS 5.1 PARITY (1.52.2): -Filter goes to FindFirstFile, which also matches 8.3 short names
+    # (`*.ps1` hits `x.ps1xml`, `*.bat` hits `x.batch`); pwsh 7 does not. The exact Extension
+    # test makes both shells scan the same files.
+    Get-ChildItem -LiteralPath $dir -Recurse -File -Filter "*$ext" -ErrorAction SilentlyContinue |
+      Where-Object { $_.Extension -eq $ext } | ForEach-Object {
       $rel = $_.FullName.Substring($Repo.Length + 1).Replace('\', '/')
       $scanned++
       if ($DeliberateFixtures.Contains($rel)) { return }
@@ -446,13 +450,17 @@ foreach ($k in $DeclaredNotScanned.Keys) {
 # is now enumerated as '(repo root)' and must be accounted for like any other.
 $scannedDirs = @($roots.Values | ForEach-Object { $_ } | Sort-Object -Unique)
 $dirsWithScannable = New-Object System.Collections.Generic.List[string]
-$rootHit = Get-ChildItem -Path (Join-Path $Repo '*') -File -Include $($roots.Keys | ForEach-Object { "*$_" }) `
-             -ErrorAction SilentlyContinue | Select-Object -First 1
+# PS 5.1 PARITY (1.52.2): 5.1 IGNORES -Include under -LiteralPath and returned EVERY file, so it
+# reported features\ rules\ skills\ SVG\ as holding scannable files (.json, .svg, .md) and went
+# RED where pwsh 7 was green. Both enumerations now test the Extension themselves.
+$scanExts = @($roots.Keys)
+$rootHit = Get-ChildItem -LiteralPath $Repo -File -ErrorAction SilentlyContinue |
+             Where-Object { $scanExts -contains $_.Extension } | Select-Object -First 1
 if ($null -ne $rootHit) { $dirsWithScannable.Add('(repo root)') }
 foreach ($d in (Get-ChildItem -LiteralPath $Repo -Directory -ErrorAction SilentlyContinue)) {
   if ($d.Name.StartsWith('.')) { continue }   # .git, .superpowers -- no build inputs
-  $hit = Get-ChildItem -LiteralPath $d.FullName -Recurse -File -Include $($roots.Keys | ForEach-Object { "*$_" }) `
-           -ErrorAction SilentlyContinue | Select-Object -First 1
+  $hit = Get-ChildItem -LiteralPath $d.FullName -Recurse -File -ErrorAction SilentlyContinue |
+           Where-Object { $scanExts -contains $_.Extension } | Select-Object -First 1
   if ($null -ne $hit) { $dirsWithScannable.Add($d.Name) }
 }
 Check 'top-level directories holding scannable files enumerated' ($dirsWithScannable.Count -gt 0) `

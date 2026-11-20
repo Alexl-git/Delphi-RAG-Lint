@@ -22,6 +22,13 @@
   and -CatchUpMin, measured values from the 1.42 run. A resumed run counts only
   the files it re-parses, so its ETA starts high and corrects itself.
 
+  THE SEARCH STAGE (1.52.2): a library's post-parse `search` stage writes about
+  -SearchRowsPerFile rows per library file at about -SearchRowsPerSec rows/s (1.52.1:
+  ~1.4M rows per library at 90-210/s, 2.7-3.7 h) -- far longer than -PostParseMin, which
+  covers only the other post-parse stages. Until the stage starts the ETA adds that
+  estimate; once its `search write <n> of <m>` progress lines appear, the rest is
+  extrapolated from the stage's own rate so far.
+
   ALONE MEANS ALONE. The run refuses to start while another engine is running a
   long verb (index, lint-all, ...), because concurrent work cannot be told apart
   from a slow engine afterwards. -AllowBusy overrides that and the fact is written
@@ -68,6 +75,8 @@ param(
   [double]$PostParseMin = 60,
   [double]$ProjectsMin = 75,
   [double]$CatchUpMin = 3,
+  [double]$SearchRowsPerFile = 200,
+  [double]$SearchRowsPerSec = 100,
   [switch]$AllowBusy,
   [switch]$Fresh,
   [switch]$DryRun,
@@ -112,13 +121,37 @@ function Read-LogLines([string]$Path) {
 # What one library's stdout says so far: files parsed, the running post-parse
 # stage, and whether the section's closing line has been written.
 function Read-LibraryProgress([string]$LogPath) {
-  $parsed = 0; $stage = ''; $closed = $false
+  $parsed = 0; $stage = ''; $closed = $false; $searchSeen = $false
+  $searchDone = 0; $searchTotal = 0; $searchSec = 0.0
   foreach ($line in (Read-LogLines $LogPath)) {
     if ($line -match ' -> \d+ symbols, \d+ refs, \d+ errors') { $parsed++; continue }
-    if ($line -match '^\s*stage: (\S+) -- started') { $stage = $Matches[1]; continue }
+    if ($line -match '^\s*stage: (\S+) -- started') {
+      $stage = $Matches[1]
+      if ($stage -eq 'search') { $searchSeen = $true }
+      continue
+    }
+    # e.g. `stage: search -- still running, 159m02s elapsed, search write 1374124 of 1404914, 211/s`
+    if ($line -match '^\s*stage: search -- still running, (\d+)m(\d+)s elapsed, search write (\d+) of (\d+)') {
+      $searchSec = [double]$Matches[1] * 60 + [double]$Matches[2]
+      $searchDone = [long]$Matches[3]; $searchTotal = [long]$Matches[4]
+      continue
+    }
     if ($line -match '^=== Library .* files=\d+') { $closed = $true; continue }
   }
-  return [pscustomobject]@{ Parsed = $parsed; Stage = $stage; Closed = $closed }
+  return [pscustomobject]@{ Parsed = $parsed; Stage = $stage; Closed = $closed; SearchSeen = $searchSeen
+    SearchDone = $searchDone; SearchTotal = $searchTotal; SearchSec = $searchSec }
+}
+
+# Seconds the library `search` stage still needs. Before it starts: the per-file estimate;
+# while it runs: the rows left at the stage's own rate so far; after it: none.
+function Get-SearchLeft($Progress, [int]$Files) {
+  $estimate = [Math]::Max(0, $Files) * $SearchRowsPerFile / $SearchRowsPerSec
+  if (-not $Progress.SearchSeen) { return $estimate }
+  if ($Progress.Stage -ne 'search') { return 0.0 }
+  if ($Progress.SearchDone -gt 0 -and $Progress.SearchSec -gt 0) {
+    return [Math]::Max(0, $Progress.SearchTotal - $Progress.SearchDone) * $Progress.SearchSec / $Progress.SearchDone
+  }
+  return [Math]::Max(60, $estimate - $Progress.SearchSec)
 }
 
 function Get-LibraryFileCount([string]$Platform) {
@@ -241,12 +274,15 @@ function Get-StepLeft($Step) {
   if ($null -ne $Step.Exit) { return 0.0 }
   switch ($Step.Phase) {
     'libraries' {
-      if ($null -eq $Step.Started) { return ($PostParseMin * 60) }
+      if ($null -eq $Step.Started) { return ($PostParseMin * 60) + ([Math]::Max(0, $Step.Total) * $SearchRowsPerFile / $SearchRowsPerSec) }
       $p = Read-LibraryProgress (Join-Path $OutDir "$($Step.Name).log")
       $el = ((Get-Date) - $Step.Started).TotalSeconds
-      if ($p.Stage -ne '') { return [Math]::Max(60, ($PostParseMin * 60) - ($el - $Step.ParseSec)) }
+      $files = if ($Step.Total -gt 0) { $Step.Total } else { $p.Parsed }
+      $search = Get-SearchLeft $p $files
+      if ($p.SearchSeen) { return [Math]::Max(60, $search) }   # only the short checkpoint follows search
+      if ($p.Stage -ne '') { return [Math]::Max(60, ($PostParseMin * 60) - ($el - $Step.ParseSec)) + $search }
       if ($p.Parsed -le 0 -or $Step.Total -le 0) { return -1.0 }   # unknown yet
-      return ([Math]::Max(0, $Step.Total - $p.Parsed) * $el / $p.Parsed) + ($PostParseMin * 60)
+      return ([Math]::Max(0, $Step.Total - $p.Parsed) * $el / $p.Parsed) + ($PostParseMin * 60) + $search
     }
     'projects' {
       if ($null -eq $Step.Started) { return ($ProjectsMin * 60) }
@@ -271,6 +307,7 @@ function Get-StepLine($Step) {
     $parseSec = if ($Step.ParseSec -gt 0) { $Step.ParseSec } else { ($endAt - $Step.Started).TotalSeconds }
     $rate = if ($p.Parsed -gt 0) { '{0:N2} s/file' -f ($parseSec / $p.Parsed) } else { 'no rate yet' }
     $stage = if ($p.Stage -ne '') { " stage=$($p.Stage)" } else { '' }
+    if ($p.Stage -eq 'search' -and $p.SearchTotal -gt 0) { $stage += " $($p.SearchDone)/$($p.SearchTotal) rows" }
     return '{0,-14} {1} {2} parsed {3}/{4} {5}{6}' -f $Step.Name, $state, $el, $p.Parsed, $tot, $rate, $stage
   }
   if ($Step.Phase -eq 'projects') {
