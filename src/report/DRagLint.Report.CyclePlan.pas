@@ -498,7 +498,8 @@ procedure VisitCyclePlans(const pStore: ISymbolStore; const pDbPath: string;
 /// </remarks>
 procedure RenderCyclePlaybook(const pStore: ISymbolStore; const pDbPath: string;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings;
-  const pLibStore: ISymbolStore = nil; const pFixProject: string = ''; const pGroupHook: TCycleGroupHook = nil);
+  const pLibStore: ISymbolStore = nil; const pFixProject: string = ''; const pGroupHook: TCycleGroupHook = nil;
+  pFixNoHubSurface: Boolean = False);
 
 type
 /// <summary>The inputs of AddCycleFixHints bundled in one record (keeps the routine under the parameter limit).</summary>
@@ -522,6 +523,8 @@ TCycleFixHintInput = record
   LibStore: ISymbolStore;
   /// <summary>The project file to name in the commands, or '' for the placeholder.</summary>
   FixProject: string;
+  /// <summary>True when the run asked for the planner (--no-hub-surface): its Fix it commands then carry the flag, so they run the planner too (a bare cycles --fix asks R3 first since 1.52).</summary>
+  FixNoHubSurface: Boolean;
   /// <summary>When not empty, no planner runs: every fix object is available=false with this text as its reason (the platform library could not be opened).</summary>
   Unavailable: string;
   /// <summary>Hub-SCC P6 prep (`--hub-surface`): asked first per group; a group whose fix object it
@@ -1122,6 +1125,7 @@ type
     FPartBDone  : Boolean;       // FPartBBest has been computed for the current group
     FInPartB    : Boolean;       // lane CYC3: Part B is being weighed on the graph predicted after Part A
     FFixProject : string;        // the project named in the Fix it commands; '' = placeholder
+    FFixNoHubSurface: Boolean;   // the Fix it commands carry --no-hub-surface (the run asked for the planner)
     FGroupHook  : TCycleGroupHook;  // hub-SCC P6 prep: a group it plans is skipped by Run; nil = none
     // loading + resolution
     procedure IndexAllFiles;
@@ -1369,6 +1373,8 @@ type
     function FixHintOf(const pPlan: TCycleFixPlan): TCycleFixHint;
     /// <summary>The project named in the Fix it commands; '' prints the placeholder `&lt;your.dproj&gt;`.</summary>
     property FixProject: string read FFixProject write FFixProject;
+    /// <summary>True = the Fix it commands name --no-hub-surface, so the suggested command runs the same planner as the plan.</summary>
+    property FixNoHubSurface: Boolean read FFixNoHubSurface write FFixNoHubSurface;
     /// <summary>Hub-SCC P6 prep: asked first per group by Run; True = the group is planned already.</summary>
     property GroupHook: TCycleGroupHook read FGroupHook write FGroupHook;
     /// <summary>The surface of every uses edge inside one SCC.</summary>
@@ -6679,16 +6685,16 @@ begin
   Emit('');
 end;
 
-function FixCommandText(const pProject, pDbPath: string; pCycle: Integer; pApply: Boolean): string;
+function FixCommandText(const pProject, pDbPath: string; pCycle: Integer; pApply, pNoHubSurface: Boolean): string;
 begin
-  Result:= Format('drag-lint cycles --fix --project %s --db "%s" --cycle %d',
-    [(if pProject <> '' then '"' + pProject + '"' else '<your.dproj>'), pDbPath, pCycle]) +
+  Result:= Format('drag-lint cycles --fix%s --project %s --db "%s" --cycle %d',
+    [(if pNoHubSurface then ' --no-hub-surface' else ''), (if pProject <> '' then '"' + pProject + '"' else '<your.dproj>'), pDbPath, pCycle]) +
     (if pApply then ' --apply' else '');
 end;
 
 function TCyclePlanner.FixCommand(pCycle: Integer; pApply: Boolean): string;
 begin
-  Result:= FixCommandText(FFixProject, FDbPath, pCycle, pApply);
+  Result:= FixCommandText(FFixProject, FDbPath, pCycle, pApply, FFixNoHubSurface);
 end;
 
 function TCyclePlanner.FixHintOf(const pPlan: TCycleFixPlan): TCycleFixHint;
@@ -8630,13 +8636,15 @@ end;
 
 procedure RenderCyclePlaybook(const pStore: ISymbolStore; const pDbPath: string;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings;
-  const pLibStore: ISymbolStore; const pFixProject: string; const pGroupHook: TCycleGroupHook);
+  const pLibStore: ISymbolStore; const pFixProject: string; const pGroupHook: TCycleGroupHook;
+  pFixNoHubSurface: Boolean);
 var
   Planner: TCyclePlanner;
 begin
   Planner:= TCyclePlanner.Create(pStore, pDbPath, pSccs, pGraph, pOut, pLibStore);
   try
     Planner.FixProject:= pFixProject;
+    Planner.FixNoHubSurface:= pFixNoHubSurface;
     Planner.GroupHook := pGroupHook;
     Planner.Run;
   finally
@@ -8699,8 +8707,8 @@ begin
       var Fix:= TJSONObject.Create;
       Fix.AddPair('available', TJSONBool.Create(False));
       Fix.AddPair('part', '');
-      Fix.AddPair('dry_run', FixCommandText(pIn.FixProject, pIn.DbPath, I, False));
-      Fix.AddPair('apply', FixCommandText(pIn.FixProject, pIn.DbPath, I, True));
+      Fix.AddPair('dry_run', FixCommandText(pIn.FixProject, pIn.DbPath, I, False, pIn.FixNoHubSurface));
+      Fix.AddPair('apply', FixCommandText(pIn.FixProject, pIn.DbPath, I, True, pIn.FixNoHubSurface));
       Fix.AddPair('edges', TJSONArray.Create);
       Fix.AddPair('reason', pIn.Unavailable);
       (pGroups.Items[I - 1] as TJSONObject).AddPair('fix', Fix);
@@ -8710,6 +8718,7 @@ begin
   Planner:= TCyclePlanner.Create(pIn.Store, pIn.DbPath, pIn.Sccs, pIn.Graph, nil, pIn.LibStore);
   try
     Planner.FixProject:= pIn.FixProject;
+    Planner.FixNoHubSurface:= pIn.FixNoHubSurface;
     for var I:= 1 to pIn.Sccs.Count do
     begin
       var HookFix: TJSONObject;
@@ -8721,8 +8730,8 @@ begin
         begin
           HookFix.RemovePair('dry_run').Free;
           HookFix.RemovePair('apply').Free;
-          HookFix.AddPair('dry_run', FixCommandText(pIn.FixProject, pIn.DbPath, I, False).Replace('cycles --fix ', 'cycles --fix --hub-surface '));
-          HookFix.AddPair('apply', FixCommandText(pIn.FixProject, pIn.DbPath, I, True).Replace('cycles --fix ', 'cycles --fix --hub-surface '));
+          HookFix.AddPair('dry_run', FixCommandText(pIn.FixProject, pIn.DbPath, I, False, False).Replace('cycles --fix ', 'cycles --fix --hub-surface '));
+          HookFix.AddPair('apply', FixCommandText(pIn.FixProject, pIn.DbPath, I, True, False).Replace('cycles --fix ', 'cycles --fix --hub-surface '));
         end;
         (pGroups.Items[I - 1] as TJSONObject).AddPair('fix', HookFix);  { hub-SCC P6 prep: no planner for this group }
         Continue;
