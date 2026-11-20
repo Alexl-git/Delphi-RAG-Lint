@@ -27,6 +27,12 @@
   dist\drag-lint-<package.json version>.vsix into EVERY local VS Code profile
   (build\install-vsix-all-profiles.ps1; default ON since 2026-11-11, when a profile
   pointing at a deleted folder silently left the extension unloaded).
+
+  REQUIRES <repo>\WWW\help\dl\index.json (the IDE help line's offline feature list, shipped
+  as help\dl\index.json beside the exe). WWW is NOT in this git repo (owner 2026-11-20: it is
+  its own local repo, ignored here), so a fresh clone does not have it: `featuregen build --all`
+  writes it on disk. The script checks for it FIRST and refuses (exit 1, path named) before
+  the gate and the builds.
 #>
 [CmdletBinding()]
 param([Parameter(Mandatory=$true)][string]$Version,
@@ -37,6 +43,13 @@ $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $rs = 'call "C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat"'
 $dproj = Join-Path $repo "src\cli\drag-lint.dproj"
+
+# WWW is a separate local repo since 2026-11-20 (not tracked here): check its one input first.
+$helpIndex = Join-Path $repo "WWW\help\dl\index.json"
+if (-not (Test-Path -LiteralPath $helpIndex)) {
+  Write-Host "PACK REFUSED: $helpIndex is missing. WWW is not in this git repo; run featuregen build --all (it writes WWW\help\dl\ on disk), then re-run." -ForegroundColor Red
+  exit 1
+}
 
 # GATE (feature registry, 2026-10-05): the manual and the wiki pages in the
 # archive are built from generated lists; refuse to pack while they are stale.
@@ -128,7 +141,7 @@ foreach ($plat in 'win64','win32') {
   # The IDE help line's offline feature list: the plugin reads <engine dir>\help\dl\index.json
   # first (spec 2026-10-23-ide-help-line 3.2); the website does not serve the JSON.
   New-Item -ItemType Directory -Path (Join-Path $stg "help\dl") -Force | Out-Null
-  Copy-Item (Join-Path $repo "WWW\help\dl\index.json") (Join-Path $stg "help\dl\index.json")
+  Copy-Item $helpIndex (Join-Path $stg "help\dl\index.json")
   foreach ($f in 'README.md','CHANGELOG.md','LICENSE','INSTALL.md') { Copy-Item (Join-Path $repo $f) $stg }
   if (Test-Path (Join-Path $repo "docs\AI-USAGE.md")) { Copy-Item (Join-Path $repo "docs\AI-USAGE.md") (Join-Path $stg "docs") }
   # "Three Ways to Read Delphi" -- background on the parsing layer this engine is
