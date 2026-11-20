@@ -351,10 +351,72 @@ begin
   Result:= Letters * 10 >= Length(S) * 7;  // dl:ok magic-literal@80b9 -- REVIEWED 2026-11-14 v151 INT: a spec value / fixed offset or length read at its single use site; a named constant adds nothing
 end;
 
-function ExcludedCallee(const AName: string): Boolean;
+{ Q19 (1.52.2): last-segment callees whose literals are keys, log text or option tables, not UI. }
+function ExcludedLastSegment(const ASeg: string): Boolean;
+const
+  CKeyCalls: array[0..24] of string = ('ReadString', 'WriteString', 'ReadInteger', 'WriteInteger',
+    'ReadBool', 'WriteBool', 'ReadFloat', 'WriteFloat', 'ReadDate', 'WriteDate', 'ReadDateTime',
+    'WriteDateTime', 'ReadTime', 'WriteTime', 'ReadSection', 'ReadSections', 'ReadSectionValues',
+    'EraseSection', 'DeleteKey', 'ValueExists', 'SectionExists', 'OpenKey', 'OpenKeyReadOnly',
+    'KeyExists', 'ReadBinaryStream');
+  COptPrefix: array[0..4] of string = ('MakeOpt', 'AddOpt', 'RegisterOption', 'DefineOption', 'NewOpt');
+var
+  I: Integer;
 begin
-  Result:= SameText(AName, 'Assert') or SameText(AName, 'OutputDebugString')
-    or StartsText('Log', AName) or StartsText('Trace', AName) or StartsText('Debug', AName);
+  Result:= SameText(ASeg, 'Assert') or SameText(ASeg, 'OutputDebugString')
+    or StartsText('Log', ASeg) or StartsText('Trace', ASeg);
+  if Result or StartsText('Debug', ASeg) or StartsText('CodeSite', ASeg) then Exit(True);
+  for I:= Low(CKeyCalls) to High(CKeyCalls) do
+    if SameText(ASeg, CKeyCalls[I]) then Exit(True);
+  for I:= Low(COptPrefix) to High(COptPrefix) do
+    if StartsText(COptPrefix[I], ASeg) then Exit(True);
+end;
+
+{ Q19 (1.52.2): a receiver segment that names a logger (FLog, Logger, AppLog, CodeSite). }
+function LoggerReceiver(const ASeg: string): Boolean;
+begin
+  Result:= SameText(ASeg, 'Log') or StartsText('Logger', ASeg) or EndsText('Log', ASeg)
+    or EndsText('Logger', ASeg) or EndsText('CodeSite', ASeg);
+end;
+
+{ AChain is the dotted callee text before a '(' (e.g. 'FLog.Info'). }
+function ExcludedCallee(const AChain: string): Boolean;
+var
+  Segs: TArray<string>;
+  I: Integer;
+begin
+  Segs:= AChain.Split(['.']);
+  Result:= False;
+  if Length(Segs) = 0 then Exit;
+  if ExcludedLastSegment(Segs[High(Segs)]) then Exit(True);
+  for I:= 0 to High(Segs) - 1 do
+    if LoggerReceiver(Segs[I]) then Exit(True);
+end;
+
+{ Q19: a statement piece that starts a SQL command or clause (IsHumanText's own keyword list). }
+function StartsSqlWord(const AText: string): Boolean;
+const
+  CSQLStart: array[0..14] of string = ('select', 'insert', 'update', 'delete', 'create', 'alter', 'drop',
+    'execute', 'with', 'from', 'where', 'set', 'order', 'group', 'merge');
+var
+  I: Integer;
+begin
+  Result:= False;
+  for I:= Low(CSQLStart) to High(CSQLStart) do
+    if StartsWithWord(AText, CSQLStart[I]) then Exit(True);
+end;
+
+{ Q19: a statement that joins pieces with '+' and holds a SQL piece is SQL text: drop its pending findings. }
+procedure FlushStatement(APending: TList<TLintFinding>; AOut: TList<TLintFinding>; ADrop: Boolean; var ANHard: Integer);
+var
+  F: TLintFinding;
+begin
+  for F in APending do
+    if not ADrop then
+      AOut.Add(F)
+    else
+      Dec(ANHard);
+  APending.Clear;
 end;
 
 procedure TxtScanText(const ASource, AFilePath: string; AWantTodo, AWantHard: Boolean; AOut: TList<TLintFinding>);  // dl:ok deep-nesting@c74a, cyclomatic-complexity@3a70, cognitive-complexity@5ca8 -- REVIEWED 2026-11-14 v151 INT: tree walk with per-shape branches; flattening would scatter one rule
@@ -364,13 +426,16 @@ var
   C: Char;
   Word, Lower, LastIdent, Snippet, Content, PrevOp: string;
   Parens: TList<string>;
-  PrecededByDot, InExcluded, Closed: Boolean;
+  Pending: TList<TLintFinding>;
+  PrecededByDot, InExcluded, Closed, StmtSql, StmtPlus: Boolean;
 begin
   S:= ASource;
   N:= Length(S);
   I:= 1; Line:= 1; LineStart:= 1; Depth:= 0; NTodo:= 0; NHard:= 0;  // dl:ok multiple-statements-per-line@e733 -- REVIEWED 2026-11-14 v151 INT: compact state reset in a scanner step, kept on one line like its siblings
+  StmtSql:= False; StmtPlus:= False;  // dl:ok multiple-statements-per-line@a1b2 -- REVIEWED 2026-11-20 Q19: compact state reset in a scanner step, kept on one line like its siblings
   LastIdent:= ''; PrevOp:= '';  // dl:ok multiple-statements-per-line@24f9 -- REVIEWED 2026-11-14 v151 INT: compact state reset in a scanner step, kept on one line like its siblings
   Parens:= TList<string>.Create;
+  Pending:= TList<TLintFinding>.Create;
   try
     while I <= N do
     begin
@@ -430,6 +495,7 @@ begin
             Inc(J);
           end;
           I:= J + 1;
+          if StartsSqlWord(Content) then StmtSql:= True;
           if AWantHard and (Depth > 0) and (NHard < TXT_MAX_PER_RULE) and IsHumanText(Content)  // dl:ok boolean-expression-complexity@c4a9 -- REVIEWED 2026-11-14 v151 INT: one flat predicate over fixed values; splitting it does not make it clearer
             and (PrevOp <> '=') and (PrevOp <> '<>') then
           begin
@@ -439,7 +505,7 @@ begin
             if not InExcluded then
             begin
               Snippet:= Copy(Content, 1, CSNIPPET_MAX);
-              AOut.Add(MakeFinding('hardcoded-string', AFilePath, StartLine, StartCol,
+              Pending.Add(MakeFinding('hardcoded-string', AFilePath, StartLine, StartCol,
                 StartCol + Length(Content) + 2, 'hint',
                 'String literal with text for people in a statement; move it to a resourcestring so it can be translated: ' + Snippet));
               Inc(NHard);
@@ -528,8 +594,17 @@ begin
             Inc(Depth)
           else if (Lower = 'end') and (Depth > 0) then
             Dec(Depth);
+          if (Parens.Count = 0) and ((Lower = 'begin') or (Lower = 'end') or (Lower = 'else') or (Lower = 'then')
+            or (Lower = 'do') or (Lower = 'try') or (Lower = 'finally') or (Lower = 'except')) then
+          begin
+            FlushStatement(Pending, AOut, StmtSql and StmtPlus, NHard);
+            StmtSql:= False; StmtPlus:= False;  // dl:ok multiple-statements-per-line@a1b2 -- REVIEWED 2026-11-20 Q19: compact state reset in a scanner step, kept on one line like its siblings
+          end;
         end;
-        LastIdent:= Word;
+        if PrecededByDot and (LastIdent <> '') then
+          LastIdent:= LastIdent + '.' + Word
+        else
+          LastIdent:= Word;
         PrevOp:= '';
         I:= J;
       end
@@ -556,11 +631,19 @@ begin
       else
       begin
         PrevOp:= '';
-        LastIdent:= '';
+        if C = '+' then StmtPlus:= True;
+        if C = ';' then
+        begin
+          FlushStatement(Pending, AOut, StmtSql and StmtPlus, NHard);
+          StmtSql:= False; StmtPlus:= False;  // dl:ok multiple-statements-per-line@a1b2 -- REVIEWED 2026-11-20 Q19: compact state reset in a scanner step, kept on one line like its siblings
+        end;
+        if C <> '.' then LastIdent:= '';
         Inc(I);
       end;
     end;
   finally
+    FlushStatement(Pending, AOut, StmtSql and StmtPlus, NHard);
+    Pending.Free;
     Parens.Free;
   end;
 end;
