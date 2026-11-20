@@ -149,7 +149,7 @@ begin
   if ACtx.Wants(PROJ2_RULE_UNIT_USED_BY_NO_UNIT) then
     Result:= Result + FindUnitsUsedByNoUnit(ACtx.Store);
   if ACtx.Wants(PROJ2_RULE_UNIT_NOT_IN_DPR) then
-    Result:= Result + FindUnlistedClosureOutsideRoots(ACtx.Store, ACtx.ProjectPath, ACtx.FilePaths);
+    Result:= Result + FindUnlistedClosureOutsideRoots(ACtx.Store, ACtx.ProjectPath, ACtx.FilePaths, ACtx.LibraryRoots);
 end;
 
 end.

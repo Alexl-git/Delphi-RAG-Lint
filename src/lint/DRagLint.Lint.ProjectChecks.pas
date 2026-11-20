@@ -45,6 +45,10 @@ type
       /// direction below is SKIPPED rather than half-answered.</param>
       /// <param name="AWithLinks">v151 EXCL: True (the default, the lint path) also appends
       /// CheckNonUsesLinks for the same closure; the index-time report passes False to stay cheap.</param>
+      /// <param name="AExcludeRoots">1.52.2 Q5: library / third-party folders (registry library
+      /// paths plus the manifest Library "include" folders). A closure file under one of them is
+      /// dropped before the third direction and the link scan: the library, not the project,
+      /// owns it. nil (the default) drops nothing.</param>
       /// <returns><!-- drag-lint:auto -->TArray&lt;TLintFinding&gt; -- Observed:
       /// Findings.ToArray; ASet.TryGetValue(AStem, Orig) and (Pos('.',
       /// NormUnitQualified(Orig)) = 0).</returns>
@@ -63,7 +67,15 @@ type
       /// </remarks>
       class function CheckUnitsInDpr( const ADprojPath: string;
                                       const AClosureFiles: TArray<string> = nil;
-                                      const AWithLinks: Boolean = True): TArray<TLintFinding>;
+                                      const AWithLinks: Boolean = True;
+                                      const AExcludeRoots: TArray<string> = nil): TArray<TLintFinding>;
+      /// <summary>1.52.2 Q5: the closure files that lie under none of the excluded roots.</summary>
+      /// <param name="AFiles">Closure files, absolute or relative.</param>
+      /// <param name="ARoots">Folders to drop; nil returns AFiles unchanged.</param>
+      /// <returns>AFiles minus every path at or below one of ARoots (case-insensitive,
+      /// '/' read as '\', a root matches whole path segments only).</returns>
+      /// <remarks>Pure; touches no file system state beyond path expansion. Thread-safe.</remarks>
+      class function WithoutRoots(const AFiles, ARoots: TArray<string>): TArray<string>; static;
       /// <summary>Reports project-local units that the compile closure does NOT reach through `uses`
       /// but that a closure unit still depends on by another link (owner ruling OQ13): such a unit
       /// belongs to the project, so it needs a `uses` entry and a project entry.</summary>
@@ -155,10 +167,36 @@ begin
   end;
 end;
 
+class function TProjectChecks.WithoutRoots(const AFiles, ARoots: TArray<string>): TArray<string>;
+var
+  Keys: TArray<string>;
+begin
+  if Length(ARoots) = 0 then Exit(AFiles);
+  Keys:= nil;
+  for var R: string in ARoots do
+    if Trim(R) <> '' then
+      Keys:= Keys + [IncludeTrailingPathDelimiter(LowerCase(StringReplace(ExpandFileName(R), '/', '\', [rfReplaceAll])))];
+  Result:= nil;
+  for var F: string in AFiles do
+  begin
+    var Key: string:= LowerCase(StringReplace(ExpandFileName(F), '/', '\', [rfReplaceAll]));
+    var Under: Boolean:= False;
+    for var K: string in Keys do
+      if StartsStr(K, Key) then
+      begin
+        Under:= True;
+        Break;
+      end;
+    if not Under then Result:= Result + [F];
+  end;
+end;
+
 class function TProjectChecks.CheckUnitsInDpr( const ADprojPath: string;
                                                const AClosureFiles: TArray<string>;
-                                               const AWithLinks: Boolean): TArray<TLintFinding>;
+                                               const AWithLinks: Boolean;
+                                               const AExcludeRoots: TArray<string>): TArray<TLintFinding>;
 var
+  Closure    : TArray<string>             ;
   DCCRefs    : TArray<string>             ;
   ProgramUses: TArray<string>             ;
   ProgramPath: string                     ;
@@ -317,11 +355,13 @@ begin
       the list is empty this direction is SKIPPED rather than half-answered:
       silence beats a wrong answer, and a project whose closure could not be
       resolved must not have every one of its units reported as missing. }
-    if Length(AClosureFiles) > 0 then
+    { 1.52.2 Q5 (owner): the WHOLE compile closure minus the library / third-party roots. }
+    Closure:= WithoutRoots(AClosureFiles, AExcludeRoots);
+    if Length(Closure) > 0 then
     begin
       var ProgBase: string := '';
       if ProgramPath <> '' then ProgBase:= TPath.GetFileNameWithoutExtension(ProgramPath);
-      for var ClosureFile: string in AClosureFiles do
+      for var ClosureFile: string in Closure do
       begin
         if not SameText(ExtractFileExt(ClosureFile), '.pas') then Continue;
         var UnitBase: string := TPath.GetFileNameWithoutExtension(RealCasedFileName(ClosureFile));
@@ -347,7 +387,7 @@ begin
       end; // for
     end; // if
 
-    if AWithLinks then Findings.AddRange(CheckNonUsesLinks(ADprojPath, AClosureFiles));
+    if AWithLinks then Findings.AddRange(CheckNonUsesLinks(ADprojPath, Closure));
     Result:= Findings.ToArray;
   finally
     DCCSet.Free;

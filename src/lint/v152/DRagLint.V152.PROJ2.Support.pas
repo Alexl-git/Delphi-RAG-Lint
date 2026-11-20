@@ -53,6 +53,8 @@ function FindUnitsUsedByNoUnit(const AStore: ISymbolStore): TArray<TLintFinding>
 /// <param name="AProjectPath">The --project .dproj of the run; '' gives no finding (the
 /// unscoped run already hands the rule every indexed file).</param>
 /// <param name="AWalked">The files lint-all walked; their findings come from the host check.</param>
+/// <param name="AExcludeRoots">1.52.2 Q5: library / third-party folders; an outside unit under one is the
+/// library's, not the project's, and is not reported. nil drops nothing.</param>
 /// <returns>The host check's "in NEITHER project file" findings for the indexed .pas files that
 /// another indexed file uses and AWalked does not contain, anchored on the project's .dpr (the
 /// --project scope filter drops findings on files outside the project); nil when none, or when the
@@ -75,7 +77,7 @@ function FindUnitsUsedByNoUnit(const AStore: ISymbolStore): TArray<TLintFinding>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function FindUnlistedClosureOutsideRoots(const AStore: ISymbolStore; const AProjectPath: string;
-  const AWalked: TArray<string>): TArray<TLintFinding>;
+  const AWalked: TArray<string>; const AExcludeRoots: TArray<string> = nil): TArray<TLintFinding>;
 
 implementation
 
@@ -249,7 +251,7 @@ begin
 end;
 
 function FindUnlistedClosureOutsideRoots(const AStore: ISymbolStore; const AProjectPath: string;
-  const AWalked: TArray<string>): TArray<TLintFinding>;
+  const AWalked: TArray<string>; const AExcludeRoots: TArray<string>): TArray<TLintFinding>;
 var
   Paths  : TIdPaths;
   Walked : TDictionary<string, Boolean>;
@@ -283,7 +285,7 @@ begin
     for var Sym: TSymbol in AStore.FindSymbolsByFile(ProgPath) do
       if Sym.Kind = skProgram then ProgLine:= Sym.StartLine;
     var Kept: TArray<TLintFinding>:= nil;
-    for var F: TLintFinding in TProjectChecks.CheckUnitsInDpr(AProjectPath, Outside.Values.ToArray, False) do
+    for var F: TLintFinding in TProjectChecks.CheckUnitsInDpr(AProjectPath, Outside.Values.ToArray, False, AExcludeRoots) do
       if Outside.ContainsKey(LowerCase(TPath.GetFullPath(F.FilePath))) then
       begin
         var R: TLintFinding:= F;
