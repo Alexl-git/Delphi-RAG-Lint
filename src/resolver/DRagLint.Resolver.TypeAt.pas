@@ -624,16 +624,145 @@ begin
   AStore:= BestStore;
 end;
 
-function ResolveMemberOnType(const AStore: ISymbolStore; ATypeId: Int64; const AMember: string): TSymbol;
-{ The member AMember on the type ATypeId: a direct child first, then each
-  transitive ancestor (same store -- ids are per-DB). Id=0 if not found. }
+{ 1.52.2 HOVER: the number of arguments of the call whose member name covers
+  1-based column ACol of ALine: 0 for `X.M` / `X.M()`, n for `X.M(a, b)`
+  (top-level commas + 1; strings and nested brackets skipped). -1 when unknown:
+  the argument list does not close on this line. }
+function CallArgCountAt(const ALine: string; ACol: Integer): Integer;
 var
-  Anc: TArray<TTypeAncestor>;
-  I  : Integer;
+  I    : Integer;
+  Depth: Integer;
+  Empty: Boolean;
+  C    : Char;
+begin
+  Result:= -1;
+  I:= ACol;
+  if (I < 1) or (I > Length(ALine)) then Exit;
+  while (I <= Length(ALine)) and CharInSet(ALine[I], ['A'..'Z', 'a'..'z', '0'..'9', '_']) do Inc(I);
+  while (I <= Length(ALine)) and (ALine[I] = ' ') do Inc(I);
+  if (I > Length(ALine)) or (ALine[I] <> '(') then Exit(0);
+  Depth:= 0;
+  Empty:= True;
+  Result:= 1;
+  while I <= Length(ALine) do
+  begin
+    C:= ALine[I];
+    if C = '''' then
+    begin
+      Empty:= False;
+      Inc(I);
+      while (I <= Length(ALine)) and (ALine[I] <> '''') do Inc(I);
+    end
+    else if CharInSet(C, ['(', '[']) then
+    begin
+      if Depth > 0 then Empty:= False;
+      Inc(Depth);
+    end
+    else if CharInSet(C, [')', ']']) then
+    begin
+      Dec(Depth);
+      if Depth = 0 then Exit(if Empty then 0 else Result);
+    end
+    else if (C = '/') and (I < Length(ALine)) and (ALine[I + 1] = '/') then Break
+    else if (C = ',') and (Depth = 1) then Inc(Result)
+    else if not CharInSet(C, [' ', #9]) then Empty:= False;
+    Inc(I);
+  end;
+  Result:= -1;   { the argument list continues on a later line }
+end;
+
+{ 1.52.2 HOVER: the parameter-count range of a routine signature
+  `procedure M(A, B: T; C: U = 1)` -> AMin 2, AMax 3; no parentheses -> 0, 0. }
+procedure SignatureParamRange(const ASig: string; out AMin, AMax: Integer);
+var
+  Open : Integer;
+  Close: Integer;
+  Depth: Integer;
+  I    : Integer;
+  Group: string;
+  Names: string;
+  N    : Integer;
+begin
+  AMin:= 0;
+  AMax:= 0;
+  Open:= Pos('(', ASig);
+  if Open = 0 then Exit;
+  Depth:= 0;
+  Close:= 0;
+  for I:= Open to Length(ASig) do
+  begin
+    if ASig[I] = '(' then Inc(Depth)
+    else if ASig[I] = ')' then
+    begin
+      Dec(Depth);
+      if Depth = 0 then
+      begin
+        Close:= I;
+        Break;
+      end;
+    end;
+  end;
+  if Close = 0 then Close:= Length(ASig) + 1;
+  for Group in Copy(ASig, Open + 1, Close - Open - 1).Split([';']) do
+  begin
+    if Trim(Group) = '' then Continue;
+    Names:= if Group.Contains(':') then Copy(Group, 1, Pos(':', Group) - 1) else Group;
+    N:= Length(Names.Split([',']));
+    Inc(AMax, N);
+    if not Group.Contains('=') then Inc(AMin, N);
+  end;
+end;
+
+{ 1.52.2 HOVER: True when AModifiers (the visibility word) hides a member from
+  a caller outside the class: private / protected, strict or not. }
+function IsHiddenVisibility(const AModifiers: string): Boolean;
+begin
+  Result:= ContainsText(AModifiers, 'private') or ContainsText(AModifiers, 'protected');
+end;
+
+function ResolveMemberOnType(const AStore: ISymbolStore; ATypeId: Int64; const AMember: string;
+  AArgCount: Integer = -1): TSymbol;
+{ The member AMember on the type ATypeId: a direct child first, then each
+  transitive ancestor (same store -- ids are per-DB). Id=0 if not found.
+  1.52.2 HOVER: with a known call-site argument count (AArgCount >= 0) every
+  same-named member on the type and its ancestors is a candidate, and the
+  nearest one whose parameter range admits AArgCount wins, a visible
+  (non-private/protected) one before a hidden one -- `Doc.Format(2)` on a
+  TJSONArray means TJSONAncestor.Format(Indentation = 4), not TJSONArray's
+  protected 3-parameter Format. No candidate fits (or the count is unknown):
+  the nearest by name, as before. }
+var
+  Anc   : TArray<TTypeAncestor>;
+  I     : Integer;
+  Owners: TArray<Int64>;
+  Kids  : TArray<TSymbol>;
+  Lo    : Integer;
+  Hi    : Integer;
+  Hidden: TSymbol;
 begin
   Result:= AStore.FindChildSymbolByName(ATypeId, AMember);
-  if Result.Id > 0 then Exit;
   Anc:= AStore.GetTransitiveAncestors(ATypeId);
+  if AArgCount >= 0 then
+  begin
+    Hidden:= Default(TSymbol);
+    Owners:= [ATypeId];
+    for I:= 0 to High(Anc) do
+      if Anc[I].SymbolId > 0 then Owners:= Owners + [Anc[I].SymbolId];
+    for var Owner in Owners do
+    begin
+      Kids:= AStore.FindAllChildSymbols(Owner);
+      for var K in Kids do
+      begin
+        if not SameText(K.Name, AMember) or (K.Kind in [skParam, skLocalVar]) then Continue;
+        SignatureParamRange(K.Signature, Lo, Hi);
+        if (AArgCount < Lo) or (AArgCount > Hi) then Continue;
+        if not IsHiddenVisibility(K.Modifiers) then Exit(K);
+        if Hidden.Id <= 0 then Hidden:= K;
+      end;
+    end;
+    if Hidden.Id > 0 then Exit(Hidden);
+  end;
+  if Result.Id > 0 then Exit;
   for I:= 0 to High(Anc) do
   begin
     if Anc[I].SymbolId <= 0 then Continue;   // unresolved ancestor edge (e.g. an unindexed alias)
@@ -900,7 +1029,7 @@ begin
     if LhsSym.Id > 0 then
     begin
       { Direct child, else a member inherited from a same-store ancestor. }
-      ResolvedSym:= ResolveMemberOnType(LhsStore, LhsSym.Id, Result.Token);
+      ResolvedSym:= ResolveMemberOnType(LhsStore, LhsSym.Id, Result.Token, CallArgCountAt(LineText, ACol));
       if ResolvedSym.Id > 0 then
       begin
         Result.Resolved          := ResolvedSym;
@@ -922,7 +1051,7 @@ begin
           var BaseSym: TSymbol:= FindGenericBaseAnywhere(AStores, GBase, GArity, GenStore);
           if BaseSym.Id > 0 then
           begin
-            var Mem: TSymbol:= ResolveMemberOnType(GenStore, BaseSym.Id, Result.Token);
+            var Mem: TSymbol:= ResolveMemberOnType(GenStore, BaseSym.Id, Result.Token, CallArgCountAt(LineText, ACol));
             if Mem.Id > 0 then
             begin
               Result.Resolved          := Mem;

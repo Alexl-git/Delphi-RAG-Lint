@@ -365,6 +365,22 @@ Check 'progress: an end' ($lAll -match '"\$/progress".*"kind":"end"') ''
 Check 'progress: the client''s reply to create is consumed (never echoed back by DelphiLSP)' (-not $lAll.Contains('"id":"drag-lint-progress-1","result"')) ''
 Check 'control: no progress without the client capability (run a)' (-not (Utf8 $aOn.Out).Contains('$/progress')) ''
 
+# --- (m) the publish race (1.52.2 HOVER): a lint that ends between the S>C pump ---
+# composing a publishDiagnostics frame and writing it must not leave the client
+# on the older set. Seam DRAGLINT_MERGE_TEST_SC_WRITE_DELAY_MS holds the pump in
+# that window (5000 ms) while the slow lint (500 ms, budget 100 ms) ends inside it
+# and the worker publishes the merged set; the pump's frame is written after it.
+# Before the fix the LAST publish for the URI was the pump's unmerged one.
+Write-Host ''
+Write-Host '(m) a lint ending while the pump holds a composed publish: the client ends on the merged set' -ForegroundColor Cyan
+$raceArgs = @('lsp', '--proxy', '--merge-diagnostics', '--merge-budget-ms', '100', '--delphi-lsp', $stub)
+$pubM = PublishBody $dirtyUri 'stub-race-7777'
+$initM = Frame '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
+$keep  = Frame '{"jsonrpc":"2.0","method":"$/setTrace","params":{"value":"off"}}'
+$m = Invoke-Raw $Exe $raceArgs ([byte[]]($initM + (Frame $pubM))) @{ DRAGLINT_MERGE_TEST_LINT_DELAY_MS = '500'; DRAGLINT_MERGE_TEST_SC_WRITE_DELAY_MS = '5000' } $keep 14000
+$mp = @((Publishes $m.Out) | Where-Object { $_.Frame.Body.Contains('stub-race-7777') })
+Check 'the worker''s merged publish went out INSIDE the window, before the pump''s frame (the race happened)' ($mp.Count -ge 2 -and ($mp[0].Sources -contains 'drag-lint')) ("count=$($mp.Count)")
+Check 'the LAST publish for the URI carries both sources' ($mp.Count -ge 1 -and ($mp[-1].Sources -contains 'delphilsp-stub') -and ($mp[-1].Sources -contains 'drag-lint')) ("count=$($mp.Count) last=$($mp[-1].Sources -join ',') all=$(($mp | ForEach-Object { $_.Sources -join '+' }) -join ' | ')")
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
 } finally {
