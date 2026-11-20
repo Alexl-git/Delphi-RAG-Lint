@@ -3,6 +3,24 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## v1.52.2-alpha -- 2026-11-20
+
+In integration (lane/v1522-int). No re-parse: extractor stays 1.42.0-alpha, resolver 1.30.0-alpha (hash-only baseline re-pins, reasons in tests\*.baseline). VS Code extension 1.6.10.
+
+Merged lanes (git log b8ea28c19..HEAD):
+
+- VSCPROXY (VS Code 1.6.8 / 1.6.9): the dragLint.delphiLsp setting runs `lsp --proxy` (+ delphiLspMerge, delphiLspConfig) and pushes .delphilsp.json to DelphiLSP; the config pick skips worktrees / node_modules and prefers the nearest json of the active unit; the restart guard no longer crashes.
+- PROXYMERGE: in `lsp --proxy` drag-lint's part of a merged answer is delivered late, never dropped.
+- HOVER: `lsp --proxy` hover -- the null-hover root cause is fixed, an overloaded routine is picked by argument count, and the publish race is closed.
+- TAILS: one stderr warning when no drag-lint.json is found, naming every place looked (silent under --quiet, JSON and self-parsing verbs); reparse-libraries' ETA counts the library search stage; pack-lint-release refuses up front when WWW\help\dl\index.json is missing; the encoding guard gives the same verdict under PowerShell 5.1 and 7.
+- TAINT: an incremental reindex gives the same data_flows / call_edges / taint findings as a fresh index (guard run_taint_incremental.ps1; the reported staleness was not an index defect).
+- INCRPP: an incremental index re-parses a host whose preprocessor inputs (include files, defines) changed.
+- Q5: unit-not-in-dpr covers the whole compile closure minus library and third-party roots.
+- Q7: param-name-prefix is ON by default, with an accepted-prefix list; its autofix declines where a rename is unsafe.
+- Q8: `lint --fix` for with-statement, nested-with and with-hides-outer-symbol runs unwith only after its proof (re-index a DB copy, decline on any rebind).
+- Q17: rename -- a write reads a library only when --library-db / library_db is passed explicitly; dry runs unchanged.
+- Q19: hardcoded-string skips logger / CodeSite calls, INI key calls, MakeOpt option tables and +-joined SQL statements.
+- FIXIDE: the IDE's Fix it on a with finding passes --project, and refuses with a message when no project is known.
 ## v1.52.1-alpha -- 2026-11-19
 
 In integration (lane/v1521-int). One re-parse for 1.52.1: extractor 1.41.0 -> 1.42.0-alpha, resolver 1.29.0 -> 1.30.0-alpha, grammar tree-sitter-delphi13 v1.4.13 -> v1.4.14.
