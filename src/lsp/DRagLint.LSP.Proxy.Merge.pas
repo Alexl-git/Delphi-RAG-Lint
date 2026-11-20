@@ -41,6 +41,15 @@ unit DRagLint.LSP.Proxy.Merge;
   to its initialize reply and its requests are answered by the registered LSP
   feature (TLSPServer.ComputeFeatureResult); one it advertises stays its own.
 
+  1.52.2 PROXYMERGE (owner 2026-11-20: never drop drag-lint's part, deliver it
+  late and say it is coming): a diagnostics lint past its budget runs on, and
+  the merged set for the URI is published again through ClientWriter when it
+  ends; every forward carries the last known drag-lint set. An over-budget
+  hover carries an "analysing" placeholder, its drag-lint part is cached per
+  position, and the VS Code deferred-hover companion's second request is
+  answered here. A lint is wrapped in a work-done progress when the client
+  advertised window.workDoneProgress.
+
   FAIL OPEN, ALWAYS. A handler that raises, overruns its budget or cannot open
   the index makes the relay forward DelphiLSP's original bytes. The engine
   never decides on its own to drop a frame. }
@@ -189,6 +198,7 @@ type
       IncludeDecl: Boolean;
       NavMethod  : string;    { --merge-navigation: the feature method; '' = references / symbols }
       NavParams  : string;    { its params, as JSON }
+      Hover      : Boolean;   { 1.52.2: the deferred hover's whole step -- drag-lint's hover part alone }
     end;
   private
     FOptions    : TLspProxyOptions;
@@ -231,6 +241,51 @@ type
     FAnsweredIds     : TDictionary<string, Boolean>;   { C>S pump only: ids Answer took }
     FTestAnswerInline: Boolean;
     FTestFastPath    : Boolean;
+    { 1.52.2 PROXYMERGE: drag-lint's part is delivered late, never dropped. }
+    FDiagStates      : TDictionary<string, TObject>;   { DocKey -> TDiagState; under FDiagLock; freed by Destroy }
+    FDiagLock        : TCriticalSection;
+    FHoverCache      : TDictionary<string, string>;    { HoverKey -> drag-lint hover markdown; under FPendingLock }
+    FProgressIds     : TDictionary<string, Boolean>;   { ids of our window/workDoneProgress/create requests, as JSON; under FPendingLock }
+    FClientProgress  : Integer;   { 1 once the client's initialize advertised window.workDoneProgress }
+    FProgressSeq     : Integer;
+    FDeferKey        : string;    { C>S pump only: the position the last draglint/deferHover named }
+    FDeferHovers     : Integer;   { C>S pump only: hover requests seen at FDeferKey since }
+    FTestLintDelayMs : Integer;
+    /// <summary>Queues one lint of APath for the per-URI diagnostics state
+    /// AState (a TDiagState) on the merge worker.</summary>
+    /// <returns>False when the worker queue is full; AState is then marked idle
+    /// again.</returns>
+    function  StartLint(AState: TObject; const APath: string): Boolean;
+    /// <summary>Worker thread: lints APath, stores the findings in AState and,
+    /// when nobody waits for them inline any more, publishes the merged set for
+    /// the URI through ClientWriter (only when it differs from what the client
+    /// was last sent). Runs a queued re-lint when a publish arrived meanwhile.</summary>
+    procedure LintOnWorker(AState: TObject; const APath: string);
+    /// <summary>Worker thread: starts a work-done progress "drag-lint: analysing
+    /// AUnit" when the client advertised window.workDoneProgress.</summary>
+    /// <returns>The progress token; '' when no progress was started.</returns>
+    function  ProgressBegin(const AUnit: string): string;
+    /// <summary>Ends the work-done progress AToken ('' = none).</summary>
+    procedure ProgressEnd(const AToken: string);
+    /// <summary>C&gt;S: True (consumed) for the client's reply to one of our
+    /// window/workDoneProgress/create requests.</summary>
+    function  TakeProgressReply(const AFrame: TBytes; ALen: Integer; const AOnTake: TProc): Boolean;
+    /// <summary>C&gt;S: True (consumed) for a draglint/deferHover notification;
+    /// remembers its position so the second hover there is answered here.</summary>
+    function  TakeDeferHover(const AFrame: TBytes; ALen: Integer; const AOnTake: TProc): Boolean;
+    /// <summary>C&gt;S: reads window.workDoneProgress from the client's
+    /// initialize request.</summary>
+    procedure NoteClientCapabilities(const AFrame: TBytes; ALen: Integer);
+    /// <summary>Drops the cached hover parts of APath (its text changed).</summary>
+    procedure ForgetHovers(const APath: string);
+    /// <summary>Caches drag-lint's hover markdown for one position.</summary>
+    procedure CacheHover(const AKey, AMarkdown: string);
+    /// <summary>The cached drag-lint hover markdown for one position.</summary>
+    /// <returns>True on a hit.</returns>
+    function  CachedHover(const AKey: string; out AMarkdown: string): Boolean;
+    /// <summary>Worker thread: the reply result (JSON) to the deferred hover's
+    /// whole step: drag-lint's hover part alone, or null.</summary>
+    function  HoverAnswer(const AServer: TLSPServer; const AJob: TAnswerJob): string;
     /// <param name="AFrame"><!-- drag-lint:auto type -->const TBytes</param>
     /// <param name="ALen"><!-- drag-lint:auto type -->Integer</param>
     /// <param name="AOnTake"><!-- drag-lint:auto type -->const TProc</param>
@@ -691,7 +746,9 @@ type
     /// declines it (run_lsp_proxy_stub_modes_guard.ps1 case f). With
     /// DRAGLINT_MERGE_TEST_FASTPATH=1 every didChange taken by the bounded head
     /// scan (no JSON parse) writes one stderr line, so a guard can prove that
-    /// path runs (run_lsp_proxy_merge_diagnostics_guard.ps1 case g2).
+    /// path runs (run_lsp_proxy_merge_diagnostics_guard.ps1 case g2). With
+    /// DRAGLINT_MERGE_TEST_LINT_DELAY_MS=N every diagnostics lint sleeps N ms
+    /// first, so a guard can force a lint past its budget (case l).
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.LSP.Proxy.RunLspProxy (DRagLint.LSP.Proxy.pas)</para>
     /// <para>Calls: DRagLint.LSP.Proxy.Merge.TMergeWorker.Create, GetEnvironmentVariable</para>
@@ -832,8 +889,13 @@ type
     /// answers, TLSPServer.ComputeFeatureResult). True also for a
     /// $/cancelRequest whose params.id is a request Answer took and has not
     /// seen cancelled yet: it is consumed and nothing is written (DelphiLSP
-    /// never saw that id; group-4 P1). False otherwise, and for a frame that
-    /// does not parse.</returns>
+    /// never saw that id; group-4 P1). 1.52.2: True also for the client's reply
+    /// to one of our window/workDoneProgress/create requests and for a
+    /// draglint/deferHover notification (both consumed, nothing written), and,
+    /// with MergeHover, for the SECOND textDocument/hover at the position the
+    /// last draglint/deferHover named (the VS Code companion's whole step):
+    /// answered with drag-lint's hover part alone, or null. False otherwise,
+    /// and for a frame that does not parse.</returns>
     /// <remarks>
     /// Once True for a request, exactly one reply is written through
     /// ClientWriter: [] when no index opens, the computation raises (one stderr
@@ -1091,6 +1153,87 @@ end;
 procedure TPendingRequest.Release;
 begin
   if TInterlocked.Decrement(FRefs) = 0 then Free;
+end;
+
+type
+  { 1.52.2 PROXYMERGE: the diagnostics of one URI, as the proxy last saw and
+    sent them. Owned by TProxyMergeEngine.FDiagStates (never removed before
+    the engine's Destroy); every field is read and written under FDiagLock.
+    Invariant: FDone is set exactly when FRunning is False. }
+  TDiagState = class
+  private   { unit-visible: only this unit's engine reads and writes them }
+    FUri    : string;
+    FBody   : string;    { DelphiLSP's last publishDiagnostics body for the URI }
+    FOurs   : string;    { drag-lint's last findings (JSON array); '' = none known }
+    FShown  : string;    { the drag-lint set the client was last sent; '' = none }
+    FRunning: Boolean;   { a lint of the file is queued or running }
+    FWaiting: Boolean;   { the S>C pump still waits for it inline (inside the budget) }
+    FRerun  : Boolean;   { a publish arrived while it ran: lint again when it ends }
+    FDone   : TEvent;
+  public
+    constructor Create;
+    destructor Destroy; override;
+  end;
+
+constructor TDiagState.Create;
+begin
+  inherited Create;
+  FDone:= TEvent.Create(nil, True, True, '');
+end;
+
+destructor TDiagState.Destroy;
+begin
+  FDone.Free;
+  inherited Destroy;
+end;
+
+const
+  { The over-budget hover answer's drag-lint part (owner 2026-11-20). The VS Code
+    companion (lib/deferredhover.js PROXY_PLACEHOLDER) treats it as the deferred
+    hover's placeholder. }
+  HOVER_PLACEHOLDER = '_drag-lint: analysing..._';
+  METHOD_DEFER_HOVER    = 'draglint/deferHover';
+  METHOD_PROGRESS       = '$/progress';
+  METHOD_PROGRESS_CREATE = 'window/workDoneProgress/create';
+  PROGRESS_ID_PREFIX    = 'drag-lint-progress-';
+  PROGRESS_TOKEN_PREFIX = 'drag-lint-lint-';
+  HOVER_CACHE_MAX = 512;
+  PROGRESS_IDS_MAX = 256;
+
+{ True when a findings array (JSON) holds at least one finding. }
+function HasFindings(const AOurs: string): Boolean;
+begin
+  Result:= (AOurs <> '') and (AOurs <> '[]');
+end;
+
+{ The publishDiagnostics frame for DelphiLSP's body ABody with drag-lint's
+  findings AOurs appended (ABody alone when AOurs has none); nil when ABody
+  does not parse. }
+function ComposePublish(const ABody, AOurs: string): TBytes;
+var
+  Json : TJSONValue;
+  Diags: TJSONArray;
+  Added: TJSONValue;
+  Elem : TJSONValue;
+begin
+  Result:= nil;
+  Json:= TJSONObject.ParseJSONValue(ABody);
+  try
+    if (Json is not TJSONObject) or not Json.TryGetValue<TJSONArray>('params.diagnostics', Diags) then Exit;
+    if HasFindings(AOurs) then
+    begin
+      Added:= TJSONObject.ParseJSONValue(AOurs);
+      try
+        if Added is TJSONArray then
+          for Elem in TJSONArray(Added) do Diags.AddElement(TJSONValue(Elem.Clone));
+      finally
+        Added.Free;
+      end;
+    end;
+    Result:= BuildFrame(TEncoding.UTF8.GetBytes(Json.ToJSON));
+  finally
+    Json.Free;
+  end;
 end;
 
 { The stderr prefix of the merge a request kind belongs to. }
@@ -1419,6 +1562,12 @@ begin
   Result:= LowerCase(APath);
 end;
 
+{ The hover cache key of one position (1-based line and column). }
+function HoverKey(const APath: string; ALine1, ACol1: Integer): string;
+begin
+  Result:= DocKey(APath) + '#' + IntToStr(ALine1) + ':' + IntToStr(ACol1);
+end;
+
 function FrameBody(const AFrame: TBytes; ALen: Integer): string;
 var
   I, J : Integer;
@@ -1461,6 +1610,11 @@ begin
   FTestEmptyReplacement:= GetEnvironmentVariable('DRAGLINT_MERGE_TEST_EMPTY_REPLACEMENT') = '1';
   FTestAnswerInline    := GetEnvironmentVariable('DRAGLINT_MERGE_TEST_ANSWER_INLINE') = '1';
   FTestFastPath        := GetEnvironmentVariable('DRAGLINT_MERGE_TEST_FASTPATH') = '1';
+  FTestLintDelayMs     := StrToIntDef(GetEnvironmentVariable('DRAGLINT_MERGE_TEST_LINT_DELAY_MS'), 0);
+  FDiagStates := TDictionary<string, TObject>.Create;
+  FDiagLock   := TCriticalSection.Create;
+  FHoverCache := TDictionary<string, string>.Create;
+  FProgressIds:= TDictionary<string, Boolean>.Create;
   FAnsweredIds         := TDictionary<string, Boolean>.Create;
   FDirty    := TDictionary<string, Boolean>.Create;
   FDirtyLock:= TCriticalSection.Create;
@@ -1485,6 +1639,12 @@ begin
   FLinter.Free;
   for var Left: TObject in FPending.Values do TPendingRequest(Left).Release;
   FPending.Free;
+  if FDiagStates <> nil then
+    for var St: TObject in FDiagStates.Values do St.Free;
+  FDiagStates.Free;
+  FDiagLock.Free;
+  FHoverCache.Free;
+  FProgressIds.Free;
   FPendingLock.Free;
   FDocUpdates.Free;
   FDocLock.Free;
@@ -1788,6 +1948,7 @@ begin
         Upd:= LiveUpdateOf(Method, Json, LiveText);
         if Upd <> luNone then QueueDocUpdate(Path, Upd = luRemove, LiveText);
       end;
+      if FOptions.MergeHover then ForgetHovers(Path);   { the text may have changed: cached hover parts go }
       if Method = METHOD_DID_OPEN then
       begin
         WarmUp;
@@ -1921,6 +2082,13 @@ begin
         Exit;
       end;
       if Kind = rkInitialize then Exit;
+      { 1.52.2: a position whose drag-lint part was computed before (often
+        late, past the budget) answers from the cache, at once. }
+      if (Kind = rkHover) and CachedHover(HoverKey(Path, Line0 + 1, Col0 + 1), P.FItems) then
+      begin
+        P.FDone.SetEvent;
+        Exit;
+      end;
       P.AddRef;   { the job's reference }
       if not Enqueue(
         procedure
@@ -2107,15 +2275,22 @@ var
   Refs  : Boolean;
   Syms  : Boolean;
   Nav   : Boolean;
+  Hov   : Boolean;
   Job   : TAnswerJob;
 begin
   Result:= False;
-  if not (FOptions.MergeDefinition or FOptions.MergeNavigation) or not Assigned(FClientWriter) then Exit;
+  if not Assigned(FClientWriter) then Exit;
+  { 1.52.2: the client's reply to our progress create, and the VS Code
+    deferred-hover announcement, are the proxy's own traffic. }
+  if TakeProgressReply(AFrame, ALen, AOnTake) or TakeDeferHover(AFrame, ALen, AOnTake) then Exit(True);
+  if not (FOptions.MergeDefinition or FOptions.MergeNavigation or FOptions.MergeHover) then Exit;
   if TakeCancel(AFrame, ALen, AOnTake) then Exit(True);
   Refs:= FOptions.MergeDefinition and (TInterlocked.CompareExchange(FTheirReferences, 0, 0) = 0) and FrameContains(AFrame, ALen, METHOD_REFERENCES);
   Syms:= FOptions.MergeDefinition and (TInterlocked.CompareExchange(FTheirSymbols, 0, 0) = 0) and FrameContains(AFrame, ALen, METHOD_WORKSPACE_SYMBOL);
   Nav := MayBeNavRequest(AFrame, ALen);
-  if not (Refs or Syms or Nav) then Exit;
+  { the deferred hover's WHOLE step: the second hover at the announced position }
+  Hov := FOptions.MergeHover and (FDeferKey <> '') and FrameContains(AFrame, ALen, METHOD_HOVER);
+  if not (Refs or Syms or Nav or Hov) then Exit;
   Method:= '';
   try
     Json:= TJSONObject.ParseJSONValue(FrameBody(AFrame, ALen));
@@ -2124,7 +2299,8 @@ begin
       Refs:= Refs and (Method = METHOD_REFERENCES);
       Syms:= Syms and (Method = METHOD_WORKSPACE_SYMBOL);
       Nav := Nav and (NavMethodIndex(Method) >= 0);
-      if not (Refs or Syms or Nav) then Exit;
+      Hov := Hov and (Method = METHOD_HOVER);
+      if not (Refs or Syms or Nav or Hov) then Exit;
       IdVal:= TJSONObject(Json).GetValue('id');
       if IdVal = nil then Exit;   { a notification of that name is not a request we owe }
       Job.Id         := IdVal.ToJSON;
@@ -2136,7 +2312,22 @@ begin
       Job.IncludeDecl:= True;   { as TLSPServer.HandleReferences defaults it }
       Job.NavMethod  := '';
       Job.NavParams  := '';
-      if Nav then
+      Job.Hover      := False;
+      if Hov then
+      begin
+        { The first hover there is the fast step (forwarded and merged as
+          usual); the second is the companion's whole step, answered here. }
+        if not (Json.TryGetValue<string>('params.textDocument.uri', Uri) and
+                Json.TryGetValue<Integer>('params.position.line', Job.Line0) and
+                Json.TryGetValue<Integer>('params.position.character', Job.Col0)) then Exit;
+        Job.Path:= TLSPServer.FileFromUri(Uri);
+        if HoverKey(Job.Path, Job.Line0 + 1, Job.Col0 + 1) <> FDeferKey then Exit;
+        Inc(FDeferHovers);
+        if FDeferHovers < 2 then Exit;
+        FDeferKey:= '';
+        Job.Hover:= True;
+      end
+      else if Nav then
       begin
         Job.NavMethod:= Method;
         var NavParams: TJSONValue:= TJSONObject(Json).GetValue('params');
@@ -2204,7 +2395,12 @@ begin
       FlushDocUpdates;
       S:= Server;
       Arr:= nil;
-      if AJob.NavMethod <> '' then
+      if AJob.Hover then
+      begin
+        Body:= 'null';
+        if S <> nil then Body:= HoverAnswer(S, AJob);
+      end
+      else if AJob.NavMethod <> '' then
       begin
         if S <> nil then Body:= NavAnswer(S, AJob);
       end
@@ -2296,7 +2492,11 @@ begin
       FlushDocUpdates;
       S:= Server;
       if S = nil then TInterlocked.Exchange(FHoverOff, 1)
-      else P.FItems:= S.ComputeHoverMarkdown(P.FPath, P.FLine1 - 1, P.FCol1 - 1);
+      else
+      begin
+        P.FItems:= S.ComputeHoverMarkdown(P.FPath, P.FLine1 - 1, P.FCol1 - 1);
+        CacheHover(HoverKey(P.FPath, P.FLine1, P.FCol1), P.FItems);   { a late answer serves the next hover }
+      end;
     except   { not swallowed: the message is published through P.FErr and logged by the S>C side }
       on E: Exception do P.FErr:= E.ClassName + ': ' + E.Message;
     end;
@@ -2408,7 +2608,9 @@ begin
       if (P.FKind = rkDefinition) and not IsEmptyLocations(TJSONObject(Json).GetValue('result')) then Exit;
       Remain:= Int64(P.FStartTick) + FOptions.MergeBudgetMs - Int64(GetTickCount64);
       if Remain < 0 then Remain:= 0;
-      if (P.FDone.WaitFor(Cardinal(Remain)) <> wrSignaled) or (P.FElapsed > UInt64(FOptions.MergeBudgetMs)) then
+      { A hover whose part is ready (cached, or done late) is merged whatever it took. }
+      if (P.FDone.WaitFor(Cardinal(Remain)) <> wrSignaled) or
+         ((P.FElapsed > UInt64(FOptions.MergeBudgetMs)) and (P.FKind <> rkHover)) then
       begin
         case P.FKind of
           rkHover     : Warned:= TInterlocked.Exchange(FHoverWarned, 1);
@@ -2417,8 +2619,16 @@ begin
         end;
         if Warned = 0 then
           MergeErrLine(Prefix + 'over its ' + IntToStr(FOptions.MergeBudgetMs) +
-                       ' ms budget; the ' + KindName(P.FKind) +
-                       ' reply is forwarded unmerged (reported once).');
+                       ' ms budget; the ' + KindName(P.FKind) + ' reply is forwarded ' +
+                       (if P.FKind = rkHover then 'with an "analysing" placeholder; drag-lint''s part is cached for the next hover'
+                        else 'unmerged') + ' (reported once).');
+        { 1.52.2 (owner 2026-11-20): a hover says drag-lint's part is coming
+          (the job runs on and caches it; the VS Code companion asks again). }
+        if (P.FKind = rkHover) and MergeHoverResult(TJSONObject(Json), HOVER_PLACEHOLDER) then
+        begin
+          AReplacement:= BuildFrame(TEncoding.UTF8.GetBytes(Json.ToJSON));
+          Result:= True;
+        end;
         Exit;
       end;
       if P.FErr <> '' then
@@ -2479,10 +2689,14 @@ var
   Uri   : string;
   Path  : string;
   Diags : TJSONArray;
-  Items : string;
-  Err   : string;
+  Ours  : string;
   Added : TJSONValue;
   Elem  : TJSONValue;
+  Obj   : TObject;
+  St    : TDiagState;
+  Dirty : Boolean;
+  Start : Boolean;
+  Late  : Boolean;
 
   procedure Skip(const AWhy: string);
   begin
@@ -2512,49 +2726,63 @@ begin
         Exit;
       end;
       Path:= TLSPServer.FileFromUri(Uri);
-      if IsDirty(Path) then Exit;   { unsaved edits: our on-disk ranges would lie }
-
-      { The job publishes ONLY through the captured strings Items / Err, read
-        after a True return; an over-budget job writes them after this method
-        stopped looking, which is harmless. The job never raises, so a False
-        return means over budget or worker still busy. }
-      Items:= '';
-      Err  := '';
-      if not RunWithinBudget(
-        procedure
-        var
-          Arr: TJSONArray;
-        begin
-          try
-            EnsureLinter;
-            Arr:= TLspCompletion.BuildDiagnostics(FLinter, Path, nil);
-            try
-              Items:= Arr.ToJSON;
-            finally
-              Arr.Free;
-            end;
-          except  // dl:ok try-except-swallowed@a7c8 -- not swallowed: the message is published through Err and logged by the caller
-            on E: Exception do Err:= E.ClassName + ': ' + E.Message;
-          end;
-        end, FOptions.MergeBudgetMs) then
-      begin
-        if (not FBudgetWarned) and (TInterlocked.CompareExchange(FWarming, 0, 0) = 0) then
-        begin
-          FBudgetWarned:= True;   { S>C pump thread only: no lock needed }
-          MergeErrLine(MERGE_ERR_PREFIX + 'over its ' + IntToStr(FOptions.MergeBudgetMs) +
-                       ' ms budget; publishDiagnostics is forwarded unmerged while the merge worker is busy (reported once).');
-        end;
-        Exit;
-      end;
-      if Err <> '' then
-      begin
-        Skip(Err);
-        Exit;
-      end;
-
-      Added:= TJSONObject.ParseJSONValue(Items);
+      { Unsaved edits: our on-disk ranges would lie, so no NEW lint; the last
+        known set still goes with the forward (as plain `lsp` keeps it shown). }
+      Dirty:= IsDirty(Path);
+      Start:= False;
+      Late := False;
+      FDiagLock.Enter;
       try
-        if not (Added is TJSONArray) or (TJSONArray(Added).Count = 0) then Exit;   { clean file: original bytes }
+        if FDiagStates.TryGetValue(DocKey(Path), Obj) then St:= TDiagState(Obj)
+        else
+        begin
+          St:= TDiagState.Create;
+          FDiagStates.Add(DocKey(Path), St);
+        end;
+        St.FUri := Uri;
+        St.FBody:= FrameBody(AFrame, ALen);
+        if not Dirty then
+        begin
+          if St.FRunning then St.FRerun:= True   { a newer compile: lint again when this one ends }
+          else
+          begin
+            Start:= True;
+            St.FRunning:= True;
+            St.FWaiting:= True;
+            St.FDone.ResetEvent;
+          end;
+        end;
+      finally
+        FDiagLock.Leave;
+      end;
+      if Start and StartLint(St, Path) then
+        St.FDone.WaitFor(Cardinal(if FOptions.MergeBudgetMs < 0 then 0 else FOptions.MergeBudgetMs));
+      { Inside the budget the fresh set goes in this frame; past it the worker
+        publishes the merged set the moment the lint ends (owner 2026-11-20),
+        and this frame carries the last known one. }
+      FDiagLock.Enter;
+      try
+        if Start and St.FRunning then
+        begin
+          St.FWaiting:= False;
+          Late:= True;
+        end;
+        Ours:= St.FOurs;
+        St.FShown:= if HasFindings(Ours) then Ours else '';
+      finally
+        FDiagLock.Leave;
+      end;
+      if Late and (not FBudgetWarned) and (TInterlocked.CompareExchange(FWarming, 0, 0) = 0) then
+      begin
+        FBudgetWarned:= True;   { S>C pump thread only: no lock needed }
+        MergeErrLine(MERGE_ERR_PREFIX + 'over its ' + IntToStr(FOptions.MergeBudgetMs) +
+                     ' ms budget; publishDiagnostics is forwarded with the last known drag-lint findings and re-published merged when the lint ends (reported once).');
+      end;
+      if not HasFindings(Ours) then Exit;   { nothing of ours known: original bytes }
+
+      Added:= TJSONObject.ParseJSONValue(Ours);
+      try
+        if Added is not TJSONArray then Exit;
         for Elem in TJSONArray(Added) do
           Diags.AddElement(TJSONValue(Elem.Clone));
       finally
@@ -2572,6 +2800,277 @@ begin
       Result:= False;
       Skip(E.ClassName + ': ' + E.Message);
     end;
+  end;
+end;
+
+function TProxyMergeEngine.StartLint(AState: TObject; const APath: string): Boolean;
+var
+  St: TDiagState;
+begin
+  St:= TDiagState(AState);
+  Result:= Enqueue(
+    procedure
+    begin
+      LintOnWorker(St, APath);
+    end);
+  if Result then Exit;
+  FDiagLock.Enter;   { queue full: nothing will lint, so the state is idle again }
+  try
+    St.FRunning:= False;
+    St.FWaiting:= False;
+    St.FDone.SetEvent;
+  finally
+    FDiagLock.Leave;
+  end;
+end;
+
+procedure TProxyMergeEngine.LintOnWorker(AState: TObject; const APath: string);
+var
+  St   : TDiagState;
+  Items: string;
+  Err  : string;
+  Arr  : TJSONArray;
+  Frame: TBytes;
+  Shown: string;
+  Rerun: Boolean;
+  Token: string;
+begin
+  St   := TDiagState(AState);
+  Items:= '';
+  Err  := '';
+  Frame:= nil;
+  Token:= ProgressBegin(ExtractFileName(APath));
+  try
+    try
+      if FTestLintDelayMs > 0 then Sleep(FTestLintDelayMs);
+      EnsureLinter;
+      Arr:= TLspCompletion.BuildDiagnostics(FLinter, APath, nil);
+      try
+        Items:= Arr.ToJSON;
+      finally
+        Arr.Free;
+      end;
+    except   { not swallowed: the message is logged below and the last known set stays }
+      on E: Exception do Err:= E.ClassName + ': ' + E.Message;
+    end;
+    FDiagLock.Enter;
+    try
+      if Err = '' then St.FOurs:= Items;
+      { Nobody waits inline any more: publish the merged set ourselves, when
+        it differs from what the client was last sent. }
+      if not St.FWaiting then
+      begin
+        Shown:= if HasFindings(St.FOurs) then St.FOurs else '';
+        if Shown <> St.FShown then
+        begin
+          Frame:= ComposePublish(St.FBody, St.FOurs);
+          if Frame <> nil then St.FShown:= Shown;
+        end;
+      end;
+      St.FWaiting:= False;
+      Rerun:= St.FRerun;
+      St.FRerun:= False;
+      St.FRunning:= Rerun;
+      if not Rerun then St.FDone.SetEvent;
+    finally
+      FDiagLock.Leave;
+    end;
+    if Err <> '' then MergeErrLine(MERGE_ERR_PREFIX + 'skipped a lint (' + Err + '); the last known findings stay.');
+    if (Frame <> nil) and Assigned(FClientWriter) then FClientWriter(Frame);
+  finally
+    ProgressEnd(Token);
+  end;
+  if Rerun then StartLint(St, APath);
+end;
+
+function TProxyMergeEngine.ProgressBegin(const AUnit: string): string;
+var
+  N    : Integer;
+  Id   : string;
+  Msg  : TJSONObject;
+  Value: TJSONObject;
+  Par  : TJSONObject;
+begin
+  Result:= '';
+  if (TInterlocked.CompareExchange(FClientProgress, 0, 0) = 0) or not Assigned(FClientWriter) then Exit;
+  N:= TInterlocked.Increment(FProgressSeq);
+  Id:= PROGRESS_ID_PREFIX + IntToStr(N);
+  Result:= PROGRESS_TOKEN_PREFIX + IntToStr(N);
+  FPendingLock.Enter;
+  try
+    if FProgressIds.Count >= PROGRESS_IDS_MAX then FProgressIds.Clear;
+    FProgressIds.AddOrSetValue('"' + Id + '"', True);
+  finally
+    FPendingLock.Leave;
+  end;
+  FClientWriter(BuildFrame(TEncoding.UTF8.GetBytes('{"jsonrpc":"2.0","id":"' + Id + '","method":"' +
+    METHOD_PROGRESS_CREATE + '","params":{"token":"' + Result + '"}}')));
+  Msg:= TJSONObject.Create;
+  try
+    Value:= TJSONObject.Create;
+    Value.AddPair('kind', 'begin');
+    Value.AddPair('title', 'drag-lint');
+    Value.AddPair('message', 'analysing ' + AUnit);
+    Value.AddPair('cancellable', TJSONBool.Create(False));
+    Par:= TJSONObject.Create;
+    Par.AddPair('token', Result);
+    Par.AddPair('value', Value);
+    Msg.AddPair('jsonrpc', '2.0');
+    Msg.AddPair('method', METHOD_PROGRESS);
+    Msg.AddPair('params', Par);
+    FClientWriter(BuildFrame(TEncoding.UTF8.GetBytes(Msg.ToJSON)));
+  finally
+    Msg.Free;
+  end;
+end;
+
+procedure TProxyMergeEngine.ProgressEnd(const AToken: string);
+begin
+  if (AToken = '') or not Assigned(FClientWriter) then Exit;
+  FClientWriter(BuildFrame(TEncoding.UTF8.GetBytes('{"jsonrpc":"2.0","method":"' + METHOD_PROGRESS +
+    '","params":{"token":"' + AToken + '","value":{"kind":"end"}}}')));
+end;
+
+function TProxyMergeEngine.TakeProgressReply(const AFrame: TBytes; ALen: Integer; const AOnTake: TProc): Boolean;
+var
+  Json : TJSONValue;
+  IdVal: TJSONValue;
+begin
+  Result:= False;
+  if not FrameContains(AFrame, ALen, PROGRESS_ID_PREFIX) then Exit;
+  try
+    Json:= TJSONObject.ParseJSONValue(FrameBody(AFrame, ALen));
+    try
+      if (Json is not TJSONObject) or (TJSONObject(Json).GetValue('method') <> nil) then Exit;
+      IdVal:= TJSONObject(Json).GetValue('id');
+      if IdVal = nil then Exit;
+      FPendingLock.Enter;
+      try
+        Result:= FProgressIds.ContainsKey(IdVal.ToJSON);
+        if Result then FProgressIds.Remove(IdVal.ToJSON);
+      finally
+        FPendingLock.Leave;
+      end;
+    finally
+      Json.Free;
+    end;
+  except   { a frame that does not parse is not our reply: forwarded }
+    on E: Exception do Result:= False;
+  end;
+  if Result and Assigned(AOnTake) then AOnTake;
+end;
+
+function TProxyMergeEngine.TakeDeferHover(const AFrame: TBytes; ALen: Integer; const AOnTake: TProc): Boolean;
+var
+  Json  : TJSONValue;
+  Method: string;
+  Uri   : string;
+  Line0 : Integer;
+  Col0  : Integer;
+begin
+  Result:= False;
+  if not FOptions.MergeHover or not FrameContains(AFrame, ALen, METHOD_DEFER_HOVER) then Exit;
+  try
+    Json:= TJSONObject.ParseJSONValue(FrameBody(AFrame, ALen));
+    try
+      if (Json is not TJSONObject) or not Json.TryGetValue<string>('method', Method) or
+         (Method <> METHOD_DEFER_HOVER) or (TJSONObject(Json).GetValue('id') <> nil) then Exit;
+      Result:= True;   { ours either way: DelphiLSP has no use for it }
+      FDeferKey:= if Json.TryGetValue<string>('params.textDocument.uri', Uri) and
+                     Json.TryGetValue<Integer>('params.position.line', Line0) and
+                     Json.TryGetValue<Integer>('params.position.character', Col0)
+                   then HoverKey(TLSPServer.FileFromUri(Uri), Line0 + 1, Col0 + 1) else '';
+      FDeferHovers:= 0;
+    finally
+      Json.Free;
+    end;
+  except   { a frame that does not parse is forwarded as before }
+    on E: Exception do Result:= False;
+  end;
+  if Result and Assigned(AOnTake) then AOnTake;
+end;
+
+procedure TProxyMergeEngine.NoteClientCapabilities(const AFrame: TBytes; ALen: Integer);
+var
+  Json  : TJSONValue;
+  Method: string;
+  On    : Boolean;
+begin
+  if not FOptions.MergeDiagnostics or not FrameContains(AFrame, ALen, 'workDoneProgress') or
+     not FrameContains(AFrame, ALen, '"' + METHOD_INITIALIZE + '"') then Exit;
+  try
+    Json:= TJSONObject.ParseJSONValue(FrameBody(AFrame, ALen));
+    try
+      if (Json is TJSONObject) and Json.TryGetValue<string>('method', Method) and (Method = METHOD_INITIALIZE) and
+         Json.TryGetValue<Boolean>('params.capabilities.window.workDoneProgress', On) then
+        TInterlocked.Exchange(FClientProgress, Ord(On));
+    finally
+      Json.Free;
+    end;
+  except  // dl:ok try-except-swallowed@26a2 -- an unreadable initialize only means no progress is shown
+    on E: Exception do TInterlocked.Exchange(FClientProgress, 0);
+  end;
+end;
+
+procedure TProxyMergeEngine.ForgetHovers(const APath: string);
+var
+  Prefix: string;
+  K     : string;
+begin
+  Prefix:= DocKey(APath) + '#';
+  FPendingLock.Enter;
+  try
+    for K in FHoverCache.Keys.ToArray do
+      if K.StartsWith(Prefix) then FHoverCache.Remove(K);
+  finally
+    FPendingLock.Leave;
+  end;
+end;
+
+procedure TProxyMergeEngine.CacheHover(const AKey, AMarkdown: string);
+begin
+  FPendingLock.Enter;
+  try
+    if FHoverCache.Count >= HOVER_CACHE_MAX then FHoverCache.Clear;
+    FHoverCache.AddOrSetValue(AKey, AMarkdown);
+  finally
+    FPendingLock.Leave;
+  end;
+end;
+
+function TProxyMergeEngine.CachedHover(const AKey: string; out AMarkdown: string): Boolean;
+begin
+  FPendingLock.Enter;
+  try
+    Result:= FHoverCache.TryGetValue(AKey, AMarkdown);
+  finally
+    FPendingLock.Leave;
+  end;
+end;
+
+function TProxyMergeEngine.HoverAnswer(const AServer: TLSPServer; const AJob: TAnswerJob): string;
+var
+  Md : string;
+  Key: string;
+  Res: TJSONObject;
+  Con: TJSONObject;
+begin
+  Key:= HoverKey(AJob.Path, AJob.Line0 + 1, AJob.Col0 + 1);
+  if not CachedHover(Key, Md) then
+  begin
+    Md:= AServer.ComputeHoverMarkdown(AJob.Path, AJob.Line0, AJob.Col0);
+    CacheHover(Key, Md);
+  end;
+  if Md = '' then Exit('null');
+  Res:= TJSONObject.Create;
+  try
+    Con:= TJSONObject.Create;
+    Con.AddPair('kind', 'markdown');
+    Con.AddPair('value', Md);
+    Res.AddPair('contents', Con);
+    Result:= Res.ToJSON;
+  finally
+    Res.Free;
   end;
 end;
 
@@ -2622,6 +3121,7 @@ begin
   begin
     TrackDocument(AFrame, ALen);
     PickupContext(AFrame, ALen);
+    NoteClientCapabilities(AFrame, ALen);
     if FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition or FOptions.MergeNavigation then RecordRequest(AFrame, ALen);
     Exit(False);
   end;

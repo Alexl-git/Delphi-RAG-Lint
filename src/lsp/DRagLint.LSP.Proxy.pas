@@ -808,7 +808,9 @@ begin
         Result:= MergeEngine.Intercept(ADir, AFrame, ALen, AReplacement);
       end;
     MergeEngine.ClientWriter:= WriteToClient;
-    if AOptions.MergeDefinition or AOptions.MergeNavigation then
+    { 1.52.2: hover (the deferred hover's whole step) and diagnostics (the
+      client's replies to our progress create) need the answerer too. }
+    if AOptions.MergeDefinition or AOptions.MergeNavigation or AOptions.MergeHover or AOptions.MergeDiagnostics then
     begin
       GAnswerer:=
         function(const AFrame: TBytes; ALen: Integer; const AOnTake: TProc): Boolean
