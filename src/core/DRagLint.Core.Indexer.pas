@@ -192,7 +192,14 @@ type
       /// in the store.</summary>
       /// <param name="AHostPath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ASites"><!-- drag-lint:auto type -->const TArray&lt;TPPIncludeSite&gt;</param>
+      /// <param name="AProbes">INCRPP: every include directive the preprocess tried; an
+      /// unresolved one is recorded as '?'-marked candidate paths (the host's folder and
+      /// the search path), so creating the include later re-parses the host.</param>
+      /// <param name="AUnitFiles">INCRPP: the project unit files whose constants an IF of
+      /// the host read; recorded as plain entries, so editing one re-parses the host.</param>
       /// <remarks>
+      /// INCRPP limit: an include that later appears only in a near-search folder
+      /// (a subfolder or parent) is not a recorded candidate.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas)</para>
       /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.SetFileIncludes, LowerCase</para>
@@ -205,7 +212,8 @@ type
       /// <seealso cref="DRagLint.Core.Indexer.TIndexer.Create"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      procedure RememberIncludeSites(const AHostPath: string; const ASites: TArray<TPPIncludeSite>);
+      procedure RememberIncludeSites(const AHostPath: string; const ASites: TArray<TPPIncludeSite>;
+        const AProbes: TArray<TPPIncludeProbe>; const AUnitFiles: TArray<string>);
       /// <summary>1.52 EXTINC (owner ruling B9i): the distinct define contexts an include is parsed in --
       /// the inclusions met this run plus, for hosts the run skipped as up to date, the contexts the
       /// index stored for them (a skipped host whose stored context is not among them is
@@ -802,7 +810,82 @@ uses
   , DRagLint.Preprocess.Lexer      { 150 PP: LexDirectives for the pp_directives rows }
   , System.Math                    { 150 PP: InRange }
   , System.Generics.Defaults      { 1.52 EXTINC: TComparer for the include variants' order }
+  , DRagLint.Preprocess.Decls      { INCRPP: IPPUnitSource / IPPUnitFiles -- which units an IF read }
+  , DRagLint.Preprocess.Expr       { INCRPP: TPPValue, TPPNameKind (IPPUnitSource's signature) }
   ;
+
+type
+  /// <summary>INCRPP: passes every used-unit lookup of ONE host's preprocess on to the
+  /// installed source and records which units the host itself asked (nested lookups --
+  /// the source scanning a used unit -- are not the host's own and are not recorded).</summary>
+  /// <remarks>Installed around one PreprocessReport call; the indexer is single-threaded.</remarks>
+  TRecordingUnitSource = class(TInterfacedObject, IPPUnitSource)
+  private
+    FInner: IPPUnitSource;
+    FDepth: Integer;
+    FUnits: TList<string>;
+  public
+    /// <summary>Wraps AInner (not nil).</summary>
+    /// <param name="AInner">The source every lookup is passed on to.</param>
+    constructor Create(const AInner: IPPUnitSource);
+    /// <summary>Frees the recorded list.</summary>
+    destructor Destroy; override;
+    /// <summary>Passes the lookup on; records AUnit when it is the host's own lookup.</summary>
+    /// <param name="AUnit">The unit asked.</param>
+    /// <param name="AName">The name asked.</param>
+    /// <param name="AValue">The inner source's value.</param>
+    /// <returns>The inner source's answer.</returns>
+    function LookupInUnit(const AUnit, AName: string; out AValue: TPPValue): TPPNameKind;
+    /// <summary>Passes the question on.</summary>
+    /// <returns>The inner source's answer.</returns>
+    function HasLibraryEvidence: Boolean;
+    /// <summary>The project unit files of the recorded units (IPPUnitFiles of the inner
+    /// source; none when it cannot tell), de-duplicated.</summary>
+    /// <returns>Absolute paths; library units are left out.</returns>
+    function UnitFiles: TArray<string>;
+  end;
+
+constructor TRecordingUnitSource.Create(const AInner: IPPUnitSource);
+begin
+  inherited Create;
+  FInner:= AInner;
+  FUnits:= TList<string>.Create;
+end;
+
+destructor TRecordingUnitSource.Destroy;
+begin
+  FUnits.Free;
+  inherited Destroy;
+end;
+
+function TRecordingUnitSource.LookupInUnit(const AUnit, AName: string; out AValue: TPPValue): TPPNameKind;
+begin
+  if (FDepth = 0) and not FUnits.Contains(LowerCase(AUnit)) then FUnits.Add(LowerCase(AUnit));
+  Inc(FDepth);
+  try
+    Result:= FInner.LookupInUnit(AUnit, AName, AValue);
+  finally
+    Dec(FDepth);
+  end;
+end;
+
+function TRecordingUnitSource.HasLibraryEvidence: Boolean;
+begin
+  Result:= FInner.HasLibraryEvidence;
+end;
+
+function TRecordingUnitSource.UnitFiles: TArray<string>;
+var
+  Files: IPPUnitFiles;
+begin
+  Result:= nil;
+  if not Supports(FInner, IPPUnitFiles, Files) then Exit;
+  for var U: string in FUnits do
+  begin
+    var P: string:= Files.UnitFilePath(U);
+    if P <> '' then Result:= Result + [P];
+  end;
+end;
 
 /// <summary>150 EX3: the unit scopes a .dproj names in its `&lt;DCC_Namespace&gt;`
 /// elements, as written: every PropertyGroup (any condition) in document order,
@@ -1226,11 +1309,21 @@ begin
   FIncContexts.Clear;
 end;
 
-procedure TIndexer.RememberIncludeSites(const AHostPath: string; const ASites: TArray<TPPIncludeSite>);
+procedure TIndexer.RememberIncludeSites(const AHostPath: string; const ASites: TArray<TPPIncludeSite>;
+  const AProbes: TArray<TPPIncludeProbe>; const AUnitFiles: TArray<string>);
 var
   Paths: TList<string>;
   Seen : TList<string>;
   Site : TPPIncludeSite;
+
+  { INCRPP: one more entry of the recorded list, once (case-insensitive). }
+  procedure AddEntry(const AEntry: string);
+  begin
+    if Seen.Contains(LowerCase(AEntry)) then Exit;
+    Seen.Add(LowerCase(AEntry));
+    Paths.Add(AEntry);
+  end;
+
 begin
   Paths:= TList<string>.Create;
   Seen := TList<string>.Create;
@@ -1254,6 +1347,21 @@ begin
         Paths.Add(Site.Path);
       end;
     end;
+    { INCRPP: inputs the preprocess result hangs on besides the host's own bytes. An include
+      that did not resolve is recorded as the paths it would be found at ('?'-marked: the
+      store re-parses the host once one EXISTS); a unit an IF read a constant of is recorded
+      as a plain entry (re-parsed once it is newer than the host's parse). }
+    for var Probe: TPPIncludeProbe in AProbes do
+    begin
+      if (Probe.Path <> '') or (Probe.Name = '') then Continue;
+      if TPath.IsPathRooted(Probe.Name) then
+        AddEntry(UNRESOLVED_INCLUDE_MARK + TPath.GetFullPath(Probe.Name))
+      else
+        for var Dir: string in [Probe.BaseDir] + FIncSearchPaths do
+          if Dir <> '' then AddEntry(UNRESOLVED_INCLUDE_MARK + TPath.GetFullPath(TPath.Combine(Dir, Probe.Name)));
+    end;
+    for var UnitFile: string in AUnitFiles do
+      if not SameText(TPath.GetFullPath(UnitFile), TPath.GetFullPath(AHostPath)) then AddEntry(UnitFile);
     FStore.SetFileIncludes(AHostPath, Paths.ToArray);
   finally
     Seen.Free;
@@ -1931,7 +2039,11 @@ var
   ParseRes      : TParseResult               ;
   IncSites      : TArray<TPPIncludeSite>     ; { N-06: depth-0+ include sites the preprocess met }
   PpRep         : TPPReport                  ; { 149 EX2: the preprocess report (sites + regions) }
-  PpRegions     : TArray<TPPRegion>          ; { 149 EX2: the file's conditional branches (pp_regions) }
+  Recorder      : TRecordingUnitSource       ; { INCRPP: which used units the host's IFs read }
+  RecorderRef   : IPPUnitSource              ; { INCRPP: holds Recorder's lifetime }
+  PpUnitFiles   : TArray<string>             ; { INCRPP: their project files }
+  PpProbes      : TArray<TPPIncludeProbe>    ; { INCRPP: the include directives the preprocess tried }
+  PpRegions    : TArray<TPPRegion>          ; { 149 EX2: the file's conditional branches (pp_regions) }
   IncInUses     : TArray<Boolean>            ; { 149 EX2: per IncSites entry, True = stands in a uses list }
   Token         : TFileTxToken               ;
   Sym           : TSymbol                    ;
@@ -2122,8 +2234,24 @@ begin
       // N-06: the report also hands back each active include's child output, so
       // a uses clause inside it can be extracted below; 149 EX2: and the file's
       // conditional branches (pp_regions). Same bytes as the 3-arg overload.
-      ParseBytes:= PreprocessReport(Utf8, PpOpts, PpRep);
+      { INCRPP: on a project run, learn which used units the host's IFs read. }
+      var Outer: IPPUnitSource:= PPUnitSource;
+      if FIncludeContext and (Outer <> nil) then
+      begin
+        Recorder:= TRecordingUnitSource.Create(Outer);
+        RecorderRef:= Recorder;
+        PPSetUnitSource(RecorderRef);
+        try
+          ParseBytes:= PreprocessReport(Utf8, PpOpts, PpRep);
+        finally
+          PPSetUnitSource(Outer);
+        end;
+        PpUnitFiles:= Recorder.UnitFiles;
+      end
+      else
+        ParseBytes:= PreprocessReport(Utf8, PpOpts, PpRep);
       IncSites  := PpRep.Sites;
+      PpProbes  := PpRep.Probes;
       PpRegions := PpRep.Regions;
     except
       on E: Exception do
@@ -2131,6 +2259,7 @@ begin
         LogPreprocessFallbackOnce(AFilePath, E);
         ParseBytes:= Utf8;
         IncSites  := nil;
+        PpProbes  := nil;
         PpRegions := nil;
       end;
     end;
@@ -2145,7 +2274,7 @@ begin
   if (Length(IncSites) > 0) and MatchText(ExtractFileExt(AFilePath), ['.pas', '.dpr', '.dpk']) then
     IncInUses:= MarkUsesListIncludes(IncSites, Utf8, ParseBytes);
   if FIncludeContext and MatchText(ExtractFileExt(AFilePath), ['.pas', '.dpr', '.dpk']) then
-    RememberIncludeSites(AFilePath, IncSites);
+    RememberIncludeSites(AFilePath, IncSites, PpProbes, PpUnitFiles);
   Inc(GProfPre, ProfNow - TPre);
   var TProf: Int64:= ProfNow;
   ParseRes:= Parser.Parse(ParseBytes, AFilePath);
