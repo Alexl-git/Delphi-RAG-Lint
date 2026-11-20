@@ -114,6 +114,7 @@ Copy-Item -LiteralPath (Join-Path $Repo 'tools\publish-wiki.ps1') -Destination (
 New-Item -ItemType Directory -Path (Join-Path $g 'build') -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $Repo 'build\pack-lint-release.ps1') -Destination (Join-Path $g 'build\pack-lint-release.ps1')
 Write-Ascii (Join-Path $g 'docs\wiki\Home.md') "# stub`n"
+Write-Ascii (Join-Path $g 'WWW\help\dl\index.json') "[]`n"   # 1.52.2 fac6e68ee: pack refuses up front without it (WWW is its own repo)
 $wikiWork = Join-Path $WorkDir 'wiki-work'
 $noRemote = Join-Path $WorkDir 'no-such-wiki-repo.git'   # LOCAL and absent: a clone can only fail, never reach a network
 $packVer = "zz-guard-$PID"
