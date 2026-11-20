@@ -1204,7 +1204,7 @@ of the CLI -- exactly **19 tools**:
 > listings; `find_symbol` searches every database (first database's symbols
 > first); `get_symbol_doc`, `get_surface`, `get_slice` and `get_context_bundle`
 > answer from the first database that declares the qname; `rename_symbol`'s
-> proof reads the served library sections when no `library_db` is passed. A
+> dry-run proof reads the served library sections, but a write (`dry_run=false`) reads a library only when `library_db` is passed. A
 > per-call `"db"` argument still answers from that one index only.
 
 | Tool | Purpose |

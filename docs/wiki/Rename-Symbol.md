@@ -74,7 +74,7 @@ A symbol declared inside a routine (a local, a parameter, a local constant or ty
 
 A proved rewrite then passes the compile gate (`--project`; `--platform`, `--rsvars`, `--build-timeout`, `--no-backup`):
 baseline build (`dirty-baseline`), all-or-nothing write, after build, rollback (`compile-error`, exit 1). `--library-db`
-names the platform library; the manifest's is the default.
+names the platform library. `--plan` and the MCP dry run default to the manifest's / the served library; a WRITE (`--apply`, MCP `dry_run=false`) reads a library ONLY when `--library-db` / `library_db` is passed explicitly (1.52.2, owner ruling Q17) -- without it a proof that needs the library refuses (`no-library`).
 
 The same proof stands behind the LSP's `textDocument/rename` (a refusal answers error -32803 with its kind) and the
 `lint --fix` naming fixes (`skipped (not-proved): N` on stderr, one `note:` per finding; `--fix-line` prints

@@ -1061,12 +1061,12 @@ begin
 
   Tools.AddElement(ToolDescriptor(
       'rename_symbol', 'Rename every occurrence of a Delphi symbol (declaration + all references) ' + 'by its qualified name. In dry_run mode returns the edit list without '
-        + 'modifying files; otherwise proves every occurrence and writes through the compile gate (needs project; a rename it cannot prove answers applied:false with the reason).',
+        + 'modifying files; otherwise proves every occurrence and writes through the compile gate (needs project; a rename it cannot prove answers applied:false with the reason). A write reads a library ONLY when library_db is passed explicitly; dry_run keeps the served-library default.',
       '{"type":"object","properties":{' + '"qname":{"type":"string","description":"Qualified name of the symbol to rename (e.g. Unit.TClass.Method)"},'
         + '"to":{"type":"string","description":"New short name for the symbol"},'
         + '"dry_run":{"type":"boolean","description":"If true, return edits without applying them (optional, default false)"},'
         + '"project":{"type":"string","description":"The .dproj the compile gate builds; required unless dry_run"},'
-        + '"library_db":{"type":"string","description":"The platform library database the proof reads; default: the library sections serve opened (none with a per-call db); with no library a write refuses"},'
+        + '"library_db":{"type":"string","description":"The platform library database the proof reads; a write reads a library ONLY when this is passed (never the served library); without it a proof that needs a library refuses"},'
         + '"db":{"type":"string","description":"Path to .sqlite database (optional if --db passed at startup)"}' + '},"required":["qname","to"]}'));
 
   // v0.31: run AST-based diagnostics (no compiler required).
@@ -2081,11 +2081,8 @@ begin
           RenFilesTouched:= 0;
           var RenLibs: TArray<ISymbolStore>:= nil;
           if Args.GetValue('library_db') <> nil then
-            RenLibs:= [TSQLiteSymbolStore.CreateReadable(Args.GetValue('library_db').Value, True) as ISymbolStore]
-          { v151 SERVE (OQ3): without library_db the proof reads the further databases
-            serve opened (the platform's library sections) -- unless a per-call "db"
-            moved the question to another index, whose libraries these may not be. }
-          else if Args.GetValue('db') = nil then RenLibs:= FMoreStores;
+            RenLibs:= [TSQLiteSymbolStore.CreateReadable(Args.GetValue('library_db').Value, True) as ISymbolStore];
+          { Q17 (owner 2026-11-19): without library_db a write reads NO library; the served library (v151 OQ3) is dry-run only. }
           var RenOwners:= Default(TRenameOwnersRequest);
           RenOwners.ExeDir:= ExtractFilePath(ParamStr(0));
           if Args.GetValue('db') <> nil then RenOwners.PrimaryDb:= Args.GetValue('db').Value
