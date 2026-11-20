@@ -121,9 +121,9 @@ begin
   try StopOpenSourceServer; except end;
   try UnregisterDragLintDock; except end;
   try UnregisterDragLintOptions; except end;
-  try UnregisterDragLintAbout;   except end;
-  try UnregisterProjectMenu;     except end;
-end;
+  try UnregisterDragLintAbout; except end;
+  try UnregisterProjectMenu; except end;
+end; // procedure
 
 procedure TDragLintWizard.Modified;
 begin
@@ -172,6 +172,7 @@ begin
     (inside ShowDragLintDock/ShowDragLintGraph) is too late for desktop restore. }
   try RegisterDragLintDockable; except end;
   try RegisterDragLintGraphDockable; except end;
-end;
+end; // procedure
 
 end.
+
