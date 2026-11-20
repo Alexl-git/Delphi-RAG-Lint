@@ -61,3 +61,24 @@ the `with` to the first use; a failing `as` is covered by `cast-after-side-effec
 `drag-lint lint --fix --fix-rule with-statement --db <db> [--in <f.pas> [--fix-line <L>]] [--apply --project <X.dproj>]`
 is the same run as `unwith`: without `--apply` it prints the plan, with it the gate builds and rolls back as above.
 `--apply` without `--project` exits 2.
+
+### Fix all (`lint --fix` without `--fix-rule`, the IDE's Fix all in unit) -- 1.52.2
+
+The fix-all run fixes `with-statement`, `nested-with` and `with-hides-outer-symbol` one `with` per finding, and since
+1.52.2 every such fix carries the same **after proof** as `unwith --apply` (owner ruling Q8, 2026-11-19):
+
+1. the plan's rewrite of that one `with` is written over the file;
+2. that file is re-indexed into a **copy** of the run's `--db` (a child `drag-lint index <file> --db <copy>`, bounded at
+   10 minutes; the real DB is never written);
+3. every ref of the rewritten body must bind to what it bound before;
+4. the file is put back byte- and time-identical either way. Only a proof that held hands the edit to the fix run.
+
+A changed binding, or a proof that cannot run, **declines** the fix and prints one note on stderr:
+
+```
+drag-lint: note: with-statement fix at UwCases.pas:92 declined -- rebind-after: 1 of 3 ref(s) bind elsewhere after the rewrite, first: UwCases.pas:93:35 Count: UwTypes.TBase.Count|... -> UwCases.CaseSilentRebind.Count|...; the file is not changed
+```
+
+`after-proof-unavailable: ...` in place of `rebind-after` means the re-index failed (its log is named) or was cancelled.
+The fix stays tagged *risky*: each `with` is proven alone, against the file as indexed. The compile gate (`--apply`
+with a project) still runs on the combined edit afterwards. Guard: `tests\autotest\run_with_fix_after_proof.ps1`.

@@ -162,16 +162,20 @@ end;
   the static member closure and the resolver's binding of each name in the
   index, plus target stability, a call / cast / getter target, a conditional,
   asm or an anonymous method in the body, and the rest of its refusal list.
-  RISKY (opt-in): the third proof, re-indexing the rewritten file and checking
-  every name still binds as before, runs only in `unwith --apply`; --fix has
-  no index of the edited bytes. Use `unwith --apply` for the fully proven path.
+  THE AFTER PROOF (1.52.2 Q8, owner ruling 2026-11-19): before an edit is
+  handed out, UnwithProveFile re-indexes the rewritten file into a COPY of the
+  run's DB and checks every ref of the rewritten body still binds as before;
+  any change (rebind-after) or a proof that cannot run (after-proof-unavailable)
+  declines the fix with a note on stderr, and the file is left as it was.
+  Still tagged RISKY: each edit is proven alone, against the file as indexed.
   with-multiple-items gets no fixer: the engine refuses every `with A, B do`
   (multiple-targets), so registering it would only advertise a fix that never applies. }
 function FixWith(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
 var
-  Store: ISymbolStore   ;
-  Plan : TUnwithFilePlan;
-  L    : Integer        ;
+  Store : ISymbolStore   ;
+  Plan  : TUnwithFilePlan;
+  L     : Integer        ;
+  Detail: string         ;
 begin
   Result:= nil;
   Store:= AutofixStore;
@@ -180,6 +184,12 @@ begin
   if L = 0 then Exit;
   Plan:= UnwithPlanFile(Store, GFixWithLib, AFinding.FilePath, L);
   if (Length(Plan.Sites) <> 1) or (Plan.Sites[0].Refusal <> '') or (Length(Plan.NewBytes) = 0) then Exit;
+  if not UnwithProveFile(Plan, Store.DbPath, Detail) then
+  begin
+    Writeln(ErrOutput, Format('drag-lint: note: %s fix at %s:%d declined -- %s; the file is not changed',
+      [AFinding.RuleId, ExtractFileName(AFinding.FilePath), L, Detail]));
+    Exit;
+  end;
   Result:= DiffEdit(AFinding.FilePath, ALines, Plan.NewBytes);
 end;
 
