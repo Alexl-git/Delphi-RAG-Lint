@@ -17,7 +17,6 @@ begin
     on E: Exception do
     begin
       Writeln('oops');
-      raise;
     end;
   end;
 end;

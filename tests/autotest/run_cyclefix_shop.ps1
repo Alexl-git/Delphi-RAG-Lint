@@ -68,6 +68,7 @@ function Invoke-Dl([string]$Root, [string]$Label, [string[]]$A) {
   $o = Join-Path $WorkDir "$Label.out"; $e = Join-Path $WorkDir "$Label.err"
   $q = ($A | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' '
   $p = Start-Process -FilePath $Exe -ArgumentList $q -WorkingDirectory $Root -Wait -PassThru -NoNewWindow -RedirectStandardOutput $o -RedirectStandardError $e
+  $null = $p.Handle   # PS5 leaves ExitCode $null otherwise (run_v152_PS5STDERR G4)
   $r = @{ Exit = $p.ExitCode; Out = ([IO.File]::ReadAllText($o)); Err = ([IO.File]::ReadAllText($e)) }
   if ($CaptureDir) {
     [IO.File]::WriteAllText((Join-Path $CaptureDir "$Label.txt"),

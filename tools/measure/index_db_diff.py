@@ -153,6 +153,9 @@ TABLES = {
         SK('b', 'f') + ", x.kind, x.confidence, " + SK('i', 'xf'),
         "dispatch_edges x JOIN symbols b ON b.id = x.base_symbol_id JOIN files f ON f.id = b.file_id "
         + SYM('i', 'xf', 'x.impl_symbol_id'), "lower(f.path)"),
+    'init_deps': (
+        SK('b', 'f') + ", x.target_unit, x.via_name",
+        "init_deps x JOIN symbols b ON b.id = x.unit_symbol_id JOIN files f ON f.id = b.file_id", "lower(f.path)"),
     'inc_variants': (
         "lower(f.path), lower(hf.path), x.variant, x.ctx_sha",
         "inc_variants x JOIN files f ON f.id = x.file_id JOIN files hf ON hf.id = x.host_file_id", "lower(f.path)"),
