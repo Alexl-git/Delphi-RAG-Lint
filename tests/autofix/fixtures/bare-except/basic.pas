@@ -15,7 +15,6 @@ begin
     Writeln('x');
   except
     Writeln('oops');
-    raise;
   end;
 end;
 

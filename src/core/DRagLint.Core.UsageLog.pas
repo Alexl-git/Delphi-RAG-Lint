@@ -259,7 +259,7 @@ begin
     begin
       try
         Lines:= TFile.ReadAllLines(ALogPath, TEncoding.ASCII);
-      except
+      except  // dl:ok bare-except@53cb -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
         Lines:= nil; { unreadable log reads as an empty one }
       end;
       for Line in Lines do

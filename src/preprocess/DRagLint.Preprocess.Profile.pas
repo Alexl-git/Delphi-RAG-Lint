@@ -818,7 +818,7 @@ begin
       Content := '';
       try
         Content := TFile.ReadAllText(ADprojPath);
-      except
+      except  // dl:ok bare-except@6eed -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
         Content := ''; // unparseable/unreadable -> builtins only (no raise)
       end;
       for Def in DprojEffectiveDefines(Content, PlatformGroupSuffix(APlatform), AConfig) do

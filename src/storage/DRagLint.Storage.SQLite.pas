@@ -286,6 +286,8 @@ type
       FFtsDeferChecked       : Boolean     ; // the first OpenFileTx has decided whether this load defers the FTS5 indexes
       FFtsDeferred           : Boolean     ; // sync triggers dropped; FinishDeferredTextIndex owes a rebuild
       FFtsTargeted           : Boolean     ; // deferred, and temp.dl_fts_gone/dl_fts_files say exactly what changed
+      FTriDeferChecked       : Boolean     ; // the first OpenFileTx of a batch has decided whether this load defers symbol_trigrams (IDXPERF P3)
+      FTriDeferred           : Boolean     ; // UpsertSymbol writes no trigram rows; FinishDeferredTrigrams owes the bulk fill
       FBatchOpen             : Boolean     ; // BeginFileBatch's outer transaction is open
       FBatchFiles            : Integer     ; // files opened in the current group
       FBatchStamp            : Int64       ; // TStopwatch time stamp at which the current group began
@@ -391,6 +393,21 @@ type
         (NoteScopeRemoval reads it while the rows still exist). The state AFTER the write is
         read by MaterializeResolveScope. Either one keeps FScopeLocalNames in the name scope. }
       FScopeIncludeTouched   : Boolean;
+      { 1.52.1 INCR18 step 4 (scoped purity) -- what LastCallsScope answers from.
+        FPurState: PUR_NONE (no call-target pass since the last PutEffectFacts), PUR_SCOPED
+        (every pass since then ran scoped and committed) or PUR_WHOLE (one of them ran whole,
+        or raised). FPurPending: a file was written or removed after the last pass, so the
+        scope below no longer describes the database. FPurFiles / FPurNames / FPurEnclosing
+        accumulate over the scoped passes; FScopeOldUsers holds, for the run in progress, the
+        routines around refs that were bound to a symbol of a file BEFORE NoteScopeRemoval saw
+        it go (their rows cascade away or go NULL with the file, so the pass's own
+        before / after comparison cannot see them). }
+      FPurState              : Integer;
+      FPurPending            : Boolean;
+      FPurFiles              : TDictionary<Int64 , Boolean>;
+      FPurNames              : TDictionary<string, Boolean>;
+      FPurEnclosing          : TDictionary<Int64 , Boolean>;
+      FScopeOldUsers         : TDictionary<Int64 , Boolean>;
       FScopeTypesBefore      : TDictionary<string, Boolean>;
       { The ancestor NAMES of every type declared in a file this run removed or
         rewrote, captured BEFORE the delete because that is the only moment the
@@ -1080,6 +1097,15 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveSectionEnclosing: Int64;
+      /// <summary>INITDEP (1.52.1): rebuilds init_deps whole -- one row per (unit, other unit its
+      /// initialization section reaches), following same-file routines the section calls; an
+      /// unbound reached ref that is not a System intrinsic writes the '?' row -- and stamps
+      /// INIT_DEPS_META_KEY.</summary>
+      /// <returns>The number of rows written.</returns>
+      /// <remarks>Runs inside the calls pass's transaction, after every binding stream
+      /// (it reads refs.symbol_id and enclosing_symbol_id). Spec
+      /// docs\superpowers\specs\2026-11-19-init-dependency-facts-design.md.</remarks>
+      function RebuildInitDeps: Int64;
       /// <summary>B9 F1 (resolver 1.20.0-alpha): the calls stage's LAST stream.
       /// Writes one ref_types row per read / write / member-access / call ref
       /// TCallResolver.RefStaticType can type.</summary>
@@ -1753,6 +1779,28 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure FinishDeferredTextIndex;
+      /// <summary>Starts a bulk load with symbol_trigrams empty and its two secondary
+      /// indexes dropped: UpsertSymbol then writes no trigram rows, and
+      /// FinishDeferredTrigrams fills the table once, in key order.</summary>
+      /// <remarks>
+      /// Only when symbol_trigrams holds no row (a new database, or after
+      /// ClearAllFiles); otherwise the rows stay live per symbol, as before.
+      /// The debt is recorded in schema_meta (TRIGRAM_FILL_PENDING_KEY) in the same
+      /// transaction as the index drops, so a run that dies mid-load is settled by
+      /// the next writer's Migrate. Best-effort: a failure leaves the load row by row.
+      /// Not thread-safe; the owning writer connection only.
+      /// </remarks>
+      procedure BeginDeferredTrigrams;
+      /// <summary>Settles a deferred symbol_trigrams load: derives every symbol's
+      /// trigrams once, inserts them in (trigram, symbol_id) order, recreates the two
+      /// secondary indexes and clears the debt, all in one transaction.</summary>
+      /// <remarks>
+      /// The resulting rows are exactly those UpsertSymbol would have written one by
+      /// one (INSERT OR IGNORE on the primary key). No-op when nothing is owed and on a
+      /// read-only handle.
+      /// </remarks>
+      /// <exception cref="Exception">Any database error; the transaction is rolled back and the debt stays recorded.</exception>
+      procedure FinishDeferredTrigrams;
       /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ASha"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: not Q.IsEmpty.</returns>
@@ -1844,6 +1892,12 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetMetaValue(const AKey: string): string                                                                     ;
+      /// <summary>Implements <see cref="DRagLint.Core.Interfaces.ISymbolStore.GetInitDeps"/>:
+      /// the init_deps rows of one unit symbol.</summary>
+      /// <param name="AUnitSymbolId">The unit's skUnit symbol id in this store.</param>
+      /// <param name="ATargets">Out: distinct target unit names; '?' = an unbound reached ref.</param>
+      /// <returns>False when the store has no INIT_DEPS_META_KEY stamp (no facts).</returns>
+      function GetInitDeps(const AUnitSymbolId: Int64; out ATargets: TArray<string>): Boolean;
       /// <summary><!-- drag-lint:auto sum -->INBOX 2.3: generic schema_meta writer.
       /// schema_meta is created by the schema DDL, so an absent table here means a
       /// read-only or non-index DB -- swallowed for the same reason the reader swallows
@@ -3933,6 +3987,48 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function PurityNeedsRun: Boolean;
+      /// <summary>Implements ISymbolStore.LastCallsScope (INCR18 step 4).</summary>
+      /// <param name="AScope">Receives the accumulated scope.</param>
+      /// <returns>True when every call-target pass since the last PutEffectFacts
+      /// ran scoped and nothing was written after the last one.</returns>
+      function LastCallsScope(out AScope: TCallsScope): Boolean;
+      /// <summary>Implements ISymbolStore.CallerRoutinesOf.</summary>
+      /// <param name="ATargetId">symbols.id of the called routine.</param>
+      /// <returns>The distinct routines that hold an edge to it.</returns>
+      function CallerRoutinesOf(ATargetId: Int64): TArray<Int64>;
+      /// <summary>Implements ISymbolStore.DumpCallerTargets.</summary>
+      /// <returns>Distinct (caller routine, target) pairs.</returns>
+      function DumpCallerTargets: TArray<TCallerTarget>;
+      /// <summary>Implements ISymbolStore.DumpCallEdgesInFiles.</summary>
+      /// <param name="AFileIds">files.id values.</param>
+      /// <returns>The call_edges rows of those files' refs.</returns>
+      function DumpCallEdgesInFiles(const AFileIds: TArray<Int64>): TArray<TCallEdge>;
+      /// <summary>Implements ISymbolStore.DumpMemberAccessesInFiles.</summary>
+      /// <param name="AFileIds">files.id values.</param>
+      /// <returns>The member_accesses rows of those files' refs.</returns>
+      function DumpMemberAccessesInFiles(const AFileIds: TArray<Int64>): TArray<TCallEdge>;
+      /// <summary>INCR18 step 4: creates the TEMP tables and triggers that keep
+      /// the first old value of every binding a scoped call-target pass writes.</summary>
+      /// <remarks>Called inside the pass's transaction, after the scope is
+      /// materialised; DropPurityMoveTriggers ends it.</remarks>
+      procedure InstallPurityMoveTriggers;
+      /// <summary>INCR18 step 4: drops the triggers InstallPurityMoveTriggers
+      /// created; a no-op when there are none.</summary>
+      procedure DropPurityMoveTriggers;
+      /// <summary>INCR18 step 4: adds what the scoped pass about to commit moved
+      /// to the accumulated purity scope (see FPurState).</summary>
+      procedure CollectPurityScope;
+      /// <summary>INCR18 step 4: forgets the accumulated purity scope; called
+      /// when the purity stage has written its verdicts.</summary>
+      procedure ResetPurityScope;
+      /// <summary>Implements ISymbolStore.LoadClosureCache (see there).</summary>
+      /// <param name="AFingerprint">Receives the stored fingerprint.</param>
+      /// <returns>The stored rows.</returns>
+      function LoadClosureCache(out AFingerprint: string): TArray<TClosureCacheRow>;
+      /// <summary>Implements ISymbolStore.SaveClosureCache (see there).</summary>
+      /// <param name="AFingerprint">The walk's scan fingerprint.</param>
+      /// <param name="ARows">The scans to store or drop.</param>
+      procedure SaveClosureCache(const AFingerprint: string; const ARows: TArray<TClosureCacheRow>);
       /// <summary>Concept-search stage: syncs symbol_search with symbols.</summary>
       /// <returns>Rows inserted.</returns>
       /// <remarks>
@@ -5556,6 +5652,10 @@ var
   GTrigramWarned: Boolean = False;
 
 const
+  { 1.52.1 INCR18 step 4: TSQLiteSymbolStore.FPurState -- see the field. }
+  PUR_NONE   = 0;
+  PUR_SCOPED = 1;
+  PUR_WHOLE  = 2;
   { Decline reason ScopedResolveDeclineReason gives when a run recorded no file writes;
     ResolveCallTargets replaces it with the clear when one was asked for. }
   RESOLVE_REASON_NO_WRITES = 'this run recorded no file writes, so it cannot know what changed';
@@ -5686,6 +5786,12 @@ begin
   FScopeFiles      := TDictionary<Int64 , Boolean>.Create;
   FScopeNames      := TDictionary<string, Boolean>.Create;
   FScopeLocalNames := TDictionary<string, Boolean>.Create;
+  FPurFiles        := TDictionary<Int64 , Boolean>.Create;
+  FPurNames        := TDictionary<string, Boolean>.Create;
+  FPurEnclosing    := TDictionary<Int64 , Boolean>.Create;
+  FScopeOldUsers   := TDictionary<Int64 , Boolean>.Create;
+  FPurState        := PUR_NONE;
+  FPurPending      := False;
   FScopeTypesBefore:= TDictionary<string, Boolean>.Create;
   FScopeTypeAncestors:= TDictionary<string, TArray<string>>.Create;
   FScopeTypesAfter := TDictionary<string, Boolean>.Create;
@@ -5901,7 +6007,7 @@ procedure TSQLiteSymbolStore.PutFileFacts(const AToken: TFileTxToken; const AInc
           P.DataType:= if MatchText(P.Name, FF_TEXT_PARAMS) then ftWideString else ftLargeint;
         end;
         Result.Prepare;
-      except  // dl:ok bare-except@041e -- frees the half-prepared query and re-raises; nothing is swallowed
+      except
         Result.Free;
         raise;
       end;
@@ -6024,7 +6130,7 @@ begin
   begin
     Q:= Prepared(FF_DEL_ATR);
     Q.ParamByName('fid').AsLargeInt:= AToken.FileId;
-    Q.ExecSQL;  // dl:ok duplicate-code@6087 -- each optional fact table (comment_facts, attributes) has its own probe + delete + insert block over the shared FF_* prepared statements; columns differ, a generic writer would hide them
+    Q.ExecSQL;
     Q:= Prepared(FF_INS_ATR);
     for I:= 0 to High(AAttributes) do
     begin
@@ -7026,8 +7132,8 @@ begin
     QE.SQL.Text  := 'INSERT INTO dispatch_edges(base_symbol_id, impl_symbol_id, kind, confidence) VALUES (:b, :i, :k, :c)';
     QA.Connection:= FConn;
     QA.SQL.Text  := 'INSERT INTO classref_args(ref_id, arg_index, param_symbol_id, class_symbol_id, confidence) VALUES (:r, :a, :p, :k, :c)';
-      FConn.ExecSQL('DELETE FROM dispatch_edges');
-      FConn.ExecSQL('DELETE FROM classref_args');
+      FConn.ExecSQL('DELETE FROM dispatch_edges');  // dl:ok sql-update-delete-without-where@f993 -- REVIEWED 2026-11-19 SLZ-MARK: intentional full clear of a derived table inside the rebuild transaction
+      FConn.ExecSQL('DELETE FROM classref_args');  // dl:ok sql-update-delete-without-where@34d7 -- REVIEWED 2026-11-19 SLZ-MARK: intentional full clear of a derived table inside the rebuild transaction
       for E in Res.Edges do
       begin
         QE.ParamByName('b').AsLargeInt  := E.BaseId;
@@ -7046,7 +7152,7 @@ begin
         QA.ExecSQL;
       end;
       FConn.Commit;
-    except // dl:ok bare-except@4bef -- rollback and RE-RAISE: nothing is swallowed, any failure must undo the wipe
+    except
       FConn.Rollback;
       raise;
     end;
@@ -7211,7 +7317,7 @@ begin
     try
       Q.Open;
       Result := not Q.IsEmpty;
-    except
+    except  // dl:ok bare-except@79dc -- REVIEWED 2026-11-19 SLZ-MARK: probe or read on an old, absent or locked DB; the handler answers with the documented fallback, nothing is lost silently
       Result := False;
     end;
   finally
@@ -7263,6 +7369,10 @@ begin
   FScopeFiles.Free;
   FScopeNames.Free;
   FScopeLocalNames.Free;
+  FScopeOldUsers.Free;
+  FPurEnclosing.Free;
+  FPurNames.Free;
+  FPurFiles.Free;
   FScopeTypesBefore.Free;
   FScopeTypeAncestors.Free;
   FScopeTypesAfter.Free;
@@ -7324,6 +7434,8 @@ begin
       try EndFileBatch; except end;  // dl:ok empty-except@8ae8, try-except-swallowed@8ae8 -- REVIEWED 2026-10-30 (PR #10): a destructor must not raise; EndFileBatch has already rolled the batch back when it fails
     if FFtsDeferred and FConn.Connected then
       try FinishDeferredTextIndex; except end;  // dl:ok empty-except@d18e, try-except-swallowed@d18e -- REVIEWED 2026-10-30 (PR #10): a destructor must not raise; a rebuild left pending is redone by the next writer (FTS_REBUILD_PENDING_KEY)
+    if FTriDeferred and FConn.Connected then
+      try FinishDeferredTrigrams; except end;  // dl:ok empty-except@41ae, try-except-swallowed@41ae -- REVIEWED 2026-11-19 (IDXPERF P3): a destructor must not raise; the debt stays in schema_meta (TRIGRAM_FILL_PENDING_KEY) and the next writer's Migrate settles it
     if FConn.Connected then FConn.Close;
     FConn.Free;
   end;
@@ -7692,6 +7804,14 @@ begin
         Writeln(ErrOutput, 'WARNING: the text-search index owes a rebuild and it failed (',
                 E.ClassName, ': ', E.Message, '); the next writer retries.');
     end;
+    { IDXPERF P3: same debt for a symbol_trigrams bulk load that died before its fill. }
+    try
+      FinishDeferredTrigrams;
+    except
+      on E: Exception do
+        Writeln(ErrOutput, 'WARNING: symbol_trigrams owes a bulk fill and it failed (',
+                E.ClassName, ': ', E.Message, '); the next writer retries.');
+    end;
   end
   else
   begin
@@ -7777,6 +7897,19 @@ begin
     without reading the file (STAMP FAST PATH in TIndexer.IndexFile). NULL on a
     row written before; such a row takes the full test once and is filled. }
   TryExec('ALTER TABLE files ADD COLUMN size INTEGER');
+  { INCR18 (1.52.1; PR #10's closure_cache, made sound): what the compile-closure
+    walk read out of each unit, so the next `index --project` does not read and
+    preprocess every unit again to learn the same uses clauses. A cache, not
+    index data: nothing reads it but that walk, and a row is used only while the
+    unit AND every include file its scan read (deps) still carry their stamps,
+    every include name still resolves to the same file, and the walk's
+    fingerprint (schema_meta closure_cache_fp) is unchanged. deps is nullable
+    and added by ALTER too: a database a PR #10 build wrote has the table
+    without it, and its rows (deps NULL) are never loaded. An older engine never
+    looks at the table. }
+  TryExec('CREATE TABLE IF NOT EXISTS closure_cache (path TEXT PRIMARY KEY, mtime INTEGER NOT NULL, ' +
+          'size INTEGER NOT NULL, uses TEXT NOT NULL, includes TEXT NOT NULL, deps TEXT)');
+  TryExec('ALTER TABLE closure_cache ADD COLUMN deps TEXT');
   { v16: per-file last-successful-compile timestamp (Unix seconds). NULL = never
     compiled. Additive column; ALTER onto pre-v16 files tables for the same
     reason as the symbols/refs columns above. Read by the freshness engine to
@@ -8198,6 +8331,15 @@ begin
   TryExec('CREATE INDEX IF NOT EXISTS idx_attributes_file   ON attributes(file_id, ordinal)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_attributes_symbol ON attributes(symbol_id)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_attributes_name   ON attributes(attr_name COLLATE NOCASE)');
+  { 1.52.1 INITDEP: init-dependency facts -- one row per (unit, other unit its initialization section
+    reaches); target_unit '?' marks an unbound reached ref (facts incomplete). Rebuilt whole by the calls
+    pass (RebuildInitDeps), stamped INIT_DEPS_META_KEY. ADDITIVE, the attributes precedent: no
+    SCHEMA_VERSION bump; filled by the re-parse of the 1.52.1 extractor bump. }
+  TryExec('CREATE TABLE IF NOT EXISTS init_deps (' +
+          '  unit_symbol_id INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,' +
+          '  target_unit    TEXT    NOT NULL,' +
+          '  via_name       TEXT    NOT NULL,' +
+          '  PRIMARY KEY (unit_symbol_id, target_unit))');
   { v0.85 PERF -- the three FK child columns that had no index.
 
     `PRAGMA foreign_keys = ON` is set on the write connection, so deleting a
@@ -8273,7 +8415,7 @@ begin
       try
         StatQ.Open;
         HaveStats:= not StatQ.IsEmpty;
-      except
+      except  // dl:ok bare-except@df16 -- REVIEWED 2026-11-19 SLZ-MARK: probe or read on an old, absent or locked DB; the handler answers with the documented fallback, nothing is lost silently
         HaveStats:= True; { cannot tell -> do not attempt a write }
       end;
     finally
@@ -8515,7 +8657,7 @@ begin
     try
       Q.Open;
       if not Q.IsEmpty then AFound := StrToIntDef(Q.Fields[0].AsString, 0);
-    except
+    except  // dl:ok bare-except@d322 -- REVIEWED 2026-11-19 SLZ-MARK: probe or read on an old, absent or locked DB; the handler answers with the documented fallback, nothing is lost silently
       { table absent (pre-schema_meta DB) -> leave AFound = 0. }
       AFound := 0;
     end;
@@ -9217,6 +9359,45 @@ begin
   end;
 end; // function
 
+const
+  { INITDEP: schema_meta key + format of the init_deps facts; a store without it has NO facts. }
+  INIT_DEPS_META_KEY = 'init_deps_format';
+  INIT_DEPS_FORMAT   = '1';
+  { Names the index never binds (System intrinsics, basic types, literals): an unbound ref with one of
+    them is not "unknown activity" and does not make the facts incomplete. Lowercase. }
+  INIT_DEPS_INTRINSICS_SQL =
+    '(''true'',''false'',''nil'',''self'',''result'',''exit'',''break'',''continue'',''assigned'',' +
+    '''sizeof'',''length'',''setlength'',''high'',''low'',''inc'',''dec'',''ord'',''chr'',''succ'',''pred'',' +
+    '''typeinfo'',''default'',''assert'',''fillchar'',''move'',''copy'',''pos'',''getmem'',''freemem'',' +
+    '''new'',''dispose'',''include'',''exclude'',''randomize'',''halt'',''abs'',''round'',''trunc'',''odd'',' +
+    '''hi'',''lo'',''swap'',''paramstr'',''paramcount'',''integer'',''cardinal'',''boolean'',''byte'',''word'',' +
+    '''longint'',''longword'',''shortint'',''smallint'',''int64'',''uint64'',''nativeint'',''nativeuint'',' +
+    '''char'',''ansichar'',''widechar'',''string'',''ansistring'',''widestring'',''unicodestring'',' +
+    '''pointer'',''pchar'',''double'',''single'',''extended'',''currency'',''dword'')';
+
+function TSQLiteSymbolStore.GetInitDeps(const AUnitSymbolId: Int64; out ATargets: TArray<string>): Boolean;
+var
+  Q: TFDQuery;
+begin
+  ATargets:= nil;
+  Result  := GetMetaValue(INIT_DEPS_META_KEY) = INIT_DEPS_FORMAT;
+  if not Result then Exit;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT target_unit FROM init_deps WHERE unit_symbol_id = :u';
+    Q.ParamByName('u').AsLargeInt:= AUnitSymbolId;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      ATargets:= ATargets + [Q.Fields[0].AsString];
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+
 // INBOX 2.3: generic schema_meta writer. schema_meta is created by the schema
 // DDL, so an absent table here means a read-only or non-index DB -- swallowed
 // for the same reason the reader swallows it, since a fingerprint that cannot
@@ -9228,6 +9409,110 @@ begin
   except
     { non-writable / pre-schema_meta DB -- recording the fingerprint is best-effort }
   end;
+end; // procedure
+
+const
+  CLOSURE_CACHE_FP_KEY = 'closure_cache_fp';
+
+function TSQLiteSymbolStore.LoadClosureCache(out AFingerprint: string): TArray<TClosureCacheRow>;
+var
+  Q   : TFDQuery;
+  List: TList<TClosureCacheRow>;
+  Row : TClosureCacheRow;
+begin
+  Result:= nil;
+  AFingerprint:= GetMetaValue(CLOSURE_CACHE_FP_KEY);
+  if AFingerprint = '' then Exit;
+  List:= TList<TClosureCacheRow>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    { The stamps are read as TEXT: FireDAC types an INTEGER column as 32-bit, and
+      a FILETIME (or a size past 2 GB) does not fit. }
+    Q.SQL.Text:= 'SELECT path, CAST(mtime AS TEXT) AS mtime, CAST(size AS TEXT) AS size, uses, includes, deps ' +
+                 'FROM closure_cache WHERE deps IS NOT NULL';
+    try
+      Q.Open;
+      var FPath: TField:= Q.FieldByName('path'    );
+      var FTime: TField:= Q.FieldByName('mtime'   );
+      var FSize: TField:= Q.FieldByName('size'    );
+      var FUses: TField:= Q.FieldByName('uses'    );
+      var FIncs: TField:= Q.FieldByName('includes');
+      var FDeps: TField:= Q.FieldByName('deps'    );
+      while not Q.Eof do
+      begin
+        Row.Path        := FPath.AsString;
+        Row.UsesText    := FUses.AsString;
+        Row.IncludesText:= FIncs.AsString;
+        Row.DepsText    := FDeps.AsString;
+        Row.Cacheable   := True;
+        // A stamp that does not read back as a number leaves the row out (its unit is scanned again).
+        if TryStrToInt64(FTime.AsString, Row.MTime) and TryStrToInt64(FSize.AsString, Row.Size) then List.Add(Row);
+        Q.Next;
+      end;
+      Result:= List.ToArray;
+    except
+      { A read-only open of a database from before the table: no cache, and the
+        fingerprint must not claim one. }
+      on E: Exception do
+      begin
+        Result:= nil;
+        AFingerprint:= '';
+      end;
+    end;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
+procedure TSQLiteSymbolStore.SaveClosureCache(const AFingerprint: string; const ARows: TArray<TClosureCacheRow>);
+var
+  Q   : TFDQuery;
+  Same: Boolean;
+begin
+  if FReadOnly then Exit;
+  Same:= GetMetaValue(CLOSURE_CACHE_FP_KEY) = AFingerprint;
+  if Same and (Length(ARows) = 0) then Exit;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    FConn.StartTransaction;
+    try
+      if not Same then
+      begin
+        FConn.ExecSQL('DELETE FROM closure_cache');  // dl:ok sql-update-delete-without-where@0a3a -- REVIEWED 2026-11-18 (INCR18): a new walk fingerprint invalidates every stored closure scan; closure_cache is a cache, nothing else reads it
+        FConn.ExecSQL('INSERT OR REPLACE INTO schema_meta(key, value) VALUES (?, ?)', [CLOSURE_CACHE_FP_KEY, AFingerprint]);
+      end;
+      for var R: TClosureCacheRow in ARows do
+        if not R.Cacheable then FConn.ExecSQL('DELETE FROM closure_cache WHERE path = ?', [R.Path]);
+      Q.SQL.Text:= 'INSERT OR REPLACE INTO closure_cache(path, mtime, size, uses, includes, deps) ' +
+                   'VALUES (:p, :m, :s, :u, :i, :d)';
+      Q.ParamByName('u').DataType:= ftWideMemo;
+      Q.ParamByName('i').DataType:= ftWideMemo;
+      Q.ParamByName('d').DataType:= ftWideMemo;
+      for var R: TClosureCacheRow in ARows do
+      begin
+        if not R.Cacheable then Continue;
+        Q.ParamByName('p').AsWideString:= R.Path;
+        Q.ParamByName('m').AsLargeInt  := R.MTime;
+        Q.ParamByName('s').AsLargeInt  := R.Size;
+        Q.ParamByName('u').AsWideMemo  := R.UsesText;
+        Q.ParamByName('i').AsWideMemo  := R.IncludesText;
+        Q.ParamByName('d').AsWideMemo  := R.DepsText;
+        Q.ExecSQL;
+      end;
+      FConn.Commit;
+    except
+      on E: Exception do
+      begin
+        FConn.Rollback;
+        raise;
+      end;
+    end;
+  finally
+    Q.Free;
+  end; // try
 end; // procedure
 
 { DEFERRED TEXT INDEX (PR #10, Jonathas Paiva, 2026-09-28 / 2026-10-14).
@@ -9279,14 +9564,124 @@ begin
   FFtsDeferred:= True;
 end; // procedure
 
+const
+  TRIGRAM_FILL_PENDING_KEY = 'trigram_fill_pending';
+  TRIGRAM_FILL_CHUNK       = 4000; { rows per array-DML insert into the staging table }
+
+procedure TSQLiteSymbolStore.BeginDeferredTrigrams;
+begin
+  if FTriDeferred or FReadOnly then Exit;
+  if Integer(FConn.ExecSQLScalar('SELECT EXISTS (SELECT 1 FROM symbol_trigrams)')) <> 0 then Exit; { populated: stay live }
+  FConn.StartTransaction;
+  try
+    FConn.ExecSQL('INSERT OR REPLACE INTO schema_meta(key, value) VALUES (?, ''1'')', [TRIGRAM_FILL_PENDING_KEY]);
+    FConn.ExecSQL('DROP INDEX IF EXISTS idx_symbol_trigrams_trigram');
+    FConn.ExecSQL('DROP INDEX IF EXISTS idx_symbol_trigrams_symbol');
+    FConn.Commit;
+  except  // dl:ok bare-except@db75, try-except-swallowed@db75 -- REVIEWED 2026-11-19 (IDXPERF P3): a failed DROP keeps the live per-symbol rows: the load stays correct, only not deferred
+    FConn.Rollback;
+    Exit;
+  end;
+  FTriDeferred:= True;
+end; // procedure
+
+procedure TSQLiteSymbolStore.FinishDeferredTrigrams;
+var
+  NameQ  : TFDQuery;
+  IdFld  : TField;
+  NameFld: TField;
+  StageQ : TFDQuery;
+  Names  : TArray<string>;
+  Ids    : TArray<Int64>;
+  Fill   : Integer;
+  Rows   : Int64;
+  Started: Int64;
+
+  procedure Flush;
+  begin
+    if Fill = 0 then Exit;
+    StageQ.Params.ArraySize:= Fill;
+    for var K:= 0 to Fill - 1 do
+    begin
+      StageQ.Params[0].AsWideStrings[K]:= Names[K];
+      StageQ.Params[1].AsLargeInts[K]  := Ids[K];
+    end;
+    StageQ.Execute(Fill);
+    Inc(Rows, Fill);
+    Fill:= 0;
+  end;
+
+begin
+  if FReadOnly then Exit;
+  if (not FTriDeferred) and (GetMetaValue(TRIGRAM_FILL_PENDING_KEY) = '') then Exit;
+  Started:= TStopwatch.GetTimeStamp;
+  Rows:= 0;
+  Fill:= 0;
+  SetLength(Names, TRIGRAM_FILL_CHUNK);
+  SetLength(Ids  , TRIGRAM_FILL_CHUNK);
+  { The sort of ~24 M staged rows belongs on disk, not in the page cache (temp_store is MEMORY at connect). }
+  FConn.ExecSQL('PRAGMA temp_store = FILE');
+  NameQ := TFDQuery.Create(nil);
+  StageQ:= TFDQuery.Create(nil);
+  try
+    FConn.StartTransaction;
+    try
+      FConn.ExecSQL('DROP TABLE IF EXISTS temp.dl_tri_stage');
+      FConn.ExecSQL('CREATE TEMP TABLE dl_tri_stage (trigram TEXT NOT NULL, symbol_id INTEGER NOT NULL)');
+      StageQ.Connection:= FConn;
+      StageQ.SQL.Text  := 'INSERT INTO temp.dl_tri_stage(trigram, symbol_id) VALUES (:tg, :sid)';
+      StageQ.Params[0].DataType:= ftWideString;
+      StageQ.Params[1].DataType:= ftLargeint;
+      NameQ.Connection:= FConn;
+      NameQ.SQL.Text  := 'SELECT id, name FROM symbols';
+      NameQ.Open;
+      IdFld  := NameQ.FieldByName('id');
+      NameFld:= NameQ.FieldByName('name');
+      while not NameQ.Eof do
+      begin
+        var SymId:= IdFld.AsLargeInt;
+        for var G in DRagLint.Query.Fuzzy.Trigrams(NameFld.AsString) do
+        begin
+          Names[Fill]:= G;
+          Ids  [Fill]:= SymId;
+          Inc(Fill);
+          if Fill = TRIGRAM_FILL_CHUNK then Flush;
+        end;
+        NameQ.Next;
+      end;
+      NameQ.Close;
+      Flush;
+      FConn.ExecSQL('INSERT OR IGNORE INTO symbol_trigrams(trigram, symbol_id) ' +
+                    'SELECT trigram, symbol_id FROM temp.dl_tri_stage ORDER BY trigram, symbol_id');
+      FConn.ExecSQL('DROP TABLE temp.dl_tri_stage');
+      FConn.ExecSQL('CREATE INDEX IF NOT EXISTS idx_symbol_trigrams_trigram ON symbol_trigrams(trigram)');
+      FConn.ExecSQL('CREATE INDEX IF NOT EXISTS idx_symbol_trigrams_symbol ON symbol_trigrams(symbol_id)');
+      FConn.ExecSQL('DELETE FROM schema_meta WHERE key = ?', [TRIGRAM_FILL_PENDING_KEY]);
+      FConn.Commit;
+    except
+      on Exception do
+      begin
+        FConn.Rollback;
+        raise;
+      end;
+    end;
+  finally
+    StageQ.Free;
+    NameQ.Free;
+    FConn.ExecSQL('PRAGMA temp_store = MEMORY');
+  end;
+  FTriDeferred:= False;
+  ResolveLog(Format('trigrams   bulk-filled symbol_trigrams from %d staged row(s)  [%.1fs]', [Rows, ResolveSecs(Started)], TFormatSettings.Invariant));
+end; // procedure
+
 procedure TSQLiteSymbolStore.BeginTargetedTextIndex;
 begin
   BeginDeferredTextIndex;
   if not FFtsDeferred then Exit; { triggers still live: row-by-row, correct anyway }
   FConn.ExecSQL('CREATE TEMP TABLE IF NOT EXISTS dl_fts_gone (id INTEGER PRIMARY KEY, text TEXT NOT NULL)');
   FConn.ExecSQL('CREATE TEMP TABLE IF NOT EXISTS dl_fts_files (f INTEGER PRIMARY KEY)');
-  FConn.ExecSQL('DELETE FROM temp.dl_fts_gone');
-  FConn.ExecSQL('DELETE FROM temp.dl_fts_files');
+  FConn.ExecSQL('DELETE FROM temp.dl_fts_gone');  // dl:ok sql-update-delete-without-where@9d8d -- REVIEWED 2026-11-19 SLZ-MARK: intentional full clear of a derived table inside the rebuild transaction
+  FConn.ExecSQL('DELETE FROM temp.dl_fts_files');  // dl:ok sql-update-delete-without-where@6a5d -- REVIEWED 2026-11-19 SLZ-MARK: intentional full clear of a derived table inside the rebuild transaction
   FFtsTargeted:= True;
 end; // procedure
 
@@ -9513,6 +9908,13 @@ begin
               E.ClassName, ': ', E.Message, '); the next writer retries.');
   end;
   try
+    FinishDeferredTrigrams;
+  except
+    on E: Exception do
+      Writeln(ErrOutput, 'WARNING: the symbol_trigrams bulk fill failed (',
+              E.ClassName, ': ', E.Message, '); the next writer retries.');
+  end;
+  try
     RunPragma('PRAGMA wal_checkpoint(FULL)');
   except
     { non-WAL or read-only DB -- best-effort }
@@ -9602,6 +10004,11 @@ begin
       if StringLiteralsEmpty(FConn) then BeginDeferredTextIndex
       else BeginTargetedTextIndex;
   end;
+  if FBatchOpen and not FTriDeferChecked then
+  begin
+    FTriDeferChecked:= True;
+    if not FReadOnly then BeginDeferredTrigrams;
+  end;
   if FBatchOpen then RollFileBatch(FConn, FBatchFiles, FBatchStamp); { see FILE BATCH above Checkpoint }
   { V-C: the corpus size BEFORE this run's first write -- read ahead of the
     upsert, which would otherwise count the run's first new file as old. }
@@ -9669,6 +10076,7 @@ end; // function
 
 function TSQLiteSymbolStore.UpsertSymbol(const AToken: TFileTxToken; const ASymbol: TSymbol): Int64;
 begin
+  FPurPending:= True; { INCR18 step 4: a write after the last call-target pass -- see FPurState }
   { RESOLVE SCOPE, the incoming half -- see ScopedResolveIsSound. Two dictionary
     probes per symbol; the pass they serve is measured in minutes. }
   if not FScopeWhole then
@@ -9733,6 +10141,9 @@ begin
   FQInsertSymbol.ParamByName('iscm' ).AsInteger:= Ord(ASymbol.IsClassMethod); { 1.40: always 0/1, NULL only on an older row }
   FQInsertSymbol.ExecSQL;
   Result:= FConn.GetLastAutoGenValue('');
+  { IDXPERF P3: a bulk load into an empty symbol_trigrams writes none here;
+    FinishDeferredTrigrams fills the table once, in key order, at the end. }
+  if FTriDeferred then Exit;
   // Populate trigram index alongside each symbol insert so fuzzy queries
   // are sub-second from the first call without any lazy build cost.
   var Grams:= DRagLint.Query.Fuzzy.Trigrams(ASymbol.Name);
@@ -9811,7 +10222,7 @@ end;
 
 procedure TSQLiteSymbolStore.ClearCallEdges;
 begin
-  FConn.ExecSQL('DELETE FROM call_edges');
+  FConn.ExecSQL('DELETE FROM call_edges');  // dl:ok sql-update-delete-without-where@e720 -- REVIEWED 2026-11-19 SLZ-MARK: intentional full clear of a derived table inside the rebuild transaction
   { AND THE IDENTITIES THOSE EDGES PUT ON THE REFS. UpsertCallEdge writes
     refs.symbol_id for a certain edge, so dropping the edges without clearing
     the column would leave a ref pointing at a declaration this run has decided
@@ -9843,7 +10254,7 @@ begin
     which never reaches here. }
   FConn.ExecSQL('UPDATE refs SET symbol_id = NULL WHERE symbol_id IS NOT NULL');
   { and the member accesses the same pass wrote -- same lifetime as the edges }
-  if HasMemberAccesses then FConn.ExecSQL('DELETE FROM member_accesses');
+  if HasMemberAccesses then FConn.ExecSQL('DELETE FROM member_accesses');  // dl:ok sql-update-delete-without-where@ca8a -- REVIEWED 2026-11-19 SLZ-MARK: intentional full clear of a derived table inside the rebuild transaction
   { 1.51.1 INC2: and the per-host bindings of the same pass -- same lifetime as the edges }
   if HasRefHostBindings then FConn.ExecSQL('DELETE FROM ref_host_bindings');  // dl:ok sql-update-delete-without-where@5ff7 -- REVIEWED 2026-11-16: a whole-database pass rewrites every row of this derived table, like call_edges above
 end;
@@ -10447,6 +10858,7 @@ begin
   FScopeFiles        .Clear;
   FScopeNames        .Clear;
   FScopeLocalNames   .Clear;
+  FScopeOldUsers     .Clear;
   FScopeIncludeTouched:= False;
   FScopeTypesBefore  .Clear;
   FScopeTypeAncestors.Clear;
@@ -10483,6 +10895,7 @@ var
 begin
   { FScopeWrites / FScopeRemovals are counted by the CALLERS (OpenFileTx,
     DeleteFilesByIds): this routine serves both, and only they know which. }
+  FPurPending:= True; { INCR18 step 4: a removal after the last call-target pass -- see FPurState }
   if FScopeWhole then Exit;
   FScopeFiles.AddOrSetValue(AFileId, True);
   { STOP ACCUMULATING once this run covers a third of the corpus. Past that the
@@ -10512,6 +10925,7 @@ begin
     FScopeFiles      .Clear;
     FScopeNames      .Clear;
     FScopeLocalNames .Clear;
+    FScopeOldUsers   .Clear;
     FScopeTypesBefore.Clear;
     FScopeTypeAncestors.Clear;
     FScopeTypesAfter .Clear;
@@ -10610,10 +11024,320 @@ begin
       Q.Next;
     end;
     Q.Close;
+    { 1.52.1 INCR18 step 4 (scoped purity): THE ROUTINES THAT USE THIS FILE'S SYMBOLS NOW.
+      A ref elsewhere bound to one of them loses the binding with the delete that follows
+      (refs.symbol_id goes NULL, its call_edges / member_accesses row cascades away), before
+      the call-target pass takes its before / after picture. When the pass then binds it to
+      nothing, the two pictures are equal and only this list says the routine's verdict input
+      moved. Three indexed lookups per rewritten file (idx_refs_symbol, idx_call_edges_target,
+      idx_member_accesses_member). }
+    var UsersSql: string:=
+                 'SELECT r.enclosing_symbol_id FROM refs r ' +
+                 'WHERE r.symbol_id IN (SELECT id FROM symbols WHERE file_id = :f) AND r.enclosing_symbol_id IS NOT NULL ' +
+                 'UNION SELECT r.enclosing_symbol_id FROM call_edges ce JOIN refs r ON r.id = ce.ref_id ' +
+                 'WHERE ce.target_symbol_id IN (SELECT id FROM symbols WHERE file_id = :f) AND r.enclosing_symbol_id IS NOT NULL';
+    if HasMemberAccesses then
+      UsersSql:= UsersSql +
+                 ' UNION SELECT r.enclosing_symbol_id FROM member_accesses ma JOIN refs r ON r.id = ma.ref_id ' +
+                 'WHERE ma.member_symbol_id IN (SELECT id FROM symbols WHERE file_id = :f) AND r.enclosing_symbol_id IS NOT NULL';
+    Q.SQL.Text:= UsersSql;
+    Q.ParamByName('f').AsLargeInt:= AFileId;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      FScopeOldUsers.AddOrSetValue(Q.Fields[0].AsLargeInt, True);
+      Q.Next;
+    end;
+    Q.Close;
   finally
     Q.Free;
   end;
 end;
+
+{ ------------------------------------------------- INCR18 step 4: scoped purity
+
+  WHAT A SCOPED CALL-TARGET PASS MOVED, FOR THE PURITY STAGE.
+
+  A purity verdict is a function of the routine's own source, the refs it encloses and what
+  they are bound to, its class's fields and properties, and its callees' verdicts. The purity
+  stage can skip a routine only when none of those moved, so the pass must be able to say
+  which refs it moved -- not which refs it RE-READ: a re-indexed file re-adds every name it
+  declares, so a pass re-reads each `Create` / `Free` in the corpus and binds almost all of
+  them exactly as before.
+
+  The picture is taken by TEMP triggers that live for the length of one scoped pass and store
+  a row's FIRST old value (dl_pur_refs / dl_pur_edges / dl_pur_members). They watch the tables
+  rather than the pass's statements, so a stream added to the pass later is covered without
+  anyone remembering this unit. The inserts are written `INSERT ... SELECT ... WHERE NOT
+  EXISTS`, never OR IGNORE: a conflict clause on the statement that fires a trigger overrides
+  the trigger's own, so under `INSERT OR REPLACE INTO call_edges` an OR IGNORE would replace
+  the first old value with a later one. }
+procedure TSQLiteSymbolStore.DropPurityMoveTriggers;
+const
+  NAMES: array[0..6] of string = ('dl_pur_refs_u', 'dl_pur_edges_i', 'dl_pur_edges_d', 'dl_pur_edges_u',
+                                  'dl_pur_members_i', 'dl_pur_members_d', 'dl_pur_members_u');
+begin
+  for var N: string in NAMES do FConn.ExecSQL('DROP TRIGGER IF EXISTS temp.' + N);
+end;
+
+procedure TSQLiteSymbolStore.InstallPurityMoveTriggers;
+const
+  REFS_COLS = 'symbol_id, external_kind, external_target, receiver_text, enclosing_symbol_id, kind';
+begin
+  DropPurityMoveTriggers;
+  FConn.ExecSQL('CREATE TEMP TABLE IF NOT EXISTS dl_pur_refs (id INTEGER PRIMARY KEY, sid, xk, xt, rt, enc, k)');
+  FConn.ExecSQL('CREATE TEMP TABLE IF NOT EXISTS dl_pur_edges (ref_id INTEGER PRIMARY KEY, tgt)');
+  FConn.ExecSQL('CREATE TEMP TABLE IF NOT EXISTS dl_pur_members (ref_id INTEGER PRIMARY KEY, mem, mode)');
+  FConn.ExecSQL('DELETE FROM temp.dl_pur_refs');  // dl:ok sql-update-delete-without-where@9c67 -- REVIEWED 2026-11-19 (INCR18 step 4): empties this connection's own TEMP picture table before a pass refills it
+  FConn.ExecSQL('DELETE FROM temp.dl_pur_edges');  // dl:ok sql-update-delete-without-where@0277 -- REVIEWED 2026-11-19 (INCR18 step 4): empties this connection's own TEMP picture table before a pass refills it
+  FConn.ExecSQL('DELETE FROM temp.dl_pur_members');  // dl:ok sql-update-delete-without-where@e194 -- REVIEWED 2026-11-19 (INCR18 step 4): empties this connection's own TEMP picture table before a pass refills it
+  FConn.ExecSQL('CREATE TEMP TRIGGER dl_pur_refs_u AFTER UPDATE OF ' + REFS_COLS + ' ON refs BEGIN ' +
+                'INSERT INTO dl_pur_refs(id, sid, xk, xt, rt, enc, k) ' +
+                'SELECT OLD.id, OLD.symbol_id, OLD.external_kind, OLD.external_target, OLD.receiver_text, ' +
+                'OLD.enclosing_symbol_id, OLD.kind WHERE NOT EXISTS (SELECT 1 FROM dl_pur_refs WHERE id = OLD.id); END');
+  FConn.ExecSQL('CREATE TEMP TRIGGER dl_pur_edges_i BEFORE INSERT ON call_edges BEGIN ' +
+                'INSERT INTO dl_pur_edges(ref_id, tgt) ' +
+                'SELECT NEW.ref_id, (SELECT target_symbol_id FROM call_edges WHERE ref_id = NEW.ref_id LIMIT 1) ' +
+                'WHERE NOT EXISTS (SELECT 1 FROM dl_pur_edges WHERE ref_id = NEW.ref_id); END');
+  FConn.ExecSQL('CREATE TEMP TRIGGER dl_pur_edges_d AFTER DELETE ON call_edges BEGIN ' +
+                'INSERT INTO dl_pur_edges(ref_id, tgt) SELECT OLD.ref_id, OLD.target_symbol_id ' +
+                'WHERE NOT EXISTS (SELECT 1 FROM dl_pur_edges WHERE ref_id = OLD.ref_id); END');
+  FConn.ExecSQL('CREATE TEMP TRIGGER dl_pur_edges_u AFTER UPDATE OF target_symbol_id ON call_edges BEGIN ' +
+                'INSERT INTO dl_pur_edges(ref_id, tgt) SELECT OLD.ref_id, OLD.target_symbol_id ' +
+                'WHERE NOT EXISTS (SELECT 1 FROM dl_pur_edges WHERE ref_id = OLD.ref_id); END');
+  if not HasMemberAccesses then Exit;
+  FConn.ExecSQL('CREATE TEMP TRIGGER dl_pur_members_i BEFORE INSERT ON member_accesses BEGIN ' +
+                'INSERT INTO dl_pur_members(ref_id, mem, mode) ' +
+                'SELECT NEW.ref_id, (SELECT member_symbol_id FROM member_accesses WHERE ref_id = NEW.ref_id), ' +
+                '(SELECT mode FROM member_accesses WHERE ref_id = NEW.ref_id) ' +
+                'WHERE NOT EXISTS (SELECT 1 FROM dl_pur_members WHERE ref_id = NEW.ref_id); END');
+  FConn.ExecSQL('CREATE TEMP TRIGGER dl_pur_members_d AFTER DELETE ON member_accesses BEGIN ' +
+                'INSERT INTO dl_pur_members(ref_id, mem, mode) SELECT OLD.ref_id, OLD.member_symbol_id, OLD.mode ' +
+                'WHERE NOT EXISTS (SELECT 1 FROM dl_pur_members WHERE ref_id = OLD.ref_id); END');
+  FConn.ExecSQL('CREATE TEMP TRIGGER dl_pur_members_u AFTER UPDATE OF member_symbol_id, mode ON member_accesses BEGIN ' +
+                'INSERT INTO dl_pur_members(ref_id, mem, mode) SELECT OLD.ref_id, OLD.member_symbol_id, OLD.mode ' +
+                'WHERE NOT EXISTS (SELECT 1 FROM dl_pur_members WHERE ref_id = OLD.ref_id); END');
+end;
+
+{ Called by a scoped pass right before it commits: adds the pass's scope files, scope names,
+  the routines around every ref whose picture differs from the row now, and the old users
+  NoteScopeRemoval recorded, to the accumulated purity scope. `IS NOT` so NULL compares as a
+  value. A ref whose enclosing routine itself moved names both routines. }
+procedure TSQLiteSymbolStore.CollectPurityScope;
+var
+  Q: TFDQuery;
+begin
+  for var Fid: Int64 in FScopeFiles.Keys do FPurFiles.AddOrSetValue(Fid, True);
+  for var Id: Int64 in FScopeOldUsers.Keys do FPurEnclosing.AddOrSetValue(Id, True);
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT n FROM temp.dl_scope_names';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      FPurNames.AddOrSetValue(LowerCase(Q.Fields[0].AsString), True);
+      Q.Next;
+    end;
+    Q.Close;
+    var MovedSql: string:=
+      'SELECT r.enclosing_symbol_id FROM refs r JOIN temp.dl_pur_refs o ON o.id = r.id ' +
+      'WHERE r.enclosing_symbol_id IS NOT NULL AND (r.symbol_id IS NOT o.sid OR r.external_kind IS NOT o.xk ' +
+      '  OR r.external_target IS NOT o.xt OR r.receiver_text IS NOT o.rt OR r.enclosing_symbol_id IS NOT o.enc ' +
+      '  OR r.kind IS NOT o.k) ' +
+      'UNION SELECT o.enc FROM refs r JOIN temp.dl_pur_refs o ON o.id = r.id ' +
+      'WHERE o.enc IS NOT NULL AND r.enclosing_symbol_id IS NOT o.enc ' +
+      'UNION SELECT r.enclosing_symbol_id FROM temp.dl_pur_edges o JOIN refs r ON r.id = o.ref_id ' +
+      'WHERE r.enclosing_symbol_id IS NOT NULL ' +
+      '  AND o.tgt IS NOT (SELECT target_symbol_id FROM call_edges WHERE ref_id = o.ref_id LIMIT 1) ' +
+      { a routine whose body lies (partly) in a rewritten file it is not declared in -- an include }
+      'UNION SELECT r.enclosing_symbol_id FROM refs r ' +
+      'WHERE r.file_id IN (SELECT f FROM temp.dl_scope_files) AND r.enclosing_symbol_id IS NOT NULL';
+    if HasMemberAccesses then
+      MovedSql:= MovedSql +
+      ' UNION SELECT r.enclosing_symbol_id FROM temp.dl_pur_members o JOIN refs r ON r.id = o.ref_id ' +
+      'WHERE r.enclosing_symbol_id IS NOT NULL ' +
+      '  AND (o.mem IS NOT (SELECT member_symbol_id FROM member_accesses WHERE ref_id = o.ref_id) ' +
+      '    OR o.mode IS NOT (SELECT mode FROM member_accesses WHERE ref_id = o.ref_id))';
+    Q.SQL.Text:= MovedSql;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      FPurEnclosing.AddOrSetValue(Q.Fields[0].AsLargeInt, True);
+      Q.Next;
+    end;
+    Q.Close;
+  finally
+    Q.Free;
+  end;
+end;
+
+procedure TSQLiteSymbolStore.ResetPurityScope;
+begin
+  FPurState:= PUR_NONE;
+  FPurFiles.Clear;
+  FPurNames.Clear;
+  FPurEnclosing.Clear;
+end;
+
+function TSQLiteSymbolStore.LastCallsScope(out AScope: TCallsScope): Boolean;
+begin
+  AScope:= Default(TCallsScope);
+  Result:= (FPurState = PUR_SCOPED) and not FPurPending;
+  if not Result then Exit;
+  AScope.FileIds     := FPurFiles.Keys.ToArray;
+  AScope.Names       := FPurNames.Keys.ToArray;
+  AScope.EnclosingIds:= FPurEnclosing.Keys.ToArray;
+end;
+
+function TSQLiteSymbolStore.CallerRoutinesOf(ATargetId: Int64): TArray<Int64>;
+var
+  Q   : TFDQuery;
+  List: TList<Int64>;
+begin
+  List:= TList<Int64>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    { DumpCallerTargets' own predicate, for one target. }
+    Q.SQL.Text:= 'SELECT DISTINCT r.enclosing_symbol_id FROM call_edges e ' +
+                 'JOIN refs r ON r.id = e.ref_id ' +
+                 'WHERE e.target_symbol_id = :t AND r.enclosing_symbol_id IS NOT NULL';
+    Q.ParamByName('t').AsLargeInt:= ATargetId;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      List.Add(Q.Fields[0].AsLargeInt);
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
+function TSQLiteSymbolStore.DumpCallerTargets: TArray<TCallerTarget>;
+var
+  Q   : TFDQuery;
+  List: TList<TCallerTarget>;
+  Row : TCallerTarget;
+begin
+  List:= TList<TCallerTarget>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT DISTINCT r.enclosing_symbol_id, e.target_symbol_id FROM call_edges e ' +
+                 'JOIN refs r ON r.id = e.ref_id ' +
+                 'WHERE r.enclosing_symbol_id IS NOT NULL AND e.target_symbol_id <> 0';
+    Q.Open;
+    while not Q.Eof do
+    begin
+      Row.CallerId:= Q.Fields[0].AsLargeInt;
+      Row.TargetId:= Q.Fields[1].AsLargeInt;
+      List.Add(Row);
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
+{ The integer ids as an SQL IN-list body; '' for an empty list. }
+function PurityIdList(const AIds: TArray<Int64>): string;
+var
+  SB: TStringBuilder;
+begin
+  SB:= TStringBuilder.Create;
+  try
+    for var I: Integer:= 0 to High(AIds) do
+    begin
+      if I > 0 then SB.Append(',');
+      SB.Append(AIds[I]);
+    end;
+    Result:= SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.DumpCallEdgesInFiles(const AFileIds: TArray<Int64>): TArray<TCallEdge>;
+var
+  Q   : TFDQuery;
+  List: TList<TCallEdge>;
+  E   : TCallEdge;
+begin
+  Result:= nil;
+  if Length(AFileIds) = 0 then Exit;
+  List:= TList<TCallEdge>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    { DumpAllCallEdges' columns and row reading; the ids are integers this unit formats. }
+    Q.SQL.Text:= 'SELECT ref_id, target_symbol_id, confidence, receiver_type_symbol_id FROM call_edges ' +
+                 'WHERE ref_id IN (SELECT id FROM refs WHERE file_id IN (' + PurityIdList(AFileIds) + ')) ORDER BY ref_id';
+    Q.Open;
+    var RefFld   : TField:= Q.FieldByName('ref_id'                 );
+    var TargetFld: TField:= Q.FieldByName('target_symbol_id'       );
+    var ConfFld  : TField:= Q.FieldByName('confidence'             );
+    var RcvFld   : TField:= Q.FieldByName('receiver_type_symbol_id');
+    while not Q.Eof do
+    begin
+      E:= Default(TCallEdge);
+      E.RefId         := RefFld   .AsLargeInt;
+      E.TargetSymbolId:= TargetFld.AsLargeInt;
+      E.Confidence    := ConfFld  .AsString;
+      if not RcvFld.IsNull then E.ReceiverTypeSymbolId:= RcvFld.AsLargeInt;
+      List.Add(E);
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
+function TSQLiteSymbolStore.DumpMemberAccessesInFiles(const AFileIds: TArray<Int64>): TArray<TCallEdge>;
+var
+  Q   : TFDQuery;
+  List: TList<TCallEdge>;
+  E   : TCallEdge;
+begin
+  Result:= nil;
+  if (Length(AFileIds) = 0) or not HasMemberAccesses then Exit;  // dl:ok duplicate-code@d05b -- REVIEWED 2026-11-19 (INCR18 step 4): the file-scoped twin of DumpAllCallEdges / DumpAllMemberAccesses and of its sibling above -- same reader shape over different columns, kept beside each other so the column lists stay visible
+  List:= TList<TCallEdge>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    { DumpAllMemberAccesses' columns and row reading. }
+    Q.SQL.Text:= 'SELECT ref_id, member_symbol_id, mode, accessor_symbol_id, accessor_kind FROM member_accesses ' +
+                 'WHERE ref_id IN (SELECT id FROM refs WHERE file_id IN (' + PurityIdList(AFileIds) + '))';
+    Q.Open;
+    var RefFld     : TField:= Q.FieldByName('ref_id'            );
+    var MemberFld  : TField:= Q.FieldByName('member_symbol_id'  );  // dl:ok duplicate-code@2113 -- REVIEWED 2026-11-19 (INCR18 step 4): the file-scoped twin of DumpAllCallEdges / DumpAllMemberAccesses and of its sibling above -- same reader shape over different columns, kept beside each other so the column lists stay visible
+    var ModeFld    : TField:= Q.FieldByName('mode'              );
+    var AccessorFld: TField:= Q.FieldByName('accessor_symbol_id');
+    var KindFld    : TField:= Q.FieldByName('accessor_kind'     );
+    while not Q.Eof do
+    begin
+      E:= Default(TCallEdge);
+      E.RefId         := RefFld   .AsLargeInt;
+      E.TargetSymbolId:= MemberFld.AsLargeInt;
+      E.MemberMode    := ModeFld  .AsString;
+      if not AccessorFld.IsNull then E.AccessorSymbolId:= AccessorFld.AsLargeInt;
+      E.AccessorKind  := KindFld  .AsString;
+      List.Add(E);
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
 
 function TSQLiteSymbolStore.CachedQuery(const ASql: string; out AOwned: Boolean): TFDQuery;
 begin
@@ -12308,8 +13032,8 @@ begin
   FFtsTargeted:= False; { the DELETE below keeps no receipt, so the end must rebuild }
   FConn.StartTransaction;
   try
-    FConn.ExecSQL('DELETE FROM string_literals'); { FTS5 sync triggers fire unless deferred above }
-    FConn.ExecSQL('DELETE FROM files');           { cascades everything else    }
+    FConn.ExecSQL('DELETE FROM string_literals'); { FTS5 sync triggers fire unless deferred above }  // dl:ok sql-update-delete-without-where@4ebf -- REVIEWED 2026-11-19 SLZ-MARK: intentional full clear of a derived table inside the rebuild transaction
+    FConn.ExecSQL('DELETE FROM files');           { cascades everything else    }  // dl:ok sql-update-delete-without-where@f038 -- REVIEWED 2026-11-19 SLZ-MARK: intentional full clear of a derived table inside the rebuild transaction
     SetMetaValue(REBUILD_IN_PROGRESS_META_KEY, '1'); { same commit as the clear }
     FConn.Commit;
   except
@@ -13116,7 +13840,7 @@ begin
   if Result >= 0 then Exit;
 
   WantFull:= '';
-  try WantFull:= TPath.GetFullPath(APath); except WantFull:= APath; end;
+  try WantFull:= TPath.GetFullPath(APath); except WantFull:= APath; end;  // dl:ok bare-except@7253 -- REVIEWED 2026-11-19 SLZ-MARK: probe or read on an old, absent or locked DB; the handler answers with the documented fallback, nothing is lost silently
   if not SameText(WantFull, APath) then
   begin
     Result:= FindFileIdByPath(WantFull);
@@ -13145,7 +13869,7 @@ begin
         Inc(CandCount);
         OnlyId:= Q.FieldByName('id').AsLargeInt;
         CandFull:= '';
-        try CandFull:= TPath.GetFullPath(StoredPath); except CandFull:= StoredPath; end;
+        try CandFull:= TPath.GetFullPath(StoredPath); except CandFull:= StoredPath; end;  // dl:ok bare-except@d83d -- REVIEWED 2026-11-19 SLZ-MARK: probe or read on an old, absent or locked DB; the handler answers with the documented fallback, nothing is lost silently
         if (MatchId < 0) and SameText(CandFull, WantFull) then MatchId:= OnlyId;
       end;
       Q.Next;
@@ -13677,7 +14401,7 @@ begin
   try
     Result:= (not ProbeExists('SELECT 1 FROM call_edges LIMIT 1'))
              and ProbeExists('SELECT 1 FROM refs WHERE ' + CallSiteRefKindSql('refs') + ' LIMIT 1');
-  except
+  except  // dl:ok bare-except@5bb3 -- REVIEWED 2026-11-19 SLZ-MARK: probe or read on an old, absent or locked DB; the handler answers with the documented fallback, nothing is lost silently
     { call_edges absent altogether, or the probe failed for any other reason. We
       cannot show the edges are intact, and the cost of being wrong is asymmetric
       -- a needless rebuild costs seconds, a skipped one leaves a permanently
@@ -13957,6 +14681,10 @@ begin
   if not HasEffectCols then
     raise EInvalidOperation.Create('PutEffectFacts: symbol_facts has no effect_* columns -- ' +
                                    'Migrate has not run on this store (read-only open?)');
+  { INCR18 step 4: the verdicts are current from here on, so the scope the passes accumulated
+    is consumed (also when the scope turned out to hold no routine at all). A write that fails
+    below leaves PUR_NONE, which the next purity run reads as "re-derive everything". }
+  ResetPurityScope;
   if Length(ARows) = 0 then Exit;
   Q:= TFDQuery.Create(nil);
   try
@@ -13981,7 +14709,7 @@ begin
         Q.ExecSQL;
       end;
       FConn.Commit;
-    except  // dl:ok bare-except@4bef -- rollback-then-reraise: every exception must undo the partial write, and none is swallowed
+    except
       FConn.Rollback;
       raise;
     end;
@@ -14317,7 +15045,7 @@ begin
       finally
         Ins.Free;
       end; // try
-    except  // dl:ok bare-except@4bef -- rollback then RE-RAISE: nothing is swallowed, any failure must undo the partial write
+    except
       FConn.Rollback;
       raise;
     end;
@@ -15615,7 +16343,7 @@ begin
       Q.ParamByName('id' ).AsLargeInt:= ASymbolId;
       Q.ExecSQL;
       Result:= Q.RowsAffected > 0;
-    except
+    except  // dl:ok bare-except@79dc -- REVIEWED 2026-11-19 SLZ-MARK: probe or read on an old, absent or locked DB; the handler answers with the documented fallback, nothing is lost silently
       Result:= False; // best-effort memoization: a query must never fail on write error
     end;
   finally
@@ -15804,7 +16532,7 @@ end; // function
 
 procedure TSQLiteSymbolStore.ClearCompilerFindings;
 begin
-  FConn.ExecSQL('DELETE FROM compiler_findings');
+  FConn.ExecSQL('DELETE FROM compiler_findings');  // dl:ok sql-update-delete-without-where@ff60 -- REVIEWED 2026-11-19 SLZ-MARK: intentional full clear of a derived table inside the rebuild transaction
 end;
 
 procedure TSQLiteSymbolStore.InsertCompilerFinding( const AFinding: TCompilerFinding);
@@ -16962,7 +17690,7 @@ begin
     Q.SQL.Text  := SQL;
     try
       Q.Open;
-    except
+    except  // dl:ok bare-except@6b17, try-except-swallowed@6b17 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
       { An index predating unit_uses.target_file_id answers nothing rather than
         failing the run -- tolerable only because the rule is opt-in, so an
         empty result is read by someone who deliberately asked and can reindex. }
@@ -17082,7 +17810,7 @@ end; // function
 
 // The shared reader behind FindDuplicateGlobalDecls and FindGlobalDeclSites:
 // runs ASQL, which must project nm/kd/fid/ln/cl/sg, into site rows.
-function TSQLiteSymbolStore.ReadDeclSiteRows(const ASQL: string): TArray<TDuplicateDeclSite>;  // dl:ok duplicate-code@f247 -- the unit's house reader shape (TFDQuery open / row loop / close), shared with FindUsesGlobalCensus and every other typed reader here; a generic reader would need a TFunc<TFDQuery, T> per record type, which is more code than the duplication it removes
+function TSQLiteSymbolStore.ReadDeclSiteRows(const ASQL: string): TArray<TDuplicateDeclSite>;
 var
   Q   : TFDQuery                   ;
   List: TList<TDuplicateDeclSite>  ;
@@ -17101,8 +17829,12 @@ begin
         down. Unlike the sibling rule this one is ON by default, so a silent
         empty result is NOT read by someone who deliberately asked -- which is
         why every column it touches (kind, section, parent_id, signature,
-        start_col) was verified present in current DBs before it shipped. }
-      Exit;
+        start_col) was verified present in current DBs before it shipped.
+        ONLY the missing-column error means "too old"; a locked database or an
+        I/O error must surface, or a failed run would look like a clean one. }
+      on E: Exception do
+        if Pos('no such column', LowerCase(E.Message)) > 0 then Exit
+        else raise;
     end;
     try
       while not Q.Eof do
@@ -17273,7 +18005,7 @@ begin
     Q.SQL.Text  := SQL;
     try
       Q.Open;
-    except
+    except  // dl:ok try-except-swallowed@0fdd -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
       { An index predating unit_uses.target_file_id answers nothing rather than
         taking lint-all down with it. That reports "no edges", which is
         indistinguishable from a project that genuinely has none -- tolerable
@@ -17324,7 +18056,7 @@ begin
       if Sift then
         try
           if HasSecondLink(E) then Continue;
-        except
+        except  // dl:ok try-except-swallowed@27fa, bare-except@27fa -- REVIEWED 2026-11-19 SLZ-MARK: probe or read on an old, absent or locked DB; the handler answers with the documented fallback, nothing is lost silently
           Sift:= False;
         end;
       Kept.Add(E);
@@ -17573,7 +18305,7 @@ begin
         so no other producer's work is being discarded. The transaction is what
         makes the clear safe: a failure rolls back to the previous values rather
         than leaving the column empty. }
-      FConn.ExecSQL('UPDATE unit_uses SET target_file_id = NULL');
+      FConn.ExecSQL('UPDATE unit_uses SET target_file_id = NULL');  // dl:ok sql-update-delete-without-where@36f0 -- REVIEWED 2026-11-19 SLZ-MARK: intentional full clear of a derived table inside the rebuild transaction
       for i:= 0 to UsedFulls.Count - 1 do
       begin
         Stem:= UsedFulls[i];
@@ -18068,7 +18800,7 @@ begin
       CLIENT, 2 on SERVER, 3 in this repo. }
     Q.SQL.Text:= 'SELECT id, file_id, heritage, COALESCE(parent_id, 0) AS parent_id FROM symbols ' +
                  'WHERE kind IN (''class'',''interface'',''type'',''classref'') AND heritage IS NOT NULL AND heritage <> ''''';   { E1 (2026-10-26): a `class of X` row carries X as heritage -> one ordinal-0 row }
-      FConn.ExecSQL('DELETE FROM type_ancestors');
+      FConn.ExecSQL('DELETE FROM type_ancestors');  // dl:ok sql-update-delete-without-where@d787 -- REVIEWED 2026-11-19 SLZ-MARK: intentional full clear of a derived table inside the rebuild transaction
       Q.Open;
       while not Q.Eof do
       begin
@@ -18252,7 +18984,7 @@ begin
     QIns.Params.ParamByName('tfid').DataType:= ftLargeint;
     Q.SQL.Text:= 'SELECT id, file_id, kind, heritage FROM symbols ' +
                  'WHERE is_helper = 1 AND heritage IS NOT NULL AND heritage <> ''''';
-      FConn.ExecSQL('DELETE FROM type_helpers');
+      FConn.ExecSQL('DELETE FROM type_helpers');  // dl:ok sql-update-delete-without-where@d821 -- REVIEWED 2026-11-19 SLZ-MARK: intentional full clear of a derived table inside the rebuild transaction
       Q.Open;
       while not Q.Eof do
       begin
@@ -19044,6 +19776,33 @@ begin
   end;
 end;
 
+function TSQLiteSymbolStore.RebuildInitDeps: Int64;
+begin
+  FConn.ExecSQL('DELETE FROM init_deps');  // dl:ok sql-update-delete-without-where@ae00 -- REVIEWED 2026-11-19 INITDEP: the table is rebuilt WHOLE by this pass, in its transaction
+  { reach = the section, then every same-file routine a reached ref binds to (UNION dedupes, so a
+    recursive routine terminates); a reached ref bound to another file names that file's unit, an
+    unbound one that is not an intrinsic names '?'. }
+  Result:= FConn.ExecSQL(
+    'WITH RECURSIVE reach(unit_id, file_id, sym_id) AS (' +
+    '  SELECT u.id, u.file_id, s.id FROM symbols s JOIN symbols u ON u.id = s.parent_id' +
+    '   WHERE s.kind = ''initialization'' AND u.kind = ''unit''' +
+    '  UNION' +
+    '  SELECT reach.unit_id, reach.file_id, t.id FROM reach' +
+    '    JOIN refs r ON r.enclosing_symbol_id = reach.sym_id' +
+    '    JOIN symbols t ON t.id = r.symbol_id' +
+    '   WHERE t.file_id = reach.file_id' +
+    '     AND t.kind IN (''procedure'', ''function'', ''method'', ''constructor'', ''destructor''))' +
+    ' INSERT INTO init_deps (unit_symbol_id, target_unit, via_name)' +
+    ' SELECT reach.unit_id, COALESCE(tu.name, ''?''), MIN(r.name_text)' +
+    '   FROM reach JOIN refs r ON r.enclosing_symbol_id = reach.sym_id' +
+    '   LEFT JOIN symbols t  ON t.id = r.symbol_id' +
+    '   LEFT JOIN symbols tu ON tu.file_id = t.file_id AND tu.kind = ''unit''' +
+    '  WHERE (t.id IS NULL AND LOWER(r.name_text) NOT IN ' + INIT_DEPS_INTRINSICS_SQL + ')' +
+    '     OR (t.id IS NOT NULL AND t.file_id <> reach.file_id)' +
+    '  GROUP BY reach.unit_id, COALESCE(tu.name, ''?'')');
+  SetMetaValue(INIT_DEPS_META_KEY, INIT_DEPS_FORMAT);
+end;
+
 procedure TSQLiteSymbolStore.WidenDerivedScope(const AScopeWhere: string;
   out ATypesWhere, AReceiversWhere: string);
 const
@@ -19706,7 +20465,7 @@ begin
                 [FScopeTypesBefore.Count, FScopeTypesAfter.Count]));
 end;
 
-procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);  // dl:ok method-too-long@a1a9, cyclomatic-complexity@b54e, cognitive-complexity@fbce -- (1.51.1 INC2 added the ref_host_bindings deletes and one write call): one transaction over one resolver with shared maps; a split is its own change with its own re-resolve measurement, and lane facts (1.44) added only two calls, three counters and two log lines here (REVIEWED 2026-11-18 INT13: +1.52 EXTGAPS2 exports ref kind / var-out global writes -> 816 lines, cc 71, cog 117; still the one-transaction resolver; the split is backlog, not a sweep fix)
+procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);
 { v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
   (wipe the table, resolve in memory, batch-write in one transaction). Builds one
   TCallResolver (its name/scope maps cost O(symbols) to build ONCE), then streams
@@ -19823,6 +20582,10 @@ begin
   if AClearFirst and ((DeclineWhy = '') or (DeclineWhy = RESOLVE_REASON_NO_WRITES)) then
     DeclineWhy:= 'a full edge clear was asked for (a stale resolver or --resolve-only)';
   Scoped:= DeclineWhy = '';
+  { INCR18 step 4: until this pass commits SCOPED, the purity stage must assume anything moved
+    (a pass that raises leaves PUR_WHOLE). Set back below, after the commit. }
+  var PurPrev: Integer:= FPurState;
+  FPurState:= PUR_WHOLE;
   { ANNOUNCED BEFORE THE PASS, NOT AFTER IT. The completion lines at the bottom
     of this routine already say which shape ran -- but they print when it is
     OVER, and the whole-database shape runs for ~37 minutes on a 2 GB index. A
@@ -19872,6 +20635,10 @@ begin
   if Scoped then WidenScopeThroughRemovedTypes;
   if Scoped then ScopeWhere:= MaterializeResolveScope
   else ScopeWhere:= '';
+  { INCR18 step 4: from here to the commit, every binding this pass writes keeps its first old
+    value, so CollectPurityScope can name the refs that MOVED rather than the refs re-read. }
+  if Scoped then InstallPurityMoveTriggers
+  else DropPurityMoveTriggers;
   TClear  := ResolveSecs(T0);
   DummyTok:= Default(TFileTxToken);
   Written := 0;
@@ -19899,7 +20666,7 @@ begin
   TReadBound     := 0;
   Streamed:= 0;
   Resolver:= TCallResolver.Create(Self, AExtraStores); // prepare name/scope maps ONCE
-  except // dl:ok bare-except@4bef -- rollback and RE-RAISE: the lock taken above must not outlive a failed set-up
+  except
     FConn.Rollback;
     raise;
   end;
@@ -19913,8 +20680,6 @@ begin
   QIsRoutine:= TFDQuery.Create(nil);
   QTwin     := TFDQuery.Create(nil);
   QStale    := TFDQuery.Create(nil);
-  StaleFileCount:= 0;
-  StaleWhere:= '';
   try
     try { item 12: the rollback frame starts here, so it also covers the prescan above the DELETE }
     Q.Connection:= FConn;
@@ -20324,7 +21089,7 @@ begin
         if StaleWhere <> '' then WtSuffix:= WtSuffix + ' AND (' + StaleWhere + ')';
         FConn.ExecSQL('UPDATE refs SET symbol_id = (SELECT r2.symbol_id FROM refs r2 WHERE r2.file_id = refs.file_id ' +
           'AND r2.start_line = refs.start_line AND r2.start_col = refs.start_col AND r2.kind IN (''read'', ''member-access'') ' +
-          'AND r2.symbol_id IS NOT NULL ORDER BY r2.id LIMIT 1) WHERE refs.kind = ''' + REF_KIND_WRITE_THROUGH + '''' + WtSuffix);  // dl:ok sql-injection-concat -- REVIEWED 2026-11-17 (1.52 INT): WtSuffix is SQL this pass BUILT (the same ScopeWhere / StaleWhere predicates ResolveLibraryReadRefs appends), never user text
+          'AND r2.symbol_id IS NOT NULL ORDER BY r2.id LIMIT 1) WHERE refs.kind = ''' + REF_KIND_WRITE_THROUGH + '''' + WtSuffix);
       end;
       { 150-RS2 (2): after every member_accesses writer, before the derived streams. }
       var ArgCandidates, ArgStored: Int64;
@@ -20355,6 +21120,14 @@ begin
       var HostRows: Integer:= WriteRefHostBindings(Resolver.HostBindings);
       if HostRows > 0 then
         ResolveLog(Format('calls      include hosts: %d per-host binding row(s) written for refs in multi-host includes', [HostRows]));
+      { 1.52.1 INITDEP: after every binding stream -- it reads what they bound. }
+      ResolveLog(Format('calls      init-deps: %d (unit, reached unit) row(s) written', [RebuildInitDeps]));
+      { INCR18 step 4: the last write of the pass is behind us -- read what moved, then stop watching. }
+      if Scoped then
+      begin
+        CollectPurityScope;
+        DropPurityMoveTriggers;
+      end;
       FConn.Commit;
     except
       on E: Exception do
@@ -20423,6 +21196,10 @@ begin
         raise;
       end;
     end;
+    { INCR18 step 4: committed. Scoped stays scoped only when every pass since the last purity
+      write was scoped; either way the database now matches what the passes recorded. }
+    if Scoped and (PurPrev <> PUR_WHOLE) then FPurState:= PUR_SCOPED;
+    FPurPending:= False;
     if Scoped then
       ResolveLog(Format('calls      %d edge(s) from %d affected call-site ref(s) in %d changed file(s)  [%.1fs, clear %.1fs, maps %.1fs]',
         [Written, Streamed, FScopeFiles.Count, ResolveSecs(T0), TClear, TMaps]))

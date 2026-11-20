@@ -255,7 +255,7 @@ end;
 
 // --defer: every routine of the file that touches a global the section writes, outside the section and finalization lines
 // [pSkipFrom, pSkipTo]. False with pKind / pReason set on a use the call cannot be put in front of.
-function FindEntryPoints(pConn: TFDConnection; pSource: TMaskedSource; const pPath: string; const pGlobals: TArray<TSectionGlobal>;  // dl:ok too-many-parameters@0563, deep-nesting@28ee -- the section's read-only context plus three outs; the nesting is one query loop per global, kept in one routine so each refusal exits with its reason
+function FindEntryPoints(pConn: TFDConnection; pSource: TMaskedSource; const pPath: string; const pGlobals: TArray<TSectionGlobal>;  // dl:ok too-many-parameters@0563 -- the section's read-only context plus three outs; the nesting is one query loop per global, kept in one routine so each refusal exits with its reason
   pSkipFrom, pSkipTo: Integer; out pPoints: TArray<TEntryPoint>; out pKind, pReason: string): Boolean;
 const
   CLineFeed = 10;   // the byte that ends a line in PF.Src

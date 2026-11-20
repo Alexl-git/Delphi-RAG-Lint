@@ -1303,7 +1303,7 @@ begin
   FMultiDecl.Free;
   FByName.Free;
   FVars.Free;
-  inherited; // dl:ok inherited-bare@246d -- the destructor idiom; TObject.Destroy is the intended ancestor
+  inherited;
 end;
 
 function TRoutineVarTable.Count: Integer; begin Result := FVars.Count; end;
@@ -1434,7 +1434,7 @@ var
     be a local or a PARAMETER, and a parameter is admitted deliberately: the
     storage really is shared, and a parameter is assigned on entry, so aliasing
     to it removes a false positive rather than creating a false negative. }
-  function AbsoluteTargetIdx(const ADeclVar: TTSNode; out ALimit: Integer): Integer;
+  function AbsoluteTargetIdx(const ADeclVar: TTSNode; var ALimit: Integer): Integer;
   var K: Integer; C, Abs_, Tgt: TTSNode;
   begin
     Result := -1;

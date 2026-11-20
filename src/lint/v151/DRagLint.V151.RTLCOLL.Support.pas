@@ -381,8 +381,6 @@ begin
   except
     on E: EInOutError do Result:= '';
     on E: EFOpenError do Result:= '';
-    on E: EDirectoryNotFoundException do Result:= '';
-    on E: EFileNotFoundException do Result:= '';
     on E: EArgumentException do Result:= '';
   end;
 end;

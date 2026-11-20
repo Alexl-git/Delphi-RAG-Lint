@@ -176,6 +176,7 @@ var
     StemToGlobal:= TDictionary<string, Integer>.Create;
     Edges   := TDictionary<Integer, TArray<TUsesEdge>>.Create;
     PerStore:= TDictionary<Integer, TList <TUsesEdge>>.Create;
+    try
 
     { Step 1: gather every file across every store, build stem -> global index. }
     for StoreIdx:= 0 to High(Stores) do
@@ -264,8 +265,10 @@ var
     end; // try
 
     for Kv in PerStore do Edges.AddOrSetValue(Kv.Key, Kv.Value.ToArray);
-    for Kv in PerStore do Kv.Value.Free;
-    PerStore.Free;
+    finally
+      for Kv in PerStore do Kv.Value.Free;
+      PerStore.Free;
+    end; // try
   end; // procedure
 
   procedure EmitCsvHeader;

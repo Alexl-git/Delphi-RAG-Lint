@@ -4273,6 +4273,7 @@ var
   PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
   Locals  : TDictionary<string, Boolean>; { the current routine's declared local var names }
+  Handed  : TDictionary<string, Boolean>; { locals the routine hands off: a call argument or an assignment source }
 
   function NodeStr(const N: TTSNode): string;
   var
@@ -4283,6 +4284,70 @@ var
     S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
+  end;
+
+  { Src[AFrom..ATo-1] as text; '' when the range is outside the buffer. }
+  function SrcSpan(AFrom, ATo: Integer): string;
+  begin
+    Result:= '';
+    if (AFrom < 0) or (ATo > Length(Src)) or (AFrom >= ATo) then Exit;
+    Result:= TEncoding.UTF8.GetString(Src, AFrom, ATo - AFrom);
+  end;
+
+  { SLZ-RULE1: True when only whitespace and ';' lie between AFrom and ATo -- the
+    Free is the very next statement after the Create, so nothing between can raise. }
+  function OnlySeparators(AFrom, ATo: Integer): Boolean;
+  begin
+    Result:= (AFrom < ATo) and (Trim(SrcSpan(AFrom, ATo).Replace(';', '')) = '');
+  end;
+
+  { SLZ-RULE1: True when the statement after byte AFrom is 'AVar := nil'. }
+  function NilAssignFollows(AFrom: Integer; const AVar: string): Boolean;
+  const
+    NIL_TAIL_BYTES = 256; { an 'X := nil' statement fits easily }
+  begin
+    Result:= TRegEx.IsMatch(SrcSpan(AFrom, if AFrom + NIL_TAIL_BYTES < Length(Src) then AFrom + NIL_TAIL_BYTES else Length(Src)),
+      '\A[\s;]*' + TRegEx.Escape(AVar) + '\s*:=\s*nil\b', [roIgnoreCase]);
+  end;
+
+  { A constructed local the rule tracks (never Result). }
+  function Tracked(const AVar: string; AConstructed: TDictionary<string, Integer>): Boolean;
+  begin
+    Result:= (AVar <> 'result') and Locals.ContainsKey(AVar) and AConstructed.ContainsKey(AVar);
+  end;
+
+  { SLZ-RULE1: the three ownership shapes that are not an unprotected Free. }
+  function OwnershipExempt(const AFree: TTSNode; const AVar: string; AInTry, AInBranch: Boolean; AConstructedEnd: Integer): Boolean;
+  begin
+    Result:= AInTry and NilAssignFollows(Integer(AFree.EndByte), AVar);
+    Result:= Result or (AInBranch and Handed.ContainsKey(AVar));
+    Result:= Result or OnlySeparators(AConstructedEnd, Integer(AFree.StartByte));
+  end;
+
+  { SLZ-RULE1: every local the routine passes as a call argument (FreeAndNil /
+    Assigned excepted) or assigns to something else -- a possible ownership
+    hand-off (EnumMems.Add(En, Members), Result := L). }
+  procedure CollectHanded(const N: TTSNode);
+  var
+    I      : Integer;
+    Ent, Ar: TTSNode;
+    Rhs    : TTSNode;
+  begin
+    if N.IsNull or (N.NodeType = 'defProc') then Exit;
+    if N.NodeType = 'exprCall' then
+    begin
+      Ent:= N.ChildByField('entity');
+      Ar := N.ChildByField('args');
+      if (not Ar.IsNull) and not ((not Ent.IsNull) and (Ent.NodeType = 'identifier') and (SameText(NodeStr(Ent), 'FreeAndNil') or SameText(NodeStr(Ent), 'Assigned'))) then
+        for I:= 0 to Ar.NamedChildCount - 1 do
+          if Ar.NamedChild(I).NodeType = 'identifier' then Handed.AddOrSetValue(LowerCase(NodeStr(Ar.NamedChild(I))), True);
+    end
+    else if N.NodeType = 'assignment' then
+    begin
+      Rhs:= N.ChildByField('rhs');
+      if (not Rhs.IsNull) and (Rhs.NodeType = 'identifier') then Handed.AddOrSetValue(LowerCase(NodeStr(Rhs)), True);
+    end;
+    for I:= 0 to N.NamedChildCount - 1 do CollectHanded(N.NamedChild(I));
   end;
 
   { 'X := <something>.Create[...]' (paren or no-paren) -> returns lowercased X. }
@@ -4378,19 +4443,26 @@ var
     end;
   end;
 
-  procedure WalkBody(const N: TTSNode; AInFinally: Boolean; AConstructed: TDictionary<string, Boolean>);
+  { AConstructed maps a constructed local to the END byte of its construction
+    statement. SLZ-RULE1 2026-11-19 exempts three ownership shapes (self-LoopZero,
+    5 of 7 findings false): Free + 'X := nil' inside a try (the enclosing try owns
+    X, FormsMap:960); a Free on an if/case branch of a routine that elsewhere hands
+    X off (AstChecks:3122/5591); and Create; Free with nothing between (MigrateDbs:85). }
+  procedure WalkBody(const N: TTSNode; AInFinally, AInTry, AInBranch: Boolean; AConstructed: TDictionary<string, Integer>);
   var
     I  : Integer    ;
     V  : string     ;
     Lf : Boolean    ;
+    Br : Boolean    ;
     C  : TTSNode    ;
     P  : TTSPoint   ;
     F  : TLintFinding;
   begin
     if N.IsNull or (Findings.Count >= 200) then Exit;
     if N.NodeType = 'defProc' then Exit; { nested routine handled separately }
-    if (N.NodeType = 'assignment') and IsConstruction(N, V) then AConstructed.AddOrSetValue(V, True)
-    else if (not AInFinally) and IsFree(N, V) and (V <> 'result') and Locals.ContainsKey(V) and AConstructed.ContainsKey(V) then
+    if (N.NodeType = 'assignment') and IsConstruction(N, V) then AConstructed.AddOrSetValue(V, Integer(N.EndByte))
+    else if (not AInFinally) and IsFree(N, V) and Tracked(V, AConstructed)
+      and not OwnershipExempt(N, V, AInTry, AInBranch, AConstructed[V]) then
     begin
       P:= N.StartPoint;
       F:= Default(TLintFinding);
@@ -4413,18 +4485,21 @@ var
         { both finally AND except are protected/cleanup regions -- a Free there is
           not an unprotected leak (FP-7: free-in-except then re-raise is the idiom). }
         if (C.NodeType = 'kFinally') or (C.NodeType = 'kExcept') then Lf:= True;
-        WalkBody(C, AInFinally or Lf, AConstructed);
+        WalkBody(C, AInFinally or Lf, True, AInBranch, AConstructed);
       end;
     end
     else
-      for I:= 0 to N.ChildCount - 1 do WalkBody(N.Child(I), AInFinally, AConstructed);
+    begin
+      Br:= AInBranch or (N.NodeType = 'if') or (N.NodeType = 'ifElse') or (N.NodeType = 'case') or (N.NodeType = 'caseCase');
+      for I:= 0 to N.ChildCount - 1 do WalkBody(N.Child(I), AInFinally, AInTry, Br, AConstructed);
+    end;
   end; // procedure
 
   procedure VisitProcs(const N: TTSNode);
   var
     I   : Integer                    ;
     Body: TTSNode                    ;
-    Con : TDictionary<string, Boolean>;
+    Con : TDictionary<string, Integer>;
   begin
     if N.IsNull then Exit;
     if N.NodeType = 'defProc' then
@@ -4432,14 +4507,17 @@ var
       Body:= N.ChildByField('body');
       if not Body.IsNull then
       begin
-        Con   := TDictionary<string, Boolean>.Create;
+        Con   := TDictionary<string, Integer>.Create;
         Locals:= TDictionary<string, Boolean>.Create;
+        Handed:= TDictionary<string, Boolean>.Create;
         try
           CollectLocals(N, Locals);
-          WalkBody(Body, False, Con);
+          CollectHanded(Body);
+          WalkBody(Body, False, False, False, Con);
         finally
           Con.Free;
           Locals.Free;
+          Handed.Free;
         end;
       end;
     end;

@@ -238,7 +238,7 @@ begin
       DescRows:= DescRows + [NewTypeRow(Lookup, D, '', Collisions, Unlocatable)];
     Dt:= DisclosureText(DTop.HiddenRows, 0, 'descendants');
     if Dt <> '' then
-      DescRows:= DescRows + [NoteRow(Dt)];  // dl:ok duplicate-code@a849 -- REVIEWED 2026-10-16: the row-list tail mirrors the script own repetition between the ancestors and descendants blocks (decision F9, precedent bdd013e3)
+      DescRows:= DescRows + [NoteRow(Dt)];
 
     { ---- 6. dot ---- }
     var Sb:= TStringBuilder.Create;

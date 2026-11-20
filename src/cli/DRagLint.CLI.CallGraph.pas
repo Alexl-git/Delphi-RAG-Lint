@@ -347,6 +347,26 @@ begin
   end; // for R
 end;
 
+/// <summary>The routine-kind symbols (procedure / function / method / constructor / destructor)
+/// whose bare name is AName -- find-callees --name's target set, the find-callers bare-name rule.</summary>
+/// <param name="AStore">The open store to search.</param>
+/// <param name="AName">The bare routine name, case-insensitive.</param>
+/// <returns>Every matching routine, in store order; empty when none.</returns>
+function RoutinesOfBareName(const AStore: ISymbolStore; const AName: string): TArray<TSymbol>;
+var
+  S: TSymbol       ;
+  L: TList<TSymbol>;
+begin
+  L:= TList<TSymbol>.Create;
+  try
+    for S in AStore.FindSymbolsByExactName(AName) do
+      if CanBeCallTarget(S.Kind) then L.Add(S);
+    Result:= L.ToArray;
+  finally
+    L.Free;
+  end; // try
+end; // function
+
 function DoFindCallees(const AArgs: TArgs): Integer;
 var
   Store  : ISymbolStore     ;
@@ -359,9 +379,11 @@ var
   Ext    : TExternalCalleeTally;
   Oracle : TLibraryOracle   ;
 begin
-  if AArgs.QName = '' then
+  { 1.52.1 SMALLS: --name <bare> is the find-callers spelling -- every routine of that bare name is a target. }
+  var ByName: Boolean:= (AArgs.QName = '') and (AArgs.Name <> '');
+  if (AArgs.QName = '') and not ByName then
   begin
-    Writeln('Usage: drag-lint find-callees --qname X [--json] --db PATH [--db LIBRARY | --library-db LIBRARY]');
+    Writeln('Usage: drag-lint find-callees --qname X | --name <bare> [--json] --db PATH [--db LIBRARY | --library-db LIBRARY]');
     Exit(2);
   end;
   var ProjectDb: string:= AArgs.DbPath;
@@ -375,8 +397,12 @@ begin
   Store:= OpenReadOnlyStore(ProjectDb, RoOk);
   if not RoOk then Exit(2); // stale schema: 2 like every bad --db -- 1 is reserved for an EMPTY answer
 
-  Targets:= Store.FindSymbolsByQualifiedName(AArgs.QName);
-  if Length(Targets) = 0 then begin ReportNotFound(AArgs, Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
+  Targets:= if ByName then RoutinesOfBareName(Store, AArgs.Name) else Store.FindSymbolsByQualifiedName(AArgs.QName);
+  if Length(Targets) = 0 then
+  begin
+    ReportNotFound(AArgs, Format('symbol not found: %s', [(if ByName then AArgs.Name else AArgs.QName)]));
+    Exit(1);
+  end;
 
   { The library is opened read-only and never written; a library that cannot be
     opened degrades to "library not open" with one stderr line, never an error. }
@@ -397,6 +423,9 @@ begin
   try
     for T in Targets do
     begin
+      { several routines share the bare name: say which one the lines below belong to (text mode only;
+        --json keeps its flat array, its shape is a contract). }
+      if ByName and (Length(Targets) > 1) and not AArgs.AsJson then Writeln('# ', T.QualifiedName);
       Edges:= Store.GetCallEdgesFromSymbol(T.Id);
       for E in Edges do
       begin

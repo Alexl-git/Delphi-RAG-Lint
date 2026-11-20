@@ -315,7 +315,7 @@ const
   /// tests\autotest\run_help_env_table.ps1: every quoted 'DRAGLINT_*' literal
   /// under src\ must be a Name here and --help must print every Name. A new
   /// variable is added HERE in the same change, or that guard fails.</remarks>
-  ENV_VARS_HELP: array[0..89] of TEnvVarHelp = (
+  ENV_VARS_HELP: array[0..93] of TEnvVarHelp = (
     (Name: 'DRAGLINT_BUSY_TIMEOUT_MS';                Purpose: 'writer busy timeout in ms (overrides the built-in default; a non-negative integer)'),
     (Name: 'DRAGLINT_CHARTS_ALLOW_LIVE_DB';           Purpose: 'charts: lets CloneDb accept a non-clone (live) database'),
     (Name: 'DRAGLINT_CHARTS_DIR';                     Purpose: 'charts: folder of the charts scripts'),
@@ -356,7 +356,9 @@ const
     (Name: 'DRAGLINT_MERGE_TEST_FASTPATH';            Purpose: 'test hook: merge fast path'),
     (Name: 'DRAGLINT_NO_AUTOCREATE';                  Purpose: '1 = a query verb never builds a missing project index on first use'),
     (Name: 'DRAGLINT_NO_BUDGET';                       Purpose: 'lint: any value other than 0 turns the per-rule time budget off for the process (as --no-budget)'),
+    (Name: 'DRAGLINT_NO_CLOSURE_CACHE';               Purpose: 'any value makes index --project walk the compile closure cold: no stored unit scan is read or written (A/B)'),
     (Name: 'DRAGLINT_NO_FILE_FACTS';                  Purpose: 'forces the text read of a .dfm instead of the stored file facts'),
+    (Name: 'DRAGLINT_NO_SCOPED_PURITY';               Purpose: 'any value makes the purity stage re-derive every routine, also after a scoped resolve pass (A/B)'),
     (Name: 'DRAGLINT_NO_SCOPED_RECEIVER_CLOSURE';     Purpose: '1|on|yes|true switches off the scoped receiver closure of the resolve pass (A/B)'),
     (Name: 'DRAGLINT_NO_SCOPED_RESOLVE';              Purpose: 'any value switches the scoped resolve pass off (whole-database A/B)'),
     (Name: 'DRAGLINT_PEER_TRACE';                     Purpose: 'path of a file that receives a trace of every sibling remap (unset = no trace)'),
@@ -390,6 +392,8 @@ const
     (Name: 'DRAGLINT_TEST_LINT_FILE_DELAY_MS';        Purpose: 'test hook: delay per linted file'),
     (Name: 'DRAGLINT_TEST_METRIC_ALGO_BUMP';          Purpose: 'test hook: bumps the routine-metric marker hash version'),
     (Name: 'DRAGLINT_TEST_REINDEX_TIMEOUT_MS';       Purpose: 'test hook: reindex timeout'),
+    (Name: 'DRAGLINT_TEST_CC_STAMP_ONLY';             Purpose: 'test hook: a stored closure scan is validated by the unit stamp only, not its include files (an unsound key)'),
+    (Name: 'DRAGLINT_TEST_PURITY_SEEDS_ONLY';         Purpose: 'test hook: 1 = a scoped purity run does not follow its seeds to their callers (an unsound scope)'),
     (Name: 'DRAGLINT_TEST_RESOLVE_DELAY_MS';          Purpose: 'test hook: delay in the resolve pass'),
     (Name: 'DRAGLINT_TEST_RULE_SLEEP_MS';              Purpose: 'test hook: ''<rule-id>=<ms>'' sleeps that long the first time a lane asks for the rule in a file'),
     (Name: 'DRAGLINT_TEST_SCRATCH_PID';               Purpose: 'test hook: scratch-folder owner pid'),
@@ -694,7 +698,7 @@ begin
   try
     Content:= TFile.ReadAllText(Candidate);
     J:= TJSONObject.ParseJSONValue(Content) as TJSONObject;
-  except
+  except  // dl:ok bare-except@8f3b, try-except-swallowed@8f3b -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
     Exit;
   end;
   if J = nil then Exit;
@@ -1743,7 +1747,7 @@ begin
     else if A = '--no-near-search' then Result.PpNoNearSearch:= True
     // v1.2.1 port change #5: opt into the dcc-tolerance pass.
     else if A = '--tolerances' then Result.PpTolerances:= True
-    else if A = '--include-sites' then Result.PpIncludeSites:= True  // dl:ok duplicate-code@9bc8 -- REVIEWED 2026-10-24 (lint sweep b0bad3cf..HEAD): the ParseArgs boolean-flag arm shape (else if A = <flag> then Result.Field:= True); one arm per flag extends the chain by design
+    else if A = '--include-sites' then Result.PpIncludeSites:= True
     // PP-Task-7: pp-profile define-profile resolver -- the project whose config
     // defines to resolve (--platform reuses CheckPlatform, --config reuses
     // WorkspaceConfig from the shared arg handlers above).
@@ -1819,7 +1823,7 @@ begin
   H:= OpenProcess(SYNCHRONIZE, False, DWORD(NativeUInt(P)));
   if H = 0 then Exit;
   try
-    if WaitForSingleObject(H, INFINITE) = WAIT_OBJECT_0 then TerminateProcess(GetCurrentProcess, 0);
+    if WaitForSingleObject(H, INFINITE) = WAIT_OBJECT_0 then TerminateProcess(GetCurrentProcess, 0);  // dl:ok halt-in-library@8e95 -- REVIEWED 2026-11-19 SLZ-MARK: parent-process watchdog: TerminateProcess/Halt is the intent when the parent dies
   finally
     CloseHandle(H);
   end;
@@ -2067,7 +2071,7 @@ begin
   try
     DocManifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
     Result:= DocManifest.Docs.MaxReturnCases;
-  except
+  except  // dl:ok bare-except@2abd -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
     Result:= 20;
   end;
 end;
@@ -2092,7 +2096,7 @@ begin
   try
     DocManifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
     Result:= DocManifest.Docs.MaxCallers;
-  except
+  except  // dl:ok bare-except@e81c -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
     Result:= 5;
   end;
 end;
@@ -2159,7 +2163,7 @@ begin
   try
     DocManifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
     Result:= DocManifest.Docs.AccessorTrivialMaxLines;
-  except
+  except  // dl:ok bare-except@8ecc -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
     Result:= 2;
   end;
 end;
@@ -3100,14 +3104,96 @@ end;
 /// stage completes would report the silence rather than break it. Exceptions
 /// propagate unchanged -- the heartbeat is stopped in a finally so a failing
 /// pass cannot leave a thread beating over the error message.</remarks>
+{ INCR18 CLOSURE CACHE: TClosureScan (the walk's view) <-> TClosureCacheRow (the
+  store's row). Lists are joined with '|' -- no unit name, Windows path or
+  recorded include name holds one (TClosureResolver refuses to record a name
+  that does) -- and a dependency per LF-terminated line. A stored row that does
+  not split back into whole dependencies is left out: its unit is scanned again. }
+const
+  CLOSURE_LIST_SEP   = '|';
+  CLOSURE_LINE_SEP   = #10;
+  CLOSURE_DEP_FIELDS = 5;
+  CLOSURE_DEP_NAME   = 0;
+  CLOSURE_DEP_BASE   = 1;
+  CLOSURE_DEP_PATH   = 2;
+  CLOSURE_DEP_SIZE   = 3;
+  CLOSURE_DEP_MTIME  = 4;
+
+function ClosureScansOf(const ARows: TArray<TClosureCacheRow>): TArray<TClosureScan>;
+var
+  List : TList<TClosureScan>;
+  Scan : TClosureScan;
+  Lines: TArray<string>;
+  Parts: TArray<string>;
+  Whole: Boolean;
+begin
+  List:= TList<TClosureScan>.Create;
+  try
+    for var Row: TClosureCacheRow in ARows do
+    begin
+      Scan:= Default(TClosureScan);
+      Scan.Path     := Row.Path;
+      Scan.Size     := Row.Size;
+      Scan.MTime    := Row.MTime;
+      Scan.UsesList := Row.UsesText.Split([CLOSURE_LIST_SEP], TStringSplitOptions.ExcludeEmpty);
+      Scan.Includes := Row.IncludesText.Split([CLOSURE_LIST_SEP], TStringSplitOptions.ExcludeEmpty);
+      Scan.Cacheable:= True;
+      Lines:= Row.DepsText.Split([CLOSURE_LINE_SEP], TStringSplitOptions.ExcludeEmpty);
+      SetLength(Scan.Deps, Length(Lines));
+      Whole:= True;
+      for var I: Integer:= 0 to High(Lines) do
+      begin
+        Parts:= Lines[I].Split([CLOSURE_LIST_SEP]);
+        Whole:= (Length(Parts) = CLOSURE_DEP_FIELDS)
+          and TryStrToInt64(Parts[CLOSURE_DEP_SIZE], Scan.Deps[I].Size)
+          and TryStrToInt64(Parts[CLOSURE_DEP_MTIME], Scan.Deps[I].MTime);
+        if not Whole then Break;
+        Scan.Deps[I].Name   := Parts[CLOSURE_DEP_NAME];
+        Scan.Deps[I].BaseDir:= Parts[CLOSURE_DEP_BASE];
+        Scan.Deps[I].Path   := Parts[CLOSURE_DEP_PATH];
+      end;
+      if Whole then List.Add(Scan);
+    end;
+    Result:= List.ToArray;
+  finally
+    List.Free;
+  end;
+end;
+
+function ClosureCacheRowsOf(const AScans: TArray<TClosureScan>): TArray<TClosureCacheRow>;
+var
+  Deps: TStringBuilder;
+begin
+  SetLength(Result, Length(AScans));
+  Deps:= TStringBuilder.Create;
+  try
+    for var I: Integer:= 0 to High(AScans) do
+    begin
+      Result[I].Path        := AScans[I].Path;
+      Result[I].Size        := AScans[I].Size;
+      Result[I].MTime       := AScans[I].MTime;
+      Result[I].Cacheable   := AScans[I].Cacheable;
+      Result[I].UsesText    := string.Join(CLOSURE_LIST_SEP, AScans[I].UsesList);
+      Result[I].IncludesText:= string.Join(CLOSURE_LIST_SEP, AScans[I].Includes);
+      Deps.Clear;
+      for var D: TClosureDep in AScans[I].Deps do
+        Deps.Append(D.Name).Append(CLOSURE_LIST_SEP).Append(D.BaseDir).Append(CLOSURE_LIST_SEP).Append(D.Path)
+          .Append(CLOSURE_LIST_SEP).Append(D.Size).Append(CLOSURE_LIST_SEP).Append(D.MTime).Append(CLOSURE_LINE_SEP);
+      Result[I].DepsText:= Deps.ToString;
+    end;
+  finally
+    Deps.Free;
+  end;
+end;
+
 procedure Stage(const AIndent, ALabel: string; AProc: TProc);
 var
-  T0  : TDateTime;
+  T0  : TStopwatch;
   Beat: TStageHeartbeat;
 begin
   Writeln(Format('%sstage: %s -- started %s', [AIndent, ALabel, FormatDateTime('hh:nn:ss', NowLocal)]));
   Flush(Output);
-  T0  := Now;
+  T0  := TStopwatch.StartNew;
   BeatStep(ALabel); { a stage without counters must not show the previous stage's step and N }
   Beat:= TStageHeartbeat.Create(AIndent, ALabel);
   try
@@ -3116,7 +3202,7 @@ begin
     Beat.StopAndWait;
     Beat.Free;
   end;
-  Writeln(Format('%sstage: %s -- done in %.1fs', [AIndent, ALabel, (Now - T0) * SecsPerDay]));
+  Writeln(Format('%sstage: %s -- done in %.1fs', [AIndent, ALabel, T0.Elapsed.TotalSeconds]));
   Flush(Output);
 end;
 
@@ -3804,7 +3890,7 @@ var
   F              : string                                    ;
   W              : string                                    ;
   ExDir          : string                                    ;
-  T0             : TDateTime                                 ;
+  T0             : TStopwatch                                ;
   Elapsed        : Double                                    ;
   ProjectFile    : string                                    ;
   ExcludePatterns: TArray<string>                            ;
@@ -3830,7 +3916,7 @@ begin
   var DbDir:= ExtractFilePath(AItem.DbPath);
   if (DbDir <> '') and (not TDirectory.Exists(DbDir)) then TDirectory.CreateDirectory(DbDir);
 
-  T0:= Now;
+  T0:= TStopwatch.StartNew;
   try
     if not AcquireIndexLock(AItem.DbPath) then Exit(False); { #17: another run owns this database }
     Store:= TSQLiteSymbolStore.Create(AItem.DbPath);
@@ -4241,7 +4327,7 @@ begin
       index, so it is announced too: it is the last thing between the operator
       and the section summary, and an unannounced pause there reads exactly like
       the hang this instrumentation exists to rule out. }
-    Elapsed:= (Now - T0) * 86400;
+    Elapsed:= T0.Elapsed.TotalSeconds;
 
     var PlatSuffix:= '';
     if AItem.Platform <> '' then PlatSuffix:= ' [' + AItem.Platform + ']';
@@ -4586,7 +4672,7 @@ begin
       Flush(Output);
       Flush(ErrOutput);
       BatchChannelClose;
-      Halt(CONTROL_EXIT_STOOD_DOWN);
+      Halt(CONTROL_EXIT_STOOD_DOWN);  // dl:ok halt-in-library@dcbb -- REVIEWED 2026-11-19 SLZ-MARK: control-channel stand-down must end the process after the flush
     end;
 end;
 
@@ -5410,6 +5496,25 @@ begin
   end;
 end;
 
+{ INCR18 step 4: the library effects store as the scoped purity run identifies it -- the path,
+  and the size and write time of the database file and of its -wal (a library index that was
+  written since shows in one of the two). }
+function PurityLibraryStamp(const ALibPath: string): string;
+  function FileStamp(const APath: string): string;
+  var
+    SR: TSearchRec;
+  begin
+    if FindFirst(APath, faAnyFile, SR) <> 0 then Exit('-');
+    try
+      Result:= Format('%d|%s', [SR.Size, FormatDateTime('yyyymmddhhnnsszzz', SR.TimeStamp)]);
+    finally
+      FindClose(SR);
+    end;
+  end;
+begin
+  Result:= LowerCase(ALibPath) + '|' + FileStamp(ALibPath) + '|' + FileStamp(ALibPath + '-wal');
+end;
+
 procedure RunPurityStage(const AStore: ISymbolStore);
 begin
   var LibPath: string:= PurityLibraryPath(AStore);
@@ -5417,7 +5522,12 @@ begin
   begin
     var Ok: Boolean;
     var Lib: ISymbolStore:= OpenReadOnlyStore(LibPath, Ok, True);
-    if Ok then TPurityStage.LibraryEffects:= Lib
+    if Ok then
+    begin
+      TPurityStage.LibraryEffects:= Lib;
+      { INCR18 step 4: what a scoped purity run compares with the previous run's library. }
+      TPurityStage.LibraryEffectsStamp:= PurityLibraryStamp(LibPath);
+    end
     else Writeln(ErrOutput, 'NOTE: purity: the library for effects could not be opened: ', LibPath);
     TPurityStage.LibraryEffectsTrustFree:= GetEnvironmentVariable('DRAGLINT_LIBRARY_EFFECTS_TRUST') = '1';
   end;
@@ -5425,6 +5535,7 @@ begin
     TPurityStage.Run(AStore);
   finally
     TPurityStage.LibraryEffects:= nil;
+    TPurityStage.LibraryEffectsStamp:= '';
     TPurityStage.LibraryEffectsTrustFree:= False;
   end;
 end;
@@ -5938,7 +6049,7 @@ var
   Store    : ISymbolStore                              ;
   Indexer  : IIndexer                                  ;
   Parser   : IParser                                   ;
-  StartTime: TDateTime                                 ;
+  StartTime: TStopwatch                                ;
   Elapsed  : Double                                    ;
   Resolver : DRagLint.Project.Resolver.TProjectResolver;
   Folders  : TArray<string>                            ;
@@ -6319,6 +6430,26 @@ begin
         var PPSrc: TPPUnitSourceResolver:= nil;
         if not AArgs.NoPreprocess then
           PPSrc:= InstallPPUnitSource(IdxBuild.Profile, nil, [LintLibraryDb(AArgs)]);
+        { INCR18 CLOSURE CACHE: what the last walk read out of each unit, reused
+          while the unit, every include file its scan read and the walk's
+          fingerprint are unchanged (TClosureResolver.EnableScanCache). Not on a
+          dry run (its store is in memory) and not with --no-preprocess (the
+          walk then has no used-unit source to count against). --rebuild walks
+          cold and replaces what is stored. DRAGLINT_NO_CLOSURE_CACHE: neither
+          read nor written. }
+        var UseClosureCache: Boolean:= (PPSrc <> nil) and (not AArgs.DryRun)
+          and (GetEnvironmentVariable('DRAGLINT_NO_CLOSURE_CACHE') = '');
+        if UseClosureCache then
+        begin
+          Cl.EnableScanCache(DRAGLINT_VERSION + '|' + DRAGLINT_EXTRACTOR_VERSION,
+            GetEnvironmentVariable('DRAGLINT_TEST_CC_STAMP_ONLY') <> '');
+          if not AArgs.Rebuild then
+          begin
+            var StoredFp: string;
+            var StoredScans: TArray<TClosureScan>:= ClosureScansOf(Store.LoadClosureCache(StoredFp));
+            Cl.SeedScanCache(StoredFp, StoredScans);
+          end;
+        end;
         var CR: TClosureResult:= ResolveTargetClosure(Cl, AArgs.ProjectPath, AArgs.ExcludeGlobs, IdxTail);
         { The first pass could not see the project's own units yet; when an IF
           asked for a name it could not answer, resolve once more with them. }
@@ -6331,6 +6462,22 @@ begin
             CR:= ResolveTargetClosure(Cl, AArgs.ProjectPath, AArgs.ExcludeGlobs, IdxTail);
             PPSrc.AddUnitFiles(CR.Files, CR.SearchPaths);
           end;
+        end;
+        if UseClosureCache then
+        begin
+          var FreshScans: TArray<TClosureScan>:= Cl.FreshScans;
+          { Best effort: the walk's answer is already in CR. Rows a failed save
+            leaves behind are validated like any other before they are used. }
+          try
+            Store.SaveClosureCache(Cl.ScanFingerprint, ClosureCacheRowsOf(FreshScans));
+          except
+            on E: Exception do
+              Writeln(ErrOutput, Format('NOTE: the closure cache was not stored (%s: %s); the next index walks those units again.',
+                [E.ClassName, E.Message]));
+          end;
+          if GetEnvironmentVariable('DRAGLINT_PROFILE') <> '' then
+            Writeln(ErrOutput, Format('CLOSURE CACHE: %d unit scan(s) reused, %d computed (%d not cacheable)',
+              [Cl.ScanHits, Length(FreshScans), Cl.ScanUncacheable]));
         end;
         { Lane INC: each .inc is parsed in its includer's define context, with
           include names resolved on the same search path the closure used. }
@@ -6521,7 +6668,7 @@ begin
      and TDirectory.Exists(AArgs.Path) then
   begin
     var DbScanType: string:= '';
-    try DbScanType:= Store.GetMetaValue(SCAN_TYPE_KEY); except DbScanType:= ''; end;
+    try DbScanType:= Store.GetMetaValue(SCAN_TYPE_KEY); except DbScanType:= ''; end;  // dl:ok bare-except@eea9 -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
 
     if SameText(DbScanType, SCAN_TYPE_PROJECT) then
     begin
@@ -6552,7 +6699,7 @@ begin
       if WatchIdle(Interval) then Break;
       Continue;
     end;
-    StartTime:= Now;
+    StartTime:= TStopwatch.StartNew;
     { Indexer.ParsedFiles is CUMULATIVE over the indexer's life, and --watch keeps
       one indexer: measured against 0, every idle tick after the first "parsed"
       files and ran the whole-database calls pass (run_watch_scope_reset W4). }
@@ -6934,7 +7081,7 @@ begin
       break, so without this the connection stays open indefinitely and a copy
       of the .sqlite alone is empty of everything this run just did. }
     Store.Checkpoint;
-    Elapsed:= (Now - StartTime) * 86400;
+    Elapsed:= StartTime.Elapsed.TotalSeconds;
     { F1 (deep review 2026-10-25): a file whose store phase raised was rolled
       back and keeps its OLD rows. It used to be one stdout line among the
       progress and an exit 0; now the Done line counts it and the run exits 1
@@ -6983,11 +7130,11 @@ var
   DParser: TDelphi13Parser;
   F      : string         ;
   Ex     : string         ;
-  T0     : TDateTime      ;
+  T0     : TStopwatch     ;
 begin
   Writeln('');
   Writeln('=== Dictionary: ', ADbPath, '  (deep=', BoolToStr(ADeep, True), ') ===');
-  T0:= Now;
+  T0:= TStopwatch.StartNew;
   Store:= TSQLiteSymbolStore.Create(ADbPath);
   Store.Migrate;
   { Each library/project ROOT is walked RECURSIVELY (soAllDirectories), so a
@@ -7039,7 +7186,7 @@ begin
     Writeln('  stage: purity -- skipped, calls did not run and every routine already carries a verdict.');
   { xj-5: concept-search table; incremental, backfills from existing rows (no re-parse). }
   Stage('  ', 'search', procedure begin Store.BuildSymbolSearch; end);
-  AElapsedSec:= (Now - T0) * 86400;
+  AElapsedSec:= T0.Elapsed.TotalSeconds;
   Writeln(Format('  Done. Files: %d, Symbols: %d, Refs: %d  [%.1fs]', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, AElapsedSec]));
   Result:= True;
 end; // function
@@ -9551,7 +9698,7 @@ begin
   if AArgs.InFile = '' then Exit;
   try
     Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
-  except
+  except  // dl:ok try-except-swallowed@4c6b -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
     { No manifest is not an error here -- the caller falls back to its old
       single-path behaviour and reports that in its own words. }
     on E: Exception do Exit;
@@ -9596,7 +9743,6 @@ begin
     yields a list, and answering from the first entry would print an empty
     outline that looks exactly like a file with no symbols. }
   var RoOk : Boolean;
-  var UsedDb: string:= '';
   Store:= nil;
   SetLength(Syms, 0);
   for var Db in Dbs do
@@ -9610,7 +9756,7 @@ begin
       Continue;
     end;
     Syms:= Store.FindSymbolsByFile(AArgs.InFile);
-    if Length(Syms) > 0 then begin UsedDb:= Db; Break; end;
+    if Length(Syms) > 0 then Break;
     Store:= nil;
   end;
 
@@ -9620,7 +9766,6 @@ begin
     ReportNotFoundFor((AArgs.AsJson or SameText(AArgs.Format, 'json')), System.SysUtils.Format('       Tried %d database(s). Index the file, or pass --db <file.sqlite>.', [Length(Dbs)]));
     Exit(2);
   end;
-  if UsedDb = '' then UsedDb:= Dbs[0];
 
   { C2.5: a forward stub (`TFoo = class;`) STAYS in the outline -- this is the
     file-structure view and the stub is a line in the file -- but it is tagged
@@ -10725,7 +10870,7 @@ var
     if not LineCache.TryGetValue(AFile, Result) then
     begin
       { B07: decode through EnsureUtf8Bytes -- a BOM file with a stray ANSI byte must not die in the strict UTF-8 reader. }
-      if TFile.Exists(AFile) then Result:= TEncoding.UTF8.GetString(EnsureUtf8Bytes(TFile.ReadAllBytes(AFile))).Replace(#13#10, #10).Split([#10]) else SetLength(Result, 0);  // dl:ok taint-path-traversal@8858 -- REVIEWED 2026-11-16: reads a file the caller named on the command line or in its own manifest; a CLI reading what its user points it at is the feature, not a traversal
+      if TFile.Exists(AFile) then Result:= TEncoding.UTF8.GetString(EnsureUtf8Bytes(TFile.ReadAllBytes(AFile))).Replace(#13#10, #10).Split([#10]) else SetLength(Result, 0);
       LineCache.Add(AFile, Result);
     end;
   end;
@@ -15251,7 +15396,7 @@ begin
         ScopeDict:= BuildProjectFileScope(AArgs);
         if ScopeDict <> nil then
           for var ScopedFile: string in ScopeDict.Keys do ClosureList:= ClosureList + [ScopedFile];
-      except
+      except  // dl:ok bare-except@febb -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
         { A closure that cannot be resolved must not take the whole verb down;
           the direction simply does not run. }
         ClosureList:= nil;
@@ -16408,7 +16553,7 @@ begin
       begin
         try
           FileSource:= ReadSourceFileText(FilePath);
-        except
+        except  // dl:ok bare-except@159c -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
           FileSource:= '';
         end;
         FileCache.AddOrSetValue(FilePath, FileSource);
@@ -16645,7 +16790,7 @@ begin
     Lang:= AGetLanguage();
     if Lang = nil then Result:= 'unknown'
     else Result:= IntToStr(Lang.Version);
-  except
+  except  // dl:ok bare-except@c8fc -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
     Result:= 'unknown';
   end;
 end;
@@ -16677,7 +16822,7 @@ begin
       finally
         Q.Free;
       end;
-    except
+    except  // dl:ok bare-except@79dc -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
       Result:= False;
     end; // try
   finally
@@ -19361,7 +19506,7 @@ begin
     { An unreadable/absent project file must surface as "no scope" -- which the
       caller turns into a usage error -- not as an unhandled exception. }
     CR:= Default(TClosureResult);
-    try CR:= Resolver.Resolve(AArgs.ProjectPath, AArgs.ExcludeGlobs); except CR:= Default(TClosureResult); end;
+    try CR:= Resolver.Resolve(AArgs.ProjectPath, AArgs.ExcludeGlobs); except CR:= Default(TClosureResult); end;  // dl:ok bare-except@a2eb -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
   finally
     Resolver.Free;
   end;
@@ -21806,7 +21951,7 @@ begin
   begin
     var Arr: TJSONArray:= TJSONArray.Create;
     try
-      for var Ed in pProof.Edits do // dl:ok duplicate-code@d4d6 -- the --json edit list as every refactor verb prints it; each owns its own shape
+      for var Ed in pProof.Edits do
       begin
         var O: TJSONObject:= TJSONObject.Create;
         O.AddPair('file', Ed.FilePath);
@@ -22515,12 +22660,12 @@ begin
     Content:= TFile.ReadAllText(ADproj);
     M:= TRegEx.Match(Content, '<DCC_DcuOutput>(.*?)</DCC_DcuOutput>', [roIgnoreCase, roSingleLine]);
     if M.Success and (Trim(M.Groups[1].Value) <> '') then DcuOut:= Trim(M.Groups[1].Value);
-  except
+  except  // dl:ok try-except-swallowed@e230, empty-except@e230 -- REVIEWED 2026-11-19 SLZ-MARK: best-effort cleanup or timestamp restore of the check's own overlay, journal or temp file; it must not fail the check and a failure only leaves a stale file
   end;
   DcuOut:= StringReplace(DcuOut, '$(Platform)', Plat   , [rfReplaceAll, rfIgnoreCase]);
   DcuOut:= StringReplace(DcuOut, '$(Config)'  , 'Debug', [rfReplaceAll, rfIgnoreCase]);
   if not TPath.IsPathRooted(DcuOut) then
-  try DcuOut:= TPath.GetFullPath(TPath.Combine(ExtractFilePath(ADproj), DcuOut)); except end;
+  try DcuOut:= TPath.GetFullPath(TPath.Combine(ExtractFilePath(ADproj), DcuOut)); except end;  // dl:ok empty-except@b4fc, try-except-swallowed@b4fc -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
   Result:= TPath.Combine(DcuOut, ChangeFileExt(ExtractFileName(AUnit), '.dcu'));
 end; // function
 
@@ -22535,7 +22680,7 @@ begin
     if not TDirectory.Exists(Result) then TDirectory.CreateDirectory(Result);
     Attrs:= GetFileAttributes(PChar(Result));
     if Attrs <> INVALID_FILE_ATTRIBUTES then SetFileAttributes(PChar(Result), Attrs or FILE_ATTRIBUTE_HIDDEN);
-  except
+  except  // dl:ok empty-except@e230, try-except-swallowed@e230 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
   end;
 end;
 
@@ -22619,9 +22764,12 @@ begin
     'mtime=' + FloatToStrF(Double(E.OrigMtime), ffGeneral, 17, 0, TFormatSettings.Invariant) + sLineBreak;
     if E.HaveFT then JournalText:= JournalText + 'ft=' + IntToStr(FileTimeToI64(E.OrigFT)) + sLineBreak;
     TFile.WriteAllText(E.Journal, JournalText);
-  except end;
+  except
+    on Ex: Exception do
+      Writeln(ErrOutput, 'ghost-check: WARNING: could not write the recovery journal ', E.Journal, ' (', Ex.Message, '); ghost-recover cannot undo this overlay after a crash.');
+  end;
   TFile.WriteAllBytes(E.RealPath, E.BufBytes);
-  try TFile.SetLastWriteTime(E.RealPath, Now); except end;
+  try TFile.SetLastWriteTime(E.RealPath, Now); except end;  // dl:ok empty-except@7a44, try-except-swallowed@7a44 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
   { Capture the timestamp our write actually left behind, and record it in the
     journal too. Read it back rather than assuming the value we asked for: the
     filesystem's granularity, not ours, decides what is stored, and the restore
@@ -22632,7 +22780,7 @@ begin
   if E.HaveOvlFT then
   try TFile.AppendAllText(E.Journal, 'ovlft=' + IntToStr(FileTimeToI64(E.OvlFT)) + sLineBreak); except end;
   if (E.DcuPath <> '') and TFile.Exists(E.DcuPath) then
-  try TFile.Delete(E.DcuPath); except end;
+  try TFile.Delete(E.DcuPath); except end;  // dl:ok stat-gated-destructive@d5d0, empty-except@d5d0, try-except-swallowed@d5d0 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
 end; // procedure
 
 { Restore one overlay: put the original content + EXACT timestamp back (verified),
@@ -22654,7 +22802,7 @@ begin
       { Already the original content. Nothing to rewrite; just put the ORIGINAL
         timestamp back (the overlay stamped 'Now' to force the rebuild). }
       if not (E.HaveFT and SetFileWriteTime(E.RealPath, E.OrigFT)) then
-      try TFile.SetLastWriteTime(E.RealPath, E.OrigMtime); except end;
+      try TFile.SetLastWriteTime(E.RealPath, E.OrigMtime); except end;  // dl:ok try-except-swallowed@9cd0, empty-except@9cd0 -- REVIEWED 2026-11-19 SLZ-MARK: best-effort cleanup or timestamp restore of the check's own overlay, journal or temp file; it must not fail the check and a failure only leaves a stale file
       RestoreDone:= True;
     end
     else if BytesSame(CurBytes, E.BufBytes) then
@@ -22677,9 +22825,9 @@ begin
       begin
         TFile.WriteAllBytes(E.RealPath, E.OrigBytes);
         if not (E.HaveFT and SetFileWriteTime(E.RealPath, E.OrigFT)) then
-        try TFile.SetLastWriteTime(E.RealPath, E.OrigMtime); except end;
+        try TFile.SetLastWriteTime(E.RealPath, E.OrigMtime); except end;  // dl:ok empty-except@9cd0, try-except-swallowed@9cd0 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
         try RestoreDone:= BytesSame(TFile.ReadAllBytes(E.RealPath), E.OrigBytes);
-        except RestoreDone:= False; end;
+        except RestoreDone:= False; end;  // dl:ok bare-except@8989 -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
       end
       else
       begin
@@ -22696,15 +22844,15 @@ begin
       RestoreDone:= True;
       Writeln('ghost-check: NOTE -- ', E.RealPath, ' changed externally during the check; left as-is.');
     end;
-  except
+  except  // dl:ok bare-except@2d51 -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
     RestoreDone:= False;
   end; // try
   if (E.DcuPath <> '') and TFile.Exists(E.DcuPath) then
-  try TFile.Delete(E.DcuPath); except end;
+  try TFile.Delete(E.DcuPath); except end;  // dl:ok empty-except@d5d0, try-except-swallowed@d5d0, stat-gated-destructive@d5d0 -- REVIEWED 2026-11-19 SLZ-MARK: own .dcu, journal or -wal/-shm sidecar inside try/except; a failed stat only leaves a stale file
   if RestoreDone then
   begin
-    try if TFile.Exists(E.Journal) then TFile.Delete(E.Journal); except end;
-    try if TFile.Exists(E.OrigBak) then TFile.Delete(E.OrigBak); except end;
+    try if TFile.Exists(E.Journal) then TFile.Delete(E.Journal); except end;  // dl:ok try-except-swallowed@6637, stat-gated-destructive@6637, empty-except@6637 -- REVIEWED 2026-11-19 SLZ-MARK: best-effort cleanup or timestamp restore of the check's own overlay, journal or temp file; it must not fail the check and a failure only leaves a stale file
+    try if TFile.Exists(E.OrigBak) then TFile.Delete(E.OrigBak); except end;  // dl:ok empty-except@84b0, try-except-swallowed@84b0, stat-gated-destructive@84b0 -- REVIEWED 2026-11-19 SLZ-MARK: own .dcu, journal or -wal/-shm sidecar inside try/except; a failed stat only leaves a stale file
   end
   else Writeln('ghost-check: WARNING -- could not safely restore ', E.RealPath, '; recovery journal kept (run ghost-recover or restart the IDE).');
 end; // procedure
@@ -22767,7 +22915,7 @@ begin
       if not TFile.Exists(AArgs.GhostOverlays) then
       begin Writeln('ERROR: overlays manifest not found: ', AArgs.GhostOverlays); Exit(2); end;
       try ManifestLines:= TFile.ReadAllLines(AArgs.GhostOverlays);
-      except SetLength(ManifestLines, 0); end;
+      except SetLength(ManifestLines, 0); end;  // dl:ok try-except-swallowed@a1d6, bare-except@a1d6 -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
       for Ln in ManifestLines do
       begin
         if Trim(Ln) = '' then Continue;
@@ -22858,7 +23006,12 @@ begin
             plugin already filters these, but ghost-check is a public verb and
             another caller may not. }
           if BytesSame(E.BufBytes, E.OrigBytes) then Continue;
-          try TFile.WriteAllBytes(TPath.Combine(ShadowDir, ExtractFileName(E.RealPath)), E.BufBytes); except end;
+          try
+            TFile.WriteAllBytes(TPath.Combine(ShadowDir, ExtractFileName(E.RealPath)), E.BufBytes);
+          except
+            on Ex: Exception do
+              Writeln(ErrOutput, 'ghost-check: WARNING: could not write the shadow copy of ', E.RealPath, ' (', Ex.Message, '); the compile may run on a stale file.');
+          end;
         end;
         for i:= 0 to Entries.Count - 1 do
         begin
@@ -22875,7 +23028,7 @@ begin
       finally
         { Best-effort: a leftover temp dir is harmless, and failing to delete it
           must never turn a successful check into an error. }
-        try if TDirectory.Exists(ShadowDir) then TDirectory.Delete(ShadowDir, True); except end;
+        try if TDirectory.Exists(ShadowDir) then TDirectory.Delete(ShadowDir, True); except end;  // dl:ok empty-except@b3c6, try-except-swallowed@b3c6 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
       end;
       Res.Findings:= NormalizeFindings(Res.Findings,
         ExtractFilePath(StringReplace(Dproj, '/', '\', [rfReplaceAll])));
@@ -22976,7 +23129,7 @@ begin
   if not TDirectory.Exists(DragDir) then begin Writeln('ghost-recover: nothing pending.'); Exit (0 ); end;
   try
     Journals:= TDirectory.GetFiles(DragDir, '*.ghost-journal');
-  except
+  except  // dl:ok try-except-swallowed@63e5, bare-except@63e5 -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
     SetLength(Journals, 0);
   end;
   for J in Journals do
@@ -22990,7 +23143,7 @@ begin
       else if Ln.StartsWith('mtime=') then MtimeStr:= Copy(Ln, 7, MaxInt)
       else if Ln.StartsWith('ovlft=') then OvlFtStr:= Copy(Ln, 7, MaxInt)
       else if Ln.StartsWith('ft=') then FtStr:= Copy(Ln, 4, MaxInt);
-    except end;
+    except end;  // dl:ok try-except-swallowed@3be8, empty-except@3be8 -- REVIEWED 2026-11-19 SLZ-MARK: best-effort cleanup or timestamp restore of the check's own overlay, journal or temp file; it must not fail the check and a failure only leaves a stale file
     { Same ownership rule as the live restore: only undo an overlay that is still
       OURS. Without this the recovery pass reverted the file to the pre-crash
       original no matter what had happened since -- including a save the user
@@ -23013,30 +23166,38 @@ begin
       try
         { keep the crash-time content so nothing is ever lost }
         CrashBuf:= TPath.Combine(DragDir, ExtractFileName(UnitPath) + '.crash-buffer');
-        try TFile.Copy(UnitPath, CrashBuf, True); except end;
+        try
+          TFile.Copy(UnitPath, CrashBuf, True);
+        except
+          on Ex: Exception do
+          begin
+            Writeln(ErrOutput, 'ghost-recover: WARNING: could not keep the crash-time content of ', UnitPath, ' at ', CrashBuf, ' (', Ex.Message, '); NOT restoring the original so nothing is lost.');
+            Continue;
+          end;
+        end;
         { restore the saved original + mtime (prefer the exact FILETIME) }
         TFile.Copy(OrigBak, UnitPath, True);
         if (FtStr <> '') and TryStrToInt64(FtStr, FtVal) then
         begin
           if not SetFileWriteTime(UnitPath, I64ToFileTime(FtVal)) then
             if MtimeStr <> '' then
-            try TFile.SetLastWriteTime(UnitPath, TDateTime(StrToFloat(MtimeStr, TFormatSettings.Invariant))); except end;
+            try TFile.SetLastWriteTime(UnitPath, TDateTime(StrToFloat(MtimeStr, TFormatSettings.Invariant))); except end;  // dl:ok try-except-swallowed@1530, empty-except@1530 -- REVIEWED 2026-11-19 SLZ-MARK: best-effort cleanup or timestamp restore of the check's own overlay, journal or temp file; it must not fail the check and a failure only leaves a stale file
         end
         else if MtimeStr <> '' then
-        try TFile.SetLastWriteTime(UnitPath, TDateTime(StrToFloat(MtimeStr, TFormatSettings.Invariant))); except end;
-        try TFile.Delete(OrigBak); except end;
-        try TFile.Delete(J); except end;
+        try TFile.SetLastWriteTime(UnitPath, TDateTime(StrToFloat(MtimeStr, TFormatSettings.Invariant))); except end;  // dl:ok empty-except@1530, try-except-swallowed@1530 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
+        try TFile.Delete(OrigBak); except end;  // dl:ok empty-except@5d18, try-except-swallowed@5d18 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
+        try TFile.Delete(J); except end;  // dl:ok empty-except@e57f, try-except-swallowed@e57f -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
         Inc(Recovered);
         Writeln('Recovered ', UnitPath, ' (crash content kept at ', CrashBuf, ')');
-      except
+      except  // dl:ok bare-except@ad49 -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
         Writeln('FAILED to recover ', UnitPath);
       end; // try
     end // if
     else
     begin
       { stale/incomplete journal -> drop it }
-      try TFile.Delete(J); except end;
-      try if (OrigBak <> '') and TFile.Exists(OrigBak) then TFile.Delete(OrigBak); except end;
+      try TFile.Delete(J); except end;  // dl:ok try-except-swallowed@e57f, empty-except@e57f -- REVIEWED 2026-11-19 SLZ-MARK: best-effort cleanup or timestamp restore of the check's own overlay, journal or temp file; it must not fail the check and a failure only leaves a stale file
+      try if (OrigBak <> '') and TFile.Exists(OrigBak) then TFile.Delete(OrigBak); except end;  // dl:ok stat-gated-destructive@5a5f, try-except-swallowed@5a5f, empty-except@5a5f -- REVIEWED 2026-11-19 SLZ-MARK: best-effort cleanup or timestamp restore of the check's own overlay, journal or temp file; it must not fail the check and a failure only leaves a stale file
     end;
   end; // for
   Writeln(Format('ghost-recover: %d file(s) restored.', [Recovered]));
@@ -23132,7 +23293,7 @@ var
 begin
   Result:= '';
   if (ADprojPath = '') or not TFile.Exists(ADprojPath) then Exit;
-  try Content:= TFile.ReadAllText(ADprojPath); except Exit; end;
+  try Content:= TFile.ReadAllText(ADprojPath); except Exit; end;  // dl:ok try-except-swallowed@27b3, bare-except@27b3 -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
   M:= TRegEx.Match(Content, '<DCC_DcuOutput>(.*?)</DCC_DcuOutput>', [roIgnoreCase, roSingleLine]);
   if not M.Success then Exit;
   Rel:= Trim(M.Groups[1].Value);
@@ -23157,7 +23318,7 @@ var
 begin
   Result:= False;
   if (ADprojPath = '') or not TFile.Exists(ADprojPath) then Exit;
-  try Content:= TFile.ReadAllText(ADprojPath); except Exit; end;
+  try Content:= TFile.ReadAllText(ADprojPath); except Exit; end;  // dl:ok bare-except@27b3, try-except-swallowed@27b3 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
   Result:= TRegEx.IsMatch(Content, '<DCC_DebugDCUs>\s*true\s*</DCC_DebugDCUs>', [roIgnoreCase]);
 end;
 // Read DCC_Namespace from a .dproj (so dotted-down 'uses Forms' etc. resolve),
@@ -23173,7 +23334,7 @@ begin
   if (ADprojPath = '') or not TFile.Exists(ADprojPath) then Exit;
   try
     Content:= TFile.ReadAllText(ADprojPath);
-  except
+  except  // dl:ok try-except-swallowed@8f3b, bare-except@8f3b -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
     Exit;
   end;
   M:= TRegEx.Match(Content, '<DCC_Namespace>(.*?)</DCC_Namespace>', [roIgnoreCase, roSingleLine]);
@@ -24221,7 +24382,7 @@ begin
       ImplLine:= MaxInt;
       if TFile.Exists(Path) then
       begin
-        try Lines.LoadFromFile(Path); except Continue; end;
+        try Lines.LoadFromFile(Path); except Continue; end;  // dl:ok bare-except@85fe, try-except-swallowed@85fe -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
         for i:= 0 to Lines.Count - 1 do
           if SameText(Trim(Lines[i]), 'implementation') then begin ImplLine:= i + 1; Break; end;
       end;
@@ -24472,6 +24633,8 @@ var
 { try one edit on a fresh copy, compile it, accept into Work only if it adds
     no new error vs the baseline. AKind: 'move' | 'remove'. }
   function TryEdit(const AUnitName: string; AEntryLine: Integer; const AKind: string): Boolean;
+  const
+    USESFIX_GUID_CHARS = 8; { hex chars of the GUID kept in the per-edit shadow dir name }
   var
     Trial    : TStringList        ;
     ShadowDir: string             ;
@@ -24494,11 +24657,22 @@ var
         Work:= Saved;
       end;
 
-      ShadowDir:= TPath.Combine(TPath.GetTempPath, 'draglint_usesfix');
+      { 1.52.1 SMALLS: a per-process, per-edit shadow dir (pid + guid), removed after the compile --
+        the old fixed %TEMP%\draglint_usesfix made two concurrent uses-fix runs overwrite each other's
+        copy of the unit (EFCreateError / a verdict on the other run's text). }
+      ShadowDir:= TPath.Combine(TPath.GetTempPath, Format('draglint_usesfix_%d_%s', [GetCurrentProcessId, Copy(TGUID.NewGuid.ToString, 2, USESFIX_GUID_CHARS)]));
       TDirectory.CreateDirectory(ShadowDir);
-      Trial.SaveToFile(TPath.Combine(ShadowDir, ExtractFileName(SrcPath)));
-
-      Res:= CompileUnitInContext(SrcPath, Proj, Plat, ShadowDir);
+      try
+        Trial.SaveToFile(TPath.Combine(ShadowDir, ExtractFileName(SrcPath)));
+        Res:= CompileUnitInContext(SrcPath, Proj, Plat, ShadowDir);
+      finally
+        try
+          TDirectory.Delete(ShadowDir, True);
+        except
+          on E: Exception do { best-effort scratch cleanup: a locked file must not change the verdict, but is told }
+            Writeln(ErrOutput, 'NOTE: uses-fix: could not remove ', ShadowDir, ': ', E.Message);
+        end;
+      end;
 
       { SAFETY GUARD: a Fatal (F-code) means the compile ABORTED -- usually on a
         dependency it couldn't resolve in this single-unit context -- BEFORE it
@@ -26123,7 +26297,7 @@ begin
   if not TFile.Exists(ADbPath) then Exit;
   try
     FileSize64:= TFile.GetSize(ADbPath);
-  except
+  except  // dl:ok bare-except@8f3b, try-except-swallowed@8f3b -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
     Exit;
   end;
   FileSizeMB:= FileSize64 div (1024 * 1024);
@@ -26511,7 +26685,7 @@ begin
         if SameText(X, D) then Dup:= True;
       if not Dup then Result:= Result + [D];
     end;
-  except
+  except  // dl:ok bare-except@3935 -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
     { A manifest that will not load is not this function's problem to report --
       every caller already treats an empty answer as "no library index" and degrades. }
     Result:= nil;
@@ -27034,7 +27208,7 @@ function DoSelfTestGlob: Integer;
 
   procedure Expect(const ADesc: string; AActual, AExpected: Boolean);
   begin
-    if AActual <> AExpected then begin Writeln('GLOB-FAIL: ', ADesc); Halt(1); end;
+    if AActual <> AExpected then begin Writeln('GLOB-FAIL: ', ADesc); Halt(1); end;  // dl:ok halt-in-library@d10b -- REVIEWED 2026-11-19 SLZ-MARK: self-test verb: Halt(1) on the first failed check is the contract
   end;
 
 begin
@@ -27066,12 +27240,12 @@ var
 
   procedure Assert(const ADesc: string; AActual, AExpected: Boolean);
   begin
-    if AActual <> AExpected then begin Writeln('IGNORE-FAIL: ', ADesc, ' (expected=', BoolToStr(AExpected, True), ' got=', BoolToStr(AActual, True), ')'); Halt(1); end;
+    if AActual <> AExpected then begin Writeln('IGNORE-FAIL: ', ADesc, ' (expected=', BoolToStr(AExpected, True), ' got=', BoolToStr(AActual, True), ')'); Halt(1); end;  // dl:ok halt-in-library@85ee -- REVIEWED 2026-11-19 SLZ-MARK: self-test verb: Halt(1) on the first failed check is the contract
   end;
 
 begin
   ProjDir:= AArgs.Path;
-  if ProjDir = '' then begin Writeln('IGNORE-FAIL: --dir <proj> required'); Halt (1 ); end;
+  if ProjDir = '' then begin Writeln('IGNORE-FAIL: --dir <proj> required'); Halt (1 ); end;  // dl:ok halt-in-library@a660 -- REVIEWED 2026-11-19 SLZ-MARK: self-test verb: Halt(1) on the first failed check is the contract
   SubDir:= TPath.Combine(ProjDir, 'sub');
 
   Stack:= TIgnoreStack.Create;
@@ -27301,7 +27475,7 @@ begin
     else Writeln('PASS recreate: stable symbol count across both modes');
   finally
     Store:= nil;
-    try TDirectory.Delete(TmpRoot, True); except end;
+    try TDirectory.Delete(TmpRoot, True); except end;  // dl:ok try-except-swallowed@8cc5, empty-except@8cc5 -- REVIEWED 2026-11-19 SLZ-MARK: best-effort cleanup or timestamp restore of the check's own overlay, journal or temp file; it must not fail the check and a failure only leaves a stale file
   end; // try
 end; // function
 
@@ -27344,7 +27518,7 @@ begin
       Result:= 1;
     end;
   finally
-    try TDirectory.Delete(TmpDir, True); except end;
+    try TDirectory.Delete(TmpDir, True); except end;  // dl:ok empty-except@9cf6, try-except-swallowed@9cf6 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
   end; // try
 end; // function
 
@@ -27651,7 +27825,7 @@ begin
     Raised:= False;
     try
       TManifestIO.Save(M, Path);
-    except
+    except  // dl:ok bare-except@1ded -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
       Raised:= True;   { expected: the swap must fail, loudly }
     end;
     if not Raised then
@@ -28299,7 +28473,7 @@ begin
     end
     else Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
     StaleGlobs:= Manifest.GlobalExclude;
-  except
+  except  // dl:ok bare-except@75f3 -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
     // Advisory: if manifest load fails, proceed with built-in globs only.
     StaleGlobs:= nil;
     Manifest:= Default(TIndexManifest);
@@ -28508,7 +28682,7 @@ begin
               // rather than AArgs.AsJson.
               RefreshProjectFindingsCore(Store, ProjectFile, True, nil, False, False, AArgs.CheckPlatform);
               CohRecomp:= True;
-            except
+            except  // dl:ok bare-except@91b0 -- REVIEWED 2026-11-19 SLZ-MARK: own-file best-effort read or cleanup; the handler falls back or exits and a failure leaves at worst a stale file
               CohRecomp:= False;
             end;
           end;

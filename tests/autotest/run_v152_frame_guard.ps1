@@ -49,8 +49,8 @@ $lanes = 'UNCONN','DOCPOL','XCONST','PTW','PROJ2','APP2','ATLA','ATLB','RTTI5','
 $units = @()
 foreach ($l in $lanes) {
   $units += "lint\v152\DRagLint.V152.$l.pas"
-  $units += "lint\v152\DRagLint.V152.$l.Support.pas"
-  $units += "lint\fixers\DRagLint.Fix.V152.$l.pas"
+  if ($l -notin 'DEFAULTS','FPS','PTW') { $units += "lint\v152\DRagLint.V152.$l.Support.pas" }   # 1.52.1 d227feb3a deleted the empty DEFAULTS/FPS Support
+  if ($l -in 'XCONST','PTW') { $units += "lint\fixers\DRagLint.Fix.V152.$l.pas" }   # 1.52.1 d227feb3a deleted the 9 empty Fix.V152.<lane> scaffolds
 }
 foreach ($s in '','.Types','.Render','.Roots','.Events','.Intra','.Fields','.Receiver','.Handlers') { $units += "query\DRagLint.Query.HappensBefore$s.pas" }
 foreach ($s in 'Schema','FbImport','TextBackup','SchemaSeed','FbTypes','CsvMemTable','ParamArray','OrmGen','DataServiceGen') { $units += "sql\DRagLint.FieldRepo.$s.pas" }

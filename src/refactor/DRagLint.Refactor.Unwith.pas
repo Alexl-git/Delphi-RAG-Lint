@@ -1535,7 +1535,7 @@ begin
   end;
 end;
 
-procedure TAnalyzer.Render(const pFmt: TTextFileFormat; var pPlan: TUnwithFilePlan);  // dl:ok deep-nesting@41c3 -- REVIEWED 2026-11-05: one linear rendering pass; splitting it would only pass its locals around
+procedure TAnalyzer.Render(const pFmt: TTextFileFormat; var pPlan: TUnwithFilePlan);
 begin
   { Apply the splices: sorted, never overlapping (the candidates are disjoint, nested ones refused). }
   FSplices.Sort(TComparer<TSplice>.Construct(
@@ -1644,9 +1644,8 @@ begin
   if GScratchCited or pDetail.Contains(ExcludeTrailingPathDelimiter(pDir)) then Exit;
   try
     if TDirectory.Exists(pDir) then TDirectory.Delete(pDir, True);  // dl:ok taint-path-traversal@b8f1 -- a fresh scratch dir; only its PID part can come from the environment, a test seam
-  except  // dl:ok try-except-swallowed@a59f -- leftovers in the scratch root are harmless; see the remarks
-    on E: EInOutError do ;  // dl:ok empty-on-handler@8192 -- the log folder is left behind, harmless; see the remarks
-    on E: EDirectoryNotFoundException do ;  // dl:ok empty-on-handler@431d -- the log folder is left behind, harmless; see the remarks
+  except  // dl:ok try-except-swallowed@1860 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
+    on E: EInOutError do ;  // dl:ok empty-on-handler@8192 -- the log folder is left behind, harmless; see the remarks (EInOutError includes EDirectoryNotFoundException)
   end;
 end;
 

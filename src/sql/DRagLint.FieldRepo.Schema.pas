@@ -134,7 +134,7 @@ type
 /// <seealso cref="DRagLint.FieldRepo.Schema.MetaTable"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function RepoTables: TArray<TRepoTable>;  // dl:ok unused-public-symbol@15fa
+function RepoTables: TArray<TRepoTable>;
 
 /// <summary>Looks a repository table up by name, case-insensitively.</summary>
 /// <param name="pName">Table name.</param>
@@ -149,7 +149,7 @@ function RepoTables: TArray<TRepoTable>;  // dl:ok unused-public-symbol@15fa
 /// <seealso cref="DRagLint.FieldRepo.Schema.RepoTables"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function FindRepoTable(const pName: string; out pTable: TRepoTable): Boolean;  // dl:ok unused-public-symbol@c8d7
+function FindRepoTable(const pName: string; out pTable: TRepoTable): Boolean;
 
 /// <summary>Quotes an identifier for SQLite with double quotes. Every SQL statement
 /// of every lane quotes identifiers through this function.</summary>
@@ -161,7 +161,7 @@ function FindRepoTable(const pName: string; out pTable: TRepoTable): Boolean;  /
 /// <para>Returns: '"' + pName.Replace('"', '""') + '"'</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function QuoteRepoIdent(const pName: string): string;  // dl:ok unused-public-symbol@0e28
+function QuoteRepoIdent(const pName: string): string;
 
 /// <summary>Builds the CREATE TABLE statement for a table: SQLite declared type per kind,
 /// NOT NULL, DEFAULT, a length CHECK for strings, a 0..255 CHECK for bytes, and the primary
@@ -191,7 +191,7 @@ function RepoTableDdl(const pTable: TRepoTable): string;  // dl:ok unused-public
 /// <para>Touches: file system</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function DefaultRepoPath(const pProjectFile: string): string;  // dl:ok unused-public-symbol@4257
+function DefaultRepoPath(const pProjectFile: string): string;
 
 /// <summary>Creates a new repository file with all five tables.</summary>
 /// <param name="pFileName">Target file; its folder is created.</param>
@@ -211,7 +211,7 @@ function DefaultRepoPath(const pProjectFile: string): string;  // dl:ok unused-p
 /// <seealso cref="DRagLint.FieldRepo.Schema.SetRepoMeta"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-procedure CreateRepository(const pFileName: string);  // dl:ok unused-public-symbol@3469
+procedure CreateRepository(const pFileName: string);
 
 /// <summary>Opens an existing repository and validates it.</summary>
 /// <param name="pFileName">Repository file.</param>
@@ -231,7 +231,7 @@ procedure CreateRepository(const pFileName: string);  // dl:ok unused-public-sym
 /// <seealso cref="DRagLint.FieldRepo.Schema.ValidateRepository"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function OpenRepository(const pFileName: string; pReadOnly: Boolean): TFDConnection;  // dl:ok unused-public-symbol@f329
+function OpenRepository(const pFileName: string; pReadOnly: Boolean): TFDConnection;
 
 /// <summary>Checks application_id, user_version, every table and every column.</summary>
 /// <param name="pConnection">A connected SQLite connection.</param>
@@ -260,7 +260,7 @@ procedure ValidateRepository(pConnection: TFDConnection);  // dl:ok unused-publi
 /// <seealso cref="DRagLint.FieldRepo.Schema.QuoteRepoIdent"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function RepoRowCount(pConnection: TFDConnection; const pTableName: string): Integer;  // dl:ok unused-public-symbol@9768
+function RepoRowCount(pConnection: TFDConnection; const pTableName: string): Integer;
 
 /// <summary>True when every repository table except DL_META has no rows.</summary>
 /// <param name="pConnection">An open repository connection.</param>
@@ -275,7 +275,7 @@ function RepoRowCount(pConnection: TFDConnection; const pTableName: string): Int
 /// <seealso cref="DRagLint.FieldRepo.Schema.RepoTables"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function RepoIsEmpty(pConnection: TFDConnection): Boolean;  // dl:ok unused-public-symbol@370b
+function RepoIsEmpty(pConnection: TFDConnection): Boolean;
 
 /// <summary>Writes (inserts or replaces) one DL_META value.</summary>
 /// <param name="pConnection">A read-write repository connection.</param>
@@ -289,7 +289,7 @@ function RepoIsEmpty(pConnection: TFDConnection): Boolean;  // dl:ok unused-publ
 /// <seealso cref="DRagLint.FieldRepo.Schema.QuoteRepoIdent"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-procedure SetRepoMeta(pConnection: TFDConnection; const pKey, pValue: string);  // dl:ok unused-public-symbol@419a
+procedure SetRepoMeta(pConnection: TFDConnection; const pKey, pValue: string);
 
 /// <summary>Reads one DL_META value.</summary>
 /// <param name="pConnection">An open repository connection.</param>
@@ -311,12 +311,12 @@ uses
   System.IOUtils,
   System.Generics.Collections,
   Data.DB,
-  FireDAC.Stan.Def,  // dl:ok unused-unit-in-uses@bef0
+  FireDAC.Stan.Def,
   FireDAC.Stan.Pool,
   FireDAC.Stan.Async,
   FireDAC.Stan.Param,
   FireDAC.Phys,  // dl:ok unused-unit-in-uses@55fa
-  FireDAC.Phys.SQLite,  // dl:ok unused-unit-in-uses@87f1
+  FireDAC.Phys.SQLite,
   FireDAC.DApt;
 
 const
@@ -578,7 +578,7 @@ begin
     Result.Params.Values['ForeignKeys'] := 'On';
     Result.Params.Values['StringFormat'] := 'Unicode';
     Result.Connected := True;
-  except  // dl:ok bare-except@041e -- cleanup then re-raise, nothing swallowed
+  except
     Result.Free;
     raise;
   end;
@@ -603,7 +603,7 @@ begin
         Conn.ExecSQL(RepoTableDdl(Tab));
       SetRepoMeta(Conn, 'schema_version', IntToStr(REPO_SCHEMA_VERSION));
       Conn.Commit;
-    except  // dl:ok bare-except@05ca -- cleanup then re-raise, nothing swallowed
+    except
       Conn.Rollback;
       raise;
     end;
@@ -673,7 +673,7 @@ begin
     // connection inherits StrsTrim = False, so readers need not set it per query.
     Result.FormatOptions.StrsTrim := False;
     ValidateRepository(Result);
-  except  // dl:ok bare-except@041e -- cleanup then re-raise, nothing swallowed
+  except
     Result.Free;
     raise;
   end;

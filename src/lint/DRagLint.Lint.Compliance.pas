@@ -409,7 +409,7 @@ begin
     finally
       Root.Free;
     end;
-  except  // dl:ok bare-except@041e -- REVIEWED 2026-10-27: frees the half-built table and re-raises unchanged
+  except
     Result.Free;
     raise;
   end;

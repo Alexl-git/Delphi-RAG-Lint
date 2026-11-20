@@ -44,8 +44,8 @@ $lanes = 'APP','CMP','DFMA','DFMB','DS','EXC','MEM','OO','RTLCOLL','RTLSTR','STY
 $units = @('lint\v151\DRagLint.V151.Api.pas', 'lint\v151\DRagLint.V151.Dispatch.pas', 'lint\fixers\DRagLint.Fix.V151.Legacy.pas')
 foreach ($l in $lanes) {
   $units += "lint\v151\DRagLint.V151.$l.pas"
-  $units += "lint\v151\DRagLint.V151.$l.Support.pas"
-  $units += "lint\fixers\DRagLint.Fix.V151.$l.pas"
+  if ($l -ne 'RTLSTR') { $units += "lint\v151\DRagLint.V151.$l.Support.pas" }   # 1.52.1 d227feb3a deleted the empty RTLSTR.Support
+  if ($l -eq 'TYP') { $units += "lint\fixers\DRagLint.Fix.V151.$l.pas" }   # 1.52.1 d227feb3a deleted the 14 empty Fix.V151.<lane> scaffolds
 }
 $dpr = [IO.File]::ReadAllText((Join-Path $repo 'src\cli\drag-lint.dpr'))
 $dproj = [IO.File]::ReadAllText((Join-Path $repo 'src\cli\drag-lint.dproj'))

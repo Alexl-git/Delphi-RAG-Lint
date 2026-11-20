@@ -145,7 +145,7 @@ end;
 destructor TOOScan.Destroy;
 begin
   FOut.Free;
-  inherited;  // dl:ok inherited-bare@246d -- REVIEWED 2026-11-14 v151 INT: bare inherited calls the same-named ancestor method, intended
+  inherited;
 end;
 
 function TOOScan.Txt(const ANode: TTSNode): string;
@@ -410,7 +410,7 @@ begin
   end;
 end;
 
-procedure TOOScan.CheckForward(const ARoot: TTSNode);  // dl:ok deep-nesting@484e -- REVIEWED 2026-11-14 v151 INT: tree walk with per-shape branches; flattening would scatter one rule
+procedure TOOScan.CheckForward(const ARoot: TTSNode);
 begin
   var Blocks:= TList<TTSNode>.Create;
   try

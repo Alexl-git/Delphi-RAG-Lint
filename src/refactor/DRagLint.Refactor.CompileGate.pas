@@ -385,7 +385,7 @@ function BuildTimeoutMs(const pProject: string): Cardinal;
 /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.StandDownRequested"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function TakeStandDown: Boolean;  // dl:ok unused-public-symbol@34e9 -- public API for the next gated rewrites (items 3 and 4) and the owed report rule
+function TakeStandDown: Boolean;
 
 /// <summary>The text a message uses to cite pPath, a file in this run's scratch.</summary>
 /// <param name="pPath">The file.</param>
@@ -732,7 +732,7 @@ function NewCompilerMessages(const pBefore, pAfter: TArray<TCompilerFinding>; ou
 function MsBuildPlatform(const pPlatform: string): string;
 begin
   if SameText(pPlatform, 'win32') then Result:= 'Win32'
-  else if (pPlatform = '') or SameText(pPlatform, CDefaultPlatform) then Result:= 'Win64'  // dl:ok ifthen-to-if-expression@3ef9 -- moved verbatim from CLI.CycleFix (lane 144 T0, pure extraction)
+  else if (pPlatform = '') or SameText(pPlatform, CDefaultPlatform) then Result:= 'Win64'
   else Result:= pPlatform;
 end;
 

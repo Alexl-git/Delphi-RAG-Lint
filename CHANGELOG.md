@@ -3,6 +3,21 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## v1.52.1-alpha -- 2026-11-19
+
+In integration (lane/v1521-int). One re-parse for 1.52.1: extractor 1.41.0 -> 1.42.0-alpha, resolver 1.29.0 -> 1.30.0-alpha, grammar tree-sitter-delphi13 v1.4.13 -> v1.4.14.
+
+**Install / update notice.** After the first install, and after any update that bumps the extractor (1.52.1 is one: extractor 1.42.0-alpha), drag-lint re-indexes the platform libraries (Win32 and Win64) in the background. Measured on 1.52 this takes about 2.5 hours per platform and uses a lot of CPU, but the machine stays usable. Later indexing is incremental.
+
+Merged lanes (git log c8118a66d..HEAD):
+
+- INCR18 (#18, resolver 1.30.0): closure_cache -- the compile-closure walk reuses each unit's scan, keyed by the unit and every include file it read; scoped purity -- after a scoped resolve pass the purity stage re-derives only what the pass moved.
+- INITDEP: init-dependency facts (init_deps) in the index; unused-unit-in-uses consumes them.
+- SMALLS: find-callees --name (bare, headers when ambiguous); query --text one-literal limit documented; noreturn hover/autodoc guard; uses-fix shadow-compile dir is per-process and cleaned up, and its cleanup reports instead of swallowing.
+- SHOPDEMO: Shop cycle-fix fixture and run_cyclefix_shop.ps1.
+- SCAFFOLD: 29 empty scaffold units dropped from the drag-lint .dpr/.dproj.
+- SRC (slz): the deferred extractor surface patch (parser, preprocessor, index plan, data-flow facts, dispatch resolver, flow lattices).
+- Grammar v1.4.14: a line comment no longer carries its trailing CR; the FixSharedMarkerLegacy TrimRight workaround is removed.
 ## v1.52.0-alpha -- 2026-11-19
 
 In integration (lane/v152-int). One re-parse for the whole 1.52 bundle: extractor 1.40.0 -> 1.41.0-alpha,

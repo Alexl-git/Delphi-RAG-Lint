@@ -242,7 +242,7 @@ begin
   if Length(pReadRows) > 0 then
     ReadPorts:= AddRowCluster(pSb, 'cluster_readers', 'nr', 'readers',
       Format('%d routine%s, %d site%s', [pData.RTop.Total, PluralS(pData.RTop.Total),
-        pData.TotalReads, PluralS(pData.TotalReads)]), pReadRows, Style);  // dl:ok duplicate-code@1d9f -- REVIEWED 2026-10-17: the cluster-and-edge tail mirrors the script's own two wing blocks (precedent Q.Hierarchy, decision F9); sharing it would cost a callback for a Format and an AppendLine
+        pData.TotalReads, PluralS(pData.TotalReads)]), pReadRows, Style);
   pSb.AppendLine('');
   { writer -> member (the routine acts ON it); member -> reader (the value flows OUT). A note row gets NO edge. }
   for var I:= 0 to High(pWriteRows) do

@@ -294,7 +294,7 @@ end;
 /// <returns>The chart result; LeftCount is the total group count, RightCount the drawn edge count.</returns>
 /// <exception cref="EChartsQuestion">The unit is in no cycle although cycles exist.</exception>
 /// <remarks>Opens a read-only TSQLiteSymbolStore beside the TChartsIndex (two read-only handles on one file) for the Tarjan mirror. Zero cycles is an answer, not a refusal.</remarks>
-function Emit(const pArgs: TQuestionArgs; const pOutDir: string): TChartResult;  // dl:ok deep-nesting@5be6 -- REVIEWED 2026-10-17: ports the one-script PS body line for line (H9-H13); splitting it would scatter the shared counters and the dot buffer
+function Emit(const pArgs: TQuestionArgs; const pOutDir: string): TChartResult;
 begin
   var Store: ISymbolStore:= TSQLiteSymbolStore.CreateReadable(pArgs.GuardedDb, True);
   var Index:= TChartsIndex.Create(pArgs.GuardedDb);

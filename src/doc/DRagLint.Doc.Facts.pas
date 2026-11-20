@@ -3147,7 +3147,7 @@ begin
   GSrcFilesRead.Add(AFilePath); { asked for = depended on, whether or not the read succeeds }
   try
     Stamp:= System.IOUtils.TFile.GetLastWriteTime(AFilePath);
-  except
+  except  // dl:ok try-except-swallowed@8f3b, bare-except@8f3b -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
     Exit; { missing/unreadable -- same tolerant contract as the reads it replaces }
   end;
   { Bit-exact, not arithmetic: the question is "is this the SAME stamp I stored",
@@ -3160,7 +3160,7 @@ begin
   if (GSrcCachePath = AFilePath) and (PInt64(@GSrcCacheStamp)^ = PInt64(@Stamp)^) then Exit(GSrcCacheLines);
   try
     GSrcCacheLines:= ReadSourceFileLines(AFilePath);
-  except
+  except  // dl:ok bare-except@5298, try-except-swallowed@5298 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
     GSrcCachePath:= '';
     Exit;
   end;
@@ -3278,7 +3278,7 @@ begin
   if AFilePath = '' then Exit;
   try
     Stamp:= System.IOUtils.TFile.GetLastWriteTime(AFilePath);
-  except
+  except  // dl:ok bare-except@8f3b, try-except-swallowed@8f3b -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
     Exit; { missing/unreadable -- unmarked, which is the no-change answer }
   end;
   { Bit-exact for the same reason SourceLines is -- see its comment. }

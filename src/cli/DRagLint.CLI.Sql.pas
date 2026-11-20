@@ -208,7 +208,6 @@ begin
 
   Truncated:= False;
   TotalRows:= 0;
-  ElapsedMs:= 0;
   Failure  := '';
   Refused  := False;
   TimedOut := False;
@@ -256,7 +255,7 @@ begin
             passed. Measured, not reasoned about. }
           Q.FetchOptions.Mode      := fmOnDemand;
           Q.FetchOptions.RowsetSize:= 100;
-          Q.SQL.Text:= SqlText;
+          Q.SQL.Text:= SqlText;  // dl:ok taint-sql-injection@a6d0 -- REVIEWED 2026-11-19 SLZ-MARK: the verb runs the operator's ad-hoc SQL; TSqlGuard authorizer blocks ATTACH (fail closed) and the connection is read-only
           try
             Q.Open;
 

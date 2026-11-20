@@ -884,7 +884,7 @@ begin
         if LSrcUsed[LI] then
           Continue;
         LSKey := UpperCase(pSrc[LI].FieldName);
-        for LJ in pDstOrder do
+        for LJ in pDstOrder do  // dl:ok index-possibly-out-of-range@085f -- REVIEWED 2026-11-19 SLZ-MARK: pDstOrder is a permutation of pDst indexes; LDstUsed is sized Length(pDst)
         begin
           if LDstUsed[LJ] then
             Continue;

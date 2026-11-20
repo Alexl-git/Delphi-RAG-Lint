@@ -3472,7 +3472,7 @@ begin
   pWhy     := '';
   pOverload:= False;
   var Text:= '';
-  for var L:= pLine to Min(pLine + CMaxDeclLines - 1, Length(pLines)) do Text:= Text + BareCode(LineOf(pLines, L)) + ' ';  // dl:ok duplicate-code@e7f0 -- mirrors the R1 DeclConvention scan with method directives; left separate so lanes editing R1 do not collide
+  for var L:= pLine to Min(pLine + CMaxDeclLines - 1, Length(pLines)) do Text:= Text + BareCode(LineOf(pLines, L)) + ' ';
   if ContainsStr(Text, '{$') or ContainsStr(Text, '(*$') then
   begin
     pWhy:= 'a compiler directive inside its declaration';

@@ -328,7 +328,7 @@ function HbIsUnorderedHandlerName(const pName: string): Boolean;  // dl:ok unuse
 /// <para>Calls: ExtractFileName, Format</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function HbReliedText(const pOrder: THbHandlerOrder): string;  // dl:ok unused-public-symbol@8e3c -- REVIEWED 2026-11-17 v152 HBEVORD: consumer is the solver hook (INT handover H-EVORD in DRagLint.Query.HappensBefore) and the harness
+function HbReliedText(const pOrder: THbHandlerOrder): string;
 
 /// <summary>The "why not SET" text of a use whose root is an ordered handler entered with the bit
 /// False: the prefix of the program does not write the target on every path.</summary>
@@ -341,7 +341,7 @@ function HbReliedText(const pOrder: THbHandlerOrder): string;  // dl:ok unused-p
 /// <para>Calls: ExtractFileName, Format</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function HbPrefixMissText(const pOrder: THbHandlerOrder; const pTarget: string): string;  // dl:ok unused-public-symbol@ffa6 -- REVIEWED 2026-11-17 v152 HBEVORD: consumer is the solver hook (INT handover H-EVORD in DRagLint.Query.HappensBefore)
+function HbPrefixMissText(const pOrder: THbHandlerOrder; const pTarget: string): string;
 
 implementation
 

@@ -219,7 +219,7 @@ end.
   Write-Host '== check 4: no site listed twice (the DOTTED write W2 is the double-row trap) ==' -ForegroundColor Cyan
   $w2Rows = @(RowsAt $fc['FFlag'] $Sites.W2.f $Sites.W2.l)
   Check 'fixture health: W2 owns a member_accesses row (so the member arm lists it and the trap is armed)' `
-    ((@(Sql $db ("SELECT COUNT(*) AS n FROM member_accesses ma JOIN refs r ON r.id = ma.ref_id JOIN files f ON f.id = r.file_id " +
+    (((Sql $db ("SELECT COUNT(*) AS n FROM member_accesses ma JOIN refs r ON r.id = ma.ref_id JOIN files f ON f.id = r.file_id " +
                  "WHERE f.path LIKE '%\{0}' AND r.start_line = {1} AND ma.mode = 'write'" -f $Sites.W2.f, $Sites.W2.l)) | ForEach-Object { [int]$_.n }) -eq 1) ''
   Check 'W2 is listed exactly ONCE' ($w2Rows.Count -eq 1) ($w2Rows | ConvertTo-Json -Compress)
   foreach ($n in @('FFlag', 'GCount', 'kTwo', 'kOne')) {

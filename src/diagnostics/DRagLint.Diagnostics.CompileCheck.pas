@@ -406,7 +406,7 @@ begin
     FillChar(PI, SizeOf(PI), 0);
     WideCmd:= ACmd;
     UniqueString(WideCmd);
-    if not CreateProcessW(nil, PWideChar(WideCmd), nil, nil, True, CREATE_NO_WINDOW, AEnvBlock, nil, SI, PI) then
+    if not CreateProcessW(nil, PWideChar(WideCmd), nil, nil, True, CREATE_NO_WINDOW, AEnvBlock, nil, SI, PI) then  // dl:ok taint-command-injection@ae6d -- REVIEWED 2026-11-19 SLZ-MARK: spawns a fixed tool (git, yadf or dcc) with a caller-built command line; the only environment input is the manifest out-dir expansion
     begin
       CloseHandle(WritePipe);
       raise Exception.CreateFmt('CreateProcessW failed: %d', [GetLastError]);

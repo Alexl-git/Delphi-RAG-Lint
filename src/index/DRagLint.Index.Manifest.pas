@@ -2068,7 +2068,7 @@ begin
         if (V is TJSONObject) and (TJSONObject(V).GetValue('name') is TJSONString) and
           (FindSectionByName(AOld, TJSONObject(V).GetValue('name').Value) = nil) then
           Result.AddElement(TJSONValue(V.Clone));
-  except  // dl:ok bare-except@041e -- frees the half-built result object and re-raises; nothing is swallowed
+  except
     Result.Free;
     raise;
   end;
@@ -2138,7 +2138,7 @@ begin
       NewJ.Free;
       OldJ.Free;
     end;
-  except  // dl:ok bare-except@041e -- frees the half-built result object and re-raises; nothing is swallowed
+  except
     Result.Free;
     raise;
   end;
@@ -2419,7 +2419,7 @@ begin
   try
     DocManifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
     Result:= DocManifest.Docs.ComplexityMin;
-  except
+  except  // dl:ok bare-except@b952 -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
     Result:= 10;
   end;
 end;

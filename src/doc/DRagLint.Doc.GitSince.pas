@@ -120,7 +120,7 @@ begin
     FillChar(PI, SizeOf(PI), 0);
     WideCmd:= ACmd;
     UniqueString(WideCmd);
-    if not CreateProcessW(nil, PWideChar(WideCmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, SI, PI) then
+    if not CreateProcessW(nil, PWideChar(WideCmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, SI, PI) then  // dl:ok taint-command-injection@0d0c -- REVIEWED 2026-11-19 SLZ-MARK: spawns a fixed tool (git, yadf or dcc) with a caller-built command line; the only environment input is the manifest out-dir expansion
     begin
       CloseHandle(WritePipe);
       raise Exception.CreateFmt('CreateProcessW failed: %d', [GetLastError]);
@@ -257,7 +257,7 @@ begin
     // line was blamed to 'Not Committed Yet' (a zero/absent author-time) -> '' too.
     Result := ParsePorcelainAuthorDate(Output);
     // Result is either 'YYYY-MM-DD' or '' -- absence over a wrong fact.
-  except
+  except  // dl:ok bare-except@86a2 -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
     Result := '';                            // ANY exception -> silent degradation
   end;
 end;

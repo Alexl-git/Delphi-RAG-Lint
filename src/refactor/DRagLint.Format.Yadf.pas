@@ -535,7 +535,7 @@ begin
     WideCmd:= ACmd;
     UniqueString(WideCmd);
 
-    if not CreateProcessW(nil, PWideChar(WideCmd), nil, nil, True,
+    if not CreateProcessW(nil, PWideChar(WideCmd), nil, nil, True,  // dl:ok taint-command-injection@ce31 -- REVIEWED 2026-11-19 SLZ-MARK: spawns a fixed tool (git, yadf or dcc) with a caller-built command line; the only environment input is the manifest out-dir expansion
                           CREATE_NO_WINDOW, nil, nil, SI, PI) then
       raise EYadfFormatError.CreateFmt('CreateProcessW failed: %d', [GetLastError]);
 

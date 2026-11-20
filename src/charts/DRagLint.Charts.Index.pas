@@ -552,7 +552,7 @@ begin
     finally
       Q.Free;
     end;
-  except // dl:ok bare-except@041e -- frees the half-built result list and re-raises; nothing is swallowed
+  except
     Result.Free;
     raise;
   end;

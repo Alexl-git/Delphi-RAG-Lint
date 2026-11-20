@@ -2171,7 +2171,7 @@ begin
 end;
 
 // Evaluate one predicate. Returns True if it passes.
-function EvalPredicate(const AQuery: TTSQuery; const AMatch: TTSQueryMatch; const ASource: TBytes; const AArgs: TArray<TPredicateArg>;
+function EvalPredicate(const AMatch: TTSQueryMatch; const ASource: TBytes; const AArgs: TArray<TPredicateArg>;
   ACache: TDeclScopeCache): Boolean;
 const
   { #in? / #not-in? argument positions: (#in? @cap "nodeType" ["nameRegex"]) }
@@ -2222,7 +2222,7 @@ begin
     Pattern:= AArgs[2].StringValue;
     try
       Result:= TRegEx.IsMatch(FirstText, Pattern);
-    except
+    except  // dl:ok bare-except@79dc -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
       Result:= False;
     end;
     if Op = 'not-match?' then Result:= not Result;
@@ -2329,7 +2329,7 @@ begin
         begin
           // End of one predicate. Evaluate; if false, the whole match
           // fails. Then reset Current for the next predicate (if any).
-          if not EvalPredicate(AQuery, AMatch, ASource, Current.ToArray, ACache) then Exit(False);
+          if not EvalPredicate(AMatch, ASource, Current.ToArray, ACache) then Exit(False);
           Current.Clear;
         end;
       end; // case
@@ -2566,7 +2566,7 @@ begin
           if Seen.TryGetValue(Rule.Id + '|' + LowerCase(ExtractFileName(ScmPath)), FirstAt) then
           begin
             Writeln(ErrOutput, Format('  RULE-DUPLICATE-ID %s: %s ignored (already loaded from %s)', [Rule.Id, ScmPath, FirstAt]));
-            FreeAndNil(Rule); // dl:ok unprotected-object-free@b455 -- REVIEWED 2026-10-24: nothing between Create and this Free can raise (Format/Writeln on strings); ownership passes to List only at List.Add
+            FreeAndNil(Rule);
             Continue;
           end;
           Seen.Add(Rule.Id + '|' + LowerCase(ExtractFileName(ScmPath)), ScmPath);

@@ -5995,7 +5995,7 @@ begin
                THashSHA2.GetHashString(Txt)) then
         FStaleFiles.AddOrSetValue(AFileId, True);
       Result.Text:= Txt;
-    except
+    except  // dl:ok try-except-swallowed@576a, bare-except@576a -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
       // A missing / locked / unreadable source file is not fatal to the whole-DB
       // pass: leave the line list empty so this ref's receiver stays unresolved
       // (Target=0) rather than aborting resolution for every other ref.

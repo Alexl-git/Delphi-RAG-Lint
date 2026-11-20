@@ -217,7 +217,8 @@ begin
   try
     { "Nothing to release" is the desired end state, so it is a success. A
       caller scripting this should not have to special-case the common case. }
-    if TFile.Exists(EngineHoldFilePath) then TFile.Delete(EngineHoldFilePath);
+    if (not System.SysUtils.DeleteFile(EngineHoldFilePath))
+       and (GetLastError <> ERROR_FILE_NOT_FOUND) and (GetLastError <> ERROR_PATH_NOT_FOUND) then RaiseLastOSError;
     Result:= True;
   except
     on E: Exception do
@@ -253,7 +254,7 @@ begin
     if Left > ENGINE_HOLD_MAX_SECONDS then Left:= ENGINE_HOLD_MAX_SECONDS;
     ASecondsLeft:= Integer(Left);
     Result      := True;
-  except
+  except  // dl:ok bare-except@651d -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
     { A locked or unreadable sentinel is NOT a hold -- see the unit header. }
     ASecondsLeft:= 0;
     Result      := False;

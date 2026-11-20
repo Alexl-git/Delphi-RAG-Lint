@@ -369,6 +369,10 @@ The rule is the same for `document`, `lint-all`, `lint-project` and the
 exporters, so one `--db` list works across verbs: a block written by
 `document --db P --db L` is accepted by `lint-all --db P --db L`.
 
+### First install and updates: the library re-index
+
+After the first install, and after any update that bumps the extractor (1.52.1 is one: extractor 1.42.0-alpha), drag-lint re-indexes the platform libraries (Win32 and Win64) in the background. Measured on 1.52 this takes about 2.5 hours per platform and uses a lot of CPU, but the machine stays usable. Later indexing is incremental.
+
 ### Indexing the Delphi RTL/VCL libraries
 
 To build one index over everything Delphi itself knows about - the IDE's
@@ -1053,7 +1057,7 @@ Win64 build.
 | `hover --qname <q>` | Hover card for a symbol (incl. declared type; a re-published property names its declaring ancestor) | `--format plain\|md\|json` |
 | `typeat <file>:<line>:<col>` | Resolve the type of the expression at a cursor position | `--format text\|json` |
 | [`find-unit`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/find-unit) `--name <X> --in <file>` | Find which unit declares `X`, to add to `uses` | `--apply` |
-| [`find-callees`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/find-callees) `--qname <X>` | Resolved outgoing calls of a routine, one line per call site; exits 1 when the routine calls nothing (1.52, GitHub #17) (a target called N times repeats; for the distinct list use `callgraph --qname <X> --direction callees --depth 1`); library-bound callees follow, marked `(library`, bound from a stored `refs.external_target` or at read time through a second `--db` / `--library-db`; with no library open the text says `M external (library not open)` | `--json` (`external`, `via`: `edge`\|`oracle`), `--library-db` |
+| [`find-callees`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/find-callees) `--qname <X>` or `--name <bare>` | Resolved outgoing calls of a routine (`--name` = every routine of that bare name, each under a `# <qname>` header when several; 1.52.1), one line per call site; exits 1 when the routine calls nothing (1.52, GitHub #17) (a target called N times repeats; for the distinct list use `callgraph --qname <X> --direction callees --depth 1`); library-bound callees follow, marked `(library`, bound from a stored `refs.external_target` or at read time through a second `--db` / `--library-db`; with no library open the text says `M external (library not open)` | `--json` (`external`, `via`: `edge`\|`oracle`), `--library-db` |
 | [`call-path`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/call-path) `--from <A> --to <B>` | Shortest resolved call path A -> B | `--max-depth N` |
 | [`ambiguous-calls`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ambiguous-calls) | Resolver-coverage diagnostic: unresolved/ambiguous call sites | `--qname`, `--in` |
 | [`helpers-of`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/helpers-of) `<T>` | Record/class helper edges targeting type `T` | `--json` |

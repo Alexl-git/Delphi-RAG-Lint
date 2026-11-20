@@ -63,11 +63,11 @@ type
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   THbReason = (
-    hrUnorderedRoot, hrEscapedRoutine, hrWriterConditional, hrWriterLaterUnit, hrWriterAfterUseSameRoutine,  // dl:ok unused-enum-value@75ab -- REVIEWED 2026-11-17 v152 HBSKEL: frozen check-init contract; the engine lanes (EVENTS, SOLVER, FIELDS, RECV, EVORD) name these values
-    hrCalleeNotMust, hrIndirectCall, hrVirtualFanout, hrInterfaceCall, hrSoftWriter, hrNilWriteOnly,  // dl:ok unused-enum-value@c81b -- REVIEWED 2026-11-17 v152 HBSKEL: frozen check-init contract; the engine lanes (EVENTS, SOLVER, FIELDS, RECV, EVORD) name these values
-    hrCtorMissesField, hrNoDeclaredCtor, hrSubclassCtorSkips, hrVirtualCallInAncestorCtor, hrSelfEscapesInCtor,  // dl:ok unused-enum-value@7be7 -- REVIEWED 2026-11-17 v152 HBSKEL: frozen check-init contract; the engine lanes (EVENTS, SOLVER, FIELDS, RECV, EVORD) name these values
-    hrUnreliableOrder, hrMultiProgram, hrWriterOnThread, hrCfgSkipped, hrBudget, hrIndexIncomplete,  // dl:ok unused-enum-value@d3c3 -- REVIEWED 2026-11-17 v152 HBSKEL: frozen check-init contract; the engine lanes (EVENTS, SOLVER, FIELDS, RECV, EVORD) name these values
-    hrReliedOnHandlerOrder, hrReceiverUnproven, hrGuardedTest, hrUnknownCallee);  // dl:ok unused-enum-value@ac06 -- REVIEWED 2026-11-17 v152 HBSKEL: frozen check-init contract; the engine lanes (EVENTS, SOLVER, FIELDS, RECV, EVORD) name these values
+    hrUnorderedRoot, hrEscapedRoutine, hrWriterConditional, hrWriterLaterUnit, hrWriterAfterUseSameRoutine,
+    hrCalleeNotMust, hrIndirectCall, hrVirtualFanout, hrInterfaceCall, hrSoftWriter, hrNilWriteOnly,
+    hrCtorMissesField, hrNoDeclaredCtor, hrSubclassCtorSkips, hrVirtualCallInAncestorCtor, hrSelfEscapesInCtor,
+    hrUnreliableOrder, hrMultiProgram, hrWriterOnThread, hrCfgSkipped, hrBudget, hrIndexIncomplete,
+    hrReliedOnHandlerOrder, hrReceiverUnproven, hrGuardedTest, hrUnknownCallee);
 
   /// <summary>How a writer writes the target (spec 5.1, plan D5). Literals: HowCode.</summary>
   /// <remarks>
@@ -97,7 +97,7 @@ type
   /// <para>Used by: declaration (DRagLint.Query.HappensBefore.Types.pas), DRagLint.Query.HappensBefore.Types.ScopeCode (DRagLint.Query.HappensBefore.Types.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  THbScope = (hsProgram, hsInstance);  // dl:ok unused-enum-value@923f -- REVIEWED 2026-11-17 v152 HBSKEL: frozen check-init contract; the engine lanes (EVENTS, SOLVER, FIELDS, RECV, EVORD) name these values
+  THbScope = (hsProgram, hsInstance);
 
   /// <summary>One source position, optionally inside a routine.</summary>
   /// <remarks>

@@ -1805,7 +1805,7 @@ begin
   var NT: string:= ANode.NodeType;
   if (NT = NODE_LAMBDA) or (NT = NODE_DEFPROC) then Exit;
   Hit:= QuitHitOf(ANode);
-  if (NT = NODE_DOT) and (Hit = '') then CheckQuits(ANode.ChildByField(FIELD_LHS), AEntry);  // dl:ok duplicate-code@56df -- 149 RT library-identity branch mirrors the indexed-type branch over a different store; folding them is a 150 row
+  if (NT = NODE_DOT) and (Hit = '') then CheckQuits(ANode.ChildByField(FIELD_LHS), AEntry);
   if NT = NODE_CALL then
   begin
     var Ent: TTSNode:= ANode.ChildByField(FIELD_ENTITY);

@@ -550,7 +550,7 @@ begin
   FFieldsOf.Free;
   FParentOf.Free;
   FNodes.Free;
-  inherited;  // dl:ok inherited-bare@246d -- REVIEWED 2026-11-14 v151 INT: bare inherited calls the same-named ancestor method, intended
+  inherited;
 end;
 
 procedure TThrbFile.Flatten(const ANode: TTSNode);
@@ -725,7 +725,7 @@ begin
   Result:= FFieldsOf.TryGetValue(AClass, Fields) and (Fields.IndexOf(AName) >= 0);
 end;
 
-procedure TThrbFile.Emit(const ANode: TTSNode; const ARule, AMsg: string);  // dl:ok duplicate-code@d459 -- REVIEWED 2026-11-14 v151 INT: same shape over different fields; a helper would need more parameters than it saves
+procedure TThrbFile.Emit(const ANode: TTSNode; const ARule, AMsg: string);
 var
   P: TTSPoint;
   F: TLintFinding;

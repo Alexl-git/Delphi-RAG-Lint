@@ -396,7 +396,7 @@ function ReadInt32LE(const ABytes: TBytes; AOffset: Integer): Integer;
 begin
   Result:= 0;
   if AOffset + Int32ByteLen > Length(ABytes) then Exit;
-  Result:= Integer(ABytes[AOffset]) or (Integer(ABytes[AOffset + Byte1Index]) shl Byte1Shift) or
+  Result:= Integer(ABytes[AOffset]) or (Integer(ABytes[AOffset + Byte1Index]) shl Byte1Shift) or  // dl:ok index-possibly-out-of-range@ea41 -- REVIEWED 2026-11-19 SLZ-MARK: AOffset is a caller contract (checked against Length one line above)
            (Integer(ABytes[AOffset + Byte2Index]) shl Byte2Shift) or (Integer(ABytes[AOffset + Byte3Index]) shl Byte3Shift);
 end;
 

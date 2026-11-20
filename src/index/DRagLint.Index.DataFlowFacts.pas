@@ -197,8 +197,7 @@ type
 implementation
 
 uses
-  System.Generics.Defaults
-  , DRagLint.Core.Encoding { 1.52 EXTGAPS2: data_flows positions are refs' CHARACTER columns }
+  DRagLint.Core.Encoding { 1.52 EXTGAPS2: data_flows positions are refs' CHARACTER columns }
   , DRagLint.Analysis.Cfg
   , DRagLint.Analysis.DataFlow
   , DRagLint.Analysis.Flow.Lattices
@@ -672,7 +671,7 @@ begin
   FGlobals.Free;
   FFields.Free;
   FVars.Free;
-  inherited;  // dl:ok inherited-bare@246d -- destructor chaining to TObject.Destroy
+  inherited;
 end;
 
 { Registers what TRoutineVarTable.Build leaves out on purpose (a single bare inline

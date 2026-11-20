@@ -6,7 +6,6 @@ uses
   System.SysUtils
   , System.Classes
   , System.IOUtils
-  , System.StrUtils
   , System.Math
   , System.Types
   , System.Generics.Collections

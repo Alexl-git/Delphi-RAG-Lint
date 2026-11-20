@@ -69,7 +69,7 @@ uses
 
 function Tag: string;
 begin
-  Result := Format('x_%u', [GetTickCount]);
+  Result := IntToStr(GetTickCount - 1);   { 1.52.1 SLZ-RULE1: a Format argument no longer fires; a binary operand (timing shape) does }
 end;
 
 end.

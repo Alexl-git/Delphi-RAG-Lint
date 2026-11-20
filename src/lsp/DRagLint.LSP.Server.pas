@@ -12,7 +12,6 @@ uses
   , System.NetEncoding
   , Winapi.Windows
   , TreeSitter
-  , TreeSitterLib
   , DRagLint.Core    .Model
   , DRagLint.Core    .Versions // dl:unit DRagLint.Core.Versions accepted -- INDEXER_FINGERPRINT_META_KEY: the stamp each --db is reported with at startup; LIBRARY_RESOLVE_STATE_META_KEY: the lf-marker key
   , DRagLint.Core    .ControlChannel { W3: the maintenance control channel the lsp host cooperates with in Run }
@@ -3053,7 +3052,7 @@ begin
   if AResult = nil then AResult:= TJSONNull.Create;
   try
     Reply:= TJSONObject.Create;
-  except  // dl:ok bare-except@5cc8 -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
+  except
     AResult.Free;
     raise;
   end;
@@ -3494,7 +3493,7 @@ begin
         SymObj.AddPair('location', LocationFromSymbol(Sym, StCur));
       end; // for
     end; // for
-  except  // dl:ok bare-except@bb6b -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
+  except
     Arr.Free;
     raise;
   end; // try
@@ -3548,7 +3547,7 @@ begin
         if (StIdx = 0) and (Length(Symbols) > 0) and EphemeralLeads(DefStores) then Break;
       end;
     end;
-  except  // dl:ok bare-except@bb6b -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
+  except
     Arr.Free;
     raise;
   end; // try
@@ -3661,7 +3660,7 @@ begin
   Arr:= TJSONArray.Create;
   try
     Path       := APath;
-    IncludeDecl:= AIncludeDecl;  // dl:ok duplicate-code@106a -- the Arr/try/IdentifierAtPosition prologue ComputeDefinition shares; both bodies were already duplicated in the pre-S0 handlers and S0 moved them verbatim
+    IncludeDecl:= AIncludeDecl;
     if Length(FStores) = 0 then Exit(Arr);
     Ident:= IdentifierAtPosition(Path, ALine0, ACol0);
     if Ident <> '' then
@@ -3721,7 +3720,7 @@ begin
           MISSING, not that the other stores' were present. }
       end;
     end;
-  except  // dl:ok bare-except@bb6b -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
+  except
     Arr.Free;
     raise;
   end; // try
@@ -3951,7 +3950,7 @@ begin
   if FEphemDbPath = '' then Exit;
   for var Suffix in TArray<string>.Create('', '-wal', '-shm') do
     try
-      if TFile.Exists(FEphemDbPath + Suffix) then TFile.Delete(FEphemDbPath + Suffix);
+      if TFile.Exists(FEphemDbPath + Suffix) then TFile.Delete(FEphemDbPath + Suffix);  // dl:ok stat-gated-destructive@85f7 -- REVIEWED 2026-11-19 SLZ-MARK: own ephemeral temp DB; the exception is swallowed on purpose
     except
       { see above -- deliberately swallowed }
     end;
@@ -3976,7 +3975,7 @@ begin
   FEphemDbPath:= TPath.Combine(TPath.GetTempPath,
     Format('drag-lint-lsp-ephem-%d-%d.sqlite', [GetCurrentProcessId, FEphemSeq]));
   try
-    if TFile.Exists(FEphemDbPath) then TFile.Delete(FEphemDbPath);
+    if TFile.Exists(FEphemDbPath) then TFile.Delete(FEphemDbPath);  // dl:ok stat-gated-destructive@97a6 -- REVIEWED 2026-11-19 SLZ-MARK: own ephemeral temp DB; the exception is swallowed on purpose
 
     var S: ISymbolStore:= TSQLiteSymbolStore.Create(FEphemDbPath);
     S.Migrate;
@@ -5207,7 +5206,7 @@ begin
 
   try
     Stamp:= TFile.GetLastWriteTime(APath);
-  except
+  except  // dl:ok try-except-swallowed@8f3b, bare-except@8f3b -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
     Exit;
   end;
 
@@ -5843,7 +5842,7 @@ begin
     { Wave 149 LX (D1P-149 i): the exception lens titles, one (line, title) object per routine, 0-based on the
       routine's declaration line -- the RAD Studio lens reads callerCounts, not codeLens. }
     Res.AddPair('exceptions', ComputeExceptionLenses(FileFromUri(Uri)));
-  except  // dl:ok bare-except@56ea -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
+  except
     Res.Free;
     raise;
   end;
@@ -5960,7 +5959,7 @@ begin
       O.AddPair('via'      , F.Via);
       O.AddPair('routine'  , F.Routine);
     end;
-  except  // dl:ok bare-except@041e -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
+  except
     Result.Free;
     raise;
   end;
@@ -6134,7 +6133,7 @@ begin
         Decl.Free;
       end;
     end;
-  except  // dl:ok bare-except@bb6b -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
+  except
     Arr.Free;
     raise;
   end;
@@ -6779,7 +6778,7 @@ begin
               if TLiveDocuments.Readable(RowPath) then
                 try
                   SrcLines:= TLiveDocuments.ReadLines(RowPath);
-                except
+                except  // dl:ok try-except-swallowed@cb30 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
                   { A caller row is worth showing without its text; it is not
                     worth failing the whole tooltip for. }
                   on E: Exception do SetLength(SrcLines, 0);
@@ -7553,8 +7552,8 @@ begin
     if HNul <> INVALID_HANDLE_VALUE then CloseHandle(HNul);
     try
       TFile.Delete(TmpPath);
-    except
-      on Exception do TmpPath:= ''; { a leftover temp file is harmless; raising out of didSave is not }
+    except  // dl:ok try-except-swallowed@767f -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
+      on Exception do ; { a leftover temp file is harmless; raising out of didSave is not }
     end;
   end;
 end; // function

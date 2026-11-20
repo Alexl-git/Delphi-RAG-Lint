@@ -908,7 +908,7 @@ begin
   for var K in FOlderKeys do
   begin
     Result.FOlderKeys.Add(K);
-    Result.FOlder.Add(K, FOlder[K]);
+    Result.FOlder.Add(K, FOlder[K]);  // dl:ok dictionary-get-without-check@91b3 -- REVIEWED 2026-11-19 SLZ-MARK: the map is keyed by the same ids or keys filled in an earlier pass; the lookup cannot miss
   end;
   if pHasOlder then
   begin

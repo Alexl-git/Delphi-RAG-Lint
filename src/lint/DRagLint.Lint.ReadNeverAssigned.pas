@@ -403,8 +403,7 @@ begin
     try
       Result:= TSrcText.Create(TFile.ReadAllLines(Path));
     except
-      on E: EInOutError do Result:= nil;
-      on E: EFileNotFoundException do Result:= nil;
+      on E: EInOutError do Result:= nil; { includes EFileNotFoundException }
       on E: EEncodingError do Result:= nil;
     end;
   FTexts.Add(AFileId, Result);

@@ -2779,7 +2779,7 @@ begin
   for CurField in FFieldList do
   begin
 
-    RealType:= if CurField.ISENUM then CurField.ENUMTYPE else CurField.VAR_TYPE;  // dl:ok duplicate-code@2407 -- REVIEWED 2026-11-17 v152 TTGEN: TableTools section generators differ only in emitted text; kept 1:1 with the ported source
+    RealType:= if CurField.ISENUM then CurField.ENUMTYPE else CurField.VAR_TYPE;
     SectionCode.Add('{$REGION ''Documentation''}		');
     if CurField.DOC_SUMMARY.Count > 0 then
     begin
@@ -3309,7 +3309,7 @@ begin
   Result.NewText:= pNewText;
   if not pExists then
     Result.Kind:= ockNew
-  else if pOldText = pNewText then  // dl:ok ifthen-to-if-expression@1943 -- REVIEWED 2026-11-17 v152 TTGEN: three-way result, an if-expression is not clearer here
+  else if pOldText = pNewText then
     Result.Kind:= ockUnchanged
   else
     Result.Kind:= ockChanged;

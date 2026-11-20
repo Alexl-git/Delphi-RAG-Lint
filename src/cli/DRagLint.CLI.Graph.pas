@@ -177,11 +177,12 @@ begin
     // query). Restrict to symbol kinds worth drawing an arrow at.
     WhereClause:= 'f1.id <> f2.id AND s.kind IN (' + '''class'', ''interface'', ''record'', ''method'', ''procedure'', ' +
     '''function'', ''constructor'', ''destructor'', ''enum'', ''unit'')';
-    if RootSubstr <> '' then WhereClause:= WhereClause + ' AND (f1.path LIKE ''%' + RootSubstr + '%'' OR f2.path LIKE ''%' + RootSubstr + '%'')';
+    if RootSubstr <> '' then WhereClause:= WhereClause + ' AND (f1.path LIKE :root OR f2.path LIKE :root)';
     Sql:= 'SELECT f1.path AS from_path, f2.path AS to_path, ' + '       COUNT(DISTINCT r.id) AS weight ' + 'FROM refs r ' + 'JOIN files f1 ON r.file_id = f1.id ' +
     'JOIN symbols s ON LOWER(s.name) = LOWER(r.name_text) ' + 'JOIN files f2 ON s.file_id = f2.id ' + 'WHERE ' + WhereClause + ' ' + 'GROUP BY f1.id, f2.id ' +
     'ORDER BY weight DESC';
     Q.Sql.Text:= Sql;
+    if RootSubstr <> '' then Q.ParamByName('root').AsString:= '%' + RootSubstr + '%';
     Q.Open;
 
     if (Format = 'json') or (Format = 'html') then JsonEdges:= TStringList.Create;
@@ -434,7 +435,7 @@ begin
     begin
       try
         Lines:= TFile.ReadAllLines(FileName);
-      except
+      except  // dl:ok try-except-swallowed@69ff, bare-except@69ff -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
         Continue;
       end;
       for i:= 0 to High(Lines) do
