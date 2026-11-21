@@ -88,3 +88,17 @@ The proxy merge and the extensions are covered by fixture guards that drive the
 built engine over stdio with a stub DelphiLSP; each names a positive control so
 that a silent run cannot pass with the feature off. Run the targeted set with
 `tests\autotest\run_lsp_*_guard.ps1`.
+
+## VS Code extension 1.6.10 and proxy delivery (1.52.2-alpha)
+
+This section records the state after the heading above was written. The 1.6.8 section still
+describes the `dragLint.delphiLsp` setting correctly; the extension version is now 1.6.10.
+
+- Version history: VS Code 1.6.8 and 1.6.9 carried the `dragLint.delphiLsp` setting (it runs
+  `lsp --proxy`, with `delphiLspMerge` and `delphiLspConfig`) and push `.delphilsp.json` to DelphiLSP.
+  The config pick skips worktrees and `node_modules` and prefers the nearest json of the active unit.
+  Version 1.6.10 is the extension build that ships with 1.52.2-alpha (`editors/vscode/drag-lint/package.json`).
+- Diagnostics: in `lsp --proxy`, drag-lint's part of a merged answer is delivered late, never dropped.
+  Live confirmation in VS Code is owner card A; until it is run, the fix is verified by the fixture guards only.
+- Hover: the null-hover root cause in `lsp --proxy` is fixed, an overloaded routine is chosen by argument
+  count, and the publish race is closed.
