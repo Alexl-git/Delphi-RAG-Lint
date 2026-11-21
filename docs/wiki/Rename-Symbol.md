@@ -88,6 +88,14 @@ named `project B: ...`; `--plan` prints `also: the gate builds <dproj>`; `--appl
 write and rolls all of it back when any of them fails, naming that project. A stale owner is reindexed first by `--apply`,
 never by a preview.
 
+**A sibling project with no index (1.52.3).** A project the manifest names whose index was never built is not an owner
+and is never proved, but when its compile closure holds an edited file the gate builds it too: `--plan` names it on the
+`also:` line, a note says `project <dproj> compiles <unit> but has no index`, and `--apply` builds it before and after the
+write. A reference in that project's own units is not renamed, so a rename that breaks it is refused `[compile-error]`
+naming its `.dproj` and rolled back; build its index (`drag-lint index --project <dproj> --db <db>`) and the rename
+reaches those units too. Only `rename` and the MCP rename tool do this; a `lint --fix` naming rename still skips an
+unindexed sibling (it names it on a `rename-unindexed:` line).
+
 | refusal | why |
 |---|---|
 | `owner-library` | a registry library's index holds the file: a library unit is not project code |
