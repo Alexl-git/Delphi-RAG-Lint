@@ -66,3 +66,13 @@ drag-lint doc-forget --scope <file.pas|dir> --project OldApp [--apply]
 drag-lint doc-forget --scope <file.pas|dir> --rename OldApp=NewApp [--apply]
 drag-lint doc-forget --scope <file.pas|dir> --untagged [--apply]
 ```
+
+## Cross-project verdicts with an unindexed peer
+
+`lint-all` judges `unused-global`, `unused-public` and `member-could-be-private` across the projects of the
+`.groupproj`. A peer project with no index makes the verdict UNDECIDABLE (the finding is withheld and one stderr
+line names the peer and the `index --project` command that fixes it) on every unit the peer lists in its `.dproj` /
+`.dpr`, and on every unit in a folder it searches: its own folder and its `DCC_UnitSearchPath`. Since 1.52.3 a
+search-path entry written as a `$(MACRO)` counts too -- the macro is expanded from the IDE's Environment Variables
+or the process environment, as the indexer does. A unit on the IDE LIBRARY path needs no such rule: `lint-all`
+treats a unit under a library root as library and reports nothing on it.

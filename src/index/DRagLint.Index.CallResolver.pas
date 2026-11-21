@@ -1176,8 +1176,9 @@ type
     /// <returns>The property's type text; for a generic class whose property type is exactly one of its type
     /// parameters, the matching type ARGUMENT of AText (then AFile / AScope are ADeclFile / ADeclScope).
     /// '' when the type does not resolve to one project type, the generic arity differs, the property type
-    /// names a type parameter in any other shape (`TList&lt;V&gt;`), or the type declares no default
-    /// indexed property itself (ancestors are not walked).</returns>
+    /// names a type parameter in any other shape (`TList&lt;V&gt;`), or neither the type nor its class
+    /// ancestors declare a default indexed property (1.52.3 EXT-RES-TAILS: OwnTypeIndexedElement walks
+    /// the ancestors).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.ValueElementTypeText (DRagLint.Index.CallResolver.pas)</para>
@@ -1193,6 +1194,25 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function OwnIndexedElementText(const AText: string; ADeclFile, ADeclScope: Int64; out AFile, AScope: Int64): string;
+    /// <summary>1.52.3 EXT-RES-TAILS: the type `X[K]` yields for X of the project type AOwner instantiated
+    /// with AArgs -- from AOwner's own `indexed default` property or, when it declares none, from the
+    /// first one up its class-parent chain (a project base, generic or not, or a library TList /
+    /// TObjectList / TDictionary / Spring list or dictionary ancestor), the arguments carried up each
+    /// heritage edge.</summary>
+    /// <param name="AOwner">The project type X is declared as.</param>
+    /// <param name="AArgs">AOwner's type arguments as written at the declaration of X (nil when not generic).</param>
+    /// <param name="AArgFile">The file AArgs are written in.</param>
+    /// <param name="AArgScope">The scope AArgs are written in.</param>
+    /// <param name="AFile">Out: the file the returned text is written in.</param>
+    /// <param name="AScope">Out: the scope the returned text is written in.</param>
+    /// <returns>The element type text; '' when no type on the chain declares a default indexed property,
+    /// an arity differs, a heritage edge mixes passed-through parameters with written types
+    /// (`class(TBase&lt;T, TFoo&gt;)`), an edge argument wraps a parameter (`TList&lt;T&gt;`), or the chain is longer
+    /// than MAX_ANCESTOR_HOPS.</returns>
+    /// <remarks>Only the FIRST heritage entry (the class parent) is climbed; interfaces are not searched
+    /// for a default property.</remarks>
+    function OwnTypeIndexedElement(const AOwner: TSymbol; const AArgs: TArray<string>; AArgFile, AArgScope: Int64;
+      out AFile, AScope: Int64): string;
     /// <summary>1.43 (recv2): the element type of a collection type written AText.</summary>
     /// <param name="AText">The type text.</param>
     /// <param name="ADeclFile">The file AText is written in.</param>
@@ -11282,9 +11302,36 @@ begin
   end;
 end;
 
-function TCallResolver.OwnIndexedElementText(const AText: string; ADeclFile, ADeclScope: Int64; out AFile, AScope: Int64): string;
+{ 1.52.3 EXT-RES-TAILS: AText's type arguments split at depth-0 commas (nil for ''). }
+function SplitTypeArgList(const AText: string): TArray<string>;
 var
   Depth: Integer;
+begin
+  Result:= nil;
+  if Trim(AText) = '' then Exit;
+  var From: Integer:= 0;
+  Depth:= 0;
+  for var I: Integer:= 0 to Length(AText) - 1 do
+    if AText.Chars[I] = '<' then Inc(Depth)
+    else if AText.Chars[I] = '>' then Dec(Depth)
+    else if (AText.Chars[I] = ',') and (Depth = 0) then
+    begin
+      Result:= Result + [Trim(AText.Substring(From, I - From))];
+      From:= I + 1;
+    end;
+  Result:= Result + [Trim(AText.Substring(From))];
+end;
+
+{ 1.52.3 EXT-RES-TAILS: True when AText names one of AParams anywhere (`T`, `TList<T>`). }
+function TypeTextNamesParam(const AText: string; const AParams: TArray<string>): Boolean;
+begin
+  Result:= False;
+  for var Part: string in AText.Split(['<', '>', ',', ' ', '.'], TStringSplitOptions.ExcludeEmpty) do
+    for var Prm: string in AParams do
+      if SameText(Part, Prm) then Exit(True);
+end;
+
+function TCallResolver.OwnIndexedElementText(const AText: string; ADeclFile, ADeclScope: Int64; out AFile, AScope: Int64): string;
 begin
   Result:= '';
   AFile := 0;
@@ -11294,61 +11341,108 @@ begin
   var Head: string:= if Open > 0 then Trim(Text.Substring(0, Open)) else Text;
   var BadShape: Boolean:= (Open = 0) or ((Open > 0) and not Text.EndsWith('>'));
   if BadShape or not IsPlainTypeRef(Head) or Head.Contains('<') or ScopeNamesGeneric(ADeclScope, LowerCase(Head)) then Exit;
-  { the type arguments, split at depth-0 commas }
-  var Args: TArray<string>:= nil;
-  if Open > 0 then
+  var Args: TArray<string>:= if Open > 0 then SplitTypeArgList(Text.Substring(Open + 1, Length(Text) - Open - 2)) else nil;
+  Result:= OwnTypeIndexedElement(SymbolById(ResolveTypeNameToSymbol(Head, ADeclFile)), Args, ADeclFile, ADeclScope, AFile, AScope);
+end;
+
+function TCallResolver.OwnTypeIndexedElement(const AOwner: TSymbol; const AArgs: TArray<string>; AArgFile, AArgScope: Int64;  // dl:ok too-many-exit-points@b695 -- REVIEWED 2026-11-20 EXT-RES-TAILS: each exit is one independent decline or one found element (own property, parameter argument, library ancestor); a found flag would only hide them
+  out AFile, AScope: Int64): string;
+const
+  MAX_ANCESTOR_HOPS = 8; // a class-parent chain longer than this declines
+begin
+  Result:= '';
+  AFile := 0;
+  AScope:= 0;
+  var Owner: TSymbol:= AOwner;
+  var Args: TArray<string>:= AArgs;
+  var ArgFile: Int64:= AArgFile;
+  var ArgScope: Int64:= AArgScope;
+  for var Hop: Integer:= 0 to MAX_ANCESTOR_HOPS do
   begin
-    var Inner: string:= Text.Substring(Open + 1, Length(Text) - Open - 2);
-    var From: Integer:= 0;
-    Depth:= 0;
-    for var I: Integer:= 0 to Length(Inner) - 1 do
-      if Inner.Chars[I] = '<' then Inc(Depth)
-      else if Inner.Chars[I] = '>' then Dec(Depth)
-      else if (Inner.Chars[I] = ',') and (Depth = 0) then
-      begin
-        Args:= Args + [Trim(Inner.Substring(From, I - From))];
-        From:= I + 1;
-      end;
-    Args:= Args + [Trim(Inner.Substring(From))];
-  end;
-  var Owner: TSymbol:= SymbolById(ResolveTypeNameToSymbol(Head, ADeclFile));
-  { the generic parameter names, in order (constraints after a depth-0 ':' dropped) }
-  var Params: TArray<string>:= nil;
-  var PText: string:= Trim(Owner.GenericParams);
-  if PText.StartsWith('<') and PText.EndsWith('>') then PText:= Copy(PText, 2, Length(PText) - 2);
-  for var Group: string in PText.Split([';'], TStringSplitOptions.ExcludeEmpty) do
-  begin
-    var Colon: Integer:= Group.IndexOf(':');
-    var Names: string:= if Colon >= 0 then Group.Substring(0, Colon) else Group;
-    for var N: string in Names.Split([',', ' '], TStringSplitOptions.ExcludeEmpty) do
-      Params:= Params + [N];
-  end;
-  { one project type of the same generic arity that itself declares the default indexed property }
-  var Kids: TList<TSymbol>:= if (Owner.Id > 0) and (Owner.Kind in TYPE_KINDS) and (Length(Params) = Length(Args)) then ChildrenOf(Owner.Id) else nil;
-  var Prop: TSymbol:= Default(TSymbol);
-  if Kids <> nil then
-    for var P: TSymbol in Kids do
-      if (P.Kind = skProperty) and SameText(P.Directives, PROPERTY_INDEXED_DIRECTIVE + ' ' + PROPERTY_DEFAULT_DIRECTIVE) then
-      begin
-        Prop:= P;
-        Break;
-      end;
-  if Prop.Id <= 0 then Exit;
-  var PropType: string:= Trim(Prop.Signature);
-  for var I: Integer:= 0 to High(Params) do
-    if SameText(PropType, Params[I]) then
+    if (Owner.Id <= 0) or (Owner.Kind not in TYPE_KINDS) then Exit;
+    { the generic parameter names, in order (constraints after a depth-0 ':' dropped) }
+    var Params: TArray<string>:= nil;
+    var PText: string:= Trim(Owner.GenericParams);
+    if PText.StartsWith('<') and PText.EndsWith('>') then PText:= Copy(PText, 2, Length(PText) - 2);
+    for var Group: string in PText.Split([';'], TStringSplitOptions.ExcludeEmpty) do
     begin
-      AFile := ADeclFile;
-      AScope:= ADeclScope;
-      Exit(Args[I]);
+      var Colon: Integer:= Group.IndexOf(':');
+      var Names: string:= if Colon >= 0 then Group.Substring(0, Colon) else Group;
+      for var N: string in Names.Split([',', ' '], TStringSplitOptions.ExcludeEmpty) do
+        Params:= Params + [N];
     end;
-  { a property type that wraps a parameter (TList<V>) is not substituted }
-  for var Part: string in PropType.Split(['<', '>', ',', ' ', '.'], TStringSplitOptions.ExcludeEmpty) do
-    for var Prm: string in Params do
-      if SameText(Part, Prm) then Exit;
-  AFile := Prop.FileId;
-  AScope:= Prop.ParentId;
-  Result:= PropType;
+    if Length(Params) <> Length(Args) then Exit;
+    { the default indexed property this type declares itself }
+    var Prop: TSymbol:= Default(TSymbol);
+    var Kids: TList<TSymbol>:= ChildrenOf(Owner.Id);
+    if Kids <> nil then
+      for var P: TSymbol in Kids do
+        if (P.Kind = skProperty) and SameText(P.Directives, PROPERTY_INDEXED_DIRECTIVE + ' ' + PROPERTY_DEFAULT_DIRECTIVE) then
+        begin
+          Prop:= P;
+          Break;
+        end;
+    if Prop.Id > 0 then
+    begin
+      var PropType: string:= Trim(Prop.Signature);
+      for var I: Integer:= 0 to High(Params) do
+        if SameText(PropType, Params[I]) then
+        begin
+          AFile := ArgFile;
+          AScope:= ArgScope;
+          Exit(Args[I]);
+        end;
+      { a property type that wraps a parameter (TList<V>) is not substituted }
+      if TypeTextNamesParam(PropType, Params) then Exit;
+      AFile := Prop.FileId;
+      AScope:= Prop.ParentId;
+      Exit(PropType);
+    end;
+    { 1.52.3 EXT-RES-TAILS: none here -- climb to the class parent (the first heritage entry), carrying
+      the arguments: an edge argument that IS one of Owner's parameters passes the matching argument
+      up (still written at ArgFile); one that names no parameter is written in Owner's declaration. }
+    var Ancs: TArray<TTypeAncestor>:= AncestorsOf(Owner.Id);
+    if Length(Ancs) = 0 then Exit;
+    var Anc: TTypeAncestor:= Ancs[0];
+    var Up: TArray<string>:= nil;
+    var Passed: Integer:= 0;
+    var Written: Integer:= 0;
+    for var A: string in SplitTypeArgList(Anc.TypeArgs) do
+    begin
+      var Ix: Integer:= -1;
+      for var I: Integer:= 0 to High(Params) do
+        if SameText(A, Params[I]) then Ix:= I;
+      if Ix >= 0 then
+      begin
+        Up:= Up + [Args[Ix]];
+        Inc(Passed);
+      end
+      else if TypeTextNamesParam(A, Params) then Exit
+      else
+      begin
+        Up:= Up + [A];
+        Inc(Written);
+      end;
+    end;
+    if (Passed > 0) and (Written > 0) then Exit;
+    if Passed = 0 then
+    begin
+      ArgFile := Owner.FileId;
+      ArgScope:= Owner.Id;
+    end;
+    if not Anc.Resolved then
+    begin
+      { a library ancestor: TList<E> / TObjectList<E> / TDictionary<K, V> / Spring IList / IDictionary }
+      if (Length(Up) = 0) or Anc.Name.Contains('.') then Exit;
+      var Element: string:= LibraryIndexedElementText(Anc.Name + '<' + string.Join(', ', Up) + '>', Owner.FileId);
+      if Element = '' then Exit;
+      AFile := ArgFile;
+      AScope:= ArgScope;
+      Exit(Element);
+    end;
+    Owner:= SymbolById(Anc.SymbolId);
+    Args := Up;
+  end;
 end;
 
 function TCallResolver.LibraryListElementText(const AText: string; AFileId: Int64): string;
