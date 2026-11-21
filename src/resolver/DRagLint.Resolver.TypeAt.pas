@@ -629,6 +629,38 @@ const
     count is given up as unknown. }
   CALL_ARGS_MAX_LINES = 64;
 
+{ 1.52.3 HOVER-OVL: steps over comment text at S[AI]. AInCom is #0 in code, a
+  brace or a star while inside that kind of comment (it may span lines). True
+  when S[AI] was comment text (AI then points at its last character); a line
+  comment moves AI past the end of S. }
+function SkipCommentAt(const S: string; var AI: Integer; var AInCom: Char): Boolean;
+var
+  C: Char;
+begin
+  C:= S[AI];
+  Result:= True;
+  if AInCom = '{' then
+  begin
+    if C = '}' then AInCom:= #0;
+  end
+  else if AInCom = '*' then
+  begin
+    if (C = '*') and (AI < Length(S)) and (S[AI + 1] = ')') then
+    begin
+      AInCom:= #0;
+      Inc(AI);
+    end;
+  end
+  else if C = '{' then AInCom:= '{'
+  else if (C = '(') and (AI < Length(S)) and (S[AI + 1] = '*') then
+  begin
+    AInCom:= '*';
+    Inc(AI);
+  end
+  else if (C = '/') and (AI < Length(S)) and (S[AI + 1] = '/') then AI:= Length(S)
+  else Result:= False;
+end;
+
 { 1.52.2 HOVER: the number of arguments of the call whose member name covers
   1-based column ACol of line ALines[ALineIdx0]: 0 for `X.M` / `X.M()`, n for
   `X.M(a, b)` (top-level commas + 1; strings, comments and nested brackets
@@ -646,7 +678,7 @@ var
   Depth : Integer;
   Empty : Boolean;
   Open  : Boolean;
-  InCom : Char;     // #0 = code; a brace or a star = inside that kind of comment
+  InCom : Char;
   C     : Char;
   S     : string;
 begin
@@ -661,33 +693,15 @@ begin
   Open := False;
   InCom:= #0;
   Result:= 1;
-  Li:= ALineIdx0;
   Last:= if High(ALines) < ALineIdx0 + CALL_ARGS_MAX_LINES - 1 then High(ALines) else ALineIdx0 + CALL_ARGS_MAX_LINES - 1;
-  while Li <= Last do
+  for Li:= ALineIdx0 to Last do
   begin
     S:= ALines[Li];
+    if Li > ALineIdx0 then I:= 1;
     while I <= Length(S) do
     begin
       C:= S[I];
-      if InCom = '{' then
-      begin
-        if C = '}' then InCom:= #0;
-      end
-      else if InCom = '*' then
-      begin
-        if (C = '*') and (I < Length(S)) and (S[I + 1] = ')') then
-        begin
-          InCom:= #0;
-          Inc(I);
-        end;
-      end
-      else if C = '{' then InCom:= '{'
-      else if (C = '(') and (I < Length(S)) and (S[I + 1] = '*') then
-      begin
-        InCom:= '*';
-        Inc(I);
-      end
-      else if (C = '/') and (I < Length(S)) and (S[I + 1] = '/') then Break
+      if SkipCommentAt(S, I, InCom) then { comment text }
       else if not Open then
       begin
         { between the member name and its '(' only blanks may stand }
@@ -718,12 +732,9 @@ begin
       else if not CharInSet(C, [' ', #9]) then Empty:= False;
       Inc(I);
     end;
-    Inc(Li);
-    I:= 1;
   end;
   Result:= if Open then -1 else 0;   { -1: the list did not close in range; 0: no '(' anywhere }
-end;
-{ 1.52.2 HOVER: the parameter-count range of a routine signature
+end;{ 1.52.2 HOVER: the parameter-count range of a routine signature
   `procedure M(A, B: T; C: U = 1)` -> AMin 2, AMax 3; no parentheses -> 0, 0. }
 procedure SignatureParamRange(const ASig: string; out AMin, AMax: Integer);
 var

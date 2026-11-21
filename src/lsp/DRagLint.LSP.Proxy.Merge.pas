@@ -1090,6 +1090,22 @@ begin
   FOwner.WorkerLoop;
 end;
 
+
+{ Writes one diagnostic line to the real stderr handle -- never stdout, which
+  carries the JSON-RPC stream. }
+procedure MergeErrLine(const AText: string);
+var
+  H  : THandle;
+  Raw: RawByteString;
+  N  : DWORD;
+begin
+  H:= GetStdHandle(STD_ERROR_HANDLE);
+  if (H = 0) or (H = INVALID_HANDLE_VALUE) then Exit;
+  Raw:= RawByteString(AnsiString(AText + sLineBreak));
+  N:= 0;
+  WriteFile(H, Raw[1], Length(Raw), N, nil);
+end;
+
 type
   { 1.52.3 MERGE-FULLRULES: the thread that runs the full-rules children. }
   TFullRulesWorker = class(TThread)
@@ -1110,7 +1126,11 @@ end;
 
 procedure TFullRulesWorker.Execute;
 begin
-  FOwner.FullRulesLoop;
+  try
+    FOwner.FullRulesLoop;
+  except   { logged, never silent: --full-rules then stays on the subset for the session }
+    on E: Exception do MergeErrLine('drag-lint lsp --proxy: the full-rules thread stopped (' + E.ClassName + ': ' + E.Message + '); merged diagnostics stay on the subset.');
+  end;
 end;
 
 { True when the proxy's own command line carries --full-rules (1.52.3
@@ -1120,21 +1140,6 @@ begin
   Result:= False;
   for var I:= 1 to ParamCount do
     if SameText(ParamStr(I), '--full-rules') then Exit(True);
-end;
-
-{ Writes one diagnostic line to the real stderr handle -- never stdout, which
-  carries the JSON-RPC stream. }
-procedure MergeErrLine(const AText: string);
-var
-  H  : THandle;
-  Raw: RawByteString;
-  N  : DWORD;
-begin
-  H:= GetStdHandle(STD_ERROR_HANDLE);
-  if (H = 0) or (H = INVALID_HANDLE_VALUE) then Exit;
-  Raw:= RawByteString(AnsiString(AText + sLineBreak));
-  N:= 0;
-  WriteFile(H, Raw[1], Length(Raw), N, nil);
 end;
 
 const
@@ -1674,6 +1679,9 @@ end;
 constructor TProxyMergeEngine.Create(const AOptions: TLspProxyOptions);
 begin
   inherited Create;
+  FFullLock  := TCriticalSection.Create;   { first: Destroy uses them unguarded }
+  FFullReady := TEvent.Create(nil, False, False, '');
+  FFullQueue := TList<TFullJob>.Create;
   FOptions   := AOptions;
   FServerLock:= TCriticalSection.Create;
   FStateLock := TCriticalSection.Create;
@@ -1697,9 +1705,6 @@ begin
   FDocLock    := TCriticalSection.Create;
   FAnswersIdle:= TEvent.Create(nil, True, True, '');
   FFullRules  := AOptions.MergeDiagnostics and CommandLineHasFullRules;
-  FFullLock   := TCriticalSection.Create;
-  FFullReady  := TEvent.Create(nil, False, False, '');
-  FFullQueue  := TList<TFullJob>.Create;
   if FFullRules then FFullThread:= TFullRulesWorker.Create(Self);
 end;
 
@@ -3013,6 +3018,7 @@ var
   Started: UInt64;
   Count  : Integer;
 begin
+  Job:= Default(TFullJob);
   while not TThread.CheckTerminated do
   begin
     FFullReady.WaitFor(INFINITE);
@@ -3125,7 +3131,7 @@ begin
     for var DbP in FOptions.DbPaths do
       if DbP <> '' then Cmd:= Cmd + ' --db "' + StringReplace(DbP, '"', '', [rfReplaceAll]) + '"';
     UniqueString(Cmd);
-    if not CreateProcess(PChar(ChildExe), PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, Si, Pi) then Exit;  // dl:ok taint-command-injection@6e02 -- REVIEWED 2026-11-20: the exe is our own (ParamStr(0) or the test-only DRAGLINT_FULLRULES_CHILD_EXE, same trust as the process); every argument is quoted with every double quote dropped
+    if not CreateProcess(PChar(ChildExe), PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, Si, Pi) then Exit;
     try
       FFullLock.Enter;
       try
@@ -3168,7 +3174,7 @@ begin
       try
         AJson:= TFile.ReadAllText(TmpPath, TEncoding.UTF8);
       except
-        on Exception do AJson:= '';  // dl:ok try-except-swallowed -- REVIEWED 2026-11-20: an unreadable result is a failed run; the caller keeps the subset
+        on Exception do AJson:= '';   { an unreadable result is a failed run: the caller keeps the subset }
       end;
       Result:= (Code <= 1) and AJson.TrimLeft.StartsWith('[');
     finally
@@ -3184,11 +3190,7 @@ begin
   finally
     if HOut <> INVALID_HANDLE_VALUE then CloseHandle(HOut);
     if HNul <> INVALID_HANDLE_VALUE then CloseHandle(HNul);
-    try
-      TFile.Delete(TmpPath);
-    except  // dl:ok try-except-swallowed -- REVIEWED 2026-11-20: a leftover temp file is harmless; the full-rules thread must not die on it
-      on Exception do ;
-    end;
+    System.SysUtils.DeleteFile(TmpPath);   { False on failure, never raises: a leftover temp file is harmless }
   end;
 end;
 
