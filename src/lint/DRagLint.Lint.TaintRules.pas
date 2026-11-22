@@ -1030,17 +1030,16 @@ end;
 function SplitReceiver(const ARecv: string; out ABase: string): string;
 var
   S    : string;
-  C    : Char;
-  Depth: Integer;
+  Prev : string;
   Parts: TArray<string>;
   I    : Integer;
 begin
-  S:= '';
-  Depth:= 0;
-  for C in ARecv do
-    if C = '[' then Inc(Depth)
-    else if C = ']' then Dec(Depth)
-    else if Depth = 0 then S:= S + C;
+  { innermost index first, until none is left: 'a[b[0]].c' -> 'a[b].c' -> 'a.c' }
+  S:= ARecv;
+  repeat
+    Prev:= S;
+    S:= TRegEx.Replace(S, '\[[^\[\]]*\]', '');
+  until S = Prev;
   Parts:= S.Split(['.']);
   ABase:= if Length(Parts) > 0 then Trim(Parts[0]) else '';
   Result:= '';
@@ -1673,8 +1672,9 @@ begin
         AAcc.Hits[I]:= AHit;
       { two different tagged witnesses: the dropped one could survive the prune where the
         kept one does not, so the kept one is no longer prunable }
-      if (Old.Tag <> '') and ((Old.Tag <> AHit.Tag) or (Old.TagAt <> AHit.TagAt) or (Length(Old.Path) <> Length(AHit.Path))
-         or ((Length(Old.Path) > 0) and (Old.Path[High(Old.Path)].Routine <> AHit.Path[High(AHit.Path)].Routine))) then
+      var SameShape:= (Old.Tag = AHit.Tag) and (Old.TagAt = AHit.TagAt) and (Length(Old.Path) = Length(AHit.Path));
+      var SameEnd  := SameShape and ((Length(Old.Path) = 0) or (Old.Path[High(Old.Path)].Routine = AHit.Path[High(AHit.Path)].Routine));
+      if (Old.Tag <> '') and not SameEnd then
         AAcc.Hits[I].Tag:= '';
       Exit;
     end;
