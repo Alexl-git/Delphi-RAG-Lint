@@ -7,7 +7,6 @@ uses
   , System.Classes
   , System.Generics.Collections { ParseParamDecls' accumulator }
   , System.RegularExpressions
-  , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   ;
 
@@ -246,6 +245,7 @@ uses
   DRagLint.Core.Encoding, System.IOUtils
   , System.Math                 { Min -- SignatureWithoutComments' line window }
   , DRagLint.Analysis.Purity    { StripCommentsAndStrings -- the one comment masker }
+  , DRagLint.Core.Model
   ;
 
 // ---------------------------------------------------------------------------
@@ -430,7 +430,7 @@ begin
     if LineCommentPos(Result, False, False) > 0 then Exit(ASig);
   end;
   { Block comments are wholly inside the text: strip them where they stand. }
-  if (Pos('{', Result) > 0) or (Pos('(*', Result) > 0) then
+  if (Result.Contains('{')) or (Result.Contains('(*')) then
   begin
     Acc:= StripCommentsAndStrings(Result, InBrace, InParen);
     if InBrace or InParen then Exit(ASig);
@@ -480,7 +480,7 @@ begin
   if S = '' then Exit(False);
   i:= 1;
   { Walk the parameter list, if there is one, tracking nesting. }
-  if (Length(S) > 0) and (S[1] = '(') then
+  if (S <> '') and (S[1] = '(') then
   begin
     Depth:= 0;
     while i <= Length(S) do
@@ -489,7 +489,8 @@ begin
       else if S[i] = ')' then
       begin
         Dec(Depth);
-        if Depth = 0 then begin Inc(i); Break; end;
+        if Depth = 0 then begin Inc(i);
+        Break; end;
       end;
       Inc(i);
     end;
@@ -497,7 +498,7 @@ begin
       return type -- say no rather than guess from the remainder. }
     if Depth <> 0 then Exit(False);
   end;
-  Result:= Pos(':', Copy(S, i, MaxInt)) > 0;
+  Result:= Copy(S, i, MaxInt).Contains(':');
 end;
 
 function SignatureIsConstructor(const ASig: string): Boolean;
@@ -523,7 +524,8 @@ begin
       begin
         Inner:= '';
         Inc(i);
-        while (i <= N) and (AText[i] <> '}') do begin Inner:= Inner + AText[i]; Inc(i); end;
+        while (i <= N) and (AText[i] <> '}') do begin Inner:= Inner + AText[i];  // dl:ok concat-in-loop@8a82 -- loop runs over one routine's params/lines (tens of items); O(n^2) is immaterial -- SLZ-S10 2026-11-22
+        Inc(i); end;
         if i <= N then Inc(i); // the closing brace
         if Note.Length > 0 then Note.Append(' ');
         Note.Append(Trim(Inner));
@@ -532,7 +534,8 @@ begin
       begin
         Inner:= '';
         Inc(i, 2);
-        while (i < N) and not ((AText[i] = '*') and (AText[i + 1] = ')')) do begin Inner:= Inner + AText[i]; Inc(i); end;
+        while (i < N) and not ((AText[i] = '*') and (AText[i + 1] = ')')) do begin Inner:= Inner + AText[i];  // dl:ok concat-in-loop@cb53 -- loop runs over one routine's params/lines (tens of items); O(n^2) is immaterial -- SLZ-S10 2026-11-22
+        Inc(i); end;
         if i < N then Inc(i, 2);
         if Note.Length > 0 then Note.Append(' ');
         Note.Append(Trim(Inner));
@@ -546,7 +549,8 @@ begin
         Note.Append(Trim(Copy(AText, i + 2, MaxInt)));
         i:= N + 1;
       end
-      else begin Rest.Append(AText[i]); Inc(i); end;
+      else begin Rest.Append(AText[i]);
+      Inc(i); end;
     end;
     ARest := Trim(Rest.ToString);
     Result:= Trim(Note.ToString);
@@ -670,7 +674,7 @@ begin
   if (AFilePath = '') or (not TFile.Exists(AFilePath)) then Exit;
   try
     Lines:= ReadSourceFileLines(AFilePath);
-    if (ALine >= 1) and (ALine <= Length(Lines)) then Result:= Trim(Lines[ALine - 1]);
+    if InRange(ALine, 1, Length(Lines)) then Result:= Trim(Lines[ALine - 1]);
   except  // dl:ok bare-except@86a2 -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
     Result:= '';
   end;

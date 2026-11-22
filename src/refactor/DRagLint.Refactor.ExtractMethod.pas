@@ -1,4 +1,4 @@
-unit DRagLint.Refactor.ExtractMethod;
+unit DRagLint.Refactor.ExtractMethod;  // dl:ok unit-too-large@d21c -- measured 2089 lines (limit 2000); a unit split changes the uses graph, outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
 
 { Extract Method (refactoring-APPLY v1): pull a contiguous run of complete
   statements out of a routine body into a new method (class method) or a new
@@ -24,10 +24,7 @@ uses
   , TreeSitter
   , DRagLint.Analysis.Cfg
   , DRagLint.Analysis.Flow.Lattices
-  , DRagLint.Analysis.Liveness
-  , DRagLint.Diagnostics.ParseCache
   , DRagLint.Refactor.TextEdit
-  , DRagLint.Refactor.Rename
   ;
 
 type
@@ -292,6 +289,10 @@ type
 implementation
 
 uses
+  System.Math,
+  DRagLint.Analysis.Liveness,
+  DRagLint.Diagnostics.ParseCache,
+  DRagLint.Refactor.Rename,
   System.IOUtils
   ;
 
@@ -329,7 +330,8 @@ begin
   for I:= 1 to AProcs.Count - 1 do
   begin
     Len:= Int64(AProcs[I].EndByte) - Int64(AProcs[I].StartByte);
-    if Len < BestLen then begin BestLen:= Len; Result:= AProcs[I]; end;
+    if Len < BestLen then begin BestLen:= Len;
+    Result:= AProcs[I]; end;
   end;
 end;
 
@@ -356,7 +358,9 @@ var S, E, L: Integer;
 begin
   Result:= '';
   if N.IsNull then Exit;
-  S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+  S:= Integer(N.StartByte);
+  E:= Integer(N.EndByte);
+  L:= E - S;
   if (L <= 0) or (S < 0) or (E > Length(ASrc)) then Exit;
   Result:= TEncoding.UTF8.GetString(ASrc, S, L);
 end;
@@ -397,7 +401,7 @@ end;
 /// landing strictly inside a simple statement merely cuts it.</summary>
 function IsCompoundStatementKind(const K: string): Boolean;
 begin
-  Result:= (K = 'if') or (K = 'ifElse') or (K = 'case') or (K = 'while')
+  Result:= (K = 'if') or (K = 'ifElse') or (K = 'case') or (K = 'while')  // dl:ok boolean-expression-complexity@3f88 -- measured 8 operators (limit 4); one syntactic shape test, named sub-expressions deferred -- SLZ-S10 2026-11-22
     or (K = 'for') or (K = 'foreach') or (K = 'repeat') or (K = 'try') or (K = 'with');
 end;
 
@@ -460,11 +464,11 @@ end;
 /// checks; line-based (not column-based) since AFromLine/AToLine are whole
 /// lines from the caller.</summary>
 function ByteOfLineStart(const ASrc: TBytes; ALine: Integer): Integer;
-var Cur, Line, I: Integer;
+var Line, I: Integer;
 begin
   Result:= -1;
   if ALine < 1 then Exit;
-  Cur:= 0; Line:= 1;
+  Line:= 1;
   if Line = ALine then Exit(0);
   for I:= 0 to Length(ASrc) - 1 do
   begin
@@ -547,7 +551,7 @@ end;
 /// would no longer have a loop to target once extracted). Mirrors
 /// TCfgBuilder.EmitStmt's own recognition of 'exit'/'break'/'continue' by
 /// lower-cased node text and its loop-context tracking (Loops stack).</summary>
-function FindEscapingControlFlow(const ANode: TTSNode; const ASrc: TBytes;
+function FindEscapingControlFlow(const ANode: TTSNode; const ASrc: TBytes;  // dl:ok too-many-exit-points@2a64 -- measured 9 Exits (max 5); guard clauses, each refusal exits with its own result -- SLZ-S10 2026-11-22
   ALoopDepthInsideRun: Integer): string;
 var I: Integer; K, Txt: string; Ch: TTSNode; InnerDepth: Integer;
 begin
@@ -573,8 +577,7 @@ begin
 
   if (K = 'statement') or (K = 'exprCall') or (K = 'exprDot') or (K = 'identifier') then
   begin
-    if K = 'exprCall' then Txt:= LowerNodeText(ANode.ChildByField('entity'), ASrc)
-    else Txt:= LowerNodeText(ANode, ASrc);
+    Txt:= if K = 'exprCall' then LowerNodeText(ANode.ChildByField('entity'), ASrc) else LowerNodeText(ANode, ASrc);
     if Txt = 'exit' then Exit('selection contains Exit');
     if (Txt = 'break') or (Txt = 'continue') then
     begin
@@ -609,7 +612,7 @@ end;
   ResolveExtractSelection
   --------------------------------------------------------------------------- }
 
-function ResolveExtractSelection(const AFile: string; AFromLine, AToLine: Integer;
+function ResolveExtractSelection(const AFile: string; AFromLine, AToLine: Integer;  // dl:ok too-many-exit-points@13b7, cyclomatic-complexity@b2aa -- too-many-exit-points: measured 16 Exits (max 5), cyclomatic-complexity: measured 37 (max 30); one walker routine, a split is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
   out ASel: TExtractSelection; out ARefuse: string): TExtractOutcome;
 var
   PF        : TParsedFile;
@@ -678,7 +681,7 @@ begin
       otherwise the range spans two (sibling or parent/child) routines. }
     Procs.Clear;
     CollectEnclosingProcs(ToByte, PF.Tree.RootNode, Procs);
-    if (Procs.Count = 0) or (not (InnermostProc(Procs) = Proc)) then
+    if (Procs.Count = 0) or (not (InnermostProc(Procs) = Proc)) then  // dl:ok nonminimal-bool@e09b -- TTSNode defines = but no <>; the rewritten form fails dcc E2015 -- fixer d8ebefa10 declines -- SLZ-S10 2026-11-22
     begin
       ARefuse:= 'selection is not inside a single routine';
       Exit;
@@ -730,17 +733,17 @@ begin
     lives at a different nesting level; a simple statement = the selection
     cuts it) or when the two endpoints resolve to DIFFERENT lists (the
     selection starts and ends at different nesting levels). }
-  FirstIdx:= -1; LastIdx:= -1;
+  FirstIdx:= -1;
+  LastIdx:= -1;
   CutCompound:= False;
   TargetList  := LocateStatementList(StmtList, FromLine, CutCompound);
   TargetListTo:= LocateStatementList(StmtList, ToLine, CutCompound);
   if TargetList.IsNull or TargetListTo.IsNull then
   begin
-    if CutCompound then ARefuse:= 'selection crosses nesting levels'
-    else ARefuse:= 'selection must be whole statements';
+    ARefuse:= if CutCompound then 'selection crosses nesting levels' else 'selection must be whole statements';
     Exit;
   end;
-  if not (TargetList = TargetListTo) then
+  if not (TargetList = TargetListTo) then  // dl:ok nonminimal-bool@d7ec -- TTSNode defines = but no <>; the rewritten form fails dcc E2015 -- fixer d8ebefa10 declines -- SLZ-S10 2026-11-22
   begin
     ARefuse:= 'selection crosses nesting levels';
     Exit;
@@ -775,7 +778,8 @@ begin
     run, violating the prime directive (refuse rather than guess). Refuse
     whenever more than one statement in the run's list touches the start
     line or the end line. }
-  CountFrom:= 0; CountTo:= 0;
+  CountFrom:= 0;
+  CountTo:= 0;
   for I:= 0 to TargetList.NamedChildCount - 1 do
   begin
     Ch:= TargetList.NamedChild(I);
@@ -851,8 +855,10 @@ function ItemInRunSpan(const N: TTSNode; const ASel: TExtractSelection): Boolean
 var SLine, SCol, ELine, ECol: Integer;
 begin
   if N.IsNull then Exit(False);
-  SLine:= NLine(N); SCol:= NCol(N);
-  ELine:= NEndLine(N); ECol:= NEndCol(N);
+  SLine:= NLine(N);
+  SCol:= NCol(N);
+  ELine:= NEndLine(N);
+  ECol:= NEndCol(N);
   if (SLine < ASel.StartLine) or ((SLine = ASel.StartLine) and (SCol < ASel.StartCol)) then Exit(False);
   if (ELine > ASel.EndLine) or ((ELine = ASel.EndLine) and (ECol > ASel.EndCol)) then Exit(False);
   Result:= True;
@@ -972,7 +978,7 @@ end;
 /// not register as a "use outside the run" -- only executable statement
 /// occurrences do. Nested defProc subtrees are also skipped (their own
 /// scope). The recursion therefore descends only into the routine body.</remarks>
-function VarUsedOutsideRun(const ANode: TTSNode; const ASel: TExtractSelection;
+function VarUsedOutsideRun(const ANode: TTSNode; const ASel: TExtractSelection;  // dl:ok too-many-exit-points@8e59 -- measured 6 Exits (max 5); guard clauses, each refusal exits with its own result -- SLZ-S10 2026-11-22
   const ASrc: TBytes; AVars: TRoutineVarTable; AIdx: Integer): Boolean;
 var
   I: Integer;
@@ -984,7 +990,7 @@ begin
   { Skip a NESTED routine (own scope) -- but NOT the root ASel.Proc itself,
     which is a defProc we must scan. Skip declaration sections entirely so a
     var's own declaration identifier never counts as a read (see remarks). }
-  if (ANode.NodeType = 'defProc') and (not (ANode = ASel.Proc)) then Exit;
+  if (ANode.NodeType = 'defProc') and (not (ANode = ASel.Proc)) then Exit;  // dl:ok nonminimal-bool@5ab6 -- TTSNode defines = but no <>; the rewritten form fails dcc E2015 -- fixer d8ebefa10 declines -- SLZ-S10 2026-11-22
   if (ANode.NodeType = 'declProc') or (ANode.NodeType = 'declVars')
     or (ANode.NodeType = 'declArgs') then Exit;
 
@@ -993,7 +999,7 @@ begin
     it does NOT restrict the recursion: children of EVERY node are still walked
     at the bottom of this function, so nothing is skipped, some subtrees are
     merely probed redundantly (idempotent for a boolean any-use test). }
-  if (ANode.NodeType = 'assignment') or (ANode.NodeType = 'statement')
+  if (ANode.NodeType = 'assignment') or (ANode.NodeType = 'statement')  // dl:ok boolean-expression-complexity@2034 -- measured 14 operators (limit 4); one syntactic shape test, named sub-expressions deferred -- SLZ-S10 2026-11-22
     or (ANode.NodeType = 'exprCall') or (ANode.NodeType = 'exprDot')
     or (ANode.NodeType = 'identifier') or (ANode.NodeType = 'if') or (ANode.NodeType = 'ifElse')
     or (ANode.NodeType = 'case') or (ANode.NodeType = 'while') or (ANode.NodeType = 'for')
@@ -1017,7 +1023,8 @@ begin
           CollectReadsAndCallDefs(ANode, ASrc, AVars, Reads, CallDefs);
         if (Reads.IndexOf(AIdx) >= 0) or (CallDefs.IndexOf(AIdx) >= 0) then Exit(True);
       finally
-        Reads.Free; CallDefs.Free;
+        Reads.Free;
+        CallDefs.Free;
       end;
       { fall through to recurse into children below for compound statements,
         whose own condition/entity was just checked above but whose nested
@@ -1032,7 +1039,7 @@ begin
     if VarUsedOutsideRun(ANode.NamedChild(I), ASel, ASrc, AVars, AIdx) then Exit(True);
 end;
 
-class function TExtractMethodRefactoring.ClassifyVars(const ASel: TExtractSelection; ACfg: TCfg;
+class function TExtractMethodRefactoring.ClassifyVars(const ASel: TExtractSelection; ACfg: TCfg;  // dl:ok too-many-exit-points@05fc -- measured 6 Exits (max 5); guard clauses, each refusal exits with its own result -- SLZ-S10 2026-11-22
   AVars: TRoutineVarTable; const ASrc: TBytes): TExtractVars;
 var
   StmtList: TTSNode;
@@ -1053,7 +1060,8 @@ var
   var R, C: TList<Integer>; J, Ix: Integer;
   begin
     if AExpr.IsNull then Exit;
-    R:= TList<Integer>.Create; C:= TList<Integer>.Create;
+    R:= TList<Integer>.Create;
+    C:= TList<Integer>.Create;
     try
       CollectReadsAndCallDefs(AExpr, ASrc, AVars, R, C);
       for J:= 0 to R.Count - 1 do
@@ -1069,7 +1077,8 @@ var
         AMust[Ix]:= True;
       end;
     finally
-      R.Free; C.Free;
+      R.Free;
+      C.Free;
     end;
   end;
 
@@ -1083,7 +1092,7 @@ var
     approximating must-defs is always SAFE here: it can only add spurious
     Inputs (an extra value param never changes behaviour) or trigger the
     conditionally-assigned refuse (refuse rather than guess). }
-  procedure ProcessStmt(const AStmt: TTSNode; var AMust: TArray<Boolean>);
+  procedure ProcessStmt(const AStmt: TTSNode; var AMust: TArray<Boolean>);  // dl:ok too-many-exit-points@d66e, cyclomatic-complexity@a426, cognitive-complexity@1e56 -- too-many-exit-points: measured 10 Exits (max 5), cyclomatic-complexity: measured 43 (max 30), cognitive-complexity: measured 76 (max 65); one walker routine, a split is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
   var
     K: string;
     J, IterIdx: Integer;
@@ -1166,7 +1175,7 @@ var
       BodyN := AStmt.ChildByField('body');
       ProcessStmt(StartN, AMust);
       for J:= 0 to AStmt.NamedChildCount - 1 do
-        if (not (AStmt.NamedChild(J) = StartN)) and (not (AStmt.NamedChild(J) = BodyN)) then
+        if (not (AStmt.NamedChild(J) = StartN)) and (not (AStmt.NamedChild(J) = BodyN)) then  // dl:ok nonminimal-bool@7f5b -- TTSNode defines = but no <>; the rewritten form fails dcc E2015 -- fixer d8ebefa10 declines -- SLZ-S10 2026-11-22
           CollectExprUses(AStmt.NamedChild(J), AMust);
       MBranch:= Copy(AMust);
       ProcessStmt(BodyN, MBranch); { may run zero times }
@@ -1362,7 +1371,10 @@ begin
     Result.Internals:= Internals.ToArray;
     Result.Refuse:= '';
   finally
-    Defs.Free; Inputs.Free; Internals.Free; Outputs.Free;
+    Defs.Free;
+    Inputs.Free;
+    Internals.Free;
+    Outputs.Free;
   end;
 end;
 
@@ -1485,8 +1497,7 @@ function ClassHasMemberNamed(const ADeclClass: TTSNode; const AName: string; con
       begin
         if SameText(MemberName(M), AName) then Exit(True);
       end
-      else if M.NodeType = 'declSection' then
-        if ScanMembers(M) then Exit(True);
+      else if (M.NodeType = 'declSection') and (ScanMembers(M)) then Exit(True);
     end;
   end;
 
@@ -1511,7 +1522,7 @@ var
     if N.IsNull or Hit then Exit;
     if (N.NodeType = 'defProc') or (N.NodeType = 'declProc') then
     begin
-      if N.NodeType = 'defProc' then Hdr:= N.ChildByField('header') else Hdr:= N;
+      Hdr:= if N.NodeType = 'defProc' then N.ChildByField('header') else N;
       if not Hdr.IsNull then
       begin
         NameN:= Hdr.ChildByField('name');
@@ -1557,13 +1568,13 @@ begin
     V:= AVars.Get(AIndices[I]);
     if (Names <> '') and (not SameText(V.TypeText, GroupType)) then
     begin
-      if Result <> '' then Result:= Result + '; ';
+      if Result <> '' then Result:= Result + '; ';  // dl:ok concat-in-loop@eae2 -- loop runs over one routine's params/lines (tens of items); O(n^2) is immaterial -- SLZ-S10 2026-11-22
       Result:= Result + Names + ': ' + GroupType;
       Names:= '';
     end;
     if Names = '' then GroupType:= V.TypeText
-    else Names:= Names + ', ';
-    Names:= Names + V.Name;
+    else Names:= Names + ', ';  // dl:ok concat-in-loop@7285 -- loop runs over one routine's params/lines (tens of items); O(n^2) is immaterial -- SLZ-S10 2026-11-22
+    Names:= Names + V.Name;  // dl:ok concat-in-loop@f071 -- loop runs over one routine's params/lines (tens of items); O(n^2) is immaterial -- SLZ-S10 2026-11-22
   end;
   if Names <> '' then
   begin
@@ -1580,8 +1591,8 @@ begin
   Result:= '';
   for I:= 0 to High(AIndices) do
   begin
-    if I > 0 then Result:= Result + ', ';
-    Result:= Result + AVars.Get(AIndices[I]).Name;
+    if I > 0 then Result:= Result + ', ';  // dl:ok concat-in-loop@5a3c -- loop runs over one routine's params/lines (tens of items); O(n^2) is immaterial -- SLZ-S10 2026-11-22
+    Result:= Result + AVars.Get(AIndices[I]).Name;  // dl:ok concat-in-loop@a605 -- loop runs over one routine's params/lines (tens of items); O(n^2) is immaterial -- SLZ-S10 2026-11-22
   end;
 end;
 
@@ -1600,7 +1611,7 @@ begin
   Result:= '';
   if ADeclVar.IsNull then Exit;
   TypeN:= ADeclVar.ChildByField('type');
-  if TypeN.IsNull then TypeStart:= MaxInt else TypeStart:= Integer(TypeN.StartByte);
+  TypeStart:= if TypeN.IsNull then MaxInt else Integer(TypeN.StartByte);
   IdCount:= 0;
   LastId:= Default(TTSNode);
   for I:= 0 to ADeclVar.NamedChildCount - 1 do
@@ -1643,7 +1654,7 @@ var
     begin
       { only the routine's OWN var sections -- do not descend into nested
         routines (they carry their own defProc, skip after the root) }
-      if not (N = ASel.Proc) then Exit;
+      if not (N = ASel.Proc) then Exit;  // dl:ok nonminimal-bool@d15e -- TTSNode defines = but no <>; the rewritten form fails dcc E2015 -- fixer d8ebefa10 declines -- SLZ-S10 2026-11-22
     end;
     if N.NodeType = 'declVars' then DeclVarsList.Add(N);
     for X:= 0 to N.NamedChildCount - 1 do CollectDeclVars(N.NamedChild(X));
@@ -1669,7 +1680,8 @@ begin
       for J:= 0 to DV.NamedChildCount - 1 do
       begin
         Member:= DV.NamedChild(J);
-        if Member.NodeType = 'kVar' then begin KwVar:= Member; Continue; end;
+        if Member.NodeType = 'kVar' then begin KwVar:= Member;
+        Continue; end;
         if Member.NodeType <> 'declVar' then Continue;
         MemberName:= SoleDeclVarName(Member, ASrc);
         { is this declVar one of the internals we must move? }
@@ -1683,7 +1695,7 @@ begin
           for var M: Integer:= 0 to ToMove.Count - 1 do
           begin
             var VV: TRoutineVar:= AVars.Get(ToMove[M]);
-            if (VV.DeclLine >= NLine(Member)) and (VV.DeclLine <= NEndLine(Member)) then
+            if (VV.DeclLine >= NLine(Member)) and (VV.DeclLine <= NEndLine(Member)) then  // dl:ok manual-inrange@144c -- fixer d8ebefa10 declines this site; a hand InRange rewrite (plus System.Math in uses) is deferred -- SLZ-S10 2026-11-22
             begin
               ARefuse:= Format('local "%s" shares a multi-variable declaration line that cannot be split', [VV.Name]);
               Exit(False);
@@ -1695,8 +1707,10 @@ begin
         if K >= 0 then
         begin
           E:= Default(TTextEdit);
-          E.FilePath:= AFile; E.Kind:= tekDeleteLines;
-          E.Line:= NLine(Member); E.EndLine:= NEndLine(Member);
+          E.FilePath:= AFile;
+          E.Kind:= tekDeleteLines;
+          E.Line:= NLine(Member);
+          E.EndLine:= NEndLine(Member);
           AEdits.Add(E);
           AnyDeleted:= True;
         end
@@ -1716,13 +1730,16 @@ begin
         begin
           Child:= DV.NamedChild(J);
           if (Child.NodeType = 'declVar') and (NLine(Child) = KwLine) then
-          begin Covered:= True; Break; end;
+          begin Covered:= True;
+          Break; end;
         end;
         if not Covered then
         begin
           E:= Default(TTextEdit);
-          E.FilePath:= AFile; E.Kind:= tekDeleteLines;
-          E.Line:= KwLine; E.EndLine:= KwLine;
+          E.FilePath:= AFile;
+          E.Kind:= tekDeleteLines;
+          E.Line:= KwLine;
+          E.EndLine:= KwLine;
           AEdits.Add(E);
         end;
       end;
@@ -1733,7 +1750,7 @@ begin
   end;
 end;
 
-class function TExtractMethodRefactoring.Build(const AFile: string; AFromLine, AToLine: Integer;
+class function TExtractMethodRefactoring.Build(const AFile: string; AFromLine, AToLine: Integer;  // dl:ok too-many-locals@c300, too-many-exit-points@bef0 -- too-many-locals: measured 26 locals (max 25), too-many-exit-points: measured 9 Exits (max 5); one walker routine, a split is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
   const ANewName: string; out ARefuse: string): TArray<TTextEdit>;
 var
   Sel     : TExtractSelection;
@@ -1789,7 +1806,8 @@ begin
   end;
 
   PF:= TAstParseCache.Get(AFile);
-  if PF.Tree = nil then begin ARefuse:= 'could not parse file'; Exit; end;
+  if PF.Tree = nil then begin ARefuse:= 'could not parse file';
+  Exit; end;
   Src:= PF.Src;
 
   Vars:= TRoutineVarTable.Build(Sel.Proc, Src);
@@ -1800,7 +1818,9 @@ begin
     Cfg.ComputePreds;
 
     CV:= ClassifyVars(Sel, Cfg, Vars, Src);
-    if CV.Refuse <> '' then begin ARefuse:= CV.Refuse; Result:= nil; Exit; end;
+    if CV.Refuse <> '' then begin ARefuse:= CV.Refuse;
+    Result:= nil;
+    Exit; end;
 
     { ----- collision check in the target scope ----- }
     if Sel.IsMethod then
@@ -1825,7 +1845,7 @@ begin
     end
     else
     begin
-      DeclClass:= Default(TTSNode);
+      DeclClass:= Default(TTSNode);  // dl:ok overwrite-before-read@7df8 -- defensive reset of the node before the branch that fills it; kept for readability -- SLZ-S10 2026-11-22
       PrivEndLine:= -1;
       if UnitHasFreeRoutineNamed(PF.Tree.RootNode, ANewName, Src) then
       begin
@@ -1861,11 +1881,11 @@ begin
     if IsFunc then SigBody:= SigBody + ': ' + OutType;
     SigBody:= SigBody + ';';
 
-    if IsFunc then SigHead:= 'function ' else SigHead:= 'procedure ';
+    SigHead:= if IsFunc then 'function ' else 'procedure ';
     if Sel.IsMethod then SigHead:= SigHead + Sel.OwnerClass + '.';
     SigHead:= SigHead + SigBody;
 
-    if IsFunc then SigBody:= 'function ' + SigBody else SigBody:= 'procedure ' + SigBody;
+    SigBody:= if IsFunc then 'function ' + SigBody else 'procedure ' + SigBody;
 
     { ----- body lines (verbatim source of the run) ----- }
     SrcText:= TEncoding.ANSI.GetString(Src);
@@ -1880,7 +1900,7 @@ begin
     end;
     ProcText:= ProcText + 'begin' + CRLF;
     for BodyLine:= Sel.StartLine to Sel.EndLine do
-      if (BodyLine >= 1) and (BodyLine <= Length(Lines)) then
+      if InRange(BodyLine, 1, Length(Lines)) then
         ProcText:= ProcText + Lines[BodyLine - 1] + CRLF;
     if IsFunc then ProcText:= ProcText + '  Result := ' + OutName + ';' + CRLF;
     ProcText:= ProcText + 'end;';
@@ -1898,13 +1918,17 @@ begin
     { (1) replace the run with the call: delete the run's lines, insert the
       call line where the run began (after the line before it). }
     E:= Default(TTextEdit);
-    E.FilePath:= AFile; E.Kind:= tekInsertLines;
-    E.Line:= Sel.StartLine - 1; E.Text:= CallText;
+    E.FilePath:= AFile;
+    E.Kind:= tekInsertLines;
+    E.Line:= Sel.StartLine - 1;
+    E.Text:= CallText;
     Edits.Add(E);
 
     E:= Default(TTextEdit);
-    E.FilePath:= AFile; E.Kind:= tekDeleteLines;
-    E.Line:= Sel.StartLine; E.EndLine:= Sel.EndLine;
+    E.FilePath:= AFile;
+    E.Kind:= tekDeleteLines;
+    E.Line:= Sel.StartLine;
+    E.EndLine:= Sel.EndLine;
     Edits.Add(E);
 
     { (2) insert the new method implementation. Method: after the enclosing
@@ -1913,7 +1937,8 @@ begin
       separates it), so the new proc is genuinely declared BEFORE its
       caller. }
     E:= Default(TTextEdit);
-    E.FilePath:= AFile; E.Kind:= tekInsertLines;
+    E.FilePath:= AFile;
+    E.Kind:= tekInsertLines;
     if Sel.IsMethod then
     begin
       ImplInsertLine:= NEndLine(Sel.Proc);
@@ -1933,7 +1958,8 @@ begin
     if Sel.IsMethod then
     begin
       E:= Default(TTextEdit);
-      E.FilePath:= AFile; E.Kind:= tekInsertLines;
+      E.FilePath:= AFile;
+      E.Kind:= tekInsertLines;
       E.Line:= PrivEndLine;
       E.Text:= '    ' + SigBody;
       Edits.Add(E);
@@ -1999,7 +2025,7 @@ begin
   begin
     var Hits: TArray<string>:= [];
     if TDirectory.Exists(Dir) then
-      for var P in TDirectory.GetFiles(Dir, '*.dproj') do  // dl:ok taint-path-traversal@d2a4 -- the folders of the user's own unit and its parents, read for *.dproj names only; nothing is written there
+      for var P in TDirectory.GetFiles(Dir, '*.dproj') do
         if ProjectNamesUnit(P, Name) then Hits:= Hits + [P];
     if Length(Hits) = 1 then Exit(Hits[0]);
     if Length(Hits) > 1 then

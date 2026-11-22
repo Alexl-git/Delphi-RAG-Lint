@@ -234,10 +234,7 @@ function TIndexerProfile.Describe: string;
 var
   VersionText: string;
 begin
-  if ExtractorVersion = '' then
-    VersionText:= '<unknown>'
-  else
-    VersionText:= ExtractorVersion;
+  VersionText:= if ExtractorVersion = '' then '<unknown>' else ExtractorVersion;
   Result:= Format('v=%s schema=%d', [VersionText, SchemaVersion]);
 end;
 
@@ -286,7 +283,7 @@ var
   Words: TArray<string>;
   W    : string;
 begin
-  if not (pSymbol.Kind in [skProcedure, skFunction, skMethod,
+  if (pSymbol.Kind not in [skProcedure, skFunction, skMethod,
                            skConstructor, skDestructor]) then
     Exit(False);
 
@@ -300,7 +297,7 @@ begin
 
   { Generic methods are instantiated in the caller. HEURISTIC, and inclusive on
     purpose -- see the CollectInlineBodies remarks. }
-  Result:= Pos('<', pSymbol.QualifiedName) > 0;
+  Result:= pSymbol.QualifiedName.Contains('<');
 end;
 
 function SpanText(const pSourceLines: TArray<string>;

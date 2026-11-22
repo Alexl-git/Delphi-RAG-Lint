@@ -622,7 +622,7 @@ begin
   for L in Lines do
   begin
     Trimmed:= Trim(L);
-    if Pos(Prefix, Trimmed) = 1 then Exit(Trim(Copy(Trimmed, Length(Prefix) + 1, MaxInt)));
+    if Pos(Prefix, Trimmed) = 1 then Exit(Trim(Copy(Trimmed, Length(Prefix) + 1, MaxInt)));  // dl:ok pos-for-contains@b7ea -- needle is a variable that may be empty (Pos(empty)=0 but StartsWith(empty)=True); not equivalent, kept -- SLZ-S10 2026-11-22
   end;
 end;
 
@@ -718,7 +718,7 @@ begin
           Row.Via    := Link.OtherQName;
           Row.ViaKind:= 'interface'    ;
           Row.ViaEdge:= Link.Confidence;
-          SetLength(Result, Length(Result) + 1);
+          SetLength(Result, Length(Result) + 1);  // dl:ok setlength-in-loop@ccdf -- result sets are small (callers of one symbol); growth by one is immaterial -- SLZ-S10 2026-11-22
           Result[High(Result)]:= Row;
         end;
         if Length(Result) > First then Result[First].ViaCount:= Length(Result) - First;
@@ -750,7 +750,7 @@ begin
       Row:= RowOfCaller(AStore, RC, T.QualifiedName);
       Row.FirstOfTarget:= First;
       First:= False;
-      SetLength(Result, Length(Result) + 1);
+      SetLength(Result, Length(Result) + 1);  // dl:ok setlength-in-loop@ccdf -- result sets are small (callers of one symbol); growth by one is immaterial -- SLZ-S10 2026-11-22
       Result[High(Result)]:= Row;
     end; // for RC
     { RB-5 P1: then the sites that reach T only through its interface. A target
@@ -762,7 +762,7 @@ begin
         Row:= VR;
         Row.FirstOfTarget:= First;
         First:= False;
-        SetLength(Result, Length(Result) + 1);
+        SetLength(Result, Length(Result) + 1);  // dl:ok setlength-in-loop@ccdf -- result sets are small (callers of one symbol); growth by one is immaterial -- SLZ-S10 2026-11-22
         Result[High(Result)]:= Row;
       end;
   end; // for T
@@ -833,7 +833,7 @@ begin
       Row.Confidence := 'callback'               ;
       Row.Resolution := RESOLUTION_NAME_ONLY     ;
       Row.TargetQName:= AName                    ;
-      SetLength(Result, Length(Result) + 1);
+      SetLength(Result, Length(Result) + 1);  // dl:ok setlength-in-loop@ccdf -- result sets are small (callers of one symbol); growth by one is immaterial -- SLZ-S10 2026-11-22
       Result[High(Result)]:= Row;
     end; // for CbRef
   finally

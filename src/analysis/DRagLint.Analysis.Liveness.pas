@@ -12,9 +12,7 @@ interface
 uses
   System.SysUtils,
   System.Generics.Collections,
-  TreeSitter,
   DRagLint.Analysis.Cfg,
-  DRagLint.Analysis.DataFlow,
   DRagLint.Analysis.Flow.Lattices;
 
 /// <summary>Live var-table indices immediately AFTER item AItemIdx of block
@@ -79,6 +77,10 @@ function LiveBeforeItem(const ACfg: TCfg; AVars: TRoutineVarTable; const ASrc: T
 
 implementation
 
+uses
+  TreeSitter,
+  DRagLint.Analysis.DataFlow;
+
 { Apply TLiveness's per-item backward transfer for a single item to ALive (in
   place): kill the whole-var def first, then add reads/call-defs as uses.
   Mirrors TLiveness.Transfer's per-item body and the split-variable replay in
@@ -109,7 +111,8 @@ begin
       { a partial write (a[i] := / x.f :=) reads its base + index -> live }
       if Tgt < 0 then
       begin
-        Reads.Clear; CallDefs.Clear;
+        Reads.Clear;
+        CallDefs.Clear;
         CollectReadsAndCallDefs(AItem.Node.ChildByField('lhs'), ASrc, AVars, Reads, CallDefs);
         for J := 0 to Reads.Count - 1 do ALive[Reads[J]] := True;
         for J := 0 to CallDefs.Count - 1 do ALive[CallDefs[J]] := True;
@@ -149,8 +152,7 @@ begin
     Exit;
 
   Result := Copy(AOut[ABlockIdx]); { start from the block's live-OUT; never alias it }
-  if AIncludeTarget then FirstReplayIdx := AItemIdx
-  else FirstReplayIdx := AItemIdx + 1;
+  FirstReplayIdx := if AIncludeTarget then AItemIdx else AItemIdx + 1;
   for I := Block.Items.Count - 1 downto FirstReplayIdx do
     ApplyItemBackward(Block.Items[I], AVars, ASrc, Result);
 end;

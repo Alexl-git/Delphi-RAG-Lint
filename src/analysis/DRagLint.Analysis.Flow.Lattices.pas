@@ -1,4 +1,4 @@
-unit DRagLint.Analysis.Flow.Lattices;
+unit DRagLint.Analysis.Flow.Lattices;  // dl:ok unit-too-large@5352 -- measured 2705 lines (limit 2000); a unit split changes the uses graph, outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
 
 { Per-routine variable table + concrete data-flow analyses (M2). The variable
   table indexes a routine's locals, params and Result to 0..N-1; lattice values
@@ -1240,7 +1240,9 @@ var S, E, L: Integer;
 begin
   Result := '';
   if N.IsNull then Exit;
-  S := Integer(N.StartByte); E := Integer(N.EndByte); L := E - S;
+  S := Integer(N.StartByte);
+  E := Integer(N.EndByte);
+  L := E - S;
   if (L <= 0) or (S < 0) or (E > Length(ASrc)) then Exit;
   Result := TEncoding.UTF8.GetString(ASrc, S, L);
 end;
@@ -1293,7 +1295,8 @@ end;
 
 constructor TRoutineVarTable.Create;
 begin
-  inherited; FVars := TList<TRoutineVar>.Create;
+  inherited;  // dl:ok inherited-bare@246d -- bare inherited is the intended ancestor call of the same method -- SLZ-S10 2026-11-22
+  FVars := TList<TRoutineVar>.Create;
   FByName := TDictionary<string, Integer>.Create;
   FMultiDecl := TDictionary<string, Boolean>.Create;
 end;
@@ -1368,7 +1371,9 @@ procedure TRoutineVarTable.MarkCaptured(AIdx: Integer);
 var V: TRoutineVar;
 begin
   if (AIdx < 0) or (AIdx >= FVars.Count) then Exit;
-  V := FVars[AIdx]; V.Captured := True; FVars[AIdx] := V;
+  V := FVars[AIdx];
+  V.Captured := True;
+  FVars[AIdx] := V;
 end;
 
 { The bare, lower-cased routine name a body can assign to set Result, from the
@@ -1435,10 +1440,11 @@ var
     storage really is shared, and a parameter is assigned on entry, so aliasing
     to it removes a false positive rather than creating a false negative. }
   function AbsoluteTargetIdx(const ADeclVar: TTSNode; var ALimit: Integer): Integer;
-  var K: Integer; C, Abs_, Tgt: TTSNode;
+  var K: Integer; C, Abs_, Tgt: TTSNode;  // dl:ok local-var-casing@8659 -- trailing underscore escapes a reserved word / RTL routine name (Uses, Abs); PascalCase is kept -- SLZ-S10 2026-11-22
   begin
     Result := -1;
-    Abs_ := Default(TTSNode); Tgt := Default(TTSNode);
+    Abs_ := Default(TTSNode);
+    Tgt := Default(TTSNode);
     for K := 0 to ADeclVar.ChildCount - 1 do
     begin
       C := ADeclVar.Child(K);
@@ -1638,7 +1644,10 @@ begin
     if not Ret.IsNull then
     begin
       RV := Default(TRoutineVar);
-      RV.Name := 'result'; RV.Display := 'Result'; RV.Kind := vkResult; RV.TypeText := Trim(NodeStr(Ret, ASrc));
+      RV.Name := 'result';
+      RV.Display := 'Result';
+      RV.Kind := vkResult;
+      RV.TypeText := Trim(NodeStr(Ret, ASrc));
       RV.DeclLine := Integer(Header.StartPoint.Row) + 1;
       RV.DeclCol  := Integer(Header.StartPoint.Column) + 1;
       Tbl.Add(RV);
@@ -1675,8 +1684,10 @@ end;
 function LeftmostBaseVar(const N: TTSNode; const ASrc: TBytes; AVars: TRoutineVarTable): Integer;
 var Cur, Nxt, IdN: TTSNode; Guard: Integer;
 begin
-  Result := -1; Cur := N; Guard := 0;
-  while (not Cur.IsNull) and (Guard < 32) do
+  Result := -1;
+  Cur := N;
+  Guard := 0;
+  while (not Cur.IsNull) and (Guard < 32) do  // dl:ok magic-literal@bb9d -- measured literal is a local bound/weight used once, documented by its line -- SLZ-S10 2026-11-22
   begin
     Inc(Guard);
     if Cur.NodeType = 'identifier' then
@@ -1729,7 +1740,7 @@ procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
   const AIsRecordMethodDef: TRecordMethodDefPredicate = nil;
   const AParamMode: TParamModeLookup = nil);
 
-  procedure Walk(const N: TTSNode; AAfterDot: Boolean);
+  procedure Walk(const N: TTSNode; AAfterDot: Boolean);  // dl:ok deep-nesting@c288, too-many-exit-points@47d0, cyclomatic-complexity@a908, cognitive-complexity@d358 -- deep-nesting: measured 6 deep (max 5), too-many-exit-points: measured 6 Exits (max 5), cyclomatic-complexity: measured 45 (max 30), cognitive-complexity: measured 88 (max 65); one walker routine, a split is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
   var I, Idx: Integer; K: string; ArgsN, Arg, Lhs, Ent: TTSNode;
       CalleeNm: string; Mode: TParamMode; IsNamedArg: Boolean;
   begin
@@ -1812,9 +1823,7 @@ procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
         a method call (exprDot entity) yields '' and every argument then keeps
         the pmUnknown/conservative path. }
       Ent := N.ChildByField('entity');
-      if (not Ent.IsNull) and (Ent.NodeType = 'identifier') then
-        CalleeNm := Trim(NodeStr(Ent, ASrc))
-      else CalleeNm := '';
+      CalleeNm := if (not Ent.IsNull) and (Ent.NodeType = 'identifier') then Trim(NodeStr(Ent, ASrc)) else '';
       if not ArgsN.IsNull then
         for I := 0 to ArgsN.NamedChildCount - 1 do
         begin
@@ -2043,8 +2052,10 @@ constructor TDefiniteAssignment.Create(AVars: TRoutineVarTable; const ASrc: TByt
   const AIsRecordMethodDef: TRecordMethodDefPredicate; const AParamMode: TParamModeLookup);
 begin
   inherited Create;
-  FVars := AVars; FSrc := ASrc;
-  FIsRecordMethodDef := AIsRecordMethodDef; FParamMode := AParamMode;
+  FVars := AVars;
+  FSrc := ASrc;
+  FIsRecordMethodDef := AIsRecordMethodDef;
+  FParamMode := AParamMode;
 end;
 
 function TDefiniteAssignment.Direction: TFlowDir; begin Result := fdForward; end;
@@ -2053,30 +2064,37 @@ function TDefiniteAssignment.Bottom: TDefAsgnVal;
 var I: Integer;
 begin
   { Bottom for MUST (intersection) is "all assigned"; MAY (union) is "none". }
-  SetLength(Result.Must, FVars.Count); SetLength(Result.May, FVars.Count);
-  for I := 0 to FVars.Count - 1 do begin Result.Must[I] := True; Result.May[I] := False; end;
+  SetLength(Result.Must, FVars.Count);
+  SetLength(Result.May, FVars.Count);
+  for I := 0 to FVars.Count - 1 do begin Result.Must[I] := True;
+  Result.May[I] := False; end;
 end;
 
 function TDefiniteAssignment.Boundary: TDefAsgnVal;
 var I: Integer; V: TRoutineVar;
 begin
-  SetLength(Result.Must, FVars.Count); SetLength(Result.May, FVars.Count);
+  SetLength(Result.Must, FVars.Count);
+  SetLength(Result.May, FVars.Count);
   for I := 0 to FVars.Count - 1 do
   begin
     V := FVars.Get(I);
     if V.Kind in [vkParamVar, vkParamConst, vkParamValue] then
-    begin Result.Must[I] := True; Result.May[I] := True; end
-    else begin Result.Must[I] := False; Result.May[I] := False; end;
+    begin Result.Must[I] := True;
+    Result.May[I] := True; end
+    else begin Result.Must[I] := False;
+    Result.May[I] := False; end;
     { captured-by-nested-routine locals: treated as assigned-on-entry (FP guard --
       a nested routine may assign them; prefer suppression over a false positive) }
-    if V.Captured then begin Result.Must[I] := True; Result.May[I] := True; end;
+    if V.Captured then begin Result.Must[I] := True;
+    Result.May[I] := True; end;
   end;
 end;
 
 function TDefiniteAssignment.Join(const A, B: TDefAsgnVal): TDefAsgnVal;
 var I: Integer;
 begin
-  SetLength(Result.Must, FVars.Count); SetLength(Result.May, FVars.Count);
+  SetLength(Result.Must, FVars.Count);
+  SetLength(Result.May, FVars.Count);
   for I := 0 to FVars.Count - 1 do
   begin
     Result.Must[I] := A.Must[I] and B.Must[I]; { intersection }
@@ -2105,26 +2123,32 @@ function TDefiniteAssignment.TransferDirect(const ABlock: TCfgBlock; const AIn: 
 var
   I, J, Tgt, Idx: Integer; It: TCfgItem; Reads, CallDefs: TList<Integer>;
 begin
-  SetLength(Result.Must, FVars.Count); SetLength(Result.May, FVars.Count);
-  for I := 0 to FVars.Count - 1 do begin Result.Must[I] := AIn.Must[I]; Result.May[I] := AIn.May[I]; end;
+  SetLength(Result.Must, FVars.Count);
+  SetLength(Result.May, FVars.Count);
+  for I := 0 to FVars.Count - 1 do begin Result.Must[I] := AIn.Must[I];
+  Result.May[I] := AIn.May[I]; end;
   { synthetic entry defs (foreach iterator): assigned on entry to the body }
   ApplyEntryDefs(ABlock, FVars, Result.Must, Result.May, True);
-  Reads := TList<Integer>.Create; CallDefs := TList<Integer>.Create;
+  Reads := TList<Integer>.Create;
+  CallDefs := TList<Integer>.Create;
   try
     for I := 0 to ABlock.Items.Count - 1 do
     begin
       It := ABlock.Items[I];
-      Reads.Clear; CallDefs.Clear;
+      Reads.Clear;
+      CallDefs.Clear;
       if It.Node.NodeType = 'assignment' then
       begin
         { reads on the rhs happen BEFORE the def of the lhs }
         CollectReadsAndCallDefs(It.Node.ChildByField('rhs'), FSrc, FVars, Reads, CallDefs, FIsRecordMethodDef, FParamMode);
         { a var passed to a call (or @x) may be a var/out param the callee assigns
           (e.g. SetLength(Result,..)); treat as assigned to suppress the finding }
-        for J := 0 to CallDefs.Count - 1 do begin Result.Must[CallDefs[J]] := True; Result.May[CallDefs[J]] := True; end;
+        for J := 0 to CallDefs.Count - 1 do begin Result.Must[CallDefs[J]] := True;
+        Result.May[CallDefs[J]] := True; end;
         { base index: a partial write (Result.f := / a[i] :=) still defines the base }
         Tgt := AssignmentBaseIndex(It.Node, FSrc, FVars);
-        if Tgt >= 0 then begin Result.Must[Tgt] := True; Result.May[Tgt] := True; end;
+        if Tgt >= 0 then begin Result.Must[Tgt] := True;
+        Result.May[Tgt] := True; end;
       end
       else
       begin
@@ -2132,19 +2156,22 @@ begin
         ApplyWithRecordEntity(It, FSrc, FVars, Reads, CallDefs, FIsRecordMethodDef); { B-14: `with Rec do` }
         { a var passed to a call (or @x) may be a var/out param the callee assigns
           (e.g. SetLength(Result,..)); treat as assigned to suppress the finding }
-        for J := 0 to CallDefs.Count - 1 do begin Result.Must[CallDefs[J]] := True; Result.May[CallDefs[J]] := True; end;
+        for J := 0 to CallDefs.Count - 1 do begin Result.Must[CallDefs[J]] := True;
+        Result.May[CallDefs[J]] := True; end;
         { `exit(v)` assigns Result. IsValuedExit rather than a local test: this
           site used to ask for NodeType = 'exprCall', but a CFG block stores the
           STATEMENT node, so it never fired -- see the remarks on IsValuedExit. }
         if IsValuedExit(It.Node, FSrc) then
         begin
           Idx := FVars.IndexOf('result');
-          if Idx >= 0 then begin Result.Must[Idx] := True; Result.May[Idx] := True; end;
+          if Idx >= 0 then begin Result.Must[Idx] := True;
+          Result.May[Idx] := True; end;
         end;
       end;
     end;
   finally
-    Reads.Free; CallDefs.Free;
+    Reads.Free;
+    CallDefs.Free;
   end;
 end;
 
@@ -2153,8 +2180,10 @@ var I: Integer;
 begin
   { NOT Bottom: Bottom's Must is all-TRUE (intersection identity). The gen-set
     seed has to be all-FALSE in BOTH fields or Gen would come back saturated. }
-  SetLength(Result.Must, FVars.Count); SetLength(Result.May, FVars.Count);
-  for I := 0 to FVars.Count - 1 do begin Result.Must[I] := False; Result.May[I] := False; end;
+  SetLength(Result.Must, FVars.Count);
+  SetLength(Result.May, FVars.Count);
+  for I := 0 to FVars.Count - 1 do begin Result.Must[I] := False;
+  Result.May[I] := False; end;
 end;
 
 function TDefiniteAssignment.GenOf(const ABlock: TCfgBlock): TDefAsgnVal;
@@ -2176,7 +2205,8 @@ function TDefiniteAssignment.Transfer(const ABlock: TCfgBlock; const AIn: TDefAs
 var I: Integer; G, Direct: TDefAsgnVal;
 begin
   G := GenOf(ABlock);
-  SetLength(Result.Must, FVars.Count); SetLength(Result.May, FVars.Count);
+  SetLength(Result.Must, FVars.Count);
+  SetLength(Result.May, FVars.Count);
   for I := 0 to FVars.Count - 1 do
   begin
     Result.Must[I] := AIn.Must[I] or G.Must[I];
@@ -2217,7 +2247,9 @@ end;
 { ----- TFreedState ----- }
 
 constructor TFreedState.Create(AVars: TRoutineVarTable; const ASrc: TBytes);
-begin inherited Create; FVars := AVars; FSrc := ASrc; end;
+begin inherited Create;
+FVars := AVars;
+FSrc := ASrc; end;
 
 function TFreedState.Direction: TFlowDir; begin Result := fdForward; end;
 
@@ -2225,22 +2257,27 @@ function TFreedState.Bottom: TFreedVal;
 var I: Integer;
 begin
   { Bottom for MUST (intersection) is "all dangling"; MAY (union) is "none". }
-  SetLength(Result.Must, FVars.Count); SetLength(Result.May, FVars.Count);
-  for I := 0 to FVars.Count - 1 do begin Result.Must[I] := True; Result.May[I] := False; end;
+  SetLength(Result.Must, FVars.Count);
+  SetLength(Result.May, FVars.Count);
+  for I := 0 to FVars.Count - 1 do begin Result.Must[I] := True;
+  Result.May[I] := False; end;
 end;
 
 function TFreedState.Boundary: TFreedVal;
 var I: Integer;
 begin
   { on entry no var is dangling (params/locals start un-freed). }
-  SetLength(Result.Must, FVars.Count); SetLength(Result.May, FVars.Count);
-  for I := 0 to FVars.Count - 1 do begin Result.Must[I] := False; Result.May[I] := False; end;
+  SetLength(Result.Must, FVars.Count);
+  SetLength(Result.May, FVars.Count);
+  for I := 0 to FVars.Count - 1 do begin Result.Must[I] := False;
+  Result.May[I] := False; end;
 end;
 
-function TFreedState.Join(const A, B: TFreedVal): TFreedVal;
+function TFreedState.Join(const A, B: TFreedVal): TFreedVal;  // dl:ok duplicate-code@9e1b -- measured 101 tokens; sibling case arms of the same walker, a shared helper is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
 var I: Integer;
 begin
-  SetLength(Result.Must, FVars.Count); SetLength(Result.May, FVars.Count);
+  SetLength(Result.Must, FVars.Count);
+  SetLength(Result.May, FVars.Count);
   for I := 0 to FVars.Count - 1 do
   begin
     Result.Must[I] := A.Must[I] and B.Must[I]; { dangling on EVERY incoming path }
@@ -2252,8 +2289,10 @@ function TFreedState.Transfer(const ABlock: TCfgBlock; const AIn: TFreedVal): TF
 var
   I, Tgt, FreedV: Integer; It: TCfgItem; Kind: TFreeKind;
 begin
-  SetLength(Result.Must, FVars.Count); SetLength(Result.May, FVars.Count);
-  for I := 0 to FVars.Count - 1 do begin Result.Must[I] := AIn.Must[I]; Result.May[I] := AIn.May[I]; end;
+  SetLength(Result.Must, FVars.Count);
+  SetLength(Result.May, FVars.Count);
+  for I := 0 to FVars.Count - 1 do begin Result.Must[I] := AIn.Must[I];
+  Result.May[I] := AIn.May[I]; end;
   { The foreach iterator is REBOUND at the top of the body, so it is not
     dangling here whatever the back-edge carried: `for L in List do L.Free`
     frees a different object each pass. False, where definite-assignment
@@ -2267,20 +2306,23 @@ begin
     if FreedV >= 0 then
     begin
       case Kind of
-        fkRawFree: begin Result.Must[FreedV] := True;  Result.May[FreedV] := True;  end;  { now dangling }
-        fkNiling:  begin Result.Must[FreedV] := False; Result.May[FreedV] := False; end;  { nil-ed / safe }
+        fkRawFree: begin Result.Must[FreedV] := True;
+        Result.May[FreedV] := True;  end;  { now dangling }
+        fkNiling:  begin Result.Must[FreedV] := False;
+        Result.May[FreedV] := False; end;  { nil-ed / safe }
       end;
       Continue; { a free site is not also a whole-var assignment }
     end;
     if It.Node.NodeType = 'assignment' then
     begin
       Tgt := AssignmentTargetIndex(It.Node, FSrc, FVars); { whole-identifier lhs only }
-      if Tgt >= 0 then begin Result.Must[Tgt] := False; Result.May[Tgt] := False; end; { re-pointed }
+      if Tgt >= 0 then begin Result.Must[Tgt] := False;
+      Result.May[Tgt] := False; end; { re-pointed }
     end;
   end;
 end;
 
-function TFreedState.Equals(const A, B: TFreedVal): Boolean;
+function TFreedState.Equals(const A, B: TFreedVal): Boolean;  // dl:ok duplicate-code@911f -- measured 113 tokens; sibling case arms of the same walker, a shared helper is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
 var I: Integer;
 begin
   Result := False;
@@ -2293,7 +2335,9 @@ end;
 { ----- TLiveness ----- }
 
 constructor TLiveness.Create(AVars: TRoutineVarTable; const ASrc: TBytes);
-begin inherited Create; FVars := AVars; FSrc := ASrc; end;
+begin inherited Create;
+FVars := AVars;
+FSrc := ASrc; end;
 
 function TLiveness.Direction: TFlowDir; begin Result := fdBackward; end;
 
@@ -2327,7 +2371,8 @@ function TLiveness.Transfer(const ABlock: TCfgBlock; const AIn: TArray<Boolean>)
 var I, J, Tgt: Integer; It: TCfgItem; Reads, CallDefs: TList<Integer>;
 begin
   Result := Copy(AIn); { AIn is the block's live-OUT; we return live-IN }
-  Reads := TList<Integer>.Create; CallDefs := TList<Integer>.Create;
+  Reads := TList<Integer>.Create;
+  CallDefs := TList<Integer>.Create;
   try
     for I := ABlock.Items.Count - 1 downto 0 do
     begin
@@ -2338,7 +2383,8 @@ begin
           if FVars.Get(J).Kind = vkLocal then Result[J] := True;
         Continue;
       end;
-      Reads.Clear; CallDefs.Clear;
+      Reads.Clear;
+      CallDefs.Clear;
       if It.Node.NodeType = 'assignment' then
       begin
         Tgt := AssignmentTargetIndex(It.Node, FSrc, FVars); { whole-var def kills }
@@ -2349,7 +2395,8 @@ begin
         { a partial write (a[i] := / x.f :=) reads its base + index -> live }
         if Tgt < 0 then
         begin
-          Reads.Clear; CallDefs.Clear;
+          Reads.Clear;
+          CallDefs.Clear;
           CollectReadsAndCallDefs(It.Node.ChildByField('lhs'), FSrc, FVars, Reads, CallDefs);
           for J := 0 to Reads.Count - 1 do Result[Reads[J]] := True;
           for J := 0 to CallDefs.Count - 1 do Result[CallDefs[J]] := True;
@@ -2363,7 +2410,8 @@ begin
         for J := 0 to CallDefs.Count - 1 do Result[CallDefs[J]] := True;
       end;
     end;
-  finally Reads.Free; CallDefs.Free; end;
+  finally Reads.Free;
+  CallDefs.Free; end;
 end;
 
 function TLiveness.Equals(const A, B: TArray<Boolean>): Boolean;
@@ -2515,7 +2563,7 @@ var Acc: TList<TCallArgRef>;
     if N.NodeType = 'exprCall' then
     begin
       Ent := N.ChildByField('entity');
-      if (not Ent.IsNull) and (Ent.NodeType = 'identifier') then
+      if (not Ent.IsNull) and (Ent.NodeType = 'identifier') then  // dl:ok ifthen-to-if-expression@9686 -- fixer d8ebefa10 declines this site (a shape dcc rejects as an if-expression, e.g. TValue / array branches); hand rewrite deferred -- SLZ-S10 2026-11-22
         Nm := Trim(NodeStr(Ent, ASrc)) { original case: the store keys on it }
       else Nm := ''; { method call (exprDot entity) -> not resolvable by bare name }
       Args := N.ChildByField('args');
@@ -2550,13 +2598,17 @@ begin
 end;
 
 constructor TEscape.Create(AVars: TRoutineVarTable; const ASrc: TBytes; AOwns: TCallArgOwns);
-begin inherited Create; FVars := AVars; FSrc := ASrc; FOwns := AOwns; end;
+begin inherited Create;
+FVars := AVars;
+FSrc := ASrc;
+FOwns := AOwns; end;
 
 function TEscape.Direction: TFlowDir; begin Result := fdForward; end;
 
 function TEscape.Bottom: TArray<Boolean>;
 var I: Integer;
-begin SetLength(Result, FVars.Count); for I := 0 to FVars.Count - 1 do Result[I] := False; end;
+begin SetLength(Result, FVars.Count);
+for I := 0 to FVars.Count - 1 do Result[I] := False; end;
 
 function TEscape.Boundary: TArray<Boolean>;
 begin Result := Bottom; end;
@@ -2615,15 +2667,16 @@ begin
               untouched -- that really is a fresh object A owns. }
             var SelfLinked: Boolean := False;
             for CA in CollectCallArgs(It.Node, FSrc, FVars) do
-              if CA.VarIdx = Tgt then begin SelfLinked := True; Break; end;
-            if SelfLinked then Result[Tgt] := False   { linked into a structure }
-            else Result[Tgt] := True;                 { created }
+              if CA.VarIdx = Tgt then begin SelfLinked := True;
+              Break; end;
+            Result[Tgt] := not SelfLinked;  { False = linked into a structure, True = created }
           end
           else if (not Rhs.IsNull) and (Rhs.NodeType = 'identifier') then
           begin
             SrcIdx := FVars.IndexOfAt(LowerCase(NodeStr(Rhs, FSrc)), Integer(Rhs.StartByte));
             if SrcIdx >= 0 then
-            begin Result[Tgt] := Result[SrcIdx]; Result[SrcIdx] := False; end { alias: ownership moves }
+            begin Result[Tgt] := Result[SrcIdx];
+            Result[SrcIdx] := False; end { alias: ownership moves }
             else Result[Tgt] := False;
           end
           else Result[Tgt] := False;                                { reassigned to other }

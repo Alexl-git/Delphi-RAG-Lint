@@ -876,7 +876,7 @@ begin
   pFirst:= pHops;
 end;
 
-procedure TFieldSolver.Run(var pAnswer: THbAnswer);
+procedure TFieldSolver.Run(var pAnswer: THbAnswer);  // dl:ok cyclomatic-complexity@b587 -- measured 36 (max 30); one dispatch routine over node kinds, a split is a refactor outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
 begin
   LoadFamily;
   LoadMethods;

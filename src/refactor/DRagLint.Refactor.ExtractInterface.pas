@@ -530,7 +530,7 @@ begin
 end;
 
 // '' when the chain implements IInterface; else the refusal's kind.
-function TIfacePlanner.ChainVerdict(out pReparentable: Boolean): string;  // dl:ok too-many-exit-points@48b8 -- one guard per named refusal, in the documented order: the exits are the contract
+function TIfacePlanner.ChainVerdict(out pReparentable: Boolean): string;  // dl:ok too-many-exit-points@1934 -- one guard per named refusal, in the documented order: the exits are the contract
 begin
   Result:= '';
   pReparentable:= False;
@@ -641,7 +641,7 @@ begin
        TRegEx.IsMatch(Masked, '\b' + TRegEx.Escape(Other.Name) + '\b', [roIgnoreCase]) then Exit(True);
 end;
 
-function TIfacePlanner.RefuseClass: Boolean;  // dl:ok too-many-exit-points@dda4 -- one guard per named refusal, in the documented order: the exits are the contract
+function TIfacePlanner.RefuseClass: Boolean;  // dl:ok too-many-exit-points@bb67 -- one guard per named refusal, in the documented order: the exits are the contract
 begin
   Result:= True;
   if not MatchText(ExtractFileExt(FClass.Path), ['.pas', '.dpr', '.dpk']) then
@@ -1028,7 +1028,7 @@ begin
 end;
 
 // '' when the class's IInterface never counts references (pWhy says why); else the refusal's kind, pWhy its reason.
-function TIfacePlanner.LifetimeVerdict(out pWhy: string): string;  // dl:ok too-many-exit-points@5dcd -- REVIEWED 2026-11-14: one exit per verdict, met in chain order: the exits are the contract
+function TIfacePlanner.LifetimeVerdict(out pWhy: string): string;  // dl:ok too-many-exit-points@e894 -- REVIEWED 2026-11-14: one exit per verdict, met in chain order: the exits are the contract
 begin
   var Row:= FClass;
   var Conn:= FConn;
@@ -1244,7 +1244,7 @@ begin
   end;
 end;
 
-procedure TIfacePlanner.PlanRetype(out pError: string);  // dl:ok too-many-exit-points@925f, cyclomatic-complexity@197d -- REVIEWED 2026-11-14: one guard per named refusal, in the documented order: the exits are the contract
+procedure TIfacePlanner.PlanRetype(out pError: string);  // dl:ok too-many-exit-points@a56b, cyclomatic-complexity@26b7 -- REVIEWED 2026-11-14: one guard per named refusal, in the documented order: the exits are the contract
 begin
   pError:= '';
   FPlan.Retype:= True;
@@ -1628,7 +1628,7 @@ begin
     else Writeln(Format('refused [%s]: %s', [pGate.Refusal, pGate.Detail]));
 end;
 
-function RunExtractInterface(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;
+function RunExtractInterface(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;  // dl:ok too-many-exit-points@5e5c -- measured 6 Exits (max 5); guard clauses, each refusal exits with its own result -- SLZ-S10 2026-11-22
   const pOpts: TExtractInterfaceOptions): Integer;
 
   function Fail(const pMessage: string): Integer;

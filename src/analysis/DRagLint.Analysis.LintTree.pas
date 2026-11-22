@@ -39,9 +39,7 @@ uses
   System.JSON,
   System.Generics.Collections,
   DRagLint.Core.Model,
-  DRagLint.Core.Interfaces,
-  DRagLint.Analysis.SurfaceFingerprint,
-  DRagLint.Analysis.SurfaceAdapters;
+  DRagLint.Core.Interfaces;
 
 const
   /// <summary>Output schema tag, bumped when the JSON shape changes.</summary>
@@ -170,6 +168,8 @@ function RunLintTree(const pOptions   : TLintTreeOptions;
 implementation
 
 uses
+  DRagLint.Analysis.SurfaceAdapters,
+  DRagLint.Analysis.SurfaceFingerprint,
   Winapi.Windows,
   System.Diagnostics,
   DRagLint.Core.Encoding,
@@ -272,7 +272,7 @@ begin
   try
     for Sym in pSymbols do
       if SameText(Sym.Section, 'interface')
-         and not (Sym.Kind in [skUnit, skParam, skLocalVar]) then
+         and (Sym.Kind not in [skUnit, skParam, skLocalVar]) then
         Acc.Add(Sym);
     Result:= Acc.ToArray;
   finally
@@ -581,13 +581,7 @@ const
   compile-time case the sentence describes. }
 function StaleRefMessage(const pVerb, pQName, pKind: string): string;
 begin
-  if SameText(pVerb, VERB_CHANGED) and SameText(pKind, 'enum_value') then
-    Result:= Format('the edited unit %s %s; this reference still compiles, but ' +
-      'the member ordinal has moved -- any ordinal already persisted or ' +
-      'transmitted now means a different member', [pVerb, pQName])
-  else
-    Result:= Format('the edited unit %s %s; this reference will not compile ' +
-      'until it is updated', [pVerb, pQName]);
+  Result:= if SameText(pVerb, VERB_CHANGED) and SameText(pKind, 'enum_value') then Format('the edited unit %s %s; this reference still compiles, but ' + 'the member ordinal has moved -- any ordinal already persisted or ' + 'transmitted now means a different member', [pVerb, pQName]) else Format('the edited unit %s %s; this reference will not compile ' + 'until it is updated', [pVerb, pQName]);
 end;
 
 { One pass over one list. Called twice so the VERB is decided by which list the
@@ -666,10 +660,7 @@ var
   P: Integer;
 begin
   P:= LastDelimiter('.', pQName);
-  if P > 0 then
-    Result:= Copy(pQName, P + 1, MaxInt)
-  else
-    Result:= pQName;
+  Result:= if P > 0 then Copy(pQName, P + 1, MaxInt) else pQName;
 end;
 
 { Would a bare-name join for S be AMBIGUOUS?
@@ -763,10 +754,7 @@ begin
           var is `read`, and a var may also be written. Anything else -- a
           member-access on a removed TYPE, say -- is left alone rather than
           guessed at. }
-        if IsTypeKind(O.Kind) then
-          Want:= SameText(Ref.Kind, 'type_use') or SameText(Ref.Kind, 'read')
-        else
-          Want:= SameText(Ref.Kind, 'read') or SameText(Ref.Kind, 'write');
+        Want:= if IsTypeKind(O.Kind) then SameText(Ref.Kind, 'type_use') or SameText(Ref.Kind, 'read') else SameText(Ref.Kind, 'read') or SameText(Ref.Kind, 'write');
         if not Want then
           Continue;
 
@@ -942,10 +930,7 @@ begin
   { Said out loud rather than left to a JSON field the text reader never sees:
     this dependent changed on disk after the index was built, so the LINE is
     not to be trusted even though the finding is. }
-  if pUnchecked then
-    Result:= '   (UNCHECKED: this file changed since it was indexed)'
-  else
-    Result:= '';
+  Result:= if pUnchecked then '   (UNCHECKED: this file changed since it was indexed)' else '';
 end;
 
 function QNameArray(const pSymbols: TArray<TBaselineSymbol>): TJSONArray;
@@ -1299,9 +1284,7 @@ begin
         So the cost is real but this is not where to take it out. The fix is T6:
         keep the staging, compile ONCE via a probe unit instead of 207 times. }
       for Dep in pClosure do
-        if not SameText(Dep.Path, pOptions.UnitPath) then
-          if TFile.Exists(Dep.Path) then
-          begin
+        if (not SameText(Dep.Path, pOptions.UnitPath)) and (TFile.Exists(Dep.Path)) then begin
             TFile.Copy(Dep.Path,
               TPath.Combine(ShadowDir, ExtractFileName(Dep.Path)), True);
             { T5: the sibling .dfm goes too. A form unit carries an R-directive for its .dfm and
@@ -1454,7 +1437,7 @@ begin
   end;
 end;
 
-function RunLintTree(const pOptions   : TLintTreeOptions;  // dl:ok too-many-exit-points@49da
+function RunLintTree(const pOptions   : TLintTreeOptions;  // dl:ok too-many-exit-points@4e0c
                      const pOpenStore : TStoreOpener;
                      const pParserFor : TParserFactory;
                      const pPreprocess: TPreprocessor;
@@ -1502,7 +1485,7 @@ begin
       AOutput:= 'ERROR: could not write baseline: ' + pOptions.WriteBaselinePath;
       Exit(2);
     end;
-    if SameText(pOptions.Format, 'json') then
+    if SameText(pOptions.Format, 'json') then  // dl:ok ifthen-to-if-expression@f71e -- fixer d8ebefa10 declines this site (a shape dcc rejects as an if-expression, e.g. TValue / array branches); hand rewrite deferred -- SLZ-S10 2026-11-22
       AOutput:= Format('{"schema":"%s","unit":"%s","baseline_written":"%s",' +
         '"fingerprint":"%s","extractor_version":"%s","schema_version":%d}',
         [LINT_TREE_SCHEMA,
@@ -1640,10 +1623,7 @@ begin
           compiling a dependent for a DIFFERENT platform than the index was
           built for would compare two different define profiles. So the index's
           platform is the default, and an explicit --platform overrides it. }
-        if pOptions.Platform <> '' then
-          EffPlatform:= pOptions.Platform
-        else
-          EffPlatform:= IndexSide.Profile.Platform;
+        EffPlatform:= if pOptions.Platform <> '' then pOptions.Platform else IndexSide.Profile.Platform;
         Report.Findings := Report.Findings +
           CompileDependents(pOptions, EffPlatform, pCompile, Closure, RawBytes,
             Unchecked, ShadowUsed);

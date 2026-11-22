@@ -139,10 +139,7 @@ const
 
 function BoolBit(const pValue: Boolean): string;
 begin
-  if pValue then
-    Result:= '1'
-  else
-    Result:= '0';
+  Result:= if pValue then '1' else '0';
 end;
 
 function IsSurfaceKind(const pKind: TSymbolKind): Boolean;
@@ -152,7 +149,7 @@ begin
     MEASURED 2026-09-10: the unit symbol carries Section='' and locals carry
     'implementation', so the section filter alone would already drop them --
     this stays explicit so the contract does not depend on that coincidence. }
-  Result:= not (pKind in [skUnit, skParam, skLocalVar]);
+  Result:= (pKind not in [skUnit, skParam, skLocalVar]);
 end;
 
 function SymbolLine(const pSymbol: TSymbol): string;

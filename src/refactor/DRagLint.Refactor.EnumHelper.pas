@@ -22,7 +22,6 @@ uses
   System.SysUtils
   , System.Classes
   , System.IOUtils
-  , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   , DRagLint.Refactor.TextEdit
   ;
@@ -328,6 +327,7 @@ type
 implementation
 
 uses
+  DRagLint.Core.Model,
   DRagLint.Core.Encoding;
 
 { Reads the 1-based AStartLine..AEndLine (inclusive) span of AFilePath, joined
@@ -393,7 +393,7 @@ begin
   ParenPos:= Pos('(', ADeclSpan);
   if ParenPos = 0 then Exit;
   MemberList:= Copy(ADeclSpan, ParenPos + 1, MaxInt);
-  Result:= Pos('=', MemberList) > 0;
+  Result:= MemberList.Contains('=');
 end;
 
 class function TEnumHelperRefactoring.Resolve(const AStore: ISymbolStore; const AEnumQName: string): TEnumHelperResolve;
@@ -419,7 +419,8 @@ begin
       not a stored qualified_name -- e.g. a bare 'TColor' where the index
       stores 'Simple.TColor'. Only skEnum candidates are considered. }
     for EnumSym in AStore.FindSymbolsByExactName(AEnumQName) do
-      if EnumSym.Kind = skEnum then begin Syms:= [EnumSym]; Break; end;
+      if EnumSym.Kind = skEnum then begin Syms:= [EnumSym];
+      Break; end;
     if Length(Syms) = 0 then Exit;
   end;
   EnumSym:= Syms[0];
@@ -513,7 +514,7 @@ begin
   Result:= Default(TEnumHelperGen);
   EnumName  := AResolve.EnumName;
   HelperName:= EnumName + 'Helper';
-  if Length(AResolve.Members) > 0 then FirstMember:= AResolve.Members[0] else FirstMember:= '';
+  FirstMember:= if Length(AResolve.Members) > 0 then AResolve.Members[0] else '';
   WantsDesc := AResolve.DescArrayName <> '';
 
   DeclSb:= TStringBuilder.Create;
@@ -723,7 +724,7 @@ begin
       Exit(True);
 end;
 
-class function TEnumHelperRefactoring.Build(const AStore: ISymbolStore; const AEnumQName: string;
+class function TEnumHelperRefactoring.Build(const AStore: ISymbolStore; const AEnumQName: string;  // dl:ok cyclomatic-complexity@bd5c -- measured 31 (max 30); one dispatch routine over node kinds, a split is a refactor outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
   const AMethods: TEnumHelperMethods; const AToStringMode: TToStringMode): TEnumHelperResult;
 var
   Res        : TEnumHelperResolve;
@@ -739,7 +740,7 @@ var
   UsesEdit   : TTextEdit;
   Edits      : TArray<TTextEdit>;
   FileId     : Int64;
-  Uses_      : TArray<TUnitUse>;
+  Uses_      : TArray<TUnitUse>;  // dl:ok local-var-casing@c92e -- trailing underscore escapes a reserved word / RTL routine name (Uses, Abs); PascalCase is kept -- SLZ-S10 2026-11-22
   UsesPrefix : string;
   LastImplUse: TUnitUse;
   HaveLastImplUse: Boolean;
@@ -762,12 +763,7 @@ begin
   if Res.HasHelper then
   begin
     Result.Action:= ehaExists;
-    if Res.HelperSameUnit then
-      Result.Message:= Format('helper for "%s" already exists in the same unit (%s)',
-        [Res.EnumName, Res.EnumFilePath])
-    else
-      Result.Message:= Format('helper for "%s" already exists in unit "%s"',
-        [Res.EnumName, Res.HelperUnitPath]);
+    Result.Message:= if Res.HelperSameUnit then Format('helper for "%s" already exists in the same unit (%s)', [Res.EnumName, Res.EnumFilePath]) else Format('helper for "%s" already exists in unit "%s"', [Res.EnumName, Res.HelperUnitPath]);
     Exit;
   end;
 
@@ -820,7 +816,7 @@ begin
       encountered). Falls back to 2 spaces if the anchor line is out of
       range (should not happen for a resolved enum). }
     EnumIndent:= '  ';
-    if (Res.EnumEndLine >= 1) and (Res.EnumEndLine <= Lines.Count) then
+    if (Res.EnumEndLine >= 1) and (Res.EnumEndLine <= Lines.Count) then  // dl:ok manual-inrange@0b7a -- fixer d8ebefa10 declines this site; a hand InRange rewrite (plus System.Math in uses) is deferred -- SLZ-S10 2026-11-22
     begin
       var LEnumLine: string:= Lines[Res.EnumEndLine - 1];
       var LTrimLen : Integer:= Length(LEnumLine) - Length(TrimLeft(LEnumLine));
@@ -860,10 +856,9 @@ begin
       if (U.Section = uusImplementation) and U.FromInclude and (U.IncludeLine > IncImplUse.IncludeLine) then
         IncImplUse:= U;
     for U in Uses_ do
-      if (U.Section = uusImplementation) and not U.FromInclude then
-        if (not HaveLastImplUse) or (U.StartLine > LastImplUse.StartLine)
-           or ((U.StartLine = LastImplUse.StartLine) and (U.StartCol > LastImplUse.StartCol)) then
-        begin LastImplUse:= U; HaveLastImplUse:= True; end;
+      if ((U.Section = uusImplementation) and not U.FromInclude) and ((not HaveLastImplUse) or (U.StartLine > LastImplUse.StartLine)  // dl:ok boolean-expression-complexity@37a5 -- measured 5 operators (limit 4); one syntactic shape test, named sub-expressions deferred -- SLZ-S10 2026-11-22
+           or ((U.StartLine = LastImplUse.StartLine) and (U.StartCol > LastImplUse.StartCol))) then begin LastImplUse:= U;
+        HaveLastImplUse:= True; end;
 
     BodiesLine:= ImplLine;
     if HaveLastImplUse and (LastImplUse.EndLine > BodiesLine) then

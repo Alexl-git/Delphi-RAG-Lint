@@ -62,11 +62,11 @@ type
   /// </remarks>
   TCfgBlock = class
   public
-    Index    : Integer;
-    Items    : TList<TCfgItem>;
-    EntryDefs: TArray<string>;
-    Succ     : TList<Integer>;
-    Pred     : TList<Integer>;
+    Index    : Integer;  // dl:ok public-field@689d -- record-like CFG node class read by the dataflow stages; properties would add no invariant -- SLZ-S10 2026-11-22
+    Items    : TList<TCfgItem>;  // dl:ok public-field@5df0 -- record-like CFG node class read by the dataflow stages; properties would add no invariant -- SLZ-S10 2026-11-22
+    EntryDefs: TArray<string>;  // dl:ok public-field@c1cf -- record-like CFG node class read by the dataflow stages; properties would add no invariant -- SLZ-S10 2026-11-22
+    Succ     : TList<Integer>;  // dl:ok public-field@091a -- record-like CFG node class read by the dataflow stages; properties would add no invariant -- SLZ-S10 2026-11-22
+    Pred     : TList<Integer>;  // dl:ok public-field@4792 -- record-like CFG node class read by the dataflow stages; properties would add no invariant -- SLZ-S10 2026-11-22
     /// <summary>True when this block ends in a statement that never returns
     /// to the caller normally -- <c>raise</c> (including a bare re-raise),
     /// the RTL <c>Halt</c> or the RTL <c>Abort</c>.</summary>
@@ -159,13 +159,13 @@ type
   /// </remarks>
   TCfg = class
   public
-    Blocks     : TObjectList<TCfgBlock>;
-    EntryIdx   : Integer;
-    ExitIdx    : Integer;
-    RoutineNode: TTSNode;
-    Src        : TBytes;
-    Skipped    : Boolean;
-    ForVars    : TList<TCfgForVar>;
+    Blocks     : TObjectList<TCfgBlock>;  // dl:ok public-field@a64f -- record-like CFG node class read by the dataflow stages; properties would add no invariant -- SLZ-S10 2026-11-22
+    EntryIdx   : Integer;  // dl:ok public-field@859a -- record-like CFG node class read by the dataflow stages; properties would add no invariant -- SLZ-S10 2026-11-22
+    ExitIdx    : Integer;  // dl:ok public-field@b73d -- record-like CFG node class read by the dataflow stages; properties would add no invariant -- SLZ-S10 2026-11-22
+    RoutineNode: TTSNode;  // dl:ok public-field@0684 -- record-like CFG node class read by the dataflow stages; properties would add no invariant -- SLZ-S10 2026-11-22
+    Src        : TBytes;  // dl:ok public-field@6180 -- record-like CFG node class read by the dataflow stages; properties would add no invariant -- SLZ-S10 2026-11-22
+    Skipped    : Boolean;  // dl:ok public-field@01c1 -- record-like CFG node class read by the dataflow stages; properties would add no invariant -- SLZ-S10 2026-11-22
+    ForVars    : TList<TCfgForVar>;  // dl:ok public-field@824f -- record-like CFG node class read by the dataflow stages; properties would add no invariant -- SLZ-S10 2026-11-22
     /// <summary>Opt-in (default False = the historic shape): when True, while-True and until-False loops
     /// get no test-exit edge, so only a Break reaches the follow block. Set by lint callers via
     /// TCfgBuilder.Build(..., True): the flow lint and, since 1.42, the index-time dataflow facts (CFG-CONSTLOOP).</summary>
@@ -357,7 +357,9 @@ var S, E, L: Integer;
 begin
   Result := '';
   if N.IsNull then Exit;
-  S := Integer(N.StartByte); E := Integer(N.EndByte); L := E - S;
+  S := Integer(N.StartByte);
+  E := Integer(N.EndByte);
+  L := E - S;
   if (L <= 0) or (S < 0) or (E > Length(ASrc)) then Exit;
   Result := TEncoding.UTF8.GetString(ASrc, S, L);
 end;
@@ -454,7 +456,7 @@ end;
   Anything else (a different callee, no args, two args, an expression argument)
   returns ''. Shape, from the real tree:
     (exprCall entity: (identifier "Low") args: (exprArgs (identifier "TGrade"))) }
-function SingleIdentArgOf(const ANode: TTSNode; const AFnName: string; const ASrc: TBytes): string;
+function SingleIdentArgOf(const ANode: TTSNode; const AFnName: string; const ASrc: TBytes): string;  // dl:ok too-many-exit-points@c2bf -- measured 7 Exits (max 5); guard clauses, each refusal exits with its own result -- SLZ-S10 2026-11-22
 var
   Ent, Args: TTSNode;
 begin
@@ -502,10 +504,8 @@ function DeclaredTypeOfVar(const ARoutine: TTSNode; const AVarNameLower: string;
   begin
     Result := '';
     if N.IsNull then Exit;
-    if SameText(N.NodeType, 'defProc') and (not (N = ARoutine)) then Exit;
-    if SameText(N.NodeType, 'declVar') or SameText(N.NodeType, 'declArg') then
-      if LowerText(N.ChildByField('name'), ASrc) = AVarNameLower then
-        Exit(TyperefNameOf(N.ChildByField('type')));
+    if SameText(N.NodeType, 'defProc') and (not (N = ARoutine)) then Exit;  // dl:ok nonminimal-bool@b962 -- TTSNode defines = but no <>; the rewritten form fails dcc E2015 -- fixer d8ebefa10 declines -- SLZ-S10 2026-11-22
+    if (SameText(N.NodeType, 'declVar') or SameText(N.NodeType, 'declArg')) and (LowerText(N.ChildByField('name'), ASrc) = AVarNameLower) then Exit(TyperefNameOf(N.ChildByField('type')));
     for I := 0 to N.NamedChildCount - 1 do
     begin
       Result := Visit(N.NamedChild(I));
@@ -555,8 +555,7 @@ begin
   { 1. Both bounds are integer literals -- the original rule, unchanged. }
   if TryStrToInt(LowTxt, LowVal) and TryStrToInt(HighTxt, HighVal) then
   begin
-    if IsDownto then Result := LowVal >= HighVal
-    else Result := LowVal <= HighVal;
+    Result := if IsDownto then LowVal >= HighVal else LowVal <= HighVal;
     Exit;
   end;
 
@@ -610,7 +609,9 @@ end;
 
 destructor TCfgBlock.Destroy;
 begin
-  Items.Free; Succ.Free; Pred.Free;
+  Items.Free;
+  Succ.Free;
+  Pred.Free;
   inherited;
 end;
 
@@ -693,7 +694,7 @@ begin
   Result := False;
   if N.IsNull then Exit;
   K := N.NodeType;
-  if (K = 'goto') or (K = 'label') or (K = 'declLabels') or (Pos('asm', K) = 1) then
+  if (K = 'goto') or (K = 'label') or (K = 'declLabels') or K.StartsWith('asm') then
     Exit(True);
   for I := 0 to N.NamedChildCount - 1 do
     if RoutineHasGotoOrAsm(N.NamedChild(I)) then Exit(True);
@@ -711,15 +712,15 @@ type
 
   TBuilderState = class
   public
-    Cfg      : TCfg;
-    Loops    : TStack<TLoopCtx>;
-    WithDepth: Integer;
+    Cfg      : TCfg;  // dl:ok public-field@fb4d -- record-like CFG node class read by the dataflow stages; properties would add no invariant -- SLZ-S10 2026-11-22
+    Loops    : TStack<TLoopCtx>;  // dl:ok public-field@ddcb -- record-like CFG node class read by the dataflow stages; properties would add no invariant -- SLZ-S10 2026-11-22
+    WithDepth: Integer;  // dl:ok public-field@30e9 -- record-like CFG node class read by the dataflow stages; properties would add no invariant -- SLZ-S10 2026-11-22
     { Finally BODIES of the try..finally blocks currently enclosing the statement
       being emitted, outermost first. See DivertVia. }
-    Finallys : TList<TTSNode>;
+    Finallys : TList<TTSNode>;  // dl:ok public-field@81ce -- record-like CFG node class read by the dataflow stages; properties would add no invariant -- SLZ-S10 2026-11-22
     { >0 while emitting an exit-path copy of a finally body, which suspends the
       list so a divert INSIDE a finally cannot recurse into itself forever. }
-    CopyDepth: Integer;
+    CopyDepth: Integer;  // dl:ok public-field@7ffd -- record-like CFG node class read by the dataflow stages; properties would add no invariant -- SLZ-S10 2026-11-22
     { C1: every block DivertVia emitted as an exit-path COPY of a finally body.
       Those blocks sit inside the try body's index range but are NOT part of its
       normal statement flow, and an exception raised in one is not caught by the
@@ -728,7 +729,7 @@ type
       reachable from the inlined finally and the finally's statements are
       analysed twice on ONE path (measured: 5 phantom double-frees on DataCopy
       CSVRoutines.pas, where each object is freed exactly once). }
-    DivertBlocks: TDictionary<Integer, Boolean>;
+    DivertBlocks: TDictionary<Integer, Boolean>;  // dl:ok public-field@cfa4 -- record-like CFG node class read by the dataflow stages; properties would add no invariant -- SLZ-S10 2026-11-22
     { C14: >0 while emitting the BODY of a try..except whose handler is empty.
       A raise / Abort there is swallowed and control returns to the caller, so
       it is not marked NoReturn -- see TCfgBlock.NoReturn. }
@@ -775,7 +776,7 @@ var
   Parts: TArray<string>;
 begin
   Parts := DottedSegments(AText);
-  if Length(Parts) = 0 then Result := '' else Result := Parts[High(Parts)];
+  Result := if Length(Parts) = 0 then '' else Parts[High(Parts)];
 end;
 
 { C14. True when a routine declared in the tree under ARoot is named AName
@@ -882,7 +883,7 @@ var
   Parts         : TArray<string>;
   Kind          : Integer;
 begin
-  if AName = 'abort' then Kind := BareAbortKind else Kind := BareHaltKind;
+  Kind := if AName = 'abort' then BareAbortKind else BareHaltKind;
   if Kind = 0 then
   begin
     { The unit root, and the OUTERMOST routine: a nested routine inherits the
@@ -905,8 +906,7 @@ begin
     else
     begin
       P := Outer.ChildByField('header');
-      if P.IsNull then Parts := nil
-      else Parts := DottedSegments(NodeStr(P.ChildByField('name'), Cfg.Src));
+      Parts := if P.IsNull then nil else DottedSegments(NodeStr(P.ChildByField('name'), Cfg.Src));
       if (Length(Parts) >= 2) and not ClassChainLacks(Root, Cfg.Src, Parts[High(Parts) - 1], AName) then
         Kind := 2;
     end;
@@ -917,8 +917,12 @@ end;
 
 constructor TBuilderState.Create(ACfg: TCfg);
 begin
-  inherited Create; Cfg := ACfg; Loops := TStack<TLoopCtx>.Create; WithDepth := 0;
-  Finallys := TList<TTSNode>.Create; CopyDepth := 0;
+  inherited Create;
+  Cfg := ACfg;
+  Loops := TStack<TLoopCtx>.Create;
+  WithDepth := 0;
+  Finallys := TList<TTSNode>.Create;
+  CopyDepth := 0;
   DivertBlocks := TDictionary<Integer, Boolean>.Create;
 end;
 
@@ -952,7 +956,8 @@ var
 begin
   Result := ATarget;
   if (Finallys.Count <= AFromDepth) or (CopyDepth > 0) then Exit;
-  First := -1; Cur := -1;
+  First := -1;
+  Cur := -1;
   Inc(CopyDepth);
   var CopyFrom: Integer := Cfg.Blocks.Count;
   try
@@ -990,7 +995,7 @@ begin
   Result := Cur;
 end;
 
-function TBuilderState.EmitStmt(ACur: Integer; const ANode: TTSNode): Integer;
+function TBuilderState.EmitStmt(ACur: Integer; const ANode: TTSNode): Integer;  // dl:ok too-many-locals@5324, method-too-long@8c24, deep-nesting@ab51, too-many-exit-points@9b84, cyclomatic-complexity@4bf1, cognitive-complexity@e841 -- too-many-locals: measured 26 locals (max 25), method-too-long: measured 563 lines (max 250), deep-nesting: measured 6 deep (max 5), too-many-exit-points: measured 19 Exits (max 5), cyclomatic-complexity: measured 119 (max 30), cognitive-complexity: measured 234 (max 65); one walker routine, a split is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
 var
   K, EntTxt: string;
   Cond, ThenN, ElseN, StartN, EntityN, IterN, LhsN: TTSNode;
@@ -1127,7 +1132,8 @@ begin
       block and join it. }
     ElseIdx := -1;
     for I := 0 to ANode.NamedChildCount - 1 do
-      if ANode.NamedChild(I).NodeType = 'kElse' then begin ElseIdx := I; Break; end;
+      if ANode.NamedChild(I).NodeType = 'kElse' then begin ElseIdx := I;
+      Break; end;
 
     if ElseIdx >= 0 then
     begin
@@ -1165,7 +1171,10 @@ begin
       path (INBOX-function-result-while-true-exit). }
     if not (Cfg.PruneConstLoops and IsBoolLiteral(Cond, Cfg.Src, 'true')) then
       Cfg.Blocks[HdrIdx].AddSucc(FollowIdx);
-    Ctx.ContinueIdx := HdrIdx; Ctx.BreakIdx := FollowIdx; Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
+    Ctx.ContinueIdx := HdrIdx;
+    Ctx.BreakIdx := FollowIdx;
+    Ctx.FinallyDepth := Finallys.Count;
+    Loops.Push(Ctx);
     TestIdx := EmitStmt(BodyIdx, ANode.ChildByField('body'));
     if TestIdx >= 0 then Cfg.Blocks[TestIdx].AddSucc(HdrIdx); { back-edge }
     Loops.Pop;
@@ -1183,7 +1192,7 @@ begin
       bound (Delphi evaluates it ONCE, before the loop -- hence ACur, not the
       header). Same rule ExtractMethod already applies. }
     for I := 0 to ANode.NamedChildCount - 1 do
-      if (not (ANode.NamedChild(I) = StartN)) and (not (ANode.NamedChild(I) = ANode.ChildByField('body'))) then
+      if (not (ANode.NamedChild(I) = StartN)) and (not (ANode.NamedChild(I) = ANode.ChildByField('body'))) then  // dl:ok nonminimal-bool@a7c9 -- TTSNode defines = but no <>; the rewritten form fails dcc E2015 -- fixer d8ebefa10 declines -- SLZ-S10 2026-11-22
         Cfg.Blocks[ACur].AddItem(ANode.NamedChild(I), WithDepth > 0);
     HdrIdx := Cfg.NewBlock.Index;
     { The loop READS its control variable on every test/increment. Without this
@@ -1212,7 +1221,10 @@ begin
       Cfg.Blocks[ACur].AddSucc(BodyIdx)
     else
       Cfg.Blocks[ACur].AddSucc(HdrIdx);
-    Ctx.ContinueIdx := HdrIdx; Ctx.BreakIdx := FollowIdx; Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
+    Ctx.ContinueIdx := HdrIdx;
+    Ctx.BreakIdx := FollowIdx;
+    Ctx.FinallyDepth := Finallys.Count;
+    Loops.Push(Ctx);
     TestIdx := EmitStmt(BodyIdx, ANode.ChildByField('body'));
     if TestIdx >= 0 then Cfg.Blocks[TestIdx].AddSucc(HdrIdx);
     Loops.Pop;
@@ -1239,11 +1251,15 @@ begin
     if (not IterN.IsNull) and (IterN.NodeType = 'varAssignDef') then
       for I := 0 to IterN.NamedChildCount - 1 do
         if IterN.NamedChild(I).NodeType = 'identifier' then
-        begin IterN := IterN.NamedChild(I); Break; end;
+        begin IterN := IterN.NamedChild(I);
+        Break; end;
     if not IterN.IsNull then Cfg.Blocks[BodyIdx].EntryDefs := [LowerText(IterN, Cfg.Src)];
     Cfg.Blocks[HdrIdx].AddSucc(BodyIdx);
-    Cfg.Blocks[HdrIdx].AddSucc(FollowIdx);
-    Ctx.ContinueIdx := HdrIdx; Ctx.BreakIdx := FollowIdx; Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
+    Cfg.Blocks[HdrIdx].AddSucc(FollowIdx);  // dl:ok duplicate-code@038b -- measured 92 tokens; sibling case arms of the same walker, a shared helper is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
+    Ctx.ContinueIdx := HdrIdx;
+    Ctx.BreakIdx := FollowIdx;
+    Ctx.FinallyDepth := Finallys.Count;
+    Loops.Push(Ctx);
     TestIdx := EmitStmt(BodyIdx, ANode.ChildByField('body'));
     if TestIdx >= 0 then Cfg.Blocks[TestIdx].AddSucc(HdrIdx);
     Loops.Pop;
@@ -1258,11 +1274,14 @@ begin
     TestIdx := Cfg.NewBlock.Index; { holds the until-condition }
     Cond := ANode.ChildByField('condition');
     if not Cond.IsNull then Cfg.Blocks[TestIdx].AddItem(Cond, WithDepth > 0);
-    Cfg.Blocks[TestIdx].AddSucc(BodyIdx);   { loop continues }
+    Cfg.Blocks[TestIdx].AddSucc(BodyIdx);   { loop continues }  // dl:ok duplicate-code@ac6c -- measured 127 tokens; sibling case arms of the same walker, a shared helper is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
     { `until False` never exits by its test; only a Break reaches the follow block. }
     if not (Cfg.PruneConstLoops and IsBoolLiteral(Cond, Cfg.Src, 'false')) then
       Cfg.Blocks[TestIdx].AddSucc(FollowIdx); { loop exits }
-    Ctx.ContinueIdx := TestIdx; Ctx.BreakIdx := FollowIdx; Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
+    Ctx.ContinueIdx := TestIdx;
+    Ctx.BreakIdx := FollowIdx;
+    Ctx.FinallyDepth := Finallys.Count;
+    Loops.Push(Ctx);
     BodyAfter := EmitStmt(BodyIdx, ANode.ChildByField('body'));
     if BodyAfter >= 0 then Cfg.Blocks[BodyAfter].AddSucc(TestIdx);
     Loops.Pop;
@@ -1310,7 +1329,8 @@ begin
     for I := 0 to ANode.NamedChildCount - 1 do
       if ANode.NamedChild(I).NodeType = 'kFinally' then SeenFinally := True
       else if SeenFinally and (ANode.NamedChild(I).NodeType = 'statements') then
-      begin FinNode := ANode.NamedChild(I); Break; end;
+      begin FinNode := ANode.NamedChild(I);
+      Break; end;
     BodyIdx := Cfg.NewBlock.Index; { try region entry }
     Cfg.Blocks[ACur].AddSucc(BodyIdx);
     FollowIdx := Cfg.NewBlock.Index;
@@ -1455,10 +1475,7 @@ begin
           for var BIdx := BodyFirst to BodyLast do
             if not DivertBlocks.ContainsKey(BIdx) then
               Cfg.Blocks[BIdx].AddSucc(HdrIdx);
-          if ANode.NamedChild(I).NodeType = 'exceptionHandler' then
-            ExcAfter := EmitStmt(HdrIdx, ANode.NamedChild(I).ChildByField('body'))
-          else
-            ExcAfter := EmitStmt(HdrIdx, ANode.NamedChild(I));
+          ExcAfter := if ANode.NamedChild(I).NodeType = 'exceptionHandler' then EmitStmt(HdrIdx, ANode.NamedChild(I).ChildByField('body')) else EmitStmt(HdrIdx, ANode.NamedChild(I));
           { A handler that DIVERTS (exit / raise / break / continue -> EmitStmt
             returns -1) has no fallthrough, and wiring its ENTRY to the follow
             block anyway re-created the very path that cannot happen: the
@@ -1517,7 +1534,8 @@ begin
       leaves. exit replays them all (depth 0); break/continue replay only those
       opened INSIDE their loop. }
     if EntTxt = 'exit' then
-    begin Cfg.Blocks[ACur].AddSucc(DivertVia(Cfg.ExitIdx, 0)); Exit(-1); end;
+    begin Cfg.Blocks[ACur].AddSucc(DivertVia(Cfg.ExitIdx, 0));
+    Exit(-1); end;
     { C14. The RTL `Halt` / `Halt(n)` ends the process and the RTL `Abort`
       raises EAbort: neither falls through. Modelled like `raise` -- an edge to
       Exit marked NoReturn (Halt also EndsProcess). A BARE name is the RTL one
@@ -1539,9 +1557,11 @@ begin
       Exit(-1);
     end;
     if (EntTxt = 'break') and (Loops.Count > 0) then
-    begin Cfg.Blocks[ACur].AddSucc(DivertVia(Loops.Peek.BreakIdx, Loops.Peek.FinallyDepth)); Exit(-1); end;
+    begin Cfg.Blocks[ACur].AddSucc(DivertVia(Loops.Peek.BreakIdx, Loops.Peek.FinallyDepth));
+    Exit(-1); end;
     if (EntTxt = 'continue') and (Loops.Count > 0) then
-    begin Cfg.Blocks[ACur].AddSucc(DivertVia(Loops.Peek.ContinueIdx, Loops.Peek.FinallyDepth)); Exit(-1); end;
+    begin Cfg.Blocks[ACur].AddSucc(DivertVia(Loops.Peek.ContinueIdx, Loops.Peek.FinallyDepth));
+    Exit(-1); end;
     Exit(ACur);
   end;
 
@@ -1569,7 +1589,8 @@ begin
   else if AProc.NodeType <> 'defProc' then Exit
   else Body := AProc.ChildByField('body');
   if Body.IsNull then Exit;
-  if RoutineHasGotoOrAsm(AProc) then begin Result.Skipped := True; Exit; end;
+  if RoutineHasGotoOrAsm(AProc) then begin Result.Skipped := True;
+  Exit; end;
 
   Result.EntryIdx := Result.NewBlock.Index; { 0 = Entry }
   Result.ExitIdx  := Result.NewBlock.Index; { 1 = Exit }

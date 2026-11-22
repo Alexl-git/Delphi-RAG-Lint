@@ -403,10 +403,7 @@ end;
 function PascalWord(const AWord: string): string;
 begin
   if AWord = '' then Exit('');
-  if (Length(AWord) > 1) and (AWord = UpperCase(AWord)) then
-    Result:= UpperCase(AWord[1]) + LowerCase(Copy(AWord, 2, MaxInt))
-  else
-    Result:= UpperCase(AWord[1]) + Copy(AWord, 2, MaxInt);
+  Result:= if (Length(AWord) > 1) and (AWord = UpperCase(AWord)) then UpperCase(AWord[1]) + LowerCase(Copy(AWord, 2, MaxInt)) else UpperCase(AWord[1]) + Copy(AWord, 2, MaxInt);
 end;
 
 function ConstCaseCandidates(const AOldName: string; const AConstCase: TArray<string>): TArray<string>;
@@ -473,7 +470,7 @@ begin
   AText:= '';
   ACharCol:= ACol;
   if (ALine < 1) or (ACol < 1) or not TFile.Exists(AFile) then Exit(False);
-  var Src: TBytes:= EnsureUtf8Bytes(TFile.ReadAllBytes(AFile));  // dl:ok taint-path-traversal@7233 -- reads the source file a lint finding names (an indexed unit the caller already linted); the env var only locates the user's own manifest
+  var Src: TBytes:= EnsureUtf8Bytes(TFile.ReadAllBytes(AFile));
   var Start: Integer:= 0;
   var Ln: Integer:= 1;
   while (Ln < ALine) and (Start < Length(Src)) do
@@ -675,9 +672,8 @@ var
   begin
     Result:= False;
     if N.IsNull then Exit;
-    if (not (N = OwnerProc)) and (N.NodeType = 'defProc') then Exit; // nested routine: out of scope
-    if (N.NodeType = 'declArg') or (N.NodeType = 'declVar') then
-      if DeclHasOtherName(N) then Exit(True);
+    if (not (N = OwnerProc)) and (N.NodeType = 'defProc') then Exit; // nested routine: out of scope  // dl:ok nonminimal-bool@6b30 -- TTSNode defines = but no <>; the rewritten form fails dcc E2015 -- fixer d8ebefa10 declines -- SLZ-S10 2026-11-22
+    if ((N.NodeType = 'declArg') or (N.NodeType = 'declVar')) and (DeclHasOtherName(N)) then Exit(True);
     for I:= 0 to N.NamedChildCount - 1 do
     begin
       Ch:= N.NamedChild(I);
@@ -747,7 +743,7 @@ end;
 
 { The rename candidates for finding AF whose identifier is AOldName, best first;
   nil when no candidate differs from AOldName or no legal one exists. }
-function NamingCandidates(const AStore: ISymbolStore; const AF: TLintFinding;
+function NamingCandidates(const AStore: ISymbolStore; const AF: TLintFinding;  // dl:ok too-many-exit-points@3477, cyclomatic-complexity@5532 -- too-many-exit-points: measured 6 Exits (max 5), cyclomatic-complexity: measured 31 (max 30); one walker routine, a split is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
   const AOldName: string; const ANaming: TNamingConfig): TArray<string>;
 var
   NewName: string;
@@ -848,7 +844,7 @@ begin
     begin
       IsLocal:= SameText(F.RuleId, 'local-var-casing') or SameText(F.RuleId, 'param-name-prefix')
                 or SameText(F.RuleId, 'local-field-prefix');
-      if not (IsLocal or SameText(F.RuleId, 'method-pascalcase') or SameText(F.RuleId, 'const-casing')
+      if not (IsLocal or SameText(F.RuleId, 'method-pascalcase') or SameText(F.RuleId, 'const-casing')  // dl:ok boolean-expression-complexity@4c78 -- measured 5 operators (limit 4); one syntactic shape test, named sub-expressions deferred -- SLZ-S10 2026-11-22
           or SameText(F.RuleId, 'field-name-prefix') or SameText(F.RuleId, 'type-name-prefix')
           or SameText(F.RuleId, 'property-accessor-name')) then Continue;
 
@@ -1300,7 +1296,7 @@ begin
   end;
 end;
 
-function BuildNamingFixEdits(const AStore: ISymbolStore; const ALibraries: TArray<ISymbolStore>; // dl:ok too-many-parameters@d5aa -- one caller; four inputs and the four separately reported outcomes, a record would only rename them
+function BuildNamingFixEdits(const AStore: ISymbolStore; const ALibraries: TArray<ISymbolStore>; // dl:ok too-many-parameters@48d6 -- one caller; four inputs and the four separately reported outcomes, a record would only rename them
   const AFindings: TArray<TLintFinding>; const ANaming: TNamingConfig;
   out AFixCount: Integer; out ASkippedCount: Integer; out AStaleCount: Integer; out ARefusals: TArray<string>): TArray<TTextEdit>;
 var

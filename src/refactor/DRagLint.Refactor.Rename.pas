@@ -8,10 +8,8 @@ uses
   , System.IOUtils
   , System  .Generics.Collections
   , System  .Generics.Defaults
-  , TreeSitter
   , DRagLint.Core    .Model
   , DRagLint.Core    .Interfaces
-  , DRagLint.Diagnostics.ParseCache
   ;
 
 type
@@ -35,7 +33,7 @@ type
   /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Feature.Rename, DRagLint.MCP.Server, DRagLint.Refactor.ExtractMethod, DRagLint.Refactor.MultiProjectRename, DRagLint.Refactor.NamingFix, DRagLint.Refactor.RenameProof</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TRenameRefactoring = class
+  TRenameRefactoring = class  // dl:ok high-response@0469 -- measured RFC 83 (>50); the class is the refactoring's single driver, a split is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
     public
       /// <summary>Edits that rename the symbol AQName to ANewName: its
       /// declaration, its implementation header, and every reference that is
@@ -475,6 +473,9 @@ implementation
 uses
   DRagLint.Core.Encoding, System.StrUtils
   , DRagLint.Refactor.TextEdit
+  , TreeSitter
+  , DRagLint.Diagnostics.ParseCache
+  , System.Math
   ;
 
 // ---------------------------------------------------------------------------
@@ -486,8 +487,7 @@ var
   DotPos: Integer;
 begin
   DotPos:= LastDelimiter('.', S);
-  if DotPos > 0 then Result:= Copy(S, DotPos + 1, MaxInt)
-  else Result:= S;
+  Result:= if DotPos > 0 then Copy(S, DotPos + 1, MaxInt) else S;
 end;
 
 // Compare two TRenameEdit values: FilePath ASC, Line DESC, Col DESC.
@@ -559,7 +559,7 @@ begin
   Result  := 0;
   Keywords:= 0;
   P       := ACol;
-  while (P >= 1) and (P <= Length(ALine)) do
+  while InRange(P, 1, Length(ALine)) do
   begin
     Q:= P;
     while (Q <= Length(ALine)) and IsIdentChar(ALine[Q]) do Inc(Q);
@@ -903,7 +903,8 @@ begin
       begin
         var PosKey:= UpperCase(List[Idx].FilePath) + '|' + IntToStr(List[Idx].Line) + '|' + IntToStr(List[Idx].Col);
         if SeenPos.ContainsKey(PosKey) then List.Delete(Idx)
-        else begin SeenPos.Add(PosKey, True); Inc(Idx); end;
+        else begin SeenPos.Add(PosKey, True);
+        Inc(Idx); end;
       end;
     finally
       SeenPos.Free;
@@ -1058,7 +1059,9 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -1183,7 +1186,7 @@ var
   begin
     if N.IsNull then Exit;
     { Entering a nested defProc that shadows Target -> stop descending for renames. }
-    if (not (N = OwnerProc)) and (N.NodeType = 'defProc') and NestedRedeclares(N) then
+    if (not (N = OwnerProc)) and (N.NodeType = 'defProc') and NestedRedeclares(N) then  // dl:ok nonminimal-bool@a2de -- TTSNode defines = but no <>; the rewritten form fails dcc E2015 -- fixer d8ebefa10 declines -- SLZ-S10 2026-11-22
       Exit;
     { An identifier matching Target: under a `with` a target may declare it, so it is a site to decide. }
     if (N.NodeType = 'identifier') and SameText(Trim(NStr(N)), Target) then
@@ -1265,7 +1268,8 @@ var
       begin
         NmN:= AN.NamedChild(K);
         if NmN.NodeType <> 'declArg' then Continue;
-        TN:= NmN.ChildByField('type'); TypeStart:= MaxInt;
+        TN:= NmN.ChildByField('type');
+        TypeStart:= MaxInt;
         if not TN.IsNull then TypeStart:= Integer(TN.StartByte);
         for J:= 0 to NmN.NamedChildCount - 1 do
         begin
@@ -1395,7 +1399,8 @@ begin
       for Ed in Edits do
       begin
         Key:= IntToStr(Ed.Line) + ':' + IntToStr(Ed.Col);
-        if not Dedup.ContainsKey(Key) then begin Dedup.Add(Key, True); Final.Add(Ed); end;
+        if not Dedup.ContainsKey(Key) then begin Dedup.Add(Key, True);
+        Final.Add(Ed); end;
       end;
       Comparer:= TComparer<TRenameEdit>.Construct(
         function(const A, B: TRenameEdit): Integer
@@ -1434,7 +1439,8 @@ const
 var L, H, M, C: Integer; Low: string;
 begin
   Low:= LowerCase(AName);
-  L:= 0; H:= High(KReserved);
+  L:= 0;
+  H:= High(KReserved);
   while L <= H do
   begin
     M:= (L + H) div 2;
@@ -1709,7 +1715,7 @@ begin
   Syms:= AStore.FindSymbolsByQualifiedName(AQName);
   if Length(Syms) = 0 then Exit;
   Owner:= AStore.GetSymbolById(Syms[0].ParentId);
-  if not (Owner.Kind in [skClass, skForm]) then Exit;
+  if (Owner.Kind not in [skClass, skForm]) then Exit;
   ShortName:= LastDotSegment(AQName);
   Seen:= TDictionary<string, Boolean>.Create;
   try
@@ -1718,7 +1724,7 @@ begin
     for var ClsName: string in [Owner.Name] + AStore.FindDescendantNames(Owner.Name) do
       for Cand in AStore.FindSymbolsByExactName(ClsName) do
       begin
-        if not (Cand.Kind in [skClass, skForm]) then Continue;
+        if (Cand.Kind not in [skClass, skForm]) then Continue;
         if (Cand.Id <> Owner.Id) and not ClassDescendsFrom(AStore, Cand.Id, Owner.Id) then Continue;
         DfmPath:= ChangeFileExt(AStore.GetFilePath(Cand.FileId), '.dfm');
         if Seen.ContainsKey(UpperCase(DfmPath)) or not FileExists(DfmPath) then Continue;

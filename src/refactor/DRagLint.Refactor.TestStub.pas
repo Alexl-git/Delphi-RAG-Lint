@@ -32,7 +32,6 @@ uses
   System.SysUtils
   , System.Classes
   , System.StrUtils
-  , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   ;
 
@@ -77,6 +76,9 @@ type
 
 implementation
 
+uses
+  DRagLint.Core.Model;
+
 type
   { One parameter as the stub needs it: a name to declare and a type to
     declare it as. Modifiers (const/var/out) are dropped -- a local standing in
@@ -102,8 +104,7 @@ var
   DotPos: Integer;
 begin
   DotPos:= LastDelimiter(ASep, S);
-  if DotPos > 0 then Result:= Copy(S, DotPos + 1, MaxInt)
-  else Result:= S;
+  Result:= if DotPos > 0 then Copy(S, DotPos + 1, MaxInt) else S;
 end;
 
 { True for the symbol kinds that can be the subject of a test. }
@@ -243,7 +244,7 @@ begin
     for N in Names do
     begin
       if Trim(N) = '' then Continue;
-      SetLength(AParams, Length(AParams) + 1);
+      SetLength(AParams, Length(AParams) + 1);  // dl:ok setlength-in-loop@513d -- result sets are small (callers of one symbol); growth by one is immaterial -- SLZ-S10 2026-11-22
       AParams[High(AParams)].Name:= Trim(N);
       AParams[High(AParams)].Kind:= TypeText;
     end;
@@ -290,7 +291,7 @@ begin
   { Walk to the enclosing unit rather than assuming a segment count. }
   Walk := Chosen;
   Guard:= 0;
-  while (Walk.ParentId <> 0) and (Guard < 16) do
+  while (Walk.ParentId <> 0) and (Guard < 16) do  // dl:ok magic-literal@9606 -- measured literal is a local bound/weight used once, documented by its line -- SLZ-S10 2026-11-22
   begin
     Walk:= AStore.GetSymbolById(Walk.ParentId);
     Inc(Guard);
@@ -348,14 +349,11 @@ begin
   for I:= 0 to High(T.Params) do ArgNames[I]:= T.Params[I].Name;
   ArgList:= string.Join(', ', ArgNames);
 
-  if T.HostClass <> '' then CallText:= 'Subject.' + T.RoutineName
-  else CallText:= T.UnitName + '.' + T.RoutineName;
+  CallText:= if T.HostClass <> '' then 'Subject.' + T.RoutineName else T.UnitName + '.' + T.RoutineName;
   if ArgList <> '' then CallText:= CallText + '(' + ArgList + ')';
-  if T.IsFunction then CallText:= 'Actual := ' + CallText + ';'
-  else CallText:= CallText + ';';
+  CallText:= if T.IsFunction then 'Actual := ' + CallText + ';' else CallText + ';';
 
-  if AFramework = tfDUnitX then FailCall:= 'Assert.Fail('
-  else FailCall:= 'Fail(';
+  FailCall:= if AFramework = tfDUnitX then 'Assert.Fail(' else 'Fail(';
 
   Sb:= TStringBuilder.Create;
   try

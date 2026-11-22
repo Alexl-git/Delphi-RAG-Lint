@@ -17,7 +17,7 @@
 /// The lattice, the axiom and built-in tables, the argument lexer, the body
 /// scanner and the callee -> caller translation live in
 /// DRagLint.Analysis.Purity; this unit only drives them against the store.</remarks>
-unit DRagLint.Analysis.PurityStage;
+unit DRagLint.Analysis.PurityStage;  // dl:ok unit-too-large@becf -- measured 2361 lines (limit 2000); a unit split changes the uses graph, outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
 
 interface
 
@@ -25,9 +25,7 @@ uses
   System.SysUtils,
   System.Classes,
   System.Generics.Collections,
-  DRagLint.Core.Model,
-  DRagLint.Core.Interfaces,
-  DRagLint.Analysis.Purity;
+  DRagLint.Core.Interfaces;
 
 type
   /// <summary>What one run counted -- printed on the `resolve: purity` line and
@@ -125,6 +123,8 @@ type
 implementation
 
 uses
+  DRagLint.Core.Model,
+  DRagLint.Analysis.Purity,
   System.Diagnostics,
   System.Generics.Defaults,
   System.IOUtils,
@@ -647,7 +647,7 @@ begin
   Result:= False;
   if ATargetId <= 0 then Exit;
   T:= SymbolById(ATargetId);
-  if not (T.Kind in [skVarDecl, skField]) and (T.Kind.ToText <> KIND_TEXT_LOCAL_VAR) and (T.Kind.ToText <> KIND_TEXT_PARAM) then Exit;
+  if (T.Kind not in [skVarDecl, skField]) and (T.Kind.ToText <> KIND_TEXT_LOCAL_VAR) and (T.Kind.ToText <> KIND_TEXT_PARAM) then Exit;
   Result:= IsProcTypeSignature(T.Signature) or FProcTypes.ContainsKey(LowerKey(Trim(T.Signature)));
 end;
 
@@ -764,8 +764,7 @@ begin
   begin
     if ACalls[I].StartLine <> ALineNo then Continue;
     NameEnd:= ACalls[I].StartCol + Length(ACalls[I].NameText);
-    if (NameEnd <= P) and (Trim(Copy(Masked, NameEnd, P - NameEnd)) = '') then
-      if (Result < 0) or (ACalls[I].StartCol > ACalls[Result].StartCol) then Result:= I;
+    if ((NameEnd <= P) and (Trim(Copy(Masked, NameEnd, P - NameEnd)) = '')) and ((Result < 0) or (ACalls[I].StartCol > ACalls[Result].StartCol)) then Result:= I;
   end;
 end;
 
@@ -1585,7 +1584,7 @@ var
 begin
   T:= SymbolById(ATargetId);
   if T.Kind in CAST_KINDS then Exit;   { TFoo(X): a cast, not a call }
-  if not (T.Kind in ROUTINE_KINDS) then
+  if (T.Kind not in ROUTINE_KINDS) then
   begin
     ASum.AddFlag(efUnknown, 'calls ' + ARef.NameText + ' (' + WITNESS_NOT_ROUTINE + ')', AChanged);
     Exit;
@@ -2306,7 +2305,7 @@ begin
       [ALoad, AScope, AScan, FLexTicks / TStopwatch.Frequency, AFix, AWrite, FVisits, FLineReReads,
        Round(FLineChars * SizeOf(Char) / BYTES_PER_MB)]));
   if GetEnvironmentVariable('DRAGLINT_PROFILE') <> '' then
-    Writeln(ErrOutput, Format('purity: scan = file %.1fs  refs %.1fs  body %.1fs  escapes %.1fs  ref-loop %.1fs; symbol lookups %d: single-row fetches %d in %.2fs, per-file preload %d row(s) in %.2fs',
+    Writeln(ErrOutput, Format('purity: scan = file %.1fs  refs %.1fs  body %.1fs  escapes %.1fs  ref-loop %.1fs; symbol lookups %d: single-row fetches %d in %.2fs, per-file preload %d row(s) in %.2fs',  // dl:ok locale-sensitive-conversion@39b2 -- diagnostic / batch text, not data; locale formatting is harmless here -- SLZ-S10 2026-11-22
       [FTkFile / TStopwatch.Frequency, FTkRefs / TStopwatch.Frequency, FTkBody / TStopwatch.Frequency,
        FTkEsc / TStopwatch.Frequency, FTkRefLoop / TStopwatch.Frequency,
        FSymLookups, FSymMiss, FTkSym / TStopwatch.Frequency, FPreloadRows, FTkPreload / TStopwatch.Frequency]));

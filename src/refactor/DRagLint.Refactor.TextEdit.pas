@@ -164,7 +164,7 @@ type
   /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.ConvertApply, DRagLint.CLI.CycleFix, DRagLint.Convert.Apply, DRagLint.LSP.UsesOnSave, DRagLint.Refactor.ExtractMethod, DRagLint.Refactor.Rename, DRagLint.Refactor.RenameProof</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TTextEditApplier = class
+  TTextEditApplier = class  // dl:ok high-response@b451 -- measured RFC 53 (>50); the class is the refactoring's single driver, a split is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
   private
     /// <summary><!-- drag-lint:auto sum -->One kept edit applied to ALines (the per-kind
     /// half of ApplyGroup).</summary>
@@ -679,7 +679,7 @@ const
 begin
   ALen:= 1;
   Result:= Ord(S[I]);
-  if (Result >= HighSurrogateLo) and (Result <= HighSurrogateHi) and (I < Length(S))
+  if InRange(Result, HighSurrogateLo, HighSurrogateHi) and (I < Length(S))
     and (Ord(S[I + 1]) >= LowSurrogateLo) and (Ord(S[I + 1]) <= LowSurrogateHi) then
   begin
     Result:= SurrogateBase + (Result - HighSurrogateLo) * SurrogateBits + (Ord(S[I + 1]) - LowSurrogateLo);
@@ -948,7 +948,7 @@ end;
 
 class function TTextFileFormat.LineBreakOf(const AText: string): string;
 begin
-  Result:= if (Pos(#10, AText) > 0) and (Pos(#13#10, AText) = 0) then #10 else #13#10;
+  Result:= if AText.Contains(#10) and (not AText.Contains(#13#10)) then #10 else #13#10;
 end;
 
 function TTextFileFormat.Encode(const AText: string): TBytes;
@@ -979,7 +979,8 @@ var
   C, EC: Integer;
 begin
   Result:= False;
-  C:= E.Col; if C < 1 then C:= 1;
+  C:= E.Col;
+  if C < 1 then C:= 1;
   if C > Length(ALine) + 1 then Exit;      { past end-of-line: reject, never append }
   if E.ExpectText = '' then Exit(True);    { unguarded (legacy) caller }
   EC:= E.EndCol;
@@ -1284,7 +1285,7 @@ begin
         if LLo < 1 then LLo:= 1;
         if LHi > ALines.Count then LHi:= ALines.Count;
         for var L: Integer:= LHi downto LLo do
-          if (L >= 1) and (L <= ALines.Count) then
+          if InRange(L, 1, ALines.Count) then
           begin
             ALines.Delete(L - 1);
             Inc(AApplied);
@@ -1303,7 +1304,7 @@ begin
       end;
     tekInsertInLine:
       begin
-        if (AEdit.Line >= 1) and (AEdit.Line <= ALines.Count) then
+        if (AEdit.Line >= 1) and (AEdit.Line <= ALines.Count) then  // dl:ok manual-inrange@c653 -- fixer d8ebefa10 declines this site; a hand InRange rewrite (plus System.Math in uses) is deferred -- SLZ-S10 2026-11-22
         begin
           var S: string:= ALines[AEdit.Line - 1];
           var C: Integer:= AEdit.Col;
@@ -1317,7 +1318,7 @@ begin
       end;
     tekReplaceInLine:
       begin
-        if (AEdit.Line >= 1) and (AEdit.Line <= ALines.Count) then
+        if (AEdit.Line >= 1) and (AEdit.Line <= ALines.Count) then  // dl:ok manual-inrange@c653 -- fixer d8ebefa10 declines this site; a hand InRange rewrite (plus System.Math in uses) is deferred -- SLZ-S10 2026-11-22
         begin
           var S: string:= ALines[AEdit.Line - 1];
           if not ReplaceEditIsValid(AEdit, S) then
@@ -1511,7 +1512,8 @@ begin
     for E in AEdits do
     begin
       if not FileMap.TryGetValue(E.FilePath, Group) then
-      begin Group:= TList<TTextEdit>.Create; FileMap.Add(E.FilePath, Group); end;
+      begin Group:= TList<TTextEdit>.Create;
+      FileMap.Add(E.FilePath, Group); end;
       Group.Add(E);
     end;
 
@@ -1552,7 +1554,8 @@ begin
     Last:= '';
     for E in AEdits do
     begin
-      if E.FilePath <> Last then begin SB.AppendLine('File: ' + E.FilePath); Last:= E.FilePath; end;
+      if E.FilePath <> Last then begin SB.AppendLine('File: ' + E.FilePath);
+      Last:= E.FilePath; end;
       case E.Kind of
         tekDeleteLines : SB.AppendLine(Format('  delete lines %d..%d', [E.Line, E.EndLine]));
         tekInsertLines : SB.AppendLine(Format('  insert after line %d: %s', [E.Line, E.Text]));
@@ -1583,10 +1586,8 @@ begin
     if (U.Section = ASection) and U.FromInclude and not AIncRow.FromInclude then
       AIncRow:= U;
   for U in AUses do
-    if (U.Section = ASection) and not U.FromInclude then
-      if (not AHaveLast) or (U.StartLine > ALast.StartLine)
-         or ((U.StartLine = ALast.StartLine) and (U.StartCol > ALast.StartCol)) then
-      begin
+    if ((U.Section = ASection) and not U.FromInclude) and ((not AHaveLast) or (U.StartLine > ALast.StartLine)  // dl:ok boolean-expression-complexity@1df9 -- measured 5 operators (limit 4); one syntactic shape test, named sub-expressions deferred -- SLZ-S10 2026-11-22
+         or ((U.StartLine = ALast.StartLine) and (U.StartCol > ALast.StartCol))) then begin
         ALast:= U;
         AHaveLast:= True;
       end;
@@ -1607,7 +1608,7 @@ begin
   Result:= Build(ANameStore, AUnitStore, AName, AInFile, AResolvedUnit, AAlreadyUsed, Reason, APreferInterface);
 end;
 
-class function TFindUnitRefactoring.Build(const ANameStore, AUnitStore: ISymbolStore;  // dl:ok too-many-parameters@896d, too-many-exit-points@8fee -- REVIEWED 2026-10-23: params = the 7-parameter overload plus the one N-06 out-reason (a record would only rename them); exits = six guard-clause exits (nothing found, self, already used, file not indexed, no keyword line) that predate N-06, whose own exit was folded into the else-if chain
+class function TFindUnitRefactoring.Build(const ANameStore, AUnitStore: ISymbolStore;  // dl:ok too-many-parameters@65fc, too-many-exit-points@932c -- REVIEWED 2026-10-23: params = the 7-parameter overload plus the one N-06 out-reason (a record would only rename them); exits = six guard-clause exits (nothing found, self, already used, file not indexed, no keyword line) that predate N-06, whose own exit was folded into the else-if chain
   const AName, AInFile: string; out AResolvedUnit: string; out AAlreadyUsed: Boolean;
   out AReason: string; APreferInterface: Boolean): TArray<TTextEdit>;
 var
@@ -1616,7 +1617,7 @@ var
   Cands: TDictionary<string, Integer>; { unit -> score }
   Best : string; BestScore: Integer;
   FullPath: string; InFileId: Int64;
-  Uses_: TArray<TUnitUse>; U: TUnitUse;
+  Uses_: TArray<TUnitUse>; U: TUnitUse;  // dl:ok local-var-casing@4b56 -- trailing underscore escapes a reserved word / RTL routine name (Uses, Abs); PascalCase is kept -- SLZ-S10 2026-11-22
   UsedSet: TDictionary<string, Boolean>;
   UnitName: string;
   TargetSection: TUnitUseSection;
@@ -1625,7 +1626,9 @@ var
   Edit: TTextEdit;
   Pair: TPair<string, Integer>;
 begin
-  Result:= nil; AResolvedUnit:= ''; AAlreadyUsed:= False;
+  Result:= nil;
+  AResolvedUnit:= '';
+  AAlreadyUsed:= False;
   AReason:= '';
 
   { 1. resolve the best declaring unit -- against ANameStore, which may be a
@@ -1640,14 +1643,16 @@ begin
       UnitName:= ChangeFileExt(ExtractFileName(ANameStore.GetFilePath(S.FileId)), '');
       if UnitName = '' then Continue;
       var Sc: Integer:= 1;
-      if not SameText(S.Section, 'implementation') then Inc(Sc, 10); { interface-visible }
+      if not SameText(S.Section, 'implementation') then Inc(Sc, 10); { interface-visible }  // dl:ok magic-literal@a2a5 -- measured literal is a local bound/weight used once, documented by its line -- SLZ-S10 2026-11-22
       var Cur: Integer;
       if not Cands.TryGetValue(UnitName, Cur) then Cur:= 0;
       Cands.AddOrSetValue(UnitName, Cur + Sc);
     end;
-    Best:= ''; BestScore:= -1;
+    Best:= '';
+    BestScore:= -1;
     for Pair in Cands do
-      if Pair.Value > BestScore then begin BestScore:= Pair.Value; Best:= Pair.Key; end;
+      if Pair.Value > BestScore then begin BestScore:= Pair.Value;
+      Best:= Pair.Key; end;
   finally
     Cands.Free;
   end;
@@ -1668,7 +1673,8 @@ begin
   UsedSet:= TDictionary<string, Boolean>.Create;
   try
     for U in Uses_ do UsedSet.AddOrSetValue(LowerCase(U.UnitName), True);
-    if UsedSet.ContainsKey(LowerCase(Best)) then begin AAlreadyUsed:= True; Exit; end;
+    if UsedSet.ContainsKey(LowerCase(Best)) then begin AAlreadyUsed:= True;
+    Exit; end;
 
     { 3. choose target section: implementation uses if present, else interface }
     HaveLast:= False;
@@ -1692,9 +1698,12 @@ begin
     if HaveLast then
     begin
       { insert ', Best' at the end of the last unit entry (before the ';') }
-      Edit.FilePath:= AInFile; Edit.Kind:= tekInsertInLine;
-      Edit.Line:= LastInSection.EndLine; Edit.Col:= LastInSection.EndCol;
-      Edit.EndLine:= 0; Edit.Text:= ', ' + Best;
+      Edit.FilePath:= AInFile;
+      Edit.Kind:= tekInsertInLine;
+      Edit.Line:= LastInSection.EndLine;
+      Edit.Col:= LastInSection.EndCol;
+      Edit.EndLine:= 0;
+      Edit.Text:= ', ' + Best;
       Result:= [Edit];
     end
     else if IncRow.FromInclude then
@@ -1737,16 +1746,21 @@ begin
           for var I: Integer:= 0 to SL.Count - 1 do
           begin
             var T: string:= LowerCase(Trim(SL[I]));
-            if WantImpl and (T = 'implementation') then begin KeywordLine:= I + 1; Break; end;
-            if (not WantImpl) and (T = 'interface') then begin KeywordLine:= I + 1; Break; end;
+            if WantImpl and (T = 'implementation') then begin KeywordLine:= I + 1;
+            Break; end;
+            if (not WantImpl) and (T = 'interface') then begin KeywordLine:= I + 1;
+            Break; end;
           end;
         finally
           SL.Free;
         end;
       end;
       if KeywordLine = 0 then Exit; { cannot place safely }
-      Edit.FilePath:= AInFile; Edit.Kind:= tekInsertLines;
-      Edit.Line:= KeywordLine; Edit.Col:= 0; Edit.EndLine:= 0;
+      Edit.FilePath:= AInFile;
+      Edit.Kind:= tekInsertLines;
+      Edit.Line:= KeywordLine;
+      Edit.Col:= 0;
+      Edit.EndLine:= 0;
       Edit.Text:= ''#13#10'uses ' + Best + ';';
       Result:= [Edit];
     end;
@@ -1759,7 +1773,7 @@ function LastSeg(const S: string): string;
 var P: Integer;
 begin
   P:= LastDelimiter('.', S);
-  if P > 0 then Result:= Copy(S, P + 1, MaxInt) else Result:= S;
+  Result:= if P > 0 then Copy(S, P + 1, MaxInt) else S;
 end;
 
 class function TSafeDeleteRefactoring.Build(const AStore: ISymbolStore;
@@ -1775,9 +1789,11 @@ var
   R           : TReference       ;
   ExternalRefs: Integer          ;
 begin
-  Result:= nil; ARefuseReason:= '';
+  Result:= nil;
+  ARefuseReason:= '';
   Syms:= AStore.FindSymbolsByQualifiedName(AQName);
-  if Length(Syms) = 0 then begin ARefuseReason:= Format('symbol "%s" not found', [AQName]); Exit; end;
+  if Length(Syms) = 0 then begin ARefuseReason:= Format('symbol "%s" not found', [AQName]);
+  Exit; end;
   Sym:= Syms[0];
   Short:= LastSeg(AQName);
 
@@ -1796,7 +1812,8 @@ begin
   end;
 
   Path:= AStore.GetFilePath(Sym.FileId);
-  if Path = '' then begin ARefuseReason:= 'declaration file path unknown'; Exit; end;
+  if Path = '' then begin ARefuseReason:= 'declaration file path unknown';
+  Exit; end;
 
   Edits:= TList<TTextEdit>.Create;
   try
@@ -1804,14 +1821,22 @@ begin
       The applier sorts back-to-front anyway, but emit in logical order. }
     if (Sym.ImplStartLine > 0) and (Sym.ImplEndLine >= Sym.ImplStartLine) then
     begin
-      E.FilePath:= Path; E.Kind:= tekDeleteLines;
-      E.Line:= Sym.ImplStartLine; E.EndLine:= Sym.ImplEndLine; E.Col:= 0; E.Text:= '';
+      E.FilePath:= Path;
+      E.Kind:= tekDeleteLines;
+      E.Line:= Sym.ImplStartLine;
+      E.EndLine:= Sym.ImplEndLine;
+      E.Col:= 0;
+      E.Text:= '';
       Edits.Add(E);
     end;
     if (Sym.StartLine > 0) and (Sym.EndLine >= Sym.StartLine) then
     begin
-      E.FilePath:= Path; E.Kind:= tekDeleteLines;
-      E.Line:= Sym.StartLine; E.EndLine:= Sym.EndLine; E.Col:= 0; E.Text:= '';
+      E.FilePath:= Path;
+      E.Kind:= tekDeleteLines;
+      E.Line:= Sym.StartLine;
+      E.EndLine:= Sym.EndLine;
+      E.Col:= 0;
+      E.Text:= '';
       Edits.Add(E);
     end;
     Result:= Edits.ToArray;

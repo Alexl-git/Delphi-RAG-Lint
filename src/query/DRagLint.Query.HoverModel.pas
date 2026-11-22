@@ -27,7 +27,6 @@ interface
 uses
   DRagLint.Core  .Model     ,
   DRagLint.Core  .Interfaces,
-  DRagLint.Symbol.Describe  ,
   DRagLint.Hover .Renderer  ;
 
 type
@@ -182,6 +181,7 @@ procedure AttachHoverSetBy(const AStore: ISymbolStore; const ASym: TSymbol; var 
 implementation
 
 uses
+  DRagLint.Symbol.Describe,
   System.SysUtils              ,
   System.RegularExpressions    ,
   System.Math                  ,
@@ -234,7 +234,7 @@ begin
   for Grp in Inner.Split([';']) do
   begin
     C:= Pos(':', Grp);
-    if C > 0 then Names:= Copy(Grp, 1, C - 1) else Names:= Grp;  { untyped var/out }
+    if C > 0 then Names:= Copy(Grp, 1, C - 1) else Names:= Grp;  { untyped var/out }  // dl:ok ifthen-to-if-expression@d3e6 -- fixer d8ebefa10 declines this site (a shape dcc rejects as an if-expression, e.g. TValue / array branches); hand rewrite deferred -- SLZ-S10 2026-11-22
     Names:= Trim(Names);
     if Names = '' then Continue;
 
@@ -403,7 +403,7 @@ begin
   AAsm.FactLines:= AAsm.FactLines + Entry.Lines;
 end;
 
-function AssembleHover(const AStore: ISymbolStore; const ASym: TSymbol;
+function AssembleHover(const AStore: ISymbolStore; const ASym: TSymbol;  // dl:ok cyclomatic-complexity@f01a -- measured 32 (max 30); one dispatch routine over node kinds, a split is a refactor outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
   AWithFacts: Boolean; const AExtraStores: TArray<ISymbolStore>;
   ASkip: THoverSkips): THoverAssembly;
 var
@@ -473,8 +473,7 @@ begin
       ParamMod:= ModifierOf(Owner.Signature, ASym.Name);
       if ASym.Signature <> '' then
       begin
-        if ParamMod <> '' then Doc2Sig:= ParamMod + ' ' + ASym.Name + ': ' + ASym.Signature
-        else Doc2Sig:= ASym.Name + ': ' + ASym.Signature;
+        Doc2Sig:= if ParamMod <> '' then ParamMod + ' ' + ASym.Name + ': ' + ASym.Signature else ASym.Name + ': ' + ASym.Signature;
       end
       else if ParamMod <> '' then Doc2Sig:= ParamMod + ' ' + ASym.Name   { untyped var/out }
       else Doc2Sig:= '';

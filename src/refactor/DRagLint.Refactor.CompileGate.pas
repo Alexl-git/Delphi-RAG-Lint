@@ -855,8 +855,8 @@ begin
     SA.nLength:= SizeOf(SA);
     SA.lpSecurityDescriptor:= nil;
     SA.bInheritHandle:= True;
-    ForceDirectories(ExtractFilePath(pOutFile));  // dl:ok ignored-must-use-result@93bb, taint-path-traversal@93bb -- moved verbatim from CLI.CycleFix; a failed call surfaces at the next file operation
-    Output:= CreateFile(PChar(pOutFile), GENERIC_WRITE, FILE_SHARE_READ, @SA, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);  // dl:ok taint-path-traversal@214e -- the path is the operator's own --project, the run's fixed scratch or the Studio root: local input, no privilege crossed
+    ForceDirectories(ExtractFilePath(pOutFile));  // dl:ok ignored-must-use-result@93bb -- moved verbatim from CLI.CycleFix; a failed call surfaces at the next file operation
+    Output:= CreateFile(PChar(pOutFile), GENERIC_WRITE, FILE_SHARE_READ, @SA, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
     if Output = INVALID_HANDLE_VALUE then RaiseLastOSError;
     SI.dwFlags   := SI.dwFlags or STARTF_USESTDHANDLES;
     SI.hStdOutput:= Output;
@@ -942,7 +942,7 @@ begin
     Format('msbuild /t:Build /p:Config=Debug /p:Platform=%s /v:minimal "%s" > "%s" 2>&1',
       [MsBuildPlatform(pPlatform), Project, Log]),
     { redirection FIRST: `echo X=%ERRORLEVEL%>> f` expands to `X=0>> f`, a redirect of handle 0 }
-    Format('>> "%s" echo BUILD_EXITCODE=%%ERRORLEVEL%%', [Log])]) + #13#10, TEncoding.ASCII);
+    Format('>> "%s" echo BUILD_EXITCODE=%%ERRORLEVEL%%', [Log])]) + #13#10, TEncoding.ASCII);  // dl:ok locale-sensitive-conversion@9aa5 -- diagnostic / batch text, not data; locale formatting is harmless here -- SLZ-S10 2026-11-22
   var Watch:= TStopwatch.StartNew;
   var Limit:= BuildTimeoutMs(Project);
   RunBounded(pWhat, 'cmd.exe /c ""' + Bat + '""', '', Limit, Result.TimedOut);
@@ -1300,7 +1300,7 @@ var
     { the write-failure test seam acts only on a project under %TEMP% / C:\TEMP (fix round 1);
       TextEdit.FailWriteForTests itself stays unscoped for convert-apply }
     if IsUnderTemp(pProjectDir) then FailWriteForTests(Writes, pPath);
-    TFile.WriteAllBytes(pPath, Staged[LowerCase(pPath)]);
+    TFile.WriteAllBytes(pPath, Staged[LowerCase(pPath)]);  // dl:ok dictionary-get-without-check@ee29 -- the key was staged a few lines above in the same routine; a miss is a programming error and should raise -- SLZ-S10 2026-11-22
     pTx.Written:= pTx.Written + [pPath];
   end;
 
@@ -1375,7 +1375,7 @@ begin
   Result.Messages:= B.Messages;
 end;
 
-function ApplyGated(const pReq: TGateRequest): TGateOutcome;  // dl:ok too-many-exit-points@277f -- one guard per named refusal, in the documented order: the exits are the contract
+function ApplyGated(const pReq: TGateRequest): TGateOutcome;  // dl:ok too-many-exit-points@6b0f -- one guard per named refusal, in the documented order: the exits are the contract
 const
   CTestBreakVar  = 'DRAGLINT_GATE_TEST_BREAK';
   CTestBreakLine = #13#10'this line does not compile (DRAGLINT_GATE_TEST_BREAK)'#13#10;

@@ -400,8 +400,8 @@ begin
   begin
       NA:= 0;
     NB:= 0;
-    if (I < Length(PA)) then TryStrToInt(Trim(PA[I]), NA);
-    if (I < Length(PB)) then TryStrToInt(Trim(PB[I]), NB);
+    if (I < Length(PA)) then TryStrToInt(Trim(PA[I]), NA);  // dl:ok ignored-must-use-result@0417 -- a non-numeric part compares as 0, which is the intended version-compare fallback -- SLZ-S10 2026-11-22
+    if (I < Length(PB)) then TryStrToInt(Trim(PB[I]), NB);  // dl:ok ignored-must-use-result@f493 -- a non-numeric part compares as 0, which is the intended version-compare fallback -- SLZ-S10 2026-11-22
     if NA < NB then Exit(-1);
     if NA > NB then Exit( 1);
   end;
@@ -568,7 +568,7 @@ begin
   end;
 end; // function
 
-class function TYadfFormatter.Format(const AFile: string; const AYadfPath: string = '';  // dl:ok too-many-exit-points@2944 -- all twelve are GUARD CLAUSES (not-found, below-floor, dry-run, diff, spawn failure, YADF decline, verification failure), which is the remedy the rule itself recommends; consolidating them into nested ifs would bury the refusal paths this verb exists to make obvious
+class function TYadfFormatter.Format(const AFile: string; const AYadfPath: string = '';  // dl:ok too-many-exit-points@a276 -- all twelve are GUARD CLAUSES (not-found, below-floor, dry-run, diff, spawn failure, YADF decline, verification failure), which is the remedy the rule itself recommends; consolidating them into nested ifs would bury the refusal paths this verb exists to make obvious
   AMode: TFormatMode = fmApply): TFormatResult;
 const
   TIMEOUT_MS = 30000;
@@ -593,8 +593,7 @@ begin
 
   if not TFile.Exists(AFile) then raise EYadfFormatError.CreateFmt('File not found: %s', [AFile]);
 
-  if AYadfPath <> '' then ResolvedYadf:= AYadfPath
-  else ResolvedYadf:= FindYadfPath;
+  ResolvedYadf:= if AYadfPath <> '' then AYadfPath else FindYadfPath;
 
   { ONE not-found message for both routes. The old code had two, and the one
     that fired for an explicit --yadf-path named neither the registry nor the
@@ -602,12 +601,7 @@ begin
     and nothing about how resolution actually works. }
   if (ResolvedYadf = '') or (not TFile.Exists(ResolvedYadf)) then
   begin
-    if ResolvedYadf = '' then
-      Result.StdoutText:= 'YADF.exe not found. Pass --yadf-path <path>, or set HKCU\Software\YADF\ExePath in the registry.'
-    else
-      Result.StdoutText:= System.SysUtils.Format(
-        'YADF.exe not found at: %s. Pass a --yadf-path that exists, or set HKCU\Software\YADF\ExePath in the registry.',
-        [ResolvedYadf]);
+    Result.StdoutText:= if ResolvedYadf = '' then 'YADF.exe not found. Pass --yadf-path <path>, or set HKCU\Software\YADF\ExePath in the registry.' else System.SysUtils.Format( 'YADF.exe not found at: %s. Pass a --yadf-path that exists, or set HKCU\Software\YADF\ExePath in the registry.', [ResolvedYadf]);
     Result.ExitCode    := FMT_NO_YADF;
     Result.ResolvedPath:= ResolvedYadf;
     Exit;

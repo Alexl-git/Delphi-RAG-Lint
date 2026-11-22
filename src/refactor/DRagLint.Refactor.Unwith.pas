@@ -400,13 +400,13 @@ type
     function TargetLinks(const E: TTSNode): TArray<TLink>;
     procedure CheckTargetStable(const pLinks: TArray<TLink>; pCast: Boolean; out pTypeId: Int64; out pTypeText: string);
     function CastType(const E: TTSNode): TSymbol;
-    procedure CheckHeader(const W, E, Body: TTSNode);
+    procedure CheckHeader(const W, E, Body: TTSNode);  // dl:ok param-name-prefix@408f -- unit-wide convention of this walker (Body/Index nested-routine params); renaming is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
     procedure VisitBody(const N: TTSNode; pInType: Boolean; pC: TClosure; const pLinks: TArray<TLink>;
       const pSite: TList<TUnwithBinding>; const pPrefixAt: TList<Integer>);
     function UsesTargetBare(const N: TTSNode; const pLinks: TArray<TLink>): Boolean;
-    procedure AddBodySplices(const W, Body: TTSNode; const pPrefix: string; const pPrefixAt: TList<Integer>;
+    procedure AddBodySplices(const W, Body: TTSNode; const pPrefix: string; const pPrefixAt: TList<Integer>;  // dl:ok param-name-prefix@0348 -- unit-wide convention of this walker (Body/Index nested-routine params); renaming is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
       const pRootBefore, pRootName: string; pRootLead: Integer);
-    function TryUnwrap(const W, Body: TTSNode; out pSplices: TArray<TSplice>): Boolean;
+    function TryUnwrap(const W, Body: TTSNode; out pSplices: TArray<TSplice>): Boolean;  // dl:ok param-name-prefix@996a -- unit-wide convention of this walker (Body/Index nested-routine params); renaming is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
     function AnalyzeSite(const W: TTSNode): TUnwithSite;
     procedure LoadRows;
     procedure Render(const pFmt: TTextFileFormat; var pPlan: TUnwithFilePlan);
@@ -1047,7 +1047,7 @@ begin
   end;
 end;
 
-procedure TAnalyzer.CheckHeader(const W, E, Body: TTSNode);
+procedure TAnalyzer.CheckHeader(const W, E, Body: TTSNode);  // dl:ok param-name-prefix@fd2c -- unit-wide convention of this walker (Body/Index nested-routine params); renaming is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
 
   function BlankBetween(pFrom, pTo: Integer): Boolean;
   begin
@@ -1213,7 +1213,7 @@ begin
     VisitBody(N.NamedChild(I), InT, pC, pLinks, pSite, pPrefixAt);
 end;
 
-function TAnalyzer.TryUnwrap(const W, Body: TTSNode; out pSplices: TArray<TSplice>): Boolean;  // dl:ok too-many-exit-points@9282, cyclomatic-complexity@5c4b -- REVIEWED 2026-11-05: each branch is one precondition for unwrapping; failing any keeps the begin..end, which is safe
+function TAnalyzer.TryUnwrap(const W, Body: TTSNode; out pSplices: TArray<TSplice>): Boolean;  // dl:ok too-many-exit-points@106d, cyclomatic-complexity@4d81, param-name-prefix@affb -- unit-wide convention of this walker (Body/Index nested-routine params); renaming is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
 var
   Block: TTSNode;
 
@@ -1324,7 +1324,7 @@ begin
   Result:= True;
 end;
 
-procedure TAnalyzer.AddBodySplices(const W, Body: TTSNode; const pPrefix: string; const pPrefixAt: TList<Integer>;
+procedure TAnalyzer.AddBodySplices(const W, Body: TTSNode; const pPrefix: string; const pPrefixAt: TList<Integer>;  // dl:ok param-name-prefix@277d -- unit-wide convention of this walker (Body/Index nested-routine params); renaming is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
   const pRootBefore, pRootName: string; pRootLead: Integer);
 var
   Own: TArray<TSplice>;
@@ -1471,7 +1471,7 @@ begin
   for var I: Integer:= 0 to N.NamedChildCount - 1 do CollectWiths(N.NamedChild(I), L);
 end;
 
-function TAnalyzer.Run(pLine: Integer): TUnwithFilePlan;  // dl:ok too-many-exit-points@5bb0 -- REVIEWED 2026-11-05: each early exit is one named precondition
+function TAnalyzer.Run(pLine: Integer): TUnwithFilePlan;  // dl:ok too-many-exit-points@b377 -- REVIEWED 2026-11-05: each early exit is one named precondition
 
   procedure RefuseAll(const pList: TList<TTSNode>; const pKind, pDetail: string);
   begin
@@ -1571,11 +1571,11 @@ begin
     begin
       if S.Pos < Cur then
         raise EInvalidOpException.CreateFmt('unwith: overlapping edits at byte %d of %s', [S.Pos, FFile]);
-      if S.Pos > Cur then Out1.Write(FRaw[Cur], S.Pos - Cur);
-      if Length(S.Ins) > 0 then Out1.Write(S.Ins[0], Length(S.Ins));
+      if S.Pos > Cur then Out1.WriteBuffer(FRaw[Cur], S.Pos - Cur);
+      if Length(S.Ins) > 0 then Out1.WriteBuffer(S.Ins[0], Length(S.Ins));
       Cur:= S.Pos + S.DelLen;
     end;
-    if Cur < Length(FRaw) then Out1.Write(FRaw[Cur], Length(FRaw) - Cur);
+    if Cur < Length(FRaw) then Out1.WriteBuffer(FRaw[Cur], Length(FRaw) - Cur);
     var NewRaw: TBytes;
     SetLength(NewRaw, Out1.Size);
     if Out1.Size > 0 then Move(Out1.Bytes[0], NewRaw[0], Out1.Size);
@@ -1650,9 +1650,9 @@ end;
 function CopyDbFor(const pDb, pDir: string): string;
 begin
   Result:= TPath.Combine(pDir, 'after-proof.sqlite');
-  TFile.Copy(pDb, Result, True);  // dl:ok taint-path-traversal@b47e -- REVIEWED 2026-11-05: the path is the user's own --db or a fresh scratch dir; a CLI writing where its user says is the contract
-  if TFile.Exists(pDb + '-wal') then TFile.Copy(pDb + '-wal', Result + '-wal', True);  // dl:ok taint-path-traversal@d26f -- REVIEWED 2026-11-05: the path is the user's own --db or a fresh scratch dir; a CLI writing where its user says is the contract
-  if TFile.Exists(pDb + '-shm') then TFile.Copy(pDb + '-shm', Result + '-shm', True);  // dl:ok taint-path-traversal@af1c -- REVIEWED 2026-11-05: the path is the user's own --db or a fresh scratch dir; a CLI writing where its user says is the contract
+  TFile.Copy(pDb, Result, True);
+  if TFile.Exists(pDb + '-wal') then TFile.Copy(pDb + '-wal', Result + '-wal', True);
+  if TFile.Exists(pDb + '-shm') then TFile.Copy(pDb + '-shm', Result + '-shm', True);
 end;
 
 /// <summary>Deletes the run's log folder, unless a message of this run sends the reader to a file in it.</summary>
@@ -1663,7 +1663,7 @@ procedure DropUnwithLogs(const pDir, pDetail: string);
 begin
   if GScratchCited or pDetail.Contains(ExcludeTrailingPathDelimiter(pDir)) then Exit;
   try
-    if TDirectory.Exists(pDir) then TDirectory.Delete(pDir, True);  // dl:ok taint-path-traversal@b8f1 -- a fresh scratch dir; only its PID part can come from the environment, a test seam
+    if TDirectory.Exists(pDir) then TDirectory.Delete(pDir, True);
   except  // dl:ok try-except-swallowed@1860 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
     on E: EInOutError do ;  // dl:ok empty-on-handler@8192 -- the log folder is left behind, harmless; see the remarks (EInOutError includes EDirectoryNotFoundException)
   end;
@@ -1713,7 +1713,7 @@ Req.Header:= 'unwith --apply';
 Req.NoBackup:= pOpts.NoBackup;
 Dir:= FreshScratchName('_unwith');
 Req.LogDir:= Dir;
-TDirectory.CreateDirectory(Dir);  // dl:ok taint-path-traversal@159a -- REVIEWED 2026-11-05: the path is the user's own --db or a fresh scratch dir; a CLI writing where its user says is the contract
+TDirectory.CreateDirectory(Dir);
 for var P: TUnwithFilePlan in pPlans do
   if Length(P.NewBytes) > 0 then
   begin
@@ -1762,11 +1762,11 @@ end;
   end;
   { The copy can be gigabytes: it never outlives the run. The logs stay only when a message names one (DropUnwithLogs). }
   for var Tail: string in ['', '-wal', '-shm'] do
-    System.SysUtils.DeleteFile(TPath.Combine(Dir, 'after-proof.sqlite') + Tail);  // dl:ok taint-path-traversal@ce76 -- a fresh scratch dir; only its PID part can come from the environment, a test seam
+    System.SysUtils.DeleteFile(TPath.Combine(Dir, 'after-proof.sqlite') + Tail);
   if (ProofFailure = '') and (Length(Result.Rebinds) = 0) then
   begin
     Result.Applied:= True;
-    TDirectory.Delete(Dir, True);  // dl:ok taint-path-traversal@8e7d -- a fresh scratch dir; only its PID part can come from the environment, a test seam
+    TDirectory.Delete(Dir, True);
     Exit;
   end;
   var Failure:= RollBack(Gate.Tx);
@@ -1823,7 +1823,7 @@ begin
   pDetail:= '';
   if Length(pPlan.NewBytes) = 0 then Exit;
   var Dir:= FreshScratchName('_unwithfix');
-  TDirectory.CreateDirectory(Dir);  // dl:ok taint-path-traversal@159a -- a fresh scratch dir; only its PID part can come from the environment, a test seam
+  TDirectory.CreateDirectory(Dir);
   var Log:= TPath.Combine(Dir, 'after-proof-index.log');
   Points:= 0;
   Rebinds:= nil;
@@ -1860,7 +1860,7 @@ begin
     { The DB copy goes now; the source copy and the logs go with the folder (DropUnwithLogs keeps it only when the
       detail cites a log, and then the copy beside it is the evidence). }
     for var Tail: string in ['', '-wal', '-shm'] do
-      System.SysUtils.DeleteFile(TPath.Combine(Dir, 'after-proof.sqlite') + Tail);  // dl:ok taint-path-traversal@ce76 -- a fresh scratch dir
+      System.SysUtils.DeleteFile(TPath.Combine(Dir, 'after-proof.sqlite') + Tail);
     DropUnwithLogs(Dir, pDetail);
   end;
   Result:= pDetail = '';

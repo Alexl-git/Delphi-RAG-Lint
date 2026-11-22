@@ -519,7 +519,7 @@ begin
   end;
 end;
 
-function TNarrowPlanner.CheckRoutine(const pR: TRoutineRow; const pParam: TParamRow; out pVerdict: TVerdict): Boolean;  // dl:ok too-many-exit-points@ccb3 -- the guard list of the refusals; a split would hide their order
+function TNarrowPlanner.CheckRoutine(const pR: TRoutineRow; const pParam: TParamRow; out pVerdict: TVerdict): Boolean;  // dl:ok too-many-exit-points@a8e8 -- the guard list of the refusals; a split would hide their order
 begin
   Result:= False;
   pVerdict:= Default(TVerdict);
@@ -633,7 +633,7 @@ end;
 
 // Classifies every use of the parameter in the body. True and the member names when each is a member read or call, or a
 // nil test.
-function TNarrowPlanner.ScanBody(const pR: TRoutineRow; const pParam: TParamRow; pSource: TMaskedSource; pMembers: TList<string>;  // dl:ok too-many-exit-points@e7d7 -- one guard per named refusal, in the documented order: the exits are the contract
+function TNarrowPlanner.ScanBody(const pR: TRoutineRow; const pParam: TParamRow; pSource: TMaskedSource; pMembers: TList<string>;  // dl:ok too-many-exit-points@139a -- one guard per named refusal, in the documented order: the exits are the contract
   out pVerdict: TVerdict): Boolean;
 const
   CNilRight = '^\s*(=|<>)\s*nil\b';
@@ -742,7 +742,7 @@ begin
 end;
 
 // Whether pNarrow's name is in scope where the header needs it, or which unit to add; refuses a cycle.
-function TNarrowPlanner.UsesPlan(const pR: TRoutineRow; const pNarrow: TChainClass; out pAdd: string; out pVerdict: TVerdict): Boolean;  // dl:ok too-many-exit-points@6f37 -- one guard per named refusal, in the documented order: the exits are the contract
+function TNarrowPlanner.UsesPlan(const pR: TRoutineRow; const pNarrow: TChainClass; out pAdd: string; out pVerdict: TVerdict): Boolean;  // dl:ok too-many-exit-points@9f12 -- one guard per named refusal, in the documented order: the exits are the contract
 begin
   Result:= False;
   pVerdict:= Default(TVerdict);
@@ -796,7 +796,7 @@ begin
   FRefused.Add(S);
 end;
 
-procedure TNarrowPlanner.Decide(const pR: TRoutineRow; const pParam: TParamRow);  // dl:ok cyclomatic-complexity@211a, too-many-exit-points@0beb -- one branch per named refusal, documented on the public function (REVIEWED 2026-11-18 INT13: re-measured after 1.52 GA-1 counts if-expressions; shape and reason unchanged)
+procedure TNarrowPlanner.Decide(const pR: TRoutineRow; const pParam: TParamRow);  // dl:ok cyclomatic-complexity@211a, too-many-exit-points@92e5 -- one branch per named refusal, documented on the public function (REVIEWED 2026-11-18 INT13: re-measured after 1.52 GA-1 counts if-expressions; shape and reason unchanged)
 var
   V: TVerdict;
 begin
@@ -1338,7 +1338,7 @@ begin
     Writeln(Format('refused  %s:%d  %s  %s: %s  %s -- %s', [S.FilePath, S.Line, S.Routine, S.Param, S.FromType, S.Kind, S.Reason]));
 end;
 
-function RunNarrowParam(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;  // dl:ok too-many-exit-points@fd3e -- one guard per named refusal, in the documented order: the exits are the contract
+function RunNarrowParam(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;  // dl:ok too-many-exit-points@aa37 -- one guard per named refusal, in the documented order: the exits are the contract
   const pOpts: TNarrowParamOptions): Integer;
 var
   Gate: TGateOutcome;
@@ -1431,7 +1431,7 @@ begin
     Ran := True;
     if not GScratchCited and TDirectory.Exists(Req.LogDir) then
     try
-      TDirectory.Delete(Req.LogDir, True);  // dl:ok taint-path-traversal@ff48 -- the path is the operator's own --project, the run's fixed scratch or the Studio root: local input, no privilege crossed
+      TDirectory.Delete(Req.LogDir, True);
     except
       on EInOutError do Writeln(ErrOutput, 'drag-lint: note: scratch not deleted: ', Req.LogDir); // best effort: a locked log must not change the result
     end;
