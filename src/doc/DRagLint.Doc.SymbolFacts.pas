@@ -3365,6 +3365,8 @@ begin
     // additionally require the FUNCTION'S OWN return type to be a reference
     // type -- else a value-returning function (e.g. Count: Integer above)
     // would wrongly render 'borrowed'/'self' for a plain value type.
+    // 152b O7: only a CERTAIN value type is dropped here; the rest is gated at
+    // read time (Doc.Facts) against the complete store -- see IsDefiniteValueTypeName.
     if ((Verdict = 'borrowed') or (Verdict = 'self')) and (IsDefiniteValueTypeName(AStore, RetTypeName, ASym.FileId)) then Exit;
 
     Result:= Verdict;
