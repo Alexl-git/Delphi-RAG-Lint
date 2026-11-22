@@ -352,7 +352,8 @@ var
     Result:= '';
     if N.IsNull then Exit;
     S:= Integer(N.StartByte);
-    E:= Integer(N.EndByte); L:= E - S;
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -3269,7 +3270,8 @@ begin
         UF.Message := Format('Unit is %d lines (limit %d) -- consider splitting it into smaller units', [ULines, AMaxUnitLines]);
         UF.FilePath:= AFile;
         UF.StartLine:= 1;
-        UF.StartCol:= 1; UF.EndLine:= 1; UF.EndCol:= 1;
+        UF.StartCol:= 1;
+        UF.EndLine:= 1; UF.EndCol:= 1;
         Findings.Add(UF);
       end;
     end;

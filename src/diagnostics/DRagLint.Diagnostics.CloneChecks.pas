@@ -98,7 +98,8 @@ begin
   Result := '';
   if N.IsNull then Exit;
   S := Integer(N.StartByte);
-  E := Integer(N.EndByte); L := E - S;
+  E := Integer(N.EndByte);
+  L := E - S;
   if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
   Result := TEncoding.UTF8.GetString(Src, S, L);
 end;
@@ -151,7 +152,8 @@ var
       Interner.Add(Key, Code);
     end;
     t.Code := Code;
-    t.FileI := AFileI; t.Line := Integer(N.StartPoint.Row) + 1;
+    t.FileI := AFileI;
+    t.Line := Integer(N.StartPoint.Row) + 1;
     Toks.Add(t);
   end;
 
@@ -172,7 +174,8 @@ var
   begin
     Inc(RoutineSeq);
     t.Code := -RoutineSeq;
-    t.FileI := -1; t.Line := 0;
+    t.FileI := -1;
+    t.Line := 0;
     Toks.Add(t);
   end;
 
@@ -399,7 +402,8 @@ var
             if L < W then Continue;
             if Abs(a - b) < L then Continue; { same-region overlap }
             Cand.A := a;
-            Cand.B := b; Cand.Len := L;
+            Cand.B := b;
+            Cand.Len := L;
             Cands.Add(Cand);
           end;
       end;
@@ -446,7 +450,8 @@ var
       for Cand in Cands do
       begin
         a := Cand.A;
-        b := Cand.B; L := Cand.Len;
+        b := Cand.B;
+        L := Cand.Len;
         CvA := 0;
         CvB := 0;
         for k := 0 to L - 1 do
@@ -503,7 +508,8 @@ begin
     Result := Findings.ToArray;
   finally
     Seen.Free;
-    Findings.Free; Interner.Free; Toks.Free;
+    Findings.Free;
+    Interner.Free; Toks.Free;
   end;
 end;
 

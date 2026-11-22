@@ -565,7 +565,8 @@ begin
   Result := '';
   if N.IsNull then Exit;
   S := Integer(N.StartByte);
-  E := Integer(N.EndByte); L := E - S;
+  E := Integer(N.EndByte);
+  L := E - S;
   if (L <= 0) or (S < 0) or (E > Length(ASrc)) then Exit;
   Result := TEncoding.UTF8.GetString(ASrc, S, L);
 end;
@@ -683,7 +684,8 @@ function IsRecordType(const ATypeText: string; const AStore: ISymbolStore; AFile
 var T0: Int64; Miss, Cached, Verifying: Boolean; K: string;
 begin
   T0 := TStopwatch.GetTimeStamp;
-  Miss := False; Verifying := False; Cached := False;
+  Miss := False;
+  Verifying := False; Cached := False;
   try
     Result := False;
     if AStore = nil then Exit;
@@ -1145,7 +1147,8 @@ function BaseIdentText(const N: TTSNode; const ASrc: TBytes): string;
 var Cur, Nxt: TTSNode; G: Integer;
 begin
   Result := '';
-  Cur := N; G := 0;
+  Cur := N;
+  G := 0;
   while (not Cur.IsNull) and (G < 32) do
   begin
     Inc(G);
@@ -1319,7 +1322,8 @@ begin
     exposes no 'then'/'else' fields, which is why this indexes rather than
     calling ChildByField. Same lesson as MaxNest in AstChecks. }
   CondIx := -1;
-  ThenIx := -1; ElseIx := -1;
+  ThenIx := -1;
+  ElseIx := -1;
   for I := 0 to AIf.ChildCount - 1 do
   begin
     C := AIf.Child(I);
@@ -3920,7 +3924,8 @@ var
   begin
     F := Default(TLintFinding);
     F.RuleId := ARule;
-    F.Severity := ASev; F.Message := AMsg; F.FilePath := AFile;
+    F.Severity := ASev;
+    F.Message := AMsg; F.FilePath := AFile;
     { 1.52 BK-COLS2: every caller passes a tree-sitter BYTE column (node StartPoint / Lattices DeclCol);
       the finding reports the CHARACTER column. }
     var Pt: TTSPoint;
@@ -4960,7 +4965,8 @@ var
           SetLength(CreateCol, Vars.Count);
           SetLength(CreateType, Vars.Count);
           for I := 0 to Vars.Count - 1 do begin CreateRow[I] := 0;
-          CreateCol[I] := 0; CreateType[I] := ''; end;
+          CreateCol[I] := 0;
+          CreateType[I] := ''; end;
           { record each local's constructor-assignment site }
           for B := 0 to Cfg.BlockCount - 1 do
             for J := 0 to Cfg.Blocks[B].Items.Count - 1 do
@@ -5097,7 +5103,8 @@ begin
         Owns: TDictionary<string, Boolean>;
       begin
         T0 := TStopwatch.GetTimeStamp;
-        Miss := False; Verifying := False; Cached := False;
+        Miss := False;
+        Verifying := False; Cached := False;
         try
         Result := True; { conservative default: owns/unknown -> escape }
         { C1b: the STORE's memo, so a callee resolved once is resolved for every
@@ -5115,12 +5122,14 @@ begin
         { resolve to a single routine: an interface forward-decl + its impl share a
           file (fine); only routines spanning DIFFERENT files are truly ambiguous. }
         Have := False;
-        Ambig := False; FId := -1; RSym := Default(TSymbol);
+        Ambig := False;
+        FId := -1; RSym := Default(TSymbol);
         for I := 0 to High(Syms) do
           if Syms[I].Kind in [skProcedure, skFunction, skMethod] then
           begin
             if not Have then begin FId := Syms[I].FileId;
-            RSym := Syms[I]; Have := True; end
+            RSym := Syms[I];
+            Have := True; end
             else if Syms[I].FileId <> FId then Ambig := True;
             if Syms[I].ImplStartLine > 0 then RSym := Syms[I]; { prefer the bodied one }
           end;
@@ -5174,7 +5183,8 @@ begin
         DK: string;
       begin
         T0 := TStopwatch.GetTimeStamp;
-        Miss := False; Verifying := False; Cached := False;
+        Miss := False;
+        Verifying := False; Cached := False;
         E0 := GOracleT[ORACLE_RECTYPE]; { subtracted below -- see the finally }
         { C1b: THE FILE ID IS NOW LOAD-BEARING. At C1a's per-file lifetime the
           key could omit it, because AFileId could not vary within one Check.
@@ -5291,7 +5301,8 @@ begin
       var T0: Int64; Miss, Verifying: Boolean; Cached: TParamMode;
       begin
         T0 := TStopwatch.GetTimeStamp;
-        Miss := False; Verifying := False; Cached := pmUnknown;
+        Miss := False;
+        Verifying := False; Cached := pmUnknown;
         try
         Result := pmUnknown;
         if ACalleeName = '' then Exit;

@@ -1335,9 +1335,11 @@ begin
     end;
     { code }
     if Result[I] = '''' then begin InStr := True;
-    Blank(1); Inc(I); Continue; end;
+    Blank(1);
+    Inc(I); Continue; end;
     if Result[I] = '{'  then begin Inc(InBrace);
-    Blank(1); Inc(I); Continue; end;
+    Blank(1);
+    Inc(I); Continue; end;
     if (Result[I] = '(') and (I < N) and (Result[I + 1] = '*') then
     begin
       InStarParen := True;
@@ -1798,7 +1800,8 @@ var
     Result:= '';
     if N.IsNull then Exit;
     S:= Integer(N.StartByte);
-    E:= Integer(N.EndByte); L:= E - S;
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -1947,7 +1950,8 @@ var
     Result:= '';
     if N.IsNull then Exit;
     S:= Integer(N.StartByte);
-    E:= Integer(N.EndByte); L:= E - S;
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -2543,7 +2547,8 @@ var
     Result:= '';
     if N.IsNull then Exit;
     S:= Integer(N.StartByte);
-    E:= Integer(N.EndByte); L:= E - S;
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -2649,7 +2654,8 @@ var
     Result:= '';
     if N.IsNull then Exit;
     S:= Integer(N.StartByte);
-    E:= Integer(N.EndByte); L:= E - S;
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -2904,7 +2910,8 @@ var
     Result:= '';
     if N.IsNull then Exit;
     S:= Integer(N.StartByte);
-    E:= Integer(N.EndByte); L:= E - S;
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -3708,7 +3715,8 @@ var
         var ClsSym : TSymbol; var Found: Boolean:= False;
         for var Sy in AStore.FindSymbolsByExactName(ClsName) do
           if Sy.Kind = skClass then begin ClsSym:= Sy;
-          Found:= True; Break; end;
+          Found:= True;
+          Break; end;
         if Found then
         begin
           var AbstractNames: TStringList:= TStringList.Create;
@@ -3756,7 +3764,8 @@ var
             end;
           finally
             ClassIds.Free;
-            AbstractNames.Free; ConcreteNames.Free;
+            AbstractNames.Free;
+            ConcreteNames.Free;
           end;
         end;
       end;
@@ -4156,7 +4165,8 @@ var
     Result:= '';
     if N.IsNull then Exit;
     S:= Integer(N.StartByte);
-    E:= Integer(N.EndByte); L:= E - S;
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -4292,7 +4302,8 @@ var
     Result:= '';
     if N.IsNull then Exit;
     S:= Integer(N.StartByte);
-    E:= Integer(N.EndByte); L:= E - S;
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -4614,7 +4625,8 @@ var
       Result:= '';
       if N.IsNull then Exit;
       S:= Integer(N.StartByte);
-      E:= Integer(N.EndByte); Ln:= E - S;
+      E:= Integer(N.EndByte);
+      Ln:= E - S;
       if (Ln <= 0) or (S < 0) or (E > Length(Src)) then Exit;
       Result:= TEncoding.UTF8.GetString(Src, S, Ln);
     end;
@@ -4657,7 +4669,8 @@ var
       else
         for I:= 0 to TypeN.ChildCount - 1 do
           if TypeN.Child(I).NodeType = 'declClass' then begin Cls:= TypeN.Child(I);
-          FoundCls:= True; Break; end;
+          FoundCls:= True;
+          Break; end;
       if not FoundCls then Exit;
       Disp:= NodeStr(NameN);
       Low := LowerCase(Disp);
@@ -4787,7 +4800,8 @@ var
     Result:= '';
     if N.IsNull then Exit;
     S:= Integer(N.StartByte);
-    E:= Integer(N.EndByte); L:= E - S;
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -4937,7 +4951,8 @@ var
     Result:= '';
     if N.IsNull then Exit;
     S:= Integer(N.StartByte);
-    E:= Integer(N.EndByte); L:= E - S;
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -4965,7 +4980,8 @@ var
         else
           for J:= 0 to TypeN.ChildCount - 1 do
             if TypeN.Child(J).NodeType = 'declClass' then begin Cls:= TypeN.Child(J);
-            FoundCls:= True; Break; end;
+            FoundCls:= True;
+            Break; end;
         if FoundCls then
           for J:= 0 to Cls.ChildCount - 1 do
           begin
@@ -6510,7 +6526,8 @@ var
     Result:= '';
     if N.IsNull then Exit;
     S:= Integer(N.StartByte);
-    E:= Integer(N.EndByte); L:= E - S;
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -7012,7 +7029,8 @@ var
     Result:= '';
     if N.IsNull then Exit;
     S:= Integer(N.StartByte);
-    E:= Integer(N.EndByte); L:= E - S;
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -7561,7 +7579,8 @@ var
                         Exit(True); end;
       if MatchText(Nm, ['RenameFile', 'CopyFile', 'MoveFile']) then
         begin AIdx0:= 0;
-        AIdx1:= 1; Exit(True); end;
+        AIdx1:= 1;
+        Exit(True); end;
       { ShellExecute is taken here in its PATH role only (lpFile). Injection
         remains unsafe-shellexecute's job -- two rules, two questions. }
       if SameText(Nm, 'ShellExecute') then begin AIdx0:= 2;
@@ -7589,7 +7608,8 @@ var
     if SameText(Recv, 'TFile') then
     begin
       if MatchText(Nm, ['Copy', 'Move']) then begin AIdx0:= 0;
-      AIdx1:= 1; Exit(True); end;
+      AIdx1:= 1;
+      Exit(True); end;
       if MatchText(Nm, ['Open', 'OpenRead', 'OpenWrite', 'OpenText', 'Create',
                         'Delete', 'Exists', 'ReadAllText', 'ReadAllLines',
                         'ReadAllBytes', 'WriteAllText', 'WriteAllLines',
@@ -8254,7 +8274,8 @@ var
     Result:= '';
     if N.IsNull then Exit;
     S:= Integer(N.StartByte);
-    E:= Integer(N.EndByte); L:= E - S;
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -8284,7 +8305,8 @@ var
           here skipped a leading 'case' and wrongly landed on a later Exit (FP-4). }
         if (C.NodeType <> '') and (C.NodeType[1] = 'k') then Continue;
         B:= C;
-        Found:= True; Break;
+        Found:= True;
+        Break;
       end;
       if not Found then Exit;
     end;
@@ -8367,7 +8389,8 @@ var
     Result:= '';
     if N.IsNull then Exit;
     S:= Integer(N.StartByte);
-    E:= Integer(N.EndByte); L:= E - S;
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -8517,7 +8540,8 @@ var
     Result:= '';
     if N.IsNull then Exit;
     S:= Integer(N.StartByte);
-    E:= Integer(N.EndByte); L:= E - S;
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -9052,7 +9076,8 @@ var
     Result:= '';
     if N.IsNull then Exit;
     S:= Integer(N.StartByte);
-    E:= Integer(N.EndByte); L:= E - S;
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -9363,7 +9388,8 @@ var
     Result:= '';
     if N.IsNull then Exit;
     S:= Integer(N.StartByte);
-    E:= Integer(N.EndByte); L:= E - S;
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -9577,7 +9603,8 @@ var
     Result:= '';
     if N.IsNull then Exit;
     S:= Integer(N.StartByte);
-    E:= Integer(N.EndByte); L:= E - S;
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -9744,7 +9771,8 @@ var
     Result:= '';
     if N.IsNull then Exit;
     S:= Integer(N.StartByte);
-    E:= Integer(N.EndByte); L:= E - S;
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -9950,7 +9978,8 @@ var
     Result:= '';
     if N.IsNull then Exit;
     S:= Integer(N.StartByte);
-    E:= Integer(N.EndByte); L:= E - S;
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -10104,7 +10133,8 @@ var
     Result:= '';
     if N.IsNull then Exit;
     S:= Integer(N.StartByte);
-    E:= Integer(N.EndByte); L:= E - S;
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
