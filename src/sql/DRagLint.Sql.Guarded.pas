@@ -427,7 +427,7 @@ begin
   Obj:= AConn.CliObj;
   if Obj = nil then
     raise ESqlGuardError.Create('SQL guard: FireDAC exposed no native SQLite handle (CliObj is nil)');
-  if not (TObject(Obj) is TSQLiteDatabase) then
+  if (TObject(Obj) is not TSQLiteDatabase) then
     raise ESqlGuardError.Create('SQL guard: the connection is not an SQLite connection');
   FNative:= TSQLiteDatabase(Obj);
 

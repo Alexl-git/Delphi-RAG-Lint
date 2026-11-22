@@ -341,7 +341,7 @@ begin
   end;
   try
     pWhySkipped:= Format('no "%s" key', [pKey]);
-    if not (Json is TJSONObject) then
+    if (Json is not TJSONObject) then
       Exit;
     for var Pair in TJSONObject(Json) do
       if SameText(Pair.JsonString.Value, pKey) then

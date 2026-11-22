@@ -236,11 +236,11 @@ begin
   try
     JVal:= TJSONObject.ParseJSONValue(TFile.ReadAllText(CfgPath));
     try
-      if not (JVal is TJSONObject) then
+      if (JVal is not TJSONObject) then
         raise EJSONException.Create('the file is not a JSON object');
       V:= TJSONObject(JVal).GetValue(POPUP_FORMS_KEY);
       if V = nil then Exit;
-      if not (V is TJSONArray) then
+      if (V is not TJSONArray) then
         raise EJSONException.Create('"' + POPUP_FORMS_KEY + '" is not an array');
       Arr:= TJSONArray(V);
       for Item in Arr do
@@ -253,7 +253,7 @@ begin
           FormVal:= TJSONObject(Item).GetValue('form');
           NoteVal:= TJSONObject(Item).GetValue('note');
         end;
-        if (FormVal <> nil) and not (FormVal is TJSONString) then
+        if (FormVal <> nil) and (FormVal is not TJSONString) then
         begin
           Writeln(ErrOutput, 'forms-csv: ' + CfgPath + ': a "' + POPUP_FORMS_KEY + '" entry whose "form" is not a string -- skipped');
           Continue;
