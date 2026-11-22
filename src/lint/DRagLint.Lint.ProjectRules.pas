@@ -1704,13 +1704,13 @@ var
       Result:= nil;
       for Sy in ALibStore.FindSymbolsByExactName(AName) do
       begin
-        if not (Sy.Kind in CGlobalKinds) then Continue;
+        if (Sy.Kind not in CGlobalKinds) then Continue;
         if not SameText(Sy.Section, 'interface') then Continue;
         LibUnit:= '';
         if Sy.ParentId <> 0 then
         begin
           Par:= ALibStore.GetSymbolById(Sy.ParentId);
-          if not (Par.Kind in [skUnit, skProgram]) then Continue;
+          if (Par.Kind not in [skUnit, skProgram]) then Continue;
           LibUnit:= Par.Name;
         end;
         if LibUnit = '' then
