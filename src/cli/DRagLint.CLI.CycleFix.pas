@@ -2153,7 +2153,7 @@ begin
   S.Code:= RunBounded(Format('--part all iteration %d (%s)', [S.Iterations, pStem]), AllIterationCmd(pOpts, pStem), OutFile, ChildApplyLimitMs, TimedOut, {pEngineChild=}True);
   var Doc:= ParseJsonFrom(OutFile, CDocMarker);
   try
-    if TimedOut or not (Doc is TJSONObject) then
+    if TimedOut or (Doc is not TJSONObject) then
     begin
       S.Code   := CExitError;
       S.Error  := Format('iteration %d: the child run printed no cycle-fix/1 document', [S.Iterations]) + CiteScratch(OutFile, ' (see %s)');
