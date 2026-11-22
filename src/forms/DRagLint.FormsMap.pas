@@ -320,8 +320,8 @@ begin
   for I:= AStartLine - 1 to Length(Lines) - 1 do
   begin
     Buf:= Buf + ' ' + Lines[I];
-    if Pos(')', Buf) > 0 then Break;
-    if (Pos('class', LowerCase(Buf)) > 0) and (Pos('(', Buf) = 0) and (Pos(';', Buf) > 0) then Exit;
+    if Buf.Contains(')') then Break;
+    if (Pos('class', LowerCase(Buf)) > 0) and (not Buf.Contains('(')) and (Buf.Contains(';')) then Exit;
     if I > AStartLine + 3 then Break;
   end;
   P:= Pos('(', Buf);
@@ -378,7 +378,7 @@ var
   Lc: string;
 begin
   Lc:= LowerCase(APath);
-  Result:= (Pos(' - copy', Lc) > 0) or (Pos('-copy', Lc) > 0) or (Copy(Lc, Length(Lc) - 3, 4) = '.bak') or (Copy(Lc, Length(Lc) - 3, 4) = '.bck') or
+  Result:= (Lc.Contains(' - copy')) or (Lc.Contains('-copy')) or (Copy(Lc, Length(Lc) - 3, 4) = '.bak') or (Copy(Lc, Length(Lc) - 3, 4) = '.bck') or
   (Copy(Lc, Length(Lc) - 3, 4) = '.old') or (Copy(Lc, Length(Lc) - 4, 5) = '.orig');
 end;
 
@@ -487,7 +487,7 @@ end; // function
 /// <summary>RFC 4180 field escaping (quote when needed, double embedded quotes).</summary>
 function CsvField(const S: string): string;
 begin
-  if (Pos(',', S) > 0) or (Pos('"', S) > 0) or (Pos(#10, S) > 0) then Result:= '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"'
+  if (S.Contains(',')) or (S.Contains('"')) or S.Contains(#10) then Result:= '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"'
   else Result:= S;
 end;
 
@@ -496,15 +496,15 @@ end;
 /// "CreateForm(FormClass".</summary>
 function IsLaunchLine(const ALine, AFormClass: string): Boolean;
 begin
-  Result:= (Pos(AFormClass + '.Create', ALine) > 0) or (Pos('CreateForm(' + AFormClass, StringReplace(ALine, ' ', '', [rfReplaceAll])) > 0);
+  Result:= (ALine.Contains(AFormClass + '.Create')) or (Pos('CreateForm(' + AFormClass, StringReplace(ALine, ' ', '', [rfReplaceAll])) > 0);
 end;
 
 /// <summary>True if ALine shows a global singleton form instance via its design-time
 /// instance name: formName.Show* (covers .ShowModal, .Show) or formName.Execute.</summary>
 function IsShowLine(const ALine, AFormName: string): Boolean;
 begin
-  Result:= (Pos(AFormName + '.Show'   , ALine) > 0) or
-           (Pos(AFormName + '.Execute', ALine) > 0);
+  Result:= (ALine.Contains(AFormName + '.Show')) or
+           (ALine.Contains(AFormName + '.Execute'));
 end;
 
 /// <summary>True when ALine calls a plain .Show (not .ShowModal, .ShowHint,
@@ -1397,7 +1397,7 @@ var
         for LIdx:= 0 to Length(Lines) - 1 do
         begin
           T:= Lines[LIdx];
-          if Pos(':=', T) = 0 then Continue;
+          if not T.Contains(':=') then Continue;
           if (ParseHookAssign(T, OC, Rout)) and (Launchers.ContainsKey(LowerCase(Rout))) then HandlerToHook.AddOrSetValue(LowerCase(Rout), OC);
         end;
       end;

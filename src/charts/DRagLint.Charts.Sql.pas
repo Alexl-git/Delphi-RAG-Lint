@@ -1153,7 +1153,7 @@ end;
 function TSqlCatalog.BlankSqlMatch(const pMatch: TMatch): string;
 begin
   Result:= pMatch.Value;
-  if Pos(#10, Result) = 0 then
+  if not Result.Contains(#10) then
     Exit(StringOfChar(' ', Length(Result)));
   for var K:= 1 to Length(Result) do
     if not CharInSet(Result[K], [#13, #10]) then

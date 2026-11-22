@@ -239,7 +239,7 @@ function IdentityOf(const pTitle, pCellMarkup: string): string;
 begin
   var SepAt:= Pos(TITLE_SEP, pTitle);
   if SepAt > 0 then Exit(Trim(Copy(pTitle, 1, SepAt - 1)));
-  if (pTitle <> '') and (Pos(' ', pTitle) = 0) then Exit(pTitle);
+  if (pTitle <> '') and (not pTitle.Contains(' ')) then Exit(pTitle);
   var Font:= TRegEx.Match(pCellMarkup, RE_FONT, [roSingleLine]);
   if Font.Success then Result:= PlainText(Font.Groups[1].Value)
   else Result:= PlainText(pCellMarkup);
