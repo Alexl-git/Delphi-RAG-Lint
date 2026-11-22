@@ -129,27 +129,27 @@ var
 
   procedure AddToken(const N: TTSNode; const Src: TBytes; AFileI: Integer);
   var
-    nt, key, txt: string;
-    code        : Integer;
+    Nt, Key, Txt: string;
+    Code        : Integer;
     t           : TTok;
   begin
-    nt := N.NodeType;
-    if IsIdentifierType(nt) then
-      key := #1'ID'
-    else if IsLiteralType(nt) then
-      key := #2'LIT'
+    Nt := N.NodeType;
+    if IsIdentifierType(Nt) then
+      Key := #1'ID'
+    else if IsLiteralType(Nt) then
+      Key := #2'LIT'
     else
     begin
-      txt := Trim(NodeText(N, Src));
-      if txt = '' then Exit; { whitespace-only terminal }
-      key := #3 + LowerCase(txt);
+      Txt := Trim(NodeText(N, Src));
+      if Txt = '' then Exit; { whitespace-only terminal }
+      Key := #3 + LowerCase(Txt);
     end;
-    if not Interner.TryGetValue(key, code) then
+    if not Interner.TryGetValue(Key, Code) then
     begin
-      code := Interner.Count + 1;
-      Interner.Add(key, code);
+      Code := Interner.Count + 1;
+      Interner.Add(Key, Code);
     end;
-    t.Code := code; t.FileI := AFileI; t.Line := Integer(N.StartPoint.Row) + 1;
+    t.Code := Code; t.FileI := AFileI; t.Line := Integer(N.StartPoint.Row) + 1;
     Toks.Add(t);
   end;
 
@@ -268,56 +268,56 @@ var
 
   procedure EmitPair(a, b, Len: Integer);
   var
-    ta, tb, anchor, other: TTok;
-    key                  : string;
+    Ta, Tb, Anchor, Other: TTok;
+    Key                  : string;
     F                    : TLintFinding;
-    aKeyGreater          : Boolean;
+    AKeyGreater          : Boolean;
   begin
-    ta := Toks[a]; tb := Toks[b];
+    Ta := Toks[a]; Tb := Toks[b];
     { anchor = lexicographically greater (FilePath, Line) for deterministic output }
-    if AFiles[ta.FileI] > AFiles[tb.FileI] then
-      aKeyGreater := True
-    else if AFiles[ta.FileI] < AFiles[tb.FileI] then
-      aKeyGreater := False
+    if AFiles[Ta.FileI] > AFiles[Tb.FileI] then
+      AKeyGreater := True
+    else if AFiles[Ta.FileI] < AFiles[Tb.FileI] then
+      AKeyGreater := False
     else
-      aKeyGreater := ta.Line >= tb.Line;
-    if aKeyGreater then begin anchor := ta; other := tb; end
-                   else begin anchor := tb; other := ta; end;
+      AKeyGreater := Ta.Line >= Tb.Line;
+    if AKeyGreater then begin Anchor := Ta; Other := Tb; end
+                   else begin Anchor := Tb; Other := Ta; end;
 
-    key := AFiles[anchor.FileI] + '|' + IntToStr(anchor.Line) + '|' +
-           AFiles[other.FileI] + '|' + IntToStr(other.Line);
-    if Seen.ContainsKey(key) then Exit;
-    Seen.Add(key, True);
+    Key := AFiles[Anchor.FileI] + '|' + IntToStr(Anchor.Line) + '|' +
+           AFiles[Other.FileI] + '|' + IntToStr(Other.Line);
+    if Seen.ContainsKey(Key) then Exit;
+    Seen.Add(Key, True);
 
     F := Default(TLintFinding);
     F.RuleId    := 'duplicate-code';
     F.Severity  := 'info';
-    F.FilePath  := AFiles[anchor.FileI];
-    F.StartLine := anchor.Line;
+    F.FilePath  := AFiles[Anchor.FileI];
+    F.StartLine := Anchor.Line;
     F.StartCol  := 1;
-    F.EndLine   := anchor.Line;
+    F.EndLine   := Anchor.Line;
     F.EndCol    := 1;
     F.Message   := Format('Duplicated code block (%d tokens) -- also at %s:%d',
-                          [Len, AFiles[other.FileI], other.Line]);
+                          [Len, AFiles[Other.FileI], Other.Line]);
     { The partner site, so a dl:ok marker on EITHER end can review the pair
       (D30): which end is the anchor depends on which partner the scope found. }
-    F.RelatedFile:= AFiles[other.FileI];
-    F.RelatedLine:= other.Line;
+    F.RelatedFile:= AFiles[Other.FileI];
+    F.RelatedLine:= Other.Line;
     Findings.Add(F);
   end;
 
   {$OVERFLOWCHECKS OFF} { rolling hash relies on natural UInt64 wraparound (mod 2^64) }
   procedure Match;
   var
-    N, i, start, a, b, p, q, L, MaxBucket, cvA, cvB, k: Integer;
+    N, i, Start, a, b, p, q, L, MaxBucket, CvA, CvB, k: Integer;
     CodeEnd, CodeSemi: Integer; { interned codes of `end` / `;`; 0 (matches no token) when absent }
     NextBar  : TArray<Integer>;
     Base, PowW, h: UInt64;
     Buckets  : TDictionary<UInt64, TList<Integer>>;
-    lst      : TList<Integer>;
+    Lst      : TList<Integer>;
     Cands    : TList<TCloneCand>;
     Covered  : TArray<Boolean>;
-    cand     : TCloneCand;
+    Cand     : TCloneCand;
   begin
     N := Toks.Count;
     if N < W then Exit;
@@ -344,29 +344,29 @@ var
           h := h - UInt64(Cardinal(Toks[i - W].Code)) * PowW;
         if i >= W - 1 then
         begin
-          start := i - (W - 1);
-          if NextBar[start] > i then { window [start..i] barrier-free }
+          Start := i - (W - 1);
+          if NextBar[Start] > i then { window [start..i] barrier-free }
           begin
-            if not Buckets.TryGetValue(h, lst) then
-            begin lst := TList<Integer>.Create; Buckets.Add(h, lst); end;
-            lst.Add(start);
+            if not Buckets.TryGetValue(h, Lst) then
+            begin Lst := TList<Integer>.Create; Buckets.Add(h, Lst); end;
+            Lst.Add(Start);
           end;
         end;
       end;
 
       MaxBucket := 400; { perf guard; log when skipped so it is not a silent cap }
-      for lst in Buckets.Values do
+      for Lst in Buckets.Values do
       begin
-        if lst.Count < 2 then Continue;
-        if lst.Count > MaxBucket then
+        if Lst.Count < 2 then Continue;
+        if Lst.Count > MaxBucket then
         begin
-          Writeln(ErrOutput, Format('duplicate-code: skipped a %d-window hash bucket (> %d cap)', [lst.Count, MaxBucket]));
+          Writeln(ErrOutput, Format('duplicate-code: skipped a %d-window hash bucket (> %d cap)', [Lst.Count, MaxBucket]));
           Continue;
         end;
-        for p := 0 to lst.Count - 2 do
-          for q := p + 1 to lst.Count - 1 do
+        for p := 0 to Lst.Count - 2 do
+          for q := p + 1 to Lst.Count - 1 do
           begin
-            a := lst[p]; b := lst[q];
+            a := Lst[p]; b := Lst[q];
             if not TokensEqual(a, b, W) then Continue; { hash-collision guard }
             { left-maximal: skip if this is a right-shift of a longer aligned match }
             if (a > 0) and (b > 0)
@@ -389,8 +389,8 @@ var
             end;
             if L < W then Continue;
             if Abs(a - b) < L then Continue; { same-region overlap }
-            cand.A := a; cand.B := b; cand.Len := L;
-            Cands.Add(cand);
+            Cand.A := a; Cand.B := b; Cand.Len := L;
+            Cands.Add(Cand);
           end;
       end;
 
@@ -433,16 +433,16 @@ var
         end));
       SetLength(Covered, N);
       for i := 0 to N - 1 do Covered[i] := False;
-      for cand in Cands do
+      for Cand in Cands do
       begin
-        a := cand.A; b := cand.B; L := cand.Len;
-        cvA := 0; cvB := 0;
+        a := Cand.A; b := Cand.B; L := Cand.Len;
+        CvA := 0; CvB := 0;
         for k := 0 to L - 1 do
         begin
-          if Covered[a + k] then Inc(cvA);
-          if Covered[b + k] then Inc(cvB);
+          if Covered[a + k] then Inc(CvA);
+          if Covered[b + k] then Inc(CvB);
         end;
-        if (cvA * 2 >= L) and (cvB * 2 >= L) then Continue; { both sides already covered }
+        if (CvA * 2 >= L) and (CvB * 2 >= L) then Continue; { both sides already covered }
         { Deliberately does NOT mark Covered: a suppressed low-information run must
           not shadow a genuine clone that overlaps it. }
         if IsLowInformation(a, L) then Continue;
@@ -455,14 +455,14 @@ var
       end;
     finally
       Cands.Free;
-      for lst in Buckets.Values do lst.Free;
+      for Lst in Buckets.Values do Lst.Free;
       Buckets.Free;
     end;
   end;
   {$OVERFLOWCHECKS ON}
 
 var
-  fi: Integer;
+  Fi: Integer;
   PF: TParsedFile;
 begin
   Result := nil;
@@ -474,11 +474,11 @@ begin
   Seen     := TDictionary<string, Boolean>.Create;
   try
     RoutineSeq := 0;
-    for fi := 0 to High(AFiles) do
+    for Fi := 0 to High(AFiles) do
     begin
-      PF := TAstParseCache.Get(AFiles[fi]);
+      PF := TAstParseCache.Get(AFiles[Fi]);
       if PF.Tree = nil then Continue;
-      VisitRoutines(PF.Tree.RootNode, PF.Src, fi);
+      VisitRoutines(PF.Tree.RootNode, PF.Src, Fi);
     end;
     Match;
     Findings.Sort(TComparer<TLintFinding>.Construct(
