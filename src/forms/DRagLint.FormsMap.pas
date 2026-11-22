@@ -29,9 +29,6 @@ uses
   , Data.DB
   , FireDAC .Comp   .Client
   , FireDAC .Stan   .Param
-  , DRagLint.Core   .Model // dl:unit DRagLint.Core.Model accepted -- DRAG_HOME_DIR: the _D-RAG folder name travels with the model that defines the index layout, so popupForms is read from the same folder every other verb uses
-  , DRagLint.Storage.SQLite
-  , DRagLint.Lint   .ProjectChecks.Parse
   ;
 
 type
@@ -129,6 +126,9 @@ uses
   , DRagLint.Core.FileTime { 151 Y2: FileMTimeUnix for the dfm_properties currency check }
   , DRagLint.FormsMap.Dfm
   , DRagLint.MenuTree
+  , DRagLint.Core.Model
+  , DRagLint.Storage.SQLite
+  , DRagLint.Lint.ProjectChecks.Parse
   ;
 
 /// <summary>Reads a .pas file as lines with comment content blanked out, for

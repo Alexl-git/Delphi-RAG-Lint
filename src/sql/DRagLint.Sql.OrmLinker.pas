@@ -31,7 +31,6 @@ uses
   , System.DateUtils
   , System  .Generics.Collections
   , FireDAC .Comp    .Client
-  , DRagLint.Storage .SQLite
   ;
 
 type
@@ -85,6 +84,7 @@ uses
   Data.DB
   , FireDAC.Stan.Intf
   , FireDAC.Stan.Param
+  , DRagLint.Storage.SQLite
   ;
 
 type
