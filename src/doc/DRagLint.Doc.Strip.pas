@@ -685,7 +685,8 @@ begin
         if Fits then
         begin
           RegionLo:= Lo;
-          RegionHi:= Hi; Found:= True;
+          RegionHi:= Hi;
+          Found:= True;
         end;
         I:= Hi + 1;
       end

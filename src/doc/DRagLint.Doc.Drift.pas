@@ -268,11 +268,17 @@ begin
     for I:= 1 to Length(S) do
       if CharInSet(S[I], [' ', #9, #13, #10]) then
       begin
-        if not Prev then begin Sb.Append(' ');
-        Prev:= True; end;
+        if not Prev then
+        begin
+          Sb.Append(' ');
+          Prev:= True;
+        end;
       end
-      else begin Sb.Append(S[I]);
-      Prev:= False; end;
+      else
+      begin
+        Sb.Append(S[I]);
+        Prev:= False;
+      end;
     Result:= Trim(Sb.ToString);
   finally
     Sb.Free;
@@ -662,8 +668,11 @@ var
     if (S = '') or (not IsIdentStart(S[1])) then Exit;
     V:= True;
     for K:= 2 to Length(S) do
-      if not IsIdentPart(S[K]) then begin V:= False;
-      Break; end;
+      if not IsIdentPart(S[K]) then
+      begin
+        V:= False;
+        Break;
+      end;
     if V then Acc.Add(S);
   end;
 
@@ -1274,8 +1283,11 @@ begin
       // does not count toward it; a body a human typed does.
       var HandWrittenParams: Boolean:= False;
       for DP in ADoc.Params do
-        if not TDocRegions.IsManagedDesc(DP.Desc) then begin HandWrittenParams:= True;
-        Break; end;
+        if not TDocRegions.IsManagedDesc(DP.Desc) then
+        begin
+          HandWrittenParams:= True;
+          Break;
+        end;
       var HumanAuthored: Boolean:=
         ADoc.HasSummaryTag or HandWrittenParams or
         (not ContainsText(ADoc.RawBlock, AUTO_TOKEN));
@@ -1503,8 +1515,11 @@ begin
       begin
         var Raised: Boolean:= False;
         for var RC in Facts.Raises do
-          if SameText(RC, DE.TypeName) then begin Raised:= True;
-          Break; end;
+          if SameText(RC, DE.TypeName) then
+          begin
+            Raised:= True;
+            Break;
+          end;
         if (not Raised)
           and CalleeRaisesType(AStore, ASym, DE.TypeName, XEdges, XEdgesLoaded) then
           Raised:= True;

@@ -768,7 +768,8 @@ begin
   Result:= '';
   if N.IsNull then Exit;
   S:= Integer(N.StartByte);
-  E:= Integer(N.EndByte); L:= E - S;
+  E:= Integer(N.EndByte);
+  L:= E - S;
   if (L <= 0) or (S < 0) or (E > Length(ASrc)) then Exit;
   Result:= TEncoding.UTF8.GetString(ASrc, S, L);
 end;
@@ -999,8 +1000,11 @@ begin
     Exit;
   end;
 
-  if N.NodeType = 'identifier' then begin MarkRead(N);
-  Exit; end;
+  if N.NodeType = 'identifier' then
+  begin
+    MarkRead(N);
+    Exit;
+  end;
 
   if N.NodeType = 'exprDot' then
   begin
@@ -1459,8 +1463,11 @@ var
 begin
   if N.IsNull then Exit;
 
-  if N.NodeType = 'identifier' then begin MarkIdent(N);
-  Exit; end;
+  if N.NodeType = 'identifier' then
+  begin
+    MarkIdent(N);
+    Exit;
+  end;
 
   if N.NodeType = 'exprDot' then
   begin
@@ -1598,8 +1605,11 @@ var
 begin
   if N.IsNull then Exit;
 
-  if N.NodeType = 'identifier' then begin MarkTypeName(IdentText(N));
-  Exit; end;
+  if N.NodeType = 'identifier' then
+  begin
+    MarkTypeName(IdentText(N));
+    Exit;
+  end;
 
   if N.NodeType = 'exprDot' then
   begin
@@ -1989,11 +1999,17 @@ begin
       begin
         Inc(APos);
         Tbl:= ScanTableRef(S, APos);
-        if Tbl <> '' then Acc.Add(Tbl) else begin APos:= Saved;
-        Break; end;
+        if Tbl <> '' then Acc.Add(Tbl) else
+        begin
+          APos:= Saved;
+          Break;
+        end;
       end
-      else begin APos:= Saved;
-      Break; end;
+      else
+      begin
+        APos:= Saved;
+        Break;
+      end;
     end;
     Result:= Acc.ToStringArray;
   finally
@@ -2835,9 +2851,11 @@ begin
   WriteSet:= TStringList.Create;
   try
     ReadSet.Sorted := True;
-    ReadSet.Duplicates := dupIgnore; ReadSet.CaseSensitive := False;
+    ReadSet.Duplicates := dupIgnore;
+    ReadSet.CaseSensitive := False;
     WriteSet.Sorted:= True;
-    WriteSet.Duplicates:= dupIgnore; WriteSet.CaseSensitive:= False;
+    WriteSet.Duplicates:= dupIgnore;
+    WriteSet.CaseSensitive:= False;
 
     WalkSqlLiterals(ABody, ASrc, ReadSet, WriteSet);
     WalkSqlAddRuns(ABody, ASrc, '', ReadSet, WriteSet); // D18: SQL.Add lines assembled per receiver
@@ -3098,8 +3116,11 @@ begin
   while (not Cur.IsNull) and (Guard < 32) do
   begin
     Inc(Guard);
-    if Cur.NodeType = 'identifier' then begin Head:= NodeText(Cur, ASrc);
-    Break; end;
+    if Cur.NodeType = 'identifier' then
+    begin
+      Head:= NodeText(Cur, ASrc);
+      Break;
+    end;
     Nxt:= Cur.ChildByField('lhs');
     if Nxt.IsNull then Nxt:= Cur.ChildByField('entity');
     if Nxt.IsNull and (Cur.NamedChildCount > 0) then Nxt:= Cur.NamedChild(0);

@@ -4457,8 +4457,11 @@ begin
       begin
         var IsStandaloneParam: Boolean:= False;
         for var SP in C.StandaloneParam.Params do
-          if SameText(SP.Name, P) then begin IsStandaloneParam:= True;
-          Break; end;
+          if SameText(SP.Name, P) then
+          begin
+            IsStandaloneParam:= True;
+            Break;
+          end;
         if IsStandaloneParam then
         begin
           // v(PHASE A3): IS THIS MARKED BODY THE ENGINE'S OWN HARVEST, OR A
@@ -4508,8 +4511,11 @@ begin
                 C.Sb.AppendLine(McEmitTagged(C, '<param name="' + P + '">', TDocMarkers.StripMark(EP.Desc), '</param>'));
                 ParamEmitted:= True;
               end;
-            taPreserveVerbatim: begin C.Sb.AppendLine(McEmitPreserved(C, C.Eff.RawBlock, C.LinePrefix, 'param', '<param name="' + P + '">', EP.Desc, '</param>'));
-            ParamEmitted:= True; end;
+            taPreserveVerbatim:
+            begin
+              C.Sb.AppendLine(McEmitPreserved(C, C.Eff.RawBlock, C.LinePrefix, 'param', '<param name="' + P + '">', EP.Desc, '</param>'));
+              ParamEmitted:= True;
+            end;
             taEngineOwned: ;  // engine-owned and empty: fall through and REGENERATE
           end;
         end;
@@ -4547,8 +4553,11 @@ begin
       end;
     var IsStandaloneParam: Boolean:= False;
     for var SP in C.StandaloneParam.Params do
-      if SameText(SP.Name, EP.Name) then begin IsStandaloneParam:= True;
-      Break; end;
+      if SameText(SP.Name, EP.Name) then
+      begin
+        IsStandaloneParam:= True;
+        Break;
+      end;
     // E-DOC-ORPHAN-PARAM: the orphan keeps its own bytes (blanks inside the
     // tag); only the trailing marker is appended to its last line.
     if (not StillThere) and (not TDocMarkers.IsManagedDesc(EP.Desc)) and IsStandaloneParam then
@@ -4668,8 +4677,11 @@ begin
   begin
     var Covered: Boolean:= False;
     for var PC in PreservedCrefs do
-      if SameText(PC, RaiseCls) then begin Covered:= True;
-      Break; end;
+      if SameText(PC, RaiseCls) then
+      begin
+        Covered:= True;
+        Break;
+      end;
     if not Covered then
       C.Sb.AppendLine(McEmitEngineException(C, RaiseCls, McMinedRaiseMessage(C.AFacts, RaiseCls)));
   end;

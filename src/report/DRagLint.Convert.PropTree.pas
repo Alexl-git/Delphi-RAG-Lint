@@ -1434,8 +1434,11 @@ begin
   for S in Cands do
     if S.Kind = skClass then
     begin
-      if not HaveAny then begin FirstAny:= S;
-      HaveAny:= True; end;
+      if not HaveAny then
+      begin
+        FirstAny:= S;
+        HaveAny:= True;
+      end;
       if not IsForwardDeclClass(S) then Exit(S); // the real body -- prefer it
     end;
   if HaveAny then Result:= FirstAny; // only forward stubs found -- best effort
@@ -1964,8 +1967,11 @@ var
   Sym : TSymbol;
   procedure AddId(AId: Int64);
   begin
-    if (AId > 0) and not Seen.ContainsKey(AId) then begin Seen.Add(AId, True);
-    Ids.Add(AId); end;
+    if (AId > 0) and not Seen.ContainsKey(AId) then
+    begin
+      Seen.Add(AId, True);
+      Ids.Add(AId);
+    end;
   end;
 begin
   Ids  := TList<Int64>.Create;
@@ -2235,8 +2241,11 @@ begin
     // across the queried class's connected tree onto every bare occurrence.
     if (OwnTok = '') and (Tok <> '') then
     begin
-      if not ClosureDone then begin ClosureIds:= ClosureClassIds(AClass);
-      ClosureDone:= True; end;
+      if not ClosureDone then
+      begin
+        ClosureIds:= ClosureClassIds(AClass);
+        ClosureDone:= True;
+      end;
       PropagateBareType(ClosureIds, Prop.Name, Tok);
       // Ensure the queried row itself is stamped even if the closure walk
       // somehow missed it (e.g. name-lookup ambiguity): direct memoize.
