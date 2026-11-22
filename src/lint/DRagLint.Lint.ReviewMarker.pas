@@ -523,7 +523,9 @@ type
     /// <param name="AHashOverride"><!-- drag-lint:auto type -->const string = ''</param>
     /// <param name="AReplaceReason">True (`allow --reason`, 1.52): AReason REPLACES the marker's reason,
     /// stamp included -- the human who passes it is the re-review -- and an entry whose hash still matches
-    /// is rewritten when its reason differs. False (default): the existing reason wins, as above.</param>
+    /// is rewritten when its reason differs. Only a marker that records ARuleId ALONE is replaced; on a
+    /// marker shared with other rules AReason is appended with '; ' (once), so a neighbour's reviewed
+    /// reason is never dropped (v1523). False (default): the existing reason wins, as above.</param>
     /// <returns>The whole new line: 7-bit ASCII, no trailing whitespace, original
     /// indentation and code untouched.</returns>
     /// <remarks>
@@ -1445,7 +1447,16 @@ begin
     human who did re-read the code writes one. Dropping rather than keeping is
     the loud direction. The stamp belongs to the whole marker, so a neighbour
     entry on the same line loses it too; that is also the loud direction. }
-  if AReplaceReason then Reason:= Trim(AReason)
+  { v1523 INT-W2b: a REPLACING reason (allow --reason) replaces only a marker that
+    records ARuleId alone. On a shared marker the old reason is a neighbour rule's
+    review, so the new reason is appended instead of silently dropping it
+    (docs\INBOX-allow-apply-overwrites-reason.md; guard run_v1523_ALLOWREASON). }
+  if AReplaceReason and Refreshed and (Length(Existing) = 1) then Reason:= Trim(AReason)
+  else if AReplaceReason then
+  begin
+    if Reason = '' then Reason:= Trim(AReason)
+    else if not Reason.Contains(Trim(AReason)) then Reason:= Reason + '; ' + Trim(AReason);
+  end
   else if Refreshed then Reason:= StripReviewStamp(Reason);
   if Trim(Reason) <> '' then Body:= Body + ' ' + REVIEW_REASON_SEP + ' ' + Trim(Reason);
 
