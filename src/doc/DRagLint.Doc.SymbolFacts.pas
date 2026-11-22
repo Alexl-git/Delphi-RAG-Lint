@@ -767,7 +767,8 @@ var S, E, L: Integer;
 begin
   Result:= '';
   if N.IsNull then Exit;
-  S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+  S:= Integer(N.StartByte);
+  E:= Integer(N.EndByte); L:= E - S;
   if (L <= 0) or (S < 0) or (E > Length(ASrc)) then Exit;
   Result:= TEncoding.UTF8.GetString(ASrc, S, L);
 end;
@@ -998,7 +999,8 @@ begin
     Exit;
   end;
 
-  if N.NodeType = 'identifier' then begin MarkRead(N); Exit; end;
+  if N.NodeType = 'identifier' then begin MarkRead(N);
+  Exit; end;
 
   if N.NodeType = 'exprDot' then
   begin
@@ -1420,19 +1422,22 @@ procedure WalkUiTouches(const N: TTSNode; const ASrc: TBytes; const AStore: ISym
     if Raw = '' then Exit;
     Key:= LowerCase(Raw);
 
-    Disp:= ''; TypeName:= '';
+    Disp:= '';
+    TypeName:= '';
     if AVars <> nil then
     begin
       Idx:= AVars.IndexOf(Key);
       if Idx >= 0 then
       begin
         RV:= AVars.Get(Idx);
-        Disp:= RV.Display; TypeName:= RV.TypeText;
+        Disp:= RV.Display;
+        TypeName:= RV.TypeText;
       end;
     end;
     if (Disp = '') and (AFieldTypes <> nil) and AFieldTypes.TryGetValue(Key, Pair) then
     begin
-      Disp:= Pair.Key; TypeName:= Pair.Value;
+      Disp:= Pair.Key;
+      TypeName:= Pair.Value;
     end;
 
     if Disp = '' then
@@ -1454,7 +1459,8 @@ var
 begin
   if N.IsNull then Exit;
 
-  if N.NodeType = 'identifier' then begin MarkIdent(N); Exit; end;
+  if N.NodeType = 'identifier' then begin MarkIdent(N);
+  Exit; end;
 
   if N.NodeType = 'exprDot' then
   begin
@@ -1592,7 +1598,8 @@ var
 begin
   if N.IsNull then Exit;
 
-  if N.NodeType = 'identifier' then begin MarkTypeName(IdentText(N)); Exit; end;
+  if N.NodeType = 'identifier' then begin MarkTypeName(IdentText(N));
+  Exit; end;
 
   if N.NodeType = 'exprDot' then
   begin
@@ -1982,9 +1989,11 @@ begin
       begin
         Inc(APos);
         Tbl:= ScanTableRef(S, APos);
-        if Tbl <> '' then Acc.Add(Tbl) else begin APos:= Saved; Break; end;
+        if Tbl <> '' then Acc.Add(Tbl) else begin APos:= Saved;
+        Break; end;
       end
-      else begin APos:= Saved; Break; end;
+      else begin APos:= Saved;
+      Break; end;
     end;
     Result:= Acc.ToStringArray;
   finally
@@ -2825,8 +2834,10 @@ begin
   ReadSet := TStringList.Create;
   WriteSet:= TStringList.Create;
   try
-    ReadSet.Sorted := True; ReadSet.Duplicates := dupIgnore; ReadSet.CaseSensitive := False;
-    WriteSet.Sorted:= True; WriteSet.Duplicates:= dupIgnore; WriteSet.CaseSensitive:= False;
+    ReadSet.Sorted := True;
+    ReadSet.Duplicates := dupIgnore; ReadSet.CaseSensitive := False;
+    WriteSet.Sorted:= True;
+    WriteSet.Duplicates:= dupIgnore; WriteSet.CaseSensitive:= False;
 
     WalkSqlLiterals(ABody, ASrc, ReadSet, WriteSet);
     WalkSqlAddRuns(ABody, ASrc, '', ReadSet, WriteSet); // D18: SQL.Add lines assembled per receiver
@@ -3082,11 +3093,13 @@ var Cur, Nxt: TTSNode; Guard: Integer; Head: string;
 begin
   Result:= False;
   Head:= '';
-  Cur:= ARecv; Guard:= 0;
+  Cur:= ARecv;
+  Guard:= 0;
   while (not Cur.IsNull) and (Guard < 32) do
   begin
     Inc(Guard);
-    if Cur.NodeType = 'identifier' then begin Head:= NodeText(Cur, ASrc); Break; end;
+    if Cur.NodeType = 'identifier' then begin Head:= NodeText(Cur, ASrc);
+    Break; end;
     Nxt:= Cur.ChildByField('lhs');
     if Nxt.IsNull then Nxt:= Cur.ChildByField('entity');
     if Nxt.IsNull and (Cur.NamedChildCount > 0) then Nxt:= Cur.NamedChild(0);

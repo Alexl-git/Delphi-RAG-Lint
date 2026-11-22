@@ -278,14 +278,18 @@ begin
         begin
           HasComment:= True;
           Brace     := True;
-          if ALine[i] = '}' then begin AState:= lsNormal; Inc(i); end
-          else begin Content:= Content + ALine[i]; Inc(i); end;
+          if ALine[i] = '}' then begin AState:= lsNormal;
+          Inc(i); end
+          else begin Content:= Content + ALine[i];
+          Inc(i); end;
         end;
       lsParenStar:
         begin
           HasComment:= True;
-          if (ALine[i] = '*') and (i < N) and (ALine[i + 1] = ')') then begin AState:= lsNormal; Inc(i, 2); end
-          else begin Content:= Content + ALine[i]; Inc(i); end;
+          if (ALine[i] = '*') and (i < N) and (ALine[i + 1] = ')') then begin AState:= lsNormal;
+          Inc(i, 2); end
+          else begin Content:= Content + ALine[i];
+          Inc(i); end;
         end;
     else // lsNormal
       if CharInSet(ALine[i], [' ', #9]) then Inc(i)
@@ -339,19 +343,25 @@ begin
         while i <= N do
         begin
           Code:= Code + ALine[i];
-          if ALine[i] = '''' then begin Inc(i); Break; end;
+          if ALine[i] = '''' then begin Inc(i);
+          Break; end;
           Inc(i);
         end;
       end
-      else begin HasCode:= True; Code:= Code + ALine[i]; Inc(i); end;
+      else begin HasCode:= True;
+      Code:= Code + ALine[i]; Inc(i); end;
     end; // case
   end; // while
 
   AInfo.HasBrace:= Brace;
-  if HasCode then begin AInfo.Kind:= lkCode; AInfo.Text:= Trim(Code); end
-  else if IsDoc then begin AInfo.Kind:= lkDoc; AInfo.Text:= Trim(Content); end
-  else if HasComment then begin AInfo.Kind:= lkComment; AInfo.Text:= Trim(Content); end
-  else begin AInfo.Kind:= lkBlank; AInfo.Text:= ''; end;
+  if HasCode then begin AInfo.Kind:= lkCode;
+  AInfo.Text:= Trim(Code); end
+  else if IsDoc then begin AInfo.Kind:= lkDoc;
+  AInfo.Text:= Trim(Content); end
+  else if HasComment then begin AInfo.Kind:= lkComment;
+  AInfo.Text:= Trim(Content); end
+  else begin AInfo.Kind:= lkBlank;
+  AInfo.Text:= ''; end;
 end; // procedure
 
 // True when AText is `end;` or `end.` -- the only stop lines that arm the
@@ -692,14 +702,16 @@ begin
   i       := Bottom;
   while i >= 0 do
   begin
-    if Infos[i].Kind = lkDoc then begin HitDoc:= True; Break; end;
+    if Infos[i].Kind = lkDoc then begin HitDoc:= True;
+    Break; end;
     if Infos[i].Kind = lkBlank then
     begin
       if SeenText then Break;              // a blank line ENDS the block
       Inc(Blanks);
       if Blanks > BLANK_GAP_MAX then Break; // ... and the gap below is bounded
     end
-    else if Infos[i].Kind <> lkComment then begin StopIdx:= i; Break; end
+    else if Infos[i].Kind <> lkComment then begin StopIdx:= i;
+    Break; end
     else SeenText:= True;
     Top:= i;
     Dec(i);
@@ -723,7 +735,8 @@ begin
   begin
     HugsEnd := (Top = StopIdx + 1);          // no blank between end; and the comment
     GapBelow:= (Bottom < ADeclLine - 2 - Markers);     // a blank between the comment and the declaration
-    if HugsEnd and GapBelow then begin Result.Reason:= hrTrailer; Exit; end;
+    if HugsEnd and GapBelow then begin Result.Reason:= hrTrailer;
+    Exit; end;
   end;
 
   // (3) EMPTY -- before BANNER, which an empty string also satisfies.
@@ -736,13 +749,15 @@ begin
     Joined:= Joined + Infos[i].Text;
     if Infos[i].HasBrace then AnyBrace:= True;
   end;
-  if AllBlank then begin Result.Reason:= hrEmpty; Exit; end;
+  if AllBlank then begin Result.Reason:= hrEmpty;
+  Exit; end;
 
   // (4) NONASCII -- over the RAW lines, so a byte outside the comment markers
   // counts too.
   for i:= Low(Result.RawLines) to High(Result.RawLines) do
     for Ch in Result.RawLines[i] do
-      if Ord(Ch) >= 128 then begin Result.Reason:= hrNonAscii; Exit; end;
+      if Ord(Ch) >= 128 then begin Result.Reason:= hrNonAscii;
+      Exit; end;
 
   // (5) NESTEDBRACE -- a { }-sourced block whose own text carries a brace.
   if AnyBrace and ((Joined.Contains('{')) or (Joined.Contains('}'))) then
@@ -767,7 +782,8 @@ begin
   // mostly rule.
   AllSep:= True;
   for i:= Top to Bottom do
-    if not IsSeparatorOnly(Infos[i].Text) then begin AllSep:= False; Break; end;
+    if not IsSeparatorOnly(Infos[i].Text) then begin AllSep:= False;
+    Break; end;
   if AllSep or ((Bottom = Top) and (SeparatorShare(Infos[Top].Text) >= SEPARATOR_SHARE_MIN)) then
   begin
     Result.Reason:= hrBanner;

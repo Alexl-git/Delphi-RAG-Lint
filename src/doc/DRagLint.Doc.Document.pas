@@ -654,7 +654,8 @@ begin
       ACloseIx:= J;
       Exit((not InFence) and SawFence and (not SawOther));
     end;
-    if Trim(Lines[J]) = '' then begin Inc(J); Continue; end;
+    if Trim(Lines[J]) = '' then begin Inc(J);
+    Continue; end;
     if Pos(AUTO_BEGIN, Lines[J]) > 0 then
     begin
       if InFence then SawOther:= True; // nested/duplicate BEGIN -- ambiguous, do not exempt
@@ -663,7 +664,8 @@ begin
       Inc(J);
       Continue;
     end;
-    if Pos(AUTO_END, Lines[J]) > 0 then begin InFence:= False; Inc(J); Continue; end;
+    if Pos(AUTO_END, Lines[J]) > 0 then begin InFence:= False;
+    Inc(J); Continue; end;
     if not InFence then SawOther:= True; // hand-written prose alongside the fence
     Inc(J);
   end;
@@ -731,7 +733,8 @@ begin
   while I <= High(Lines) do
   begin
     L:= Lines[I];
-    if Trim(L) = '' then begin Inc(I); Continue; end;
+    if Trim(L) = '' then begin Inc(I);
+    Continue; end;
     if (Trim(L) = '<remarks>') and IsFenceOnlyRemarksSpan(Lines, I, CloseIx) then
     begin
       I:= CloseIx + 1; // fence-only remarks wrapper, consumed as a unit

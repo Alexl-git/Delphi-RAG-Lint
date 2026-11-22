@@ -2092,7 +2092,8 @@ begin
   AToType:= '';
   for R in ARules.Rules do
     if (R.Kind = rkConvert) and SameText(BareTypeTail(R.FromType), AClassName) then
-    begin AToType:= BareTypeTail(R.ToType); Exit(True); end;
+    begin AToType:= BareTypeTail(R.ToType);
+    Exit(True); end;
   Result:= False;
 end;
 
@@ -2108,7 +2109,8 @@ var
   ColonAt: Integer;
   NamePart, ClassPart: string;
 begin
-  AName:= ''; AClassName:= '';
+  AName:= '';
+  AClassName:= '';
   if not StartsText(AKeyword, ATrimmedLine) then Exit(False);
   Rest:= Trim(Copy(ATrimmedLine, Length(AKeyword) + 1, MaxInt));
   ColonAt:= Pos(':', Rest);
@@ -2121,7 +2123,8 @@ begin
   while (i <= Length(ClassPart)) and (CharInSet(ClassPart[i], ['A'..'Z', 'a'..'z', '0'..'9', '_'])) do Inc(i);
   ClassPart:= Copy(ClassPart, 1, i - 1);
   if (NamePart = '') or (ClassPart = '') then Exit(False);
-  AName:= NamePart; AClassName:= ClassPart;
+  AName:= NamePart;
+  AClassName:= ClassPart;
   Result:= True;
 end;
 
@@ -2181,7 +2184,8 @@ var
   S     : string;
   NamePos, ColonPos, TypePos: Integer;
 begin
-  ALine:= 0; ACol:= 0; AEndCol:= 0;
+  ALine:= 0;
+  ACol:= 0; AEndCol:= 0;
   if AStartLine < 1 then AStartLine:= 1;
   if AEndLine > APasLines.Count then AEndLine:= APasLines.Count;
   for LineNo:= AStartLine to AEndLine do
@@ -4215,7 +4219,8 @@ begin
   begin
     Cands:= St.FindSymbolsByExactName(AClassName);
     for var S in Cands do
-      if S.Kind = skClass then begin ClassSym:= S; Found:= True; ResolvedStore:= St; Break; end;
+      if S.Kind = skClass then begin ClassSym:= S;
+      Found:= True; ResolvedStore:= St; Break; end;
     if Found then Break;
   end;
 
@@ -4265,7 +4270,8 @@ begin
 
   IsKnownCtor:= False;
   for var Ctor in AKnownCtorNames do
-    if SameText(Name, Ctor) then begin IsKnownCtor:= True; Break; end;
+    if SameText(Name, Ctor) then begin IsKnownCtor:= True;
+    Break; end;
   if not IsKnownCtor then Exit(False); { e.g. '.ClassName' / '.InheritsFrom' -- not a constructor }
 
   ACtorName:= Name;
@@ -4354,7 +4360,8 @@ begin
   begin
     Cands:= St.FindSymbolsByExactName(AToType);
     for var S in Cands do
-      if S.Kind = skClass then begin ClassSym:= S; Found:= True; ResolvedStore:= St; Break; end;
+      if S.Kind = skClass then begin ClassSym:= S;
+      Found:= True; ResolvedStore:= St; Break; end;
     if Found then Break;
   end;
   if not Found then Exit;
@@ -4411,7 +4418,8 @@ begin
   begin
     Cands:= St.FindSymbolsByExactName(AClassName);
     for S in Cands do
-      if S.Kind = skClass then begin ClassSym:= S; Found:= True; ResolvedStore:= St; Break; end;
+      if S.Kind = skClass then begin ClassSym:= S;
+      Found:= True; ResolvedStore:= St; Break; end;
     if Found then Break;
   end;
 
@@ -5127,7 +5135,8 @@ begin
 
       IsConverted:= False;
       for N in AInstanceNames do
-        if SameText(N, Receiver) then begin IsConverted:= True; Break; end;
+        if SameText(N, Receiver) then begin IsConverted:= True;
+        Break; end;
       if not IsConverted then Continue; { e.g. Other.Caption -- Other is not a converted instance }
 
       Site:= Default(TAccessSite);
@@ -8216,16 +8225,19 @@ begin
   ATrees.SetScope(AUnitPas, ABook.Rules);  { bare #convert / .dfm class names resolve in THIS unit }
 
   if not TFile.Exists(AUnitPas) then
-  begin Result.Error:= Format('unit .pas not found: %s', [AUnitPas]); Exit; end;
+  begin Result.Error:= Format('unit .pas not found: %s', [AUnitPas]);
+  Exit; end;
   { 1.42 (MIG-TYPE): no .dfm (ADfmPath '' or missing) is a hard failure only
     when the unit has no identifier #migrate site either -- such a unit runs
     the code surfaces alone, nothing is read from or written to a .dfm }
   var NoDfm: Boolean:= (ADfmPath = '') or not TFile.Exists(ADfmPath);
   var IdSites: Boolean:= NoDfm and UnitHasIdentifierMigrateSites(ATrees, AUnitPas, ABook);
   if NoDfm and not IdSites then
-  begin Result.Error:= Format('.dfm not found: %s', [ADfmPath]); Exit; end;
+  begin Result.Error:= Format('.dfm not found: %s', [ADfmPath]);
+  Exit; end;
   if Length(Stores) = 0 then
-  begin Result.Error:= 'no symbol store available (empty AStores)'; Exit; end;
+  begin Result.Error:= 'no symbol store available (empty AStores)';
+  Exit; end;
 
   DfmText:= if NoDfm then '' else ReadUnitText(ADfmPath);
   Instances:= FindConvertInstances(DfmText, ABook.Rules, AOnly);

@@ -665,7 +665,8 @@ begin
   if Trim(ABlockText) = '' then Exit;
   Src:= TEncoding.UTF8.GetBytes(ABlockText);
   if (Length(Src) > 0) and (Src[0] = $FF) then Exit; // binary DFM unsupported
-  Parser:= nil; Tree:= nil;
+  Parser:= nil;
+  Tree:= nil;
   try
     Parser:= TTSParser.Create;
     Parser.Language:= tree_sitter_dfm;
@@ -674,7 +675,8 @@ begin
       var Remaining: Integer;
       begin
         Remaining:= Length(Src) - Integer(AByteIndex);
-        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
+        if Remaining <= 0 then begin ABytesRead:= 0;
+        SetLength(Result, 0); Exit; end;
         SetLength(Result, Remaining);
         Move(Src[AByteIndex], Result[0], Remaining);
         ABytesRead:= Remaining;
@@ -686,7 +688,8 @@ begin
     for i:= 0 to Root.NamedChildCount - 1 do
     begin
       ObjNode:= Root.NamedChild(i);
-      if ObjNode.NodeType = 'object' then begin Found:= True; Break; end;
+      if ObjNode.NodeType = 'object' then begin Found:= True;
+      Break; end;
     end;
     if not Found then Exit;
     ARoot:= TReemitDfmNode.Create;
@@ -828,7 +831,8 @@ begin
     for j:= 0 to Cur.Children.Count - 1 do
       if SameText(Cur.Children[j].Name, Segs[i]) and
          (Cur.Children[j].Kind = dnkSubObject) then
-      begin Cur:= Cur.Children[j]; Found:= True; Break; end;
+      begin Cur:= Cur.Children[j];
+      Found:= True; Break; end;
     if not Found then
     begin
       Child:= TReemitDfmNode.Create;
@@ -849,7 +853,8 @@ begin
   Child:= nil;
   for j:= 0 to Cur.Children.Count - 1 do
     if SameText(Cur.Children[j].Name, Segs[High(Segs)]) then
-    begin Child:= Cur.Children[j]; Found:= True; Break; end;
+    begin Child:= Cur.Children[j];
+    Found:= True; Break; end;
   if not Found then
   begin
     Child:= TReemitDfmNode.Create;
@@ -1202,10 +1207,12 @@ var
   function FindLinkFor(const AFromPath: string; out AToPath: string): Boolean;
   var Q: TConversionRule;
   begin
-    Result:= False; AToPath:= '';
+    Result:= False;
+    AToPath:= '';
     for Q in ARules.Rules do
       if (Q.Kind = rkLink) and (Q.GlyphExpr = '') and SameText(Q.FromPath, AFromPath) then
-      begin AToPath:= Q.ToPath; Exit(True); end;
+      begin AToPath:= Q.ToPath;
+      Exit(True); end;
   end;
 
   { TYPE-IDENTITY CARRY (converter team's rule, 2026-09-16, taken verbatim):
@@ -2248,11 +2255,13 @@ var
       if Carried then Exit;
     end;
     if IsIgnored(AFromPath) then
-    begin Ignored:= Ignored + [AFromPath]; Exit; end;
+    begin Ignored:= Ignored + [AFromPath];
+    Exit; end;
     if FindLinkFor(AFromPath, ToPath) then
     begin
       if Trim(ToPath) = '???' then
-      begin Result.Report.Stubs:= Result.Report.Stubs + [Format('unfilled ToPath (???) for %s', [AFromPath])]; Exit; end;
+      begin Result.Report.Stubs:= Result.Report.Stubs + [Format('unfilled ToPath (???) for %s', [AFromPath])];
+      Exit; end;
       if ALeaf.Kind = dnkCollection then
       begin
         // Collection relocate-keep-items: move the whole collection verbatim.
@@ -2513,7 +2522,8 @@ var
   Redeclared  : TArray<string>;
 begin
   Result:= Default(TReemitResult);
-  FRoot := nil; TRoot:= nil;
+  FRoot := nil;
+  TRoot:= nil;
   Redeclared  := nil;
   Created     := nil;
   Dropped     := nil;
@@ -2546,14 +2556,17 @@ begin
     // BareTypeTail) so a qualified #convert header still matches THIS block's
     // root class instead of silently falling through to the "first #convert"
     // fallback below.
-    HaveConvert:= False; ToType:= '';
+    HaveConvert:= False;
+    ToType:= '';
     for R in ARules.Rules do
       if (R.Kind = rkConvert) and SameText(BareTypeTail(R.FromType), FRoot.ClassName_) then
-      begin HaveConvert:= True; ToType:= R.ToType; Break; end;
+      begin HaveConvert:= True;
+      ToType:= R.ToType; Break; end;
     if not HaveConvert then
       for R in ARules.Rules do
         if R.Kind = rkConvert then
-        begin HaveConvert:= True; ToType:= R.ToType; Break; end;
+        begin HaveConvert:= True;
+        ToType:= R.ToType; Break; end;
     if not HaveConvert then
     begin
       Result.Ok:= False;

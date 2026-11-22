@@ -480,9 +480,12 @@ begin
       { Engine-owned facts never belong in a hand-written concept body. The
         fence is checked before anything else so a topic that happens to sit
         beside a facts block cannot swallow it. }
-      if L.Contains(AUTO_BEGIN) then begin InAuto:= True ; Keep(Raw); Continue; end;
-      if L.Contains(AUTO_END) then begin InAuto:= False; Keep(Raw); Continue; end;
-      if InAuto then begin Keep(Raw); Continue; end;
+      if L.Contains(AUTO_BEGIN) then begin InAuto:= True ;
+      Keep(Raw); Continue; end;
+      if L.Contains(AUTO_END) then begin InAuto:= False;
+      Keep(Raw); Continue; end;
+      if InAuto then begin Keep(Raw);
+      Continue; end;
 
       Low:= LowerCase(L);
 
@@ -499,7 +502,8 @@ begin
         end;
       end;
 
-      if not Have then begin Keep(Raw); Continue; end;  { not ours }
+      if not Have then begin Keep(Raw);
+      Continue; end;  { not ours }
 
       if StartsText('Aliases:', L) then
       begin
@@ -522,7 +526,8 @@ begin
         keeps the body readable without needing the author to end the block
         explicitly. A prose line that merely MENTIONS a tag is kept -- see
         IsMarkupOnly. }
-      if IsMarkupOnly(L) then begin Keep(Raw); Continue; end;
+      if IsMarkupOnly(L) then begin Keep(Raw);
+      Continue; end;
 
       { Lenient fallback (plan section 3): untagged lines after the header join
         the body even when the author never wrote `Body:`. }

@@ -1111,7 +1111,8 @@ begin
           R.UnitName:= Trim(Copy(Arg, 1, ArrPos - 1));
           Rhs       := Trim(Copy(Arg, ArrPos + Length(ARROW_MIGRATE), MaxInt));
         end
-        else begin R.UnitName:= Trim(Arg); Rhs:= ''; end;
+        else begin R.UnitName:= Trim(Arg);
+        Rhs:= ''; end;
         // Rhs is a pure comma list of New units; fold Head + rest into UnitsAdd.
         SplitHeadAndUnits(Rhs, Head, Units);
         if Head <> '' then Insert(Head, Units, 0);
@@ -1151,7 +1152,8 @@ begin
           Lhs:= Trim(Copy(Arg, 1, ArrPos - 1));
           Rhs:= Trim(Copy(Arg, ArrPos + Length(ARROW_MIGRATE), MaxInt));
         end
-        else begin Lhs:= Trim(Arg); Rhs:= ''; end;
+        else begin Lhs:= Trim(Arg);
+        Rhs:= ''; end;
         SplitMigrateLhs(Lhs, R.Scope, R.Old);
         SplitHeadAndUnits(Rhs, Head, Units);
         R.New     := Head;
@@ -1168,7 +1170,8 @@ begin
           R.FromType:= Trim(Copy(Arg, 1, ArrPos - 1));
           Rhs       := Trim(Copy(Arg, ArrPos + Length(ARROW_MIGRATE), MaxInt));
         end
-        else begin R.FromType:= Trim(Arg); Rhs:= ''; end;
+        else begin R.FromType:= Trim(Arg);
+        Rhs:= ''; end;
         SplitHeadAndUnits(Rhs, Head, Units);
         R.ToType  := Head;
         R.UnitsAdd:= Units;

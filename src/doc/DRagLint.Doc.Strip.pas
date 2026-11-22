@@ -591,7 +591,8 @@ begin
     begin
       if IsDocLine(Lines[I]) then
       begin
-        Lo:= I; Hi:= I;
+        Lo:= I;
+        Hi:= I;
         while (Hi + 1 < Lines.Count) and IsDocLine(Lines[Hi + 1]) do Inc(Hi);
         StripRegion(Lines, Lo, Hi, Deleted, Result.TagsRemoved, Result.BlocksRemoved);
         I:= Hi + 1;
@@ -666,13 +667,15 @@ begin
     // code that deletes lines from a user's source. Both branches are pinned by
     // tests\autodoc\run_doc_p3_strip_wrongsymbol.ps1.
     Found:= False;
-    RegionLo:= 0; RegionHi:= 0;
+    RegionLo:= 0;
+    RegionHi:= 0;
     I:= 0;
     while I < Lines.Count do
     begin
       if IsDocLine(Lines[I]) then
       begin
-        Lo:= I; Hi:= I;
+        Lo:= I;
+        Hi:= I;
         while (Hi + 1 < Lines.Count) and IsDocLine(Lines[Hi + 1]) do Inc(Hi);
         if Length(ASymStartLines) > 0 then
           Fits:= DocRegionFitsDecl(Hi + 1, ADeclLine, DOC_ALLOW_GAP, ASymStartLines)
@@ -681,7 +684,8 @@ begin
                  and ((Hi + 1 = ADeclLine - 1) or IsBlankSourceLine(Lines, ADeclLine - 1));
         if Fits then
         begin
-          RegionLo:= Lo; RegionHi:= Hi; Found:= True;
+          RegionLo:= Lo;
+          RegionHi:= Hi; Found:= True;
         end;
         I:= Hi + 1;
       end

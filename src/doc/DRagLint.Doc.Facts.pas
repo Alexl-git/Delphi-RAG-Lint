@@ -2112,7 +2112,8 @@ begin
       Inc(I);
       Continue;
     end;
-    if ALine[I] = '{' then begin Inc(AState.InBrace); Inc(I); Continue; end;
+    if ALine[I] = '{' then begin Inc(AState.InBrace);
+    Inc(I); Continue; end;
     if (ALine[I] = '(') and (I < N) and (ALine[I + 1] = '*') then
     begin
       AState.InStarParen:= True;
@@ -2129,7 +2130,8 @@ begin
         if ALine[I] = '''' then
         begin
           if (I < N) and (ALine[I + 1] = '''') then Inc(I, 2) // escaped quote
-          else begin Inc(I); Break; end;
+          else begin Inc(I);
+          Break; end;
         end
         else Inc(I);
       end;
@@ -2299,21 +2301,25 @@ begin
     case AScan.OnStage of
       ON_STAGE_VAR: { awaiting the handler VARIABLE }
         begin
-          if not IsIdentStart(ALine[AIdx]) then begin AScan.OnStage:= ON_STAGE_NONE; Continue; end;
+          if not IsIdentStart(ALine[AIdx]) then begin AScan.OnStage:= ON_STAGE_NONE;
+          Continue; end;
           C:= ReadIdentChain(ALine, AIdx);
-          if Length(C) <> 1 then begin AScan.OnStage:= ON_STAGE_NONE; Continue; end;
+          if Length(C) <> 1 then begin AScan.OnStage:= ON_STAGE_NONE;
+          Continue; end;
           AScan.OnVar  := C[0];
           AScan.OnStage:= ON_STAGE_COLON;
         end;
       ON_STAGE_COLON: { awaiting the ':' -- `on Exception do` binds nothing }
         begin
-          if ALine[AIdx] <> ':' then begin AScan.OnStage:= ON_STAGE_NONE; Continue; end;
+          if ALine[AIdx] <> ':' then begin AScan.OnStage:= ON_STAGE_NONE;
+          Continue; end;
           Inc(AIdx);
           AScan.OnStage:= ON_STAGE_TYPE;
         end;
     else { awaiting the TYPE (last segment of a dotted one) }
       begin
-        if not IsIdentStart(ALine[AIdx]) then begin AScan.OnStage:= ON_STAGE_NONE; Continue; end;
+        if not IsIdentStart(ALine[AIdx]) then begin AScan.OnStage:= ON_STAGE_NONE;
+        Continue; end;
         C:= ReadIdentChain(ALine, AIdx);
         AScan.OnStage:= ON_STAGE_NONE;
         if Length(C) = 0 then Continue;
@@ -2340,7 +2346,8 @@ var
 begin
   if AScan.OnStage = ON_STAGE_NONE then Exit;
   Dec(AScan.OnBudget);
-  if AScan.OnBudget < 0 then begin AScan.OnStage:= ON_STAGE_NONE; Exit; end;
+  if AScan.OnBudget < 0 then begin AScan.OnStage:= ON_STAGE_NONE;
+  Exit; end;
   Idx:= 1;
   AdvanceHandlerBinding(ALine, Idx, AScan);
 end;
@@ -2453,7 +2460,8 @@ begin
         if ALine[I] = '''' then
         begin
           if (I < N) and (ALine[I + 1] = '''') then Inc(I, 2)
-          else begin Inc(I); Break; end;
+          else begin Inc(I);
+          Break; end;
         end
         else Inc(I);
       end;
@@ -2541,10 +2549,13 @@ begin
       if ALine[AIdx] = '''' then
       begin
         if (AIdx < N) and (ALine[AIdx + 1] = '''') then
-        begin Sb.Append(''''); Inc(AIdx, 2); end
-        else begin Inc(AIdx); Break; end;
+        begin Sb.Append('''');
+        Inc(AIdx, 2); end
+        else begin Inc(AIdx);
+        Break; end;
       end
-      else begin Sb.Append(ALine[AIdx]); Inc(AIdx); end;
+      else begin Sb.Append(ALine[AIdx]);
+      Inc(AIdx); end;
     end;
     Result := Sb.ToString;
   finally
@@ -3583,7 +3594,8 @@ begin
     begin
       if CharInSet(Grp[i], ['(', '[']) then Inc(Depth)
       else if CharInSet(Grp[i], [')', ']']) then Dec(Depth)
-      else if (Grp[i] = ':') and (Depth <= 0) then begin ColonAt:= i; Break; end;
+      else if (Grp[i] = ':') and (Depth <= 0) then begin ColonAt:= i;
+      Break; end;
     end;
     if ColonAt > 0 then
     begin
@@ -3653,9 +3665,11 @@ begin
   HasUpper:= False;
   HasLower:= False;
   for i:= 2 to Length(AWord) do
-    if CharInSet(AWord[i], ['A'..'Z']) then begin HasUpper:= True; Break; end;
+    if CharInSet(AWord[i], ['A'..'Z']) then begin HasUpper:= True;
+    Break; end;
   for i:= 1 to Length(AWord) do
-    if CharInSet(AWord[i], ['a'..'z']) then begin HasLower:= True; Break; end;
+    if CharInSet(AWord[i], ['a'..'z']) then begin HasLower:= True;
+    Break; end;
   Result:= HasUpper and HasLower;
 end;
 
@@ -3687,7 +3701,8 @@ begin
   N:= Length(Sent);
   while i <= N do
   begin
-    if not IsIdentStart(Sent[i]) then begin Inc(i); Continue; end;
+    if not IsIdentStart(Sent[i]) then begin Inc(i);
+    Continue; end;
     J:= i;
     while (J <= N) and IsIdentPart(Sent[J]) do Inc(J);
     Word:= Copy(Sent, i, J - i);
