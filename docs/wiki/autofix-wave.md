@@ -17,3 +17,11 @@ The Structure form's right-click Fix it / Fix all in unit run the same fixers; s
 
 ## What it needs
 Nothing for the file-level fixers; `--db <index.sqlite>` for the store-backed ones.
+
+## When a fix is not offered
+A fixer that cannot prove its output compiles declines: the finding stays and no edit is written. Two rules that used to write code dcc 37 rejects now decline these shapes (1.52.3):
+
+- `ifthen-to-if-expression` keeps `if C then X := A else X := B` as written when an arm is an array or set constructor such as `Rows + [NewRow(..)]` (E2010, or internal error F2084 on a long one), and, inside a generic routine, when an arm is a method call and the target is not a built-in type (`Acc := if C then AAnalysis.Boundary else AAnalysis.Bottom` is E2010 there). An `Integer` target in the same routine is still rewritten.
+- `nonminimal-bool` keeps `not (A = B)` when an operand is a record, or an alias of one: a record's `=` and `<>` exist only as declared operators, and `TTSNode` declares `Equal` without `NotEqual` (E2015). It is rewritten only when at least one operand is shown to have built-in equality: a literal, or a local of a scalar, string, class, interface or enum type, or an enum value. With `--db` the fixer reads the type from the index; without it, from the file's own declarations.
+
+`nonminimal-bool` also no longer writes a doubled pair: `(not (I = 0)) and B` becomes `(I <> 0) and B`, not `((I <> 0)) and B`.
