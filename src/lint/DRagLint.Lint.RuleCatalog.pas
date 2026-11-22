@@ -1065,8 +1065,7 @@ var
   Id    : string;
   Labels: TComplianceTable;
 begin
-  if ARulesDir <> '' then Dir:= ARulesDir
-  else Dir:= TPath.Combine(TPath.GetDirectoryName(ParamStr(0)), 'rules');
+  Dir:= if ARulesDir <> '' then ARulesDir else TPath.Combine(TPath.GetDirectoryName(ParamStr(0)), 'rules');
   Labels:= nil;
   if AWithLabels then Labels:= TComplianceTable.Shared(ARulesDir, ComplianceError);
 
@@ -1100,13 +1099,9 @@ begin
           if (Obj.GetValue('category') <> nil) and (Obj.GetValue('category').Value <> '') then
             Sc.Category:= Obj.GetValue('category').Value  { optional sidecar key; lets a rule file name its own category (e.g. modernize, policy) }
           else Sc.Category:= ScmCategory(Id);
-          if Obj.GetValue('severity') <> nil then Sc.DefaultSeverity:= Obj.GetValue('severity').Value
-          else Sc.DefaultSeverity:= 'warning';
-          if Obj.GetValue('message') <> nil then Sc.Title:= Obj.GetValue('message').Value
-          else Sc.Title:= Id;
-          if (Obj.GetValue('enabled') <> nil) then
-            Sc.DefaultEnabled:= not SameText(Obj.GetValue('enabled').Value, 'false')
-          else Sc.DefaultEnabled:= True;
+          Sc.DefaultSeverity:= if Obj.GetValue('severity') <> nil then Obj.GetValue('severity').Value else 'warning';
+          Sc.Title:= if Obj.GetValue('message') <> nil then Obj.GetValue('message').Value else Id;
+          Sc.DefaultEnabled:= if (Obj.GetValue('enabled') <> nil) then not SameText(Obj.GetValue('enabled').Value, 'false') else True;
           { An .scm sidecar that forgets "enabled": false is still OFF if the
             engine's shared list says so. nil-comparison is exactly that case:
             its JSON says nothing, so `rules --json` advertised

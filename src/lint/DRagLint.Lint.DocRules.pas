@@ -602,7 +602,7 @@ var
 
   function Tick: Int64;
   begin
-    if Prof then Result:= TStopwatch.GetTimeStamp else Result:= 0;
+    Result:= if Prof then TStopwatch.GetTimeStamp else 0;
   end;
 
   { True when ADrifts carries a callee-fact kind AND the facts were read from a

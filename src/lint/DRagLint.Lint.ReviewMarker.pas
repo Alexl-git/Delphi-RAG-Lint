@@ -1248,7 +1248,7 @@ end;
 
 class function TReviewMarkers.RuleToken(const ARuleId, AHash: string): string;
 begin
-  if AHash = '' then Result:= ARuleId else Result:= ARuleId + '@' + AHash;
+  Result:= if AHash = '' then ARuleId else ARuleId + '@' + AHash;
 end;
 
 class function TReviewMarkers.FormatMarker(const ARuleId, ALineText, AReason: string): string;
@@ -1378,8 +1378,7 @@ begin
     born stale. The checker hashes a window (see HashWindow); it passes that
     value here rather than letting this function re-derive a single-line hash it
     has no way to reproduce -- InsertInto only ever receives one line. }
-  if AHashOverride <> '' then Hash:= AHashOverride
-  else Hash:= HashLine(ALineText);
+  Hash:= if AHashOverride <> '' then AHashOverride else HashLine(ALineText);
   Existing:= Parse(ALineText);
 
   { Idempotent: a rule this line already records AND whose hash still matches the

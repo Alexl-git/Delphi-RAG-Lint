@@ -177,7 +177,7 @@ begin
       BaseKey:= LowerCase(F.RuleId) + '|' + NormPath(F.FilePath) + '|' + LineTxt;
       if not Counts.TryGetValue(BaseKey, N) then N:= 0;
       Counts.AddOrSetValue(BaseKey, N + 1);
-      if N = 0 then Ord:= '' else Ord:= #0 + IntToStr(N);
+      Ord:= if N = 0 then '' else #0 + IntToStr(N);
       Raw:= BaseKey + Ord;
       Result:= Result + [THashSHA2.GetHashString(Raw)];
     end;

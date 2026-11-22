@@ -392,10 +392,7 @@ begin
   NamObj.AddPair('min_identifier_len', TJSONNumber.Create(N.MinIdentifierLen));
 
   // short_identifier_check is a JSON string "true"/"false", not a bool
-  if N.ShortIdentifierCheck then
-    S:= 'true'
-  else
-    S:= 'false';
+  S:= if N.ShortIdentifierCheck then 'true' else 'false';
   NamObj.AddPair('short_identifier_check', TJSONString.Create(S));
 
   NamObj.AddPair('hungarian_prefixes', ArrayToJsonArr(N.HungarianPrefixes));

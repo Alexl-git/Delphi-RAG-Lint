@@ -688,7 +688,7 @@ var
     DcuLoaded := True;
     { Platform comes from the library DB name: ...\library-Win32.sqlite -> Win32. }
     Plat := ChangeFileExt(ExtractFileName(ALibDbPath), '');
-    if StartsText('library-', Plat) then Plat := Copy(Plat, Length('library-') + 1, MaxInt) else Plat := '';
+    Plat := if StartsText('library-', Plat) then Copy(Plat, Length('library-') + 1, MaxInt) else '';
     if Plat = '' then Exit;
     Resolver := ResolveTargetStudio(AProjectFile).OpenResolver;
     try

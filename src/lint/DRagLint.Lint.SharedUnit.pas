@@ -466,10 +466,7 @@ begin
                 LineStop - (MarkPos + Length(SHARED_MARK)) + 1);
     Body:= SplitCommentTail(Rest, Tail);
 
-    if Trim(Body) = '' then
-      Body:= ' ' + Proj
-    else
-      Body:= TrimRight(Body) + ', ' + Proj;
+    Body:= if Trim(Body) = '' then ' ' + Proj else TrimRight(Body) + ', ' + Proj;
     if Tail <> '' then
       Body:= Body + ' ' + TrimLeft(Tail);
 

@@ -2189,21 +2189,18 @@ var
   Pattern  : string ;
 begin
   if Length(AArgs) < 1 then Exit(True);
-  if not AArgs[0].IsCapture then Op:= AArgs[0].StringValue
-  else Op:= '';
+  Op:= if not AArgs[0].IsCapture then AArgs[0].StringValue else '';
 
   if (Op = 'eq?') or (Op = 'not-eq?') then
   begin
     // (#eq? @cap "literal")  or  (#eq? @cap1 @cap2)
     // Resolve each subsequent arg to a string and compare all-equal.
     if Length(AArgs) < 3 then Exit(True);
-    if AArgs[1].IsCapture then FirstText:= ResolveCaptureText(AMatch, AArgs[1].CaptureIndex, ASource)
-    else FirstText:= AArgs[1].StringValue;
+    FirstText:= if AArgs[1].IsCapture then ResolveCaptureText(AMatch, AArgs[1].CaptureIndex, ASource) else AArgs[1].StringValue;
     Result:= True;
     for i:= 2 to Length(AArgs) - 1 do
     begin
-      if AArgs[i].IsCapture then Other:= ResolveCaptureText(AMatch, AArgs[i].CaptureIndex, ASource)
-      else Other:= AArgs[i].StringValue;
+      Other:= if AArgs[i].IsCapture then ResolveCaptureText(AMatch, AArgs[i].CaptureIndex, ASource) else AArgs[i].StringValue;
       if FirstText <> Other then
       begin
         Result:= False;
@@ -2366,7 +2363,7 @@ begin
     drop the sample, and a per-rule table that silently omits its cheapest-
     looking rules is worse than none. }
   Profiled:= RuleProfileArmed;
-  if Profiled then ProfT0:= TStopwatch.GetTimeStamp else ProfT0:= 0;
+  ProfT0:= if Profiled then TStopwatch.GetTimeStamp else 0;
   try
     FoundList:= TList<TLintFinding>.Create;
     Cursor:= TTSQueryCursor.Create;

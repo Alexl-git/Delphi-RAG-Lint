@@ -815,8 +815,7 @@ var
 begin
   inherited Create;
   FLanguage:= tree_sitter_delphi13;
-  if ARulesDir = '' then ResolvedDir:= TPath.Combine( TPath.GetDirectoryName(ParamStr(0)), 'rules')
-  else ResolvedDir:= ARulesDir;
+  ResolvedDir:= if ARulesDir = '' then TPath.Combine( TPath.GetDirectoryName(ParamStr(0)), 'rules') else ARulesDir;
   FQueryRules:= TQueryRuleLoader.LoadAll(FLanguage, ResolvedDir);
 end;
 
@@ -963,8 +962,7 @@ begin
     Inc(GLintParseCount);
     var TP0: Int64:= TStopwatch.GetTimeStamp;
     Parser:= TTSParser.Create;
-    if IsDfm then Parser.Language:= tree_sitter_dfm
-    else Parser.Language:= FLanguage;
+    Parser.Language:= if IsDfm then tree_sitter_dfm else FLanguage;
     Tree:= Parser.Parse(
       function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes var Remaining: Integer; begin Remaining:= Length(Source)
         - Integer(AByteIndex); if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end; SetLength(Result, Remaining); Move(Source[AByteIndex], Result[0],
@@ -1278,8 +1276,7 @@ var
   Patterns: TArray<string>      ;
   Pattern : string              ;
 begin
-  if ARecursive then Mode:= TSearchOption.soAllDirectories
-  else Mode:= TSearchOption.soTopDirectoryOnly;
+  Mode:= if ARecursive then TSearchOption.soAllDirectories else TSearchOption.soTopDirectoryOnly;
   Patterns:= ['*.pas', '*.dpr', '*.dpk'];
   All:= TList<TLintFinding>.Create;
   try

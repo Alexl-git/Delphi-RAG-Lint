@@ -1201,10 +1201,8 @@ begin
   if AObj.GetValue('exceptions') is TJSONObject then
   begin
     var ExcObj: TJSONObject:= AObj.GetValue('exceptions') as TJSONObject;
-    if ExcObj.GetValue('unit') <> nil then ExceptionsUnit:= ExcObj.GetValue('unit').Value
-    else ExceptionsUnit:= DEFAULT_EXCEPTIONS_UNIT;
-    if ExcObj.GetValue('root') <> nil then ExceptionsRoot:= ExcObj.GetValue('root').Value
-    else ExceptionsRoot:= DEFAULT_EXCEPTIONS_ROOT;
+    ExceptionsUnit:= if ExcObj.GetValue('unit') <> nil then ExcObj.GetValue('unit').Value else DEFAULT_EXCEPTIONS_UNIT;
+    ExceptionsRoot:= if ExcObj.GetValue('root') <> nil then ExcObj.GetValue('root').Value else DEFAULT_EXCEPTIONS_ROOT;
   end;
   ApplyV152Keys(AObj);
 end;
