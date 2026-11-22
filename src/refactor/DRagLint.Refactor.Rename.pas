@@ -1714,7 +1714,7 @@ begin
   Syms:= AStore.FindSymbolsByQualifiedName(AQName);
   if Length(Syms) = 0 then Exit;
   Owner:= AStore.GetSymbolById(Syms[0].ParentId);
-  if not (Owner.Kind in [skClass, skForm]) then Exit;
+  if (Owner.Kind not in [skClass, skForm]) then Exit;
   ShortName:= LastDotSegment(AQName);
   Seen:= TDictionary<string, Boolean>.Create;
   try
@@ -1723,7 +1723,7 @@ begin
     for var ClsName: string in [Owner.Name] + AStore.FindDescendantNames(Owner.Name) do
       for Cand in AStore.FindSymbolsByExactName(ClsName) do
       begin
-        if not (Cand.Kind in [skClass, skForm]) then Continue;
+        if (Cand.Kind not in [skClass, skForm]) then Continue;
         if (Cand.Id <> Owner.Id) and not ClassDescendsFrom(AStore, Cand.Id, Owner.Id) then Continue;
         DfmPath:= ChangeFileExt(AStore.GetFilePath(Cand.FileId), '.dfm');
         if Seen.ContainsKey(UpperCase(DfmPath)) or not FileExists(DfmPath) then Continue;
