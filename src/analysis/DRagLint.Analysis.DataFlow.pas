@@ -355,7 +355,8 @@ begin
   Inc(GBuckets[K].TransferTicks, ATransferTicks);
   Inc(GSolves);
   Inc(GBlocks, ABlocks);
-  Inc(GVisits, AVisits); Inc(GReenq, AReenqueues);
+  Inc(GVisits, AVisits);
+  Inc(GReenq, AReenqueues);
   Inc(GJoins, AJoins);
   Inc(GTransfers, ATransfers);
   Inc(GComparisons, AComparisons);
@@ -389,7 +390,8 @@ begin
   T0 := TStopwatch.GetTimeStamp;
   LocalVisits := 0;
   LocalJoins := 0;
-  LocalReenq := 0; LocalTransferTicks := 0;
+  LocalReenq := 0;
+  LocalTransferTicks := 0;
   LocalTransfers := 0;
   LocalEquals := 0;
   { Interface-to-object cast: the lattices are all TInterfacedObject descendants,

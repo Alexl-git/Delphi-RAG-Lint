@@ -919,7 +919,8 @@ constructor TBuilderState.Create(ACfg: TCfg);
 begin
   inherited Create;
   Cfg := ACfg;
-  Loops := TStack<TLoopCtx>.Create; WithDepth := 0;
+  Loops := TStack<TLoopCtx>.Create;
+  WithDepth := 0;
   Finallys := TList<TTSNode>.Create;
   CopyDepth := 0;
   DivertBlocks := TDictionary<Integer, Boolean>.Create;
@@ -1172,7 +1173,8 @@ begin
       Cfg.Blocks[HdrIdx].AddSucc(FollowIdx);
     Ctx.ContinueIdx := HdrIdx;
     Ctx.BreakIdx := FollowIdx;
-    Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
+    Ctx.FinallyDepth := Finallys.Count;
+    Loops.Push(Ctx);
     TestIdx := EmitStmt(BodyIdx, ANode.ChildByField('body'));
     if TestIdx >= 0 then Cfg.Blocks[TestIdx].AddSucc(HdrIdx); { back-edge }
     Loops.Pop;
@@ -1221,7 +1223,8 @@ begin
       Cfg.Blocks[ACur].AddSucc(HdrIdx);
     Ctx.ContinueIdx := HdrIdx;
     Ctx.BreakIdx := FollowIdx;
-    Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
+    Ctx.FinallyDepth := Finallys.Count;
+    Loops.Push(Ctx);
     TestIdx := EmitStmt(BodyIdx, ANode.ChildByField('body'));
     if TestIdx >= 0 then Cfg.Blocks[TestIdx].AddSucc(HdrIdx);
     Loops.Pop;
@@ -1255,7 +1258,8 @@ begin
     Cfg.Blocks[HdrIdx].AddSucc(FollowIdx);
     Ctx.ContinueIdx := HdrIdx;
     Ctx.BreakIdx := FollowIdx;
-    Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
+    Ctx.FinallyDepth := Finallys.Count;
+    Loops.Push(Ctx);
     TestIdx := EmitStmt(BodyIdx, ANode.ChildByField('body'));
     if TestIdx >= 0 then Cfg.Blocks[TestIdx].AddSucc(HdrIdx);
     Loops.Pop;
@@ -1276,7 +1280,8 @@ begin
       Cfg.Blocks[TestIdx].AddSucc(FollowIdx); { loop exits }
     Ctx.ContinueIdx := TestIdx;
     Ctx.BreakIdx := FollowIdx;
-    Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
+    Ctx.FinallyDepth := Finallys.Count;
+    Loops.Push(Ctx);
     BodyAfter := EmitStmt(BodyIdx, ANode.ChildByField('body'));
     if BodyAfter >= 0 then Cfg.Blocks[BodyAfter].AddSucc(TestIdx);
     Loops.Pop;

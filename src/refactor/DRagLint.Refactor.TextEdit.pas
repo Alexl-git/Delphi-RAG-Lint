@@ -1825,7 +1825,8 @@ begin
       E.Kind:= tekDeleteLines;
       E.Line:= Sym.ImplStartLine;
       E.EndLine:= Sym.ImplEndLine;
-      E.Col:= 0; E.Text:= '';
+      E.Col:= 0;
+      E.Text:= '';
       Edits.Add(E);
     end;
     if (Sym.StartLine > 0) and (Sym.EndLine >= Sym.StartLine) then
@@ -1834,7 +1835,8 @@ begin
       E.Kind:= tekDeleteLines;
       E.Line:= Sym.StartLine;
       E.EndLine:= Sym.EndLine;
-      E.Col:= 0; E.Text:= '';
+      E.Col:= 0;
+      E.Text:= '';
       Edits.Add(E);
     end;
     Result:= Edits.ToArray;

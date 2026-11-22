@@ -1646,7 +1646,8 @@ begin
       RV := Default(TRoutineVar);
       RV.Name := 'result';
       RV.Display := 'Result';
-      RV.Kind := vkResult; RV.TypeText := Trim(NodeStr(Ret, ASrc));
+      RV.Kind := vkResult;
+      RV.TypeText := Trim(NodeStr(Ret, ASrc));
       RV.DeclLine := Integer(Header.StartPoint.Row) + 1;
       RV.DeclCol  := Integer(Header.StartPoint.Column) + 1;
       Tbl.Add(RV);
@@ -2599,7 +2600,8 @@ end;
 constructor TEscape.Create(AVars: TRoutineVarTable; const ASrc: TBytes; AOwns: TCallArgOwns);
 begin inherited Create;
 FVars := AVars;
-FSrc := ASrc; FOwns := AOwns; end;
+FSrc := ASrc;
+FOwns := AOwns; end;
 
 function TEscape.Direction: TFlowDir; begin Result := fdForward; end;
 

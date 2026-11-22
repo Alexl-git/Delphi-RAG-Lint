@@ -1373,7 +1373,8 @@ begin
   finally
     Defs.Free;
     Inputs.Free;
-    Internals.Free; Outputs.Free;
+    Internals.Free;
+    Outputs.Free;
   end;
 end;
 
