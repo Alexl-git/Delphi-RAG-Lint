@@ -397,7 +397,7 @@ begin
   SetLength(AIn, N);
   SetLength(AOut, N); SetLength(InQueue, N);
   Fwd := AAnalysis.Direction = fdForward;
-  if Fwd then Boundary := ACfg.EntryIdx else Boundary := ACfg.ExitIdx;
+  Boundary := if Fwd then ACfg.EntryIdx else ACfg.ExitIdx;
   for B := 0 to N - 1 do begin AIn[B] := AAnalysis.Bottom;
   AOut[B] := AAnalysis.Bottom; end;
 
