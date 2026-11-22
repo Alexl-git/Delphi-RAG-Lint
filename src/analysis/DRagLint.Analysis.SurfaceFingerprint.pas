@@ -99,7 +99,7 @@ type
 /// <seealso cref="DRagLint.Analysis.SurfaceFingerprint.InterfaceUsesLine"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function SurfaceCanonical(const pSymbols: TArray<TSymbol>;
+function SurfaceCanonical(const pSymbols: TArray<TSymbol>;  // dl:ok unused-public-symbol@fafb -- public so the test project tests\SurfaceFingerprintTests.dpr can call it directly (unit test surface); the index covers drag-lint.dproj only, not the test projects -- INT-W2a 2026-11-22
                           const pUses: TArray<TUnitUse>;
                           const pInlineBodies: TArray<TInlineBody>): string;
 

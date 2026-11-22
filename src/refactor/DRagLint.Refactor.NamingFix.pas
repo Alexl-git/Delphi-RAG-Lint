@@ -29,7 +29,7 @@ type
 /// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function StyleFromConfigText(const AConfigCase: string): TNameStyle;
+function StyleFromConfigText(const AConfigCase: string): TNameStyle;  // dl:ok unused-public-symbol@7d1f -- public so the test project tests\autotest\fixtures\namesynth\NameSynthHarness.dpr can call it directly (unit test surface); the index covers drag-lint.dproj only, not the test projects -- INT-W2a 2026-11-22
 
 /// <summary>Returns AOldName re-cased to AStyle WITHOUT changing its letters or
 /// inserting separators (a pure, collision-free re-casing in a case-insensitive
@@ -50,7 +50,7 @@ function StyleFromConfigText(const AConfigCase: string): TNameStyle;
 /// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function SynthesizeCasedName(const AOldName: string; AStyle: TNameStyle): string;
+function SynthesizeCasedName(const AOldName: string; AStyle: TNameStyle): string;  // dl:ok unused-public-symbol@bb30 -- public so the test project tests\autotest\fixtures\namesynth\NameSynthHarness.dpr can call it directly (unit test surface); the index covers drag-lint.dproj only, not the test projects -- INT-W2a 2026-11-22
 
 /// <summary>Returns APrefix + Cap(AOldName): the identifier with the naming-convention
 /// prefix prepended and its first letter capitalized (e.g. 'client' + 'F' -> 'FClient';

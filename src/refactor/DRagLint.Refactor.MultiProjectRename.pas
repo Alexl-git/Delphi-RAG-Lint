@@ -348,7 +348,7 @@ function FindRenameOwners(const AManifest: TIndexManifest; const APlatform, AFil
 /// <seealso cref="DRagLint.Refactor.MultiProjectRename.TagMismatch"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function RefreshOwner(const AOwner: TRenameOwner; const AReindex: TFunc<string, string, Boolean>;
+function RefreshOwner(const AOwner: TRenameOwner; const AReindex: TFunc<string, string, Boolean>;  // dl:ok unused-public-symbol@d2a7 -- public so the test project tests\autotest\fixtures\renameowners\RenameOwnersHarness.dpr can call it directly (unit test surface); the index covers drag-lint.dproj only, not the test projects -- INT-W2a 2026-11-22
   out AReason: string): TOwnerFreshness;
 
 /// <summary>Builds the rename of the naming findings of ONE file across every
@@ -556,7 +556,7 @@ function GuardPlansAtWrite(var APlans: TArray<TTargetPlan>; AAllOrNothing: Boole
 /// <seealso cref="DRagLint.Refactor.MultiProjectRename.SpanHolds"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function FindStaleEdit(const AEdits: TArray<TTextEdit>; out AStale: TTextEdit): Boolean;
+function FindStaleEdit(const AEdits: TArray<TTextEdit>; out AStale: TTextEdit): Boolean;  // dl:ok unused-public-symbol@d099 -- public so the test project tests\autotest\fixtures\renameowners\RenameOwnersHarness.dpr can call it directly (unit test surface); the index covers drag-lint.dproj only, not the test projects -- INT-W2a 2026-11-22
 
 /// <summary>The members of ADeclared a project index is expected to hold: every
 /// one not under a folder of ALibraryRoots.</summary>
@@ -578,7 +578,7 @@ function FindStaleEdit(const AEdits: TArray<TTextEdit>; out AStale: TTextEdit): 
 /// <seealso cref="DRagLint.Refactor.MultiProjectRename.ProjectOwnedMembers.Norm"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function ProjectOwnedMembers(const ADeclared, ALibraryRoots: TArray<string>): TArray<string>;
+function ProjectOwnedMembers(const ADeclared, ALibraryRoots: TArray<string>): TArray<string>;  // dl:ok unused-public-symbol@71b8 -- public so the test project tests\autotest\fixtures\renameowners\RenameOwnersHarness.dpr can call it directly (unit test surface); the index covers drag-lint.dproj only, not the test projects -- INT-W2a 2026-11-22
 implementation
 
 uses

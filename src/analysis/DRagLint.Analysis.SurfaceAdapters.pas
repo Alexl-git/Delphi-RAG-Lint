@@ -118,7 +118,7 @@ type
 /// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function ParseIndexerFingerprint(const pRaw: string): TIndexerProfile;
+function ParseIndexerFingerprint(const pRaw: string): TIndexerProfile;  // dl:ok unused-public-symbol@1ac6 -- public so the test project tests\SurfaceAdaptersTests.dpr can call it directly (unit test surface); the index covers drag-lint.dproj only, not the test projects -- INT-W2a 2026-11-22
 
 /// <summary>Reads the profile of the index behind <paramref name="pStore"/>.</summary>
 /// <param name="pStore">An open store; must not be nil.</param>
@@ -185,7 +185,7 @@ function CollectInlineBodies(const pSymbols: TArray<TSymbol>;
 /// <seealso cref="DRagLint.Analysis.SurfaceFingerprint.SurfaceFingerprint"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function FingerprintOfParse(const pParse: TParseResult;
+function FingerprintOfParse(const pParse: TParseResult;  // dl:ok unused-public-symbol@d46a -- public so the test project tests\SurfaceAdaptersTests.dpr can call it directly (unit test surface); the index covers drag-lint.dproj only, not the test projects -- INT-W2a 2026-11-22
                             const pSourceLines: TArray<string>): string;
 
 /// <summary>Fingerprints what the index currently holds for a file.</summary>
@@ -210,7 +210,7 @@ function FingerprintOfParse(const pParse: TParseResult;
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function TryFingerprintOfIndex(const pStore: ISymbolStore;
+function TryFingerprintOfIndex(const pStore: ISymbolStore;  // dl:ok unused-public-symbol@bce4 -- public so the test project tests\SurfaceAdaptersTests.dpr can call it directly (unit test surface); the index covers drag-lint.dproj only, not the test projects -- INT-W2a 2026-11-22
                                const pPath: string;
                                const pSourceLines: TArray<string>;
                                out AFingerprint: string): Boolean;

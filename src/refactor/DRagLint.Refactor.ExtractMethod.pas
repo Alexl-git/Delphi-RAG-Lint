@@ -236,7 +236,7 @@ type
   /// <seealso cref="DRagLint.Refactor.ExtractMethod.ByteOfLineStart"/>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  function ResolveExtractSelection(const AFile: string; AFromLine, AToLine: Integer;
+  function ResolveExtractSelection(const AFile: string; AFromLine, AToLine: Integer;  // dl:ok unused-public-symbol@ea9c -- public so the test project tests\refactor\ExtractMethodTests.dpr can call it directly (unit test surface); the index covers drag-lint.dproj only, not the test projects -- INT-W2a 2026-11-22
     out ASel: TExtractSelection; out ARefuse: string): TExtractOutcome;
 
 const
