@@ -1099,13 +1099,17 @@
     "hash": "b1fe51bce9dfab12afda1f1f2cbc24cfdd7cb80a33f070af417fe3823aa84dfa",
     "version": "1.51.1-alpha"
   },
+  "features/v1523-one-file-lint-perf.md": {
+    "hash": "3dc718bb003529db097551f3082756d5ee38923714e6b6970535a1f6bdb3120c",
+    "version": "1.52.3-alpha"
+  },
   "features/vscode-extension.md": {
     "hash": "6d0b6c42cc43d4cbad4958521064d3bcdd2e8f3028c94680d982aca33c30531e",
     "version": "1.51.1-alpha"
   },
   "features/warm-rule-cache.md": {
-    "hash": "58c173dbf46f9b05ea6c454ca6828abff0771ed3502aaecf638c71075362a472",
-    "version": "1.52.0-alpha"
+    "hash": "62c8d580f16d15f6a8def1f9ab10d444bfe3dc3e61d6ef401970f8db35f50854",
+    "version": "1.52.3-alpha"
   },
   "features/wiki-blocks-authoring.md": {
     "hash": "cbfdcef0bfe52ed7104fe1b3d6a434b94ac7fb6174c267802b5aa0e4a6b2c13c",

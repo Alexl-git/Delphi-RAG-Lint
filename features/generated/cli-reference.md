@@ -1293,6 +1293,7 @@ Described in:
 * [Per-rule time budget in the rule frame (rule-skipped-budget)](../../docs/wiki/rule-time-budget.md)
 * [parameter-type-too-wide ON by default, with an autofix](../../docs/wiki/v152-ptw.md)
 * [Lint rules unconnected-control and hanging-handler](../../docs/wiki/v152-unconn-rules.md)
+* [Fast one-file lint on a large index](../../docs/wiki/one-file-lint-speed.md)
 
 ### lint-all
 

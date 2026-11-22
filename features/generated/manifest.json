@@ -1,5 +1,5 @@
 {
-  "product": "1.52.2-alpha",
+  "product": "1.52.3-alpha",
   "extractor": "1.42.0-alpha",
   "resolver": "1.31.0-alpha",
   "schema": 27,
@@ -4197,6 +4197,32 @@
         "by": "ENGINE",
         "build": "1.51.1-alpha",
         "surfaceHash": "32782a37a7c3aeebf9b31f3885cfd677a2fdf05a3ce8b4cbf2918a1542bcf85e"
+      }
+    },
+    {
+      "id": "v1523-one-file-lint-perf",
+      "title": "Fast one-file lint on a large index",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.52.3-alpha",
+      "summary": "One-file lint asks the index per name for unused-public-symbol's own-unit tier, not every ref: Export.pas 20.5 -> 9.1 s on a 712k-ref index",
+      "intro": "Read this when a lint of one unit feels slow on a big project index, or to see what the unused-public-symbol stage costs in a one-file lint.",
+      "wikiPage": "one-file-lint-speed",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "drag-lint lint src\\cli\\DRagLint.CLI.Export.pas --db <project.sqlite>"
+        }
+      ],
+      "audience": "both",
+      "related": ["lint-project", "v152-per-rule-budget"],
+      "verified": {
+        "date": "2026-11-22",
+        "by": "ENGINE",
+        "build": "1.52.3-alpha",
+        "surfaceHash": "f3d9fc9fe5ed09d8fbce71d2ba38a284de00a9f5e0e543ce31ff1626797258cb"
       }
     },
     {
@@ -13758,9 +13784,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-20",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
+        "build": "1.52.2-alpha",
         "surfaceHash": "86743e3e74f44bf4836c5ed3fab9f985a7d5563d712795c9fb85db304b2c874d"
       },
       "homeOrder": 20

@@ -190,6 +190,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Exception and inherited lint rules](exception-and-inherited-rules) | `lint`; `lint-all` |  |
 | [exceptions-sync](Features) | `exceptions-sync` |  |
 | [explain](explain) | `explain` |  |
+| [Fast one-file lint on a large index](one-file-lint-speed) | `lint` |  |
 | [Finalization reaching a unit already finalized (lint rule)](finalization-after-dependency) | `lint-all` |  |
 | [Fix all in project](Fix-all-in-project) | Structure form: Fix all in project; `lint-all` |  |
 | [Fix all in unit](Fix-all-in-unit) | Structure form: Fix all in unit; `lint` |  |
