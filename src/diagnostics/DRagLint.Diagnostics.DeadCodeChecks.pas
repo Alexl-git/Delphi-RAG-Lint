@@ -91,7 +91,6 @@ uses
   , System.StrUtils
   , System.Classes
   , System.Generics.Collections
-  , TreeSitter
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   , DRagLint.Diagnostics.ParseCache
@@ -217,7 +216,8 @@ implementation
 
 uses
   DRagLint.Analysis.Flow.Lattices
-  , DRagLint.Lint.RefTypeRules;
+  , DRagLint.Lint.RefTypeRules
+  , TreeSitter;
 
 { True when ABareName (already lower-cased, unqualified) is the name of a
   published TForm/TFrame event handler.

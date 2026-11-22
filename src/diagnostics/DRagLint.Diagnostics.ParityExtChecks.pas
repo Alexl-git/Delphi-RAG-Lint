@@ -20,8 +20,6 @@ uses
   System.SysUtils
   , System.StrUtils
   , System.Generics.Collections
-  , TreeSitter
-  , DRagLint.Diagnostics.ParseCache
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   , DRagLint.Lint.Config
@@ -69,6 +67,8 @@ uses
   , DRagLint.Refactor.TextEdit
   , DRagLint.Lint.Autofix
   , DRagLint.Fix.Stmt
+  , TreeSitter
+  , DRagLint.Diagnostics.ParseCache
   ;
 
 type

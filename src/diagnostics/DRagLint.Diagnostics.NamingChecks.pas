@@ -29,10 +29,8 @@ uses
   , System.StrUtils
   , System.Classes
   , System.Generics.Collections
-  , TreeSitter
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
-  , DRagLint.Diagnostics.ParseCache
   , DRagLint.Lint.Config
   ;
 
@@ -92,6 +90,10 @@ type
   end;
 
 implementation
+
+uses
+  TreeSitter,
+  DRagLint.Diagnostics.ParseCache;
 
 { Returns True when AName carries APrefix (matched case-SENSITIVELY) followed
   by an uppercase letter. An empty APrefix always returns False (disables the

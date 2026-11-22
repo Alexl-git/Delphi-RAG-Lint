@@ -14,13 +14,8 @@ uses
   System.Generics.Collections,
   System.Character,
   System.RegularExpressions,
-  TreeSitter,
   DRagLint.Core.Model,
   DRagLint.Core.Interfaces,
-  DRagLint.Diagnostics.ParseCache,
-  DRagLint.Analysis.Cfg,
-  DRagLint.Analysis.DataFlow,
-  DRagLint.Analysis.Flow.Lattices,
   { ParseSignatureParams. A LEAF unit -- it uses only DRagLint.Core.Model -- so
     consuming it here introduces no layering inversion despite its src\cli home.
     Reused rather than reimplemented: it already splits on TOP-LEVEL semicolons
@@ -239,6 +234,11 @@ type
 implementation
 
 uses
+  TreeSitter,
+  DRagLint.Diagnostics.ParseCache,
+  DRagLint.Analysis.Cfg,
+  DRagLint.Analysis.DataFlow,
+  DRagLint.Analysis.Flow.Lattices,
   System.Math,
   DRagLint.Lint.RefTypeRules; { TExprTypeReader: the receiver's static type, index fact F1 }
 

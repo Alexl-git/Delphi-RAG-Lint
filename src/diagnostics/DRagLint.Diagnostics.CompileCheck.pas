@@ -13,7 +13,6 @@ uses
   , Winapi.Windows
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
-  , DRagLint.Core.StudioEnv { TStudioEnv: the ONLY source of a RAD Studio path }
   ;
 
 type
@@ -227,6 +226,9 @@ type
   end;
 
 implementation
+
+uses
+  DRagLint.Core.StudioEnv;
 
   { TCompileChecker }
 

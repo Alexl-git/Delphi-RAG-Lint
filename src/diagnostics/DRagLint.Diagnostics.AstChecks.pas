@@ -9,10 +9,8 @@ uses
   , System.Generics.Collections
   , System.RegularExpressions
   , TreeSitter
-  , TreeSitterLib
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
-  , DRagLint.Diagnostics.ParseCache
   , DRagLint.Refactor.TextEdit
   , System.StrUtils { ContainsText -- visibility test in CheckWithHiding }
   ;
@@ -1065,6 +1063,8 @@ type
 implementation
 
 uses
+  TreeSitterLib,
+  DRagLint.Diagnostics.ParseCache,
   System.Math,
   DRagLint.Lint.RefTypeRules; { RefStaticTypeAt: index fact F1 for redundant-cast and unsafe-typecast-without-is }
 
