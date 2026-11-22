@@ -181,10 +181,7 @@ begin
     Line:= '   see: ' + Entry;
     if AStore <> nil then
     begin
-      if ResolveSeeCode(AStore, Entry, Hit) then
-        Line:= Line + '  -> ' + AStore.GetFilePath(Hit.FileId) + ':' + IntToStr(Hit.StartLine)
-      else
-        Line:= Line + '  -> MISSING';
+      Line:= if ResolveSeeCode(AStore, Entry, Hit) then Line + '  -> ' + AStore.GetFilePath(Hit.FileId) + ':' + IntToStr(Hit.StartLine) else Line + '  -> MISSING';
     end;
     Writeln(Line);
   end;
@@ -432,7 +429,7 @@ begin
 
   { A word that is not in the wiki is an ANSWER, and a caller must be able to
     branch on it without parsing prose. }
-  if Matched = 0 then Result:= 1 else Result:= 0;
+  Result:= if Matched = 0 then 1 else 0;
 end; // function
 
 end.

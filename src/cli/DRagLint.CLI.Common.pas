@@ -1330,10 +1330,7 @@ begin
   ScanType:= '';
   if AStore <> nil then ScanType:= AStore.GetMetaValue(SCAN_TYPE_KEY);
   Suffix:= IfThen(AResolveOnly, ' --resolve-only', '');
-  if SameText(ScanType, SCAN_TYPE_PROJECT) then
-    Result:= Format('index --project <file.dproj> --db "%s"%s', [ADbPath, Suffix])
-  else
-    Result:= Format('index <dir> --db "%s"%s', [ADbPath, Suffix]);
+  Result:= if SameText(ScanType, SCAN_TYPE_PROJECT) then Format('index --project <file.dproj> --db "%s"%s', [ADbPath, Suffix]) else Format('index <dir> --db "%s"%s', [ADbPath, Suffix]);
 end;
 
 procedure NoteIndexFreshnessOnce(const AStore: ISymbolStore; const ADbPath: string);
@@ -1692,7 +1689,7 @@ begin
     P:= AArgs.DbPaths[I];
     if TFile.Exists(P) then Continue;
     Result:= False;
-    if P = '' then Shown:= '(empty)' else Shown:= P;
+    Shown:= if P = '' then '(empty)' else P;
     if AArgs.DbFromConfig then
     begin
       { The user typed no --db: name the file that supplied it (INBOX 2026-09-29 item 5). }
@@ -2060,8 +2057,7 @@ var
   DotPos: Integer;
 begin
   DotPos:= LastDelimiter(ASep, S);
-  if DotPos > 0 then Result:= Copy(S, DotPos + 1, MaxInt)
-  else Result:= S;
+  Result:= if DotPos > 0 then Copy(S, DotPos + 1, MaxInt) else S;
 end;
 
 procedure ReportNotFound(const AArgs: TArgs; const AMsg: string);

@@ -121,8 +121,7 @@ var
         fix; completing a hand-written list would only reset the clock. }
       AValues:= '';
       for var SK: TSymbolKind:= Low(TSymbolKind) to High(TSymbolKind) do
-        if AValues = '' then AValues:= SK.ToText
-        else AValues:= AValues + ',' + SK.ToText;
+        AValues:= if AValues = '' then SK.ToText else AValues + ',' + SK.ToText;
     end
     else if Key = 'symbols.section' then
     begin
@@ -195,8 +194,7 @@ var
 
 begin
   Result:= 0;
-  if Length(AArgs.DbPaths) > 0 then DbPath:= AArgs.DbPaths[0]
-  else DbPath:= AArgs.DbPath;
+  DbPath:= if Length(AArgs.DbPaths) > 0 then AArgs.DbPaths[0] else AArgs.DbPath;
   if DbPath = '' then
   begin
     Writeln(ErrOutput, 'Usage: drag-lint schema --db <file.sqlite> [--format text|json]');

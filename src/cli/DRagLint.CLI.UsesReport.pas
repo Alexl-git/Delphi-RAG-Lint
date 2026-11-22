@@ -284,8 +284,7 @@ var
 
   function CsvEscape(const S: string): string;
   begin
-    if (S.Contains(',')) or (S.Contains('"')) or S.Contains(#10) then Result:= '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"'
-    else Result:= S;
+    Result:= if (S.Contains(',')) or (S.Contains('"')) or S.Contains(#10) then '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"' else S;
   end;
 
   procedure EmitCsvRow(const ASource, AUsed: string; ADepth: Integer; const ASection, AVia: string; AExternal: Boolean);
@@ -342,8 +341,7 @@ var
       if Item.Depth >= MaxDepth then Continue;
       if not Edges.TryGetValue(Integer(Item.FileId), EdgeList) then Continue;
 
-      if Item.Via = '' then NextVia:= Item.UsedUnit
-      else NextVia:= Item.Via + '>' + Item.UsedUnit;
+      NextVia:= if Item.Via = '' then Item.UsedUnit else Item.Via + '>' + Item.UsedUnit;
 
       for Edge in EdgeList do
       begin
@@ -479,13 +477,12 @@ var
 
   function CsvEscape(const S: string): string;
   begin
-    if (S.Contains(',')) or (S.Contains('"')) or S.Contains(#10) then Result:= '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"'
-    else Result:= S;
+    Result:= if (S.Contains(',')) or (S.Contains('"')) or S.Contains(#10) then '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"' else S;
   end;
 
   function ResolvedStr(AResolved: Boolean): string;
   begin
-    if AResolved then Result:= 'resolved' else Result:= 'not-indexed';
+    Result:= if AResolved then 'resolved' else 'not-indexed';
   end;
 
   function RenderText(const ARep: TDepsReport): string;

@@ -279,8 +279,7 @@ begin
     Writeln('');
     Writeln(Format('[%s]', [P.Path]));
 
-    if P.ScanDir then CmdLine:= Format('"%s" index "%s" --db "%s"', [ExeName, AbsProjPath, SharedDbPath])
-    else CmdLine:= Format('"%s" index --project "%s" --db "%s"', [ExeName, AbsProjPath, SharedDbPath]);
+    CmdLine:= if P.ScanDir then Format('"%s" index "%s" --db "%s"', [ExeName, AbsProjPath, SharedDbPath]) else Format('"%s" index --project "%s" --db "%s"', [ExeName, AbsProjPath, SharedDbPath]);
 
     Writeln(CmdLine);
     CreatePipes;
@@ -296,8 +295,7 @@ begin
   Writeln('');
   Writeln(Format('Done: %d/%d projects indexed into %s', [SuccessCount, ProjectCount, SharedDbPath]));
 
-  if SuccessCount = ProjectCount then Result:= 0
-  else Result:= 1;
+  Result:= if SuccessCount = ProjectCount then 0 else 1;
 end; // begin
 
 function DoFormsCsv(const AArgs: TArgs): Integer;

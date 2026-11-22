@@ -147,8 +147,7 @@ var
   begin
     Result:= '';
     for Ch in AName do
-      if CharInSet(Ch, ['A'..'Z', 'a'..'z', '0'..'9', '_']) then Result:= Result + Ch
-    else Result:= Result + '_';
+      Result:= if CharInSet(Ch, ['A'..'Z', 'a'..'z', '0'..'9', '_']) then Result + Ch else Result + '_';
     if (Result = '') or CharInSet(Result[1], ['0'..'9']) then Result:= '_' + Result;
   end;
 
@@ -158,8 +157,7 @@ begin
   Exit (2 ); end;
   if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath);
   Exit(2); end;
-  if AArgs.Format <> '' then Format:= LowerCase(AArgs.Format)
-  else Format:= 'dot';
+  Format:= if AArgs.Format <> '' then LowerCase(AArgs.Format) else 'dot';
   if not MatchText(Format, ['dot', 'mermaid', 'json', 'html']) then
   begin
     Writeln('ERROR: graph supports --format dot|mermaid|json|html (got "', Format, '")');
@@ -426,8 +424,7 @@ var
   JArr    : TJSONArray    ;
   JObj    : TJSONObject   ;
 begin
-  if AArgs.Path = '' then Path:= GetCurrentDir
-  else Path:= AArgs.Path;
+  Path:= if AArgs.Path = '' then GetCurrentDir else AArgs.Path;
   if not (TDirectory.Exists(Path) or TFile.Exists(Path)) then begin Writeln('ERROR: path does not exist: ', Path);
   Exit(2); end;
   // Keyword set is intentionally narrow and word-boundaried so noise like
@@ -468,8 +465,7 @@ begin
         T.LineNo:= i + 1;
         T.ColNo:= M.Index;
         T.Keyword:= UpperCase(M.Groups[1].Value);
-        if M.Groups[2].Success then T.Author:= M.Groups[2].Value
-        else T.Author:= '';
+        T.Author:= if M.Groups[2].Success then M.Groups[2].Value else '';
         T.Body:= Trim(M.Groups[3].Value);
         Todos.Add(T);
       end; // for

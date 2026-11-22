@@ -173,8 +173,7 @@ begin
   end;
 
   { ---- the index ---------------------------------------------------------- }
-  if Length(AArgs.DbPaths) > 0 then DbPath:= AArgs.DbPaths[0]
-  else DbPath:= AArgs.DbPath;
+  DbPath:= if Length(AArgs.DbPaths) > 0 then AArgs.DbPaths[0] else AArgs.DbPath;
   if DbPath = '' then
   begin
     Writeln(ErrOutput, 'ERROR: --db is required. Resolve it with "drag-lint resolve-dbs --project <x.dproj>" or "--in <x.pas>".');
@@ -303,8 +302,7 @@ begin
             begin
               TimedOut:= Guard.TimedOut;
               Refused := Guard.Denied or TimedOut;
-              if Refused then Failure:= Guard.Explain
-              else Failure:= E.Message;
+              Failure:= if Refused then Guard.Explain else E.Message;
             end;
           end; // try
         finally

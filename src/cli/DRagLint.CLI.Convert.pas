@@ -1141,7 +1141,7 @@ var
     D: Integer;
   begin
     D:= LastDelimiter('.', APath);
-    if D > 0 then Result:= Copy(APath, D + 1, MaxInt) else Result:= APath;
+    Result:= if D > 0 then Copy(APath, D + 1, MaxInt) else APath;
     Result:= LowerCase(Result);
   end;
 
@@ -1151,7 +1151,7 @@ var
     D: Integer;
   begin
     D:= LastDelimiter('.', AQName);
-    if D > 0 then Result:= Copy(AQName, 1, D - 1) else Result:= '';
+    Result:= if D > 0 then Copy(AQName, 1, D - 1) else '';
   end;
 
   // Sorted copy of a tree's paths (case-insensitive). A Sorted TStringList with

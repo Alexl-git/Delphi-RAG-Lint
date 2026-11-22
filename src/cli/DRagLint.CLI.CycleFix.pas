@@ -642,8 +642,7 @@ function ShadowPathOf(const pShadowDir, pProjectDir, pPath: string): string;
 begin
   var Full:= ExpandFileName(pPath);
   var Root:= IncludeTrailingPathDelimiter(ExpandFileName(pProjectDir));
-  if StartsText(Root, Full) then Result:= Copy(Full, Length(Root) + 1, MaxInt)
-  else Result:= '_outside\' + StringReplace(Full, ':', '', [rfReplaceAll]);
+  Result:= if StartsText(Root, Full) then Copy(Full, Length(Root) + 1, MaxInt) else '_outside\' + StringReplace(Full, ':', '', [rfReplaceAll]);
   Result:= IncludeTrailingPathDelimiter(pShadowDir) + TrimLeft(Result);
 end;
 
@@ -942,9 +941,7 @@ end;
 // Where pPath of the plan is in pTreeDir: itself when the tree IS the project folder, else its shadow path.
 function TreePathOf(const pTreeDir, pProjectDir, pPath: string): string;
 begin
-  if SameText(IncludeTrailingPathDelimiter(ExpandFileName(pTreeDir)), IncludeTrailingPathDelimiter(ExpandFileName(pProjectDir))) then
-    Result:= ExpandFileName(pPath)
-  else Result:= ShadowPathOf(pTreeDir, pProjectDir, pPath);
+  Result:= if SameText(IncludeTrailingPathDelimiter(ExpandFileName(pTreeDir)), IncludeTrailingPathDelimiter(ExpandFileName(pProjectDir))) then ExpandFileName(pPath) else ShadowPathOf(pTreeDir, pProjectDir, pPath);
 end;
 
 // Every file the plan edits or creates.

@@ -159,7 +159,7 @@ var
   P: Integer;
 begin
   P:= Pos('//', S);
-  if P > 0 then Result:= Copy(S, 1, P - 1) else Result:= S;
+  Result:= if P > 0 then Copy(S, 1, P - 1) else S;
 end;
 
 /// <summary>v(ADP3 T4f, register K23): close the gap a REMOVED COMMENT left in a
@@ -725,8 +725,8 @@ begin
           Fr:= Stk.Pop;
           for X:= Fr.Line to T.Line do
           begin
-            if X = Fr.Line then A:= Fr.Col else A:= 1;
-            if X = T.Line then B:= T.EndCol else B:= MaxInt;
+            A:= if X = Fr.Line then Fr.Col else 1;
+            B:= if X = T.Line then T.EndCol else MaxInt;
             BlankRange(Result, X, A, B);
             BlankRange(ACodeOnly, X, A, B);
             BlankRange(ANoComments, X, A, B);

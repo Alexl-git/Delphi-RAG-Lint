@@ -252,8 +252,7 @@ begin
   Edges:= Store.DumpAllCallEdges;
   for E in Edges do
   begin
-    if E.TargetSymbolId > 0 then QName:= Store.GetSymbolById(E.TargetSymbolId).QualifiedName
-    else QName:= '';
+    QName:= if E.TargetSymbolId > 0 then Store.GetSymbolById(E.TargetSymbolId).QualifiedName else '';
     Writeln(Format('%d|%s|%s', [E.RefId, QName, E.Confidence]));
   end;
   Result:= 0;
@@ -430,8 +429,7 @@ begin
       Edges:= Store.GetCallEdgesFromSymbol(T.Id);
       for E in Edges do
       begin
-        if E.TargetSymbolId > 0 then QName:= Store.GetSymbolById(E.TargetSymbolId).QualifiedName
-        else QName:= '';
+        QName:= if E.TargetSymbolId > 0 then Store.GetSymbolById(E.TargetSymbolId).QualifiedName else '';
         if AArgs.AsJson then
         begin
           var JObj:= TJSONObject.Create;
@@ -910,8 +908,7 @@ var
   begin
     Result:= '';
     for Ch in AName do
-      if CharInSet(Ch, ['A'..'Z', 'a'..'z', '0'..'9', '_']) then Result:= Result + Ch
-      else Result:= Result + '_';
+      Result:= if CharInSet(Ch, ['A'..'Z', 'a'..'z', '0'..'9', '_']) then Result + Ch else Result + '_';
     if (Result = '') or CharInSet(Result[1], ['0'..'9']) then Result:= '_' + Result;
   end;
 
@@ -1146,8 +1143,7 @@ var
   begin
     Result:= '';
     for Ch in AName do
-      if CharInSet(Ch, ['A'..'Z', 'a'..'z', '0'..'9', '_']) then Result:= Result + Ch
-      else Result:= Result + '_';
+      Result:= if CharInSet(Ch, ['A'..'Z', 'a'..'z', '0'..'9', '_']) then Result + Ch else Result + '_';
     if (Result = '') or CharInSet(Result[1], ['0'..'9']) then Result:= '_' + Result;
   end;
 
