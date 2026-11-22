@@ -126,7 +126,7 @@ uses
   , DRagLint.Core.FileTime { 151 Y2: FileMTimeUnix for the dfm_properties currency check }
   , DRagLint.FormsMap.Dfm
   , DRagLint.MenuTree
-  , DRagLint.Core.Model
+  , DRagLint.Core.Model  // dl:unit DRagLint.Core.Model accepted -- DRAG_HOME_DIR is the one shared home-dir constant; Core.Model is its owner
   , DRagLint.Storage.SQLite
   , DRagLint.Lint.ProjectChecks.Parse
   ;

@@ -15,7 +15,7 @@ uses
   System.SysUtils,
   System.Classes,
   FireDAC.Comp.Client,
-  DRagLint.FieldRepo.OrmGen;
+  DRagLint.FieldRepo.OrmGen;  // dl:unit DRagLint.FieldRepo.OrmGen accepted -- the data-service generator emits files named by the ORM generator's ORM_FILE_EXT / ORM_PAS_PREFIX; the two generators travel together
 
 /// <summary>Plans repo gen-dataservice: u&lt;T&gt;_SERVER.PAS in pServerDir and
 /// u&lt;T&gt;_CLIENT.PAS in pClientDir per table, then uDIContainerConfig.PAS (server) and

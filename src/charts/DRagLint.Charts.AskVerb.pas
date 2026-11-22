@@ -249,7 +249,7 @@ uses
   , DRagLint.Core.Interfaces, DRagLint.Storage.SQLite, DRagLint.Index.Freshness
   , DRagLint.Core.CliError  // dl:unit DRagLint.Core.CliError accepted -- the stale-index reason constant travels with CliErrorLine, which formats it
   , DRagLint.Charts.DocInsight, DRagLint.Charts.Render
-  , DRagLint.Charts.Question  // dl:unit DRagLint.Charts.Question accepted -- the question catalog and its caption phrase travel with the question types
+  , DRagLint.Charts.Question
   , DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Pairs
   ;
 

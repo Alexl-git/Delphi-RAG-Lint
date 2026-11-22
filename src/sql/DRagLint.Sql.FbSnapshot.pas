@@ -103,15 +103,18 @@ var
 begin
   Q:= TFDQuery.Create(nil);
   try
-    Q.Connection:= AConn;
-    Q.Sql.Text:= 'SELECT FIRST 1 1 FROM RDB$RELATIONS WHERE UPPER(RDB$RELATION_NAME) = :n';
-    Q.ParamByName('n').AsWideString:= UpperCase(AName);
-    Q.Open;
-    Result:= not Q.IsEmpty;
-  except  // dl:ok bare-except@79dc -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
-    Result:= False;
+    try
+      Q.Connection:= AConn;
+      Q.Sql.Text:= 'SELECT FIRST 1 1 FROM RDB$RELATIONS WHERE UPPER(RDB$RELATION_NAME) = :n';
+      Q.ParamByName('n').AsWideString:= UpperCase(AName);
+      Q.Open;
+      Result:= not Q.IsEmpty;
+    except  // dl:ok bare-except@79dc -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
+      Result:= False;
+    end;
+  finally
+    Q.Free;
   end;
-  Q.Free;
 end;
 
 procedure ClearPriorSnapshot(ASqlite: TFDConnection);
