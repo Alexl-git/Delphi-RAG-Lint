@@ -175,6 +175,7 @@ type
     FgnSym : TSym;              { that guard as idx <= FgnSym }
     FgnNode: TTSNode;           { the for loop ending at that bound (report site with no write) }
     Sentinel: Boolean;          { 1.52.1 SLZ-RULE2: a dominating guard excludes the not-found sentinel (`<> -1`, `>= 0`) }
+    Foreign: Boolean;           { 1.52.3 IDXRANGE-TP: Info was read from the index (another unit's array) }
   end;
 
   { One walk over one parsed file. Private to this unit. }
@@ -244,6 +245,7 @@ type
     function IsMemberCopy(const N: TTSNode): Boolean;
     procedure CheckCopyBlock(const ABlock: TTSNode);
     function IsBoundedArray(const AName: string; out AInfo: TDeclInfo): Boolean;
+    function IsBoundedArrayOrStore(const AName: string; out AInfo: TDeclInfo): Boolean;
     function IsArrayFn(const N: TTSNode; const AFn, AArr: string): Boolean;
     function IsLenMinus(const N: TTSNode; const AArr: string): Boolean;
     function ProvesLower(const E: TTSNode; AStrict: Boolean; const AArr: string; const AInfo: TDeclInfo): Boolean;
@@ -297,6 +299,8 @@ type
     function IsUnwrittenParam(const E: TTSNode): Boolean;
     function RoutineConst(const AName: string; out AValue: Integer): Boolean;
     function StoreArray(const AName: string; out AInfo: TDeclInfo): Boolean;
+    function ProvenOverrun(const ACtx: TIdxCtx): Boolean;
+    function WhileExitUpper(const ACtx: TIdxCtx; out AV: Integer): Boolean;
     function UpperConstOf(const E: TTSNode; ADepth: Integer; out AValue: Integer): Boolean;
     function LowerConstOf(const E: TTSNode; ADepth: Integer; out AValue: Integer): Boolean;
     function GuardMinLen(const AArr: string): Integer;
@@ -1421,7 +1425,7 @@ begin
       FStableTo:= ASite.EndByte;
     end;
     U:= SymOf(AE);
-    if not Lookup(AArr, Info) then Info:= Default(TDeclInfo);
+    if (not Lookup(AArr, Info)) and not StoreArray(AArr, Info) then Info:= Default(TDeclInfo);
     Result:= U.Ok and UpperWithin(MkSym(U.Base, U.Off + AOff), AArr, Info);
   finally
     FAccess:= OldAccess;
@@ -1682,6 +1686,14 @@ end;
 function TBnRun.IsBoundedArray(const AName: string; out AInfo: TDeclInfo): Boolean;
 begin
   Result:= Lookup(AName, AInfo) and (not AInfo.Ambig) and (AInfo.Kind in [dkArray, dkDynArray]);
+end;
+
+{ 1.52.3 IDXRANGE-TP (uINSPRSLT:5575 reads MscConst.NssDistConvert[i]): IsBoundedArray, else AName as
+  a const / var array of ANOTHER unit read from the index (StoreArray). A declaration this unit can see
+  always wins, also when it is no array. }
+function TBnRun.IsBoundedArrayOrStore(const AName: string; out AInfo: TDeclInfo): Boolean;
+begin
+  Result:= IsBoundedArray(AName, AInfo) or ((not Lookup(AName, AInfo)) and StoreArray(AName, AInfo));
 end;
 
 { N (parentheses peeled) is the call AFn(AArr) -- Low / High / Length of that array -- or a local
@@ -2347,6 +2359,9 @@ begin
       if U.Ok and (U.Base <> '') and UpperWithin(U, ACtx.Arr, ACtx.Info) then ACtx.Hi:= True;
     end;
     if ACtx.Lo and ACtx.Hi then Exit;
+    { 1.52.3 IDXRANGE-TP: another unit's array is reported on a PROVEN overrun only (its own unit's
+      guards and clamps are not this rule's view; the ORM3 FP set kept 0 new FPs this way) }
+    if ACtx.Foreign and not ProvenOverrun(ACtx) then Exit;
     if FTraceDepth = 0 then
     begin
       { C1: the other collection's bound proven within this array's by every local caller }
@@ -3276,7 +3291,7 @@ begin
 end;
 
 { uINSPRSLT:1871: AName as a const / var array of ANOTHER unit, read from the index (lint --db): its
-  static bounds. Every same-named const / var row must be an array with the same bounds. Cached. }
+  static bounds. Every same-named interface const / var row must be an array with the same bounds. Cached. }
 function TBnRun.StoreArray(const AName: string; out AInfo: TDeclInfo): Boolean;
 var
   S: TSymbol;
@@ -3290,7 +3305,9 @@ begin
     Have:= False;
     for S in FStore.FindSymbolsByExactName(AName) do
     begin
-      if S.Kind not in [skConstDecl, skVarDecl] then Continue;
+      { 1.52.3 IDXRANGE-TP: only an interface declaration is visible to another unit; a routine-local or
+        implementation const of the same name (this unit's own are Lookup's) must not make the name ambiguous }
+      if (S.Kind not in [skConstDecl, skVarDecl]) or not SameText(S.Section, 'interface') then Continue;
       if (ClassifyType(S.Signature, Lo, Hi) <> dkArray) or (Have and ((Lo <> AInfo.Lo) or (Hi <> AInfo.Hi))) then
       begin
         AInfo:= Default(TDeclInfo);
@@ -3304,6 +3321,43 @@ begin
     FStoreArr.Add(AName, AInfo);
   end;
   Result:= AInfo.Kind = dkArray;
+end;
+
+{ 1.52.3 IDXRANGE-TP: the index's bounds at the access, from its writes and guards (BoundAt), leave the
+  array's static range: greater than Hi or less than Lo. False when a side is unknown. }
+function TBnRun.ProvenOverrun(const ACtx: TIdxCtx): Boolean;
+var
+  V: Integer;
+  AboveHi, BelowLo: Boolean;
+begin
+  AboveHi:= BoundAt(ACtx.Idx, ACtx.Access, True, 0, V) and (not IsNeutralBound(V)) and (V > ACtx.Info.Hi);
+  BelowLo:= BoundAt(ACtx.Idx, ACtx.Access, False, 0, V) and (not IsNeutralBound(V)) and (V < ACtx.Info.Lo);
+  Result:= AboveHi or BelowLo or (WhileExitUpper(ACtx, V) and (V > ACtx.Info.Hi));
+end;
+
+{ 1.52.3 IDXRANGE-TP (uINSPRSLT:5575 `while (H[i] = 0) and (i <= 4) do Inc(i); X:= C[i]`): the last write
+  of the index before the access is a step of 1 inside a while that ends before the access and whose
+  condition bounds the index by a constant G, every write in that loop a step of 1. The index can leave
+  the loop at G + 1 (AV). False for a G that is not a constant (`i < Last`). }
+function TBnRun.WhileExitUpper(const ACtx: TIdxCtx; out AV: Integer): Boolean;
+var
+  W, LastW, Wh: TTSNode;
+  G: TSym;
+begin
+  Result:= False;
+  AV:= 0;
+  LastW:= Default(TTSNode);
+  for W in ACtx.Writes do
+    if (W.EndByte <= ACtx.Access.StartByte) and (LastW.IsNull or (W.StartByte > LastW.StartByte)) then LastW:= W;
+  if LastW.IsNull or not StepWrite(LastW, ACtx.Idx) then Exit;
+  Wh:= LastW.Parent;
+  while (not Wh.IsNull) and (Wh.NodeType <> 'while') and (Wh.NodeType <> 'defProc') do Wh:= Wh.Parent;
+  if Wh.IsNull or (Wh.NodeType <> 'while') or (Wh.EndByte > ACtx.Access.StartByte) then Exit;
+  if (not CondUpperSym(Wh.ChildByField('condition'), ACtx.Idx, False, G)) or (G.Base <> '') then Exit;
+  for W in ACtx.Writes do
+    if (W.StartByte >= Wh.StartByte) and (W.EndByte <= Wh.EndByte) and not StepWrite(W, ACtx.Idx) then Exit;
+  AV:= G.Off + 1;
+  Result:= True;
 end;
 
 { uINSPRSLT:1871: the greatest value E can take -- a constant (also Length / High of a static or
@@ -5079,7 +5133,7 @@ var
 begin
   Result:= False;
   Ctx:= Default(TIdxCtx);
-  if not IsBoundedArray(AArr, Ctx.Info) then
+  if not IsBoundedArrayOrStore(AArr, Ctx.Info) then
   begin
     { 1.52 BK-RULEFP (YADF.Tokens:230): the caller passes its own Result of a dynamic-array type }
     RetT:= FCurProc.ChildByField('header').ChildByField('type');
@@ -5181,7 +5235,7 @@ begin
         Continue;
       end;
       U:= TranslateSym(ACtx.FgnSym, AProc, Args);
-      if not Lookup(ArrAt, Info) then Info:= Default(TDeclInfo);
+      if (not Lookup(ArrAt, Info)) and not StoreArray(ArrAt, Info) then Info:= Default(TDeclInfo);
       if not (U.Ok and UpperWithin(U, ArrAt, Info)) then Exit;
     finally
       LeaveRoutine(Saved);
@@ -5265,7 +5319,12 @@ begin
       Ctx.Arr:= BareIdent(N.ChildByField('entity'));
       if (Ctx.Idx = '') or (Ctx.Arr = '') or EvalIndex(IdxN, V) then Continue;
       if not Locals.TryGetValue(Ctx.Idx, Ctx.IdxInfo) then Continue;   { v1 cut: field / global index }
-      if not IsBoundedArray(Ctx.Arr, Ctx.Info) then Continue;
+      if not IsBoundedArray(Ctx.Arr, Ctx.Info) then
+      begin
+        { 1.52.3 IDXRANGE-TP (uINSPRSLT:5575): another unit's const / var array, read from the index }
+        if Lookup(Ctx.Arr, Ctx.Info) or not StoreArray(Ctx.Arr, Ctx.Info) then Continue;
+        Ctx.Foreign:= True;
+      end;
       if CapturedElsewhere(Ctx.Idx) then Continue;
       Writes.Clear;
       CollectIdxWrites(Body, Ctx.Idx, Writes);

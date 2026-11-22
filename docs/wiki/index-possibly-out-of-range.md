@@ -73,6 +73,18 @@ A field or global array uses the size every SetLength in the file agrees on.
   expression in a row, or made equal by `if Length(A) <> Length(B) then Exit`; `SetLength(A, n + 1); A[n]`.
 - A write followed by `Exit` / `Continue`, or in the other branch of an if / else, does not undo a guard.
 
+## Arrays of another unit (1.52.3, IDXRANGE-TP)
+
+With `--db`, an accessed array that this unit does not declare is looked up in the index: a const or var
+array declared in the INTERFACE of another unit (`MscConst.NssDistConvert: array [0 .. 4] of 0 .. 8`) is
+checked, but reported only on a PROVEN overrun: the index's known bound leaves the array's range, e.g.
+`while (H[i] = 0) and (i <= 4) do Inc(i); X := NssDistConvert[i]` lets `i` reach 5 (uINSPRSLT:5575). An
+index whose bound is unknown or within range (a clamp, `i < High(A)`, a limit picked by the same
+condition as the array) is not reported for such an array. A declaration this unit
+can see always wins (a local const of the same name shadows it); a name declared twice with different
+bounds is skipped; routine-local and implementation-section consts of other units never count. Without
+`--db` such an access is not checked.
+
 ## Autofix (risky, MANUAL ONLY)
 
 `drag-lint lint --in <f.pas> --fix --fix-rule index-possibly-out-of-range [--apply]` inserts,
