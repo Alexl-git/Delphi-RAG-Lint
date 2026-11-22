@@ -504,9 +504,7 @@ function DeclaredTypeOfVar(const ARoutine: TTSNode; const AVarNameLower: string;
     Result := '';
     if N.IsNull then Exit;
     if SameText(N.NodeType, 'defProc') and (not (N = ARoutine)) then Exit;
-    if SameText(N.NodeType, 'declVar') or SameText(N.NodeType, 'declArg') then
-      if LowerText(N.ChildByField('name'), ASrc) = AVarNameLower then
-        Exit(TyperefNameOf(N.ChildByField('type')));
+    if (SameText(N.NodeType, 'declVar') or SameText(N.NodeType, 'declArg')) and (LowerText(N.ChildByField('name'), ASrc) = AVarNameLower) then Exit(TyperefNameOf(N.ChildByField('type')));
     for I := 0 to N.NamedChildCount - 1 do
     begin
       Result := Visit(N.NamedChild(I));

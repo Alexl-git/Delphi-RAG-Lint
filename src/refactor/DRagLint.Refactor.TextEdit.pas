@@ -1586,10 +1586,8 @@ begin
     if (U.Section = ASection) and U.FromInclude and not AIncRow.FromInclude then
       AIncRow:= U;
   for U in AUses do
-    if (U.Section = ASection) and not U.FromInclude then
-      if (not AHaveLast) or (U.StartLine > ALast.StartLine)
-         or ((U.StartLine = ALast.StartLine) and (U.StartCol > ALast.StartCol)) then
-      begin
+    if ((U.Section = ASection) and not U.FromInclude) and ((not AHaveLast) or (U.StartLine > ALast.StartLine)
+         or ((U.StartLine = ALast.StartLine) and (U.StartCol > ALast.StartCol))) then begin
         ALast:= U;
         AHaveLast:= True;
       end;

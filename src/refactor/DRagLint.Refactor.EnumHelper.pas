@@ -856,10 +856,8 @@ begin
       if (U.Section = uusImplementation) and U.FromInclude and (U.IncludeLine > IncImplUse.IncludeLine) then
         IncImplUse:= U;
     for U in Uses_ do
-      if (U.Section = uusImplementation) and not U.FromInclude then
-        if (not HaveLastImplUse) or (U.StartLine > LastImplUse.StartLine)
-           or ((U.StartLine = LastImplUse.StartLine) and (U.StartCol > LastImplUse.StartCol)) then
-        begin LastImplUse:= U;
+      if ((U.Section = uusImplementation) and not U.FromInclude) and ((not HaveLastImplUse) or (U.StartLine > LastImplUse.StartLine)
+           or ((U.StartLine = LastImplUse.StartLine) and (U.StartCol > LastImplUse.StartCol))) then begin LastImplUse:= U;
         HaveLastImplUse:= True; end;
 
     BodiesLine:= ImplLine;

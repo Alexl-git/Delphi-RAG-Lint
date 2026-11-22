@@ -673,8 +673,7 @@ var
     Result:= False;
     if N.IsNull then Exit;
     if (not (N = OwnerProc)) and (N.NodeType = 'defProc') then Exit; // nested routine: out of scope
-    if (N.NodeType = 'declArg') or (N.NodeType = 'declVar') then
-      if DeclHasOtherName(N) then Exit(True);
+    if ((N.NodeType = 'declArg') or (N.NodeType = 'declVar')) and (DeclHasOtherName(N)) then Exit(True);
     for I:= 0 to N.NamedChildCount - 1 do
     begin
       Ch:= N.NamedChild(I);

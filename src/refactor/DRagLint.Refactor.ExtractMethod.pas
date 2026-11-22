@@ -1495,8 +1495,7 @@ function ClassHasMemberNamed(const ADeclClass: TTSNode; const AName: string; con
       begin
         if SameText(MemberName(M), AName) then Exit(True);
       end
-      else if M.NodeType = 'declSection' then
-        if ScanMembers(M) then Exit(True);
+      else if (M.NodeType = 'declSection') and (ScanMembers(M)) then Exit(True);
     end;
   end;
 

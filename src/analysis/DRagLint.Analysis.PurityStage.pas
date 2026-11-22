@@ -764,8 +764,7 @@ begin
   begin
     if ACalls[I].StartLine <> ALineNo then Continue;
     NameEnd:= ACalls[I].StartCol + Length(ACalls[I].NameText);
-    if (NameEnd <= P) and (Trim(Copy(Masked, NameEnd, P - NameEnd)) = '') then
-      if (Result < 0) or (ACalls[I].StartCol > ACalls[Result].StartCol) then Result:= I;
+    if ((NameEnd <= P) and (Trim(Copy(Masked, NameEnd, P - NameEnd)) = '')) and ((Result < 0) or (ACalls[I].StartCol > ACalls[Result].StartCol)) then Result:= I;
   end;
 end;
 

@@ -1284,9 +1284,7 @@ begin
         So the cost is real but this is not where to take it out. The fix is T6:
         keep the staging, compile ONCE via a probe unit instead of 207 times. }
       for Dep in pClosure do
-        if not SameText(Dep.Path, pOptions.UnitPath) then
-          if TFile.Exists(Dep.Path) then
-          begin
+        if (not SameText(Dep.Path, pOptions.UnitPath)) and (TFile.Exists(Dep.Path)) then begin
             TFile.Copy(Dep.Path,
               TPath.Combine(ShadowDir, ExtractFileName(Dep.Path)), True);
             { T5: the sibling .dfm goes too. A form unit carries an R-directive for its .dfm and
