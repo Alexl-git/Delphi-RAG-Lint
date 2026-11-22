@@ -23,6 +23,8 @@ uses
   System.SysUtils
   , System.Classes
   , System.RegularExpressions
+  , System.StrUtils
+  , System.Generics.Collections
   , DRagLint.Core.Model
   , DRagLint.Refactor.TextEdit
   , DRagLint.Lint.Autofix
@@ -280,26 +282,251 @@ begin
   Result:= [E];
 end;
 
-{ multiple-statements-per-line: breaks the line in front of the flagged statement and gives it the line's
-  indentation. The rule flags the FIRST extra statement of a line, so a line holding n statements needs n-1 runs.
-  Declines unless the text before the statement ends in `;`. }
+const
+  { multiple-statements-per-line: the block indent the re-layout writes, the repo's own. }
+  MSP_INDENT_STEP = 2;
+
+type
+  { One output line of the multiple-statements-per-line re-layout: Key = its block level relative to the
+    input line, Value = its text without indentation. }
+  TMspPiece = TPair<Integer, string>;
+
+{ ALine with every blank and control character removed: the token stream of a line, for the
+  multiple-statements-per-line re-layout's "whitespace only" self-check. }
+function StripBlanks(const ALine: string): string;
+var
+  Sb: TStringBuilder;
+  C : Char;
+begin
+  Sb:= TStringBuilder.Create;
+  try
+    for C in ALine do
+      if C > ' ' then Sb.Append(C);
+    Result:= Sb.ToString;
+  finally
+    Sb.Free;
+  end;
+end;
+
+{ True for a character that can continue a Delphi identifier. }
+function IsIdentChar(AChar: Char): Boolean;
+begin
+  Result:= CharInSet(AChar, ['A'..'Z', 'a'..'z', '0'..'9', '_']) or (Ord(AChar) > Ord(High(AnsiChar)));
+end;
+
+{ True when a word (identifier or keyword) starts at AIdx of ABody: not a digit, not the tail of a
+  longer word, and not a member (`.X`), an escaped identifier (`&end`), a char code or a hex literal. }
+function IsWordStart(const ABody: string; AIdx: Integer): Boolean;
+begin
+  Result:= IsIdentChar(ABody[AIdx]) and not CharInSet(ABody[AIdx], ['0'..'9']) and
+           ((AIdx = 1) or not (IsIdentChar(ABody[AIdx - 1]) or CharInSet(ABody[AIdx - 1], ['&', '.', '#', '$'])));
+end;
+
+{ Index of the last character of the string literal or comment that starts at AFrom in ABody;
+  0 when none starts there; -1 when it is unterminated on the line or is a compiler directive. }
+function OpaqueEnd(const ABody: string; AFrom: Integer): Integer;
+var
+  N: Integer;
+begin
+  N:= Length(ABody);
+  Result:= 0;
+  if ABody[AFrom] = '''' then
+  begin
+    Result:= AFrom + 1;
+    while (Result <= N) and not ((ABody[Result] = '''') and ((Result = N) or (ABody[Result + 1] <> ''''))) do
+      Inc(Result, if ABody[Result] = '''' then 2 else 1);
+    if Result > N then Result:= -1;
+  end
+  else if ABody[AFrom] = '{' then
+  begin
+    Result:= Pos('}', ABody, AFrom + 1);
+    if (Result = 0) or (Copy(ABody, AFrom, 2) = '{$') then Result:= -1;
+  end
+  else if Copy(ABody, AFrom, 2) = '(*' then
+  begin
+    Result:= Pos('*)', ABody, AFrom + 2);
+    Result:= if Result = 0 then -1 else Result + 1;
+  end;
+end;
+
+{ The re-laid-out text: one line per piece, indented AIndent plus MSP_INDENT_STEP per level (a negative
+  level steps back out of AIndent), lines joined by CRLF; ATail (a // comment) ends the last line. }
+function JoinPieces(const APieces: TArray<TMspPiece>; const AIndent, ATail: string): string;
+var
+  Sb: TStringBuilder;
+  K : Integer;
+begin
+  Sb:= TStringBuilder.Create;
+  try
+    for K:= 0 to High(APieces) do
+    begin
+      if K > 0 then Sb.Append(#13#10);
+      if APieces[K].Key >= 0 then Sb.Append(AIndent).Append(' ', APieces[K].Key * MSP_INDENT_STEP)
+      else Sb.Append(Copy(AIndent, 1, Length(AIndent) + APieces[K].Key * MSP_INDENT_STEP));
+      Sb.Append(APieces[K].Value);
+    end;
+    if ATail <> '' then Sb.Append(' ').Append(ATail);
+    Result:= Sb.ToString;
+  finally
+    Sb.Free;
+  end;
+end;
+
+{ Re-lays out ONE source line that packs several statements, in one pass (v1523 FIXER-2: the old fixer
+  broke the line once, so `if C then begin A; B; end;` became `if C then begin A;` + `B; end;`).
+  Every top-level `;` ends a statement; a top-level `begin` goes on its own line at the indentation of
+  the statement that owns it and indents what follows by one step; a top-level `end` (with the `;` or
+  `.` right after it) closes that step. An `end` that opens the line keeps the line's indentation; one
+  closing a block opened on an EARLIER line steps back out of it. An `else` in the middle of the text
+  that owns a `begin` (`if C then A else begin`) starts its own line, as `end else begin` does:
+  `else` / `begin`. A trailing // comment stays on the last line. Strings, brace and paren-star
+  comments and anything inside ( ) or [ ] are copied untouched.
+  Declines (False) on what it cannot lay out without guessing: a compiler directive, an unterminated
+  string or comment, brackets that do not balance on the line (a statement spanning lines), the
+  block keywords case / try / repeat / until / except / finally / asm / record, or a result whose
+  non-blank characters differ from the input's. }
+function SplitStatementLine(const ALine: string; out AText: string): Boolean;
+const
+  DECLINE_WORDS: array[0..7] of string = ('case', 'try', 'repeat', 'until', 'except', 'finally', 'asm', 'record');
+var
+  Indent: string;
+  Body  : string;
+  Tail  : string;
+  Word  : string;
+  Cur   : TStringBuilder;
+  Pieces: TArray<TMspPiece>;
+  I     : Integer;
+  J     : Integer;
+  N     : Integer;
+  Depth : Integer;
+  Level : Integer;
+  ElseAt: Integer;
+
+  procedure Emit(ALevel: Integer; const AText: string);
+  begin
+    Pieces:= Pieces + [TMspPiece.Create(ALevel, AText)];
+  end;
+
+  procedure Flush;
+  begin
+    if Trim(Cur.ToString) <> '' then Emit(Level, Trim(Cur.ToString));
+    Cur.Clear;
+    ElseAt:= 0;
+  end;
+
+  { `end` and the `;` or `.` right after it close one block level. }
+  procedure TakeEnd;
+  begin
+    Flush;
+    if Length(Pieces) > 0 then Dec(Level);
+    J:= I;
+    while (J <= N) and (Body[J] = ' ') do Inc(J);
+    if (J <= N) and CharInSet(Body[J], [';', '.']) then
+    begin
+      Word:= Word + Body[J];
+      I:= J + 1;
+    end;
+    Emit(Level, Word);
+  end;
+
+  { A word at bracket depth 0; False = decline the line. }
+  function TakeWord: Boolean;
+  begin
+    Result:= not MatchText(Word, DECLINE_WORDS);
+    if not Result then Exit;
+    if SameText(Word, 'begin') then
+    begin
+      if ElseAt > 0 then
+      begin
+        Emit(Level, Trim(Cur.ToString(0, ElseAt)));
+        Cur.Remove(0, ElseAt);
+      end;
+      Flush;
+      Emit(Level, Word);
+      Inc(Level);
+    end
+    else if SameText(Word, 'end') then TakeEnd
+    else
+    begin
+      if SameText(Word, 'else') and (Trim(Cur.ToString) <> '') then ElseAt:= Cur.Length;
+      Cur.Append(Word);
+    end;
+  end;
+
+begin
+  Result:= False;
+  AText:= '';
+  Indent:= LeadingWs(ALine);
+  Body:= TrimRight(Copy(ALine, Length(Indent) + 1, MaxInt));
+  N:= Length(Body);
+  Tail:= '';
+  Depth:= 0;
+  Level:= 0;
+  ElseAt:= 0;
+  Cur:= TStringBuilder.Create;
+  try
+    I:= 1;
+    while I <= N do
+    begin
+      J:= OpaqueEnd(Body, I);
+      if J < 0 then Exit;
+      if J > 0 then
+      begin
+        Cur.Append(Body, I - 1, J - I + 1);
+        I:= J + 1;
+      end
+      else if Copy(Body, I, 2) = '//' then
+      begin
+        Tail:= Copy(Body, I, MaxInt);
+        Break;
+      end
+      else if IsWordStart(Body, I) then
+      begin
+        J:= I;
+        while (J <= N) and IsIdentChar(Body[J]) do Inc(J);
+        Word:= Copy(Body, I, J - I);
+        I:= J;
+        if Depth > 0 then Cur.Append(Word)
+        else if not TakeWord then Exit;
+      end
+      else
+      begin
+        if CharInSet(Body[I], ['(', '[']) then Inc(Depth)
+        else if CharInSet(Body[I], [')', ']']) then Dec(Depth);
+        if Depth < 0 then Exit;
+        Cur.Append(Body[I]);
+        if (Depth = 0) and (Body[I] = ';') then Flush;
+        Inc(I);
+      end;
+    end;
+    if Depth <> 0 then Exit;
+    Flush;
+  finally
+    Cur.Free;
+  end;
+  if Length(Pieces) < 2 then Exit;
+  AText:= JoinPieces(Pieces, Indent, Tail);
+  Result:= StripBlanks(AText) = StripBlanks(ALine);
+end;
+
+{ multiple-statements-per-line: re-lays out the flagged line so every statement stands on its own line,
+  in ONE pass (SplitStatementLine). The rule flags the first extra statement of a line, so this sees each
+  packed line once. Declines whenever SplitStatementLine does. }
 function FixMultipleStatementsPerLine(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
 var
   Line: string;
-  Pre : string;
+  Text: string;
   E   : TTextEdit;
 begin
   Result:= nil;
   if (AFinding.StartLine < 1) or (AFinding.StartLine > ALines.Count) then Exit;
   Line:= ALines[AFinding.StartLine - 1];
-  if (AFinding.StartCol < 2) or (AFinding.StartCol > Length(Line)) then Exit;
-  Pre:= TrimRight(Copy(Line, 1, AFinding.StartCol - 1));
-  if not Pre.EndsWith(';') then Exit;
+  if not SplitStatementLine(Line, Text) then Exit;
   E:= NewEdit(AFinding, tekReplaceLines);
   E.Line      := AFinding.StartLine;
   E.EndLine   := AFinding.StartLine;
   E.ExpectText:= Line;
-  E.Text      := Pre + #13#10 + LeadingWs(Line) + Copy(Line, AFinding.StartCol, MaxInt);
+  E.Text      := Text;
   Result:= [E];
 end;
 
