@@ -3,6 +3,33 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## v1.52.3-alpha -- 2026-11-22
+
+In integration (lane/v153-int). One re-parse for 1.52.3: resolver 1.30.0 -> 1.31.0-alpha (EXT-RES-TAILS: default indexer on an ancestor). Extractor stays 1.42.0-alpha -- hash-only baseline re-pins, proven by an extraction A/B (symbols / refs / unit_uses / call_edges / files byte-identical on the fixtures and the self project, engines 1096e368f vs the INT build). VS Code extension 1.6.11.
+
+Merged lanes (git log c53540a95..HEAD):
+
+- EXPORT-PERF-FIX: a one-file `lint` no longer loads every reference of the index for unused-public-symbol's own-unit tier (IsOwnUnitOnly asks idx_refs_name_nocase per queried name). Measured on the self index (712k refs): one-file lint of DRagLint.CLI.Export.pas 20.5 s -> 9.1 s (rule-cache hit; miss 48.5 -> 29.7 s), DRagLint.CLI.Format.pas 15.8 -> 5.5 s; the unused-public-symbol stage 8.1 s -> 0.0 s. Findings byte-identical (Export 13, Format 1, TaintRules 20). Guard tests\autotest\run_unused_public_own_unit_perf.ps1 (RED 7.12 s on the pre-fix INT build 9f9b0c268, GREEN 0 s on the merged build).
+- Taint stage timing: no regression from SLZ-TAINTFP (idle-box A/B, 3 interleaved runs each: 71.7 s vs 72.9 s, +1.6 %, ranges overlap; findings identical).
+- EXT-RES-TAILS: `X[K]` is typed through a default indexer an ANCESTOR declares; an unindexed peer `$(MACRO)` search-path folder is undecidable, not a miss (resolver 1.31.0).
+- INCR: an incremental index re-parses a file when an ancestor file, a near-search include or an indirect constant changed (INCR-BASEFIELD + INCRPP-LIMITS).
+- LSP-PROXY: the owner's VS Code "LSP exit 4294967295" was an external kill, not an engine crash; the proxy's guard reaps only its own children and stderr names the child's exit; the .delphilsp.json pick skips worktrees (VS Code 1.6.11).
+- LSP-MERGE: `lsp --proxy` never drops a diagnostics lint on a full merge queue (VS Code showed 0 drag-lint findings); --full-rules honoured; hover overload over multi-line calls; DelphiLSP hover error replies merged.
+- GH20-21: MCP get_impact uses the resolved impact walk and returns isError for an unknown qname (#20); wiring / get_wiring drop foreign-form DFM bindings (#21).
+- IDXRANGE-TP: index-possibly-out-of-range sees a constant array declared in another unit.
+- RULES-S: hardcoded-string skips Log* calls of known loggers only; Select / Set / With UI sentences are no longer dropped as SQL.
+- RENAME-GATE (B24): rename's compile gate builds a sibling project whose index was never built.
+- UNWITH: `lint --fix` after proof re-indexes a scratch copy, never writes the user's source while proving.
+- CYCLES-FIXHINT: the Fix it commands of `cycles --plan` / `--causes --no-hub-surface` carry --no-hub-surface.
+- FIXER-COMPILE: ifthen-to-if-expression and nonminimal-bool decline shapes dcc rejects (generic method-call arms, array concatenation).
+- FIXER-2: multiple-statements-per-line lays out a packed line in ONE pass.
+- FIXER-2b: local-field-prefix declines reserved words and class-member / ancestor / outer-local collisions.
+- SLZ-TAINTFP: taint-path-traversal follows a var/out parameter written field by field as those fields only.
+- allow --apply --reason keeps a neighbour rule's reviewed reason; only a marker recording the rule alone is re-stamped (docs\INBOX-allow-apply-overwrites-reason.md).
+- Self-LoopZero lanes (SLZ-S02/S04/S05/S07/S10/S11, INT-UPS): lint cleanups on the engine's own source, 33 unused public routines moved to implementation; the 47 taint-path-traversal dl:ok markers those lanes stripped on per-file evidence are restored (per-file lint has no project-wide taint stage), and the comment the collapsible-if autofix dropped in Doc.SymbolFacts is back.
+- Tests: hermetic engine cache self-heals companions, CLI-RETEST runner, owner fixture builders tests\autotest\setup_owner_converter_sandbox.ps1 and setup_owner_circular_fx.ps1; UTF-16 column fence test (COLS-TAILS).
+- Docs / specs: TableTools parent spec + phase-1 plan, symbol-id reuse spec (GH18), verify-index spec (LSP1), per-project settings store spec; Charts registry entries now owned by team ENGINE.
+
 ## v1.52.2-alpha -- 2026-11-20
 
 In integration (lane/v1522-int). No re-parse: extractor stays 1.42.0-alpha, resolver 1.30.0-alpha (hash-only baseline re-pins, reasons in tests\*.baseline). VS Code extension 1.6.10.
