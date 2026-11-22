@@ -1571,11 +1571,11 @@ begin
     begin
       if S.Pos < Cur then
         raise EInvalidOpException.CreateFmt('unwith: overlapping edits at byte %d of %s', [S.Pos, FFile]);
-      if S.Pos > Cur then Out1.Write(FRaw[Cur], S.Pos - Cur);
-      if Length(S.Ins) > 0 then Out1.Write(S.Ins[0], Length(S.Ins));
+      if S.Pos > Cur then Out1.WriteBuffer(FRaw[Cur], S.Pos - Cur);
+      if Length(S.Ins) > 0 then Out1.WriteBuffer(S.Ins[0], Length(S.Ins));
       Cur:= S.Pos + S.DelLen;
     end;
-    if Cur < Length(FRaw) then Out1.Write(FRaw[Cur], Length(FRaw) - Cur);
+    if Cur < Length(FRaw) then Out1.WriteBuffer(FRaw[Cur], Length(FRaw) - Cur);
     var NewRaw: TBytes;
     SetLength(NewRaw, Out1.Size);
     if Out1.Size > 0 then Move(Out1.Bytes[0], NewRaw[0], Out1.Size);

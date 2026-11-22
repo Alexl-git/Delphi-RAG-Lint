@@ -2667,8 +2667,7 @@ begin
             for CA in CollectCallArgs(It.Node, FSrc, FVars) do
               if CA.VarIdx = Tgt then begin SelfLinked := True;
               Break; end;
-            if SelfLinked then Result[Tgt] := False   { linked into a structure }
-            else Result[Tgt] := True;                 { created }
+            Result[Tgt] := not SelfLinked;  { False = linked into a structure, True = created }
           end
           else if (not Rhs.IsNull) and (Rhs.NodeType = 'identifier') then
           begin

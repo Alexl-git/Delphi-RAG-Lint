@@ -464,11 +464,10 @@ end;
 /// checks; line-based (not column-based) since AFromLine/AToLine are whole
 /// lines from the caller.</summary>
 function ByteOfLineStart(const ASrc: TBytes; ALine: Integer): Integer;
-var Cur, Line, I: Integer;
+var Line, I: Integer;
 begin
   Result:= -1;
   if ALine < 1 then Exit;
-  Cur:= 0;
   Line:= 1;
   if Line = ALine then Exit(0);
   for I:= 0 to Length(ASrc) - 1 do
