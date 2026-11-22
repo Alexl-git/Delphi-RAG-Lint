@@ -70,7 +70,7 @@ type
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Lint.DocRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TDocumenter = class
+  TDocumenter = class  // dl:ok high-response@c502 -- REVIEWED 2026-11-22 SLZ-S07: high-response measured a response set of 61 (>50), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   public
     /// <summary>Resolves AQName in the index and computes the DocInsight
     /// comment edits for its declaration. Reads the source file (ANSI) and the
@@ -1023,7 +1023,7 @@ begin
   end;
 end;
 
-class function TDocumenter.BuildFor(const AStore: ISymbolStore; const AQName: string;
+class function TDocumenter.BuildFor(const AStore: ISymbolStore; const AQName: string;  // dl:ok too-many-parameters@5916 -- REVIEWED 2026-11-22 SLZ-S07: too-many-parameters measured 10 parameters (max 7), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   const AHandles: TDocHandlesOptions;
   AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string;
   const AExtraStores: TArray<ISymbolStore>; AMaxReturnCases: Integer; AMaxCallers: Integer;
@@ -1067,7 +1067,7 @@ begin
            and CommentLinesEqual(NormalizeCommentLines(PureStored), NormalizeCommentLines(PureFresh))
            and CommentLinesIndentEqual(RawCommentLines(PureStored), RawCommentLines(PureFresh));
 end;
-class function TDocumenter.BuildForSymbol(const AStore: ISymbolStore; const ASym: TSymbol;
+class function TDocumenter.BuildForSymbol(const AStore: ISymbolStore; const ASym: TSymbol;  // dl:ok cyclomatic-complexity@c9ac, method-too-long@1368, too-many-exit-points@4df8, too-many-parameters@4df8 -- REVIEWED 2026-11-22 SLZ-S07: cyclomatic-complexity measured cyclomatic complexity 35 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); method-too-long measured 565 lines (max 250), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); too-many-exit-points measured 10 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); too-many-parameters measured 10 parameters (max 7), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   const AHandles: TDocHandlesOptions;
   AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string;
   const AExtraStores: TArray<ISymbolStore>; AMaxReturnCases: Integer; AMaxCallers: Integer;

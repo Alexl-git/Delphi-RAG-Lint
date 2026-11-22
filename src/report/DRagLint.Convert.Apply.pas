@@ -1,4 +1,4 @@
-unit DRagLint.Convert.Apply;
+unit DRagLint.Convert.Apply;  // dl:ok unit-too-large@ac33 -- REVIEWED 2026-11-22 SLZ-S07: unit-too-large measured 8660 lines (limit 2000), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 
 {
   Track 3 (component conversion), sub-project B -- the convert-apply
@@ -910,7 +910,7 @@ type
   /// <para>Used in units: DRagLint.CLI.Convert, DRagLint.CLI.ConvertApply, DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TConvertTreeCache = class
+  TConvertTreeCache = class  // dl:ok high-response@9898 -- REVIEWED 2026-11-22 SLZ-S07: high-response measured a response set of 57 (>50), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   private type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -2178,7 +2178,7 @@ end;
 // search rather than a full re-parse: the field symbol already told us WHICH
 // line(s) to look at; this only finds the type token's exact columns for the
 // tekReplaceInLine edit.
-function LocateFieldTypeToken(const APasLines: TStringList; AStartLine, AEndLine: Integer;
+function LocateFieldTypeToken(const APasLines: TStringList; AStartLine, AEndLine: Integer;  // dl:ok too-many-parameters@ceb9 -- REVIEWED 2026-11-22 SLZ-S07: too-many-parameters measured 8 parameters (max 7), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   const AInstanceName, AFromType: string; out ALine, ACol, AEndCol: Integer): Boolean;
 var
   LineNo: Integer;
@@ -3580,7 +3580,7 @@ var
   { -1, or the Found index of a new entry when AField is a converted ancestor's
     component field of a #convert To type -- or (1.26.7) an UNCONVERTED one's,
     still of the block's From type: listed 'skipped', never rewritten }
-  function Candidate(const AField: TSymbol; const AAction: string = INH_ACTION_CODE): Integer;
+  function Candidate(const AField: TSymbol; const AAction: string = INH_ACTION_CODE): Integer;  // dl:ok too-many-exit-points@0c13 -- REVIEWED 2026-11-22 SLZ-S07: too-many-exit-points measured 6 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   var
     FromType, DeclClass, DeclPas: string;
     Inst    : TInheritedInstance;
@@ -7005,7 +7005,7 @@ begin
 end;
 
 // REVIEWED 2026-11-18 INT13: cyclomatic re-measured after 1.52 GA-1 counts if-expressions; shape and reason unchanged.
-function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;  // dl:ok too-many-parameters@3d90, method-too-long@37f2, too-many-locals@7c2a, cyclomatic-complexity@efac -- (327 lines, re-reviewed 2026-11-04 int3: +the C18 #migrate hook and its 1.42 identifier form, PlanMigrateSites itself lives outside it; +InstToType and the 1.27.0 pas_uses input record, the surfaces themselves live outside it): parameters -- the eighth is the unit's inherited[] entries (C8 N2), per-unit and updated in place, while the book and the cast library are per-run, so no existing record fits it; length -- 264 lines at 1.25.0, 272 at 1.25.1, 276 with C8 N2 (each addition a one-line hook into a nested routine); every surface is already its own nested routine and the remaining body is the per-instance loop, whose split is a refactor of its own; locals -- one per output surface + per-unit views, shared by the nested routines (same refactor)
+function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;  // dl:ok too-many-parameters@3a17, method-too-long@e4d7, too-many-locals@da07, cyclomatic-complexity@efac -- (332 lines: +5 from the SLZ-S07 one-statement-per-line layout 2026-11-22, no logic added; 327 lines re-reviewed 2026-11-04 int3: +the C18 #migrate hook and its 1.42 identifier form, PlanMigrateSites itself lives outside it; +InstToType and the 1.27.0 pas_uses input record, the surfaces themselves live outside it): parameters -- the eighth is the unit's inherited[] entries (C8 N2), per-unit and updated in place, while the book and the cast library are per-run, so no existing record fits it; length -- 264 lines at 1.25.0, 272 at 1.25.1, 276 with C8 N2 (each addition a one-line hook into a nested routine); every surface is already its own nested routine and the remaining body is the per-instance loop, whose split is a refactor of its own; locals -- one per output surface + per-unit views, shared by the nested routines (same refactor)
   const ABook: TApplyBook; const AOnly: TArray<string>;
   const ACastLib: TCastLib; AWarnUnlinked: Boolean;
   var AInherited: TArray<TInheritedInstance>): TApplyResult;
@@ -8014,7 +8014,7 @@ var
     if (Length(AUnitLevel) = 1) and not ATrees.UnitIndex.SameUnit(AResolved, AUnitLevel[0].UnitName) then
       Result:= AUnitLevel[0].UnitName;
   end;
-  procedure PlanUsesAdditions(out AUses: TUsesPlan; out AAdds, AIntfAdds: TArray<string>);
+  procedure PlanUsesAdditions(out AUses: TUsesPlan; out AAdds, AIntfAdds: TArray<string>);  // dl:ok cyclomatic-complexity@78db -- REVIEWED 2026-11-22 SLZ-S07: cyclomatic-complexity measured cyclomatic complexity 31 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   var
     E : TTextEdit;
     It: TApplyItem;

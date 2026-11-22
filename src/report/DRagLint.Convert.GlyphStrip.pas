@@ -380,7 +380,7 @@ end;
 // of the others; folding these into a loop over an array of (sig, format)
 // pairs would need a dynamic-array typed constant per entry for zero
 // behavioural gain on a routine this small.
-function SniffImageFormat(const ABytes: TBytes; AOffset: Integer): string;  // dl:ok too-many-exit-points@0ee8
+function SniffImageFormat(const ABytes: TBytes; AOffset: Integer): string;  // dl:ok too-many-exit-points@657a
 begin
   Result:= '';
   if StartsWith(ABytes, AOffset, PngMagic) then Exit('png');

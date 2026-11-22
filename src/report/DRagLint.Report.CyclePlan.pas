@@ -2030,7 +2030,7 @@ end;
   first, so a removal never empties a clause that gains an entry. First = 0
   when nothing changes; a refusal is an ekManual edit on the line it names,
   its Refusal the kind. }
-function ClauseEdit(const pLines: TArray<string>; pUsesLine: Integer; const pSectLabel: string;
+function ClauseEdit(const pLines: TArray<string>; pUsesLine: Integer; const pSectLabel: string;  // dl:ok cyclomatic-complexity@2343 -- REVIEWED 2026-11-22 SLZ-S07: cyclomatic-complexity measured cyclomatic complexity 38 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   const pAdds, pDels: TArray<string>; const pMoved: TArray<string> = nil; const pRegions: TArray<TPpRegionRow> = nil): TFileEdit;
 var
   Why   : string;           // lane 149 CYB: a named reason that replaces the generic one
@@ -3083,7 +3083,7 @@ end;
 { The F5 base-class plan of a class: `TX = class` or, since B4-d, `TX = class(TAnc[, I1, ...])`
   with TAnc declared outside the cycle -- the leaf gets `TXBase = class(TAnc)`, the class becomes
   `TX = class(TXBase[, I1, ...])` (the interfaces stay on TX: their methods are implemented there). }
-procedure TCyclePlanner.BuildBase(const pF: TPlanFile; var pItem: TMoveItem);
+procedure TCyclePlanner.BuildBase(const pF: TPlanFile; var pItem: TMoveItem);  // dl:ok too-many-exit-points@2618 -- REVIEWED 2026-11-22 SLZ-S07: too-many-exit-points measured 6 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 const
   CHeritageGroup = 3;  // the header regex's group for the text inside `class(...)`; 1 = indent, 2 = the parentheses
 var
@@ -3809,7 +3809,7 @@ end;
   whose routine body only reads members of it, compares it with nil or stores it
   into a switchable field (`F[..] := p`), or is such a field (FieldSiteRefusal);
   otherwise the first offending site, as "`<file>:<line>` <what>". }
-function TCyclePlanner.BaseSiteRefusal(const pItem: TMoveItem): string;
+function TCyclePlanner.BaseSiteRefusal(const pItem: TMoveItem): string;  // dl:ok too-many-exit-points@15fe -- REVIEWED 2026-11-22 SLZ-S07: too-many-exit-points measured 6 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 var
   Param : string;
   Field : string;
@@ -3930,7 +3930,7 @@ end;
   ref outside its unit; every use of its name in its scope (the unit for a field, the routine
   body for a local) passes IsSlotUse; a member reached through it is read, or is `Free` called;
   otherwise the first offending site, as "`<file>:<line>`: <what>". }
-function TCyclePlanner.ObjSlotRefusal(const pItem: TMoveItem; const pSlot: TObjSlot; const pFields: TArray<string>;
+function TCyclePlanner.ObjSlotRefusal(const pItem: TMoveItem; const pSlot: TObjSlot; const pFields: TArray<string>;  // dl:ok cyclomatic-complexity@155b -- REVIEWED 2026-11-22 SLZ-S07: cyclomatic-complexity measured cyclomatic complexity 35 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   const pSlots: TArray<TObjSlot>): string;
 var
   MA     : TCallEdge;
@@ -4061,7 +4061,7 @@ end;
   of Add / Insert / Remove / IndexOf / Contains / Delete / Clear / Count / Free, a nil test,
   `Assigned(F)` / `FreeAndNil(F)`, or `F := TList<TX>.Create` (TObjectList too) -- the creation is
   switched with the field. Extract, First, Last, ToArray and every other use refuse. }
-function IsListFieldUse(const pCode: string; pIndex, pLen: Integer; const pTypeName: string; const pPulled,
+function IsListFieldUse(const pCode: string; pIndex, pLen: Integer; const pTypeName: string; const pPulled,  // dl:ok too-many-exit-points@7881 -- REVIEWED 2026-11-22 SLZ-S07: too-many-exit-points measured 7 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   pSlots: TArray<string>): Boolean;
 begin
   if IsSwitchableFieldUse(pCode, pIndex, pLen, pPulled, pSlots) then Exit(True);
@@ -8616,7 +8616,7 @@ begin
   end;
 end;
 
-procedure RenderCyclePlaybook(const pStore: ISymbolStore; const pDbPath: string;
+procedure RenderCyclePlaybook(const pStore: ISymbolStore; const pDbPath: string;  // dl:ok too-many-parameters@69ee -- REVIEWED 2026-11-22 SLZ-S07: too-many-parameters measured 9 parameters (max 7), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings;
   const pLibStore: ISymbolStore; const pFixProject: string; const pGroupHook: TCycleGroupHook;
   pFixNoHubSurface: Boolean);

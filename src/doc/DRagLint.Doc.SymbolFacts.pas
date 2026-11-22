@@ -1,4 +1,4 @@
-unit DRagLint.Doc.SymbolFacts;
+unit DRagLint.Doc.SymbolFacts;  // dl:ok unit-too-large@d456 -- REVIEWED 2026-11-22 SLZ-S07: unit-too-large measured 4116 lines (limit 2000), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 
 // v(ADP3 T11-T14): FOUR MORE ANALYSES, and one rule that governs all of them.
 //
@@ -869,7 +869,7 @@ end;
 // too-many-parameters, reviewed v23: 8 = the 6 pre-existing plus the two held
 // lists, which parallel AReads/AWrites one-to-one; folding the four lists into
 // a record would hide WHICH list each of the 8 recursive call sites feeds.
-procedure WalkFieldRW(const N: TTSNode; const ASrc: TBytes; AFields: TDictionary<string, string>;  // dl:ok too-many-parameters@a341 -- see the note above
+procedure WalkFieldRW(const N: TTSNode; const ASrc: TBytes; AFields: TDictionary<string, string>;  // dl:ok too-many-parameters@1750 -- see the note above
   AVars: TRoutineVarTable; AReads, AWrites: TList<string>; AUnresReads, AUnresWrites: TList<string>);
 
   // Returns True when AIdent is an OWN field (ADisplay = its declared
@@ -1088,7 +1088,7 @@ end;
 // list (F4). AOwnReads/AOwnWrites are the UNCAPPED own lists behind the two
 // capped CSVs. A free routine (ASym.ParentId <= 0) yields '' for both CSVs
 // and empty arrays -- the renderer then omits the whole Reads/Writes line.
-procedure AnalyzeReadsWrites(const AProc, ABody: TTSNode; const ASrc: TBytes;  // dl:ok too-many-parameters@2bfd, unused-parameter@237a -- REVIEWED 2026-11-05: AProc is unused but removing it is a code change in a fingerprint unit, out of scope for a comment-only pass; 12 parameters: the two own + two held out-arrays are the F1 contract with ApplyInheritedFieldFacts; grouping them into a record is a separate refactor
+procedure AnalyzeReadsWrites(const AProc, ABody: TTSNode; const ASrc: TBytes;  // dl:ok too-many-parameters@3212, unused-parameter@237a -- REVIEWED 2026-11-22 (SLZ-S07 re-read after the layout/if-expression passes changed the body; signature untouched, still 12 parameters): AProc is unused but removing it is a code change in a fingerprint unit, out of scope for a comment-only pass; 12 parameters: the two own + two held out-arrays are the F1 contract with ApplyInheritedFieldFacts; grouping them into a record is a separate refactor
   const ASym: TSymbol; const AStore: ISymbolStore; AVars: TRoutineVarTable;
   out AReadsCsv, AWritesCsv: string;
   out AOwnReads, AOwnWrites, AHeldReads, AHeldWrites: TArray<string>);
@@ -1202,7 +1202,7 @@ procedure WalkMutatedParams(const N: TTSNode; const ASrc: TBytes;
   begin
     Result:= Default(TTSNode);
     Cur   := ALhs;
-    for Guard:= 0 to 7 do
+    for Guard:= 0 to 7 do  // dl:ok magic-literal@bab1 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 7 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
     begin
       if Cur.IsNull then Exit;
       if Cur.NodeType = 'identifier' then Exit(Cur);
@@ -1389,7 +1389,7 @@ begin
   Seen:= TStringList.Create;
   try
     Seen.CaseSensitive:= False;
-    Result:= ChainReachesUi(Bare, Seen, 16);
+    Result:= ChainReachesUi(Bare, Seen, 16);  // dl:ok magic-literal@1560 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 16 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
   finally
     Seen.Free;
   end;
@@ -2228,7 +2228,7 @@ var T, U: string;
 begin
   T:= Trim(AText);
   U:= SqlUpperCase(T);
-  Result:= (StartsText('SELECT', T) and SelectFromIsSqlShaped(U)) or
+  Result:= (StartsText('SELECT', T) and SelectFromIsSqlShaped(U)) or  // dl:ok boolean-expression-complexity@0031 -- REVIEWED 2026-11-22 SLZ-S07: boolean-expression-complexity measured 8 and/or/xor operators (limit 4), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
            (StartsText('INSERT', T) and InsertIntoIsSqlShaped(U)) or
            (StartsText('UPDATE', T) and UpdateIsSqlShaped(U)) or
            (StartsText('DELETE', T) and DeleteFromIsSqlShaped(U)) or
@@ -3112,7 +3112,7 @@ begin
   Head:= '';
   Cur:= ARecv;
   Guard:= 0;
-  while (not Cur.IsNull) and (Guard < 32) do
+  while (not Cur.IsNull) and (Guard < 32) do  // dl:ok magic-literal@bb9d -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 32 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
   begin
     Inc(Guard);
     if Cur.NodeType = 'identifier' then
@@ -3145,7 +3145,7 @@ end;
 // param handle -- Pascal scoping: a local/Result SHADOWS a same-named
 // field, the exact same precedence AnalyzeReadsWrites' own ResolveField
 // already enforces.
-function ClassifyReturnSite(const N: TTSNode; const ASrc: TBytes;
+function ClassifyReturnSite(const N: TTSNode; const ASrc: TBytes;  // dl:ok too-many-exit-points@dcff -- REVIEWED 2026-11-22 SLZ-S07: too-many-exit-points measured 7 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   AVars: TRoutineVarTable; AFields: TDictionary<string, string>): string;
 var
   Op    : TTSNode;
@@ -3242,7 +3242,7 @@ end;
 // NOT found in AVars (AResultIdx = -1), an untranslatable/unrelated
 // identifier that ALSO fails to resolve (-1) would wrongly compare equal;
 // gating AResultIdx >= 0 at the call site avoids that entirely.
-procedure WalkReturnsOwnerSites(const N: TTSNode; const ASrc: TBytes;
+procedure WalkReturnsOwnerSites(const N: TTSNode; const ASrc: TBytes;  // dl:ok too-many-exit-points@2ad4 -- REVIEWED 2026-11-22 SLZ-S07: too-many-exit-points measured 6 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   AVars: TRoutineVarTable; AResultIdx: Integer; ASites: TList<TTSNode>; var ADisposed: Boolean);
 var
   Lhs, Rhs, Ent, ArgsN: TTSNode;
@@ -3298,7 +3298,7 @@ end;
 // each step's own rules. AProc/ABody are the SAME defProc/body nodes
 // Analyze already matched for Cyclomatic/AnalyzeReadsWrites/
 // AnalyzeSqlTables -- no second AST scan.
-function AnalyzeReturnsOwner(const ABody: TTSNode; const ASrc: TBytes;  // dl:ok too-many-exit-points@2d69 -- REVIEWED 2026-09-30: the nine guard exits predate the index-throughput change, which only threaded the shared TRoutineVarTable through this signature
+function AnalyzeReturnsOwner(const ABody: TTSNode; const ASrc: TBytes;  // dl:ok too-many-exit-points@4c80 -- REVIEWED 2026-11-22 (SLZ-S07 re-read after the layout/if-expression passes; exit count unchanged): the nine guard exits predate the index-throughput change, which only threaded the shared TRoutineVarTable through this signature
   const ASym: TSymbol; const AStore: ISymbolStore; AVars: TRoutineVarTable): string;
 var
   RetTypeName: string             ;

@@ -1,4 +1,4 @@
-unit DRagLint.Convert.PropTree;
+unit DRagLint.Convert.PropTree;  // dl:ok unit-too-large@0ee3 -- REVIEWED 2026-11-22 SLZ-S07: unit-too-large measured 2738 lines (limit 2000), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 
 {
   Track 3 (component conversion), Batch 1, Task 1 -- the index-driven RECURSIVE
@@ -1296,7 +1296,7 @@ end;
 //                 A bare `default;` lands here too: that is the default-ARRAY-
 //                 PROPERTY directive and carries no value; array properties
 //                 are not DFM-streamed, so walking up is harmless.
-function ClassifyDefaultClause(const ADeclText: string; out AValue: string): TDefaultClause;
+function ClassifyDefaultClause(const ADeclText: string; out AValue: string): TDefaultClause;  // dl:ok cyclomatic-complexity@e102, too-many-exit-points@70a2 -- REVIEWED 2026-11-22 SLZ-S07: cyclomatic-complexity measured cyclomatic complexity 31 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); too-many-exit-points measured 8 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 const
   KW_PROPERTY = 'property';
 var
@@ -1346,27 +1346,27 @@ begin
   repeat
     P:= PosEx('stored', LowText, P);
     if P = 0 then Break;
-    if IsWholeWordAt(LowText, P, 6) then
+    if IsWholeWordAt(LowText, P, 6) then  // dl:ok magic-literal@95a4 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 6 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
     begin
-      i:= P + 6;
+      i:= P + 6;  // dl:ok magic-literal@37d0 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 6 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
       while (i <= Length(LowText)) and CharInSet(LowText[i], [' ', #9]) do Inc(i);
       j:= i;
       while (j <= Length(LowText)) and (not CharInSet(LowText[j], [' ', #9, ';'])) do Inc(j);
       if not SameText(Copy(ADeclText, i, j - i), 'True') then Exit(dcAbsent);
       Break;
     end;
-    Inc(P, 6);
+    Inc(P, 6);  // dl:ok magic-literal@e97f -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 6 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
   until False;
 
   P:= 1;
   repeat
     P:= PosEx('default', LowText, P);
     if P = 0 then Exit(dcAbsent);
-    if IsWholeWordAt(LowText, P, 7) then Break;
-    Inc(P, 7);
+    if IsWholeWordAt(LowText, P, 7) then Break;  // dl:ok magic-literal@1d4b -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 7 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
+    Inc(P, 7);  // dl:ok magic-literal@0279 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 7 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
   until False;
 
-  i:= P + 7;
+  i:= P + 7;  // dl:ok magic-literal@ef2b -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 7 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
   while (i <= Length(ADeclText)) and CharInSet(ADeclText[i], [' ', #9]) do Inc(i);
 
   { A SET default is a bracketed list and contains spaces:

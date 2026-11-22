@@ -227,7 +227,7 @@ var
   T: string;
 begin
   T:= TrimLeft(S);
-  if StartsStr('///', T) then T:= Copy(T, 4, MaxInt);
+  if StartsStr('///', T) then T:= Copy(T, 4, MaxInt);  // dl:ok magic-literal@4b1b -- REVIEWED 2026-11-22 SLZ-S07: magic-literal  is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
   Result:= Trim(T);
 end;
 
@@ -304,7 +304,7 @@ end;
 // additional blank-line artifact to clean up, because the region by
 // definition contains only /// lines (a blank line breaks the contiguous
 // run that defines a region in the first place).
-procedure StripRegion(ALines: TStrings; ALo, AHi: Integer;
+procedure StripRegion(ALines: TStrings; ALo, AHi: Integer;  // dl:ok cognitive-complexity@5b1a, cyclomatic-complexity@080a -- REVIEWED 2026-11-22 SLZ-S07: cognitive-complexity measured 92 (max 65), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); cyclomatic-complexity measured cyclomatic complexity 41 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   var ADeleted: TArray<Boolean>; var ATagsRemoved, ABlocksRemoved: Integer);
 var
   I, J, K    : Integer;

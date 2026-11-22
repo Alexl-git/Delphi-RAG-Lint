@@ -2683,7 +2683,7 @@ end;
   `B.G` the plan moves (pSurface.QualifiedMoved) is rewritten, and a call that runs from the finalization
   section refuses finalization-order when the declaring unit's finalization can be seen and the program order does
   not prove it is finalized after the consumer (FinalOrderVerdict, lane FINPROOF). }
-function CallRefusal(const pSource: IEdgeSurfaceSource; const pSurface: TEdgeSurface; pFromFid: Int64;
+function CallRefusal(const pSource: IEdgeSurfaceSource; const pSurface: TEdgeSurface; pFromFid: Int64;  // dl:ok too-many-exit-points@aef5, too-many-parameters@2bf5 -- REVIEWED 2026-11-22 SLZ-S07: too-many-exit-points measured 8 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); too-many-parameters measured 11 parameters (max 7), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   const pLines: TArray<string>; const pFromUnit, pDeclUnit: string; pQualified: TList<Integer>;
   const pRoutine: TSymbol; pDeclFid: Int64; var pProof, pFinProof: string): TRecipeRefusal;
 var
@@ -3706,7 +3706,7 @@ begin
 end;
 
 { Whether one ref of the edge has a shape the interface cannot carry: its kind and what it does. }
-function TMemberPlan.RefRefusal(const pR: TEdgeRef; out pKind, pWhat: string): Boolean;
+function TMemberPlan.RefRefusal(const pR: TEdgeRef; out pKind, pWhat: string): Boolean;  // dl:ok too-many-exit-points@100d -- REVIEWED 2026-11-22 SLZ-S07: too-many-exit-points measured 6 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 begin
   pKind:= '';
   pWhat:= '';
@@ -4196,7 +4196,7 @@ end;
   without a call (a method pointer), an overload, a directive an interface cannot carry, a function with no
   stored result type, a signature type of the cycle or one no index resolves. Else pM is
   carried once: `procedure|function <Name><signature verbatim>;[ <conv>;]`. }
-function TMemberPlan.CheckMethod(const pR: TEdgeRef; const pM: TSymbol): Boolean;  // dl:ok too-many-exit-points@2e39 -- one guard clause per refusal kind, the TMemberPlan check style
+function TMemberPlan.CheckMethod(const pR: TEdgeRef; const pM: TSymbol): Boolean;  // dl:ok too-many-exit-points@4b1e -- one guard clause per refusal kind, the TMemberPlan check style
 var
   Conv, Why: string;
   IsOverload: Boolean;

@@ -113,7 +113,7 @@ type
   /// <para>Used in units: [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.Doc.Document, [drag-lint]DRagLint.Doc.Drift, [drag-lint]DRagLint.Doc.Facts, [drag-lint]DRagLint.Doc.Regions, [drag-lint]DRagLint.Doc.SharedFacts</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TSharedFacts = class
+  TSharedFacts = class  // dl:ok high-response@e60c -- REVIEWED 2026-11-22 SLZ-S07: high-response measured a response set of 58 (>50), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   public
     /// <summary>True when the stored block differs from a fresh render in a way
     /// that counts as drift.</summary>
@@ -1588,7 +1588,7 @@ end;
   TSharedFacts
   --------------------------------------------------------------------------- }
 
-class function TSharedFacts.BlockDrifted(const AStored, AFresh: string;
+class function TSharedFacts.BlockDrifted(const AStored, AFresh: string;  // dl:ok too-many-exit-points@da3e -- REVIEWED 2026-11-22 SLZ-S07: too-many-exit-points measured 9 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   const AStore: ISymbolStore; const AUnitPath: string): Boolean;
 var
   SIn, FIn      : TFactMap;

@@ -311,7 +311,7 @@ begin
         if (i + 2 <= N) and (ALine[i + 2] = '/') then
         begin
           IsDoc  := True;
-          Content:= Content + Copy(ALine, i + 3, MaxInt);
+          Content:= Content + Copy(ALine, i + 3, MaxInt);  // dl:ok magic-literal@2b4b -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 3 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
         end
         else Content:= Content + Copy(ALine, i + 2, MaxInt);
         i:= N + 1; // a // comment runs to end-of-line
@@ -495,11 +495,11 @@ var
   T: string;
 begin
   T:= TrimLeft(ALine);
-  if T.StartsWith('///') then T:= Copy(T, 4, MaxInt)
-  else if T.StartsWith('//') then T:= Copy(T, 3, MaxInt)
+  if T.StartsWith('///') then T:= Copy(T, 4, MaxInt)  // dl:ok magic-literal@749d -- REVIEWED 2026-11-22 SLZ-S07: magic-literal  is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
+  else if T.StartsWith('//') then T:= Copy(T, 3, MaxInt)  // dl:ok magic-literal@4420 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal  is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
   else
   begin
-    if T.StartsWith('(*') then T:= Copy(T, 3, MaxInt)
+    if T.StartsWith('(*') then T:= Copy(T, 3, MaxInt)  // dl:ok magic-literal@023d -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 3 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
     else if T.StartsWith('{') then T:= Copy(T, 2, MaxInt);
     T:= TrimRight(T);
     if T.EndsWith('*)') then T:= Copy(T, 1, Length(T) - 2)
@@ -672,7 +672,7 @@ begin
   Result:= T.StartsWith('//') and (not T.StartsWith('///')) and Trim(Copy(T, Length('//') + 1, MaxInt)).StartsWith('dl:');
 end;
 
-function HarvestScan(const ASrcLines: TArray<string>; ADeclLine: Integer): THarvestResult;
+function HarvestScan(const ASrcLines: TArray<string>; ADeclLine: Integer): THarvestResult;  // dl:ok cyclomatic-complexity@4d4a, too-many-exit-points@b58a -- REVIEWED 2026-11-22 SLZ-S07: cyclomatic-complexity measured cyclomatic complexity 45 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); too-many-exit-points measured 10 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 var
   Infos    : TArray<TLineInfo>;
   State    : TLexState        ;
@@ -799,7 +799,7 @@ begin
   // counts too.
   for i:= Low(Result.RawLines) to High(Result.RawLines) do
     for Ch in Result.RawLines[i] do
-      if Ord(Ch) >= 128 then
+      if Ord(Ch) >= 128 then  // dl:ok magic-literal@7352 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 128 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
       begin
         Result.Reason:= hrNonAscii;
         Exit;

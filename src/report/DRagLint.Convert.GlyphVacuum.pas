@@ -369,7 +369,7 @@ end;
 // Builds and files one row for one decoded payload -- the binary-leaf path and
 // the collection-item path (HarvestCollection) both funnel through here so the
 // derived columns are computed exactly once, the same way, everywhere.
-procedure AddRow(const AObject: TReemitDfmNode; const ADfmPath, APasUnit, ASurface, AFormClass, AObjectPath, AProp: string;
+procedure AddRow(const AObject: TReemitDfmNode; const ADfmPath, APasUnit, ASurface, AFormClass, AObjectPath, AProp: string;  // dl:ok too-many-parameters@076e -- REVIEWED 2026-11-22 SLZ-S07: too-many-parameters measured 10 parameters (max 7), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   const APayload: TBytes; AInCollection: Boolean; var AState: TVacuumState);
 var
   G    : TStreamedGraphic;
@@ -434,7 +434,7 @@ end;
 // A collection value is verbatim `< item ... end item ... end>` text; the
 // re-emit parser does not descend into it. Every `<Name> = {hex}` inside becomes
 // one row named <CollectionProp>[i].<Name>, i counting `item` keywords from 0.
-procedure HarvestCollection(const AObject: TReemitDfmNode; const ACollProp: TReemitDfmNode;
+procedure HarvestCollection(const AObject: TReemitDfmNode; const ACollProp: TReemitDfmNode;  // dl:ok too-many-parameters@fb21 -- REVIEWED 2026-11-22 SLZ-S07: too-many-parameters measured 8 parameters (max 7), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   const ADfmPath, APasUnit, ASurface, AFormClass, AObjectPath: string; var AState: TVacuumState);
 var
   Text   : string;

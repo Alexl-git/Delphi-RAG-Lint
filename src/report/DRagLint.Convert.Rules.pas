@@ -750,7 +750,7 @@ begin
   APath     := Trim(Copy(APath, 1, At - 1));
 end;
 
-function ParseConversionRules(const AText: string): TConversionRuleSet;
+function ParseConversionRules(const AText: string): TConversionRuleSet;  // dl:ok cognitive-complexity@89ec, cyclomatic-complexity@74ac, method-too-long@5de6 -- REVIEWED 2026-11-22 SLZ-S07: cognitive-complexity measured 67 (max 65), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); cyclomatic-complexity measured cyclomatic complexity 39 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); method-too-long measured 251 lines (max 250), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 var
   Lines : TArray<string>       ;
   Rules : TList<TConversionRule>;
@@ -1133,10 +1133,10 @@ begin
       begin
         R.Kind:= rkRemove;
         // '#remove DFM: <prop>' -> DFM-only. Match a leading 'DFM:' (any case).
-        if SameText(Copy(Arg, 1, 4), 'DFM:') then
+        if SameText(Copy(Arg, 1, 4), 'DFM:') then  // dl:ok magic-literal@5809 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 4 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
         begin
           R.DfmOnly := True;
-          R.PropName:= Trim(Copy(Arg, 5, MaxInt));
+          R.PropName:= Trim(Copy(Arg, 5, MaxInt));  // dl:ok magic-literal@7cb8 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 5 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
         end
         else
         begin

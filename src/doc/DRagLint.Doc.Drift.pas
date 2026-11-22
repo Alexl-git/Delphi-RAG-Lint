@@ -118,7 +118,7 @@ type
   /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.DocRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TDocDrift = class
+  TDocDrift = class  // dl:ok high-response@2208 -- REVIEWED 2026-11-22 SLZ-S07: high-response measured a response set of 56 (>50), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   public
     /// <summary>Analyzes ADoc against ASym's live signature and body facts,
     /// returning all drift findings (empty when the doc is structurally current).
@@ -622,9 +622,9 @@ begin
       // Find the next '<c>' (case-insensitive) open tag.
       OpenT:= PosEx('<c>', LowerCase(AText), I);
       if OpenT = 0 then Break;
-      CloseT:= PosEx('</c>', LowerCase(AText), OpenT + 3);
+      CloseT:= PosEx('</c>', LowerCase(AText), OpenT + 3);  // dl:ok magic-literal@87f8 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 3 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
       if CloseT = 0 then Break;
-      Tok:= Trim(Copy(AText, OpenT + 3, CloseT - (OpenT + 3)));
+      Tok:= Trim(Copy(AText, OpenT + 3, CloseT - (OpenT + 3)));  // dl:ok magic-literal@31dd -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 3 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
       // Accept only a clean identifier (optionally dotted). Reject anything with
       // whitespace or non-identifier chars -- those are not a type token.
       Valid:= (Tok <> '') and (IsIdentStart(Tok[1]));
@@ -636,7 +636,7 @@ begin
             Break;
           end;
       if Valid then Acc.Add(Tok);
-      I:= CloseT + 4;
+      I:= CloseT + 4;  // dl:ok magic-literal@a766 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 4 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
     end;
     Result:= Acc.ToStringArray;
   finally
@@ -687,11 +687,11 @@ begin
     begin
       OpenT:= PosEx('<c>', LowerT, I);
       if OpenT = 0 then Break;
-      CloseT:= PosEx('</c>', LowerT, OpenT + 3);
+      CloseT:= PosEx('</c>', LowerT, OpenT + 3);  // dl:ok magic-literal@8e8e -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 3 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
       if CloseT = 0 then Break;
-      Tok:= Trim(Copy(AText, OpenT + 3, CloseT - (OpenT + 3)));
+      Tok:= Trim(Copy(AText, OpenT + 3, CloseT - (OpenT + 3)));  // dl:ok magic-literal@31dd -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 3 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
       AddIfIdent(Tok);
-      I:= CloseT + 4;
+      I:= CloseT + 4;  // dl:ok magic-literal@a766 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 4 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
     end;
     // <paramref name="Ident"/>
     I:= 1;
@@ -701,7 +701,7 @@ begin
       if OpenT = 0 then Break;
       QOpen:= PosEx('name="', LowerT, OpenT);
       if QOpen = 0 then Break;
-      QOpen := QOpen + 6;
+      QOpen := QOpen + 6;  // dl:ok magic-literal@a6f9 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 6 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
       QClose:= PosEx('"', AText, QOpen);
       if QClose = 0 then Break;
       Tok:= Trim(Copy(AText, QOpen, QClose - QOpen));
@@ -1117,7 +1117,7 @@ begin
   Result:= Analyze(AStore, ASym, ADoc, TDocFactsRenderOptions.Defaults);
 end;
 
-class function TDocDrift.Analyze(const AStore: ISymbolStore; const ASym: TSymbol;
+class function TDocDrift.Analyze(const AStore: ISymbolStore; const ASym: TSymbol;  // dl:ok cognitive-complexity@2479, cyclomatic-complexity@0fd9, method-too-long@75fd -- REVIEWED 2026-11-22 SLZ-S07: cognitive-complexity measured 106 (max 65), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); cyclomatic-complexity measured cyclomatic complexity 66 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); method-too-long measured 611 lines (max 250), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   const ADoc: TParsedDoc; const AOpts: TDocFactsRenderOptions): TArray<TDocDriftFinding>;
 var
   Findings  : TList<TDocDriftFinding>;

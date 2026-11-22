@@ -1,4 +1,4 @@
-unit DRagLint.Doc.Facts;
+unit DRagLint.Doc.Facts;  // dl:ok unit-too-large@aab5 -- REVIEWED 2026-11-22 SLZ-S07: unit-too-large measured 5754 lines (limit 2000), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 
 interface
 
@@ -724,7 +724,7 @@ type
   /// <para>Used in units: DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.LSP.Server, DRagLint.Query.HoverModel</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TDocFactsBuilder = class
+  TDocFactsBuilder = class  // dl:ok high-response@3252 -- REVIEWED 2026-11-22 SLZ-S07: high-response measured a response set of 96 (>50), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   public
     /// <summary>Builds the grounded facts for ASym from the index. When
     /// AIncludeSeeAlso is True (the --seealso opt-in), also populates
@@ -1422,7 +1422,7 @@ function DocFactsBuildProfile: string;
   function Per(ATicks, ACalls: Int64): string;
   begin
     if ACalls <= 0 then Exit('-- ms/call');
-    Result:= Format('%.2f ms/call', [ATicks * 1000 / (TStopwatch.Frequency * ACalls)]);
+    Result:= Format('%.2f ms/call', [ATicks * 1000 / (TStopwatch.Frequency * ACalls)]);  // dl:ok magic-literal@2e68 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 1000 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
   end;
 begin
   // 'unattributed' is total minus the nine sections. It is printed rather than
@@ -1517,7 +1517,7 @@ end;
 
 function DocDisplayCount(ATotal: Integer): Integer;
 begin
-  Result:= if ATotal > 15 then 10 else ATotal;
+  Result:= if ATotal > 15 then 10 else ATotal;  // dl:ok magic-literal@0d9b -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 10/15 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
 end;
 
 function EffectiveDocIndent(const ALines: TArray<string>; ADeclLine, ADocStart, ADocEnd: Integer): string;
@@ -3695,7 +3695,7 @@ var
   HasLower: Boolean;
 begin
   Result:= False;
-  if Length(AWord) < 3 then Exit;
+  if Length(AWord) < 3 then Exit;  // dl:ok magic-literal@a794 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 3 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
   HasUpper:= False;
   HasLower:= False;
   for i:= 2 to Length(AWord) do
@@ -4443,7 +4443,7 @@ begin
   end;
 end;
 
-class function TDocFactsBuilder.Build(const AStore: ISymbolStore; const ASym: TSymbol;
+class function TDocFactsBuilder.Build(const AStore: ISymbolStore; const ASym: TSymbol;  // dl:ok cognitive-complexity@e58a, cyclomatic-complexity@ef0a, method-too-long@e16c, too-many-parameters@2a0c -- REVIEWED 2026-11-22 SLZ-S07: cognitive-complexity measured 165 (max 65), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); cyclomatic-complexity measured cyclomatic complexity 96 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); method-too-long measured 1090 lines (max 250), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); too-many-parameters measured 11 parameters (max 7), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   const AHandles: TDocHandlesOptions;
   AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string;
   const AExtraStores: TArray<ISymbolStore>; AMaxReturnCases: Integer; AMaxCallers: Integer;

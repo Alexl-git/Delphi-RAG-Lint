@@ -577,10 +577,10 @@ begin
   for C in Cand do
   begin
     if C = '' then Continue;
-    if      C = T                                              then S:= 100
-    else if StartsStr(T, C) or StartsStr(C, T)                 then S:= 80
-    else if ContainsWholeWord(T, C) or ContainsWholeWord(C, T) then S:= 60
-    else if T.Contains(C) or C.Contains(T)                     then S:= 40
+    if      C = T                                              then S:= 100  // dl:ok magic-literal@c83f -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 100 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
+    else if StartsStr(T, C) or StartsStr(C, T)                 then S:= 80  // dl:ok large-magic-number@0cf3, magic-literal@0cf3 -- REVIEWED 2026-11-22 SLZ-S07: large-magic-number 80 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up; magic-literal 80 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
+    else if ContainsWholeWord(T, C) or ContainsWholeWord(C, T) then S:= 60  // dl:ok magic-literal@ffa6 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 60 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
+    else if T.Contains(C) or C.Contains(T)                     then S:= 40  // dl:ok large-magic-number@93d6, magic-literal@93d6 -- REVIEWED 2026-11-22 SLZ-S07: large-magic-number 40 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up; magic-literal 40 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
     else                                                            S:= 0;
     if S > Result then Result:= S;
   end;

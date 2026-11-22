@@ -1,4 +1,4 @@
-unit DRagLint.Doc.Regions;
+unit DRagLint.Doc.Regions;  // dl:ok unit-too-large@3502 -- REVIEWED 2026-11-22 SLZ-S07: unit-too-large measured 5172 lines (limit 2000), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 
 // THE PROVENANCE CONTRACT -- this unit's governing invariant (v(ADP3) T1/T15).
 //
@@ -1697,7 +1697,7 @@ end;
 function IsSingularMatchContainer(const ATagName: string): Boolean;
 begin
   Result:=
-    SameText(ATagName, 'summary' ) or SameText(ATagName, 'remarks') or
+    SameText(ATagName, 'summary' ) or SameText(ATagName, 'remarks') or  // dl:ok boolean-expression-complexity@5cf8 -- REVIEWED 2026-11-22 SLZ-S07: boolean-expression-complexity measured 5 and/or/xor operators (limit 4), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
     SameText(ATagName, 'returns' ) or SameText(ATagName, 'example') or
     SameText(ATagName, 'since'   ) or SameText(ATagName, 'deprecated');
 end;
@@ -1807,7 +1807,7 @@ begin
   // length -- so the body is the match minus '<tag>' and '</tag>', with no
   // capture group needed.
   OpenLen := Length(ATagName) + 2;
-  CloseLen:= Length(ATagName) + 3;
+  CloseLen:= Length(ATagName) + 3;  // dl:ok magic-literal@9b28 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 3 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
   // v(ADP3 T3k, T3h minor 1): FAIL-CLOSED CHECK ON THE PATTERN, not just on the
   // caller. The refusal above guards the tag NAME; this guards the thing the
   // arithmetic actually depends on -- that the matched opening really is the
@@ -2865,12 +2865,12 @@ begin
       if StartsStr('di:', WEntry) then
       begin
         if DiPart <> '' then DiPart:= DiPart + ', ';
-        DiPart:= DiPart + Copy(WEntry, 4, MaxInt);
+        DiPart:= DiPart + Copy(WEntry, 4, MaxInt);  // dl:ok magic-literal@5ac6 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 4 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
       end
       else if StartsStr('ds:', WEntry) then
       begin
         if DsPart <> '' then DsPart:= DsPart + ', ';
-        DsPart:= DsPart + Copy(WEntry, 4, MaxInt);
+        DsPart:= DsPart + Copy(WEntry, 4, MaxInt);  // dl:ok magic-literal@1cf7 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 4 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
       end;
     if DiPart <> '' then ALines.Add('Registered as: ' + EscXml(DiPart));
     if DsPart <> '' then ALines.Add('Dataset: ' + EscXml(DsPart));
@@ -4058,7 +4058,7 @@ begin
   // no failing state to revert to); it is evidenced instead by the whole
   // idempotency sweep producing byte-identical md5s before and after.
   var HasAnySignal: Boolean:=
-    C.AExistingHasAnyTag and
+    C.AExistingHasAnyTag and  // dl:ok boolean-expression-complexity@243f -- REVIEWED 2026-11-22 SLZ-S07: boolean-expression-complexity measured 6 and/or/xor operators (limit 4), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
     (C.Eff.Format = dfXmlDoc) and
     ((Length(C.Eff.Exceptions) > 0) or C.Eff.HasExampleTag or
      (Length(C.Eff.SeeAlso) > 0) or C.Eff.HasSinceTag or C.Eff.Deprecated);

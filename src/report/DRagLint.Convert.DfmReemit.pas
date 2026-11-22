@@ -1,4 +1,4 @@
-unit DRagLint.Convert.DfmReemit;
+unit DRagLint.Convert.DfmReemit;  // dl:ok unit-too-large@5756 -- REVIEWED 2026-11-22 SLZ-S07: unit-too-large measured 2873 lines (limit 2000), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 
 {
   Track 3 (component conversion), Batch 2a-i -- the PURE DFM component re-emit
@@ -664,7 +664,7 @@ begin
   Result:= False;
   if Trim(ABlockText) = '' then Exit;
   Src:= TEncoding.UTF8.GetBytes(ABlockText);
-  if (Length(Src) > 0) and (Src[0] = $FF) then Exit; // binary DFM unsupported
+  if (Length(Src) > 0) and (Src[0] = $FF) then Exit; // binary DFM unsupported  // dl:ok magic-literal@0f62 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal $FF is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
   Parser:= nil;
   Tree:= nil;
   try
@@ -1177,7 +1177,7 @@ end;
   rule set THIS block runs -- already through WithoutUnreachableRules;
   AAllRules / AUnreachable are the whole book and its records, handed on
   unchanged when an owned part re-enters ReemitComponent for its own block. }
-function ReemitBlock(const AFromBlock: string; const ARules: TConversionRuleSet;
+function ReemitBlock(const AFromBlock: string; const ARules: TConversionRuleSet;  // dl:ok cognitive-complexity@70b6, cyclomatic-complexity@18d6, method-too-long@01d5 -- REVIEWED 2026-11-22 SLZ-S07: cognitive-complexity measured 76 (max 65), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); cyclomatic-complexity measured cyclomatic complexity 43 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); method-too-long measured 318 lines (max 250), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   const AFrom, ATo: TClassRef; const ACastLib: TCastLib;
   const AAllRules: TConversionRuleSet; const AUnreachable: TArray<TUnreachablePath>): TReemitResult;
 var
@@ -2250,7 +2250,7 @@ var
         [ItemNo, Carried, Dropped1, if LinkLines <> '' then '; #link Params.Items.* at line(s) ' + LinkLines else ''])];
   end;
 
-  procedure RemapLeaf(const ALeaf: TReemitDfmNode; const AFromPath: string);
+  procedure RemapLeaf(const ALeaf: TReemitDfmNode; const AFromPath: string);  // dl:ok too-many-exit-points@00d2 -- REVIEWED 2026-11-22 SLZ-S07: too-many-exit-points measured 15 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   var
     ToPath : string;
     Carried: Boolean;
