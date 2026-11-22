@@ -38,7 +38,7 @@ try {
 if (-not $SkipRunner) {
   $lib = 'C:\Projects\.drag-lint\library-Win64.sqlite'
   $before = @(Get-ChildItem -Path ([IO.Path]::GetTempPath()) -Directory -Filter 'drag-lint-*' -ErrorAction SilentlyContinue | ForEach-Object { Get-ChildItem -LiteralPath $_.FullName -Filter 'library-copy.sqlite' -ErrorAction SilentlyContinue } | ForEach-Object { $_.FullName })
-  $out = & pwsh -NoProfile -File "$PSScriptRoot\run_cyclefix_dryrun.ps1" -Exe $Exe 2>&1 | Out-String
+  $out = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File "$PSScriptRoot\run_cyclefix_dryrun.ps1" -Exe $Exe 2>&1 | ForEach-Object { "$_" } } | Out-String
   $after = @(Get-ChildItem -Path ([IO.Path]::GetTempPath()) -Directory -Filter 'drag-lint-*' -ErrorAction SilentlyContinue | ForEach-Object { Get-ChildItem -LiteralPath $_.FullName -Filter 'library-copy.sqlite' -ErrorAction SilentlyContinue } | ForEach-Object { $_.FullName })
   $new = @($after | Where-Object { $before -notcontains $_ })
   Check 'W4 real runner ran (PASS or SKIP) and left no new library-copy.sqlite' (($LASTEXITCODE -eq 0) -and ($new.Count -eq 0)) ("exit=$LASTEXITCODE new=" + ($new -join ';'))
