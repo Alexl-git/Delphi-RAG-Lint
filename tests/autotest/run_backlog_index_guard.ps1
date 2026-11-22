@@ -45,6 +45,9 @@ function Check($n,$ok,$d){
 }
 
 $VALID = @('open','parked-owner','parked-ide-bound','parked-extractor-batch','blocked-repro','ideas')
+# Terminal statuses (owner 2026-11-21): a note whose work is finished. Valid in a header, counted with the
+# retired/done notes (INBOX-Done), never as open. The index table carries ONE aggregate row, `closed`.
+$TERMINAL = @('closed','fixed','fixed-on-branch','fixed-in-branch')
 
 if (-not (Test-Path $Root)) {
   if (-not $Quiet) { Write-Host "SKIP: no docs dir at $Root" -ForegroundColor Yellow }
@@ -65,7 +68,7 @@ if ($notes.Count -eq 0) {
 
 $all = @($notes) + @($backs)
 $byStatus = @{}
-foreach ($v in $VALID) { $byStatus[$v] = 0 }
+foreach ($v in ($VALID + $TERMINAL)) { $byStatus[$v] = 0 }
 
 # ---- every note carries a machine-readable status --------------------------
 $missing = @(); $badval = @()
@@ -73,13 +76,13 @@ foreach ($f in $all) {
   $head = (Get-Content -LiteralPath $f.FullName -TotalCount 3 -ErrorAction SilentlyContinue) -join "`n"
   if ($head -match 'dl:backlog\s+status=([a-z-]+)') {
     $st = $Matches[1]
-    if ($VALID -contains $st) { $byStatus[$st]++ } else { $badval += ("{0} (status={1})" -f $f.Name, $st) }
+    if (($VALID + $TERMINAL) -contains $st) { $byStatus[$st]++ } else { $badval += ("{0} (status={1})" -f $f.Name, $st) }
   } else { $missing += $f.Name }
 }
 Check 'every backlog note carries a dl:backlog status header' ($missing.Count -eq 0) `
       ("missing on: " + ($missing -join ', '))
 Check 'every status is one of the known values' ($badval.Count -eq 0) `
-      (($badval -join ', ') + "  valid: $($VALID -join '|')")
+      (($badval -join ', ') + "  valid: $(($VALID + $TERMINAL) -join '|')")
 
 # ---- the second inbox cannot be invisible ----------------------------------
 # The folder holds six notes and belonged to no count for weeks. A pointer note
@@ -102,7 +105,8 @@ if (Test-Path $idx) {
     $done = Join-Path $Root 'INBOX-Done'
     $rTot = $all.Count
     $rOpen = $byStatus['open']
-    $rRet  = if (Test-Path $done) { @(Get-ChildItem -LiteralPath $done -Filter '*.md' -File).Count } else { 0 }
+    $rTerm = 0; foreach ($v in $TERMINAL) { $rTerm += $byStatus[$v] }
+    $rRet  = $rTerm + $(if (Test-Path $done) { @(Get-ChildItem -LiteralPath $done -Filter '*.md' -File).Count } else { 0 })
     Check "INBOX-INDEX total matches the enumeration ($rTot)"   ($sTot  -eq $rTot)  "index says $sTot, on disk $rTot"
     Check "INBOX-INDEX open count matches ($rOpen)"             ($sOpen -eq $rOpen) "index says $sOpen, on disk $rOpen"
     Check "INBOX-INDEX retired count matches ($rRet)"           ($sRet  -eq $rRet)  "index says $sRet, on disk $rRet"
@@ -155,11 +159,16 @@ if (Test-Path $idx) {
         if ([int]$Matches[1] -ne $byStatus[$v]) { $tableBad += ("{0}: table {1}, on disk {2}" -f $v, $Matches[1], $byStatus[$v]) }
       }
     }
-    $tableDetail = if ($tableRows -ne $VALID.Count) {
-      "only $tableRows of $($VALID.Count) status rows matched in the table"
+    # terminal aggregate row: closed + fixed + fixed-on-branch + fixed-in-branch
+    $tableRows++
+    if ($ihead -match '(?m)^>?\s*\|\s*`closed`[^|]*\|[^|]*\|\s*(\d+)\s*\|') {
+      if ([int]$Matches[1] -ne $rTerm) { $tableBad += ("closed (terminal): table {0}, on disk {1}" -f $Matches[1], $rTerm) }
+    } else { $tableRows-- }
+    $tableDetail = if ($tableRows -ne ($VALID.Count + 1)) {
+      "only $tableRows of $($VALID.Count + 1) status rows matched in the table"
     } else { $tableBad -join '; ' }
     Check "the status table's per-status counts match ($tableRows row(s) checked)" `
-          (($tableBad.Count -eq 0) -and ($tableRows -eq $VALID.Count)) $tableDetail
+          (($tableBad.Count -eq 0) -and ($tableRows -eq ($VALID.Count + 1))) $tableDetail
   } else {
     Check 'INBOX-INDEX.md carries a dl:counts line' $false `
           'expected: <!-- dl:counts total=N open=N retired=N --> so the counts can be CHECKED rather than trusted'
@@ -169,7 +178,7 @@ if (Test-Path $idx) {
 if (-not $Quiet) {
   Write-Host ''
   Write-Host ('  enumerated {0} note(s): ' -f $all.Count) -NoNewline -ForegroundColor DarkGray
-  Write-Host (($VALID | ForEach-Object { "$_=$($byStatus[$_])" }) -join '  ') -ForegroundColor DarkGray
+  Write-Host ((($VALID + $TERMINAL) | ForEach-Object { "$_=$($byStatus[$_])" }) -join '  ') -ForegroundColor DarkGray
 }
 
 # ---- SELF-TEST: the guard must be able to FAIL -----------------------------
