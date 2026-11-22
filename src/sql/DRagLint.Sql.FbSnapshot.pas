@@ -75,7 +75,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoFbSnapshot (DRagLint.CLI.pas), DRagLint.CLI.RunCommand (DRagLint.CLI.pas) ?</para>
       /// <para>Calls: Copy, DateTimeToUnix, Default, DRagLint.Sql.FbSnapshot.ClearPriorSnapshot, DRagLint.Sql.FbSnapshot.ResolveSqlSymbolLinks, DRagLint.Sql.FbSnapshot.TableExists, DRagLint.Sql.FbSnapshot.TFbSnapshot.Run.ConnectFb, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection, Pos, Trim, UpCase, UpperCase, Writeln</para>
-      /// <para>Complexity: 11 (cyclomatic, outer body), 299 lines (full implementation)</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 309 lines (full implementation)</para>
       /// <para>Catches: Exception (re-raise); Exception (swallowed)</para>
       /// <para>SQL: reads FIB$DATASETS_INFO, FIB$ENUMVALUES, FIB$FIELDS_INFO, RDB$FIELDS, RDB$RELATION_FIELDS, RDB$RELATIONS; writes FB_COLUMNS, FB_DATASETS, FB_ENUM_VALUES, FB_FIELD_INFO, FB_RELATIONS</para>
       /// <para>Transaction: starts, commits, rolls back</para>

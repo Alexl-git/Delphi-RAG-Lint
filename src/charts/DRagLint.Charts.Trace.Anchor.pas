@@ -537,7 +537,7 @@ function DataSetTypeSql(const pAlias: string = 's'): string;
 /// Port of Get-FieldVarPairs (Trace.Walk.ps1:322). Pure.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromFieldVar (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Calc.TCalcFactsReader.ReadBindings (DRagLint.Charts.Trace.Calc.pas)</para>
-/// <para>Calls: DRagLint.Charts.Sql.SortUniqueNames, Pos</para>
+/// <para>Calls: DRagLint.Charts.Sql.SortUniqueNames</para>
 /// <seealso cref="DRagLint.Charts.Sql.SortUniqueNames"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

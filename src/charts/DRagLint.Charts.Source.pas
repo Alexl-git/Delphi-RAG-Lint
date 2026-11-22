@@ -89,7 +89,7 @@ type
     /// V.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Calls: CharInSet, Pos, StringOfChar</para>
+    /// <para>Calls: CharInSet, StringOfChar</para>
     /// <seealso cref="DRagLint.Charts.Source.TSourceReader.AddOverride"/>
     /// <seealso cref="DRagLint.Charts.Source.TSourceReader.ContextOfLines"/>
     /// <seealso cref="DRagLint.Charts.Source.TSourceReader.Create"/>

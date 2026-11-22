@@ -292,7 +292,7 @@ begin
         QIns.Params.ParamByName('ca'  ).DataType:= ftLargeint;
         QIns.Prepare;
 
-        // ---- class_to_table: TXXX -> XXX ----
+        // ---- class_to_table: TFoo -> FOO ----
         for Cls in DelphiClasses do
         begin
           if Cls.Stripped = '' then Continue;
@@ -303,7 +303,7 @@ begin
           end;
         end;
 
-        // ---- iface_to_table: IXXX -> XXX ----
+        // ---- iface_to_table: IFoo -> FOO ----
         for Iface in DelphiIfaces do
         begin
           if Iface.Stripped = '' then Continue;
