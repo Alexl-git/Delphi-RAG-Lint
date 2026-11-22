@@ -78,3 +78,13 @@ See also: [[Index-DB-Schema]] (`schema_meta` keys), [[info]].
 - `index --resolve-only` with no library store attached KEEPS the library bindings (calls, member accesses and
   library reads) of the last library run and warns `library bindings are kept from the last library run, not
   refreshed`; the `external_stores` key is marked partial so the next library run resolves whole.
+
+## Resolver fixes (1.52.3)
+
+- `var X:= L[K]` types `X` through a default indexed property declared on an ANCESTOR of L's type, not only on
+  the type itself: `TFooList = class(TObjectList<TFoo>)`, `TOwn<T> = class(TObjectList<T>)` used as
+  `TOwn<TFoo>`, `TDerived<T> = class(TBase<T>)` where `TBase<V>` declares `Items[I]: V; default`, and a
+  project class two or more parents below the one that declares the property. Each heritage edge carries the type
+  arguments up (`class(TBase<B>)` of `TSwap<A, B>` used as `TSwap<TFoo, string>` gives `string`). Only the class
+  parent is climbed; an edge that mixes a passed-through parameter with a written type (`class(TBase<T, TFoo>)`)
+  or wraps a parameter (`class(TBase<TList<T>>)`) still declines, as does a chain longer than eight parents.

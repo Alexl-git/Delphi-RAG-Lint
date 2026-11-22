@@ -281,6 +281,7 @@ uses
   DRagLint.Lint.SharedUnit,  { TSharedUnit.ProjectsOf -- the header-declared projects }
   DRagLint.Lint.ProjectChecks.Parse,  { ReadDCCReferences / FindSiblingProgramFile -- what an unindexed peer lists }
   DRagLint.Index.Closure,  { TClosureResolver.ProjectSearchPaths -- the folders an unindexed peer searches }
+  DRagLint.Project.Resolver,  { TProjectResolver.ResolveProjectOnly -- the same folders, $(MACRO) entries expanded }
   DRagLint.Index.Freshness;  { ProbeIndexFreshness -- a stale sibling proves nothing }
 
 const
@@ -343,9 +344,10 @@ end;
   and its .dpr / .dpk `in '...'` paths -- so TSharedScope reads a verdict on such a unit as undecidable.
   1.52 TAILS-ENG2: also every folder it searches (its own folder + DCC_UnitSearchPath, via
   TClosureResolver.ProjectSearchPaths): a unit in one of them MAY be compiled by the peer unlisted, so it
-  is undecidable too. Deliberately over-approximate (no closure walk without an index); not covered: a
-  unit reached through a library path / IDE-global search path or an environment macro the .dproj parse
-  does not expand. }
+  is undecidable too. Deliberately over-approximate (no closure walk without an index).
+  1.52.3 EXT-RES-TAILS: a search-path entry written as a $(MACRO) (an IDE Environment Variable or a process
+  environment variable) is expanded too (TProjectResolver.ResolveProjectOnly). A unit on the IDE LIBRARY
+  path needs no entry here: lint-all treats a unit under a library root as library and reports nothing on it. }
 procedure NoteUnindexedPeer(const ADproj: string);
 var
   Dir : string;
@@ -366,6 +368,17 @@ begin
   { 1.52 TAILS-ENG2: the folders the compiler searches for this peer -- its own folder and its
     DCC_UnitSearchPath. A unit there may be compiled by the peer without being listed. }
   var SearchDirs: TArray<string>:= TClosureResolver.ProjectSearchPaths(ADproj);
+  { 1.52.3 EXT-RES-TAILS: the same search path with $(MACRO) entries expanded (ProjectSearchPaths skips them). }
+  var Resolver: TProjectResolver:= TProjectResolver.Create;
+  try
+    try
+      SearchDirs:= SearchDirs + Resolver.ResolveProjectOnly(ADproj);
+    except  // dl:ok try-except-swallowed@6cec -- REVIEWED 2026-11-20 EXT-RES-TAILS: an unreadable peer .dproj keeps the unexpanded folders above; the run judges as before
+      on E: Exception do ;  // dl:ok empty-on-handler@1c60 -- REVIEWED 2026-11-20 EXT-RES-TAILS: same contract as the except above
+    end;
+  finally
+    Resolver.Free;
+  end;
   TMonitor.Enter(GUnindexedPeerOf);
   try
     for var Ref: string in Refs do
