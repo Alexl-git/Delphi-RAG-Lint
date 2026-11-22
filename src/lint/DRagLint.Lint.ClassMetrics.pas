@@ -125,7 +125,8 @@ var
 begin
   Result:= '';
   if N.IsNull then Exit;
-  S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+  S:= Integer(N.StartByte);
+  E:= Integer(N.EndByte); L:= E - S;
   if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
   Result:= TEncoding.UTF8.GetString(Src, S, L);
 end;
@@ -497,7 +498,8 @@ var
     Exclude:= TDictionary<string, Boolean>.Create;
     try
       Exclude.AddOrSetValue(LowerCase(AInfo.Name), True);
-      Inc(GCAnc); var TAnc: Int64:= TStopwatch.GetTimeStamp;
+      Inc(GCAnc);
+      var TAnc: Int64:= TStopwatch.GetTimeStamp;
       Anc:= AStore.GetTransitiveAncestors(AInfo.Id);
       Inc(GBAnc, TStopwatch.GetTimeStamp - TAnc);
       for A in Anc do
@@ -558,7 +560,8 @@ var
       Exclude:= TDictionary<string, Boolean>.Create;
       try
         Exclude.AddOrSetValue(LowerCase(Src.Name), True);
-        Inc(GCAnc); var TAnc: Int64:= TStopwatch.GetTimeStamp;
+        Inc(GCAnc);
+        var TAnc: Int64:= TStopwatch.GetTimeStamp;
         Anc:= AStore.GetTransitiveAncestors(Src.Id);
         Inc(GBAnc, TStopwatch.GetTimeStamp - TAnc);
         for A in Anc do
@@ -676,7 +679,8 @@ var
     var
       Rx, Ry: Integer;
     begin
-      Rx:= Find(X); Ry:= Find(Y);
+      Rx:= Find(X);
+      Ry:= Find(Y);
       if Rx <> Ry then UF[Rx]:= Ry;
     end;
 
@@ -1040,7 +1044,8 @@ var
       for M in AInfo.Methods do
       begin
         if not Foreign.TryGetValue(M.Id, ForByX) then Continue; { no foreign access -> not envious }
-        MaxF:= 0; EnviedX:= 0;
+        MaxF:= 0;
+        EnviedX:= 0;
         for Pair in ForByX do
           if Pair.Value > MaxF then
           begin
@@ -1184,7 +1189,8 @@ begin
 
       if WantRule('high-response') then
       begin
-        Inc(GCRfc); var TR: Int64:= TStopwatch.GetTimeStamp;
+        Inc(GCRfc);
+        var TR: Int64:= TStopwatch.GetTimeStamp;
         var Rfc: Integer:= ComputeRFC(CI);
         Inc(GBRfc, TStopwatch.GetTimeStamp - TR);
         if Rfc > TRFC then
@@ -1195,7 +1201,8 @@ begin
 
       if WantRule('high-coupling') then
       begin
-        Inc(GCCbo); var TC: Int64:= TStopwatch.GetTimeStamp;
+        Inc(GCCbo);
+        var TC: Int64:= TStopwatch.GetTimeStamp;
         var Cbo: Integer:= ComputeCBO(CI);
         Inc(GBCbo, TStopwatch.GetTimeStamp - TC);
         if Cbo > TCBO then
@@ -1206,7 +1213,8 @@ begin
 
       if WantRule('low-cohesion') then
       begin
-        Inc(GCLcom); var TL: Int64:= TStopwatch.GetTimeStamp;
+        Inc(GCLcom);
+        var TL: Int64:= TStopwatch.GetTimeStamp;
         var Lc: Integer:= ComputeLCOM4(CI);
         Inc(GBLcom, TStopwatch.GetTimeStamp - TL);
         if Lc > TLCOM then
@@ -1217,7 +1225,8 @@ begin
 
       if WantRule('middle-man') then
       begin
-        Inc(GCMm); var TM: Int64:= TStopwatch.GetTimeStamp;
+        Inc(GCMm);
+        var TM: Int64:= TStopwatch.GetTimeStamp;
         var MM: TMiddleManResult:= ComputeMiddleMan(CI);
         Inc(GBMm, TStopwatch.GetTimeStamp - TM);
         if (MM.Total >= MIDDLE_MAN_MIN_METHODS) and (MM.BestCount * 2 > MM.Total) then

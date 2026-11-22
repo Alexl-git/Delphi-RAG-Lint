@@ -209,7 +209,8 @@ begin
          and (LooksLikeIdentifier(Head)
               or InArray(LowerCase(Head), ['error', 'warning', 'internal'])) then
       begin
-        S:= Rest; Changed:= True; Continue;
+        S:= Rest;
+        Changed:= True; Continue;
       end;
     end;
 
@@ -221,7 +222,8 @@ begin
       if (WordCount(Head) = 1) and (WordCount(Rest) >= 2)
          and LooksLikeIdentifier(Head) then
       begin
-        S:= Rest; Changed:= True; Continue;
+        S:= Rest;
+        Changed:= True; Continue;
       end;
     end;
   end;

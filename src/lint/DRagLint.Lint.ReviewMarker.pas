@@ -913,12 +913,14 @@ begin
         Inc(I);
         while I <= Len do
         begin
-          if Line[I] = '''' then begin Inc(I); Break; end;
+          if Line[I] = '''' then begin Inc(I);
+          Break; end;
           Inc(I);
         end;
         Continue;
       end;
-      if Line[I] = '{' then begin InBrace:= True; Inc(I); Continue; end;
+      if Line[I] = '{' then begin InBrace:= True;
+      Inc(I); Continue; end;
       if (Line[I] = '(') and (I < Len) and (Line[I + 1] = '*') then
       begin
         InParen:= True;
@@ -960,7 +962,8 @@ begin
       begin
         if ALineText[I] = '''' then
         begin
-          if (I < Len) and (ALineText[I + 1] = '''') then begin Inc(I, 2); Continue; end;
+          if (I < Len) and (ALineText[I + 1] = '''') then begin Inc(I, 2);
+          Continue; end;
           Inc(I);
           Break;
         end;
@@ -981,7 +984,8 @@ begin
       Inc(I, 2);
       while I <= Len do
       begin
-        if (ALineText[I] = '*') and (I < Len) and (ALineText[I + 1] = ')') then begin Inc(I, 2); Break; end;
+        if (ALineText[I] = '*') and (I < Len) and (ALineText[I + 1] = ')') then begin Inc(I, 2);
+        Break; end;
         Inc(I);
       end;
       Continue;

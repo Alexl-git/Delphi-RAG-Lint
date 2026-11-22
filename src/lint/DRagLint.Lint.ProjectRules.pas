@@ -374,7 +374,8 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte); L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -580,7 +581,8 @@ var
       for Bi:= 0 to AComp.Count - 1 do
       begin
         if Ai = Bi then Continue;
-        A:= AComp[Ai]; B:= AComp[Bi];
+        A:= AComp[Ai];
+        B:= AComp[Bi];
         if not Adj.TryGetValue(A, Lst) then Continue;
         if Lst.IndexOf(B) < 0 then Continue; { not an edge of this cycle }
 
@@ -735,7 +737,8 @@ var
             Ln:= 1;
             UnitLine.TryGetValue(Anchor, Ln);
           end;
-          F.StartLine:= Ln; F.StartCol:= 1; F.EndLine:= Ln; F.EndCol:= 1;
+          F.StartLine:= Ln;
+          F.StartCol:= 1; F.EndLine:= Ln; F.EndCol:= 1;
           var CC: TCycleCoupling;
           CC.Finding:= F;
           CC.Detail := CouplingLines(Comp);
@@ -882,8 +885,10 @@ begin
     Adj.Free;
     EdgeHasImpl.Free;
     EdgeHasIntf.Free;
-    Stack.Free; OnStack.Free; LowLink.Free; Index.Free;
-    UnitLine.Free; FileOfStem.Free; FileOfUnit.Free; UnitName.Free;
+    Stack.Free;
+    OnStack.Free; LowLink.Free; Index.Free;
+    UnitLine.Free;
+    FileOfStem.Free; FileOfUnit.Free; UnitName.Free;
     for var SD in SymCache.Values do SD.Free;
     SymCache.Free;
     Findings.Free;
@@ -1065,7 +1070,8 @@ var
   U   : TUnitUse;
   Stem: string  ;
 begin
-  ALine:= 1; ACol:= 1;
+  ALine:= 1;
+  ACol:= 1;
   Stem:= LowerCase(ADeclUnit);
   if LastDelimiter('.', Stem) > 0 then
     Stem:= Copy(Stem, LastDelimiter('.', Stem) + 1, MaxInt);
@@ -1267,11 +1273,13 @@ var
     SL: TStringList;
     I : Integer;
   begin
-    Result:= ''; ACount:= 0;
+    Result:= '';
+    ACount:= 0;
     SL:= TStringList.Create;
     try
       SL.CaseSensitive:= False;
-      SL.Delimiter:= ','; SL.StrictDelimiter:= True;
+      SL.Delimiter:= ',';
+      SL.StrictDelimiter:= True;
       SL.DelimitedText:= ACsv;
       SL.Sort;
       for I:= 0 to SL.Count - 1 do
@@ -1391,7 +1399,8 @@ begin
 
           var Toks: TStringList:= TStringList.Create;
           try
-            Toks.Delimiter:= ','; Toks.StrictDelimiter:= True;
+            Toks.Delimiter:= ',';
+            Toks.StrictDelimiter:= True;
             Toks.DelimitedText:= Rest;
             for var T: Integer:= 0 to Toks.Count - 1 do
             begin
@@ -1428,8 +1437,10 @@ begin
                 F.RuleId   := 'uses-global-census';
                 F.Severity := 'info';
                 F.FilePath := RPath;
-                F.StartLine:= L; F.StartCol:= P;
-                F.EndLine  := L; F.EndCol  := P + Length(CTag);
+                F.StartLine:= L;
+                F.StartCol:= P;
+                F.EndLine  := L;
+                F.EndCol  := P + Length(CTag);
                 var Why: string;
                 if not InUses then
                   Why:= 'it is not in this unit''s uses clause'
@@ -1492,8 +1503,10 @@ begin
       F.RuleId   := 'uses-global-census';
       F.Severity := 'info';
       F.FilePath := ReaderPath;
-      F.StartLine:= Ln; F.StartCol:= Cl;
-      F.EndLine  := Ln; F.EndCol  := Cl + Length(DeclUnit);
+      F.StartLine:= Ln;
+      F.StartCol:= Cl;
+      F.EndLine  := Ln;
+      F.EndCol  := Cl + Length(DeclUnit);
       { WHAT IS DRAWN, AGAINST WHAT IS THERE. The counts above say how much of
         the used unit this reader touches; the two after "that %s declares" say
         how much there is. Neither alone answers the owner's question -- 7 of 9
@@ -2951,7 +2964,8 @@ var
     SL       : TStringList;
     I, C     : Integer;
   begin
-    ARoot:= ''; ARootClass:= '';
+    ARoot:= '';
+    ARootClass:= '';
     Dfm:= ChangeFileExt(AUnitPath, '.dfm');
     if not TFile.Exists(Dfm) then Exit;
     SL:= TStringList.Create;
@@ -3205,8 +3219,10 @@ begin
       F.RuleId  := 'global-only-uses-edge';
       F.Severity:= 'info';
       F.FilePath:= ReaderPath;
-      F.StartLine:= Ln; F.StartCol:= Cl;
-      F.EndLine  := Ln; F.EndCol  := Cl + Length(DeclUnit);
+      F.StartLine:= Ln;
+      F.StartCol:= Cl;
+      F.EndLine  := Ln;
+      F.EndCol  := Cl + Length(DeclUnit);
       { THE CURE CLAUSE IS CHOSEN BY THE CARRYING GLOBAL'S TYPE, and only an
         interface earns the word "inject" -- see the remarks above. }
       if E.GlobalCount = 1 then
@@ -3415,7 +3431,8 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte); L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -3503,7 +3520,8 @@ var
           var Sct: string:= Sc.NodeType;
           if (Sct <> 'caseCase') and (Sct <> 'statement') and (Sct <> 'statements')
              and ((Sct = '') or (Sct[1] <> 'k')) then
-          begin Selector:= Sc; Break; end;
+          begin Selector:= Sc;
+          Break; end;
         end;
       if (not Selector.IsNull) and (Cur <> '') then
       begin
@@ -4426,7 +4444,8 @@ var
     if UnitIndexed.TryGetValue(AUnitName, Result) then Exit;
     Result:= False;
     for S in AStore.FindSymbolsByExactName(AUnitName) do
-      if S.Kind = skUnit then begin Result:= True; Break; end;
+      if S.Kind = skUnit then begin Result:= True;
+      Break; end;
     UnitIndexed.Add(AUnitName, Result);
   end;
 
@@ -4924,8 +4943,10 @@ begin
   OwnRefFile := nil;
   Shared     := TSharedScope.Create(AStore, ASiblingStore, ASiblingNames);
   Prof:= GetEnvironmentVariable('DRAGLINT_PROFILE') <> '';
-  TCirc:= 0; TEnum:= 0; TRts:= 0; TUuiu:= 0; TGod:= 0; TUpub:= 0; TUpriv:= 0; TAccess:= 0; TOuter:= 0;
-  TGlob:= 0; TDupD:= 0; TCens:= 0;
+  TCirc:= 0;
+  TEnum:= 0; TRts:= 0; TUuiu:= 0; TGod:= 0; TUpub:= 0; TUpriv:= 0; TAccess:= 0; TOuter:= 0;
+  TGlob:= 0;
+  TDupD:= 0; TCens:= 0;
   TPurity:= 0;
   LapNames:= nil;
   LapTicks:= nil;
@@ -4950,14 +4971,16 @@ begin
       until its corpus count is audited -- see CollectCycleParticipants. }
     if WantRule('cycle-participant-unit') and OptedIn('cycle-participant-unit') then
       for var Cp in CollectCycleParticipants(AStore) do Findings.Add(Cp);
-    Inc(TCirc, Tick - T0); T0:= Tick;
+    Inc(TCirc, Tick - T0);
+    T0:= Tick;
 
     { global-only-uses-edge: whole-refs-graph pass (not per-file), and the ONE
       rule here that is gated on OptedIn as well as WantRule -- see the gate's
       own comment for why both are needed. }
     if WantRule('global-only-uses-edge') and OptedIn('global-only-uses-edge') then
       for var Gf in CollectGlobalOnlyUsesEdges(AStore, ALibraryStore) do Findings.Add(Gf);
-    Inc(TGlob, Tick - T0); T0:= Tick;
+    Inc(TGlob, Tick - T0);
+    T0:= Tick;
     TLap:= T0;
 
     { duplicate-unit-on-search-path: one pass over the file list, grouped by unit stem. }
@@ -4988,7 +5011,8 @@ begin
     if WantRule('duplicate-global-decl') then
       for var Df in WholeGraph('duplicate-global-decl') do
         Findings.Add(Df);
-    Inc(TDupD, Tick - T0); T0:= Tick;
+    Inc(TDupD, Tick - T0);
+    T0:= Tick;
 
     { uses-global-census: whole-refs-graph pass, OFF by default and gated on
       OptedIn for the same reason as global-only-uses-edge -- 1.26 s on the
@@ -4996,7 +5020,8 @@ begin
       perfectly while still charging for it. }
     if WantRule('uses-global-census') and OptedIn('uses-global-census') then
       for var Cf in CollectUsesGlobalCensus(AStore) do Findings.Add(Cf);
-    Inc(TCens, Tick - T0); T0:= Tick;
+    Inc(TCens, Tick - T0);
+    T0:= Tick;
 
     { purity v2 rules (spec section 14): OFF by default and OptedIn-gated for
       the same reason as uses-global-census -- a full symbol_facts scan, plus a
@@ -5030,7 +5055,8 @@ begin
     if WantRule('enum-helper-separate-units') then
       for var Ef in WholeGraph('enum-helper-separate-units') do
         Findings.Add(Ef);
-    Inc(TEnum, Tick - T0); T0:= Tick;
+    Inc(TEnum, Tick - T0);
+    T0:= Tick;
 
     { repeated-type-switch (v0.80 #14): cross-file case-selector grouping pass. }
     if WantRule('repeated-type-switch') then
@@ -5384,7 +5410,8 @@ begin
             if (NMethods > 20) and (NFields > 15) then
               Add('god-class', 'info', Format('God class: %s has %d methods and %d fields -- consider splitting responsibilities', [Sym.Name, NMethods, NFields]), Sym);
           end;
-          Inc(TGod, Tick - TS); TS:= Tick;
+          Inc(TGod, Tick - TS);
+          TS:= Tick;
 
           { unused-public-symbol: an exported (interface-section) free routine that
             nothing in the index references or calls -- likely dead public API.
@@ -5451,7 +5478,8 @@ begin
                     Format('Exported routine %s is only referenced within its own unit -- its visibility could be reduced (move it to the implementation section)', [Sym.Name]), Sym);
               end;
           end;
-          Inc(TUpub, Tick - TS); TS:= Tick;
+          Inc(TUpub, Tick - TS);
+          TS:= Tick;
 
           { unused-private-member: a private or strict private member (method,
             field, const, nested type) that has zero references in the index.
@@ -5609,7 +5637,8 @@ begin
       Exit;
     end;
   end;
-  if (Root is not TJSONObject) then begin Root.Free; Exit; end;
+  if (Root is not TJSONObject) then begin Root.Free;
+  Exit; end;
   Obj:= TJSONObject(Root);
 
   Findings  := TList<TLintFinding>.Create;
@@ -5645,7 +5674,8 @@ begin
         if (Fr is not TJSONString) then Continue;
         var FrLow:= LowerCase(TJSONString(Fr).Value);
         var Lst: TStringList;
-        if not Allow.TryGetValue(FrLow, Lst) then begin Lst:= TStringList.Create; Allow.Add(FrLow, Lst); end;
+        if not Allow.TryGetValue(FrLow, Lst) then begin Lst:= TStringList.Create;
+        Allow.Add(FrLow, Lst); end;
         var ToV:= TJSONObject(Ae).GetValue('to');
         if ToV is TJSONArray then
           for var J:= 0 to TJSONArray(ToV).Count - 1 do

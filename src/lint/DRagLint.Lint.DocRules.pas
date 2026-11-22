@@ -639,7 +639,8 @@ begin
   Result:= nil;
   if AStore = nil then Exit;
   Prof:= GetEnvironmentVariable('DRAGLINT_PROFILE') <> '';
-  TDecls:= 0; TExisting:= 0; TAnalyze:= 0; NDecl:= 0; NDiff:= 0;
+  TDecls:= 0;
+  TExisting:= 0; TAnalyze:= 0; NDecl:= 0; NDiff:= 0;
   Changed     := nil;
   ChangedKnown:= False;
   StaleFiles  := nil;
@@ -872,7 +873,8 @@ begin
         Drifts:= TDocDrift.Analyze(AStore, ResSym, Live, AOpts);
         AnyFix:= False;
         for D in Drifts do
-          if D.Fixable then begin AnyFix:= True; Break; end;
+          if D.Fixable then begin AnyFix:= True;
+          Break; end;
         if not AnyFix then
         begin
           ReportTrace(Format('DROP no-fixable-of-%d', [Length(Drifts)]), ResSym.QualifiedName);

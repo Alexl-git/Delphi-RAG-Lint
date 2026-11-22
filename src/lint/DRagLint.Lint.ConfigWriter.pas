@@ -628,7 +628,8 @@ begin
   Result:= nil;
   if not TFile.Exists(APath) then Exit;
   RootVal:= TJSONObject.ParseJSONValue(TFile.ReadAllText(APath));
-  if (RootVal is not TJSONObject) then begin RootVal.Free; Exit; end;
+  if (RootVal is not TJSONObject) then begin RootVal.Free;
+  Exit; end;
   try
     Root:= RootVal as TJSONObject;
     if Root.GetValue('profiles') is TJSONObject then
@@ -649,12 +650,14 @@ var
   RemovedPair: TJSONPair;
 begin
   { start from existing file, or a fresh object }
-  Root:= nil; RootVal:= nil;
+  Root:= nil;
+  RootVal:= nil;
   if TFile.Exists(APath) then
   begin
     try RootVal:= TJSONObject.ParseJSONValue(TFile.ReadAllText(APath)); except RootVal:= nil; end;
     if RootVal is TJSONObject then Root:= RootVal as TJSONObject
-    else begin RootVal.Free; RootVal:= nil; end;
+    else begin RootVal.Free;
+    RootVal:= nil; end;
   end;
   if Root = nil then Root:= TJSONObject.Create;
   try

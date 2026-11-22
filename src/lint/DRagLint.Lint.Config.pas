@@ -1308,7 +1308,8 @@ begin
   if (APath = '') or (not TFile.Exists(APath)) then Exit;
   RawText:= TFile.ReadAllText(APath, TEncoding.UTF8);
   RootVal:= TJSONObject.ParseJSONValue(RawText);
-  if (RootVal is not TJSONObject) then begin RootVal.Free; Exit; end;
+  if (RootVal is not TJSONObject) then begin RootVal.Free;
+  Exit; end;
   try
     Root:= RootVal as TJSONObject;
     Result.ApplyConfigObject(Root, False);

@@ -1015,7 +1015,8 @@ begin
     JSON:= TJSONObject.ParseJSONValue(RawJson) as TJSONObject;
     if Assigned(JSON) then
     try
-      if JSON.GetValue('id'          ) <> nil then begin FId:= JSON.GetValue('id').Value; FRuleId:= FId; end;
+      if JSON.GetValue('id'          ) <> nil then begin FId:= JSON.GetValue('id').Value;
+      FRuleId:= FId; end;
       if JSON.GetValue('severity'    ) <> nil then FSeverity   := JSON.GetValue('severity'    ).Value;
       if JSON.GetValue('message'     ) <> nil then FMessage    := JSON.GetValue('message'     ).Value;
       if JSON.GetValue('warn_capture') <> nil then FWarnCapture:= JSON.GetValue('warn_capture').Value;

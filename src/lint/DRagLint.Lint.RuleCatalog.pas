@@ -552,7 +552,8 @@ end;
 
 function MkParam(const AName, AType, ADefault: string): TRuleParam;
 begin
-  Result.Name:= AName; Result.ParamType:= AType; Result.DefaultVal:= ADefault;
+  Result.Name:= AName;
+  Result.ParamType:= AType; Result.DefaultVal:= ADefault;
 end;
 
 class function TRuleCatalog.BuiltinRegistry: TArray<TRuleInfo>;
@@ -563,8 +564,10 @@ var
   var R: TRuleInfo;
   begin
     R:= Default(TRuleInfo);
-    R.Id:= AId; R.Category:= ACat; R.DefaultSeverity:= ASev; R.Title:= ATitle;
-    R.Source:= 'builtin'; R.DefaultEnabled:= AEnabled; R.Params:= AParams;
+    R.Id:= AId;
+    R.Category:= ACat; R.DefaultSeverity:= ASev; R.Title:= ATitle;
+    R.Source:= 'builtin';
+    R.DefaultEnabled:= AEnabled; R.Params:= AParams;
     R.NeedsCompiler:= ANeedsCompiler;
     R.CompatSince  := ACompatSince;
     L.Add(R);
@@ -1068,7 +1071,8 @@ begin
   try
     { built-ins first (they win dedup) }
     for R in BuiltinRegistry do
-      if not ById.ContainsKey(R.Id) then begin ById.Add(R.Id, R); Order.Add(R.Id); end;
+      if not ById.ContainsKey(R.Id) then begin ById.Add(R.Id, R);
+      Order.Add(R.Id); end;
 
     { external .scm sidecars }
     if TDirectory.Exists(Dir) then
@@ -1080,7 +1084,8 @@ begin
         Raw:= '';
         try Raw:= TFile.ReadAllText(F, TEncoding.UTF8); except Continue; end;  // dl:ok try-except-swallowed@264e, bare-except@264e -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
         Root:= TJSONObject.ParseJSONValue(Raw);
-        if (Root is not TJSONObject) then begin Root.Free; Continue; end;
+        if (Root is not TJSONObject) then begin Root.Free;
+        Continue; end;
         try
           Obj:= Root as TJSONObject;
           if Obj.GetValue('id') = nil then Continue;
@@ -1114,7 +1119,8 @@ begin
           Sc.NeedsCompiler:= if Obj.GetValue('needs_compiler') <> nil then StrToIntDef(Obj.GetValue('needs_compiler').Value, 0) else 0;
           Sc.CompatSince  := if Obj.GetValue('compat_since') <> nil then StrToIntDef(Obj.GetValue('compat_since').Value, 0) else 0;
           Sc.Params:= nil;
-          ById.Add(Id, Sc); Order.Add(Id);
+          ById.Add(Id, Sc);
+          Order.Add(Id);
         finally
           Root.Free;
         end;
@@ -1162,7 +1168,8 @@ begin
     for R in ACatalog do
     begin
       if Counts.TryGetValue(R.Category, N) then Counts[R.Category]:= N + 1
-      else begin Counts.Add(R.Category, 1); Order.Add(R.Category); end;
+      else begin Counts.Add(R.Category, 1);
+      Order.Add(R.Category); end;
     end;
     Result.Categories:= Order.Count;
     for C in Order do

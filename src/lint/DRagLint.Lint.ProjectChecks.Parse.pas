@@ -279,22 +279,29 @@ begin
         end;
       '{':
         begin
-          while (I <= N) and (ASrc[I] <> '}') do begin Blank(I); Inc(I); end;
-          if I <= N then begin Blank(I); Inc(I); end;
+          while (I <= N) and (ASrc[I] <> '}') do begin Blank(I);
+          Inc(I); end;
+          if I <= N then begin Blank(I);
+          Inc(I); end;
         end;
       '(':
         if (I < N) and (ASrc[I + 1] = '*') then
         begin
-          Blank(I); Blank(I + 1); Inc(I, 2);
-          while (I < N) and not ((ASrc[I] = '*') and (ASrc[I + 1] = ')')) do begin Blank(I); Inc(I); end;
-          if I < N then begin Blank(I); Blank(I + 1); Inc(I, 2); end
-          else if I = N then begin Blank(I); Inc(I); end;
+          Blank(I);
+          Blank(I + 1); Inc(I, 2);
+          while (I < N) and not ((ASrc[I] = '*') and (ASrc[I + 1] = ')')) do begin Blank(I);
+          Inc(I); end;
+          if I < N then begin Blank(I);
+          Blank(I + 1); Inc(I, 2); end
+          else if I = N then begin Blank(I);
+          Inc(I); end;
         end
         else
           Inc(I);
       '/':
         if (I < N) and (ASrc[I + 1] = '/') then
-          while (I <= N) and (ASrc[I] <> #10) and (ASrc[I] <> #13) do begin Blank(I); Inc(I); end
+          while (I <= N) and (ASrc[I] <> #10) and (ASrc[I] <> #13) do begin Blank(I);
+          Inc(I); end
         else
           Inc(I);
     else
@@ -537,13 +544,17 @@ begin
   Norm:= NormUnit(AUnitName);
   if Norm = '' then Exit;
   if Assigned(AIsProjectMember) and AIsProjectMember(Norm) then
-    begin Result.Resolvable:= True; Result.Via:= urvProjectMember; Exit; end;
+    begin Result.Resolvable:= True;
+    Result.Via:= urvProjectMember; Exit; end;
   if Assigned(AIsInLibrary) and AIsInLibrary(Norm) then
-    begin Result.Resolvable:= True; Result.Via:= urvLibrary; Exit; end;
+    begin Result.Resolvable:= True;
+    Result.Via:= urvLibrary; Exit; end;
   if IsStandardUnitAlias(AUnitName) then
-    begin Result.Resolvable:= True; Result.Via:= urvAlias; Exit; end;
+    begin Result.Resolvable:= True;
+    Result.Via:= urvAlias; Exit; end;
   if IsRtlNamespaceUnit(AUnitName) then
-    begin Result.Resolvable:= True; Result.Via:= urvRtlNamespace; Exit; end;
+    begin Result.Resolvable:= True;
+    Result.Via:= urvRtlNamespace; Exit; end;
 end;
 
 initialization
