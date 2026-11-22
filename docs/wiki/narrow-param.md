@@ -52,3 +52,6 @@ Without `--project` the plan is bounded by the project the index belongs to (the
 
 An `--apply` run listens on the maintenance control channel: `drag-lint stop-now --db <db>` (or the IDE's Cancel) kills the
 build the gate waits on, restores every written file and ends the run with exit 1 and the refusal `cancelled`.
+A plan run (no `--apply`) opens the same channel: `drag-lint shutdown --db <db>` stops it with exit 1 and the refusal `cancelled`;
+nothing is written. Guard: `tests\autotest\run_v1511_CAST_shutdown.ps1`.
+
