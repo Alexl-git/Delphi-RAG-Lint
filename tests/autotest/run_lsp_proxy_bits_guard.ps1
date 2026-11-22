@@ -75,7 +75,8 @@ function Play {
   while ((Get-Date) -lt $deadline) {
     Start-Sleep -Milliseconds 200
     foreach ($w in @(Get-CimInstance Win32_Process -Filter "Name='DelphiLSP.exe'" -ErrorAction SilentlyContinue)) {
-      if ($w.ExecutablePath -and ($images -notcontains $w.ExecutablePath)) { $images += $w.ExecutablePath }
+      # 1.52.3 LSPBITS-ENV: only OUR proxy's children count; an IDE or another session's own bin64 DelphiLSP running on the box is not ours.
+      if ($w.ParentProcessId -eq $p.Id -and $w.ExecutablePath -and ($images -notcontains $w.ExecutablePath)) { $images += $w.ExecutablePath }
     }
     $len = $outMs.Length
     if ($len -ne $last) { $last = $len; $stableAt = Get-Date; continue }

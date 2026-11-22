@@ -74,7 +74,7 @@ try {
 
   $u = LintX $UG
   Check 'X1 unindexed peer lists UShared: UsedOnlyByApp2 + UsedNowhere withheld' ((Hits $u.F $UG 'UsedOnlyByApp2') -eq 0 -and (Hits $u.F $UG 'UsedNowhere') -eq 0) ("only=$(Hits $u.F $UG 'UsedOnlyByApp2') nowhere=$(Hits $u.F $UG 'UsedNowhere')")
-  $pl = & $peerLine $u.Err
+  $pl = @(& $peerLine $u.Err)
   Check 'X2 one stderr info line names the unindexed peer App2' ($pl.Count -eq 1) ("lines=$($pl.Count) err=" + ($u.Err -replace "`r?`n", ' | ').Substring(0, [Math]::Min(300, $u.Err.Length)))
   $m = LintX $MP
   Check 'X3 member-could-be-private: WriteChunk + OnlyLocal withheld' ((Hits $m.F $MP 'WriteChunk') -eq 0 -and (Hits $m.F $MP 'OnlyLocal') -eq 0) ("wc=$(Hits $m.F $MP 'WriteChunk') ol=$(Hits $m.F $MP 'OnlyLocal')")
@@ -141,7 +141,7 @@ end.
   }
   $t = LintC 'uTxt.pas'
   $inv = { param($ln) @($t | Where-Object { $_.rule -eq 'invisible-char' -and [int]$_.start_line -eq $ln }) }
-  $i4 = & $inv 4; $i5 = & $inv 5
+  $i4 = @(& $inv 4); $i5 = @(& $inv 5)
   Check 'C2 invisible-char after U+1F600 is at UTF-16 column 6' ($i4.Count -eq 1 -and [int]$i4[0].start_col -eq 6) ("got=" + ($i4 | ForEach-Object { $_.start_col }))
   Check 'C2c control: ASCII twin stays at column 5' ($i5.Count -eq 1 -and [int]$i5[0].start_col -eq 5) ("got=" + ($i5 | ForEach-Object { $_.start_col }))
 
@@ -149,11 +149,11 @@ end.
   $u = LintC 'uCol.pas'
   $at = { param($rule, $ln) @($u | Where-Object { $_.rule -eq $rule -and [int]$_.start_line -eq $ln }) }
   $want16 = $lines[15].IndexOf('StrPas') + 1; $want17 = $lines[16].IndexOf('StrPas') + 1
-  $r16 = & $at 'deprecated-rtl-function' 16; $r17 = & $at 'deprecated-rtl-function' 17
+  $r16 = @(& $at 'deprecated-rtl-function' 16); $r17 = @(& $at 'deprecated-rtl-function' 17)
   Check 'C3 deprecated-rtl-function after a blanked non-ASCII directive: character column' ($r16.Count -eq 1 -and [int]$r16[0].start_col -eq $want16) ("want=$want16 got=" + ($r16 | ForEach-Object { $_.start_col }))
   Check 'C3c control: ASCII twin column' ($r17.Count -eq 1 -and [int]$r17[0].start_col -eq $want17) ("want=$want17 got=" + ($r17 | ForEach-Object { $_.start_col }))
   $want18 = $lines[17].IndexOf('FieldByName') + 1; $want19 = $lines[18].IndexOf('FieldByName') + 1
-  $f18 = & $at 'field-by-name-in-loop' 18; $f19 = & $at 'field-by-name-in-loop' 19
+  $f18 = @(& $at 'field-by-name-in-loop' 18); $f19 = @(& $at 'field-by-name-in-loop' 19)
   Check 'C4 field-by-name-in-loop after a blanked non-ASCII directive: character column' ($f18.Count -eq 1 -and [int]$f18[0].start_col -eq $want18) ("want=$want18 got=" + ($f18 | ForEach-Object { $_.start_col }))
   Check 'C4c control: ASCII twin column' ($f19.Count -eq 1 -and [int]$f19[0].start_col -eq $want19) ("want=$want19 got=" + ($f19 | ForEach-Object { $_.start_col }))
 
