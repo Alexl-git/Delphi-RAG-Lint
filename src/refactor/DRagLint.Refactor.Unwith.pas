@@ -282,12 +282,13 @@ function UnwithApply(const pPlans: TArray<TUnwithFilePlan>; const pOpts: TUnwith
 /// <param name="pDb">The project DB the plan was made from; only a copy of it is written.</param>
 /// <param name="pDetail">'' on success; else "rebind-after: ..." or "after-proof-unavailable: ...", one line for the user.</param>
 /// <returns>True only when the re-index ran and every proof point held.</returns>
-/// <exception cref="EInOutError">The source file could not be restored after the proof (it then holds the rewrite).</exception>
 /// <remarks>
-/// Writes NewBytes over the file, re-indexes that one file into a copy of pDb in a child "index", compares, and always
-/// restores the original bytes AND last-write time before returning: the caller sees the file as it was and decides
-/// whether to write the edit. The copy and its logs never outlive the call (unless a detail cites a log). Not
-/// thread-safe: the file is briefly rewritten in place.
+/// Never writes pPlan.FilePath (1.52.3 UNWITH-DISK; up to 1.52.2 the rewrite went over the file and was restored).
+/// Writes NewBytes to a copy of the file (same name, plus the sibling .inc files when the rewrite names an include) in
+/// a fresh scratch folder, re-points the file's row in a copy of pDb at that copy, re-indexes the copy in a child
+/// "index" (same file_id, full re-emit) and compares. The caller decides whether to write the edit. The copies and the
+/// logs never outlive the call (unless a detail cites a log). Any failure, including an I/O one, is a detail
+/// "after-proof-unavailable: ...", never an exception.
 /// </remarks>
 function UnwithProveFile(const pPlan: TUnwithFilePlan; const pDb: string; out pDetail: string): Boolean;
 
@@ -314,6 +315,8 @@ const
   CSemicolon = Ord(';');
   /// <summary>UnwithProveFile's bound on its child re-index of ONE file (10 min).</summary>
   CFixProofTimeoutMs = 600000;
+  /// <summary>UnwithProveFile's sub-folder of its scratch dir that holds the rewritten copy of the file.</summary>
+  CProofSrcDir = 'src';
 
 type
   TRow = record
@@ -1784,6 +1787,33 @@ end;
 end;
 
 
+/// <summary>Writes pPlan's rewrite to a copy of its file under pDir\src (same file name, so the same unit), with the
+/// sibling include files when the rewrite names an include directive.</summary>
+/// <returns>The copy's full path.</returns>
+function CopySourceFor(const pPlan: TUnwithFilePlan; const pDir: string): string;
+begin
+  var Into:= TPath.Combine(pDir, CProofSrcDir);
+  TDirectory.CreateDirectory(Into);
+  Result:= TPath.Combine(Into, ExtractFileName(pPlan.FilePath));
+  TFile.WriteAllBytes(Result, pPlan.NewBytes);
+  var Text:= TEncoding.ANSI.GetString(pPlan.NewBytes);
+  if ContainsText(Text, '{$I') or ContainsText(Text, '(*$I') then
+    for var F: string in TDirectory.GetFiles(ExtractFilePath(pPlan.FilePath), '*.inc') do
+      TFile.Copy(F, TPath.Combine(Into, ExtractFileName(F)), True);
+end;
+
+/// <summary>In the DB copy pDb, renames the files row of pFrom to pTo, so an index of pTo re-emits the same file_id.</summary>
+/// <returns>False when pDb holds no row for pFrom.</returns>
+function RepointFileRow(const pDb, pFrom, pTo: string): Boolean;
+begin
+  { Reference-counted like every other store of this unit: released when Store leaves scope. }
+  var Store: ISymbolStore:= TSQLiteSymbolStore.CreateReadable(pDb, False);
+  var Fid:= Store.FindFileIdByPath(pFrom);
+  Result:= Fid > 0;
+  if Result then (Store as TSQLiteSymbolStore).GetConnection.ExecSQL('UPDATE files SET path = :p WHERE id = :i', [pTo, Fid]);
+  Store:= nil;
+end;
+
 function UnwithProveFile(const pPlan: TUnwithFilePlan; const pDb: string; out pDetail: string): Boolean;
 var
   Points: Integer;
@@ -1795,36 +1825,40 @@ begin
   var Dir:= FreshScratchName('_unwithfix');
   TDirectory.CreateDirectory(Dir);  // dl:ok taint-path-traversal@159a -- a fresh scratch dir; only its PID part can come from the environment, a test seam
   var Log:= TPath.Combine(Dir, 'after-proof-index.log');
-  var Orig:= TFile.ReadAllBytes(pPlan.FilePath);  // dl:ok taint-path-traversal@a1e3 -- REVIEWED 2026-11-20 v1522 INT: the indexed file the fix itself edits, read to restore it below
-  var Stamp:= TFile.GetLastWriteTimeUtc(pPlan.FilePath);
   Points:= 0;
   Rebinds:= nil;
   try
     try
       var AfterDb:= CopyDbFor(pDb, Dir);
-      TFile.WriteAllBytes(pPlan.FilePath, pPlan.NewBytes);  // dl:ok taint-path-traversal@fce7 -- the indexed file the fix itself edits; restored below
-      var TimedOut: Boolean;
-      var Code:= RunBounded('after-proof re-index', Format('"%s" index "%s" --db "%s"', [ParamStr(0), pPlan.FilePath, AfterDb]),
-        Log, CFixProofTimeoutMs, TimedOut);
-      if Code <> 0 then pDetail:= Format('%s: the re-index exited %d (log %s)', [CUwProofUnavailable, Code, Log])
+      { 1.52.3 UNWITH-DISK: the user's file is never written. The rewrite goes to a copy in the scratch folder and the
+        copied DB's row for the file is re-pointed at it, so the re-index re-emits the SAME file_id from the copy. }
+      var Proved:= pPlan;
+      Proved.FilePath:= CopySourceFor(pPlan, Dir);
+      if not RepointFileRow(AfterDb, pPlan.FilePath, Proved.FilePath) then
+        pDetail:= Format('%s: %s is not in the index %s', [CUwProofUnavailable, ExtractFileName(pPlan.FilePath), pDb])
       else
       begin
-        var AfterStore: ISymbolStore:= TSQLiteSymbolStore.CreateReadable(AfterDb, True);
-        CompareProof(pPlan, AfterStore, Points, Rebinds);
-        AfterStore:= nil;
-        if Length(Rebinds) > 0 then
-          pDetail:= Format('%s: %d of %d ref(s) bind elsewhere after the rewrite, first: %s',
-            [CUwRebindAfter, Length(Rebinds), Points, Rebinds[0]]);
+        var TimedOut: Boolean;
+        var Code:= RunBounded('after-proof re-index', Format('"%s" index "%s" --db "%s"', [ParamStr(0), Proved.FilePath, AfterDb]),
+          Log, CFixProofTimeoutMs, TimedOut);
+        if Code <> 0 then pDetail:= Format('%s: the re-index exited %d (log %s)', [CUwProofUnavailable, Code, Log])
+        else
+        begin
+          var AfterStore: ISymbolStore:= TSQLiteSymbolStore.CreateReadable(AfterDb, True);
+          CompareProof(Proved, AfterStore, Points, Rebinds);
+          AfterStore:= nil;
+          if Length(Rebinds) > 0 then
+            pDetail:= Format('%s: %d of %d ref(s) bind elsewhere after the rewrite, first: %s',
+              [CUwRebindAfter, Length(Rebinds), Points, Rebinds[0]]);
+        end;
       end;
     except
       on E: ECompileGateCancelled do pDetail:= CUwProofUnavailable + ': cancelled';
       on E: Exception do pDetail:= CUwProofUnavailable + ': ' + E.ClassName + ': ' + E.Message;
     end;
   finally
-    { The caller writes the edit, never this proof: the file goes back byte- and time-identical, so the index still
-      holds it fresh for the next finding of the same run. A failure here raises (the file holds the rewrite). }
-    TFile.WriteAllBytes(pPlan.FilePath, Orig);  // dl:ok taint-path-traversal@39cf -- restores the file's own bytes
-    TFile.SetLastWriteTimeUtc(pPlan.FilePath, Stamp);
+    { The DB copy goes now; the source copy and the logs go with the folder (DropUnwithLogs keeps it only when the
+      detail cites a log, and then the copy beside it is the evidence). }
     for var Tail: string in ['', '-wal', '-shm'] do
       System.SysUtils.DeleteFile(TPath.Combine(Dir, 'after-proof.sqlite') + Tail);  // dl:ok taint-path-traversal@ce76 -- a fresh scratch dir
     DropUnwithLogs(Dir, pDetail);
