@@ -251,8 +251,8 @@ begin
   Prefix:= Copy(ALine, 1, AMarkPos - 1);
   if EndsText('<summary>', Prefix) then Result:= '</summary>'
   else if EndsText('<returns>', Prefix) then Result:= '</returns>'
-  else if EndsText('>', Prefix) and (Pos('<param', Prefix) > 0) then Result:= '</param>'
-  else if EndsText('>', Prefix) and (Pos('<exception', Prefix) > 0) then Result:= '</exception>'
+  else if EndsText('>', Prefix) and (Prefix.Contains('<param')) then Result:= '</param>'
+  else if EndsText('>', Prefix) and (Prefix.Contains('<exception')) then Result:= '</exception>'
   else Result:= '';
 end;
 
@@ -324,7 +324,7 @@ begin
     Line:= ALines[I];
 
     // Rule 2: AUTO_BEGIN .. AUTO_END, inclusive.
-    if Pos(AUTO_BEGIN, Line) > 0 then
+    if Line.Contains(AUTO_BEGIN) then
     begin
       J:= I;
       while (J <= AHi) and (Pos(AUTO_END, ALines[J]) = 0) do Inc(J);

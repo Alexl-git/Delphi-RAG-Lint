@@ -736,7 +736,7 @@ begin
       I:= CloseIx + 1; // fence-only remarks wrapper, consumed as a unit
       Continue;
     end;
-    if Pos(AUTO_BEGIN, L) > 0 then
+    if L.Contains(AUTO_BEGIN) then
     begin
       J:= I;
       while (J <= High(Lines)) and (Pos(AUTO_END, Lines[J]) = 0) do Inc(J);
@@ -744,7 +744,7 @@ begin
       I:= J + 1; // whole fence, inclusive
       Continue;
     end;
-    if Pos(AUTO_END, L) > 0 then Exit(False); // stray END with no opening BEGIN -- ambiguous, fail closed
+    if L.Contains(AUTO_END) then Exit(False); // stray END with no opening BEGIN -- ambiguous, fail closed
     { AUTO_EXC counts as engine-owned here, and it has to be searched for
       EXPLICITLY: it is deliberately not a superstring of AUTO_MARK, so a line
       carrying only the mined-raise marker scores Pos(AUTO_MARK) = 0 and would
@@ -758,8 +758,8 @@ begin
       above gives for AUTO_EXC: it is deliberately not a superstring of
       AUTO_MARK either, so a comment whose only content is a harvested
       <summary> would otherwise score Pos(AUTO_MARK) = 0 and fail closed. }
-    if (Pos(AUTO_MARK, L) = 0) and (Pos(AUTO_EXC, L) = 0)
-       and (Pos(AUTO_SUM, L) = 0) then Exit(False);
+    if (not L.Contains(AUTO_MARK)) and (not L.Contains(AUTO_EXC))
+       and (not L.Contains(AUTO_SUM)) then Exit(False);
     Inc(I);
   end;
   Result:= True;
@@ -1397,7 +1397,7 @@ begin
     runs before it, without that gate -- daUnchanged touches nothing, so a
     human's text is at no risk either way, and the writer that cannot see
     those facts keeps them. }
-  if Existing.HasContent and (Pos(AUTO_BEGIN, Merged) = 0)
+  if Existing.HasContent and (not Merged.Contains(AUTO_BEGIN))
      and (TSharedFacts.HoldsForeignInboundEntries(TSharedFacts.StoredBlockBody(Existing.Remarks), AStore)
           or TSharedFacts.IsLegacyPureOnlyBody(TSharedFacts.StoredBlockBody(Existing.Remarks))) then
   begin

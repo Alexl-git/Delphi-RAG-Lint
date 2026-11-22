@@ -1055,7 +1055,7 @@ const
 begin
   Result:= Trim(ARaw);
   if (Length(Result) >= 2) and (Result[1] = QUOTE) and (Result[Length(Result)] = QUOTE) and
-     (Pos(QUOTE + '#', Result) = 0) and (Pos(QUOTE + ' +', Result) = 0) then
+     (not Result.Contains(QUOTE + '#')) and (not Result.Contains(QUOTE + ' +')) then
     Result:= StringReplace(Copy(Result, 2, Length(Result) - 2), QUOTE + QUOTE, QUOTE, [rfReplaceAll]);
 end;
 
@@ -2050,7 +2050,7 @@ var
   var NS, NT: TPropNode;
   begin
     Result:= False;
-    if (Pos('.', AToPath) > 0) or not SameText(AFromPath, AToPath) then Exit;
+    if (AToPath.Contains('.')) or not SameText(AFromPath, AToPath) then Exit;
     if not (AFrom.ResolvePath(AFromPath, psDfm, NS) and ATo.ResolvePath(AToPath, psDfm, NT)) then Exit;
     if not NT.HasDefault or (NS.DeclaredIn = '') or SameText(NS.DeclaredIn, NT.DeclaredIn) then Exit;
     Result:= ATo.DescendsFrom(NS.DeclaredIn);
@@ -2133,7 +2133,7 @@ var
           else if ToPath.StartsWith(ITEMS_PFX, True) and (Pos('.', Copy(ToPath, Length(ITEMS_PFX) + 1, MaxInt)) = 0) then
           begin
             ToName:= Copy(ToPath, Length(ITEMS_PFX) + 1, MaxInt);
-            if Pos(IntToStr(LinkLine), LinkLines) = 0 then
+            if not LinkLines.Contains(IntToStr(LinkLine)) then
               LinkLines:= LinkLines + (if LinkLines = '' then '' else ', ') + IntToStr(LinkLine);
           end
           else

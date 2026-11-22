@@ -326,8 +326,8 @@ begin
   Result := False;
   InFence:= False;
   for S in ARawBlock.Split([#10]) do
-    if Pos(AUTO_BEGIN, S) > 0 then InFence:= True
-    else if Pos(AUTO_END, S) > 0 then InFence:= False
+    if S.Contains(AUTO_BEGIN) then InFence:= True
+    else if S.Contains(AUTO_END) then InFence:= False
     else if InFence
       and (AIndent + Length(DOC_LINE_SLASHES) + Length(S.TrimRight([#13])) > DOC_FACT_MAX_COLS) then
       Exit(True);

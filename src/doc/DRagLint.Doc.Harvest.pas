@@ -745,7 +745,7 @@ begin
       if Ord(Ch) >= 128 then begin Result.Reason:= hrNonAscii; Exit; end;
 
   // (5) NESTEDBRACE -- a { }-sourced block whose own text carries a brace.
-  if AnyBrace and ((Pos('{', Joined) > 0) or (Pos('}', Joined) > 0)) then
+  if AnyBrace and ((Joined.Contains('{')) or (Joined.Contains('}'))) then
   begin
     Result.Reason:= hrNestedBrace;
     Exit;

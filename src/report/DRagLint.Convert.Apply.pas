@@ -2407,7 +2407,7 @@ begin
   if FResolved.TryGetValue(Key, Result) then Exit;
   Result.QName:= '';
   Result.Store:= -1;
-  if Pos('.', Name) > 0 then
+  if Name.Contains('.') then
   begin
     for I:= 0 to High(FStores) do
     begin
@@ -5471,7 +5471,7 @@ begin
   Result:= Default(TScopedClass);
   Result.Resolution:= PAS_RES_CLASS_NOT_FOUND;
   if Trim(AName) = '' then Exit;
-  if Pos('.', AName) > 0 then
+  if AName.Contains('.') then
   begin
     Result.QName:= ATrees.ResolveType(AName);
     if Result.QName <> '' then Result.Resolution:= PAS_RES_RESOLVED;
@@ -5803,7 +5803,7 @@ var
           IntfOnly:= SameText(F.Section, 'interface');
           var Written: string:= Trim(F.Signature);
           if Written.StartsWith(':') then Written:= Trim(Written.Substring(1));
-          if (Pos('.', Written) > 0) and SameText(BareTypeTail(Written), AType) then Name:= Written;
+          if (Written.Contains('.')) and SameText(BareTypeTail(Written), AType) then Name:= Written;
           Break;
         end;
     var HintFrom, HintTo, FromBare: string;
@@ -5812,7 +5812,7 @@ var
     { a bare book spelling hints with the class the BLOCK resolved to (scope,
       book units, inference), so a row agrees with the class converted }
     var Hint: string:= if AToSide then HintTo else HintFrom;
-    if (Hint <> '') and (Pos('.', Hint) = 0) then Hint:= AIn.Trees.ResolveType(Hint);
+    if (Hint <> '') and (not Hint.Contains('.')) then Hint:= AIn.Trees.ResolveType(Hint);
     Result:= ResolveClassInScope(AIn.Trees, AIn.Store, AIn.FileId, Name, IntfOnly, Hint);
     ClassMemo.Add(Key, Result);
   end;

@@ -727,7 +727,7 @@ begin
   ColonAt:= LastDelimiter(':', APath);
   if ColonAt <= 0 then Exit;
   Tail:= Trim(Copy(APath, ColonAt + 1, MaxInt));
-  if (Tail = '') or (Pos(' ', Tail) > 0) or (Pos('.', Tail) > 0) or (Pos('<', Tail) > 0) then Exit;
+  if (Tail = '') or (Tail.Contains(' ')) or (Tail.Contains('.')) or (Tail.Contains('<')) then Exit;
   ACast:= Tail;
   APath:= Trim(Copy(APath, 1, ColonAt - 1));
 end;
@@ -967,7 +967,7 @@ var
     begin
       T  := Trim(S);
       Dot:= T.LastIndexOf('.') + 1;
-      if (Dot <= 1) or (Dot >= Length(T)) or (Pos(' ', T) > 0) then
+      if (Dot <= 1) or (Dot >= Length(T)) or (T.Contains(' ')) then
       begin
         AddError(Format('#check-ref target "%s" is not <Class>.<Prop>', [T]));
         Exit;
@@ -1288,7 +1288,7 @@ begin
         if ArrPos > 0 then Low:= Copy(Low, 1, ArrPos - 1);
         AddError('unknown directive: ' + Low);
       end
-      else if Pos(ARROW_MIGRATE, Line) > 0 then
+      else if Line.Contains(ARROW_MIGRATE) then
       begin
         // A non-'#' line with ' -> ' -- the raw PCRE find/replace escape hatch.
         R.Kind := rkPcre;

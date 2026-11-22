@@ -285,7 +285,7 @@ var
   L: string;
 begin
   L:= LowerCase(APath);
-  Result:= (Pos('\embarcadero\', L) > 0) or (Pos('\program files', L) > 0) or (Pos('\dcc\', L) > 0);
+  Result:= (L.Contains('\embarcadero\')) or (L.Contains('\program files')) or (L.Contains('\dcc\'));
 end;
 
 { Classifies by unit-NAME prefix only (used both as the primary signal for
@@ -312,9 +312,9 @@ begin
   if AResolved and (AResolvedPath <> '') then
   begin
     L:= LowerCase(AResolvedPath);
-    if (Pos('\embarcadero\', L) > 0) or (Pos('\dcc\', L) > 0) then Result:= dgRTL
-    else if (Pos('devexpress', L) > 0) or (Pos('dev express', L) > 0) or (Pos('\cxlib', L) > 0) then Result:= dgDevExpress
-    else if Pos('spring', L) > 0 then Result:= dgSpring4D;
+    if (L.Contains('\embarcadero\')) or (L.Contains('\dcc\')) then Result:= dgRTL
+    else if (L.Contains('devexpress')) or (L.Contains('dev express')) or (L.Contains('\cxlib')) then Result:= dgDevExpress
+    else if L.Contains('spring') then Result:= dgSpring4D;
   end;
 
   if Result = dgUnknown then Result:= ClassifyByName(AUnitName);

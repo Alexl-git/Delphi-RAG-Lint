@@ -480,8 +480,8 @@ begin
       { Engine-owned facts never belong in a hand-written concept body. The
         fence is checked before anything else so a topic that happens to sit
         beside a facts block cannot swallow it. }
-      if Pos(AUTO_BEGIN, L) > 0 then begin InAuto:= True ; Keep(Raw); Continue; end;
-      if Pos(AUTO_END  , L) > 0 then begin InAuto:= False; Keep(Raw); Continue; end;
+      if L.Contains(AUTO_BEGIN) then begin InAuto:= True ; Keep(Raw); Continue; end;
+      if L.Contains(AUTO_END) then begin InAuto:= False; Keep(Raw); Continue; end;
       if InAuto then begin Keep(Raw); Continue; end;
 
       Low:= LowerCase(L);
@@ -558,7 +558,7 @@ begin
     if      C = T                                              then S:= 100
     else if StartsStr(T, C) or StartsStr(C, T)                 then S:= 80
     else if ContainsWholeWord(T, C) or ContainsWholeWord(C, T) then S:= 60
-    else if (Pos(C, T) > 0) or (Pos(T, C) > 0)                 then S:= 40
+    else if T.Contains(C) or C.Contains(T)                     then S:= 40
     else                                                            S:= 0;
     if S > Result then Result:= S;
   end;

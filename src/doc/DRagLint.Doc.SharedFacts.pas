@@ -895,7 +895,7 @@ end;
 
 function IsTruncated(const AContent: string): Boolean;
 begin
-  Result:= Pos(MORE_MARK, AContent) > 0;
+  Result:= AContent.Contains(MORE_MARK);
 end;
 
 function IsUncertainEntry(const AEntry: string): Boolean;
@@ -1305,7 +1305,7 @@ var
   SC  : string;
 begin
   Result:= False;
-  if Pos(TAG_OPEN, ABlock) = 0 then Exit;
+  if not ABlock.Contains(TAG_OPEN) then Exit;
   ParseBlock(ABlock, SIn, SRes);
   try
     for SC in SIn.Values do
@@ -1470,7 +1470,7 @@ end;
   stored text carries no legacy line. See BlockDrifted for the ruling. }
 procedure WithoutLegacyPure(var AStored, AFresh: string);
 begin
-  if TSharedFacts.MigrateLegacyPure or (Pos(LEGACY_PURE_PARA, AStored) = 0) then Exit;
+  if TSharedFacts.MigrateLegacyPure or (not AStored.Contains(LEGACY_PURE_PARA)) then Exit;
   AStored:= StringReplace(AStored, LEGACY_PURE_PARA, '', [rfReplaceAll]);
   AFresh := StringReplace(AFresh,  EFFECT_FREE_PARA, '', [rfReplaceAll]);
 end;
@@ -2072,10 +2072,10 @@ begin
   Result:= ADocText;
   if MigrateLegacyPure then Exit;
   Body:= StoredBlockBody(AStoredRemarks);
-  if Pos(LEGACY_PURE_PARA, Body) = 0 then Exit;
+  if not Body.Contains(LEGACY_PURE_PARA) then Exit;
   { Either purity element already in the regenerated text settles it: the v2
     fact proves the claim, the legacy one is already kept. }
-  if (Pos(LEGACY_PURE_PARA, ADocText) > 0) or (Pos(EFFECT_FREE_PARA, ADocText) > 0) then Exit;
+  if ADocText.Contains(LEGACY_PURE_PARA) or ADocText.Contains(EFFECT_FREE_PARA) then Exit;
   Lines:= TStringList.Create;
   try
     Lines.Text:= ADocText;   { round-trips the trailing EOL state, as MergeInboundFacts }
@@ -2128,7 +2128,7 @@ var
 begin
   Result:= ADocText;
   Body:= StoredBlockBody(AStoredRemarks);
-  if (Body = '') or (Pos(PARA_OPEN + USED_IN_CLASSES, ADocText) > 0) then Exit;
+  if (Body = '') or ADocText.Contains(PARA_OPEN + USED_IN_CLASSES) then Exit;
   Names:= TStringList.Create;
   try
     Names.Sorted       := True;
@@ -2302,8 +2302,8 @@ begin
   try
     for S in AText.Replace(#13#10, #10).Split([#10]) do
     begin
-      if Pos(AUTO_BEGIN, S) > 0 then InFence:= True
-      else if Pos(AUTO_END, S) > 0 then InFence:= False
+      if S.Contains(AUTO_BEGIN) then InFence:= True
+      else if S.Contains(AUTO_END) then InFence:= False
       else if InFence then
       begin
         C:= Trim(S);

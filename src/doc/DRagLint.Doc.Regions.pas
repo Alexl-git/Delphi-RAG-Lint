@@ -1423,7 +1423,7 @@ begin
       L:= Norm(Line);
       // A blank separator line carries no text to duplicate; it is kept only
       // when something survives around it, which the final Trim takes care of.
-      if (L <> '') and (Pos(L, Present) > 0) then Continue;
+      if (L <> '') and Present.Contains(L) then Continue;
       if Kept.Length > 0 then Kept.Append(#10);
       Kept.Append(Line);
     end;
@@ -1970,7 +1970,7 @@ begin
   //     spelling continuing to match a generic pattern, so it is asserted
   //     here in its own right.
   S.Spans[High(S.Spans)].NonRetractable:=
-    (AIsRemarks and (S.EmitsOwnRemarks or (Pos(AUTO_BEGIN, Body) > 0)))
+    (AIsRemarks and (S.EmitsOwnRemarks or Body.Contains(AUTO_BEGIN)))
     or RxResEngineMarker.IsMatch(Body);
   S.Spans[High(S.Spans)].Dropped       := False;
 end;
@@ -2488,19 +2488,19 @@ var
 begin
   ALast := AStart;
   Result:= ALines[AStart].TrimRight([#13]);
-  if (Pos(FACT_PARA_OPEN, Result) = 0) or (Pos(FACT_PARA_CLOSE, Result) > 0) then Exit;
+  if (not Result.Contains(FACT_PARA_OPEN)) or Result.Contains(FACT_PARA_CLOSE) then Exit;
   Joined:= Result;
   for K:= AStart + 1 to High(ALines) do
   begin
     S:= ALines[K].TrimRight([#13]);
     { FAIL-SAFE: anything that is not a plain continuation abandons the fold,
       so an unterminated <para> never swallows the fence or the next fact. }
-    if (Pos(AUTO_END, S) > 0) or (Pos(AUTO_BEGIN, S) > 0) or (Pos(FACT_PARA_OPEN, S) > 0) then Exit;
+    if S.Contains(AUTO_END) or S.Contains(AUTO_BEGIN) or S.Contains(FACT_PARA_OPEN) then Exit;
     C:= TrimLeft(S);
     if not C.StartsWith(FACT_SLASHES) then Exit;
     P     := Pos(FACT_SLASHES, S);
     Joined:= Joined + ' ' + TrimLeft(Copy(S, P + Length(FACT_SLASHES), MaxInt));
-    if Pos(FACT_PARA_CLOSE, S) > 0 then
+    if S.Contains(FACT_PARA_CLOSE) then
     begin
       ALast := K;
       Result:= Joined;
@@ -2602,7 +2602,7 @@ begin
   SetLength(CrLines, Length(Lines));
   for I:= 0 to High(Lines) do CrLines[I]:= Lines[I] + #13;
   Folded:= FoldFactLine(CrLines, 0, L);
-  Expect((Pos(#13, Folded) = 0) and (Folded = PFX + Text), 'case 7 fold with CRs kept a CR or differs from the text');
+  Expect((not Folded.Contains(#13)) and (Folded = PFX + Text), 'case 7 fold with CRs kept a CR or differs from the text');
 
   { case 4: one blank-free token over the limit is returned whole }
   Text := FACT_PARA_OPEN + StringOfChar('X', TOKEN_LEN) + FACT_PARA_CLOSE;
@@ -3501,8 +3501,8 @@ begin
     while K <= High(Lines) do
     begin
       var TK: string:= Trim(Lines[K]);
-      if (Pos(AUTO_BEGIN, TK) > 0) or (Pos(AUTO_MARK, TK) > 0)
-         or (Pos(AUTO_SUM, TK) > 0) or EndsText('</remarks>', TK) then Break;
+      if TK.Contains(AUTO_BEGIN) or TK.Contains(AUTO_MARK)
+         or TK.Contains(AUTO_SUM) or EndsText('</remarks>', TK) then Break;
       Cand:= Cand + [Lines[K]];
       Inc(K);
     end;
@@ -3602,7 +3602,7 @@ begin
   // PROSE, which is exactly what this budget exists for. Omitting it here
   // would leave harvested summaries unwrapped the moment they stopped
   // carrying AUTO_MARK, silently reintroducing the 759-column lines B8 fixed.
-  if (Pos(AUTO_MARK, AOpen) > 0) or (Pos(AUTO_SUM, AOpen) > 0) then
+  if AOpen.Contains(AUTO_MARK) or AOpen.Contains(AUTO_SUM) then
     Norm:= WrapEngineProse(Norm,
              DOC_WRAP_COLS - Length(C.APrefix) - Length(AClose),
              DOC_WRAP_COLS - Length(C.APrefix) - Length(AClose) - Length(AOpen));
