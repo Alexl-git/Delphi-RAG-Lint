@@ -404,7 +404,7 @@ end;
   answer. }
 function ManagedMemo(const AStore: ISymbolStore): TDictionary<string, Boolean>;
 begin
-  if Assigned(AStore) then Result:= AStore.FlowOracles.Managed else Result:= GManagedMemoLocal;
+  Result:= if Assigned(AStore) then AStore.FlowOracles.Managed else GManagedMemoLocal;
 end;
 
 { Empties the STORE-FREE fallback only. Called at TFlowChecker.Check entry, as
@@ -497,7 +497,7 @@ begin
   if Result and (VerifyOracleMode > 0) then
   begin
     if VerifyOracleMode = 2 then
-      if ACached = pmUnknown then ACached:= pmVar else ACached:= pmUnknown;
+      ACached:= if ACached = pmUnknown then pmVar else pmUnknown;
     AVerifying:= True;
     Result    := False;
   end;
@@ -4764,8 +4764,7 @@ var
                   ChainSeen.Add(Cur);
                   for I := 0 to Cfg.Blocks[Cur].Items.Count - 1 do
                     Flat.Add(Cfg.Blocks[Cur].Items[I]);
-                  if Cfg.Blocks[Cur].Succ.Count = 1 then Cur := Cfg.Blocks[Cur].Succ[0]
-                  else Cur := -1;
+                  Cur := if Cfg.Blocks[Cur].Succ.Count = 1 then Cfg.Blocks[Cur].Succ[0] else -1;
                 end;
 
                 { LiveAfter[k][v] = local v is read on the linear tail AFTER item k
@@ -5380,7 +5379,7 @@ begin
             else if M <> Seen then begin Seen := pmUnknown; Break; end;
           end;
           if Any and MethodAny and (MethodSeen <> Seen) then Seen := pmUnknown;
-          if Any then Result := Seen else Result := pmUnknown;
+          Result := if Any then Seen else pmUnknown;
         finally
           OracleCheckPM(Verifying, Cached, Result, Key);
           AStore.FlowOracles.ParamMd.AddOrSetValue(Key, Ord(Result));

@@ -535,10 +535,7 @@ begin
         than Make on a large project; used by refresh-findings to keep
         compiler_findings complete rather than just delta-updated. }
       if AMsbuildPath <> '' then
-        if ATargetPlatform <> '' then
-          Cmd:= Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Build /p:Platform=%s /nologo"', [RsVars, AMsbuildPath, ATarget, Plat])
-        else
-          Cmd:= Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Build /nologo"', [RsVars, AMsbuildPath, ATarget])
+        Cmd:= if ATargetPlatform <> '' then Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Build /p:Platform=%s /nologo"', [RsVars, AMsbuildPath, ATarget, Plat]) else Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Build /nologo"', [RsVars, AMsbuildPath, ATarget])
       else
         if ATargetPlatform <> '' then
           Cmd:= Format('cmd.exe /c "call "%s" && msbuild "%s" /v:normal /t:Build /p:Platform=%s /nologo"', [RsVars, ATarget, Plat])
@@ -552,10 +549,7 @@ begin
         seconds vs minutes on a large project. A unit that fails to compile has no
         valid DCU, so Make always re-checks it; current errors are never missed. }
       if AMsbuildPath <> '' then
-        if ATargetPlatform <> '' then
-          Cmd:= Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Make /p:Platform=%s /nologo"', [RsVars, AMsbuildPath, ATarget, Plat])
-        else
-          Cmd:= Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Make /nologo"', [RsVars, AMsbuildPath, ATarget])
+        Cmd:= if ATargetPlatform <> '' then Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Make /p:Platform=%s /nologo"', [RsVars, AMsbuildPath, ATarget, Plat]) else Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Make /nologo"', [RsVars, AMsbuildPath, ATarget])
       else
         if ATargetPlatform <> '' then
           Cmd:= Format('cmd.exe /c "call "%s" && msbuild "%s" /v:normal /t:Make /p:Platform=%s /nologo"', [RsVars, ATarget, Plat])

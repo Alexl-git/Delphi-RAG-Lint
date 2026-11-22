@@ -1042,8 +1042,7 @@ var
     begin
       FullName:= LowerCase(Trim(NodeStr(NameNode)));
       DotPos:= LastDelimiter('.', FullName);
-      if DotPos > 0 then BareName:= Copy(FullName, DotPos + 1, MaxInt)
-      else BareName:= FullName;
+      BareName:= if DotPos > 0 then Copy(FullName, DotPos + 1, MaxInt) else FullName;
       if ContractMethods.ContainsKey(BareName) then Exit;
       { The routine is handed somewhere as a value (bare name, @X, or an event
         assignment), so its parameter list is the procedural type's, not its
@@ -1261,8 +1260,7 @@ var
     begin
       FullName:= LowerCase(Trim(NodeStr(NameNode)));
       DotPos:= LastDelimiter('.', FullName);
-      if DotPos > 0 then BareName:= Copy(FullName, DotPos + 1, MaxInt)
-      else BareName:= FullName;
+      BareName:= if DotPos > 0 then Copy(FullName, DotPos + 1, MaxInt) else FullName;
       if ContractMethods.ContainsKey(BareName) then Exit;
     end;
 
@@ -1785,8 +1783,7 @@ var
     if N.IsNull or (N.NodeType <> 'assignment') then Exit;
     Rhs:= N.ChildByField('rhs');
     if Rhs.IsNull then Exit;
-    if Rhs.NodeType = 'exprCall' then Dot:= Rhs.ChildByField('entity')
-    else Dot:= Rhs;
+    Dot:= if Rhs.NodeType = 'exprCall' then Rhs.ChildByField('entity') else Rhs;
     if Dot.IsNull or (Dot.NodeType <> 'exprDot') then Exit;
     Dr:= Dot.ChildByField('rhs');
     Result:= (not Dr.IsNull) and (Dr.NodeType = 'identifier') and SameText(Trim(NodeStr(Dr)), 'Create');

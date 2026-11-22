@@ -287,8 +287,7 @@ begin
   else
   begin
     Leaves:= AStore.UnresolvedAncestorNames(ATypeName, AFileId);
-    if Length(Leaves) = 0 then Result:= toClass
-    else Result:= ClassifyLeaves(ALibStore, Leaves, AUnknownLeaf);
+    Result:= if Length(Leaves) = 0 then toClass else ClassifyLeaves(ALibStore, Leaves, AUnknownLeaf);
   end;
 end;
 

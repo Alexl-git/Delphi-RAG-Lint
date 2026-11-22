@@ -1734,8 +1734,7 @@ var
         F:= Default(TLintFinding);
         F.RuleId  := 'syntax-error';
         F.Severity:= 'error';
-        if N.IsMissing then F.Message:= 'Syntax error: missing token'
-        else F.Message:= 'Syntax error near here';
+        F.Message:= if N.IsMissing then 'Syntax error: missing token' else 'Syntax error near here';
         F.FilePath:= AFile;
         F.StartLine:= ErrorLine;
         F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
@@ -1868,8 +1867,7 @@ var
           DV:= Child.NamedChild(J);
           if DV.NodeType <> 'declVar' then Continue;
           TypeNode:= DV.ChildByField('type');
-          if TypeNode.IsNull then TypeStart:= MaxInt
-          else TypeStart:= Integer(TypeNode.StartByte);
+          TypeStart:= if TypeNode.IsNull then MaxInt else Integer(TypeNode.StartByte);
           { name identifiers come before the type field (A, B: T) }
           for K:= 0 to DV.NamedChildCount - 1 do
           begin
@@ -1887,8 +1885,7 @@ var
               F:= Default(TLintFinding);
               F.RuleId  := 'unused-local';
               F.Severity:= 'hint';
-              if RoutineName <> '' then F.Message:= Format( 'H2164 Variable ''%s'' is declared but never used in ''%s''', [DisplayName, RoutineName])
-              else F.Message:= Format( 'H2164 Variable ''%s'' is declared but never used', [DisplayName]);
+              F.Message:= if RoutineName <> '' then Format( 'H2164 Variable ''%s'' is declared but never used in ''%s''', [DisplayName, RoutineName]) else Format( 'H2164 Variable ''%s'' is declared but never used', [DisplayName]);
               F.FilePath:= AFile;
               F.StartLine:= Integer(P.Row   ) + 1;
               F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
@@ -2093,8 +2090,7 @@ var
 
           { name identifiers precede the type field -- the rule CheckUnusedLocals uses }
           TypeNode:= DV.ChildByField('type');
-          if TypeNode.IsNull then TypeStart:= MaxInt
-          else TypeStart:= Integer(TypeNode.StartByte);
+          TypeStart:= if TypeNode.IsNull then MaxInt else Integer(TypeNode.StartByte);
           Names:= nil;
           for K:= 0 to DV.NamedChildCount - 1 do
           begin
@@ -2664,7 +2660,7 @@ var
       Item:= ADecls.NamedChild(I);
       if Item.NodeType <> AItemKind then Continue;
       TypeNode:= Item.ChildByField('type');
-      if TypeNode.IsNull then TypeStart:= MaxInt else TypeStart:= Integer(TypeNode.StartByte);
+      TypeStart:= if TypeNode.IsNull then MaxInt else Integer(TypeNode.StartByte);
       for J:= 0 to Item.NamedChildCount - 1 do
       begin
         NameId:= Item.NamedChild(J);
@@ -2886,8 +2882,7 @@ var
     to the name heuristic). }
   function CatOf(const T: string): TTypeCategory;
   begin
-    if AStore <> nil then Result:= AStore.ResolveTypeCategory(T, AFileId)
-    else Result:= tcUnknown;
+    Result:= if AStore <> nil then AStore.ResolveTypeCategory(T, AFileId) else tcUnknown;
   end;
 
   function NodeStr(const N: TTSNode): string;
@@ -2935,24 +2930,21 @@ var
   var C: TTypeCategory;
   begin
     C:= CatOf(T);
-    if C <> tcUnknown then Result:= (C = tcFloat)
-    else Result:= IsFloatType(T);
+    Result:= if C <> tcUnknown then (C = tcFloat) else IsFloatType(T);
   end;
 
   function TypeTextIsInterface(const T: string): Boolean;
   var C: TTypeCategory;
   begin
     C:= CatOf(T);
-    if C <> tcUnknown then Result:= (C = tcInterface)
-    else Result:= IsInterfaceType(T);
+    Result:= if C <> tcUnknown then (C = tcInterface) else IsInterfaceType(T);
   end;
 
   function TypeTextIsPointer(const T: string): Boolean;
   var C: TTypeCategory;
   begin
     C:= CatOf(T);
-    if C <> tcUnknown then Result:= (C = tcPointer)
-    else Result:= IsPointerType(T);
+    Result:= if C <> tcUnknown then (C = tcPointer) else IsPointerType(T);
   end;
 
   { Intrinsic string types by name (no store needed). ShortString[n] handled via
@@ -2975,8 +2967,7 @@ var
   var C: TTypeCategory;
   begin
     C:= CatOf(T);
-    if C <> tcUnknown then Result:= (C = tcString)
-    else Result:= IsStringType(T);
+    Result:= if C <> tcUnknown then (C = tcString) else IsStringType(T);
   end;
 
   { v0.71: a T-prefixed name that is plausibly a CLASS (reference) type -- excludes
@@ -4212,8 +4203,7 @@ var
           F:= Default(TLintFinding);
           F.RuleId  := 'firedac-open-execsql-mismatch';
           F.Severity:= 'warning';
-          if M = 'open' then F.Message:= 'Open on a data-modifying statement (INSERT/UPDATE/DELETE) -- use ExecSQL; Open expects a result set'
-          else F.Message:= 'ExecSQL on a SELECT -- use Open to fetch the result set; ExecSQL discards it';
+          F.Message:= if M = 'open' then 'Open on a data-modifying statement (INSERT/UPDATE/DELETE) -- use ExecSQL; Open expects a result set' else 'ExecSQL on a SELECT -- use Open to fetch the result set; ExecSQL discards it';
           F.FilePath:= AFile;
           F.StartLine:= Integer(P.Row   ) + 1;
           F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
@@ -4429,7 +4419,7 @@ var
       Item:= Loc.NamedChild(I);
       if Item.NodeType <> 'declVar' then Continue;
       TypeNode:= Item.ChildByField('type');
-      if TypeNode.IsNull then TypeStart:= MaxInt else TypeStart:= Integer(TypeNode.StartByte);
+      TypeStart:= if TypeNode.IsNull then MaxInt else Integer(TypeNode.StartByte);
       for J:= 0 to Item.NamedChildCount - 1 do
       begin
         NameId:= Item.NamedChild(J);
@@ -4776,7 +4766,7 @@ var
   { Unwrap a 'statement' wrapper to its primary expression. }
   function Primary(const N: TTSNode): TTSNode;
   begin
-    if (N.NodeType = 'statement') and (N.NamedChildCount > 0) then Result:= N.NamedChild(0) else Result:= N;
+    Result:= if (N.NodeType = 'statement') and (N.NamedChildCount > 0) then N.NamedChild(0) else N;
   end;
 
   { 'X.Free' -> X. }
@@ -5988,8 +5978,7 @@ var
                                and (C.EndByte   = Body.EndByte  ) then Continue;
           Lay.EntityText:= Trim(NodeStr(C));
           Lay.TypeName  := EntityType(C);
-          if Lay.TypeName = '' then Lay.Surface:= nil
-          else Lay.Surface:= SurfaceOf(Lay.TypeName);
+          Lay.Surface:= if Lay.TypeName = '' then nil else SurfaceOf(Lay.TypeName);
           Lay.RecSurface:= nil;
           if (Lay.Surface = nil) and (Lay.TypeName <> '') then
             Lay.RecSurface:= RecordSurfaceOf(Lay.TypeName);
@@ -7540,7 +7529,7 @@ var
     Nm  := Trim(NodeStr(R));
     Recv:= '';
     if (not L.IsNull) and (L.NodeType = 'identifier') then Recv:= Trim(NodeStr(L));
-    if Recv = '' then AName:= Nm else AName:= Recv + '.' + Nm;
+    AName:= if Recv = '' then Nm else Recv + '.' + Nm;
 
     { RECEIVER-BLIND ON PURPOSE: TStringList, TStrings, TPicture, TMemoryStream
       and dataset persistence all spell it the same way and all take a file
@@ -7756,7 +7745,7 @@ var
     Fallback:= Default(TTSNode);
     Found   := Default(TTSNode);
     Walk(ARoot);
-    if not Found.IsNull then Result:= Found else Result:= Fallback;
+    Result:= if not Found.IsNull then Found else Fallback;
   end;
 
   { Resolve a callee name to a single first-party body, exactly as the OwnsOracle
@@ -8247,7 +8236,7 @@ var
     end;
     if B.NodeType = 'statement' then
     begin
-      if B.NamedChildCount >= 1 then Result:= B.NamedChild(0) else Result:= B;
+      Result:= if B.NamedChildCount >= 1 then B.NamedChild(0) else B;
     end
     else
       Result:= B;
