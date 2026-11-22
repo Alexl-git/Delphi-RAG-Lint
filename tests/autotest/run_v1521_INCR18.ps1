@@ -655,7 +655,7 @@ function Get-EffectFree($db, $name) {
 $purScenarios = @(
   @{ Name = 'PUR a callee gains a global write'; File = 'uPurA.pas'; Find = '  Result := AValue + 1;'; Repl = "  GCount := AValue;`r`n  Result := AValue + 1;"; Control = $true; Flip = 'Far'; Small = $true },
   @{ Name = 'PUR a called routine is withdrawn'; File = 'uPurA.pas'; Find = 'Gone'; Repl = 'Gone2'; Small = $true },
-  @{ Name = 'PUR a base class gains a field a descendant writes'; File = 'uPurBase.pas'; Find = '    FSeen: Integer;'; Repl = "    FSeen: Integer;`r`n    Extra: Integer;"; Small = $true; FullGap = 'symbol_facts.writes_fields of the descendant is filled by the facts-inherited pass of a file''s own parse, and the descendant was not re-parsed' },
+  @{ Name = 'PUR a base class gains a field a descendant writes'; File = 'uPurBase.pas'; Find = '    FSeen: Integer;'; Repl = "    FSeen: Integer;`r`n    Extra: Integer;"; Small = $true },  # 1.52.3 INCR-BASEFIELD closed its FullGap: the descendant's file lists the ancestor's file (schema_meta file_ancestors:)
   @{ Name = 'PUR a body edit that moves no verdict'; File = 'uPurC.pas'; Find = 'Result := Over(AValue);'; Repl = 'Result := Over(AValue) + 0;'; Small = $true },
   @{ Name = 'PUR a procedural type appears'; File = 'uPurT.pas'; Find = 'THook = Integer;'; Repl = 'THook = procedure;'; Whole = $true }
 )

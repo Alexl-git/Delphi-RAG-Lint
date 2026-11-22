@@ -38,6 +38,7 @@ type
     OwnWrites : TArray<string>;
     HeldReads : TArray<string>;
     HeldWrites: TArray<string>;
+    FilePath  : string; { 1.52.3 INCR-BASEFIELD: the file the routine was parsed from }
   end;
 
   /// <summary>152c RINC2: the progress / DIAG report of an include file whose parse has a tree
@@ -100,6 +101,9 @@ type
         is the per-run string pool behind Intern. }
       FHeld           : TList<THeldFieldFacts>             ;
       FIntern         : TDictionary<string, string>        ;
+      { 1.52.3 INCR-BASEFIELD: every file this run parsed (lowercase full path -> path);
+        ApplyInheritedFieldFacts rewrites their recorded ancestor-file lists, then clears it. }
+      FParsedPaths    : TDictionary<string, string>        ;
       FSkippedUpToDate: Integer                            ;
       { Files this indexer got PAST the up-to-date skip for, i.e. every file it
         may have written rows for. Backs IIndexer.ParsedFiles -- see there. }
@@ -198,8 +202,11 @@ type
       /// <param name="AUnitFiles">INCRPP: the project unit files whose constants an IF of
       /// the host read; recorded as plain entries, so editing one re-parses the host.</param>
       /// <remarks>
-      /// INCRPP limit: an include that later appears only in a near-search folder
-      /// (a subfolder or parent) is not a recorded candidate.
+      /// 1.52.3 INCRPP-LIMITS: an unresolved relative include also gets one
+      /// UNRESOLVED_NEAR_MARK rule entry (its folder + name), which the store re-asks with
+      /// the near search, so it appearing in a subfolder or parent level counts; and
+      /// AUnitFiles carries the units a used unit's constants read, transitively
+      /// (IPPUnitDeps).
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas)</para>
       /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.SetFileIncludes, LowerCase</para>
@@ -747,9 +754,13 @@ type
       /// <remarks>
       /// Implements IIndexer.ApplyInheritedFieldFacts. Reach is the
       /// SAME database: a base class in the platform library is out of reach
-      /// from a project index (F6). An ancestor gaining a field does not
-      /// re-facts descendants in unchanged files on an incremental run -- the
-      /// periodic rebuild covers that.
+      /// from a project index (F6). 1.52.3 INCR-BASEFIELD: for every file this run
+      /// parsed it also records (schema_meta 'file_ancestors:' + path) the OTHER
+      /// files that declare an ancestor of a class one of its routines held names
+      /// for; the store's up-to-date test re-parses the file once one of them is
+      /// newer than its parse, so an ancestor gaining or losing a field re-facts
+      /// descendants in unchanged files on an incremental run. The lists are
+      /// rewritten even when nothing was held (a stale list is cleared).
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.BuildEphemeralStore (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts.FieldsOfAncestors, DRagLint.Core.Indexer.TIndexer.ApplyInheritedFieldFacts.Merge, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolFacts, DRagLint.Core.Interfaces.ISymbolStore.PutSymbolFacts, JoinCappedDisplay, LowerCase</para>
@@ -812,6 +823,7 @@ uses
   , System.Generics.Defaults      { 1.52 EXTINC: TComparer for the include variants' order }
   , DRagLint.Preprocess.Decls      { INCRPP: IPPUnitSource / IPPUnitFiles -- which units an IF read }
   , DRagLint.Preprocess.Expr       { INCRPP: TPPValue, TPPNameKind (IPPUnitSource's signature) }
+  , DRagLint.Index.PPUnitSource    { 1.52.3 INCRPP-LIMITS: IPPUnitDeps -- the units a used unit's constants read }
   ;
 
 type
@@ -877,8 +889,18 @@ end;
 function TRecordingUnitSource.UnitFiles: TArray<string>;
 var
   Files: IPPUnitFiles;
+  Deps : IPPUnitDeps;
 begin
   Result:= nil;
+  { 1.52.3 INCRPP-LIMITS: with the deps of each unit's scan, a constant defined through
+    ANOTHER unit's constant re-parses the host too. }
+  if Supports(FInner, IPPUnitDeps, Deps) then
+  begin
+    for var U: string in FUnits do
+      for var P: string in Deps.UnitFileClosure(U) do
+        if IndexText(P, Result) < 0 then Result:= Result + [P];
+    Exit;
+  end;
   if not Supports(FInner, IPPUnitFiles, Files) then Exit;
   for var U: string in FUnits do
   begin
@@ -1044,6 +1066,7 @@ begin
   FVisitedKeys := TDictionary<string, Boolean>.Create;
   FHeld        := TList<THeldFieldFacts>.Create;
   FIntern      := TDictionary<string, string>.Create;
+  FParsedPaths := TDictionary<string, string>.Create;
   FIgnoreStack:= nil;
   { PP-Task-9: safe default -- preprocessing OFF until a caller opts in via
     SetPreprocess. A bare TIndexer (tests, embedders) keeps the pre-Task-9 raw
@@ -1071,6 +1094,7 @@ begin
   FVisited.Free;
   FVisitedKeys.Free;
   FIntern.Free;
+  FParsedPaths.Free;
   FHeld.Free;
   FIgnoreStack.Free;
   FIncContexts.Free;
@@ -1095,6 +1119,10 @@ begin
   end;
 end;
 
+const
+  { 1.52.3 INCR-BASEFIELD: separator of the ANCESTOR_FILES_META_KEY list. }
+  ANCESTOR_FILES_SEP = '|';
+
 type
   { v23 (spec F2/F3), private to ApplyInheritedFieldFacts. One ancestor field:
     its declared spelling and the RANK of the ancestor that declares it (0 =
@@ -1110,6 +1138,9 @@ type
   TFieldMap = class
     Fields   : TDictionary<string, TAncField>;
     RankCount: Integer;
+    { 1.52.3 INCR-BASEFIELD: the files declaring a resolved ancestor, nearest first,
+      once each -- whether or not that ancestor has a field. }
+    Files    : TArray<string>;
     constructor Create;
     destructor Destroy; override;
   end;
@@ -1130,6 +1161,54 @@ end;
 function TIndexer.ApplyInheritedFieldFacts: Integer;
 var
   AncFields: TObjectDictionary<Int64, TFieldMap>;
+  FilePaths: TDictionary<Int64, string>;           { INCR-BASEFIELD: files.id -> path, per run }
+  Deps     : TObjectDictionary<string, TList<string>>; { INCR-BASEFIELD: lower host path -> ancestor files }
+
+  { INCR-BASEFIELD: appends the file AFileId names to AMap.Files, once. }
+  procedure AddAncestorFile(AMap: TFieldMap; AFileId: Int64);
+  var
+    P: string;
+  begin
+    if AFileId <= 0 then Exit;
+    if not FilePaths.TryGetValue(AFileId, P) then
+    begin
+      P:= FStore.GetFilePath(AFileId);
+      FilePaths.Add(AFileId, P);
+    end;
+    if (P <> '') and (IndexText(P, AMap.Files) < 0) then AMap.Files:= AMap.Files + [P];
+  end;
+
+  { INCR-BASEFIELD: AHostPath's routine held names for a class whose ancestors live in
+    AFiles; every one of them that is not the host itself joins the host's list. }
+  procedure NoteAncestorFiles(const AHostPath: string; const AFiles: TArray<string>);
+  var
+    L: TList<string>;
+  begin
+    if Length(AFiles) = 0 then Exit;
+    if not Deps.TryGetValue(LowerCase(AHostPath), L) then
+    begin
+      L:= TList<string>.Create;
+      Deps.Add(LowerCase(AHostPath), L);
+    end;
+    for var P: string in AFiles do
+      if not SameText(TPath.GetFullPath(P), TPath.GetFullPath(AHostPath))
+        and (IndexText(P, L.ToArray) < 0) then L.Add(P);
+  end;
+
+  { INCR-BASEFIELD: writes each parsed file's ancestor-file list (an empty one clears a
+    stale record); a list that did not change is not written. }
+  procedure StoreAncestorFiles;
+  var
+    L: TList<string>;
+  begin
+    for var Pair: TPair<string, string> in FParsedPaths do
+    begin
+      var NewList: string:= '';
+      if Deps.TryGetValue(Pair.Key, L) then NewList:= string.Join(ANCESTOR_FILES_SEP, L.ToArray);
+      var Key: string:= ANCESTOR_FILES_META_KEY + LowerCase(TPath.GetFullPath(StringReplace(Pair.Value, '/', '\', [rfReplaceAll])));
+      if FStore.GetMetaValue(Key) <> NewList then FStore.SetMetaValue(Key, NewList);
+    end;
+  end;
 
   function FieldsOfAncestors(AClassId: Int64): TFieldMap;
   var
@@ -1149,6 +1228,7 @@ var
     for A in FStore.GetTransitiveAncestors(AClassId) do
     begin
       if not (A.Resolved and (A.SymbolId > 0)) then Continue;
+      AddAncestorFile(Result, A.FileId);
       for Kid in FStore.FindAllChildSymbols(A.SymbolId) do
         if (Kid.Kind = skField) and not Result.Fields.ContainsKey(LowerCase(Kid.Name)) then
         begin
@@ -1197,12 +1277,15 @@ var
   NewR, NewW: string;
 begin
   Result:= 0;
-  if FHeld.Count = 0 then Exit; // F7: nothing parsed, nothing to do, print nothing
+  if (FHeld.Count = 0) and (FParsedPaths.Count = 0) then Exit; // F7: nothing parsed, nothing to do, print nothing
   AncFields:= TObjectDictionary<Int64, TFieldMap>.Create([doOwnsValues]);
+  FilePaths:= TDictionary<Int64, string>.Create;
+  Deps     := TObjectDictionary<string, TList<string>>.Create([doOwnsValues]);
   try
     for H in FHeld do
     begin
       Map:= FieldsOfAncestors(H.ClassId);
+      NoteAncestorFiles(H.FilePath, Map.Files);
       if Map.Fields.Count = 0 then Continue;
       NewR:= Merge(H.OwnReads , H.HeldReads , Map);
       NewW:= Merge(H.OwnWrites, H.HeldWrites, Map);
@@ -1214,10 +1297,14 @@ begin
       FStore.PutSymbolFacts(Facts);
       Inc(Result);
     end;
+    StoreAncestorFiles;
   finally
+    Deps.Free;
+    FilePaths.Free;
     AncFields.Free;
     FHeld.Clear;
     FIntern.Clear;
+    FParsedPaths.Clear;
   end;
 end;
 
@@ -1357,8 +1444,14 @@ begin
       if TPath.IsPathRooted(Probe.Name) then
         AddEntry(UNRESOLVED_INCLUDE_MARK + TPath.GetFullPath(Probe.Name))
       else
+      begin
         for var Dir: string in [Probe.BaseDir] + FIncSearchPaths do
           if Dir <> '' then AddEntry(UNRESOLVED_INCLUDE_MARK + TPath.GetFullPath(TPath.Combine(Dir, Probe.Name)));
+        { 1.52.3 INCRPP-LIMITS: the preprocess also searched near the host (subfolders,
+          parent levels); a rule entry re-asks that search, so a folder created later counts. }
+        if Probe.BaseDir <> '' then
+          AddEntry(UNRESOLVED_NEAR_MARK + TPath.GetFullPath(Probe.BaseDir) + '*' + Probe.Name);
+      end;
     end;
     for var UnitFile: string in AUnitFiles do
       if not SameText(TPath.GetFullPath(UnitFile), TPath.GetFullPath(AHostPath)) then AddEntry(UnitFile);
@@ -2180,6 +2273,7 @@ begin
     this line -- a parse failure, a rolled-back file transaction -- has already
     opened the door to a write, so the increment belongs above all of them. }
   Inc(FParsedFiles);
+  FParsedPaths.AddOrSetValue(LowerCase(AFilePath), AFilePath); { INCR-BASEFIELD }
   // v0.86 (Task 3): transcode ANSI/UTF-16 sources to valid UTF-8 before the
   // parse/slice pipeline (which assumes UTF-8). A valid CP1252 file (0xAE/0xA9
   // in a resourcestring -- the SOFTWID.PAS class) was SKIPPED here with
@@ -2592,6 +2686,7 @@ begin
             H.OwnWrites := Intern(Facts.OwnWrites);
             H.HeldReads := Intern(Facts.HeldReads);
             H.HeldWrites:= Intern(Facts.HeldWrites);
+            H.FilePath  := AFilePath;
             FHeld.Add(H);
           end;
         end;
