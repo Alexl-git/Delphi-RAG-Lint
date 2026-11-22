@@ -1065,6 +1065,7 @@ type
 implementation
 
 uses
+  System.Math,
   DRagLint.Lint.RefTypeRules; { RefStaticTypeAt: index fact F1 for redundant-cast and unsafe-typecast-without-is }
 
 function tree_sitter_delphi13: PTSLanguage; cdecl;
@@ -1623,7 +1624,7 @@ var
   begin
     Result:= False;
     for I:= 0 to Length(ConditionalRanges) - 1 do
-      if (ALine >= ConditionalRanges[I].StartLine) and (ALine <= ConditionalRanges[I].EndLine) then
+      if InRange(ALine, ConditionalRanges[I].StartLine, ConditionalRanges[I].EndLine) then
         Exit(True);
   end;
 
@@ -7748,7 +7749,7 @@ var
             if Fallback.IsNull then Fallback:= N;
             SR:= Integer(N.StartPoint.Row) + 1;
             ER:= Integer(N.EndPoint  .Row) + 1;
-            if (AImplStartLine >= SR) and (AImplStartLine <= ER) then
+            if InRange(AImplStartLine, SR, ER) then
             begin
               Found:= N;
               Exit;

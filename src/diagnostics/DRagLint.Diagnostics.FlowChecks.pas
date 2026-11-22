@@ -239,6 +239,7 @@ type
 implementation
 
 uses
+  System.Math,
   DRagLint.Lint.RefTypeRules; { TExprTypeReader: the receiver's static type, index fact F1 }
 
 { FLOWCHECKER SUB-BREAKDOWN. INBOX-flowchecker-is-half-of-lint-all.
@@ -3525,7 +3526,7 @@ begin
     if Nm.IsNull or (LowerCase(Trim(NodeStr(Nm, ASrc))) <> LowerCase(AName)) then Continue;
     if Fallback.IsNull then Fallback := Procs[I];
     SR := Integer(Procs[I].StartPoint.Row) + 1; ER := Integer(Procs[I].EndPoint.Row) + 1;
-    if (AImplStartLine >= SR) and (AImplStartLine <= ER) then Exit(Procs[I]);
+    if InRange(AImplStartLine, SR, ER) then Exit(Procs[I]);
   end;
   Result := Fallback;
 end;
