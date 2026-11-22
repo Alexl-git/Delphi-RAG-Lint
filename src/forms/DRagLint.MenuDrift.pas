@@ -327,22 +327,6 @@ type
 /// </remarks>
 function ComputeMenuDrift(pTree: TMenuTree; pRegistry: TMenuRegistry): TMenuDriftReport;
 
-/// <summary>The drift key of a path on a form: MenuPathKey(pPath), prefixed
-/// with the lowercased form class and '|' when pForm is not ''. ide-menu
-/// surfaces and code roots have no form, so their keys are unchanged.</summary>
-/// <param name="pForm">Form class ('' for none).</param>
-/// <param name="pPath">A display path.</param>
-/// <returns>The key; an app-menu key never equals an ide-menu key.</returns>
-/// <remarks>
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.MenuDrift.CollectContainers (DRagLint.MenuDrift.pas), DRagLint.MenuDrift.ComputeMenuDrift (DRagLint.MenuDrift.pas), DRagLint.MenuDrift.TMenuRegistry.AddSurface (DRagLint.MenuDrift.pas)</para>
-/// <para>Calls: DRagLint.MenuTree.MenuPathKey, LowerCase</para>
-/// <para>Returns: if pForm = '' then MenuPathKey(pPath)</para>
-/// <seealso cref="DRagLint.MenuTree.MenuPathKey"/>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
-function MenuFormPathKey(const pForm, pPath: string): string;
-
 implementation
 
 uses
@@ -370,6 +354,20 @@ begin
   inherited Destroy;
 end;
 
+/// <summary>The drift key of a path on a form: MenuPathKey(pPath), prefixed
+/// with the lowercased form class and '|' when pForm is not ''. ide-menu
+/// surfaces and code roots have no form, so their keys are unchanged.</summary>
+/// <param name="pForm">Form class ('' for none).</param>
+/// <param name="pPath">A display path.</param>
+/// <returns>The key; an app-menu key never equals an ide-menu key.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.MenuDrift.CollectContainers (DRagLint.MenuDrift.pas), DRagLint.MenuDrift.ComputeMenuDrift (DRagLint.MenuDrift.pas), DRagLint.MenuDrift.TMenuRegistry.AddSurface (DRagLint.MenuDrift.pas)</para>
+/// <para>Calls: DRagLint.MenuTree.MenuPathKey, LowerCase</para>
+/// <para>Returns: if pForm = '' then MenuPathKey(pPath)</para>
+/// <seealso cref="DRagLint.MenuTree.MenuPathKey"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MenuFormPathKey(const pForm, pPath: string): string;
 begin
   Result:= if pForm = '' then MenuPathKey(pPath) else LowerCase(pForm) + '|' + MenuPathKey(pPath);

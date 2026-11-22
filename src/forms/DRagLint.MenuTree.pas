@@ -633,17 +633,6 @@ function MenuPathKey(const pPath: string): string;
 /// </remarks>
 function MenuKindName(pKind: TMenuNodeKind): string;
 
-/// <summary>The JSON / text name of a confidence ('certain', 'derived', 'unknown').</summary>
-/// <param name="pConfidence"><!-- drag-lint:auto type -->TMenuConfidence</param>
-/// <returns><!-- drag-lint:auto -->string -- Observed: CONFIDENCE_NAMES[pConfidence].</returns>
-/// <remarks>
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.MenuTree.NodeJson (DRagLint.MenuTree.pas), DRagLint.MenuTree.TMenuTree.ToPaths (DRagLint.MenuTree.pas), DRagLint.MenuTree.TMenuTree.ToText.Emit (DRagLint.MenuTree.pas)</para>
-/// <para>Effect-free (proven)</para>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
-function MenuConfidenceName(pConfidence: TMenuConfidence): string;
-
 implementation
 
 uses
@@ -700,6 +689,15 @@ begin
   Result:= KIND_NAMES[pKind];
 end;
 
+/// <summary>The JSON / text name of a confidence ('certain', 'derived', 'unknown').</summary>
+/// <param name="pConfidence"><!-- drag-lint:auto type -->TMenuConfidence</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: CONFIDENCE_NAMES[pConfidence].</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.MenuTree.NodeJson (DRagLint.MenuTree.pas), DRagLint.MenuTree.TMenuTree.ToPaths (DRagLint.MenuTree.pas), DRagLint.MenuTree.TMenuTree.ToText.Emit (DRagLint.MenuTree.pas)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MenuConfidenceName(pConfidence: TMenuConfidence): string;
 begin
   Result:= CONFIDENCE_NAMES[pConfidence];

@@ -52,54 +52,6 @@ function StyleFromConfigText(const AConfigCase: string): TNameStyle;  // dl:ok u
 /// </remarks>
 function SynthesizeCasedName(const AOldName: string; AStyle: TNameStyle): string;  // dl:ok unused-public-symbol@bb30 -- public so the test project tests\autotest\fixtures\namesynth\NameSynthHarness.dpr can call it directly (unit test surface); the index covers drag-lint.dproj only, not the test projects -- INT-W2a 2026-11-22
 
-/// <summary>Returns APrefix + Cap(AOldName): the identifier with the naming-convention
-/// prefix prepended and its first letter capitalized (e.g. 'client' + 'F' -> 'FClient';
-/// 'x' + 'p' -> 'pX'). Idempotent: if AOldName already starts with APrefix followed by an
-/// uppercase letter (already prefixed), returns AOldName unchanged. Empty APrefix or empty
-/// AOldName returns AOldName. Unlike SynthesizeCasedName this CHANGES the identifier, so the
-/// caller MUST collision-check the result before applying.</summary>
-/// <param name="AOldName">The offending identifier verbatim.</param>
-/// <param name="APrefix">The configured prefix (e.g. 'F', 'p', 'T'); '' disables.</param>
-/// <returns>The prefixed identifier, or AOldName unchanged if already prefixed/empty input.</returns>
-/// <remarks>
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Refactor.NamingFix.NamingCandidates (DRagLint.Refactor.NamingFix.pas)</para>
-/// <para>Calls: CharInSet, Copy, SameText, UpperCase</para>
-/// <para>Returns: APrefix + UpperCase(AOldName[1]) + Copy(AOldName, 2, MaxInt)</para>
-/// <para>Pure</para>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
-function SynthesizePrefixedName(const AOldName, APrefix: string): string;
-
-/// <summary>The names const-casing may rename AOldName to, in preference order:
-/// one per style in AConstCase (the configured order), duplicates and the
-/// unchanged name removed.</summary>
-/// <param name="AOldName">The offending constant name verbatim.</param>
-/// <param name="AConstCase">The configured const_case styles; empty means UPPER_CASE.</param>
-/// <returns>Candidates, best first; empty when no style changes the name.</returns>
-/// <remarks>
-/// WORD-AWARE, unlike SynthesizeCasedName (owner report 2026-10-13: most
-/// of ORM3's const-casing findings looked like StationType_Operator, which a
-/// first-letter re-casing leaves unchanged, so nothing was ever fixable). Words
-/// split at '_' and at a lower-to-upper step:
-/// PascalCase StationType_Operator -> StationTypeOperator, wr_str -> WrStr,
-/// MAX_COUNT -> MaxCount, wrStr -> WrStr
-/// UPPER_CASE StationType_Operator -> STATION_TYPE_OPERATOR, wrStr -> WR_STR
-/// camelCase StationType_Operator -> stationTypeOperator
-/// A candidate CHANGES the identifier, so the caller must ask the index whether
-/// it is free (FreeCandidates keeps those ConflictReason clears; BuildNamingFixEdits takes the first).
-/// Pure. Pinned by tests\autotest\run_const_casing_word_fix.ps1.
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Refactor.NamingFix.NamingCandidates (DRagLint.Refactor.NamingFix.pas)</para>
-/// <para>Calls: Copy, DRagLint.Refactor.NamingFix.IdentWords, DRagLint.Refactor.NamingFix.PascalWord, DRagLint.Refactor.NamingFix.StyleFromConfigText, IndexStr, LowerCase, UpperCase</para>
-/// <para>Complexity: 10 (cyclomatic, outer body), 30 lines (full implementation)</para>
-/// <seealso cref="DRagLint.Refactor.NamingFix.IdentWords"/>
-/// <seealso cref="DRagLint.Refactor.NamingFix.PascalWord"/>
-/// <seealso cref="DRagLint.Refactor.NamingFix.StyleFromConfigText"/>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
-function ConstCaseCandidates(const AOldName: string; const AConstCase: TArray<string>): TArray<string>;
-
 type
   /// <summary>Which rename engine a naming target goes through.</summary>
   /// <remarks>
@@ -407,6 +359,33 @@ begin
   Result:= if (Length(AWord) > 1) and (AWord = UpperCase(AWord)) then UpperCase(AWord[1]) + LowerCase(Copy(AWord, 2, MaxInt)) else UpperCase(AWord[1]) + Copy(AWord, 2, MaxInt);
 end;
 
+/// <summary>The names const-casing may rename AOldName to, in preference order:
+/// one per style in AConstCase (the configured order), duplicates and the
+/// unchanged name removed.</summary>
+/// <param name="AOldName">The offending constant name verbatim.</param>
+/// <param name="AConstCase">The configured const_case styles; empty means UPPER_CASE.</param>
+/// <returns>Candidates, best first; empty when no style changes the name.</returns>
+/// <remarks>
+/// WORD-AWARE, unlike SynthesizeCasedName (owner report 2026-10-13: most
+/// of ORM3's const-casing findings looked like StationType_Operator, which a
+/// first-letter re-casing leaves unchanged, so nothing was ever fixable). Words
+/// split at '_' and at a lower-to-upper step:
+/// PascalCase StationType_Operator -> StationTypeOperator, wr_str -> WrStr,
+/// MAX_COUNT -> MaxCount, wrStr -> WrStr
+/// UPPER_CASE StationType_Operator -> STATION_TYPE_OPERATOR, wrStr -> WR_STR
+/// camelCase StationType_Operator -> stationTypeOperator
+/// A candidate CHANGES the identifier, so the caller must ask the index whether
+/// it is free (FreeCandidates keeps those ConflictReason clears; BuildNamingFixEdits takes the first).
+/// Pure. Pinned by tests\autotest\run_const_casing_word_fix.ps1.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Refactor.NamingFix.NamingCandidates (DRagLint.Refactor.NamingFix.pas)</para>
+/// <para>Calls: Copy, DRagLint.Refactor.NamingFix.IdentWords, DRagLint.Refactor.NamingFix.PascalWord, DRagLint.Refactor.NamingFix.StyleFromConfigText, IndexStr, LowerCase, UpperCase</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 30 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Refactor.NamingFix.IdentWords"/>
+/// <seealso cref="DRagLint.Refactor.NamingFix.PascalWord"/>
+/// <seealso cref="DRagLint.Refactor.NamingFix.StyleFromConfigText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ConstCaseCandidates(const AOldName: string; const AConstCase: TArray<string>): TArray<string>;
 var
   Styles: TArray<string>;
@@ -449,6 +428,23 @@ begin
   end;
 end;
 
+/// <summary>Returns APrefix + Cap(AOldName): the identifier with the naming-convention
+/// prefix prepended and its first letter capitalized (e.g. 'client' + 'F' -> 'FClient';
+/// 'x' + 'p' -> 'pX'). Idempotent: if AOldName already starts with APrefix followed by an
+/// uppercase letter (already prefixed), returns AOldName unchanged. Empty APrefix or empty
+/// AOldName returns AOldName. Unlike SynthesizeCasedName this CHANGES the identifier, so the
+/// caller MUST collision-check the result before applying.</summary>
+/// <param name="AOldName">The offending identifier verbatim.</param>
+/// <param name="APrefix">The configured prefix (e.g. 'F', 'p', 'T'); '' disables.</param>
+/// <returns>The prefixed identifier, or AOldName unchanged if already prefixed/empty input.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Refactor.NamingFix.NamingCandidates (DRagLint.Refactor.NamingFix.pas)</para>
+/// <para>Calls: CharInSet, Copy, SameText, UpperCase</para>
+/// <para>Returns: APrefix + UpperCase(AOldName[1]) + Copy(AOldName, 2, MaxInt)</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SynthesizePrefixedName(const AOldName, APrefix: string): string;
 begin
   if (AOldName = '') or (APrefix = '') then Exit(AOldName);

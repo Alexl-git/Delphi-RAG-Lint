@@ -221,22 +221,6 @@ type
       property Denied: Boolean read FDenied;
   end;
 
-/// <summary>Maps an SQLite authorizer action code to its documented name.</summary>
-/// <param name="ACode">One of the SQLITE_* authorizer action codes.</param>
-/// <returns>The action's name (e.g. 'ATTACH'), or 'action &lt;n&gt;' for a code
-/// this build does not know -- a newer SQLite may add codes, and an unnamed
-/// code must still be reportable.</returns>
-/// <remarks>
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Sql.Guarded.TSqlGuard.Explain (DRagLint.Sql.Guarded.pas)</para>
-/// <para>Calls: Format</para>
-/// <para>Returns: 'CREATE INDEX'; 'CREATE TABLE'; 'CREATE TEMP INDEX'; 'CREATE TEMP TABLE'; 'CREATE TEMP TRIGGER'; 'CREATE TEMP VIEW'</para>
-/// <para>Complexity: 34 (cyclomatic, outer body), 39 lines (full implementation)</para>
-/// <para>Pure</para>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
-function SqlActionName(ACode: Integer): string;
-
 /// <summary>Rejects anything that is not exactly one SQL statement.</summary>
 /// <param name="ASql">The raw query text.</param>
 /// <param name="AReason">Set to a user-facing explanation when the result is
@@ -277,6 +261,20 @@ const
     'fts3_tokenizer', 'zipfile', 'sqlite_dbpage'
   );
 
+/// <summary>Maps an SQLite authorizer action code to its documented name.</summary>
+/// <param name="ACode">One of the SQLITE_* authorizer action codes.</param>
+/// <returns>The action's name (e.g. 'ATTACH'), or 'action &lt;n&gt;' for a code
+/// this build does not know -- a newer SQLite may add codes, and an unnamed
+/// code must still be reportable.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Sql.Guarded.TSqlGuard.Explain (DRagLint.Sql.Guarded.pas)</para>
+/// <para>Calls: Format</para>
+/// <para>Returns: 'CREATE INDEX'; 'CREATE TABLE'; 'CREATE TEMP INDEX'; 'CREATE TEMP TABLE'; 'CREATE TEMP TRIGGER'; 'CREATE TEMP VIEW'</para>
+/// <para>Complexity: 34 (cyclomatic, outer body), 39 lines (full implementation)</para>
+/// <para>Pure</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SqlActionName(ACode: Integer): string;  // dl:ok cyclomatic-complexity@1b23 -- REVIEWED SLZ-S11 2026-11-22: measured 34 (max 30); one dispatch routine over chart/node kinds, a split is a refactor outside the mechanical SLZ batch
 begin
   case ACode of

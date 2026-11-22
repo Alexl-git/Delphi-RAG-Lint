@@ -93,22 +93,6 @@ type
 /// </remarks>
 function SameIndexPath(const pA, pB: string): Boolean;
 
-/// <summary>The default report-pairs.json (Emit-Common's Resolve-ReportPairsFile).</summary>
-/// <param name="pScriptPath">A file or folder in the charts scripts folder; '' resolves it
-/// (DRagLint.Charts.Tools.ResolveChartsHome).</param>
-/// <returns>%APPDATA%\drag-lint\report-pairs.json when it exists, else charts\report-pairs.json
-/// when that exists (or APPDATA is unset), else the APPDATA path.</returns>
-/// <remarks>
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Pairs.LoadReportPairs (DRagLint.Charts.Pairs.pas)</para>
-/// <para>Calls: DRagLint.Charts.Tools.ResolveChartsHome, GetEnvironmentVariable</para>
-/// <para>Returns: User</para>
-/// <para>Touches: file system</para>
-/// <seealso cref="DRagLint.Charts.Tools.ResolveChartsHome"/>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
-function ResolveReportPairsFile(const pScriptPath: string = ''): string;
-
 /// <summary>Loads a pairing file.</summary>
 /// <param name="pFile">The report-pairs.json; '' = ResolveReportPairsFile(pScriptPath).</param>
 /// <param name="pScriptPath">Passed to ResolveReportPairsFile when pFile is ''.</param>
@@ -288,7 +272,21 @@ begin
   Result:= (pA <> '') and (pB <> '') and SameText(ExpandFileName(pA), ExpandFileName(pB));
 end;
 
-function ResolveReportPairsFile(const pScriptPath: string): string;
+/// <summary>The default report-pairs.json (Emit-Common's Resolve-ReportPairsFile).</summary>
+/// <param name="pScriptPath">A file or folder in the charts scripts folder; '' resolves it
+/// (DRagLint.Charts.Tools.ResolveChartsHome).</param>
+/// <returns>%APPDATA%\drag-lint\report-pairs.json when it exists, else charts\report-pairs.json
+/// when that exists (or APPDATA is unset), else the APPDATA path.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Pairs.LoadReportPairs (DRagLint.Charts.Pairs.pas)</para>
+/// <para>Calls: DRagLint.Charts.Tools.ResolveChartsHome, GetEnvironmentVariable</para>
+/// <para>Returns: User</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Charts.Tools.ResolveChartsHome"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function ResolveReportPairsFile(const pScriptPath: string = ''): string;
 begin
   var AppData:= GetEnvironmentVariable('APPDATA');
   var User:= if AppData <> '' then TPath.Combine(AppData, USER_PAIRS_REL) else '';
