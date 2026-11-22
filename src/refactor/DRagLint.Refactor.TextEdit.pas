@@ -1285,7 +1285,7 @@ begin
         if LLo < 1 then LLo:= 1;
         if LHi > ALines.Count then LHi:= ALines.Count;
         for var L: Integer:= LHi downto LLo do
-          if (L >= 1) and (L <= ALines.Count) then
+          if InRange(L, 1, ALines.Count) then
           begin
             ALines.Delete(L - 1);
             Inc(AApplied);
