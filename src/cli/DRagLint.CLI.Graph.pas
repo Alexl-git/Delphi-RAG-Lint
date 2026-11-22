@@ -373,7 +373,8 @@ begin
         Inc(Added); end
       else if SetA[Pair.Key] <> Pair.Value then begin Writeln('~ ', Pair.Key);
       Writeln('    from: ', SetA[Pair.Key]);
-      Writeln('    to:   ', Pair.Value); Inc(Changed); end;
+      Writeln('    to:   ', Pair.Value);
+      Inc(Changed); end;
       for Pair in SetA do
         if not SetB.ContainsKey(Pair.Key) then begin Tag:= Pair.Value.Split(['|'])[0];
         Writeln('- ', Pair.Key, '  [', Tag, ']');

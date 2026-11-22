@@ -365,7 +365,8 @@ begin
       end;
       if Ln[I] = '{' then begin InBrace:= True;
       Blank(I, I);
-      Inc(I); Continue; end;
+      Inc(I);
+      Continue; end;
       if (Ln[I] = '(') and (I < N) and (Ln[I + 1] = '*') then
       begin
         InParenStar:= True;

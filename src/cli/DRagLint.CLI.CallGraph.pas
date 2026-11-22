@@ -687,7 +687,8 @@ begin
   finally
     ToSet.Free;
     Visited.Free;
-    Parent.Free; Depths.Free;
+    Parent.Free;
+    Depths.Free;
     Frontier.Free;
     PathIds.Free;
     QNames.Free;
