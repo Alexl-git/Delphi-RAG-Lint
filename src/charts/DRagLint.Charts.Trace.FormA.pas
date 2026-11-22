@@ -774,7 +774,7 @@ begin
   pTrace.Sections.Add(Result);
 end;
 
-function NewTraceStep(const pKind, pText, pAnchor, pGrade, pRoutine, pNote, pAsk, pActor: string): TTraceItem;  // dl:ok too-many-parameters@1eeb -- REVIEWED 2026-10-17: the 8-parameter signature is the PowerShell New-TraceStep's own and its callers (Trace.Walk, ReadFormA) pass them positionally.
+function NewTraceStep(const pKind, pText, pAnchor, pGrade, pRoutine, pNote, pAsk, pActor: string): TTraceItem;  // dl:ok too-many-parameters@521d -- REVIEWED 2026-10-17: the 8-parameter signature is the PowerShell New-TraceStep's own and its callers (Trace.Walk, ReadFormA) pass them positionally.
 begin
   if not (SameText(pKind, KIND_STEP) or SameText(pKind, KIND_STOPS) or SameText(pKind, KIND_CROSSES)) then
     Refuse('New-TraceStep: kind ''' + pKind + ''' is not step/stops/crosses');
@@ -1164,7 +1164,7 @@ begin
         Nt:= SplitTraceNote(Grp(M, STEP_NOTE), Rn, Ask);
         Cur:= NewTraceStep(Kind, Grp(M, STEP_TEXT), Grp(M, STEP_ANCHOR), Grp(M, STEP_GRADE), Rn, Nt, Ask, Grp(M, STEP_ACTOR));
         Cur.Number:= StrToInt(Grp(M, STEP_NUMBER));
-        Sec.Items.Add(Cur);
+        Sec.Items.Add(Cur);  // dl:ok missing-begin-update@05b6 -- REVIEWED SLZ-S11 2026-11-22: Items is an in-memory TTraceSection/TAnchorResult model list, not a visual control; no repaint to suppress (rule FP, SLZ\RULE-FP.tsv)
         Continue;
       end;
       M:= TRegEx.Match(Raw, RE_COND);

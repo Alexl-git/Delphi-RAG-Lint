@@ -904,7 +904,7 @@ begin
     Exit;
   end;
   var Lines:= FReader.StrippedSourceLines(FReader.ReadPath(pProp.FileName));
-  var Decl:= if (pProp.Line >= 1) and (pProp.Line <= Length(Lines)) then Lines[pProp.Line - 1] else '';
+  var Decl:= if (pProp.Line >= 1) and (pProp.Line <= Length(Lines)) then Lines[pProp.Line - 1] else '';  // dl:ok manual-inrange@4510 -- REVIEWED SLZ-S11 2026-11-22: fixer d8ebefa10 declines this shape (mixed with other operands / no System.Math); the explicit bounds read as clearly as InRange
   var M:= TRegEx.Match(Decl, RE_READ);
   if not M.Success then
   begin
@@ -972,7 +972,7 @@ begin
     var Grade:= HopGrade(H.Grade);
     { final-review M2: the ask that would retire THIS hop's grade, or none; rhs-type [by name] is matched to a class by NAME }
     var Ask:= if (Grade <> '') and SameText(H.Hop, 'rhs-type') then ASK_TYPE_USE else '';
-    pR.Items.Add(NewTraceStep(KIND_STEP, ChainVerb(H.Hop) + ' ' + TraceWord(H.Caption, HOP_WORD_MAX), TraceAnchorText(H.Path, H.Line),
+    pR.Items.Add(NewTraceStep(KIND_STEP, ChainVerb(H.Hop) + ' ' + TraceWord(H.Caption, HOP_WORD_MAX), TraceAnchorText(H.Path, H.Line),  // dl:ok missing-begin-update@9240 -- REVIEWED SLZ-S11 2026-11-22: Items is an in-memory TTraceSection/TAnchorResult model list, not a visual control; no repaint to suppress (rule FP, SLZ\RULE-FP.tsv)
       Grade, '', TraceNoteText(H.Reason), Ask));
   end;
   var DsName:= LastSegment(TRegEx.Replace(A0.Rhs, RE_SELF, ''));
@@ -1127,7 +1127,7 @@ begin
       begin
         var Rc:= FWalker.RePointChain(Pk.Rows[0]);
         for var H in Rc.Hops do
-          pR.Items.Add(NewTraceStep(KIND_STEP, RePointVerb(H.Hop) + ' ' + TraceWord(H.Caption, HOP_WORD_MAX), TraceAnchorText(H.Path, H.Line),
+          pR.Items.Add(NewTraceStep(KIND_STEP, RePointVerb(H.Hop) + ' ' + TraceWord(H.Caption, HOP_WORD_MAX), TraceAnchorText(H.Path, H.Line),  // dl:ok missing-begin-update@f9eb -- REVIEWED SLZ-S11 2026-11-22: Items is an in-memory TTraceSection/TAnchorResult model list, not a visual control; no repaint to suppress (rule FP, SLZ\RULE-FP.tsv)
             HopGrade(H.Grade), H.Routine, TraceNoteText(H.Reason), H.Ask));
         var Last:= pR.Items[pR.Items.Count - 1].Anchor;
         if Rc.StaleFile <> '' then

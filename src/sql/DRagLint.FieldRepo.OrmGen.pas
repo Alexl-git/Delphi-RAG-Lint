@@ -225,7 +225,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionKEY"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure GenerateInterfaceFooter(InterfaceObject: TStringList);
+    procedure GenerateInterfaceFooter(InterfaceObject: TStringList);  // dl:ok param-name-prefix@a196 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
     /// <param name="SectionCode"><!-- drag-lint:auto type -->TStringList</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -239,7 +239,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionDEL"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure GenerateSection1(SectionCode: TStringList);
+    procedure GenerateSection1(SectionCode: TStringList);  // dl:ok param-name-prefix@2039 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
     /// <param name="SectionCode"><!-- drag-lint:auto type -->TStringList</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -253,7 +253,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure GenerateSection1A(SectionCode: TStringList);
+    procedure GenerateSection1A(SectionCode: TStringList);  // dl:ok param-name-prefix@6beb -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
     /// <param name="SectionCode"><!-- drag-lint:auto type -->TStringList</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -267,7 +267,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure GenerateSection2P(SectionCode: TStringList);
+    procedure GenerateSection2P(SectionCode: TStringList);  // dl:ok param-name-prefix@0cbf -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
     /// <param name="SectionCode"><!-- drag-lint:auto type -->TStringList</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -281,7 +281,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure GenerateSection2I(SectionCode: TStringList);
+    procedure GenerateSection2I(SectionCode: TStringList);  // dl:ok param-name-prefix@5a0c -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
     /// <param name="SectionCode"><!-- drag-lint:auto type -->TStringList</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -296,7 +296,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure GenerateSection3(SectionCode: TStringList);
+    procedure GenerateSection3(SectionCode: TStringList);  // dl:ok param-name-prefix@3b3d -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
     /// <param name="SectionCode"><!-- drag-lint:auto type -->TStringList</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -310,7 +310,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionDEL"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure GenerateSection4(SectionCode: TStringList);
+    procedure GenerateSection4(SectionCode: TStringList);  // dl:ok param-name-prefix@86fe -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
     /// <param name="SectionCode"><!-- drag-lint:auto type -->TStringList</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -324,7 +324,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionDEL"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure GenerateSection5(SectionCode: TStringList);
+    procedure GenerateSection5(SectionCode: TStringList);  // dl:ok param-name-prefix@e4af -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
     /// <param name="SectionCode"><!-- drag-lint:auto type -->TStringList</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -338,7 +338,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionDEL"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure GenerateSection6(SectionCode: TStringList);
+    procedure GenerateSection6(SectionCode: TStringList);  // dl:ok param-name-prefix@028b -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
     /// <param name="SectionCode"><!-- drag-lint:auto type -->TStringList</param>
     /// <param name="TableId"><!-- drag-lint:auto type -->const string</param>
     /// <remarks>
@@ -353,7 +353,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure GenerateSection7(SectionCode: TStringList; const TableId: string);
+    procedure GenerateSection7(SectionCode: TStringList; const TableId: string);  // dl:ok param-name-prefix@e5c6 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
     /// <param name="SectionCode"><!-- drag-lint:auto type -->TStringList</param>
     /// <param name="TableName0"><!-- drag-lint:auto type -->string</param>
     /// <exception cref="EOrmGenError"><!-- drag-lint:auto exc -->via DRagLint.FieldRepo.OrmGen.TOrmGenerator.LocateField: Table &lt;%s&gt; key field &lt;%s&gt; is missing</exception>
@@ -370,7 +370,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure GenerateSection8(SectionCode: TStringList; TableName0: string);
+    procedure GenerateSection8(SectionCode: TStringList; TableName0: string);  // dl:ok param-name-prefix@5255 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
     /// <param name="SectionCode"><!-- drag-lint:auto type -->TStringList</param>
     /// <param name="TableName0"><!-- drag-lint:auto type -->string</param>
     /// <remarks>
@@ -385,7 +385,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.Destroy"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure GenerateSection8A(SectionCode: TStringList; TableName0: string);
+    procedure GenerateSection8A(SectionCode: TStringList; TableName0: string);  // dl:ok param-name-prefix@c1df -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
     /// <param name="SectionCode"><!-- drag-lint:auto type -->TStringList</param>
     /// <param name="TableName0"><!-- drag-lint:auto type -->const string</param>
     /// <exception cref="EOrmGenError"><!-- drag-lint:auto exc -->via DRagLint.FieldRepo.OrmGen.TOrmGenerator.LocateField: Table &lt;%s&gt; key field &lt;%s&gt; is missing</exception>
@@ -402,7 +402,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure GenerateSection9(SectionCode: TStringList; const TableName0: string);
+    procedure GenerateSection9(SectionCode: TStringList; const TableName0: string);  // dl:ok param-name-prefix@8e09 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
     /// <param name="SectionCode"><!-- drag-lint:auto type -->TStringList</param>
     /// <param name="TableName0"><!-- drag-lint:auto type -->const string</param>
     /// <remarks>
@@ -417,7 +417,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure GenerateSection9A(SectionCode: TStringList; const TableName0: string);
+    procedure GenerateSection9A(SectionCode: TStringList; const TableName0: string);  // dl:ok param-name-prefix@6d14 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
     /// <param name="SectionCode"><!-- drag-lint:auto type -->TStringList</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -432,7 +432,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionDEL"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure GenerateSection10(SectionCode: TStringList);
+    procedure GenerateSection10(SectionCode: TStringList);  // dl:ok param-name-prefix@1123 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
     /// <param name="SectionCode"><!-- drag-lint:auto type -->TStringList</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -447,7 +447,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionDEL"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure GenerateSection11(SectionCode: TStringList);
+    procedure GenerateSection11(SectionCode: TStringList);  // dl:ok param-name-prefix@28d1 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
     /// <param name="SectionCode"><!-- drag-lint:auto type -->TStringList</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -461,7 +461,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure GenerateSection14(SectionCode: TStringList);
+    procedure GenerateSection14(SectionCode: TStringList);  // dl:ok param-name-prefix@aaa0 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
     /// <param name="SectionCode"><!-- drag-lint:auto type -->TStringList</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -475,7 +475,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure GenerateSection15(SectionCode: TStringList);
+    procedure GenerateSection15(SectionCode: TStringList);  // dl:ok param-name-prefix@c2c6 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
     /// <param name="SectionCode"><!-- drag-lint:auto type -->TStringList</param>
     /// <param name="TableName0"><!-- drag-lint:auto type -->const string</param>
     /// <exception cref="EOrmGenError"><!-- drag-lint:auto exc -->via DRagLint.FieldRepo.OrmGen.TOrmGenerator.LocateField: Table &lt;%s&gt; key field &lt;%s&gt; is missing</exception>
@@ -491,7 +491,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure GenerateCLSectionKEY(SectionCode: TStringList; const TableName0: string);
+    procedure GenerateCLSectionKEY(SectionCode: TStringList; const TableName0: string);  // dl:ok param-name-prefix@4588 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
     /// <param name="SectionCode"><!-- drag-lint:auto type -->TStringList</param>
     /// <param name="TableName0"><!-- drag-lint:auto type -->const string</param>
     /// <exception cref="EOrmGenError"><!-- drag-lint:auto exc -->via DRagLint.FieldRepo.OrmGen.TOrmGenerator.LocateField: Table &lt;%s&gt; key field &lt;%s&gt; is missing</exception>
@@ -507,7 +507,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure GenerateCLSectionLOAD(SectionCode: TStringList; const TableName0: string);
+    procedure GenerateCLSectionLOAD(SectionCode: TStringList; const TableName0: string);  // dl:ok param-name-prefix@1c6b -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
     /// <param name="SectionCode"><!-- drag-lint:auto type -->TStringList</param>
     /// <param name="TableName0"><!-- drag-lint:auto type -->const string</param>
     /// <exception cref="EOrmGenError"><!-- drag-lint:auto exc -->via DRagLint.FieldRepo.OrmGen.TOrmGenerator.LocateField: Table &lt;%s&gt; key field &lt;%s&gt; is missing</exception>
@@ -523,7 +523,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure GenerateCLSectionSAVE(SectionCode: TStringList; const TableName0: string);
+    procedure GenerateCLSectionSAVE(SectionCode: TStringList; const TableName0: string);  // dl:ok param-name-prefix@159a -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
     /// <param name="SectionCode"><!-- drag-lint:auto type -->TStringList</param>
     /// <param name="TableName0"><!-- drag-lint:auto type -->const string</param>
     /// <exception cref="EOrmGenError"><!-- drag-lint:auto exc -->via DRagLint.FieldRepo.OrmGen.TOrmGenerator.LocateField: Table &lt;%s&gt; key field &lt;%s&gt; is missing</exception>
@@ -539,7 +539,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.FieldCount"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure GenerateCLSectionDEL(SectionCode: TStringList; const TableName0: string);
+    procedure GenerateCLSectionDEL(SectionCode: TStringList; const TableName0: string);  // dl:ok param-name-prefix@939b -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
     /// <param name="SectionCode"><!-- drag-lint:auto type -->TStringList</param>
     /// <param name="TableName0"><!-- drag-lint:auto type -->const string</param>
     /// <param name="HasGenerator"><!-- drag-lint:auto type -->Boolean</param>
@@ -555,7 +555,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionKEY"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure GenerateCLSectionNEXTID(SectionCode: TStringList; const TableName0: string; HasGenerator: Boolean; const GenName: string);
+    procedure GenerateCLSectionNEXTID(SectionCode: TStringList; const TableName0: string; HasGenerator: Boolean; const GenName: string);  // dl:ok param-name-prefix@bf58 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
     /// <summary><!-- drag-lint:auto sum -->TableTools UpdateFileRegions: the per-id
     /// dispatch. Ids 12 and 13 fall through to "nothing" on purpose: TableTools'
     /// GenerateSection12 / 13 only build a string they never add (the lines that used it
@@ -659,7 +659,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateSection14"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure GenerateNewTableObject(const TableName0: string; InterfaceObject, PasObject: TStringList);
+    procedure GenerateNewTableObject(const TableName0: string; InterfaceObject, PasObject: TStringList);  // dl:ok param-name-prefix@87cb -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
     /// <summary>Writes a new server data-service unit (u&lt;T&gt;_SERVER) for a table.</summary>
     /// <param name="TableName0">Table name as stored.</param>
     /// <param name="PasObject">Receives the unit lines; not cleared.</param>
@@ -676,7 +676,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.LoadTable"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure GenerateNewServerObject(const TableName0: string; PasObject: TStringList);
+    procedure GenerateNewServerObject(const TableName0: string; PasObject: TStringList);  // dl:ok param-name-prefix@79eb -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
     /// <summary>Writes a new client data-service unit (u&lt;T&gt;_CLIENT) for a table.</summary>
     /// <param name="TableName0">Table name as stored.</param>
     /// <param name="PasObject">Receives the unit lines; not cleared.</param>
@@ -694,7 +694,7 @@ type
     /// <seealso cref="DRagLint.FieldRepo.OrmGen.TOrmGenerator.GenerateCLSectionSAVE"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure GenerateNewClientObject(const TableName0: string; PasObject: TStringList);
+    procedure GenerateNewClientObject(const TableName0: string; PasObject: TStringList);  // dl:ok param-name-prefix@a4cc -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
     /// <summary>Regenerates every DB-RAD region of a unit's text for one table (TableTools
     /// UpdateFileRegions). Region ids 1, 1A, 2 (2I in an interface unit, 2P otherwise),
     /// 3..15, 8A, 9A, CL-KEY, CL-LOAD, CL-SAVE, CL-DEL, CL-NEXTID; an unknown id empties its
@@ -974,7 +974,7 @@ begin
 end;
 
 { TableTools ToolsAPIHelper.ZeroTime: True when every character is a quote, '0', ':' or blank. }
-function ZeroTime(const Astr: string): Boolean;
+function ZeroTime(const Astr: string): Boolean;  // dl:ok param-name-prefix@33fe -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 var
   C: Char;
 begin
@@ -1239,7 +1239,7 @@ begin
     raise EOrmGenError.CreateFmt('Table <%s> has no field rows in the repository', [pTableName]);
 end;
 
-procedure TOrmGenerator.GenerateInterfaceFooter(InterfaceObject: TStringList);
+procedure TOrmGenerator.GenerateInterfaceFooter(InterfaceObject: TStringList);  // dl:ok param-name-prefix@a4a5 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 begin
   InterfaceObject.Add('end;'          );
   InterfaceObject.Add('  '            );
@@ -1248,7 +1248,7 @@ begin
   InterfaceObject.Add('end.'          );
 end;
 
-procedure TOrmGenerator.GenerateNewServerObject(const TableName0: string; PasObject: TStringList);  // dl:ok method-too-long@51af -- REVIEWED 2026-11-17 v152 TTGEN: verbatim TableTools generator (one Add per emitted line); splitting it risks the byte-identical output
+procedure TOrmGenerator.GenerateNewServerObject(const TableName0: string; PasObject: TStringList);  // dl:ok method-too-long@51af, param-name-prefix@81ae -- REVIEWED 2026-11-17 v152 TTGEN: verbatim TableTools generator (one Add per emitted line); splitting it risks the byte-identical output; param names: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane (REVIEWED SLZ-S11 2026-11-22)
 var
   SectionCode : TStringList;
   TableId   : string;
@@ -1629,7 +1629,7 @@ begin
   end; // try
 end; // procedure
 
-procedure TOrmGenerator.GenerateNewTableObject(const TableName0: string; InterfaceObject, PasObject: TStringList);  // dl:ok method-too-long@4e9f -- REVIEWED 2026-11-17 v152 TTGEN: verbatim TableTools generator (one Add per emitted line); splitting it risks the byte-identical output
+procedure TOrmGenerator.GenerateNewTableObject(const TableName0: string; InterfaceObject, PasObject: TStringList);  // dl:ok method-too-long@4e9f, param-name-prefix@f0af -- REVIEWED 2026-11-17 v152 TTGEN: verbatim TableTools generator (one Add per emitted line); splitting it risks the byte-identical output; param names: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane (REVIEWED SLZ-S11 2026-11-22)
 var
   IntfGUID    : TGUID;
   TableId   : string;
@@ -1927,7 +1927,7 @@ begin
   end; // try
 end; // procedure
 
-procedure TOrmGenerator.GenerateSection1(SectionCode: TStringList);
+procedure TOrmGenerator.GenerateSection1(SectionCode: TStringList);  // dl:ok param-name-prefix@21de -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 var
   CurField: TOrmField;
 begin
@@ -1940,7 +1940,7 @@ begin
   end;
 end;
 
-procedure TOrmGenerator.GenerateSection10(SectionCode: TStringList);
+procedure TOrmGenerator.GenerateSection10(SectionCode: TStringList);  // dl:ok param-name-prefix@5ffc -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 var
   CurField: TOrmField;
   S       : string;
@@ -2028,7 +2028,7 @@ begin
   end; // for
 end; // procedure
 
-procedure TOrmGenerator.GenerateSection11(SectionCode: TStringList);
+procedure TOrmGenerator.GenerateSection11(SectionCode: TStringList);  // dl:ok param-name-prefix@3a2d -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 var
   CurField: TOrmField;
   S       : string;
@@ -2116,7 +2116,7 @@ begin
   end; // for
 end; // procedure
 
-procedure TOrmGenerator.GenerateSection14(SectionCode: TStringList);
+procedure TOrmGenerator.GenerateSection14(SectionCode: TStringList);  // dl:ok param-name-prefix@3199 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 var
   CurField: TOrmField;
 begin
@@ -2127,7 +2127,7 @@ begin
   end;
 end;
 
-procedure TOrmGenerator.GenerateSection15(SectionCode: TStringList);
+procedure TOrmGenerator.GenerateSection15(SectionCode: TStringList);  // dl:ok param-name-prefix@7ad6 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 var
   CurField: TOrmField;
 begin
@@ -2139,7 +2139,7 @@ begin
 end;
 
 
-procedure TOrmGenerator.GenerateCLSectionKEY(SectionCode: TStringList; const TableName0: string);
+procedure TOrmGenerator.GenerateCLSectionKEY(SectionCode: TStringList; const TableName0: string);  // dl:ok param-name-prefix@359f -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 var
   I         : Integer;
   CurField  : TOrmField;
@@ -2184,7 +2184,7 @@ begin
   SectionCode.Add(Format('    Format(''TABLE=%s|%s'', [%s]));', [TableId, FmtParts, ArgParts]));
 end; // procedure
 
-procedure TOrmGenerator.GenerateCLSectionLOAD(SectionCode: TStringList; const TableName0: string);
+procedure TOrmGenerator.GenerateCLSectionLOAD(SectionCode: TStringList; const TableName0: string);  // dl:ok param-name-prefix@ceb4 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 var
   I        : Integer;
   CurField : TOrmField;
@@ -2215,7 +2215,7 @@ begin
   end; // for
 end; // procedure
 
-procedure TOrmGenerator.GenerateCLSectionSAVE(SectionCode: TStringList; const TableName0: string);  // dl:ok duplicate-code@c2b0 -- REVIEWED 2026-11-17 v152 TTGEN: TableTools section generators differ only in emitted text; kept 1:1 with the ported source
+procedure TOrmGenerator.GenerateCLSectionSAVE(SectionCode: TStringList; const TableName0: string);  // dl:ok duplicate-code@c2b0, param-name-prefix@c2b0 -- REVIEWED 2026-11-17 v152 TTGEN: TableTools section generators differ only in emitted text; kept 1:1 with the ported source; param names: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane (REVIEWED SLZ-S11 2026-11-22)
 var
   I        : Integer;
   CurField : TOrmField;
@@ -2246,7 +2246,7 @@ begin
   end; // for
 end; // procedure
 
-procedure TOrmGenerator.GenerateCLSectionDEL(SectionCode: TStringList; const TableName0: string);  // dl:ok duplicate-code@7072 -- REVIEWED 2026-11-17 v152 TTGEN: TableTools section generators differ only in emitted text; kept 1:1 with the ported source
+procedure TOrmGenerator.GenerateCLSectionDEL(SectionCode: TStringList; const TableName0: string);  // dl:ok duplicate-code@7072, param-name-prefix@7072 -- REVIEWED 2026-11-17 v152 TTGEN: TableTools section generators differ only in emitted text; kept 1:1 with the ported source; param names: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane (REVIEWED SLZ-S11 2026-11-22)
 var
   I        : Integer;
   CurField : TOrmField;
@@ -2277,7 +2277,7 @@ begin
   end; // for
 end; // procedure
 
-procedure TOrmGenerator.GenerateCLSectionNEXTID(SectionCode: TStringList; const TableName0: string; HasGenerator: Boolean; const GenName: string);
+procedure TOrmGenerator.GenerateCLSectionNEXTID(SectionCode: TStringList; const TableName0: string; HasGenerator: Boolean; const GenName: string);  // dl:ok param-name-prefix@918c -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 var
   TableId: string;
 begin
@@ -2314,7 +2314,7 @@ begin
   end;
 end; // procedure
 
-procedure TOrmGenerator.GenerateNewClientObject(const TableName0: string; PasObject: TStringList);  // dl:ok method-too-long@a378 -- REVIEWED 2026-11-17 v152 TTGEN: verbatim TableTools generator (one Add per emitted line); splitting it risks the byte-identical output
+procedure TOrmGenerator.GenerateNewClientObject(const TableName0: string; PasObject: TStringList);  // dl:ok method-too-long@a378, param-name-prefix@6622 -- REVIEWED 2026-11-17 v152 TTGEN: verbatim TableTools generator (one Add per emitted line); splitting it risks the byte-identical output; param names: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane (REVIEWED SLZ-S11 2026-11-22)
 var
   SectionCode  : TStringList;
   TableId    : string;
@@ -2739,7 +2739,7 @@ begin
   end; // try
 end; // procedure
 
-procedure TOrmGenerator.GenerateSection2I(SectionCode: TStringList);
+procedure TOrmGenerator.GenerateSection2I(SectionCode: TStringList);  // dl:ok param-name-prefix@7175 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 var
   CurField: TOrmField;
   RealType: string;
@@ -2770,7 +2770,7 @@ begin
   end; // for
 end; // procedure
 
-procedure TOrmGenerator.GenerateSection2P(SectionCode: TStringList);
+procedure TOrmGenerator.GenerateSection2P(SectionCode: TStringList);  // dl:ok param-name-prefix@fdf5 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 var
   CurField: TOrmField;
   RealType: string;
@@ -2780,7 +2780,7 @@ begin
   begin
 
     RealType:= if CurField.ISENUM then CurField.ENUMTYPE else CurField.VAR_TYPE;
-    SectionCode.Add('{$REGION ''Documentation''}		');
+    SectionCode.Add('{$REGION ''Documentation''}		');  // dl:ok duplicate-code@7752 -- REVIEWED SLZ-S11 2026-11-22: measured 127 tokens; sibling builder/query idiom, a shared helper is outside the mechanical SLZ batch
     if CurField.DOC_SUMMARY.Count > 0 then
     begin
       SectionCode.Add('/// <summary>                ');
@@ -2799,7 +2799,7 @@ begin
   end; // for
 end; // procedure
 
-procedure TOrmGenerator.GenerateSection1A(SectionCode: TStringList);
+procedure TOrmGenerator.GenerateSection1A(SectionCode: TStringList);  // dl:ok param-name-prefix@c87b -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 var
   CurField: TOrmField;
   RealType: string;
@@ -2812,7 +2812,7 @@ begin
   end;
 end;
 
-procedure TOrmGenerator.GenerateSection3(SectionCode: TStringList);
+procedure TOrmGenerator.GenerateSection3(SectionCode: TStringList);  // dl:ok param-name-prefix@66d2 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 var
   CurField: TOrmField;
 begin
@@ -2849,28 +2849,28 @@ begin
   end; // for
 end; // procedure
 
-procedure TOrmGenerator.GenerateSection4(SectionCode: TStringList);
+procedure TOrmGenerator.GenerateSection4(SectionCode: TStringList);  // dl:ok param-name-prefix@c5ab -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 var
   CurField: TOrmField;
 begin
   for CurField in FFieldList do SectionCode.Add(Format('      f%s:= %s;', [CurField.GetCurrentFieldName.PadRight(PAD_NAME), CurField.GetCurrentFieldName.PadRight(PAD_NAME)]));
 end;
 
-procedure TOrmGenerator.GenerateSection5(SectionCode: TStringList);
+procedure TOrmGenerator.GenerateSection5(SectionCode: TStringList);  // dl:ok param-name-prefix@60ac -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 var
   CurField: TOrmField;
 begin
   for CurField in FFieldList do SectionCode.Add(Format('    f%s:= Value.%s;', [CurField.GetCurrentFieldName.PadRight(PAD_NAME), CurField.GetCurrentFieldName.PadRight(PAD_NAME)]));
 end;
 
-procedure TOrmGenerator.GenerateSection6(SectionCode: TStringList);
+procedure TOrmGenerator.GenerateSection6(SectionCode: TStringList);  // dl:ok param-name-prefix@76a5 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 var
   CurField: TOrmField;
 begin
   for CurField in FFieldList do SectionCode.Add(Format('      %s:= f%s;', [CurField.GetCurrentFieldName.PadRight(PAD_NAME), CurField.GetCurrentFieldName.PadRight(PAD_NAME)]));
 end;
 
-procedure TOrmGenerator.GenerateSection7(SectionCode: TStringList; const TableId: string);
+procedure TOrmGenerator.GenerateSection7(SectionCode: TStringList; const TableId: string);  // dl:ok param-name-prefix@17bc -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 var
   CurField: TOrmField;
   RealType: string;
@@ -2892,7 +2892,7 @@ begin
   end; // for
 end; // procedure
 
-procedure TOrmGenerator.GenerateSection8A(SectionCode: TStringList; TableName0: string);
+procedure TOrmGenerator.GenerateSection8A(SectionCode: TStringList; TableName0: string);  // dl:ok param-name-prefix@0817 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 var
   CurField: TOrmField;
   I       : Integer;
@@ -2939,7 +2939,7 @@ begin
   end; // try
 end; // procedure
 
-procedure TOrmGenerator.GenerateSection8(SectionCode: TStringList; TableName0: string);
+procedure TOrmGenerator.GenerateSection8(SectionCode: TStringList; TableName0: string);  // dl:ok param-name-prefix@e179 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 var
   CurField: TOrmField;
   I       : Integer;
@@ -3007,7 +3007,7 @@ begin
   end; // for
 end; // procedure
 
-procedure TOrmGenerator.GenerateSection9A(SectionCode: TStringList; const TableName0: string);
+procedure TOrmGenerator.GenerateSection9A(SectionCode: TStringList; const TableName0: string);  // dl:ok param-name-prefix@6d39 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 var
   CurField: TOrmField;
   I       : Integer;
@@ -3069,7 +3069,7 @@ begin
   end; // try
 end; // procedure
 
-procedure TOrmGenerator.GenerateSection9(SectionCode: TStringList; const TableName0: string);
+procedure TOrmGenerator.GenerateSection9(SectionCode: TStringList; const TableName0: string);  // dl:ok param-name-prefix@86c5 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 var
   CurField    : TOrmField;
   I           : Integer;

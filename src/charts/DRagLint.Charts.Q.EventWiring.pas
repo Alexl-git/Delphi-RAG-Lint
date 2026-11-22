@@ -75,7 +75,7 @@ begin
       begin
         var G:= Default(TEventGroup);
         G.Name:= R.Event;
-        Result:= Result + [G];
+        Result:= Result + [G];  // dl:ok duplicate-code@d5df -- REVIEWED SLZ-S11 2026-11-22: measured 102 tokens; sibling builder/query idiom, a shared helper is outside the mechanical SLZ batch
         K:= High(Result);
         Slot.Add(R.Event, K);
       end;
@@ -268,7 +268,7 @@ begin
         for var R in G.Rows do
         begin
           var Assign:= Format('%s.%s = %s', [R.Comp, R.Event, R.Handler]);
-          if R.DfmExact then
+          if R.DfmExact then  // dl:ok ifthen-to-if-expression@ca88 -- REVIEWED SLZ-S11 2026-11-22: fixer d8ebefa10 declines this shape (array-concat or generic-call arm that hit E2010/F2084); kept as if/else
             Cells:= Cells + [TDotRow.Anchored(R.Comp, R.DfmLine, RowHref(Dfm, R.DfmLine),
               Format('%s  --  %s:%d', [Assign, DfmName, R.DfmLine]))]
           else

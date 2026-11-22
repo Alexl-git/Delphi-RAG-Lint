@@ -130,7 +130,7 @@ begin
 end;
 
 // the focus table (PS 289-312): not AddRowCluster, its own grammar
-function FocusTable(pUnits, pZones, pEdges, pDrawn: Integer; const pRootPath: string; pSingleZone: Boolean;  // dl:ok too-many-parameters@7b94 -- REVIEWED 2026-10-17: the parameter list is the set of numbers and lists the PS focus table interpolates (Emit-Architecture.ps1 289-312); a record would only rename them
+function FocusTable(pUnits, pZones, pEdges, pDrawn: Integer; const pRootPath: string; pSingleZone: Boolean;  // dl:ok too-many-parameters@56c9 -- REVIEWED 2026-10-17: the parameter list is the set of numbers and lists the PS focus table interpolates (Emit-Architecture.ps1 289-312); a record would only rename them
   const pBack: TList<TBackEdge>; pExtUnits, pExtEdges: Integer; const pGaps: TArray<string>): string;
 begin
   var Tbl:= TStringBuilder.Create;
@@ -164,7 +164,7 @@ end;
 /// <returns>The chart result; LeftCount is the unit count, RightCount the back-edge count.</returns>
 /// <exception cref="EChartsQuestion">The index holds no unit symbols at all.</exception>
 /// <remarks>Opens a read-only TSQLiteSymbolStore beside the TChartsIndex (two read-only handles on one file) and calls BuildDepsReport on it.</remarks>
-function Emit(const pArgs: TQuestionArgs; const pOutDir: string): TChartResult;  // dl:ok method-too-long@5acb -- ports the one-script PS body line for line (H2-H8); the sections share a dozen locals (zones, matrix, degrees, report), so splitting would only thread them as parameters
+function Emit(const pArgs: TQuestionArgs; const pOutDir: string): TChartResult;  // dl:ok method-too-long@3ed0 -- ports the one-script PS body line for line (H2-H8); the sections share a dozen locals (zones, matrix, degrees, report), so splitting would only thread them as parameters
 begin
   var Store: ISymbolStore:= TSQLiteSymbolStore.CreateReadable(pArgs.GuardedDb, True);
   var Index:= TChartsIndex.Create(pArgs.GuardedDb);

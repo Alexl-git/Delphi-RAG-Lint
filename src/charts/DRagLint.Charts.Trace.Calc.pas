@@ -1149,7 +1149,7 @@ end;
 
 { What one read on a computation's right-hand side is. False: a constant (a bound enum value, type or routine, or by NAME SHAPE an
   unbound type or typecast head). Locals shadow class fields, as in Pascal. Port of Resolve-CalcRead (Trace.Walk.ps1:2201). }
-function ResolveCalcRead(pF: TCalcFacts; pH: TCalcHandler; const pR: TCalcRef; out pX: TCalcRead): Boolean;  // dl:ok too-many-exit-points@afc5 -- REVIEWED 2026-10-17: one early return per shape Resolve-CalcRead names (Self, FieldByName read, parameter, local, class field, bound constant, type shape); each exit carries its own documented result, so folding them would hide the shapes
+function ResolveCalcRead(pF: TCalcFacts; pH: TCalcHandler; const pR: TCalcRef; out pX: TCalcRead): Boolean;  // dl:ok too-many-exit-points@396f -- REVIEWED 2026-10-17: one early return per shape Resolve-CalcRead names (Self, FieldByName read, parameter, local, class field, bound constant, type shape); each exit carries its own documented result, so folding them would hide the shapes
 
   function Unmapped(const pName, pWhy: string; pIsField: Boolean): TCalcRead;
   begin
@@ -1651,7 +1651,7 @@ begin
   if U > 0 then
     Lead:= Lead + Format(', and %d other value%s the walk cannot map', [U, if U <> 1 then 's' else '']);
   var Tail:= if Cmd = 0 then ' -- nothing to trace instead' else if Cmd = 1 then ' -- trace it instead' else ' -- trace one of them instead';
-  if Cmd = 0 then
+  if Cmd = 0 then  // dl:ok ifthen-to-if-expression@3d6f -- REVIEWED SLZ-S11 2026-11-22: fixer d8ebefa10 declines this shape (array-concat or generic-call arm that hit E2010/F2084); kept as if/else
     Result.Note:= Lead + Tail
   else
     Result.Note:= Lead + Tail + (if Shared <> '' then Format(' (%s below: %s)', [if Nb = 1 then 'the binding' else 'every binding', Shared])
@@ -1775,7 +1775,7 @@ end;
 { Every TField variable of the class bound by exactly one (dataset field, column literal) pair. Port of Get-CalcBinding (Trace.Walk.ps1:2400). }
 procedure TCalcFactsReader.ReadBindings(const pDs: TTraceDataSet; const pCol: string; pFacts: TCalcFacts);
 begin
-  var Rows:= FResolver.FieldVarWriteRows(pDs.ClassId, Format('v.parent_id = %d AND v.kind = ''field'' AND TRIM(v.signature) LIKE ''T%%Field''',
+  var Rows:= FResolver.FieldVarWriteRows(pDs.ClassId, Format('v.parent_id = %d AND v.kind = ''field'' AND TRIM(v.signature) LIKE ''T%%Field''',  // dl:ok locale-sensitive-conversion@e8f8 -- REVIEWED SLZ-S11 2026-11-22: Format with %d integer arguments only; no decimal separator involved
     [pDs.ClassId]));
   var Names: TArray<string>:= [];
   var Groups: TDictionary<string, TArray<TFieldVarWrite>>:= TDictionary<string, TArray<TFieldVarWrite>>.Create(TIStringComparer.Ordinal);

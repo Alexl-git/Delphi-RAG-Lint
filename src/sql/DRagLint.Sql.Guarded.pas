@@ -277,7 +277,7 @@ const
     'fts3_tokenizer', 'zipfile', 'sqlite_dbpage'
   );
 
-function SqlActionName(ACode: Integer): string;
+function SqlActionName(ACode: Integer): string;  // dl:ok cyclomatic-complexity@1b23 -- REVIEWED SLZ-S11 2026-11-22: measured 34 (max 30); one dispatch routine over chart/node kinds, a split is a refactor outside the mechanical SLZ batch
 begin
   case ACode of
     SQLITE_CREATE_INDEX       : Result:= 'CREATE INDEX'        ;
@@ -318,7 +318,7 @@ begin
   end;
 end;
 
-function IsSingleStatement(const ASql: string; out AReason: string): Boolean;
+function IsSingleStatement(const ASql: string; out AReason: string): Boolean;  // dl:ok cyclomatic-complexity@dca3 -- REVIEWED SLZ-S11 2026-11-22: measured 31 (max 30); one dispatch routine over chart/node kinds, a split is a refactor outside the mechanical SLZ batch
 var
   i    : Integer;
   n    : Integer;

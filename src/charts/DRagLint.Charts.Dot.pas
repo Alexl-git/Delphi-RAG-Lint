@@ -387,7 +387,7 @@ end;
 
 function DotLayout(const pDotExe, pDotText, pOutDir, pBase: string; out pMessages: TArray<string>): TDotLayout;
 begin
-  ForceDirectories(pOutDir);
+  ForceDirectories(pOutDir);  // dl:ok ignored-must-use-result@3db3 -- REVIEWED SLZ-S11 2026-11-22: best-effort: a failed ForceDirectories surfaces at the next file write with the path; a failed DeleteFile of a temp/pruned file is retried or harmless
   Result.Dot:= TPath.Combine(pOutDir, pBase + '.dot');
   Result.Svg:= TPath.Combine(pOutDir, pBase + '.svg');
   Result.Plain:= TPath.Combine(pOutDir, pBase + '.plain');

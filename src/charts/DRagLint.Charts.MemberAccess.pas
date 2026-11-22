@@ -421,7 +421,7 @@ begin
       else
       begin
         Position.Add(Hit.CallerQName, Length(Result));
-        SetLength(Result, Length(Result) + 1);
+        SetLength(Result, Length(Result) + 1);  // dl:ok setlength-in-loop@ccdf -- REVIEWED SLZ-S11 2026-11-22: few members per class; growth cost not measurable
         Result[High(Result)].Routine:= Hit.CallerQName;
         Result[High(Result)].Sites:= 1;
       end;

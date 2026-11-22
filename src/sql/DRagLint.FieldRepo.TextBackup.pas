@@ -375,8 +375,8 @@ begin
   for VI := 0 to High(VKeys) do
   begin
     if VI > 0 then
-      VParts := VParts + PK_SEPARATOR;
-    VParts := VParts + KeyPart(pQuery, VKeys[VI]);
+      VParts := VParts + PK_SEPARATOR;  // dl:ok concat-in-loop@fb70 -- REVIEWED SLZ-S11 2026-11-22: loop over a primary key's few columns; a TStringBuilder adds nothing
+    VParts := VParts + KeyPart(pQuery, VKeys[VI]);  // dl:ok concat-in-loop@16a9 -- REVIEWED SLZ-S11 2026-11-22: loop over a primary key's few columns; a TStringBuilder adds nothing
   end;
   Result := '[' + pTable.Name + ' ' + VParts + HEADER_CLOSE;
 end;

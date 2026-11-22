@@ -338,7 +338,7 @@ type
     function ClassInIndex(const pName: string): Boolean;
     function CatchVerdict(const pType, pHandler: string; pBare: Boolean): string;
     function CallerVerdict(const pCaller: TCallerNode; const pType: string; const pSites: TArray<Int64>): TCallerVerdict;
-    function HasCallers(const pIds: TArray<Integer>): TArray<Integer>;
+    function HasCallers(const pIds: TArray<Integer>): TArray<Integer>;  // dl:ok is-prefix-not-boolean@8ffe -- REVIEWED SLZ-S11 2026-11-22: returns the subset of ids that have callers (a filter), name kept for its CLI/test callers
     function EvaluateEdge(pCaller, pCallee: Integer; const pSites: TArray<Int64>; const pType: string): TEdgeVerdict;
     function EventCount(const pKind: string): Integer;
     function WalkSentence(const pTr: TTypeResult): string;
@@ -791,7 +791,7 @@ begin
 end;
 
 { Get-CatchVerdict: exact / catch-all / ancestor / bare are SOLID type matches, may is dashed, no cannot catch }
-function TExceptionPathsChart.CatchVerdict(const pType, pHandler: string; pBare: Boolean): string;  // dl:ok too-many-exit-points@1578 -- REVIEWED 2026-10-14: ports Get-CatchVerdict, a ladder of early returns, line for line; the order of the returns IS the verdict precedence
+function TExceptionPathsChart.CatchVerdict(const pType, pHandler: string; pBare: Boolean): string;  // dl:ok too-many-exit-points@0030 -- REVIEWED 2026-10-14: ports Get-CatchVerdict, a ladder of early returns, line for line; the order of the returns IS the verdict precedence
 begin
   if pBare then
     Exit(V_BARE);
@@ -1008,7 +1008,7 @@ begin
 end;
 
 { Add-CappedCluster: a capped row cluster; Shown is how many of pRows are drawn (the first ones) }
-function TExceptionPathsChart.AddCappedCluster(const pKey, pTitle: string; const pRows: TArray<TDotRow>; const pNoun,  // dl:ok too-many-parameters@eaff -- REVIEWED 2026-10-14: the parameter list of the PS Add-CappedCluster, kept so each call site reads like the script
+function TExceptionPathsChart.AddCappedCluster(const pKey, pTitle: string; const pRows: TArray<TDotRow>; const pNoun,  // dl:ok too-many-parameters@37b2 -- REVIEWED 2026-10-14: the parameter list of the PS Add-CappedCluster, kept so each call site reads like the script
   pBorder, pFill, pHdr, pStyle, pFooter: string): TCappedCluster;
 begin
   Inc(FNodeId);

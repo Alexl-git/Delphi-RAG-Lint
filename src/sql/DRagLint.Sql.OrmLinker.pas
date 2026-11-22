@@ -142,7 +142,7 @@ var
       Q.Open;
       while not Q.Eof do
       begin
-        Sql.Id:= Q.FieldByName('id').AsLargeInt;
+        Sql.Id:= Q.FieldByName('id').AsLargeInt;  // dl:ok field-by-name-in-loop@812c -- REVIEWED SLZ-S11 2026-11-22: one FieldByName per row over a short metadata/index result; caching TField refs is a perf refactor with no measured cost
         Sql.DbIndex:= ADbIdx;
         Sql.Name:= UpperCase(Q.FieldByName('name').AsString);
         Sql.ParentId:= 0;
@@ -157,7 +157,7 @@ var
       Q.Open;
       while not Q.Eof do
       begin
-        Sql.Id:= Q.FieldByName('id').AsLargeInt;
+        Sql.Id:= Q.FieldByName('id').AsLargeInt;  // dl:ok field-by-name-in-loop@812c -- REVIEWED SLZ-S11 2026-11-22: one FieldByName per row over a short metadata/index result; caching TField refs is a perf refactor with no measured cost
         Sql.DbIndex:= ADbIdx;
         Sql.Name:= UpperCase(Q.FieldByName('name').AsString);
         Sql.ParentId:= 0;
@@ -173,7 +173,7 @@ var
       Q.Open;
       while not Q.Eof do
       begin
-        Del.Id:= Q.FieldByName('id').AsLargeInt;
+        Del.Id:= Q.FieldByName('id').AsLargeInt;  // dl:ok field-by-name-in-loop@c020 -- REVIEWED SLZ-S11 2026-11-22: one FieldByName per row over a short metadata/index result; caching TField refs is a perf refactor with no measured cost
         Del.DbIndex:= ADbIdx;
         Del.Name:= Q.FieldByName('name').AsString;
         Del.Stripped:= UpperCase(StripPrefix(Del.Name, 'T'));
@@ -191,7 +191,7 @@ var
       Q.Open;
       while not Q.Eof do
       begin
-        Del.Id:= Q.FieldByName('id').AsLargeInt;
+        Del.Id:= Q.FieldByName('id').AsLargeInt;  // dl:ok field-by-name-in-loop@c020 -- REVIEWED SLZ-S11 2026-11-22: one FieldByName per row over a short metadata/index result; caching TField refs is a perf refactor with no measured cost
         Del.DbIndex:= ADbIdx;
         Del.Name:= Q.FieldByName('name').AsString;
         Del.Stripped:= UpperCase(StripPrefix(Del.Name, 'I'));
@@ -206,7 +206,7 @@ var
       Q.Open;
       while not Q.Eof do
       begin
-        Del.Id:= Q.FieldByName('id').AsLargeInt;
+        Del.Id:= Q.FieldByName('id').AsLargeInt;  // dl:ok field-by-name-in-loop@c020 -- REVIEWED SLZ-S11 2026-11-22: one FieldByName per row over a short metadata/index result; caching TField refs is a perf refactor with no measured cost
         Del.DbIndex:= ADbIdx;
         Del.Name:= Q.FieldByName('name').AsString;
         Del.Stripped:= UpperCase(StripPrefix(Del.Name, 'F'));
@@ -298,7 +298,7 @@ begin
           if Cls.Stripped = '' then Continue;
           if SqlTablesByName.TryGetValue(Cls.Stripped, Tbl) then
           begin
-            EmitLink(Cls, Tbl, 'class_to_table', 'T-strip + exact', 1.0);
+            EmitLink(Cls, Tbl, 'class_to_table', 'T-strip + exact', 1.0);  // dl:ok magic-literal@996d -- REVIEWED SLZ-S11 2026-11-22: literal 1.0; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
             Inc(Result.ClassLinks);
           end;
         end;
@@ -309,7 +309,7 @@ begin
           if Iface.Stripped = '' then Continue;
           if SqlTablesByName.TryGetValue(Iface.Stripped, Tbl) then
           begin
-            EmitLink(Iface, Tbl, 'iface_to_table', 'I-strip + exact', 1.0);
+            EmitLink(Iface, Tbl, 'iface_to_table', 'I-strip + exact', 1.0);  // dl:ok magic-literal@0c16 -- REVIEWED SLZ-S11 2026-11-22: literal 1.0; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
             Inc(Result.IfaceLinks);
           end;
         end;
@@ -326,7 +326,7 @@ begin
             Key:= ParentStripped + '.' + Fld.Stripped;
             if SqlColumns.TryGetValue(Key, ColsList) and (ColsList.Count > 0) then
             begin
-              EmitLink(Fld, ColsList[0], 'field_to_column', 'T+F-strip + exact', 1.0);
+              EmitLink(Fld, ColsList[0], 'field_to_column', 'T+F-strip + exact', 1.0);  // dl:ok magic-literal@5809 -- REVIEWED SLZ-S11 2026-11-22: literal 0,1.0; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
               Inc(Result.FieldLinks);
             end;
           end;

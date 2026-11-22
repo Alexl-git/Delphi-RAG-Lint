@@ -854,7 +854,7 @@ end;
   start tag inside <title> or <desc>, an on* attribute, a URL attribute that is not draglint:
   or #, an animation of href or of a handler, a '<!' or '<?' other than a comment, a malformed
   end tag, a </br> or </p>, anything but blanks after the FIRST </svg>, and no </svg> at all. }
-function SvgRefusal(const pSvg: string): string; // dl:ok too-many-exit-points@ac92 -- REVIEWED 2026-10-11: each Exit is one R26 refusal rule returning its own reason, in the order the tokenizer meets it; folding them into a flag would hide which rule fired
+function SvgRefusal(const pSvg: string): string; // dl:ok too-many-exit-points@8bef -- REVIEWED 2026-10-11: each Exit is one R26 refusal rule returning its own reason, in the order the tokenizer meets it; folding them into a flag would hide which rule fired
 begin
   var Len:= Length(pSvg);
   var At:= 1;

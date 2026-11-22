@@ -651,7 +651,7 @@ procedure TFeedsFromChart.DrawControl;
 begin
   var Rows: TArray<TDotRow>:= [];
   var DfmName:= FileNameOf(FCtl.Dfm);
-  if FHasField then
+  if FHasField then  // dl:ok ifthen-to-if-expression@4cce -- REVIEWED SLZ-S11 2026-11-22: fixer d8ebefa10 declines this shape (array-concat or generic-call arm that hit E2010/F2084); kept as if/else
     Rows:= Rows + [NewRow(FCtlName + ' : ' + FCtl.CType, FCtl.Dfm, FFieldLine,
       Format('%s.%s = ''%s'' -- %s:%d', [FCtl.QName, FFieldProp, FFieldCol, DfmName, FFieldLine]), FFieldProp + ' = ' + FFieldCol)]
   else

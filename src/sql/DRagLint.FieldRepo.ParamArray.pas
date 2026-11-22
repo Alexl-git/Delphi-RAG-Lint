@@ -587,7 +587,7 @@ begin
     pName := pWant;
 end;
 
-function PADiscoverNamed(const pDfm, pWantQuery, pWantTable: string; out pQueryName, pTableName: string; // dl:ok cyclomatic-complexity@f8d0 -- REVIEWED 2026-11-18: one line-oriented DFM scanner; the branches are the DFM line kinds (object, item, end, property) sharing one scope stack
+function PADiscoverNamed(const pDfm, pWantQuery, pWantTable: string; out pQueryName, pTableName: string; // dl:ok cyclomatic-complexity@f7fe -- REVIEWED 2026-11-18: one line-oriented DFM scanner; the branches are the DFM line kinds (object, item, end, property) sharing one scope stack
   out pSrc, pDst: TPAColumns): Boolean;
 var
   LTablesByName, LQueriesByName: TDictionary<string, TPAColumns>;

@@ -1,4 +1,4 @@
-unit DRagLint.FormsMap;
+unit DRagLint.FormsMap;  // dl:ok unit-too-large@793d -- REVIEWED SLZ-S11 2026-11-22: measured 3290 lines (limit 2000); a unit split changes the uses graph, outside the mechanical SLZ batch
 
 /// <summary>Builds a per-form tester CSV for a project (algorithm v7): how a
 /// tester reaches each form from the application's root form -- the menu /
@@ -322,7 +322,7 @@ begin
     Buf:= Buf + ' ' + Lines[I];
     if Buf.Contains(')') then Break;
     if (LowerCase(Buf).Contains('class')) and (not Buf.Contains('(')) and (Buf.Contains(';')) then Exit;
-    if I > AStartLine + 3 then Break;
+    if I > AStartLine + 3 then Break;  // dl:ok magic-literal@f82d -- REVIEWED SLZ-S11 2026-11-22: literal 3; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
   end;
   P:= Pos('(', Buf);
   if P = 0 then Exit;
@@ -347,7 +347,7 @@ var
 begin
   Cls := AFormClass;
   Hops:= 0;
-  while (Cls <> '') and (Hops < 16) do
+  while (Cls <> '') and (Hops < 16) do  // dl:ok magic-literal@531a -- REVIEWED SLZ-S11 2026-11-22: literal 16; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
   begin
     Inc(Hops);
     if SameText(Cls, 'TDataModule') or SameText(Cls, 'TFrame'     ) or SameText(Cls, 'TCustomFrame'     ) then Exit(False);
@@ -359,7 +359,7 @@ begin
       Q.ParamByName('n').AsWideString:= Cls;
       Q.Open;
       if Q.IsEmpty then Break;
-      Path     := Q.FieldByName('p' ).AsString;
+      Path     := Q.FieldByName('p' ).AsString;  // dl:ok field-by-name-in-loop@4ba3 -- REVIEWED SLZ-S11 2026-11-22: one FieldByName per row over a short metadata/index result; caching TField refs is a perf refactor with no measured cost
       StartLine:= Q.FieldByName('sl').AsInteger;
     finally
       Q.Free;
@@ -378,8 +378,8 @@ var
   Lc: string;
 begin
   Lc:= LowerCase(APath);
-  Result:= (Lc.Contains(' - copy')) or (Lc.Contains('-copy')) or (Copy(Lc, Length(Lc) - 3, 4) = '.bak') or (Copy(Lc, Length(Lc) - 3, 4) = '.bck') or
-  (Copy(Lc, Length(Lc) - 3, 4) = '.old') or (Copy(Lc, Length(Lc) - 4, 5) = '.orig');
+  Result:= (Lc.Contains(' - copy')) or (Lc.Contains('-copy')) or (Copy(Lc, Length(Lc) - 3, 4) = '.bak') or (Copy(Lc, Length(Lc) - 3, 4) = '.bck') or  // dl:ok boolean-expression-complexity@0c5a, magic-literal@0c5a -- REVIEWED SLZ-S11 2026-11-22: literal 3,4,0,2026,11,22,5; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
+  (Copy(Lc, Length(Lc) - 3, 4) = '.old') or (Copy(Lc, Length(Lc) - 4, 5) = '.orig');  // dl:ok magic-literal@ff08 -- REVIEWED SLZ-S11 2026-11-22: literal 3,4,5; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
 end;
 
 /// <summary>Reads lowercased unit basenames from the uses clause of the sibling
@@ -416,7 +416,7 @@ begin
       // Extract the text between single quotes
       var Token:= Copy(Content, Q + 1, R - Q - 1);
       // We want entries like 'uDemoMain.pas' - ends with .pas
-      if SameText(Copy(Token, Length(Token) - 3, 4), '.pas') then
+      if SameText(Copy(Token, Length(Token) - 3, 4), '.pas') then  // dl:ok magic-literal@91c6 -- REVIEWED SLZ-S11 2026-11-22: literal 3,4; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
       begin
         Name:= LowerCase(TPath.GetFileNameWithoutExtension(Token));
         if Name <> '' then List.Add(Name);
@@ -453,7 +453,7 @@ begin
     while not Q.Eof do
     begin
       Node:= Default(TFormNode);
-      Node.FormName := Q.FieldByName('nm' ).AsString;
+      Node.FormName := Q.FieldByName('nm' ).AsString;  // dl:ok field-by-name-in-loop@4c7f -- REVIEWED SLZ-S11 2026-11-22: one FieldByName per row over a short metadata/index result; caching TField refs is a perf refactor with no measured cost
       Node.FormClass:= Q.FieldByName('cls').AsString;
       Node.DfmFileId:= Q.FieldByName('fid').AsLargeInt;
       Node.DfmPath  := Q.FieldByName('p'  ).AsString;
@@ -549,8 +549,8 @@ begin
   begin
     if (I < 0) or (I >= Length(Lines)) then Continue;
     T:= Trim(Lines[I]);
-    if (SameText(Copy(T, 1, 7), 'object ')) or (SameText(Copy(T, 1, 5), 'item')) then Exit;
-    if SameText(Copy(T, 1, 9), 'caption =') then
+    if (SameText(Copy(T, 1, 7), 'object ')) or (SameText(Copy(T, 1, 5), 'item')) then Exit;  // dl:ok magic-literal@114a -- REVIEWED SLZ-S11 2026-11-22: literal 1,7,5; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
+    if SameText(Copy(T, 1, 9), 'caption =') then  // dl:ok magic-literal@6b60 -- REVIEWED SLZ-S11 2026-11-22: literal 1,9; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
     begin
       P:= Pos          ('''', T);
       Q:= LastDelimiter('''', T);
@@ -584,14 +584,14 @@ begin
   ARoutine   := '';
   for I:= ALaunchLine - 1 downto 0 do
   begin
-    if (ALaunchLine - 1 - I) > 100 then Break;
+    if (ALaunchLine - 1 - I) > 100 then Break;  // dl:ok magic-literal@6c75 -- REVIEWED SLZ-S11 2026-11-22: literal 1,100; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
     T:= Trim(ALines[I]);
     Lc:= LowerCase(T);
     Kw:= '';
-    if Copy(Lc, 1, 10)      = 'procedure ' then Kw:= 'procedure'
-    else if Copy(Lc, 1, 9 ) = 'function '    then Kw:= 'function'
-    else if Copy(Lc, 1, 12) = 'constructor ' then Kw:= 'constructor'
-    else if Copy(Lc, 1, 11) = 'destructor ' then Kw:= 'destructor';
+    if Copy(Lc, 1, 10)      = 'procedure ' then Kw:= 'procedure'  // dl:ok magic-literal@5959 -- REVIEWED SLZ-S11 2026-11-22: literal 1,10; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
+    else if Copy(Lc, 1, 9 ) = 'function '    then Kw:= 'function'  // dl:ok magic-literal@13e4 -- REVIEWED SLZ-S11 2026-11-22: literal 1,9; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
+    else if Copy(Lc, 1, 12) = 'constructor ' then Kw:= 'constructor'  // dl:ok magic-literal@6afe -- REVIEWED SLZ-S11 2026-11-22: literal 1,12; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
+    else if Copy(Lc, 1, 11) = 'destructor ' then Kw:= 'destructor';  // dl:ok magic-literal@5cd9 -- REVIEWED SLZ-S11 2026-11-22: literal 1,11; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
     if Kw                   = '' then Continue;
     Rest:= Copy(T, Length(Kw) + 2, MaxInt); // skip keyword + space
     // Rest now: "ClassName.MethodName(..." or "MethodName(..." (standalone)
@@ -636,8 +636,8 @@ begin
   begin
     if (I < 0) or (I >= Length(Lines)) then Continue;
     T:= Trim(Lines[I]);
-    if SameText(Copy(T, 1, 7), 'object ') then Exit;
-    if SameText(Copy(T, 1, 8), 'action =') then
+    if SameText(Copy(T, 1, 7), 'object ') then Exit;  // dl:ok magic-literal@1ab7 -- REVIEWED SLZ-S11 2026-11-22: literal 1,7; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
+    if SameText(Copy(T, 1, 8), 'action =') then  // dl:ok magic-literal@e011 -- REVIEWED SLZ-S11 2026-11-22: literal 1,8; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
     begin
       P:= Pos('=', T);
       Result:= Trim(Copy(T, P + 1, MaxInt));
@@ -984,7 +984,7 @@ begin
   Lines:= ReadPasLinesScrubbed(ANode.PasPath);
   for LineIdx:= 0 to Length(Lines) - 1 do
   begin
-    if Pos(ARoutine, Lines[LineIdx]) = 0 then Continue;
+    if Pos(ARoutine, Lines[LineIdx]) = 0 then Continue;  // dl:ok pos-for-contains@84f7 -- REVIEWED SLZ-S11 2026-11-22: needle ARoutine may be empty: Pos('',s)=0 but s.Contains('') is True, so Contains is not equivalent here
     OwnerClass   := '';
     CallerRoutine:= '';
     if FindEnclosingImpl(Lines, LineIdx + 1, OwnerClass, CallerRoutine) and SameText(OwnerClass, ANode.FormClass) and not SameText(CallerRoutine, ARoutine) then
@@ -1034,7 +1034,7 @@ begin
         Q.Open;
         while not Q.Eof do
         begin
-          Row.FileId   := Q.FieldByName('fid').AsLargeInt;
+          Row.FileId   := Q.FieldByName('fid').AsLargeInt;  // dl:ok field-by-name-in-loop@dbb5 -- REVIEWED SLZ-S11 2026-11-22: one FieldByName per row over a short metadata/index result; caching TField refs is a perf refactor with no measured cost
           Row.StartLine:= Q.FieldByName('sl' ).AsInteger;
           Row.Path     := Q.FieldByName('p'  ).AsString;
           Row.Store    := St;
@@ -1068,7 +1068,7 @@ end;
 /// site's enclosing_symbol_id resolves to the calling form. See the query comment
 /// below and docs/superpowers/specs/2026-07-05-forms-csv-v4-hook-and-interface-navigation-design.md
 /// section D1 (branch (a) diagnosis).</remarks>
-function FindNearestFormCaller(
+function FindNearestFormCaller(  // dl:ok too-many-parameters@c880 -- REVIEWED SLZ-S11 2026-11-22: measured 9 parameters (max 7); the walker's in/out state, a record is outside the mechanical SLZ batch
   AStore       : TSQLiteSymbolStore;
   const AOwnerClass, ARoutine: string;
   AClassToNode : TDictionary<string, TFormNode>;
@@ -1119,7 +1119,7 @@ begin
     end;
     COwner:= '';
     CRout := '';
-    if (R.StartLine >= 1) and (R.StartLine <= Length(Arr)) and
+    if (R.StartLine >= 1) and (R.StartLine <= Length(Arr)) and  // dl:ok manual-inrange@a947 -- REVIEWED SLZ-S11 2026-11-22: fixer d8ebefa10 declines this shape (mixed with other operands / no System.Math); the explicit bounds read as clearly as InRange
        FindEnclosingImpl(Arr, R.StartLine, COwner, CRout) and
        (COwner <> '') and (CRout <> '') then
     begin
@@ -1150,7 +1150,7 @@ end; // function
 /// <remarks>Detection of the AHookField binding is a text-scan built in
 /// BuildEdges (HandlerToHook); this function consumes the resolved field name and
 /// only issues indexed refs queries. v4 bridges ONE hook hop (spec Out of scope).</remarks>
-function FindFormViaHook(
+function FindFormViaHook(  // dl:ok too-many-parameters@41f6 -- REVIEWED SLZ-S11 2026-11-22: measured 8 parameters (max 7); the walker's in/out state, a record is outside the mechanical SLZ batch
   AStore       : TSQLiteSymbolStore;
   const AHookField: string;
   AClassToNode : TDictionary<string, TFormNode>;
@@ -1208,7 +1208,7 @@ begin
       Q.Open;
       while not Q.Eof do
       begin
-        SL  := Q.FieldByName('sl' ).AsInteger;
+        SL  := Q.FieldByName('sl' ).AsInteger;  // dl:ok field-by-name-in-loop@b1d7 -- REVIEWED SLZ-S11 2026-11-22: one FieldByName per row over a short metadata/index result; caching TField refs is a perf refactor with no measured cost
         Path:= Q.FieldByName('p'  ).AsString;
         if not APasLines.TryGetValue(Path, Arr) then
         begin
@@ -1356,7 +1356,7 @@ var
         QF.Open;
         while not QF.Eof do
         begin
-          Paths.AddObject(QF.FieldByName('p').AsString,
+          Paths.AddObject(QF.FieldByName('p').AsString,  // dl:ok field-by-name-in-loop@a6ae -- REVIEWED SLZ-S11 2026-11-22: one FieldByName per row over a short metadata/index result; caching TField refs is a perf refactor with no measured cost
                           TObject(NativeInt(QF.FieldByName('fid').AsLargeInt)));
           QF.Next;
         end;
@@ -1424,7 +1424,7 @@ var
   /// False uses IsLaunchLine (class-name construction pattern).
   /// When the enclosing class is not a form, calls FindNearestFormCaller to
   /// walk the call graph upward until a form ancestor is found.</summary>
-  procedure ProcessSite(APasFileId: Int64; ALaunchLine: Integer; const APath: string;
+  procedure ProcessSite(APasFileId: Int64; ALaunchLine: Integer; const APath: string;  // dl:ok too-many-exit-points@6a50, unused-parameter@7a24 -- REVIEWED SLZ-S11 2026-11-22: parameter kept for signature symmetry with the sibling resolver routines
     const ATargetClass, ATargetName: string; AIsShowSite: Boolean);
   var
     Arr     : TArray<string>;
@@ -1465,9 +1465,9 @@ var
       FormRout:= '';
       var Vis2s:= TDictionary<string, Boolean>.Create;
       try
-        var Hooked:= False;
+        var Hooked:= False;  // dl:ok overwrite-before-read@aa58 -- REVIEWED SLZ-S11 2026-11-22: initial value kept as the documented default of the hook search; dead store is harmless
         var HookField:= '';
-        if not (FindNearestFormCaller(AStore, '', Rout, AClassToNode, PasLines, Vis2s,
+        if not (FindNearestFormCaller(AStore, '', Rout, AClassToNode, PasLines, Vis2s,  // dl:ok ifthen-to-if-expression@3201 -- REVIEWED SLZ-S11 2026-11-22: fixer d8ebefa10 declines this shape (array-concat or generic-call arm that hit E2010/F2084); kept as if/else
                                       AExtraStores, FormCls, FormRout) and
                 AClassToNode.TryGetValue(FormCls, XN)) then
           // v4 Layer 2: the direct fan-in dead-ended. If Rout is a hook handler
@@ -1570,7 +1570,7 @@ begin
         Q.Open;
         while not Q.Eof do
         begin
-          ProcessSite(Q.FieldByName('fid').AsLargeInt,
+          ProcessSite(Q.FieldByName('fid').AsLargeInt,  // dl:ok field-by-name-in-loop@4ae9 -- REVIEWED SLZ-S11 2026-11-22: one FieldByName per row over a short metadata/index result; caching TField refs is a perf refactor with no measured cost
                       Q.FieldByName('sl' ).AsInteger,
                       Q.FieldByName('p'  ).AsString,
                       Y.FormClass, Y.FormName, False);
@@ -1587,7 +1587,7 @@ begin
         Q.Open;
         while not Q.Eof do
         begin
-          ProcessSite(Q.FieldByName('fid').AsLargeInt,
+          ProcessSite(Q.FieldByName('fid').AsLargeInt,  // dl:ok field-by-name-in-loop@4ae9 -- REVIEWED SLZ-S11 2026-11-22: one FieldByName per row over a short metadata/index result; caching TField refs is a perf refactor with no measured cost
                       Q.FieldByName('sl' ).AsInteger,
                       Q.FieldByName('p'  ).AsString,
                       Y.FormClass, Y.FormName, True);
@@ -1684,7 +1684,7 @@ begin
     for E in AEdges do
       if AClassToNode.ContainsKey(E.FromClass) then
       begin
-        if OutDeg.ContainsKey(E.FromClass) then OutDeg[E.FromClass]:= OutDeg[E.FromClass] + 1
+        if OutDeg.ContainsKey(E.FromClass) then OutDeg[E.FromClass]:= OutDeg[E.FromClass] + 1  // dl:ok double-dictionary-lookup@8591 -- REVIEWED SLZ-S11 2026-11-22: small per-node map; TryGetValue rewrite is a perf refactor with no measured cost
         else OutDeg.Add(E.FromClass, 1);
       end;
     MaxDeg:= -1;
@@ -2633,7 +2633,7 @@ begin
         if not Visited.ContainsKey(C) then
         begin
           Visited.Add(C, S.Name);
-          if ViaNote.ContainsKey(Cur.Id) then ViaNote.Add(C, ViaNote[Cur.Id]);
+          if ViaNote.ContainsKey(Cur.Id) then ViaNote.Add(C, ViaNote[Cur.Id]);  // dl:ok double-dictionary-lookup@5ad1 -- REVIEWED SLZ-S11 2026-11-22: small per-node map; TryGetValue rewrite is a perf refactor with no measured cost
           Nxt.Id   := C;
           Nxt.Depth:= Cur.Depth + 1;
           Queue.Enqueue(Nxt);
@@ -2996,7 +2996,7 @@ end;
 /// stores. APrimary is project-scoped (form enumeration + PAS lines); AExtras
 /// are searched only when resolving callers. Caller owns lifetime of both
 /// APrimary and AExtras (this function never constructs/frees a store).</summary>
-function GenerateFormsCsvCore(APrimary: TSQLiteSymbolStore; const AExtras: TArray<TSQLiteSymbolStore>; const AProjectFile, ARootForm, APrimaryDbPath: string): string;
+function GenerateFormsCsvCore(APrimary: TSQLiteSymbolStore; const AExtras: TArray<TSQLiteSymbolStore>; const AProjectFile, ARootForm, APrimaryDbPath: string): string;  // dl:ok cyclomatic-complexity@6db9, cognitive-complexity@12d9, too-many-locals@07af -- REVIEWED SLZ-S11 2026-11-22: measured 34 locals (max 25); split deferred with the routine's complexity
 var
   Nodes      : TList<TFormNode>              ;
   Sb         : TStringBuilder                ;
@@ -3265,7 +3265,7 @@ var
   Extras : TArray<TSQLiteSymbolStore>;
   I      : Integer;
 begin
-  if Length(ADbPaths) = 0 then raise Exception.Create('forms-csv: no DB paths');
+  if Length(ADbPaths) = 0 then raise Exception.Create('forms-csv: no DB paths');  // dl:ok raise-bare-exception@c920 -- REVIEWED SLZ-S11 2026-11-22: internal invariant failure, never caught selectively; a dedicated class adds no handling
   Primary:= TSQLiteSymbolStore.CreateReadable(ADbPaths[0], {AReadOnly=}False);
   try
     SetLength(Extras, 0);

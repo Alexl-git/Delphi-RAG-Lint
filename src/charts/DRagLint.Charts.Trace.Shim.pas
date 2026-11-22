@@ -691,7 +691,7 @@ begin
   end;
 end;
 
-function NewShimResult(const pX: TShimContext; const pForm, pKeyword, pCondition: string;  // dl:ok too-many-parameters@182e -- REVIEWED 2026-10-17: mirrors New-ShimResult's ten values; every caller names each position, and a grouping record would only rename the same values at ten call sites
+function NewShimResult(const pX: TShimContext; const pForm, pKeyword, pCondition: string;  // dl:ok too-many-parameters@15af -- REVIEWED 2026-10-17: mirrors New-ShimResult's ten values; every caller names each position, and a grouping record would only rename the same values at ten call sites
   pIfLine, pBlockStart, pBlockEnd: Integer; const pReason: string; pStmtLine, pStmtCol: Integer): TShimResult;
 begin
   if pForm <> FORM_UNKNOWN then
@@ -1018,7 +1018,7 @@ function ResolveShimEnclosing(const pX: TShimContext; pP: Integer): TShimResult;
 
 { The statement holding the Exit starts at token pP (TokCount: the Exit itself); pBlkStart..pBlkEnd is that
   statement's first and last line. }
-function ResolveShimStatement(const pX: TShimContext; pP, pBlkStart, pBlkEnd: Integer): TShimResult;  // dl:ok too-many-exit-points@2cfd -- REVIEWED 2026-10-17: one Exit per source shape (then, else, do, case arm), each returning its own named result as the PS returns do; a single exit would only add a Result variable and else-chains
+function ResolveShimStatement(const pX: TShimContext; pP, pBlkStart, pBlkEnd: Integer): TShimResult;  // dl:ok too-many-exit-points@c211 -- REVIEWED 2026-10-17: one Exit per source shape (then, else, do, case arm), each returning its own named result as the PS returns do; a single exit would only add a Result variable and else-chains
 begin
   if pP <= 0 then
     Exit(NewShimUnknown(pX, 'is not inside a branch'));
@@ -1056,7 +1056,7 @@ end;
 
 { The Exit (or the statement at token pP) is one statement of a block: find the block's opener and read IT as the
   statement that holds the Exit. }
-function ResolveShimEnclosing(const pX: TShimContext; pP: Integer): TShimResult;  // dl:ok too-many-exit-points@6c4b -- REVIEWED 2026-10-17: one Exit per opener kind (begin, try, case, other) and per no-branch case, each a distinct named result as in the PS; collapsing them hides which shape was refused
+function ResolveShimEnclosing(const pX: TShimContext; pP: Integer): TShimResult;  // dl:ok too-many-exit-points@5698 -- REVIEWED 2026-10-17: one Exit per opener kind (begin, try, case, other) and per no-branch case, each a distinct named result as in the PS; collapsing them hides which shape was refused
 begin
   var Depth:= 0;
   for var Q:= pP - 1 downto 0 do

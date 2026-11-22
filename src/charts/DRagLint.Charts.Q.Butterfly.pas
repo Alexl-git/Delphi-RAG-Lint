@@ -192,7 +192,7 @@ begin
 end;
 
 // Add-UnitCluster: the emitter's own older grammar (no subtitle, every row anchored, no note cell).
-procedure AddUnitCluster(pSb: TStringBuilder; const pSide, pUnit: string; pLevel: Integer; pRows: TList<TBfNode>;  // dl:ok too-many-parameters@0d0a -- REVIEWED 2026-10-16: the parameter list of the PS Add-UnitCluster plus the node counter and port map the script keeps in script scope, so the call sites read like the script
+procedure AddUnitCluster(pSb: TStringBuilder; const pSide, pUnit: string; pLevel: Integer; pRows: TList<TBfNode>;  // dl:ok too-many-parameters@ad64 -- REVIEWED 2026-10-16: the parameter list of the PS Add-UnitCluster plus the node counter and port map the script keeps in script scope, so the call sites read like the script
   const pBorder, pFill, pHdr: string; var pNodeId: Integer; pPortMap: TDictionary<string, string>);
 begin
   Inc(pNodeId);
@@ -330,7 +330,7 @@ begin
           Inc(FocusIn);
         Sb.AppendLine(Format('  %s -> %s [color="%s"];', [EdgeFrom, EdgeTo, CALLER_BORDER]));
       end;
-      for var N in CalleeNodes do
+      for var N in CalleeNodes do  // dl:ok duplicate-code@076c -- REVIEWED SLZ-S11 2026-11-22: measured 108 tokens; sibling builder/query idiom, a shared helper is outside the mechanical SLZ batch
       begin
         var EdgeFrom:= PortOf(PortMap, SIDE_OUT, N.ParentQ, FocusQ);
         var EdgeTo:= PortOf(PortMap, SIDE_OUT, N.QName, FocusQ);

@@ -240,7 +240,7 @@ begin
     ReadPorts:= AddRowCluster(pSb, 'cluster_readers', 'nr', 'readers',
       Format('%d routine%s, %d site%s', [pData.RTop.Total, PluralS(pData.RTop.Total),
         pData.TotalReads, PluralS(pData.TotalReads)]), pReadRows, Style);
-  pSb.AppendLine('');
+  pSb.AppendLine('');  // dl:ok duplicate-code@ce3d -- REVIEWED SLZ-S11 2026-11-22: measured 94 tokens; sibling builder/query idiom, a shared helper is outside the mechanical SLZ batch
   { writer -> member (the routine acts ON it); member -> reader (the value flows OUT). A note row gets NO edge. }
   for var I:= 0 to High(pWriteRows) do
     if pWriteRows[I].Href <> '' then

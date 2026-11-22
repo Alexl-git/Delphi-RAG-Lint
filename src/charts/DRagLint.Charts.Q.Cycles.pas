@@ -261,7 +261,7 @@ begin
 end;
 
 // the focus table (PS 332-346): not AddRowCluster, its own grammar
-function FocusTable(const pTitle: string; pTotal, pShown, pDrawn, pAnchored, pUnanchored, pHidden: Integer;  // dl:ok too-many-parameters@a840 -- REVIEWED 2026-10-17: the parameters are the counters the PS focus table prints, each one line of it; a record would only rename them
+function FocusTable(const pTitle: string; pTotal, pShown, pDrawn, pAnchored, pUnanchored, pHidden: Integer;  // dl:ok too-many-parameters@b1a4 -- REVIEWED 2026-10-17: the parameters are the counters the PS focus table prints, each one line of it; a record would only rename them
   const pNotes: TList<string>): string;
 begin
   var Tbl:= TStringBuilder.Create;

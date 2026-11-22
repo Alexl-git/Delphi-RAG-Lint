@@ -1667,7 +1667,7 @@ begin
   for var I:= 1 to Length(pDot) do
   begin
     var C:= Ord(pDot[I]);
-    if not ((C = ASCII_CR) or (C = ASCII_LF) or ((C >= ASCII_FIRST) and (C <= ASCII_LAST))) then
+    if not ((C = ASCII_CR) or (C = ASCII_LF) or ((C >= ASCII_FIRST) and (C <= ASCII_LAST))) then  // dl:ok manual-inrange@2349 -- REVIEWED SLZ-S11 2026-11-22: fixer d8ebefa10 declines this shape (mixed with other operands / no System.Math); the explicit bounds read as clearly as InRange
       raise EChartsTrace.Create(PS_TRACE_ERR + 'the dot is not 7-bit ASCII at offset ' + IntToStr(I - 1));
   end;
 end;

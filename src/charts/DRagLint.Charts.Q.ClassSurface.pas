@@ -161,7 +161,7 @@ begin
     begin
       var C:= Default(TVisCluster);
       C.Vis:= Vis;
-      C.Total:= ByVis.Values[ByVis.IndexOf(Vis)];
+      C.Total:= ByVis.Values[ByVis.IndexOf(Vis)];  // dl:ok indexof-result-unchecked@21b8 -- REVIEWED SLZ-S11 2026-11-22: Vis iterates VisKeys, the keys of ByVis itself, so IndexOf never returns -1
       C.Rows:= [];
       var Pred:= if SameText(Vis, NO_VIS) then '(c.modifiers IS NULL OR c.modifiers = '''')'
         else 'c.modifiers = ''' + TChartsIndex.SqlText(Vis) + '''';
