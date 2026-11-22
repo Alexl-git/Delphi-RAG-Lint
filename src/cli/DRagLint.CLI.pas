@@ -23921,7 +23921,7 @@ begin
                 Result:= HubSurfaceGroupLines(Store, LibStore, Sccs[pIndex - 1], pIndex, Graph, pOut, HubAsked);
               end;
           end;
-          RenderCyclePlaybook(Store, AArgs.DbPath, Sccs, Graph, PlanLines, LibStore, AArgs.ProjectPath, GroupHook);
+          RenderCyclePlaybook(Store, AArgs.DbPath, Sccs, Graph, PlanLines, LibStore, AArgs.ProjectPath, GroupHook, AArgs.NoHubSurface);
           for var PlanLine in PlanLines do Writeln(PlanLine);
         finally
           PlanLines.Free;
@@ -23971,6 +23971,7 @@ begin
           HintIn.Graph:= EdgeGraph;
           HintIn.LibStore:= OpenPlanLibrary(JsonLibFailed, JsonLibMessage);
           HintIn.FixProject:= AArgs.ProjectPath;
+          HintIn.FixNoHubSurface:= AArgs.NoHubSurface;  { 1.52.3: the hint names the planner the run used }
           HintIn.Unavailable:= (if JsonLibFailed then 'library unavailable: ' + (if JsonLibMessage <> '' then JsonLibMessage else 'the platform library could not be opened') else '');
           HintIn.FixHook:= nil;
           { 1.52 (owner ruling B9b): R3's fix object by default for a group R3 breaks; --hub-surface also for one it
