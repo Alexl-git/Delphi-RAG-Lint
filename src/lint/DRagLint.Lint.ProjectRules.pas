@@ -5614,7 +5614,7 @@ begin
       Exit;
     end;
   end;
-  if not (Root is TJSONObject) then begin Root.Free; Exit; end;
+  if (Root is not TJSONObject) then begin Root.Free; Exit; end;
   Obj:= TJSONObject(Root);
 
   Findings  := TList<TLintFinding>.Create;
@@ -5627,9 +5627,9 @@ begin
       for var I:= 0 to TJSONArray(LayersArr).Count - 1 do
       begin
         var Le:= TJSONArray(LayersArr).Items[I];
-        if not (Le is TJSONObject) then Continue;
+        if (Le is not TJSONObject) then Continue;
         var Nm:= TJSONObject(Le).GetValue('name');
-        if not (Nm is TJSONString) then Continue;
+        if (Nm is not TJSONString) then Continue;
         var LName:= TJSONString(Nm).Value;
         var Pats:= TStringList.Create;
         var Mt:= TJSONObject(Le).GetValue('match');
@@ -5645,9 +5645,9 @@ begin
       for var I:= 0 to TJSONArray(AllowArr).Count - 1 do
       begin
         var Ae:= TJSONArray(AllowArr).Items[I];
-        if not (Ae is TJSONObject) then Continue;
+        if (Ae is not TJSONObject) then Continue;
         var Fr:= TJSONObject(Ae).GetValue('from');
-        if not (Fr is TJSONString) then Continue;
+        if (Fr is not TJSONString) then Continue;
         var FrLow:= LowerCase(TJSONString(Fr).Value);
         var Lst: TStringList;
         if not Allow.TryGetValue(FrLow, Lst) then begin Lst:= TStringList.Create; Allow.Add(FrLow, Lst); end;

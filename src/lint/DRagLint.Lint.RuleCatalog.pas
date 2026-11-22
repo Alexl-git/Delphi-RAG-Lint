@@ -1080,7 +1080,7 @@ begin
         Raw:= '';
         try Raw:= TFile.ReadAllText(F, TEncoding.UTF8); except Continue; end;  // dl:ok try-except-swallowed@264e, bare-except@264e -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
         Root:= TJSONObject.ParseJSONValue(Raw);
-        if not (Root is TJSONObject) then begin Root.Free; Continue; end;
+        if (Root is not TJSONObject) then begin Root.Free; Continue; end;
         try
           Obj:= Root as TJSONObject;
           if Obj.GetValue('id') = nil then Continue;

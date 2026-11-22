@@ -226,7 +226,7 @@ begin
   if not TFile.Exists(APath) then Exit(AFindings);
 
   RootVal:= TJSONObject.ParseJSONValue(TFile.ReadAllText(APath, TEncoding.UTF8));
-  if not (RootVal is TJSONObject) then
+  if (RootVal is not TJSONObject) then
   begin
     RootVal.Free;
     Exit(AFindings);

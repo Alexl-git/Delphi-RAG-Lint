@@ -628,7 +628,7 @@ begin
   Result:= nil;
   if not TFile.Exists(APath) then Exit;
   RootVal:= TJSONObject.ParseJSONValue(TFile.ReadAllText(APath));
-  if not (RootVal is TJSONObject) then begin RootVal.Free; Exit; end;
+  if (RootVal is not TJSONObject) then begin RootVal.Free; Exit; end;
   try
     Root:= RootVal as TJSONObject;
     if Root.GetValue('profiles') is TJSONObject then
@@ -659,7 +659,7 @@ begin
   if Root = nil then Root:= TJSONObject.Create;
   try
     { ensure a "profiles" object }
-    if not (Root.GetValue('profiles') is TJSONObject) then
+    if (Root.GetValue('profiles') is not TJSONObject) then
     begin
       RemovedPair:= Root.RemovePair('profiles');
       if RemovedPair <> nil then RemovedPair.Free;
