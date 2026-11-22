@@ -343,7 +343,7 @@ var
 begin
   Result:= False;
   Words:= Trim(AText).Split([' ']);
-  if Length(Words) < 2 then Exit;  // dl:ok magic-literal@a1c1 -- REVIEWED 2026-11-20 v1523 RULES-S: a lead word plus one more is the minimum shape
+  if Length(Words) < 2 then Exit;
   Hit:= False;
   for I:= Low(CSqlLike) to High(CSqlLike) do
     if SameText(Words[0], CSqlLike[I]) then Hit:= True;
