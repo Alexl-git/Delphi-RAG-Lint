@@ -498,7 +498,7 @@ begin
       return type -- say no rather than guess from the remainder. }
     if Depth <> 0 then Exit(False);
   end;
-  Result:= Pos(':', Copy(S, i, MaxInt)) > 0;
+  Result:= Copy(S, i, MaxInt).Contains(':');
 end;
 
 function SignatureIsConstructor(const ASig: string): Boolean;

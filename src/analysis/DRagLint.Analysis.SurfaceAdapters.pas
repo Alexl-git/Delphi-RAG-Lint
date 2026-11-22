@@ -297,7 +297,7 @@ begin
 
   { Generic methods are instantiated in the caller. HEURISTIC, and inclusive on
     purpose -- see the CollectInlineBodies remarks. }
-  Result:= Pos('<', pSymbol.QualifiedName) > 0;
+  Result:= pSymbol.QualifiedName.Contains('<');
 end;
 
 function SpanText(const pSourceLines: TArray<string>;

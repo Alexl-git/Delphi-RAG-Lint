@@ -694,7 +694,7 @@ begin
   Result := False;
   if N.IsNull then Exit;
   K := N.NodeType;
-  if (K = 'goto') or (K = 'label') or (K = 'declLabels') or (Pos('asm', K) = 1) then
+  if (K = 'goto') or (K = 'label') or (K = 'declLabels') or K.StartsWith('asm') then
     Exit(True);
   for I := 0 to N.NamedChildCount - 1 do
     if RoutineHasGotoOrAsm(N.NamedChild(I)) then Exit(True);
