@@ -314,7 +314,8 @@ var
   begin
     if AFrom < 1 then AFrom:= 1;
     if ATo > N then ATo:= N;
-    for K:= AFrom to ATo do begin Code[K]:= ' '; NoCom[K]:= COMMENT_MASK; end;
+    for K:= AFrom to ATo do begin Code[K]:= ' ';
+    NoCom[K]:= COMMENT_MASK; end;
   end;
 
   // A STRING LITERAL: gone from the code-only view (a mutation "found" inside
@@ -362,7 +363,8 @@ begin
         Inc(I);
         Continue;
       end;
-      if Ln[I] = '{' then begin InBrace:= True; Blank(I, I); Inc(I); Continue; end;
+      if Ln[I] = '{' then begin InBrace:= True;
+      Blank(I, I); Inc(I); Continue; end;
       if (Ln[I] = '(') and (I < N) and (Ln[I + 1] = '*') then
       begin
         InParenStar:= True;
@@ -383,7 +385,8 @@ begin
         begin
           if Ln[I] = '''' then
           begin
-            if (I < N) and (Ln[I + 1] = '''') then begin Inc(I, 2); Continue; end;
+            if (I < N) and (Ln[I + 1] = '''') then begin Inc(I, 2);
+            Continue; end;
             Inc(I);
             Break;
           end;
@@ -396,7 +399,8 @@ begin
       begin
         J:= I;
         while (J <= N) and IsIdentCh(Ln[J]) do Inc(J);
-        T.Line:= Li; T.Col:= I; T.EndCol:= J - 1;
+        T.Line:= Li;
+        T.Col:= I; T.EndCol:= J - 1;
         T.Text:= LowerCase(Copy(Ln, I, J - I));
         T.IsWord:= True;
         AToks.Add(T);
@@ -409,7 +413,8 @@ begin
       // named nested routine). Nothing else consumes it.
       if CharInSet(Ln[I], ['(', ')', ';', ':']) then
       begin
-        T.Line:= Li; T.Col:= I; T.EndCol:= I;
+        T.Line:= Li;
+        T.Col:= I; T.EndCol:= I;
         T.Text:= Ln[I];
         T.IsWord:= False;
         AToks.Add(T);
@@ -631,7 +636,8 @@ begin
   Pend:= TStack<TPendRoutine>.Create;
   try
     TokenizeBody(ABodyLines, Toks, ACodeOnly, ANoComments);
-    Depth:= 0; Paren:= 0;
+    Depth:= 0;
+    Paren:= 0;
     HeaderSeen:= False;
     for Ti:= 0 to Toks.Count - 1 do
     begin
@@ -676,7 +682,8 @@ begin
           Nx:= Toks[Ti + 1];
           Pr.Named:= Nx.IsWord and (Nx.Text <> 'of');
         end;
-        Pr.Line:= T.Line; Pr.Col:= T.Col; Pr.Paren:= Paren;
+        Pr.Line:= T.Line;
+        Pr.Col:= T.Col; Pr.Paren:= Paren;
         { B3: PUSH, do not overwrite. A nested routine declared inside another
           nested routine's declaration part leaves two headers open at once, and
           the single slot this replaced kept only the inner one -- so the outer
@@ -700,7 +707,8 @@ begin
         if Pend.Count > 0 then
         begin
           Pr:= Pend.Pop;                { the INNERMOST open header }
-          Fr.Line:= Pr.Line; Fr.Col:= Pr.Col; Fr.Depth:= Depth;
+          Fr.Line:= Pr.Line;
+          Fr.Col:= Pr.Col; Fr.Depth:= Depth;
           Stk.Push(Fr);
         end;
         Inc(Depth);
@@ -792,7 +800,8 @@ begin
       begin
         if ARest[I] = '''' then
         begin
-          if (I < N) and (ARest[I + 1] = '''') then begin Inc(I, 2); Continue; end;
+          if (I < N) and (ARest[I + 1] = '''') then begin Inc(I, 2);
+          Continue; end;
           Inc(I);
           Closed:= True;
           Break;
@@ -897,7 +906,8 @@ begin
   P:= Pos('(', T);
   if P = 0 then Exit; // bare Exit; -- no value
   // capture balanced parens content
-  Depth:= 0; StartI:= P + 1;
+  Depth:= 0;
+  StartI:= P + 1;
   for i:= P to Length(T) do
   begin
     if T[i] = '(' then Inc(Depth)

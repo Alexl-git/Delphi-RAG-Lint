@@ -244,7 +244,8 @@ var
   E    : TCallEdge        ;
   QName: string           ;
 begin
-  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
+  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath]));
+  Exit(2); end;
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
   if not RoOk then Exit(2); // stale schema: 2 like every bad --db -- 1 is reserved for an EMPTY answer
@@ -467,7 +468,8 @@ var
   Rows : TArray<TResolvedCaller>;
   R    : TResolvedCaller        ;
 begin
-  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
+  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath]));
+  Exit(2); end;
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
   if not RoOk then Exit(2); // stale schema: 2 like every bad --db -- 1 is reserved for an EMPTY answer
@@ -552,16 +554,20 @@ var
 begin
   ToB:= AArgs.RenameTo; // --to reuses RenameTo (rename + call-path never co-run)
   if (AArgs.CallFrom = '') or (ToB = '') then
-  begin Writeln('Usage: drag-lint call-path --from A --to B [--max-depth N] [--json] --db PATH'); Exit(2); end;
-  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
+  begin Writeln('Usage: drag-lint call-path --from A --to B [--max-depth N] [--json] --db PATH');
+  Exit(2); end;
+  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath]));
+  Exit(2); end;
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
   if not RoOk then Exit(2); // store-open/corruption failure = 2 (distinct from no-path = 1)
 
   FromIds:= ResolveEndpointIds(Store, AArgs.CallFrom);
-  if Length(FromIds) = 0 then begin ReportNotFound(AArgs, Format('symbol not found: %s', [AArgs.CallFrom])); Exit(2); end;
+  if Length(FromIds) = 0 then begin ReportNotFound(AArgs, Format('symbol not found: %s', [AArgs.CallFrom]));
+  Exit(2); end;
   ToIds:= ResolveEndpointIds(Store, ToB);
-  if Length(ToIds) = 0 then begin ReportNotFound(AArgs, Format('symbol not found: %s', [ToB])); Exit(2); end;
+  if Length(ToIds) = 0 then begin ReportNotFound(AArgs, Format('symbol not found: %s', [ToB]));
+  Exit(2); end;
 
   var Cap: Integer:= AArgs.MaxDepth;
   if Cap <= 0 then Cap:= 20;
@@ -578,14 +584,16 @@ begin
 
     // Seed the BFS with every id A resolves to (multi-source). A source that is
     // itself a target = the trivial length-0 path.
-    Found:= False; Hit:= 0;
+    Found:= False;
+    Hit:= 0;
     for Cur in FromIds do
       if not Visited.ContainsKey(Cur) then
       begin
         Visited.Add(Cur, True);
         Depths.AddOrSetValue(Cur, 0);
         Frontier.Enqueue(Cur);
-        if ToSet.ContainsKey(Cur) and not Found then begin Found:= True; Hit:= Cur; end;
+        if ToSet.ContainsKey(Cur) and not Found then begin Found:= True;
+        Hit:= Cur; end;
       end;
 
     while (not Found) and (Frontier.Count > 0) do
@@ -602,7 +610,8 @@ begin
         Parent.AddOrSetValue(E.TargetSymbolId, Cur);
         Depths.AddOrSetValue(E.TargetSymbolId, D + 1);
         if ToSet.ContainsKey(E.TargetSymbolId) then
-        begin Found:= True; Hit:= E.TargetSymbolId; Break; end;
+        begin Found:= True;
+        Hit:= E.TargetSymbolId; Break; end;
         Frontier.Enqueue(E.TargetSymbolId);
       end; // for E
       { RB-5 P1: control also flows from an interface method into the methods
@@ -675,8 +684,10 @@ begin
     end;
     Result:= 0;
   finally
-    ToSet.Free; Visited.Free; Parent.Free; Depths.Free;
-    Frontier.Free; PathIds.Free; QNames.Free;
+    ToSet.Free;
+    Visited.Free; Parent.Free; Depths.Free;
+    Frontier.Free;
+    PathIds.Free; QNames.Free;
   end; // try
 end; // function
 
@@ -807,13 +818,16 @@ var
   Rid    : Int64                     ;
 begin
   if AArgs.QName = '' then
-  begin Writeln('Usage: drag-lint callgraph --qname X [--direction callers|callees] [--depth N] [--json|--format text|json] --db PATH'); Exit(2); end;
-  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
+  begin Writeln('Usage: drag-lint callgraph --qname X [--direction callers|callees] [--depth N] [--json|--format text|json] --db PATH');
+  Exit(2); end;
+  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath]));
+  Exit(2); end;
 
   Dir:= LowerCase(Trim(AArgs.Direction));
   if Dir = '' then Dir:= 'callees';
   if (Dir <> 'callees') and (Dir <> 'callers') then
-  begin Writeln(Format('ERROR: --direction must be callers|callees (got "%s")', [AArgs.Direction])); Exit(2); end;
+  begin Writeln(Format('ERROR: --direction must be callers|callees (got "%s")', [AArgs.Direction]));
+  Exit(2); end;
   Callees:= (Dir = 'callees');
 
   Depth:= AArgs.Depth;
@@ -837,7 +851,8 @@ begin
   if not RoOk then Exit(2); // store-open/corruption failure = 2 (distinct from unresolved-qname = 1)
 
   RootIds:= ResolveEndpointIds(Store, AArgs.QName);
-  if Length(RootIds) = 0 then begin ReportNotFound(AArgs, Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
+  if Length(RootIds) = 0 then begin ReportNotFound(AArgs, Format('symbol not found: %s', [AArgs.QName]));
+  Exit(1); end;
 
   if AArgs.AsJson or (Fmt = 'json') then
   begin
@@ -956,8 +971,10 @@ var
   begin
     for Kid in ANode.Callers do
     begin
-      if ACalleeTree then begin From:= ANode.QName; Dest:= Kid.QName;   end
-      else                begin From:= Kid.QName;   Dest:= ANode.QName; end;
+      if ACalleeTree then begin From:= ANode.QName;
+      Dest:= Kid.QName;   end
+      else                begin From:= Kid.QName;
+      Dest:= ANode.QName; end;
       if AIsDot then ABuf.AppendLine(Format('  "%s" -> "%s";', [From, Dest]))
       else ABuf.AppendLine(Format('  %s --> %s', [SanitizeId(From), SanitizeId(Dest)]));
       if not Kid.Cycle then RenderNodeChart(Kid, ABuf, AIsDot, ACalleeTree);
@@ -980,7 +997,8 @@ var
 begin
   if not ExplicitDbsExist(AArgs, 'reverse-calltree') then Exit(2);
   if AArgs.QName = '' then
-  begin ReportNotFoundFor(AArgs.AsJson or SameText(AArgs.Format, 'json'), 'Usage: drag-lint reverse-calltree --qname X [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH'); Exit(2); end;
+  begin ReportNotFoundFor(AArgs.AsJson or SameText(AArgs.Format, 'json'), 'Usage: drag-lint reverse-calltree --qname X [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH');
+  Exit(2); end;
 
   Fmt:= LowerCase(Trim(AArgs.Format));
 
@@ -997,7 +1015,8 @@ begin
   if (Dir <> 'callers') and (Dir <> 'callees') then Dir:= 'callers';
 
   Dbs:= ResolveConsumerDbs(AArgs);
-  if Length(Dbs) = 0 then begin ReportNotFoundFor(AArgs.AsJson or (Fmt = 'json'), 'ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
+  if Length(Dbs) = 0 then begin ReportNotFoundFor(AArgs.AsJson or (Fmt = 'json'), 'ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.');
+  Exit(2); end;
 
   // Multi-db root resolution: use the FIRST db whose ResolveEndpointIds(qname)
   // is non-empty (mirrors DoHover's multi-db precedent). Exit 1 only if NO db
@@ -1032,8 +1051,10 @@ begin
     ReportNotFoundFor(AArgs.AsJson or (Fmt = 'json'), Format('symbol not found: %s', [AArgs.QName]));
     Exit(1);
   end;
-  if Store = nil then begin ReportNotFoundFor(AArgs.AsJson or (Fmt = 'json'), 'ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
-  if Length(RootIds) = 0 then begin ReportNotFoundFor(AArgs.AsJson or (Fmt = 'json'), Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
+  if Store = nil then begin ReportNotFoundFor(AArgs.AsJson or (Fmt = 'json'), 'ERROR: no readable drag-lint index among --db path(s)');
+  Exit(2); end;
+  if Length(RootIds) = 0 then begin ReportNotFoundFor(AArgs.AsJson or (Fmt = 'json'), Format('symbol not found: %s', [AArgs.QName]));
+  Exit(1); end;
 
   Opts.Depth:= Depth;
 
@@ -1201,7 +1222,8 @@ var
 begin
   if not ExplicitDbsExist(AArgs, 'butterfly') then Exit(2);
   if AArgs.QName = '' then
-  begin Writeln('Usage: drag-lint butterfly --qname X [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH'); Exit(2); end;
+  begin Writeln('Usage: drag-lint butterfly --qname X [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH');
+  Exit(2); end;
 
   Fmt:= LowerCase(Trim(AArgs.Format));
   if Fmt = '' then Fmt:= 'dot'; // chart verb -- default dot (unlike reverse-calltree's text default)
@@ -1210,7 +1232,8 @@ begin
   if Depth < 0 then Depth:= 0;
 
   Dbs:= ResolveConsumerDbs(AArgs);
-  if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
+  if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.');
+  Exit(2); end;
 
   // Multi-db root resolution: first db whose ResolveEndpointIds(qname) is
   // non-empty wins. AnyDbOpened tracks whether at least one --db path opened
@@ -1244,7 +1267,8 @@ begin
       Break;
     end;
   end;
-  if not AnyDbOpened then begin Writeln('ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
+  if not AnyDbOpened then begin Writeln('ERROR: no readable drag-lint index among --db path(s)');
+  Exit(2); end;
   if Store = nil then
   begin
     ReportNotFoundFor(AArgs.AsJson or SameText(AArgs.Format, 'json'), Format('symbol not found: %s', [AArgs.QName]));

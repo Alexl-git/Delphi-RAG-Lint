@@ -151,7 +151,8 @@ begin
     for IncPath in Sec.Include do
     begin
       IncNorm:= IncludeTrailingPathDelimiter( TPath.GetFullPath(IncPath)).ToLower;
-      if CwdNorm.StartsWith(IncNorm) and (Length(IncNorm) > BestLen) then begin BestLen:= Length(IncNorm); BestInc:= IncPath; end;
+      if CwdNorm.StartsWith(IncNorm) and (Length(IncNorm) > BestLen) then begin BestLen:= Length(IncNorm);
+      BestInc:= IncPath; end;
     end;
   end;
 
@@ -329,7 +330,8 @@ var
   D        : string                                    ;
 begin
   // User supplied explicit --db: honour without modification.
-  if Length(AArgs.DbPaths) > 0 then begin Result:= AArgs.DbPaths; Exit; end;
+  if Length(AArgs.DbPaths) > 0 then begin Result:= AArgs.DbPaths;
+  Exit; end;
 
   ProjDb   := '';
   Claimants:= nil;

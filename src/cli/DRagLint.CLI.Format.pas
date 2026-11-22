@@ -89,7 +89,8 @@ begin
   { Read-WRITE open (purge MUTATES) -- same path as index/rename/safe-delete, NOT
     the query_only OpenReadOnlyStore used by read verbs. Migrate ensures the
     schema (incl. the symbols.kind values) is current before we touch it. }
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath); Store.Migrate;
+  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store.Migrate;
   Removed:= Store.PurgeLocals;
   Store:= nil; { close the connection so the VACUUM's file resize is flushed before we stat }
   SizeAfter:= TFile.GetSize(AArgs.DbPath);
@@ -141,8 +142,10 @@ var
 begin
   Target:= AArgs.Target;
   if Target = '' then Target:= AArgs.QName; // fallback: reuse qname slot
-  if Target = '' then begin Writeln('Usage: drag-lint format <file> [--yadf-path PATH] [--dry-run|--diff]'); Exit (2 ); end;
-  if not FileExists(Target) then begin Writeln(Format('File not found: %s', [Target])); Exit(2); end;
+  if Target = '' then begin Writeln('Usage: drag-lint format <file> [--yadf-path PATH] [--dry-run|--diff]');
+  Exit (2 ); end;
+  if not FileExists(Target) then begin Writeln(Format('File not found: %s', [Target]));
+  Exit(2); end;
 
   if AArgs.ShowDiff then Mode:= fmDiff
   else if AArgs.DryRun then Mode:= fmDryRun

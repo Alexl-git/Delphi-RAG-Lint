@@ -82,7 +82,8 @@ var
   var
     Key: string;
   begin
-    ADesc:= ''; AValues:= '';
+    ADesc:= '';
+    AValues:= '';
     Key:= LowerCase(ATable) + '.' + LowerCase(AColumn);
 
     if Key = 'refs.kind' then

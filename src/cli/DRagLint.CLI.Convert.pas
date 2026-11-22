@@ -464,7 +464,8 @@ begin
   // not a silent fall-through) so a typo does not silently emit ALL leaves.
   MinVis:= LowerCase(Trim(AArgs.MinVisibility));
   if (MinVis <> '') and (MinVis <> 'published') and (MinVis <> 'public') then
-  begin Writeln(Format('ERROR: --min-visibility must be published|public (got "%s")', [AArgs.MinVisibility])); Exit(2); end;
+  begin Writeln(Format('ERROR: --min-visibility must be published|public (got "%s")', [AArgs.MinVisibility]));
+  Exit(2); end;
 
   // --depth > the --rules book's #depth > 5. Before 1.20.6 this read AArgs.Depth,
   // whose parse default is 3, so a proptree with no --depth ran at 3, not the
@@ -480,7 +481,8 @@ begin
   if ProgMs > 0 then Opts.OnProgress:= MakeProgressWriter('proptree');
 
   Dbs:= ResolveConsumerDbs(AArgs);
-  if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
+  if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.');
+  Exit(2); end;
 
   // Multi-db resolution: use the FIRST db whose qname resolves to a class
   // (RootType non-empty). Exit 2 if no --db is readable; exit 1 if none resolve.
@@ -517,7 +519,8 @@ begin
       Break;
     end;
   end;
-  if Store = nil then begin Writeln('ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
+  if Store = nil then begin Writeln('ERROR: no readable drag-lint index among --db path(s)');
+  Exit(2); end;
   if not Found then
   begin
     ReportNotFoundFor(AArgs.AsJson or SameText(AArgs.Format, 'json'), Format('class not found: %s', [AArgs.QName]));
@@ -808,13 +811,15 @@ begin
     Exit(2);
   end;
   if not TFile.Exists(AArgs.RulesFile) then
-  begin Writeln(Format('ERROR: rules file not found: %s', [AArgs.RulesFile])); Exit(2); end;
+  begin Writeln(Format('ERROR: rules file not found: %s', [AArgs.RulesFile]));
+  Exit(2); end;
 
   try
     RulesText:= TFile.ReadAllText(AArgs.RulesFile);
   except
     on Ex: Exception do
-    begin Writeln(Format('ERROR: cannot read rules file: %s (%s)', [AArgs.RulesFile, Ex.Message])); Exit(2); end;
+    begin Writeln(Format('ERROR: cannot read rules file: %s (%s)', [AArgs.RulesFile, Ex.Message]));
+    Exit(2); end;
   end;
 
   RuleSet:= ParseConversionRules(RulesText);
@@ -970,16 +975,19 @@ begin
     Exit(2);
   end;
   if not TFile.Exists(AArgs.FromBlockFile) then
-  begin Writeln('from-block not found: ' + AArgs.FromBlockFile); Exit(2); end;
+  begin Writeln('from-block not found: ' + AArgs.FromBlockFile);
+  Exit(2); end;
   if not TFile.Exists(AArgs.RulesFile) then
-  begin Writeln('rules not found: ' + AArgs.RulesFile); Exit(2); end;
+  begin Writeln('rules not found: ' + AArgs.RulesFile);
+  Exit(2); end;
 
   try
     BlockText:= TFile.ReadAllText(AArgs.FromBlockFile);
     RulesText:= TFile.ReadAllText(AArgs.RulesFile);
   except
     on Ex: Exception do
-    begin Writeln(Format('ERROR: cannot read input file (%s)', [Ex.Message])); Exit(2); end;
+    begin Writeln(Format('ERROR: cannot read input file (%s)', [Ex.Message]));
+    Exit(2); end;
   end;
 
   Rules:= ParseConversionRules(RulesText);
@@ -1294,7 +1302,8 @@ begin
   Surface:= LowerCase(Trim(AArgs.Surface));
   if Surface = '' then Surface:= 'dfm';
   if (Surface <> 'dfm') and (Surface <> 'pas') then
-  begin Writeln(Format('ERROR: --surface must be dfm|pas (got "%s")', [AArgs.Surface])); Exit(2); end;
+  begin Writeln(Format('ERROR: --surface must be dfm|pas (got "%s")', [AArgs.Surface]));
+  Exit(2); end;
 
   if not ResolveTreeDepth(AArgs, Depth) then Exit(2); // --depth > #depth > 5
   if not ResolveProgressInterval(AArgs, ProgMs) then Exit(2);
@@ -1305,7 +1314,8 @@ begin
   if ProgMs > 0 then Opts.OnProgress:= MakeProgressWriter('convert-scaffold');
 
   Dbs:= ResolveConsumerDbs(AArgs);
-  if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
+  if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.');
+  Exit(2); end;
 
   // Use the FIRST db that resolves BOTH types (ids are per-DB, so both trees
   // must come from the same store). Exit 2 if no --db is readable.
@@ -1335,14 +1345,18 @@ begin
       TreeCache.Free;
     end;
     if (CF.RootType <> '') and (CT.RootType <> '') then
-    begin FromTree:= CF; ToTree:= CT; Break; end;
+    begin FromTree:= CF;
+    ToTree:= CT; Break; end;
     // Keep the first db's partial trees so we can report which type failed.
     if FromTree.RootType = '' then FromTree:= CF;
     if ToTree.RootType   = '' then ToTree  := CT;
   end;
-  if not HaveStore then begin Writeln('ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
-  if FromTree.RootType = '' then begin Writeln(Format('class not found: %s', [AArgs.CallFrom])); Exit(1); end;
-  if ToTree.RootType   = '' then begin Writeln(Format('class not found: %s', [AArgs.RenameTo])); Exit(1); end;
+  if not HaveStore then begin Writeln('ERROR: no readable drag-lint index among --db path(s)');
+  Exit(2); end;
+  if FromTree.RootType = '' then begin Writeln(Format('class not found: %s', [AArgs.CallFrom]));
+  Exit(1); end;
+  if ToTree.RootType   = '' then begin Writeln(Format('class not found: %s', [AArgs.RenameTo]));
+  Exit(1); end;
 
   Sb:= TStringBuilder.Create;
   try

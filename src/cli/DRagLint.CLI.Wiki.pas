@@ -140,7 +140,8 @@ begin
 
   Hits:= AStore.FindSymbolsByQualifiedName(AEntry);
   if Length(Hits) = 0 then Hits:= AStore.FindSymbolsByExactName(AEntry);
-  if Length(Hits) > 0 then begin AHit:= Hits[0]; Exit(True); end;
+  if Length(Hits) > 0 then begin AHit:= Hits[0];
+  Exit(True); end;
 
   { Dotted but not fully qualified: look the leaf up and keep only the symbols
     whose qualified name actually ENDS with what was written, so

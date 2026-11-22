@@ -2024,13 +2024,15 @@ begin
   try
     Result:= TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}False);
   except  // dl:ok bare-except@7c42 -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
-    Result:= nil; Exit; // writable open failed (locked / read-only file) -> caller falls back
+    Result:= nil;
+    Exit; // writable open failed (locked / read-only file) -> caller falls back
   end;
   if Result.IsSchemaCurrent(Found, Expected) then AOk:= True
   { ErrOutput for the same reason as OpenReadOnlyStore's twin above: proptree
     opens WRITABLE by default, so this -- not that one -- is the line a stale
     `proptree --db <old>` actually printed, and it printed it onto stdout. }
-  else begin AOk:= False; Writeln(ErrOutput, Format('index schema v%d < v%d: run "drag-lint index <dir> --db <db>" to migrate', [Found, Expected])); end;
+  else begin AOk:= False;
+  Writeln(ErrOutput, Format('index schema v%d < v%d: run "drag-lint index <dir> --db <db>" to migrate', [Found, Expected])); end;
 end;
 
 { XERJ item 2: the one place a capped list says so. AOmitted is the number of
