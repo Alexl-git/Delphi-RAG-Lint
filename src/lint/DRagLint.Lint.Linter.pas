@@ -12,12 +12,8 @@ uses
   , TreeSitter
   , TreeSitterLib
   , DRagLint.Core  .Model
-  , DRagLint.Core  .Encoding
-  , DRagLint.Parser.Delphi13
   , DRagLint.Lint  .QueryRules
   , DRagLint.Lint  .ReviewMarker { REVIEW_MARK -- a tool-written marker is not a hand-written inline comment }
-  , DRagLint.Lint  .ExceptionNaming { stage 3: the message -> class-name derivation }
-  , DRagLint.Diagnostics.ParseCache { ApplyPreprocess -- ONE transform shared with the AST checks }
   ;
 
 type
@@ -399,6 +395,10 @@ function NormalizeExcMessage(const AMsg: string): string;
 implementation
 
 uses
+  DRagLint.Core.Encoding,
+  DRagLint.Parser.Delphi13,
+  DRagLint.Lint.ExceptionNaming,
+  DRagLint.Diagnostics.ParseCache,
   System.Diagnostics; { TStopwatch -- the parse-vs-query split below }
 
 { SESSION 25 B2 follow-up, DIAGNOSTIC ONLY. `Linter.LintFile` is 56.17 s of

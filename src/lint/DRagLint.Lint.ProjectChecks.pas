@@ -20,8 +20,6 @@ uses
   , System  .Generics.Collections
   , DRagLint.Core    .Model
   , DRagLint.Core    .Interfaces
-  , DRagLint.Lint    .ProjectChecks.Parse
-  , DRagLint.Project .Resolver
   ;
 
 type
@@ -148,6 +146,8 @@ uses
   , DRagLint.Project.TargetStudio { ResolveTargetStudio: the project's Delphi, for the .dcu search (GH #13) }
   , DRagLint.Storage.FileMembership { ConnectReadOnly: the shared reader open }
   , System.RegularExpressions { v151 EXCL: CheckNonUsesLinks text scan }
+  , DRagLint.Lint.ProjectChecks.Parse
+  , DRagLint.Project.Resolver
   ;
 
 { The scoped closure list arrives LOWERCASED, so a unit reported from it read as

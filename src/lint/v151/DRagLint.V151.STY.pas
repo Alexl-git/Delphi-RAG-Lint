@@ -11,7 +11,6 @@ uses
   System.SysUtils
   , System.Generics.Collections
   , DRagLint.Core.Model
-  , DRagLint.Core.Encoding
   , DRagLint.V151.Api
   ;
 
@@ -118,6 +117,7 @@ implementation
 uses
   System.IOUtils
   , DRagLint.V151.STY.Support
+  , DRagLint.Core.Encoding
   ;
 
 const

@@ -13,18 +13,14 @@ uses
   System.SysUtils
   , System.Classes
   , System.StrUtils { StartsText / PosEx -- the .dfm text scan in global-only-uses-edge }
-  , DRagLint.Lint.ReviewMarker { MarkerBearingLines -- which // is reached in code state }
   , System.DateUtils { DateTimeToUnix / UnixToDateTime -- R2 dates against the CURRENT disk mtime, not the stored one }
   , System.IOUtils
   , System.JSON
   , System.Diagnostics { TStopwatch -- DRAGLINT_PROFILE per-rule attribution in Run }
   , System.Generics.Collections
   , System.Generics.Defaults
-  , TreeSitter
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
-  , DRagLint.Index.Glob
-  , DRagLint.Diagnostics.ParseCache
   , DRagLint.Lint.SharedUnit { ProjectsOf -- unused-public-symbol must not call a
                                shared unit's API dead on one project's index }
   , DRagLint.Lint.SharedScope { TSharedScope -- a shared unit is judged by every project that lists it }
@@ -239,6 +235,10 @@ function WithCycleFixPointer(const pMessage, pProject, pStem: string): string;
 implementation
 
 uses
+  DRagLint.Lint.ReviewMarker,
+  TreeSitter,
+  DRagLint.Index.Glob,
+  DRagLint.Diagnostics.ParseCache,
   DRagLint.Core.Encoding, DRagLint.Core.FileTime,
   DRagLint.Core.Versions, { CompareDottedVersions -- the resolver-version gate of InitSectionInfo (145 lane lf) }
   DRagLint.Report.CycleEdge, { BareUsesBinding / ProjectUnitScopes -- circular-uses binds a bare

@@ -16,11 +16,9 @@ uses
   , System.Diagnostics { TStopwatch -- the phase-attribution counters below }
   , System.Generics.Collections
   , System.Generics.Defaults { TComparer -- the deterministic emit order below }
-  , TreeSitter
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   , DRagLint.Lint.Config
-  , DRagLint.Diagnostics.ParseCache
   ;
 
 type
@@ -81,6 +79,8 @@ type
 implementation
 
 uses
+  TreeSitter,
+  DRagLint.Diagnostics.ParseCache,
   System.Math,
   DRagLint.Core.ForwardStub { PairForwardStubs -- BuildInventory }
   ;
