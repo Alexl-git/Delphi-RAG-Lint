@@ -770,7 +770,9 @@
 #   2026-11-19 1.29.0 -> 1.30.0-alpha (1.52.1 INCR18): closure_cache + scoped purity re-derivation. Rides the 1.42.0 extractor re-parse.
 #   2026-11-20 v1522 INT re-pin at the same version (guard was red on main b8ea28c19 since 1.52.1): IDXPERF 98199e908 Storage.SQLite purity MemberNamesOf cache + bulk symbol_trigrams fill (index_db_diff IDENTICAL), SLZ-MARK dl:ok comment edits in CallResolver/Query.Callers. No resolve output change; no bump.
 #   Superseded: 1.30.0-alpha|49289cf04d8d66b85a226333f726bcc8e6ba86b8c83b58f2e65232941e875873
-1.30.0-alpha|a3713c89be28338f7d2d50c4a41a853d0ae46e0a65262041937ebcaeb715803a
+#   Superseded: 1.30.0-alpha|a3713c89be28338f7d2d50c4a41a853d0ae46e0a65262041937ebcaeb715803a
+#   2026-11-21 v1523 INT-W1 1.30.0 -> 1.31.0-alpha (ONE bump for 1.52.3; later v1523 lanes that report a resolver change re-pin hash-only at 1.31.0): EXT-RES-TAILS 655073dd1 -- var X := L[K] types X through a default indexer declared on an ANCESTOR of L's type (CallResolver), new call edges / external targets bind. Re-resolve only (index --resolve-only), no extractor bump.
+1.31.0-alpha|b6ebb546e29f1355560302d7fcaf54e53f805082f20e47a18d50e76f16892959
 #   2026-11-06 int2: hash moved WITHOUT a bump from 631322c4: the dl:ok comment on ResolveCallTargets re-stamped by the lint sweep, no code change.
 # superseded: 1.19.0-alpha|e4c14c16d87b21940e6ce6017456b8446a5cc516e342b72b816e3e161612ecba
 #   2026-11-06 1.19.0 -> 1.20.0-alpha (lanes facts + rename): ref_types (static type of a reference), ref_receivers (receiver link of a ref), references in initialization / finalization attributed to the section symbol. Additive, no SCHEMA_VERSION move. Remedy: index --all --resolve-only.

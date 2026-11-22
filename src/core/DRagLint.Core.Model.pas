@@ -572,7 +572,11 @@ const
   /// <para>1.29.0-alpha -&gt; 1.30.0-alpha (2026-11-19, 1.52.1, rides the 1.42.0 extractor
   /// re-parse): the compile-closure walk reuses each unit's scan (closure_cache) and a scoped
   /// resolve pass re-derives only what it moved in the purity stage (lane INCR18, GH #18).</para>
-  DRAGLINT_RESOLVER_VERSION = '1.30.0-alpha';
+  /// <para>1.30.0-alpha -&gt; 1.31.0-alpha (2026-11-21, 1.52.3, re-resolve only, no extractor
+  /// re-parse): var X := L[K] types X through a default indexer declared on an ANCESTOR of L's
+  /// type (library TList / TObjectList / TDictionary or an own generic base, at most 8 parents),
+  /// so members of X bind (lane EXT-RES-TAILS). Remedy: index --resolve-only per DB.</para>
+  DRAGLINT_RESOLVER_VERSION = '1.31.0-alpha';
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
   /// the ghost-compile journal that first created the folder.</summary>

@@ -1270,4 +1270,6 @@
 #   2026-11-20 v1522 INCRPP (INBOX-incremental-preproc-inputs): hash-only re-pin, no bump. Indexer.RememberIncludeSites also records a host's unresolved include candidates ('?'-marked) and the project units its IFs read into the schema_meta file_includes list, and the up-to-date test (Storage RecordedIncludesChanged) re-parses the host when one appears / changes; PPUnitSource gains IPPUnitFiles.UnitFilePath. Decides WHICH files an incremental run re-parses -- no parsed or emitted row of a parse changes.
 # superseded (hash-only): 1.42.0-alpha|2ab4b5beeeeb559b09abd10b75bf1b4d5535785c6e572e3bdef0f6130ec1eaee
 #   2026-11-20 v1522 INT: merges of lane/v1522-tails (Index.Manifest + CLI: one stderr warning when no drag-lint.json is found) and lane/v1522-q5 (CLI: unit-not-in-dpr library-root helper) -- no parse or emitted row changes; hash-only re-pin, no bump.
-1.42.0-alpha|98dc9a998237f050c02ecc4e7ff3c572a9faddb1d7fad63f53791e3f77af8581
+# superseded (hash-only): 1.42.0-alpha|98dc9a998237f050c02ecc4e7ff3c572a9faddb1d7fad63f53791e3f77af8581
+#   2026-11-21 v1523 INT-W1: merge of lane/v1523-ext-res-tails 655073dd1 -- src\index\DRagLint.Index.CallResolver.pas changed only the RESOLVE pass (default indexer on an ancestor types X := L[K]); covered by the ONE resolver bump 1.30.0 -> 1.31.0-alpha. No parse or emitted row changes; hash-only re-pin, no extractor bump.
+1.42.0-alpha|dbb824ce39f14ffc6a1b956389362337aff6ed858c693f84961743d193459447
