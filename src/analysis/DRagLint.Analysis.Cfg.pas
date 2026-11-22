@@ -358,7 +358,8 @@ begin
   Result := '';
   if N.IsNull then Exit;
   S := Integer(N.StartByte);
-  E := Integer(N.EndByte); L := E - S;
+  E := Integer(N.EndByte);
+  L := E - S;
   if (L <= 0) or (S < 0) or (E > Length(ASrc)) then Exit;
   Result := TEncoding.UTF8.GetString(ASrc, S, L);
 end;
@@ -609,7 +610,8 @@ end;
 destructor TCfgBlock.Destroy;
 begin
   Items.Free;
-  Succ.Free; Pred.Free;
+  Succ.Free;
+  Pred.Free;
   inherited;
 end;
 
@@ -916,7 +918,8 @@ end;
 constructor TBuilderState.Create(ACfg: TCfg);
 begin
   inherited Create;
-  Cfg := ACfg; Loops := TStack<TLoopCtx>.Create; WithDepth := 0;
+  Cfg := ACfg;
+  Loops := TStack<TLoopCtx>.Create; WithDepth := 0;
   Finallys := TList<TTSNode>.Create;
   CopyDepth := 0;
   DivertBlocks := TDictionary<Integer, Boolean>.Create;
@@ -1168,7 +1171,8 @@ begin
     if not (Cfg.PruneConstLoops and IsBoolLiteral(Cond, Cfg.Src, 'true')) then
       Cfg.Blocks[HdrIdx].AddSucc(FollowIdx);
     Ctx.ContinueIdx := HdrIdx;
-    Ctx.BreakIdx := FollowIdx; Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
+    Ctx.BreakIdx := FollowIdx;
+    Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
     TestIdx := EmitStmt(BodyIdx, ANode.ChildByField('body'));
     if TestIdx >= 0 then Cfg.Blocks[TestIdx].AddSucc(HdrIdx); { back-edge }
     Loops.Pop;
@@ -1216,7 +1220,8 @@ begin
     else
       Cfg.Blocks[ACur].AddSucc(HdrIdx);
     Ctx.ContinueIdx := HdrIdx;
-    Ctx.BreakIdx := FollowIdx; Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
+    Ctx.BreakIdx := FollowIdx;
+    Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
     TestIdx := EmitStmt(BodyIdx, ANode.ChildByField('body'));
     if TestIdx >= 0 then Cfg.Blocks[TestIdx].AddSucc(HdrIdx);
     Loops.Pop;
@@ -1249,7 +1254,8 @@ begin
     Cfg.Blocks[HdrIdx].AddSucc(BodyIdx);
     Cfg.Blocks[HdrIdx].AddSucc(FollowIdx);
     Ctx.ContinueIdx := HdrIdx;
-    Ctx.BreakIdx := FollowIdx; Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
+    Ctx.BreakIdx := FollowIdx;
+    Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
     TestIdx := EmitStmt(BodyIdx, ANode.ChildByField('body'));
     if TestIdx >= 0 then Cfg.Blocks[TestIdx].AddSucc(HdrIdx);
     Loops.Pop;
@@ -1269,7 +1275,8 @@ begin
     if not (Cfg.PruneConstLoops and IsBoolLiteral(Cond, Cfg.Src, 'false')) then
       Cfg.Blocks[TestIdx].AddSucc(FollowIdx); { loop exits }
     Ctx.ContinueIdx := TestIdx;
-    Ctx.BreakIdx := FollowIdx; Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
+    Ctx.BreakIdx := FollowIdx;
+    Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
     BodyAfter := EmitStmt(BodyIdx, ANode.ChildByField('body'));
     if BodyAfter >= 0 then Cfg.Blocks[BodyAfter].AddSucc(TestIdx);
     Loops.Pop;

@@ -1060,7 +1060,8 @@ var
     Result:= '';
     if N.IsNull then Exit;
     S:= Integer(N.StartByte);
-    E:= Integer(N.EndByte); L:= E - S;
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;

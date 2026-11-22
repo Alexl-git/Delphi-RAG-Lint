@@ -1627,7 +1627,8 @@ var
   Pair: TPair<string, Integer>;
 begin
   Result:= nil;
-  AResolvedUnit:= ''; AAlreadyUsed:= False;
+  AResolvedUnit:= '';
+  AAlreadyUsed:= False;
   AReason:= '';
 
   { 1. resolve the best declaring unit -- against ANameStore, which may be a
@@ -1758,7 +1759,8 @@ begin
       Edit.FilePath:= AInFile;
       Edit.Kind:= tekInsertLines;
       Edit.Line:= KeywordLine;
-      Edit.Col:= 0; Edit.EndLine:= 0;
+      Edit.Col:= 0;
+      Edit.EndLine:= 0;
       Edit.Text:= ''#13#10'uses ' + Best + ';';
       Result:= [Edit];
     end;
@@ -1822,7 +1824,8 @@ begin
       E.FilePath:= Path;
       E.Kind:= tekDeleteLines;
       E.Line:= Sym.ImplStartLine;
-      E.EndLine:= Sym.ImplEndLine; E.Col:= 0; E.Text:= '';
+      E.EndLine:= Sym.ImplEndLine;
+      E.Col:= 0; E.Text:= '';
       Edits.Add(E);
     end;
     if (Sym.StartLine > 0) and (Sym.EndLine >= Sym.StartLine) then
@@ -1830,7 +1833,8 @@ begin
       E.FilePath:= Path;
       E.Kind:= tekDeleteLines;
       E.Line:= Sym.StartLine;
-      E.EndLine:= Sym.EndLine; E.Col:= 0; E.Text:= '';
+      E.EndLine:= Sym.EndLine;
+      E.Col:= 0; E.Text:= '';
       Edits.Add(E);
     end;
     Result:= Edits.ToArray;

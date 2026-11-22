@@ -359,7 +359,8 @@ begin
   Result:= '';
   if N.IsNull then Exit;
   S:= Integer(N.StartByte);
-  E:= Integer(N.EndByte); L:= E - S;
+  E:= Integer(N.EndByte);
+  L:= E - S;
   if (L <= 0) or (S < 0) or (E > Length(ASrc)) then Exit;
   Result:= TEncoding.UTF8.GetString(ASrc, S, L);
 end;
@@ -1372,7 +1373,8 @@ begin
     Result.Refuse:= '';
   finally
     Defs.Free;
-    Inputs.Free; Internals.Free; Outputs.Free;
+    Inputs.Free;
+    Internals.Free; Outputs.Free;
   end;
 end;
 
@@ -1817,7 +1819,8 @@ begin
 
     CV:= ClassifyVars(Sel, Cfg, Vars, Src);
     if CV.Refuse <> '' then begin ARefuse:= CV.Refuse;
-    Result:= nil; Exit; end;
+    Result:= nil;
+    Exit; end;
 
     { ----- collision check in the target scope ----- }
     if Sel.IsMethod then

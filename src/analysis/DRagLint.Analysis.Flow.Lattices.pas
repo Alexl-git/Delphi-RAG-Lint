@@ -1241,7 +1241,8 @@ begin
   Result := '';
   if N.IsNull then Exit;
   S := Integer(N.StartByte);
-  E := Integer(N.EndByte); L := E - S;
+  E := Integer(N.EndByte);
+  L := E - S;
   if (L <= 0) or (S < 0) or (E > Length(ASrc)) then Exit;
   Result := TEncoding.UTF8.GetString(ASrc, S, L);
 end;
@@ -1371,7 +1372,8 @@ var V: TRoutineVar;
 begin
   if (AIdx < 0) or (AIdx >= FVars.Count) then Exit;
   V := FVars[AIdx];
-  V.Captured := True; FVars[AIdx] := V;
+  V.Captured := True;
+  FVars[AIdx] := V;
 end;
 
 { The bare, lower-cased routine name a body can assign to set Result, from the
@@ -1643,7 +1645,8 @@ begin
     begin
       RV := Default(TRoutineVar);
       RV.Name := 'result';
-      RV.Display := 'Result'; RV.Kind := vkResult; RV.TypeText := Trim(NodeStr(Ret, ASrc));
+      RV.Display := 'Result';
+      RV.Kind := vkResult; RV.TypeText := Trim(NodeStr(Ret, ASrc));
       RV.DeclLine := Integer(Header.StartPoint.Row) + 1;
       RV.DeclCol  := Integer(Header.StartPoint.Column) + 1;
       Tbl.Add(RV);
@@ -1681,7 +1684,8 @@ function LeftmostBaseVar(const N: TTSNode; const ASrc: TBytes; AVars: TRoutineVa
 var Cur, Nxt, IdN: TTSNode; Guard: Integer;
 begin
   Result := -1;
-  Cur := N; Guard := 0;
+  Cur := N;
+  Guard := 0;
   while (not Cur.IsNull) and (Guard < 32) do
   begin
     Inc(Guard);
@@ -2243,7 +2247,8 @@ end;
 
 constructor TFreedState.Create(AVars: TRoutineVarTable; const ASrc: TBytes);
 begin inherited Create;
-FVars := AVars; FSrc := ASrc; end;
+FVars := AVars;
+FSrc := ASrc; end;
 
 function TFreedState.Direction: TFlowDir; begin Result := fdForward; end;
 
@@ -2330,7 +2335,8 @@ end;
 
 constructor TLiveness.Create(AVars: TRoutineVarTable; const ASrc: TBytes);
 begin inherited Create;
-FVars := AVars; FSrc := ASrc; end;
+FVars := AVars;
+FSrc := ASrc; end;
 
 function TLiveness.Direction: TFlowDir; begin Result := fdBackward; end;
 
@@ -2592,7 +2598,8 @@ end;
 
 constructor TEscape.Create(AVars: TRoutineVarTable; const ASrc: TBytes; AOwns: TCallArgOwns);
 begin inherited Create;
-FVars := AVars; FSrc := ASrc; FOwns := AOwns; end;
+FVars := AVars;
+FSrc := ASrc; FOwns := AOwns; end;
 
 function TEscape.Direction: TFlowDir; begin Result := fdForward; end;
 

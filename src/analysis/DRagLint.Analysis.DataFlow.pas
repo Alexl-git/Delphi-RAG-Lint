@@ -354,9 +354,11 @@ begin
   Inc(GBuckets[K].SolveTicks, ASolveTicks);
   Inc(GBuckets[K].TransferTicks, ATransferTicks);
   Inc(GSolves);
-  Inc(GBlocks, ABlocks); Inc(GVisits, AVisits); Inc(GReenq, AReenqueues);
+  Inc(GBlocks, ABlocks);
+  Inc(GVisits, AVisits); Inc(GReenq, AReenqueues);
   Inc(GJoins, AJoins);
-  Inc(GTransfers, ATransfers); Inc(GComparisons, AComparisons);
+  Inc(GTransfers, ATransfers);
+  Inc(GComparisons, AComparisons);
   Inc(GSolveTicks, ASolveTicks);
   Inc(GTransferTicks, ATransferTicks);
   { WorstRatio is tracked per SOLVE, not derived from the totals: an aggregate
@@ -386,7 +388,8 @@ begin
   if ACfg.Skipped then Exit(False);
   T0 := TStopwatch.GetTimeStamp;
   LocalVisits := 0;
-  LocalJoins := 0; LocalReenq := 0; LocalTransferTicks := 0;
+  LocalJoins := 0;
+  LocalReenq := 0; LocalTransferTicks := 0;
   LocalTransfers := 0;
   LocalEquals := 0;
   { Interface-to-object cast: the lattices are all TInterfacedObject descendants,
@@ -395,7 +398,8 @@ begin
   LatticeName := (AAnalysis as TObject).ClassName;
   N := ACfg.BlockCount;
   SetLength(AIn, N);
-  SetLength(AOut, N); SetLength(InQueue, N);
+  SetLength(AOut, N);
+  SetLength(InQueue, N);
   Fwd := AAnalysis.Direction = fdForward;
   Boundary := if Fwd then ACfg.EntryIdx else ACfg.ExitIdx;
   for B := 0 to N - 1 do begin AIn[B] := AAnalysis.Bottom;
@@ -408,7 +412,8 @@ begin
     while Work.Count > 0 do
     begin
       B := Work.Dequeue;
-      InQueue[B] := False; Inc(LocalVisits);
+      InQueue[B] := False;
+      Inc(LocalVisits);
       { gather predecessors (forward) or successors (backward) }
       if Fwd then Adj := ACfg.Blocks[B].Pred else Adj := ACfg.Blocks[B].Succ;
       if B = Boundary then Acc := AAnalysis.Boundary
@@ -434,7 +439,8 @@ begin
           for I := 0 to ACfg.Blocks[B].Succ.Count - 1 do
             if not InQueue[ACfg.Blocks[B].Succ[I]] then
             begin Work.Enqueue(ACfg.Blocks[B].Succ[I]);
-            InQueue[ACfg.Blocks[B].Succ[I]] := True; Inc(LocalReenq); end;
+            InQueue[ACfg.Blocks[B].Succ[I]] := True;
+            Inc(LocalReenq); end;
         end;
       end
       else
@@ -451,7 +457,8 @@ begin
           for I := 0 to ACfg.Blocks[B].Pred.Count - 1 do
             if not InQueue[ACfg.Blocks[B].Pred[I]] then
             begin Work.Enqueue(ACfg.Blocks[B].Pred[I]);
-            InQueue[ACfg.Blocks[B].Pred[I]] := True; Inc(LocalReenq); end;
+            InQueue[ACfg.Blocks[B].Pred[I]] := True;
+            Inc(LocalReenq); end;
         end;
       end;
     end;
