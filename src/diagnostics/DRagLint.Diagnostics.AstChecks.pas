@@ -3718,8 +3718,7 @@ var
                     (ImplStartLine = 0). A concrete method (any body) overrides it. }
                   if M.IsVirtual and (M.ImplStartLine = 0) then
                   begin if AbstractNames.IndexOf(M.Name) < 0 then AbstractNames.Add(M.Name); end
-                  else if M.ImplStartLine > 0 then
-                  begin if ConcreteNames.IndexOf(M.Name) < 0 then ConcreteNames.Add(M.Name); end;
+                  else if (M.ImplStartLine > 0) and (ConcreteNames.IndexOf(M.Name) < 0) then ConcreteNames.Add(M.Name);
                 end;
             var Unimpl: string:= '';
             for var AName in AbstractNames do
@@ -3869,11 +3868,9 @@ var
       begin
         Lhs:= N.ChildByField('lhs');
         Rhs:= N.ChildByField('rhs');
-        if (not Lhs.IsNull) and (not Rhs.IsNull) and (Lhs.NodeType = 'identifier')
+        if ((not Lhs.IsNull) and (not Rhs.IsNull) and (Lhs.NodeType = 'identifier')
            and (Rhs.NodeType = 'identifier')
-           and (SameText(NodeStr(Rhs), 'Free') or SameText(NodeStr(Rhs), 'DisposeOf')) then { v151: DisposeOf }
-          if not FreedAt.ContainsKey(LowerCase(NodeStr(Lhs))) then
-            FreedAt.Add(LowerCase(NodeStr(Lhs)), N);
+           and (SameText(NodeStr(Rhs), 'Free') or SameText(NodeStr(Rhs), 'DisposeOf'))) and (not FreedAt.ContainsKey(LowerCase(NodeStr(Lhs)))) then FreedAt.Add(LowerCase(NodeStr(Lhs)), N);
       end
       else if N.NodeType = 'exprCall' then
       begin
@@ -4210,9 +4207,7 @@ var
     if (N.NodeType = 'assignment') and MatchSqlTextAssign(N, V, K) then AMap.AddOrSetValue(V, K)
     else if (N.NodeType = 'exprDot') and MatchCall(N, V, M) then
     begin
-      if AMap.TryGetValue(V, Kind) then
-        if ((M = 'open') and (Kind = 'dml')) or ((M = 'execsql') and (Kind = 'select')) then
-        begin
+      if (AMap.TryGetValue(V, Kind)) and (((M = 'open') and (Kind = 'dml')) or ((M = 'execsql') and (Kind = 'select'))) then begin
           P:= N.StartPoint;
           F:= Default(TLintFinding);
           F.RuleId  := 'firedac-open-execsql-mismatch';
@@ -5113,9 +5108,7 @@ var
         begin
           Lhs:= Nm.ChildByField('lhs');
           Rhs:= Nm.ChildByField('rhs');
-          if (not Lhs.IsNull) and (not Rhs.IsNull) and (Lhs.NodeType = 'identifier') and SameText(NodeStr(Rhs), 'Execute') then
-            if IsThreadClass(NodeStr(Lhs)) then
-            begin
+          if ((not Lhs.IsNull) and (not Rhs.IsNull) and (Lhs.NodeType = 'identifier') and SameText(NodeStr(Rhs), 'Execute')) and (IsThreadClass(NodeStr(Lhs))) then begin
               Body:= N.ChildByField('body');
               if not Body.IsNull then WalkExec(Body);
             end;
@@ -7329,8 +7322,7 @@ var
       begin
         N:= Lst[I];
         if N.StartByte >= ASinkByte then Continue;
-        if not IsConditionalAsgn(N, AProc) then
-          if (LastU < 0) or (N.StartByte > Lst[LastU].StartByte) then LastU:= I;
+        if (not IsConditionalAsgn(N, AProc)) and ((LastU < 0) or (N.StartByte > Lst[LastU].StartByte)) then LastU:= I;
       end;
 
       for I:= 0 to Lst.Count - 1 do
@@ -7864,8 +7856,7 @@ var
     if N.NodeType = 'assignment' then
     begin
       Lhs:= N.ChildByField('lhs');
-      if (not Lhs.IsNull) and SameText(Trim(SrcStr(Lhs, ASrc)), ATarget) then
-        if CalleeRhsTaints(N.ChildByField('rhs'), ASrc, 0, ALitText) then Exit(True);
+      if ((not Lhs.IsNull) and SameText(Trim(SrcStr(Lhs, ASrc)), ATarget)) and (CalleeRhsTaints(N.ChildByField('rhs'), ASrc, 0, ALitText)) then Exit(True);
     end;
     for I:= 0 to N.NamedChildCount - 1 do
       if BodyTaints(N.NamedChild(I), ASrc, ATarget, ALitText) then Exit(True);
@@ -8105,9 +8096,7 @@ var
       literal for a value the caller then overwrote. }
     if Length(SurvivingAssignments(Nm, SinkByte, AProc)) = 0 then
     begin
-      if VarOutCallFor(AProc, Nm, SinkByte, VoCallee, VoArgIdx) then
-        if CalleeTaints(VoCallee, VoArgIdx, LitText) then
-        begin
+      if (VarOutCallFor(AProc, Nm, SinkByte, VoCallee, VoArgIdx)) and (CalleeTaints(VoCallee, VoArgIdx, LitText)) then begin
           ReportAt(A, ASink, LitText);
           Exit;
         end;
@@ -8147,8 +8136,7 @@ var
       may be several statements later, and the sink-anchored pass is what
       populates Seen. Reporting here would race that and duplicate every
       literal the warning tier is about to claim. }
-    if N.NodeType = 'literalString' then
-      if IsPathPortion(UnquoteLiteral(NodeStr(N))) then Orphans.Add(N);
+    if (N.NodeType = 'literalString') and (IsPathPortion(UnquoteLiteral(NodeStr(N)))) then Orphans.Add(N);
 
     if N.NodeType = 'exprCall' then
     begin

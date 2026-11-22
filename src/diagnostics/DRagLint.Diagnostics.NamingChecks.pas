@@ -1002,12 +1002,8 @@ var
               EmitAt(NameNode, 'type-name-prefix',
                 TypePrefixFindingMessage('Interface', TypeName, ANaming.InterfacePrefix));
           end
-          else if TypeNodeIsPointer(TypeNode) then
-          begin
-            if (ANaming.PointerPrefix <> '') and (not StartsWithPrefix(TypeName, ANaming.PointerPrefix)) then
-              EmitAt(NameNode, 'type-name-prefix',
+          else if (TypeNodeIsPointer(TypeNode)) and ((ANaming.PointerPrefix <> '') and (not StartsWithPrefix(TypeName, ANaming.PointerPrefix))) then EmitAt(NameNode, 'type-name-prefix',
                 TypePrefixFindingMessage('Pointer type', TypeName, ANaming.PointerPrefix));
-          end;
         end;
       end;
       { Still recurse for nested type declarations. Carry "inside a record"
@@ -1135,17 +1131,13 @@ var
           wiring) was reported at its implementation line. The class-body
           declProc is the authoritative check for these, exactly as the defProc
           branch below already documents. }
-        if (MethName <> '') and (not StartsText('operator', MethName))
-          and (LastDelimiter('.', MethName) = 0) then
-        begin
-          if (not MatchesCase(MethName, ANaming.MethodCase))
+        if ((MethName <> '') and (not StartsText('operator', MethName))
+          and (LastDelimiter('.', MethName) = 0)) and ((not MatchesCase(MethName, ANaming.MethodCase))
             and (not IsShortAllCaps(MethName))
             and (not IsUnderscoreAccessor(MethName))
             and (not IsTypeLibraryUnit)
-            and (not HasTestAttribute(N)) then
-            EmitAt(NameNode, 'method-pascalcase',
+            and (not HasTestAttribute(N))) then EmitAt(NameNode, 'method-pascalcase',
               Format('Method "%s" should be %s', [MethName, ANaming.MethodCase]));
-        end;
       end;
       if (Length(ANaming.ParamPrefixes) > 0) or ANaming.ShortIdentifierCheck then
       begin

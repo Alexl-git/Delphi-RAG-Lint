@@ -2017,9 +2017,7 @@ begin
     counter-example while every other clause behaved: the walk's own defProc
     branch was unreachable in the position that matters. }
   for I := 0 to ARoutine.ChildCount - 1 do
-    if ARoutine.Child(I).StartByte <> Body.StartByte then
-      if NestedRoutineMentionsFlag(ARoutine.Child(I)) then
-      begin
+    if (ARoutine.Child(I).StartByte <> Body.StartByte) and (NestedRoutineMentionsFlag(ARoutine.Child(I))) then begin
         Ok := False;
         Break;
       end;
