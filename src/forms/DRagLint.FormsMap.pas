@@ -487,8 +487,7 @@ end; // function
 /// <summary>RFC 4180 field escaping (quote when needed, double embedded quotes).</summary>
 function CsvField(const S: string): string;
 begin
-  if (S.Contains(',')) or (S.Contains('"')) or S.Contains(#10) then Result:= '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"'
-  else Result:= S;
+  Result:= if (S.Contains(',')) or (S.Contains('"')) or S.Contains(#10) then '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"' else S;
 end;
 
 /// <summary>True if the source line constructs the given form class:
@@ -1342,8 +1341,7 @@ var
         end
         else if not CharInSet(L[I], ['A'..'Z','a'..'z','0'..'9','_']) then
           Exit; // any other char (space, paren, index) -> reject
-      if DotP > 0 then AField:= Copy(L, DotP + 1, MaxInt)
-      else AField:= L;
+      AField:= if DotP > 0 then Copy(L, DotP + 1, MaxInt) else L;
       if not IsIdent(AField) then Exit;
       ARhs:= R;
       Result:= True;
@@ -1456,8 +1454,7 @@ var
     if not FindEnclosingImpl(Arr, ALaunchLine, OC, Rout) then Exit;
     if SameText(OC, ATargetClass) then Exit; // self-launch
     // v6: who holds the launch line, and whether it is modal, for the tester columns.
-    if OC <> '' then Opener:= OC + '.' + Rout
-    else Opener:= TPath.GetFileNameWithoutExtension(APath) + '.' + Rout;
+    Opener:= if OC <> '' then OC + '.' + Rout else TPath.GetFileNameWithoutExtension(APath) + '.' + Rout;
     Launch:= Default(TFormEdge);
     Launch.OpenedBy  := Opener;
     Launch.Modal     := LineModal(Arr[ALaunchLine - 1]);
@@ -1482,12 +1479,7 @@ var
           // (registered as HookField := Rout, invisible to refs), resume from the
           // hook field's invocation sites -- which rejoin the interface walk to a
           // form. Reuse the SAME visited set so the fan-in cannot loop.
-          if HandlerToHook.TryGetValue(LowerCase(Rout), HookField) then
-            Hooked:= FindFormViaHook(AStore, HookField, AClassToNode, PasLines,
-                                     Vis2s, AExtraStores, FormCls, FormRout) and
-                     AClassToNode.TryGetValue(FormCls, XN)
-          else
-            Hooked:= False
+          Hooked:= if HandlerToHook.TryGetValue(LowerCase(Rout), HookField) then FindFormViaHook(AStore, HookField, AClassToNode, PasLines, Vis2s, AExtraStores, FormCls, FormRout) and AClassToNode.TryGetValue(FormCls, XN) else False
         else
           Hooked:= True; // direct walk already reached a form
 
@@ -1829,8 +1821,7 @@ end;
 
 function RoutineDisplay(const AInfo: TRoutineInfo): string;
 begin
-  if AInfo.Owner <> '' then Result:= AInfo.Owner + '.' + AInfo.Name
-  else Result:= AInfo.UnitName + '.' + AInfo.Name;
+  Result:= if AInfo.Owner <> '' then AInfo.Owner + '.' + AInfo.Name else AInfo.UnitName + '.' + AInfo.Name;
 end;
 
 /// <summary>The identifier right after "AClass." on ALine ('' when absent),
@@ -2173,8 +2164,7 @@ begin
     if ContainsText(L, 'ShowModal') then Exit('Yes');
     if HasShowCall(L) then SawShow:= True;
   end;
-  if SawShow then Result:= 'No'
-  else Result:= '?';
+  Result:= if SawShow then 'No' else '?';
 end;
 
 function TNavBuilder.IsFormField(AStore: TSQLiteSymbolStore; const AFormClass, AName: string): Boolean;
@@ -2216,8 +2206,7 @@ begin
         if IsFormField(AStore, AFormClass, M.Groups[1].Value) then
         begin
           Member:= M.Groups[2].Value;
-          if SameText(Member, 'ItemIndex') or SameText(Member, 'Selected') then What:= 'an item'
-          else What:= 'a row';
+          What:= if SameText(Member, 'ItemIndex') or SameText(Member, 'Selected') then 'an item' else 'a row';
           Exit(N.FormName + ': select ' + What + ' in ' + M.Groups[1].Value + ' first (the handler reads ' + M.Groups[1].Value + '.' + Member + ')');
         end;
 end;
@@ -2266,8 +2255,7 @@ end;
 /// the OUTER form's and is deliberately not matched.</summary>
 function BareShow(const ALine: string; AModal: Boolean): Boolean;
 begin
-  if AModal then Result:= TRegEx.IsMatch(ALine, '(?<![A-Za-z0-9_.])ShowModal\b', [roIgnoreCase])
-  else Result:= TRegEx.IsMatch(ALine, '(?<![A-Za-z0-9_.])Show\s*(;|$)', [roIgnoreCase]);
+  Result:= if AModal then TRegEx.IsMatch(ALine, '(?<![A-Za-z0-9_.])ShowModal\b', [roIgnoreCase]) else TRegEx.IsMatch(ALine, '(?<![A-Za-z0-9_.])Show\s*(;|$)', [roIgnoreCase]);
 end;
 
 /// <summary>R1: 'Yes' / 'No' / '?' for a line inside a form's OWN method,
@@ -2430,8 +2418,7 @@ begin
   begin
     Result:= DfmModal(AY, ANote);
     if Result <> '?' then Exit;
-    if Created then ANote:= 'modal unknown: ' + RoutineDisplay(AL) + ' creates ' + AY.FormName + ' but does not show it there'
-    else ANote:= 'modal unknown: ' + RoutineDisplay(AL) + ' reaches ' + AY.FormName + ' but does not show it there';
+    ANote:= if Created then 'modal unknown: ' + RoutineDisplay(AL) + ' creates ' + AY.FormName + ' but does not show it there' else 'modal unknown: ' + RoutineDisplay(AL) + ' reaches ' + AY.FormName + ' but does not show it there';
   end;
 end;
 
@@ -2523,8 +2510,7 @@ begin
   if not FClassToNode.TryGetValue(AH.Owner, N) then Exit;
   Parts:= TStringList.Create;
   try
-    if SameText(AL.Owner, AH.Owner) and (AL.Id <> AH.Id) then Sel:= SelectionHint(AStore, AH.Owner, [AH, AL])
-    else Sel:= SelectionHint(AStore, AH.Owner, [AH]);
+    Sel:= if SameText(AL.Owner, AH.Owner) and (AL.Id <> AH.Id) then SelectionHint(AStore, AH.Owner, [AH, AL]) else SelectionHint(AStore, AH.Owner, [AH]);
     if Sel <> '' then Parts.Add(Sel);
     // The handler's own guards (when it is not also the opener), then the
     // opener's guards above its launch line; at most FORMS_ALSO_MAX messages.
@@ -2917,8 +2903,7 @@ end;
 /// non-empty text is always quoted.</summary>
 function CsvText(const S: string): string;
 begin
-  if S = '' then Result:= ''
-  else Result:= '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"';
+  Result:= if S = '' then '' else '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"';
 end;
 
 /// <summary>Shortest chain of edge indexes from ARoot to ATarget, over edges
@@ -2975,11 +2960,7 @@ function NoControlText(const AEdge: TNavEdge; AClassToNode: TDictionary<string, 
 var
   N: TFormNode;
 begin
-  if (SameText(AEdge.Handler, 'FormCreate') or SameText(AEdge.Handler, 'FormShow') or SameText(AEdge.Handler, 'FormActivate')) and
-     AClassToNode.TryGetValue(AEdge.FromClass, N) then
-    Result:= '(opens automatically when ' + N.FormName + ' opens: ' + AEdge.Handler + ')'
-  else
-    Result:= '(no control: ' + AEdge.FromClass + '.' + AEdge.Handler + ')';
+  Result:= if (SameText(AEdge.Handler, 'FormCreate') or SameText(AEdge.Handler, 'FormShow') or SameText(AEdge.Handler, 'FormActivate')) and AClassToNode.TryGetValue(AEdge.FromClass, N) then '(opens automatically when ' + N.FormName + ' opens: ' + AEdge.Handler + ')' else '(no control: ' + AEdge.FromClass + '.' + AEdge.Handler + ')';
 end;
 
 /// <summary>Tester-facing text for one hop; AFirst omits the "in frmX:" prefix
@@ -2988,12 +2969,10 @@ function HopText(const AEdge: TNavEdge; AClassToNode: TDictionary<string, TFormN
 var
   N: TFormNode;
 begin
-  if Length(AEdge.Ways) > 0 then Result:= AEdge.Ways[0].Location
-  else Result:= NoControlText(AEdge, AClassToNode);
+  Result:= if Length(AEdge.Ways) > 0 then AEdge.Ways[0].Location else NoControlText(AEdge, AClassToNode);
   if not AFirst then
   begin
-    if AClassToNode.TryGetValue(AEdge.FromClass, N) then Result:= 'in ' + N.FormName + ': ' + Result
-    else Result:= 'in ' + AEdge.FromClass + ': ' + Result;
+    Result:= if AClassToNode.TryGetValue(AEdge.FromClass, N) then 'in ' + N.FormName + ': ' + Result else 'in ' + AEdge.FromClass + ': ' + Result;
   end;
 end;
 
@@ -3087,8 +3066,7 @@ begin
         Builder.RunIndexPass;
         Builder.AddTextEdges(TextEdges);
         RootClass:= DetectRoot(AProjectFile, ARootForm, ClassToNode, TextEdges);
-        if ClassToNode.TryGetValue(RootClass, RootNode) then RootName:= RootNode.FormName
-        else RootName:= RootClass;
+        RootName:= if ClassToNode.TryGetValue(RootClass, RootNode) then RootNode.FormName else RootClass;
         { Schema version lives in schema_meta (written at migrate), NOT in
           PRAGMA user_version (which the engine never writes -> always 0).
           Mirror IsSchemaCurrent's query; a missing table/row falls back to 0. }
@@ -3147,8 +3125,7 @@ begin
             else
             begin
               Conf:= CONF_UNRESOLVED;
-              if RootName <> '' then How:= '(no path from ' + RootName + ')'
-              else How:= '(no root form detected)';
+              How:= if RootName <> '' then '(no path from ' + RootName + ')' else '(no root form detected)';
               // Best known way in, even though it does not connect to the root:
               // a form source with a control first, then any form source, then any.
               for I:= 0 to Builder.Edges.Count - 1 do
@@ -3180,8 +3157,7 @@ begin
             // handler when no control fires it.
             WayKeys.Clear;
             Also.Clear;
-            if Length(E.Ways) > 0 then ShownKey:= LowerCase(E.FromClass + #1 + E.Ways[0].Location)
-            else ShownKey:= LowerCase(E.FromClass + #1 + '#' + E.Handler);
+            ShownKey:= if Length(E.Ways) > 0 then LowerCase(E.FromClass + #1 + E.Ways[0].Location) else LowerCase(E.FromClass + #1 + '#' + E.Handler);
             for I:= 0 to Builder.Edges.Count - 1 do
             begin
               if not SameText(Builder.Edges[I].ToClass, N.FormClass) then Continue;
@@ -3225,10 +3201,8 @@ begin
             if not Popups.TryGetValue(LowerCase(N.FormName), Notes) then Notes:= 'no caller found (index or text scan)';
           end;
 
-          if Hints.Count > 0 then Hint:= string.Join('; ', Hints.ToStringArray)
-          else Hint:= E.Hint;
-          if HasEdge and ClassToNode.ContainsKey(E.FromClass) then Handler:= E.FromClass + '.' + E.Handler
-          else Handler:= E.Handler;
+          Hint:= if Hints.Count > 0 then string.Join('; ', Hints.ToStringArray) else E.Hint;
+          Handler:= if HasEdge and ClassToNode.ContainsKey(E.FromClass) then E.FromClass + '.' + E.Handler else E.Handler;
           Sb.Append(Idx).Append(',')
             .Append(CsvText(N.FormName)).Append(',')
             .Append(CsvText(N.UnitName)).Append(',')

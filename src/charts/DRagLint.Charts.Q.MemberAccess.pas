@@ -188,10 +188,7 @@ end;
 /// <returns>TMetaField.Str, or TMetaField.Null for ''.</returns>
 function LabelField(const pName, pLabel: string): TMetaField;
 begin
-  if pLabel = '' then
-    Result:= TMetaField.Null(pName)
-  else
-    Result:= TMetaField.Str(pName, pLabel);
+  Result:= if pLabel = '' then TMetaField.Null(pName) else TMetaField.Str(pName, pLabel);
 end;
 
 /// <summary>The plural s of a count.</summary>

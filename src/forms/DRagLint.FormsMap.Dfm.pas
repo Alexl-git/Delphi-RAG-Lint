@@ -747,8 +747,7 @@ var
   I: Integer;
 begin
   I:= FProps.IndexOfName(AName);
-  if I >= 0 then Result:= FProps.ValueFromIndex[I]
-  else Result:= '';
+  Result:= if I >= 0 then FProps.ValueFromIndex[I] else '';
 end;
 
 { TFormDfmTree }

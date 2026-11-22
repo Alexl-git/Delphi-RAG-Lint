@@ -387,10 +387,7 @@ function ValuesMatch(const pA, pB: string): Boolean;
 begin
   var IA, IB: Integer;
   // PS trap handled: '03' -eq 3 is True in PowerShell; two integers compare numerically.
-  if TryStrToInt(pA, IA) and TryStrToInt(pB, IB) then
-    Result:= IA = IB
-  else
-    Result:= SameText(pA, pB);
+  Result:= if TryStrToInt(pA, IA) and TryStrToInt(pB, IB) then IA = IB else SameText(pA, pB);
 end;
 
 function BodyAt(const pLines: TArray<string>; pIndex: Integer; pForm: TReportForm;

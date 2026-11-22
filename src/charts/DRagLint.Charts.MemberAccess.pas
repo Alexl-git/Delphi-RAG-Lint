@@ -354,10 +354,7 @@ end;
 function TMemberAccessData.SitesOf(const pRoutine, pMode: string): TArray<TSiteAnchor>;
 begin
   var List: TList<TSiteAnchor>;
-  if FSites.TryGetValue(pRoutine + '|' + pMode, List) then
-    Result:= List.ToArray
-  else
-    Result:= nil;
+  Result:= if FSites.TryGetValue(pRoutine + '|' + pMode, List) then List.ToArray else nil;
 end;
 
 function TMemberAccessData.CountLabel(const pU: TUnreportedAccess): string;

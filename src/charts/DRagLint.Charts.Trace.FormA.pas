@@ -652,19 +652,13 @@ end;
 
 function Rx(const pText, pPattern: string; pIgnoreCase: Boolean = False): Boolean;
 begin
-  if pIgnoreCase then
-    Result:= TRegEx.IsMatch(pText, pPattern, [roIgnoreCase])
-  else
-    Result:= TRegEx.IsMatch(pText, pPattern);
+  Result:= if pIgnoreCase then TRegEx.IsMatch(pText, pPattern, [roIgnoreCase]) else TRegEx.IsMatch(pText, pPattern);
 end;
 
 { a group value; PCRE reports fewer groups when the trailing optional ones did not take part }
 function Grp(const pMatch: TMatch; pIndex: Integer): string;
 begin
-  if pIndex < pMatch.Groups.Count then
-    Result:= pMatch.Groups[pIndex].Value
-  else
-    Result:= '';
+  Result:= if pIndex < pMatch.Groups.Count then pMatch.Groups[pIndex].Value else '';
 end;
 
 function ListText(const pList: array of string; const pSep: string): string;
@@ -924,19 +918,13 @@ begin
       Refuse('Form A note must not contain ''; '' (it is the note separator): ' + pNote);
     if Rx(pNote, RE_NOTE_IN_ONLY, True) or Rx(pNote, RE_NOTE_ASK_ONLY, True) then
       Refuse('Form A note must not read like a routine or ask part: ' + pNote);
-    if Result = '' then
-      Result:= pNote
-    else
-      Result:= Result + NOTE_SEP + pNote;
+    Result:= if Result = '' then pNote else Result + NOTE_SEP + pNote;
   end;
   if pAsk <> '' then
   begin
     if not Rx(pAsk, RE_ROUTINE_WORD) then
       Refuse('Form A ask must be one word with no '';'': ' + pAsk);
-    if Result = '' then
-      Result:= 'ask ' + pAsk
-    else
-      Result:= Result + NOTE_SEP + 'ask ' + pAsk;
+    Result:= if Result = '' then 'ask ' + pAsk else Result + NOTE_SEP + 'ask ' + pAsk;
   end;
 end;
 
@@ -959,10 +947,7 @@ begin
       pAsk:= MAsk.Groups[1].Value
     else
     begin
-      if AnyRest then
-        Result:= Result + NOTE_SEP + P
-      else
-        Result:= P;
+      Result:= if AnyRest then Result + NOTE_SEP + P else P;
       AnyRest:= True;
     end;
     First:= False;

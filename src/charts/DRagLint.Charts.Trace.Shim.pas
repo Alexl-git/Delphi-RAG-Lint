@@ -524,10 +524,7 @@ end;
 { a group value; PCRE reports fewer groups when the trailing optional ones did not take part }
 function Grp(const pMatch: TMatch; pIndex: Integer): string;
 begin
-  if pIndex < pMatch.Groups.Count then
-    Result:= pMatch.Groups[pIndex].Value
-  else
-    Result:= '';
+  Result:= if pIndex < pMatch.Groups.Count then pMatch.Groups[pIndex].Value else '';
 end;
 
 { String.IndexOf(pSub, pStart0): 0-based, -1 when absent }
@@ -1401,20 +1398,14 @@ end;
 
 function TraceNoteLocator(const pAnchorFile, pRefFile: string; pRefLine: Integer): string;
 begin
-  if SameText(LeafOf(pAnchorFile), LeafOf(pRefFile)) then
-    Result:= ':' + IntToStr(pRefLine)
-  else
-    Result:= TraceAnchorText(pRefFile, pRefLine);
+  Result:= if SameText(LeafOf(pAnchorFile), LeafOf(pRefFile)) then ':' + IntToStr(pRefLine) else TraceAnchorText(pRefFile, pRefLine);
 end;
 
 function TraceWord(const pS: string; pMax: Integer = TRACE_WORD_MAX): string;
 begin
   var T:= PsTrim(TRegEx.Replace(pS, '\s+', ' '));
   T:= T.Replace(' -- ', ' - ').Replace(' @', ' at ').Replace(' [', ' (').Replace('"', '''').Replace('; ', ', ');
-  if Length(T) > pMax then
-    Result:= Copy(T, 1, pMax - Length(ELLIPSIS)) + ELLIPSIS
-  else
-    Result:= T;
+  Result:= if Length(T) > pMax then Copy(T, 1, pMax - Length(ELLIPSIS)) + ELLIPSIS else T;
 end;
 
 function TraceNoteText(const pS: string): string;

@@ -944,10 +944,7 @@ begin
     At:= At + [Format('%s:%d', [FileNameOf(R.Path), R.Line])];
   var S:= FStats;
   var Pct: TMetaField;
-  if S.CtlTotal > 0 then
-    Pct:= TMetaField.Real('CoveragePct', S.Pct)
-  else
-    Pct:= TMetaField.Int('CoveragePct', 0);
+  Pct:= if S.CtlTotal > 0 then TMetaField.Real('CoveragePct', S.Pct) else TMetaField.Int('CoveragePct', 0);
   var FieldCol, Grade, RePoint, Candidates: string;
   var AfterTie, Bound: Integer;
   FieldCol:= '';

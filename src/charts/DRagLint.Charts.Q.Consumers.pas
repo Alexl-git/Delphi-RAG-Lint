@@ -859,10 +859,7 @@ begin
   FTName:= FTbl.Name;
   var DeclFile:= FileNameOf(FTbl.Path);
   var DeclCount:= Length(FTbl.Declarations);
-  if DeclCount > 1 then
-    FDeclText:= Format('declared %d times in the scripts; showing the newest (%s:%d, by file date)', [DeclCount, DeclFile, FTbl.Line])
-  else
-    FDeclText:= Format('declared 1 time in the scripts (%s:%d)', [DeclFile, FTbl.Line]);
+  FDeclText:= if DeclCount > 1 then Format('declared %d times in the scripts; showing the newest (%s:%d, by file date)', [DeclCount, DeclFile, FTbl.Line]) else Format('declared 1 time in the scripts (%s:%d)', [DeclFile, FTbl.Line]);
   FColFile:= FTbl.Path;
   FColLine:= FTbl.Line;
   if FSelCol <> '' then

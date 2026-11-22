@@ -1290,10 +1290,7 @@ begin
         Qs:= Qs + [C.S('q')];
       pR.Stop:= Format('%s.%s: %d datasets load %s in this index (%s) -- pass the control or the dataset field',
         [pTable, pCol, Cands.Count, pTable, string.Join(', ', Qs)]);
-      if Cands.Count > 0 then
-        pR.StopAnchor:= TraceAnchorText(Cands[0].S('path'), Cands[0].I('line'))
-      else
-        pR.StopAnchor:= TraceAnchorText(FSet.Table(pTable).Path, FSet.Table(pTable).Line);
+      pR.StopAnchor:= if Cands.Count > 0 then TraceAnchorText(Cands[0].S('path'), Cands[0].I('line')) else TraceAnchorText(FSet.Table(pTable).Path, FSet.Table(pTable).Line);
       pR.TableColumn:= pTable + '.' + pCol;
       Exit;
     end;

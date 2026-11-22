@@ -105,8 +105,7 @@ type
 
 function StripPrefix(const AName: string; APrefix: Char): string;
 begin
-  if (Length(AName) >= 2) and (UpCase(AName[1]) = APrefix) and CharInSet(AName[2], ['A'..'Z']) then Result:= Copy(AName, 2, MaxInt)
-  else Result:= AName;
+  Result:= if (Length(AName) >= 2) and (UpCase(AName[1]) = APrefix) and CharInSet(AName[2], ['A'..'Z']) then Copy(AName, 2, MaxInt) else AName;
 end;
 
 class function TOrmLinker.Run(const ADbPaths: TArray<string>): TOrmLinkerStats;

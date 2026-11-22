@@ -238,10 +238,7 @@ end;
 // Get-FileSize: the size in bytes, 0 when the file is missing.
 function FileSizeOf(const pPath: string): Integer;
 begin
-  if TFile.Exists(pPath) then
-    Result:= Integer(TFile.GetSize(pPath))
-  else
-    Result:= 0;
+  Result:= if TFile.Exists(pPath) then Integer(TFile.GetSize(pPath)) else 0;
 end;
 
 // The focus cluster (PS 214-221). The href line is ALWAYS the reverse root's line (PS 218, mirrored).

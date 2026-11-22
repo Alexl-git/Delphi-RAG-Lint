@@ -347,10 +347,7 @@ begin
     pText:= 'Totals: ' + Trim(Copy(pRaw, P + Length(' -- '), MaxInt)) + '.';
     Exit(True);
   end;
-  if StartsStr('TARGET ', Trimmed) then
-    pText:= 'Selected: ' + RenderAnchors(Trim(Copy(Trimmed, Length('TARGET ') + 1, MaxInt)))
-  else
-    pText:= RenderAnchors(Trimmed);
+  pText:= if StartsStr('TARGET ', Trimmed) then 'Selected: ' + RenderAnchors(Trim(Copy(Trimmed, Length('TARGET ') + 1, MaxInt))) else RenderAnchors(Trimmed);
   if LeadingSpaces(pRaw) > CONTINUATION_INDENT then pIndent:= ROW_INDENT;
   Result:= pText <> '';
 end;
