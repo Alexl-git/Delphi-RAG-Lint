@@ -2025,7 +2025,7 @@ begin
   begin
     var Hits: TArray<string>:= [];
     if TDirectory.Exists(Dir) then
-      for var P in TDirectory.GetFiles(Dir, '*.dproj') do
+      for var P in TDirectory.GetFiles(Dir, '*.dproj') do  // dl:ok taint-path-traversal@d2a4 -- the folders of the user's own unit and its parents, read for *.dproj names only; nothing is written there
         if ProjectNamesUnit(P, Name) then Hits:= Hits + [P];
     if Length(Hits) = 1 then Exit(Hits[0]);
     if Length(Hits) > 1 then

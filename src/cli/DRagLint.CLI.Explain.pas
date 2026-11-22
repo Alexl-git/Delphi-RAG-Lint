@@ -180,7 +180,7 @@ begin
   if not TFile.Exists(Path) then Exit;
   Root:= nil;
   try
-    Root:= TJSONObject.ParseJSONValue(TFile.ReadAllText(Path, TEncoding.UTF8));
+    Root:= TJSONObject.ParseJSONValue(TFile.ReadAllText(Path, TEncoding.UTF8));  // dl:ok taint-path-traversal@cffe -- REVIEWED 2026-11-17 v152 EXPLAIN: the path is the operator's own --rules-dir (or <exe-dir>\rules) joined with a catalog rule id; a local CLI reading its own rules folder, no remote caller
     if Root is TJSONObject then
     begin
       V:= TJSONObject(Root).GetValue(pKey);
@@ -228,7 +228,7 @@ begin
     WikiDir:= TPath.Combine(TPath.Combine(Dir, 'docs'), 'wiki');
     if TDirectory.Exists(WikiDir) then
     begin
-      for F in TDirectory.GetFiles(WikiDir, '*.md') do
+      for F in TDirectory.GetFiles(WikiDir, '*.md') do  // dl:ok taint-path-traversal@fd50 -- REVIEWED 2026-11-17 v152 EXPLAIN: WikiDir is docs\wiki found by walking up from the operator's own rules folder; read-only listing for a local CLI
       begin
         pText:= WikiRowText(F, pId);
         if pText <> '' then

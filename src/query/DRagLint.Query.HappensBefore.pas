@@ -1434,7 +1434,7 @@ begin
       if not Lines.TryGetValue(W.Site.FileName, SL) then
       begin
         SL:= TStringList.Create;
-        if FileExists(W.Site.FileName) then SL.LoadFromFile(W.Site.FileName);
+        if FileExists(W.Site.FileName) then SL.LoadFromFile(W.Site.FileName);  // dl:ok taint-path-traversal@aae9 -- REVIEWED 2026-11-17 v152 HBSOLVER: the path is files.path from the project index, read only; the env-var chain is the DB location, not this path
         Lines.Add(W.Site.FileName, SL);
       end;
       { v152 HBFIX: an unresolved `X.F := ..` / `F := ..` is an assignment, never an argument }

@@ -2671,8 +2671,8 @@ begin
   for var I:= 0 to High(pRw.Paths) do
   begin
     var S:= ShadowPathOf(pShadowDir, pProjectDir, pRw.Paths[I]);
-    TDirectory.CreateDirectory(ExtractFilePath(S));
-    TFile.WriteAllBytes(S, pRw.Contents[I]);
+    TDirectory.CreateDirectory(ExtractFilePath(S));  // dl:ok taint-path-traversal@4eb0 -- REVIEWED 2026-11-16: the path is the cycles --fix shadow tree (TEMP or --shadow-out) the user's own run created; the tool writes there with the user's rights by design, no trust boundary is crossed
+    TFile.WriteAllBytes(S, pRw.Contents[I]);  // dl:ok taint-path-traversal@1dbf -- REVIEWED 2026-11-16: the path is the cycles --fix shadow tree (TEMP or --shadow-out) the user's own run created; the tool writes there with the user's rights by design, no trust boundary is crossed
   end;
   var Bytes:= pRw.NewContent;
   if pBreak = CBreakNoRepair then
@@ -2683,8 +2683,8 @@ begin
     Bytes:= TEncoding.ANSI.GetBytes(Text);
   end;
   var NewShadow:= ShadowPathOf(pShadowDir, pProjectDir, pRw.NewPath);
-  TDirectory.CreateDirectory(ExtractFilePath(NewShadow));
-  TFile.WriteAllBytes(NewShadow, Bytes);
+  TDirectory.CreateDirectory(ExtractFilePath(NewShadow));  // dl:ok taint-path-traversal@1431 -- REVIEWED 2026-11-16: the path is the cycles --fix shadow tree (TEMP or --shadow-out) the user's own run created; the tool writes there with the user's rights by design, no trust boundary is crossed
+  TFile.WriteAllBytes(NewShadow, Bytes);  // dl:ok taint-path-traversal@b544 -- REVIEWED 2026-11-16: the path is the cycles --fix shadow tree (TEMP or --shadow-out) the user's own run created; the tool writes there with the user's rights by design, no trust boundary is crossed
 end;
 
 // `cycles --fix --hub-surface`: RunCycleFixGroups with recipe R3 in place of the planner. Same flags, same baseline gate,

@@ -315,7 +315,7 @@ function IdentifierAtFilePosition(const AFile: string; ALine1, ACol1: Integer): 
 begin
   Result:= '';
   if not TFile.Exists(AFile) then Exit;
-  var Lines: TArray<string>:= TFile.ReadAllLines(AFile);
+  var Lines: TArray<string>:= TFile.ReadAllLines(AFile);  // dl:ok taint-path-traversal@4ce1 -- REVIEWED 2026-11-18 FUSCOPE: reads the source file the user named (--in / the MCP file argument); reading it is the point
   if (ALine1 < 1) or (ALine1 > Length(Lines)) then Exit;
   var Text: string:= Lines[ALine1 - 1];
   var Col: Integer:= ACol1;
@@ -351,7 +351,7 @@ begin
   Result:= nil;
   if (AGroupFile = '') or not TFile.Exists(AGroupFile) then Exit;
   var Dir: string:= ExtractFilePath(ExpandFileName(AGroupFile));
-  var Text: string:= TFile.ReadAllText(AGroupFile);
+  var Text: string:= TFile.ReadAllText(AGroupFile);  // dl:ok taint-path-traversal@d6d4 -- REVIEWED 2026-11-18 FUSCOPE: reads the project group file the user named (--group / the IDE open group); reading it is the point
   for var M: TMatch in TRegEx.Matches(Text, '<Projects\s+Include="([^"]+)"', [roIgnoreCase]) do
     Result:= Result + [ExpandFileName(TPath.Combine(Dir, M.Groups[1].Value))];
 end;

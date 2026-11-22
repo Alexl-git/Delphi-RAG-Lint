@@ -189,7 +189,7 @@ function LoadConfigJson(const pPath: string; out pMessage: string): TJSONObject;
 begin
   pMessage:= '';
   if not TFile.Exists(pPath) then Exit(TJSONObject.Create);
-  var Parsed: TJSONValue:= TJSONObject.ParseJSONValue(TFile.ReadAllText(pPath));
+  var Parsed: TJSONValue:= TJSONObject.ParseJSONValue(TFile.ReadAllText(pPath));  // dl:ok taint-path-traversal@7c13 -- REVIEWED 2026-11-17: v152 DISRULE: the path is the user's own --in / --config / --project argument; editing that file is the verb's job (same review as CLI.Explain)
   if Parsed is TJSONObject then Exit(TJSONObject(Parsed));
   Parsed.Free;
   pMessage:= Format('%s is not a JSON object; fix it by hand first (nothing was written).', [pPath]);
@@ -205,7 +205,7 @@ begin
     for var Ch: Char in Text do
       if Ch > ASCII_LAST then SB.Append('\u').Append(IntToHex(Ord(Ch), HEX_DIGITS))
       else SB.Append(Ch);
-    TFile.WriteAllBytes(pPath, TEncoding.ASCII.GetBytes(SB.ToString));
+    TFile.WriteAllBytes(pPath, TEncoding.ASCII.GetBytes(SB.ToString));  // dl:ok taint-path-traversal@1a09 -- REVIEWED 2026-11-17: v152 DISRULE: the path is the user's own --in / --config / --project argument; editing that file is the verb's job (same review as CLI.Explain)
   finally
     SB.Free;
   end;
@@ -420,7 +420,7 @@ begin
   if (pReq.FileName = '') or (pReq.Line <= 0) then
     Exit(Outcome(EXIT_USAGE, '', 'line scope needs --in <Unit.pas> and --line <N>.'));
   if not TFile.Exists(pReq.FileName) then Exit(Outcome(EXIT_USAGE, '', 'File not found: ' + pReq.FileName));
-  var Fmt: TTextFileFormat:= TTextFileFormat.Decode(TFile.ReadAllBytes(pReq.FileName), Raw);
+  var Fmt: TTextFileFormat:= TTextFileFormat.Decode(TFile.ReadAllBytes(pReq.FileName), Raw);  // dl:ok taint-path-traversal@ecf3 -- REVIEWED 2026-11-17: v152 DISRULE: the path is the user's own --in / --config / --project argument; editing that file is the verb's job (same review as CLI.Explain)
   var Lines: TArray<string>:= Raw.Replace(#13#10, #10).Split([#10]);
   if pReq.Line > Length(Lines) then
     Exit(Outcome(EXIT_USAGE, pReq.FileName, Format('Line %d is past the end of %s', [pReq.Line, pReq.FileName])));
@@ -438,7 +438,7 @@ begin
     Exit(Outcome(EXIT_NOTHING, pReq.FileName, Format(if pReq.Disable then '%s:%d already allows "%s"'
       else 'nothing to enable: %s:%d carries no dl:ok marker for "%s"', [pReq.FileName, MarkLine, pReq.RuleId])));
   SpliceLine(Raw, MarkLine, NewLine);
-  TFile.WriteAllBytes(pReq.FileName, Fmt.Encode(Raw));
+  TFile.WriteAllBytes(pReq.FileName, Fmt.Encode(Raw));  // dl:ok taint-path-traversal@bf7e -- REVIEWED 2026-11-17: v152 DISRULE: the path is the user's own --in / --config / --project argument; editing that file is the verb's job (same review as CLI.Explain)
   Result:= Outcome(EXIT_DONE, pReq.FileName, Format('%s "%s" on %s:%d',
     [if pReq.Disable then 'disabled' else 'enabled', pReq.RuleId, pReq.FileName, MarkLine]));
 end;
