@@ -300,10 +300,7 @@ var
   More: string;
 begin
   if GSkippedCount = 0 then Exit;
-  if GSkippedCount > Length(GSkippedSamples) then
-    More:= Format('; (+%d more)', [GSkippedCount - Length(GSkippedSamples)])
-  else
-    More:= '';
+  More:= if GSkippedCount > Length(GSkippedSamples) then Format('; (+%d more)', [GSkippedCount - Length(GSkippedSamples)]) else '';
   Writeln(ErrOutput, Format('drag-lint: note: skipped %d unverified caller edge(s) whose receiver has an unrelated type: %s%s',
     [GSkippedCount, string.Join('; ', GSkippedSamples), More]));
   GSkippedCount  := 0;
@@ -869,8 +866,7 @@ begin
 
   Buf:= '';
   for I:= LastIx to High(Lines) do
-    if Buf = '' then Buf:= Lines[I]
-    else Buf:= Buf + sLineBreak + Lines[I];
+    Buf:= if Buf = '' then Lines[I] else Buf + sLineBreak + Lines[I];
 
   Result.RawText  := Buf;
   Result.StartLine:= ARegion.StartLine + LastIx;

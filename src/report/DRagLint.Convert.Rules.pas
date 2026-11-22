@@ -1417,8 +1417,7 @@ var
 
   function ClassesOf(ABlock: Integer): TBlockClasses;
   begin
-    if InRange(ABlock, 0, High(ABlockClasses)) then Result:= ABlockClasses[ABlock]
-    else Result:= Default(TBlockClasses);
+    Result:= if InRange(ABlock, 0, High(ABlockClasses)) then ABlockClasses[ABlock] else Default(TBlockClasses);
   end;
 
   // ' (#convert line N: From -> To)' naming the block a path was checked in;

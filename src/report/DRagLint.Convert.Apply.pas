@@ -2073,8 +2073,7 @@ var
   DotAt: Integer;
 begin
   DotAt:= LastDelimiter('.', AQName);
-  if DotAt > 0 then Result:= Copy(AQName, DotAt + 1, MaxInt)
-  else Result:= AQName;
+  Result:= if DotAt > 0 then Copy(AQName, DotAt + 1, MaxInt) else AQName;
 end;
 
 // Looks up the #convert rule whose FromType matches AClassName (SameText,
@@ -8387,14 +8386,7 @@ begin
           since "indexed but absent" and "indexed but STALE" are both live and
           the reader cannot tell them apart from the old sentence either. }
         var SkipMsg: string;
-        if Length(DfmFileSyms) = 0 then
-          SkipMsg:= Format('%s: %s is not covered by any supplied --db; convert-apply resolves .dfm blocks through the index. ' +
-                           'Index it, or pass a --db that covers it -- instance skipped',
-            [Inst.InstanceName, ExtractFileName(AUnitPas)])
-        else
-          SkipMsg:= Format('%s: could not locate .dfm object block for "%s: %s" in %s ' +
-                           '(the .dfm IS indexed, so the object is absent from it or the index is stale) -- instance skipped',
-            [Inst.InstanceName, Inst.InstanceName, Inst.FromType, ADfmPath]);
+        SkipMsg:= if Length(DfmFileSyms) = 0 then Format('%s: %s is not covered by any supplied --db; convert-apply resolves .dfm blocks through the index. ' + 'Index it, or pass a --db that covers it -- instance skipped', [Inst.InstanceName, ExtractFileName(AUnitPas)]) else Format('%s: could not locate .dfm object block for "%s: %s" in %s ' + '(the .dfm IS indexed, so the object is absent from it or the index is stale) -- instance skipped', [Inst.InstanceName, Inst.InstanceName, Inst.FromType, ADfmPath]);
         It:= InstItem(aikInstanceSkipped, afWarnings, SkipMsg);
         It.FilePath:= ADfmPath;
         SkipInstance(It);

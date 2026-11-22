@@ -516,10 +516,7 @@ begin
       // removing decayed engine blocks while --qname kept doing it. Splitting an
       // enum value is only safe when every site that tested the old value is
       // re-decided, and this was the site where "no change needed" was wrong.
-      if AOptions.Stubs then
-        Keep := True
-      else
-        Keep := HasManagedBlock(Res) or (Res.Action in [daExtended, daRemoved]);
+      Keep := if AOptions.Stubs then True else HasManagedBlock(Res) or (Res.Action in [daExtended, daRemoved]);
 
       if not Keep then Continue;
 

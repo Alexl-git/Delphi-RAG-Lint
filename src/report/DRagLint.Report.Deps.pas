@@ -613,8 +613,7 @@ begin
       if not IsProjSrc then Continue;
       if not AEdges.TryGetValue(Integer(Item.FileId), EdgeList) then Continue;
 
-      if Item.Via = '' then NextVia:= SourceMeta.Stem + '>' + Item.UsedUnit
-      else NextVia:= Item.Via + '>' + Item.UsedUnit;
+      NextVia:= if Item.Via = '' then SourceMeta.Stem + '>' + Item.UsedUnit else Item.Via + '>' + Item.UsedUnit;
 
       { D5: these edges belong to the file being expanded, not to the BFS
         root. Crediting the root listed the program as a user of every unit

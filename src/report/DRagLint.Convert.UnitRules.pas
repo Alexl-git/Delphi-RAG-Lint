@@ -707,8 +707,7 @@ var
   P: Integer;
 begin
   P:= Pos(ACloser, FText, FPos);
-  if P = 0 then FPos:= Length(FText) + 1
-  else FPos:= P + Length(ACloser);
+  FPos:= if P = 0 then Length(FText) + 1 else P + Length(ACloser);
 end;
 
 procedure TUsesLexer.Directive(AStart, ABodyStart: Integer; const ACloser: string);
@@ -1063,8 +1062,7 @@ end;
 { Offset of the LF ending ALine (or Length + 1 for the last line). }
 function TUnitText.LineStop(ALine: Integer): Integer;
 begin
-  if ALine < FLineStarts.Count then Result:= FLineStarts[ALine] - 1
-  else Result:= Length(FText) + 1;
+  Result:= if ALine < FLineStarts.Count then FLineStarts[ALine] - 1 else Length(FText) + 1;
 end;
 
 function TUnitText.LineIsBlank(ALine: Integer): Boolean;
@@ -1145,8 +1143,7 @@ end;
   handed a predicate, plain case-insensitive equality otherwise (1.26). }
 function TUnitRulePlanner.Same(const A, B: string): Boolean;
 begin
-  if FNeeds.Enabled and Assigned(FNeeds.SameUnit) then Result:= FNeeds.SameUnit(A, B)
-  else Result:= SameText(A, B);
+  Result:= if FNeeds.Enabled and Assigned(FNeeds.SameUnit) then FNeeds.SameUnit(A, B) else SameText(A, B);
 end;
 
 function TUnitRulePlanner.InAddSet(const AName: string): Boolean;
@@ -1401,8 +1398,7 @@ var
 
 begin
   E:= AC.Entries[AIdx];
-  if AIdx < ALastKept then Result:= TryFollow or TryPrecede
-  else Result:= TryPrecede or TryFollow;
+  Result:= if AIdx < ALastKept then TryFollow or TryPrecede else TryPrecede or TryFollow;
 end;
 
 { Rebuilds the clause's lines with ASpans deleted and AInsText inserted at

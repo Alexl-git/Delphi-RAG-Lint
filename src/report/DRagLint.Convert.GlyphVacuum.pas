@@ -164,7 +164,7 @@ end;
 
 function ImageExt(const AFormat: string): string;
 begin
-  if AFormat = '' then Result:= '.bin' else Result:= '.' + AFormat;
+  Result:= if AFormat = '' then '.bin' else '.' + AFormat;
 end;
 
 // SHA-256 of the RAW payload bytes. THashSHA2 has no GetHashString(TBytes)
@@ -257,15 +257,13 @@ procedure FillDerived(var R: TGlyphRow; const AObjectClass: string; AInCollectio
 var
   Eff, Inf: Integer;
 begin
-  if R.CountValue <> '' then R.CountEffective:= R.CountValue
-  else R.CountEffective:= R.CountDefault;
-  if (R.Height > 0) and (R.Width mod R.Height = 0) then R.InferredN:= IntToStr(R.Width div R.Height)
-  else R.InferredN:= '';
+  R.CountEffective:= if R.CountValue <> '' then R.CountValue else R.CountDefault;
+  R.InferredN:= if (R.Height > 0) and (R.Width mod R.Height = 0) then IntToStr(R.Width div R.Height) else '';
   Eff:= StrToIntDef(R.CountEffective, 0);
   Inf:= StrToIntDef(R.InferredN, 0);
   if (R.CountEffective <> '') and (R.InferredN <> '') then
   begin
-    if Eff = Inf then R.Agree:= 'Y' else R.Agree:= 'N';
+    R.Agree:= if Eff = Inf then 'Y' else 'N';
   end
   else
     R.Agree:= '';
@@ -365,7 +363,7 @@ begin
   else if PBrack = 0 then P:= PDot
   else if PDot < PBrack then P:= PDot
   else P:= PBrack;
-  if P = 0 then Result:= AProp else Result:= Copy(AProp, 1, P - 1);
+  Result:= if P = 0 then AProp else Copy(AProp, 1, P - 1);
 end;
 
 // Builds and files one row for one decoded payload -- the binary-leaf path and
@@ -487,7 +485,7 @@ begin
   begin
     if Child.Kind = dnkSubObject then
     begin
-      if AObjectPath = '' then ChildPath:= Child.Name else ChildPath:= AObjectPath + '.' + Child.Name;
+      ChildPath:= if AObjectPath = '' then Child.Name else AObjectPath + '.' + Child.Name;
       HarvestObject(Child, ADfmPath, APasUnit, ASurface, AFormClass, ChildPath, AState);
       Continue;
     end;
@@ -575,7 +573,7 @@ begin
     // convert it in memory; otherwise it is already a text .dfm (decoded per TTextFileFormat).
     if not BinaryDfmToText(Bytes, Text) then
       TTextFileFormat.Decode(Bytes, Text); { project .dfm rule: BOM / valid UTF-8 / else ANSI -- not the machine code page (1026c E1) }
-    if SameText(TPath.GetExtension(APath), '.fmx') then Surface:= 'fmx' else Surface:= 'dfm';
+    Surface:= if SameText(TPath.GetExtension(APath), '.fmx') then 'fmx' else 'dfm';
     PasUnit:= TPath.ChangeExtension(TPath.GetFileName(APath), '.pas');
     if not TFile.Exists(TPath.Combine(TPath.GetDirectoryName(APath), PasUnit)) then PasUnit:= '';
     Root:= nil;
@@ -669,7 +667,7 @@ end;
 function ClassRowLine(const A: TClassAgg): string;
 var Runtime: string;
 begin
-  if A.RuntimeRefs = -1 then Runtime:= '' else Runtime:= IntToStr(A.RuntimeRefs);
+  Runtime:= if A.RuntimeRefs = -1 then '' else IntToStr(A.RuntimeRefs);
   Result:= String.Join(#9, [
     Cell(A.ClassName_), Cell(A.ClassUnit), IntToStr(A.Instances), Cell(KeysText(A.Props)),
     Cell(KeysText(A.CountProps)), Cell(A.CountDef), DistText(A.NDist), DistText(A.InfDist),
@@ -948,7 +946,7 @@ var
   function Col(const AName: string): string;
   var Ix: Integer;
   begin
-    if Cols.TryGetValue(AName, Ix) and (Ix < Length(F)) then Result:= F[Ix] else Result:= '';
+    Result:= if Cols.TryGetValue(AName, Ix) and (Ix < Length(F)) then F[Ix] else '';
   end;
 begin
   if not TFile.Exists(APath) then Exit;

@@ -1517,7 +1517,7 @@ end;
 
 function DocDisplayCount(ATotal: Integer): Integer;
 begin
-  if ATotal > 15 then Result:= 10 else Result:= ATotal;
+  Result:= if ATotal > 15 then 10 else ATotal;
 end;
 
 function EffectiveDocIndent(const ALines: TArray<string>; ADeclLine, ADocStart, ADocEnd: Integer): string;
@@ -1551,7 +1551,7 @@ function LastSeg(const S: string): string;
 var P: Integer;
 begin
   P:= S.LastDelimiter('.');
-  if P >= 0 then Result:= Copy(S, P + 2, MaxInt) else Result:= S;
+  Result:= if P >= 0 then Copy(S, P + 2, MaxInt) else S;
 end;
 
 { v20: the leaf name of the TYPE that owns AKind/AQualifiedName, or '' when the
@@ -1668,7 +1668,7 @@ begin
   begin
     AGenerics:= AGenerics + ',' + Cur.GenericParams;
     Result:= ScopeMember(AStore, Cur, ARcv);  { 151 CF: memoised per (store, scope, name) }
-    if Cur.ParentId > 0 then Cur:= AStore.GetSymbolById(Cur.ParentId) else Cur:= Default(TSymbol);
+    Cur:= if Cur.ParentId > 0 then AStore.GetSymbolById(Cur.ParentId) else Default(TSymbol);
     Inc(Hops);
   end;
 end;
@@ -2793,7 +2793,7 @@ type
 function LastDottedSegment(const AName: string): string;
 begin
   var P: Integer:= LastDelimiter('.', AName);
-  if P > 0 then Result:= Copy(AName, P + 1, MaxInt) else Result:= AName;
+  Result:= if P > 0 then Copy(AName, P + 1, MaxInt) else AName;
 end;
 
 function IsStatementStart(const ATok: string): Boolean;
@@ -2819,8 +2819,7 @@ end;
 
 function TopFrame(const AState: THandlersScanState): Integer;
 begin
-  if Length(AState.Frames) = 0 then Result:= -1
-  else Result:= AState.Frames[High(AState.Frames)];
+  Result:= if Length(AState.Frames) = 0 then -1 else AState.Frames[High(AState.Frames)];
 end;
 
 procedure MarkStatement(var AState: THandlersScanState);
@@ -3139,7 +3138,7 @@ begin
     if ALine[I] > ' ' then
     begin
       MarkStatement(AState);
-      if ALine[I] = ':' then AState.PrevTok:= ':' else AState.PrevTok:= '';
+      AState.PrevTok:= if ALine[I] = ':' then ':' else '';
     end;
     Inc(I);
   end;
@@ -3447,8 +3446,7 @@ begin
   for D in ParseParamDecls(ExtractParamList(ASig)) do
   begin
     if Trim(D.TypeText) = '' then Continue;
-    if D.Qualifier <> '' then Txt:= D.Qualifier + ' ' + D.TypeText
-    else Txt:= D.TypeText;
+    Txt:= if D.Qualifier <> '' then D.Qualifier + ' ' + D.TypeText else D.TypeText;
     Ent.Name:= D.Name;
     Ent.Text:= Txt;
     Result:= Result + [Ent];
@@ -3800,10 +3798,7 @@ begin
     // Demote, never discard. The prose keeps its provenance marker via
     // EmitHarvestedRemarks, so a later run re-promotes it automatically once the
     // comment or the declaration changes -- nothing here is a one-way door.
-    if AFacts.HarvestedRemarks = '' then
-      AFacts.HarvestedRemarks:= AFacts.HarvestedSummary
-    else
-      AFacts.HarvestedRemarks:= AFacts.HarvestedSummary + #10#10 + AFacts.HarvestedRemarks;
+    AFacts.HarvestedRemarks:= if AFacts.HarvestedRemarks = '' then AFacts.HarvestedSummary else AFacts.HarvestedSummary + #10#10 + AFacts.HarvestedRemarks;
     AFacts.HarvestedSummary:= '';
     Exit;
   end;
@@ -4965,7 +4960,7 @@ begin
     Inc(GBUnresolved, BTick - TB0);
     Result.CalledFromTotal:= Distinct.Count;
     Result.SkippedCallers := Skipped;
-    if Distinct.Count > AMaxCallers then Shown:= AMaxCallers else Shown:= Distinct.Count;
+    Shown:= if Distinct.Count > AMaxCallers then AMaxCallers else Distinct.Count;
     // v(Q0, 2026-08-14): NO CAP ON A `dl:shared` UNIT. This is an INBOUND fact --
     // its entries come from OUTSIDE the unit, so each project that compiles the
     // unit computes a DIFFERENT set, and the several projects have to agree on one

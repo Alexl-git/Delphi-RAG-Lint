@@ -1456,17 +1456,13 @@ const
   CBomBB  = $BB;
   CBomBF  = $BF;
 begin
-  if (Length(pBytes) >= CBomLen) and (pBytes[0] = CBomEF) and (pBytes[1] = CBomBB) and (pBytes[2] = CBomBF) then
-    Result:= TEncoding.UTF8
-  else Result:= TEncoding.ANSI;
+  Result:= if (Length(pBytes) >= CBomLen) and (pBytes[0] = CBomEF) and (pBytes[1] = CBomBB) and (pBytes[2] = CBomBF) then TEncoding.UTF8 else TEncoding.ANSI;
 end;
 
 function DecodeSource(const pBytes: TBytes; out pEncoding: TEncoding): string;
 begin
   pEncoding:= SourceEncodingOf(pBytes);
-  if pEncoding = TEncoding.UTF8 then
-    Result:= TEncoding.UTF8.GetString(pBytes, Length(TEncoding.UTF8.GetPreamble), Length(pBytes) - Length(TEncoding.UTF8.GetPreamble))
-  else Result:= TEncoding.ANSI.GetString(pBytes);
+  Result:= if pEncoding = TEncoding.UTF8 then TEncoding.UTF8.GetString(pBytes, Length(TEncoding.UTF8.GetPreamble), Length(pBytes) - Length(TEncoding.UTF8.GetPreamble)) else TEncoding.ANSI.GetString(pBytes);
 end;
 
 function EncodeSource(const pText: string; pEncoding: TEncoding): TBytes;
@@ -1490,8 +1486,7 @@ end;
 
 function LineAt(const pLines: TArray<string>; pLine: Integer): string;
 begin
-  if InRange(pLine, 1, Length(pLines)) then Result:= pLines[pLine - 1]
-  else Result:= '';
+  Result:= if InRange(pLine, 1, Length(pLines)) then pLines[pLine - 1] else '';
 end;
 
 function SliceLines(const pLines: TArray<string>; const pRange: TLineRange): TArray<string>;
@@ -1544,8 +1539,7 @@ begin
     end;
     Dec(L);
   end;
-  if (L >= 1) and IsBlockWord(LineAt(pLines, L)) then Result:= L
-  else Result:= 0;
+  Result:= if (L >= 1) and IsBlockWord(LineAt(pLines, L)) then L else 0;
 end;
 
 /// First line after pHeader that is indented no deeper than pHeader (a column-1 header: the
@@ -1649,8 +1643,7 @@ var
   P: Integer;
 begin
   P:= Pos(' in ', LowerCase(pEntry));
-  if P > 0 then Result:= LowerCase(Trim(Copy(pEntry, 1, P - 1)))
-  else Result:= LowerCase(Trim(pEntry));
+  Result:= if P > 0 then LowerCase(Trim(Copy(pEntry, 1, P - 1))) else LowerCase(Trim(pEntry));
 end;
 
 function SectLabel(pSect: TSect): string;
@@ -2497,8 +2490,7 @@ var
   Fid: Int64;
 begin
   Fid:= FidOfStem(pStem);
-  if Fid > 0 then Result:= UnitNameOfPath(PathOf(Fid))
-  else Result:= pStem;
+  Result:= if Fid > 0 then UnitNameOfPath(PathOf(Fid)) else pStem;
 end;
 
 function TCyclePlanner.GetFile(pFid: Int64): TPlanFile;
@@ -5845,11 +5837,7 @@ end;
 
 function TCyclePlanner.ReindexCommand: string;
 begin
-  if FProjectFile <> '' then
-    Result:= Format('drag-lint index --project "%s" --db "%s"', [FProjectFile, FDbPath])
-  else
-    Result:= Format('drag-lint index "%s" --db "%s"',
-      [ExcludeTrailingPathDelimiter(ExtractFilePath(PathOf(FidOfStem(FComp[0])))), FDbPath]);
+  Result:= if FProjectFile <> '' then Format('drag-lint index --project "%s" --db "%s"', [FProjectFile, FDbPath]) else Format('drag-lint index "%s" --db "%s"', [ExcludeTrailingPathDelimiter(ExtractFilePath(PathOf(FidOfStem(FComp[0])))), FDbPath]);
 end;
 
 function TCyclePlanner.CyclesCommand(pPlan: Boolean): string;
@@ -6854,12 +6842,7 @@ begin
       Inc(NAll);
       if FGraph.IntfEdges.ContainsKey(A + '->' + B) then Inc(NIntf);
     end;
-  if (NAll > 0) and (NIntf = NAll) then
-    Result:= Format('Status: **interface cycle** -- all %d uses between the units of this cycle are in INTERFACE ' +
-      'uses clauses (the compiler refuses this loop).', [NAll])
-  else
-    Result:= Format('Status: **interface coupling** -- %d of %d uses between the units of this cycle are in ' +
-      'INTERFACE uses clauses.', [NIntf, NAll]);
+  Result:= if (NAll > 0) and (NIntf = NAll) then Format('Status: **interface cycle** -- all %d uses between the units of this cycle are in INTERFACE ' + 'uses clauses (the compiler refuses this loop).', [NAll]) else Format('Status: **interface coupling** -- %d of %d uses between the units of this cycle are in ' + 'INTERFACE uses clauses.', [NIntf, NAll]);
 end;
 procedure TCyclePlanner.RenderIntfCycle(const pPlan: TCycleFixPlan);
 begin

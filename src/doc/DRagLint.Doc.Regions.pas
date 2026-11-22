@@ -1295,7 +1295,7 @@ begin
     for i:= 0 to High(Lines) do
     begin
       if i > 0 then Sb.Append(#10);
-      if i = 0 then CurBud:= AFirstBudget else CurBud:= ABudget;
+      CurBud:= if i = 0 then AFirstBudget else ABudget;
       if Length(Lines[i]) <= CurBud then
       begin
         Sb.Append(Lines[i]);
@@ -1513,10 +1513,7 @@ begin
   while (EolPos <= Length(S)) and (S[EolPos] <> #13) and (S[EolPos] <> #10) do
     Inc(EolPos);
   Tail:= Copy(S, EolPos, MaxInt).TrimLeft([#13, #10]);
-  if (Head <> '') and (Tail <> '') then
-    Result:= Head + sLineBreak + Tail
-  else
-    Result:= Head + Tail;
+  Result:= if (Head <> '') and (Tail <> '') then Head + sLineBreak + Tail else Head + Tail;
 end;
 
 // The ONE spelling of the attribute-tolerant container pattern: non-greedy
@@ -1739,8 +1736,7 @@ end;
 // visible as whitespace churn on shapes it is supposed to leave alone.
 function NormalizeContainerBody(const ATagName, ABody: string): string;
 begin
-  if SameText(ATagName, 'example') then Result:= Trim(ABody)
-  else Result:= TDocCommentParser.CollapseWhitespace(ABody);
+  Result:= if SameText(ATagName, 'example') then Trim(ABody) else TDocCommentParser.CollapseWhitespace(ABody);
 end;
 
 // v(ADP3 T3h): every match of ARe replaced by an EQUAL-LENGTH run of spaces
@@ -2689,7 +2685,7 @@ end;
 // '(+N more)' spellings in one block would read as two different measurements.
 function MoreSuffixP2(AShown, ATotal: Integer): string;
 begin
-  if ATotal > AShown then Result:= Format(' (+%d more)', [ATotal - AShown]) else Result:= '';
+  Result:= if ATotal > AShown then Format(' (+%d more)', [ATotal - AShown]) else '';
 end;
 function JoinEscP2(const A: TArray<string>): string;
 var i: Integer;
@@ -2759,8 +2755,7 @@ begin
   if AFacts.ReturnsOwner <> '' then
   begin
     var OwnsWord: string;
-    if AFacts.ReturnsOwner = 'new' then OwnsWord:= 'new (caller owns)'
-    else OwnsWord:= AFacts.ReturnsOwner;
+    OwnsWord:= if AFacts.ReturnsOwner = 'new' then 'new (caller owns)' else AFacts.ReturnsOwner;
     ALines.Add('Owns returned: ' + EscXml(OwnsWord));
   end;
 end;
@@ -3044,7 +3039,7 @@ var
   Sb: TStringBuilder;
   function MoreSuffix(AShown, ATotal: Integer): string;
   begin
-    if ATotal > AShown then Result:= Format(' (+%d more)', [ATotal - AShown]) else Result:= '';
+    Result:= if ATotal > AShown then Format(' (+%d more)', [ATotal - AShown]) else '';
   end;
   // Escapes each element then joins with ', '. Used for every mined name list
   // emitted as element text (Calls / Used in units / Raises / Overridden by).
@@ -3217,8 +3212,7 @@ begin
       // the contents cannot drift apart into disagreeing about what a callable
       // is -- which is the whole reason T3i/T3k collapsed the copies.
       var RefVerb: string;
-      if CanBeCallTarget(AFacts.SymbolKind) then RefVerb:= 'Called from: '
-      else RefVerb:= 'Used by: ';
+      RefVerb:= if CanBeCallTarget(AFacts.SymbolKind) then 'Called from: ' else 'Used by: ';
       // E-USE-EDGES-PHASE2: a property/field with RESOLVED uses says so with
       // modes, and the name-matched list is not rendered beside it (a resolved
       // list must not be diluted with guesses -- spec 2026-09-14 sec 8.1).
@@ -3610,8 +3604,7 @@ begin
   Parts:= Norm.Split([#10]);
   Result:= C.APrefix + AOpen;
   for i:= 0 to High(Parts) do
-    if i = 0 then Result:= Result + Parts[i]
-    else Result:= Result + sLineBreak + C.APrefix + Trim(Parts[i]);
+    Result:= if i = 0 then Result + Parts[i] else Result + sLineBreak + C.APrefix + Trim(Parts[i]);
   Result:= Result + AClose;
 end;
 // v(2026-09-15, defect 3): the preserve arms' emitter. The author's own
@@ -3828,11 +3821,7 @@ begin
     human's -- pass 2 preserved it, dropped the marker, and a deleted `raise`
     stopped deleting its tag. The empty case keeps AUTO_MARK exactly as
     before, so nothing about an undescribed exception changes. }
-  if Trim(AMessage) <> '' then
-    Result:= McEmitTagged(C, '<exception cref="' + ATypeName + '">' + AUTO_EXC,
-                        EscXml(Trim(AMessage)), '</exception>')
-  else
-    Result:= McEmitTagged(C, '<exception cref="' + ATypeName + '">' + AUTO_MARK, '', '</exception>');
+  Result:= if Trim(AMessage) <> '' then McEmitTagged(C, '<exception cref="' + ATypeName + '">' + AUTO_EXC, EscXml(Trim(AMessage)), '</exception>') else McEmitTagged(C, '<exception cref="' + ATypeName + '">' + AUTO_MARK, '', '</exception>');
 end;
 { EVERY distinct mined message for ACls, joined, or '' when that class was
   raised only in forms the miner declines to describe. Matched
@@ -3860,7 +3849,7 @@ begin
       if (M = '') or (not SameText(D.ExcClass, ACls)) then Continue;
       if Seen.IndexOf(M) >= 0 then Continue;
       Seen.Add(M);
-      if Result = '' then Result:= M else Result:= Result + '; ' + M;
+      Result:= if Result = '' then M else Result + '; ' + M;
     end;
 
     { TRANSITIVE ATTRIBUTION (gap 2). Everything above is what THIS routine
@@ -3898,7 +3887,7 @@ begin
       if Seen.IndexOf(Attrib) >= 0 then Continue;
       Seen.Add(Attrib);
       Inc(Shown);
-      if Result = '' then Result:= Attrib else Result:= Result + '; ' + Attrib;
+      Result:= if Result = '' then Attrib else Result + '; ' + Attrib;
     end;
     if Extra > 0 then
       Result:= Result + Format(' (+%d more)', [Extra]);
@@ -5114,10 +5103,7 @@ begin
     // it. Identical to the pre-v(ADP3 T3f) expression whenever Residual is
     // empty: both conditions then reduce to "Sb is empty", which TrimRight
     // would have returned as '' anyway.
-    if (C.LenBeforeResidual = 0) and (C.Sb.Length = C.LenAfterResidual) then
-      Result:= ''
-    else
-      Result:= C.Sb.ToString.TrimRight([#13, #10]);
+    Result:= if (C.LenBeforeResidual = 0) and (C.Sb.Length = C.LenAfterResidual) then '' else C.Sb.ToString.TrimRight([#13, #10]);
   finally
     C.Sb.Free;
   end;

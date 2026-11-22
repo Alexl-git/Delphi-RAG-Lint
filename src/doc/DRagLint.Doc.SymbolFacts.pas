@@ -1041,7 +1041,7 @@ var Shown, I: Integer;
 begin
   Result:= '';
   if (AItems = nil) or (AItems.Count = 0) then Exit;
-  if AItems.Count > ACap then Shown:= ACap else Shown:= AItems.Count;
+  Shown:= if AItems.Count > ACap then ACap else AItems.Count;
   for I:= 0 to Shown - 1 do
   begin
     if I > 0 then Result:= Result + ', ';
@@ -1226,8 +1226,7 @@ procedure WalkMutatedParams(const N: TTSNode; const ASrc: TBytes;
     if Idx < 0 then Exit;
     RV:= AVars.Get(Idx);
     if (RV.Kind not in [vkParamVar, vkParamOut]) then Exit;
-    if RV.Kind = vkParamVar then Disp:= RV.Display + ' (var)'
-    else Disp:= RV.Display + ' (out)';
+    Disp:= if RV.Kind = vkParamVar then RV.Display + ' (var)' else RV.Display + ' (out)';
     if AOut.IndexOf(Disp) < 0 then AOut.Add(Disp);
   end;
 
@@ -2036,8 +2035,8 @@ begin
   begin
     if Copy(AText, P, L) = AWord then
     begin
-      if P = 1 then Before:= #0 else Before:= AText[P - 1];
-      if P + L > TL then After:= #0 else After:= AText[P + L];
+      Before:= if P = 1 then #0 else AText[P - 1];
+      After:= if P + L > TL then #0 else AText[P + L];
       if (not IsSqlIdentChar(Before)) and (not IsSqlIdentChar(After)) then Exit(P);
     end;
     Inc(P);
@@ -3521,7 +3520,7 @@ begin
           None of them mutates it (they only IndexOf/Get), and every one of them
           exits on a null Body before touching it, which is why it is built only
           for a non-null Body. }
-        if Body.IsNull then Vars:= nil else Vars:= TRoutineVarTable.Build(Proc, PF.Src);
+        Vars:= if Body.IsNull then nil else TRoutineVarTable.Build(Proc, PF.Src);
         try
         // ADP2 T4: Reads/Writes fields -- the SAME matched Proc/Body, no 2nd
         // AST scan. See AnalyzeReadsWrites' header comment (above, this
@@ -3598,7 +3597,7 @@ function LastSegment(const S: string): string;
 var P: Integer;
 begin
   P:= S.LastDelimiter('.');
-  if P >= 0 then Result:= Copy(S, P + 2, MaxInt) else Result:= S;
+  Result:= if P >= 0 then Copy(S, P + 2, MaxInt) else S;
 end;
 
 { 152b O6F: run-level memos of the walk's symbol lookups. GCbTestCase: rule (b) per FIXTURE

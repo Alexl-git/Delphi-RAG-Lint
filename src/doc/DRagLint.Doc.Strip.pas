@@ -677,11 +677,7 @@ begin
         Lo:= I;
         Hi:= I;
         while (Hi + 1 < Lines.Count) and IsDocLine(Lines[Hi + 1]) do Inc(Hi);
-        if Length(ASymStartLines) > 0 then
-          Fits:= DocRegionFitsDecl(Hi + 1, ADeclLine, DOC_ALLOW_GAP, ASymStartLines)
-        else
-          Fits:= DocRegionInGapWindow(Hi + 1, ADeclLine, DOC_ALLOW_GAP)
-                 and ((Hi + 1 = ADeclLine - 1) or IsBlankSourceLine(Lines, ADeclLine - 1));
+        Fits:= if Length(ASymStartLines) > 0 then DocRegionFitsDecl(Hi + 1, ADeclLine, DOC_ALLOW_GAP, ASymStartLines) else DocRegionInGapWindow(Hi + 1, ADeclLine, DOC_ALLOW_GAP) and ((Hi + 1 = ADeclLine - 1) or IsBlankSourceLine(Lines, ADeclLine - 1));
         if Fits then
         begin
           RegionLo:= Lo;

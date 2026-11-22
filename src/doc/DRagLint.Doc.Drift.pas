@@ -1139,7 +1139,7 @@ begin
   try
     // The doc-comment anchor line (falls back to the decl line if the parsed doc
     // carries no position).
-    if ADoc.StartLine > 0 then DocLine:= ADoc.StartLine else DocLine:= ASym.StartLine;
+    DocLine:= if ADoc.StartLine > 0 then ADoc.StartLine else ASym.StartLine;
 
     // Body facts (for the exception-raised check and the fresh facts-block).
     // AIncludeSeeAlso is THREADED, never defaulted here: the fresh block this

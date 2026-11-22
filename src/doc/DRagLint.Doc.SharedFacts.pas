@@ -1110,8 +1110,7 @@ function FactContentEnd(const AFlat: string; AFrom: Integer): Integer;
 var
   TagAt: Integer;
 begin
-  if InsidePara(AFlat, AFrom) then Result:= 0
-  else Result:= NextLabelPos(AFlat, AFrom);
+  Result:= if InsidePara(AFlat, AFrom) then 0 else NextLabelPos(AFlat, AFrom);
   if Result = 0 then Result:= Length(AFlat) + 1;
   TagAt:= PosEx('<', AFlat, AFrom);
   if (TagAt > 0) and (TagAt < Result) then Result:= TagAt;
@@ -1450,11 +1449,7 @@ begin
       tagged it the line is in the tagged regime, adopting costs no churn that
       has not already happened, and an entry left untagged there could never be
       reaped by the project that rendered it (run_doc_project_tags REAP). }
-    if (not IsTruncated(AStored)) and (not AnyTagged(SE)) and
-       SameEntryMultiset(Lazy.ToArray, SE) then
-      Result:= SortedJoin(Lazy)
-    else
-      Result:= SortedJoin(Eager);
+    Result:= if (not IsTruncated(AStored)) and (not AnyTagged(SE)) and SameEntryMultiset(Lazy.ToArray, SE) then SortedJoin(Lazy) else SortedJoin(Eager);
   finally
     Eager.Free;
     Lazy.Free;
@@ -2020,7 +2015,7 @@ begin
       { An EMPTY RANGE rather than a guarded loop: wrapping the loop in
         'if BeginAt >= 0' costs a nesting level, and this routine is at the
         deep-nesting limit. No fence -> FirstAt 0, LastAt -1 -> nothing runs. }
-      if BeginAt >= 0 then FirstAt:= BeginAt + 1 else FirstAt:= 0;
+      FirstAt:= if BeginAt >= 0 then BeginAt + 1 else 0;
       if EndAt >= 0 then LastAt:= EndAt - 1
       else if BeginAt >= 0 then LastAt:= Lines.Count - 1
       else LastAt:= -1;

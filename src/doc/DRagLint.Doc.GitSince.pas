@@ -145,8 +145,7 @@ begin
     WaitRes:= WaitForSingleObject(PI.hProcess, GIT_TIMEOUT_MS);
     if WaitRes = WAIT_OBJECT_0 then
     begin
-      if GetExitCodeProcess(PI.hProcess, ExitCode) then Result:= Integer(ExitCode)
-      else Result:= -1;
+      Result:= if GetExitCodeProcess(PI.hProcess, ExitCode) then Integer(ExitCode) else -1;
     end
     else
     begin
@@ -200,7 +199,7 @@ begin
   TzSeconds:= 0;
   if (Length(TzStr) = 5) and ((TzStr[1] = '+') or (TzStr[1] = '-')) then
   begin
-    if TzStr[1] = '-' then TzSign := -1 else TzSign := 1;
+    TzSign := if TzStr[1] = '-' then -1 else 1;
     if TryStrToInt(Copy(TzStr, 2, 2), TzHours) and TryStrToInt(Copy(TzStr, 4, 2), TzMins) then
       TzSeconds := TzSign * (Int64(TzHours) * 3600 + Int64(TzMins) * 60);
   end;

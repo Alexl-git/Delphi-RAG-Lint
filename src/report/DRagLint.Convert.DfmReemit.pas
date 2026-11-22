@@ -576,7 +576,7 @@ var
 begin
   T:= NodeText(ANode, ASource);
   P:= Pos(' ', T);
-  if P > 0 then Result:= LowerCase(Copy(T, 1, P - 1)) else Result:= '';
+  Result:= if P > 0 then LowerCase(Copy(T, 1, P - 1)) else '';
 end;
 
 // 1.26.5: the `[n]` child-position marker after an object header's class
@@ -782,10 +782,7 @@ begin
     // `object` it would DECLARE a second component of that name, which fails
     // when the form loads. A synthesized node has none and is an `object`.
     Kw:= if ANode.Keyword <> '' then ANode.Keyword else KW_OBJECT;
-    if ANode.ClassName_ <> '' then
-      Head:= Format('%s %s: %s', [Kw, ANode.Name, ANode.ClassName_])
-    else
-      Head:= Format('%s %s', [Kw, ANode.Name]);
+    Head:= if ANode.ClassName_ <> '' then Format('%s %s: %s', [Kw, ANode.Name, ANode.ClassName_]) else Format('%s %s', [Kw, ANode.Name]);
     { 1.26.5: the child-position marker as parsed -- see ChildPosOf }
     if ANode.ChildPos <> '' then Head:= Head + ' ' + ANode.ChildPos;
     SB.Append(Ind(AIndent)).Append(Head).Append(#13#10);
@@ -833,7 +830,7 @@ begin
   Prefix:= '';
   for i:= 0 to High(Segs) - 1 do // every segment EXCEPT the last -> sub-objects
   begin
-    if Prefix = '' then Prefix:= Segs[i] else Prefix:= Prefix + '.' + Segs[i];
+    Prefix:= if Prefix = '' then Segs[i] else Prefix + '.' + Segs[i];
     Found:= False;
     for j:= 0 to Cur.Children.Count - 1 do
       if SameText(Cur.Children[j].Name, Segs[i]) and
@@ -951,8 +948,7 @@ var
   DotAt: Integer;
 begin
   DotAt:= LastDelimiter('.', AQName);
-  if DotAt > 0 then Result:= Copy(AQName, DotAt + 1, MaxInt)
-  else Result:= AQName;
+  Result:= if DotAt > 0 then Copy(AQName, DotAt + 1, MaxInt) else AQName;
 end;
 
 // Look up a #convert rule for a specific From part-type. 2a-i recurses with the
@@ -1457,10 +1453,7 @@ var
     end;
     if not CastTargetFraming(ACast, Framing, AWhy) then Exit;
     if not WrapGraphicData(Image, Fmt, Framing, Framed, AWhy) then Exit;
-    if (Length(Framed) = Length(Payload)) and CompareMem(Pointer(Framed), Pointer(Payload), Length(Framed)) then
-      ACarry:= AValueText
-    else
-      ACarry:= EncodeDfmHex(Framed, HexIndentOf(AValueText));
+    ACarry:= if (Length(Framed) = Length(Payload)) and CompareMem(Pointer(Framed), Pointer(Payload), Length(Framed)) then AValueText else EncodeDfmHex(Framed, HexIndentOf(AValueText));
     Result:= True;
   end;
 

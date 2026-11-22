@@ -1425,8 +1425,7 @@ end;
 
 function TSurfaceBuilder.LineText(pLine: Integer): string;
 begin
-  if InRange(pLine, 1, Length(FLines)) then Result:= Trim(FLines[pLine - 1])
-  else Result:= '';
+  Result:= if InRange(pLine, 1, Length(FLines)) then Trim(FLines[pLine - 1]) else '';
 end;
 
 function TSurfaceBuilder.BindBare(const pR: TReference; const pName: string; out pOwner: TSymbol): Boolean;
@@ -1845,8 +1844,7 @@ end;
 
 function LineOf(const pLines: TArray<string>; pLine: Integer): string;
 begin
-  if InRange(pLine, 1, Length(pLines)) then Result:= pLines[pLine - 1]
-  else Result:= '';
+  Result:= if InRange(pLine, 1, Length(pLines)) then pLines[pLine - 1] else '';
 end;
 
 { The code of a line before a `//` comment, trimmed. }
