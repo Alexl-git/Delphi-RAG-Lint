@@ -257,19 +257,6 @@ type
     function RoutinesLabel: string;
   end;
 
-/// <summary>What find-callers does NOT report, as a ' + ...' tail (the PS Get-UnreportedTail).</summary>
-/// <param name="pU">The unreported refs of one kind.</param>
-/// <param name="pSel">The selection, for the member name and its file.</param>
-/// <returns>'' when nothing is unreported.</returns>
-/// <remarks>
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.MemberAccess.FormatAccessCount (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.MemberAccess.TMemberAccessData.CountLabel (DRagLint.Charts.MemberAccess.pas)</para>
-/// <para>Calls: DRagLint.Charts.Text.FileNameOf, Format</para>
-/// <seealso cref="DRagLint.Charts.Text.FileNameOf"/>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
-function UnreportedTail(const pU: TUnreportedAccess; const pSel: TMemberSelection): string;
-
 /// <summary>A count named for what it is (the PS Format-AccessCount).</summary>
 /// <param name="pN">The number of sites find-callers reports.</param>
 /// <param name="pU">The unreported refs of the same kind.</param>
@@ -338,6 +325,19 @@ const
   ENCL_SELECT = 'encl.qualified_name';
 
 { ---- TMemberAccessData ---- }
+
+/// <summary>What find-callers does NOT report, as a ' + ...' tail (the PS Get-UnreportedTail).</summary>
+/// <param name="pU">The unreported refs of one kind.</param>
+/// <param name="pSel">The selection, for the member name and its file.</param>
+/// <returns>'' when nothing is unreported.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.MemberAccess.FormatAccessCount (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.MemberAccess.TMemberAccessData.CountLabel (DRagLint.Charts.MemberAccess.pas)</para>
+/// <para>Calls: DRagLint.Charts.Text.FileNameOf, Format</para>
+/// <seealso cref="DRagLint.Charts.Text.FileNameOf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function UnreportedTail(const pU: TUnreportedAccess; const pSel: TMemberSelection): string; forward;
 
 constructor TMemberAccessData.Create;
 begin

@@ -419,34 +419,6 @@ function NewTraceFacet(const pHead, pText: string; const pAnchor: string = ''; c
 /// </remarks>
 function TraceCondProblem(const pCondition: string): string;
 
-/// <summary>Refuses a text the line regexes would misread.</summary>
-/// <param name="pText">The text to check.</param>
-/// <param name="pWhat">Names the field in the message ('step text', 'facet text').</param>
-/// <param name="pHead">True for a STEP text: adds the head-word rules (counted words, section word before STOPS, lone annotation).</param>
-/// <exception cref="EChartsTrace">The text is empty, has a line break, ' @', ' [', ' -- ', a leading '--', a trailing ' --', or a refused head.</exception>
-/// <remarks>
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Trace.FormA.NewTraceFacet (DRagLint.Charts.Trace.FormA.pas), DRagLint.Charts.Trace.FormA.NewTraceStep (DRagLint.Charts.Trace.FormA.pas)</para>
-/// <para>Calls: DRagLint.Charts.Trace.FormA.Refuse, DRagLint.Charts.Trace.FormA.Rx, Trim</para>
-/// <para>Complexity: 15 (cyclomatic, outer body), 25 lines (full implementation)</para>
-/// <seealso cref="DRagLint.Charts.Trace.FormA.Refuse"/>
-/// <seealso cref="DRagLint.Charts.Trace.FormA.Rx"/>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
-procedure TestTraceText(const pText, pWhat: string; pHead: Boolean = False);
-
-/// <summary>Refuses a title that cannot be quoted verbatim.</summary>
-/// <param name="pTitle">The title to check.</param>
-/// <exception cref="EChartsTrace">The title carries a double-quote.</exception>
-/// <remarks>
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Trace.FormA.NewTrace (DRagLint.Charts.Trace.FormA.pas), DRagLint.Charts.Trace.FormA.WriteFormA (DRagLint.Charts.Trace.FormA.pas)</para>
-/// <para>Calls: DRagLint.Charts.Trace.FormA.Refuse</para>
-/// <seealso cref="DRagLint.Charts.Trace.FormA.Refuse"/>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
-procedure TestTraceTitle(const pTitle: string);
-
 /// <summary>The END TRACE line of pCounts; the ONE builder, so the text and the chart cannot word it two ways.</summary>
 /// <param name="pCounts">The counts to word.</param>
 /// <returns>'END TRACE  n steps, n conditions, n crossings, n unresolved.'</returns>
@@ -512,21 +484,6 @@ function TraceUnclickable(const pText: string): TArray<string>;
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function FormatTraceNote(const pRoutine, pNote, pAsk: string): string;
-
-/// <summary>Splits a note back into its parts.</summary>
-/// <param name="pNote">A note as FormatTraceNote joins it.</param>
-/// <param name="pRoutine">The 'in X' part, only when it is the FIRST piece.</param>
-/// <param name="pAsk">The 'ask X' part.</param>
-/// <returns>The remaining free text, pieces joined by '; '.</returns>
-/// <remarks>
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Trace.FormA.ReadFormA (DRagLint.Charts.Trace.FormA.pas)</para>
-/// <para>Calls: DRagLint.Charts.Trace.FormA.Grp</para>
-/// <para>Mutates: pRoutine (out), pAsk (out)</para>
-/// <seealso cref="DRagLint.Charts.Trace.FormA.Grp"/>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
-function SplitTraceNote(const pNote: string; out pRoutine, pAsk: string): string;
 
 /// <summary>The canonical Form A text. Numbers the items in place, recomputes the counts, refuses any byte outside 0x20-0x7E/CR/LF.</summary>
 /// <param name="pTrace">The trace to write.</param>
@@ -719,13 +676,37 @@ begin
   inherited Destroy;
 end;
 
+/// <summary>Refuses a title that cannot be quoted verbatim.</summary>
+/// <param name="pTitle">The title to check.</param>
+/// <exception cref="EChartsTrace">The title carries a double-quote.</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.FormA.NewTrace (DRagLint.Charts.Trace.FormA.pas), DRagLint.Charts.Trace.FormA.WriteFormA (DRagLint.Charts.Trace.FormA.pas)</para>
+/// <para>Calls: DRagLint.Charts.Trace.FormA.Refuse</para>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.Refuse"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure TestTraceTitle(const pTitle: string);
 begin
   if pTitle.Contains('"') then
     Refuse('Form A title carries a double-quote, so it cannot be quoted verbatim: ' + pTitle);
 end;
 
-procedure TestTraceText(const pText, pWhat: string; pHead: Boolean);
+/// <summary>Refuses a text the line regexes would misread.</summary>
+/// <param name="pText">The text to check.</param>
+/// <param name="pWhat">Names the field in the message ('step text', 'facet text').</param>
+/// <param name="pHead">True for a STEP text: adds the head-word rules (counted words, section word before STOPS, lone annotation).</param>
+/// <exception cref="EChartsTrace">The text is empty, has a line break, ' @', ' [', ' -- ', a leading '--', a trailing ' --', or a refused head.</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.FormA.NewTraceFacet (DRagLint.Charts.Trace.FormA.pas), DRagLint.Charts.Trace.FormA.NewTraceStep (DRagLint.Charts.Trace.FormA.pas)</para>
+/// <para>Calls: DRagLint.Charts.Trace.FormA.Refuse, DRagLint.Charts.Trace.FormA.Rx, Trim</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 25 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.Refuse"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.Rx"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+procedure TestTraceText(const pText, pWhat: string; pHead: Boolean = False);
 begin
   if Trim(pText) = '' then
     Refuse('Form A ' + pWhat + ' is empty');
@@ -928,6 +909,19 @@ begin
   end;
 end;
 
+/// <summary>Splits a note back into its parts.</summary>
+/// <param name="pNote">A note as FormatTraceNote joins it.</param>
+/// <param name="pRoutine">The 'in X' part, only when it is the FIRST piece.</param>
+/// <param name="pAsk">The 'ask X' part.</param>
+/// <returns>The remaining free text, pieces joined by '; '.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.FormA.ReadFormA (DRagLint.Charts.Trace.FormA.pas)</para>
+/// <para>Calls: DRagLint.Charts.Trace.FormA.Grp</para>
+/// <para>Mutates: pRoutine (out), pAsk (out)</para>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.Grp"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SplitTraceNote(const pNote: string; out pRoutine, pAsk: string): string;
 begin
   pRoutine:= '';

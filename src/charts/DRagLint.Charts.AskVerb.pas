@@ -167,30 +167,6 @@ function NormaliseAskQuestion(const pTyped: string; out pId: string): Boolean;
 /// </remarks>
 function AskCommandOf(const pArgs: TAskVerbArgs): TReportCommand;
 
-/// <summary>The text `drag-lint ask` prints for an answer.</summary>
-/// <param name="pQuestion">The normalised question id.</param>
-/// <param name="pShownTarget">The target; 'A -> B' for path.</param>
-/// <param name="pPlainText">The producer's plain answer (CRLF, LF or CR line ends).</param>
-/// <param name="pPlain">True: the plain answer itself. False: its DocInsight block.</param>
-/// <param name="pAskedOn">When it was asked; the DocInsight form prints it only for a legacy
-/// answer without a header.</param>
-/// <returns>The lines to print, without line ends; a final empty line of the input is
-/// dropped.</returns>
-/// <remarks>
-/// The DocInsight form is FormatAnswerAsDocInsight with the question's caption
-/// phrase -- the bytes Ask-Report's default mode and the IDE's Reports menu produce. Pure.
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas)</para>
-/// <para>Calls: DRagLint.Charts.AskVerb.AnswerLines, DRagLint.Charts.DocInsight.FormatAnswerAsDocInsight, DRagLint.Charts.Question.QuestionPhrase</para>
-/// <para>Returns: AnswerLines(FormatAnswerAsDocInsight(QuestionPhrase(pQuestion), pQuestion, pShownTarget, pAskedOn, pPlainText))</para>
-/// <seealso cref="DRagLint.Charts.AskVerb.AnswerLines"/>
-/// <seealso cref="DRagLint.Charts.DocInsight.FormatAnswerAsDocInsight"/>
-/// <seealso cref="DRagLint.Charts.Question.QuestionPhrase"/>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
-function FormatAskAnswer(const pQuestion, pShownTarget, pPlainText: string; pPlain: Boolean;
-  pAskedOn: TDateTime): TArray<string>;
-
 /// <summary>Runs `drag-lint ask`.</summary>
 /// <param name="pArgs">The parsed arguments.</param>
 /// <param name="pProducer">The producer to answer with; nil = TDelphiProducer (live indexes
@@ -231,17 +207,6 @@ function RunAsk(const pArgs: TAskVerbArgs; const pProducer: IReportProducer;
 /// </remarks>
 function RunAskVerbFromCommandLine: Integer;
 
-/// <summary>The verb's usage text.</summary>
-/// <returns>The lines --help prints for `ask`.</returns>
-/// <remarks>
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.AskVerb.RunAskVerbFromCommandLine (DRagLint.Charts.AskVerb.pas)</para>
-/// <para>Calls: DRagLint.Charts.Question.QuestionIds</para>
-/// <seealso cref="DRagLint.Charts.Question.QuestionIds"/>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
-function AskUsage: TArray<string>;
-
 implementation
 
 uses
@@ -269,6 +234,15 @@ type
     unit's own refusal, so a pairing stop is an ask stop. }
   EAskStop = EReportPairStop;
 
+/// <summary>The verb's usage text.</summary>
+/// <returns>The lines --help prints for `ask`.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.AskVerb.RunAskVerbFromCommandLine (DRagLint.Charts.AskVerb.pas)</para>
+/// <para>Calls: DRagLint.Charts.Question.QuestionIds</para>
+/// <seealso cref="DRagLint.Charts.Question.QuestionIds"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AskUsage: TArray<string>;
 begin
   Result:= [
@@ -418,6 +392,27 @@ begin
   if (Length(Result) > 0) and (Result[High(Result)] = '') then SetLength(Result, Length(Result) - 1);
 end;
 
+/// <summary>The text `drag-lint ask` prints for an answer.</summary>
+/// <param name="pQuestion">The normalised question id.</param>
+/// <param name="pShownTarget">The target; 'A -> B' for path.</param>
+/// <param name="pPlainText">The producer's plain answer (CRLF, LF or CR line ends).</param>
+/// <param name="pPlain">True: the plain answer itself. False: its DocInsight block.</param>
+/// <param name="pAskedOn">When it was asked; the DocInsight form prints it only for a legacy
+/// answer without a header.</param>
+/// <returns>The lines to print, without line ends; a final empty line of the input is
+/// dropped.</returns>
+/// <remarks>
+/// The DocInsight form is FormatAnswerAsDocInsight with the question's caption
+/// phrase -- the bytes Ask-Report's default mode and the IDE's Reports menu produce. Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas)</para>
+/// <para>Calls: DRagLint.Charts.AskVerb.AnswerLines, DRagLint.Charts.DocInsight.FormatAnswerAsDocInsight, DRagLint.Charts.Question.QuestionPhrase</para>
+/// <para>Returns: AnswerLines(FormatAnswerAsDocInsight(QuestionPhrase(pQuestion), pQuestion, pShownTarget, pAskedOn, pPlainText))</para>
+/// <seealso cref="DRagLint.Charts.AskVerb.AnswerLines"/>
+/// <seealso cref="DRagLint.Charts.DocInsight.FormatAnswerAsDocInsight"/>
+/// <seealso cref="DRagLint.Charts.Question.QuestionPhrase"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FormatAskAnswer(const pQuestion, pShownTarget, pPlainText: string; pPlain: Boolean;
   pAskedOn: TDateTime): TArray<string>;
 begin

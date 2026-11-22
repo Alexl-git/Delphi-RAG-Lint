@@ -110,21 +110,6 @@ function ScrubLine(const pLine: string): string;
 /// </remarks>
 function RemoveAutodocMarker(const pText: string): string;
 
-/// <summary>Renders a row's file anchors the DocInsight way.</summary>
-/// <param name="pLine">One answer line.</param>
-/// <returns>pLine with each '@File.ext' or '@File.ext:12' token (preceded by
-/// the line start or whitespace, followed by the line end, whitespace, ',' or
-/// ';') rewritten as '(File.ext)' / '(File.ext:12)'.</returns>
-/// <remarks>
-/// Case-sensitive TRegEx; [A-Za-z0-9] covers both cases of the
-/// extension. Pure; thread-safe.
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.DocInsight.RenderAnswerLine (DRagLint.Charts.DocInsight.pas)</para>
-/// <para>Returns: TRegEx.Replace(pLine, '(^|\s)@([^\s@]+\.[A-Za-z0-9]+(?::\d+)?)(?=$|[\s,;])', '$1($2)')</para>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
-function RenderAnchors(const pLine: string): string;
-
 /// <summary>Counts the leading spaces of a line.</summary>
 /// <param name="pLine">One line.</param>
 /// <returns>The number of ' ' characters before the first other character
@@ -259,6 +244,19 @@ begin
 end;
 
 { ' @File.pas:12' -> ' (File.pas:12)'; only a token that looks like a file. }
+/// <summary>Renders a row's file anchors the DocInsight way.</summary>
+/// <param name="pLine">One answer line.</param>
+/// <returns>pLine with each '@File.ext' or '@File.ext:12' token (preceded by
+/// the line start or whitespace, followed by the line end, whitespace, ',' or
+/// ';') rewritten as '(File.ext)' / '(File.ext:12)'.</returns>
+/// <remarks>
+/// Case-sensitive TRegEx; [A-Za-z0-9] covers both cases of the
+/// extension. Pure; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.DocInsight.RenderAnswerLine (DRagLint.Charts.DocInsight.pas)</para>
+/// <para>Returns: TRegEx.Replace(pLine, '(^|\s)@([^\s@]+\.[A-Za-z0-9]+(?::\d+)?)(?=$|[\s,;])', '$1($2)')</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RenderAnchors(const pLine: string): string;
 begin
   Result:= TRegEx.Replace(pLine, '(^|\s)@([^\s@]+\.[A-Za-z0-9]+(?::\d+)?)(?=$|[\s,;])', '$1($2)');

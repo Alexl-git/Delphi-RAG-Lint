@@ -112,28 +112,6 @@ type
     QuotedScan: string;
   end;
 
-/// <summary>A QUOTED identifier "COL" opening a line of a table's newest declaration, from fresh source.</summary>
-/// <param name="pCatalog">The SQL catalogue (index, reader, stripped lines).</param>
-/// <param name="pTable">The table.</param>
-/// <param name="pCol">The column (upper case).</param>
-/// <returns>Found with the line and text; Stale when the script is not the indexed copy.</returns>
-/// <exception cref="EChartsIndex"><!-- drag-lint:auto exc -->via DRagLint.Charts.Source.TSourceReader.SourceFresh: Test-SourceFresh:</exception>
-/// <remarks>
-/// Port of Find-QuotedColumn (Emit-Common.ps1:1137): scans from the line after the
-/// declaration to its ';' terminator (or 400 lines), regex ^\s*"COL"\s, case-insensitive.
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Columns.SqlColumnState (DRagLint.Charts.Columns.pas)</para>
-/// <para>Calls: Default, DRagLint.Charts.Source.PsTrim, DRagLint.Charts.Source.TSourceReader.ReadPath, DRagLint.Charts.Source.TSourceReader.SourceFresh, DRagLint.Charts.Sql.FindSqlBodyEnd, DRagLint.Charts.Sql.TSqlCatalog.StrippedSqlLines</para>
-/// <para>Returns: Default(TQuotedColumn)</para>
-/// <seealso cref="DRagLint.Charts.Source.PsTrim"/>
-/// <seealso cref="DRagLint.Charts.Source.TSourceReader.ReadPath"/>
-/// <seealso cref="DRagLint.Charts.Source.TSourceReader.SourceFresh"/>
-/// <seealso cref="DRagLint.Charts.Sql.FindSqlBodyEnd"/>
-/// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.StrippedSqlLines"/>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
-function FindQuotedColumn(pCatalog: TSqlCatalog; pTable: TSqlTable; const pCol: string): TQuotedColumn;
-
 /// <summary>Whether pCol is a column of pTable, and on what evidence.</summary>
 /// <param name="pCatalog">The SQL catalogue (its index answers the sql_column line lookups).</param>
 /// <param name="pSet">The table set to judge against (the catalogue's, or a doctored copy).</param>
@@ -263,6 +241,26 @@ begin
   Result.Routine:= pRoutine;
 end;
 
+/// <summary>A QUOTED identifier "COL" opening a line of a table's newest declaration, from fresh source.</summary>
+/// <param name="pCatalog">The SQL catalogue (index, reader, stripped lines).</param>
+/// <param name="pTable">The table.</param>
+/// <param name="pCol">The column (upper case).</param>
+/// <returns>Found with the line and text; Stale when the script is not the indexed copy.</returns>
+/// <exception cref="EChartsIndex"><!-- drag-lint:auto exc -->via DRagLint.Charts.Source.TSourceReader.SourceFresh: Test-SourceFresh:</exception>
+/// <remarks>
+/// Port of Find-QuotedColumn (Emit-Common.ps1:1137): scans from the line after the
+/// declaration to its ';' terminator (or 400 lines), regex ^\s*"COL"\s, case-insensitive.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Columns.SqlColumnState (DRagLint.Charts.Columns.pas)</para>
+/// <para>Calls: Default, DRagLint.Charts.Source.PsTrim, DRagLint.Charts.Source.TSourceReader.ReadPath, DRagLint.Charts.Source.TSourceReader.SourceFresh, DRagLint.Charts.Sql.FindSqlBodyEnd, DRagLint.Charts.Sql.TSqlCatalog.StrippedSqlLines</para>
+/// <para>Returns: Default(TQuotedColumn)</para>
+/// <seealso cref="DRagLint.Charts.Source.PsTrim"/>
+/// <seealso cref="DRagLint.Charts.Source.TSourceReader.ReadPath"/>
+/// <seealso cref="DRagLint.Charts.Source.TSourceReader.SourceFresh"/>
+/// <seealso cref="DRagLint.Charts.Sql.FindSqlBodyEnd"/>
+/// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.StrippedSqlLines"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindQuotedColumn(pCatalog: TSqlCatalog; pTable: TSqlTable; const pCol: string): TQuotedColumn;
 begin
   Result:= Default(TQuotedColumn);

@@ -93,41 +93,6 @@ function LibraryReadinessToken(AState: TLibraryReadiness): string;
 /// </remarks>
 function ProbeLibraryReadiness(const ALibDb, APlatform: string; out AWhy, AStampFp: string): TLibraryReadiness;
 
-/// <summary>The same decision as ProbeLibraryReadiness over already-read stamps; pure, for tests and `info`.</summary>
-/// <param name="AFingerprint">indexer_fingerprint value ('' = absent).</param>
-/// <param name="AIndexedAt">indexed_at_unix value ('' = absent).</param>
-/// <param name="ARebuilding">rebuild_in_progress = '1'.</param>
-/// <param name="APlatform">Expected platform ('' = skip).</param>
-/// <param name="AEngineExtractor">The engine's extractor version.</param>
-/// <param name="AWhy">Human reason.</param>
-/// <returns>The readiness; schema currency is the caller's check.</returns>
-/// <remarks>
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.LibraryReady.ProbeLibraryReadiness (DRagLint.CLI.LibraryReady.pas)</para>
-/// <para>Calls: DRagLint.CLI.LibraryReady.FingerprintLimbValue, DRagLint.Core.Versions.CompareDottedVersions, Format, FormatDateTime, SameText, StrToInt64Def, UnixToDateTime</para>
-/// <para>Returns: lrRebuilding; lrNeverCompleted; lrMissing; lrStaleExtractor; lrNewerThanEngine; lrReady</para>
-/// <para>Complexity: 10 (cyclomatic, outer body), 36 lines (full implementation)</para>
-/// <para>Mutates: AWhy (out)</para>
-/// <seealso cref="DRagLint.CLI.LibraryReady.FingerprintLimbValue"/>
-/// <seealso cref="DRagLint.Core.Versions.CompareDottedVersions"/>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
-function ClassifyLibraryStamps(const AFingerprint, AIndexedAt: string; ARebuilding: Boolean;
-  const APlatform, AEngineExtractor: string; out AWhy: string): TLibraryReadiness;
-
-/// <summary>One limb of a stored fingerprint: the text after APrefix up to the next ';'.</summary>
-/// <param name="AFingerprint">E.g. 'v=1.26.0-alpha;schema=23;pp=1;plat=win64'.</param>
-/// <param name="APrefix">E.g. 'plat=' (matched at a limb start).</param>
-/// <returns>The limb value, or '' when absent.</returns>
-/// <remarks>
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.LibraryReady.ChooseLibraryPlatform (DRagLint.CLI.LibraryReady.pas), DRagLint.CLI.LibraryReady.ClassifyLibraryStamps (DRagLint.CLI.LibraryReady.pas)</para>
-/// <para>Calls: Copy</para>
-/// <para>Returns: ''</para>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
-function FingerprintLimbValue(const AFingerprint, APrefix: string): string;
-
 /// <summary>The platform a project binds its library against, project-authoritative (plan s.2.1).</summary>
 /// <param name="APlatformArg">--platform, wins when given.</param>
 /// <param name="AProjectFingerprint">The project DB's own indexer_fingerprint ('' when never completed).</param>
@@ -193,6 +158,17 @@ begin
   end;
 end;
 
+/// <summary>One limb of a stored fingerprint: the text after APrefix up to the next ';'.</summary>
+/// <param name="AFingerprint">E.g. 'v=1.26.0-alpha;schema=23;pp=1;plat=win64'.</param>
+/// <param name="APrefix">E.g. 'plat=' (matched at a limb start).</param>
+/// <returns>The limb value, or '' when absent.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.LibraryReady.ChooseLibraryPlatform (DRagLint.CLI.LibraryReady.pas), DRagLint.CLI.LibraryReady.ClassifyLibraryStamps (DRagLint.CLI.LibraryReady.pas)</para>
+/// <para>Calls: Copy</para>
+/// <para>Returns: ''</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FingerprintLimbValue(const AFingerprint, APrefix: string): string;
 begin
   Result:= '';
@@ -201,6 +177,25 @@ begin
     if L.StartsWith(APrefix) then Exit(Copy(L, Length(APrefix) + 1, MaxInt));
 end;
 
+/// <summary>The same decision as ProbeLibraryReadiness over already-read stamps; pure, for tests and `info`.</summary>
+/// <param name="AFingerprint">indexer_fingerprint value ('' = absent).</param>
+/// <param name="AIndexedAt">indexed_at_unix value ('' = absent).</param>
+/// <param name="ARebuilding">rebuild_in_progress = '1'.</param>
+/// <param name="APlatform">Expected platform ('' = skip).</param>
+/// <param name="AEngineExtractor">The engine's extractor version.</param>
+/// <param name="AWhy">Human reason.</param>
+/// <returns>The readiness; schema currency is the caller's check.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.LibraryReady.ProbeLibraryReadiness (DRagLint.CLI.LibraryReady.pas)</para>
+/// <para>Calls: DRagLint.CLI.LibraryReady.FingerprintLimbValue, DRagLint.Core.Versions.CompareDottedVersions, Format, FormatDateTime, SameText, StrToInt64Def, UnixToDateTime</para>
+/// <para>Returns: lrRebuilding; lrNeverCompleted; lrMissing; lrStaleExtractor; lrNewerThanEngine; lrReady</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 36 lines (full implementation)</para>
+/// <para>Mutates: AWhy (out)</para>
+/// <seealso cref="DRagLint.CLI.LibraryReady.FingerprintLimbValue"/>
+/// <seealso cref="DRagLint.Core.Versions.CompareDottedVersions"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ClassifyLibraryStamps(const AFingerprint, AIndexedAt: string; ARebuilding: Boolean;
   const APlatform, AEngineExtractor: string; out AWhy: string): TLibraryReadiness;
 begin

@@ -261,72 +261,6 @@ function ChartCellHtml(const pSegs: TArray<TChartSeg>; pWidth: Integer = CHART_W
 /// </remarks>
 function FormatChartNumbers(const pNums: TArray<Integer>): string;
 
-/// <summary>The lane of one step, from the text (section and actor word).</summary>
-/// <param name="pSection">The section name.</param>
-/// <param name="pItem">The step.</param>
-/// <param name="pLanes">The upper-case tier words of the TIERS header.</param>
-/// <returns>CLIENT, PIPE, SERVER or DATABASE.</returns>
-/// <exception cref="EChartsTrace">The section has no lane rule, or the lane is not in the TIERS header (R19).</exception>
-/// <remarks>
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Trace.Chart.TChartBuilder.WalkSteps (DRagLint.Charts.Trace.Chart.pas)</para>
-/// <para>Calls: DRagLint.Charts.Trace.Chart.ChartSqlAnchor, DRagLint.Charts.Trace.Chart.Two</para>
-/// <para>Returns: if X then LANE_PIPE; LANE_CLIENT</para>
-/// <para>Complexity: 18 (cyclomatic, outer body), 27 lines (full implementation)</para>
-/// <seealso cref="DRagLint.Charts.Trace.Chart.ChartSqlAnchor"/>
-/// <seealso cref="DRagLint.Charts.Trace.Chart.Two"/>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
-function TraceChartLane(const pSection: string; pItem: TTraceItem; const pLanes: TArray<string>): string;
-
-/// <summary>What a step text names as its callee: `CALLS X`.</summary>
-/// <param name="pText">The step text.</param>
-/// <returns>X, or '' when none.</returns>
-/// <remarks>
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Trace.Chart.TChartBuilder.AddStepEdge (DRagLint.Charts.Trace.Chart.pas), DRagLint.Charts.Trace.Chart.TChartBuilder.ClassifyStep (DRagLint.Charts.Trace.Chart.pas)</para>
-/// <para>Returns: if M.Success then M.Groups[1].Value</para>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
-function TraceChartCallee(const pText: string): string;
-
-/// <summary>What a step text names as its target: `CALLS X`, `... VIA X`, `FIRES d.E -> X`.</summary>
-/// <param name="pText">The step text.</param>
-/// <returns>X, or '' when none.</returns>
-/// <remarks>
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Trace.Chart.TChartBuilder.AlsoTarget (DRagLint.Charts.Trace.Chart.pas)</para>
-/// <para>Returns: if M.Success then M.Groups[1].Value</para>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
-function TraceChartTarget(const pText: string): string;
-
-/// <summary>The label words of a crossing edge, from its WITH facet.</summary>
-/// <param name="pWith">The facet text.</param>
-/// <returns>The whole alternative set when the facet is one (`rspError or rspOK`), the command when a payload follows it, else ''.</returns>
-/// <remarks>
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Trace.Chart.TChartBuilder.AddStepEdge (DRagLint.Charts.Trace.Chart.pas)</para>
-/// <para>Returns: pWith; if M.Success then M.Groups[1].Value</para>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
-function TraceChartWithLabel(const pWith: string): string;
-
-/// <summary>One Form A line of an item, for a tooltip (the text's own words, never re-phrased).</summary>
-/// <param name="pItem">The step.</param>
-/// <param name="pNums">The number text, e.g. '[09]'.</param>
-/// <returns>'[09] SERVER CALLS X @file:1 -- note'.</returns>
-/// <remarks>
-/// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Trace.Chart.TChartBuilder.BuildStepCells (DRagLint.Charts.Trace.Chart.pas)</para>
-/// <para>Calls: DRagLint.Charts.Trace.Chart.ItemHead, DRagLint.Charts.Trace.FormA.FormatTraceNote</para>
-/// <para>Returns: pNums + ' ' + (if pItem.Actor &lt;&gt; '' then pItem.Actor + ' ' else '') + ItemHead(pItem) + ' @' + pItem.Anchor</para>
-/// <seealso cref="DRagLint.Charts.Trace.Chart.ItemHead"/>
-/// <seealso cref="DRagLint.Charts.Trace.FormA.FormatTraceNote"/>
-/// <!-- drag-lint:auto END -->
-/// </remarks>
-function FormatTraceChartTip(pItem: TTraceItem; const pNums: string): string;
-
 /// <summary>The chart of a numbered trace.</summary>
 /// <param name="pTrace">A model whose items carry their numbers (ReadFormA's result, or the model after WriteFormA); not freed.</param>
 /// <param name="pAnchorPaths">Leaf -> the one full path the indexes hold (case-insensitive); rows on any other leaf stay unlinked. May be nil.</param>
@@ -698,6 +632,22 @@ begin
   end;
 end;
 
+/// <summary>The lane of one step, from the text (section and actor word).</summary>
+/// <param name="pSection">The section name.</param>
+/// <param name="pItem">The step.</param>
+/// <param name="pLanes">The upper-case tier words of the TIERS header.</param>
+/// <returns>CLIENT, PIPE, SERVER or DATABASE.</returns>
+/// <exception cref="EChartsTrace">The section has no lane rule, or the lane is not in the TIERS header (R19).</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Chart.TChartBuilder.WalkSteps (DRagLint.Charts.Trace.Chart.pas)</para>
+/// <para>Calls: DRagLint.Charts.Trace.Chart.ChartSqlAnchor, DRagLint.Charts.Trace.Chart.Two</para>
+/// <para>Returns: if X then LANE_PIPE; LANE_CLIENT</para>
+/// <para>Complexity: 18 (cyclomatic, outer body), 27 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Charts.Trace.Chart.ChartSqlAnchor"/>
+/// <seealso cref="DRagLint.Charts.Trace.Chart.Two"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TraceChartLane(const pSection: string; pItem: TTraceItem; const pLanes: TArray<string>): string;
 begin
   var X:= pItem.Kind = KIND_CROSSES;
@@ -727,12 +677,30 @@ begin
       + ', which the TIERS header (' + string.Join(' -> ', pLanes) + ') does not name (R19)');
 end;
 
+/// <summary>What a step text names as its callee: `CALLS X`.</summary>
+/// <param name="pText">The step text.</param>
+/// <returns>X, or '' when none.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Chart.TChartBuilder.AddStepEdge (DRagLint.Charts.Trace.Chart.pas), DRagLint.Charts.Trace.Chart.TChartBuilder.ClassifyStep (DRagLint.Charts.Trace.Chart.pas)</para>
+/// <para>Returns: if M.Success then M.Groups[1].Value</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TraceChartCallee(const pText: string): string;
 begin
   var M:= TRegEx.Match(pText, RE_CALLEE);
   Result:= if M.Success then M.Groups[1].Value else '';
 end;
 
+/// <summary>What a step text names as its target: `CALLS X`, `... VIA X`, `FIRES d.E -> X`.</summary>
+/// <param name="pText">The step text.</param>
+/// <returns>X, or '' when none.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Chart.TChartBuilder.AlsoTarget (DRagLint.Charts.Trace.Chart.pas)</para>
+/// <para>Returns: if M.Success then M.Groups[1].Value</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TraceChartTarget(const pText: string): string;
 begin
   var M:= TRegEx.Match(pText, RE_CALLEE);
@@ -743,6 +711,15 @@ begin
   Result:= if M.Success then M.Groups[1].Value else '';
 end;
 
+/// <summary>The label words of a crossing edge, from its WITH facet.</summary>
+/// <param name="pWith">The facet text.</param>
+/// <returns>The whole alternative set when the facet is one (`rspError or rspOK`), the command when a payload follows it, else ''.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Chart.TChartBuilder.AddStepEdge (DRagLint.Charts.Trace.Chart.pas)</para>
+/// <para>Returns: pWith; if M.Success then M.Groups[1].Value</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TraceChartWithLabel(const pWith: string): string;
 begin
   if TRegEx.IsMatch(pWith, RE_WITH_SET) then
@@ -761,6 +738,19 @@ begin
     Result:= pItem.Text + (if pItem.Grade <> '' then ' [' + pItem.Grade + ']' else '');
 end;
 
+/// <summary>One Form A line of an item, for a tooltip (the text's own words, never re-phrased).</summary>
+/// <param name="pItem">The step.</param>
+/// <param name="pNums">The number text, e.g. '[09]'.</param>
+/// <returns>'[09] SERVER CALLS X @file:1 -- note'.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Chart.TChartBuilder.BuildStepCells (DRagLint.Charts.Trace.Chart.pas)</para>
+/// <para>Calls: DRagLint.Charts.Trace.Chart.ItemHead, DRagLint.Charts.Trace.FormA.FormatTraceNote</para>
+/// <para>Returns: pNums + ' ' + (if pItem.Actor &lt;&gt; '' then pItem.Actor + ' ' else '') + ItemHead(pItem) + ' @' + pItem.Anchor</para>
+/// <seealso cref="DRagLint.Charts.Trace.Chart.ItemHead"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.FormatTraceNote"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FormatTraceChartTip(pItem: TTraceItem; const pNums: string): string;
 begin
   var Note:= FormatTraceNote(pItem.Routine, pItem.Note, pItem.Ask);
