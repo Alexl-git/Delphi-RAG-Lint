@@ -378,8 +378,8 @@ begin
     try
       for var i:= 0 to High(Copies) do
         NewTexts[i]:= AppendSectionToText(
-          if Copies[i] = Created then NEW_MANIFEST_TEXT else TFile.ReadAllText(Copies[i]), SectionOb);  // dl:ok taint-path-traversal@38a7 -- REVIEWED 2026-11-08 (X5P): the path IS the user's own %APPDATA% / DRAGLINT_MANIFEST manifest (owner ruling 1); reading the file the environment names is the design, not a traversal
-      if Created <> '' then TDirectory.CreateDirectory(ExtractFileDir(Created));  // dl:ok taint-path-traversal@444a -- REVIEWED 2026-11-08 (X5P): creates the folder of %APPDATA%\drag-lint\drag-lint.json for the user who runs the engine (layout v2, phase 2); the environment choosing it is the design
+          if Copies[i] = Created then NEW_MANIFEST_TEXT else TFile.ReadAllText(Copies[i]), SectionOb);
+      if Created <> '' then TDirectory.CreateDirectory(ExtractFileDir(Created));
     except
       on E: Exception do
       begin

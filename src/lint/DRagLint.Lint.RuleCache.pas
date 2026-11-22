@@ -397,7 +397,7 @@ begin
   var Root: TJSONValue:= nil;
   try
     try
-      Root:= TJSONObject.ParseJSONValue(TFile.ReadAllText(Path, TEncoding.UTF8), False, True);  // dl:ok taint-path-traversal@eb6f -- the folder is the user's own DRAGLINT_RULE_CACHE_DIR or %LOCALAPPDATA%\drag-lint\cache (the caller's environment, not remote input), same as SweepStaleTmp
+      Root:= TJSONObject.ParseJSONValue(TFile.ReadAllText(Path, TEncoding.UTF8), False, True);
       var O: TJSONObject:= Root as TJSONObject;
       if O.GetValue<Integer>('format') <> CACHE_FORMAT then
       begin
@@ -436,7 +436,7 @@ begin
   if Path = '' then Exit;
   try
     var Prefix: string:= ExtractFileName(Path) + '.tmp-';
-    for var Leftover: string in TDirectory.GetFiles(ExtractFileDir(Path), Prefix + '*') do  // dl:ok taint-path-traversal@83b1 -- the folder is the user's own DRAGLINT_RULE_CACHE_DIR or %LOCALAPPDATA%\drag-lint\cache (the caller's environment, not remote input); only rules-<hash>.json.tmp-<pid> files of a dead pid are deleted
+    for var Leftover: string in TDirectory.GetFiles(ExtractFileDir(Path), Prefix + '*') do
     begin
       var Pid: Integer:= StrToIntDef(Copy(ExtractFileName(Leftover), Length(Prefix) + 1, MaxInt), 0);
       if (Pid <= 0) or (Cardinal(Pid) = GetCurrentProcessId) then Continue;
@@ -483,12 +483,12 @@ begin
       verified its key before writing, and the last rename wins. }
     var Tmp: string:= Path + '.tmp-' + IntToStr(GetCurrentProcessId);
     try
-      TDirectory.CreateDirectory(ExtractFileDir(Path));  // dl:ok taint-path-traversal@636b -- the folder is the user's own DRAGLINT_RULE_CACHE_DIR or %LOCALAPPDATA%\drag-lint\cache (the caller's environment, not remote input), same as SweepStaleTmp
-      TFile.WriteAllText(Tmp, O.ToJSON, TEncoding.UTF8);  // dl:ok taint-path-traversal@3899 -- the folder is the user's own DRAGLINT_RULE_CACHE_DIR or %LOCALAPPDATA%\drag-lint\cache (the caller's environment, not remote input), same as SweepStaleTmp
+      TDirectory.CreateDirectory(ExtractFileDir(Path));
+      TFile.WriteAllText(Tmp, O.ToJSON, TEncoding.UTF8);
       if not MoveFileEx(PChar(Tmp), PChar(Path), MOVEFILE_REPLACE_EXISTING) then
       begin
         AWhy:= 'rename failed: ' + SysErrorMessage(GetLastError);
-        if not DeleteFile(PChar(Tmp)) then AWhy:= AWhy + ' (temp file left: ' + Tmp + ')';  // dl:ok taint-path-traversal@13ee -- the folder is the user's own DRAGLINT_RULE_CACHE_DIR or %LOCALAPPDATA%\drag-lint\cache (the caller's environment, not remote input), same as SweepStaleTmp
+        if not DeleteFile(PChar(Tmp)) then AWhy:= AWhy + ' (temp file left: ' + Tmp + ')';
         Exit;
       end;
       Result:= True;
@@ -498,7 +498,7 @@ begin
       on E: Exception do
       begin
         AWhy:= 'write failed: ' + E.Message;
-        if not DeleteFile(PChar(Tmp)) then AWhy:= AWhy + ' (temp file left: ' + Tmp + ')';  // dl:ok taint-path-traversal@13ee -- the folder is the user's own DRAGLINT_RULE_CACHE_DIR or %LOCALAPPDATA%\drag-lint\cache (the caller's environment, not remote input), same as SweepStaleTmp
+        if not DeleteFile(PChar(Tmp)) then AWhy:= AWhy + ' (temp file left: ' + Tmp + ')';
         Result:= False;
       end;
     end;

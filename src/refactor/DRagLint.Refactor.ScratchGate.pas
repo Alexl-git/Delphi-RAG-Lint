@@ -111,10 +111,10 @@ begin
   for var Dir in pFolders do
   begin
     var Into:= TPath.Combine(pTarget, Copy(Dir, Length(Result) + 1, MaxInt));
-    TDirectory.CreateDirectory(Into);  // dl:ok taint-path-traversal@581a -- the path is the run's own fresh scratch name under C:\TEMP or the operator's --project: local input, no privilege crossed
+    TDirectory.CreateDirectory(Into);
     for var F in TDirectory.GetFiles(Dir) do
       if MatchText(ExtractFileExt(F), CMirrorExtensions) then
-        TFile.Copy(F, TPath.Combine(Into, ExtractFileName(F)), True);  // dl:ok taint-path-traversal@c925 -- the path is the run's own fresh scratch name under C:\TEMP or the operator's --project: local input, no privilege crossed
+        TFile.Copy(F, TPath.Combine(Into, ExtractFileName(F)), True);
   end;
 end;
 
@@ -126,14 +126,14 @@ begin
   Result:= nil;
   var Platform:= if pPlatform = '' then 'Win64' else pPlatform;
   var Out_:= TPath.Combine(pScratch, 'out_' + pTag);
-  TDirectory.CreateDirectory(Out_);  // dl:ok taint-path-traversal@711c -- the path is the run's own fresh scratch name under C:\TEMP or the operator's --project: local input, no privilege crossed
+  TDirectory.CreateDirectory(Out_);
   var Bat:= TPath.Combine(pScratch, pTag + '.bat');
   var Log:= TPath.Combine(pScratch, pTag + '.log');
   var Text:= '@echo off'#13#10 + 'call "' + BuildEnvBat + '"'#13#10 + 'cd /d "' + ExtractFilePath(pProject) + '"'#13#10 +
     'msbuild /t:Build /p:Config=Debug /p:Platform=' + Platform + ' /v:minimal' +
     ' "/p:DCC_ExeOutput=' + Out_ + '" "/p:DCC_DcuOutput=' + Out_ + '" "/p:DCC_BplOutput=' + Out_ + '" "/p:DCC_DcpOutput=' + Out_ + '"' +
     ' "' + ExtractFileName(pProject) + '"'#13#10 + 'exit /b %ERRORLEVEL%'#13#10;
-  TFile.WriteAllText(Bat, Text, TEncoding.ASCII);  // dl:ok taint-path-traversal@d913 -- the path is the run's own fresh scratch name under C:\TEMP or the operator's --project: local input, no privilege crossed
+  TFile.WriteAllText(Bat, Text, TEncoding.ASCII);
   var TimedOut: Boolean;
   var Code:= RunBounded('scratch build', 'cmd.exe /c "' + Bat + '"', Log, BuildTimeoutMs(pProject), TimedOut);
   if TimedOut then
@@ -142,7 +142,7 @@ begin
     Exit;
   end;
   if TFile.Exists(Log) then
-    for var L in TFile.ReadAllLines(Log) do  // dl:ok taint-path-traversal@19f3 -- the path is the run's own fresh scratch name under C:\TEMP or the operator's --project: local input, no privilege crossed
+    for var L in TFile.ReadAllLines(Log) do
       if TRegEx.IsMatch(L, CDccError, [roIgnoreCase]) then Result:= Result + [Trim(L)];
   if (Code <> 0) and (Length(Result) = 0) then Result:= [Format('msbuild exited %d; see %s', [Code, Log])];
 end;
@@ -173,14 +173,14 @@ begin
       for var F in pReq.Files do
       begin
         var Into:= TPath.Combine(Mirror, Copy(ExpandFileName(F.Path), Length(Root) + 1, MaxInt));
-        Originals.Add(Into, TFile.ReadAllBytes(Into));  // dl:ok taint-path-traversal@dd7e -- the path is the run's own fresh scratch name under C:\TEMP or the operator's --project: local input, no privilege crossed
-        TFile.WriteAllBytes(Into, F.Bytes);  // dl:ok taint-path-traversal@59a7 -- the path is the run's own fresh scratch name under C:\TEMP or the operator's --project: local input, no privilege crossed
+        Originals.Add(Into, TFile.ReadAllBytes(Into));
+        TFile.WriteAllBytes(Into, F.Bytes);
       end;
       var MirrorProj:= TPath.Combine(Mirror, Copy(ExpandFileName(pReq.Project), Length(Root) + 1, MaxInt));
       var Errors:= BuildMirror(MirrorProj, pReq.Platform, Scratch, 'scratch-after');
       if Length(Errors) > 0 then
       begin
-        for var Pair in Originals do TFile.WriteAllBytes(Pair.Key, Pair.Value);  // dl:ok taint-path-traversal@7830 -- the path is the run's own fresh scratch name under C:\TEMP or the operator's --project: local input, no privilege crossed
+        for var Pair in Originals do TFile.WriteAllBytes(Pair.Key, Pair.Value);
         var Plain:= BuildMirror(MirrorProj, pReq.Platform, Scratch, 'scratch-baseline');
         Result.Refusal:= if Length(Plain) = 0 then CScratchCompileError else CScratchUnusable;
         Result.Detail := Format('the scratch build refused (%d line(s), first: %s); nothing written', [Length(Errors), Errors[0]]);

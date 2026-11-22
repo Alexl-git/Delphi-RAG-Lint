@@ -292,7 +292,7 @@ var
 begin
   Lines:= TStringList.Create;
   try
-    Lines.Text:= TEncoding.UTF8.GetString(EnsureUtf8Bytes(TFile.ReadAllBytes(APath)));  // dl:ok taint-path-traversal@7bfa -- REVIEWED 2026-11-18 a source reader: APath is the file the caller indexes or shows (manifest/project roots); confining it is the caller's job, not this decoder's
+    Lines.Text:= TEncoding.UTF8.GetString(EnsureUtf8Bytes(TFile.ReadAllBytes(APath)));
     Result:= Lines.ToStringArray;
   finally
     Lines.Free;
@@ -301,7 +301,7 @@ end; // function
 
 function ReadSourceFileText(const APath: string): string;
 begin
-  Result:= TEncoding.UTF8.GetString(EnsureUtf8Bytes(TFile.ReadAllBytes(APath)));  // dl:ok taint-path-traversal@011e -- REVIEWED 2026-11-18 a source reader: APath is the file the caller indexes or shows (manifest/project roots); confining it is the caller's job, not this decoder's
+  Result:= TEncoding.UTF8.GetString(EnsureUtf8Bytes(TFile.ReadAllBytes(APath)));
 end; // function
 
 end.

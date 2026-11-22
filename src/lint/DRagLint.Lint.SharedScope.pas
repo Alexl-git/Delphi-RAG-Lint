@@ -464,7 +464,7 @@ end;
 function GroupProjsIn(const ADir: string): TArray<string>;
 begin
   try
-    Result:= TDirectory.GetFiles(ADir, '*.groupproj');  // dl:ok taint-path-traversal@d6af -- ADir is the run's own --project / --db folder or a parent; only a listing is read
+    Result:= TDirectory.GetFiles(ADir, '*.groupproj');
   except  { a folder that cannot be listed names no peer }
     on E: Exception do Result:= nil;
   end;
@@ -487,7 +487,7 @@ begin
   InDRag := (DbDir <> '') and SameText(ExtractFileName(DbDir), DRAG_DIR);
   { (a) a copy set: the other DBs beside the copy }
   if AIsCopy and (DbDir <> '') and not InDRag and TDirectory.Exists(DbDir) then
-    for var Db: string in TDirectory.GetFiles(DbDir, '*.sqlite') do  // dl:ok taint-path-traversal@398e -- DbDir is the folder of the run's own --db; only a listing is read
+    for var Db: string in TDirectory.GetFiles(DbDir, '*.sqlite') do
       if not SameText(Db, Primary) then AddPeer(ANameToDb, ChangeFileExt(ExtractFileName(Db), ''), Db);
   { (b) a real DB: the peers the project group lists }
   if AIsCopy and not InDRag then Exit;

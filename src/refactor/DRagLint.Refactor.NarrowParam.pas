@@ -1431,7 +1431,7 @@ begin
     Ran := True;
     if not GScratchCited and TDirectory.Exists(Req.LogDir) then
     try
-      TDirectory.Delete(Req.LogDir, True);  // dl:ok taint-path-traversal@ff48 -- the path is the operator's own --project, the run's fixed scratch or the Studio root: local input, no privilege crossed
+      TDirectory.Delete(Req.LogDir, True);
     except
       on EInOutError do Writeln(ErrOutput, 'drag-lint: note: scratch not deleted: ', Req.LogDir); // best effort: a locked log must not change the result
     end;

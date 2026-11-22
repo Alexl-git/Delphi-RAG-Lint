@@ -1648,7 +1648,7 @@ begin
   var Located:= TInstalledLayout.ManifestLocation(AEngineDir);
   if not Located.Exists then Exit;
   try
-    var Root:= TJSONObject.ParseJSONValue(TFile.ReadAllText(Located.Path));  // dl:ok taint-path-traversal@675e -- REVIEWED 2026-11-18 (BK-TOOLING B28): Located.Path is the engine's own manifest (the DRAGLINT_MANIFEST/--manifest file or the one beside the exe), the same file Load reads a few lines below
+    var Root:= TJSONObject.ParseJSONValue(TFile.ReadAllText(Located.Path));
     try
       var JSettings:= if Root is TJSONObject then TJSONObject(Root).GetValue('settings') else nil;
       var JKey:= if JSettings is TJSONObject then TJSONObject(JSettings).GetValue('ignoreLocalConfig') else nil;

@@ -1711,7 +1711,7 @@ begin
       var DprScan: string;
       var DprProbes: TArray<TPPIncludeProbe>;
       var DprPreprocessed: Boolean;
-      for var PI_: string in ScanIncludes(ProjSource, TFile.ReadAllText(ProjSource), DprScan, DprProbes, DprPreprocessed) do  // dl:ok taint-path-traversal@e8d3 -- REVIEWED 2026-11-18 (INCR18): ProjSource is the project's own .dpr / .dpk, the file the walk was asked to resolve; reading it is the purpose (the finding predates this line's new out-parameters)
+      for var PI_: string in ScanIncludes(ProjSource, TFile.ReadAllText(ProjSource), DprScan, DprProbes, DprPreprocessed) do
         EnqueueFile(PI_, '<project>');
     end;
 

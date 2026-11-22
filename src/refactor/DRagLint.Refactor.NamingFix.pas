@@ -467,7 +467,7 @@ begin
   AText:= '';
   ACharCol:= ACol;
   if (ALine < 1) or (ACol < 1) or not TFile.Exists(AFile) then Exit(False);
-  var Src: TBytes:= EnsureUtf8Bytes(TFile.ReadAllBytes(AFile));  // dl:ok taint-path-traversal@7233 -- reads the source file a lint finding names (an indexed unit the caller already linted); the env var only locates the user's own manifest
+  var Src: TBytes:= EnsureUtf8Bytes(TFile.ReadAllBytes(AFile));
   var Start: Integer:= 0;
   var Ln: Integer:= 1;
   while (Ln < ALine) and (Start < Length(Src)) do

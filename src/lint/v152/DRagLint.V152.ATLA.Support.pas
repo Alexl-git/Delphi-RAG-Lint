@@ -299,7 +299,7 @@ begin
   try
     var Loc: TManifestLocation:= TInstalledLayout.ManifestLocation(AEngineDir);
     if not FileExists(Loc.Path) then Exit;
-    var V: TJSONValue:= TJSONObject.ParseJSONValue(TFile.ReadAllText(Loc.Path));  // dl:ok taint-path-traversal@4134 -- REVIEWED 2026-11-17 v152 ATLA: the path is drag-lint's own manifest (--manifest / DRAGLINT_MANIFEST / exe dir), read by every verb; one JSON key is taken from it
+    var V: TJSONValue:= TJSONObject.ParseJSONValue(TFile.ReadAllText(Loc.Path));
     try
       if V is not TJSONObject then Exit;
       var A: TJSONValue:= TJSONObject(V).GetValue(CONTRACT_UNITS_KEY);

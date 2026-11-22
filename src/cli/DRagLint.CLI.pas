@@ -15080,7 +15080,7 @@ begin
   { P14: the counts of both builds, every error, and the warnings / hints the write added }
   for var Line in GateMessageReport(Gate) do Writeln(ErrOutput, Line);
   try
-    if not GScratchCited and TDirectory.Exists(Req.LogDir) then TDirectory.Delete(Req.LogDir, True);  // dl:ok taint-path-traversal@c08a -- LogDir is FreshScratchName's: a folder this run made under C:\TEMP
+    if not GScratchCited and TDirectory.Exists(Req.LogDir) then TDirectory.Delete(Req.LogDir, True);
   except
     on EInOutError do Writeln(ErrOutput, 'drag-lint: note: scratch not deleted: ', Req.LogDir);  // best effort: a locked log must not change the result
   end;

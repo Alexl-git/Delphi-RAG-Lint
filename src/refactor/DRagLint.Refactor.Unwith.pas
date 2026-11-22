@@ -1650,9 +1650,9 @@ end;
 function CopyDbFor(const pDb, pDir: string): string;
 begin
   Result:= TPath.Combine(pDir, 'after-proof.sqlite');
-  TFile.Copy(pDb, Result, True);  // dl:ok taint-path-traversal@b47e -- REVIEWED 2026-11-05: the path is the user's own --db or a fresh scratch dir; a CLI writing where its user says is the contract
-  if TFile.Exists(pDb + '-wal') then TFile.Copy(pDb + '-wal', Result + '-wal', True);  // dl:ok taint-path-traversal@d26f -- REVIEWED 2026-11-05: the path is the user's own --db or a fresh scratch dir; a CLI writing where its user says is the contract
-  if TFile.Exists(pDb + '-shm') then TFile.Copy(pDb + '-shm', Result + '-shm', True);  // dl:ok taint-path-traversal@af1c -- REVIEWED 2026-11-05: the path is the user's own --db or a fresh scratch dir; a CLI writing where its user says is the contract
+  TFile.Copy(pDb, Result, True);
+  if TFile.Exists(pDb + '-wal') then TFile.Copy(pDb + '-wal', Result + '-wal', True);
+  if TFile.Exists(pDb + '-shm') then TFile.Copy(pDb + '-shm', Result + '-shm', True);
 end;
 
 /// <summary>Deletes the run's log folder, unless a message of this run sends the reader to a file in it.</summary>
@@ -1663,7 +1663,7 @@ procedure DropUnwithLogs(const pDir, pDetail: string);
 begin
   if GScratchCited or pDetail.Contains(ExcludeTrailingPathDelimiter(pDir)) then Exit;
   try
-    if TDirectory.Exists(pDir) then TDirectory.Delete(pDir, True);  // dl:ok taint-path-traversal@b8f1 -- a fresh scratch dir; only its PID part can come from the environment, a test seam
+    if TDirectory.Exists(pDir) then TDirectory.Delete(pDir, True);
   except  // dl:ok try-except-swallowed@1860 -- REVIEWED 2026-11-19 SLZ-MARK: deliberate: an unreadable dir, file or stamp becomes the empty result or an Exit; best-effort file operation, failure is harmless to the caller
     on E: EInOutError do ;  // dl:ok empty-on-handler@8192 -- the log folder is left behind, harmless; see the remarks (EInOutError includes EDirectoryNotFoundException)
   end;
@@ -1713,7 +1713,7 @@ Req.Header:= 'unwith --apply';
 Req.NoBackup:= pOpts.NoBackup;
 Dir:= FreshScratchName('_unwith');
 Req.LogDir:= Dir;
-TDirectory.CreateDirectory(Dir);  // dl:ok taint-path-traversal@159a -- REVIEWED 2026-11-05: the path is the user's own --db or a fresh scratch dir; a CLI writing where its user says is the contract
+TDirectory.CreateDirectory(Dir);
 for var P: TUnwithFilePlan in pPlans do
   if Length(P.NewBytes) > 0 then
   begin
@@ -1762,11 +1762,11 @@ end;
   end;
   { The copy can be gigabytes: it never outlives the run. The logs stay only when a message names one (DropUnwithLogs). }
   for var Tail: string in ['', '-wal', '-shm'] do
-    System.SysUtils.DeleteFile(TPath.Combine(Dir, 'after-proof.sqlite') + Tail);  // dl:ok taint-path-traversal@ce76 -- a fresh scratch dir; only its PID part can come from the environment, a test seam
+    System.SysUtils.DeleteFile(TPath.Combine(Dir, 'after-proof.sqlite') + Tail);
   if (ProofFailure = '') and (Length(Result.Rebinds) = 0) then
   begin
     Result.Applied:= True;
-    TDirectory.Delete(Dir, True);  // dl:ok taint-path-traversal@8e7d -- a fresh scratch dir; only its PID part can come from the environment, a test seam
+    TDirectory.Delete(Dir, True);
     Exit;
   end;
   var Failure:= RollBack(Gate.Tx);
@@ -1823,7 +1823,7 @@ begin
   pDetail:= '';
   if Length(pPlan.NewBytes) = 0 then Exit;
   var Dir:= FreshScratchName('_unwithfix');
-  TDirectory.CreateDirectory(Dir);  // dl:ok taint-path-traversal@159a -- a fresh scratch dir; only its PID part can come from the environment, a test seam
+  TDirectory.CreateDirectory(Dir);
   var Log:= TPath.Combine(Dir, 'after-proof-index.log');
   Points:= 0;
   Rebinds:= nil;
@@ -1860,7 +1860,7 @@ begin
     { The DB copy goes now; the source copy and the logs go with the folder (DropUnwithLogs keeps it only when the
       detail cites a log, and then the copy beside it is the evidence). }
     for var Tail: string in ['', '-wal', '-shm'] do
-      System.SysUtils.DeleteFile(TPath.Combine(Dir, 'after-proof.sqlite') + Tail);  // dl:ok taint-path-traversal@ce76 -- a fresh scratch dir
+      System.SysUtils.DeleteFile(TPath.Combine(Dir, 'after-proof.sqlite') + Tail);
     DropUnwithLogs(Dir, pDetail);
   end;
   Result:= pDetail = '';

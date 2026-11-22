@@ -428,7 +428,7 @@ type
 function ReadTextOrEmpty(const APath: string): string;
 begin
   try
-    Result:= TFile.ReadAllText(APath); // dl:ok taint-path-traversal@a796 -- APath comes from the project's own closure list or a directory listing of its folders, never from outside input
+    Result:= TFile.ReadAllText(APath);
   except
     on E: Exception do Result:= ''; // advisory scan: an unreadable, locked or vanished file has no links
   end;

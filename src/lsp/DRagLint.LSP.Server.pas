@@ -4752,7 +4752,7 @@ begin
         Exe:= GetEnvironmentVariable('ComSpec');
       end;
       UniqueString(Cmd);
-      if CreateProcess(PChar(Exe), PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, Si, Pi) then  // dl:ok taint-command-injection@705f -- REVIEWED 2026-11-18: the exe is our own (ParamStr(0) or the test-only DRAGLINT_LSP_REINDEX_EXE / ComSpec, same trust as the process); project and DB paths are quoted with every double quote dropped
+      if CreateProcess(PChar(Exe), PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, Si, Pi) then
       begin
         CloseHandle(Pi.hThread);
         Run.Process:= Pi.hProcess;
@@ -7522,7 +7522,7 @@ begin
     if FStartProject <> '' then Cmd:= Cmd + ' --project "' + StringReplace(FStartProject, '"', '', [rfReplaceAll]) + '"';
     if FStartPlatform <> '' then Cmd:= Cmd + ' --platform "' + StringReplace(FStartPlatform, '"', '', [rfReplaceAll]) + '"';
     UniqueString(Cmd);
-    if not CreateProcess(PChar(ChildExe), PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, Si, Pi) then Exit;  // dl:ok taint-command-injection@6e02 -- REVIEWED 2026-11-18: the exe is our own (ParamStr(0) or the test-only DRAGLINT_FULLRULES_CHILD_EXE, same trust as the process); every argument is quoted with every double quote dropped
+    if not CreateProcess(PChar(ChildExe), PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, Si, Pi) then Exit;
     try
       if not WaitFullRulesChild(Pi.hProcess, HOut, Budget, AFile, ARule = '') then
       begin

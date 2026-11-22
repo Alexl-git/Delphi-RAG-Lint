@@ -341,7 +341,7 @@ begin
     for var H: TPeerStaleHint in AStale do
       Lines.Add(KIND_STALE + SEP + IntToStr(H.Line) + SEP + H.MarkerRule + SEP + H.FilePath + SEP + H.Message);
     Lines.Add(END_LINE);
-    Lines.SaveToFile(APath, TEncoding.UTF8);  // dl:ok taint-path-traversal@4285 -- the path is a temp file the parent engine chose for its own child, not user input
+    Lines.SaveToFile(APath, TEncoding.UTF8);
   finally
     Lines.Free;
   end;
