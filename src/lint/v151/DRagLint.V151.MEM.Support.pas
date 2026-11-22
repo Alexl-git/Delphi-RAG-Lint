@@ -847,7 +847,7 @@ end;
 
 { A type whose values hold a reference the compiler counts or finalizes: long strings, variants,
   interfaces, dynamic arrays, and records / static arrays that contain one. Unknown -> False. }
-function TMemRun.IsManagedType(const AType: string; ADepth: Integer): Boolean;  // dl:ok too-many-exit-points@b191 -- REVIEWED 2026-11-14 v151 MEM: recursive type classifier; each guard clause answers one type shape, the early exits are the readable form
+function TMemRun.IsManagedType(const AType: string; ADepth: Integer): Boolean;  // dl:ok too-many-exit-points@6d54 -- REVIEWED 2026-11-14 v151 MEM: recursive type classifier; each guard clause answers one type shape, the early exits are the readable form
 var
   T: string;
   P: Integer;
@@ -877,7 +877,7 @@ begin
 end;
 
 { ADecl is a declType node of this file. }
-function TMemRun.IsManagedTypeNode(const ADecl: TTSNode; ADepth: Integer): Boolean;  // dl:ok too-many-exit-points@96fc -- REVIEWED 2026-11-14 v151 MEM: recursive type classifier; each guard clause answers one type shape, the early exits are the readable form
+function TMemRun.IsManagedTypeNode(const ADecl: TTSNode; ADepth: Integer): Boolean;  // dl:ok too-many-exit-points@8020 -- REVIEWED 2026-11-14 v151 MEM: recursive type classifier; each guard clause answers one type shape, the early exits are the readable form
 
   function FieldsManaged(const N: TTSNode): Boolean;
   var
@@ -1333,7 +1333,7 @@ begin
   end;
 end;
 
-procedure TMemRun.CheckCharCount(const N: TTSNode; const AName: string);  // dl:ok too-many-exit-points@ab9b -- REVIEWED 2026-11-14 v151 MEM: one guard clause per non-defect shape of the char-count call  // dl:ok cyclomatic-complexity@83b9 -- REVIEWED 2026-11-14 v151 MEM: the decision list IS the rule (API x argument x declared type); split helpers would each need the same call context
+procedure TMemRun.CheckCharCount(const N: TTSNode; const AName: string);  // dl:ok too-many-exit-points@5d7e -- REVIEWED 2026-11-14 v151 MEM: one guard clause per non-defect shape of the char-count call  // dl:ok cyclomatic-complexity@a563 -- REVIEWED 2026-11-14 v151 MEM: the decision list IS the rule (API x argument x declared type); split helpers would each need the same call context  // dl:ok cyclomatic-complexity@83b9 -- REVIEWED 2026-11-14 v151 MEM: the decision list IS the rule (API x argument x declared type); split helpers would each need the same call context  // dl:ok cyclomatic-complexity@83b9 -- REVIEWED 2026-11-14 v151 MEM: the decision list IS the rule (API x argument x declared type); split helpers would each need the same call context
 var
   Args     : TArray<TTSNode>;
   CountIdx : Integer;
@@ -1664,7 +1664,7 @@ var
   end;
 
   { True when the occurrence O of the variable releases it or hands it on. }
-  function ReleasedOrEscapes(const O: TTSNode; const AAlloc: TAlloc): Boolean;  // dl:ok too-many-exit-points@c094 -- REVIEWED 2026-11-14 v151 MEM: escape walker; each exit is one way the allocation is released or escapes, guard clauses read better than a flag
+  function ReleasedOrEscapes(const O: TTSNode; const AAlloc: TAlloc): Boolean;  // dl:ok too-many-exit-points@e3f3 -- REVIEWED 2026-11-14 v151 MEM: escape walker; each exit is one way the allocation is released or escapes, guard clauses read better than a flag
   var
     P, Child, Args: TTSNode;
     Nm, Pre: string;

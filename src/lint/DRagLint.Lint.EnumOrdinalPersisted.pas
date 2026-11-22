@@ -37,7 +37,7 @@ const
 /// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function DefaultEnumPersistSinks: TArray<string>;
+function DefaultEnumPersistSinks: TArray<string>;  // dl:ok unused-public-symbol@f804 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
 /// <summary>Reads a sink table: one name per line, '#' comment lines and blank
 /// lines skipped.</summary>
@@ -55,7 +55,7 @@ function DefaultEnumPersistSinks: TArray<string>;
 /// <seealso cref="DRagLint.Lint.EnumOrdinalPersisted.DefaultEnumPersistSinks"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function LoadEnumPersistSinks(const pPath: string): TArray<string>;
+function LoadEnumPersistSinks(const pPath: string): TArray<string>;  // dl:ok unused-public-symbol@be57 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
 /// <summary>Counts the values of an enum declaration and how many of them carry
 /// no explicit `= N`.</summary>

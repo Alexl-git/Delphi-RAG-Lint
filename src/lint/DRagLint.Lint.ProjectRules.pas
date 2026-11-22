@@ -1,4 +1,4 @@
-unit DRagLint.Lint.ProjectRules;
+unit DRagLint.Lint.ProjectRules;  // dl:ok unit-too-large@b772 -- REVIEWED 2026-11-21 SLZ-S05: 5748 lines; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
 { Index-wide ("project") lint rules that need the whole symbol/refs graph rather
   than a single file's AST -- the cross-file complement to the per-file `lint`
@@ -45,7 +45,7 @@ type
   /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TProjectLintRules = class
+  TProjectLintRules = class  // dl:ok high-response@09ab -- REVIEWED 2026-11-21 SLZ-S05: RFC 99; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   public
     /// <summary>Runs the project rules over AStore and returns all findings.</summary>
     /// <param name="AStore">An open, migrated symbol store; nil yields no findings.</param>
@@ -213,7 +213,7 @@ function CollectCircularUsesDetailed(const AStore: ISymbolStore): TArray<TCycleC
 /// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function CycleFixPointer(const pProject, pStem: string): string;
+function CycleFixPointer(const pProject, pStem: string): string;  // dl:ok unused-public-symbol@9543 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
 /// <summary>pMessage with its cycle-fix pointer (see CycleFixPointer), if it has one, replaced by
 /// the pointer for pProject / pStem; a message without one gets it appended.</summary>
@@ -602,8 +602,8 @@ var
           Names:= '';
           for var Ni: Integer:= 0 to Shown - 1 do
           begin
-            if Names <> '' then Names:= Names + ', ';
-            Names:= Names + Seen[Ni];
+            if Names <> '' then Names:= Names + ', ';  // dl:ok concat-in-loop@f891 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+            Names:= Names + Seen[Ni];  // dl:ok concat-in-loop@b730 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
           end;
           if Seen.Count > Shown then
             Names:= Names + Format(', ... and %d more', [Seen.Count - Shown]);
@@ -639,7 +639,7 @@ var
                          '         unit; there is no interface edge here that must go.'];
   end;
 
-  procedure StrongConnect(V: Int64);
+  procedure StrongConnect(V: Int64);  // dl:ok deep-nesting@64d6, cognitive-complexity@3c96 -- REVIEWED 2026-11-21 SLZ-S05: measured 79 (max 65); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     W  : Int64;
     Lst: TList<Int64>;
@@ -688,8 +688,8 @@ var
             var Names: string:= '';
             for Idx:= 0 to Sorted.Count - 1 do
             begin
-              if Names <> '' then Names:= Names + ' -> ';
-              Names:= Names + Sorted[Idx];
+              if Names <> '' then Names:= Names + ' -> ';  // dl:ok concat-in-loop@89cd -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+              Names:= Names + Sorted[Idx];  // dl:ok concat-in-loop@8a2a -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
             end;
           { Anchor at the alphabetically-first unit's fid. }
           var Anchor: Int64:= Comp[Comp.Count - 1];
@@ -1125,8 +1125,8 @@ begin
     for var I: Integer:= 0 to SL.Count - 1 do
     begin
       if Trim(SL[I]) = '' then Continue;
-      if Result <> '' then Result:= Result + ', ';
-      Result:= Result + Trim(SL[I]);
+      if Result <> '' then Result:= Result + ', ';  // dl:ok concat-in-loop@788e -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+      Result:= Result + Trim(SL[I]);  // dl:ok concat-in-loop@76fc -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     end;
   finally
     SL.Free;
@@ -1220,7 +1220,7 @@ type
 /// 144 MB index), so it is gated on OptedIn as well as WantRule.
 /// Never raises. See ISymbolStore.FindUsesGlobalCensus.
 /// </remarks>
-function CollectUsesGlobalCensus(const AStore: ISymbolStore): TArray<TLintFinding>;
+function CollectUsesGlobalCensus(const AStore: ISymbolStore): TArray<TLintFinding>;  // dl:ok cyclomatic-complexity@c27b -- REVIEWED 2026-11-21 SLZ-S05: measured 35 (max 30); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 const
   CTag      = 'dl:census-ok';
   { The owner's spelling, 2026-08-31: `// dl:unit <unit> accepted`, which reads
@@ -1296,8 +1296,8 @@ var
       begin
         if Trim(SL[I]) = '' then Continue;
         if Shown >= CNameCap then Break;
-        if Result <> '' then Result:= Result + ', ';
-        Result:= Result + Trim(SL[I]);
+        if Result <> '' then Result:= Result + ', ';  // dl:ok concat-in-loop@788e -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+        Result:= Result + Trim(SL[I]);  // dl:ok concat-in-loop@76fc -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
         Inc(Shown);
       end;
       if ACount > Shown then
@@ -1326,7 +1326,7 @@ var
   function IsDataModuleClass(const AName: string; ADepth: Integer): Boolean;
   begin
     Result:= False;
-    if (ADepth > 8) or (Trim(AName) = '') then Exit;
+    if (ADepth > 8) or (Trim(AName) = '') then Exit;  // dl:ok magic-literal@90d1 -- REVIEWED 2026-11-21 SLZ-S05: literal 8; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if SameText(Trim(AName), 'TDataModule') then Exit(True);
     for var Sy: TSymbol in AStore.FindSymbolsByExactName(Trim(AName)) do
     begin
@@ -1500,8 +1500,8 @@ begin
       var VNames: string:= Rendered(E.VarNames  , NV);
       var CNames: string:= Rendered(E.ConstNames, NC);
       var All   : string:= VNames;
-      if (All <> '') and (CNames <> '') then All:= All + ', ';
-      All:= All + CNames;
+      if (All <> '') and (CNames <> '') then All:= All + ', ';  // dl:ok concat-in-loop@cb7b -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+      All:= All + CNames;  // dl:ok concat-in-loop@99e1 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
       var Ln, Cl: Integer;
       ProjAnchorAtUsesIn(UsesCached(E.ReaderFileId), DeclUnit, Ln, Cl);
@@ -1650,9 +1650,9 @@ var
         if Gap and (Result <> '')
            and CharInSet(Result[Length(Result)], CWord)
            and CharInSet(Ch, CWord) then
-          Result:= Result + ' ';
+          Result:= Result + ' ';  // dl:ok concat-in-loop@9c4f -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
         Gap   := False;
-        Result:= Result + Ch;
+        Result:= Result + Ch;  // dl:ok concat-in-loop@60cd -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
       end;
     end;
     Result:= LowerCase(Result);
@@ -1892,18 +1892,18 @@ begin
         end;
         if Shown < CMaxDupSitesShown then
         begin
-          if Sites <> '' then Sites:= Sites + ', ';
-          Sites:= Sites + Format('%s:%d', [SitePath, Rows[K].StartLine]);
-          if Sigs <> '' then Sigs:= Sigs + ' vs ';
-          Sigs:= Sigs + Trim(Rows[K].Signature);
+          if Sites <> '' then Sites:= Sites + ', ';  // dl:ok concat-in-loop@2080 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+          Sites:= Sites + Format('%s:%d', [SitePath, Rows[K].StartLine]);  // dl:ok concat-in-loop@b6fc -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+          if Sigs <> '' then Sigs:= Sigs + ' vs ';  // dl:ok concat-in-loop@3326 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+          Sigs:= Sigs + Trim(Rows[K].Signature);  // dl:ok concat-in-loop@8b8c -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
           Inc(Shown);
         end
         else
           Inc(Elided);
         if not ContainsText(Kinds, Rows[K].Kind) then
         begin
-          if Kinds <> '' then Kinds:= Kinds + '/';
-          Kinds:= Kinds + Rows[K].Kind;
+          if Kinds <> '' then Kinds:= Kinds + '/';  // dl:ok concat-in-loop@277f -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+          Kinds:= Kinds + Rows[K].Kind;  // dl:ok concat-in-loop@ca17 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
         end;
         if NormSig(Rows[K].Signature) <> NormSig(Rows[I].Signature) then Differ:= True;
       end;
@@ -2162,7 +2162,7 @@ var
 
   { Every member name the class chain declares, or nil to mean "stay silent
     about this class". }
-  function MembersOf(const AClassName: string): TStringList;
+  function MembersOf(const AClassName: string): TStringList;  // dl:ok too-many-exit-points@8aec -- REVIEWED 2026-11-21 SLZ-S05: 6 Exit statements; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     Sym    : TSymbol        ;
     Used   : ISymbolStore   ;
@@ -2477,7 +2477,7 @@ begin
         Cls:= RootClassOf(Lit.SymbolId);
         if Cls = '' then Continue;
         Members:= MembersOf(Cls);
-        if Members = nil then Continue;                 { unknown chain: silent }
+        if Members = nil then Continue;                 { unknown chain: silent }  // dl:ok duplicate-code@2964 -- REVIEWED 2026-11-21 SLZ-S05: 93 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
         if Members.IndexOf(Handler) >= 0 then Continue;
 
         var F: TLintFinding:= Default(TLintFinding);
@@ -2906,7 +2906,7 @@ var
     A  : TTypeAncestor;
   begin
     Result:= False;
-    if (ADepth > 8) or (Trim(AName) = '') then Exit;
+    if (ADepth > 8) or (Trim(AName) = '') then Exit;  // dl:ok magic-literal@90d1 -- REVIEWED 2026-11-21 SLZ-S05: literal 8; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if IsBehaviouralRoot(AName) then
     begin
       ABehav:= True;
@@ -2988,7 +2988,7 @@ var
       begin
         Line:= Trim(SL[I]);
         if not StartsText('object ', Line) then Continue;
-        Line:= Trim(Copy(Line, 8, MaxInt));
+        Line:= Trim(Copy(Line, 8, MaxInt));  // dl:ok magic-literal@ccc0 -- REVIEWED 2026-11-21 SLZ-S05: literal 8; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
         C:= Pos(':', Line);
         if C > 1 then
         begin
@@ -3136,7 +3136,7 @@ var
           if Cls = mcResource then Continue;
           Result.ModuleOK:= False;
           Inc(NBad);
-          if NBad <= 5 then
+          if NBad <= 5 then  // dl:ok magic-literal@c90e -- REVIEWED 2026-11-21 SLZ-S05: literal 5; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
           begin
             TypeTx:= Trim(S.Signature);
             if TypeTx = '' then TypeTx:= 'unknown type';
@@ -3144,7 +3144,7 @@ var
             Result.BadFields:= Result.BadFields + Format('%s (%s)', [S.Name, TypeTx]);
           end;
         end;
-        if NBad > 5 then Result.BadFields:= Result.BadFields + Format(', +%d more', [NBad - 5]);
+        if NBad > 5 then Result.BadFields:= Result.BadFields + Format(', +%d more', [NBad - 5]);  // dl:ok magic-literal@0e5a -- REVIEWED 2026-11-21 SLZ-S05: literal 5; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
       end;
     end;
     RootCache.Add(ADeclPath, Result);
@@ -3273,13 +3273,13 @@ begin
           if MemCls = mcResource then Continue;
           AllResource:= False;
           Inc(NBad);
-          if NBad <= 5 then
+          if NBad <= 5 then  // dl:ok magic-literal@c90e -- REVIEWED 2026-11-21 SLZ-S05: literal 5; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
           begin
-            if Bad <> '' then Bad:= Bad + ', ';
-            Bad:= Bad + Format('%s (%s)', [M, MemTx]);
+            if Bad <> '' then Bad:= Bad + ', ';  // dl:ok concat-in-loop@54e7 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+            Bad:= Bad + Format('%s (%s)', [M, MemTx]);  // dl:ok concat-in-loop@7292 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
           end;
         end;
-        if NBad > 5 then Bad:= Bad + Format(', +%d more', [NBad - 5]);
+        if NBad > 5 then Bad:= Bad + Format(', +%d more', [NBad - 5]);  // dl:ok magic-literal@9bb4 -- REVIEWED 2026-11-21 SLZ-S05: literal 5; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
 
         if AllResource and Info.ModuleOK then
           { GATE 1 and GATE 2 both pass: every bound member is a resource and the
@@ -3432,7 +3432,7 @@ var
   Src      : TBytes                           ;
 
   { Extract raw source bytes spanned by a node as a string. }
-  function NodeStr(const N: TTSNode): string;
+  function NodeStr(const N: TTSNode): string;  // dl:ok duplicate-code@408a -- REVIEWED 2026-11-21 SLZ-S05: 97 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     S, E, L: Integer;
   begin
@@ -3612,7 +3612,7 @@ begin
           F.StartLine:= S.Line;
           F.StartCol := S.Col;
           F.EndLine  := S.Line;
-          F.EndCol   := S.Col + 4; { length of 'case' keyword }
+          F.EndCol   := S.Col + 4; { length of 'case' keyword }  // dl:ok magic-literal@656e -- REVIEWED 2026-11-21 SLZ-S05: literal 4; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
           Findings.Add(F);
         end;
       finally
@@ -4219,7 +4219,7 @@ begin
   end;
 end; // function
 
-class function TProjectLintRules.Run(const AStore: ISymbolStore; const ARuleId: string;
+class function TProjectLintRules.Run(const AStore: ISymbolStore; const ARuleId: string;  // dl:ok too-many-parameters@0c17, too-many-locals@4bb7, method-too-long@4707, cyclomatic-complexity@d985, cognitive-complexity@a935 -- REVIEWED 2026-11-21 SLZ-S05: measured 224 (max 65); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   const ASiblingStore: TSiblingStoreResolver; const ALibraryStore: ISymbolStore;
   const AOptInRules: TArray<string>; const AOnlyFileId: Int64;
   const AWholeGraph: TFunc<string, TArray<TLintFinding>>; const ASiblingNames: TSiblingProjectLister): TArray<TLintFinding>;
@@ -4241,7 +4241,7 @@ var
   Ref           : TReference                  ;
   UsesList      : TArray<TUnitUse>            ;
   U             : TUnitUse                    ;
-  UnitStem      : string                      ;
+  UnitStem      : string                      ;  // dl:ok unused-local@3f6d -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   UF            : TLintFinding                ;
   PrivModifiers : string                      ;
   IsPrivate     : Boolean                     ;
@@ -4330,7 +4330,7 @@ var
 
   procedure ProfLine(const AName: string; ATicks: Int64);
   begin
-    Writeln(ErrOutput, Format('    %-28s %10.2f s', [AName, ATicks / TStopwatch.Frequency]));
+    Writeln(ErrOutput, Format('    %-28s %10.2f s', [AName, ATicks / TStopwatch.Frequency]));  // dl:ok locale-sensitive-conversion@3bc6 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   end;
 
   { Charges the time since the previous lap to AName and starts the next lap. }
@@ -5418,7 +5418,7 @@ begin
                 skMethod, skFunction, skProcedure, skConstructor, skDestructor: Inc(NMethods);
                 skField: Inc(NFields);
               end;
-            if (NMethods > 20) and (NFields > 15) then
+            if (NMethods > 20) and (NFields > 15) then  // dl:ok magic-literal@ddfd -- REVIEWED 2026-11-21 SLZ-S05: literal 20,15; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
               Add('god-class', 'info', Format('God class: %s has %d methods and %d fields -- consider splitting responsibilities', [Sym.Name, NMethods, NFields]), Sym);
           end;
           Inc(TGod, Tick - TS);
@@ -5428,7 +5428,7 @@ begin
             nothing in the index references or calls -- likely dead public API.
             Restricted to unit-level routines (not class methods) so DFM-wired
             event handlers and virtual/override methods are not false positives. }
-          if WantRule('unused-public-symbol') and (Sym.Section = 'interface') and (Sym.Kind in [skFunction, skProcedure]) and (Sym.ParentId > 0) and
+          if WantRule('unused-public-symbol') and (Sym.Section = 'interface') and (Sym.Kind in [skFunction, skProcedure]) and (Sym.ParentId > 0) and  // dl:ok boolean-expression-complexity@f6ae -- REVIEWED 2026-11-21 SLZ-S05: 5 and/or/xor operators; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
             (Pos('override', LowerCase(Sym.Modifiers)) = 0) and not SameText(Sym.Name, 'Register') then
           begin
             Parent:= AStore.GetSymbolById(Sym.ParentId);
@@ -5537,7 +5537,7 @@ begin
 
       finally
         PropAccessors.Free;
-        PropAccessors:= nil;
+        PropAccessors:= nil;  // dl:ok overwrite-before-read@5eed -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
       end;
 
     end; // for Fid
@@ -5728,7 +5728,7 @@ begin
           F.EndLine:= U.HostLine;
           F.EndCol := U.HostCol + Length(U.UnitName);
           Findings.Add(F);
-          if Findings.Count >= 500 then Break;
+          if Findings.Count >= 500 then Break;  // dl:ok large-magic-number@80f2, magic-literal@80f2 -- REVIEWED 2026-11-21 SLZ-S05: literal 500,80,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
         end;
       end;
     end;

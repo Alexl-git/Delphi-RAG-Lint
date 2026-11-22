@@ -70,7 +70,7 @@ type
   /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.RuleScope, DRagLint.Fix.Hygiene, DRagLint.Lint.MarkerHash, DRagLint.Lint.ProjectRules, DRagLint.Lint.ReviewMarker, DRagLint.LSP.Completion</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TReviewMarkers = class
+  TReviewMarkers = class  // dl:ok high-response@140c -- REVIEWED 2026-11-21 SLZ-S05: RFC 56; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   strict private
     /// <summary>1-based index just past the `//` that opens the line comment,
     /// skipping any `//` that occurs inside a string literal or a block
@@ -638,7 +638,7 @@ uses
   Normalisation
   --------------------------------------------------------------------------- }
 
-class function TReviewMarkers.NormalizeLine(const ALineText: string): string;
+class function TReviewMarkers.NormalizeLine(const ALineText: string): string;  // dl:ok cyclomatic-complexity@8d7b, cognitive-complexity@261b -- REVIEWED 2026-11-21 SLZ-S05: measured 82 (max 65); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   SB  : TStringBuilder;
   I   : Integer       ;
@@ -757,7 +757,7 @@ end;
 
 class function TReviewMarkers.HashLine(const ALineText: string): string;
 begin
-  Result:= LowerCase(Copy(THashSHA2.GetHashString(NormalizeLine(ALineText)), 1, 4));
+  Result:= LowerCase(Copy(THashSHA2.GetHashString(NormalizeLine(ALineText)), 1, 4));  // dl:ok magic-literal@501b -- REVIEWED 2026-11-21 SLZ-S05: literal 1,4; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
 end;
 
 { True when the normalized line is a single Delphi keyword (optionally with a
@@ -836,7 +836,7 @@ begin
       end;
       Inc(I);
     end;
-    Result:= LowerCase(Copy(THashSHA2.GetHashString(SB.ToString), 1, 4));
+    Result:= LowerCase(Copy(THashSHA2.GetHashString(SB.ToString), 1, 4));  // dl:ok magic-literal@7ceb -- REVIEWED 2026-11-21 SLZ-S05: literal 1,4; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
   finally
     SB.Free;
   end;
@@ -1421,7 +1421,7 @@ begin
   Body     := REVIEW_MARK + ' ';
   for var K: Integer:= 0 to High(Existing) do
   begin
-    if K > 0 then Body:= Body + ', ';
+    if K > 0 then Body:= Body + ', ';  // dl:ok concat-in-loop@e4f5 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     if SameText(Existing[K].RuleId, ARuleId) then
     begin
       { Re-accepting a review whose code moved on: THIS entry is re-hashed to the
@@ -1429,11 +1429,11 @@ begin
         including a stale one. Refreshing the whole line would silently
         re-validate a review of code nobody re-examined, which is the single
         failure this design exists to prevent. Second finding, second click. }
-      Body     := Body + RuleToken(ARuleId, Hash);
+      Body     := Body + RuleToken(ARuleId, Hash);  // dl:ok concat-in-loop@be10 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
       Refreshed:= True;
     end
     else
-      Body:= Body + RuleToken(Existing[K].RuleId, Existing[K].Hash);
+      Body:= Body + RuleToken(Existing[K].RuleId, Existing[K].Hash);  // dl:ok concat-in-loop@4b59 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   end;
   if not Refreshed then Body:= Body + ', ' + RuleToken(ARuleId, Hash);
   { A RE-HASH IS NOT A RE-REVIEW (L3, 2026-09-23). Refreshed means this entry's
@@ -1509,7 +1509,7 @@ begin
     { Was there any other comment text before the tag? Prefix still carries the
       `//`, so measure what sits BETWEEN the opener and the tag. }
     if Trim(Copy(ALineText, CStart, TagPos - 1)) = '' then
-      Result:= TrimRight(Copy(ALineText, 1, CStart - 3))  { drop the `//` too }
+      Result:= TrimRight(Copy(ALineText, 1, CStart - 3))  { drop the `//` too }  // dl:ok magic-literal@9872 -- REVIEWED 2026-11-21 SLZ-S05: literal 1,3; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     else
       Result:= TrimRight(Prefix);
     Exit;

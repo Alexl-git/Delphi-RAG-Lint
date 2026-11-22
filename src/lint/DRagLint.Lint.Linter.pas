@@ -13,7 +13,7 @@ uses
   , TreeSitterLib
   , DRagLint.Core  .Model
   , DRagLint.Lint  .QueryRules
-  , DRagLint.Lint  .ReviewMarker { REVIEW_MARK -- a tool-written marker is not a hand-written inline comment }
+  , DRagLint.Lint  .ReviewMarker { REVIEW_MARK -- a tool-written marker is not a hand-written inline comment }  // dl:ok unused-unit-in-uses@5d1e -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   ;
 
 type
@@ -68,7 +68,7 @@ type
   /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Completion, DRagLint.LSP.Context, DRagLint.LSP.Proxy.Merge, DRagLint.LSP.Server, DRagLint.MCP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TLinter = class
+  TLinter = class  // dl:ok high-response@cb1c -- REVIEWED 2026-11-21 SLZ-S05: RFC 63; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     strict private
       { See the WalkFilter property. nil = no scoping, which is every caller
         except the scoped directory walk. }
@@ -201,7 +201,7 @@ type
       /// <summary>Names the unit that owns the project's exception classes,
       /// enabling stage 1 of exception-class-unit. Set it BEFORE linting; empty
       /// (the default) disables the harvest entirely.</summary>
-      property ExceptionsUnit: string read FExcUnit write FExcUnit;
+      property ExceptionsUnit: string read FExcUnit write FExcUnit;  // dl:ok property-accessor-name@cca9 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
       /// <summary>Rewrites every raise-bare-exception finding to name the
       /// existing exception class whose message covers it, or to say plainly
       /// that none does.</summary>
@@ -343,7 +343,7 @@ type
       /// <remarks>Their names are taken, so the writer must not re-allocate
       /// them, and their messages are already covered -- neither needs a
       /// generated class.</remarks>
-      property ExcCandidates: TArray<TDragExcCand> read FExcCand;
+      property ExcCandidates: TArray<TDragExcCand> read FExcCand;  // dl:ok property-accessor-name@5fc6 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   end;
 
 /// <summary>Ticks spent building the tree-sitter tree inside CheckFileImpl,
@@ -424,7 +424,7 @@ end;
   the exe via the indexer's TDFMParser). Re-declared here so the linter can parse
   .dfm files with the correct grammar -- same pattern AstChecks uses for
   tree_sitter_delphi13. }
-function tree_sitter_dfm: PTSLanguage; cdecl;
+function tree_sitter_dfm: PTSLanguage; cdecl;  // dl:ok method-pascalcase@78b2 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 external 'tree-sitter-dfm';
 
 function NodeText(const ANode: TTSNode; const ASource: TBytes): string;
@@ -673,7 +673,7 @@ procedure CollectDfmParseErrors(const ARoot: TTSNode; const ASource: TBytes; con
     F: TLintFinding;
     P: TTSPoint    ;
   begin
-    if N.IsNull or (AFindings.Count >= 100) then Exit;
+    if N.IsNull or (AFindings.Count >= 100) then Exit;  // dl:ok magic-literal@49dd -- REVIEWED 2026-11-21 SLZ-S05: literal 100; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if N.IsError or N.IsMissing then
     begin
       P:= N.StartPoint;
@@ -732,10 +732,10 @@ begin
       Raw:= NodeText(Atom, ASource);
       if (Length(Raw) >= 2) and (Raw[1] = '''') and (Raw[Length(Raw)] = '''') then
         Raw:= Copy(Raw, 2, Length(Raw) - 2);
-      Result:= Result + StringReplace(Raw, '''''', '''', [rfReplaceAll]);
+      Result:= Result + StringReplace(Raw, '''''', '''', [rfReplaceAll]);  // dl:ok concat-in-loop@e758 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     end
     else if Atom.NodeType = 'char_code' then
-      Result:= Result + ' ';
+      Result:= Result + ' ';  // dl:ok concat-in-loop@9c4f -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   end;
 end; // function
 
@@ -750,7 +750,7 @@ begin
   P:= LastDelimiter('.', Seg);
   if P > 0 then Seg:= Copy(Seg, P + 1, MaxInt);
   Result:=
-    (Seg = 'password') or (Seg = 'passwd') or (Seg = 'pwd') or
+    (Seg = 'password') or (Seg = 'passwd') or (Seg = 'pwd') or  // dl:ok boolean-expression-complexity@56a9 -- REVIEWED 2026-11-21 SLZ-S05: 7 and/or/xor operators; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     (Seg = 'secret') or (Seg = 'apikey') or (Seg = 'privatekey') or
     (Seg = 'passphrase') or (Seg = 'connectionpassword');
 end; // function
@@ -768,7 +768,7 @@ procedure CheckDfmCredentials(const ARoot: TTSNode; const ASource: TBytes; const
     F        : TLintFinding;
     P        : TTSPoint    ;
   begin
-    if N.IsNull or (AFindings.Count >= 100) then Exit;
+    if N.IsNull or (AFindings.Count >= 100) then Exit;  // dl:ok magic-literal@49dd -- REVIEWED 2026-11-21 SLZ-S05: literal 100; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if N.NodeType = 'property' then
     begin
       NameNode := N.ChildByField('name' );
@@ -1091,7 +1091,7 @@ begin
       var ColSource: TBytes:= Source; { 1.52 BK-TAILS-ENG: columns are counted before blanking }
       Source:= TAstParseCache.ApplyPreprocess(Source, AFilePath);
       Parser:= TTSParser.Create;
-      Parser.Language:= FLanguage;
+      Parser.Language:= FLanguage;  // dl:ok duplicate-code@99b4 -- REVIEWED 2026-11-21 SLZ-S05: 97 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
       Tree:= Parser.Parse(
         function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
         var Remaining: Integer;

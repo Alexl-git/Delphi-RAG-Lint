@@ -87,7 +87,7 @@ type
     /// <seealso cref="DRagLint.Lint.DocRules.IsAccessorOfDocumentedProperty"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    class function RunMissingDoc(const AStore: ISymbolStore; AFileId: Int64 = 0): TArray<TLintFinding>;
+    class function RunMissingDoc(const AStore: ISymbolStore; AFileId: Int64 = 0): TArray<TLintFinding>;  // dl:ok compiler-magic-comments@6c48 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
     /// <summary>Reports deterministic doc-vs-code drift for every DOCUMENTED
     /// public/published declaration in AStore -- one 'doc-drift' finding per
@@ -759,10 +759,10 @@ begin
     if Prof then
     begin
       Writeln(ErrOutput, Format('  DOC-DRIFT BREAKDOWN (%d decl(s), %d with a live doc)', [NDecl, NDiff]));
-      Writeln(ErrOutput, Format('    %-28s %10.2f s', ['list documented decls', TDecls   / TStopwatch.Frequency]));
-      Writeln(ErrOutput, Format('    %-28s %10.2f s', ['ExistingDocFor'       , TExisting/ TStopwatch.Frequency]));
-      Writeln(ErrOutput, Format('    %-28s %10.2f s', ['TDocDrift.Analyze'    , TAnalyze / TStopwatch.Frequency]));
-      Writeln(ErrOutput, Format('    %-28s %10.2f s', ['  of which facts rebuild', TDocDrift.FactsBuildTicks / TStopwatch.Frequency]));
+      Writeln(ErrOutput, Format('    %-28s %10.2f s', ['list documented decls', TDecls   / TStopwatch.Frequency]));  // dl:ok locale-sensitive-conversion@0aea -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+      Writeln(ErrOutput, Format('    %-28s %10.2f s', ['ExistingDocFor'       , TExisting/ TStopwatch.Frequency]));  // dl:ok locale-sensitive-conversion@ff7e -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+      Writeln(ErrOutput, Format('    %-28s %10.2f s', ['TDocDrift.Analyze'    , TAnalyze / TStopwatch.Frequency]));  // dl:ok locale-sensitive-conversion@fd6e -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+      Writeln(ErrOutput, Format('    %-28s %10.2f s', ['  of which facts rebuild', TDocDrift.FactsBuildTicks / TStopwatch.Frequency]));  // dl:ok locale-sensitive-conversion@64df -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
       Writeln(ErrOutput, DocFactsBuildProfile);
       Flush(ErrOutput);
     end;

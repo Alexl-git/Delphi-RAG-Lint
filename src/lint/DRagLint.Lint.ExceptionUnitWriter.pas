@@ -243,7 +243,7 @@ uses
 { A declaration line inside the block. Deliberately permissive about spacing and
   about the ancestor -- a human may have reformatted or re-parented it, and
   neither changes the BINDING, which is what this recovers. }
-function ParseDeclLine(const ALine: string; out AName, AMsg: string): Boolean;
+function ParseDeclLine(const ALine: string; out AName, AMsg: string): Boolean;  // dl:ok too-many-exit-points@52f0 -- REVIEWED 2026-11-21 SLZ-S05: 7 Exit statements; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   P, Q, R: Integer;
   S      : string ;
@@ -448,7 +448,7 @@ begin
       SB.Append(#13#10); end;
       { ABody opens with its own CRLF, so the marker line above is already
         terminated; trim the leading one to avoid doubling it }
-      if StartsStr(#13#10, ABody) then SB.Append(Copy(ABody, 3, MaxInt))
+      if StartsStr(#13#10, ABody) then SB.Append(Copy(ABody, 3, MaxInt))  // dl:ok magic-literal@df65 -- REVIEWED 2026-11-21 SLZ-S05: literal 13,10,3; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
       else SB.Append(ABody);
       for I:= E to High(Lines) do
       begin
@@ -469,7 +469,7 @@ begin
     SB.Append(#13#10); end;
     SB.Append(EXC_BEGIN_MARK);
     SB.Append(#13#10);
-    if StartsStr(#13#10, ABody) then SB.Append(Copy(ABody, 3, MaxInt)) else SB.Append(ABody);
+    if StartsStr(#13#10, ABody) then SB.Append(Copy(ABody, 3, MaxInt)) else SB.Append(ABody);  // dl:ok magic-literal@6a1e -- REVIEWED 2026-11-21 SLZ-S05: literal 13,10,3; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     SB.Append(EXC_END_MARK);
     SB.Append(#13#10);
     SB.Append(#13#10);
@@ -554,7 +554,7 @@ begin
         else
         begin
           var S: string:= Lines[I];
-          System.Insert(' ' + AUnitName + ',', S, Pos('uses', LowerCase(S)) + 4);
+          System.Insert(' ' + AUnitName + ',', S, Pos('uses', LowerCase(S)) + 4);  // dl:ok magic-literal@98b0 -- REVIEWED 2026-11-21 SLZ-S05: literal 4; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
           SB.Append(S);
         end;
       end
@@ -596,7 +596,7 @@ begin
     SB.Append(#13#10);
     SB.Append(EXC_BEGIN_MARK);
     SB.Append(#13#10);
-    if StartsStr(#13#10, ABody) then SB.Append(Copy(ABody, 3, MaxInt)) else SB.Append(ABody);
+    if StartsStr(#13#10, ABody) then SB.Append(Copy(ABody, 3, MaxInt)) else SB.Append(ABody);  // dl:ok magic-literal@6a1e -- REVIEWED 2026-11-21 SLZ-S05: literal 13,10,3; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     SB.Append(EXC_END_MARK);
     SB.Append(#13#10);
     SB.Append(#13#10);

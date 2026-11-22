@@ -1,4 +1,4 @@
-unit DRagLint.Lint.RefTypeRules;
+unit DRagLint.Lint.RefTypeRules;  // dl:ok unit-too-large@cf10 -- REVIEWED 2026-11-21 SLZ-S05: 2178 lines; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
 { The project lint rules that stand on index fact F1, table ref_types: the static
   type of a reference (1.44, lane rulesf1; spec lanes\143\fabcyc\REPORT.md section 5).
@@ -605,7 +605,7 @@ type
   end;
 
 /// <summary>Bytes of a numeric type name, plus WIDTH_FLOAT_BASE for a float; 0 for any other type.</summary>
-function NumericWidth(const ALowerType: string): Integer;  // dl:ok too-many-exit-points@f4c0 -- REVIEWED 2026-11-05: guard clauses, each declining a shape the rule cannot prove
+function NumericWidth(const ALowerType: string): Integer;  // dl:ok too-many-exit-points@84aa -- REVIEWED 2026-11-05: guard clauses, each declining a shape the rule cannot prove
 const
   WIDTH_1: array[0..1] of string = ('shortint', 'byte');
   WIDTH_2: array[0..1] of string = ('smallint', 'word');
@@ -996,7 +996,7 @@ begin
   Result:= True;
 end;
 
-function TRefTypeScan.StaticType(const ANode: TTSNode): TExprType;  // dl:ok too-many-exit-points@f142 -- REVIEWED 2026-11-05: guard clauses, each declining a shape the rule cannot prove
+function TRefTypeScan.StaticType(const ANode: TTSNode): TExprType;  // dl:ok too-many-exit-points@59e0 -- REVIEWED 2026-11-05: guard clauses, each declining a shape the rule cannot prove
 var
   Fact: TRefFact;
 begin
@@ -1125,7 +1125,7 @@ begin
     CollectGuards(ANode.NamedChild(I));
 end;
 
-procedure TRefTypeScan.CheckUnsafeCast(const ANode: TTSNode; const AOuter: TTypeFacts; const AOperand: TTSNode);  // dl:ok too-many-exit-points@701b -- REVIEWED 2026-11-05: guard clauses, each declining a shape the rule cannot prove
+procedure TRefTypeScan.CheckUnsafeCast(const ANode: TTSNode; const AOuter: TTypeFacts; const AOperand: TTSNode);  // dl:ok too-many-exit-points@199e -- REVIEWED 2026-11-05: guard clauses, each declining a shape the rule cannot prove
 var
   Inner  : TTypeFacts;
   InnerOp: TTSNode;
@@ -1220,7 +1220,7 @@ begin
   end;
 end;
 
-procedure TRefTypeScan.CheckAssign(const ANode: TTSNode);  // dl:ok too-many-exit-points@c598 -- REVIEWED 2026-11-05: guard clauses, each declining a shape the rule cannot prove
+procedure TRefTypeScan.CheckAssign(const ANode: TTSNode);  // dl:ok too-many-exit-points@c600 -- REVIEWED 2026-11-05: guard clauses, each declining a shape the rule cannot prove
 begin
   var Op: TTSNode:= ANode.ChildByField(FIELD_OP);
   if Op.IsNull or (Op.NodeType <> OP_NODE_ASSIGN) then Exit;
@@ -1299,7 +1299,7 @@ begin
   Result:= SymbolOf(AFact.SymbolId).Kind <> skConstDecl;
 end;
 
-procedure TRefTypeScan.CheckArguments(const ANode: TTSNode);  // dl:ok too-many-exit-points@d8e0 -- REVIEWED 2026-11-05: guard clauses, each declining a shape the rule cannot prove
+procedure TRefTypeScan.CheckArguments(const ANode: TTSNode);  // dl:ok too-many-exit-points@561a -- REVIEWED 2026-11-05: guard clauses, each declining a shape the rule cannot prove
 var
   Callee: TRefFact;
   Arg   : TRefFact;
@@ -1765,7 +1765,7 @@ end;
 
 { The first process-ending call in a routine body, under the same skips as CheckQuits (marshal arguments, lambdas,
   nested routines). RN 149: lets a quit reached through a called routine be reported at the call site. }
-function TRefTypeScan.FirstQuit(const ANode: TTSNode; out ALine: Integer): string;  // dl:ok too-many-exit-points@3b5f -- guard-clause ladder of one decision (149 RT), each exit a named refusal
+function TRefTypeScan.FirstQuit(const ANode: TTSNode; out ALine: Integer): string;  // dl:ok too-many-exit-points@8efa -- guard-clause ladder of one decision (149 RT), each exit a named refusal
 begin
   Result:= '';
   ALine:= 0;
@@ -1806,7 +1806,7 @@ begin
   if (NT = NODE_LAMBDA) or (NT = NODE_DEFPROC) then Exit;
   Hit:= QuitHitOf(ANode);
   if (NT = NODE_DOT) and (Hit = '') then CheckQuits(ANode.ChildByField(FIELD_LHS), AEntry);
-  if NT = NODE_CALL then
+  if NT = NODE_CALL then  // dl:ok duplicate-code@0b3f -- REVIEWED 2026-11-21 SLZ-S05: 92 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   begin
     var Ent: TTSNode:= ANode.ChildByField(FIELD_ENTITY);
     var Callee: string:= '';

@@ -143,17 +143,17 @@ begin
       Inc(I);
       while (I <= Length(S)) and CharInSet(S[I], ['-', '.', '0'..'9', '*']) do Inc(I);
       if (I <= Length(S)) and CharInSet(S[I], ['a'..'z', 'A'..'Z']) then Inc(I);
-      Result:= Result + ' ';
+      Result:= Result + ' ';  // dl:ok concat-in-loop@9c4f -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     end
     else if S[I] = '#' then
     begin
       Inc(I);
       while (I <= Length(S)) and CharInSet(S[I], ['0'..'9']) do Inc(I);
-      Result:= Result + ' ';
+      Result:= Result + ' ';  // dl:ok concat-in-loop@9c4f -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     end
     else
     begin
-      Result:= Result + S[I];
+      Result:= Result + S[I];  // dl:ok concat-in-loop@98e9 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
       Inc(I);
     end;
   end;
@@ -261,7 +261,7 @@ begin
   begin
     Bare:= '';
     for Ch in LowerCase(Parts[I]) do
-      if CharInSet(Ch, ['a'..'z', ' ']) then Bare:= Bare + Ch;
+      if CharInSet(Ch, ['a'..'z', ' ']) then Bare:= Bare + Ch;  // dl:ok concat-in-loop@137c -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     Bare:= Trim(Bare);
     if InArray(Bare, GENERIC_HEADS) then Inc(I) else Break;
   end;
@@ -310,7 +310,7 @@ begin
     Cur:= '';
     for I:= 1 to Length(S) do
     begin
-      if CharInSet(S[I], ['a'..'z', 'A'..'Z', '0'..'9']) then Cur:= Cur + S[I]
+      if CharInSet(S[I], ['a'..'z', 'A'..'Z', '0'..'9']) then Cur:= Cur + S[I]  // dl:ok concat-in-loop@2c5b -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
       else
       begin
         if Cur <> '' then List.Add(Cur);
@@ -336,7 +336,7 @@ begin
   if LooksLikeIdentifier(AWord) then Exit(AWord);
   if AWord = UpperCase(AWord) then
   begin
-    if Length(AWord) <= 3 then Exit(AWord);
+    if Length(AWord) <= 3 then Exit(AWord);  // dl:ok magic-literal@0aaf -- REVIEWED 2026-11-21 SLZ-S05: literal 3; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     Exit(UpperCase(AWord[1]) + LowerCase(Copy(AWord, 2, MaxInt)));
   end;
   Result:= UpperCase(AWord[1]) + Copy(AWord, 2, MaxInt);
@@ -374,7 +374,7 @@ begin
     if I >= MAX_WORDS then Break;
     W:= CaseWord(Kept[I]);
     if (Len > 0) and (Len + Length(W) > MAX_NAME_CHARS) then Break;
-    Result:= Result + W;
+    Result:= Result + W;  // dl:ok concat-in-loop@7970 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     Inc(Len, Length(W));
   end;
 

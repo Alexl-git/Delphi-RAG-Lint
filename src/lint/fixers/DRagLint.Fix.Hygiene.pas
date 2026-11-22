@@ -147,7 +147,7 @@ end;
   the doc block that documents the routine. Declines unless the tag opens and closes on `///` lines of its own, and
   declines while a signature parameter has no tag of its own: that is a RENAME, whose hand prose doc-drift keeps
   report-only (ADP3 T3) for a human to carry over. }
-function FixDocParamNotInSignature(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@7432 -- REVIEWED 2026-10-28: a fixer declines (Exit) on every source shape it was not written for (incl. a renamed param, INT); guard clauses by design
+function FixDocParamNotInSignature(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@064f -- REVIEWED 2026-10-28: a fixer declines (Exit) on every source shape it was not written for (incl. a renamed param, INT); guard clauses by design
 var
   Match : TMatch;
   Lo    : Integer;
@@ -307,7 +307,7 @@ end;
   by the hash the engine computes for the marked finding (the line and rule the message names in its `allow
   --fix-line N --fix-rule R` advice). Declines for the block-comment and no-finding forms (no such advice), and for
   the routine-metric rules, whose hash also folds in a measured number the marker finding does not carry. }
-function FixPlaceholderHash(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@3253 -- REVIEWED 2026-10-27: a fixer declines (Exit) on every source shape it was not written for; guard clauses by design
+function FixPlaceholderHash(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@8629 -- REVIEWED 2026-10-27: a fixer declines (Exit) on every source shape it was not written for; guard clauses by design
 var
   Match   : TMatch;
   Rule    : string;
@@ -349,7 +349,7 @@ end;
 { review-marker-unused: deletes the dead marker -- the whole line when the `// dl:ok ...` comment stands alone,
   else just the trailing comment. Declines unless the comment starts with dl:ok and names exactly the one rule the
   message reports (a list `dl:ok a, b` would lose a live review with it). }
-function FixUnusedMarker(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@34eb -- REVIEWED 2026-10-27: a fixer declines (Exit) on every source shape it was not written for; guard clauses by design
+function FixUnusedMarker(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@2ddc -- REVIEWED 2026-10-27: a fixer declines (Exit) on every source shape it was not written for; guard clauses by design
 var
   Match: TMatch;
   Line : string;

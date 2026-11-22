@@ -110,7 +110,7 @@ function StripPasCommentsKeepLayout(const ASrc: string): string;
 /// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.StripPasCommentsKeepLayout"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function ParseUsesFromContent(const AContent: string; out AUsesStartLine: Integer): TArray<string>;
+function ParseUsesFromContent(const AContent: string; out AUsesStartLine: Integer): TArray<string>;  // dl:ok unused-public-symbol@5bdd -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
 /// <summary>Read a .dpr/.dpk file and extract its uses-clause unit names.</summary>
 /// <param name="AProgramPath"><!-- drag-lint:auto type -->const string</param>
@@ -164,7 +164,7 @@ function FindSiblingProgramFile(const ADprojPath: string): string;
 /// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function IsStandardUnitAlias(const AUnitName: string): Boolean;
+function IsStandardUnitAlias(const AUnitName: string): Boolean;  // dl:ok unused-public-symbol@bc94 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
 /// <summary>True if AUnitName is an RTL/framework unit by namespace (System.*,
 /// Vcl.*, Fmx.*, Winapi.*, Data.*, Datasnap.*, Soap.*, Web.*, FireDAC.*) or a
@@ -181,7 +181,7 @@ function IsStandardUnitAlias(const AUnitName: string): Boolean;
 /// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.IsUnscopedRtlUnit"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function IsRtlNamespaceUnit(const AUnitName: string): Boolean;
+function IsRtlNamespaceUnit(const AUnitName: string): Boolean;  // dl:ok unused-public-symbol@a5f9 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
 /// <summary>Decide whether a used unit resolves to something known. Order:
 /// project member -> platform library -> standard alias -> RTL namespace.

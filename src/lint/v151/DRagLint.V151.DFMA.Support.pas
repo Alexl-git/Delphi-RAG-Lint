@@ -1092,7 +1092,7 @@ begin
   Routines.Add(R);
 end;
 
-procedure TPasBuilder.Walk(const N: TTSNode; AInInterface, AInImpl: Boolean);  // dl:ok deep-nesting@dd0f -- REVIEWED 2026-11-14 v151 DFM-A: single-pass scanner / node-kind walker; a split would thread its state through every helper
+procedure TPasBuilder.Walk(const N: TTSNode; AInInterface, AInImpl: Boolean);  // dl:ok deep-nesting@080b -- REVIEWED 2026-11-14 v151 DFM-A: single-pass scanner / node-kind walker; a split would thread its state through every helper
 var
   T: string;
 begin

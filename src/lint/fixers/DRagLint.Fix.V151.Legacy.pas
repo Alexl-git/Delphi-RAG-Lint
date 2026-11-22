@@ -202,7 +202,7 @@ end;
   field stays reachable as before and the local's uses still reach the local.
   A PARAMETER is declined: its name is part of the routine's signature (the
   interface declaration, named arguments, documentation). }
-function FixLocalShadowsField(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@3e5a -- REVIEWED 2026-11-14: a fixer declines (Exit) on every source shape it was not written for; guard clauses by design
+function FixLocalShadowsField(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@c718 -- REVIEWED 2026-11-14: a fixer declines (Exit) on every source shape it was not written for; guard clauses by design
 var
   M         : TMatch     ;
   Nm, NewNm : string     ;

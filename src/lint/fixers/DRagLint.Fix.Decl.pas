@@ -323,7 +323,7 @@ end;
   Declines for a function (the bare form forwards the result), for a constructor WITH parameters (a bare
   `inherited;` there legally reaches an ancestor constructor of a different signature, e.g. TObject.Create),
   and when the enclosing routine cannot be proven (nested routine, unreadable parameter list). }
-function FixInheritedBare(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
+function FixInheritedBare(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@6c41 -- REVIEWED 2026-11-21 SLZ-S05: 10 Exit statements; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   Line, Span, Kind, QName, Meth, Text, Call: string;
   H, SemiLine, SemiCol, BodyBegin, BodyEnd : Integer;
@@ -458,7 +458,7 @@ end;
 { missing-const-param: insert `const ` before the lone by-value parameter on the implementation header AND on the
   declaration. Declines for a grouped name list, an overloaded or unpaired method, or a parameter the declaration
   spells differently. }
-function FixMissingConstParam(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
+function FixMissingConstParam(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@0474 -- REVIEWED 2026-11-21 SLZ-S05: 10 Exit statements; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   Line, Name, Kind, QName: string;
   K, DeclLine, SemiLine, SemiCol, I, Col: Integer;
@@ -467,7 +467,7 @@ var
   E, E2      : TTextEdit;
   Hits       : Integer;
   HitLine    : Integer;
-  HitCol     : Integer;
+  HitCol     : Integer;  // dl:ok duplicate-code@b6e2 -- REVIEWED 2026-11-21 SLZ-S05: 100 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 begin
   Result:= nil;
   if (AFinding.StartLine <> AFinding.EndLine) or (AFinding.StartLine < 1) or (AFinding.StartLine > ALines.Count) then Exit;
@@ -648,12 +648,12 @@ end;
   reason "passed as var/out") when the same file passes the field -- bare or as `Obj.X` -- as an argument at a var/out
   parameter position of a routine declared in that file: a property cannot be a var/out argument, so the fix would stop
   that call compiling. Registered RISKY: a var/out use in another unit is invisible to this per-file fixer. }
-function FixPublicField(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
+function FixPublicField(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@76e1 -- REVIEWED 2026-11-21 SLZ-S05: 10 Exit statements; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   Line, Name, TypeText, Ind: string;
   M                        : TMatch;
   I, ClassFirst, ClassLast, PubLine, PrivLine, ClassInd: Integer;
-  E, EProp                 : TTextEdit;
+  E, EProp                 : TTextEdit;  // dl:ok duplicate-code@47ae -- REVIEWED 2026-11-21 SLZ-S05: 95 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 begin
   Result:= nil;
   if (AFinding.StartLine <> AFinding.EndLine) or (AFinding.StartLine < 1) or (AFinding.StartLine > ALines.Count) then Exit;
@@ -731,7 +731,7 @@ end;
 function FixDestructorWithoutOverride(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
 var
   Line, Span: string;
-  E         : TTextEdit;
+  E         : TTextEdit;  // dl:ok duplicate-code@83b4 -- REVIEWED 2026-11-21 SLZ-S05: 97 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 begin
   Result:= nil;
   if (AFinding.StartLine <> AFinding.EndLine) or (AFinding.StartLine < 1) or (AFinding.StartLine > ALines.Count) then Exit;
@@ -848,7 +848,7 @@ end;
   the declaration's header. Declines for an overloaded or unpaired method, a declaration with virtual / override /
   dynamic / message / abstract / reintroduce, and a published or unclassified section. A method reference to the
   result breaks visibly at compile time -- hence the risky tag. }
-function FixMethodCouldBeStatic(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
+function FixMethodCouldBeStatic(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@e4ae -- REVIEWED 2026-11-21 SLZ-S05: 9 Exit statements; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   Kind, QName, Tail: string;
   K, DeclLine, SemiLine, SemiCol, I: Integer;

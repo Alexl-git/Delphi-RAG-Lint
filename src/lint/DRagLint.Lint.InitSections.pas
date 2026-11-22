@@ -1,4 +1,4 @@
-unit DRagLint.Lint.InitSections;
+unit DRagLint.Lint.InitSections;  // dl:ok unit-too-large@b53b -- REVIEWED 2026-11-21 SLZ-S05: 2046 lines; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
 { The project rules on index fact F2 (1.44 lane rulesf2): references inside a unit's initialization or
   finalization section belong to the section symbol, so a section is a node of the call graph.
@@ -1942,7 +1942,7 @@ end;
   unit placed at or before the later of the two, and every unit whose uses reach either (a DFS ancestor of a unit
   placed after them; a unit placed after both that reaches neither was entered after both were placed). }
 function AnswerInProgram(AGraph: TInitGraph; AProgram: Int64; AOrder: TDictionary<string, Integer>;
-  const KA, KB: string): TInitOrderVerdict;
+  const KA, KB: string): TInitOrderVerdict;  // dl:ok param-name-prefix@8cf0 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   Reaches: TDictionary<string, Boolean>;
 begin

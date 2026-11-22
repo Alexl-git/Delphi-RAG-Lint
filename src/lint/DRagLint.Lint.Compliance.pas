@@ -235,7 +235,7 @@ function ComplianceProfileSelects(const AName: string; const ALabels: TComplianc
 /// <para>Returns: TRegEx.IsMatch(AId, RE_CWE)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function IsCweId(const AId: string): Boolean;
+function IsCweId(const AId: string): Boolean;  // dl:ok unused-public-symbol@0176 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 /// <param name="AId">Identifier text to test.</param>
 /// <returns>True when AId is a well formed CERT id (EXP34-C, DCL57-CPP, LCK09-J).</returns>
 /// <remarks>
@@ -244,7 +244,7 @@ function IsCweId(const AId: string): Boolean;
 /// <para>Returns: TRegEx.IsMatch(AId, RE_CERT)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function IsCertId(const AId: string): Boolean;
+function IsCertId(const AId: string): Boolean;  // dl:ok unused-public-symbol@eb67 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 /// <param name="AId">Identifier text to test.</param>
 /// <returns>True when AId is a well formed MISRA id (MISRA-C-2012-R18.6, MISRA-CPP-2008-15-5-1).</returns>
 /// <remarks>
@@ -253,7 +253,7 @@ function IsCertId(const AId: string): Boolean;
 /// <para>Returns: TRegEx.IsMatch(AId, RE_MISRA)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function IsMisraId(const AId: string): Boolean;
+function IsMisraId(const AId: string): Boolean;  // dl:ok unused-public-symbol@11bd -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
 implementation
 

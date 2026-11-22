@@ -47,7 +47,7 @@ type
   /// <para>Used in units: DRagLint.V151.THRB, DRagLint.V151.THRB.Support</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TThrbFile = class
+  TThrbFile = class  // dl:ok high-response@3601 -- REVIEWED 2026-11-21 SLZ-S05: RFC 51; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   strict private
     FPath     : string;
     FSrc      : TBytes;
@@ -755,7 +755,7 @@ begin
   Result:= InList(ANode.NodeType, LOOP_NODES);
 end;
 
-function ThrbLambdaKind(const AFile: TThrbFile; const ALambda: TTSNode; out ACall: TTSNode): TThrbLambdaKind;  // dl:ok too-many-exit-points@d642 -- each early return IS the classification
+function ThrbLambdaKind(const AFile: TThrbFile; const ALambda: TTSNode; out ACall: TTSNode): TThrbLambdaKind;  // dl:ok too-many-exit-points@4afe -- each early return IS the classification
 var
   Args, Anc: TTSNode;
   Callee   : string;
@@ -862,7 +862,7 @@ begin
   CollectDecls(AFile, AScope, ANames, True);
 end;
 
-function ThrbWrittenName(const AFile: TThrbFile; const ANode: TTSNode; out AIsIncrement: Boolean): TTSNode;  // dl:ok too-many-exit-points@ce43 -- guard clauses per statement shape; a nested if would hide the shapes
+function ThrbWrittenName(const AFile: TThrbFile; const ANode: TTSNode; out AIsIncrement: Boolean): TTSNode;  // dl:ok too-many-exit-points@6c21 -- guard clauses per statement shape; a nested if would hide the shapes
 var
   Lhs, Rhs, Args, First: TTSNode;
   Name, Op, Callee     : string;

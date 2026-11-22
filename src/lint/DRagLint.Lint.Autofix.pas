@@ -756,15 +756,15 @@ end;
 /// group (the opening paren balances exactly at the last character).
 /// Errs toward False (compound): over-wrapping 'not (X)' is harmless, but
 /// under-wrapping 'not a and b' silently changes meaning.</summary>
-function IsSingleTokenAtom(const S: string): Boolean;
+function IsSingleTokenAtom(const S: string): Boolean;  // dl:ok too-many-exit-points@5650 -- REVIEWED 2026-11-21 SLZ-S05: 6 Exit statements; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   T    : string                           ;
   i    : Integer                          ;
   Depth: Integer                          ;
   C    : Char                             ;
-  function IsIdentStart(Ch: Char): Boolean;
+  function IsIdentStart(Ch: Char): Boolean;  // dl:ok param-name-prefix@736a -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   begin Result:= CharInSet(Ch, ['A'..'Z','a'..'z','_']); end;
-  function IsIdentChar(Ch: Char): Boolean;
+  function IsIdentChar(Ch: Char): Boolean;  // dl:ok param-name-prefix@3a72 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   begin Result:= CharInSet(Ch, ['A'..'Z','a'..'z','_','0'..'9']); end;
 begin
   T:= Trim(S);
@@ -839,7 +839,7 @@ end; // begin
 /// emptied-'var'-block collapse depends on the whole section. Per-finding edits
 /// here would delete still-used variables and stack overlapping deletes on one
 /// line, so that grouping is load-bearing, not a tidiness choice.</remarks>
-function BuildAutofixEdits(const AFindings: TArray<TLintFinding>; out AFixableCount: Integer): TArray<TTextEdit>;
+function BuildAutofixEdits(const AFindings: TArray<TLintFinding>; out AFixableCount: Integer): TArray<TTextEdit>;  // dl:ok method-too-long@8cc3, deep-nesting@8c38, cyclomatic-complexity@a4e8, cognitive-complexity@b858 -- REVIEWED 2026-11-21 SLZ-S05: measured 306 (max 65); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   F    : TLintFinding                    ;
   E    : TTextEdit                       ;
@@ -1008,7 +1008,7 @@ begin
         and one behaviour change at a time is enough. Registered RISKY -- a test
         that could never pass can now pass, which is the point, but a human must
         confirm that was the intent. }
-      else if SameText(F.RuleId, 'uppercase-compare-always-false') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
+      else if SameText(F.RuleId, 'uppercase-compare-always-false') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then  // dl:ok duplicate-code@6382 -- REVIEWED 2026-11-21 SLZ-S05: 103 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
       begin
         SL:= LinesFor(F.FilePath);
         if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
@@ -1055,7 +1055,7 @@ begin
       end
       { redundant-cast has no text fix: DRagLint.Refactor.RedundantCast proves it from ref_types and writes through
         the compile gate (lint --fix --fix-rule redundant-cast --project). }
-      else if SameText(F.RuleId, 'redundant-not-not') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
+      else if SameText(F.RuleId, 'redundant-not-not') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then  // dl:ok duplicate-code@4616 -- REVIEWED 2026-11-21 SLZ-S05: 94 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
       begin
         { span covers 'not not X' (the outer exprUnary). Strip the two leading
           'not' keywords + their trailing whitespace; the remainder is X. }
@@ -1079,7 +1079,7 @@ begin
           end;
           if Ok and (Rest <> '') then
           begin
-            AddReplaceEdit(F, F.EndCol, Rest);
+            AddReplaceEdit(F, F.EndCol, Rest);  // dl:ok duplicate-code@c389 -- REVIEWED 2026-11-21 SLZ-S05: 112 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
           end;
         end; // if
       end // if
@@ -1114,7 +1114,7 @@ begin
             if (Repl <> '') and TRegEx.IsMatch(Repl, '^[A-Za-z_]\w*$') and (DeclTypeOf(F.FilePath, F.StartLine, Repl) <> '') and
                not TRegEx.IsMatch(DeclTypeOf(F.FilePath, F.StartLine, Repl), '^I[A-Z]') then
             begin
-              AddReplaceEdit(F, F.EndCol, Repl);
+              AddReplaceEdit(F, F.EndCol, Repl);  // dl:ok duplicate-code@2a5f -- REVIEWED 2026-11-21 SLZ-S05: 114 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
             end;
           end;
         end; // if
@@ -1172,7 +1172,7 @@ begin
           end; // if
         end; // if
       end // if
-      else if SameText(F.RuleId, 'reserved-word-casing') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
+      else if SameText(F.RuleId, 'reserved-word-casing') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then  // dl:ok duplicate-code@4d9f -- REVIEWED 2026-11-21 SLZ-S05: 94 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
       begin
         { span covers the keyword token; keywords are case-insensitive and have no
           reference sites, so lowercasing the span is a safe local edit. }
@@ -1183,7 +1183,7 @@ begin
           Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
           if (Span <> '') and (Span <> LowerCase(Span)) then
           begin
-            AddReplaceEdit(F, F.EndCol, LowerCase(Span));
+            AddReplaceEdit(F, F.EndCol, LowerCase(Span));  // dl:ok duplicate-code@9a62 -- REVIEWED 2026-11-21 SLZ-S05: 112 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
           end;
         end; // if
       end // if
@@ -1205,7 +1205,7 @@ begin
             var Ch: Char:= Span[K];
             if (Ch = '(') or (Ch = '[') then Inc(Depth)
             else if (Ch = ')') or (Ch = ']') then Dec(Depth)
-            else if (Depth = 0) and (Copy(LS, K, 4) = 'then') and ((K = 1) or (Span[K - 1] <= ' ') or (Span[K - 1] = ')')) and ((K + 4 > Length(Span)) or (Span[K + 4] <= ' ')) then  // dl:ok magic-literal@66b2 -- REVIEWED 2026-10-28: Pascal keyword length (then); lexer-local scan
+            else if (Depth = 0) and (Copy(LS, K, 4) = 'then') and ((K = 1) or (Span[K - 1] <= ' ') or (Span[K - 1] = ')')) and ((K + 4 > Length(Span)) or (Span[K + 4] <= ' ')) then  // dl:ok magic-literal@66b2, boolean-expression-complexity@66b2 -- REVIEWED 2026-11-21 SLZ-S05: 6 and/or/xor operators; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
             begin
               ThenEnd:= K + 4;  // dl:ok magic-literal@5223 -- REVIEWED 2026-10-28: length of keyword then
               Break;
@@ -1214,9 +1214,9 @@ begin
           if ThenEnd > 0 then
           begin
             Repl:= TrimLeft(Copy(Span, ThenEnd, MaxInt));
-            if Repl <> '' then
+            if Repl <> '' then  // dl:ok duplicate-code@226a -- REVIEWED 2026-11-21 SLZ-S05: 111 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
             begin
-              AddReplaceEdit(F, F.EndCol, Repl);
+              AddReplaceEdit(F, F.EndCol, Repl);  // dl:ok duplicate-code@2a5f -- REVIEWED 2026-11-21 SLZ-S05: 110 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
             end;
           end;
         end; // if

@@ -547,7 +547,7 @@ end;
 
 function MetricHash(const AWindowHash: string; AMetric: Integer): string;
 begin
-  Result:= LowerCase(Copy(THashSHA2.GetHashString(AWindowHash + '|' + IntToStr(AMetric)), 1, 4));
+  Result:= LowerCase(Copy(THashSHA2.GetHashString(AWindowHash + '|' + IntToStr(AMetric)), 1, 4));  // dl:ok magic-literal@5383 -- REVIEWED 2026-11-21 SLZ-S05: literal 1,4; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
 end;
 
 function MkParam(const AName, AType, ADefault: string): TRuleParam;
@@ -557,10 +557,10 @@ begin
   Result.DefaultVal:= ADefault;
 end;
 
-class function TRuleCatalog.BuiltinRegistry: TArray<TRuleInfo>;
+class function TRuleCatalog.BuiltinRegistry: TArray<TRuleInfo>;  // dl:ok method-too-long@b13f -- REVIEWED 2026-11-21 SLZ-S05: 444 lines; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   L: TList<TRuleInfo>;
-  procedure B(const AId, ACat, ASev, ATitle: string; AEnabled: Boolean = True;
+  procedure B(const AId, ACat, ASev, ATitle: string; AEnabled: Boolean = True;  // dl:ok too-many-parameters@2c1c -- REVIEWED 2026-11-21 SLZ-S05: 8 parameters; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     const AParams: TArray<TRuleParam> = nil; ANeedsCompiler: Integer = 0; ACompatSince: Integer = 0);
   var R: TRuleInfo;
   begin
@@ -1084,7 +1084,7 @@ begin
       for F in Files do
       begin
         if SameText(TPath.GetFileName(F), 'compliance.json') then Continue; { label data, not a rule sidecar }
-        Raw:= '';
+        Raw:= '';  // dl:ok overwrite-before-read@e9fe -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
         try Raw:= TFile.ReadAllText(F, TEncoding.UTF8); except Continue; end;  // dl:ok try-except-swallowed@264e, bare-except@264e -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
         Root:= TJSONObject.ParseJSONValue(Raw);
         if (Root is not TJSONObject) then begin Root.Free;

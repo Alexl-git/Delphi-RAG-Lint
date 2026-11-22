@@ -408,7 +408,7 @@ begin
   end;
 end;
 
-procedure TTypScan.CollectClass(const ADeclType: TTSNode);  // dl:ok cyclomatic-complexity@0bb4, cognitive-complexity@ad2f -- REVIEWED 2026-11-13 v151 TYP: one pass over a class declaration, one branch per member kind; splitting it scatters the member bookkeeping
+procedure TTypScan.CollectClass(const ADeclType: TTSNode);  // dl:ok cyclomatic-complexity@af98, cognitive-complexity@b058 -- REVIEWED 2026-11-13 v151 TYP: one pass over a class declaration, one branch per member kind; splitting it scatters the member bookkeeping
 var
   TyNode, Cls, K, S: TTSNode;
   C                : TTypClass;
@@ -749,7 +749,7 @@ end;
 
 { Can evaluating N raise? Any call except inherited, the safe RTL calls, casts to a
   type, and the creation of a raising-free RTL class. }
-function TTypScan.ContainsRaisingCall(const N: TTSNode): Boolean;  // dl:ok too-many-exit-points@8d4a -- REVIEWED 2026-11-13 v151 TYP: guard clauses, each one a call shape that can or cannot raise
+function TTypScan.ContainsRaisingCall(const N: TTSNode): Boolean;  // dl:ok too-many-exit-points@e7a1 -- REVIEWED 2026-11-13 v151 TYP: guard clauses, each one a call shape that can or cannot raise
 var
   L   : TList<TTSNode>;
   K   : TTSNode;
@@ -1389,7 +1389,7 @@ end;
 { 1 = AStmt sets AField on every path through it (a direct assignment, or a call
   of a method of the class that assigns it); 2 = it ends the routine (Exit / raise);
   0 = neither. }
-function TTypScan.StmtSetsField(const AStmt: TTSNode; const AClass, AField: string;  // dl:ok too-many-exit-points@9b5d -- REVIEWED 2026-11-13 v151 TYP: guard clauses, one per statement kind that decides the answer
+function TTypScan.StmtSetsField(const AStmt: TTSNode; const AClass, AField: string;  // dl:ok too-many-exit-points@0c72 -- REVIEWED 2026-11-13 v151 TYP: guard clauses, one per statement kind that decides the answer
   const ASetters: TDictionary<string, Boolean>): Integer;
 var
   Fld, Nm: string;
@@ -1656,7 +1656,7 @@ end;
 
 { ---- field-ownership-unclear ---------------------------------------------- }
 
-procedure TTypScan.CheckOwnershipUnclear;  // dl:ok cyclomatic-complexity@67bc, cognitive-complexity@6694 -- REVIEWED 2026-11-13 v151 TYP: one walk that collects created, freed and handed-out facts per class in a single pass over its routines
+procedure TTypScan.CheckOwnershipUnclear;  // dl:ok cyclomatic-complexity@6bc7, cognitive-complexity@0fb7 -- REVIEWED 2026-11-13 v151 TYP: one walk that collects created, freed and handed-out facts per class in a single pass over its routines
 var
   R         : TTSNode;
   Cls, Fld  : string;

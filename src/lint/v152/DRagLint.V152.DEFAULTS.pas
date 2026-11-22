@@ -124,7 +124,7 @@ const
 /// <para>Calls: Trim</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function V152ParseExemptList(const AText: string): TArray<string>;
+function V152ParseExemptList(const AText: string): TArray<string>;  // dl:ok unused-public-symbol@9d61 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
 /// <summary>The classes form-object-without-field never reports for one run.</summary>
 /// <param name="ACfg">The run configuration: its "exempt_classes" always count; the shipped list

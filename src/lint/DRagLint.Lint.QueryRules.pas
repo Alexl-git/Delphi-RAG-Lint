@@ -1,4 +1,4 @@
-unit DRagLint.Lint.QueryRules;
+unit DRagLint.Lint.QueryRules;  // dl:ok unit-too-large@5456 -- REVIEWED 2026-11-21 SLZ-S05: 2590 lines; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
 interface
 
@@ -108,7 +108,7 @@ type
   /// <para>Used in units: DRagLint.Lint.Linter, DRagLint.Lint.QueryRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TQueryRule = class
+  TQueryRule = class  // dl:ok high-response@f0d0 -- REVIEWED 2026-11-21 SLZ-S05: RFC 59; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     strict private
       FQuery          : TTSQuery       ;
       FId             : string         ;
@@ -988,7 +988,7 @@ var
   ErrType: TTSQueryError;
 begin
   ErrOff:= 0;
-  ErrType:= TSQueryError(0);
+  ErrType:= TSQueryError(0);  // dl:ok enum-ordinal-cast@60b6 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   CreateCompiled(AQuerySource, AScmPath, AJsonPath, TTSQuery.Create(ALanguage, AQuerySource, ErrOff, ErrType), ErrOff, ErrType);
 end; // constructor
 
@@ -1430,7 +1430,7 @@ end;
   unknown keeps the finding. Only a declared numeric type drops it, so a real
   string accumulation can never be hidden by this. Char is not numeric here:
   Char + Char is a string. }
-function DeclaredTypeInRoutine(const AId: TTSNode; const ASource: TBytes): string;  // dl:ok too-many-exit-points@a74e -- REVIEWED 2026-10-30: guard clauses of a scope walk (no id, no name, lambda, Result, unique/ambiguous hit); a single exit would nest every guard
+function DeclaredTypeInRoutine(const AId: TTSNode; const ASource: TBytes): string;  // dl:ok too-many-exit-points@bdff -- REVIEWED 2026-10-30: guard clauses of a scope walk (no id, no name, lambda, Result, unique/ambiguous hit); a single exit would nest every guard
 const
   UNKNOWN = ''; { not declared with a single written type in reach }
 var
@@ -2108,7 +2108,7 @@ end;
   metaclass, whose `.Create` really does allocate: an inline `class of T`, a `T = class of`
   in this source, TClass, a classref symbol the oracle finds, or with no index answer a name
   of the `T*Class` convention (TComponentClass) that is not a known class. No type at all passes. }
-function EvalNotMetaclassReceiver(const AMatch: TTSQueryMatch; const ASource: TBytes; const AArgs: TArray<TPredicateArg>;  // dl:ok too-many-exit-points@912f -- REVIEWED 2026-11-06: guard clauses, each one the answer for one way a receiver can be a metaclass or unknown
+function EvalNotMetaclassReceiver(const AMatch: TTSQueryMatch; const ASource: TBytes; const AArgs: TArray<TPredicateArg>;  // dl:ok too-many-exit-points@def5 -- REVIEWED 2026-11-06: guard clauses, each one the answer for one way a receiver can be a metaclass or unknown
   ACache: TDeclScopeCache): Boolean;
 const
   OP_CAPTURE_NAME = 2;
@@ -2172,7 +2172,7 @@ begin
 end;
 
 // Evaluate one predicate. Returns True if it passes.
-function EvalPredicate(const AMatch: TTSQueryMatch; const ASource: TBytes; const AArgs: TArray<TPredicateArg>;
+function EvalPredicate(const AMatch: TTSQueryMatch; const ASource: TBytes; const AArgs: TArray<TPredicateArg>;  // dl:ok too-many-exit-points@4709, cyclomatic-complexity@52b4, cognitive-complexity@cd94 -- REVIEWED 2026-11-21 SLZ-S05: measured 84 (max 65); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   ACache: TDeclScopeCache): Boolean;
 const
   { #in? / #not-in? argument positions: (#in? @cap "nodeType" ["nameRegex"]) }
@@ -2195,7 +2195,7 @@ begin
   begin
     // (#eq? @cap "literal")  or  (#eq? @cap1 @cap2)
     // Resolve each subsequent arg to a string and compare all-equal.
-    if Length(AArgs) < 3 then Exit(True);
+    if Length(AArgs) < 3 then Exit(True);  // dl:ok magic-literal@e4a7 -- REVIEWED 2026-11-21 SLZ-S05: literal 3; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     FirstText:= if AArgs[1].IsCapture then ResolveCaptureText(AMatch, AArgs[1].CaptureIndex, ASource) else AArgs[1].StringValue;
     Result:= True;
     for i:= 2 to Length(AArgs) - 1 do
@@ -2213,7 +2213,7 @@ begin
 
   if (Op = 'match?') or (Op = 'not-match?') then
   begin
-    if Length(AArgs) <> 3 then Exit(True);
+    if Length(AArgs) <> 3 then Exit(True);  // dl:ok magic-literal@6c6c -- REVIEWED 2026-11-21 SLZ-S05: literal 3; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if not AArgs[1].IsCapture then Exit(True);
     if AArgs[2].IsCapture then Exit(True);
     FirstText:= ResolveCaptureText(AMatch, AArgs[1].CaptureIndex, ASource);
@@ -2229,7 +2229,7 @@ begin
 
   if (Op = 'any-of?') or (Op = 'not-any-of?') then
   begin
-    if Length(AArgs) < 3 then Exit(True);
+    if Length(AArgs) < 3 then Exit(True);  // dl:ok magic-literal@e4a7 -- REVIEWED 2026-11-21 SLZ-S05: literal 3; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if not AArgs[1].IsCapture then Exit(True);
     FirstText:= ResolveCaptureText(AMatch, AArgs[1].CaptureIndex, ASource);
     Result:= False;
@@ -2254,7 +2254,7 @@ begin
     Pattern:= '';
     if Length(AArgs) = MaxArgs then Pattern:= AArgs[NameRxArg].StringValue;
     Result:= AncestorNamedLike(ResolveCaptureNode(AMatch, AArgs[CapArg].CaptureIndex), ASource, AArgs[TypeArg].StringValue, Pattern);
-    if Op = 'not-in?' then Result:= not Result;
+    if Op = 'not-in?' then Result:= not Result;  // dl:ok duplicate-code@c252 -- REVIEWED 2026-11-21 SLZ-S05: 135 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     Exit;
   end;
 

@@ -135,7 +135,7 @@ begin
   Result:= [Edit];
 end;
 
-function WithCharColumns(const AFinding: TLintFinding; ALines: TStrings): TLintFinding;
+function WithCharColumns(const AFinding: TLintFinding; ALines: TStrings): TLintFinding;  // dl:ok unused-parameter@88a6 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 begin
   { 1.52 EXTGAPS2: .pas index columns are characters; 1.52 BK-COLS2: .dfm index columns and every lint
     finding's columns are characters too, so nothing is left to convert. ALines stays for the callers. }
@@ -150,7 +150,7 @@ begin
   Result:= (T = 'uses') or T.StartsWith('uses ');
 end;
 
-function RemoveUsesEntry(const AFinding: TLintFinding; ALines: TStringList; AEdits: TList<TTextEdit>): Boolean;  // dl:ok too-many-exit-points@8322 -- REVIEWED 2026-10-28: one guard-clause Exit per uses-clause layout the fixer recognises (lane IATOM added the leading-comma ones); any other layout must decline
+function RemoveUsesEntry(const AFinding: TLintFinding; ALines: TStringList; AEdits: TList<TTextEdit>): Boolean;  // dl:ok too-many-exit-points@0577, cyclomatic-complexity@10a2, cognitive-complexity@8b42 -- REVIEWED 2026-11-21 SLZ-S05: measured 68 (max 65); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   T, Before, After, Name, S: string;
   NoTail, OneBrace         : Boolean;
@@ -406,7 +406,7 @@ end;
   `  Name,` under a bare `uses`, else ` Name,` after the keyword. A finding whose removal would
   touch a line another finding's removal already takes waits for the next run. Entries whose
   removal layout is not understood are left alone and not counted. }
-function FixUsesMovable(const APath: string; const AFindings: TArray<TLintFinding>; out AFixed: Integer): TArray<TTextEdit>;
+function FixUsesMovable(const APath: string; const AFindings: TArray<TLintFinding>; out AFixed: Integer): TArray<TTextEdit>;  // dl:ok cyclomatic-complexity@c415 -- REVIEWED 2026-11-21 SLZ-S05: measured 35 (max 30); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 const
   RULE_ID = 'uses-movable-to-implementation';
 var

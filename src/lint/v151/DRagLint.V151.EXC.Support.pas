@@ -1244,7 +1244,7 @@ end;
 
 { 1 = a (transitive) store ancestor declares AMethod (AVis = its visibility text), 0 = the
   chain is complete and none does, -1 = unknown (an ancestor is missing from both stores). }
-function TExcRun.StoreMember(const AClassOrig, AMethod: string; out AVis: string): Integer;  // dl:ok too-many-exit-points@c346 -- REVIEWED 2026-11-14 v151 INT: guard clauses per syntax shape; each early exit is a classification
+function TExcRun.StoreMember(const AClassOrig, AMethod: string; out AVis: string): Integer;  // dl:ok too-many-exit-points@c277 -- REVIEWED 2026-11-14 v151 INT: guard clauses per syntax shape; each early exit is a classification
 var
   Sy    : TSymbol;
   Cls   : TSymbol;
@@ -1336,7 +1336,7 @@ end;
 { Does a (transitive) ancestor of lower-case class AClass declare AMethod?
   1 yes (AVis set when known), 0 no (chain complete), -1 unknown. Same-file classes first;
   the first ancestor outside the file hands the rest of the chain to the stores. }
-function TExcRun.AncestorMember(const AClass, AMethod: string; out AVis: string): Integer;  // dl:ok too-many-exit-points@1dde -- REVIEWED 2026-11-14 v151 INT: guard clauses per syntax shape; each early exit is a classification
+function TExcRun.AncestorMember(const AClass, AMethod: string; out AVis: string): Integer;  // dl:ok too-many-exit-points@09cb -- REVIEWED 2026-11-14 v151 INT: guard clauses per syntax shape; each early exit is a classification
 var
   Cls  : TExcClassInfo;
   MI   : TExcMethodInfo;
@@ -1468,7 +1468,7 @@ begin
 end;
 
 { destroy-called-directly: `X.Destroy;` as a statement on anything but Self / inherited. }
-procedure TExcRun.CheckDestroyDirect(const N: TTSNode);  // dl:ok too-many-exit-points@eac9 -- REVIEWED 2026-11-14 v151 INT: guard clauses per syntax shape; each early exit is a classification
+procedure TExcRun.CheckDestroyDirect(const N: TTSNode);  // dl:ok too-many-exit-points@3250 -- REVIEWED 2026-11-14 v151 INT: guard clauses per syntax shape; each early exit is a classification
 var
   Ent, Lhs, Rhs: TTSNode;
 begin
@@ -1552,7 +1552,7 @@ begin
 end;
 
 { message-handler-without-inherited. }
-procedure TExcRun.CheckMessageHandler(const ADef: TTSNode; const AInfo: TExcMethodInfo);  // dl:ok too-many-exit-points@2a82 -- REVIEWED 2026-11-14 v151 INT: guard clauses per syntax shape; each early exit is a classification
+procedure TExcRun.CheckMessageHandler(const ADef: TTSNode; const AInfo: TExcMethodInfo);  // dl:ok too-many-exit-points@edf1 -- REVIEWED 2026-11-14 v151 INT: guard clauses per syntax shape; each early exit is a classification
 var
   Body, Hdr: TTSNode;
   Stmts    : TList<TTSNode>;
@@ -1615,7 +1615,7 @@ begin
 end;
 
 { override-only-inherited: an override whose whole body forwards to the ancestor. }
-procedure TExcRun.CheckOnlyInherited(const ADef: TTSNode; const AInfo: TExcMethodInfo; const AClass: string);  // dl:ok too-many-exit-points@1959 -- REVIEWED 2026-11-14 v151 INT: guard clauses per syntax shape; each early exit is a classification
+procedure TExcRun.CheckOnlyInherited(const ADef: TTSNode; const AInfo: TExcMethodInfo; const AClass: string);  // dl:ok too-many-exit-points@d48b -- REVIEWED 2026-11-14 v151 INT: guard clauses per syntax shape; each early exit is a classification
 var
   Body, Args: TTSNode;
   Stmts     : TList<TTSNode>;

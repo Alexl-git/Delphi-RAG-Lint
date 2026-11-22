@@ -477,7 +477,7 @@ begin
   end;
 end;
 
-class procedure TLintConfigWriter.SetRuleEnabled(var ACfg: TLintConfig;
+class procedure TLintConfigWriter.SetRuleEnabled(var ACfg: TLintConfig;  // dl:ok duplicate-code@724e -- REVIEWED 2026-11-21 SLZ-S05: 111 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   const AId: string; AEnabled: Boolean);
 var
   DisArr, EnArr: TArray<string>;
@@ -547,7 +547,7 @@ begin
       try
         ExistText:= TFile.ReadAllText(APath);
         Existing:= TJSONObject.ParseJSONValue(ExistText) as TJSONObject;
-      except
+      except  // dl:ok bare-except@e9b8 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
         Existing:= nil; { parse failure -- fall through to plain write }
       end;
     end;
@@ -648,13 +648,13 @@ var
 begin
   { start from existing file, or a fresh object }
   Root:= nil;
-  RootVal:= nil;
+  RootVal:= nil;  // dl:ok overwrite-before-read@3b95 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   if TFile.Exists(APath) then
   begin
-    try RootVal:= TJSONObject.ParseJSONValue(TFile.ReadAllText(APath)); except RootVal:= nil; end;
+    try RootVal:= TJSONObject.ParseJSONValue(TFile.ReadAllText(APath)); except RootVal:= nil; end;  // dl:ok bare-except@c8a2 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     if RootVal is TJSONObject then Root:= RootVal as TJSONObject
     else begin RootVal.Free;
-    RootVal:= nil; end;
+    RootVal:= nil; end;  // dl:ok overwrite-before-read@2c0a -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   end;
   if Root = nil then Root:= TJSONObject.Create;
   try

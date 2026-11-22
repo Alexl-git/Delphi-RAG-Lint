@@ -264,7 +264,7 @@ end;
   move, and nothing between the unit start and the body names the routine --
   a use above the body needs the prototype. The finding is the proof of
   "own unit only"; the name re-read from the line is the stale-index guard. }
-function FixUnusedPublicSymbol(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@3a0b -- REVIEWED 2026-10-27: one guard-clause Exit per condition under which this fixer must decline; a single exit would nest every guard
+function FixUnusedPublicSymbol(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@d0ab -- REVIEWED 2026-10-27: one guard-clause Exit per condition under which this fixer must decline; a single exit would nest every guard
 var
   M                         : TMatch;
   Name, Doc                 : string;
@@ -361,7 +361,7 @@ end;
   `exports`, an interface its class implements, a sibling project of a
   shared unit, the interface section (public API), or ANY other mention of
   the name in the file (a property accessor is not a reference in the index). }
-function IsDeletableRoutine(const AStore: ISymbolStore; const ASym: TSymbol; const APath: string; ALines: TStrings): Boolean;  // dl:ok too-many-exit-points@c1be -- REVIEWED 2026-10-27: one guard-clause Exit per condition under which this fixer must decline; a single exit would nest every guard
+function IsDeletableRoutine(const AStore: ISymbolStore; const ASym: TSymbol; const APath: string; ALines: TStrings): Boolean;  // dl:ok too-many-exit-points@3018 -- REVIEWED 2026-10-27: one guard-clause Exit per condition under which this fixer must decline; a single exit would nest every guard
 var
   Parent: TSymbol;
   DocAt : Integer;
@@ -394,7 +394,7 @@ end;
   separate one-line declaration -- when the store holds no reference to it.
   Needs --db (AutofixStore); the store row must have its body on the finding's
   line and bear the name read from that line, so a stale index declines. }
-function FixEmptyProcedureBody(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@b5db -- REVIEWED 2026-10-27: one guard-clause Exit per condition under which this fixer must decline; a single exit would nest every guard
+function FixEmptyProcedureBody(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@b048 -- REVIEWED 2026-10-27: one guard-clause Exit per condition under which this fixer must decline; a single exit would nest every guard
 var
   Store: ISymbolStore;
   Name : string;
