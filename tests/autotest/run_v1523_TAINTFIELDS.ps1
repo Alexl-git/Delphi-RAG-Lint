@@ -6,7 +6,9 @@
 #
 # Fixture tests\lint\taint-path-traversal\uFieldOut.pas: ReadLn(S) is written into
 # A[..].Note (Annotate) and into B[..].Path (AnnotatePath).
-#   NON-hits (pruned): DeleteByPath (line 51, reads .Path), KillOne via DeleteByPathDeep (43).
+#   NON-hits (pruned): DeleteByPath (line 51, reads .Path), KillOne via DeleteByPathDeep (43),
+#   DeleteByPathCommented (98: names 'Note' only in comments and a string literal -- v1523
+#   TAINT-TRIAGE, a comment cannot read a field).
 #   Hits (kept): DeleteByNote (67, reads .Note), DeleteThroughCall (80, .Note read inside the
 #   NoteOf call -- a body no path hop shows, so the tag must not prune), DeleteWritten (88,
 #   B's tainted .Path).
@@ -41,7 +43,7 @@ try {
   $f = @($all | Where-Object { $_.rule -eq 'taint-path-traversal' })
   $f | ForEach-Object { Write-Host ("  {0}:{1} {2}" -f (Split-Path $_.file_path -Leaf), $_.start_line, $_.message) }
   $lines = @($f | ForEach-Object { [int]$_.start_line })
-  foreach ($ln in @(43, 51)) { Check "non-hit: field-only taint not read downstream (line $ln)" ($lines -notcontains $ln) }
+  foreach ($ln in @(43, 51, 98)) { Check "non-hit: field-only taint not read downstream (line $ln)" ($lines -notcontains $ln) }
   foreach ($ln in @(67, 80, 88)) { Check "hit kept (line $ln)" ($lines -contains $ln) "lines: $($lines -join ',')" }
   Check 'exactly three taint-path-traversal findings' ($f.Count -eq 3) "got $($f.Count)"
 }
