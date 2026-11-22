@@ -3507,7 +3507,7 @@ var
           if Sc.IsNull then Continue;
           var Sct: string:= Sc.NodeType;
           if (Sct <> 'caseCase') and (Sct <> 'statement') and (Sct <> 'statements')
-             and ((Length(Sct) = 0) or (Sct[1] <> 'k')) then
+             and ((Sct = '') or (Sct[1] <> 'k')) then
           begin Selector:= Sc; Break; end;
         end;
       if (not Selector.IsNull) and (Cur <> '') then
