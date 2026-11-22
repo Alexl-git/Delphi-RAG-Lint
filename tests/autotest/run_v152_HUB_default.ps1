@@ -104,7 +104,8 @@ try {
   $K = New-Proj 'guardeduses' 'GuardedUses'
   $kd = Invoke-Cycles $K @('--causes', '--format', 'json')
   $kn = Invoke-Cycles $K @('--causes', '--format', 'json', '--no-hub-surface')
-  Check 'j3 a knot: the default = --no-hub-surface byte for byte' (($kd.Exit -eq $kn.Exit) -and ($kd.Out -eq $kn.Out) -and ($kd.Out.Length -gt 0)) "$($kd.Out) // $($kn.Out)"
+  # 1.52.3 CYCLES-FIXHINT: the --no-hub-surface fix.dry_run / fix.apply commands carry --no-hub-surface; equal once the flag is taken out (and it must be there)
+Check 'j3 a knot: the default = --no-hub-surface byte for byte (its fix commands minus the flag)' (($kd.Exit -eq $kn.Exit) -and ($kn.Out -match 'cycles --fix --no-hub-surface') -and ($kd.Out -eq $kn.Out.Replace(' --no-hub-surface', '')) -and ($kd.Out.Length -gt 0)) "$($kd.Out) // $($kn.Out)"
 
   Write-Host '== x: cycles --fix (dry run, --no-compile)' -ForegroundColor Cyan
   $xd = Invoke-Cycles $H (FixArgs $H @('--cycle', '1', '--format', 'json', '--no-compile'))

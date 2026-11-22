@@ -134,7 +134,7 @@ try {
   $h0 = SrcHash $Root
   $fx = & { $ErrorActionPreference = 'Continue'; $null | & $Engine cycles --fix --project $dproj --db $db --no-compile --format json 2>$null | Out-String }
   $fcode = $LASTEXITCODE
-  $j = $null; try { $j = $fx | ConvertFrom-Json } catch { }
+  $j = $null; try { $j = $fx | ConvertFrom-Json | ForEach-Object { $_ } } catch { }
   $c = if ($j) { @($j.cycles)[0] } else { $null }
   $edge = if ($c) { "$($c.edge)" } else { '' }
   Check 'cycles --fix dry run exit 0' ($fcode -eq 0) "exit=$fcode $fx"

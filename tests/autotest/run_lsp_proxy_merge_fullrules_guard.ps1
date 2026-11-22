@@ -94,7 +94,7 @@ function Publishes([byte[]]$b, [string]$tag) {
   $res = @()
   foreach ($f in (Split-Frames $b)) {
     if (-not $f.Body.Contains($tag)) { continue }
-    try { $j = $f.Body | ConvertFrom-Json -AsHashtable } catch { continue }
+    try { $j = $f.Body | ConvertFrom-Json -AsHashtable | ForEach-Object { $_ } } catch { continue }
     if ($j -and ($j['method'] -eq 'textDocument/publishDiagnostics')) {
       $d = @($j['params']['diagnostics'])
       $res += [pscustomobject]@{

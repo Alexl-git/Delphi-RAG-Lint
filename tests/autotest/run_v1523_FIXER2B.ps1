@@ -49,7 +49,7 @@ function Compile([string]$UnitPath) {
   $dir = Split-Path -Parent $UnitPath
   $dpr = Join-Path $dir "P_$u.dpr"
   [IO.File]::WriteAllText($dpr, "program P_$u;`r`n{`$APPTYPE CONSOLE}`r`nuses $u in '$u.pas';`r`nbegin end.`r`n", $Enc)
-  $out = & $Dcc -Q -B $dpr "-E$dir" "-N$dir" 2>&1 | ForEach-Object { "$_" }
+  $out = & { $ErrorActionPreference = 'Continue'; & $Dcc -Q -B $dpr "-E$dir" "-N$dir" 2>&1 | ForEach-Object { "$_" } }
   return (($out | Where-Object { $_ -match '(Error|Fatal)' }) -join ' | ')
 }
 

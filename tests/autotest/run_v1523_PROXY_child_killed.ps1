@@ -110,7 +110,7 @@ foreach ($g in @($BitsGuard, $IdentityGuard)) {
   try {
     Start-Sleep -Milliseconds 1500
     Check "the decoy DelphiLSP is running before $leaf (positive control)" (-not $decoy.HasExited) "pid $($decoy.Id)"
-    $o = & pwsh -NoProfile -File $g -Exe $Exe 2>&1 | Out-String
+    $o = & { $ErrorActionPreference = 'Continue'; & pwsh -NoProfile -File $g -Exe $Exe 2>&1 | Out-String }
     $code = $LASTEXITCODE
     Check "$leaf passes" ($code -eq 0 -and $o -match '(?m)^PASS\s*$') "exit $code"
     $decoy.Refresh()

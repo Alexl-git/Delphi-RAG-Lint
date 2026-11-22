@@ -273,9 +273,10 @@ try {
     $null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe cycles --plan --hub-surface --no-hub-surface --db $P0.Db --library-db none *> $null }; $bothCode = $LASTEXITCODE
     $ap = ($null | & { $ErrorActionPreference = 'Continue'; $input | & $Exe cycles --plan --apply --cycle 1 --no-hub-surface --db $P0.Db --library-db none 2>&1 | ForEach-Object { "$_" } } | Out-String)
   } finally { Pop-Location }
-  Check 'd1 default, a knot R3 refuses: no note, byte-identical to --no-hub-surface' (($kd -eq $ko) -and ($kd -notmatch 'recipe R3') -and ($kd -match '## Cycle 1:')) $kd
+  # 1.52.3 CYCLES-FIXHINT: the --no-hub-surface run's Fix it commands carry --no-hub-surface, so the two are equal once that flag is taken out of them (and the flag must be there)
+  Check 'd1 default, a knot R3 refuses: no note, byte-identical to --no-hub-surface (its Fix it commands minus the flag)' (($ko -match 'cycles --fix --no-hub-surface') -and ($kd -eq $ko.Replace(' --no-hub-surface', '')) -and ($kd -notmatch 'recipe R3') -and ($kd -match '## Cycle 1:')) $kd
   $wh = (Get-HubPlan $W).Out
-  Check 'd2 default, a hub group R3 plans but cannot break (control: --hub-surface shows "the group stays"): the planner''s plan, byte-identical to --no-hub-surface' ((Has $wh 'the group stays -- 1 spoke->hub edges remain') -and ($wd -eq $wo) -and ($wd -notmatch 'recipe R3')) $wd
+  Check 'd2 default, a hub group R3 plans but cannot break (control: --hub-surface shows "the group stays"): the planner''s plan, byte-identical to --no-hub-surface (its Fix it commands minus the flag)' ((Has $wh 'the group stays -- 1 spoke->hub edges remain') -and ($wo -match 'cycles --fix --no-hub-surface') -and ($wd -eq $wo.Replace(' --no-hub-surface', '')) -and ($wd -notmatch 'recipe R3')) $wd
   Check 'd3 --hub-surface with --no-hub-surface: exit 2' ($bothCode -eq 2) "exit=$bothCode"
   Check 'd4 --plan --apply without --hub-surface writes nothing' (((Get-SrcHash $P0.Root) -eq $p0h) -and -not (Test-Path (Join-Path $P0.Root 'HubMain.Hub.pas'))) $ap
 } finally {

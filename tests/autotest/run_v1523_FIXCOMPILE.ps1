@@ -49,7 +49,7 @@ function Fix([string]$Path, [string]$Rule) {
 function Compile([string]$UnitPath) {
   $u = [IO.Path]::GetFileNameWithoutExtension($UnitPath)
   $dpr = Put "P_$u.dpr" "program P_$u;`n{`$APPTYPE CONSOLE}`nuses $u in '$u.pas';`nbegin end.`n"
-  $out = & $Dcc -Q -B $dpr "-E$Work" "-N$Work" 2>&1 | ForEach-Object { "$_" }
+  $out = & { $ErrorActionPreference = 'Continue'; & $Dcc -Q -B $dpr "-E$Work" "-N$Work" 2>&1 | ForEach-Object { "$_" } }
   return (($out | Where-Object { $_ -match '(Error|Fatal)' }) -join ' | ')
 }
 function Has([string]$Text, [string]$Literal) { return $Text.Contains($Literal) }
