@@ -1035,6 +1035,14 @@ begin
       Code:= 0;
     end;
     Result:= Integer(Code);
+    if (Code <> 0) and not GShutdownSeen then
+      { PROXY-KILLED (2026-11-21 owner crash): DelphiLSP died mid-session --
+        crashed, or killed from outside (a test's machine-wide reap gave it
+        TerminateProcess -1). The code is still relayed, but say so: without
+        this line the client's log showed only the proxy's own exit code and
+        the cause looked like a drag-lint crash. }
+      StdErrLine(Format('drag-lint lsp --proxy: DelphiLSP exited with code 0x%.8X before the client''s ' +
+                        'shutdown request (it crashed or was killed); the proxy exits with the same code.', [Code]));
     if (Code <> 0) and GShutdownSeen then
     begin
       { PROXY-AV: DelphiLSP's own crash at exit, after the session ended

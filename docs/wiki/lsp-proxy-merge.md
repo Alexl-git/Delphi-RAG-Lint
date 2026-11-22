@@ -87,6 +87,15 @@ stderr. DelphiLSP itself (Studio 37.0) exits `0xC0000005` or 1 in about a third
 of sessions after a correct shutdown/exit, with or without a config; that was
 the "access violation at shutdown" seen in the proxy, and it is not drag-lint's.
 
+If DelphiLSP dies BEFORE a `shutdown` (it crashed, or something killed it), the
+proxy still exits with DelphiLSP's code and now also writes one stderr line:
+`drag-lint lsp --proxy: DelphiLSP exited with code 0x... before the client's
+shutdown request (it crashed or was killed)`. Code `0xFFFFFFFF` (VS Code shows
+`4294967295`) means DelphiLSP was terminated from outside: on 2026-11-21 the
+proxy tests killed every DelphiLSP on the machine, including the one under VS
+Code. Those tests now kill only DelphiLSP processes they started themselves
+(`tests\autotest\run_v1523_PROXY_child_killed.ps1`).
+
 ## VS Code switch
 
 `drag-lint-switch.exe` switches VS Code's Delphi MCP entry off and on
