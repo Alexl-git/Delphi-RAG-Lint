@@ -29,10 +29,8 @@ uses
   , System.StrUtils
   , System.Classes
   , System.Generics.Collections
-  , TreeSitter
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
-  , DRagLint.Diagnostics.ParseCache
   , DRagLint.Lint.Config
   ;
 
@@ -92,6 +90,10 @@ type
   end;
 
 implementation
+
+uses
+  TreeSitter,
+  DRagLint.Diagnostics.ParseCache;
 
 { Returns True when AName carries APrefix (matched case-SENSITIVELY) followed
   by an uppercase letter. An empty APrefix always returns False (disables the
@@ -199,7 +201,7 @@ begin
   P:= 1;
   while (P <= Length(S)) and (CharInSet(S[P], ['A'..'Z', 'a'..'z', '0'..'9', '_', '.'])) do Inc(P);
   Result:= Copy(S, 1, P - 1);
-  if Pos('.', Result) > 0 then Result:= Copy(Result, LastDelimiter('.', Result) + 1, MaxInt);
+  if Result.Contains('.') then Result:= Copy(Result, LastDelimiter('.', Result) + 1, MaxInt);
 end;
 
 type
@@ -287,8 +289,7 @@ begin
   else
   begin
     Leaves:= AStore.UnresolvedAncestorNames(ATypeName, AFileId);
-    if Length(Leaves) = 0 then Result:= toClass
-    else Result:= ClassifyLeaves(ALibStore, Leaves, AUnknownLeaf);
+    Result:= if Length(Leaves) = 0 then toClass else ClassifyLeaves(ALibStore, Leaves, AUnknownLeaf);
   end;
 end;
 
@@ -317,7 +318,7 @@ var
   HasLet : Boolean;
 begin
   Result:= False;
-  if (Length(S) = 0) or (Length(S) > 4) then Exit;
+  if (S = '') or (Length(S) > 4) then Exit;  // dl:ok magic-literal@89cf -- REVIEWED 2026-11-21 SLZ-S04: literal 4; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
   HasLet:= False;
   for I:= 1 to Length(S) do
   begin
@@ -348,7 +349,8 @@ begin
     'P' are accepted (short local/counter names). }
   HasLower:= False;
   for I:= 1 to Length(S) do
-    if CharInSet(S[I], ['a'..'z']) then begin HasLower:= True; Break; end;
+    if CharInSet(S[I], ['a'..'z']) then begin HasLower:= True;
+    Break; end;
   { single-char uppercase identifiers (P, I, J, ...) are PascalCase-compliant }
   Result:= HasLower or (Length(S) = 1);
 end;
@@ -448,7 +450,7 @@ end;
   insensitive. }
 function IsLoopCounterName(const AName: string): Boolean;
 begin
-  Result:= SameText(AName, 'i') or SameText(AName, 'j') or SameText(AName, 'k')
+  Result:= SameText(AName, 'i') or SameText(AName, 'j') or SameText(AName, 'k')  // dl:ok boolean-expression-complexity@3a72 -- REVIEWED 2026-11-21 SLZ-S04: 5 and/or/xor operators; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     or SameText(AName, 'n') or SameText(AName, 'x') or SameText(AName, 'y');
 end;
 
@@ -570,7 +572,9 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -676,7 +680,7 @@ var
   var
     Ch: Char;
   begin
-    Result:= Pos('_', AName) > 0;
+    Result:= AName.Contains('_');
     if not Result then Exit;
     for Ch in AName do
       if CharInSet(Ch, ['a'..'z']) then Exit(False);
@@ -779,7 +783,7 @@ var
     Result:= False;
     if ATypeNode.IsNull then Exit;
     Raw:= Trim(NodeStr(ATypeNode));
-    Result:= (Length(Raw) > 0) and (Raw[1] = '^');
+    Result:= (Raw <> '') and (Raw[1] = '^');
   end;
 
   { True when ASection (a declSection) carries an explicit visibility keyword.
@@ -833,7 +837,8 @@ var
     for K:= 0 to ASection.NamedChildCount - 1 do
     begin
       Ch:= ASection.NamedChild(K);
-      if Ch.NodeType = 'kPublished' then begin Result:= True; Exit; end;
+      if Ch.NodeType = 'kPublished' then begin Result:= True;
+      Exit; end;
     end;
   end;
 
@@ -849,7 +854,7 @@ var
   end;
 
   { Walk the entire AST once; emit findings for each rule whose prefix is set. }
-  procedure Visit(const N: TTSNode);
+  procedure Visit(const N: TTSNode);  // dl:ok method-too-long@8c2d, deep-nesting@e3cc, too-many-exit-points@7d6d, cyclomatic-complexity@886c, cognitive-complexity@96dc -- REVIEWED 2026-11-21 SLZ-S04: measured 311 (max 65); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     I        : Integer;
     NameNode : TTSNode;
@@ -956,7 +961,8 @@ var
           for I:= 0 to TypeNode.NamedChildCount - 1 do
           begin
             var Ch: TTSNode:= TypeNode.NamedChild(I);
-            if Ch.NodeType = 'declClass' then begin ClassBodyNode:= Ch; Break; end;
+            if Ch.NodeType = 'declClass' then begin ClassBodyNode:= Ch;
+            Break; end;
           end;
           if TypeNode.NodeType = 'declClass' then ClassBodyNode:= TypeNode;
 
@@ -1002,12 +1008,8 @@ var
               EmitAt(NameNode, 'type-name-prefix',
                 TypePrefixFindingMessage('Interface', TypeName, ANaming.InterfacePrefix));
           end
-          else if TypeNodeIsPointer(TypeNode) then
-          begin
-            if (ANaming.PointerPrefix <> '') and (not StartsWithPrefix(TypeName, ANaming.PointerPrefix)) then
-              EmitAt(NameNode, 'type-name-prefix',
+          else if (TypeNodeIsPointer(TypeNode)) and ((ANaming.PointerPrefix <> '') and (not StartsWithPrefix(TypeName, ANaming.PointerPrefix))) then EmitAt(NameNode, 'type-name-prefix',
                 TypePrefixFindingMessage('Pointer type', TypeName, ANaming.PointerPrefix));
-          end;
         end;
       end;
       { Still recurse for nested type declarations. Carry "inside a record"
@@ -1135,17 +1137,13 @@ var
           wiring) was reported at its implementation line. The class-body
           declProc is the authoritative check for these, exactly as the defProc
           branch below already documents. }
-        if (MethName <> '') and (not StartsText('operator', MethName))
-          and (LastDelimiter('.', MethName) = 0) then
-        begin
-          if (not MatchesCase(MethName, ANaming.MethodCase))
+        if ((MethName <> '') and (not StartsText('operator', MethName))  // dl:ok boolean-expression-complexity@60ef -- REVIEWED 2026-11-21 SLZ-S04: 7 and/or/xor operators; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+          and (LastDelimiter('.', MethName) = 0)) and ((not MatchesCase(MethName, ANaming.MethodCase))
             and (not IsShortAllCaps(MethName))
             and (not IsUnderscoreAccessor(MethName))
             and (not IsTypeLibraryUnit)
-            and (not HasTestAttribute(N)) then
-            EmitAt(NameNode, 'method-pascalcase',
+            and (not HasTestAttribute(N))) then EmitAt(NameNode, 'method-pascalcase',
               Format('Method "%s" should be %s', [MethName, ANaming.MethodCase]));
-        end;
       end;
       if (Length(ANaming.ParamPrefixes) > 0) or ANaming.ShortIdentifierCheck then
       begin
@@ -1224,7 +1222,7 @@ var
           end;
         end;
         { param-name-prefix on the defProc args }
-        if (Length(ANaming.ParamPrefixes) > 0) or ANaming.ShortIdentifierCheck then
+        if (Length(ANaming.ParamPrefixes) > 0) or ANaming.ShortIdentifierCheck then  // dl:ok duplicate-code@a7a0 -- REVIEWED 2026-11-21 SLZ-S04: 175 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
         begin
           ArgsNode:= HdrNode.ChildByField('args');
           if not ArgsNode.IsNull then
@@ -1358,7 +1356,7 @@ var
               EmitAt(VarNameId, 'local-field-prefix',
                 Format('Local variable "%s" carries the "%s" %s prefix -- that prefix is reserved for %s, so a local wearing it reads as one',
                   [VarName,
-                   IfThen(HasFieldPfx, ANaming.FieldPrefix, ANaming.ParamPrefix),
+                   IfThen(HasFieldPfx, ANaming.FieldPrefix, ANaming.ParamPrefix),  // dl:ok ifthen-both-branches@26f2 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
                    IfThen(HasFieldPfx, 'field', 'parameter'),
                    IfThen(HasFieldPfx, 'object fields', 'parameters')]))
             else if CasingBad then

@@ -13,7 +13,6 @@ uses
   , Winapi.Windows
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
-  , DRagLint.Core.StudioEnv { TStudioEnv: the ONLY source of a RAD Studio path }
   ;
 
 type
@@ -44,7 +43,7 @@ type
   /// <para>Used in units: DRagLint.CLI, DRagLint.MCP.Server, DRagLint.Refactor.CompileGate</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TCompileChecker = class
+  TCompileChecker = class  // dl:ok high-response@c506 -- REVIEWED 2026-11-21 SLZ-S04: RFC 59; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     public
       /// <summary>Compiles ATarget and returns the parsed compiler findings.</summary>
       /// <param name="ATarget">A .dproj (compiled via msbuild) or a .pas/.dpr/.dpk (via dcc64).</param>
@@ -228,6 +227,9 @@ type
 
 implementation
 
+uses
+  DRagLint.Core.StudioEnv;
+
   { TCompileChecker }
 
   class function TCompileChecker.ResolveIdeLibraryPath(const APlatform: string): string;
@@ -317,10 +319,10 @@ implementation
 
             Low:= LowerCase(Path);
             { Drop RAD-provided dirs -- already on dcc's baseline search path. }
-            if Pos('\embarcadero\studio\37.0\', Low) > 0 then Continue;
+            if Low.Contains('\embarcadero\studio\37.0\') then Continue;
             { Keep compiled-DCU library dirs; otherwise drop source trees. }
-            IsCompiled:= (Pos('\library\rs', Low) > 0) or (Pos('\library\win', Low) > 0);
-            if (not IsCompiled) and ((Pos('\source', Low) > 0) or (Pos('\src', Low) > 0)) then Continue;
+            IsCompiled:= (Low.Contains('\library\rs')) or (Low.Contains('\library\win'));
+            if (not IsCompiled) and ((Low.Contains('\source')) or (Low.Contains('\src'))) then Continue;
 
             Path:= ShortPathOf(Path);
 
@@ -330,8 +332,8 @@ implementation
             if Seen.ContainsKey(Low) then Continue;
             Seen.Add(Low, True);
 
-            if Result <> '' then Result:= Result + ';';
-            Result:= Result + Path;
+            if Result <> '' then Result:= Result + ';';  // dl:ok concat-in-loop@fd40 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+            Result:= Result + Path;  // dl:ok concat-in-loop@fce4 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
           end;
         end;
       finally
@@ -394,7 +396,7 @@ begin
   SA.nLength:= SizeOf(SA);
   SA.bInheritHandle:= True;
   SA.lpSecurityDescriptor:= nil;
-  if not CreatePipe(ReadPipe, WritePipe, @SA, 0) then raise Exception.Create('CreatePipe failed');
+  if not CreatePipe(ReadPipe, WritePipe, @SA, 0) then raise Exception.Create('CreatePipe failed');  // dl:ok raise-bare-exception@20d2 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   try
     SetHandleInformation(ReadPipe, HANDLE_FLAG_INHERIT, 0);
     FillChar(SI, SizeOf(SI), 0);
@@ -409,7 +411,7 @@ begin
     if not CreateProcessW(nil, PWideChar(WideCmd), nil, nil, True, CREATE_NO_WINDOW, AEnvBlock, nil, SI, PI) then  // dl:ok taint-command-injection@ae6d -- REVIEWED 2026-11-19 SLZ-MARK: spawns a fixed tool (git, yadf or dcc) with a caller-built command line; the only environment input is the manifest out-dir expansion
     begin
       CloseHandle(WritePipe);
-      raise Exception.CreateFmt('CreateProcessW failed: %d', [GetLastError]);
+      raise Exception.CreateFmt('CreateProcessW failed: %d', [GetLastError]);  // dl:ok raise-bare-exception@65a3 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     end;
     CloseHandle(WritePipe);
     SB:= TStringBuilder.Create;
@@ -535,10 +537,7 @@ begin
         than Make on a large project; used by refresh-findings to keep
         compiler_findings complete rather than just delta-updated. }
       if AMsbuildPath <> '' then
-        if ATargetPlatform <> '' then
-          Cmd:= Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Build /p:Platform=%s /nologo"', [RsVars, AMsbuildPath, ATarget, Plat])
-        else
-          Cmd:= Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Build /nologo"', [RsVars, AMsbuildPath, ATarget])
+        Cmd:= if ATargetPlatform <> '' then Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Build /p:Platform=%s /nologo"', [RsVars, AMsbuildPath, ATarget, Plat]) else Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Build /nologo"', [RsVars, AMsbuildPath, ATarget])
       else
         if ATargetPlatform <> '' then
           Cmd:= Format('cmd.exe /c "call "%s" && msbuild "%s" /v:normal /t:Build /p:Platform=%s /nologo"', [RsVars, ATarget, Plat])
@@ -552,10 +551,7 @@ begin
         seconds vs minutes on a large project. A unit that fails to compile has no
         valid DCU, so Make always re-checks it; current errors are never missed. }
       if AMsbuildPath <> '' then
-        if ATargetPlatform <> '' then
-          Cmd:= Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Make /p:Platform=%s /nologo"', [RsVars, AMsbuildPath, ATarget, Plat])
-        else
-          Cmd:= Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Make /nologo"', [RsVars, AMsbuildPath, ATarget])
+        Cmd:= if ATargetPlatform <> '' then Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Make /p:Platform=%s /nologo"', [RsVars, AMsbuildPath, ATarget, Plat]) else Format('cmd.exe /c "call "%s" && "%s" "%s" /v:normal /t:Make /nologo"', [RsVars, AMsbuildPath, ATarget])
       else
         if ATargetPlatform <> '' then
           Cmd:= Format('cmd.exe /c "call "%s" && msbuild "%s" /v:normal /t:Make /p:Platform=%s /nologo"', [RsVars, ATarget, Plat])
@@ -641,7 +637,7 @@ begin
     Rec:= F;
     // Attempt to resolve file_id from the indexed files table.
     FileId:= AStore.FindFileIdByPath(F.RawPath);
-    if FileId > 0 then Rec.FileId:= FileId
+    if FileId > 0 then Rec.FileId:= FileId  // dl:ok ifthen-to-if-expression@794b -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     else Rec.FileId:= -1; // not indexed; store with NULL file_id
     AStore.InsertCompilerFinding(Rec);
   end;

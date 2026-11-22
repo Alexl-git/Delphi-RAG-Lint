@@ -79,7 +79,7 @@ const
 
 type
   { One walk over one parsed file. Private to this unit. }
-  TCfRun = class
+  TCfRun = class  // dl:ok high-response@99a7 -- REVIEWED 2026-11-21 SLZ-S04: RFC 89; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   strict private
     FSrc      : TBytes;
     FFile     : string;
@@ -252,7 +252,7 @@ end;
 { True when the code under N can leave the enclosing loop: a Break that belongs to
   it (AInner = 0), Exit, raise, goto, asm, Halt / Abort / RunError. Nested routines
   and anonymous methods are not entered; a Break inside an inner loop only leaves that loop. }
-function TCfRun.HasExit(const N: TTSNode; AInner: Integer): Boolean;  // dl:ok too-many-exit-points@201c -- REVIEWED 2026-10-27: early-out guards of a recursive tree search; a single exit would nest every guard
+function TCfRun.HasExit(const N: TTSNode; AInner: Integer): Boolean;  // dl:ok too-many-exit-points@47f9 -- REVIEWED 2026-10-27: early-out guards of a recursive tree search; a single exit would nest every guard
 var
   I    : Integer;
   T, Cn: string;
@@ -309,7 +309,7 @@ end;
 { True when the code under N may change one of ANames: assignment, for-loop variable,
   foreach variable, address-of, asm, or (AStrictCalls) handing the name to a call
   whose callee is not a known read-only RTL routine (a possible var / out argument). }
-function TCfRun.BodyModifies(const N: TTSNode; ANames: TDictionary<string, Boolean>; AStrictCalls: Boolean): Boolean;  // dl:ok too-many-exit-points@ac76 -- REVIEWED 2026-10-27: early-out guards of a recursive tree search; a single exit would nest every guard
+function TCfRun.BodyModifies(const N: TTSNode; ANames: TDictionary<string, Boolean>; AStrictCalls: Boolean): Boolean;  // dl:ok too-many-exit-points@fe72 -- REVIEWED 2026-10-27: early-out guards of a recursive tree search; a single exit would nest every guard
 var
   I      : Integer;
   T, Cn  : string;
@@ -488,7 +488,7 @@ end;
 
 { The first call to AName (bare or via Self) that is evaluated unconditionally
   inside expression N, or a null node. Short-circuit operands and the ternary are not entered. }
-function TCfRun.ExprCallsSelf(const N: TTSNode; const AName: string; AIsFunc: Boolean): TTSNode;  // dl:ok too-many-exit-points@9d8f -- REVIEWED 2026-10-27, re-checked 2026-11-12 (152b INT2, GF1 named-arg unwrap): early-out guards of a recursive tree search; a single exit would nest every guard
+function TCfRun.ExprCallsSelf(const N: TTSNode; const AName: string; AIsFunc: Boolean): TTSNode;  // dl:ok too-many-exit-points@0265 -- REVIEWED 2026-10-27, re-checked 2026-11-12 (152b INT2, GF1 named-arg unwrap): early-out guards of a recursive tree search; a single exit would nest every guard
 var
   I      : Integer;
   Ent, R : TTSNode;

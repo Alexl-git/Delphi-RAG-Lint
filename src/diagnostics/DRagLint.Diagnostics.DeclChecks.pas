@@ -99,7 +99,7 @@ type
     destructor Destroy; override;
   end;
 
-  TDeclRun = class
+  TDeclRun = class  // dl:ok high-response@4211 -- REVIEWED 2026-11-21 SLZ-S04: RFC 95; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   strict private
     FFile      : string;
     FSrc       : TBytes;

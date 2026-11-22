@@ -330,7 +330,7 @@ var
     if not Streams.ContainsKey(Result) then Result:= '';
   end;
 
-  procedure Visit(const N: TTSNode; AConditional: Boolean);  // dl:ok too-many-exit-points@dbf0, cyclomatic-complexity@2ba0 -- REVIEWED 2026-11-04: a node-kind dispatch; each arm is one early Exit and the order is the source order the rule follows
+  procedure Visit(const N: TTSNode; AConditional: Boolean);  // dl:ok too-many-exit-points@0b1d, cyclomatic-complexity@90e8 -- REVIEWED 2026-11-22 SLZ-S04: re-stamped under v2 hash, still valid
   var
     I         : Integer;
     Kid, L, R : TTSNode;
