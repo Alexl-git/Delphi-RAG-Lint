@@ -655,10 +655,7 @@ var
           StrongConnect(W);
           if LowLink[W] < LowLink[V] then LowLink[V]:= LowLink[W];
         end
-        else if OnStack.ContainsKey(W) and OnStack[W] then
-        begin
-          if Index[W] < LowLink[V] then LowLink[V]:= Index[W];
-        end;
+        else if (OnStack.ContainsKey(W) and OnStack[W]) and (Index[W] < LowLink[V]) then LowLink[V]:= Index[W];
       end;
     { Root of an SCC -> pop it off the stack. }
     if LowLink[V] = Index[V] then
@@ -2913,9 +2910,7 @@ var
             ABehav:= True;
             Exit(True);
           end;
-          if (not A.Resolved) and (ALibStore <> nil) and (Idx = 0) then
-            if Climb(A.Name, ADepth + 1, ABehav) then
-            begin
+          if ((not A.Resolved) and (ALibStore <> nil) and (Idx = 0)) and (Climb(A.Name, ADepth + 1, ABehav)) then begin
               Result:= True;
               if ABehav then Exit(True);
             end;
