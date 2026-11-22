@@ -9,9 +9,9 @@ uses
 
 function P(S, T: string): Boolean;
 begin
-  Result := S.Contains(T);
-  Result := not S.Contains(T);
-  Result := S.Contains(T);
+  Result := S.Contains('ab');
+  Result := not S.Contains('ab');
+  Result := S.Contains('ab');
 end;
 
 end.

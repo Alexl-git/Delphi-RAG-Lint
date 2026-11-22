@@ -10,7 +10,7 @@ uses
 
 function P(S, T: string): Boolean;
 begin
-  Result := S.Contains(T);
+  Result := S.Contains('ab');
 end;
 
 end.
