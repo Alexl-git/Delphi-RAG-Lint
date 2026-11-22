@@ -141,6 +141,7 @@ procedure OpenInBrowser(const pPath: string);
 implementation
 
 uses
+  System.Math,
   Winapi.Windows, Winapi.ShellAPI, System.SysUtils, System.Classes, System.IOUtils,
   System.JSON, System.RegularExpressions, System.Generics.Collections,
   System.Generics.Defaults, System.Character, System.StrUtils,
@@ -295,7 +296,7 @@ function RefCodePoint(const pRef: string): Integer;
 begin
   if CharInSet(pRef[ENT_KIND_AT], ['x', 'X']) then Result:= StrToIntDef(HEX_BASE + Copy(pRef, ENT_HEX_FROM, MaxInt), -1)
   else Result:= StrToIntDef(Copy(pRef, ENT_KIND_AT, MaxInt), -1);
-  if (Result <= 0) or (Result > MAX_CODE_POINT) or ((Result >= SURROGATE_FIRST) and (Result <= SURROGATE_LAST)) then
+  if (Result <= 0) or (Result > MAX_CODE_POINT) or InRange(Result, SURROGATE_FIRST, SURROGATE_LAST) then
     Result:= -1;
 end;
 

@@ -673,7 +673,7 @@ begin
   if not Result then
     Exit;
   var Lines:= FCatalog.StrippedSqlLines(FSqlReader.ReadPath(pPath));
-  if (pLine >= 1) and (pLine <= Length(Lines)) then
+  if InRange(pLine, 1, Length(Lines)) then
     pText:= Lines[pLine - 1];
 end;
 

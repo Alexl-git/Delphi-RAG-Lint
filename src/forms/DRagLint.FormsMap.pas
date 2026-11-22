@@ -1224,7 +1224,7 @@ begin
         end;
         COwner:= '';
         CRout := '';
-        if (SL >= 1) and (SL <= Length(Arr)) and
+        if InRange(SL, 1, Length(Arr)) and
            FindEnclosingImpl(Arr, SL, COwner, CRout) and
            (COwner <> '') and (CRout <> '') then
         begin
