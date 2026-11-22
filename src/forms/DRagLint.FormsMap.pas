@@ -1882,7 +1882,7 @@ var
 begin
   for C in AFrom.Children do
   begin
-    if not (C.Kind in [mnkItem, mnkSubmenu]) then Continue;
+    if (C.Kind not in [mnkItem, mnkSubmenu]) then Continue;
     { qualified Unit.TForm.Method -> the bare method name a .dfm OnClick holds }
     Handler:= Copy(C.Handler, LastDelimiter('.', C.Handler) + 1, MaxInt);
     if StartsStr('<', C.Handler) then Handler:= '';
@@ -1902,7 +1902,7 @@ var
 begin
   for C in AFrom.Children do
   begin
-    if not (C.Kind in [mnkItem, mnkSubmenu]) then Continue;
+    if (C.Kind not in [mnkItem, mnkSubmenu]) then Continue;
     Handler:= Copy(C.Handler, LastDelimiter('.', C.Handler) + 1, MaxInt);
     if StartsStr('<', C.Handler) then Handler:= '';
     Cls:= if C.Kind = mnkSubmenu then 'TdxBarSubItem' else 'TdxBarButton';
