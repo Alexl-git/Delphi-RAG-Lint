@@ -97,7 +97,8 @@ var
 begin
   Result := '';
   if N.IsNull then Exit;
-  S := Integer(N.StartByte); E := Integer(N.EndByte); L := E - S;
+  S := Integer(N.StartByte);
+  E := Integer(N.EndByte); L := E - S;
   if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
   Result := TEncoding.UTF8.GetString(Src, S, L);
 end;
@@ -149,7 +150,8 @@ var
       Code := Interner.Count + 1;
       Interner.Add(Key, Code);
     end;
-    t.Code := Code; t.FileI := AFileI; t.Line := Integer(N.StartPoint.Row) + 1;
+    t.Code := Code;
+    t.FileI := AFileI; t.Line := Integer(N.StartPoint.Row) + 1;
     Toks.Add(t);
   end;
 
@@ -159,7 +161,8 @@ var
     if N.IsNull then Exit;
     if N.IsExtra then Exit; { comments }
     if (not (N = ARoot)) and (N.NodeType = 'defProc') then Exit; { nested routine handled separately }
-    if N.ChildCount = 0 then begin AddToken(N, Src, AFileI); Exit; end;
+    if N.ChildCount = 0 then begin AddToken(N, Src, AFileI);
+    Exit; end;
     for i := 0 to N.ChildCount - 1 do
       CollectLeaves(ARoot, N.Child(i), Src, AFileI);
   end;
@@ -168,7 +171,8 @@ var
   var t: TTok;
   begin
     Inc(RoutineSeq);
-    t.Code := -RoutineSeq; t.FileI := -1; t.Line := 0;
+    t.Code := -RoutineSeq;
+    t.FileI := -1; t.Line := 0;
     Toks.Add(t);
   end;
 
@@ -273,7 +277,8 @@ var
     F                    : TLintFinding;
     AKeyGreater          : Boolean;
   begin
-    Ta := Toks[a]; Tb := Toks[b];
+    Ta := Toks[a];
+    Tb := Toks[b];
     { anchor = lexicographically greater (FilePath, Line) for deterministic output }
     if AFiles[Ta.FileI] > AFiles[Tb.FileI] then
       AKeyGreater := True
@@ -281,8 +286,10 @@ var
       AKeyGreater := False
     else
       AKeyGreater := Ta.Line >= Tb.Line;
-    if AKeyGreater then begin Anchor := Ta; Other := Tb; end
-                   else begin Anchor := Tb; Other := Ta; end;
+    if AKeyGreater then begin Anchor := Ta;
+    Other := Tb; end
+                   else begin Anchor := Tb;
+                   Other := Ta; end;
 
     Key := AFiles[Anchor.FileI] + '|' + IntToStr(Anchor.Line) + '|' +
            AFiles[Other.FileI] + '|' + IntToStr(Other.Line);
@@ -348,7 +355,8 @@ var
           if NextBar[Start] > i then { window [start..i] barrier-free }
           begin
             if not Buckets.TryGetValue(h, Lst) then
-            begin Lst := TList<Integer>.Create; Buckets.Add(h, Lst); end;
+            begin Lst := TList<Integer>.Create;
+            Buckets.Add(h, Lst); end;
             Lst.Add(Start);
           end;
         end;
@@ -366,7 +374,8 @@ var
         for p := 0 to Lst.Count - 2 do
           for q := p + 1 to Lst.Count - 1 do
           begin
-            a := Lst[p]; b := Lst[q];
+            a := Lst[p];
+            b := Lst[q];
             if not TokensEqual(a, b, W) then Continue; { hash-collision guard }
             { left-maximal: skip if this is a right-shift of a longer aligned match }
             if (a > 0) and (b > 0)
@@ -389,7 +398,8 @@ var
             end;
             if L < W then Continue;
             if Abs(a - b) < L then Continue; { same-region overlap }
-            Cand.A := a; Cand.B := b; Cand.Len := L;
+            Cand.A := a;
+            Cand.B := b; Cand.Len := L;
             Cands.Add(Cand);
           end;
       end;
@@ -435,8 +445,10 @@ var
       for i := 0 to N - 1 do Covered[i] := False;
       for Cand in Cands do
       begin
-        a := Cand.A; b := Cand.B; L := Cand.Len;
-        CvA := 0; CvB := 0;
+        a := Cand.A;
+        b := Cand.B; L := Cand.Len;
+        CvA := 0;
+        CvB := 0;
         for k := 0 to L - 1 do
         begin
           if Covered[a + k] then Inc(CvA);
@@ -490,7 +502,8 @@ begin
       end));
     Result := Findings.ToArray;
   finally
-    Seen.Free; Findings.Free; Interner.Free; Toks.Free;
+    Seen.Free;
+    Findings.Free; Interner.Free; Toks.Free;
   end;
 end;
 

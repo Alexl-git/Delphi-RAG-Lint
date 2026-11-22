@@ -351,7 +351,8 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte); L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -1861,7 +1862,8 @@ var
     Result:= False;
     KFi:= -1;
     for I:= 0 to ATryNode.ChildCount - 1 do
-      if ATryNode.Child(I).NodeType = 'kFinally' then begin KFi:= I; Break; end;
+      if ATryNode.Child(I).NodeType = 'kFinally' then begin KFi:= I;
+      Break; end;
     if KFi < 0 then Exit;
     for I:= KFi + 1 to ATryNode.ChildCount - 1 do
     begin
@@ -2261,7 +2263,8 @@ var
         has not started yet. That needs a different rule. }
       var HasFin: Boolean:= False;
       for var Fi:= 0 to N.ChildCount - 1 do
-        if N.Child(Fi).NodeType = 'kFinally' then begin HasFin:= True; Break; end;
+        if N.Child(Fi).NodeType = 'kFinally' then begin HasFin:= True;
+        Break; end;
       if HasFin then
         for var Pi:= 0 to N.NamedChildCount - 1 do
         begin
@@ -2535,10 +2538,14 @@ var
       AncLow := LowerCase(AncName);
       AncLen := Length(AncLow);
       { Check name endings and exact names. }
-      if (AncLen >= 4) and (Copy(AncLow, AncLen - 3, 4) = 'form') then begin Result:= True; Exit; end;
-      if (AncLen >= 5) and (Copy(AncLow, AncLen - 4, 5) = 'frame') then begin Result:= True; Exit; end;
-      if AncLow = 'tcomponent'  then begin Result:= True; Exit; end;
-      if AncLow = 'tdatamodule' then begin Result:= True; Exit; end;
+      if (AncLen >= 4) and (Copy(AncLow, AncLen - 3, 4) = 'form') then begin Result:= True;
+      Exit; end;
+      if (AncLen >= 5) and (Copy(AncLow, AncLen - 4, 5) = 'frame') then begin Result:= True;
+      Exit; end;
+      if AncLow = 'tcomponent'  then begin Result:= True;
+      Exit; end;
+      if AncLow = 'tdatamodule' then begin Result:= True;
+      Exit; end;
       { Only check the first typeref (the direct parent). }
       Break;
     end;
@@ -3198,8 +3205,10 @@ var
           for J:= 0 to CI.Fields.Count - 1 do
           begin
             FI:= CI.Fields[J];
-            ReadCnt := 0; ReadMaps[I].TryGetValue(FI.NameLower, ReadCnt);
-            WriteCnt:= 0; WriteMaps[I].TryGetValue(FI.NameLower, WriteCnt);
+            ReadCnt := 0;
+            ReadMaps[I].TryGetValue(FI.NameLower, ReadCnt);
+            WriteCnt:= 0;
+            WriteMaps[I].TryGetValue(FI.NameLower, WriteCnt);
             if (ReadCnt > 0) and (WriteCnt = 0) then
               EmitAt(FI.DeclNode, 'referenced-never-set',
                 Format('Field "%s" is read but never written -- it always holds its zero value',
@@ -3259,7 +3268,8 @@ begin
         UF.Severity:= 'info';
         UF.Message := Format('Unit is %d lines (limit %d) -- consider splitting it into smaller units', [ULines, AMaxUnitLines]);
         UF.FilePath:= AFile;
-        UF.StartLine:= 1; UF.StartCol:= 1; UF.EndLine:= 1; UF.EndCol:= 1;
+        UF.StartLine:= 1;
+        UF.StartCol:= 1; UF.EndLine:= 1; UF.EndCol:= 1;
         Findings.Add(UF);
       end;
     end;
@@ -3316,8 +3326,10 @@ begin
                                   'the next block starts at line %d with no code between. A previous ' +
                                   '--apply stacked it; delete this one.', [PrevB + 1, LI + 1]);
             OF_.FilePath:= AFile;
-            OF_.StartLine:= PrevB + 1; OF_.StartCol:= 1;
-            OF_.EndLine  := PrevB + 1; OF_.EndCol  := 1;
+            OF_.StartLine:= PrevB + 1;
+            OF_.StartCol:= 1;
+            OF_.EndLine  := PrevB + 1;
+            OF_.EndCol  := 1;
             Findings.Add(OF_);
           end;
         end;

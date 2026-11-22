@@ -395,7 +395,8 @@ begin
         var Remaining: Integer;
         begin
           Remaining:= Length(PF.Src) - Integer(AByteIndex);
-          if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
+          if Remaining <= 0 then begin ABytesRead:= 0;
+          SetLength(Result, 0); Exit; end;
           SetLength(Result, Remaining);
           Move(PF.Src[AByteIndex], Result[0], Remaining);
           ABytesRead:= Remaining;

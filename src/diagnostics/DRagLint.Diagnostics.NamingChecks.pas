@@ -349,7 +349,8 @@ begin
     'P' are accepted (short local/counter names). }
   HasLower:= False;
   for I:= 1 to Length(S) do
-    if CharInSet(S[I], ['a'..'z']) then begin HasLower:= True; Break; end;
+    if CharInSet(S[I], ['a'..'z']) then begin HasLower:= True;
+    Break; end;
   { single-char uppercase identifiers (P, I, J, ...) are PascalCase-compliant }
   Result:= HasLower or (Length(S) = 1);
 end;
@@ -571,7 +572,8 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte); L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -834,7 +836,8 @@ var
     for K:= 0 to ASection.NamedChildCount - 1 do
     begin
       Ch:= ASection.NamedChild(K);
-      if Ch.NodeType = 'kPublished' then begin Result:= True; Exit; end;
+      if Ch.NodeType = 'kPublished' then begin Result:= True;
+      Exit; end;
     end;
   end;
 
@@ -957,7 +960,8 @@ var
           for I:= 0 to TypeNode.NamedChildCount - 1 do
           begin
             var Ch: TTSNode:= TypeNode.NamedChild(I);
-            if Ch.NodeType = 'declClass' then begin ClassBodyNode:= Ch; Break; end;
+            if Ch.NodeType = 'declClass' then begin ClassBodyNode:= Ch;
+            Break; end;
           end;
           if TypeNode.NodeType = 'declClass' then ClassBodyNode:= TypeNode;
 

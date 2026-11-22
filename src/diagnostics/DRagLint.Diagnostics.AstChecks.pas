@@ -1334,8 +1334,10 @@ begin
       Continue;
     end;
     { code }
-    if Result[I] = '''' then begin InStr := True; Blank(1); Inc(I); Continue; end;
-    if Result[I] = '{'  then begin Inc(InBrace);  Blank(1); Inc(I); Continue; end;
+    if Result[I] = '''' then begin InStr := True;
+    Blank(1); Inc(I); Continue; end;
+    if Result[I] = '{'  then begin Inc(InBrace);
+    Blank(1); Inc(I); Continue; end;
     if (Result[I] = '(') and (I < N) and (Result[I + 1] = '*') then
     begin
       InStarParen := True;
@@ -1795,7 +1797,8 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte); L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -1943,7 +1946,8 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte); L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -2085,7 +2089,8 @@ var
         for J:= 0 to DeclVars.NamedChildCount - 1 do
         begin
           DV:= DeclVars.NamedChild(J);
-          if DV.NodeType = 'kVar' then begin KwVar:= DV; Continue; end;
+          if DV.NodeType = 'kVar' then begin KwVar:= DV;
+          Continue; end;
           if DV.NodeType <> 'declVar' then Continue;
 
           { name identifiers precede the type field -- the rule CheckUnusedLocals uses }
@@ -2099,7 +2104,8 @@ var
             if Integer(NameId.StartByte) >= TypeStart then Continue;
             Names:= Names + [NameId];
           end;
-          if Length(Names) = 0 then begin AnyKept:= True; Continue; end;
+          if Length(Names) = 0 then begin AnyKept:= True;
+          Continue; end;
 
           FlagCount:= 0;
           for K:= 0 to High(Names) do
@@ -2137,7 +2143,8 @@ var
               if Keep <> '' then Keep:= Keep + ', ';
               Keep:= Keep + NStr(Names[K]);
             end;
-          if Trim(Keep) = '' then begin AnyKept:= True; Continue; end;
+          if Trim(Keep) = '' then begin AnyKept:= True;
+          Continue; end;
           E:= Default(TTextEdit);
           E.FilePath:= AFile;
           E.Kind    := tekReplaceInLine;
@@ -2171,7 +2178,8 @@ var
             begin
               DV:= DeclVars.NamedChild(J);
               if (DV.NodeType = 'declVar') and (Integer(DV.StartPoint.Row) + 1 = KwLine) then
-              begin Covered:= True; Break; end;
+              begin Covered:= True;
+              Break; end;
             end;
             if not Covered then
             begin
@@ -2439,7 +2447,8 @@ var
   begin
     Hdr:= ADefProc.ChildByField('header');
     if Hdr.IsNull then Exit;
-    IsCtor:= False; IsDtor:= False;
+    IsCtor:= False;
+    IsDtor:= False;
     for I:= 0 to Hdr.ChildCount - 1 do
     begin
       Kind:= Hdr.Child(I).NodeType;
@@ -2533,7 +2542,8 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte); L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -2638,7 +2648,8 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte); L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -2758,7 +2769,8 @@ var
     var ElseIdx: Integer:= -1;
     if Inc1 = 1 then
       for I:= 0 to N.ChildCount - 1 do
-        if N.Child(I).NodeType = 'kElse' then begin ElseIdx:= I + 1; Break; end;
+        if N.Child(I).NodeType = 'kElse' then begin ElseIdx:= I + 1;
+        Break; end;
 
     M:= ADepth;
     for I:= 0 to N.ChildCount - 1 do
@@ -2891,7 +2903,8 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte); L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -3002,7 +3015,8 @@ var
     Result:= (Length(S) >= 2) and (S[1] = 'T') and (CharInSet(S[2], ['A'..'Z']) or LowerPrefixedClass);
     if not Result then Exit;
     C:= CatOf(S);
-    if C <> tcUnknown then begin Result:= (C = tcClass); Exit; end;
+    if C <> tcUnknown then begin Result:= (C = tcClass);
+    Exit; end;
     L:= LowerCase(S);
     if (L = 'tdatetime') or (L = 'tdate') or (L = 'ttime') or (L = 'tcolor')
     or (L = 'talphacolor') or (L = 'tpoint') or (L = 'tsize') or (L = 'trect')
@@ -3131,7 +3145,8 @@ var
     if L = '' then Exit;
     if EnumMems.TryGetValue(L, Own) then
     begin
-      Result:= TStringList.Create; Result.CaseSensitive:= False;
+      Result:= TStringList.Create;
+      Result.CaseSensitive:= False;
       Result.AddStrings(Own);
       Exit;
     end;
@@ -3139,7 +3154,8 @@ var
       for var S in AStore.FindSymbolsByExactName(Trim(ATypeText)) do
         if S.Kind = skEnum then
         begin
-          Result:= TStringList.Create; Result.CaseSensitive:= False;
+          Result:= TStringList.Create;
+          Result.CaseSensitive:= False;
           for var K in AStore.FindAllChildSymbols(S.Id) do
             if K.Kind = skEnumValue then Result.Add(K.Name);
           Break;
@@ -3314,7 +3330,8 @@ var
     begin
       var HasElse: Boolean:= False;
       for var Ei:= 0 to N.ChildCount - 1 do
-        if N.Child(Ei).NodeType = 'kElse' then begin HasElse:= True; Break; end;
+        if N.Child(Ei).NodeType = 'kElse' then begin HasElse:= True;
+        Break; end;
       if not HasElse then
       begin
         { the selector is the first named child that is an expression -- skip the
@@ -3327,7 +3344,8 @@ var
             var St: string:= Sc.NodeType;
             if (St <> 'caseCase') and (St <> 'statement') and (St <> 'statements')
                and ((St = '') or (St[1] <> 'k')) then
-            begin Selector:= Sc; Break; end;
+            begin Selector:= Sc;
+            Break; end;
           end;
         if (not Selector.IsNull) and OperandType(Selector, T) then
         begin
@@ -3436,9 +3454,11 @@ var
         R:= N.ChildByField('rhs');
         HaveCall:= False;
         if (not R.IsNull) and (R.NodeType = 'literalNumber') and (Trim(NodeStr(R)) = '0') and (not L.IsNull) and (L.NodeType = 'exprCall') then
-        begin Call:= L; HaveCall:= True; end
+        begin Call:= L;
+        HaveCall:= True; end
         else if (not L.IsNull) and (L.NodeType = 'literalNumber') and (Trim(NodeStr(L)) = '0') and (not R.IsNull) and (R.NodeType = 'exprCall') then
-        begin Call:= R; HaveCall:= True; end;
+        begin Call:= R;
+        HaveCall:= True; end;
         if HaveCall then
         begin
           Entity:= Call.ChildByField('entity');
@@ -3687,14 +3707,16 @@ var
         var ClsName: string:= Trim(NodeStr(Lhs));
         var ClsSym : TSymbol; var Found: Boolean:= False;
         for var Sy in AStore.FindSymbolsByExactName(ClsName) do
-          if Sy.Kind = skClass then begin ClsSym:= Sy; Found:= True; Break; end;
+          if Sy.Kind = skClass then begin ClsSym:= Sy;
+          Found:= True; Break; end;
         if Found then
         begin
           var AbstractNames: TStringList:= TStringList.Create;
           var ConcreteNames: TStringList:= TStringList.Create;
           var ClassIds     : TList<Int64>:= TList<Int64>.Create;
           try
-            AbstractNames.CaseSensitive:= False; AbstractNames.Sorted:= False;
+            AbstractNames.CaseSensitive:= False;
+            AbstractNames.Sorted:= False;
             ConcreteNames.CaseSensitive:= False;
             ClassIds.Add(ClsSym.Id);
             for var Anc in AStore.GetTransitiveAncestors(ClsSym.Id) do
@@ -3733,7 +3755,8 @@ var
               Findings.Add(F);
             end;
           finally
-            ClassIds.Free; AbstractNames.Free; ConcreteNames.Free;
+            ClassIds.Free;
+            AbstractNames.Free; ConcreteNames.Free;
           end;
         end;
       end;
@@ -4132,7 +4155,8 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte); L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -4267,7 +4291,8 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte); L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -4588,7 +4613,8 @@ var
     begin
       Result:= '';
       if N.IsNull then Exit;
-      S:= Integer(N.StartByte); E:= Integer(N.EndByte); Ln:= E - S;
+      S:= Integer(N.StartByte);
+      E:= Integer(N.EndByte); Ln:= E - S;
       if (Ln <= 0) or (S < 0) or (E > Length(Src)) then Exit;
       Result:= TEncoding.UTF8.GetString(Src, S, Ln);
     end;
@@ -4626,10 +4652,12 @@ var
       TypeN:= ADeclType.ChildByField('type');
       if NameN.IsNull or TypeN.IsNull then Exit;
       FoundCls:= False;
-      if TypeN.NodeType = 'declClass' then begin Cls:= TypeN; FoundCls:= True; end
+      if TypeN.NodeType = 'declClass' then begin Cls:= TypeN;
+      FoundCls:= True; end
       else
         for I:= 0 to TypeN.ChildCount - 1 do
-          if TypeN.Child(I).NodeType = 'declClass' then begin Cls:= TypeN.Child(I); FoundCls:= True; Break; end;
+          if TypeN.Child(I).NodeType = 'declClass' then begin Cls:= TypeN.Child(I);
+          FoundCls:= True; Break; end;
       if not FoundCls then Exit;
       Disp:= NodeStr(NameN);
       Low := LowerCase(Disp);
@@ -4758,7 +4786,8 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte); L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -4776,7 +4805,8 @@ var
   begin
     Result:= False;
     if N.NodeType <> 'exprDot' then Exit;
-    L:= N.ChildByField('lhs'); R:= N.ChildByField('rhs');
+    L:= N.ChildByField('lhs');
+    R:= N.ChildByField('rhs');
     if (not L.IsNull) and (not R.IsNull) and (L.NodeType = 'identifier') and (R.NodeType = 'identifier') and SameText(NodeStr(R), 'Free') then
     begin
       AVar:= LowerCase(NodeStr(L));
@@ -4796,7 +4826,8 @@ var
     Args:= N.ChildByField('args');
     if Args.IsNull or (Args.NamedChildCount < 1) then Exit;
     A0:= Args.NamedChild(0);
-    if A0.NodeType = 'identifier' then begin AVar:= LowerCase(NodeStr(A0)); Result:= True; end;
+    if A0.NodeType = 'identifier' then begin AVar:= LowerCase(NodeStr(A0));
+    Result:= True; end;
   end;
 
   { Find an 'X.<member>' access where X is in AFreed; returns the node or null-via-found-flag. }
@@ -4905,7 +4936,8 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte); L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -4928,10 +4960,12 @@ var
       if (not NameN.IsNull) and (not TypeN.IsNull) then
       begin
         FoundCls:= False;
-        if TypeN.NodeType = 'declClass' then begin Cls:= TypeN; FoundCls:= True; end
+        if TypeN.NodeType = 'declClass' then begin Cls:= TypeN;
+        FoundCls:= True; end
         else
           for J:= 0 to TypeN.ChildCount - 1 do
-            if TypeN.Child(J).NodeType = 'declClass' then begin Cls:= TypeN.Child(J); FoundCls:= True; Break; end;
+            if TypeN.Child(J).NodeType = 'declClass' then begin Cls:= TypeN.Child(J);
+            FoundCls:= True; Break; end;
         if FoundCls then
           for J:= 0 to Cls.ChildCount - 1 do
           begin
@@ -5168,7 +5202,8 @@ var
         if TypeN.NodeType = 'declClass' then IsClass:= True
         else
           for I:= 0 to TypeN.ChildCount - 1 do
-            if TypeN.Child(I).NodeType = 'declClass' then begin IsClass:= True; Break; end;
+            if TypeN.Child(I).NodeType = 'declClass' then begin IsClass:= True;
+            Break; end;
       end;
       if IsClass and (not NmN.IsNull) then
       begin
@@ -6358,14 +6393,16 @@ var
             Mem := Lhs.ChildByField('rhs');
             if (not Base.IsNull) and (Base.NodeType = 'identifier')
                and SameText(NodeStr(Base), 'Self') and (not Mem.IsNull) then
-            begin Hit:= True; Exit; end;
+            begin Hit:= True;
+            Exit; end;
           end
           { 'FXxx := ...' -- bare F-prefixed identifier that is not a local/param }
           else if Lhs.NodeType = 'identifier' then
           begin
             Nm:= NodeStr(Lhs);
             if LooksLikeFieldName(Nm) and (not ALocals.ContainsKey(LowerCase(Nm))) then
-            begin Hit:= True; Exit; end;
+            begin Hit:= True;
+            Exit; end;
           end;
         end;
       end;
@@ -6472,7 +6509,8 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte); L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -6773,7 +6811,8 @@ var
     begin
       Verb:= LowerCase(UnquoteLiteral(LeftmostLiteralText(Op)));
       for V in SAFE_VERBS do
-        if Verb = V then begin VerbSafe:= True; Break; end;
+        if Verb = V then begin VerbSafe:= True;
+        Break; end;
     end;
     if not VerbSafe then Exit(True);
 
@@ -6972,7 +7011,8 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte); L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -6989,13 +7029,16 @@ var
     if Ent.NodeType = 'identifier' then
     begin
       Nm:= NodeStr(Ent);
-      if SameText(Nm, 'AssignFile') then begin AIdx:= 1; Exit(True); end;
-      if SameText(Nm, 'FileOpen') or SameText(Nm, 'CreateFile') then begin AIdx:= 0; Exit(True); end;
+      if SameText(Nm, 'AssignFile') then begin AIdx:= 1;
+      Exit(True); end;
+      if SameText(Nm, 'FileOpen') or SameText(Nm, 'CreateFile') then begin AIdx:= 0;
+      Exit(True); end;
     end
     else if Ent.NodeType = 'exprDot' then
     begin
       R:= Ent.ChildByField('rhs');
-      if (not R.IsNull) and (R.NodeType = 'identifier') and SameText(NodeStr(R), 'Open') then begin AIdx:= 0; Exit(True); end;
+      if (not R.IsNull) and (R.NodeType = 'identifier') and SameText(NodeStr(R), 'Open') then begin AIdx:= 0;
+      Exit(True); end;
     end;
   end;
 
@@ -7502,7 +7545,8 @@ var
       Nm   := Trim(NodeStr(Ent));
       AName:= Nm;
       { Classic Pascal / RTL file + directory I/O. }
-      if SameText(Nm, 'AssignFile') then begin AIdx0:= 1; Exit(True); end;
+      if SameText(Nm, 'AssignFile') then begin AIdx0:= 1;
+      Exit(True); end;
       { DirectoryExists/MkDir/RmDir/FindFirst added 2026-09-01. DirectoryExists
         is the owner's own stated idiom -- "to figure out if the software is
         running on a test computer or customer, to check for existence of some
@@ -7513,12 +7557,15 @@ var
       if MatchText(Nm, ['FileOpen', 'FileCreate', 'FileExists', 'DeleteFile',
                         'ForceDirectories', 'CreateDir', 'ChDir', 'RemoveDir',
                         'CreateFile', 'DirectoryExists', 'MkDir', 'RmDir',
-                        'FindFirst']) then begin AIdx0:= 0; Exit(True); end;
+                        'FindFirst']) then begin AIdx0:= 0;
+                        Exit(True); end;
       if MatchText(Nm, ['RenameFile', 'CopyFile', 'MoveFile']) then
-        begin AIdx0:= 0; AIdx1:= 1; Exit(True); end;
+        begin AIdx0:= 0;
+        AIdx1:= 1; Exit(True); end;
       { ShellExecute is taken here in its PATH role only (lpFile). Injection
         remains unsafe-shellexecute's job -- two rules, two questions. }
-      if SameText(Nm, 'ShellExecute') then begin AIdx0:= 2; Exit(True); end;
+      if SameText(Nm, 'ShellExecute') then begin AIdx0:= 2;
+      Exit(True); end;
       Exit;
     end;
 
@@ -7535,23 +7582,27 @@ var
       and dataset persistence all spell it the same way and all take a file
       name at argument 0. Requiring a known receiver here would silently drop
       the single most common Delphi file sink there is. }
-    if MatchText(Nm, ['LoadFromFile', 'SaveToFile']) then begin AIdx0:= 0; Exit(True); end;
+    if MatchText(Nm, ['LoadFromFile', 'SaveToFile']) then begin AIdx0:= 0;
+    Exit(True); end;
 
     { System.IOUtils. }
     if SameText(Recv, 'TFile') then
     begin
-      if MatchText(Nm, ['Copy', 'Move']) then begin AIdx0:= 0; AIdx1:= 1; Exit(True); end;
+      if MatchText(Nm, ['Copy', 'Move']) then begin AIdx0:= 0;
+      AIdx1:= 1; Exit(True); end;
       if MatchText(Nm, ['Open', 'OpenRead', 'OpenWrite', 'OpenText', 'Create',
                         'Delete', 'Exists', 'ReadAllText', 'ReadAllLines',
                         'ReadAllBytes', 'WriteAllText', 'WriteAllLines',
                         'WriteAllBytes', 'AppendAllText']) then
-        begin AIdx0:= 0; Exit(True); end;
+        begin AIdx0:= 0;
+        Exit(True); end;
       Exit;
     end;
     if SameText(Recv, 'TDirectory') then
     begin
       if MatchText(Nm, ['CreateDirectory', 'Delete', 'Exists', 'GetFiles',
-                        'GetDirectories']) then begin AIdx0:= 0; Exit(True); end;
+                        'GetDirectories']) then begin AIdx0:= 0;
+                        Exit(True); end;
       Exit;
     end;
 
@@ -7559,7 +7610,8 @@ var
     if SameText(Nm, 'Create')
        and MatchText(Recv, ['TFileStream', 'TBufferedFileStream',
                             'TIniFile', 'TMemIniFile', 'TRegistryIniFile']) then
-      begin AIdx0:= 0; Exit(True); end;
+      begin AIdx0:= 0;
+      Exit(True); end;
   end;
 
   { The owner's "table opening": a dataset or connection is pointed at a
@@ -8201,7 +8253,8 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte); L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -8230,7 +8283,8 @@ var
           with/try) and NOT a 'statement' wrapper. Searching only for 'statement'
           here skipped a leading 'case' and wrongly landed on a later Exit (FP-4). }
         if (C.NodeType <> '') and (C.NodeType[1] = 'k') then Continue;
-        B:= C; Found:= True; Break;
+        B:= C;
+        Found:= True; Break;
       end;
       if not Found then Exit;
     end;
@@ -8312,7 +8366,8 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte); L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -8461,7 +8516,8 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte); L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -8995,7 +9051,8 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte); L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -9068,7 +9125,8 @@ var
     Args:= N.ChildByField('args');
     if Args.IsNull or (Args.NamedChildCount < 1) then Exit;
     A0:= Args.NamedChild(0);
-    if A0.NodeType = 'identifier' then begin AVar:= LowerCase(NodeStr(A0)); Result:= True; end;
+    if A0.NodeType = 'identifier' then begin AVar:= LowerCase(NodeStr(A0));
+    Result:= True; end;
   end;
 
   { A dataset open is a bare `X.Open;` / `X.Open();` STATEMENT -- the parser
@@ -9304,7 +9362,8 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte); L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -9517,7 +9576,8 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte); L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -9683,7 +9743,8 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte); L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -9888,7 +9949,8 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte); L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -10041,7 +10103,8 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte); L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -10194,7 +10257,8 @@ var
       begin
         IsCtor:= False;
         for I:= 0 to Hdr.ChildCount - 1 do
-          if Hdr.Child(I).NodeType = 'kConstructor' then begin IsCtor:= True; Break; end;
+          if Hdr.Child(I).NodeType = 'kConstructor' then begin IsCtor:= True;
+          Break; end;
         if IsCtor then
         begin
           NameNode:= Hdr.ChildByField('name');

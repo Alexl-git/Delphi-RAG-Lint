@@ -564,7 +564,8 @@ var S, E, L: Integer;
 begin
   Result := '';
   if N.IsNull then Exit;
-  S := Integer(N.StartByte); E := Integer(N.EndByte); L := E - S;
+  S := Integer(N.StartByte);
+  E := Integer(N.EndByte); L := E - S;
   if (L <= 0) or (S < 0) or (E > Length(ASrc)) then Exit;
   Result := TEncoding.UTF8.GetString(ASrc, S, L);
 end;
@@ -577,7 +578,8 @@ var
   Cat: TTypeCategory; T: string; T0, E0: Int64; Miss: Boolean; MK: string;
   Memo: TDictionary<string, Boolean>; Cached, Verifying: Boolean;
 begin
-  T0 := TStopwatch.GetTimeStamp; Miss := False;
+  T0 := TStopwatch.GetTimeStamp;
+  Miss := False;
   E0 := GOracleT[ORACLE_MANAGED]; { see the finally: this function RECURSES }
   MK := OracleMemoKey(AFileId, ATypeText);
   Memo := ManagedMemo(AStore); { C1b: the store's, or the store-free fallback }
@@ -680,7 +682,8 @@ end;
 function IsRecordType(const ATypeText: string; const AStore: ISymbolStore; AFileId: Int64): Boolean;
 var T0: Int64; Miss, Cached, Verifying: Boolean; K: string;
 begin
-  T0 := TStopwatch.GetTimeStamp; Miss := False; Verifying := False; Cached := False;
+  T0 := TStopwatch.GetTimeStamp;
+  Miss := False; Verifying := False; Cached := False;
   try
     Result := False;
     if AStore = nil then Exit;
@@ -1061,13 +1064,15 @@ var
   procedure CollectLocalCallDefs(const N: TTSNode);
   var Reads, CallDefs: TList<Integer>; K: Integer;
   begin
-    Reads := TList<Integer>.Create; CallDefs := TList<Integer>.Create;
+    Reads := TList<Integer>.Create;
+    CallDefs := TList<Integer>.Create;
     try
       CollectReadsAndCallDefs(N, ASrc, AVars, Reads, CallDefs);
       for K := 0 to CallDefs.Count - 1 do
         if LocallyAssigned.IndexOf(CallDefs[K]) < 0 then LocallyAssigned.Add(CallDefs[K]);
     finally
-      Reads.Free; CallDefs.Free;
+      Reads.Free;
+      CallDefs.Free;
     end;
   end;
 
@@ -1139,7 +1144,8 @@ end;
 function BaseIdentText(const N: TTSNode; const ASrc: TBytes): string;
 var Cur, Nxt: TTSNode; G: Integer;
 begin
-  Result := ''; Cur := N; G := 0;
+  Result := '';
+  Cur := N; G := 0;
   while (not Cur.IsNull) and (G < 32) do
   begin
     Inc(G);
@@ -1312,7 +1318,8 @@ begin
   { Children are POSITIONAL (kIf, cond, kThen, then, kElse, else) -- exprIf
     exposes no 'then'/'else' fields, which is why this indexes rather than
     calling ChildByField. Same lesson as MaxNest in AstChecks. }
-  CondIx := -1; ThenIx := -1; ElseIx := -1;
+  CondIx := -1;
+  ThenIx := -1; ElseIx := -1;
   for I := 0 to AIf.ChildCount - 1 do
   begin
     C := AIf.Child(I);
@@ -1931,7 +1938,8 @@ var
     if (N.NodeType = 'identifier') and SameText(Trim(NodeStr(N, ASrc)), AFlag) then
     begin
       Par := N.Parent;
-      if Par.IsNull then begin Ok := False; Exit; end;
+      if Par.IsNull then begin Ok := False;
+      Exit; end;
       if Par.NodeType = 'assignment' then
       begin
         Lhs := Par.ChildByField('lhs');
@@ -2997,13 +3005,15 @@ procedure CollectAndOrLeftDefs(const ANode: TTSNode; const ASrc: TBytes;
       begin
         L := N.ChildByField('lhs');
         R := N.ChildByField('rhs');
-        Reads := TList<Integer>.Create; CallDefs := TList<Integer>.Create;
+        Reads := TList<Integer>.Create;
+        CallDefs := TList<Integer>.Create;
         try
           CollectReadsAndCallDefs(L, ASrc, AVars, Reads, CallDefs);
           for K := 0 to CallDefs.Count - 1 do
             if AAcc.IndexOf(CallDefs[K]) < 0 then AAcc.Add(CallDefs[K]);
         finally
-          Reads.Free; CallDefs.Free;
+          Reads.Free;
+          CallDefs.Free;
         end;
         Walk(L);
         Walk(R);
@@ -3514,7 +3524,8 @@ function FindCalleeDefProc(const ARoot: TTSNode; const AName: string;
   AImplStartLine: Integer; const ASrc: TBytes): TTSNode;
 var Procs: TArray<TTSNode>; I, SR, ER: Integer; Hdr, Nm, Fallback: TTSNode;
 begin
-  Result := Default(TTSNode); Fallback := Default(TTSNode);
+  Result := Default(TTSNode);
+  Fallback := Default(TTSNode);
   Procs := CfgFindProcs(ARoot);
   for I := 0 to High(Procs) do
   begin
@@ -3523,7 +3534,8 @@ begin
     Nm := Hdr.ChildByField('name');
     if Nm.IsNull or (LowerCase(Trim(NodeStr(Nm, ASrc))) <> LowerCase(AName)) then Continue;
     if Fallback.IsNull then Fallback := Procs[I];
-    SR := Integer(Procs[I].StartPoint.Row) + 1; ER := Integer(Procs[I].EndPoint.Row) + 1;
+    SR := Integer(Procs[I].StartPoint.Row) + 1;
+    ER := Integer(Procs[I].EndPoint.Row) + 1;
     if InRange(AImplStartLine, SR, ER) then Exit(Procs[I]);
   end;
   Result := Fallback;
@@ -3543,7 +3555,8 @@ var Body: TTSNode; Bad: Boolean;
       M := LowerCase(Trim(NodeStr(N.ChildByField('rhs'), ASrc)));
       if ((M = 'free') or (M = 'disposeof'))
          and (BaseIdentText(N.ChildByField('lhs'), ASrc) = APName) then
-      begin Bad := True; Exit; end;
+      begin Bad := True;
+      Exit; end;
     end;
     if N.NodeType = 'exprCall' then
     begin
@@ -3552,13 +3565,15 @@ var Body: TTSNode; Bad: Boolean;
         for I := 0 to Args.NamedChildCount - 1 do
         begin
           Arg := Args.NamedChild(I);
-          if BaseIdentText(Arg, ASrc) = APName then begin Bad := True; Exit; end;
+          if BaseIdentText(Arg, ASrc) = APName then begin Bad := True;
+          Exit; end;
         end;
     end;
     if N.NodeType = 'assignment' then
     begin
       Rhs := N.ChildByField('rhs');
-      if ExprMentionsIdent(Rhs, APName, ASrc) then begin Bad := True; Exit; end;
+      if ExprMentionsIdent(Rhs, APName, ASrc) then begin Bad := True;
+      Exit; end;
     end;
     for I := 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I));
   end;
@@ -3904,7 +3919,8 @@ var
   var F: TLintFinding;
   begin
     F := Default(TLintFinding);
-    F.RuleId := ARule; F.Severity := ASev; F.Message := AMsg; F.FilePath := AFile;
+    F.RuleId := ARule;
+    F.Severity := ASev; F.Message := AMsg; F.FilePath := AFile;
     { 1.52 BK-COLS2: every caller passes a tree-sitter BYTE column (node StartPoint / Lattices DeclCol);
       the finding reports the CHARACTER column. }
     var Pt: TTSPoint;
@@ -4233,7 +4249,8 @@ var
       if not TDataFlowSolver<TDefAsgnVal>.Solve(Cfg, Ana, AIn, AOut) then Exit;
       FlowTick(2, TickAt, TickEx);
 
-      Reads := TList<Integer>.Create; CallDefs := TList<Integer>.Create;
+      Reads := TList<Integer>.Create;
+      CallDefs := TList<Integer>.Create;
       SeqDefs := TList<Integer>.Create;
       Derefs := TList<TIfaceDeref>.Create;
       Scans := TArgScanMemo.Create(Vars, PF.Src, ArgMode);
@@ -4241,13 +4258,15 @@ var
         { ---- used-before-assignment: per-item replay of must/may within a block ---- }
         for B := 0 to Cfg.BlockCount - 1 do
         begin
-          CurMust := Copy(AIn[B].Must); CurMay := Copy(AIn[B].May);
+          CurMust := Copy(AIn[B].Must);
+          CurMay := Copy(AIn[B].May);
           { synthetic entry defs (foreach iterator) }
           ApplyEntryDefs(Cfg.Blocks[B], Vars, CurMust, CurMay, True);
           for I := 0 to Cfg.Blocks[B].Items.Count - 1 do
           begin
             It := Cfg.Blocks[B].Items[I];
-            Reads.Clear; CallDefs.Clear;
+            Reads.Clear;
+            CallDefs.Clear;
             if It.Node.NodeType = 'assignment' then
             begin
               CollectReadsAndCallDefs(It.Node.ChildByField('rhs'), PF.Src, Vars, Reads, CallDefs, RecMethodDef, ParamMode);
@@ -4478,17 +4497,20 @@ var
             end;
             { advance must/may by this item's defs (reads already handled);
               a call arg / @x is treated as assigned (callee may be a var/out sink) }
-            for J := 0 to CallDefs.Count - 1 do begin CurMust[CallDefs[J]] := True; CurMay[CallDefs[J]] := True; end;
+            for J := 0 to CallDefs.Count - 1 do begin CurMust[CallDefs[J]] := True;
+            CurMay[CallDefs[J]] := True; end;
             if It.Node.NodeType = 'assignment' then
             begin
               Tgt := AssignmentBaseIndex(It.Node, PF.Src, Vars);
-              if Tgt >= 0 then begin CurMust[Tgt] := True; CurMay[Tgt] := True; end;
+              if Tgt >= 0 then begin CurMust[Tgt] := True;
+              CurMay[Tgt] := True; end;
             end
             else if (It.Node.NodeType = 'exprCall')
                     and (NodeText(It.Node.ChildByField('entity'), PF.Src) = 'exit') then
             begin
               Idx := Vars.IndexOf('result');
-              if Idx >= 0 then begin CurMust[Idx] := True; CurMay[Idx] := True; end;
+              if Idx >= 0 then begin CurMust[Idx] := True;
+              CurMay[Idx] := True; end;
             end;
           end;
         end;
@@ -4508,7 +4530,8 @@ var
         begin
           for B := 0 to Cfg.BlockCount - 1 do
           begin
-            CurFMust := Copy(FIn[B].Must); CurFMay := Copy(FIn[B].May);
+            CurFMust := Copy(FIn[B].Must);
+            CurFMay := Copy(FIn[B].May);
             { Mirror TFreedState.Transfer's EntryDefs kill. FIn[B] is the JOIN of
               the predecessors, so it still carries the back-edge's dangling
               state; the replay must rebind the foreach iterator before it walks
@@ -4536,15 +4559,18 @@ var
                       ROW, COL);
                 end;
                 case FKind of
-                  fkRawFree: begin CurFMust[FreedV] := True;  CurFMay[FreedV] := True;  end;
-                  fkNiling:  begin CurFMust[FreedV] := False; CurFMay[FreedV] := False; end;
+                  fkRawFree: begin CurFMust[FreedV] := True;
+                  CurFMay[FreedV] := True;  end;
+                  fkNiling:  begin CurFMust[FreedV] := False;
+                  CurFMay[FreedV] := False; end;
                 end;
                 Continue;
               end;
               if It.Node.NodeType = 'assignment' then
               begin
                 Tgt := AssignmentTargetIndex(It.Node, PF.Src, Vars);
-                if Tgt >= 0 then begin CurFMust[Tgt] := False; CurFMay[Tgt] := False; end;
+                if Tgt >= 0 then begin CurFMust[Tgt] := False;
+                CurFMay[Tgt] := False; end;
               end;
             end;
           end;
@@ -4607,14 +4633,17 @@ var
         FlowTick(4, TickAt, TickEx);
         if TDataFlowSolver<TArray<Boolean>>.Solve(Cfg, LiveAna, LIn, LOut) then
         begin
-          SetLength(ReadAny, Vars.Count); SetLength(AsgnAny, Vars.Count);
-          for I := 0 to Vars.Count - 1 do begin ReadAny[I] := False; AsgnAny[I] := False; end;
+          SetLength(ReadAny, Vars.Count);
+          SetLength(AsgnAny, Vars.Count);
+          for I := 0 to Vars.Count - 1 do begin ReadAny[I] := False;
+          AsgnAny[I] := False; end;
           { precompute read-anywhere / assigned-anywhere over all blocks }
           for B := 0 to Cfg.BlockCount - 1 do
             for I := 0 to Cfg.Blocks[B].Items.Count - 1 do
             begin
               It := Cfg.Blocks[B].Items[I];
-              Reads.Clear; CallDefs.Clear;
+              Reads.Clear;
+              CallDefs.Clear;
               if It.Node.NodeType = 'assignment' then
               begin
                 CollectReadsAndCallDefs(It.Node.ChildByField('rhs'), PF.Src, Vars, Reads, CallDefs);
@@ -4624,7 +4653,8 @@ var
                 begin
                   { partial write (a[i]:= / x.f:=): assigns AND reads the base }
                   Idx := AssignmentBaseIndex(It.Node, PF.Src, Vars);
-                  if Idx >= 0 then begin AsgnAny[Idx] := True; ReadAny[Idx] := True; end;
+                  if Idx >= 0 then begin AsgnAny[Idx] := True;
+                  ReadAny[Idx] := True; end;
                   CollectReadsAndCallDefs(It.Node.ChildByField('lhs'), PF.Src, Vars, Reads, CallDefs);
                 end;
               end
@@ -4690,14 +4720,16 @@ var
                   ObrReported := ObrReported + [Integer(It.Node.StartByte)];
                 end;
                 { backward transfer for this item (mirror TLiveness.Transfer) }
-                Reads.Clear; CallDefs.Clear;
+                Reads.Clear;
+                CallDefs.Clear;
                 if Tgt >= 0 then Live[Tgt] := False;
                 CollectReadsAndCallDefs(It.Node.ChildByField('rhs'), PF.Src, Vars, Reads, CallDefs);
                 for J := 0 to Reads.Count - 1 do Live[Reads[J]] := True;
                 for J := 0 to CallDefs.Count - 1 do Live[CallDefs[J]] := True; { rhs call args are uses }
                 if Tgt < 0 then
                 begin
-                  Reads.Clear; CallDefs.Clear;
+                  Reads.Clear;
+                  CallDefs.Clear;
                   CollectReadsAndCallDefs(It.Node.ChildByField('lhs'), PF.Src, Vars, Reads, CallDefs);
                   for J := 0 to Reads.Count - 1 do Live[Reads[J]] := True;
                   for J := 0 to CallDefs.Count - 1 do Live[CallDefs[J]] := True;
@@ -4705,7 +4737,8 @@ var
               end
               else
               begin
-                Reads.Clear; CallDefs.Clear;
+                Reads.Clear;
+                CallDefs.Clear;
                 CollectReadsAndCallDefs(It.Node, PF.Src, Vars, Reads, CallDefs);
                 for J := 0 to Reads.Count - 1 do Live[Reads[J]] := True;
                 for J := 0 to CallDefs.Count - 1 do Live[CallDefs[J]] := True;
@@ -4749,7 +4782,8 @@ var
             var Linear := True;
             for B := 0 to Cfg.BlockCount - 1 do
               if (Cfg.Blocks[B].Succ.Count > 1) or (Cfg.Blocks[B].Pred.Count > 1) then
-              begin Linear := False; Break; end;
+              begin Linear := False;
+              Break; end;
             if Linear then
             begin
               { flatten items in execution order by following the single-succ chain
@@ -4784,7 +4818,8 @@ var
                         if Vars.Get(J).Kind = vkLocal then LiveNow[J] := True;
                       Continue;
                     end;
-                    Reads.Clear; CallDefs.Clear;
+                    Reads.Clear;
+                    CallDefs.Clear;
                     if It.Node.NodeType = 'assignment' then
                     begin
                       Tgt := AssignmentTargetIndex(It.Node, PF.Src, Vars); { whole-var only }
@@ -4809,7 +4844,8 @@ var
                   begin
                     It := Flat[I];
                     if It.Opaque then Continue;
-                    Reads.Clear; CallDefs.Clear;
+                    Reads.Clear;
+                    CallDefs.Clear;
                     if It.Node.NodeType = 'assignment' then
                     begin
                       Tgt := AssignmentTargetIndex(It.Node, PF.Src, Vars);
@@ -4845,7 +4881,8 @@ var
                   LiveAfter.Free;
                 end;
               finally
-                Flat.Free; ChainSeen.Free;
+                Flat.Free;
+                ChainSeen.Free;
               end;
             end;
           end;
@@ -4909,7 +4946,8 @@ var
                 for RIx := 0 to Cfg.Blocks[B].Succ.Count - 1 do
                   Q.Enqueue(Cfg.Blocks[B].Succ[RIx]);
             end;
-          finally Q.Free; Seen.Free; end;
+          finally Q.Free;
+          Seen.Free; end;
         end;
 
         { ============ object-leak (store-free, conservative) ============ }
@@ -4918,9 +4956,11 @@ var
         if TDataFlowSolver<TArray<Boolean>>.Solve(Cfg, EscAna, EIn2, EOut2) then
         begin
           FlowTick(8, TickAt, TickEx); { the escape SOLVE; phase 6 keeps the rest }
-          SetLength(CreateRow, Vars.Count); SetLength(CreateCol, Vars.Count);
+          SetLength(CreateRow, Vars.Count);
+          SetLength(CreateCol, Vars.Count);
           SetLength(CreateType, Vars.Count);
-          for I := 0 to Vars.Count - 1 do begin CreateRow[I] := 0; CreateCol[I] := 0; CreateType[I] := ''; end;
+          for I := 0 to Vars.Count - 1 do begin CreateRow[I] := 0;
+          CreateCol[I] := 0; CreateType[I] := ''; end;
           { record each local's constructor-assignment site }
           for B := 0 to Cfg.BlockCount - 1 do
             for J := 0 to Cfg.Blocks[B].Items.Count - 1 do
@@ -5027,7 +5067,8 @@ var
         code that follows its solve, which is the honest attribution: that work
         only exists because the solve produced something. }
       FlowTick(6, TickAt, TickEx);
-      Cfg.Free; Vars.Free;
+      Cfg.Free;
+      Vars.Free;
     end;
   end;
 
@@ -5055,7 +5096,8 @@ begin
         T0: Int64; Miss, Cached, Verifying: Boolean;
         Owns: TDictionary<string, Boolean>;
       begin
-        T0 := TStopwatch.GetTimeStamp; Miss := False; Verifying := False; Cached := False;
+        T0 := TStopwatch.GetTimeStamp;
+        Miss := False; Verifying := False; Cached := False;
         try
         Result := True; { conservative default: owns/unknown -> escape }
         { C1b: the STORE's memo, so a callee resolved once is resolved for every
@@ -5072,11 +5114,13 @@ begin
         Syms := AStore.FindSymbolsByExactName(ACalleeName);
         { resolve to a single routine: an interface forward-decl + its impl share a
           file (fine); only routines spanning DIFFERENT files are truly ambiguous. }
-        Have := False; Ambig := False; FId := -1; RSym := Default(TSymbol);
+        Have := False;
+        Ambig := False; FId := -1; RSym := Default(TSymbol);
         for I := 0 to High(Syms) do
           if Syms[I].Kind in [skProcedure, skFunction, skMethod] then
           begin
-            if not Have then begin FId := Syms[I].FileId; RSym := Syms[I]; Have := True; end
+            if not Have then begin FId := Syms[I].FileId;
+            RSym := Syms[I]; Have := True; end
             else if Syms[I].FileId <> FId then Ambig := True;
             if Syms[I].ImplStartLine > 0 then RSym := Syms[I]; { prefer the bodied one }
           end;
@@ -5129,7 +5173,8 @@ begin
         RecSym, MemSym: TSymbol; T0, E0: Int64; Miss, Cached, Verifying: Boolean;
         DK: string;
       begin
-        T0 := TStopwatch.GetTimeStamp; Miss := False; Verifying := False; Cached := False;
+        T0 := TStopwatch.GetTimeStamp;
+        Miss := False; Verifying := False; Cached := False;
         E0 := GOracleT[ORACLE_RECTYPE]; { subtracted below -- see the finally }
         { C1b: THE FILE ID IS NOW LOAD-BEARING. At C1a's per-file lifetime the
           key could omit it, because AFileId could not vary within one Check.
@@ -5231,7 +5276,8 @@ begin
         function ModeOf(const ASig: string; out AMode: TParamMode): Boolean;
         var PS: TArray<TParamPart>;
         begin
-          Result := False; AMode := pmUnknown;
+          Result := False;
+          AMode := pmUnknown;
           PS := ParseSignatureParams(ASig);
           if (AIndex < 0) or (AIndex > High(PS)) then Exit;
           if      SameText(PS[AIndex].Modifier, 'var'  ) then AMode := pmVar
@@ -5244,7 +5290,8 @@ begin
 
       var T0: Int64; Miss, Verifying: Boolean; Cached: TParamMode;
       begin
-        T0 := TStopwatch.GetTimeStamp; Miss := False; Verifying := False; Cached := pmUnknown;
+        T0 := TStopwatch.GetTimeStamp;
+        Miss := False; Verifying := False; Cached := pmUnknown;
         try
         Result := pmUnknown;
         if ACalleeName = '' then Exit;
@@ -5330,7 +5377,8 @@ begin
           Syms := AStore.FindSymbolsByExactName(ACalleeName);
           if (Length(Syms) = 0) and (ALibStore <> nil) then
             Syms := ALibStore.FindSymbolsByExactName(ACalleeName);
-          Any := False; Seen := pmUnknown;
+          Any := False;
+          Seen := pmUnknown;
           MethodAny := False;
           MethodSeen := pmUnknown;
           for I := 0 to High(Syms) do
@@ -5375,8 +5423,10 @@ begin
             end;
             if not (Syms[I].Kind in [skProcedure, skFunction]) then Continue;
             if not ModeOf(Syms[I].Signature, M) then Continue;
-            if not Any then begin Seen := M; Any := True; end
-            else if M <> Seen then begin Seen := pmUnknown; Break; end;
+            if not Any then begin Seen := M;
+            Any := True; end
+            else if M <> Seen then begin Seen := pmUnknown;
+            Break; end;
           end;
           if Any and MethodAny and (MethodSeen <> Seen) then Seen := pmUnknown;
           Result := if Any then Seen else pmUnknown;
