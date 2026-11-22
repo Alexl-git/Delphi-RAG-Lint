@@ -1,7 +1,7 @@
 {
   "product": "1.52.2-alpha",
   "extractor": "1.42.0-alpha",
-  "resolver": "1.30.0-alpha",
+  "resolver": "1.31.0-alpha",
   "schema": 27,
   "groups": [
     {
@@ -766,7 +766,7 @@
       "status": "shipped",
       "since": "1.51.1-alpha",
       "summary": "Generic receivers (`TObjectList<T>.Create`) typed; index --resolve-only without a library keeps the last library bindings",
-      "intro": "Read this when find-callers misses a call on a generic list, or when an index --resolve-only run without --library-db used to lose every library binding.",
+      "intro": "Read this when find-callers misses a call on a generic list or on an element read through a default indexer (also one an ancestor declares, 1.52.3), or when an index --resolve-only run without --library-db used to lose every library binding.",
       "wikiPage": "library-first-resolve",
       "surfaces": [
         {
@@ -777,9 +777,10 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-17",
-        "by": "alexanderl",
-        "build": "1.51.1-alpha"
+        "date": "2026-11-20",
+        "by": "ENGINE",
+        "build": "1.52.2-alpha",
+        "surfaceHash": "ef7035a4a4af9b1f2e8b73f5c2b7d6fd883fabb9660dd0fdf8621cf18cfd0b2e"
       }
     },
     {
@@ -6156,10 +6157,10 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-14",
+        "date": "2026-11-21",
         "by": "ENGINE",
-        "build": "1.51.0-alpha",
-        "surfaceHash": "c86e88b99bad3d1352c6b7e19e7394f26a185b860c009bb97ac366379a830ab4"
+        "build": "1.52.2-alpha",
+        "surfaceHash": "563d6196bbf11d9e058857f5620b69f23c822d22ea12b0326457de84c8a42b71"
       }
     },
     {
@@ -8182,9 +8183,9 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-18",
+        "date": "2026-11-20",
         "by": "ENGINE",
-        "build": "1.52.0-alpha",
+        "build": "1.52.2-alpha",
         "surfaceHash": "784b27b33ecdaddb5f47a51ff08ffe78033e768a302cc2829a6add2553f145c8"
       }
     },
@@ -8531,10 +8532,10 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-06",
+        "date": "2026-11-20",
         "by": "ENGINE",
-        "build": "1.44.1-alpha",
-        "surfaceHash": "a7696ea7437b3dc50d702f75453bbfed58aa90e201dd7e5c57816fe8b15e42a6"
+        "build": "1.52.2-alpha",
+        "surfaceHash": "f3d9fc9fe5ed09d8fbce71d2ba38a284de00a9f5e0e543ce31ff1626797258cb"
       }
     },
     {
@@ -8627,10 +8628,14 @@
         {
           "ask": "How do I rename a component on a form, in its .dfm and in the code together?",
           "command": "drag-lint rename --kind symbol --name <Unit>.<TFormClass>.<Component> --to <New> --db <db> --project <X.dproj> --apply"
+        },
+        {
+          "ask": "Which other projects does a rename build, including ones with no index?",
+          "command": "drag-lint rename --kind symbol --name <QName> --to <New> --db <db> --project <X.dproj> --plan"
         }
       ],
       "verified": {
-        "date": "2026-11-20",
+        "date": "2026-11-21",
         "by": "ENGINE",
         "build": "1.52.2-alpha",
         "surfaceHash": "c032a8882e6a7b885c23a41419f4be4d4574b9f4f9a0d44c16e384b2fc207955"
@@ -8757,7 +8762,7 @@
       "status": "shipped",
       "since": "1.44.1-alpha",
       "summary": "Removes with blocks, proving every name binds to what it bound before",
-      "intro": "Read this when you want a with statement gone without a name silently changing meaning. --plan names, for every with in a file or a project, whether it can be removed and exactly why not; --apply rewrites through the compile gate, then re-indexes a copy of the DB and rolls back if any reference binds elsewhere. Since 1.52.2 the with fixes of lint --fix (fix all, the IDE's Fix all in unit) carry the same after proof and are declined when a binding would change.",
+      "intro": "Read this when you want a with statement gone without a name silently changing meaning. --plan names, for every with in a file or a project, whether it can be removed and exactly why not; --apply rewrites through the compile gate, then re-indexes a copy of the DB and rolls back if any reference binds elsewhere. Since 1.52.2 the with fixes of lint --fix (fix all, the IDE's Fix all in unit) carry the same after proof and are declined when a binding would change; since 1.52.3 that proof re-indexes a scratch copy of the file and never writes your source, also not on a dry run.",
       "wikiPage": "unwith",
       "surfaces": [
         {
@@ -8877,7 +8882,7 @@
       ],
       "notes": "lane 144 unwith; guard tests\\autotest\\run_unwith.ps1",
       "verified": {
-        "date": "2026-11-20",
+        "date": "2026-11-21",
         "by": "ENGINE",
         "build": "1.52.2-alpha",
         "surfaceHash": "8433300beda108050279e7ee108a80c70294d2a5b1d82fa7b1fa165f9551b425"
