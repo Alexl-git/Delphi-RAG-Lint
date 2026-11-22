@@ -612,7 +612,7 @@ var
 begin
   Result := AName;
   AScoped:= Default(TScopedClass);
-  if (Trim(AName) = '') or (Pos('.', AName) > 0) then Exit;
+  if (Trim(AName) = '') or (AName.Contains('.')) then Exit;
   var Hint: string:= '';
   for var R: TConversionRule in ARules.Rules do
     if (R.Kind = rkConvert) and (Hint = '') then

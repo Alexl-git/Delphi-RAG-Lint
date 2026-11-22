@@ -283,7 +283,7 @@ var
 
   function CsvEscape(const S: string): string;
   begin
-    if (Pos(',', S) > 0) or (Pos('"', S) > 0) or (Pos(#10, S) > 0) then Result:= '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"'
+    if (S.Contains(',')) or (S.Contains('"')) or S.Contains(#10) then Result:= '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"'
     else Result:= S;
   end;
 
@@ -477,7 +477,7 @@ var
 
   function CsvEscape(const S: string): string;
   begin
-    if (Pos(',', S) > 0) or (Pos('"', S) > 0) or (Pos(#10, S) > 0) then Result:= '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"'
+    if (S.Contains(',')) or (S.Contains('"')) or S.Contains(#10) then Result:= '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"'
     else Result:= S;
   end;
 

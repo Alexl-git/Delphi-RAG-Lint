@@ -189,7 +189,7 @@ var
   Sb  : TStringBuilder;
 begin
   N:= Length(S);
-  if (N = 0) or (Pos(COMMENT_MASK, S) = 0) then Exit(Trim(S));
+  if (N = 0) or (not S.Contains(COMMENT_MASK)) then Exit(Trim(S));
   Sb:= TStringBuilder.Create;
   try
     I:= 1;
@@ -878,7 +878,7 @@ begin
         Rest:= Trim(Copy(Rest, 3, MaxInt));
         Cut:= CutRhs(Rest, Terminated);
         if not Terminated then Exit('');
-        if Pos(NESTED_MASK, Cut) > 0 then Exit('');
+        if Cut.Contains(NESTED_MASK) then Exit('');
         Exit(Trim(Cut));
       end;
     end;
@@ -917,7 +917,7 @@ begin
       if Depth = 0 then
       begin
         Result:= Trim(Copy(T, StartI, i - StartI));
-        if Pos(NESTED_MASK, Result) > 0 then Result:= '';
+        if Result.Contains(NESTED_MASK) then Result:= '';
         Exit;
       end;
     end;

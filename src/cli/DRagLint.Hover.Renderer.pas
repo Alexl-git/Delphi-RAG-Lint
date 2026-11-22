@@ -520,7 +520,7 @@ function UnescapeJsonText(const AText: string): string;
 begin
   Result:= AText;
   if Result = '' then Exit;
-  if Pos('\', Result) = 0 then Exit;          // fast path: nothing escaped
+  if not Result.Contains('\') then Exit;          // fast path: nothing escaped
   Result:= StringReplace(Result, '\r\n', sLineBreak, [rfReplaceAll]);
   Result:= StringReplace(Result, '\n'   , sLineBreak, [rfReplaceAll]);
   Result:= StringReplace(Result, '\r'   , sLineBreak, [rfReplaceAll]);
