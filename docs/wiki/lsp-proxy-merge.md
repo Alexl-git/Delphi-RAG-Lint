@@ -34,9 +34,16 @@ modes run one shared setup; the proxy runs it on its merge worker the first time
 it lints, so its startup still opens no index.
 Guard: `tests\autotest\run_lsp_proxy_preprocess_guard.ps1`.
 
-`--proxy` and `--full-rules` are separate modes. With `--proxy` the engine only
-relays and merges: it starts the relay before it reads `--full-rules`, so that
-flag does nothing there. The merge flags, in turn, do nothing without `--proxy`.
+`--proxy --merge-diagnostics --full-rules` (1.52.3): after each quick lint the
+full rule set runs out of process, as plain `lsp --full-rules` does, and its
+findings replace the quick set in the merged publish (the CLI `lint` count).
+The merge flags do nothing without `--proxy`.
+
+A lint is never dropped by a full queue (1.52.3): hover, completion and
+definition jobs share one merge worker with at most 8 waiting, and a ninth is
+dropped; a lint is always queued (one per file at a time), so a burst of hovers
+right after opening a file cannot leave it without drag-lint findings.
+Guard: `run_lsp_proxy_merge_diagnostics_guard.ps1` case (n).
 
 Guards: `tests\autotest\run_lsp_proxy_*_guard.ps1`.
 
@@ -53,15 +60,15 @@ behaviour is in [lsp](lsp.md).
 `drag-lint lsp --full-rules` runs `drag-lint lint "file" --json` on save, so the
 editor shows the same findings as the CLI, including `dl:ok` review markers.
 Without the flag the server keeps its small built-in check set unchanged. It
-applies to the plain server only; `lsp --proxy` ignores it (see above).
+With `lsp --proxy --merge-diagnostics` it applies to the merged set (see above).
 
 ## VS Code extension: DelphiLSP proxy (1.6.8)
 
 The drag-lint VS Code extension starts plain `lsp` by default. Setting
 `dragLint.delphiLsp` = `true` makes it start `lsp --proxy` plus the flags of
 `dragLint.delphiLspMerge` (default all five `--merge-*` flags; an empty list is a
-plain relay), then the usual `--db` pairs and `--full-rules` (ignored by the
-proxy). The args line is written to the drag-lint output channel. Changing
+plain relay), then the usual `--db` pairs and `--full-rules` (applied to the
+merged diagnostics since 1.52.3). The args line is written to the drag-lint output channel. Changing
 either setting restarts the server.
 
 What DelphiLSP needs to start (measured headless against

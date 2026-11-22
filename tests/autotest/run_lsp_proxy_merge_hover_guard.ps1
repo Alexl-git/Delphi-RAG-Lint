@@ -46,6 +46,8 @@
            written. 56 requests in one write against a queue of 8 force the
            overflow; a run where none overflowed FAILS (A5 fix M5), so the
            case can never pass vacuously.
+   13      (1.52.3 HOVER-ISE) theirs an error reply + ours -> ours alone as a
+           result; nothing of ours -> the error reply byte-identical.
 
   The proxy guards default -Exe to dll-win64; a lane passes its own engine.
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
@@ -380,6 +382,25 @@ $a12 = @(ReplyN $r12.Out 7)
 $b12 = @(ReplyN $r12.Out 8)
 Check 'fast step (id 7): a hover (not null) whose content is the placeholder alone' ($a12.Count -eq 1 -and $null -ne $a12[0].Result -and $a12[0].Value -eq $Placeholder) ("n=$($a12.Count) value=$(Show $a12[0].Value)")
 Check 'whole step (id 8): drag-lint''s part' ($b12.Count -eq 1 -and $b12[0].Value -eq $ours) ("n=$($b12.Count) value=$(Show $b12[0].Value)")
+
+# --- 13 (1.52.3 HOVER-ISE) theirs an ERROR reply ----------------------------------------
+# Live VS Code log 2026-11-20 07:04: "Request textDocument/hover failed. Internal server
+# error -32603" -- DelphiLSP's own error reply went through as is and drag-lint's part was
+# lost. The stub answers an unscripted hover with error -32601 (the same shape).
+Write-Host ''
+Write-Host '(13) theirs an error reply: drag-lint''s part alone; nothing of ours -> the error as is' -ForegroundColor Cyan
+$errScript = Join-Path $WorkDir 'script-err.tsv'
+[IO.File]::WriteAllText($errScript, "textDocument/none`t0`tnull`r`n", [Text.Encoding]::ASCII)
+$envE = @{ DRAGLINT_STUB_SCRIPT = $errScript }
+$p13 = Invoke-Raw $Exe $plainArgs $fieldReq $envE
+Check 'CONTROL: the plain relay forwards the stub''s error reply for id 7' ((Utf8 $p13.Out) -match '"id":7,"error"') ''
+$r13 = Invoke-Raw $Exe $onArgs $fieldReq $envE
+$m13 = Reply7 $r13.Out
+Check 'error + ours: a result (not an error) whose value is drag-lint''s part' ($m13 -and $m13.Kind -eq 'markdown' -and $m13.Value -eq $ours) ("value=$(Show $m13.Value)")
+Check 'error + ours: stderr names the error once' (@((Utf8 $r13.Err) -split "\r?\n" | Where-Object { $_ -match 'answered a hover with an error' }).Count -eq 1) ''
+$r13b = Invoke-Raw $Exe $onArgs    $emptyReq $envE
+$p13b = Invoke-Raw $Exe $plainArgs $emptyReq $envE
+Check 'error + nothing of ours: ON = plain relay (the error as is)' (Same $r13b.Out $p13b.Out) ("on=$($r13b.Out.Length) plain=$($p13b.Out.Length)")
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
 } finally {

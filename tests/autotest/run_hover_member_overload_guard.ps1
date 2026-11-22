@@ -17,8 +17,10 @@
     1 L.Format(2)            -> TBase.Format   (1 arg: only the ancestor's fits)
     2 L.Format(Sb, 'a', 'b') -> TLeaf.Format   (3 args: the own overload fits)
     3 L.Format()             -> TBase.Format   (0 args: the default parameter)
-    4 L.Format(              -> TLeaf.Format   (call continues on the next line:
-                                               count unknown, nearest as before)
+    4 L.Format(Sb, / 'a', 'b') -> TLeaf.Format (3 args over 2 lines)
+    6 L.Format( / 2 / )      -> TBase.Format   (1.52.3 HOVER-OVL: 1 arg over 3 lines,
+                                               a comment inside; before the fix the
+                                               count stopped at the line end: TLeaf)
     5 L.Done(1, 2)           -> TLeaf.Done     (nothing fits: nearest as before)
   Positive control: case 2 and case 4 must still answer the leaf's own member,
   so a lookup that always skips the receiver class fails.
@@ -82,10 +84,13 @@ $lines = @(
   '  L.Format();',                                                              # 30
   '  L.Format(Sb,',                                                             # 31
   '    ''a'', ''b'');',                                                         # 32
-  '  L.Done(1, 2);',                                                            # 33
-  'end;',                                                                       # 34
-  '',                                                                           # 35
-  'end.',                                                                       # 36
+  '  L.Format(',                                                                # 33  1.52.3 HOVER-OVL: a 3-line call
+  '    2 { one argument }',                                                     # 34
+  '  );',                                                                       # 35
+  '  L.Done(1, 2);',                                                            # 36
+  'end;',                                                                       # 37
+  '',                                                                           # 38
+  'end.',                                                                       # 39
   '')
 [IO.File]::WriteAllText($unit, ($lines -join "`r`n"), [Text.Encoding]::ASCII)
 $db = Join-Path $WorkDir 'ovl.sqlite'
@@ -101,8 +106,9 @@ $cases = @(
   @{ N = '1 L.Format(2): the ancestor''s 0..1-parameter Format';          L = 28; C = 6; W = 'Ovl.TBase.Format' },
   @{ N = '2 L.Format(Sb, ''a'', ''b''): the leaf''s own 3-parameter Format'; L = 29; C = 6; W = 'Ovl.TLeaf.Format' },
   @{ N = '3 L.Format(): the default parameter fits the ancestor''s';       L = 30; C = 6; W = 'Ovl.TBase.Format' },
-  @{ N = '4 L.Format( continued on the next line: nearest, as before';     L = 31; C = 6; W = 'Ovl.TLeaf.Format' },
-  @{ N = '5 L.Done(1, 2): nothing fits: nearest, as before';               L = 33; C = 5; W = 'Ovl.TLeaf.Done' }
+  @{ N = '4 L.Format(Sb, / ''a'', ''b''): 3 args over 2 lines: the leaf''s';  L = 31; C = 6; W = 'Ovl.TLeaf.Format' },
+  @{ N = '6 L.Format( / 2 / ): 1 arg over 3 lines: the ancestor''s (HOVER-OVL)'; L = 33; C = 6; W = 'Ovl.TBase.Format' },
+  @{ N = '5 L.Done(1, 2): nothing fits: nearest, as before';               L = 36; C = 5; W = 'Ovl.TLeaf.Done' }
 )
 foreach ($c in $cases) {
   $j = TypeAt $c.L $c.C

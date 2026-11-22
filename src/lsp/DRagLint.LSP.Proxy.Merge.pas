@@ -184,6 +184,14 @@ type
       Text  : string;
       Remove: Boolean;
     end;
+    /// <summary>One queued full-rules run (1.52.3 MERGE-FULLRULES): the per-URI
+    /// diagnostics state (a TDiagState), the file, and the generation of the
+    /// subset lint that queued it.</summary>
+    TFullJob = record
+      State: TObject;
+      Path : string;
+      Gen  : Integer;
+    end;
     { One request the proxy answers itself (A5). }
     /// <summary><!-- drag-lint:auto sum -->One request the proxy answers itself (A5).</summary>
     /// <remarks>
@@ -234,6 +242,7 @@ type
     FCompletionWarned: Integer;
     FHoverOff        : Integer;
     FHoverWarned     : Integer;
+    FHoverErrWarned  : Integer;   { 1 once a DelphiLSP hover error reply was reported (1.52.3 HOVER-ISE) }
     FDefinitionOff   : Integer;
     FDefinitionWarned: Integer;
     FTheirReferences : Integer;
@@ -258,11 +267,41 @@ type
     FDeferKey        : string;    { C>S pump only: the position the last draglint/deferHover named }
     FDeferHovers     : Integer;   { C>S pump only: hover requests seen at FDeferKey since }
     FTestLintDelayMs : Integer;
+    { 1.52.3 MERGE-FULLRULES: with --full-rules the merged set is the full
+      `lint <file> --json` set, run out of process on its own thread (one child
+      at a time) so a 90 s lint never holds the merge worker (hover, completion). }
+    FFullRules  : Boolean;
+    FFullThread : TThread;            { created with the engine when FFullRules; freed by Destroy }
+    FFullLock   : TCriticalSection;   { guards FFullQueue, FFullProcess }
+    FFullReady  : TEvent;
+    FFullQueue  : TList<TFullJob>;
+    FFullProcess: THandle;            { the running child; 0 = none }
+    /// <summary>Queues a full-rules run of APath for the per-URI state AState
+    /// (a TDiagState) whose subset lint had generation AGen; replaces a queued
+    /// run of the same state.</summary>
+    procedure QueueFullRules(AState: TObject; const APath: string; AGen: Integer);
+    /// <summary>Full-rules thread body: runs the queued jobs one at a time until
+    /// the thread is terminated.</summary>
+    procedure FullRulesLoop;
+    /// <summary>Full-rules thread: runs `lint APath --json` as a child process.</summary>
+    /// <param name="AJob">The job; its state's generation is checked while the
+    /// child runs and a newer subset lint kills it.</param>
+    /// <param name="AJson">The child's stdout (a JSON array) on success.</param>
+    /// <returns>True when the child exited 0 or 1 with a JSON array; False when
+    /// it failed, stalled past LintChildTimeoutMs, was superseded or the engine
+    /// is stopping.</returns>
+    function  RunFullRulesChild(const AJob: TFullJob; out AJson: string): Boolean;
+    /// <summary>Full-rules thread: stores AItems (a JSON array of diagnostics)
+    /// as the drag-lint set of AJob's state and publishes the merged set when it
+    /// differs from what the client was last sent. No-op when the state's
+    /// generation moved on or a newer lint is queued. AFull: AItems is a full set.</summary>
+    procedure ApplyFullRules(const AJob: TFullJob; const AItems: string; AFull: Boolean);
     /// <summary>Queues one lint of APath for the per-URI diagnostics state
-    /// AState (a TDiagState) on the merge worker.</summary>
-    /// <returns>False when the worker queue is full; AState is then marked idle
-    /// again.</returns>
-    function  StartLint(AState: TObject; const APath: string): Boolean;
+    /// AState (a TDiagState) on the merge worker. Never dropped: a lint is
+    /// queued past QUEUE_MAX (at most one per URI is queued or running, the
+    /// FRunning / FRerun pair), so hover / completion / definition jobs filling
+    /// the queue cannot leave a URI without drag-lint findings (1.52.3).</summary>
+    procedure StartLint(AState: TObject; const APath: string);
     /// <summary>Worker thread: lints APath, stores the findings in AState and,
     /// when nobody waits for them inline any more, publishes the merged set for
     /// the URI through ClientWriter (only when it differs from what the client
@@ -420,9 +459,11 @@ type
     procedure WarmUp;
     /// <summary><!-- drag-lint:auto sum -->Queues AWork on the merge worker and returns
     /// at once; nobody waits on it, so it must publish its result through its own
-    /// captured state. False (AWork is dropped, never run) when QUEUE_MAX jobs are
-    /// already waiting.</summary>
+    /// captured state. False (AWork is dropped, never run) when ABounded and
+    /// QUEUE_MAX jobs are already waiting.</summary>
     /// <param name="AWork"><!-- drag-lint:auto type -->const TProc</param>
+    /// <param name="ABounded">False queues AWork whatever the queue holds (always
+    /// True then); only for jobs bounded elsewhere -- one lint per URI.</param>
     /// <returns><!-- drag-lint:auto -->Boolean -- Observed: FQueue.Count &lt; QUEUE_MAX.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -435,7 +476,7 @@ type
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeDefinition"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    function  Enqueue(const AWork: TProc): Boolean;
+    function  Enqueue(const AWork: TProc; ABounded: Boolean = True): Boolean;
     /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
     /// <returns><!-- drag-lint:auto -->Boolean -- Observed:
     /// FDirty.ContainsKey(DocKey(APath)).</returns>
@@ -992,7 +1033,9 @@ implementation
 
 uses
     Winapi.Windows
+  , System.IOUtils
   , DRagLint.Core.Interfaces
+  , DRagLint.Core.LintBudget
   , DRagLint.Core.LiveDocs
   , DRagLint.LSP.Completion
   ;
@@ -1050,6 +1093,7 @@ begin
   FOwner.WorkerLoop;
 end;
 
+
 { Writes one diagnostic line to the real stderr handle -- never stdout, which
   carries the JSON-RPC stream. }
 procedure MergeErrLine(const AText: string);
@@ -1065,6 +1109,34 @@ begin
   WriteFile(H, Raw[1], Length(Raw), N, nil);
 end;
 
+type
+  { 1.52.3 MERGE-FULLRULES: the thread that runs the full-rules children. }
+  TFullRulesWorker = class(TThread)
+  private
+    FOwner: TProxyMergeEngine;
+  protected
+    procedure Execute; override;
+  public
+    constructor Create(AOwner: TProxyMergeEngine);
+  end;
+
+constructor TFullRulesWorker.Create(AOwner: TProxyMergeEngine);
+begin
+  FOwner:= AOwner;
+  FreeOnTerminate:= False;
+  inherited Create(False);
+end;
+
+procedure TFullRulesWorker.Execute;
+begin
+  try
+    FOwner.FullRulesLoop;
+  except   { logged, never silent: --full-rules then stays on the subset for the session }
+    on E: Exception do MergeErrLine('drag-lint lsp --proxy: the full-rules thread stopped (' + E.ClassName + ': ' + E.Message + '); merged diagnostics stay on the subset.');
+  end;
+end;
+
+
 const
   { The blank line that ends an LSP header block. }
   HEADER_END: array[0..3] of Byte = (13, 10, 13, 10);
@@ -1078,6 +1150,12 @@ const
   METHOD_DID_PREFIX          = 'textDocument/did';
 
   MERGE_ERR_PREFIX = 'drag-lint lsp --proxy: merge-diagnostics ';
+
+  { 1.52.3 MERGE-FULLRULES: the full-rules child's poll, reap and CPU-progress
+    steps (the values of plain lsp's LSP_FULL_RULES_* in DRagLint.LSP.Server). }
+  FULL_RULES_POLL_MS = 200;
+  FULL_RULES_REAP_MS = 2000;
+  FULL_RULES_CPU_PROGRESS_100NS = 50 * 10000;
 
   METHOD_COMPLETION = 'textDocument/completion';
   MERGE_COMPLETION_PREFIX = 'drag-lint lsp --proxy: merge-completion ';
@@ -1163,6 +1241,9 @@ type
     FWaiting: Boolean;   { the S>C pump still waits for it inline (inside the budget) }
     FRerun  : Boolean;   { a publish arrived while it ran: lint again when it ends }
     FDone   : TEvent;
+    { 1.52.3 MERGE-FULLRULES (--full-rules only) }
+    FGen    : Integer;   { bumped by every subset lint: a full-rules result of an older one is stale }
+    FHasFull: Boolean;   { FOurs holds a full `lint --json` set: a later subset does not replace it }
   public
     constructor Create;
     destructor Destroy; override;
@@ -1593,6 +1674,9 @@ end;
 constructor TProxyMergeEngine.Create(const AOptions: TLspProxyOptions);
 begin
   inherited Create;
+  FFullLock  := TCriticalSection.Create;   { first: Destroy uses them unguarded }
+  FFullReady := TEvent.Create(nil, False, False, '');
+  FFullQueue := TList<TFullJob>.Create;
   FOptions   := AOptions;
   FServerLock:= TCriticalSection.Create;
   FStateLock := TCriticalSection.Create;
@@ -1615,6 +1699,8 @@ begin
   FDocUpdates := TDictionary<string, TDocUpdate>.Create;
   FDocLock    := TCriticalSection.Create;
   FAnswersIdle:= TEvent.Create(nil, True, True, '');
+  FFullRules  := AOptions.MergeDiagnostics and AOptions.FullRules;
+  if FFullRules then FFullThread:= TFullRulesWorker.Create(Self);
 end;
 
 destructor TProxyMergeEngine.Destroy;
@@ -1626,6 +1712,23 @@ begin
     FWorker.WaitFor;
     FWorker.Free;
   end;
+  { after the merge worker: it is the one that queues full-rules jobs }
+  if FFullThread <> nil then
+  begin
+    FFullThread.Terminate;
+    FFullLock.Enter;
+    try
+      if FFullProcess <> 0 then TerminateProcess(FFullProcess, 1);
+    finally
+      FFullLock.Leave;
+    end;
+    FFullReady.SetEvent;
+    FFullThread.WaitFor;
+    FFullThread.Free;
+  end;
+  FFullQueue.Free;
+  FFullReady.Free;
+  FFullLock.Free;
   FServer.Free;
   FLinter.Free;
   for var Left: TObject in FPending.Values do TPendingRequest(Left).Release;
@@ -1679,12 +1782,12 @@ end;
 
 { Queues AWork on the merge worker and returns at once; nobody waits on it, so
   it must publish its result through its own captured state. False (AWork is
-  dropped, never run) when QUEUE_MAX jobs are already waiting. }
-function TProxyMergeEngine.Enqueue(const AWork: TProc): Boolean;
+  dropped, never run) when ABounded and QUEUE_MAX jobs are already waiting. }
+function TProxyMergeEngine.Enqueue(const AWork: TProc; ABounded: Boolean): Boolean;
 begin
   FStateLock.Enter;
   try
-    Result:= FQueue.Count < QUEUE_MAX;
+    Result:= (not ABounded) or (FQueue.Count < QUEUE_MAX);
     if Result then FQueue.Enqueue(AWork);
   finally
     FStateLock.Leave;
@@ -2526,7 +2629,22 @@ begin
       finally
         FPendingLock.Leave;
       end;
-      if (P = nil) or (TJSONObject(Json).GetValue('result') = nil) then Exit;   { not ours, or an error reply }
+      if P = nil then Exit;   { not ours }
+      if TJSONObject(Json).GetValue('result') = nil then
+      begin
+        { 1.52.3 HOVER-ISE (VS Code log 2026-11-20 07:04 / 07:07: "Request
+          textDocument/hover failed. Internal server error -32603" -- DelphiLSP's
+          own error reply, after an EAccessViolation in DelphiLSP.exe): an error
+          reply to a HOVER is merged as a null result, so drag-lint's part (or
+          the placeholder) still shows. With nothing of ours to add the original
+          error bytes go out. Any other kind: forwarded as is. }
+        if (P.FKind <> rkHover) or (TJSONObject(Json).GetValue('error') = nil) then Exit;
+        if TInterlocked.Exchange(FHoverErrWarned, 1) = 0 then
+          MergeErrLine(MERGE_HOVER_PREFIX + 'DelphiLSP answered a hover with an error (' +
+                       TJSONObject(Json).GetValue('error').ToJSON + '); drag-lint''s part is sent alone (reported once).');
+        TJSONObject(Json).RemovePair('error').Free;
+        TJSONObject(Json).AddPair('result', TJSONNull.Create);
+      end;
       Prefix:= PrefixOf(P.FKind);
       if P.FKind = rkInitialize then
       begin
@@ -2611,7 +2729,7 @@ end;
 { S>C: rewrites a publishDiagnostics frame with drag-lint's findings appended.
   Runs on the S>C pump thread; the lint itself runs on the merge worker, inside
   the budget. }
-function TProxyMergeEngine.MergeDiagnostics(const AFrame: TBytes; ALen: Integer;  // dl:ok too-many-exit-points@3a8f -- each Exit is a fail-open decline (forward the original frame); one flat guard sequence reads better than nesting
+function TProxyMergeEngine.MergeDiagnostics(const AFrame: TBytes; ALen: Integer;  // dl:ok too-many-exit-points@5649 -- each Exit is a fail-open decline (forward the original frame); one flat guard sequence reads better than nesting
   out AReplacement: TBytes): Boolean;
 var
   Json  : TJSONValue;
@@ -2686,8 +2804,11 @@ begin
       finally
         FDiagLock.Leave;
       end;
-      if Start and StartLint(St, Path) then
+      if Start then
+      begin
+        StartLint(St, Path);
         St.FDone.WaitFor(Cardinal(if FOptions.MergeBudgetMs < 0 then 0 else FOptions.MergeBudgetMs));
+      end;
       { Inside the budget the fresh set goes in this frame; past it the worker
         publishes the merged set the moment the lint ends (owner 2026-11-20),
         and this frame carries the last known one. }
@@ -2767,25 +2888,19 @@ begin
   end;
 end;
 
-function TProxyMergeEngine.StartLint(AState: TObject; const APath: string): Boolean;
+procedure TProxyMergeEngine.StartLint(AState: TObject; const APath: string);
 var
   St: TDiagState;
 begin
   St:= TDiagState(AState);
-  Result:= Enqueue(
+  { Unbounded (1.52.3 LSP-MERGE): with the queue full of hover jobs the lint
+    used to be dropped, silently, and nothing re-linted the URI until
+    DelphiLSP's next publish -- VS Code showed 0 drag-lint findings. }
+  Enqueue(
     procedure
     begin
       LintOnWorker(St, APath);
-    end);
-  if Result then Exit;
-  FDiagLock.Enter;   { queue full: nothing will lint, so the state is idle again }
-  try
-    St.FRunning:= False;
-    St.FWaiting:= False;
-    St.FDone.SetEvent;
-  finally
-    FDiagLock.Leave;
-  end;
+    end, False);
 end;
 
 procedure TProxyMergeEngine.LintOnWorker(AState: TObject; const APath: string);
@@ -2799,11 +2914,19 @@ var
   Rerun: Boolean;
   Token: string;
   Publish: TProc;
+  Gen  : Integer;
 begin
   St   := TDiagState(AState);
   Items:= '';
   Err  := '';
   Frame:= nil;
+  FDiagLock.Enter;
+  try
+    Inc(St.FGen);   { a full-rules run of an older lint is stale from here on }
+    Gen:= St.FGen;
+  finally
+    FDiagLock.Leave;
+  end;
   Token:= ProgressBegin(ExtractFileName(APath));
   try
     try
@@ -2827,7 +2950,9 @@ begin
       begin
         FDiagLock.Enter;
         try
-          if Err = '' then St.FOurs:= Items;
+          { --full-rules: the last full set stays shown until the next full run
+            ends, as plain `lsp --full-rules` keeps it until the child is done. }
+          if (Err = '') and not St.FHasFull then St.FOurs:= Items;
           { Nobody waits inline any more: publish the merged set ourselves, when
             it differs from what the client was last sent. }
           if not St.FWaiting then
@@ -2853,7 +2978,244 @@ begin
   finally
     ProgressEnd(Token);
   end;
-  if Rerun then StartLint(St, APath);
+  if Rerun then StartLint(St, APath)
+  else if FFullRules and (Err = '') then QueueFullRules(St, APath, Gen);
+end;
+
+procedure TProxyMergeEngine.QueueFullRules(AState: TObject; const APath: string; AGen: Integer);
+var
+  Job: TFullJob;
+begin
+  Job.State:= AState;
+  Job.Path := APath;
+  Job.Gen  := AGen;
+  FFullLock.Enter;
+  try
+    for var I:= FFullQueue.Count - 1 downto 0 do
+      if FFullQueue[I].State = AState then FFullQueue.Delete(I);
+    FFullQueue.Add(Job);
+  finally
+    FFullLock.Leave;
+  end;
+  FFullReady.SetEvent;
+end;
+
+procedure TProxyMergeEngine.FullRulesLoop;
+var
+  Job    : TFullJob;
+  Have   : Boolean;
+  Json   : string;
+  Arr    : TJSONArray;
+  Items  : string;
+  Started: UInt64;
+  Count  : Integer;
+begin
+  Job:= Default(TFullJob);
+  while not TThread.CheckTerminated do
+  begin
+    FFullReady.WaitFor(INFINITE);
+    while not TThread.CheckTerminated do
+    begin
+      FFullLock.Enter;
+      try
+        Have:= FFullQueue.Count > 0;
+        if Have then
+        begin
+          Job:= FFullQueue[0];
+          FFullQueue.Delete(0);
+        end;
+      finally
+        FFullLock.Leave;
+      end;
+      if not Have then Break;
+      Started:= GetTickCount64;
+      Items  := '';
+      Count  := -1;
+      try
+        if RunFullRulesChild(Job, Json) then
+        begin
+          Arr:= TLspCompletion.DiagnosticsFromLintJson(Json);
+          if Arr <> nil then
+          try
+            Items:= Arr.ToJSON;
+            Count:= Arr.Count;
+          finally
+            Arr.Free;
+          end;
+        end;
+      except
+        on E: Exception do MergeErrLine(MERGE_ERR_PREFIX + 'full-rules run raised (' + E.ClassName + ': ' + E.Message + ').');
+      end;
+      if TThread.CheckTerminated then Break;
+      if Count >= 0 then
+      begin
+        MergeErrLine(Format('drag-lint lsp --proxy: full-rules %s %d ms %d findings', [Job.Path, GetTickCount64 - Started, Count]));
+        ApplyFullRules(Job, Items, True);
+      end
+      else
+      begin
+        MergeErrLine('drag-lint lsp --proxy: full-rules skipped (stalled, superseded, failed run or invalid JSON); the subset stays: ' + Job.Path);
+        FDiagLock.Enter;
+        try
+          if TDiagState(Job.State).FGen = Job.Gen then TDiagState(Job.State).FHasFull:= False;   { the next subset lint is shown again }
+        finally
+          FDiagLock.Leave;
+        end;
+      end;
+    end;
+  end;
+end;
+
+{ Superseded = the state's generation moved on (a newer subset lint started). }
+function FullJobStale(ALock: TCriticalSection; const AJob: TProxyMergeEngine.TFullJob): Boolean;
+begin
+  ALock.Enter;
+  try
+    Result:= TDiagState(AJob.State).FGen <> AJob.Gen;
+  finally
+    ALock.Leave;
+  end;
+end;
+
+function TProxyMergeEngine.RunFullRulesChild(const AJob: TFullJob; out AJson: string): Boolean;
+var
+  Sa      : TSecurityAttributes;
+  TmpPath : string;
+  HOut    : THandle;
+  HNul    : THandle;
+  Si      : TStartupInfo;
+  Pi      : TProcessInformation;
+  Cmd     : string;
+  ChildExe: string;
+  Code    : DWORD;
+  Budget  : Cardinal;
+  Deadline: UInt64;
+  LastSize: DWORD;
+  Size    : DWORD;
+  CpuMark : Int64;
+  Cpu     : Int64;
+  CreateT, ExitT, KernelT, UserT: TFileTime;
+begin
+  Result:= False;
+  AJson := '';
+  if FullJobStale(FDiagLock, AJob) then Exit;
+  Budget := LintChildTimeoutMs('');
+  TmpPath:= TPath.GetTempFileName;
+  FillChar(Sa, SizeOf(Sa), 0);
+  Sa.nLength       := SizeOf(Sa);
+  Sa.bInheritHandle:= True;
+  HOut:= CreateFile(PChar(TmpPath), GENERIC_WRITE, FILE_SHARE_READ, @Sa, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+  HNul:= CreateFile('NUL', GENERIC_READ or GENERIC_WRITE, FILE_SHARE_READ or FILE_SHARE_WRITE, @Sa, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+  try
+    if (HOut = INVALID_HANDLE_VALUE) or (HNul = INVALID_HANDLE_VALUE) then Exit;
+    FillChar(Si, SizeOf(Si), 0);
+    Si.cb         := SizeOf(Si);
+    Si.dwFlags    := STARTF_USESTDHANDLES or STARTF_USESHOWWINDOW;
+    Si.wShowWindow:= SW_HIDE;
+    Si.hStdInput  := HNul;
+    Si.hStdOutput := HOut;
+    Si.hStdError  := HNul;
+    { the same child plain `lsp --full-rules` runs (TLSPServer.RunFullRulesLint),
+      including its test-only stub override }
+    ChildExe:= GetEnvironmentVariable('DRAGLINT_FULLRULES_CHILD_EXE');
+    if ChildExe = '' then ChildExe:= ParamStr(0);
+    Cmd:= '"' + ChildExe + '" lint "' + StringReplace(AJob.Path, '"', '', [rfReplaceAll]) + '" --json --output-encoding utf8';
+    for var DbP in FOptions.DbPaths do
+      if DbP <> '' then Cmd:= Cmd + ' --db "' + StringReplace(DbP, '"', '', [rfReplaceAll]) + '"';
+    UniqueString(Cmd);
+    if not CreateProcess(PChar(ChildExe), PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, Si, Pi) then Exit;
+    try
+      FFullLock.Enter;
+      try
+        FFullProcess:= Pi.hProcess;
+      finally
+        FFullLock.Leave;
+      end;
+      { a STALL budget, as plain lsp: output growth or CPU progress re-arms it }
+      LastSize:= 0;
+      CpuMark := 0;
+      Deadline:= GetTickCount64 + Budget;
+      while WaitForSingleObject(Pi.hProcess, FULL_RULES_POLL_MS) <> WAIT_OBJECT_0 do
+      begin
+        if TThread.CheckTerminated or FullJobStale(FDiagLock, AJob) or (GetTickCount64 >= Deadline) then
+        begin
+          TerminateProcess(Pi.hProcess, 1);
+          WaitForSingleObject(Pi.hProcess, FULL_RULES_REAP_MS);
+          Exit;
+        end;
+        Size:= GetFileSize(HOut, nil);
+        if (Size <> INVALID_FILE_SIZE) and (Size > LastSize) then
+        begin
+          LastSize:= Size;
+          Deadline:= GetTickCount64 + Budget;
+        end;
+        if GetProcessTimes(Pi.hProcess, CreateT, ExitT, KernelT, UserT) then
+        begin
+          Cpu:= PInt64(@UserT)^ + PInt64(@KernelT)^;
+          if Cpu - CpuMark >= FULL_RULES_CPU_PROGRESS_100NS then
+          begin
+            CpuMark := Cpu;
+            Deadline:= GetTickCount64 + Budget;
+          end;
+        end;
+      end;
+      Code:= 1;
+      GetExitCodeProcess(Pi.hProcess, Code);
+      CloseHandle(HOut);
+      HOut:= INVALID_HANDLE_VALUE;
+      try
+        AJson:= TFile.ReadAllText(TmpPath, TEncoding.UTF8);
+      except
+        on Exception do AJson:= '';   { an unreadable result is a failed run: the caller keeps the subset }
+      end;
+      Result:= (Code <= 1) and AJson.TrimLeft.StartsWith('[');
+    finally
+      FFullLock.Enter;
+      try
+        FFullProcess:= 0;
+      finally
+        FFullLock.Leave;
+      end;
+      CloseHandle(Pi.hThread);
+      CloseHandle(Pi.hProcess);
+    end;
+  finally
+    if HOut <> INVALID_HANDLE_VALUE then CloseHandle(HOut);
+    if HNul <> INVALID_HANDLE_VALUE then CloseHandle(HNul);
+    System.SysUtils.DeleteFile(TmpPath);   { False on failure, never raises: a leftover temp file is harmless }
+  end;
+end;
+
+procedure TProxyMergeEngine.ApplyFullRules(const AJob: TFullJob; const AItems: string; AFull: Boolean);
+var
+  St     : TDiagState;
+  Frame  : TBytes;
+  Publish: TProc;
+begin
+  St   := TDiagState(AJob.State);
+  Frame:= nil;
+  Publish:=
+    procedure
+    var
+      Shown: string;
+    begin
+      FDiagLock.Enter;
+      try
+        if (St.FGen <> AJob.Gen) or St.FRunning then Exit;   { a newer lint owns the URI now }
+        St.FOurs   := AItems;
+        St.FHasFull:= AFull;
+        Shown:= if HasFindings(St.FOurs) then St.FOurs else '';
+        if Shown <> St.FShown then
+        begin
+          Frame:= ComposePublish(St.FBody, St.FOurs);
+          if Frame <> nil then St.FShown:= Shown;
+        end;
+      finally
+        FDiagLock.Leave;
+      end;
+      if (Frame <> nil) and Assigned(FClientWriter) then FClientWriter(Frame);
+    end;
+  if Assigned(FClientLocker) then FClientLocker(Publish) else Publish();
 end;
 
 function TProxyMergeEngine.ProgressBegin(const AUnit: string): string;

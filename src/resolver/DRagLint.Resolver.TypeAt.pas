@@ -624,54 +624,117 @@ begin
   AStore:= BestStore;
 end;
 
-{ 1.52.2 HOVER: the number of arguments of the call whose member name covers
-  1-based column ACol of ALine: 0 for `X.M` / `X.M()`, n for `X.M(a, b)`
-  (top-level commas + 1; strings and nested brackets skipped). -1 when unknown:
-  the argument list does not close on this line. }
-function CallArgCountAt(const ALine: string; ACol: Integer): Integer;
+const
+  { 1.52.3 HOVER-OVL: how many lines an argument list may span before its
+    count is given up as unknown. }
+  CALL_ARGS_MAX_LINES = 64;
+
+{ 1.52.3 HOVER-OVL: steps over comment text at S[AI]. AInCom is #0 in code, a
+  brace or a star while inside that kind of comment (it may span lines). True
+  when S[AI] was comment text (AI then points at its last character); a line
+  comment moves AI past the end of S. }
+function SkipCommentAt(const S: string; var AI: Integer; var AInCom: Char): Boolean;
 var
-  I    : Integer;
-  Depth: Integer;
-  Empty: Boolean;
-  C    : Char;
+  C: Char;
 begin
-  Result:= -1;
-  I:= ACol;
-  if (I < 1) or (I > Length(ALine)) then Exit;
-  while (I <= Length(ALine)) and CharInSet(ALine[I], ['A'..'Z', 'a'..'z', '0'..'9', '_']) do Inc(I);
-  while (I <= Length(ALine)) and (ALine[I] = ' ') do Inc(I);
-  if (I > Length(ALine)) or (ALine[I] <> '(') then Exit(0);
-  Depth:= 0;
-  Empty:= True;
-  Result:= 1;
-  while I <= Length(ALine) do
+  C:= S[AI];
+  Result:= True;
+  if AInCom = '{' then
   begin
-    C:= ALine[I];
-    if C = '''' then
+    if C = '}' then AInCom:= #0;
+  end
+  else if AInCom = '*' then
+  begin
+    if (C = '*') and (AI < Length(S)) and (S[AI + 1] = ')') then
     begin
-      Empty:= False;
-      Inc(I);
-      while (I <= Length(ALine)) and (ALine[I] <> '''') do Inc(I);
-    end
-    else if CharInSet(C, ['(', '[']) then
-    begin
-      if Depth > 0 then Empty:= False;
-      Inc(Depth);
-    end
-    else if CharInSet(C, [')', ']']) then
-    begin
-      Dec(Depth);
-      if Depth = 0 then Exit(if Empty then 0 else Result);
-    end
-    else if (C = '/') and (I < Length(ALine)) and (ALine[I + 1] = '/') then Break
-    else if (C = ',') and (Depth = 1) then Inc(Result)
-    else if not CharInSet(C, [' ', #9]) then Empty:= False;
-    Inc(I);
-  end;
-  Result:= -1;   { the argument list continues on a later line }
+      AInCom:= #0;
+      Inc(AI);
+    end;
+  end
+  else if C = '{' then AInCom:= '{'
+  else if (C = '(') and (AI < Length(S)) and (S[AI + 1] = '*') then
+  begin
+    AInCom:= '*';
+    Inc(AI);
+  end
+  else if (C = '/') and (AI < Length(S)) and (S[AI + 1] = '/') then AI:= Length(S)
+  else Result:= False;
 end;
 
-{ 1.52.2 HOVER: the parameter-count range of a routine signature
+{ 1.52.2 HOVER: the number of arguments of the call whose member name covers
+  1-based column ACol of line ALines[ALineIdx0]: 0 for `X.M` / `X.M()`, n for
+  `X.M(a, b)` (top-level commas + 1; strings, comments and nested brackets
+  skipped). -1 when unknown: the list does not close within
+  CALL_ARGS_MAX_LINES lines.
+  1.52.3 HOVER-OVL: the argument list may span lines (it used to stop at the
+  end of the caret's line and answer -1, so a multi-line call fell back to
+  the nearest member by name); a line end counts as a blank and a brace or
+  paren-star comment may span lines too. }
+function CallArgCountAt(const ALines: TArray<string>; ALineIdx0, ACol: Integer): Integer;
+var
+  Li    : Integer;
+  Last  : Integer;
+  I     : Integer;
+  Depth : Integer;
+  Empty : Boolean;
+  Open  : Boolean;
+  InCom : Char;
+  C     : Char;
+  S     : string;
+begin
+  Result:= -1;
+  if (ALineIdx0 < 0) or (ALineIdx0 > High(ALines)) then Exit;
+  S:= ALines[ALineIdx0];
+  I:= ACol;
+  if (I < 1) or (I > Length(S)) then Exit;
+  while (I <= Length(S)) and CharInSet(S[I], ['A'..'Z', 'a'..'z', '0'..'9', '_']) do Inc(I);
+  Depth:= 0;
+  Empty:= True;
+  Open := False;
+  InCom:= #0;
+  Result:= 1;
+  Last:= if High(ALines) < ALineIdx0 + CALL_ARGS_MAX_LINES - 1 then High(ALines) else ALineIdx0 + CALL_ARGS_MAX_LINES - 1;
+  for Li:= ALineIdx0 to Last do
+  begin
+    S:= ALines[Li];
+    if Li > ALineIdx0 then I:= 1;
+    while I <= Length(S) do
+    begin
+      C:= S[I];
+      if SkipCommentAt(S, I, InCom) then { comment text }
+      else if not Open then
+      begin
+        { between the member name and its '(' only blanks may stand }
+        if C = '(' then
+        begin
+          Open := True;
+          Depth:= 1;
+        end
+        else if not CharInSet(C, [' ', #9]) then Exit(0);
+      end
+      else if C = '''' then
+      begin
+        Empty:= False;
+        Inc(I);
+        while (I <= Length(S)) and (S[I] <> '''') do Inc(I);
+      end
+      else if CharInSet(C, ['(', '[']) then
+      begin
+        Empty:= False;
+        Inc(Depth);
+      end
+      else if CharInSet(C, [')', ']']) then
+      begin
+        Dec(Depth);
+        if Depth = 0 then Exit(if Empty then 0 else Result);
+      end
+      else if (C = ',') and (Depth = 1) then Inc(Result)
+      else if not CharInSet(C, [' ', #9]) then Empty:= False;
+      Inc(I);
+    end;
+  end;
+  Result:= if Open then -1 else 0;   { -1: the list did not close in range; 0: no '(' anywhere }
+end;{ 1.52.2 HOVER: the parameter-count range of a routine signature
   `procedure M(A, B: T; C: U = 1)` -> AMin 2, AMax 3; no parentheses -> 0, 0. }
 procedure SignatureParamRange(const ASig: string; out AMin, AMax: Integer);
 var
@@ -1029,7 +1092,7 @@ begin
     if LhsSym.Id > 0 then
     begin
       { Direct child, else a member inherited from a same-store ancestor. }
-      ResolvedSym:= ResolveMemberOnType(LhsStore, LhsSym.Id, Result.Token, CallArgCountAt(LineText, ACol));
+      ResolvedSym:= ResolveMemberOnType(LhsStore, LhsSym.Id, Result.Token, CallArgCountAt(Lines, ALine - 1, ACol));
       if ResolvedSym.Id > 0 then
       begin
         Result.Resolved          := ResolvedSym;
@@ -1051,7 +1114,7 @@ begin
           var BaseSym: TSymbol:= FindGenericBaseAnywhere(AStores, GBase, GArity, GenStore);
           if BaseSym.Id > 0 then
           begin
-            var Mem: TSymbol:= ResolveMemberOnType(GenStore, BaseSym.Id, Result.Token, CallArgCountAt(LineText, ACol));
+            var Mem: TSymbol:= ResolveMemberOnType(GenStore, BaseSym.Id, Result.Token, CallArgCountAt(Lines, ALine - 1, ACol));
             if Mem.Id > 0 then
             begin
               Result.Resolved          := Mem;

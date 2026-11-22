@@ -29757,6 +29757,7 @@ begin
         ProxyOpt.MergeHover      := Args.LspMergeHover;
         ProxyOpt.MergeDefinition := Args.LspMergeDefinition;
         ProxyOpt.MergeNavigation := Args.LspMergeNavigation;
+        ProxyOpt.FullRules       := Args.LspFullRules;
         ProxyOpt.DbPaths         := Args.DbPaths;
         ProxyOpt.ResolveDbs      := MakeConsumerDbResolver(Args);   { P0 review I1: lazy, on the merge worker }
         ProxyOpt.PrepareLint     := MakeLspLintSetup(Args);         { C14: plain lsp's lint setup, lazily }

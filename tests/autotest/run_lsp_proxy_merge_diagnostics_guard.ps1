@@ -381,6 +381,27 @@ $m = Invoke-Raw $Exe $raceArgs ([byte[]]($initM + (Frame $pubM))) @{ DRAGLINT_ME
 $mp = @((Publishes $m.Out) | Where-Object { $_.Frame.Body.Contains('stub-race-7777') })
 Check 'the worker''s merged publish went out INSIDE the window, before the pump''s frame (the race happened)' ($mp.Count -ge 2 -and ($mp[0].Sources -contains 'drag-lint')) ("count=$($mp.Count)")
 Check 'the LAST publish for the URI carries both sources' ($mp.Count -ge 1 -and ($mp[-1].Sources -contains 'delphilsp-stub') -and ($mp[-1].Sources -contains 'drag-lint')) ("count=$($mp.Count) last=$($mp[-1].Sources -join ',') all=$(($mp | ForEach-Object { $_.Sources -join '+' }) -join ' | ')")
+
+# --- (n) a full merge queue never drops a lint (1.52.3 LSP-MERGE, owner VS Code 2026-11-21) ---
+# VS Code fires hover / definition requests right after didOpen; each is a job on the
+# one merge worker (8 slots). The lint a DelphiLSP publish starts used to share that
+# bound: with the slots full it was dropped SILENTLY and nothing re-linted the URI
+# until DelphiLSP's next publish -- the Problems panel showed 0 drag-lint findings.
+# Here a slow lint of Clean.pas holds the worker (seam, 1500 ms) while 10 hover
+# requests fill the queue, then the stub publishes for Dirty.pas.
+Write-Host ''
+Write-Host '(n) a lint started while hover jobs fill the merge queue is still run and published' -ForegroundColor Cyan
+$qArgs = @('lsp', '--proxy', '--merge-diagnostics', '--merge-hover', '--merge-budget-ms', '100', '--delphi-lsp', $stub)
+$initN = Frame '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
+$nBytes = [byte[]]($initN + (Frame (PublishBody $cleanUri 'stub-busy-5555')))
+for ($h = 0; $h -lt 10; $h++) {
+  $nBytes += Frame ('{"jsonrpc":"2.0","id":' + (200 + $h) + ',"method":"textDocument/hover","params":{"textDocument":{"uri":"' + $cleanUri + '"},"position":{"line":' + $h + ',"character":1}}}')
+}
+$nBytes += Frame (PublishBody $dirtyUri 'stub-queue-full-6666')
+$n = Invoke-Raw $Exe $qArgs $nBytes @{ DRAGLINT_MERGE_TEST_LINT_DELAY_MS = '1500' } $keep 15000
+$np = @((Publishes $n.Out) | Where-Object { $_.Frame.Body.Contains('stub-queue-full-6666') })
+Check 'control: the Dirty.pas publish was forwarded' ($np.Count -ge 1) ("count=$($np.Count)")
+Check 'a publish for Dirty.pas carries drag-lint findings (the lint was not dropped)' (@($np | Where-Object { $_.Sources -contains 'drag-lint' }).Count -ge 1) ("all=$(($np | ForEach-Object { $_.Sources -join '+' }) -join ' | ')")
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
 } finally {
