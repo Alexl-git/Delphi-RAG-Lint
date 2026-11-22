@@ -76,13 +76,13 @@ uses
   actually break the move. }
 function DbIsLocked(const APath: string): Boolean;
 var
-  FS: TFileStream;
+  LStream: TFileStream;
 begin
   Result:= False;
   if not TFile.Exists(APath) then Exit;
   try
-    FS:= TFileStream.Create(APath, fmOpenReadWrite or fmShareExclusive);
-    FS.Free;
+    LStream:= TFileStream.Create(APath, fmOpenReadWrite or fmShareExclusive);
+    LStream.Free;
   except
     on E: EFOpenError do Result:= True;
   end;

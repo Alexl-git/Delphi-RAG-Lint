@@ -312,7 +312,7 @@ end;
 
 // Split S on Sep, but only at top nesting level (ignores separators inside
 // (), [], <> so generics like TDictionary<Integer, string> stay intact).
-function SplitTopLevel(const S: string; Sep: Char): TArray<string>;
+function SplitTopLevel(const S: string; ASep: Char): TArray<string>;
 var
   Parts: TList<string>;
   i    : Integer      ;
@@ -329,7 +329,7 @@ begin
         '(', '[', '<': Inc(Depth)                  ;
         ')', ']', '>': if Depth > 0 then Dec(Depth);
       end;
-      if (S[i] = Sep) and (Depth = 0) then
+      if (S[i] = ASep) and (Depth = 0) then
       begin
         Parts.Add(Copy(S, Start, i - Start));
         Start:= i + 1;

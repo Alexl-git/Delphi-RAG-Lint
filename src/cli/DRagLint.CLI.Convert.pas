@@ -1278,8 +1278,8 @@ var
   TPath   : string        ;
   TType   : string        ;
   Cands   : TArray<string>;
-  FPath   : string        ;
-  FType   : string        ;
+  SrcPath   : string        ;
+  SrcType   : string        ;
   UFrom   : string        ;
   UTo     : string        ;
   Header  : string        ;
@@ -1393,11 +1393,11 @@ begin
     end;
 
     // (3) DROPPED note per From path with no compatible To target (sorted).
-    for FPath in SortedPaths(FromTree) do
+    for SrcPath in SortedPaths(FromTree) do
     begin
-      FType:= TypeOfPath(FromTree, FPath);
-      if not ToHasCounterpart(LeafLower(FPath), FType) then
-        Sb.AppendLine(Format('#note DROPPED %s (no T target)', [FPath]));
+      SrcType:= TypeOfPath(FromTree, SrcPath);
+      if not ToHasCounterpart(LeafLower(SrcPath), SrcType) then
+        Sb.AppendLine(Format('#note DROPPED %s (no T target)', [SrcPath]));
     end;
 
     OutText:= Sb.ToString;
