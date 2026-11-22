@@ -199,7 +199,7 @@ begin
   P:= 1;
   while (P <= Length(S)) and (CharInSet(S[P], ['A'..'Z', 'a'..'z', '0'..'9', '_', '.'])) do Inc(P);
   Result:= Copy(S, 1, P - 1);
-  if Pos('.', Result) > 0 then Result:= Copy(Result, LastDelimiter('.', Result) + 1, MaxInt);
+  if Result.Contains('.') then Result:= Copy(Result, LastDelimiter('.', Result) + 1, MaxInt);
 end;
 
 type
@@ -676,7 +676,7 @@ var
   var
     Ch: Char;
   begin
-    Result:= Pos('_', AName) > 0;
+    Result:= AName.Contains('_');
     if not Result then Exit;
     for Ch in AName do
       if CharInSet(Ch, ['a'..'z']) then Exit(False);

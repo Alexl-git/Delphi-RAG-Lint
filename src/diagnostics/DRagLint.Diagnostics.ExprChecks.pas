@@ -504,7 +504,7 @@ var
       Body:= if T = 'if' then Stmt.ChildByField('then')
         else if T = 'ifElse' then Stmt.ChildByField('else')
         else Stmt.ChildByField('body');
-      if Body.IsNull or (Pos(Body.NodeType + ';', SIMPLE_BODY_BLOCKERS) > 0) then Continue;
+      if Body.IsNull or (SIMPLE_BODY_BLOCKERS.Contains(Body.NodeType + ';')) then Continue;
       Nxt:= Default(TTSNode);
       for J:= I + 1 to AParent.NamedChildCount - 1 do
         if AParent.NamedChild(J).NodeType <> 'comment' then
@@ -512,7 +512,7 @@ var
           Nxt:= AParent.NamedChild(J);
           Break;
         end;
-      if Nxt.IsNull or (Pos(Nxt.NodeType + ';', FOLLOW_STATEMENTS) = 0) then Continue;
+      if Nxt.IsNull or (not FOLLOW_STATEMENTS.Contains(Nxt.NodeType + ';')) then Continue;
       if Nxt.StartPoint.Row <= Stmt.EndPoint.Row then Continue;
       Indent    := LeadingIndent(PF.RawSrc, Integer(Stmt.StartByte), IKind);
       NextIndent:= LeadingIndent(PF.RawSrc, Integer(Nxt.StartByte), NKind);

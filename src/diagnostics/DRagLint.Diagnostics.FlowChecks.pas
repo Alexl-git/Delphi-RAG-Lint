@@ -598,7 +598,7 @@ begin
   T := LowerCase(Trim(ATypeText));
   if (T = 'string') or (T = 'unicodestring') or (T = 'ansistring') or (T = 'widestring')
      or (T = 'rawbytestring') or (T = 'variant') or (T = 'olevariant') then Exit(True);
-  if (Pos('array of', T) > 0) or (Pos('tarray<', T) > 0) then Exit(True);
+  if (T.Contains('array of')) or (T.Contains('tarray<')) then Exit(True);
   { A STATIC array is managed iff its ELEMENT type is. `array[0..2] of string`
     is zero-initialised by the compiler exactly as a bare string local is, so
     reading an element before any write yields '' -- defined behaviour, and not

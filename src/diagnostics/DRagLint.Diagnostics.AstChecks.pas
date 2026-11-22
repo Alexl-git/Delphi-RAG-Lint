@@ -3052,7 +3052,7 @@ var
         if (not L.IsNull) and (L.NodeType = 'identifier') and (not R.IsNull) then
         begin
           RT:= Trim(NodeStr(R));
-          if (RT <> '') and (Pos(' ', RT) = 0) then
+          if (RT <> '') and (not RT.Contains(' ')) then
             Guards.AddOrSetValue(LowerCase(NodeStr(L)) + '|' + LowerCase(RT), 1);
         end;
       end;
@@ -3256,7 +3256,7 @@ var
     if N.NodeType = 'literalNumber' then
     begin
       Txt:= NodeStr(N);
-      Result:= (Pos('.', Txt) > 0) and (Pos('$', Txt) = 0);
+      Result:= (Txt.Contains('.')) and (not Txt.Contains('$'));
     end
     else if OperandType(N, T) then Result:= TypeTextIsFloat(T);
   end;
@@ -7385,7 +7385,7 @@ var
   begin
     Result:= False;
     if AText = '' then Exit;
-    if Pos('://', AText) > 0 then Exit;
+    if AText.Contains('://') then Exit;
 
     { UNC root, either slash spelling: \\server\share or //server/share.
 
@@ -8593,14 +8593,14 @@ var
       if (not Lhs.IsNull) and (Lhs.NodeType = 'exprDot') then
       begin
         T:= LowerCase(NodeStr(N));
-        if (Pos('.message', T) > 0) or (Pos('.classname', T) > 0) then Exit(True);
+        if (T.Contains('.message')) or (T.Contains('.classname')) then Exit(True);
       end;
     end;
     if (N.NodeType = 'identifier') or (N.NodeType = 'exprCall') or (N.NodeType = 'exprDot') then
     begin
       T:= LowerCase(NodeStr(N));
-      if (Pos('handleexception', T) > 0) or (Pos('showexception', T) > 0)
-         or (Pos('log', T) > 0) or (Pos('report', T) > 0) then Exit(True);
+      if (T.Contains('handleexception')) or (T.Contains('showexception'))
+         or (T.Contains('log')) or (T.Contains('report')) then Exit(True);
       { v(2026-08-10): a CONSOLE diagnostic is reporting, same as calling a
         routine with 'log' in its name. This rule already accepted log*/report*,
         but drag-lint is a CLI: its actual logging idiom is
@@ -8612,8 +8612,8 @@ var
         appears in ordinary calls (WriteSymbol, TFile.WriteAllText, Rewrite),
         and accepting those would turn a real swallow into a false negative --
         the direction that costs more for this rule. }
-      if (Pos('writeln', T) > 0) or (Pos('outputdebugstring', T) > 0)
-         or (Pos('showmessage', T) > 0) then Exit(True);
+      if (T.Contains('writeln')) or (T.Contains('outputdebugstring'))
+         or (T.Contains('showmessage')) then Exit(True);
       { v(2026-08-13): a MODAL DIALOG carrying the exception is reporting, and it
         is the loudest form of it -- the user cannot miss it. The rule already
         accepted ShowMessage but not MessageDlg/MessageBox, which are the VCL and
@@ -8622,7 +8622,7 @@ var
         failed.' + E.ClassName + ': ' + E.Message, mtError, [mbOK], 0)` --
         reported as "silently swallowed" while putting the class AND message on
         screen. }
-      if (Pos('messagedlg', T) > 0) or (Pos('messagebox', T) > 0) then Exit(True);
+      if (T.Contains('messagedlg')) or (T.Contains('messagebox')) then Exit(True);
       { v(2026-08-13b): stop guessing the SINK's name and look at what is being
         passed instead. The three amendments above (log/report, then writeln,
         then messagedlg/messagebox) are the same patch three times: each new
@@ -8643,7 +8643,7 @@ var
         observe still communicates nothing, while handing it to a callee, by
         definition, hands it somewhere else. }
       if (N.NodeType = 'exprCall')
-         and ((Pos('.message', T) > 0) or (Pos('.classname', T) > 0)) then Exit(True);
+         and ((T.Contains('.message')) or (T.Contains('.classname'))) then Exit(True);
       { v(2026-08-13c): `exit(X)` IS "assign Result, then return" -- the very
         TryXxx conversion Task 9c already accepts, written the other way round.
         The check above it looks for an `assignment` NODE, so the most common

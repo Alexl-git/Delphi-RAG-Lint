@@ -317,10 +317,10 @@ implementation
 
             Low:= LowerCase(Path);
             { Drop RAD-provided dirs -- already on dcc's baseline search path. }
-            if Pos('\embarcadero\studio\37.0\', Low) > 0 then Continue;
+            if Low.Contains('\embarcadero\studio\37.0\') then Continue;
             { Keep compiled-DCU library dirs; otherwise drop source trees. }
-            IsCompiled:= (Pos('\library\rs', Low) > 0) or (Pos('\library\win', Low) > 0);
-            if (not IsCompiled) and ((Pos('\source', Low) > 0) or (Pos('\src', Low) > 0)) then Continue;
+            IsCompiled:= (Low.Contains('\library\rs')) or (Low.Contains('\library\win'));
+            if (not IsCompiled) and ((Low.Contains('\source')) or (Low.Contains('\src'))) then Continue;
 
             Path:= ShortPathOf(Path);
 

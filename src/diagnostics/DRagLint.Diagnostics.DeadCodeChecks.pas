@@ -1445,10 +1445,10 @@ var
   var L: string;
   begin
     L:= LowerCase(AName);
-    Result:= (Pos('password', L) > 0) or (Pos('passphrase', L) > 0) or (Pos('secret', L) > 0)
-          or (Pos('token', L) > 0) or (Pos('apikey', L) > 0) or (Pos('privatekey', L) > 0)
-          or (Pos('salt', L) > 0) or (Pos('nonce', L) > 0) or (Pos('sessionid', L) > 0)
-          or (Pos('cryptokey', L) > 0) or (Pos('securitykey', L) > 0);
+    Result:= (L.Contains('password')) or (L.Contains('passphrase')) or (L.Contains('secret'))
+          or (L.Contains('token')) or (L.Contains('apikey')) or (L.Contains('privatekey'))
+          or (L.Contains('salt')) or (L.Contains('nonce')) or (L.Contains('sessionid'))
+          or (L.Contains('cryptokey')) or (L.Contains('securitykey'));
   end;
 
   { v0.75 #10: True if N's subtree calls System.Random / RandomRange. }
@@ -1568,11 +1568,11 @@ var
   var L: string;
   begin
     L:= LowerCase(AText);
-    Result:= (Pos('savetofile', L) > 0) or (Pos('loadfromfile', L) > 0)
-          or (Pos('writealltext', L) > 0) or (Pos('writeallbytes', L) > 0)
-          or (Pos('readalltext', L) > 0) or (Pos('readallbytes', L) > 0)
-          or (Pos('filecreate', L) > 0) or (Pos('assignfile', L) > 0)
-          or (Pos('tfilestream', L) > 0);
+    Result:= (L.Contains('savetofile')) or (L.Contains('loadfromfile'))
+          or (L.Contains('writealltext')) or (L.Contains('writeallbytes'))
+          or (L.Contains('readalltext')) or (L.Contains('readallbytes'))
+          or (L.Contains('filecreate')) or (L.Contains('assignfile'))
+          or (L.Contains('tfilestream'));
   end;
 
   { v0.81 #9: True if the callee text of an exprCall is a file I/O API whose
@@ -1635,7 +1635,7 @@ var
     if Recv.IsNull or (Recv.NodeType <> 'identifier') then Exit;
     NameTxt:= LowerCase(Trim(NodeStr(Recv)));
     if not DeclTypes.TryGetValue(NameTxt, TypeTxt) then Exit;
-    Result:= (TypeTxt <> '') and (Pos('string', TypeTxt) = 0);
+    Result:= (TypeTxt <> '') and (not TypeTxt.Contains('string'));
   end;
 
   { default-encoding-io: the receiver's STATIC type from the index, when it settles the question. tdYes (descends from TStrings) = text, so the call is reported even when the type's name lacks "string"; tdNo = a binary loader (TPicture, TMemoryStream), not reported. Any other outcome keeps ReceiverIsKnownNonText. }
@@ -1687,9 +1687,9 @@ var
   var L: string;
   begin
     L:= LowerCase(AText);
-    Result:= (Pos('\temp\', L) > 0) or (Pos('c:\temp', L) > 0)  // dl:ok hardcoded-absolute-path@f838 -- a search NEEDLE inside the insecure-temp-file detector, not a path this program uses
-          or (Pos('/tmp/', L) > 0) or (Pos('\windows\temp', L) > 0)
-          or (Pos('\winnt\temp', L) > 0);
+    Result:= (L.Contains('\temp\')) or (L.Contains('c:\temp'))  // dl:ok hardcoded-absolute-path@f838 -- a search NEEDLE inside the insecure-temp-file detector, not a path this program uses
+          or (L.Contains('/tmp/')) or (L.Contains('\windows\temp'))
+          or (L.Contains('\winnt\temp'));
   end;
 
   { v0.76 #10: emit insecure-temp-file at the first hardcoded-temp-path string
