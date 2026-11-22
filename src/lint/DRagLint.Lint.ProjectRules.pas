@@ -4295,10 +4295,6 @@ var
     queries per symbol. See IsReferenced. }
   RefdIds       : TDictionary<Int64 , Boolean>;
   RefdNames     : TDictionary<string, Boolean>;
-  { Lazily built for the own-unit tier of unused-public-symbol: lowercased reference
-    name -> the one file id every reference sits in, or -1 once a second file refers
-    to the same name. See IsOwnUnitOnly. }
-  OwnRefFile    : TDictionary<string, Int64>;
 
   function WantRule(const AId: string): Boolean;
   begin
@@ -4352,7 +4348,7 @@ var
       (Length(AStore.FindReferencesTo(ASym.Id)) = 0) and
       (Length(AStore.FindCallersByName(ASym.Name)) = 0)
     which cost two row-materialising queries PER SYMBOL, the second of them a
-    full scan of refs (that table has no name_text index). Measured on
+    scan of refs by name (idx_refs_name_nocase serves it). Measured on
     ORM3-Micronite2027: 447.8 s in unused-private-member and 59.0 s in
     unused-public-symbol.
 
@@ -4369,29 +4365,17 @@ var
     file that declares it, could leave the interface section. NAME-keyed like
     IsReferenced, so it is conservative the same way: any same-named reference in
     another file (a homonym included) keeps the routine "used elsewhere" and
-    silent. The map costs one GetReferencesFromFile per file, built on first
-    use only. }
+    silent. One idx_refs_name_nocase lookup per queried symbol (FindCallersByName
+    is COLLATE NOCASE, kind-blind); it replaced a map of ALL refs of the index
+    (712k rows, 8-11 s on a one-file lint). }
   function IsOwnUnitOnly(const ASym: TSymbol): Boolean;
   var
-    FileId: Int64;
-    R     : TReference;
-    Key   : string;
-    Prev  : Int64;
+    R: TReference;
   begin
-    if OwnRefFile = nil then
-    begin
-      OwnRefFile:= TDictionary<string, Int64>.Create;
-      for FileId in AStore.GetAllFileIds do
-        for R in AStore.GetReferencesFromFile(FileId) do
-        begin
-          Key:= LowerCase(R.NameText);
-          if not OwnRefFile.TryGetValue(Key, Prev) then
-            OwnRefFile.Add(Key, FileId)
-          else if Prev <> FileId then
-            OwnRefFile.AddOrSetValue(Key, -1);
-        end;
-    end;
-    Result:= OwnRefFile.TryGetValue(LowerCase(ASym.Name), Prev) and (Prev = ASym.FileId);
+    Result:= False;
+    for R in AStore.FindCallersByName(ASym.Name) do
+      if R.FileId <> ASym.FileId then Exit(False)
+      else Result:= True;
   end;
 
   { The unit stems of every symbol named AName, memoised for the whole run.
@@ -4949,7 +4933,6 @@ begin
   InlineUnitOfSym:= TDictionary<Int64, string>     .Create;
   RefdIds    := TDictionary<Int64 , Boolean>      .Create;
   RefdNames  := TDictionary<string, Boolean>      .Create;
-  OwnRefFile := nil;
   Shared     := TSharedScope.Create(AStore, ASiblingStore, ASiblingNames);
   Prof:= GetEnvironmentVariable('DRAGLINT_PROFILE') <> '';
   TCirc:= 0;
@@ -5577,7 +5560,6 @@ begin
   finally
     Shared     .Free;
     RefdNames  .Free;
-    OwnRefFile .Free;
     RefdIds    .Free;
     UnitIndexed.Free;
     ExportsOfUnit.Free;
