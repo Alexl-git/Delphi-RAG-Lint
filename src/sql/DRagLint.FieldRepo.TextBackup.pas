@@ -206,30 +206,30 @@ end;
 
 function EscapeRepoValue(const pValue: string; pInHeader: Boolean): string;
 var
-  vSb: TStringBuilder;
-  vI, vLast: Integer;
-  vC: Char;
+  VSb: TStringBuilder;
+  VI, VLast: Integer;
+  VC: Char;
 begin
-  vSb := TStringBuilder.Create;
+  VSb := TStringBuilder.Create;
   try
-    vLast := Length(pValue);
-    for vI := 1 to vLast do
+    VLast := Length(pValue);
+    for VI := 1 to VLast do
     begin
-      vC := pValue[vI];
-      if vC = '\' then
-        vSb.Append(ESC_BACKSLASH)
-      else if vC = #13 then
-        vSb.Append('\r')
-      else if vC = #9 then
-        vSb.Append('\t')
-      else if NeedsUnicodeEscape(vC, (vI = vLast), pInHeader) then
-        vSb.Append('\u').Append(IntToHex(Ord(vC), UNICODE_HEX_DIGITS))
+      VC := pValue[VI];
+      if VC = '\' then
+        VSb.Append(ESC_BACKSLASH)
+      else if VC = #13 then
+        VSb.Append('\r')
+      else if VC = #9 then
+        VSb.Append('\t')
+      else if NeedsUnicodeEscape(VC, (VI = VLast), pInHeader) then
+        VSb.Append('\u').Append(IntToHex(Ord(VC), UNICODE_HEX_DIGITS))
       else
-        vSb.Append(vC);
+        VSb.Append(VC);
     end;
-    Result := vSb.ToString;
+    Result := VSb.ToString;
   finally
-    vSb.Free;
+    VSb.Free;
   end;
 end;
 
@@ -247,80 +247,80 @@ end;
 { Returns '' on success, else the error text. }
 function TryUnescape(const pText: string; out pResult: string): string;
 var
-  vSb: TStringBuilder;
-  vI, vK, vCode, vDigit: Integer;
-  vC: Char;
+  VSb: TStringBuilder;
+  VI, VK, VCode, VDigit: Integer;
+  VC: Char;
 begin
   Result := '';
-  vSb := TStringBuilder.Create;
+  VSb := TStringBuilder.Create;
   try
-    vI := 1;
-    while (vI <= Length(pText)) and (Result = '') do
+    VI := 1;
+    while (VI <= Length(pText)) and (Result = '') do
     begin
-      vC := pText[vI];
-      if vC <> '\' then
+      VC := pText[VI];
+      if VC <> '\' then
       begin
-        if (vC < CHAR_FIRST) or (vC > CHAR_LAST) then
-          Result := 'character U+' + IntToHex(Ord(vC), UNICODE_HEX_DIGITS) + ' is not 7-bit printable ASCII'
+        if (VC < CHAR_FIRST) or (VC > CHAR_LAST) then
+          Result := 'character U+' + IntToHex(Ord(VC), UNICODE_HEX_DIGITS) + ' is not 7-bit printable ASCII'
         else
-          vSb.Append(vC);
-        Inc(vI);
+          VSb.Append(VC);
+        Inc(VI);
       end
-      else if vI = Length(pText) then
+      else if VI = Length(pText) then
         Result := 'escape at the end of the value'
       else
       begin
-        case pText[vI + 1] of
+        case pText[VI + 1] of
           '\':
             begin
-              vSb.Append('\');
-              Inc(vI, 2);
+              VSb.Append('\');
+              Inc(VI, 2);
             end;
           'r':
             begin
-              vSb.Append(#13);
-              Inc(vI, 2);
+              VSb.Append(#13);
+              Inc(VI, 2);
             end;
           't':
             begin
-              vSb.Append(#9);
-              Inc(vI, 2);
+              VSb.Append(#9);
+              Inc(VI, 2);
             end;
           'u':
             begin
-              vCode := 0;
-              vK := 1;
-              while (vK <= UNICODE_HEX_DIGITS) and (Result = '') do
+              VCode := 0;
+              VK := 1;
+              while (VK <= UNICODE_HEX_DIGITS) and (Result = '') do
               begin
-                vDigit := if vI + 1 + vK > Length(pText) then -1 else HexValue(pText[vI + 1 + vK]);
-                if vDigit < 0 then
+                VDigit := if VI + 1 + VK > Length(pText) then -1 else HexValue(pText[VI + 1 + VK]);
+                if VDigit < 0 then
                   Result := 'bad \u escape (four hex digits needed)'
                 else
-                  vCode := vCode * HEX_RADIX + vDigit;
-                Inc(vK);
+                  VCode := VCode * HEX_RADIX + VDigit;
+                Inc(VK);
               end;
               if Result = '' then
-                vSb.Append(Char(vCode));
-              Inc(vI, 2 + UNICODE_HEX_DIGITS);
+                VSb.Append(Char(VCode));
+              Inc(VI, 2 + UNICODE_HEX_DIGITS);
             end;
         else
-          Result := 'unknown escape \' + pText[vI + 1];
+          Result := 'unknown escape \' + pText[VI + 1];
         end;
       end;
     end;
-    pResult := vSb.ToString;
+    pResult := VSb.ToString;
   finally
-    vSb.Free;
+    VSb.Free;
   end;
 end;
 
 function UnescapeRepoValue(const pText: string): string;
 var
-  vErr: string;
+  VErr: string;
 begin
-  vErr := TryUnescape(pText, Result);
-  if vErr <> '' then
-    raise ERepoBackupFormatError.CreateAt(0, vErr);
+  VErr := TryUnescape(pText, Result);
+  if VErr <> '' then
+    raise ERepoBackupFormatError.CreateAt(0, VErr);
 end;
 
 constructor ERepoBackupFormatError.CreateAt(pLineNo: Integer; const pMessage: string);
@@ -343,138 +343,138 @@ end;
 
 procedure AddTextLines(pLines: TStrings; const pName, pValue: string);
 var
-  vStart, vPos: Integer;
-  vSeg: string;
+  VStart, VPos: Integer;
+  VSeg: string;
 begin
   pLines.Add(pName + ':');
-  vStart := 1;
+  VStart := 1;
   repeat
-    vPos := PosEx(#10, pValue, vStart);
-    vSeg := if vPos = 0 then Copy(pValue, vStart, MaxInt) else Copy(pValue, vStart, vPos - vStart);
-    pLines.Add(TEXT_PREFIX + EscapeRepoValue(vSeg, False));
-    vStart := vPos + 1;
-  until vPos = 0;
+    VPos := PosEx(#10, pValue, VStart);
+    VSeg := if VPos = 0 then Copy(pValue, VStart, MaxInt) else Copy(pValue, VStart, VPos - VStart);
+    pLines.Add(TEXT_PREFIX + EscapeRepoValue(VSeg, False));
+    VStart := VPos + 1;
+  until VPos = 0;
 end;
 
 function KeyPart(pQuery: TFDQuery; const pKey: TRepoColumn): string;
 var
-  vField: TField;
+  VField: TField;
 begin
-  vField := pQuery.FieldByName(pKey.Name);
-  Result := if pKey.Kind = rckString then EscapeRepoValue(vField.AsString, True) else IntToStr(vField.AsLargeInt);
+  VField := pQuery.FieldByName(pKey.Name);
+  Result := if pKey.Kind = rckString then EscapeRepoValue(VField.AsString, True) else IntToStr(VField.AsLargeInt);
 end;
 
 function RecordHeader(pQuery: TFDQuery; const pTable: TRepoTable): string;
 var
-  vKeys: TArray<TRepoColumn>;
-  vI: Integer;
-  vParts: string;
+  VKeys: TArray<TRepoColumn>;
+  VI: Integer;
+  VParts: string;
 begin
-  vKeys := pTable.PkColumns;
-  vParts := '';
-  for vI := 0 to High(vKeys) do
+  VKeys := pTable.PkColumns;
+  VParts := '';
+  for VI := 0 to High(VKeys) do
   begin
-    if vI > 0 then
-      vParts := vParts + PK_SEPARATOR;
-    vParts := vParts + KeyPart(pQuery, vKeys[vI]);
+    if VI > 0 then
+      VParts := VParts + PK_SEPARATOR;
+    VParts := VParts + KeyPart(pQuery, VKeys[VI]);
   end;
-  Result := '[' + pTable.Name + ' ' + vParts + HEADER_CLOSE;
+  Result := '[' + pTable.Name + ' ' + VParts + HEADER_CLOSE;
 end;
 
 procedure AddRecord(pQuery: TFDQuery; const pTable: TRepoTable; pLines: TStrings);
 var
-  vCol: TRepoColumn;
-  vField: TField;
+  VCol: TRepoColumn;
+  VField: TField;
 begin
   pLines.Add(RecordHeader(pQuery, pTable));
-  for vCol in pTable.Columns do
+  for VCol in pTable.Columns do
   begin
-    if vCol.PkOrder > 0 then
+    if VCol.PkOrder > 0 then
       Continue;
-    vField := pQuery.FieldByName(vCol.Name);
-    if vField.IsNull then
+    VField := pQuery.FieldByName(VCol.Name);
+    if VField.IsNull then
       Continue;
-    if vCol.Kind = rckText then
-      AddTextLines(pLines, vCol.Name, vField.AsString)
+    if VCol.Kind = rckText then
+      AddTextLines(pLines, VCol.Name, VField.AsString)
     else
-      pLines.Add(vCol.Name + '=' + ScalarText(vField, vCol));
+      pLines.Add(VCol.Name + '=' + ScalarText(VField, VCol));
   end;
   pLines.Add('');
 end;
 
 function OrderByClause(const pTable: TRepoTable): string;
 var
-  vKey: TRepoColumn;
+  VKey: TRepoColumn;
 begin
   Result := '';
-  for vKey in pTable.PkColumns do
-    Result := Result + IfThen(Result = '', '', ', ') + QuoteRepoIdent(vKey.Name);
+  for VKey in pTable.PkColumns do
+    Result := Result + IfThen(Result = '', '', ', ') + QuoteRepoIdent(VKey.Name);
 end;
 
 procedure BackupRepositoryToStrings(pConnection: TFDConnection; pLines: TStrings);
 var
-  vTable: TRepoTable;
-  vQuery: TFDQuery;
-  vCount: Integer;
+  VTable: TRepoTable;
+  VQuery: TFDQuery;
+  VCount: Integer;
 begin
   pLines.Clear;
   pLines.Add(BACKUP_MAGIC);
-  for vTable in RepoTables do
+  for VTable in RepoTables do
   begin
-    vQuery := TFDQuery.Create(nil);
+    VQuery := TFDQuery.Create(nil);
     try
-      vQuery.Connection := pConnection;
-      vQuery.FormatOptions.StrsTrim := False;
-      vQuery.FormatOptions.StrsEmpty2Null := False;
-      vQuery.SQL.Text := 'SELECT * FROM ' + QuoteRepoIdent(vTable.Name) + ' ORDER BY ' + OrderByClause(vTable);
-      vQuery.Open;
-      vCount := 0;
-      while not vQuery.Eof do
+      VQuery.Connection := pConnection;
+      VQuery.FormatOptions.StrsTrim := False;
+      VQuery.FormatOptions.StrsEmpty2Null := False;
+      VQuery.SQL.Text := 'SELECT * FROM ' + QuoteRepoIdent(VTable.Name) + ' ORDER BY ' + OrderByClause(VTable);
+      VQuery.Open;
+      VCount := 0;
+      while not VQuery.Eof do
       begin
-        AddRecord(vQuery, vTable, pLines);
-        Inc(vCount);
-        vQuery.Next;
+        AddRecord(VQuery, VTable, pLines);
+        Inc(VCount);
+        VQuery.Next;
       end;
     finally
-      vQuery.Free;
+      VQuery.Free;
     end;
-    pLines.Add(BACKUP_END + vTable.Name + ' ' + IntToStr(vCount));
+    pLines.Add(BACKUP_END + VTable.Name + ' ' + IntToStr(VCount));
   end;
 end;
 
 procedure BackupRepository(pConnection: TFDConnection; const pFileName: string);
 var
-  vLines: TStringList;
-  vSb: TStringBuilder;
-  vText: string;
-  vBytes: TBytes;
-  vI: Integer;
-  vTmp: string;
+  VLines: TStringList;
+  VSb: TStringBuilder;
+  VText: string;
+  VBytes: TBytes;
+  VI: Integer;
+  VTmp: string;
 begin
-  vLines := TStringList.Create;
-  vSb := TStringBuilder.Create;
+  VLines := TStringList.Create;
+  VSb := TStringBuilder.Create;
   try
-    BackupRepositoryToStrings(pConnection, vLines);
-    for vI := 0 to vLines.Count - 1 do
-      vSb.Append(vLines[vI]).Append(#13#10);
-    vText := vSb.ToString;
+    BackupRepositoryToStrings(pConnection, VLines);
+    for VI := 0 to VLines.Count - 1 do
+      VSb.Append(VLines[VI]).Append(#13#10);
+    VText := VSb.ToString;
   finally
-    vSb.Free;
-    vLines.Free;
+    VSb.Free;
+    VLines.Free;
   end;
-  SetLength(vBytes, Length(vText));
-  for vI := 1 to Length(vText) do
+  SetLength(VBytes, Length(VText));
+  for VI := 1 to Length(VText) do
   begin
-    if Ord(vText[vI]) >= ASCII_LIMIT then
+    if Ord(VText[VI]) >= ASCII_LIMIT then
       raise ERepoError.Create('backup text holds a non-ASCII character after escaping');
-    vBytes[vI - 1] := Byte(Ord(vText[vI]));
+    VBytes[VI - 1] := Byte(Ord(VText[VI]));
   end;
-  vTmp := pFileName + '.tmp';
-  TFile.WriteAllBytes(vTmp, vBytes);
+  VTmp := pFileName + '.tmp';
+  TFile.WriteAllBytes(VTmp, VBytes);
   if TFile.Exists(pFileName) then
-    TFile.Replace(vTmp, pFileName, '')
+    TFile.Replace(VTmp, pFileName, '')
   else
-    TFile.Move(vTmp, pFileName);
+    TFile.Move(VTmp, pFileName);
 end;
 
 { ---- restore: parse ------------------------------------------------------- }
@@ -521,50 +521,50 @@ end;
 
 procedure TBackupParser.CheckChars(pLineNo: Integer; const pLine: string);
 var
-  vC: Char;
+  VC: Char;
 begin
-  for vC in pLine do
-    if (vC < CHAR_FIRST) or (vC > CHAR_LAST) then
-      Fail(pLineNo, 'character U+' + IntToHex(Ord(vC), UNICODE_HEX_DIGITS)
+  for VC in pLine do
+    if (VC < CHAR_FIRST) or (VC > CHAR_LAST) then
+      Fail(pLineNo, 'character U+' + IntToHex(Ord(VC), UNICODE_HEX_DIGITS)
         + ' is not 7-bit printable ASCII');
 end;
 
 function TBackupParser.ColIndex(const pTable: TRepoTable; const pName: string): Integer;
 var
-  vI: Integer;
+  VI: Integer;
 begin
   Result := -1;
-  for vI := 0 to High(pTable.Columns) do
-    if SameStr(pTable.Columns[vI].Name, pName) then
-      Exit(vI);
+  for VI := 0 to High(pTable.Columns) do
+    if SameStr(pTable.Columns[VI].Name, pName) then
+      Exit(VI);
 end;
 
 function IsDecimal(const pText: string): Boolean;
 var
-  vI, vStart: Integer;
+  VI, VStart: Integer;
 begin
   Result := pText <> '';
-  vStart := 1;
+  VStart := 1;
   if Result and (pText[1] = '-') then
-    vStart := 2;
-  if Result and (vStart > Length(pText)) then
+    VStart := 2;
+  if Result and (VStart > Length(pText)) then
     Result := False;
-  for vI := vStart to Length(pText) do
-    if (pText[vI] < '0') or (pText[vI] > '9') then
+  for VI := VStart to Length(pText) do
+    if (pText[VI] < '0') or (pText[VI] > '9') then
       Result := False;
 end;
 
 function TBackupParser.ParseCell(pLineNo: Integer; const pCol: TRepoColumn; const pRaw: string): TCell;
 var
-  vErr: string;
+  VErr: string;
 begin
   Result := Default(TCell);
   case pCol.Kind of
     rckString:
       begin
-        vErr := TryUnescape(pRaw, Result.Str);
-        if vErr <> '' then
-          Fail(pLineNo, pCol.Name + ': ' + vErr);
+        VErr := TryUnescape(pRaw, Result.Str);
+        if VErr <> '' then
+          Fail(pLineNo, pCol.Name + ': ' + VErr);
         if Length(Result.Str) > pCol.MaxLen then
           Fail(pLineNo, pCol.Name + ': value longer than ' + IntToStr(pCol.MaxLen));
       end;
@@ -592,195 +592,195 @@ end;
 { pNo is the line of "NAME:"; on return it is the first line after the text block. }
 function TBackupParser.ParseText(pLineNo: Integer; var pNo: Integer): string;
 var
-  vCount: Integer;
-  vErr, vPart, vLine: string;
-  vSb: TStringBuilder;
+  VCount: Integer;
+  VErr, VPart, VLine: string;
+  VSb: TStringBuilder;
 begin
-  vSb := TStringBuilder.Create;
+  VSb := TStringBuilder.Create;
   try
-  vCount := 0;
+  VCount := 0;
   Inc(pNo);
   while (pNo <= FLines.Count) and StartsStr(TEXT_PREFIX, FLines[pNo - 1]) do
   begin
-    vLine := FLines[pNo - 1];
-    CheckChars(pNo, vLine);
-    vErr := TryUnescape(Copy(vLine, Length(TEXT_PREFIX) + 1, MaxInt), vPart);
-    if vErr <> '' then
-      Fail(pNo, vErr);
-    if vCount > 0 then
-      vSb.Append(#10);
-    vSb.Append(vPart);
-    Inc(vCount);
+    VLine := FLines[pNo - 1];
+    CheckChars(pNo, VLine);
+    VErr := TryUnescape(Copy(VLine, Length(TEXT_PREFIX) + 1, MaxInt), VPart);
+    if VErr <> '' then
+      Fail(pNo, VErr);
+    if VCount > 0 then
+      VSb.Append(#10);
+    VSb.Append(VPart);
+    Inc(VCount);
     Inc(pNo);
   end;
-  if vCount = 0 then
+  if VCount = 0 then
     Fail(pLineNo, 'TEXT column without " |" lines');
-  Result := vSb.ToString;
+  Result := VSb.ToString;
   finally
-    vSb.Free;
+    VSb.Free;
   end;
 end;
 
 procedure TBackupParser.ParseRecord(pTableIdx: Integer; var pNo: Integer;
   var pKeys: TDictionary<string, Integer>);
 var
-  vTable, vOther: TRepoTable;
-  vHeaderNo, vSp, vSep, vIdx, vI: Integer;
-  vLine, vInner, vName, vKeyText: string;
-  vParts: TArray<string>;
-  vPk: TArray<TRepoColumn>;
-  vSeen: TArray<Boolean>;
-  vRow: TParsedRow;
-  vCol: TRepoColumn;
+  VTable, VOther: TRepoTable;
+  VHeaderNo, VSp, VSep, VIdx, VI: Integer;
+  VLine, VInner, VName, VKeyText: string;
+  VParts: TArray<string>;
+  VPk: TArray<TRepoColumn>;
+  VSeen: TArray<Boolean>;
+  VRow: TParsedRow;
+  VCol: TRepoColumn;
 begin
-  vTable := FTables[pTableIdx];
-  vHeaderNo := pNo;
-  vLine := FLines[pNo - 1];
-  if vLine[Length(vLine)] <> HEADER_CLOSE then
-    Fail(vHeaderNo, 'record header must end with "]"');
-  vInner := Copy(vLine, 2, Length(vLine) - 2);
-  vSp := Pos(' ', vInner);
-  if vSp = 0 then
-    Fail(vHeaderNo, 'record header needs "[TABLE key]"');
-  vName := Copy(vInner, 1, vSp - 1);
-  if not SameStr(vName, vTable.Name) then
+  VTable := FTables[pTableIdx];
+  VHeaderNo := pNo;
+  VLine := FLines[pNo - 1];
+  if VLine[Length(VLine)] <> HEADER_CLOSE then
+    Fail(VHeaderNo, 'record header must end with "]"');
+  VInner := Copy(VLine, 2, Length(VLine) - 2);
+  VSp := Pos(' ', VInner);
+  if VSp = 0 then
+    Fail(VHeaderNo, 'record header needs "[TABLE key]"');
+  VName := Copy(VInner, 1, VSp - 1);
+  if not SameStr(VName, VTable.Name) then
   begin
-    if FindRepoTable(vName, vOther) then
-      Fail(vHeaderNo, 'record of ' + vName + ' where ' + vTable.Name
+    if FindRepoTable(VName, VOther) then
+      Fail(VHeaderNo, 'record of ' + VName + ' where ' + VTable.Name
         + ' is open (table out of order, repeated, or #end missing)')
     else
-      Fail(vHeaderNo, 'unknown table ' + vName);
+      Fail(VHeaderNo, 'unknown table ' + VName);
   end;
-  vKeyText := Copy(vInner, vSp + 1, MaxInt);
-  vParts := vKeyText.Split([PK_SEPARATOR]);
-  vPk := vTable.PkColumns;
-  if Length(vParts) <> Length(vPk) then
-    Fail(vHeaderNo, 'wrong number of key values: ' + IntToStr(Length(vParts)) + ' for '
-      + IntToStr(Length(vPk)));
-  vRow.TableIdx := pTableIdx;
-  SetLength(vRow.Cells, Length(vTable.Columns));
-  SetLength(vSeen, Length(vTable.Columns));
-  for vI := 0 to High(vRow.Cells) do
-    vRow.Cells[vI].IsNull := True;
-  for vI := 0 to High(vPk) do
+  VKeyText := Copy(VInner, VSp + 1, MaxInt);
+  VParts := VKeyText.Split([PK_SEPARATOR]);
+  VPk := VTable.PkColumns;
+  if Length(VParts) <> Length(VPk) then
+    Fail(VHeaderNo, 'wrong number of key values: ' + IntToStr(Length(VParts)) + ' for '
+      + IntToStr(Length(VPk)));
+  VRow.TableIdx := pTableIdx;
+  SetLength(VRow.Cells, Length(VTable.Columns));
+  SetLength(VSeen, Length(VTable.Columns));
+  for VI := 0 to High(VRow.Cells) do
+    VRow.Cells[VI].IsNull := True;
+  for VI := 0 to High(VPk) do
   begin
-    vIdx := ColIndex(vTable, vPk[vI].Name);
-    vRow.Cells[vIdx] := ParseCell(vHeaderNo, vPk[vI], vParts[vI]);
-    vSeen[vIdx] := True;
+    VIdx := ColIndex(VTable, VPk[VI].Name);
+    VRow.Cells[VIdx] := ParseCell(VHeaderNo, VPk[VI], VParts[VI]);
+    VSeen[VIdx] := True;
   end;
-  if pKeys.ContainsKey(vKeyText) then
-    Fail(vHeaderNo, 'duplicate record key ' + vKeyText);
-  pKeys.Add(vKeyText, vHeaderNo);
+  if pKeys.ContainsKey(VKeyText) then
+    Fail(VHeaderNo, 'duplicate record key ' + VKeyText);
+  pKeys.Add(VKeyText, VHeaderNo);
   Inc(pNo);
   while True do
   begin
     if pNo > FLines.Count then
       Fail(pNo, 'record not closed by a blank line');
-    vLine := FLines[pNo - 1];
-    CheckChars(pNo, vLine);
-    if vLine = '' then
+    VLine := FLines[pNo - 1];
+    CheckChars(pNo, VLine);
+    if VLine = '' then
     begin
       Inc(pNo);
       Break;
     end;
-    vSep := 0;
-    for vI := 1 to Length(vLine) do
-      if (vLine[vI] = '=') or (vLine[vI] = ':') then
+    VSep := 0;
+    for VI := 1 to Length(VLine) do
+      if (VLine[VI] = '=') or (VLine[VI] = ':') then
       begin
-        vSep := vI;
+        VSep := VI;
         Break;
       end;
-    if vSep = 0 then
+    if VSep = 0 then
       Fail(pNo, 'line is neither NAME=value nor NAME: (body line outside a record?)');
-    vName := Copy(vLine, 1, vSep - 1);
-    vIdx := ColIndex(vTable, vName);
-    if vIdx < 0 then
-      Fail(pNo, 'unknown column ' + vName + ' in ' + vTable.Name);
-    vCol := vTable.Columns[vIdx];
-    if vCol.PkOrder > 0 then
-      Fail(pNo, 'key column ' + vName + ' must not appear in the body');
-    if vSeen[vIdx] then
-      Fail(pNo, 'column ' + vName + ' given twice');
-    vSeen[vIdx] := True;
-    if vLine[vSep] = '=' then
+    VName := Copy(VLine, 1, VSep - 1);
+    VIdx := ColIndex(VTable, VName);
+    if VIdx < 0 then
+      Fail(pNo, 'unknown column ' + VName + ' in ' + VTable.Name);
+    VCol := VTable.Columns[VIdx];
+    if VCol.PkOrder > 0 then
+      Fail(pNo, 'key column ' + VName + ' must not appear in the body');
+    if VSeen[VIdx] then
+      Fail(pNo, 'column ' + VName + ' given twice');
+    VSeen[VIdx] := True;
+    if VLine[VSep] = '=' then
     begin
-      if vCol.Kind = rckText then
-        Fail(pNo, 'TEXT column ' + vName + ' must use the NAME: form');
-      vRow.Cells[vIdx] := ParseCell(pNo, vCol, Copy(vLine, vSep + 1, MaxInt));
+      if VCol.Kind = rckText then
+        Fail(pNo, 'TEXT column ' + VName + ' must use the NAME: form');
+      VRow.Cells[VIdx] := ParseCell(pNo, VCol, Copy(VLine, VSep + 1, MaxInt));
       Inc(pNo);
     end
     else
     begin
-      if (vCol.Kind <> rckText) or (vSep <> Length(vLine)) then
+      if (VCol.Kind <> rckText) or (VSep <> Length(VLine)) then
         Fail(pNo, 'only a TEXT column uses the NAME: form');
-      vRow.Cells[vIdx].IsNull := False;
-      vRow.Cells[vIdx].Str := ParseText(pNo, pNo);
+      VRow.Cells[VIdx].IsNull := False;
+      VRow.Cells[VIdx].Str := ParseText(pNo, pNo);
     end;
   end;
-  for vI := 0 to High(vTable.Columns) do
-    if (not vSeen[vI]) and vTable.Columns[vI].NotNull then
-      Fail(vHeaderNo, 'NOT NULL column ' + vTable.Columns[vI].Name + ' is missing');
-  FRows.Add(vRow);
+  for VI := 0 to High(VTable.Columns) do
+    if (not VSeen[VI]) and VTable.Columns[VI].NotNull then
+      Fail(VHeaderNo, 'NOT NULL column ' + VTable.Columns[VI].Name + ' is missing');
+  FRows.Add(VRow);
 end;
 
 procedure TBackupParser.ParseTrailer(pTableIdx, pNo, pCount: Integer);
 var
-  vRest, vName: string;
-  vSp, vN: Integer;
+  VRest, VName: string;
+  VSp, VN: Integer;
 begin
-  vRest := Copy(FLines[pNo - 1], Length(BACKUP_END) + 1, MaxInt);
-  vSp := Pos(' ', vRest);
-  if vSp = 0 then
+  VRest := Copy(FLines[pNo - 1], Length(BACKUP_END) + 1, MaxInt);
+  VSp := Pos(' ', VRest);
+  if VSp = 0 then
     Fail(pNo, 'trailer needs "#end TABLE n"');
-  vName := Copy(vRest, 1, vSp - 1);
-  if not SameStr(vName, FTables[pTableIdx].Name) then
-    Fail(pNo, '#end ' + vName + ' where #end ' + FTables[pTableIdx].Name + ' is due');
-  if (not IsDecimal(Copy(vRest, vSp + 1, MaxInt))) or (not TryStrToInt(Copy(vRest, vSp + 1, MaxInt), vN)) then
+  VName := Copy(VRest, 1, VSp - 1);
+  if not SameStr(VName, FTables[pTableIdx].Name) then
+    Fail(pNo, '#end ' + VName + ' where #end ' + FTables[pTableIdx].Name + ' is due');
+  if (not IsDecimal(Copy(VRest, VSp + 1, MaxInt))) or (not TryStrToInt(Copy(VRest, VSp + 1, MaxInt), VN)) then
     Fail(pNo, 'trailer count is not a number');
-  if vN <> pCount then
-    Fail(pNo, 'trailer says ' + IntToStr(vN) + ' records but ' + IntToStr(pCount) + ' were read');
+  if VN <> pCount then
+    Fail(pNo, 'trailer says ' + IntToStr(VN) + ' records but ' + IntToStr(pCount) + ' were read');
 end;
 
 procedure TBackupParser.Parse;
 var
-  vT, vNo, vCount: Integer;
-  vLine: string;
-  vKeys: TDictionary<string, Integer>;
+  VT, VNo, VCount: Integer;
+  VLine: string;
+  VKeys: TDictionary<string, Integer>;
 begin
   if (FLines.Count = 0) or (FLines[0] <> BACKUP_MAGIC) then
     Fail(1, 'first line must be "' + BACKUP_MAGIC + '"');
-  vNo := 2;
-  for vT := 0 to High(FTables) do
+  VNo := 2;
+  for VT := 0 to High(FTables) do
   begin
-    vCount := 0;
-    vKeys := TDictionary<string, Integer>.Create;
+    VCount := 0;
+    VKeys := TDictionary<string, Integer>.Create;
     try
       while True do
       begin
-        if vNo > FLines.Count then
-          Fail(vNo, 'missing #end for ' + FTables[vT].Name);
-        vLine := FLines[vNo - 1];
-        CheckChars(vNo, vLine);
-        if StartsStr(BACKUP_END, vLine) then
+        if VNo > FLines.Count then
+          Fail(VNo, 'missing #end for ' + FTables[VT].Name);
+        VLine := FLines[VNo - 1];
+        CheckChars(VNo, VLine);
+        if StartsStr(BACKUP_END, VLine) then
         begin
-          ParseTrailer(vT, vNo, vCount);
-          Inc(vNo);
+          ParseTrailer(VT, VNo, VCount);
+          Inc(VNo);
           Break;
         end;
-        if (vLine <> '') and (vLine[1] = '[') then
+        if (VLine <> '') and (VLine[1] = '[') then
         begin
-          ParseRecord(vT, vNo, vKeys);
-          Inc(vCount);
+          ParseRecord(VT, VNo, VKeys);
+          Inc(VCount);
         end
         else
-          Fail(vNo, 'line outside a record');
+          Fail(VNo, 'line outside a record');
       end;
     finally
-      vKeys.Free;
+      VKeys.Free;
     end;
   end;
-  if vNo <= FLines.Count then
-    Fail(vNo, 'content after the last #end');
+  if VNo <= FLines.Count then
+    Fail(VNo, 'content after the last #end');
 end;
 
 { ---- restore: write ------------------------------------------------------- }
@@ -798,64 +798,64 @@ end;
 
 procedure InsertRows(pConnection: TFDConnection; pParser: TBackupParser);
 var
-  vT, vI: Integer;
-  vTable: TRepoTable;
-  vQuery: TFDQuery;
-  vCols, vVals: string;
-  vRow: TParsedRow;
-  vCell: TCell;
-  vParam: TFDParam;
+  VT, VI: Integer;
+  VTable: TRepoTable;
+  VQuery: TFDQuery;
+  VCols, VVals: string;
+  VRow: TParsedRow;
+  VCell: TCell;
+  VParam: TFDParam;
 begin
-  for vT := 0 to High(pParser.Tables) do
+  for VT := 0 to High(pParser.Tables) do
   begin
-    vTable := pParser.Tables[vT];
-    pConnection.ExecSQL('DELETE FROM ' + QuoteRepoIdent(vTable.Name));
+    VTable := pParser.Tables[VT];
+    pConnection.ExecSQL('DELETE FROM ' + QuoteRepoIdent(VTable.Name));
   end;
-  for vT := 0 to High(pParser.Tables) do
+  for VT := 0 to High(pParser.Tables) do
   begin
-    vTable := pParser.Tables[vT];
-    vCols := '';
-    vVals := '';
-    for vI := 0 to High(vTable.Columns) do
+    VTable := pParser.Tables[VT];
+    VCols := '';
+    VVals := '';
+    for VI := 0 to High(VTable.Columns) do
     begin
-      vCols := vCols + IfThen(vI = 0, '', ', ') + QuoteRepoIdent(vTable.Columns[vI].Name);
-      vVals := vVals + IfThen(vI = 0, '', ', ') + ':p' + IntToStr(vI);
+      VCols := VCols + IfThen(VI = 0, '', ', ') + QuoteRepoIdent(VTable.Columns[VI].Name);
+      VVals := VVals + IfThen(VI = 0, '', ', ') + ':p' + IntToStr(VI);
     end;
-    vQuery := TFDQuery.Create(nil);
+    VQuery := TFDQuery.Create(nil);
     try
-      vQuery.Connection := pConnection;
-      vQuery.FormatOptions.StrsTrim := False;
-      vQuery.FormatOptions.StrsEmpty2Null := False;
-      vQuery.SQL.Text := 'INSERT INTO ' + QuoteRepoIdent(vTable.Name) + ' (' + vCols + ') VALUES (' + vVals + ')';
-      for vI := 0 to High(vTable.Columns) do
+      VQuery.Connection := pConnection;
+      VQuery.FormatOptions.StrsTrim := False;
+      VQuery.FormatOptions.StrsEmpty2Null := False;
+      VQuery.SQL.Text := 'INSERT INTO ' + QuoteRepoIdent(VTable.Name) + ' (' + VCols + ') VALUES (' + VVals + ')';
+      for VI := 0 to High(VTable.Columns) do
       begin
-        vParam := vQuery.Params[vI];
-        vParam.ParamType := ptInput;
-        vParam.DataType := ParamFieldType(vTable.Columns[vI].Kind);
+        VParam := VQuery.Params[VI];
+        VParam.ParamType := ptInput;
+        VParam.DataType := ParamFieldType(VTable.Columns[VI].Kind);
       end;
-      for vRow in pParser.Rows do
+      for VRow in pParser.Rows do
       begin
-        if vRow.TableIdx <> vT then
+        if VRow.TableIdx <> VT then
           Continue;
-        for vI := 0 to High(vTable.Columns) do
+        for VI := 0 to High(VTable.Columns) do
         begin
-          vCell := vRow.Cells[vI];
-          vParam := vQuery.Params[vI];
-          if vCell.IsNull then
-            vParam.Value := Null
+          VCell := VRow.Cells[VI];
+          VParam := VQuery.Params[VI];
+          if VCell.IsNull then
+            VParam.Value := Null
           else
-            case vTable.Columns[vI].Kind of
-              rckString, rckText: vParam.AsWideString := vCell.Str;
-              rckBoolean: vParam.AsBoolean := vCell.Bool;
-              rckInteger: vParam.AsLargeInt := vCell.Int;
+            case VTable.Columns[VI].Kind of
+              rckString, rckText: VParam.AsWideString := VCell.Str;
+              rckBoolean: VParam.AsBoolean := VCell.Bool;
+              rckInteger: VParam.AsLargeInt := VCell.Int;
             else
-              vParam.AsSmallInt := vCell.Int;
+              VParam.AsSmallInt := VCell.Int;
             end;
         end;
-        vQuery.ExecSQL;
+        VQuery.ExecSQL;
       end;
     finally
-      vQuery.Free;
+      VQuery.Free;
     end;
   end;
 end;
@@ -863,16 +863,16 @@ end;
 procedure RestoreRepositoryFromStrings(pConnection: TFDConnection; pLines: TStrings;
   pReplace: Boolean);
 var
-  vParser: TBackupParser;
+  VParser: TBackupParser;
 begin
-  vParser := TBackupParser.Create(pLines);
+  VParser := TBackupParser.Create(pLines);
   try
-    vParser.Parse;
+    VParser.Parse;
     if (not pReplace) and (not RepoIsEmpty(pConnection)) then
       raise ERepoError.Create('the repository already holds rows; restore needs replace');
     pConnection.StartTransaction;
     try
-      InsertRows(pConnection, vParser);
+      InsertRows(pConnection, VParser);
       pConnection.Commit;
     except
       on Exception do
@@ -882,45 +882,45 @@ begin
         end;
     end;
   finally
-    vParser.Free;
+    VParser.Free;
   end;
 end;
 
 procedure RestoreRepository(pConnection: TFDConnection; const pFileName: string;
   pReplace: Boolean);
 var
-  vBytes: TBytes;
-  vLines: TStringList;
-  vText, vLine: string;
-  vI, vLineNo, vStart, vPos: Integer;
+  VBytes: TBytes;
+  VLines: TStringList;
+  VText, VLine: string;
+  VI, VLineNo, VStart, VPos: Integer;
 begin
-  vBytes := TFile.ReadAllBytes(pFileName);
-  vLineNo := 1;
-  for vI := 0 to High(vBytes) do
+  VBytes := TFile.ReadAllBytes(pFileName);
+  VLineNo := 1;
+  for VI := 0 to High(VBytes) do
   begin
-    if vBytes[vI] >= ASCII_LIMIT then
-      raise ERepoBackupFormatError.CreateAt(vLineNo, 'non-ASCII byte 0x' + IntToHex(vBytes[vI], BYTE_HEX_DIGITS));
-    if vBytes[vI] = LF_BYTE then
-      Inc(vLineNo);
+    if VBytes[VI] >= ASCII_LIMIT then
+      raise ERepoBackupFormatError.CreateAt(VLineNo, 'non-ASCII byte 0x' + IntToHex(VBytes[VI], BYTE_HEX_DIGITS));
+    if VBytes[VI] = LF_BYTE then
+      Inc(VLineNo);
   end;
-  vText := TEncoding.ASCII.GetString(vBytes);
-  vLines := TStringList.Create;
+  VText := TEncoding.ASCII.GetString(VBytes);
+  VLines := TStringList.Create;
   try
-    vStart := 1;
-    while vStart <= Length(vText) do
+    VStart := 1;
+    while VStart <= Length(VText) do
     begin
-      vPos := PosEx(#10, vText, vStart);
-      if vPos = 0 then
-        vPos := Length(vText) + 1;
-      vLine := Copy(vText, vStart, vPos - vStart);
-      if (vLine <> '') and (vLine[Length(vLine)] = #13) then
-        SetLength(vLine, Length(vLine) - 1);
-      vLines.Add(vLine);
-      vStart := vPos + 1;
+      VPos := PosEx(#10, VText, VStart);
+      if VPos = 0 then
+        VPos := Length(VText) + 1;
+      VLine := Copy(VText, VStart, VPos - VStart);
+      if (VLine <> '') and (VLine[Length(VLine)] = #13) then
+        SetLength(VLine, Length(VLine) - 1);
+      VLines.Add(VLine);
+      VStart := VPos + 1;
     end;
-    RestoreRepositoryFromStrings(pConnection, vLines, pReplace);
+    RestoreRepositoryFromStrings(pConnection, VLines, pReplace);
   finally
-    vLines.Free;
+    VLines.Free;
   end;
 end;
 
