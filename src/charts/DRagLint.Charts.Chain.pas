@@ -1,4 +1,4 @@
-unit DRagLint.Charts.Chain;
+unit DRagLint.Charts.Chain;  // dl:ok unit-too-large@f45b -- REVIEWED SLZ-S11 2026-11-22: measured 2088 lines (limit 2000); a unit split changes the uses graph, outside the mechanical SLZ batch
 
 (* The datasource chain feeds-from, lands-where and consumers share:
 
@@ -1680,7 +1680,7 @@ begin
     Exit(B.Done(Format('%s differs from the indexed copy -- the property''s read accessor is not read', [FileNameOf(pM.Path)]), pM.Path));
   var Lines:= pW.FReader.StrippedSourceLines(pW.FReader.ReadPath(pM.Path));
   { a line past the end reads $null in the PS: no accessor }
-  var DeclLine:= if (pM.Line >= 1) and (pM.Line <= Length(Lines)) then Lines[pM.Line - 1] else '';
+  var DeclLine:= if (pM.Line >= 1) and (pM.Line <= Length(Lines)) then Lines[pM.Line - 1] else '';  // dl:ok manual-inrange@5b76 -- REVIEWED SLZ-S11 2026-11-22: fixer d8ebefa10 declines this shape (mixed with other operands / no System.Math); the explicit bounds read as clearly as InRange
   var Acc:= TRegEx.Match(DeclLine, READ_ACCESSOR_PATTERN);
   if not Acc.Success then
     Exit(B.Done(Format('property %s at %s:%d has no read accessor on its declaration line', [pMember, FileNameOf(pM.Path), pM.Line]), ''));
@@ -1945,7 +1945,7 @@ type
     procedure AddDataSource(pChain: Integer);
     procedure AddBinding(const pRow: TFieldBinding);
     function Outcome(const pRow: TFieldBinding; pChain: Integer): string;
-    property Population: TFieldBindingChains read FOut;
+    property Population: TFieldBindingChains read FOut;  // dl:ok property-accessor-name@cd7b -- REVIEWED SLZ-S11 2026-11-22: public property name kept for callers; renaming the backing field is cosmetic
   end;
 
 constructor TBindingBuild.Create(pWalker: TChainWalker);

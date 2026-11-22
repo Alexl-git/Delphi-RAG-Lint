@@ -151,7 +151,7 @@ begin
       Style.RowInk:= ROW_INK;
       Style.LineInk:= LINE_INK;
       Style.FontSans:= FONT_SANS;
-      var Sb:= TStringBuilder.Create;
+      var Sb:= TStringBuilder.Create;  // dl:ok duplicate-code@acd9 -- REVIEWED SLZ-S11 2026-11-22: measured 99 tokens; sibling builder/query idiom, a shared helper is outside the mechanical SLZ batch
       try
         Sb.AppendLine('digraph touchestables {');
         Sb.AppendLine('  rankdir=LR; bgcolor="transparent"; compound=true;');

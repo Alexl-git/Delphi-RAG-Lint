@@ -1944,7 +1944,7 @@ begin
 end;
 
 { spec 4.3: caption evaluation. Never raises; what it cannot see is dynamic. }
-function TWalkCore.CaptionOf(const pNode: TTSNode; const pFrame: TWalkFrame): TMValue;  // dl:ok too-many-exit-points@e0bb -- a dispatch on the CST node kind: one guard-and-exit per recognised shape of spec 4.2 / 4.3, kept flat so each row maps to one branch (REVIEWED 2026-11-18 INT13: +1.52 Cmd152 command-table shapes)
+function TWalkCore.CaptionOf(const pNode: TTSNode; const pFrame: TWalkFrame): TMValue;  // dl:ok too-many-exit-points@e0bb, cyclomatic-complexity@e02e -- a dispatch on the CST node kind: one guard-and-exit per recognised shape of spec 4.2 / 4.3, kept flat so each row maps to one branch (REVIEWED 2026-11-18 INT13: +1.52 Cmd152 command-table shapes); cyclomatic measured 37 (max 30) for the same reason (REVIEWED SLZ-S11 2026-11-22)
 var
   K       : string;
   A, B    : TMValue;
@@ -2174,7 +2174,7 @@ begin
   Result.Node:= N;
 end;
 
-function TWalkCore.EvalCall(const pNode: TTSNode; const pFrame: TWalkFrame): TMValue;  // dl:ok too-many-exit-points@ca8a -- a dispatch on the CST node kind: one guard-and-exit per recognised shape of spec 4.2 / 4.3, kept flat so each row maps to one branch
+function TWalkCore.EvalCall(const pNode: TTSNode; const pFrame: TWalkFrame): TMValue;  // dl:ok too-many-exit-points@5324, cyclomatic-complexity@9d85 -- a dispatch on the CST node kind: one guard-and-exit per recognised shape of spec 4.2 / 4.3, kept flat so each row maps to one branch; cyclomatic measured 36 (max 30) for the same reason (REVIEWED SLZ-S11 2026-11-22)
 var
   E, Args : TTSNode;
   Name    : string;

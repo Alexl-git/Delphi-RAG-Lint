@@ -176,23 +176,20 @@ type
 function AttrOf(const pAttrs, pPattern: string): string;
 begin
   var M:= TRegEx.Match(pAttrs, pPattern);
-  if M.Success then Result:= M.Groups[1].Value
-  else Result:= '';
+  Result:= if M.Success then M.Groups[1].Value else '';
 end;
 
 { A DOT id without its quotes: '"nw box"' is the id 'nw box'; a bare id is itself. }
 function Unquote(const pId: string): string;
 begin
-  if (Length(pId) >= 2) and (pId[1] = '"') and (pId[Length(pId)] = '"') then Result:= Copy(pId, 2, Length(pId) - 2)
-  else Result:= pId;
+  Result:= if (Length(pId) >= 2) and (pId[1] = '"') and (pId[Length(pId)] = '"') then Copy(pId, 2, Length(pId) - 2) else pId;
 end;
 
 { A trailing optional group that did not take part is absent from Groups, not empty. The id
   it holds is returned unquoted. }
 function GroupOf(const pMatch: TMatch; pIndex: Integer): string;
 begin
-  if pIndex < pMatch.Groups.Count then Result:= Unquote(pMatch.Groups[pIndex].Value)
-  else Result:= '';
+  Result:= if pIndex < pMatch.Groups.Count then Unquote(pMatch.Groups[pIndex].Value) else '';
 end;
 
 function EntityValue(const pMatch: TMatch): string;
@@ -204,12 +201,9 @@ begin
   if Name = 'quot' then Exit('"');
   if Name = 'apos' then Exit('''');
   var Code: Integer;
-  if (Length(Name) > 1) and (Name[ENT_KIND_AT] = ENT_HEX) then Code:= StrToIntDef(HEX_BASE + Copy(Name, ENT_HEX_FROM, MaxInt), -1)
-  else Code:= StrToIntDef(Copy(Name, 2, MaxInt), -1);
+  Code:= if (Length(Name) > 1) and (Name[ENT_KIND_AT] = ENT_HEX) then StrToIntDef(HEX_BASE + Copy(Name, ENT_HEX_FROM, MaxInt), -1) else StrToIntDef(Copy(Name, 2, MaxInt), -1);
   // a lone surrogate is not a character, and ConvertFromUtf32 raises on one: keep it as written
-  if (Code > 0) and (Code <= MAX_CODE_POINT) and ((Code < SURROGATE_FIRST) or (Code > SURROGATE_LAST)) then
-    Result:= Char.ConvertFromUtf32(Code)
-  else Result:= pMatch.Value;
+  Result:= if (Code > 0) and (Code <= MAX_CODE_POINT) and ((Code < SURROGATE_FIRST) or (Code > SURROGATE_LAST)) then Char.ConvertFromUtf32(Code) else pMatch.Value;
 end;
 
 function DecodeEntities(const pText: string): string;
@@ -239,10 +233,9 @@ function IdentityOf(const pTitle, pCellMarkup: string): string;
 begin
   var SepAt:= Pos(TITLE_SEP, pTitle);
   if SepAt > 0 then Exit(Trim(Copy(pTitle, 1, SepAt - 1)));
-  if (pTitle <> '') and (Pos(' ', pTitle) = 0) then Exit(pTitle);
+  if (pTitle <> '') and (not pTitle.Contains(' ')) then Exit(pTitle);
   var Font:= TRegEx.Match(pCellMarkup, RE_FONT, [roSingleLine]);
-  if Font.Success then Result:= PlainText(Font.Groups[1].Value)
-  else Result:= PlainText(pCellMarkup);
+  Result:= if Font.Success then PlainText(Font.Groups[1].Value) else PlainText(pCellMarkup);
 end;
 
 function ParseDot(const pDotText: string): TGraphModel;

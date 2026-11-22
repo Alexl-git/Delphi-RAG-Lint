@@ -249,7 +249,7 @@ uses
   , DRagLint.Core.Interfaces, DRagLint.Storage.SQLite, DRagLint.Index.Freshness
   , DRagLint.Core.CliError  // dl:unit DRagLint.Core.CliError accepted -- the stale-index reason constant travels with CliErrorLine, which formats it
   , DRagLint.Charts.DocInsight, DRagLint.Charts.Render
-  , DRagLint.Charts.Question  // dl:unit DRagLint.Charts.Question accepted -- the question catalog and its caption phrase travel with the question types
+  , DRagLint.Charts.Question
   , DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Pairs
   ;
 
@@ -573,16 +573,16 @@ begin
       on E: Exception do
         Stop(ASK_VERB_EXIT_REFUSED, Format('the engine could not open %s (%s: %s)', [Db, E.ClassName, E.Message]));
     end;
-    if Rep.Verdict = fvUnknown then
+    if Rep.Verdict = fvUnknown then  // dl:ok used-before-assignment@10b9 -- REVIEWED SLZ-S11 2026-11-22: Rep is assigned in the try; the except arm calls Stop(), which never returns, so the read is always after assignment (rule FP, SLZ\RULE-FP.tsv)
       pErr(ASK_VERB_ERR_PREFIX + 'note -- the engine reports no freshness for ' + Db + '; answering unchecked')
-    else if Rep.Verdict = fvStale then
+    else if Rep.Verdict = fvStale then  // dl:ok used-before-assignment@2a26 -- REVIEWED SLZ-S11 2026-11-22: Rep is assigned in the try; the except arm calls Stop(), which never returns, so the read is always after assignment (rule FP, SLZ\RULE-FP.tsv)
     begin
       var Cmd:= ReindexCommand(Db);
-      Lines:= Lines + [Format('  %s: %d file(s) changed since it was indexed', [Db, Rep.Changed]),
+      Lines:= Lines + [Format('  %s: %d file(s) changed since it was indexed', [Db, Rep.Changed]),  // dl:ok used-before-assignment@f1fa -- REVIEWED SLZ-S11 2026-11-22: Rep is assigned in the try; the except arm calls Stop(), which never returns, so the read is always after assignment (rule FP, SLZ\RULE-FP.tsv)
         if Cmd <> '' then '    ' + Cmd
         else '    no reindex command can be derived for it (not a <project>\_D-RAG\<name>.sqlite the manifest resolves; ' +
           'a clone under charts\scratch\db is re-taken, not reindexed)'];
-      Allowed:= Allowed + [Format('%s: %d file(s)', [Db, Rep.Changed])];
+      Allowed:= Allowed + [Format('%s: %d file(s)', [Db, Rep.Changed])];  // dl:ok used-before-assignment@3a48 -- REVIEWED SLZ-S11 2026-11-22: Rep is assigned in the try; the except arm calls Stop(), which never returns, so the read is always after assignment (rule FP, SLZ\RULE-FP.tsv)
     end;
   end;
   if Length(Lines) = 0 then Exit;

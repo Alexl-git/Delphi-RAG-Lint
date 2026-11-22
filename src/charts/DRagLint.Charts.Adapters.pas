@@ -109,7 +109,7 @@ begin
       var LineEnd:= Start;
       while (LineEnd <= Length(pText)) and (pText[LineEnd] <> #10) and (pText[LineEnd] <> #13) do
         Inc(LineEnd);
-      if Pos('{', Copy(pText, Start, LineEnd - Start)) > 0 then Exit(True);
+      if Copy(pText, Start, LineEnd - Start).Contains('{') then Exit(True);
     end;
 end;
 

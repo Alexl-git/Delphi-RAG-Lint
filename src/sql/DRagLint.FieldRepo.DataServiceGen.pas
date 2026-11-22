@@ -15,7 +15,7 @@ uses
   System.SysUtils,
   System.Classes,
   FireDAC.Comp.Client,
-  DRagLint.FieldRepo.OrmGen;
+  DRagLint.FieldRepo.OrmGen;  // dl:unit DRagLint.FieldRepo.OrmGen accepted -- the data-service generator emits files named by the ORM generator's ORM_FILE_EXT / ORM_PAS_PREFIX; the two generators travel together
 
 /// <summary>Plans repo gen-dataservice: u&lt;T&gt;_SERVER.PAS in pServerDir and
 /// u&lt;T&gt;_CLIENT.PAS in pClientDir per table, then uDIContainerConfig.PAS (server) and
@@ -112,7 +112,7 @@ const
   SUB_UPDATE_ORM = 1;
   SUB_GEN_DATASERVICE = 2;
 
-procedure GenerateDIServerObjectStart(DIText: TStringList);
+procedure GenerateDIServerObjectStart(DIText: TStringList);  // dl:ok param-name-prefix@eade -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 begin
   DIText.Add('unit ' + DI_UNIT_SERVER + ';');
   DIText.Add('                      '               );
@@ -133,7 +133,7 @@ begin
   DIText.Add('  IuMicObject,        '               );
 end;
 
-procedure GenerateDIClientObjectStart(DIText: TStringList);
+procedure GenerateDIClientObjectStart(DIText: TStringList);  // dl:ok param-name-prefix@5f3a -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 begin
   DIText.Add('unit ' + DI_UNIT_CLIENT + ';');
   DIText.Add('                      '               );
@@ -154,7 +154,7 @@ begin
   DIText.Add('  IuMicObject,        '               );
 end;
 
-procedure AddServerRegistration(DIText, DIText2: TStringList; const TblName: string);
+procedure AddServerRegistration(DIText, DIText2: TStringList; const TblName: string);  // dl:ok param-name-prefix@1687 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 begin
   DIText.Add(Format('  i%s,       ', [TblName]));
   DIText.Add(Format('  u%s,       ', [TblName]));
@@ -176,7 +176,7 @@ begin
   DIText2.Add('    end);                                                                                    ');
 end;
 
-procedure FinishServerDI(DIText, DIText2: TStringList);
+procedure FinishServerDI(DIText, DIText2: TStringList);  // dl:ok param-name-prefix@6ab5 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 begin
   DIText.Add       ('  uThreadStorageServer                                                                               ');
   DIText.Add       ('                                                                                                     ');
@@ -204,7 +204,7 @@ begin
   DIText.Add       ('end.                    '                                                                             );
 end;
 
-procedure FinishClientDI(DITextClient, DIText2Client: TStringList);
+procedure FinishClientDI(DITextClient, DIText2Client: TStringList);  // dl:ok param-name-prefix@42fa -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 begin
   DITextClient.Add       ('                                              '                                  );
   DITextClient.Add       ('  ;  // end uses                             '                                   );

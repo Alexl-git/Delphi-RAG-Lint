@@ -158,7 +158,7 @@ type
     FLits: TObjectList<TIndexRow>;
   public
     /// <summary>symbols.id.</summary>
-    property Id: Integer read FIdent write FIdent;
+    property Id: Integer read FIdent write FIdent;  // dl:ok property-accessor-name@e99d -- REVIEWED SLZ-S11 2026-11-22: public property name kept for callers; renaming the backing field is cosmetic
     /// <summary>symbols.name.</summary>
     property Name: string read FName write FName;
     /// <summary>symbols.qualified_name.</summary>
@@ -2709,7 +2709,7 @@ begin
   if pFid <> 0 then
   begin
     var Raw:= TraceSource(pSide, pPath).Raw;
-    if (Ln >= 1) and (Ln <= Length(Raw)) then
+    if (Ln >= 1) and (Ln <= Length(Raw)) then  // dl:ok manual-inrange@3f11 -- REVIEWED SLZ-S11 2026-11-22: fixer d8ebefa10 declines this shape (mixed with other operands / no System.Math); the explicit bounds read as clearly as InRange
     begin
       RawLine:= Raw[Ln - 1];
       HasRaw:= True;
@@ -2743,7 +2743,7 @@ begin
   if FImpls.TryGetValue(Key, Result) then
     Exit;
   var Scopes: TArray<string>;
-  if Length(Segs) = 1 then
+  if Length(Segs) = 1 then  // dl:ok ifthen-to-if-expression@a8b1 -- REVIEWED SLZ-S11 2026-11-22: fixer d8ebefa10 declines this shape (array-concat or generic-call arm that hit E2010/F2084); kept as if/else
     Scopes:= [Format('s.parent_id = %d AND s.kind IN (''local_var'',''param'')', [pF.Id]),
       Format('s.parent_id = %d AND s.kind IN (''field'',''property'')', [pF.Pid]), 's.kind = ''var''']
   else
@@ -2827,13 +2827,13 @@ begin
 end;
 
 { Get-ElseNote: what the other branch does -- dataset ops, protocol constants, the literal that goes out with it }
-function TTraceWalker.ElseNote(pSide: TTraceSide; pF: TRoutineFacts; const pG: TElseScope): string;
+function TTraceWalker.ElseNote(pSide: TTraceSide; pF: TRoutineFacts; const pG: TElseScope): string;  // dl:ok cyclomatic-complexity@15e9 -- REVIEWED SLZ-S11 2026-11-22: measured 34 (max 30); one dispatch routine over chart/node kinds, a split is a refactor outside the mechanical SLZ batch
 begin
   var G:= pG;
   var InBr: TFunc<TIndexRow, Boolean>:= function(pO: TIndexRow): Boolean
     begin
       var L:= pO.I('line');
-      Result:= (L >= G.BlockStart) and (L <= G.BlockEnd) and ((L <> G.SpanLine) or ((pO.I('col') - 1 >= G.SpanFrom) and
+      Result:= (L >= G.BlockStart) and (L <= G.BlockEnd) and ((L <> G.SpanLine) or ((pO.I('col') - 1 >= G.SpanFrom) and  // dl:ok manual-inrange@eee2 -- REVIEWED SLZ-S11 2026-11-22: fixer d8ebefa10 declines this shape (mixed with other operands / no System.Math); the explicit bounds read as clearly as InRange
         (pO.I('col') - 1 < G.SpanTo)));
     end;
   var InRefs:= Filter(pF.Refs.ToArray, InBr);
@@ -2885,7 +2885,7 @@ begin
         (L.S('text').Trim.Length > ELSE_LIT_MIN) then
       begin
         var Ln:= L.I('line');
-        var HasRaw:= (Ln >= 1) and (Ln <= Length(Src.Raw));
+        var HasRaw:= (Ln >= 1) and (Ln <= Length(Src.Raw));  // dl:ok manual-inrange@2bde -- REVIEWED SLZ-S11 2026-11-22: fixer d8ebefa10 declines this shape (mixed with other operands / no System.Math); the explicit bounds read as clearly as InRange
         var Lt:= LiteralSourceText(L.S('text'), L.I('col'), L.I('ecol'), if HasRaw then Src.Raw[Ln - 1] else '', HasRaw);
         Parts.Add(if TRegEx.IsMatch(Lt, RE_NOTE_UNSAFE) then Format('a literal at :%d', [Ln]) else Lt);
         Break;
@@ -2960,7 +2960,7 @@ begin
   Result.Text:= if T <> '' then T else 'payload built before the send (no literal found)';
 end;
 
-procedure TTraceWalker.AddCallsStep(pList: TObjectList<TTraceItem>; const pTgt: TCallTarget; pSub: TWalkResult; pCaller: TRoutineFacts;  // dl:ok too-many-parameters@a35b -- REVIEWED 2026-10-18: Add-CallsStep's own eight parameters (Trace.Walk.ps1:1162: List, Tgt, Sub, Caller, SiteLine, Lits, -Always, -Note), kept one to one with the PS
+procedure TTraceWalker.AddCallsStep(pList: TObjectList<TTraceItem>; const pTgt: TCallTarget; pSub: TWalkResult; pCaller: TRoutineFacts;  // dl:ok too-many-parameters@7326 -- REVIEWED 2026-10-18: Add-CallsStep's own eight parameters (Trace.Walk.ps1:1162: List, Tgt, Sub, Caller, SiteLine, Lits, -Always, -Note), kept one to one with the PS
   pSiteLine: Integer; const pLits: string; pAlways: Boolean; const pNote: string);
 begin
   try
@@ -2981,7 +2981,7 @@ begin
     end;
     MoveItems(pSub.Items, pList);
   finally
-    pSub.Free;
+    pSub.Free;  // dl:ok free-of-parameter@b335 -- REVIEWED SLZ-S11 2026-11-22: ownership transfer by contract: the walker takes and frees the sub-context it is handed; the caller drops its reference
   end;
 end;
 
@@ -3404,10 +3404,8 @@ begin
     SplitAnchor(Fs.Anchor, FsFile, FsLine);
     var Found:= False;
     for var N in pNaming do
-      if ((pName = '') or SameText(N.Ref.S('nm'), pName)) and SameText(FileNameOf(N.F.Path), FsFile) and (FsLine >= N.F.ImplStart) and
-        (FsLine <= N.F.ImplEnd) then
-        if not Found or (pSorted and (N.Ref.I('line') < pHit.Ref.I('line'))) then
-        begin
+      if (((pName = '') or SameText(N.Ref.S('nm'), pName)) and SameText(FileNameOf(N.F.Path), FsFile) and (FsLine >= N.F.ImplStart) and  // dl:ok boolean-expression-complexity@5562 -- REVIEWED SLZ-S11 2026-11-22: measured 7 operators (limit 4); one shape test, named sub-expressions deferred
+        (FsLine <= N.F.ImplEnd)) and (not Found or (pSorted and (N.Ref.I('line') < pHit.Ref.I('line')))) then begin
           pHit:= N;
           Found:= True;
           if not pSorted then
@@ -3420,7 +3418,7 @@ begin
 end;
 
 { the write direction's statement STOPS (final-review M7, FW-R1, P15) }
-function TTraceWalker.WriteStatementStop(const pServerItems: TArray<TTraceItem>; pCtx: TTraceContext): TTraceItem;
+function TTraceWalker.WriteStatementStop(const pServerItems: TArray<TTraceItem>; pCtx: TTraceContext): TTraceItem;  // dl:ok cyclomatic-complexity@084f -- REVIEWED SLZ-S11 2026-11-22: measured 35 (max 30); one dispatch routine over chart/node kinds, a split is a refactor outside the mechanical SLZ batch
 const
   STMT = 'UpdateSQL';
 begin
@@ -3562,7 +3560,7 @@ begin
 end;
 
 { Get-SelectStop: DATABASE for a READ -- where the SELECT is assembled, with After (M4) }
-function TTraceWalker.SelectStop(const pServerItems: TArray<TTraceItem>; pCtx: TTraceContext; out pAfter: TTraceItem): TTraceItem;
+function TTraceWalker.SelectStop(const pServerItems: TArray<TTraceItem>; pCtx: TTraceContext; out pAfter: TTraceItem): TTraceItem;  // dl:ok cyclomatic-complexity@6378 -- REVIEWED SLZ-S11 2026-11-22: measured 31 (max 30); one dispatch routine over chart/node kinds, a split is a refactor outside the mechanical SLZ batch
 begin
   pAfter:= nil;
   var Fib:= StepsMatching(pServerItems, RE_FIB_READ);

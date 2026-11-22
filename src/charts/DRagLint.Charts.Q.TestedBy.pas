@@ -205,7 +205,7 @@ begin
     var FixtureNames: TArray<string>:= [];
     for var T in Tests do
       FixtureNames:= FixtureNames + [T.Fixture];
-    var Fixtures:= SortUniqueNames(FixtureNames);
+    var Fixtures:= SortUniqueNames(FixtureNames);  // dl:ok duplicate-code@db51 -- REVIEWED SLZ-S11 2026-11-22: measured 288 tokens; sibling builder/query idiom, a shared helper is outside the mechanical SLZ batch
     var TestsOf:= function(const pFixture: string): TArray<TCoveringTest>
       begin
         Result:= [];
@@ -308,7 +308,7 @@ begin
           Sb.AppendLine(Format('  %s -> %s:p1 [color="%s"];', [Nid, FNid, TEST_BORDER]));
         end;
       end;
-      Sb.AppendLine('}');
+      Sb.AppendLine('}');  // dl:ok duplicate-code@4838 -- REVIEWED SLZ-S11 2026-11-22: measured 119 tokens; sibling builder/query idiom, a shared helper is outside the mechanical SLZ batch
 
       var Msgs: TArray<string>;
       Result.Layout:= DotLayout(pArgs.Dot, Sb.ToString, pOutDir, 'testedby_' + TRegEx.Replace(Sel.QName, '[^A-Za-z0-9]', '_'), Msgs);

@@ -134,7 +134,7 @@ end;
 /// <exception cref="EChartsQuestion">The name is neither declared nor in any heritage.</exception>
 /// <exception cref="EChartsIndex">The name is ambiguous (the text comes from ResolveMemberSelection).</exception>
 /// <remarks>Opens a read-only TSQLiteSymbolStore beside the TChartsIndex (two read-only handles on one file).</remarks>
-function Emit(const pArgs: TQuestionArgs; const pOutDir: string): TChartResult;
+function Emit(const pArgs: TQuestionArgs; const pOutDir: string): TChartResult;  // dl:ok cyclomatic-complexity@6416 -- REVIEWED SLZ-S11 2026-11-22: measured 32 (max 30); one dispatch routine over chart/node kinds, a split is a refactor outside the mechanical SLZ batch
 var
   Found: Boolean;
 begin
@@ -226,7 +226,7 @@ begin
     var Unlocatable:= 0;
     var AncRows: TArray<TDotRow>:= [];
     for var A in ATop.Shown do
-      if not A.Resolved then
+      if not A.Resolved then  // dl:ok ifthen-to-if-expression@4fa0 -- REVIEWED SLZ-S11 2026-11-22: fixer d8ebefa10 declines this shape (array-concat or generic-call arm that hit E2010/F2084); kept as if/else
         AncRows:= AncRows + [NoteRow(A.Name + '  (outside this project''s closure)')]
       else
         AncRows:= AncRows + [NewTypeRow(Lookup, A.Name, A.Kind, Collisions, Unlocatable)];

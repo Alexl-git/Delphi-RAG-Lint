@@ -214,7 +214,7 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Charts.MemberAccess.CrossCheckSites (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.Q.MemberAccess.RoutineRow (DRagLint.Charts.Q.MemberAccess.pas)</para>
-    /// <para>Returns: List.ToArray; nil</para>
+    /// <para>Returns: if FSites.TryGetValue(pRoutine + '|' + pMode, List) then List.ToArray</para>
     /// <para>Reads: FSites</para>
     /// <seealso cref="DRagLint.Charts.MemberAccess.TMemberAccessData.CountLabel"/>
     /// <seealso cref="DRagLint.Charts.MemberAccess.TMemberAccessData.Create"/>
@@ -354,10 +354,7 @@ end;
 function TMemberAccessData.SitesOf(const pRoutine, pMode: string): TArray<TSiteAnchor>;
 begin
   var List: TList<TSiteAnchor>;
-  if FSites.TryGetValue(pRoutine + '|' + pMode, List) then
-    Result:= List.ToArray
-  else
-    Result:= nil;
+  Result:= if FSites.TryGetValue(pRoutine + '|' + pMode, List) then List.ToArray else nil;
 end;
 
 function TMemberAccessData.CountLabel(const pU: TUnreportedAccess): string;
@@ -424,7 +421,7 @@ begin
       else
       begin
         Position.Add(Hit.CallerQName, Length(Result));
-        SetLength(Result, Length(Result) + 1);
+        SetLength(Result, Length(Result) + 1);  // dl:ok setlength-in-loop@ccdf -- REVIEWED SLZ-S11 2026-11-22: few members per class; growth cost not measurable
         Result[High(Result)].Routine:= Hit.CallerQName;
         Result[High(Result)].Sites:= 1;
       end;

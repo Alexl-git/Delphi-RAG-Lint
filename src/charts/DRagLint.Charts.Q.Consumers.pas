@@ -532,9 +532,7 @@ begin
   Result:= False;
   pRoutine:= Default(TFileRoutine);
   for var R in FileRoutines(pFid) do
-    if (R.A <= pLine) and (R.B >= pLine) then
-      if not Result or (R.B - R.A < pRoutine.B - pRoutine.A) then
-      begin
+    if ((R.A <= pLine) and (R.B >= pLine)) and (not Result or (R.B - R.A < pRoutine.B - pRoutine.A)) then begin
         pRoutine:= R;
         Result:= True;
       end;
@@ -675,7 +673,7 @@ begin
   if not Result then
     Exit;
   var Lines:= FCatalog.StrippedSqlLines(FSqlReader.ReadPath(pPath));
-  if (pLine >= 1) and (pLine <= Length(Lines)) then
+  if InRange(pLine, 1, Length(Lines)) then
     pText:= Lines[pLine - 1];
 end;
 
@@ -861,10 +859,7 @@ begin
   FTName:= FTbl.Name;
   var DeclFile:= FileNameOf(FTbl.Path);
   var DeclCount:= Length(FTbl.Declarations);
-  if DeclCount > 1 then
-    FDeclText:= Format('declared %d times in the scripts; showing the newest (%s:%d, by file date)', [DeclCount, DeclFile, FTbl.Line])
-  else
-    FDeclText:= Format('declared 1 time in the scripts (%s:%d)', [DeclFile, FTbl.Line]);
+  FDeclText:= if DeclCount > 1 then Format('declared %d times in the scripts; showing the newest (%s:%d, by file date)', [DeclCount, DeclFile, FTbl.Line]) else Format('declared 1 time in the scripts (%s:%d)', [DeclFile, FTbl.Line]);
   FColFile:= FTbl.Path;
   FColLine:= FTbl.Line;
   if FSelCol <> '' then

@@ -423,7 +423,7 @@ begin
   for F in TDirectory.GetFiles(TPath.Combine(pDir, 'entries'), '*.json') do
   begin
     V:= TJSONObject.ParseJSONValue(TFile.ReadAllText(F, TEncoding.UTF8));
-    if not (V is TJSONObject) then
+    if (V is not TJSONObject) then
     begin
       V.Free;
       raise EMenuDriftSetup.CreateFmt('registry entry is not a JSON object: %s', [F]);

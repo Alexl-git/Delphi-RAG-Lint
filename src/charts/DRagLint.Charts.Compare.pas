@@ -696,7 +696,7 @@ begin
   begin
     DiffSides(R);
     if pRequest.Source <> csTwoFiles then
-      ApplySideEffects(pRequest, R, Run, if pRequest.Now = 0 then Now else pRequest.Now);
+      ApplySideEffects(pRequest, R, Run, if pRequest.Now = 0 then Now else pRequest.Now);  // dl:ok float-equality-comparison@86c3 -- REVIEWED SLZ-S11 2026-11-22: 0 is an exact 'not set' sentinel assigned literally, not a computed float
   end;
   Result:= R;
 end;

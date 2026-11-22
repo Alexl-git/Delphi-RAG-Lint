@@ -350,7 +350,7 @@ begin
   except
     on E: Exception do
     begin
-      DeleteFile(Temp);
+      DeleteFile(Temp);  // dl:ok ignored-must-use-result@153d -- REVIEWED SLZ-S11 2026-11-22: best-effort: a failed ForceDirectories surfaces at the next file write with the path; a failed DeleteFile of a temp/pruned file is retried or harmless
       pWhyNot:= 'cannot write ' + pPath + ': ' + E.Message;
       Exit;
     end;

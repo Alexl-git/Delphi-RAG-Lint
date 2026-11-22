@@ -506,7 +506,7 @@ function TraceUnclickable(const pText: string): TArray<string>;
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Charts.Trace.Chart.FormatTraceChartTip (DRagLint.Charts.Trace.Chart.pas), DRagLint.Charts.Trace.Chart.TChartBuilder.BuildCondCell (DRagLint.Charts.Trace.Chart.pas), DRagLint.Charts.Trace.FormA.WriteFormA (DRagLint.Charts.Trace.FormA.pas)</para>
 /// <para>Calls: DRagLint.Charts.Trace.FormA.Refuse, DRagLint.Charts.Trace.FormA.Rx</para>
-/// <para>Complexity: 12 (cyclomatic, outer body), 31 lines (full implementation)</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 25 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Charts.Trace.FormA.Refuse"/>
 /// <seealso cref="DRagLint.Charts.Trace.FormA.Rx"/>
 /// <!-- drag-lint:auto END -->
@@ -652,19 +652,13 @@ end;
 
 function Rx(const pText, pPattern: string; pIgnoreCase: Boolean = False): Boolean;
 begin
-  if pIgnoreCase then
-    Result:= TRegEx.IsMatch(pText, pPattern, [roIgnoreCase])
-  else
-    Result:= TRegEx.IsMatch(pText, pPattern);
+  Result:= if pIgnoreCase then TRegEx.IsMatch(pText, pPattern, [roIgnoreCase]) else TRegEx.IsMatch(pText, pPattern);
 end;
 
 { a group value; PCRE reports fewer groups when the trailing optional ones did not take part }
 function Grp(const pMatch: TMatch; pIndex: Integer): string;
 begin
-  if pIndex < pMatch.Groups.Count then
-    Result:= pMatch.Groups[pIndex].Value
-  else
-    Result:= '';
+  Result:= if pIndex < pMatch.Groups.Count then pMatch.Groups[pIndex].Value else '';
 end;
 
 function ListText(const pList: array of string; const pSep: string): string;
@@ -780,7 +774,7 @@ begin
   pTrace.Sections.Add(Result);
 end;
 
-function NewTraceStep(const pKind, pText, pAnchor, pGrade, pRoutine, pNote, pAsk, pActor: string): TTraceItem;  // dl:ok too-many-parameters@1eeb -- REVIEWED 2026-10-17: the 8-parameter signature is the PowerShell New-TraceStep's own and its callers (Trace.Walk, ReadFormA) pass them positionally.
+function NewTraceStep(const pKind, pText, pAnchor, pGrade, pRoutine, pNote, pAsk, pActor: string): TTraceItem;  // dl:ok too-many-parameters@521d -- REVIEWED 2026-10-17: the 8-parameter signature is the PowerShell New-TraceStep's own and its callers (Trace.Walk, ReadFormA) pass them positionally.
 begin
   if not (SameText(pKind, KIND_STEP) or SameText(pKind, KIND_STOPS) or SameText(pKind, KIND_CROSSES)) then
     Refuse('New-TraceStep: kind ''' + pKind + ''' is not step/stops/crosses');
@@ -924,19 +918,13 @@ begin
       Refuse('Form A note must not contain ''; '' (it is the note separator): ' + pNote);
     if Rx(pNote, RE_NOTE_IN_ONLY, True) or Rx(pNote, RE_NOTE_ASK_ONLY, True) then
       Refuse('Form A note must not read like a routine or ask part: ' + pNote);
-    if Result = '' then
-      Result:= pNote
-    else
-      Result:= Result + NOTE_SEP + pNote;
+    Result:= if Result = '' then pNote else Result + NOTE_SEP + pNote;
   end;
   if pAsk <> '' then
   begin
     if not Rx(pAsk, RE_ROUTINE_WORD) then
       Refuse('Form A ask must be one word with no '';'': ' + pAsk);
-    if Result = '' then
-      Result:= 'ask ' + pAsk
-    else
-      Result:= Result + NOTE_SEP + 'ask ' + pAsk;
+    Result:= if Result = '' then 'ask ' + pAsk else Result + NOTE_SEP + 'ask ' + pAsk;
   end;
 end;
 
@@ -959,10 +947,7 @@ begin
       pAsk:= MAsk.Groups[1].Value
     else
     begin
-      if AnyRest then
-        Result:= Result + NOTE_SEP + P
-      else
-        Result:= P;
+      Result:= if AnyRest then Result + NOTE_SEP + P else P;
       AnyRest:= True;
     end;
     First:= False;
@@ -1179,7 +1164,7 @@ begin
         Nt:= SplitTraceNote(Grp(M, STEP_NOTE), Rn, Ask);
         Cur:= NewTraceStep(Kind, Grp(M, STEP_TEXT), Grp(M, STEP_ANCHOR), Grp(M, STEP_GRADE), Rn, Nt, Ask, Grp(M, STEP_ACTOR));
         Cur.Number:= StrToInt(Grp(M, STEP_NUMBER));
-        Sec.Items.Add(Cur);
+        Sec.Items.Add(Cur);  // dl:ok missing-begin-update@05b6 -- REVIEWED SLZ-S11 2026-11-22: Items is an in-memory TTraceSection/TAnchorResult model list, not a visual control; no repaint to suppress (rule FP, SLZ\RULE-FP.tsv)
         Continue;
       end;
       M:= TRegEx.Match(Raw, RE_COND);

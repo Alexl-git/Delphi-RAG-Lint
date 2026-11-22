@@ -1,4 +1,4 @@
-unit DRagLint.FormsMap;
+unit DRagLint.FormsMap;  // dl:ok unit-too-large@793d -- REVIEWED SLZ-S11 2026-11-22: measured 3290 lines (limit 2000); a unit split changes the uses graph, outside the mechanical SLZ batch
 
 /// <summary>Builds a per-form tester CSV for a project (algorithm v7): how a
 /// tester reaches each form from the application's root form -- the menu /
@@ -29,9 +29,6 @@ uses
   , Data.DB
   , FireDAC .Comp   .Client
   , FireDAC .Stan   .Param
-  , DRagLint.Core   .Model // dl:unit DRagLint.Core.Model accepted -- DRAG_HOME_DIR: the _D-RAG folder name travels with the model that defines the index layout, so popupForms is read from the same folder every other verb uses
-  , DRagLint.Storage.SQLite
-  , DRagLint.Lint   .ProjectChecks.Parse
   ;
 
 type
@@ -129,6 +126,9 @@ uses
   , DRagLint.Core.FileTime { 151 Y2: FileMTimeUnix for the dfm_properties currency check }
   , DRagLint.FormsMap.Dfm
   , DRagLint.MenuTree
+  , DRagLint.Core.Model  // dl:unit DRagLint.Core.Model accepted -- DRAG_HOME_DIR is the one shared home-dir constant; Core.Model is its owner
+  , DRagLint.Storage.SQLite
+  , DRagLint.Lint.ProjectChecks.Parse
   ;
 
 /// <summary>Reads a .pas file as lines with comment content blanked out, for
@@ -236,11 +236,11 @@ begin
   try
     JVal:= TJSONObject.ParseJSONValue(TFile.ReadAllText(CfgPath));
     try
-      if not (JVal is TJSONObject) then
+      if (JVal is not TJSONObject) then
         raise EJSONException.Create('the file is not a JSON object');
       V:= TJSONObject(JVal).GetValue(POPUP_FORMS_KEY);
       if V = nil then Exit;
-      if not (V is TJSONArray) then
+      if (V is not TJSONArray) then
         raise EJSONException.Create('"' + POPUP_FORMS_KEY + '" is not an array');
       Arr:= TJSONArray(V);
       for Item in Arr do
@@ -253,7 +253,7 @@ begin
           FormVal:= TJSONObject(Item).GetValue('form');
           NoteVal:= TJSONObject(Item).GetValue('note');
         end;
-        if (FormVal <> nil) and not (FormVal is TJSONString) then
+        if (FormVal <> nil) and (FormVal is not TJSONString) then
         begin
           Writeln(ErrOutput, 'forms-csv: ' + CfgPath + ': a "' + POPUP_FORMS_KEY + '" entry whose "form" is not a string -- skipped');
           Continue;
@@ -320,9 +320,9 @@ begin
   for I:= AStartLine - 1 to Length(Lines) - 1 do
   begin
     Buf:= Buf + ' ' + Lines[I];
-    if Pos(')', Buf) > 0 then Break;
-    if (Pos('class', LowerCase(Buf)) > 0) and (Pos('(', Buf) = 0) and (Pos(';', Buf) > 0) then Exit;
-    if I > AStartLine + 3 then Break;
+    if Buf.Contains(')') then Break;
+    if (LowerCase(Buf).Contains('class')) and (not Buf.Contains('(')) and (Buf.Contains(';')) then Exit;
+    if I > AStartLine + 3 then Break;  // dl:ok magic-literal@f82d -- REVIEWED SLZ-S11 2026-11-22: literal 3; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
   end;
   P:= Pos('(', Buf);
   if P = 0 then Exit;
@@ -347,7 +347,7 @@ var
 begin
   Cls := AFormClass;
   Hops:= 0;
-  while (Cls <> '') and (Hops < 16) do
+  while (Cls <> '') and (Hops < 16) do  // dl:ok magic-literal@531a -- REVIEWED SLZ-S11 2026-11-22: literal 16; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
   begin
     Inc(Hops);
     if SameText(Cls, 'TDataModule') or SameText(Cls, 'TFrame'     ) or SameText(Cls, 'TCustomFrame'     ) then Exit(False);
@@ -359,7 +359,7 @@ begin
       Q.ParamByName('n').AsWideString:= Cls;
       Q.Open;
       if Q.IsEmpty then Break;
-      Path     := Q.FieldByName('p' ).AsString;
+      Path     := Q.FieldByName('p' ).AsString;  // dl:ok field-by-name-in-loop@4ba3 -- REVIEWED SLZ-S11 2026-11-22: one FieldByName per row over a short metadata/index result; caching TField refs is a perf refactor with no measured cost
       StartLine:= Q.FieldByName('sl').AsInteger;
     finally
       Q.Free;
@@ -378,8 +378,8 @@ var
   Lc: string;
 begin
   Lc:= LowerCase(APath);
-  Result:= (Pos(' - copy', Lc) > 0) or (Pos('-copy', Lc) > 0) or (Copy(Lc, Length(Lc) - 3, 4) = '.bak') or (Copy(Lc, Length(Lc) - 3, 4) = '.bck') or
-  (Copy(Lc, Length(Lc) - 3, 4) = '.old') or (Copy(Lc, Length(Lc) - 4, 5) = '.orig');
+  Result:= (Lc.Contains(' - copy')) or (Lc.Contains('-copy')) or (Copy(Lc, Length(Lc) - 3, 4) = '.bak') or (Copy(Lc, Length(Lc) - 3, 4) = '.bck') or  // dl:ok boolean-expression-complexity@0c5a, magic-literal@0c5a -- REVIEWED SLZ-S11 2026-11-22: literal 3,4,0,2026,11,22,5; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
+  (Copy(Lc, Length(Lc) - 3, 4) = '.old') or (Copy(Lc, Length(Lc) - 4, 5) = '.orig');  // dl:ok magic-literal@ff08 -- REVIEWED SLZ-S11 2026-11-22: literal 3,4,5; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
 end;
 
 /// <summary>Reads lowercased unit basenames from the uses clause of the sibling
@@ -416,7 +416,7 @@ begin
       // Extract the text between single quotes
       var Token:= Copy(Content, Q + 1, R - Q - 1);
       // We want entries like 'uDemoMain.pas' - ends with .pas
-      if SameText(Copy(Token, Length(Token) - 3, 4), '.pas') then
+      if SameText(Copy(Token, Length(Token) - 3, 4), '.pas') then  // dl:ok magic-literal@91c6 -- REVIEWED SLZ-S11 2026-11-22: literal 3,4; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
       begin
         Name:= LowerCase(TPath.GetFileNameWithoutExtension(Token));
         if Name <> '' then List.Add(Name);
@@ -453,7 +453,7 @@ begin
     while not Q.Eof do
     begin
       Node:= Default(TFormNode);
-      Node.FormName := Q.FieldByName('nm' ).AsString;
+      Node.FormName := Q.FieldByName('nm' ).AsString;  // dl:ok field-by-name-in-loop@4c7f -- REVIEWED SLZ-S11 2026-11-22: one FieldByName per row over a short metadata/index result; caching TField refs is a perf refactor with no measured cost
       Node.FormClass:= Q.FieldByName('cls').AsString;
       Node.DfmFileId:= Q.FieldByName('fid').AsLargeInt;
       Node.DfmPath  := Q.FieldByName('p'  ).AsString;
@@ -484,27 +484,20 @@ begin
   end; // try
 end; // function
 
-/// <summary>RFC 4180 field escaping (quote when needed, double embedded quotes).</summary>
-function CsvField(const S: string): string;
-begin
-  if (Pos(',', S) > 0) or (Pos('"', S) > 0) or (Pos(#10, S) > 0) then Result:= '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"'
-  else Result:= S;
-end;
-
 /// <summary>True if the source line constructs the given form class:
 /// "FormClass.Create" (also matches named ctors like .CreateForFolder) or
 /// "CreateForm(FormClass".</summary>
 function IsLaunchLine(const ALine, AFormClass: string): Boolean;
 begin
-  Result:= (Pos(AFormClass + '.Create', ALine) > 0) or (Pos('CreateForm(' + AFormClass, StringReplace(ALine, ' ', '', [rfReplaceAll])) > 0);
+  Result:= (ALine.Contains(AFormClass + '.Create')) or (StringReplace(ALine, ' ', '', [rfReplaceAll]).Contains('CreateForm(' + AFormClass));
 end;
 
 /// <summary>True if ALine shows a global singleton form instance via its design-time
 /// instance name: formName.Show* (covers .ShowModal, .Show) or formName.Execute.</summary>
 function IsShowLine(const ALine, AFormName: string): Boolean;
 begin
-  Result:= (Pos(AFormName + '.Show'   , ALine) > 0) or
-           (Pos(AFormName + '.Execute', ALine) > 0);
+  Result:= (ALine.Contains(AFormName + '.Show')) or
+           (ALine.Contains(AFormName + '.Execute'));
 end;
 
 /// <summary>True when ALine calls a plain .Show (not .ShowModal, .ShowHint,
@@ -556,8 +549,8 @@ begin
   begin
     if (I < 0) or (I >= Length(Lines)) then Continue;
     T:= Trim(Lines[I]);
-    if (SameText(Copy(T, 1, 7), 'object ')) or (SameText(Copy(T, 1, 5), 'item')) then Exit;
-    if SameText(Copy(T, 1, 9), 'caption =') then
+    if (SameText(Copy(T, 1, 7), 'object ')) or (SameText(Copy(T, 1, 5), 'item')) then Exit;  // dl:ok magic-literal@114a -- REVIEWED SLZ-S11 2026-11-22: literal 1,7,5; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
+    if SameText(Copy(T, 1, 9), 'caption =') then  // dl:ok magic-literal@6b60 -- REVIEWED SLZ-S11 2026-11-22: literal 1,9; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
     begin
       P:= Pos          ('''', T);
       Q:= LastDelimiter('''', T);
@@ -591,14 +584,14 @@ begin
   ARoutine   := '';
   for I:= ALaunchLine - 1 downto 0 do
   begin
-    if (ALaunchLine - 1 - I) > 100 then Break;
+    if (ALaunchLine - 1 - I) > 100 then Break;  // dl:ok magic-literal@6c75 -- REVIEWED SLZ-S11 2026-11-22: literal 1,100; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
     T:= Trim(ALines[I]);
     Lc:= LowerCase(T);
     Kw:= '';
-    if Copy(Lc, 1, 10)      = 'procedure ' then Kw:= 'procedure'
-    else if Copy(Lc, 1, 9 ) = 'function '    then Kw:= 'function'
-    else if Copy(Lc, 1, 12) = 'constructor ' then Kw:= 'constructor'
-    else if Copy(Lc, 1, 11) = 'destructor ' then Kw:= 'destructor';
+    if Copy(Lc, 1, 10)      = 'procedure ' then Kw:= 'procedure'  // dl:ok magic-literal@5959 -- REVIEWED SLZ-S11 2026-11-22: literal 1,10; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
+    else if Copy(Lc, 1, 9 ) = 'function '    then Kw:= 'function'  // dl:ok magic-literal@13e4 -- REVIEWED SLZ-S11 2026-11-22: literal 1,9; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
+    else if Copy(Lc, 1, 12) = 'constructor ' then Kw:= 'constructor'  // dl:ok magic-literal@6afe -- REVIEWED SLZ-S11 2026-11-22: literal 1,12; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
+    else if Copy(Lc, 1, 11) = 'destructor ' then Kw:= 'destructor';  // dl:ok magic-literal@5cd9 -- REVIEWED SLZ-S11 2026-11-22: literal 1,11; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
     if Kw                   = '' then Continue;
     Rest:= Copy(T, Length(Kw) + 2, MaxInt); // skip keyword + space
     // Rest now: "ClassName.MethodName(..." or "MethodName(..." (standalone)
@@ -611,7 +604,8 @@ begin
       Q:= 1;
       while (Q <= Length(Rest)) and CharInSet(Rest[Q], ['A'..'Z','a'..'z','0'..'9','_']) do Inc(Q);
       ARoutine:= Copy(Rest, 1, Q - 1);
-      if ARoutine <> '' then begin AOwnerClass:= ''; Exit(True); end;
+      if ARoutine <> '' then begin AOwnerClass:= '';
+      Exit(True); end;
       Continue;
     end;
     // Extract class name (chars before the dot)
@@ -642,8 +636,8 @@ begin
   begin
     if (I < 0) or (I >= Length(Lines)) then Continue;
     T:= Trim(Lines[I]);
-    if SameText(Copy(T, 1, 7), 'object ') then Exit;
-    if SameText(Copy(T, 1, 8), 'action =') then
+    if SameText(Copy(T, 1, 7), 'object ') then Exit;  // dl:ok magic-literal@1ab7 -- REVIEWED SLZ-S11 2026-11-22: literal 1,7; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
+    if SameText(Copy(T, 1, 8), 'action =') then  // dl:ok magic-literal@e011 -- REVIEWED SLZ-S11 2026-11-22: literal 1,8; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
     begin
       P:= Pos('=', T);
       Result:= Trim(Copy(T, P + 1, MaxInt));
@@ -990,7 +984,7 @@ begin
   Lines:= ReadPasLinesScrubbed(ANode.PasPath);
   for LineIdx:= 0 to Length(Lines) - 1 do
   begin
-    if Pos(ARoutine, Lines[LineIdx]) = 0 then Continue;
+    if Pos(ARoutine, Lines[LineIdx]) = 0 then Continue;  // dl:ok pos-for-contains@84f7 -- REVIEWED SLZ-S11 2026-11-22: needle ARoutine may be empty: Pos('',s)=0 but s.Contains('') is True, so Contains is not equivalent here
     OwnerClass   := '';
     CallerRoutine:= '';
     if FindEnclosingImpl(Lines, LineIdx + 1, OwnerClass, CallerRoutine) and SameText(OwnerClass, ANode.FormClass) and not SameText(CallerRoutine, ARoutine) then
@@ -1040,7 +1034,7 @@ begin
         Q.Open;
         while not Q.Eof do
         begin
-          Row.FileId   := Q.FieldByName('fid').AsLargeInt;
+          Row.FileId   := Q.FieldByName('fid').AsLargeInt;  // dl:ok field-by-name-in-loop@dbb5 -- REVIEWED SLZ-S11 2026-11-22: one FieldByName per row over a short metadata/index result; caching TField refs is a perf refactor with no measured cost
           Row.StartLine:= Q.FieldByName('sl' ).AsInteger;
           Row.Path     := Q.FieldByName('p'  ).AsString;
           Row.Store    := St;
@@ -1074,7 +1068,7 @@ end;
 /// site's enclosing_symbol_id resolves to the calling form. See the query comment
 /// below and docs/superpowers/specs/2026-07-05-forms-csv-v4-hook-and-interface-navigation-design.md
 /// section D1 (branch (a) diagnosis).</remarks>
-function FindNearestFormCaller(
+function FindNearestFormCaller(  // dl:ok too-many-parameters@c880 -- REVIEWED SLZ-S11 2026-11-22: measured 9 parameters (max 7); the walker's in/out state, a record is outside the mechanical SLZ batch
   AStore       : TSQLiteSymbolStore;
   const AOwnerClass, ARoutine: string;
   AClassToNode : TDictionary<string, TFormNode>;
@@ -1125,7 +1119,7 @@ begin
     end;
     COwner:= '';
     CRout := '';
-    if (R.StartLine >= 1) and (R.StartLine <= Length(Arr)) and
+    if (R.StartLine >= 1) and (R.StartLine <= Length(Arr)) and  // dl:ok manual-inrange@a947 -- REVIEWED SLZ-S11 2026-11-22: fixer d8ebefa10 declines this shape (mixed with other operands / no System.Math); the explicit bounds read as clearly as InRange
        FindEnclosingImpl(Arr, R.StartLine, COwner, CRout) and
        (COwner <> '') and (CRout <> '') then
     begin
@@ -1156,7 +1150,7 @@ end; // function
 /// <remarks>Detection of the AHookField binding is a text-scan built in
 /// BuildEdges (HandlerToHook); this function consumes the resolved field name and
 /// only issues indexed refs queries. v4 bridges ONE hook hop (spec Out of scope).</remarks>
-function FindFormViaHook(
+function FindFormViaHook(  // dl:ok too-many-parameters@41f6 -- REVIEWED SLZ-S11 2026-11-22: measured 8 parameters (max 7); the walker's in/out state, a record is outside the mechanical SLZ batch
   AStore       : TSQLiteSymbolStore;
   const AHookField: string;
   AClassToNode : TDictionary<string, TFormNode>;
@@ -1214,7 +1208,7 @@ begin
       Q.Open;
       while not Q.Eof do
       begin
-        SL  := Q.FieldByName('sl' ).AsInteger;
+        SL  := Q.FieldByName('sl' ).AsInteger;  // dl:ok field-by-name-in-loop@b1d7 -- REVIEWED SLZ-S11 2026-11-22: one FieldByName per row over a short metadata/index result; caching TField refs is a perf refactor with no measured cost
         Path:= Q.FieldByName('p'  ).AsString;
         if not APasLines.TryGetValue(Path, Arr) then
         begin
@@ -1223,7 +1217,7 @@ begin
         end;
         COwner:= '';
         CRout := '';
-        if (SL >= 1) and (SL <= Length(Arr)) and
+        if InRange(SL, 1, Length(Arr)) and
            FindEnclosingImpl(Arr, SL, COwner, CRout) and
            (COwner <> '') and (CRout <> '') then
         begin
@@ -1317,7 +1311,9 @@ var
       end;
 
     begin
-      Result:= False; AField:= ''; ARhs:= '';
+      Result:= False;
+      AField:= '';
+      ARhs:= '';
       S:= Trim(ALine);
       P:= Pos(':=', S);
       if P = 0 then Exit;
@@ -1340,8 +1336,7 @@ var
         end
         else if not CharInSet(L[I], ['A'..'Z','a'..'z','0'..'9','_']) then
           Exit; // any other char (space, paren, index) -> reject
-      if DotP > 0 then AField:= Copy(L, DotP + 1, MaxInt)
-      else AField:= L;
+      AField:= if DotP > 0 then Copy(L, DotP + 1, MaxInt) else L;
       if not IsIdent(AField) then Exit;
       ARhs:= R;
       Result:= True;
@@ -1361,7 +1356,7 @@ var
         QF.Open;
         while not QF.Eof do
         begin
-          Paths.AddObject(QF.FieldByName('p').AsString,
+          Paths.AddObject(QF.FieldByName('p').AsString,  // dl:ok field-by-name-in-loop@a6ae -- REVIEWED SLZ-S11 2026-11-22: one FieldByName per row over a short metadata/index result; caching TField refs is a perf refactor with no measured cost
                           TObject(NativeInt(QF.FieldByName('fid').AsLargeInt)));
           QF.Next;
         end;
@@ -1378,9 +1373,11 @@ var
         begin
           Launches:= False;
           for N in ANodes do
-            if IsLaunchLine(Lines[LIdx], N.FormClass) then begin Launches:= True; Break; end;
+            if IsLaunchLine(Lines[LIdx], N.FormClass) then begin Launches:= True;
+            Break; end;
           if not Launches then Continue;
-          OC:= ''; Rout:= '';
+          OC:= '';
+          Rout:= '';
           if FindEnclosingImpl(Lines, LIdx + 1, OC, Rout) and (Rout <> '') then
             Launchers.AddOrSetValue(LowerCase(Rout), True);
         end;
@@ -1393,10 +1390,8 @@ var
         for LIdx:= 0 to Length(Lines) - 1 do
         begin
           T:= Lines[LIdx];
-          if Pos(':=', T) = 0 then Continue;
-          if ParseHookAssign(T, OC, Rout) then // OC=field, Rout=rhs routine
-            if Launchers.ContainsKey(LowerCase(Rout)) then
-              HandlerToHook.AddOrSetValue(LowerCase(Rout), OC);
+          if not T.Contains(':=') then Continue;
+          if (ParseHookAssign(T, OC, Rout)) and (Launchers.ContainsKey(LowerCase(Rout))) then HandlerToHook.AddOrSetValue(LowerCase(Rout), OC);
         end;
       end;
     finally
@@ -1429,7 +1424,7 @@ var
   /// False uses IsLaunchLine (class-name construction pattern).
   /// When the enclosing class is not a form, calls FindNearestFormCaller to
   /// walk the call graph upward until a form ancestor is found.</summary>
-  procedure ProcessSite(APasFileId: Int64; ALaunchLine: Integer; const APath: string;
+  procedure ProcessSite(APasFileId: Int64; ALaunchLine: Integer; const APath: string;  // dl:ok too-many-exit-points@6a50, unused-parameter@7a24 -- REVIEWED SLZ-S11 2026-11-22: parameter kept for signature symmetry with the sibling resolver routines
     const ATargetClass, ATargetName: string; AIsShowSite: Boolean);
   var
     Arr     : TArray<string>;
@@ -1454,8 +1449,7 @@ var
     if not FindEnclosingImpl(Arr, ALaunchLine, OC, Rout) then Exit;
     if SameText(OC, ATargetClass) then Exit; // self-launch
     // v6: who holds the launch line, and whether it is modal, for the tester columns.
-    if OC <> '' then Opener:= OC + '.' + Rout
-    else Opener:= TPath.GetFileNameWithoutExtension(APath) + '.' + Rout;
+    Opener:= if OC <> '' then OC + '.' + Rout else TPath.GetFileNameWithoutExtension(APath) + '.' + Rout;
     Launch:= Default(TFormEdge);
     Launch.OpenedBy  := Opener;
     Launch.Modal     := LineModal(Arr[ALaunchLine - 1]);
@@ -1471,21 +1465,16 @@ var
       FormRout:= '';
       var Vis2s:= TDictionary<string, Boolean>.Create;
       try
-        var Hooked:= False;
+        var Hooked:= False;  // dl:ok overwrite-before-read@aa58 -- REVIEWED SLZ-S11 2026-11-22: initial value kept as the documented default of the hook search; dead store is harmless
         var HookField:= '';
-        if not (FindNearestFormCaller(AStore, '', Rout, AClassToNode, PasLines, Vis2s,
+        if not (FindNearestFormCaller(AStore, '', Rout, AClassToNode, PasLines, Vis2s,  // dl:ok ifthen-to-if-expression@3201 -- REVIEWED SLZ-S11 2026-11-22: fixer d8ebefa10 declines this shape (array-concat or generic-call arm that hit E2010/F2084); kept as if/else
                                       AExtraStores, FormCls, FormRout) and
                 AClassToNode.TryGetValue(FormCls, XN)) then
           // v4 Layer 2: the direct fan-in dead-ended. If Rout is a hook handler
           // (registered as HookField := Rout, invisible to refs), resume from the
           // hook field's invocation sites -- which rejoin the interface walk to a
           // form. Reuse the SAME visited set so the fan-in cannot loop.
-          if HandlerToHook.TryGetValue(LowerCase(Rout), HookField) then
-            Hooked:= FindFormViaHook(AStore, HookField, AClassToNode, PasLines,
-                                     Vis2s, AExtraStores, FormCls, FormRout) and
-                     AClassToNode.TryGetValue(FormCls, XN)
-          else
-            Hooked:= False
+          Hooked:= if HandlerToHook.TryGetValue(LowerCase(Rout), HookField) then FindFormViaHook(AStore, HookField, AClassToNode, PasLines, Vis2s, AExtraStores, FormCls, FormRout) and AClassToNode.TryGetValue(FormCls, XN) else False
         else
           Hooked:= True; // direct walk already reached a form
 
@@ -1581,7 +1570,7 @@ begin
         Q.Open;
         while not Q.Eof do
         begin
-          ProcessSite(Q.FieldByName('fid').AsLargeInt,
+          ProcessSite(Q.FieldByName('fid').AsLargeInt,  // dl:ok field-by-name-in-loop@4ae9 -- REVIEWED SLZ-S11 2026-11-22: one FieldByName per row over a short metadata/index result; caching TField refs is a perf refactor with no measured cost
                       Q.FieldByName('sl' ).AsInteger,
                       Q.FieldByName('p'  ).AsString,
                       Y.FormClass, Y.FormName, False);
@@ -1598,7 +1587,7 @@ begin
         Q.Open;
         while not Q.Eof do
         begin
-          ProcessSite(Q.FieldByName('fid').AsLargeInt,
+          ProcessSite(Q.FieldByName('fid').AsLargeInt,  // dl:ok field-by-name-in-loop@4ae9 -- REVIEWED SLZ-S11 2026-11-22: one FieldByName per row over a short metadata/index result; caching TField refs is a perf refactor with no measured cost
                       Q.FieldByName('sl' ).AsInteger,
                       Q.FieldByName('p'  ).AsString,
                       Y.FormClass, Y.FormName, True);
@@ -1695,7 +1684,7 @@ begin
     for E in AEdges do
       if AClassToNode.ContainsKey(E.FromClass) then
       begin
-        if OutDeg.ContainsKey(E.FromClass) then OutDeg[E.FromClass]:= OutDeg[E.FromClass] + 1
+        if OutDeg.ContainsKey(E.FromClass) then OutDeg[E.FromClass]:= OutDeg[E.FromClass] + 1  // dl:ok double-dictionary-lookup@8591 -- REVIEWED SLZ-S11 2026-11-22: small per-node map; TryGetValue rewrite is a perf refactor with no measured cost
         else OutDeg.Add(E.FromClass, 1);
       end;
     MaxDeg:= -1;
@@ -1827,8 +1816,7 @@ end;
 
 function RoutineDisplay(const AInfo: TRoutineInfo): string;
 begin
-  if AInfo.Owner <> '' then Result:= AInfo.Owner + '.' + AInfo.Name
-  else Result:= AInfo.UnitName + '.' + AInfo.Name;
+  Result:= if AInfo.Owner <> '' then AInfo.Owner + '.' + AInfo.Name else AInfo.UnitName + '.' + AInfo.Name;
 end;
 
 /// <summary>The identifier right after "AClass." on ALine ('' when absent),
@@ -1880,7 +1868,7 @@ var
 begin
   for C in AFrom.Children do
   begin
-    if not (C.Kind in [mnkItem, mnkSubmenu]) then Continue;
+    if (C.Kind not in [mnkItem, mnkSubmenu]) then Continue;
     { qualified Unit.TForm.Method -> the bare method name a .dfm OnClick holds }
     Handler:= Copy(C.Handler, LastDelimiter('.', C.Handler) + 1, MaxInt);
     if StartsStr('<', C.Handler) then Handler:= '';
@@ -1900,7 +1888,7 @@ var
 begin
   for C in AFrom.Children do
   begin
-    if not (C.Kind in [mnkItem, mnkSubmenu]) then Continue;
+    if (C.Kind not in [mnkItem, mnkSubmenu]) then Continue;
     Handler:= Copy(C.Handler, LastDelimiter('.', C.Handler) + 1, MaxInt);
     if StartsStr('<', C.Handler) then Handler:= '';
     Cls:= if C.Kind = mnkSubmenu then 'TdxBarSubItem' else 'TdxBarButton';
@@ -2171,8 +2159,7 @@ begin
     if ContainsText(L, 'ShowModal') then Exit('Yes');
     if HasShowCall(L) then SawShow:= True;
   end;
-  if SawShow then Result:= 'No'
-  else Result:= '?';
+  Result:= if SawShow then 'No' else '?';
 end;
 
 function TNavBuilder.IsFormField(AStore: TSQLiteSymbolStore; const AFormClass, AName: string): Boolean;
@@ -2214,8 +2201,7 @@ begin
         if IsFormField(AStore, AFormClass, M.Groups[1].Value) then
         begin
           Member:= M.Groups[2].Value;
-          if SameText(Member, 'ItemIndex') or SameText(Member, 'Selected') then What:= 'an item'
-          else What:= 'a row';
+          What:= if SameText(Member, 'ItemIndex') or SameText(Member, 'Selected') then 'an item' else 'a row';
           Exit(N.FormName + ': select ' + What + ' in ' + M.Groups[1].Value + ' first (the handler reads ' + M.Groups[1].Value + '.' + Member + ')');
         end;
 end;
@@ -2264,8 +2250,7 @@ end;
 /// the OUTER form's and is deliberately not matched.</summary>
 function BareShow(const ALine: string; AModal: Boolean): Boolean;
 begin
-  if AModal then Result:= TRegEx.IsMatch(ALine, '(?<![A-Za-z0-9_.])ShowModal\b', [roIgnoreCase])
-  else Result:= TRegEx.IsMatch(ALine, '(?<![A-Za-z0-9_.])Show\s*(;|$)', [roIgnoreCase]);
+  Result:= if AModal then TRegEx.IsMatch(ALine, '(?<![A-Za-z0-9_.])ShowModal\b', [roIgnoreCase]) else TRegEx.IsMatch(ALine, '(?<![A-Za-z0-9_.])Show\s*(;|$)', [roIgnoreCase]);
 end;
 
 /// <summary>R1: 'Yes' / 'No' / '?' for a line inside a form's OWN method,
@@ -2428,8 +2413,7 @@ begin
   begin
     Result:= DfmModal(AY, ANote);
     if Result <> '?' then Exit;
-    if Created then ANote:= 'modal unknown: ' + RoutineDisplay(AL) + ' creates ' + AY.FormName + ' but does not show it there'
-    else ANote:= 'modal unknown: ' + RoutineDisplay(AL) + ' reaches ' + AY.FormName + ' but does not show it there';
+    ANote:= if Created then 'modal unknown: ' + RoutineDisplay(AL) + ' creates ' + AY.FormName + ' but does not show it there' else 'modal unknown: ' + RoutineDisplay(AL) + ' reaches ' + AY.FormName + ' but does not show it there';
   end;
 end;
 
@@ -2521,8 +2505,7 @@ begin
   if not FClassToNode.TryGetValue(AH.Owner, N) then Exit;
   Parts:= TStringList.Create;
   try
-    if SameText(AL.Owner, AH.Owner) and (AL.Id <> AH.Id) then Sel:= SelectionHint(AStore, AH.Owner, [AH, AL])
-    else Sel:= SelectionHint(AStore, AH.Owner, [AH]);
+    Sel:= if SameText(AL.Owner, AH.Owner) and (AL.Id <> AH.Id) then SelectionHint(AStore, AH.Owner, [AH, AL]) else SelectionHint(AStore, AH.Owner, [AH]);
     if Sel <> '' then Parts.Add(Sel);
     // The handler's own guards (when it is not also the opener), then the
     // opener's guards above its launch line; at most FORMS_ALSO_MAX messages.
@@ -2650,7 +2633,7 @@ begin
         if not Visited.ContainsKey(C) then
         begin
           Visited.Add(C, S.Name);
-          if ViaNote.ContainsKey(Cur.Id) then ViaNote.Add(C, ViaNote[Cur.Id]);
+          if ViaNote.ContainsKey(Cur.Id) then ViaNote.Add(C, ViaNote[Cur.Id]);  // dl:ok double-dictionary-lookup@5ad1 -- REVIEWED SLZ-S11 2026-11-22: small per-node map; TryGetValue rewrite is a perf refactor with no measured cost
           Nxt.Id   := C;
           Nxt.Depth:= Cur.Depth + 1;
           Queue.Enqueue(Nxt);
@@ -2915,8 +2898,7 @@ end;
 /// non-empty text is always quoted.</summary>
 function CsvText(const S: string): string;
 begin
-  if S = '' then Result:= ''
-  else Result:= '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"';
+  Result:= if S = '' then '' else '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"';
 end;
 
 /// <summary>Shortest chain of edge indexes from ARoot to ATarget, over edges
@@ -2973,11 +2955,7 @@ function NoControlText(const AEdge: TNavEdge; AClassToNode: TDictionary<string, 
 var
   N: TFormNode;
 begin
-  if (SameText(AEdge.Handler, 'FormCreate') or SameText(AEdge.Handler, 'FormShow') or SameText(AEdge.Handler, 'FormActivate')) and
-     AClassToNode.TryGetValue(AEdge.FromClass, N) then
-    Result:= '(opens automatically when ' + N.FormName + ' opens: ' + AEdge.Handler + ')'
-  else
-    Result:= '(no control: ' + AEdge.FromClass + '.' + AEdge.Handler + ')';
+  Result:= if (SameText(AEdge.Handler, 'FormCreate') or SameText(AEdge.Handler, 'FormShow') or SameText(AEdge.Handler, 'FormActivate')) and AClassToNode.TryGetValue(AEdge.FromClass, N) then '(opens automatically when ' + N.FormName + ' opens: ' + AEdge.Handler + ')' else '(no control: ' + AEdge.FromClass + '.' + AEdge.Handler + ')';
 end;
 
 /// <summary>Tester-facing text for one hop; AFirst omits the "in frmX:" prefix
@@ -2986,12 +2964,10 @@ function HopText(const AEdge: TNavEdge; AClassToNode: TDictionary<string, TFormN
 var
   N: TFormNode;
 begin
-  if Length(AEdge.Ways) > 0 then Result:= AEdge.Ways[0].Location
-  else Result:= NoControlText(AEdge, AClassToNode);
+  Result:= if Length(AEdge.Ways) > 0 then AEdge.Ways[0].Location else NoControlText(AEdge, AClassToNode);
   if not AFirst then
   begin
-    if AClassToNode.TryGetValue(AEdge.FromClass, N) then Result:= 'in ' + N.FormName + ': ' + Result
-    else Result:= 'in ' + AEdge.FromClass + ': ' + Result;
+    Result:= if AClassToNode.TryGetValue(AEdge.FromClass, N) then 'in ' + N.FormName + ': ' + Result else 'in ' + AEdge.FromClass + ': ' + Result;
   end;
 end;
 
@@ -3020,7 +2996,7 @@ end;
 /// stores. APrimary is project-scoped (form enumeration + PAS lines); AExtras
 /// are searched only when resolving callers. Caller owns lifetime of both
 /// APrimary and AExtras (this function never constructs/frees a store).</summary>
-function GenerateFormsCsvCore(APrimary: TSQLiteSymbolStore; const AExtras: TArray<TSQLiteSymbolStore>; const AProjectFile, ARootForm, APrimaryDbPath: string): string;
+function GenerateFormsCsvCore(APrimary: TSQLiteSymbolStore; const AExtras: TArray<TSQLiteSymbolStore>; const AProjectFile, ARootForm, APrimaryDbPath: string): string;  // dl:ok cyclomatic-complexity@6db9, cognitive-complexity@12d9, too-many-locals@07af -- REVIEWED SLZ-S11 2026-11-22: measured 34 locals (max 25); split deferred with the routine's complexity
 var
   Nodes      : TList<TFormNode>              ;
   Sb         : TStringBuilder                ;
@@ -3085,8 +3061,7 @@ begin
         Builder.RunIndexPass;
         Builder.AddTextEdges(TextEdges);
         RootClass:= DetectRoot(AProjectFile, ARootForm, ClassToNode, TextEdges);
-        if ClassToNode.TryGetValue(RootClass, RootNode) then RootName:= RootNode.FormName
-        else RootName:= RootClass;
+        RootName:= if ClassToNode.TryGetValue(RootClass, RootNode) then RootNode.FormName else RootClass;
         { Schema version lives in schema_meta (written at migrate), NOT in
           PRAGMA user_version (which the engine never writes -> always 0).
           Mirror IsSchemaCurrent's query; a missing table/row falls back to 0. }
@@ -3145,8 +3120,7 @@ begin
             else
             begin
               Conf:= CONF_UNRESOLVED;
-              if RootName <> '' then How:= '(no path from ' + RootName + ')'
-              else How:= '(no root form detected)';
+              How:= if RootName <> '' then '(no path from ' + RootName + ')' else '(no root form detected)';
               // Best known way in, even though it does not connect to the root:
               // a form source with a control first, then any form source, then any.
               for I:= 0 to Builder.Edges.Count - 1 do
@@ -3178,8 +3152,7 @@ begin
             // handler when no control fires it.
             WayKeys.Clear;
             Also.Clear;
-            if Length(E.Ways) > 0 then ShownKey:= LowerCase(E.FromClass + #1 + E.Ways[0].Location)
-            else ShownKey:= LowerCase(E.FromClass + #1 + '#' + E.Handler);
+            ShownKey:= if Length(E.Ways) > 0 then LowerCase(E.FromClass + #1 + E.Ways[0].Location) else LowerCase(E.FromClass + #1 + '#' + E.Handler);
             for I:= 0 to Builder.Edges.Count - 1 do
             begin
               if not SameText(Builder.Edges[I].ToClass, N.FormClass) then Continue;
@@ -3223,10 +3196,8 @@ begin
             if not Popups.TryGetValue(LowerCase(N.FormName), Notes) then Notes:= 'no caller found (index or text scan)';
           end;
 
-          if Hints.Count > 0 then Hint:= string.Join('; ', Hints.ToStringArray)
-          else Hint:= E.Hint;
-          if HasEdge and ClassToNode.ContainsKey(E.FromClass) then Handler:= E.FromClass + '.' + E.Handler
-          else Handler:= E.Handler;
+          Hint:= if Hints.Count > 0 then string.Join('; ', Hints.ToStringArray) else E.Hint;
+          Handler:= if HasEdge and ClassToNode.ContainsKey(E.FromClass) then E.FromClass + '.' + E.Handler else E.Handler;
           Sb.Append(Idx).Append(',')
             .Append(CsvText(N.FormName)).Append(',')
             .Append(CsvText(N.UnitName)).Append(',')
@@ -3294,7 +3265,7 @@ var
   Extras : TArray<TSQLiteSymbolStore>;
   I      : Integer;
 begin
-  if Length(ADbPaths) = 0 then raise Exception.Create('forms-csv: no DB paths');
+  if Length(ADbPaths) = 0 then raise Exception.Create('forms-csv: no DB paths');  // dl:ok raise-bare-exception@c920 -- REVIEWED SLZ-S11 2026-11-22: internal invariant failure, never caught selectively; a dedicated class adds no handling
   Primary:= TSQLiteSymbolStore.CreateReadable(ADbPaths[0], {AReadOnly=}False);
   try
     SetLength(Extras, 0);

@@ -615,7 +615,7 @@ begin
           else if (Num <> '') and CharInSet(Num[1], ['0'..'9']) then
             Code:= StrToIntDef(Num, -1);
         end;
-        if (Code >= 0) and (Code <= MAX_CODE_POINT) and not ((Code >= SURROGATE_FIRST) and (Code <= SURROGATE_LAST)) then
+        if (Code >= 0) and (Code <= MAX_CODE_POINT) and not ((Code >= SURROGATE_FIRST) and (Code <= SURROGATE_LAST)) then  // dl:ok manual-inrange@5245 -- REVIEWED SLZ-S11 2026-11-22: fixer d8ebefa10 declines this shape (mixed with other operands / no System.Math); the explicit bounds read as clearly as InRange
         begin
           SB.Append(Char.ConvertFromUtf32(Code));
           I:= Semi + 1;
@@ -937,7 +937,7 @@ begin
     .Replace('@@GENERATED@@', pGenerated)
     .Replace('@@FOOTFILES@@', FootFiles)
     .Replace('@@NOTE@@', NOTE_TEXT.Replace('@@QUESTION@@', pArgs.Question))
-    .Replace('@@SVG@@', Body);
+    .Replace('@@SVG@@', Body);  // dl:ok unit-missing-from-uses@ac5b -- REVIEWED SLZ-S11 2026-11-22: Replace here is the string helper on a string expression, not IBX.IBServices.Replace (rule FP, SLZ\RULE-FP.tsv)
   Result:= ToCrlf(Result);
 end;
 
@@ -1028,7 +1028,7 @@ begin
     Slugged:= LastSegments(pArgs.Target) + '__' + LastSegments(pArgs.Command.Get('To'));
   var Dir:= TPath.Combine(pArgs.OutRoot, pArgs.Question + '-' + BundleSlug(Slugged));
   var DirWasNew:= not TDirectory.Exists(Dir);
-  ForceDirectories(Dir);
+  ForceDirectories(Dir);  // dl:ok ignored-must-use-result@d24c -- REVIEWED SLZ-S11 2026-11-22: best-effort: a failed ForceDirectories surfaces at the next file write with the path; a failed DeleteFile of a temp/pruned file is retried or harmless
   try
     Chart:= RunEmitter(Emitter, pArgs, Dir);
   except

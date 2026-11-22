@@ -400,7 +400,7 @@ function TraceAnchorText(const pPath: string; pLine: Integer): string;
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.PropertyReadField (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Calc.CalcFieldByNameRow (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Calc.CalcSourceRow (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Calc.NewCalcInfo (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Calc.ResolveCalcField (DRagLint.Charts.Trace.Calc.pas)</para>
 /// <para>Calls: DRagLint.Charts.Trace.Shim.LeafOf, DRagLint.Charts.Trace.Shim.TraceAnchorText, IntToStr, SameText</para>
-/// <para>Returns: ':' + IntToStr(pRefLine); TraceAnchorText(pRefFile, pRefLine)</para>
+/// <para>Returns: if SameText(LeafOf(pAnchorFile), LeafOf(pRefFile)) then ':' + IntToStr(pRefLine)</para>
 /// <seealso cref="DRagLint.Charts.Trace.Shim.LeafOf"/>
 /// <seealso cref="DRagLint.Charts.Trace.Shim.TraceAnchorText"/>
 /// <!-- drag-lint:auto END -->
@@ -416,7 +416,7 @@ function TraceNoteLocator(const pAnchorFile, pRefFile: string; pRefLine: Integer
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.FollowDirectChain (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.Classify (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.ClassifyCalls (DRagLint.Charts.Trace.Walk.pas)</para>
 /// <para>Calls: Copy, DRagLint.Charts.Source.PsTrim</para>
-/// <para>Returns: Copy(T, 1, pMax - Length(ELLIPSIS)) + ELLIPSIS; T</para>
+/// <para>Returns: if Length(T) &gt; pMax then Copy(T, 1, pMax - Length(ELLIPSIS)) + ELLIPSIS</para>
 /// <seealso cref="DRagLint.Charts.Source.PsTrim"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -524,10 +524,7 @@ end;
 { a group value; PCRE reports fewer groups when the trailing optional ones did not take part }
 function Grp(const pMatch: TMatch; pIndex: Integer): string;
 begin
-  if pIndex < pMatch.Groups.Count then
-    Result:= pMatch.Groups[pIndex].Value
-  else
-    Result:= '';
+  Result:= if pIndex < pMatch.Groups.Count then pMatch.Groups[pIndex].Value else '';
 end;
 
 { String.IndexOf(pSub, pStart0): 0-based, -1 when absent }
@@ -694,7 +691,7 @@ begin
   end;
 end;
 
-function NewShimResult(const pX: TShimContext; const pForm, pKeyword, pCondition: string;  // dl:ok too-many-parameters@182e -- REVIEWED 2026-10-17: mirrors New-ShimResult's ten values; every caller names each position, and a grouping record would only rename the same values at ten call sites
+function NewShimResult(const pX: TShimContext; const pForm, pKeyword, pCondition: string;  // dl:ok too-many-parameters@15af -- REVIEWED 2026-10-17: mirrors New-ShimResult's ten values; every caller names each position, and a grouping record would only rename the same values at ten call sites
   pIfLine, pBlockStart, pBlockEnd: Integer; const pReason: string; pStmtLine, pStmtCol: Integer): TShimResult;
 begin
   if pForm <> FORM_UNKNOWN then
@@ -1021,7 +1018,7 @@ function ResolveShimEnclosing(const pX: TShimContext; pP: Integer): TShimResult;
 
 { The statement holding the Exit starts at token pP (TokCount: the Exit itself); pBlkStart..pBlkEnd is that
   statement's first and last line. }
-function ResolveShimStatement(const pX: TShimContext; pP, pBlkStart, pBlkEnd: Integer): TShimResult;  // dl:ok too-many-exit-points@2cfd -- REVIEWED 2026-10-17: one Exit per source shape (then, else, do, case arm), each returning its own named result as the PS returns do; a single exit would only add a Result variable and else-chains
+function ResolveShimStatement(const pX: TShimContext; pP, pBlkStart, pBlkEnd: Integer): TShimResult;  // dl:ok too-many-exit-points@c211 -- REVIEWED 2026-10-17: one Exit per source shape (then, else, do, case arm), each returning its own named result as the PS returns do; a single exit would only add a Result variable and else-chains
 begin
   if pP <= 0 then
     Exit(NewShimUnknown(pX, 'is not inside a branch'));
@@ -1059,7 +1056,7 @@ end;
 
 { The Exit (or the statement at token pP) is one statement of a block: find the block's opener and read IT as the
   statement that holds the Exit. }
-function ResolveShimEnclosing(const pX: TShimContext; pP: Integer): TShimResult;  // dl:ok too-many-exit-points@6c4b -- REVIEWED 2026-10-17: one Exit per opener kind (begin, try, case, other) and per no-branch case, each a distinct named result as in the PS; collapsing them hides which shape was refused
+function ResolveShimEnclosing(const pX: TShimContext; pP: Integer): TShimResult;  // dl:ok too-many-exit-points@5698 -- REVIEWED 2026-10-17: one Exit per opener kind (begin, try, case, other) and per no-branch case, each a distinct named result as in the PS; collapsing them hides which shape was refused
 begin
   var Depth:= 0;
   for var Q:= pP - 1 downto 0 do
@@ -1401,20 +1398,14 @@ end;
 
 function TraceNoteLocator(const pAnchorFile, pRefFile: string; pRefLine: Integer): string;
 begin
-  if SameText(LeafOf(pAnchorFile), LeafOf(pRefFile)) then
-    Result:= ':' + IntToStr(pRefLine)
-  else
-    Result:= TraceAnchorText(pRefFile, pRefLine);
+  Result:= if SameText(LeafOf(pAnchorFile), LeafOf(pRefFile)) then ':' + IntToStr(pRefLine) else TraceAnchorText(pRefFile, pRefLine);
 end;
 
 function TraceWord(const pS: string; pMax: Integer = TRACE_WORD_MAX): string;
 begin
   var T:= PsTrim(TRegEx.Replace(pS, '\s+', ' '));
   T:= T.Replace(' -- ', ' - ').Replace(' @', ' at ').Replace(' [', ' (').Replace('"', '''').Replace('; ', ', ');
-  if Length(T) > pMax then
-    Result:= Copy(T, 1, pMax - Length(ELLIPSIS)) + ELLIPSIS
-  else
-    Result:= T;
+  Result:= if Length(T) > pMax then Copy(T, 1, pMax - Length(ELLIPSIS)) + ELLIPSIS else T;
 end;
 
 function TraceNoteText(const pS: string): string;

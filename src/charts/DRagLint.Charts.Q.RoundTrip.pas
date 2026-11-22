@@ -96,7 +96,6 @@ const
   MODE_WRITE = 'write';
   MODE_READ = 'read';
   DIR_WRITE = 'write';
-  DIR_READ = 'read';
   NO_ANCHOR = 'index:0';
   UNKNOWN_ANCHOR = 'unknown:0';
   CLIENT_PREFIX_RX = '^CLIENT-';
@@ -105,7 +104,6 @@ const
   ANCHOR_LEAF_RX = ' @([A-Za-z0-9_$.\-]+\.(?:pas|dfm|dpr|inc|sql)):[1-9]\d*';
   { PS :360: the field a DERIVED row's REGENERATE traces -- its --target, double-quoted (a qualified name holds no ") }
   TARGET_RX = '--target "([^"]*)"';
-  SQL_FILES_COUNT = 'SELECT COUNT(*) AS n FROM files';
   SQL_ANCHOR_PATHS = 'SELECT DISTINCT path AS p FROM files WHERE %s';
   TITLE_REACHES = 'How %s reaches %s and goes back';
   TITLE_CANNOT = 'Why %s cannot be traced';
@@ -283,7 +281,7 @@ end;
 { PS :72-79: this run's own names and the names the bundler gives them in a bundle folder }
 procedure TRoundTripRun.RemoveOutputs;
 begin
-  ForceDirectories(FOutDir);
+  ForceDirectories(FOutDir);  // dl:ok ignored-must-use-result@acc4 -- REVIEWED SLZ-S11 2026-11-22: best-effort: a failed ForceDirectories surfaces at the next file write with the path; a failed DeleteFile of a temp/pruned file is retried or harmless
   var Names: TArray<string>:= [FBase + TRACE_EXT, TRACE_BUNDLE_NAME];
   for var X in CHART_EXTS do
     Names:= Names + [FBase + '.' + X, GRAPH_PREFIX + X];
@@ -345,7 +343,7 @@ begin
   var StopAnchor:= if (FAnchor.StopAnchor <> '') and not SameText(FAnchor.StopAnchor, UNKNOWN_ANCHOR) then FAnchor.StopAnchor
     else if FAnchor.Items.Count > 0 then FAnchor.Items.Last.Anchor else NO_ANCHOR;
   for var I in FAnchor.Items do
-    FSecA.Items.Add(I);
+    FSecA.Items.Add(I);  // dl:ok missing-begin-update@0d71 -- REVIEWED SLZ-S11 2026-11-22: Items is an in-memory TTraceSection/TAnchorResult model list, not a visual control; no repaint to suppress (rule FP, SLZ\RULE-FP.tsv)
   Disown(FAnchor.Items);
   if HasCalc then
     FSecA.Items.Add(Calc.Stop)
@@ -357,7 +355,7 @@ begin
     FSecDv:= AddTraceSection(FTrace, SEC_DERIVED);
     FSecDv.Note:= TraceNoteText(Calc.Note);
     for var R in Calc.Rows do
-      FSecDv.Items.Add(R);
+      FSecDv.Items.Add(R);  // dl:ok missing-begin-update@83ab -- REVIEWED SLZ-S11 2026-11-22: Items is an in-memory TTraceSection/TAnchorResult model list, not a visual control; no repaint to suppress (rule FP, SLZ\RULE-FP.tsv)
     Disown(Calc.Rows);
     Calc.Rows.Free;
   end;
@@ -433,7 +431,7 @@ end;
 procedure TRoundTripRun.PlaceServerItems(pSrv: TServerHandling; pSec: TTraceSection);
 begin
   for var I in pSrv.Items do
-    pSec.Items.Add(I);
+    pSec.Items.Add(I);  // dl:ok missing-begin-update@d95a -- REVIEWED SLZ-S11 2026-11-22: Items is an in-memory TTraceSection/TAnchorResult model list, not a visual control; no repaint to suppress (rule FP, SLZ\RULE-FP.tsv)
   Disown(pSrv.Items);
 end;
 
@@ -484,7 +482,7 @@ begin
     if Xi < 0 then
     begin
       for var I in Client do
-        FSecW.Items.Add(I);
+        FSecW.Items.Add(I);  // dl:ok missing-begin-update@a927 -- REVIEWED SLZ-S11 2026-11-22: Items is an in-memory TTraceSection/TAnchorResult model list, not a visual control; no repaint to suppress (rule FP, SLZ\RULE-FP.tsv)
       var LastAnchor:= Client.Last.Anchor;
       Disown(Client);
       FWStop:= NewTraceStep(KIND_STOPS, Format('%s never reaches a transport call carrying a protocol constant within %d call levels',
@@ -514,7 +512,7 @@ procedure TRoundTripRun.WriteThroughCrossing(pClient: TObjectList<TTraceItem>; p
 begin
   var Xing:= pClient[pXi];
   for var K:= 0 to pXi do
-    FSecW.Items.Add(pClient[K]);
+    FSecW.Items.Add(pClient[K]);  // dl:ok missing-begin-update@2f2e -- REVIEWED SLZ-S11 2026-11-22: Items is an in-memory TTraceSection/TAnchorResult model list, not a visual control; no repaint to suppress (rule FP, SLZ\RULE-FP.tsv)
   Disown(pClient, pXi + 1);
   var Srv:= FWalker.ServerHandling(Xing.Command, FCtx, FDepth);
   try
@@ -527,7 +525,7 @@ begin
       var Db:= FWalker.DatabaseSteps(FSecS.Items.ToArray, FCtx, MODE_WRITE);
       try
         for var I in Db.Items do
-          FSecD.Items.Add(I);
+          FSecD.Items.Add(I);  // dl:ok missing-begin-update@1b6d -- REVIEWED SLZ-S11 2026-11-22: Items is an in-memory TTraceSection/TAnchorResult model list, not a visual control; no repaint to suppress (rule FP, SLZ\RULE-FP.tsv)
         Disown(Db.Items);
       finally
         Db.Free;
@@ -543,7 +541,7 @@ begin
     Srv.Free;
   end;
   for var I in pClient do
-    FSecR.Items.Add(I);
+    FSecR.Items.Add(I);  // dl:ok missing-begin-update@9664 -- REVIEWED SLZ-S11 2026-11-22: Items is an in-memory TTraceSection/TAnchorResult model list, not a visual control; no repaint to suppress (rule FP, SLZ\RULE-FP.tsv)
   Disown(pClient);
 end;
 
@@ -590,7 +588,7 @@ begin
       end;
     var Xr:= Ri[Xi];
     for var K:= 0 to Xi do
-      FSecRd.Items.Add(Ri[K]);
+      FSecRd.Items.Add(Ri[K]);  // dl:ok missing-begin-update@7d09 -- REVIEWED SLZ-S11 2026-11-22: Items is an in-memory TTraceSection/TAnchorResult model list, not a visual control; no repaint to suppress (rule FP, SLZ\RULE-FP.tsv)
     Disown(Ri, Xi + 1);
     { the far side on the SERVER index, then its DATABASE facts, still on the SERVER index (AC-9) }
     var Srv:= FWalker.ServerHandling(Xr.Command, pRoute.Ctx, FDepth);
@@ -612,18 +610,18 @@ begin
         for var I in Srv.Items do
         begin
           I.Actor:= ACTOR_SERVER;
-          FSecRd.Items.Add(I);
+          FSecRd.Items.Add(I);  // dl:ok missing-begin-update@3ab1 -- REVIEWED SLZ-S11 2026-11-22: Items is an in-memory TTraceSection/TAnchorResult model list, not a visual control; no repaint to suppress (rule FP, SLZ\RULE-FP.tsv)
           if (not DbPlaced) and (Db <> nil) and (Db.After <> nil) and (I = Db.After) then
           begin
             for var D in Db.Items do
-              FSecRd.Items.Add(D);
+              FSecRd.Items.Add(D);  // dl:ok missing-begin-update@c799 -- REVIEWED SLZ-S11 2026-11-22: Items is an in-memory TTraceSection/TAnchorResult model list, not a visual control; no repaint to suppress (rule FP, SLZ\RULE-FP.tsv)
             DbPlaced:= True;
           end;
         end;
         Disown(Srv.Items);
         if (not DbPlaced) and (Db <> nil) then
           for var D in Db.Items do
-            FSecRd.Items.Add(D);
+            FSecRd.Items.Add(D);  // dl:ok missing-begin-update@c799 -- REVIEWED SLZ-S11 2026-11-22: Items is an in-memory TTraceSection/TAnchorResult model list, not a visual control; no repaint to suppress (rule FP, SLZ\RULE-FP.tsv)
         if Db <> nil then
           Disown(Db.Items);
       finally
@@ -637,7 +635,7 @@ begin
     for var I in Ri do
     begin
       I.Actor:= ACTOR_CLIENT;
-      FSecRd.Items.Add(I);
+      FSecRd.Items.Add(I);  // dl:ok missing-begin-update@3ab1 -- REVIEWED SLZ-S11 2026-11-22: Items is an in-memory TTraceSection/TAnchorResult model list, not a visual control; no repaint to suppress (rule FP, SLZ\RULE-FP.tsv)
     end;
     Disown(Ri);
   finally
@@ -676,7 +674,7 @@ begin
     FAlsoRows.Add(NewTraceStep(KIND_STEP, Format('LOADS %s VIA %s%s', [Ds.Name, pRoutes[K].TargetShort, pRoutes[K].Lits]),
       TraceAnchorText(Ds.FileName, pRoutes[K].Line), '', pRoutes[K].Routine, NOTE_OTHER_ROUTE));
   for var R in FAlsoRows do
-    FSecAl.Items.Add(R);
+    FSecAl.Items.Add(R);  // dl:ok missing-begin-update@357f -- REVIEWED SLZ-S11 2026-11-22: Items is an in-memory TTraceSection/TAnchorResult model list, not a visual control; no repaint to suppress (rule FP, SLZ\RULE-FP.tsv)
   Disown(FAlsoRows);
   { an empty ALSO is not a hop that failed: no STOPS, nothing unresolved; the section says so in a note }
   if FSecAl.Items.Count = 0 then

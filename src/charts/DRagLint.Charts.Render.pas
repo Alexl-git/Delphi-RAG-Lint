@@ -141,6 +141,7 @@ procedure OpenInBrowser(const pPath: string);
 implementation
 
 uses
+  System.Math,
   Winapi.Windows, Winapi.ShellAPI, System.SysUtils, System.Classes, System.IOUtils,
   System.JSON, System.RegularExpressions, System.Generics.Collections,
   System.Generics.Defaults, System.Character, System.StrUtils,
@@ -293,9 +294,8 @@ end;
   zero, out of range, or a lone surrogate (ConvertFromUtf32 raises on one). }
 function RefCodePoint(const pRef: string): Integer;
 begin
-  if CharInSet(pRef[ENT_KIND_AT], ['x', 'X']) then Result:= StrToIntDef(HEX_BASE + Copy(pRef, ENT_HEX_FROM, MaxInt), -1)
-  else Result:= StrToIntDef(Copy(pRef, ENT_KIND_AT, MaxInt), -1);
-  if (Result <= 0) or (Result > MAX_CODE_POINT) or ((Result >= SURROGATE_FIRST) and (Result <= SURROGATE_LAST)) then
+  Result:= if CharInSet(pRef[ENT_KIND_AT], ['x', 'X']) then StrToIntDef(HEX_BASE + Copy(pRef, ENT_HEX_FROM, MaxInt), -1) else StrToIntDef(Copy(pRef, ENT_KIND_AT, MaxInt), -1);
+  if (Result <= 0) or (Result > MAX_CODE_POINT) or InRange(Result, SURROGATE_FIRST, SURROGATE_LAST) then
     Result:= -1;
 end;
 
@@ -854,7 +854,7 @@ end;
   start tag inside <title> or <desc>, an on* attribute, a URL attribute that is not draglint:
   or #, an animation of href or of a handler, a '<!' or '<?' other than a comment, a malformed
   end tag, a </br> or </p>, anything but blanks after the FIRST </svg>, and no </svg> at all. }
-function SvgRefusal(const pSvg: string): string; // dl:ok too-many-exit-points@ac92 -- REVIEWED 2026-10-11: each Exit is one R26 refusal rule returning its own reason, in the order the tokenizer meets it; folding them into a flag would hide which rule fired
+function SvgRefusal(const pSvg: string): string; // dl:ok too-many-exit-points@8bef -- REVIEWED 2026-10-11: each Exit is one R26 refusal rule returning its own reason, in the order the tokenizer meets it; folding them into a flag would hide which rule fired
 begin
   var Len:= Length(pSvg);
   var At:= 1;
@@ -961,7 +961,7 @@ begin
   var Title:= if TitleMatch.Success then DecodeXml(TitleMatch.Groups[1].Value).Replace(NBSP, ' ') else '';
   var SepAt:= Pos(TITLE_SEP, Title);
   if SepAt > 0 then Exit(Trim(Copy(Title, 1, SepAt - 1)));
-  if (Title <> '') and (Pos(' ', Title) = 0) then Exit(Title);
+  if (Title <> '') and (not Title.Contains(' ')) then Exit(Title);
   var First:= TRegEx.Match(pBody, RE_FIRST_TEXT, [roSingleLine]);
   Result:= if First.Success then Trim(DecodeXml(TRegEx.Replace(First.Groups[1].Value, RE_TAG, ''))) else '';
 end;
@@ -1316,7 +1316,7 @@ end;
 
 procedure OpenInBrowser(const pPath: string);
 begin
-  ShellExecute(0, 'open', PChar(pPath), nil, nil, SW_SHOWNORMAL);  // dl:ok taint-command-injection@ea37 -- REVIEWED 2026-11-19 SLZ-MARK: ShellExecute open on the report file this run just wrote; the path comes from the out-dir
+  ShellExecute(0, 'open', PChar(pPath), nil, nil, SW_SHOWNORMAL);
 end;
 
 end.

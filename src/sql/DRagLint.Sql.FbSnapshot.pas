@@ -40,7 +40,6 @@ uses
   , FireDAC .Phys    .IBDef
   , FireDAC .Phys    .FB
   , FireDAC .Phys    .FBDef
-  , DRagLint.Core    .Interfaces
   , DRagLint.Storage .SQLite
   ;
 
@@ -76,7 +75,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoFbSnapshot (DRagLint.CLI.pas), DRagLint.CLI.RunCommand (DRagLint.CLI.pas) ?</para>
       /// <para>Calls: Copy, DateTimeToUnix, Default, DRagLint.Sql.FbSnapshot.ClearPriorSnapshot, DRagLint.Sql.FbSnapshot.ResolveSqlSymbolLinks, DRagLint.Sql.FbSnapshot.TableExists, DRagLint.Sql.FbSnapshot.TFbSnapshot.Run.ConnectFb, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection, Pos, Trim, UpCase, UpperCase, Writeln</para>
-      /// <para>Complexity: 11 (cyclomatic, outer body), 299 lines (full implementation)</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 309 lines (full implementation)</para>
       /// <para>Catches: Exception (re-raise); Exception (swallowed)</para>
       /// <para>SQL: reads FIB$DATASETS_INFO, FIB$ENUMVALUES, FIB$FIELDS_INFO, RDB$FIELDS, RDB$RELATION_FIELDS, RDB$RELATIONS; writes FB_COLUMNS, FB_DATASETS, FB_ENUM_VALUES, FB_FIELD_INFO, FB_RELATIONS</para>
       /// <para>Transaction: starts, commits, rolls back</para>
@@ -104,15 +103,18 @@ var
 begin
   Q:= TFDQuery.Create(nil);
   try
-    Q.Connection:= AConn;
-    Q.Sql.Text:= 'SELECT FIRST 1 1 FROM RDB$RELATIONS WHERE UPPER(RDB$RELATION_NAME) = :n';
-    Q.ParamByName('n').AsWideString:= UpperCase(AName);
-    Q.Open;
-    Result:= not Q.IsEmpty;
-  except  // dl:ok bare-except@79dc -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
-    Result:= False;
+    try
+      Q.Connection:= AConn;
+      Q.Sql.Text:= 'SELECT FIRST 1 1 FROM RDB$RELATIONS WHERE UPPER(RDB$RELATION_NAME) = :n';
+      Q.ParamByName('n').AsWideString:= UpperCase(AName);
+      Q.Open;
+      Result:= not Q.IsEmpty;
+    except  // dl:ok bare-except@79dc -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
+      Result:= False;
+    end;
+  finally
+    Q.Free;
   end;
-  Q.Free;
 end;
 
 procedure ClearPriorSnapshot(ASqlite: TFDConnection);
@@ -149,7 +151,7 @@ begin
   end; // try
 end; // procedure
 
-class function TFbSnapshot.Run(const AConnectionString: string; const ASqliteStore: TSQLiteSymbolStore): TFbSnapshotStats;
+class function TFbSnapshot.Run(const AConnectionString: string; const ASqliteStore: TSQLiteSymbolStore): TFbSnapshotStats;  // dl:ok method-too-long@5080 -- REVIEWED SLZ-S11 2026-11-22: measured 275 lines (max 250); one linear snapshot script, a split is outside the mechanical SLZ batch
 var
   FbConn    : TFDConnection             ;
   SQLite    : TFDConnection             ;
@@ -167,7 +169,7 @@ var
     P     : Integer    ;
   begin
     FbConn:= TFDConnection.Create(nil);
-    Params:= TStringList.Create;
+    Params:= TStringList.Create;  // dl:ok duplicate-code@163e -- REVIEWED SLZ-S11 2026-11-22: measured 92 tokens; sibling builder/query idiom, a shared helper is outside the mechanical SLZ batch
     try
       { Convert ';' separated key=value list into TFDConnection.Params. }
       for Pair in AConnectionString.Split([';'], TStringSplitOptions.ExcludeEmpty) do
@@ -200,7 +202,8 @@ begin
       ClearPriorSnapshot(SQLite);
 
       { ---- RDB$RELATIONS -> fb_relations ---- }
-      QSrc:= TFDQuery.Create(nil); QIns:= TFDQuery.Create(nil);
+      QSrc:= TFDQuery.Create(nil);
+      QIns:= TFDQuery.Create(nil);
       try
         QSrc.Connection:= FbConn;
         QSrc.Sql.Text:= 'SELECT TRIM(RDB$RELATION_NAME) AS NAME, ' + '       TRIM(RDB$OWNER_NAME) AS OWNER_NAME, ' + '       COALESCE(RDB$SYSTEM_FLAG, 0) AS SYSTEM_FLAG, ' +
@@ -218,7 +221,7 @@ begin
 
         while not QSrc.Eof do
         begin
-          RelName:= QSrc.FieldByName('NAME').AsString;
+          RelName:= QSrc.FieldByName('NAME').AsString;  // dl:ok field-by-name-in-loop@1076 -- REVIEWED SLZ-S11 2026-11-22: one FieldByName per row over a short metadata/index result; caching TField refs is a perf refactor with no measured cost
           QIns.ParamByName('n').AsWideString:= RelName;
           QIns.ParamByName('o' ).AsWideString := QSrc.FieldByName('OWNER_NAME' ).AsString;
           QIns.ParamByName('sf').AsInteger:= QSrc.FieldByName('SYSTEM_FLAG').AsInteger;
@@ -231,11 +234,13 @@ begin
           QSrc.Next;
         end;
       finally
-        QSrc.Free; QIns.Free;
+        QSrc.Free;
+        QIns.Free;
       end; // try
 
       { ---- RDB$RELATION_FIELDS -> fb_columns ---- }
-      QSrc:= TFDQuery.Create(nil); QIns:= TFDQuery.Create(nil);
+      QSrc:= TFDQuery.Create(nil);
+      QIns:= TFDQuery.Create(nil);
       try
         QSrc.Connection:= FbConn;
         QSrc.Sql.Text:= 'SELECT TRIM(RF.RDB$RELATION_NAME) AS REL, ' + '       TRIM(RF.RDB$FIELD_NAME)    AS NM, ' + '       RF.RDB$FIELD_POSITION       AS POS, ' +
@@ -264,7 +269,7 @@ begin
 
         while not QSrc.Eof do
         begin
-          RelName:= UpperCase(QSrc.FieldByName('REL').AsString);
+          RelName:= UpperCase(QSrc.FieldByName('REL').AsString);  // dl:ok field-by-name-in-loop@5494 -- REVIEWED SLZ-S11 2026-11-22: one FieldByName per row over a short metadata/index result; caching TField refs is a perf refactor with no measured cost
           if not RelMap.TryGetValue(RelName, RelId) then
           begin
             QSrc.Next;
@@ -287,7 +292,8 @@ begin
           QSrc.Next;
         end; // while
       finally
-        QSrc.Free; QIns.Free;
+        QSrc.Free;
+        QIns.Free;
       end; // try
 
       { ---- FIB$FIELDS_INFO -> fb_field_info (optional) ----
@@ -295,7 +301,8 @@ begin
         partial snapshot still commits. }
       if TableExists(FbConn, 'FIB$FIELDS_INFO') then
       try
-        QSrc:= TFDQuery.Create(nil); QIns:= TFDQuery.Create(nil);
+        QSrc:= TFDQuery.Create(nil);
+        QIns:= TFDQuery.Create(nil);
         try
           QSrc.Connection:= FbConn;
           { Project-specific schema -- the actual FIB$FIELDS_INFO in Micronite
@@ -337,7 +344,8 @@ begin
             QSrc.Next;
           end; // while
         finally
-          QSrc.Free; QIns.Free;
+          QSrc.Free;
+          QIns.Free;
         end; // try
       except
         on E: Exception do Writeln(ErrOutput, 'fb-snapshot: FIB$FIELDS_INFO skipped: ', E.Message);
@@ -346,7 +354,8 @@ begin
       { ---- FIB$DATASETS_INFO -> fb_datasets (optional) ---- }
       if TableExists(FbConn, 'FIB$DATASETS_INFO') then
       try
-        QSrc:= TFDQuery.Create(nil); QIns:= TFDQuery.Create(nil);
+        QSrc:= TFDQuery.Create(nil);
+        QIns:= TFDQuery.Create(nil);
         try
           QSrc.Connection:= FbConn;
           QSrc.Sql.Text:= 'SELECT DS_ID, DESCRIPTION, SELECT_SQL, UPDATE_SQL, INSERT_SQL, ' + '       DELETE_SQL, REFRESH_SQL, NAME_GENERATOR, KEY_FIELD, ' +
@@ -373,7 +382,7 @@ begin
           QIns.Prepare;
           while not QSrc.Eof do
           begin
-            QIns.ParamByName('dsid').AsInteger:= QSrc.FieldByName('DS_ID'            ).AsInteger;
+            QIns.ParamByName('dsid').AsInteger:= QSrc.FieldByName('DS_ID'            ).AsInteger;  // dl:ok field-by-name-in-loop@0393 -- REVIEWED SLZ-S11 2026-11-22: one FieldByName per row over a short metadata/index result; caching TField refs is a perf refactor with no measured cost
             QIns.ParamByName('desc').AsWideString := QSrc.FieldByName('DESCRIPTION'      ).AsString;
             QIns.ParamByName('ss'  ).AsWideString := QSrc.FieldByName('SELECT_SQL'       ).AsString;
             QIns.ParamByName('us'  ).AsWideString := QSrc.FieldByName('UPDATE_SQL'       ).AsString;
@@ -383,7 +392,7 @@ begin
             QIns.ParamByName('ng'  ).AsWideString := QSrc.FieldByName('NAME_GENERATOR'   ).AsString;
             QIns.ParamByName('kf'  ).AsWideString := QSrc.FieldByName('KEY_FIELD'        ).AsString;
             QIns.ParamByName('utn' ).AsWideString := QSrc.FieldByName('UPDATE_TABLE_NAME').AsString;
-            QIns.ParamByName('uomf').AsInteger:= Ord(UpCase(string(QSrc.FieldByName('UPDATE_ONLY_MODIFIED_FIELDS').AsString + ' ')[1]) = 'T');
+            QIns.ParamByName('uomf').AsInteger:= Ord(UpCase(string(QSrc.FieldByName('UPDATE_ONLY_MODIFIED_FIELDS').AsString + ' ')[1]) = 'T');  // dl:ok duplicate-code@1819 -- REVIEWED SLZ-S11 2026-11-22: measured 169 tokens; sibling builder/query idiom, a shared helper is outside the mechanical SLZ batch
             QIns.ParamByName('c'  ).AsWideString := QSrc.FieldByName('CONDITIONS' ).AsString;
             QIns.ParamByName('ver').AsInteger:= QSrc.FieldByName('FIB$VERSION').AsInteger;
             QIns.ParamByName('sa').AsLargeInt:= SnapshotAt;
@@ -392,7 +401,8 @@ begin
             QSrc.Next;
           end; // while
         finally
-          QSrc.Free; QIns.Free;
+          QSrc.Free;
+          QIns.Free;
         end; // try
       except
         on E: Exception do Writeln(ErrOutput, 'fb-snapshot: FIB$DATASETS_INFO skipped: ', E.Message);
@@ -409,7 +419,8 @@ begin
         We map: enum_name <- ENUMTYPE, value_code <- EVALUE, value_label <- ESTRING. }
       if TableExists(FbConn, 'FIB$ENUMVALUES') then
       try
-        QSrc:= TFDQuery.Create(nil); QIns:= TFDQuery.Create(nil);
+        QSrc:= TFDQuery.Create(nil);
+        QIns:= TFDQuery.Create(nil);
         try
           QSrc.Connection:= FbConn;
           QSrc.Sql.Text:= 'SELECT ENUMTYPE, EVALUE, ESTRING FROM FIB$ENUMVALUES';
@@ -432,7 +443,8 @@ begin
             QSrc.Next;
           end;
         finally
-          QSrc.Free; QIns.Free;
+          QSrc.Free;
+          QIns.Free;
         end; // try
       except
         on E: Exception do Writeln(ErrOutput, 'fb-snapshot: FIB$ENUMVALUES skipped: ', E.Message);

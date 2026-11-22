@@ -805,7 +805,7 @@ end;
 function Skipped(pLine: Integer; const pSkip: TArray<TLineSpan>): Boolean;
 begin
   for var S in pSkip do
-    if (pLine >= S.FromLine) and (pLine <= S.ToLine) then
+    if InRange(pLine, S.FromLine, S.ToLine) then
       Exit(True);
   Result:= False;
 end;

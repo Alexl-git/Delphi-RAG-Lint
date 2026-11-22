@@ -89,7 +89,7 @@ type
     /// V.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Calls: CharInSet, Pos, StringOfChar</para>
+    /// <para>Calls: CharInSet, StringOfChar</para>
     /// <seealso cref="DRagLint.Charts.Source.TSourceReader.AddOverride"/>
     /// <seealso cref="DRagLint.Charts.Source.TSourceReader.ContextOfLines"/>
     /// <seealso cref="DRagLint.Charts.Source.TSourceReader.Create"/>
@@ -538,7 +538,7 @@ end;
 function TSourceReader.BlankMatch(const pMatch: TMatch): string;
 begin
   var V:= pMatch.Value;
-  if Pos(#10, V) = 0 then
+  if not V.Contains(#10) then
     Exit(StringOfChar(' ', Length(V)));
   Result:= V;
   for var K:= 1 to Length(Result) do

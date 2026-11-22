@@ -108,8 +108,7 @@ type
 
 function StripBom(const pText: string): string;
 begin
-  if (pText <> '') and (pText[1] = BOM) then Result:= Copy(pText, 2, MaxInt)
-  else Result:= pText;
+  Result:= if (pText <> '') and (pText[1] = BOM) then Copy(pText, 2, MaxInt) else pText;
 end;
 
 function IsFormsCsv(const pText: string): Boolean;
@@ -204,8 +203,7 @@ end;
 
 function CellAt(const pFields: TArray<string>; pIndex: Integer): string;
 begin
-  if pIndex < Length(pFields) then Result:= Trim(pFields[pIndex])
-  else Result:= '';
+  Result:= if pIndex < Length(pFields) then Trim(pFields[pIndex]) else '';
 end;
 
 function IsFooter(const pFields: TArray<string>): Boolean;

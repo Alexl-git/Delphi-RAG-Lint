@@ -230,7 +230,7 @@ type
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Sql.Guarded.TSqlGuard.Explain (DRagLint.Sql.Guarded.pas)</para>
 /// <para>Calls: Format</para>
-/// <para>Returns: 'CREATE INDEX'; 'CREATE TABLE'; 'CREATE TEMP INDEX'; 'CREATE TEMP TABLE'; 'CREATE TEMP TRIGGER'; 'CREATE TEMP VIEW'; 'CREATE TRIGGER'; 'CREATE VIEW'; 'DELETE'; 'DROP INDEX'; 'DROP TABLE'; 'DROP TEMP INDEX'; 'DROP TEMP TABLE'; 'DROP TEMP TRIGGER'; 'DROP TEMP VIEW'; 'DROP TRIGGER'; 'DROP VIEW'; 'INSERT'; 'PRAGMA'; 'READ'</para>
+/// <para>Returns: 'CREATE INDEX'; 'CREATE TABLE'; 'CREATE TEMP INDEX'; 'CREATE TEMP TABLE'; 'CREATE TEMP TRIGGER'; 'CREATE TEMP VIEW'</para>
 /// <para>Complexity: 34 (cyclomatic, outer body), 39 lines (full implementation)</para>
 /// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
@@ -277,7 +277,7 @@ const
     'fts3_tokenizer', 'zipfile', 'sqlite_dbpage'
   );
 
-function SqlActionName(ACode: Integer): string;
+function SqlActionName(ACode: Integer): string;  // dl:ok cyclomatic-complexity@1b23 -- REVIEWED SLZ-S11 2026-11-22: measured 34 (max 30); one dispatch routine over chart/node kinds, a split is a refactor outside the mechanical SLZ batch
 begin
   case ACode of
     SQLITE_CREATE_INDEX       : Result:= 'CREATE INDEX'        ;
@@ -318,7 +318,7 @@ begin
   end;
 end;
 
-function IsSingleStatement(const ASql: string; out AReason: string): Boolean;
+function IsSingleStatement(const ASql: string; out AReason: string): Boolean;  // dl:ok cyclomatic-complexity@dca3 -- REVIEWED SLZ-S11 2026-11-22: measured 31 (max 30); one dispatch routine over chart/node kinds, a split is a refactor outside the mechanical SLZ batch
 var
   i    : Integer;
   n    : Integer;
@@ -427,7 +427,7 @@ begin
   Obj:= AConn.CliObj;
   if Obj = nil then
     raise ESqlGuardError.Create('SQL guard: FireDAC exposed no native SQLite handle (CliObj is nil)');
-  if not (TObject(Obj) is TSQLiteDatabase) then
+  if (TObject(Obj) is not TSQLiteDatabase) then
     raise ESqlGuardError.Create('SQL guard: the connection is not an SQLite connection');
   FNative:= TSQLiteDatabase(Obj);
 

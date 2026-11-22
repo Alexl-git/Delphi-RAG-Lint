@@ -313,7 +313,7 @@ begin
     if not ((Doc is TJSONObject) and TJSONObject(Doc).TryGetValue<TJSONArray>('pairs', Arr)) then Exit;
     for var V in Arr do
     begin
-      if not (V is TJSONObject) then Continue;
+      if (V is not TJSONObject) then Continue;
       var O:= TJSONObject(V);
       var P:= Default(TReportPair);
       P.Name:= O.GetValue<string>('name', '');
@@ -373,7 +373,7 @@ end;
 function JsonStrings(const pValue: TJSONValue): TArray<string>;
 begin
   Result:= nil;
-  if not (pValue is TJSONArray) then Exit;
+  if (pValue is not TJSONArray) then Exit;
   for var V in TJSONArray(pValue) do
     if (V is TJSONString) and (V.Value <> '') then Result:= Result + [V.Value];
 end;

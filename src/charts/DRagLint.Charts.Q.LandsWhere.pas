@@ -723,7 +723,7 @@ begin
     for var H in FChain.Hops do
     begin
       var Lbl:= Format('[%s] %s: %s', [H.Grade, H.Hop, H.Caption]);
-      if (H.Line > 0) and (H.Path <> '') then
+      if (H.Line > 0) and (H.Path <> '') then  // dl:ok ifthen-to-if-expression@fbaf -- REVIEWED SLZ-S11 2026-11-22: fixer d8ebefa10 declines this shape (array-concat or generic-call arm that hit E2010/F2084); kept as if/else
         FSelRows:= FSelRows + [NewRow(Lbl, H.Path, H.Line, H.Caption + ' -- ' + At(H.Path, H.Line), H.Reason)]
       else
         FSelRows:= FSelRows + [NoteRow(Lbl + ' -- ' + H.Reason)];
@@ -967,7 +967,7 @@ begin
     begin
       var Span: TArray<TSrvLiteral>:= [];
       for var L in Lits do
-        if (L.Line >= Rt.A) and (L.Line <= Rt.B) then
+        if (L.Line >= Rt.A) and (L.Line <= Rt.B) then  // dl:ok manual-inrange@3a77 -- REVIEWED SLZ-S11 2026-11-22: fixer d8ebefa10 declines this shape (mixed with other operands / no System.Math); the explicit bounds read as clearly as InRange
           Span:= Span + [L];
       var NamesT:= False;
       for var L in Span do

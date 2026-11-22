@@ -259,7 +259,7 @@ procedure PruneAutoSnapshots(const pAutoDir, pQuestion, pTarget: string; pKeep: 
 begin
   var Files:= StampedFiles(pAutoDir, pQuestion, pTarget, pExt);
   for var I:= Max(0, pKeep) to High(Files) do
-    DeleteFile(Files[I].Value); // False (locked file) is fine: the next prune retries it
+    DeleteFile(Files[I].Value); // False (locked file) is fine: the next prune retries it  // dl:ok ignored-must-use-result@fae6 -- REVIEWED SLZ-S11 2026-11-22: best-effort: a failed ForceDirectories surfaces at the next file write with the path; a failed DeleteFile of a temp/pruned file is retried or harmless
 end;
 
 function LatestAutoSnapshotAnyFormat(const pAutoDir, pQuestion, pTarget: string): string;
@@ -278,7 +278,7 @@ begin
   end;
 end;
 
-function SaveSnapshot(const pDir: string; pAuto: Boolean; const pQuestion, pTarget, pPlainText: string; // dl:ok too-many-parameters@14b1 -- the 8th is pExt, a defaulted extension added for R18 so every existing caller keeps its call; a record would break them all
+function SaveSnapshot(const pDir: string; pAuto: Boolean; const pQuestion, pTarget, pPlainText: string; // dl:ok too-many-parameters@d880 -- the 8th is pExt, a defaulted extension added for R18 so every existing caller keeps its call; a record would break them all
   pWhen: TDateTime; out pPath: string; const pExt: string): Boolean;
 const
   AUTO_KEEP = 20;
@@ -287,7 +287,7 @@ begin
   Result:= False;
   var Dir:= if pAuto then TPath.Combine(pDir, AUTO_DIR) else pDir;
   try
-    ForceDirectories(Dir);
+    ForceDirectories(Dir);  // dl:ok ignored-must-use-result@d24c -- REVIEWED SLZ-S11 2026-11-22: best-effort: a failed ForceDirectories surfaces at the next file write with the path; a failed DeleteFile of a temp/pruned file is retried or harmless
     var Text:= StringReplace(pPlainText, #13#10, #10, [rfReplaceAll]);
     Text:= StringReplace(Text, #13, #10, [rfReplaceAll]);
     Text:= StringReplace(Text, #10, #13#10, [rfReplaceAll]);

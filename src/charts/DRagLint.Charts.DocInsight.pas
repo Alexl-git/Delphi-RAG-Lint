@@ -169,7 +169,7 @@ function SplitAnswerLines(const pText: string): TArray<string>;
 /// <para>Called from: DRagLint.Charts.Adapter.Text.MapPlainLine (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.DocInsight.FormatAnswerAsDocInsight (DRagLint.Charts.DocInsight.pas)</para>
 /// <para>Calls: Copy, DRagLint.Charts.DocInsight.LeadingSpaces, DRagLint.Charts.DocInsight.RenderAnchors, Pos, StartsStr, StartsText, Trim</para>
 /// <para>Returns: False; True; pText &lt;&gt; ''</para>
-/// <para>Complexity: 10 (cyclomatic, outer body), 27 lines (full implementation)</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 24 lines (full implementation)</para>
 /// <para>Mutates: pIndent (out), pText (out)</para>
 /// <seealso cref="DRagLint.Charts.DocInsight.LeadingSpaces"/>
 /// <seealso cref="DRagLint.Charts.DocInsight.RenderAnchors"/>
@@ -347,10 +347,7 @@ begin
     pText:= 'Totals: ' + Trim(Copy(pRaw, P + Length(' -- '), MaxInt)) + '.';
     Exit(True);
   end;
-  if StartsStr('TARGET ', Trimmed) then
-    pText:= 'Selected: ' + RenderAnchors(Trim(Copy(Trimmed, Length('TARGET ') + 1, MaxInt)))
-  else
-    pText:= RenderAnchors(Trimmed);
+  pText:= if StartsStr('TARGET ', Trimmed) then 'Selected: ' + RenderAnchors(Trim(Copy(Trimmed, Length('TARGET ') + 1, MaxInt))) else RenderAnchors(Trimmed);
   if LeadingSpaces(pRaw) > CONTINUATION_INDENT then pIndent:= ROW_INDENT;
   Result:= pText <> '';
 end;

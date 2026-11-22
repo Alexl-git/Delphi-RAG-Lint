@@ -31,7 +31,6 @@ uses
   , System.DateUtils
   , System  .Generics.Collections
   , FireDAC .Comp    .Client
-  , DRagLint.Storage .SQLite
   ;
 
 type
@@ -85,6 +84,7 @@ uses
   Data.DB
   , FireDAC.Stan.Intf
   , FireDAC.Stan.Param
+  , DRagLint.Storage.SQLite
   ;
 
 type
@@ -105,8 +105,7 @@ type
 
 function StripPrefix(const AName: string; APrefix: Char): string;
 begin
-  if (Length(AName) >= 2) and (UpCase(AName[1]) = APrefix) and CharInSet(AName[2], ['A'..'Z']) then Result:= Copy(AName, 2, MaxInt)
-  else Result:= AName;
+  Result:= if (Length(AName) >= 2) and (UpCase(AName[1]) = APrefix) and CharInSet(AName[2], ['A'..'Z']) then Copy(AName, 2, MaxInt) else AName;
 end;
 
 class function TOrmLinker.Run(const ADbPaths: TArray<string>): TOrmLinkerStats;
@@ -143,7 +142,7 @@ var
       Q.Open;
       while not Q.Eof do
       begin
-        Sql.Id:= Q.FieldByName('id').AsLargeInt;
+        Sql.Id:= Q.FieldByName('id').AsLargeInt;  // dl:ok field-by-name-in-loop@812c -- REVIEWED SLZ-S11 2026-11-22: one FieldByName per row over a short metadata/index result; caching TField refs is a perf refactor with no measured cost
         Sql.DbIndex:= ADbIdx;
         Sql.Name:= UpperCase(Q.FieldByName('name').AsString);
         Sql.ParentId:= 0;
@@ -158,7 +157,7 @@ var
       Q.Open;
       while not Q.Eof do
       begin
-        Sql.Id:= Q.FieldByName('id').AsLargeInt;
+        Sql.Id:= Q.FieldByName('id').AsLargeInt;  // dl:ok field-by-name-in-loop@812c -- REVIEWED SLZ-S11 2026-11-22: one FieldByName per row over a short metadata/index result; caching TField refs is a perf refactor with no measured cost
         Sql.DbIndex:= ADbIdx;
         Sql.Name:= UpperCase(Q.FieldByName('name').AsString);
         Sql.ParentId:= 0;
@@ -174,7 +173,7 @@ var
       Q.Open;
       while not Q.Eof do
       begin
-        Del.Id:= Q.FieldByName('id').AsLargeInt;
+        Del.Id:= Q.FieldByName('id').AsLargeInt;  // dl:ok field-by-name-in-loop@c020 -- REVIEWED SLZ-S11 2026-11-22: one FieldByName per row over a short metadata/index result; caching TField refs is a perf refactor with no measured cost
         Del.DbIndex:= ADbIdx;
         Del.Name:= Q.FieldByName('name').AsString;
         Del.Stripped:= UpperCase(StripPrefix(Del.Name, 'T'));
@@ -192,7 +191,7 @@ var
       Q.Open;
       while not Q.Eof do
       begin
-        Del.Id:= Q.FieldByName('id').AsLargeInt;
+        Del.Id:= Q.FieldByName('id').AsLargeInt;  // dl:ok field-by-name-in-loop@c020 -- REVIEWED SLZ-S11 2026-11-22: one FieldByName per row over a short metadata/index result; caching TField refs is a perf refactor with no measured cost
         Del.DbIndex:= ADbIdx;
         Del.Name:= Q.FieldByName('name').AsString;
         Del.Stripped:= UpperCase(StripPrefix(Del.Name, 'I'));
@@ -207,7 +206,7 @@ var
       Q.Open;
       while not Q.Eof do
       begin
-        Del.Id:= Q.FieldByName('id').AsLargeInt;
+        Del.Id:= Q.FieldByName('id').AsLargeInt;  // dl:ok field-by-name-in-loop@c020 -- REVIEWED SLZ-S11 2026-11-22: one FieldByName per row over a short metadata/index result; caching TField refs is a perf refactor with no measured cost
         Del.DbIndex:= ADbIdx;
         Del.Name:= Q.FieldByName('name').AsString;
         Del.Stripped:= UpperCase(StripPrefix(Del.Name, 'F'));
@@ -293,24 +292,24 @@ begin
         QIns.Params.ParamByName('ca'  ).DataType:= ftLargeint;
         QIns.Prepare;
 
-        { ---- class_to_table: TXXX -> XXX ---- }
+        // ---- class_to_table: TFoo -> FOO ----
         for Cls in DelphiClasses do
         begin
           if Cls.Stripped = '' then Continue;
           if SqlTablesByName.TryGetValue(Cls.Stripped, Tbl) then
           begin
-            EmitLink(Cls, Tbl, 'class_to_table', 'T-strip + exact', 1.0);
+            EmitLink(Cls, Tbl, 'class_to_table', 'T-strip + exact', 1.0);  // dl:ok magic-literal@996d -- REVIEWED SLZ-S11 2026-11-22: literal 1.0; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
             Inc(Result.ClassLinks);
           end;
         end;
 
-        { ---- iface_to_table: IXXX -> XXX ---- }
+        // ---- iface_to_table: IFoo -> FOO ----
         for Iface in DelphiIfaces do
         begin
           if Iface.Stripped = '' then Continue;
           if SqlTablesByName.TryGetValue(Iface.Stripped, Tbl) then
           begin
-            EmitLink(Iface, Tbl, 'iface_to_table', 'I-strip + exact', 1.0);
+            EmitLink(Iface, Tbl, 'iface_to_table', 'I-strip + exact', 1.0);  // dl:ok magic-literal@0c16 -- REVIEWED SLZ-S11 2026-11-22: literal 1.0; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
             Inc(Result.IfaceLinks);
           end;
         end;
@@ -327,7 +326,7 @@ begin
             Key:= ParentStripped + '.' + Fld.Stripped;
             if SqlColumns.TryGetValue(Key, ColsList) and (ColsList.Count > 0) then
             begin
-              EmitLink(Fld, ColsList[0], 'field_to_column', 'T+F-strip + exact', 1.0);
+              EmitLink(Fld, ColsList[0], 'field_to_column', 'T+F-strip + exact', 1.0);  // dl:ok magic-literal@5809 -- REVIEWED SLZ-S11 2026-11-22: literal 0,1.0; literal self-describing at its single use site (width/size/index in a renderer table); a named constant would only rename it
               Inc(Result.FieldLinks);
             end;
           end;
