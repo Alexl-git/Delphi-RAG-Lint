@@ -905,7 +905,7 @@ begin
       else if SameText(F.RuleId, 'redundant-parentheses') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
       begin
         SL:= LinesFor(F.FilePath);
-        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
+        if InRange(F.StartLine, 1, SL.Count) then
         begin
           Ln:= SL[F.StartLine - 1];
           Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
@@ -922,7 +922,7 @@ begin
       else if SameText(F.RuleId, 'nil-comparison') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
       begin
         SL:= LinesFor(F.FilePath);
-        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
+        if InRange(F.StartLine, 1, SL.Count) then
         begin
           Ln:= SL[F.StartLine - 1];
           Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
@@ -958,7 +958,7 @@ begin
       else if SameText(F.RuleId, 'uppercase-compare') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
       begin
         SL:= LinesFor(F.FilePath);
-        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
+        if InRange(F.StartLine, 1, SL.Count) then
         begin
           Ln:= SL[F.StartLine - 1];
           Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
@@ -988,7 +988,7 @@ begin
             var UcQuote: Integer:= Pos('''', UcRest);
             if (UcInner <> '') and (UcQuote > 1) then
             begin
-              var UcNeg: Boolean:= Pos('<>', Copy(UcRest, 1, UcQuote - 1)) > 0;
+              var UcNeg: Boolean:= Copy(UcRest, 1, UcQuote - 1).Contains('<>');
               var UcLit: string := Trim(Copy(UcRest, UcQuote, MaxInt));
               if UcLit <> '' then
               begin
@@ -1011,7 +1011,7 @@ begin
       else if SameText(F.RuleId, 'uppercase-compare-always-false') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then  // dl:ok duplicate-code@6382 -- REVIEWED 2026-11-21 SLZ-S05: 103 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
       begin
         SL:= LinesFor(F.FilePath);
-        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
+        if InRange(F.StartLine, 1, SL.Count) then
         begin
           Ln:= SL[F.StartLine - 1];
           Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
@@ -1060,7 +1060,7 @@ begin
         { span covers 'not not X' (the outer exprUnary). Strip the two leading
           'not' keywords + their trailing whitespace; the remainder is X. }
         SL:= LinesFor(F.FilePath);
-        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
+        if InRange(F.StartLine, 1, SL.Count) then
         begin
           Ln:= SL[F.StartLine - 1];
           Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
@@ -1088,7 +1088,7 @@ begin
         { span covers 'X as TObject' (the exprBinary). Find the depth-0 whole-word
           'as' keyword; the lhs before it is X. }
         SL:= LinesFor(F.FilePath);
-        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
+        if InRange(F.StartLine, 1, SL.Count) then
         begin
           Ln:= SL[F.StartLine - 1];
           Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
@@ -1126,7 +1126,7 @@ begin
           positive (= True / <> False) -> lhs; negative (= False / <> True) ->
           'not ' + (lhs, parenthesized when not a single-token atom). }
         SL:= LinesFor(F.FilePath);
-        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
+        if InRange(F.StartLine, 1, SL.Count) then
         begin
           Ln:= SL[F.StartLine - 1];
           Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
@@ -1177,7 +1177,7 @@ begin
         { span covers the keyword token; keywords are case-insensitive and have no
           reference sites, so lowercasing the span is a safe local edit. }
         SL:= LinesFor(F.FilePath);
-        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
+        if InRange(F.StartLine, 1, SL.Count) then
         begin
           Ln:= SL[F.StartLine - 1];
           Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
@@ -1193,7 +1193,7 @@ begin
           delimited 'then' keyword (whole word, not a substring of an identifier)
           to end of span. The Assigned guard is redundant -- Free is nil-safe. }
         SL:= LinesFor(F.FilePath);
-        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
+        if InRange(F.StartLine, 1, SL.Count) then
         begin
           Ln:= SL[F.StartLine - 1];
           Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
@@ -1227,7 +1227,7 @@ begin
           BEHAVIOUR-CHANGING (tagged risky via IsRiskyFixRule). The bound is
           isolated by 'to .. do', so no precedence hazard. }
         SL:= LinesFor(F.FilePath);
-        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
+        if InRange(F.StartLine, 1, SL.Count) then
         begin
           Ln:= SL[F.StartLine - 1];
           Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);

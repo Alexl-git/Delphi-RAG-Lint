@@ -251,7 +251,7 @@ begin
       var
         Orig: string;
       begin
-        Result := ASet.TryGetValue(AStem, Orig) and (Pos('.', NormUnitQualified(Orig)) = 0);
+        Result := ASet.TryGetValue(AStem, Orig) and (not NormUnitQualified(Orig).Contains('.'));
       end);
 
     { Normalize BOTH sides identically so dotted unit names like 'Foo.ViewModel'

@@ -535,7 +535,7 @@ begin
   for I:= UsesAt to ImplAt - 1 do
   begin
     if MentionsUnit(Lines[I], AUnitName) then Exit;
-    if Pos(';', Lines[I]) > 0 then Break;
+    if Lines[I].Contains(';') then Break;
   end;
   SB:= TStringBuilder.Create;
   try

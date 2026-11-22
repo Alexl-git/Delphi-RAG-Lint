@@ -235,6 +235,7 @@ function WithCycleFixPointer(const pMessage, pProject, pStem: string): string;
 implementation
 
 uses
+  System.Math,
   DRagLint.Lint.ReviewMarker,
   TreeSitter,
   DRagLint.Index.Glob,
@@ -521,7 +522,7 @@ var
       end
       else if (AnyIntf = 0) or (HL < AnyIntf) then AnyIntf:= HL;
       Tgt:= 0;
-      if (not FileOfUnit.TryGetValue(LowerCase(U.UnitName), Tgt)) and (Pos('.', U.UnitName) = 0) then
+      if (not FileOfUnit.TryGetValue(LowerCase(U.UnitName), Tgt)) and (not U.UnitName.Contains('.')) then
         FileOfStem.TryGetValue(LowerCase(U.UnitName), Tgt);
       if (Tgt <= 0) or (Tgt = AFid) or not AComp.Contains(Tgt) then Continue;
       if U.Section = uusImplementation then
@@ -853,7 +854,7 @@ begin
             became an edge to `DRagLint.Storage.SQLite`, reporting a phantom
             2-unit cycle on every unit that opens a FireDAC connection.
             run_circular_uses_message.ps1 pins both halves. }
-          if Pos('.', U.UnitName) = 0 then
+          if not U.UnitName.Contains('.') then
             FileOfStem.TryGetValue(LowerCase(U.UnitName), Tgt);
         end;
         if (Tgt > 0) and (Tgt <> Fid) and (not Lst.Contains(Tgt)) then Lst.Add(Tgt);
@@ -2155,7 +2156,7 @@ var
       LitCache.Add(Key, Lits);
     end;
     for Lit in Lits do
-      if (Lit.StartLine >= AOwner.ImplStartLine) and (Lit.StartLine <= AOwner.ImplEndLine)
+      if InRange(Lit.StartLine, AOwner.ImplStartLine, AOwner.ImplEndLine)
          and (Trim(Lit.Text) <> '') then
         AList.Add(Trim(Lit.Text));
   end;
@@ -4954,7 +4955,12 @@ begin
   TCirc:= 0;
   TEnum:= 0;
   TRts:= 0;
-  TUuiu:= 0; TGod:= 0; TUpub:= 0; TUpriv:= 0; TAccess:= 0; TOuter:= 0;
+  TUuiu:= 0;
+  TGod:= 0;
+  TUpub:= 0;
+  TUpriv:= 0;
+  TAccess:= 0;
+  TOuter:= 0;
   TGlob:= 0;
   TDupD:= 0;
   TCens:= 0;

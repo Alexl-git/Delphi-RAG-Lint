@@ -598,17 +598,28 @@ begin
   begin
     if T[I] = '%' then
     begin
-      T[I]:= ' '; Inc(I);
+      T[I]:= ' ';
+      Inc(I);
       while (I <= Length(T)) and CharInSet(T[I], ['-', '.', '0'..'9', '*']) do
-      begin T[I]:= ' '; Inc(I); end;
+      begin
+        T[I]:= ' ';
+        Inc(I);
+      end;
       if (I <= Length(T)) and CharInSet(T[I], ['a'..'z']) then
-      begin T[I]:= ' '; Inc(I); end;
+      begin
+        T[I]:= ' ';
+        Inc(I);
+        Inc(I);
+      end;
     end
     else if T[I] = '#' then
     begin
       T[I]:= ' '; Inc(I);
       while (I <= Length(T)) and CharInSet(T[I], ['0'..'9']) do
-      begin T[I]:= ' '; Inc(I); end;
+      begin
+        T[I]:= ' ';
+        Inc(I);
+      end;
     end
     else Inc(I);
   end;
@@ -620,7 +631,11 @@ begin
   begin
     Skip:= False;
     for K:= Low(STOPWORDS) to High(STOPWORDS) do
-      if Parts[I] = STOPWORDS[K] then begin Skip:= True; Break; end;
+      if Parts[I] = STOPWORDS[K] then
+      begin
+        Skip:= True;
+        Break;
+      end;
     if not Skip then Keep:= Keep + [Parts[I]];
   end;
   Result:= string.Join(' ', Keep);
@@ -964,9 +979,21 @@ begin
     Parser:= TTSParser.Create;
     Parser.Language:= if IsDfm then tree_sitter_dfm else FLanguage;
     Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes var Remaining: Integer; begin Remaining:= Length(Source)
-        - Integer(AByteIndex); if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end; SetLength(Result, Remaining); Move(Source[AByteIndex], Result[0],
-          Remaining); ABytesRead:= Remaining; end, TTSInputEncoding.TSInputEncodingUTF8);
+      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
+      var
+        Remaining: Integer;
+      begin
+        Remaining:= Length(Source) - Integer(AByteIndex);
+        if Remaining <= 0 then
+        begin
+          ABytesRead:= 0;
+          SetLength(Result, 0);
+          Exit;
+        end;
+        SetLength(Result, Remaining);
+        Move(Source[AByteIndex], Result[0], Remaining);
+        ABytesRead:= Remaining;
+      end, TTSInputEncoding.TSInputEncodingUTF8);
     Inc(GLintParseTicks, TStopwatch.GetTimeStamp - TP0);
     if IsDfm then
       { DFM: the Pascal *.scm rules and the Pascal-specific walks key off node types
@@ -1021,7 +1048,11 @@ begin
           end;
           var InScope: Boolean:= False;
           for var Needle: string in R.RequireFileText do
-            if LowerSrc.Contains(Needle) then begin InScope:= True; Break; end;
+            if LowerSrc.Contains(Needle) then
+            begin
+              InScope:= True;
+              Break;
+            end;
           if not InScope then Continue;
         end;
         var QFindings:= R.Run(Tree.RootNode, Source, AFilePath, nil, ColSource);
@@ -1097,7 +1128,12 @@ begin
         var Remaining: Integer;
         begin
           Remaining:= Length(Source) - Integer(AByteIndex);
-          if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
+          if Remaining <= 0 then
+          begin
+            ABytesRead:= 0;
+            SetLength(Result, 0);
+            Exit;
+          end;
           SetLength(Result, Remaining);
           Move(Source[AByteIndex], Result[0], Remaining);
           ABytesRead:= Remaining;
@@ -1220,7 +1256,11 @@ begin
     Cls:= '';
     if Key <> '' then
       for K:= 0 to High(FExcCand) do
-        if FExcCand[K].Msg = Key then begin Cls:= FExcCand[K].ClsName; Break; end;
+        if FExcCand[K].Msg = Key then
+        begin
+          Cls:= FExcCand[K].ClsName;
+          Break;
+        end;
     if Cls <> '' then
       AFindings[I].Message:= AFindings[I].Message +
         Format(' %s already covers this message -- raise it instead.', [Cls])
