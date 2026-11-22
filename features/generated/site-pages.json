@@ -524,16 +524,16 @@
     "version": "1.52.0-alpha"
   },
   "features/impact-blast-radius-symbol.md": {
-    "hash": "7478bd8b776e41a70136d7b5f5f4334f478079cfedfca48f6556b745e84eb944",
-    "version": "1.46.0-alpha"
+    "hash": "a4fd8968c7fddae459d3c0fa3063baf20f716fa40599fd3f610dd3475c8d1e0d",
+    "version": "1.52.2-alpha"
   },
   "features/import-build-log.md": {
     "hash": "f7c79b2fae85224e04ba39944659fb803a04eec9c754943a59f1b2d7292f1751",
     "version": "1.51.0-alpha"
   },
   "features/inc-indexing.md": {
-    "hash": "efd6f3fd6e5017827ab04b2d7a23b56563e1997b1f30c7818efe47dc1d37a6d3",
-    "version": "1.51.1-alpha"
+    "hash": "50de07e3e82c76a07662d555611c7510735e7041f5c54ad5a87cadb791a3aba5",
+    "version": "1.52.2-alpha"
   },
   "features/index-build-config.md": {
     "hash": "e274f5e7a4048bb261edbe79db15b60c9a763c5f98e45f6afdab540ef27a11f2",
@@ -600,19 +600,19 @@
     "version": "1.52.0-alpha"
   },
   "features/lsp-full-rules.md": {
-    "hash": "817106cc44ee22d7137ce395399029f984ce01995dcc0c914957f38495407949",
+    "hash": "e24857d55c47ce9a3a13f4829eba5d75e7e387a9ebb529f99f3bfc5b9f9dc91c",
     "version": "1.52.2-alpha"
   },
   "features/lsp-protocol-extensions.md": {
-    "hash": "34665f164fc102f58f8a4578fc611f114dc90c9d6676c188ab0727166e2afafc",
+    "hash": "2ddd8393c45931258aedccef3bf8fb2589f7953cee0e2f8b9c66e234ef282552",
     "version": "1.52.2-alpha"
   },
   "features/lsp-proxy-merge.md": {
-    "hash": "90315e383d91bb999ad2ecc124fcfefe525e907aac3411ce8e0385b53e820f49",
+    "hash": "b98c6a6cf833ac6f34af79eaf9636ddd807228cca9a38cda8a8a09893d1d8641",
     "version": "1.52.2-alpha"
   },
   "features/lsp-switch-vscode.md": {
-    "hash": "485624e57ac5fc8552d314ea25c798d2518301aea3acde7b8a973b0c5fabdba2",
+    "hash": "837aaa487e5c18e9d3b573c515c95ac8e248abd6b308e7894df8c704cb59d1c5",
     "version": "1.52.2-alpha"
   },
   "features/lsp.md": {
@@ -856,8 +856,8 @@
     "version": "1.51.1-alpha"
   },
   "features/show-wiring-spring4d-di-dfm-events.md": {
-    "hash": "13f31149f2e1e82c39d103d208b00210dfa92bfda46228d76a9068b7d742726e",
-    "version": "1.46.0-alpha"
+    "hash": "30eef8128ef8f1f9392ff29a26d9ca53dc57778ea07d624faa36bc8c60606fb1",
+    "version": "1.52.2-alpha"
   },
   "features/shutdown.md": {
     "hash": "99c179135e3de38d84fb910cea97776c908c31e260b4ab0a63c0541c9ca06c79",
@@ -1028,8 +1028,8 @@
     "version": "1.51.1-alpha"
   },
   "features/v1511-inc2-fixes.md": {
-    "hash": "a0c68fb0805f1e6faa22609f771d09981b172c7989353dcdf42c28400a6cdd37",
-    "version": "1.51.1-alpha"
+    "hash": "f6a3ccefc196685706d63f6364405a7499900f1a04f8a742ebea1a9144e2a298",
+    "version": "1.52.2-alpha"
   },
   "features/v1511-res-fixes.md": {
     "hash": "ec5e445eee087c3d4533a88bffb220d604573a9c35ad3f8c59723d59ee9292b8",
@@ -1076,8 +1076,8 @@
     "version": "1.52.0-alpha"
   },
   "features/v152-index-possibly-out-of-range.md": {
-    "hash": "db2a37914419fad60ea27a8944e0708cc5e9ee42bafeb7cf42169854f7aa5ca6",
-    "version": "1.52.0-alpha"
+    "hash": "3c95514bd291f52ffedfb7bbebf8733f9e016162abbe962ee411e9c396713211",
+    "version": "1.52.2-alpha"
   },
   "features/v152-per-rule-budget.md": {
     "hash": "1b23e3c48d4dcb969e5485b3b65e9f7795f5bf124a2ba75026ad92190cd76194",

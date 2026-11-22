@@ -279,9 +279,9 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-18",
+        "date": "2026-11-20",
         "by": "ENGINE",
-        "build": "1.52.0-alpha",
+        "build": "1.52.2-alpha",
         "surfaceHash": "ef7035a4a4af9b1f2e8b73f5c2b7d6fd883fabb9660dd0fdf8621cf18cfd0b2e"
       }
     },
@@ -3224,7 +3224,7 @@
       "status": "shipped",
       "since": "1.52.0-alpha",
       "summary": "Warns on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only",
-      "intro": "Read this to see when index-possibly-out-of-range warns, how it treats another collection's bound and index parameters, and how its manual-only autofix inserts an InRange check.",
+      "intro": "Read this to see when index-possibly-out-of-range warns, how it treats another collection's bound, index parameters and (with --db) a constant array of another unit, and how its manual-only autofix inserts an InRange check.",
       "wikiPage": "index-possibly-out-of-range",
       "surfaces": [
         {
@@ -3251,10 +3251,10 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-18",
+        "date": "2026-11-21",
         "by": "ENGINE",
-        "build": "1.52.0-alpha",
-        "surfaceHash": "193c42e17a1b3087f2dfef535b008235f2f191fd65c20200d6f0b7ebabb7957c"
+        "build": "1.52.2-alpha",
+        "surfaceHash": "f3d9fc9fe5ed09d8fbce71d2ba38a284de00a9f5e0e543ce31ff1626797258cb"
       }
     },
     {
@@ -11418,9 +11418,9 @@
         }
       ],
       "verified": {
-        "date": "2026-11-05",
+        "date": "2026-11-21",
         "by": "ENGINE",
-        "build": "1.43.0-alpha",
+        "build": "1.52.2-alpha",
         "surfaceHash": "30066e3560381b5f69f5b39ce4a8422d082ef51f66ddd3f15a12a4718b8aca22"
       }
     },
@@ -11860,9 +11860,9 @@
         }
       ],
       "verified": {
-        "date": "2026-11-18",
+        "date": "2026-11-21",
         "by": "ENGINE",
-        "build": "1.52.0-alpha",
+        "build": "1.52.2-alpha",
         "surfaceHash": "2ef1be7d0b519e9023b5a153a4822e903ba0daf6cc6e5ba3420a7e91ba92f82d"
       }
     },
@@ -14008,10 +14008,10 @@
         "by": "LSP"
       },
       "verified": {
-        "date": "2026-11-07",
+        "date": "2026-11-21",
         "by": "ENGINE",
-        "build": "1.46.0-alpha",
-        "surfaceHash": "382a804739cefb86c690c97b9791c70d40f522947fa32409a1c16ddb8fb67f58"
+        "build": "1.52.2-alpha",
+        "surfaceHash": "10022e84258187bc2c007e3f25e7d555f66920a2b2d6cbbdc39b8d081e7164a3"
       }
     },
     {
