@@ -39,8 +39,7 @@ uses
   System.JSON,
   System.Generics.Collections,
   DRagLint.Core.Model,
-  DRagLint.Core.Interfaces,
-  DRagLint.Analysis.SurfaceAdapters;
+  DRagLint.Core.Interfaces;
 
 const
   /// <summary>Output schema tag, bumped when the JSON shape changes.</summary>
@@ -169,6 +168,7 @@ function RunLintTree(const pOptions   : TLintTreeOptions;
 implementation
 
 uses
+  DRagLint.Analysis.SurfaceAdapters,
   DRagLint.Analysis.SurfaceFingerprint,
   Winapi.Windows,
   System.Diagnostics,
