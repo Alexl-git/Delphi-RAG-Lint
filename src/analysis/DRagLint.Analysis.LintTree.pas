@@ -272,7 +272,7 @@ begin
   try
     for Sym in pSymbols do
       if SameText(Sym.Section, 'interface')
-         and not (Sym.Kind in [skUnit, skParam, skLocalVar]) then
+         and (Sym.Kind not in [skUnit, skParam, skLocalVar]) then
         Acc.Add(Sym);
     Result:= Acc.ToArray;
   finally

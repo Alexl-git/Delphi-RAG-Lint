@@ -647,7 +647,7 @@ begin
   Result:= False;
   if ATargetId <= 0 then Exit;
   T:= SymbolById(ATargetId);
-  if not (T.Kind in [skVarDecl, skField]) and (T.Kind.ToText <> KIND_TEXT_LOCAL_VAR) and (T.Kind.ToText <> KIND_TEXT_PARAM) then Exit;
+  if (T.Kind not in [skVarDecl, skField]) and (T.Kind.ToText <> KIND_TEXT_LOCAL_VAR) and (T.Kind.ToText <> KIND_TEXT_PARAM) then Exit;
   Result:= IsProcTypeSignature(T.Signature) or FProcTypes.ContainsKey(LowerKey(Trim(T.Signature)));
 end;
 
@@ -1585,7 +1585,7 @@ var
 begin
   T:= SymbolById(ATargetId);
   if T.Kind in CAST_KINDS then Exit;   { TFoo(X): a cast, not a call }
-  if not (T.Kind in ROUTINE_KINDS) then
+  if (T.Kind not in ROUTINE_KINDS) then
   begin
     ASum.AddFlag(efUnknown, 'calls ' + ARef.NameText + ' (' + WITNESS_NOT_ROUTINE + ')', AChanged);
     Exit;

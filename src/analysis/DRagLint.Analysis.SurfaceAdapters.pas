@@ -283,7 +283,7 @@ var
   Words: TArray<string>;
   W    : string;
 begin
-  if not (pSymbol.Kind in [skProcedure, skFunction, skMethod,
+  if (pSymbol.Kind not in [skProcedure, skFunction, skMethod,
                            skConstructor, skDestructor]) then
     Exit(False);
 
