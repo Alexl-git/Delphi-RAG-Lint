@@ -490,7 +490,7 @@ A `reraise`, and a `raise-expr` naming the handler variable, carry the type of t
 
 **data_flows.dst_kind** (`DF_DST_*`): `arg` (call argument), `write` (assignment to a member of
 a non-local), `result` (`Result :=`, `Exit(e)`), `field` (field of the owner or ancestor),
-`global` (unit variable; 1.52: also a unit variable passed to a var/out parameter of a resolved project routine, by the calls pass with `src_kind` `argout` and `dst_index` = the argument position), `outparam` (var/out parameter of this routine). index columns are 1-based CHARACTER (UTF-16 unit) columns since 1.52, not UTF-8 byte columns (.dfm rows too since 1.52 BK-COLS2; lint finding columns as well).
+`global` (unit variable; 1.52: also a unit variable passed to a var/out parameter of a resolved project routine, by the calls pass with `src_kind` `argout` and `dst_index` = the argument position), `outparam` (var/out parameter of this routine). index columns are 1-based CHARACTER (UTF-16 unit) columns since 1.52, not UTF-8 byte columns (.dfm rows too since 1.52 BK-COLS2; lint finding columns as well). 1.52.3 COLS-TAILS: verified after 2-, 3- and 4-byte (surrogate pair, two units) characters, after a blanked inactive {$IFDEF} branch, in .dfm parse-error findings and index DIAG lines, and in the V151 text rules; pinned by tests\autotest\run_v1523_COLS-TAILS.ps1.
 **data_flows.src_kind** (`DF_SRC_*`): `param` (declared parameter), `ref` (a call result or a
 member/variable read that is not a local/param/field/global), `field`, `global`, `argout` (a
 variable passed at position `src_index` of an earlier call).
