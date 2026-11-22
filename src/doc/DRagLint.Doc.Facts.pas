@@ -5,8 +5,7 @@ interface
 uses
   System.SysUtils, System.Classes, System.IOUtils, System.Math,
   System.Generics.Collections, System.Generics.Defaults, System.RegularExpressions,
-  DRagLint.Core.Model, DRagLint.Core.Interfaces, DRagLint.Doc.GitSince,
-  DRagLint.Hover.Returns;
+  DRagLint.Core.Model, DRagLint.Core.Interfaces, DRagLint.Doc.GitSince;
 
 const
   // Display cap for the <seealso> related-symbol list (ADF T4). At most this many
@@ -1124,6 +1123,7 @@ function SourceFilesRead: TArray<string>;
 implementation
 
 uses
+  DRagLint.Hover.Returns,
   DRagLint.Core.Encoding, // 1.52 EXTGAPS2: Utf8ByteColToCharCol -- handler spans meet refs' CHARACTER columns
   System.Diagnostics, // TStopwatch -- DocFactsBuildProfile's per-section counters
   // StripPasCommentsKeepLayout only, for ReadDeclLine -- see its header. A pure
