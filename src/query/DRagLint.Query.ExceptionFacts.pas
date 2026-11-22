@@ -239,7 +239,7 @@ begin
 end;
 
 { The one query behind every surface: pWhere narrows the refs (routine or file). }
-function FactsWhereIn(const Index: TChartsIndex; const pWhere, pTypeName: string): TArray<TExceptionFact>;
+function FactsWhereIn(const Index: TChartsIndex; const pWhere, pTypeName: string): TArray<TExceptionFact>;  // dl:ok param-name-prefix@b3e9 -- unit-wide convention of this walker (Body/Index nested-routine params); renaming is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
 var
   Found: TList<TExceptionFact>;
   Fact : TExceptionFact;

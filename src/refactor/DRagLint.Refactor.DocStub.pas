@@ -524,7 +524,7 @@ begin
       begin
         Inner:= '';
         Inc(i);
-        while (i <= N) and (AText[i] <> '}') do begin Inner:= Inner + AText[i];
+        while (i <= N) and (AText[i] <> '}') do begin Inner:= Inner + AText[i];  // dl:ok concat-in-loop@8a82 -- loop runs over one routine's params/lines (tens of items); O(n^2) is immaterial -- SLZ-S10 2026-11-22
         Inc(i); end;
         if i <= N then Inc(i); // the closing brace
         if Note.Length > 0 then Note.Append(' ');
@@ -534,7 +534,7 @@ begin
       begin
         Inner:= '';
         Inc(i, 2);
-        while (i < N) and not ((AText[i] = '*') and (AText[i + 1] = ')')) do begin Inner:= Inner + AText[i];
+        while (i < N) and not ((AText[i] = '*') and (AText[i + 1] = ')')) do begin Inner:= Inner + AText[i];  // dl:ok concat-in-loop@cb53 -- loop runs over one routine's params/lines (tens of items); O(n^2) is immaterial -- SLZ-S10 2026-11-22
         Inc(i); end;
         if i < N then Inc(i, 2);
         if Note.Length > 0 then Note.Append(' ');

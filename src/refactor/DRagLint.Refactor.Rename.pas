@@ -33,7 +33,7 @@ type
   /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Feature.Rename, DRagLint.MCP.Server, DRagLint.Refactor.ExtractMethod, DRagLint.Refactor.MultiProjectRename, DRagLint.Refactor.NamingFix, DRagLint.Refactor.RenameProof</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TRenameRefactoring = class
+  TRenameRefactoring = class  // dl:ok high-response@0469 -- measured RFC 83 (>50); the class is the refactoring's single driver, a split is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
     public
       /// <summary>Edits that rename the symbol AQName to ANewName: its
       /// declaration, its implementation header, and every reference that is
@@ -1186,7 +1186,7 @@ var
   begin
     if N.IsNull then Exit;
     { Entering a nested defProc that shadows Target -> stop descending for renames. }
-    if (not (N = OwnerProc)) and (N.NodeType = 'defProc') and NestedRedeclares(N) then
+    if (not (N = OwnerProc)) and (N.NodeType = 'defProc') and NestedRedeclares(N) then  // dl:ok nonminimal-bool@a2de -- TTSNode defines = but no <>; the rewritten form fails dcc E2015 -- fixer d8ebefa10 declines -- SLZ-S10 2026-11-22
       Exit;
     { An identifier matching Target: under a `with` a target may declare it, so it is a site to decide. }
     if (N.NodeType = 'identifier') and SameText(Trim(NStr(N)), Target) then

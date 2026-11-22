@@ -1331,7 +1331,7 @@ begin
   Result:= '';
   try
     Lines:= ReadSourceFileLines(AFinding.FilePath);
-    if (AFinding.StartLine >= 1) and (AFinding.StartLine <= Length(Lines)) and (AFinding.EndCol > AFinding.StartCol) then
+    if (AFinding.StartLine >= 1) and (AFinding.StartLine <= Length(Lines)) and (AFinding.EndCol > AFinding.StartCol) then  // dl:ok manual-inrange@7173 -- fixer d8ebefa10 declines this site; a hand InRange rewrite (plus System.Math in uses) is deferred -- SLZ-S10 2026-11-22
       Result:= Copy(Lines[AFinding.StartLine - 1], AFinding.StartCol, AFinding.EndCol - AFinding.StartCol);
   except
     on E: Exception do Result:= '';  { unreadable: the plan still says why it was dropped }
@@ -1386,7 +1386,7 @@ begin
       end;
       { TTextEditApplier's ReplaceEditIsValid rule: the span [Col, EndCol) on
         Line holds ExpectText, compared case-insensitively. }
-      Ok:= (E.Line >= 1) and (E.Line <= Length(Lines)) and SpanHolds(Lines[E.Line - 1], E);
+      Ok:= (E.Line >= 1) and (E.Line <= Length(Lines)) and SpanHolds(Lines[E.Line - 1], E);  // dl:ok manual-inrange@e4fe -- fixer d8ebefa10 declines this site; a hand InRange rewrite (plus System.Math in uses) is deferred -- SLZ-S10 2026-11-22
       if not Ok then
       begin
         AStale:= E;

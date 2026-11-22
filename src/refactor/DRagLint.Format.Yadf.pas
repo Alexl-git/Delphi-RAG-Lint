@@ -400,8 +400,8 @@ begin
   begin
       NA:= 0;
     NB:= 0;
-    if (I < Length(PA)) then TryStrToInt(Trim(PA[I]), NA);
-    if (I < Length(PB)) then TryStrToInt(Trim(PB[I]), NB);
+    if (I < Length(PA)) then TryStrToInt(Trim(PA[I]), NA);  // dl:ok ignored-must-use-result@0417 -- a non-numeric part compares as 0, which is the intended version-compare fallback -- SLZ-S10 2026-11-22
+    if (I < Length(PB)) then TryStrToInt(Trim(PB[I]), NB);  // dl:ok ignored-must-use-result@f493 -- a non-numeric part compares as 0, which is the intended version-compare fallback -- SLZ-S10 2026-11-22
     if NA < NB then Exit(-1);
     if NA > NB then Exit( 1);
   end;

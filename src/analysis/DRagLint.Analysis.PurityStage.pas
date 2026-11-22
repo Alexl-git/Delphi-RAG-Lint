@@ -17,7 +17,7 @@
 /// The lattice, the axiom and built-in tables, the argument lexer, the body
 /// scanner and the callee -> caller translation live in
 /// DRagLint.Analysis.Purity; this unit only drives them against the store.</remarks>
-unit DRagLint.Analysis.PurityStage;
+unit DRagLint.Analysis.PurityStage;  // dl:ok unit-too-large@becf -- measured 2361 lines (limit 2000); a unit split changes the uses graph, outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
 
 interface
 
@@ -2305,7 +2305,7 @@ begin
       [ALoad, AScope, AScan, FLexTicks / TStopwatch.Frequency, AFix, AWrite, FVisits, FLineReReads,
        Round(FLineChars * SizeOf(Char) / BYTES_PER_MB)]));
   if GetEnvironmentVariable('DRAGLINT_PROFILE') <> '' then
-    Writeln(ErrOutput, Format('purity: scan = file %.1fs  refs %.1fs  body %.1fs  escapes %.1fs  ref-loop %.1fs; symbol lookups %d: single-row fetches %d in %.2fs, per-file preload %d row(s) in %.2fs',
+    Writeln(ErrOutput, Format('purity: scan = file %.1fs  refs %.1fs  body %.1fs  escapes %.1fs  ref-loop %.1fs; symbol lookups %d: single-row fetches %d in %.2fs, per-file preload %d row(s) in %.2fs',  // dl:ok locale-sensitive-conversion@39b2 -- diagnostic / batch text, not data; locale formatting is harmless here -- SLZ-S10 2026-11-22
       [FTkFile / TStopwatch.Frequency, FTkRefs / TStopwatch.Frequency, FTkBody / TStopwatch.Frequency,
        FTkEsc / TStopwatch.Frequency, FTkRefLoop / TStopwatch.Frequency,
        FSymLookups, FSymMiss, FTkSym / TStopwatch.Frequency, FPreloadRows, FTkPreload / TStopwatch.Frequency]));

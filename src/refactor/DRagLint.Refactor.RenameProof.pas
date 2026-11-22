@@ -1954,7 +1954,7 @@ begin
   else ClassifyUnbound(pTok, UnboundRow);
 end;
 
-procedure TProver.ClassifyNewToken(const pTok: TTok; pDecls: TDeclMap);
+procedure TProver.ClassifyNewToken(const pTok: TTok; pDecls: TDeclMap);  // dl:ok too-many-exit-points@ccf5 -- measured 6 Exits (max 5); guard clauses, each refusal exits with its own result -- SLZ-S10 2026-11-22
 var
   Rows: TList<TRefRow>;
 begin
@@ -2024,7 +2024,7 @@ begin
     Refuse(CRefuseDfmNameUnbound, pPath, pLine, pAt,
       Format('this form names "%s" where nothing tells which component it means: fix it by hand', [FOld]));
 end;
-procedure TProver.ScanFile(pFileId: Int64; const pPath: string);
+procedure TProver.ScanFile(pFileId: Int64; const pPath: string);  // dl:ok cyclomatic-complexity@4c42 -- measured 33 (max 30); one dispatch routine over node kinds, a split is a refactor outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
 var
   Text: string;
 begin

@@ -942,7 +942,7 @@ begin
     Format('msbuild /t:Build /p:Config=Debug /p:Platform=%s /v:minimal "%s" > "%s" 2>&1',
       [MsBuildPlatform(pPlatform), Project, Log]),
     { redirection FIRST: `echo X=%ERRORLEVEL%>> f` expands to `X=0>> f`, a redirect of handle 0 }
-    Format('>> "%s" echo BUILD_EXITCODE=%%ERRORLEVEL%%', [Log])]) + #13#10, TEncoding.ASCII);
+    Format('>> "%s" echo BUILD_EXITCODE=%%ERRORLEVEL%%', [Log])]) + #13#10, TEncoding.ASCII);  // dl:ok locale-sensitive-conversion@9aa5 -- diagnostic / batch text, not data; locale formatting is harmless here -- SLZ-S10 2026-11-22
   var Watch:= TStopwatch.StartNew;
   var Limit:= BuildTimeoutMs(Project);
   RunBounded(pWhat, 'cmd.exe /c ""' + Bat + '""', '', Limit, Result.TimedOut);
@@ -1300,7 +1300,7 @@ var
     { the write-failure test seam acts only on a project under %TEMP% / C:\TEMP (fix round 1);
       TextEdit.FailWriteForTests itself stays unscoped for convert-apply }
     if IsUnderTemp(pProjectDir) then FailWriteForTests(Writes, pPath);
-    TFile.WriteAllBytes(pPath, Staged[LowerCase(pPath)]);
+    TFile.WriteAllBytes(pPath, Staged[LowerCase(pPath)]);  // dl:ok dictionary-get-without-check@ee29 -- the key was staged a few lines above in the same routine; a miss is a programming error and should raise -- SLZ-S10 2026-11-22
     pTx.Written:= pTx.Written + [pPath];
   end;
 

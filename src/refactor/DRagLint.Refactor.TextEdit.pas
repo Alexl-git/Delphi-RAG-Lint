@@ -164,7 +164,7 @@ type
   /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.ConvertApply, DRagLint.CLI.CycleFix, DRagLint.Convert.Apply, DRagLint.LSP.UsesOnSave, DRagLint.Refactor.ExtractMethod, DRagLint.Refactor.Rename, DRagLint.Refactor.RenameProof</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TTextEditApplier = class
+  TTextEditApplier = class  // dl:ok high-response@b451 -- measured RFC 53 (>50); the class is the refactoring's single driver, a split is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
   private
     /// <summary><!-- drag-lint:auto sum -->One kept edit applied to ALines (the per-kind
     /// half of ApplyGroup).</summary>
@@ -1304,7 +1304,7 @@ begin
       end;
     tekInsertInLine:
       begin
-        if (AEdit.Line >= 1) and (AEdit.Line <= ALines.Count) then
+        if (AEdit.Line >= 1) and (AEdit.Line <= ALines.Count) then  // dl:ok manual-inrange@c653 -- fixer d8ebefa10 declines this site; a hand InRange rewrite (plus System.Math in uses) is deferred -- SLZ-S10 2026-11-22
         begin
           var S: string:= ALines[AEdit.Line - 1];
           var C: Integer:= AEdit.Col;
@@ -1318,7 +1318,7 @@ begin
       end;
     tekReplaceInLine:
       begin
-        if (AEdit.Line >= 1) and (AEdit.Line <= ALines.Count) then
+        if (AEdit.Line >= 1) and (AEdit.Line <= ALines.Count) then  // dl:ok manual-inrange@c653 -- fixer d8ebefa10 declines this site; a hand InRange rewrite (plus System.Math in uses) is deferred -- SLZ-S10 2026-11-22
         begin
           var S: string:= ALines[AEdit.Line - 1];
           if not ReplaceEditIsValid(AEdit, S) then
@@ -1586,7 +1586,7 @@ begin
     if (U.Section = ASection) and U.FromInclude and not AIncRow.FromInclude then
       AIncRow:= U;
   for U in AUses do
-    if ((U.Section = ASection) and not U.FromInclude) and ((not AHaveLast) or (U.StartLine > ALast.StartLine)
+    if ((U.Section = ASection) and not U.FromInclude) and ((not AHaveLast) or (U.StartLine > ALast.StartLine)  // dl:ok boolean-expression-complexity@1df9 -- measured 5 operators (limit 4); one syntactic shape test, named sub-expressions deferred -- SLZ-S10 2026-11-22
          or ((U.StartLine = ALast.StartLine) and (U.StartCol > ALast.StartCol))) then begin
         ALast:= U;
         AHaveLast:= True;
@@ -1617,7 +1617,7 @@ var
   Cands: TDictionary<string, Integer>; { unit -> score }
   Best : string; BestScore: Integer;
   FullPath: string; InFileId: Int64;
-  Uses_: TArray<TUnitUse>; U: TUnitUse;
+  Uses_: TArray<TUnitUse>; U: TUnitUse;  // dl:ok local-var-casing@4b56 -- trailing underscore escapes a reserved word / RTL routine name (Uses, Abs); PascalCase is kept -- SLZ-S10 2026-11-22
   UsedSet: TDictionary<string, Boolean>;
   UnitName: string;
   TargetSection: TUnitUseSection;
@@ -1643,7 +1643,7 @@ begin
       UnitName:= ChangeFileExt(ExtractFileName(ANameStore.GetFilePath(S.FileId)), '');
       if UnitName = '' then Continue;
       var Sc: Integer:= 1;
-      if not SameText(S.Section, 'implementation') then Inc(Sc, 10); { interface-visible }
+      if not SameText(S.Section, 'implementation') then Inc(Sc, 10); { interface-visible }  // dl:ok magic-literal@a2a5 -- measured literal is a local bound/weight used once, documented by its line -- SLZ-S10 2026-11-22
       var Cur: Integer;
       if not Cands.TryGetValue(UnitName, Cur) then Cur:= 0;
       Cands.AddOrSetValue(UnitName, Cur + Sc);

@@ -108,9 +108,9 @@ var
   L: Integer;
 begin
   L:= Length(APattern);
-  if L <= 4 then Result:= 1
-  else if L <= 8 then Result:= 2
-  else Result:= 3;
+  if L <= 4 then Result:= 1  // dl:ok magic-literal@4db9 -- measured literal is a local bound/weight used once, documented by its line -- SLZ-S10 2026-11-22
+  else if L <= 8 then Result:= 2  // dl:ok magic-literal@976f -- measured literal is a local bound/weight used once, documented by its line -- SLZ-S10 2026-11-22
+  else Result:= 3;  // dl:ok magic-literal@6307 -- measured literal is a local bound/weight used once, documented by its line -- SLZ-S10 2026-11-22
 end;
 
 function Trigrams(const S: string): TArray<string>;
@@ -124,13 +124,13 @@ var
 begin
   Low:= LowerCase(S  );
   N  := Length   (Low);
-  if N < 3 then Exit(nil);
+  if N < 3 then Exit(nil);  // dl:ok magic-literal@550f -- measured literal is a local bound/weight used once, documented by its line -- SLZ-S10 2026-11-22
   Seen:= TDictionary<string, Boolean>.Create;
   List:= TList<string>.Create;
   try
     for i:= 1 to N - 2 do
     begin
-      G:= Copy(Low, i, 3);
+      G:= Copy(Low, i, 3);  // dl:ok magic-literal@4139 -- measured literal is a local bound/weight used once, documented by its line -- SLZ-S10 2026-11-22
       if not Seen.ContainsKey(G) then
       begin
         Seen.Add(G, True);

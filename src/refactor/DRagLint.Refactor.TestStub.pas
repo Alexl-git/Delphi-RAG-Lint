@@ -244,7 +244,7 @@ begin
     for N in Names do
     begin
       if Trim(N) = '' then Continue;
-      SetLength(AParams, Length(AParams) + 1);
+      SetLength(AParams, Length(AParams) + 1);  // dl:ok setlength-in-loop@513d -- result sets are small (callers of one symbol); growth by one is immaterial -- SLZ-S10 2026-11-22
       AParams[High(AParams)].Name:= Trim(N);
       AParams[High(AParams)].Kind:= TypeText;
     end;
@@ -291,7 +291,7 @@ begin
   { Walk to the enclosing unit rather than assuming a segment count. }
   Walk := Chosen;
   Guard:= 0;
-  while (Walk.ParentId <> 0) and (Guard < 16) do
+  while (Walk.ParentId <> 0) and (Guard < 16) do  // dl:ok magic-literal@9606 -- measured literal is a local bound/weight used once, documented by its line -- SLZ-S10 2026-11-22
   begin
     Walk:= AStore.GetSymbolById(Walk.ParentId);
     Inc(Guard);

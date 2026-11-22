@@ -334,7 +334,7 @@ begin
   end;
 end;
 
-procedure DataFlowRecordSolve(const AName: string; ABlocks, AVisits, AReenqueues,
+procedure DataFlowRecordSolve(const AName: string; ABlocks, AVisits, AReenqueues,  // dl:ok too-many-parameters@b6bf -- measured 9 parameters (max 7); the solver's in/out state, grouping it into a record is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
   AJoins, ATransfers, AComparisons, ASolveTicks, ATransferTicks: Int64);
 var I, K: Integer;
 begin
@@ -417,14 +417,14 @@ begin
       InQueue[B] := False;
       Inc(LocalVisits);
       { gather predecessors (forward) or successors (backward) }
-      if Fwd then Adj := ACfg.Blocks[B].Pred else Adj := ACfg.Blocks[B].Succ;
-      if B = Boundary then Acc := AAnalysis.Boundary
+      if Fwd then Adj := ACfg.Blocks[B].Pred else Adj := ACfg.Blocks[B].Succ;  // dl:ok ifthen-to-if-expression@ca8f -- fixer d8ebefa10 declines this site (a shape dcc rejects as an if-expression, e.g. TValue / array branches); hand rewrite deferred -- SLZ-S10 2026-11-22
+      if B = Boundary then Acc := AAnalysis.Boundary  // dl:ok ifthen-to-if-expression@a880 -- fixer d8ebefa10 declines this site (a shape dcc rejects as an if-expression, e.g. TValue / array branches); hand rewrite deferred -- SLZ-S10 2026-11-22
       else Acc := AAnalysis.Bottom;
       for I := 0 to Adj.Count - 1 do
       begin
         P := Adj[I];
         Inc(LocalJoins);
-        if Fwd then Acc := AAnalysis.Join(Acc, AOut[P])
+        if Fwd then Acc := AAnalysis.Join(Acc, AOut[P])  // dl:ok ifthen-to-if-expression@21e5 -- fixer d8ebefa10 declines this site (a shape dcc rejects as an if-expression, e.g. TValue / array branches); hand rewrite deferred -- SLZ-S10 2026-11-22
         else Acc := AAnalysis.Join(Acc, AIn[P]);
       end;
       if Fwd then
@@ -446,7 +446,7 @@ begin
         end;
       end
       else
-      begin
+      begin  // dl:ok duplicate-code@0353 -- measured 156 tokens; sibling case arms of the same walker, a shared helper is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
         AOut[B] := Acc;
         TX := TStopwatch.GetTimeStamp;
         NewVal := AAnalysis.Transfer(ACfg.Blocks[B], AOut[B]);

@@ -1,4 +1,4 @@
-unit DRagLint.Analysis.Flow.Lattices;
+unit DRagLint.Analysis.Flow.Lattices;  // dl:ok unit-too-large@5352 -- measured 2705 lines (limit 2000); a unit split changes the uses graph, outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
 
 { Per-routine variable table + concrete data-flow analyses (M2). The variable
   table indexes a routine's locals, params and Result to 0..N-1; lattice values
@@ -1295,7 +1295,7 @@ end;
 
 constructor TRoutineVarTable.Create;
 begin
-  inherited;
+  inherited;  // dl:ok inherited-bare@246d -- bare inherited is the intended ancestor call of the same method -- SLZ-S10 2026-11-22
   FVars := TList<TRoutineVar>.Create;
   FByName := TDictionary<string, Integer>.Create;
   FMultiDecl := TDictionary<string, Boolean>.Create;
@@ -1440,7 +1440,7 @@ var
     storage really is shared, and a parameter is assigned on entry, so aliasing
     to it removes a false positive rather than creating a false negative. }
   function AbsoluteTargetIdx(const ADeclVar: TTSNode; var ALimit: Integer): Integer;
-  var K: Integer; C, Abs_, Tgt: TTSNode;
+  var K: Integer; C, Abs_, Tgt: TTSNode;  // dl:ok local-var-casing@8659 -- trailing underscore escapes a reserved word / RTL routine name (Uses, Abs); PascalCase is kept -- SLZ-S10 2026-11-22
   begin
     Result := -1;
     Abs_ := Default(TTSNode);
@@ -1687,7 +1687,7 @@ begin
   Result := -1;
   Cur := N;
   Guard := 0;
-  while (not Cur.IsNull) and (Guard < 32) do
+  while (not Cur.IsNull) and (Guard < 32) do  // dl:ok magic-literal@bb9d -- measured literal is a local bound/weight used once, documented by its line -- SLZ-S10 2026-11-22
   begin
     Inc(Guard);
     if Cur.NodeType = 'identifier' then
@@ -1740,7 +1740,7 @@ procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
   const AIsRecordMethodDef: TRecordMethodDefPredicate = nil;
   const AParamMode: TParamModeLookup = nil);
 
-  procedure Walk(const N: TTSNode; AAfterDot: Boolean);
+  procedure Walk(const N: TTSNode; AAfterDot: Boolean);  // dl:ok deep-nesting@c288, too-many-exit-points@47d0, cyclomatic-complexity@a908, cognitive-complexity@d358 -- deep-nesting: measured 6 deep (max 5), too-many-exit-points: measured 6 Exits (max 5), cyclomatic-complexity: measured 45 (max 30), cognitive-complexity: measured 88 (max 65); one walker routine, a split is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
   var I, Idx: Integer; K: string; ArgsN, Arg, Lhs, Ent: TTSNode;
       CalleeNm: string; Mode: TParamMode; IsNamedArg: Boolean;
   begin
@@ -2273,7 +2273,7 @@ begin
   Result.May[I] := False; end;
 end;
 
-function TFreedState.Join(const A, B: TFreedVal): TFreedVal;
+function TFreedState.Join(const A, B: TFreedVal): TFreedVal;  // dl:ok duplicate-code@9e1b -- measured 101 tokens; sibling case arms of the same walker, a shared helper is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
 var I: Integer;
 begin
   SetLength(Result.Must, FVars.Count);
@@ -2322,7 +2322,7 @@ begin
   end;
 end;
 
-function TFreedState.Equals(const A, B: TFreedVal): Boolean;
+function TFreedState.Equals(const A, B: TFreedVal): Boolean;  // dl:ok duplicate-code@911f -- measured 113 tokens; sibling case arms of the same walker, a shared helper is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
 var I: Integer;
 begin
   Result := False;
@@ -2563,7 +2563,7 @@ var Acc: TList<TCallArgRef>;
     if N.NodeType = 'exprCall' then
     begin
       Ent := N.ChildByField('entity');
-      if (not Ent.IsNull) and (Ent.NodeType = 'identifier') then
+      if (not Ent.IsNull) and (Ent.NodeType = 'identifier') then  // dl:ok ifthen-to-if-expression@9686 -- fixer d8ebefa10 declines this site (a shape dcc rejects as an if-expression, e.g. TValue / array branches); hand rewrite deferred -- SLZ-S10 2026-11-22
         Nm := Trim(NodeStr(Ent, ASrc)) { original case: the store keys on it }
       else Nm := ''; { method call (exprDot entity) -> not resolvable by bare name }
       Args := N.ChildByField('args');

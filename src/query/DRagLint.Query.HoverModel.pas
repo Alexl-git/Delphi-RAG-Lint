@@ -234,7 +234,7 @@ begin
   for Grp in Inner.Split([';']) do
   begin
     C:= Pos(':', Grp);
-    if C > 0 then Names:= Copy(Grp, 1, C - 1) else Names:= Grp;  { untyped var/out }
+    if C > 0 then Names:= Copy(Grp, 1, C - 1) else Names:= Grp;  { untyped var/out }  // dl:ok ifthen-to-if-expression@d3e6 -- fixer d8ebefa10 declines this site (a shape dcc rejects as an if-expression, e.g. TValue / array branches); hand rewrite deferred -- SLZ-S10 2026-11-22
     Names:= Trim(Names);
     if Names = '' then Continue;
 
@@ -403,7 +403,7 @@ begin
   AAsm.FactLines:= AAsm.FactLines + Entry.Lines;
 end;
 
-function AssembleHover(const AStore: ISymbolStore; const ASym: TSymbol;
+function AssembleHover(const AStore: ISymbolStore; const ASym: TSymbol;  // dl:ok cyclomatic-complexity@f01a -- measured 32 (max 30); one dispatch routine over node kinds, a split is a refactor outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
   AWithFacts: Boolean; const AExtraStores: TArray<ISymbolStore>;
   ASkip: THoverSkips): THoverAssembly;
 var

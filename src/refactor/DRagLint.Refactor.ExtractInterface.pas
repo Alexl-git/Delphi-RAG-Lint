@@ -1628,7 +1628,7 @@ begin
     else Writeln(Format('refused [%s]: %s', [pGate.Refusal, pGate.Detail]));
 end;
 
-function RunExtractInterface(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;
+function RunExtractInterface(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;  // dl:ok too-many-exit-points@5e5c -- measured 6 Exits (max 5); guard clauses, each refusal exits with its own result -- SLZ-S10 2026-11-22
   const pOpts: TExtractInterfaceOptions): Integer;
 
   function Fail(const pMessage: string): Integer;

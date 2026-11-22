@@ -1485,7 +1485,7 @@ begin
       AOutput:= 'ERROR: could not write baseline: ' + pOptions.WriteBaselinePath;
       Exit(2);
     end;
-    if SameText(pOptions.Format, 'json') then
+    if SameText(pOptions.Format, 'json') then  // dl:ok ifthen-to-if-expression@f71e -- fixer d8ebefa10 declines this site (a shape dcc rejects as an if-expression, e.g. TValue / array branches); hand rewrite deferred -- SLZ-S10 2026-11-22
       AOutput:= Format('{"schema":"%s","unit":"%s","baseline_written":"%s",' +
         '"fingerprint":"%s","extractor_version":"%s","schema_version":%d}',
         [LINT_TREE_SCHEMA,

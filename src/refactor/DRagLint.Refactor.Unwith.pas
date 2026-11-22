@@ -400,13 +400,13 @@ type
     function TargetLinks(const E: TTSNode): TArray<TLink>;
     procedure CheckTargetStable(const pLinks: TArray<TLink>; pCast: Boolean; out pTypeId: Int64; out pTypeText: string);
     function CastType(const E: TTSNode): TSymbol;
-    procedure CheckHeader(const W, E, Body: TTSNode);
+    procedure CheckHeader(const W, E, Body: TTSNode);  // dl:ok param-name-prefix@408f -- unit-wide convention of this walker (Body/Index nested-routine params); renaming is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
     procedure VisitBody(const N: TTSNode; pInType: Boolean; pC: TClosure; const pLinks: TArray<TLink>;
       const pSite: TList<TUnwithBinding>; const pPrefixAt: TList<Integer>);
     function UsesTargetBare(const N: TTSNode; const pLinks: TArray<TLink>): Boolean;
-    procedure AddBodySplices(const W, Body: TTSNode; const pPrefix: string; const pPrefixAt: TList<Integer>;
+    procedure AddBodySplices(const W, Body: TTSNode; const pPrefix: string; const pPrefixAt: TList<Integer>;  // dl:ok param-name-prefix@0348 -- unit-wide convention of this walker (Body/Index nested-routine params); renaming is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
       const pRootBefore, pRootName: string; pRootLead: Integer);
-    function TryUnwrap(const W, Body: TTSNode; out pSplices: TArray<TSplice>): Boolean;
+    function TryUnwrap(const W, Body: TTSNode; out pSplices: TArray<TSplice>): Boolean;  // dl:ok param-name-prefix@996a -- unit-wide convention of this walker (Body/Index nested-routine params); renaming is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
     function AnalyzeSite(const W: TTSNode): TUnwithSite;
     procedure LoadRows;
     procedure Render(const pFmt: TTextFileFormat; var pPlan: TUnwithFilePlan);
@@ -1047,7 +1047,7 @@ begin
   end;
 end;
 
-procedure TAnalyzer.CheckHeader(const W, E, Body: TTSNode);
+procedure TAnalyzer.CheckHeader(const W, E, Body: TTSNode);  // dl:ok param-name-prefix@fd2c -- unit-wide convention of this walker (Body/Index nested-routine params); renaming is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
 
   function BlankBetween(pFrom, pTo: Integer): Boolean;
   begin
@@ -1213,7 +1213,7 @@ begin
     VisitBody(N.NamedChild(I), InT, pC, pLinks, pSite, pPrefixAt);
 end;
 
-function TAnalyzer.TryUnwrap(const W, Body: TTSNode; out pSplices: TArray<TSplice>): Boolean;  // dl:ok too-many-exit-points@106d, cyclomatic-complexity@4d81 -- REVIEWED 2026-11-05: each branch is one precondition for unwrapping; failing any keeps the begin..end, which is safe
+function TAnalyzer.TryUnwrap(const W, Body: TTSNode; out pSplices: TArray<TSplice>): Boolean;  // dl:ok too-many-exit-points@106d, cyclomatic-complexity@4d81, param-name-prefix@affb -- unit-wide convention of this walker (Body/Index nested-routine params); renaming is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
 var
   Block: TTSNode;
 
@@ -1324,7 +1324,7 @@ begin
   Result:= True;
 end;
 
-procedure TAnalyzer.AddBodySplices(const W, Body: TTSNode; const pPrefix: string; const pPrefixAt: TList<Integer>;
+procedure TAnalyzer.AddBodySplices(const W, Body: TTSNode; const pPrefix: string; const pPrefixAt: TList<Integer>;  // dl:ok param-name-prefix@277d -- unit-wide convention of this walker (Body/Index nested-routine params); renaming is outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
   const pRootBefore, pRootName: string; pRootLead: Integer);
 var
   Own: TArray<TSplice>;

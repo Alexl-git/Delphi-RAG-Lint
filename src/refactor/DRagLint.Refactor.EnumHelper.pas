@@ -724,7 +724,7 @@ begin
       Exit(True);
 end;
 
-class function TEnumHelperRefactoring.Build(const AStore: ISymbolStore; const AEnumQName: string;
+class function TEnumHelperRefactoring.Build(const AStore: ISymbolStore; const AEnumQName: string;  // dl:ok cyclomatic-complexity@bd5c -- measured 31 (max 30); one dispatch routine over node kinds, a split is a refactor outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
   const AMethods: TEnumHelperMethods; const AToStringMode: TToStringMode): TEnumHelperResult;
 var
   Res        : TEnumHelperResolve;
@@ -740,7 +740,7 @@ var
   UsesEdit   : TTextEdit;
   Edits      : TArray<TTextEdit>;
   FileId     : Int64;
-  Uses_      : TArray<TUnitUse>;
+  Uses_      : TArray<TUnitUse>;  // dl:ok local-var-casing@c92e -- trailing underscore escapes a reserved word / RTL routine name (Uses, Abs); PascalCase is kept -- SLZ-S10 2026-11-22
   UsesPrefix : string;
   LastImplUse: TUnitUse;
   HaveLastImplUse: Boolean;
@@ -816,7 +816,7 @@ begin
       encountered). Falls back to 2 spaces if the anchor line is out of
       range (should not happen for a resolved enum). }
     EnumIndent:= '  ';
-    if (Res.EnumEndLine >= 1) and (Res.EnumEndLine <= Lines.Count) then
+    if (Res.EnumEndLine >= 1) and (Res.EnumEndLine <= Lines.Count) then  // dl:ok manual-inrange@0b7a -- fixer d8ebefa10 declines this site; a hand InRange rewrite (plus System.Math in uses) is deferred -- SLZ-S10 2026-11-22
     begin
       var LEnumLine: string:= Lines[Res.EnumEndLine - 1];
       var LTrimLen : Integer:= Length(LEnumLine) - Length(TrimLeft(LEnumLine));
@@ -856,7 +856,7 @@ begin
       if (U.Section = uusImplementation) and U.FromInclude and (U.IncludeLine > IncImplUse.IncludeLine) then
         IncImplUse:= U;
     for U in Uses_ do
-      if ((U.Section = uusImplementation) and not U.FromInclude) and ((not HaveLastImplUse) or (U.StartLine > LastImplUse.StartLine)
+      if ((U.Section = uusImplementation) and not U.FromInclude) and ((not HaveLastImplUse) or (U.StartLine > LastImplUse.StartLine)  // dl:ok boolean-expression-complexity@37a5 -- measured 5 operators (limit 4); one syntactic shape test, named sub-expressions deferred -- SLZ-S10 2026-11-22
            or ((U.StartLine = LastImplUse.StartLine) and (U.StartCol > LastImplUse.StartCol))) then begin LastImplUse:= U;
         HaveLastImplUse:= True; end;
 

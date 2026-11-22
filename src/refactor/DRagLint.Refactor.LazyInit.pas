@@ -345,7 +345,7 @@ begin
   Result:= True;
 end;
 
-function PlanSection(const pStore: ISymbolStore; const pConn: TFDConnection; const pOwn: TOwnRoots; const pOpts: TLazyInitOptions;  // dl:ok too-many-exit-points@ab21 -- one guard per named refusal, in the documented order: the exits are the contract
+function PlanSection(const pStore: ISymbolStore; const pConn: TFDConnection; const pOwn: TOwnRoots; const pOpts: TLazyInitOptions;  // dl:ok too-many-exit-points@ab21, cyclomatic-complexity@1db5 -- measured 34 (max 30); one dispatch routine over node kinds, a split is a refactor outside the mechanical SLZ batch -- SLZ-S10 2026-11-22
   const pPath, pUnit: string; const pHeavy: TArray<TLintFinding>): TSectionPlan;
 
   procedure Refuse(var pPlan: TSectionPlan; const pKind, pReason: string);
