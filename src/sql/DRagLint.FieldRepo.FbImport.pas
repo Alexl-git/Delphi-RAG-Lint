@@ -122,7 +122,7 @@ uses
   FireDAC.Stan.Pool,
   FireDAC.Stan.Async,
   FireDAC.Stan.Param,
-  FireDAC.Phys,  // dl:ok unused-unit-in-uses@55fa
+  FireDAC.Phys,
   FireDAC.Phys.FB,
   FireDAC.DApt;
 

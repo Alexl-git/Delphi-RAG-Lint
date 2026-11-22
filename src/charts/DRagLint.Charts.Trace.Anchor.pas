@@ -703,7 +703,7 @@ begin
   try
     var Keys: TArray<string>:= [];
     for var W in pRows do
-      if (W.Ds <> '') and (W.Col <> '') and (Pos(',', W.Ds) = 0) and (Pos('|', W.Col) = 0) then
+      if (W.Ds <> '') and (W.Col <> '') and (not W.Ds.Contains(',')) and (not W.Col.Contains('|')) then
       begin
         Ok.Add(W);
         Keys:= Keys + [W.Ds + '|' + W.Col];

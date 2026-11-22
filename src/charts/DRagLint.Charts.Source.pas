@@ -538,7 +538,7 @@ end;
 function TSourceReader.BlankMatch(const pMatch: TMatch): string;
 begin
   var V:= pMatch.Value;
-  if Pos(#10, V) = 0 then
+  if not V.Contains(#10) then
     Exit(StringOfChar(' ', Length(V)));
   Result:= V;
   for var K:= 1 to Length(Result) do

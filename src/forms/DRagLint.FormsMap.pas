@@ -321,7 +321,7 @@ begin
   begin
     Buf:= Buf + ' ' + Lines[I];
     if Buf.Contains(')') then Break;
-    if (Pos('class', LowerCase(Buf)) > 0) and (not Buf.Contains('(')) and (Buf.Contains(';')) then Exit;
+    if (LowerCase(Buf).Contains('class')) and (not Buf.Contains('(')) and (Buf.Contains(';')) then Exit;
     if I > AStartLine + 3 then Break;
   end;
   P:= Pos('(', Buf);
@@ -484,18 +484,12 @@ begin
   end; // try
 end; // function
 
-/// <summary>RFC 4180 field escaping (quote when needed, double embedded quotes).</summary>
-function CsvField(const S: string): string;
-begin
-  Result:= if (S.Contains(',')) or (S.Contains('"')) or S.Contains(#10) then '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"' else S;
-end;
-
 /// <summary>True if the source line constructs the given form class:
 /// "FormClass.Create" (also matches named ctors like .CreateForFolder) or
 /// "CreateForm(FormClass".</summary>
 function IsLaunchLine(const ALine, AFormClass: string): Boolean;
 begin
-  Result:= (ALine.Contains(AFormClass + '.Create')) or (Pos('CreateForm(' + AFormClass, StringReplace(ALine, ' ', '', [rfReplaceAll])) > 0);
+  Result:= (ALine.Contains(AFormClass + '.Create')) or (StringReplace(ALine, ' ', '', [rfReplaceAll]).Contains('CreateForm(' + AFormClass));
 end;
 
 /// <summary>True if ALine shows a global singleton form instance via its design-time

@@ -961,7 +961,7 @@ begin
   var Title:= if TitleMatch.Success then DecodeXml(TitleMatch.Groups[1].Value).Replace(NBSP, ' ') else '';
   var SepAt:= Pos(TITLE_SEP, Title);
   if SepAt > 0 then Exit(Trim(Copy(Title, 1, SepAt - 1)));
-  if (Title <> '') and (Pos(' ', Title) = 0) then Exit(Title);
+  if (Title <> '') and (not Title.Contains(' ')) then Exit(Title);
   var First:= TRegEx.Match(pBody, RE_FIRST_TEXT, [roSingleLine]);
   Result:= if First.Success then Trim(DecodeXml(TRegEx.Replace(First.Groups[1].Value, RE_TAG, ''))) else '';
 end;
@@ -1316,7 +1316,7 @@ end;
 
 procedure OpenInBrowser(const pPath: string);
 begin
-  ShellExecute(0, 'open', PChar(pPath), nil, nil, SW_SHOWNORMAL);  // dl:ok taint-command-injection@ea37 -- REVIEWED 2026-11-19 SLZ-MARK: ShellExecute open on the report file this run just wrote; the path comes from the out-dir
+  ShellExecute(0, 'open', PChar(pPath), nil, nil, SW_SHOWNORMAL);
 end;
 
 end.

@@ -96,7 +96,6 @@ const
   MODE_WRITE = 'write';
   MODE_READ = 'read';
   DIR_WRITE = 'write';
-  DIR_READ = 'read';
   NO_ANCHOR = 'index:0';
   UNKNOWN_ANCHOR = 'unknown:0';
   CLIENT_PREFIX_RX = '^CLIENT-';
@@ -105,7 +104,6 @@ const
   ANCHOR_LEAF_RX = ' @([A-Za-z0-9_$.\-]+\.(?:pas|dfm|dpr|inc|sql)):[1-9]\d*';
   { PS :360: the field a DERIVED row's REGENERATE traces -- its --target, double-quoted (a qualified name holds no ") }
   TARGET_RX = '--target "([^"]*)"';
-  SQL_FILES_COUNT = 'SELECT COUNT(*) AS n FROM files';
   SQL_ANCHOR_PATHS = 'SELECT DISTINCT path AS p FROM files WHERE %s';
   TITLE_REACHES = 'How %s reaches %s and goes back';
   TITLE_CANNOT = 'Why %s cannot be traced';

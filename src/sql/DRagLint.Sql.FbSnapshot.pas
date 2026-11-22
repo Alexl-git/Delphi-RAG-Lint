@@ -40,7 +40,6 @@ uses
   , FireDAC .Phys    .IBDef
   , FireDAC .Phys    .FB
   , FireDAC .Phys    .FBDef
-  , DRagLint.Core    .Interfaces
   , DRagLint.Storage .SQLite
   ;
 

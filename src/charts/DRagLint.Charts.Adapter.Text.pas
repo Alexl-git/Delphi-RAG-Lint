@@ -165,7 +165,7 @@ end;
 function IsCut(const pLine: string): Boolean;
 begin
   var T:= pLine.Trim;
-  Result:= (Pos(' ', T) = 0) and (Length(T) = WRAP_ROOM - LeadingSpaces(pLine));
+  Result:= (not T.Contains(' ')) and (Length(T) = WRAP_ROOM - LeadingSpaces(pLine));
 end;
 
 { Whether EmitWrapped broke between pLine and pNext: it does only when the next

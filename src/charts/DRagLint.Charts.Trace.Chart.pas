@@ -383,7 +383,6 @@ const
   SIZE_TITLE = 13;
   NO_SIZE = 0;
   NUM_DIGITS = 2;
-  LEGEND_ROOT = 'legend';
   DISCLOSED = 'disclosed:';
   FULL_TEXT_TAIL = ', full text in trace.dlgraph';
   RE_SQL_ANCHOR = '\.sql:\d+$';
