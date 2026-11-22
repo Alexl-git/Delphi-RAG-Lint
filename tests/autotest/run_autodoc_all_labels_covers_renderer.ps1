@@ -97,6 +97,10 @@ $Legacy = @('Pure', 'Used in classes:')
 # renderers, the RefVerb:= pair that feeds AppendFact for the inbound verb, and
 # the RWLine:= pair that builds the one-line 'Reads: ...   Writes: ...' fact.
 $SiteRx = "(?:AppendFact\(|Lines\.Add\(|RefVerb\s*:=|RWLine\s*:=(?:\s*RWLine\s*\+)?)\s*(?:Format\()?\s*'([^']*)'"
+# The same pair written as ONE if-expression (the ifthen-to-if-expression autofix
+# turned "if C then RefVerb:= 'A' else RefVerb:= 'B'" into this shape in 1.52.3):
+# both arms are emit sites.
+$IfExprRx = "(?:RefVerb|RWLine)\s*:=\s*if\b[^;]*?\bthen\s*'([^']*)'\s*else\s*'([^']*)'"
 
 function ConvertTo-CanonicalLabel([string]$Literal) {
   $l = $Literal
@@ -111,6 +115,12 @@ function Get-EmittedLabels([string]$PascalText) {
     $c = ConvertTo-CanonicalLabel $m.Groups[1].Value
     if ($c.Trim() -eq '') { continue }
     $out += $c
+  }
+  foreach ($m in [regex]::Matches($nc, $IfExprRx)) {
+    foreach ($g in 1, 2) {
+      $c = ConvertTo-CanonicalLabel $m.Groups[$g].Value
+      if ($c.Trim() -ne '') { $out += $c }
+    }
   }
   return @($out | Sort-Object -Unique)
 }
@@ -137,6 +147,7 @@ $synthetic = @(
   "  AppendFact('Planted label: ' + EscXml(X));",
   "  Lines.Add(Format('Planted count %d of %d', [A, B]));",
   "  if C then RefVerb:= 'Planted verb: ' else RefVerb:= 'Other verb: ';",
+  "  RefVerb:= if D then 'Planted ifexpr then: ' else 'Planted ifexpr else: ';",
   "  RWLine:= 'Planted reads: ' + R;",
   "  RWLine:= RWLine + 'Planted writes: ' + W;",
   "  Lines.Add('Planted marker -- touches ' + T);",
@@ -147,10 +158,11 @@ Check 'P1 the extractor finds a planted AppendFact label' ($pl -contains 'Plante
 Check 'P1 the extractor finds a planted Format label, cut at its first %' ($pl -contains 'Planted count ') ''
 Check 'P1 the extractor finds both RefVerb:= literals' (($pl -contains 'Planted verb: ') -and ($pl -contains 'Other verb: ')) ''
 Check 'P1 the extractor finds both RWLine:= literals (plain and RWLine + ...)' (($pl -contains 'Planted reads: ') -and ($pl -contains 'Planted writes: ')) ''
+Check 'P1 the extractor finds both arms of a RefVerb:= if-expression' (($pl -contains 'Planted ifexpr then: ') -and ($pl -contains 'Planted ifexpr else: ')) ''
 Check 'P1 the extractor cuts a label at " -- "' ($pl -contains 'Planted marker') ''
 $ghosts = @($pl | Where-Object { $_ -like 'Ghost*' })
 Check 'N1 a label inside { }, // or (* *) is NOT collected' ($ghosts.Count -eq 0) ("ghosts: " + ($ghosts -join ' | '))
-Check 'N1 the synthetic yields exactly the 7 planted labels' ($pl.Count -eq 7) "count=$($pl.Count)"
+Check 'N1 the synthetic yields exactly the 9 planted labels' ($pl.Count -eq 9) "count=$($pl.Count)"
 
 $syntheticConst = @(
   "  { the comment quotes 'Not a label:' and 'Nor this:' }",
