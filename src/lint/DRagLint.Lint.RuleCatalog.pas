@@ -567,7 +567,8 @@ var
     R:= Default(TRuleInfo);
     R.Id:= AId;
     R.Category:= ACat;
-    R.DefaultSeverity:= ASev; R.Title:= ATitle;
+    R.DefaultSeverity:= ASev;
+    R.Title:= ATitle;
     R.Source:= 'builtin';
     R.DefaultEnabled:= AEnabled;
     R.Params:= AParams;

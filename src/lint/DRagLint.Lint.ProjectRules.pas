@@ -740,7 +740,8 @@ var
           end;
           F.StartLine:= Ln;
           F.StartCol:= 1;
-          F.EndLine:= Ln; F.EndCol:= 1;
+          F.EndLine:= Ln;
+          F.EndCol:= 1;
           var CC: TCycleCoupling;
           CC.Finding:= F;
           CC.Detail := CouplingLines(Comp);
@@ -889,10 +890,12 @@ begin
     EdgeHasIntf.Free;
     Stack.Free;
     OnStack.Free;
-    LowLink.Free; Index.Free;
+    LowLink.Free;
+    Index.Free;
     UnitLine.Free;
     FileOfStem.Free;
-    FileOfUnit.Free; UnitName.Free;
+    FileOfUnit.Free;
+    UnitName.Free;
     for var SD in SymCache.Values do SD.Free;
     SymCache.Free;
     Findings.Free;
@@ -4950,7 +4953,8 @@ begin
   Prof:= GetEnvironmentVariable('DRAGLINT_PROFILE') <> '';
   TCirc:= 0;
   TEnum:= 0;
-  TRts:= 0; TUuiu:= 0; TGod:= 0; TUpub:= 0; TUpriv:= 0; TAccess:= 0; TOuter:= 0;
+  TRts:= 0;
+  TUuiu:= 0; TGod:= 0; TUpub:= 0; TUpriv:= 0; TAccess:= 0; TOuter:= 0;
   TGlob:= 0;
   TDupD:= 0;
   TCens:= 0;
