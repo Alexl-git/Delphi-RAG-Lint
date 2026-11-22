@@ -101,6 +101,12 @@ type
     /// not exist (Ruling 14): no index, so the project is not checked -- not an
     /// owner, not unknown, not counted in Probed, and never blocking.</summary>
     Unindexed: TArray<string>;
+    /// <summary>B24 (1.52.3): the .dproj of each Unindexed project section whose
+    /// compile closure (ClosureUnits) holds the file. Not an owner and never
+    /// proved, but the compile gate builds it before and after the write, so a
+    /// rename that breaks it is refused. 'section (project)' notes stay in
+    /// Unindexed; a closure that cannot be resolved is left out (Ruling 14).</summary>
+    UnindexedProjects: TArray<string>;
   end; // record
 
   /// <summary>Whether an owning DB may be used for a rename, after RefreshOwner.</summary>
@@ -612,6 +618,8 @@ begin
     Result.ProjectFile:= SectionProjectFile(AManifest, Sec);
 end; // function
 
+function UnindexedGateProject(const AProjectFile, AFilePath: string): string; forward;
+
 function FindRenameOwners(const AManifest: TIndexManifest; const APlatform, AFilePath,
   APreferredDb: string): TOwnerDiscovery;
 var
@@ -654,6 +662,8 @@ begin
       if not FileExists(Item.DbPath) then
       begin
         Unindexed.Add(Item.Name + ' (' + Item.DbPath + ')');
+        var Built:= UnindexedGateProject(OwnerOf(AManifest, Item).ProjectFile, AFilePath);
+        if Built <> '' then Result.UnindexedProjects:= Result.UnindexedProjects + [Built];
         Continue;
       end;
       Member:= DbMembership(Item.DbPath, AFilePath, Reason);
@@ -792,6 +802,24 @@ begin
   finally
     List.Free;
     Resolver.Free;
+  end; // try
+end; // function
+
+{ B24: the .dproj beside AProjectFile when its compile closure holds AFilePath, else ''. '' too for a folder section
+  (no project), a project with no .dproj the gate could build, and a closure that cannot be resolved (Ruling 14: an
+  unindexed section never blocks). Reads files; writes nothing. }
+function UnindexedGateProject(const AProjectFile, AFilePath: string): string;
+begin
+  Result:= '';
+  if AProjectFile = '' then Exit;
+  var Dproj:= ChangeFileExt(ExpandFileName(AProjectFile), '.dproj');
+  if not FileExists(Dproj) then Exit;
+  var Wanted:= ExpandFileName(AFilePath);
+  try
+    for var F in ClosureUnits(AProjectFile) do
+      if SameText(ExpandFileName(F), Wanted) then Exit(Dproj);
+  except
+    on Exception do Result:= ''; { Ruling 14: an unresolvable unindexed closure is not built and never blocks }
   end; // try
 end; // function
 
@@ -1551,6 +1579,16 @@ begin
         Files.Add(LowerCase(Path), True);
         var Disc:= FindRenameOwners(Manifest, Plat, Path, AOwners.PrimaryDb);
         for var U in Disc.Unknown do Refuse(CRefuseOwnerUnknown, Path, 'ownership unknown: ' + U);
+        { B24: a sibling that compiles the unit but has no index is not proved; the gate builds it. }
+        for var Dproj in Disc.UnindexedProjects do
+        begin
+          var Key:= LowerCase(Dproj);
+          if Seen.ContainsKey(Key) or SameText(Dproj, ChangeFileExt(ExpandFileName(AOwners.PrimaryProject), '.dproj')) then Continue;
+          Seen.Add(Key, True);
+          Result.AlsoProjects:= Result.AlsoProjects + [Dproj];
+          Result.Notes:= Result.Notes + [Format('project %s compiles %s but has no index: its own units are not renamed; the compile gate builds it',
+            [Dproj, ExtractFileName(Path)])];
+        end; // for
         for var O in Disc.Owners do
         begin
           if Seen.ContainsKey(DbKey(O.DbPath)) then Continue;
