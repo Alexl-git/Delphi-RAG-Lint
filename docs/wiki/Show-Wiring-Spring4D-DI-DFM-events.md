@@ -27,3 +27,6 @@ Illustrative only:
 drag-lint wiring --qname MyApp.TfrmMain --db C:\Projects\MyApp\_D-RAG\MyApp.sqlite --format text
 ```
 This would list Spring4D DI registrations and DFM event edges touching `TfrmMain`.
+
+## Form bindings (GitHub #21)
+A DFM event binding is listed under a form class only when it comes from that form's own DFM, or from the DFM of a form that descends from the queried class (a descendant that redeclares the handler is kept). Bindings of unrelated forms that share a handler name (FormShow, FormCreate) are dropped. The MCP tool get_wiring and the context verb use the same check, so the three agree.

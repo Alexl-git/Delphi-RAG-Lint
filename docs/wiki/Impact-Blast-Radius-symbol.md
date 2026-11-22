@@ -65,3 +65,6 @@ drag-lint impact --qname CustomerOrder.TCustomerOrder.Total --db C:\Projects\MyA
 ```
 This would report what is affected, up to 3 levels out, if the `Total`
 member of `TCustomerOrder` changes.
+
+## MCP get_impact (GitHub #20)
+The MCP tool get_impact walks the same resolved callers as this verb, from the full qualified name, so its levels equal the CLI numbers. A qname that names no symbol in the database answers isError true (the CLI exits 1).

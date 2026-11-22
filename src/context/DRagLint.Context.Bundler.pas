@@ -141,6 +141,7 @@ implementation
 
 uses
   DRagLint.Doc.Regions
+  , DRagLint.Wiring     { DropForeignFormBindings -- GH #15 / #21, shared with wiring }
   , DRagLint.Doc.Wiki   { TWikiParser -- alias matching for the ## Wiki section }
   , System.JSON         { RenderJson's content keys -- escaped by the JSON writer }
   , System.Generics.Defaults { TComparer -- CapTypeBodies' ranking }
@@ -414,56 +415,6 @@ begin
     end;
   finally
     BoundElse.Free;
-  end; // try
-end; // function
-
-{ GitHub #15 (1.52): an UNBOUND DFM event binding (`OnShow = FormShow`) names the
-  handler only; the method it reaches belongs to the DFM's ROOT object class. Keep
-  the binding when that root class is AOwnerClass or descends from it, or when the
-  index cannot tell (no root row, root class not indexed); drop it when the root
-  class is a known class that is NOT AOwnerClass's descendant. Before this every
-  form's `OnShow = FormShow` was listed as a [name-only] caller of every FormShow.
-  Pinned by tests\autotest\run_v152_GH15.ps1. }
-function DropForeignFormBindings(const AStore: ISymbolStore; const ARefs: TArray<TReference>;
-  const AOwnerClass: string): TArray<TReference>;
-var
-  KeepByFile: TDictionary<Int64, Boolean>;
-  Keep      : Boolean;
-begin
-  if AOwnerClass = '' then Exit(ARefs);
-  Result:= [];
-  KeepByFile:= TDictionary<Int64, Boolean>.Create;
-  try
-    for var R in ARefs do
-    begin
-      if (R.SymbolId <> 0) or not SameText(R.Kind, 'event-binding') then
-      begin
-        Result:= Result + [R];
-        Continue;
-      end;
-      if not KeepByFile.TryGetValue(R.FileId, Keep) then
-      begin
-        Keep:= True;
-        var Root:= '';
-        for var O in AStore.GetDfmObjects(R.FileId) do
-          if O.Depth = 0 then
-          begin
-            Root:= O.ClassName;
-            Break;
-          end;
-        if (Root <> '') and not SameText(Root, AOwnerClass) then
-        begin
-          var Known:= False;
-          for var S in AStore.FindSymbolsByExactName(Root) do
-            if S.Kind = skClass then Known:= True;
-          if Known then Keep:= AStore.IsDescendantOf(Root, AOwnerClass, 0);
-        end;
-        KeepByFile.Add(R.FileId, Keep);
-      end;
-      if Keep then Result:= Result + [R];
-    end;
-  finally
-    KeepByFile.Free;
   end; // try
 end; // function
 
