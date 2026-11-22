@@ -222,7 +222,7 @@ begin
   begin
     Impls   := Store.FindImplementationsOf   (AArgs.QName);
     Sites   := Store.FindDiResolveSites      (AArgs.QName);
-    Handlers:= Store.FindEventHandlersForForm(AArgs.QName);
+    Handlers:= FormEventHandlers(Store, AArgs.QName);
     Writeln(AArgs.QName);
     if Length(Impls) > 0 then
       for B in Impls do Writeln(Format('  impl: %s [%s]  %s:%d', [B.ImplName, B.Lifetime, Store.GetFilePath(B.FileId), B.StartLine]));
@@ -382,54 +382,12 @@ begin
   Result:= if Report.Found then 0 else 1;
 end; // function
 
-{ GitHub #14: the transitive callers of ASyms over the RESOLVED caller rows
-  (FindResolvedCallers: call edges, bound member accesses, bound usages) -- the
-  rows find-callers --resolved prints, so impact and find-callers agree. Breadth
-  first; a caller counts once, at the first level that reaches it; a site with no
-  enclosing routine (initialization code) counts per file and is not walked on.
-  False when ASyms holds no routine: the caller keeps the by-name walk for a type
-  or variable target. An empty ALevels with True is a routine nobody calls. }
+{ GitHub #20: the walk itself moved to DRagLint.Wiring (shared with the MCP get_impact); this stays the
+  entry point the usages verb and the LSP already call. }
 function ResolvedImpactLevels(const AStore: ISymbolStore; const ASyms: TArray<TSymbol>; ADepth: Integer;
   out ALevels: TArray<TImpactLevel>): Boolean;
 begin
-  ALevels:= nil;
-  var Frontier: TArray<Int64>:= [];
-  for var S in ASyms do
-    if S.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor] then Frontier:= Frontier + [S.Id];
-  Result:= Length(Frontier) > 0;
-  if not Result then Exit;
-  var Seen := TDictionary<string, Boolean>.Create;
-  var Units: TDictionary<string, Boolean>:= nil;
-  try
-    for var Id in Frontier do Seen.AddOrSetValue(IntToStr(Id), True);
-    for var Lvl:= 1 to ADepth do
-    begin
-      var Next : TArray<Int64>:= [];
-      var Count: Integer:= 0;
-      FreeAndNil(Units);
-      Units:= TDictionary<string, Boolean>.Create;
-      for var Id in Frontier do
-        for var C in AStore.FindResolvedCallers(Id) do
-        begin
-          var Key:= if C.EnclosingSymbolId > 0 then IntToStr(C.EnclosingSymbolId) else 'file:' + LowerCase(C.FullPath);
-          if Seen.ContainsKey(Key) then Continue;
-          Seen.Add(Key, True);
-          Inc(Count);
-          Units.AddOrSetValue(LowerCase(C.FullPath), True);
-          if C.EnclosingSymbolId > 0 then Next:= Next + [C.EnclosingSymbolId];
-        end;
-      if Count = 0 then Break;
-      var L:= Default(TImpactLevel);
-      L.Depth      := Lvl;
-      L.CallerCount:= Count;
-      L.UnitCount  := Units.Count;
-      ALevels:= ALevels + [L];
-      Frontier:= Next;
-    end;
-  finally
-    Units.Free;
-    Seen.Free;
-  end; // try
+  Result:= DRagLint.Wiring.WalkResolvedImpact(AStore, ASyms, ADepth, ALevels);
 end; // function
 
 function DoImpact(const AArgs: TArgs): Integer;

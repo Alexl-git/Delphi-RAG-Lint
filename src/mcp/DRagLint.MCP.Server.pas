@@ -1734,10 +1734,11 @@ begin
       end;
       var ImpDepth:= 3;
       if Args.GetValue('depth') <> nil then ImpDepth:= StrToIntDef(Args.GetValue('depth').Value, 3);
-      // Use last segment of qname for the symbol name lookup
-      var ImpSegments:= ImpQName.Split(['.']);
-      var ImpName:= ImpSegments[High(ImpSegments)];
-      var ImpLevels:= ImpStore.FindTransitiveCallers(ImpName, ImpDepth);
+      { GitHub #20: the same resolved-callers walk as the CLI `impact` (DRagLint.Wiring.ImpactLevelsForQName);
+        a qname that names no symbol is an error answer (HandleToolsCall turns the raise into isError true). }
+      var ImpLevels: TArray<TImpactLevel>;
+      if not ImpactLevelsForQName(ImpStore, ImpQName, ImpDepth, ImpLevels) then
+        raise Exception.CreateFmt('impact: no symbol %s in this database', [ImpQName]);
       ResultText:= FormatImpactAsJson(ImpQName, ImpLevels);
     end // if
     else if ToolName = 'get_neighbors' then
