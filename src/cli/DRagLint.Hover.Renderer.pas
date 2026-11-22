@@ -372,11 +372,20 @@ begin
     OpenParen:= Pos('(', Sig);
     if OpenParen > 0 then
     begin
-      Depth:= 0; CloseParen:= 0;
+      Depth:= 0;
+      CloseParen:= 0;
       for i:= OpenParen to Length(Sig) do
       begin
         if Sig[i] = '(' then Inc(Depth)
-        else if Sig[i] = ')' then begin Dec(Depth); if Depth = 0 then begin CloseParen:= i; Break; end; end;
+        else if Sig[i] = ')' then
+        begin
+          Dec(Depth);
+          if Depth = 0 then
+          begin
+            CloseParen:= i;
+            Break;
+          end;
+        end;
       end;
       if CloseParen > 0 then
       begin
@@ -386,16 +395,29 @@ begin
           if Trim(Seg) = '' then Continue;
           ColonPos:= LastTopLevelColon(Seg);
           if ColonPos > 0 then
-          begin Names:= Trim(Copy(Seg, 1, ColonPos - 1)); Typ:= Trim(Copy(Seg, ColonPos + 1, MaxInt)); end
-          else begin Names:= Trim(Seg); Typ:= ''; end;
+          begin
+            Names:= Trim(Copy(Seg, 1, ColonPos - 1));
+            Typ:= Trim(Copy(Seg, ColonPos + 1, MaxInt));
+          end
+          else
+          begin
+            Names:= Trim(Seg);
+            Typ:= '';
+          end;
           ModWord:= '';
           for MW in ['const ', 'var ', 'out '] do
             if StartsText(MW, Names) then
-            begin ModWord:= Trim(MW); Names:= Trim(Copy(Names, Length(MW) + 1, MaxInt)); Break; end;
+            begin
+              ModWord:= Trim(MW);
+              Names:= Trim(Copy(Names, Length(MW) + 1, MaxInt));
+              Break;
+            end;
           for Nm in SplitTopLevel(Names, ',') do
             if Trim(Nm) <> '' then
             begin
-              PP.Modifier:= ModWord; PP.Name:= Trim(Nm); PP.TypeText:= Typ;
+              PP.Modifier:= ModWord;
+              PP.Name:= Trim(Nm);
+              PP.TypeText:= Typ;
               Parts.Add(PP);
             end;
         end;
@@ -455,7 +477,15 @@ begin
   begin
     case Sig[i] of
       '(': Inc(Depth)                                                               ;
-      ')': begin Dec(Depth); if Depth = 0 then begin CloseParen:= i; Break; end; end;
+      ')':
+      begin
+        Dec(Depth);
+        if Depth = 0 then
+        begin
+          CloseParen:= i;
+          Break;
+        end;
+      end;
     end;
   end;
   if CloseParen = 0 then Exit;
@@ -926,7 +956,11 @@ begin
   Result.EffectSummary:= '';
   Result.EffectWitness:= '';
   Cap:= Length(AReturnRhs);
-  if Cap > 10 then begin Result.ReturnsMore:= Cap - 10; Cap:= 10; end
+  if Cap > 10 then
+  begin
+    Result.ReturnsMore:= Cap - 10;
+    Cap:= 10;
+  end
   else Result.ReturnsMore:= 0;
   SetLength(Result.Returns, Cap);
   for i:= 0 to Cap - 1 do
