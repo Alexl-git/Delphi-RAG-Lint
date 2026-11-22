@@ -480,7 +480,7 @@ begin
   if S = '' then Exit(False);
   i:= 1;
   { Walk the parameter list, if there is one, tracking nesting. }
-  if (Length(S) > 0) and (S[1] = '(') then
+  if (S <> '') and (S[1] = '(') then
   begin
     Depth:= 0;
     while i <= Length(S) do
