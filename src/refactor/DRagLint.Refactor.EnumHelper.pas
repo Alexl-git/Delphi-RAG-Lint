@@ -393,7 +393,7 @@ begin
   ParenPos:= Pos('(', ADeclSpan);
   if ParenPos = 0 then Exit;
   MemberList:= Copy(ADeclSpan, ParenPos + 1, MaxInt);
-  Result:= Pos('=', MemberList) > 0;
+  Result:= MemberList.Contains('=');
 end;
 
 class function TEnumHelperRefactoring.Resolve(const AStore: ISymbolStore; const AEnumQName: string): TEnumHelperResolve;

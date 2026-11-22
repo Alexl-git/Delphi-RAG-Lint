@@ -948,7 +948,7 @@ end;
 
 class function TTextFileFormat.LineBreakOf(const AText: string): string;
 begin
-  Result:= if (Pos(#10, AText) > 0) and (Pos(#13#10, AText) = 0) then #10 else #13#10;
+  Result:= if AText.Contains(#10) and (not AText.Contains(#13#10)) then #10 else #13#10;
 end;
 
 function TTextFileFormat.Encode(const AText: string): TBytes;

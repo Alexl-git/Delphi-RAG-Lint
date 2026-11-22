@@ -430,7 +430,7 @@ begin
     if LineCommentPos(Result, False, False) > 0 then Exit(ASig);
   end;
   { Block comments are wholly inside the text: strip them where they stand. }
-  if (Pos('{', Result) > 0) or (Pos('(*', Result) > 0) then
+  if (Result.Contains('{')) or (Result.Contains('(*')) then
   begin
     Acc:= StripCommentsAndStrings(Result, InBrace, InParen);
     if InBrace or InParen then Exit(ASig);

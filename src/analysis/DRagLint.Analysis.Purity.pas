@@ -991,7 +991,7 @@ begin
     else if C = ')' then Inc(Closes);
   AInsideCallArgs:= Opens > Closes;
   if (After <> '') and (After[1] = '.') then Exit(False);
-  if Pos(':=', Before) > 0 then Exit(True);
+  if Before.Contains(':=') then Exit(True);
   I:= Length(Before);
   while (I > 0) and (Before[I] = ' ') do Dec(I);
   Result:= (I > 0) and (Before[I] = '@');
