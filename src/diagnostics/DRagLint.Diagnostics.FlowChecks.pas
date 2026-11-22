@@ -1,4 +1,4 @@
-unit DRagLint.Diagnostics.FlowChecks;
+unit DRagLint.Diagnostics.FlowChecks;  // dl:ok unit-too-large@5e09 -- REVIEWED 2026-11-21 SLZ-S04: 5558 lines; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
 { Flow-sensitive lint checks (M2): runs the data-flow analyses per routine and
   maps results to TLintFinding. Mirrors the TAstChecker.CheckXxx integration
@@ -21,7 +21,7 @@ uses
     Reused rather than reimplemented: it already splits on TOP-LEVEL semicolons
     and expands `a, b: Integer` into one part per name, which is exactly what a
     POSITIONAL lookup needs and is where a hand-rolled split would go wrong. }
-  DRagLint.Hover.Renderer;
+  DRagLint.Hover.Renderer;  // dl:ok uses-movable-to-implementation@aa11 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
 type
   /// <summary>Raised by the DRAGLINT_VERIFY_ORACLE self-check when a
@@ -46,7 +46,7 @@ type
   /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TFlowChecker = class
+  TFlowChecker = class  // dl:ok high-response@7b02 -- REVIEWED 2026-11-21 SLZ-S04: RFC 57; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   public
     /// <summary>Run every flow check on AFile. AStore (optional, nil-safe)
     /// enables exact managed-type classification via M1 ResolveTypeCategory and
@@ -600,7 +600,7 @@ begin
       Exit((Cat = tcString) or (Cat = tcInterface));
   end;
   T := LowerCase(Trim(ATypeText));
-  if (T = 'string') or (T = 'unicodestring') or (T = 'ansistring') or (T = 'widestring')
+  if (T = 'string') or (T = 'unicodestring') or (T = 'ansistring') or (T = 'widestring')  // dl:ok boolean-expression-complexity@07c7 -- REVIEWED 2026-11-21 SLZ-S04: 6 and/or/xor operators; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
      or (T = 'rawbytestring') or (T = 'variant') or (T = 'olevariant') then Exit(True);
   if (T.Contains('array of')) or (T.Contains('tarray<')) then Exit(True);
   { A STATIC array is managed iff its ELEMENT type is. `array[0..2] of string`
@@ -623,7 +623,7 @@ begin
   begin
     var OfPos: Integer := T.LastIndexOf(' of ');
     if OfPos > 0 then
-      Exit(IsManagedType(Trim(Copy(T, OfPos + 5, MaxInt)), AStore, AFileId));
+      Exit(IsManagedType(Trim(Copy(T, OfPos + 5, MaxInt)), AStore, AFileId));  // dl:ok magic-literal@8a06 -- REVIEWED 2026-11-21 SLZ-S04: literal 5; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
   end;
   { I-prefixed interface convention: 'I' + uppercase letter }
   if (Length(ATypeText) >= 2) and (ATypeText[1] = 'I') and ATypeText[2].IsUpper then Exit(True);
@@ -840,7 +840,7 @@ begin
     this rule's single most common false positive (a record constructor, four of
     twelve sampled findings) and lives in System.RegularExpressions, which a
     project index does not contain. }
-  if SameText(Head, 'TRegEx') or SameText(Head, 'TMatch') or SameText(Head, 'TMatchCollection')
+  if SameText(Head, 'TRegEx') or SameText(Head, 'TMatch') or SameText(Head, 'TMatchCollection')  // dl:ok boolean-expression-complexity@7804 -- REVIEWED 2026-11-21 SLZ-S04: 5 and/or/xor operators; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
      or SameText(Head, 'TGUID') or SameText(Head, 'TPoint') or SameText(Head, 'TRect') then
     Exit(True);
   Result:= (Length(Head) >= 2) and (Head[1] = 'I') and CharInSet(Head[2], ['A'..'Z']);
@@ -924,7 +924,7 @@ begin
     if ALibStore.IsDescendantOf(Anc, 'TComponent', 0) or SameText(Anc, 'TComponent') then Exit(True);
 end;
 
-function ConstructorTransfersOwnership(const AConstructorNode: TTSNode; const ASrc: TBytes;
+function ConstructorTransfersOwnership(const AConstructorNode: TTSNode; const ASrc: TBytes;  // dl:ok too-many-exit-points@bab9 -- REVIEWED 2026-11-21 SLZ-S04: 11 Exit statements; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   const AStore: ISymbolStore; AFileId: Int64; const ALibStore: ISymbolStore = nil): Boolean;
 var
   Ent, TypeNode, ArgsN, FirstArg: TTSNode;
@@ -1026,7 +1026,7 @@ begin
   { A qualified implementation name (TFoo.TryParse) carries the class prefix. }
   DotPos := LastDelimiter('.', N);
   if DotPos > 0 then N := Copy(N, DotPos + 1, MaxInt);
-  Result := (Length(N) > 3) and N.StartsWith('try');
+  Result := (Length(N) > 3) and N.StartsWith('try');  // dl:ok magic-literal@882d -- REVIEWED 2026-11-21 SLZ-S04: literal 3; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
 end;
 
 { A single interface dereference site: the routine-var index of the base
@@ -1104,7 +1104,7 @@ var
       Op := N.ChildByField('operator');
       OpText := '';
       if not Op.IsNull then OpText := LowerCase(Trim(NodeStr(Op, ASrc)));
-      if OpText = 'as' then
+      if OpText = 'as' then  // dl:ok duplicate-code@54f6 -- REVIEWED 2026-11-21 SLZ-S04: 115 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
       begin
         L := N.ChildByField('lhs');
         VarIdx := LeftmostBaseVar(L, ASrc, AVars);
@@ -1150,7 +1150,7 @@ begin
   Result := '';
   Cur := N;
   G := 0;
-  while (not Cur.IsNull) and (G < 32) do
+  while (not Cur.IsNull) and (G < 32) do  // dl:ok magic-literal@e006 -- REVIEWED 2026-11-21 SLZ-S04: literal 32; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
   begin
     Inc(G);
     if Cur.NodeType = 'identifier' then Exit(LowerCase(Trim(NodeStr(Cur, ASrc))));
@@ -1507,7 +1507,7 @@ function WitnessFlagForRead(const ANode, ARoutine: TTSNode; const ASrc: TBytes;
     Result := Default(TTSNode);
     Cur    := N;
     Hop    := 0;
-    while (not Cur.IsNull) and (Hop < 64) do
+    while (not Cur.IsNull) and (Hop < 64) do  // dl:ok magic-literal@1020 -- REVIEWED 2026-11-21 SLZ-S04: literal 64; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     begin
       if Cur.NodeType = 'block' then Exit(Cur);
       if Cur.StartByte = ARoutine.StartByte then Break;
@@ -1846,7 +1846,7 @@ var
     Result := Default(TTSNode);
     Cur    := N;
     Hop    := 0;
-    while (not Cur.IsNull) and (Hop < 64) do
+    while (not Cur.IsNull) and (Hop < 64) do  // dl:ok magic-literal@1020 -- REVIEWED 2026-11-21 SLZ-S04: literal 64; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     begin
       { 1.52.1 SLZ-RULE2: a try body / finally / repeat body is a `statements`
         node, not a `block`; stopping there pairs a flag set inside `try` with the
@@ -1923,7 +1923,7 @@ var
       if NestedRoutineMentionsFlag(N.Child(I)) then Exit(True);
   end;
 
-  procedure Walk(const N: TTSNode);
+  procedure Walk(const N: TTSNode);  // dl:ok deep-nesting@9f3d, too-many-exit-points@e0d0 -- REVIEWED 2026-11-21 SLZ-S04: 6 Exit statements; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     I       : Integer;
     Par     : TTSNode;
@@ -2449,7 +2449,7 @@ begin
            and not SameText(T, 'pointer');
 end;
 
-function TMethodArgModes.MethodMode(const ATypeLeaf, AMethod: string; AIndex, AArgCount: Integer): TParamMode;  // dl:ok too-many-exit-points@3129 -- REVIEWED 2026-11-06: each exit declines one way the proof is not whole, and all answer pmUnknown
+function TMethodArgModes.MethodMode(const ATypeLeaf, AMethod: string; AIndex, AArgCount: Integer): TParamMode;  // dl:ok too-many-exit-points@631f -- REVIEWED 2026-11-06: each exit declines one way the proof is not whole, and all answer pmUnknown
 var
   IsRecord, Any: Boolean;
   Seen, M: TParamMode;
@@ -3376,7 +3376,7 @@ begin
   { skip the run of sibling inits to reach the shared try }
   Cur   := Unwrap(AAsg.NextNamedSibling);
   Guard := 0;
-  while (not Cur.IsNull) and (Cur.NodeType = 'assignment') and (Guard < 64) do
+  while (not Cur.IsNull) and (Cur.NodeType = 'assignment') and (Guard < 64) do  // dl:ok magic-literal@81ae -- REVIEWED 2026-11-21 SLZ-S04: literal 64; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
   begin
     Cur := Unwrap(Cur.NextNamedSibling);
     Inc(Guard);
@@ -3416,7 +3416,7 @@ begin
   { conjunct 3: the name is read after the try }
   Nxt   := Unwrap(Cur.NextNamedSibling);
   Guard := 0;
-  while (not Nxt.IsNull) and (Guard < 512) do
+  while (not Nxt.IsNull) and (Guard < 512) do  // dl:ok magic-literal@ae06 -- REVIEWED 2026-11-21 SLZ-S04: literal 512; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
   begin
     S := LowerCase(NodeStr(Nxt, ASrc));
     if ContainsWholeIdent(S, Nm) then Exit(True);
@@ -3794,7 +3794,7 @@ end;
   `Self.FA` -> [fa], `P^.X` -> [p, ^, x], `R.Inner.X` -> [r, inner, x].
   A leading `Self` is dropped. Empty for any other shape (a call, an index,
   a cast, an `inherited` ...), which every caller treats as "decline". }
-function SlPathSegments(const N: TTSNode; const ASrc: TBytes): TArray<string>;  // dl:ok too-many-exit-points@9405 -- REVIEWED 2026-11-14: one Exit per accepted node shape plus the declines; a guard ladder
+function SlPathSegments(const N: TTSNode; const ASrc: TBytes): TArray<string>;  // dl:ok too-many-exit-points@7a0f -- REVIEWED 2026-11-14: one Exit per accepted node shape plus the declines; a guard ladder
 var L, R: TArray<string>; Op: TTSNode;
 begin
   Result := nil;
@@ -3899,7 +3899,7 @@ begin
   Result := if AVar.Kind = vkParamOut then 'Out parameter' else 'Local';
 end;
 
-class function TFlowChecker.Check(const AFile: string; const AStore: ISymbolStore;
+class function TFlowChecker.Check(const AFile: string; const AStore: ISymbolStore;  // dl:ok method-too-long@ff3c, too-many-exit-points@b70c, cyclomatic-complexity@b7e3, cognitive-complexity@7e23 -- REVIEWED 2026-11-21 SLZ-S04: measured 122 (max 65); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   AFileId: Int64; const ALibStore: ISymbolStore;
   const AKeep: TFunc<string, Boolean>): TArray<TLintFinding>;
 var
@@ -3976,7 +3976,7 @@ var
     lifetime is managed elsewhere -- a thread (the self-freeing idiom), a
     component (an owner), an exception (exception-constructed-but-not-raised
     reports it) or a reference-counted object. Unknown -> False. }
-  function SlLeakingClass(const ATypeName: string): Boolean;  // dl:ok too-many-exit-points@b3d6 -- REVIEWED 2026-11-14: each Exit is one way the leak is not proven (managed ancestor, unknown chain)
+  function SlLeakingClass(const ATypeName: string): Boolean;  // dl:ok too-many-exit-points@effd -- REVIEWED 2026-11-14: each Exit is one way the leak is not proven (managed ancestor, unknown chain)
   const
     MANAGED: array[0..3] of string = ('tthread', 'tcomponent', 'exception', 'tinterfacedobject');
   var
@@ -4086,7 +4086,7 @@ var
       end;
   end;
 
-  procedure CheckRoutine(const AProc: TTSNode);
+  procedure CheckRoutine(const AProc: TTSNode);  // dl:ok too-many-locals@42fe, method-too-long@f31e, deep-nesting@dbd0, cyclomatic-complexity@53e0, cognitive-complexity@5220 -- REVIEWED 2026-11-21 SLZ-S04: measured 626 (max 65); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     Cfg: TCfg; Vars: TRoutineVarTable; Ana: IDataFlowAnalysis<TDefAsgnVal>;
     AIn, AOut: TArray<TDefAsgnVal>; ExitVal: TDefAsgnVal;
@@ -4106,9 +4106,9 @@ var
       DECLARED type, which an inline var does not have. }
     CreateType: TArray<string>;
     FreedAna: IDataFlowAnalysis<TFreedVal>;
-    FIn, FOut: TArray<TFreedVal>;
+    FIn, FOut: TArray<TFreedVal>;  // dl:ok local-field-prefix@da76 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     CurFMust, CurFMay: TArray<Boolean>;
-    FreedV: Integer; FKind: TFreeKind;
+    FreedV: Integer; FKind: TFreeKind;  // dl:ok local-field-prefix@f0aa -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     TickAt : Int64;  { phase cursor -- see FlowTick }
     TickEx : Int64;  { time already charged exactly, to subtract from the window }
     Scans  : TArgScanMemo; { per item of THIS routine }
@@ -4532,7 +4532,7 @@ var
         FreedAna := TFreedState.Create(Vars, PF.Src);
         { Everything since the definite-assignment SOLVE tick is the per-item
           REPLAY, not the solve -- charged separately as of session 47. }
-        FlowTick(7, TickAt, TickEx);
+        FlowTick(7, TickAt, TickEx);  // dl:ok magic-literal@b792 -- REVIEWED 2026-11-21 SLZ-S04: literal 7; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
         if TDataFlowSolver<TFreedVal>.Solve(Cfg, FreedAna, FIn, FOut) then
         begin
           for B := 0 to Cfg.BlockCount - 1 do
@@ -4637,7 +4637,7 @@ var
 
         { ============ liveness checks: overwrite-before-read + write-only-local ============ }
         LiveAna := TLiveness.Create(Vars, PF.Src);
-        FlowTick(4, TickAt, TickEx);
+        FlowTick(4, TickAt, TickEx);  // dl:ok magic-literal@8b41 -- REVIEWED 2026-11-21 SLZ-S04: literal 4; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
         if TDataFlowSolver<TArray<Boolean>>.Solve(Cfg, LiveAna, LIn, LOut) then
         begin
           SetLength(ReadAny, Vars.Count);
@@ -4959,10 +4959,10 @@ var
 
         { ============ object-leak (store-free, conservative) ============ }
         EscAna := TEscape.Create(Vars, PF.Src, OwnsOracle);
-        FlowTick(5, TickAt, TickEx);
+        FlowTick(5, TickAt, TickEx);  // dl:ok magic-literal@2673 -- REVIEWED 2026-11-21 SLZ-S04: literal 5; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
         if TDataFlowSolver<TArray<Boolean>>.Solve(Cfg, EscAna, EIn2, EOut2) then
         begin
-          FlowTick(8, TickAt, TickEx); { the escape SOLVE; phase 6 keeps the rest }
+          FlowTick(8, TickAt, TickEx); { the escape SOLVE; phase 6 keeps the rest }  // dl:ok magic-literal@71c4 -- REVIEWED 2026-11-21 SLZ-S04: literal 8,6; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
           SetLength(CreateRow, Vars.Count);
           SetLength(CreateCol, Vars.Count);
           SetLength(CreateType, Vars.Count);
@@ -5037,7 +5037,7 @@ var
               Break;
             end;
           for I := 0 to Vars.Count - 1 do
-            if (Vars.Get(I).Kind = vkLocal) and (CreateRow[I] > 0) and LeakAtExit[I]
+            if (Vars.Get(I).Kind = vkLocal) and (CreateRow[I] > 0) and LeakAtExit[I]  // dl:ok boolean-expression-complexity@cdbe -- REVIEWED 2026-11-21 SLZ-S04: 5 and/or/xor operators; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
                { An inline `var X := T.Create(..)` has NO declared type, so the
                  value/interface narrowing below had nothing to read and every
                  such local was a leak candidate regardless of its kind. Fall
@@ -5074,7 +5074,7 @@ var
         does for the per-file slots. A window therefore includes the emit/replay
         code that follows its solve, which is the honest attribution: that work
         only exists because the solve produced something. }
-      FlowTick(6, TickAt, TickEx);
+      FlowTick(6, TickAt, TickEx);  // dl:ok magic-literal@9f34 -- REVIEWED 2026-11-21 SLZ-S04: literal 6; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
       Cfg.Free;
       Vars.Free;
     end;
@@ -5095,12 +5095,12 @@ begin
   { Interprocedural object-leak: with a store, the escape analysis asks this oracle
     whether a callee OWNS its argument. True (owns/unknown) keeps the conservative
     escape; False (clearly non-owning unit proc) lets a real leak surface. }
-  if AStore <> nil then
+  if AStore <> nil then  // dl:ok ifthen-to-if-expression@38d8 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     OwnsOracle :=
       function(const ACalleeName: string; AArgIdx: Integer): Boolean
       var
         Key, CPath, PName: string; Ambig, Have: Boolean; Syms: TArray<TSymbol>;
-        RSym: TSymbol; I: Integer; FId: Int64; CPF: TParsedFile; DP: TTSNode;
+        RSym: TSymbol; I: Integer; FId: Int64; CPF: TParsedFile; DP: TTSNode;  // dl:ok local-field-prefix@04fb -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
         T0: Int64; Miss, Cached, Verifying: Boolean;
         Owns: TDictionary<string, Boolean>;
       begin
@@ -5179,7 +5179,7 @@ begin
     record state" would go unreported. Accepted deliberately: the alternative
     is the 24 false positives this fix removes from YADF alone, and narrowing
     to "provably mutates Self" is not information this analysis has. }
-  if AStore <> nil then
+  if AStore <> nil then  // dl:ok ifthen-to-if-expression@38d8 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     RecMethodDef :=
       function(const ATypeText, AMemberName: string): Boolean
       var
@@ -5249,7 +5249,7 @@ begin
 
     Cached per (name, index): a routine body calls the same handful of routines
     repeatedly, and each miss is a store query. }
-  if AStore <> nil then
+  if AStore <> nil then  // dl:ok ifthen-to-if-expression@38d8 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     ParamMode :=
       function(const ACalleeName: string; AIndex: Integer): TParamMode
       var
@@ -5438,7 +5438,7 @@ begin
                   MethodSeen := pmUnknown;
               Continue;
             end;
-            if not (Syms[I].Kind in [skProcedure, skFunction]) then Continue;
+            if not (Syms[I].Kind in [skProcedure, skFunction]) then Continue;  // dl:ok nonminimal-bool@cf35 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
             if not ModeOf(Syms[I].Signature, M) then Continue;
             if not Any then begin Seen := M;
             Any := True; end

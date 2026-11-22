@@ -240,7 +240,7 @@ var
   PF      : TParsedFile;
   Findings: TArray<TLintFinding>;
 
-  procedure CheckFor(const F: TTSNode); // dl:ok too-many-exit-points@f114 -- a chain of shape guards; each Exit is a distinct 'not our pattern' bail-out
+  procedure CheckFor(const F: TTSNode); // dl:ok too-many-exit-points@5aac -- a chain of shape guards; each Exit is a distinct 'not our pattern' bail-out
   var
     Start, Lhs, BodyN, Scope: TTSNode;
     Ctx     : TLoopCtx;

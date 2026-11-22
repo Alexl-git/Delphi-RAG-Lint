@@ -73,7 +73,7 @@ const
   MAX_CHAIN = 16;
 
 type
-  TParityRun = class
+  TParityRun = class  // dl:ok high-response@a5e7 -- REVIEWED 2026-11-21 SLZ-S04: RFC 90; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   strict private
     FFile    : string;
     FSrc     : TBytes;

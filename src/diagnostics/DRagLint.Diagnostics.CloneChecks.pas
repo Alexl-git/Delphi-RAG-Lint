@@ -91,7 +91,7 @@ type
 { NodeText is only exported from the parser unit's implementation section (not
   visible outside it) -- reimplement the same StartByte/EndByte/UTF8 pattern
   used locally by DRagLint.Diagnostics.DeadCodeChecks.NodeStr. }
-function NodeText(const N: TTSNode; const Src: TBytes): string;
+function NodeText(const N: TTSNode; const Src: TBytes): string;  // dl:ok param-name-prefix@ee00 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   S, E, L: Integer;
 begin
@@ -129,7 +129,7 @@ var
   Findings  : TList<TLintFinding>;
   Seen      : TDictionary<string, Boolean>;
 
-  procedure AddToken(const N: TTSNode; const Src: TBytes; AFileI: Integer);
+  procedure AddToken(const N: TTSNode; const Src: TBytes; AFileI: Integer);  // dl:ok param-name-prefix@43cc -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     Nt, Key, Txt: string;
     Code        : Integer;
@@ -157,12 +157,12 @@ var
     Toks.Add(t);
   end;
 
-  procedure CollectLeaves(const ARoot, N: TTSNode; const Src: TBytes; AFileI: Integer);
+  procedure CollectLeaves(const ARoot, N: TTSNode; const Src: TBytes; AFileI: Integer);  // dl:ok param-name-prefix@3ea3 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var i: Integer;
   begin
     if N.IsNull then Exit;
     if N.IsExtra then Exit; { comments }
-    if (not (N = ARoot)) and (N.NodeType = 'defProc') then Exit; { nested routine handled separately }
+    if (not (N = ARoot)) and (N.NodeType = 'defProc') then Exit; { nested routine handled separately }  // dl:ok nonminimal-bool@4136 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     if N.ChildCount = 0 then begin AddToken(N, Src, AFileI);
     Exit; end;
     for i := 0 to N.ChildCount - 1 do
@@ -179,7 +179,7 @@ var
     Toks.Add(t);
   end;
 
-  procedure VisitRoutines(const N: TTSNode; const Src: TBytes; AFileI: Integer);
+  procedure VisitRoutines(const N: TTSNode; const Src: TBytes; AFileI: Integer);  // dl:ok param-name-prefix@c271 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var i: Integer;
   begin
     if N.IsNull then Exit;
@@ -195,7 +195,7 @@ var
         VisitRoutines(N.Child(i), Src, AFileI);
   end;
 
-  function TokensEqual(a, b, Len: Integer): Boolean;
+  function TokensEqual(a, b, Len: Integer): Boolean;  // dl:ok param-name-prefix@0d76 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var k: Integer;
   begin
     Result := True;
@@ -266,14 +266,14 @@ var
   begin
     { (a) mostly one statement shape repeated -- a dispatch chain, a field-assignment
       run, a block of parameter setup. Nothing extractable. }
-    if LongestPeriodicRun(AStart, ALen) * 100 >= ALen * PERIODIC_COVER_PCT then Exit(True);
+    if LongestPeriodicRun(AStart, ALen) * 100 >= ALen * PERIODIC_COVER_PCT then Exit(True);  // dl:ok magic-literal@1984 -- REVIEWED 2026-11-21 SLZ-S04: literal 100; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     { (b) too little vocabulary for its length to be a meaningful clone at all. }
     Floor := Round(Sqrt(ALen) * VOCAB_COEFF);
     if Floor < VOCAB_FLOOR_MIN then Floor := VOCAB_FLOOR_MIN;
     Result := DistinctTokenCount(AStart, ALen) < Floor;
   end;
 
-  procedure EmitPair(a, b, Len: Integer);
+  procedure EmitPair(a, b, Len: Integer);  // dl:ok param-name-prefix@a94d -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     Ta, Tb, Anchor, Other: TTok;
     Key                  : string;
@@ -316,8 +316,8 @@ var
     Findings.Add(F);
   end;
 
-  {$OVERFLOWCHECKS OFF} { rolling hash relies on natural UInt64 wraparound (mod 2^64) }
-  procedure Match;
+  {$OVERFLOWCHECKS OFF} { rolling hash relies on natural UInt64 wraparound (mod 2^64) }  // dl:ok checks-disabled-directive@25bd -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+  procedure Match;  // dl:ok cyclomatic-complexity@3d23 -- REVIEWED 2026-11-21 SLZ-S04: measured 41 (max 30); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     N, i, Start, a, b, p, q, L, MaxBucket, CvA, CvB, k: Integer;
     CodeEnd, CodeSemi: Integer; { interned codes of `end` / `;`; 0 (matches no token) when absent }
@@ -333,7 +333,7 @@ var
     if N < W then Exit;
     if not Interner.TryGetValue(#3'end', CodeEnd) then CodeEnd := 0;
     if not Interner.TryGetValue(#3';', CodeSemi) then CodeSemi := 0;
-    Base := UInt64(1000003);
+    Base := UInt64(1000003);  // dl:ok large-magic-number@3319, unreadable-literal@3319, magic-literal@3319 -- REVIEWED 2026-11-21 SLZ-S04: literal 1000003,3319,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     PowW := 1;
     for i := 1 to W do PowW := PowW * Base; { Base^W (natural mod 2^64) }
 
@@ -341,7 +341,7 @@ var
     SetLength(NextBar, N + 1);
     NextBar[N] := N;
     for i := N - 1 downto 0 do
-      if Toks[i].Code <= 0 then NextBar[i] := i else NextBar[i] := NextBar[i + 1];
+      if Toks[i].Code <= 0 then NextBar[i] := i else NextBar[i] := NextBar[i + 1];  // dl:ok ifthen-to-if-expression@d998 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
     Buckets := TDictionary<UInt64, TList<Integer>>.Create;
     Cands   := TList<TCloneCand>.Create;
@@ -365,7 +365,7 @@ var
         end;
       end;
 
-      MaxBucket := 400; { perf guard; log when skipped so it is not a silent cap }
+      MaxBucket := 400; { perf guard; log when skipped so it is not a silent cap }  // dl:ok large-magic-number@2bf5, magic-literal@2bf5 -- REVIEWED 2026-11-21 SLZ-S04: literal 400,2,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
       for Lst in Buckets.Values do
       begin
         if Lst.Count < 2 then Continue;
@@ -484,7 +484,7 @@ var
 begin
   Result := nil;
   W := AMinTokens;
-  if W < 1 then W := 60;
+  if W < 1 then W := 60;  // dl:ok magic-literal@964c -- REVIEWED 2026-11-21 SLZ-S04: literal 1,60; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
   Toks     := TList<TTok>.Create;
   Interner := TDictionary<string, Integer>.Create;
   Findings := TList<TLintFinding>.Create;

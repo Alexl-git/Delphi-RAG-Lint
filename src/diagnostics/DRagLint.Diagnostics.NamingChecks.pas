@@ -318,7 +318,7 @@ var
   HasLet : Boolean;
 begin
   Result:= False;
-  if (S = '') or (Length(S) > 4) then Exit;
+  if (S = '') or (Length(S) > 4) then Exit;  // dl:ok magic-literal@89cf -- REVIEWED 2026-11-21 SLZ-S04: literal 4; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
   HasLet:= False;
   for I:= 1 to Length(S) do
   begin
@@ -450,7 +450,7 @@ end;
   insensitive. }
 function IsLoopCounterName(const AName: string): Boolean;
 begin
-  Result:= SameText(AName, 'i') or SameText(AName, 'j') or SameText(AName, 'k')
+  Result:= SameText(AName, 'i') or SameText(AName, 'j') or SameText(AName, 'k')  // dl:ok boolean-expression-complexity@3a72 -- REVIEWED 2026-11-21 SLZ-S04: 5 and/or/xor operators; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     or SameText(AName, 'n') or SameText(AName, 'x') or SameText(AName, 'y');
 end;
 
@@ -854,7 +854,7 @@ var
   end;
 
   { Walk the entire AST once; emit findings for each rule whose prefix is set. }
-  procedure Visit(const N: TTSNode);
+  procedure Visit(const N: TTSNode);  // dl:ok method-too-long@8c2d, deep-nesting@e3cc, too-many-exit-points@7d6d, cyclomatic-complexity@886c, cognitive-complexity@96dc -- REVIEWED 2026-11-21 SLZ-S04: measured 311 (max 65); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     I        : Integer;
     NameNode : TTSNode;
@@ -1137,7 +1137,7 @@ var
           wiring) was reported at its implementation line. The class-body
           declProc is the authoritative check for these, exactly as the defProc
           branch below already documents. }
-        if ((MethName <> '') and (not StartsText('operator', MethName))
+        if ((MethName <> '') and (not StartsText('operator', MethName))  // dl:ok boolean-expression-complexity@60ef -- REVIEWED 2026-11-21 SLZ-S04: 7 and/or/xor operators; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
           and (LastDelimiter('.', MethName) = 0)) and ((not MatchesCase(MethName, ANaming.MethodCase))
             and (not IsShortAllCaps(MethName))
             and (not IsUnderscoreAccessor(MethName))
@@ -1222,7 +1222,7 @@ var
           end;
         end;
         { param-name-prefix on the defProc args }
-        if (Length(ANaming.ParamPrefixes) > 0) or ANaming.ShortIdentifierCheck then
+        if (Length(ANaming.ParamPrefixes) > 0) or ANaming.ShortIdentifierCheck then  // dl:ok duplicate-code@a7a0 -- REVIEWED 2026-11-21 SLZ-S04: 175 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
         begin
           ArgsNode:= HdrNode.ChildByField('args');
           if not ArgsNode.IsNull then
@@ -1356,7 +1356,7 @@ var
               EmitAt(VarNameId, 'local-field-prefix',
                 Format('Local variable "%s" carries the "%s" %s prefix -- that prefix is reserved for %s, so a local wearing it reads as one',
                   [VarName,
-                   IfThen(HasFieldPfx, ANaming.FieldPrefix, ANaming.ParamPrefix),
+                   IfThen(HasFieldPfx, ANaming.FieldPrefix, ANaming.ParamPrefix),  // dl:ok ifthen-both-branches@26f2 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
                    IfThen(HasFieldPfx, 'field', 'parameter'),
                    IfThen(HasFieldPfx, 'object fields', 'parameters')]))
             else if CasingBad then

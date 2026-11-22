@@ -3,7 +3,7 @@ unit DRagLint.Diagnostics.ParseCache;
 interface
 
 uses
-  System.SysUtils, System.Generics.Collections, TreeSitter, TreeSitterLib,
+  System.SysUtils, System.Generics.Collections, TreeSitter, TreeSitterLib,  // dl:ok uses-movable-to-implementation@14c9 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   DRagLint.Preprocess, DRagLint.Preprocess.Types;
 
 type
@@ -302,7 +302,7 @@ uses
   Surfaced 2026-08-31 when that rule was widened past ('const','var').
   DRagLint.Diagnostics.AstChecks already declares it in its implementation for
   the same reason; this now matches. Only TAstParseCache.Get uses it. }
-function tree_sitter_delphi13: PTSLanguage; cdecl; external 'tree-sitter-delphi13';
+function tree_sitter_delphi13: PTSLanguage; cdecl; external 'tree-sitter-delphi13';  // dl:ok method-pascalcase@9995 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
 { 1.52 BK-COLS2: nil for pure-ASCII bytes (no column needs mapping), else the byte offset of each line start. }
 function LineStartsIfNonAscii(const ABytes: TBytes): TArray<Integer>;

@@ -73,7 +73,7 @@ uses
 
 type
   { Per-call helper state; a fresh instance per Check call keeps the checker stateless. }
-  TParityRun = class
+  TParityRun = class  // dl:ok high-response@a5e7 -- REVIEWED 2026-11-21 SLZ-S04: RFC 55; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   private
     FFile    : string;
     FSrc     : TBytes;
@@ -590,7 +590,7 @@ end;
 { empty-conditional, shape 'if c then else s'  ->  'if not c then s'. Declines (no edits)
   for every other shape, when a comment would be lost, or when the if is the THEN branch
   of an if-else (the new, shorter if would capture that else). }
-function FixEmptyThen(const F: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@3937 -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not touch, and a flag would hide which guard fired
+function FixEmptyThen(const F: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@6134 -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not touch, and a flag would hide which guard fired
 var
   PF          : TParsedFile;
   I, Par, Cond: TTSNode;
@@ -658,7 +658,7 @@ end;
 { identical-then-else, block / call shapes  ->  the then branch alone. Only when the
   condition holds no call (it could have a side effect). Registered RISKY: a bare
   identifier in the condition might still be a parameterless function. }
-function FixIdenticalBlockBranches(const F: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@7e51 -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not touch
+function FixIdenticalBlockBranches(const F: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@fb29 -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not touch
 var
   PF                : TParsedFile;
   Run               : TParityRun;

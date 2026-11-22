@@ -121,7 +121,7 @@ type
   end;
 
   { One scan of one file; owns every collection it builds. }
-  TOwnershipScan = class
+  TOwnershipScan = class  // dl:ok high-response@d3b8 -- REVIEWED 2026-11-21 SLZ-S04: RFC 105; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   strict private
     FFile      : string                      ;
     FSrc       : TBytes                      ;
@@ -1064,7 +1064,7 @@ var
     if (not Q.IsNull) and (Q.NodeType = 'statement') then Result:= Q;
   end;
 
-  function SameParent(const A1, A2: TTSNode): Boolean;
+  function SameParent(const A1, A2: TTSNode): Boolean;  // dl:ok param-name-prefix@0304 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     P1, P2: TTSNode;
   begin

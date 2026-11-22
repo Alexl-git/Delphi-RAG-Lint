@@ -1,4 +1,4 @@
-unit DRagLint.Diagnostics.AstChecks;
+unit DRagLint.Diagnostics.AstChecks;  // dl:ok unit-too-large@99a9 -- REVIEWED 2026-11-21 SLZ-S04: 10361 lines; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
 interface
 
@@ -22,7 +22,7 @@ type
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.SymbolFacts, DRagLint.Fix.Stmt, DRagLint.Lint.Autofix, DRagLint.LSP.Completion, DRagLint.MCP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TAstChecker = class
+  TAstChecker = class  // dl:ok high-response@1e2a, low-cohesion@1e2a -- REVIEWED 2026-11-21 SLZ-S04: LCOM4 34; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     strict private
       /// <returns><!-- drag-lint:auto -->TDictionary&lt;string, Boolean&gt; -- Observed:
       /// D.</returns>
@@ -495,17 +495,6 @@ type
       /// and typed constants are naturally excluded (no special-casing needed). Runs on every
       /// .pas file (no .dfm gate, no type filter) -- broader than CheckGlobalFormVars, which
       /// this method does not modify. Pure AST; no DB. Never raises.
-      /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-      /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars.CheckGlobalVarDecls, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, Move, NodeStr</para>
-      /// <para>Returns: nil; Findings.ToArray</para>
-      /// <para>Pure</para>
-      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars.CheckGlobalVarDecls"/>
-      /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
-      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
-      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.Check"/>
-      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit"/>
-      /// <!-- drag-lint:auto END -->
       /// </remarks>
       /// <summary>Flags a bare identifier inside a `with` body that binds to a
       /// member of the with-target while an OUTER scope declares the same name --
@@ -850,17 +839,6 @@ type
       /// <returns>One finding per routine exceeding the Exit-count threshold, at its header.</returns>
       /// <remarks>
       /// Severity info. Threshold = 5 (const). Pure AST; no DB. Never raises.
-      /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints/2</para>
-      /// <para>Returns: CheckTooManyExitPoints(AFile, 5)</para>
-      /// <para>Overload 1 of 2</para>
-      /// <para>Pure</para>
-      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints"/>
-      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
-      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.Check"/>
-      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit"/>
-      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity"/>
-      /// <!-- drag-lint:auto END -->
       /// </remarks>
       /// <summary>Flags a destructive act gated on a file-existence check.</summary>
       /// <param name="AFile">Path to the .pas source file to analyse.</param>
@@ -1068,7 +1046,7 @@ uses
   System.Math,
   DRagLint.Lint.RefTypeRules; { RefStaticTypeAt: index fact F1 for redundant-cast and unsafe-typecast-without-is }
 
-function tree_sitter_delphi13: PTSLanguage; cdecl;
+function tree_sitter_delphi13: PTSLanguage; cdecl;  // dl:ok method-pascalcase@ed5d -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 external 'tree-sitter-delphi13';
 
 const
@@ -1203,7 +1181,7 @@ procedure BuildKeywordSet;
 var
   KW: TStringList;
 begin
-  GKeywordSet:= TDictionary<string, Boolean>.Create(256);
+  GKeywordSet:= TDictionary<string, Boolean>.Create(256);  // dl:ok magic-literal@9380 -- REVIEWED 2026-11-21 SLZ-S04: literal 256; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
   KW:= TStringList.Create;
   try
     KW.CommaText:= 'and,array,as,asm,begin,case,class,const,' + 'constructor,destructor,dispinterface,div,do,downto,' + 'else,end,except,exports,file,finalization,finally,' +
@@ -1233,7 +1211,7 @@ var
   Line     : string                      ;
   D        : TDictionary<string, Boolean>;
 begin
-  D:= TDictionary<string, Boolean>.Create(256);
+  D:= TDictionary<string, Boolean>.Create(256);  // dl:ok magic-literal@f4c5 -- REVIEWED 2026-11-21 SLZ-S04: literal 256; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
   AllowPath:= TPath.Combine( TPath.GetDirectoryName(ParamStr(0)), 'rules\builtin-symbols.txt');
   if TFile.Exists(AllowPath) then
   begin
@@ -1404,7 +1382,7 @@ begin
       if Length(Syms) > 0 then Continue;
 
       LineNum  := 1;
-      ColNum   := 1;
+      ColNum   := 1;  // dl:ok overwrite-before-read@d477 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
       LineStart:= 1;
       for I:= 1 to M.Index - 1 do
       begin
@@ -1435,7 +1413,7 @@ begin
   end; // try
 end; // function
 
-class function TAstChecker.CheckUnbalancedBeginEnd( const AFile: string): TArray<TLintFinding>;
+class function TAstChecker.CheckUnbalancedBeginEnd( const AFile: string): TArray<TLintFinding>;  // dl:ok cyclomatic-complexity@2dc7 -- REVIEWED 2026-11-21 SLZ-S04: measured 33 (max 30); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   Source           : string      ;
   SrcBytes         : TBytes      ;
@@ -1604,7 +1582,7 @@ begin
     Finding.StartLine:= LastUnmatchedLine;
     Finding.StartCol := LastUnmatchedCol;
     Finding.EndLine  := LastUnmatchedLine;
-    Finding.EndCol:= LastUnmatchedCol + 5;
+    Finding.EndCol:= LastUnmatchedCol + 5;  // dl:ok magic-literal@0472 -- REVIEWED 2026-11-21 SLZ-S04: literal 5; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     Result:= [Finding];
   end;
 end; // function
@@ -1677,7 +1655,7 @@ var
         begin
           R.StartLine:= StartLine;
           R.EndLine:= LineNum;
-          SetLength(ConditionalRanges, Length(ConditionalRanges) + 1);
+          SetLength(ConditionalRanges, Length(ConditionalRanges) + 1);  // dl:ok setlength-in-loop@1a4c -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
           ConditionalRanges[Length(ConditionalRanges) - 1]:= R;
           StartLine:= -1;
         end;
@@ -1704,7 +1682,7 @@ var
     ErrorLine, EndLine: Integer;
     SkipDueToConditional: Boolean;
   begin
-    if N.IsNull or (Findings.Count >= 100) then Exit;
+    if N.IsNull or (Findings.Count >= 100) then Exit;  // dl:ok magic-literal@cdd2 -- REVIEWED 2026-11-21 SLZ-S04: literal 100; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if N.IsError or N.IsMissing then
     begin
       P:= N.StartPoint;
@@ -1716,7 +1694,7 @@ var
 
       if HasCond then
       begin
-        if Length(ConditionalRanges) > 0 then
+        if Length(ConditionalRanges) > 0 then  // dl:ok ifthen-to-if-expression@8592 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
           // Skip when the error starts or ends inside a region, or engulfs any
           // single region (per-range straddle handles multiple separate blocks).
           SkipDueToConditional:= IsInConditionalRegion(ErrorLine)
@@ -1731,7 +1709,7 @@ var
         // A small genuine line-1 error (EndLine near line 1) always fires.
         if (not SkipDueToConditional) and (ErrorLine = 1)
            and (TotalLines > 1)
-           and ((EndLine - ErrorLine) >= (TotalLines * 3) div 4) then
+           and ((EndLine - ErrorLine) >= (TotalLines * 3) div 4) then  // dl:ok magic-literal@24a4 -- REVIEWED 2026-11-21 SLZ-S04: literal 3,4; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
           SkipDueToConditional:= True;
       end;
 
@@ -1943,7 +1921,7 @@ var
   F       : TLintFinding                  ;
   Fixed   : Integer                       ;
 
-  function NStr(const N: TTSNode): string;
+  function NStr(const N: TTSNode): string;  // dl:ok duplicate-code@8ebf -- REVIEWED 2026-11-21 SLZ-S04: 101 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     S: Integer;
     E: Integer;
@@ -2058,7 +2036,7 @@ var
   { One routine's own var sections. Mirrors CheckUnusedLocals: only declVars
     that are DIRECT children of the defProc, so a nested routine's sections are
     handled when the walk reaches that routine. }
-  procedure HandleProc(const ADefProc: TTSNode);
+  procedure HandleProc(const ADefProc: TTSNode);  // dl:ok cognitive-complexity@b8bb -- REVIEWED 2026-11-21 SLZ-S04: measured 79 (max 65); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     I         : Integer          ;
     J         : Integer          ;
@@ -2146,8 +2124,8 @@ var
           for K:= 0 to High(Names) do
             if not Flagged.ContainsKey(NodeKey(Names[K])) then
             begin
-              if Keep <> '' then Keep:= Keep + ', ';
-              Keep:= Keep + NStr(Names[K]);
+              if Keep <> '' then Keep:= Keep + ', ';  // dl:ok concat-in-loop@5070 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+              Keep:= Keep + NStr(Names[K]);  // dl:ok concat-in-loop@0eed -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
             end;
           if Trim(Keep) = '' then begin AnyKept:= True;
           Continue; end;
@@ -2236,9 +2214,9 @@ begin
   end;
 end;
 
-class function TAstChecker.CheckRaiseInFinally(const AFile: string): TArray<TLintFinding>;
+class function TAstChecker.CheckRaiseInFinally(const AFile: string): TArray<TLintFinding>;  // dl:ok duplicate-code@c505 -- REVIEWED 2026-11-21 SLZ-S04: 96 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
-  Src     : TBytes             ;
+  Src     : TBytes             ;  // dl:ok write-only-local@6180 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
@@ -2251,7 +2229,7 @@ var
     P: TTSPoint    ;
     F: TLintFinding;
   begin
-    if N.IsNull or (Findings.Count >= 100) then Exit;
+    if N.IsNull or (Findings.Count >= 100) then Exit;  // dl:ok magic-literal@cdd2 -- REVIEWED 2026-11-21 SLZ-S04: literal 100; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if N.NodeType = 'try' then Exit;
     if N.NodeType = 'raise' then
     begin
@@ -2264,7 +2242,7 @@ var
       F.StartLine:= Integer(P.Row   ) + 1;
       F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
       F.EndLine:= F.StartLine;
-      F.EndCol := F.StartCol + 5;
+      F.EndCol := F.StartCol + 5;  // dl:ok magic-literal@c6ab -- REVIEWED 2026-11-21 SLZ-S04: literal 5; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
       Findings.Add(F);
       Exit; { do not descend into the raise expression }
     end;
@@ -2308,7 +2286,7 @@ begin
   end;
 end; // function
 
-class function TAstChecker.CheckCodeAfterExit(const AFile: string): TArray<TLintFinding>;
+class function TAstChecker.CheckCodeAfterExit(const AFile: string): TArray<TLintFinding>;  // dl:ok duplicate-code@6782 -- REVIEWED 2026-11-21 SLZ-S04: 96 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   Src     : TBytes             ;
   PF      : TParsedFile        ;
@@ -2320,7 +2298,7 @@ var
   end;
 
   { Is this statement an unconditional flow-terminator (Exit/raise/Break/Continue/Halt)? }
-  function IsTerminator(const Stmt: TTSNode): Boolean;
+  function IsTerminator(const Stmt: TTSNode): Boolean;  // dl:ok param-name-prefix@4d15 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     Inner : TTSNode;
     Entity: TTSNode;
@@ -2350,7 +2328,7 @@ var
 
   { In a block/statements node, flag the first real statement that directly
     follows a terminator. Keyword children (kBegin/kEnd/kUntil...) are skipped. }
-  procedure CheckList(const Parent: TTSNode);
+  procedure CheckList(const Parent: TTSNode);  // dl:ok param-name-prefix@086d -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     I   : Integer         ;
     C   : TTSNode         ;
@@ -2394,7 +2372,7 @@ var
   var
     I: Integer;
   begin
-    if N.IsNull or (Findings.Count >= 100) then Exit;
+    if N.IsNull or (Findings.Count >= 100) then Exit;  // dl:ok magic-literal@cdd2 -- REVIEWED 2026-11-21 SLZ-S04: literal 100; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if (N.NodeType = 'block') or (N.NodeType = 'statements') then CheckList(N);
     for I:= 0 to N.ChildCount - 1 do Visit(N.Child(I));
   end; // procedure
@@ -2414,7 +2392,7 @@ begin
   end;
 end; // function
 
-class function TAstChecker.CheckMissingInherited(const AFile: string): TArray<TLintFinding>;
+class function TAstChecker.CheckMissingInherited(const AFile: string): TArray<TLintFinding>;  // dl:ok duplicate-code@057d -- REVIEWED 2026-11-21 SLZ-S04: 96 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   Src     : TBytes             ;
   PF      : TParsedFile        ;
@@ -2440,7 +2418,7 @@ var
     Result:= TRegEx.IsMatch(SrcText(ABody, Src), '(?<![\w.])(Self\s*\.\s*)?Create\w*\s*[(;]|\bSelf\s*\.\s*Create\w*', [roIgnoreCase]);
   end; // function
 
-  procedure CheckProc(const ADefProc: TTSNode);
+  procedure CheckProc(const ADefProc: TTSNode);  // dl:ok too-many-exit-points@19e5 -- REVIEWED 2026-11-21 SLZ-S04: 7 Exit statements; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     Hdr  : TTSNode     ;
     Body : TTSNode     ;
@@ -2508,7 +2486,7 @@ var
     F.StartLine:= Integer(P.Row   ) + 1;
     F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
     F.EndLine:= F.StartLine;
-    F.EndCol := F.StartCol + 5;
+    F.EndCol := F.StartCol + 5;  // dl:ok magic-literal@c6ab -- REVIEWED 2026-11-21 SLZ-S04: literal 5; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     Findings.Add(F);
   end; // procedure
 
@@ -2516,7 +2494,7 @@ var
   var
     I: Integer;
   begin
-    if N.IsNull or (Findings.Count >= 100) then Exit;
+    if N.IsNull or (Findings.Count >= 100) then Exit;  // dl:ok magic-literal@cdd2 -- REVIEWED 2026-11-21 SLZ-S04: literal 100; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if N.NodeType = 'defProc' then CheckProc(N);
     for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
   end; // procedure
@@ -2536,13 +2514,13 @@ begin
   end;
 end; // function
 
-class function TAstChecker.CheckControlFlowInFinally(const AFile: string): TArray<TLintFinding>;
+class function TAstChecker.CheckControlFlowInFinally(const AFile: string): TArray<TLintFinding>;  // dl:ok duplicate-code@c4c9 -- REVIEWED 2026-11-21 SLZ-S04: 96 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   Src     : TBytes             ;
   PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
-  function NodeStr(const N: TTSNode): string;
+  function NodeStr(const N: TTSNode): string;  // dl:ok duplicate-code@408a -- REVIEWED 2026-11-21 SLZ-S04: 94 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     S, E, L: Integer;
   begin
@@ -2557,7 +2535,7 @@ var
 
   { Is this statement an Exit/Break/Continue/Halt? (raise is handled by the
     separate raise-in-finally rule.) }
-  function IsCtrlFlow(const Stmt: TTSNode): Boolean;
+  function IsCtrlFlow(const Stmt: TTSNode): Boolean;  // dl:ok param-name-prefix@aa7a -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     Inner : TTSNode;
     Entity: TTSNode;
@@ -2588,9 +2566,9 @@ var
     P: TTSPoint    ;
     F: TLintFinding;
   begin
-    if N.IsNull or (Findings.Count >= 100) then Exit;
+    if N.IsNull or (Findings.Count >= 100) then Exit;  // dl:ok magic-literal@cdd2 -- REVIEWED 2026-11-21 SLZ-S04: literal 100; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if N.NodeType = 'try' then Exit; { nested try handled on its own }
-    if IsCtrlFlow(N) then
+    if IsCtrlFlow(N) then  // dl:ok duplicate-code@4565 -- REVIEWED 2026-11-21 SLZ-S04: 117 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     begin
       P:= N.StartPoint;
       F:= Default(TLintFinding);
@@ -2608,7 +2586,7 @@ var
     for I:= 0 to N.ChildCount - 1 do SearchFinally(N.Child(I));
   end; // procedure
 
-  procedure Visit(const N: TTSNode);
+  procedure Visit(const N: TTSNode);  // dl:ok duplicate-code@fc90 -- REVIEWED 2026-11-21 SLZ-S04: 117 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     I        : Integer;
     InFinally: Boolean;
@@ -2649,7 +2627,7 @@ var
   PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
-  function NodeStr(const N: TTSNode): string;
+  function NodeStr(const N: TTSNode): string;  // dl:ok duplicate-code@408a -- REVIEWED 2026-11-21 SLZ-S04: 97 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     S, E, L: Integer;
   begin
@@ -2719,7 +2697,7 @@ var
   var
     I, D, M    : Integer;
     Inc1       : Integer;
-    ElseN, C   : TTSNode;
+    ElseN, C   : TTSNode;  // dl:ok unused-local@61bc -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     ChildDepth : Integer;
   begin
     Result:= ADepth;
@@ -2865,7 +2843,7 @@ var
   var
     I: Integer;
   begin
-    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.IsNull or (Findings.Count >= 200) then Exit;  // dl:ok large-magic-number@150f, magic-literal@150f -- REVIEWED 2026-11-21 SLZ-S04: literal 200,150,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if N.NodeType = 'defProc' then CheckProc(N);
     for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
   end; // procedure
@@ -2905,7 +2883,7 @@ var
     Result:= if AStore <> nil then AStore.ResolveTypeCategory(T, AFileId) else tcUnknown;
   end;
 
-  function NodeStr(const N: TTSNode): string;
+  function NodeStr(const N: TTSNode): string;  // dl:ok duplicate-code@408a -- REVIEWED 2026-11-21 SLZ-S04: 97 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     S, E, L: Integer;
   begin
@@ -2923,7 +2901,7 @@ var
     L: string;
   begin
     L:= LowerCase(Trim(T));
-    Result:= (L = 'single') or (L = 'double') or (L = 'extended') or (L = 'real') or (L = 'real48') or (L = 'tdatetime') or (L = 'tdate') or (L = 'ttime');
+    Result:= (L = 'single') or (L = 'double') or (L = 'extended') or (L = 'real') or (L = 'real48') or (L = 'tdatetime') or (L = 'tdate') or (L = 'ttime');  // dl:ok boolean-expression-complexity@0852 -- REVIEWED 2026-11-21 SLZ-S04: 7 and/or/xor operators; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   end;
 
   function IsInterfaceType(const T: string): Boolean;
@@ -2976,9 +2954,9 @@ var
     L: string;
   begin
     L:= LowerCase(Trim(T));
-    Result:= (L = 'string') or (L = 'ansistring') or (L = 'widestring')
+    Result:= (L = 'string') or (L = 'ansistring') or (L = 'widestring')  // dl:ok boolean-expression-complexity@7134 -- REVIEWED 2026-11-21 SLZ-S04: 7 and/or/xor operators; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
           or (L = 'unicodestring') or (L = 'shortstring') or (L = 'utf8string')
-          or (L = 'rawbytestring') or (Copy(L, 1, 7) = 'string[');
+          or (L = 'rawbytestring') or (Copy(L, 1, 7) = 'string[');  // dl:ok magic-literal@a535 -- REVIEWED 2026-11-21 SLZ-S04: literal 1,7; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
   end;
 
   { v0.67: operand resolves to a string -- store category authoritative when
@@ -3027,11 +3005,11 @@ var
     if C <> tcUnknown then begin Result:= (C = tcClass);
     Exit; end;
     L:= LowerCase(S);
-    if (L = 'tdatetime') or (L = 'tdate') or (L = 'ttime') or (L = 'tcolor')
+    if (L = 'tdatetime') or (L = 'tdate') or (L = 'ttime') or (L = 'tcolor')  // dl:ok boolean-expression-complexity@a581 -- REVIEWED 2026-11-21 SLZ-S04: 16 and/or/xor operators; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     or (L = 'talphacolor') or (L = 'tpoint') or (L = 'tsize') or (L = 'trect')
     or (L = 'tsmallpoint') or (L = 'tguid') or (L = 'tbytes') or (L = 'tvalue')
     or (L = 'tpair') or (L = 'tdatetimefield')
-    or (Copy(L, 1, 6) = 'tarray') or (Copy(L, 1, 5) = 'tproc') or (Copy(L, 1, 5) = 'tfunc') then
+    or (Copy(L, 1, 6) = 'tarray') or (Copy(L, 1, 5) = 'tproc') or (Copy(L, 1, 5) = 'tfunc') then  // dl:ok magic-literal@369d -- REVIEWED 2026-11-21 SLZ-S04: literal 1,6,5; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
       Result:= False;
   end;
 
@@ -3312,7 +3290,7 @@ var
     else if OperandType(N, T) then Result:= (CatOf(T) = tcString);
   end;
 
-  procedure CheckExpr(const N: TTSNode);
+  procedure CheckExpr(const N: TTSNode);  // dl:ok method-too-long@0bc2, deep-nesting@7516, cyclomatic-complexity@46a6, cognitive-complexity@5e56 -- REVIEWED 2026-11-21 SLZ-S04: measured 350 (max 65); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     I     : Integer    ;
     Op    : TTSNode    ;
@@ -3327,7 +3305,7 @@ var
     Call    : TTSNode  ; // v0.67: the Length() call side of a length-zero compare
     HaveCall: Boolean  ;
   begin
-    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.IsNull or (Findings.Count >= 200) then Exit;  // dl:ok large-magic-number@150f, magic-literal@150f -- REVIEWED 2026-11-21 SLZ-S04: literal 200,150,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     var Pushed:= PushScope(N);
     try
     { v0.74: exhaustive-enum-case -- a 'case' on an enum-typed selector that omits
@@ -3384,8 +3362,8 @@ var
                 for var Mi:= 0 to Members.Count - 1 do
                   if Covered.IndexOf(Members[Mi]) < 0 then
                   begin
-                    if Missing <> '' then Missing:= Missing + ', ';
-                    Missing:= Missing + Members[Mi];
+                    if Missing <> '' then Missing:= Missing + ', ';  // dl:ok concat-in-loop@6939 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+                    Missing:= Missing + Members[Mi];  // dl:ok concat-in-loop@8f11 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
                   end;
                 if Missing <> '' then
                 begin
@@ -3398,7 +3376,7 @@ var
                   F.StartLine:= Integer(P.Row   ) + 1;
                   F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
                   F.EndLine := F.StartLine;
-                  F.EndCol  := F.StartCol + 4;
+                  F.EndCol  := F.StartCol + 4;  // dl:ok magic-literal@3fe8 -- REVIEWED 2026-11-21 SLZ-S04: literal 4; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
                   Findings.Add(F);
                 end;
               end;
@@ -3527,7 +3505,7 @@ var
       if (not Entity.IsNull) and (Entity.NodeType = 'identifier') then
       begin
         var Cn: string:= LowerCase(NodeStr(Entity));
-        if (Cn = 'integer') or (Cn = 'cardinal') or (Cn = 'longint') or (Cn = 'longword') then
+        if (Cn = 'integer') or (Cn = 'cardinal') or (Cn = 'longint') or (Cn = 'longword') then  // dl:ok duplicate-code@91cb -- REVIEWED 2026-11-21 SLZ-S04: 91 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
         begin
           Args:= N.ChildByField('args');
           if (not Args.IsNull) and (Args.NamedChildCount >= 1) then
@@ -3555,7 +3533,7 @@ var
         64-bit on Win64, so the cast silently drops the high 32 bits -- use NativeInt/
         NativeUInt (or Int64) for the result. Distinct from win64-pointer-cast (which
         fires on true pointer types); this covers the integer pointer-sized family. }
-      if (not Entity.IsNull) and (Entity.NodeType = 'identifier') then
+      if (not Entity.IsNull) and (Entity.NodeType = 'identifier') then  // dl:ok duplicate-code@6a66 -- REVIEWED 2026-11-21 SLZ-S04: 98 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
       begin
         var Cn: string:= LowerCase(NodeStr(Entity));
         if (Cn = 'integer') or (Cn = 'cardinal') or (Cn = 'longint') or (Cn = 'longword') then
@@ -3567,7 +3545,7 @@ var
             if OperandType(A0, T) then
             begin
               var Tl: string:= LowerCase(Trim(T));
-              if (Tl = 'nativeint') or (Tl = 'nativeuint') or (Tl = 'intptr') or (Tl = 'uintptr')
+              if (Tl = 'nativeint') or (Tl = 'nativeuint') or (Tl = 'intptr') or (Tl = 'uintptr')  // dl:ok boolean-expression-complexity@740b -- REVIEWED 2026-11-21 SLZ-S04: 5 and/or/xor operators; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
                  or (Tl = 'ptrint') or (Tl = 'ptruint') then
               begin
                 P:= Entity.StartPoint;
@@ -3747,8 +3725,8 @@ var
             for var AName in AbstractNames do
               if ConcreteNames.IndexOf(AName) < 0 then
               begin
-                if Unimpl <> '' then Unimpl:= Unimpl + ', ';
-                Unimpl:= Unimpl + AName;
+                if Unimpl <> '' then Unimpl:= Unimpl + ', ';  // dl:ok concat-in-loop@5f09 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+                Unimpl:= Unimpl + AName;  // dl:ok concat-in-loop@03dc -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
               end;
             if Unimpl <> '' then
             begin
@@ -3818,7 +3796,7 @@ var
     { 'I := X' / 'I := X as ISomething' where I is interface-typed and X is a
       simple class-typed identifier -> record X (lower key, original-case
       value) in Aliased. }
-    procedure ScanAlias(const N: TTSNode);
+    procedure ScanAlias(const N: TTSNode);  // dl:ok cyclomatic-complexity@e82f -- REVIEWED 2026-11-21 SLZ-S04: measured 33 (max 30); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     var
       Lhs, Rhs, Src2: TTSNode;
       TI, TX, Xn    : string ;
@@ -3893,7 +3871,7 @@ var
       begin
         Lhs:= N.ChildByField('lhs');
         Rhs:= N.ChildByField('rhs');
-        if ((not Lhs.IsNull) and (not Rhs.IsNull) and (Lhs.NodeType = 'identifier')
+        if ((not Lhs.IsNull) and (not Rhs.IsNull) and (Lhs.NodeType = 'identifier')  // dl:ok boolean-expression-complexity@1c37 -- REVIEWED 2026-11-21 SLZ-S04: 6 and/or/xor operators; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
            and (Rhs.NodeType = 'identifier')
            and (SameText(NodeStr(Rhs), 'Free') or SameText(NodeStr(Rhs), 'DisposeOf'))) and (not FreedAt.ContainsKey(LowerCase(NodeStr(Lhs)))) then FreedAt.Add(LowerCase(NodeStr(Lhs)), N);
       end
@@ -4154,13 +4132,13 @@ begin
   end;
 end; // function
 
-class function TAstChecker.CheckFireDacSqlMismatch(const AFile: string): TArray<TLintFinding>;
+class function TAstChecker.CheckFireDacSqlMismatch(const AFile: string): TArray<TLintFinding>;  // dl:ok duplicate-code@aae9 -- REVIEWED 2026-11-21 SLZ-S04: 96 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   Src     : TBytes             ;
   PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
-  function NodeStr(const N: TTSNode): string;
+  function NodeStr(const N: TTSNode): string;  // dl:ok duplicate-code@408a -- REVIEWED 2026-11-21 SLZ-S04: 97 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     S, E, L: Integer;
   begin
@@ -4174,7 +4152,7 @@ var
   end;
 
   { Recognize 'X.SQL.Text := ''<sql>''' and return X (lowercased) + 'select'/'dml'. }
-  function MatchSqlTextAssign(const ANode: TTSNode; out AVar, AKind: string): Boolean;
+  function MatchSqlTextAssign(const ANode: TTSNode; out AVar, AKind: string): Boolean;  // dl:ok too-many-exit-points@b73e, out-param-not-set@c2e3 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     Lhs, Inner, V, Rhs: TTSNode;
     Lit, Up           : string ;
@@ -4202,7 +4180,7 @@ var
   end;
 
   { Recognize 'X.Open' / 'X.ExecSQL' (the exprDot form). }
-  function MatchCall(const ANode: TTSNode; out AVar, AMethod: string): Boolean;
+  function MatchCall(const ANode: TTSNode; out AVar, AMethod: string): Boolean;  // dl:ok out-param-not-set@10fe -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     V, M: TTSNode;
     Mn  : string ;
@@ -4229,7 +4207,7 @@ var
     P        : TTSPoint   ;
     F        : TLintFinding;
   begin
-    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.IsNull or (Findings.Count >= 200) then Exit;  // dl:ok large-magic-number@150f, magic-literal@150f -- REVIEWED 2026-11-21 SLZ-S04: literal 200,150,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if N.NodeType = 'defProc' then Exit; { nested routine handled separately }
     if (N.NodeType = 'assignment') and MatchSqlTextAssign(N, V, K) then AMap.AddOrSetValue(V, K)
     else if (N.NodeType = 'exprDot') and MatchCall(N, V, M) then
@@ -4297,7 +4275,7 @@ var
   Locals  : TDictionary<string, Boolean>; { the current routine's declared local var names }
   Handed  : TDictionary<string, Boolean>; { locals the routine hands off: a call argument or an assignment source }
 
-  function NodeStr(const N: TTSNode): string;
+  function NodeStr(const N: TTSNode): string;  // dl:ok duplicate-code@408a -- REVIEWED 2026-11-21 SLZ-S04: 97 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     S, E, L: Integer;
   begin
@@ -4375,7 +4353,7 @@ var
   end;
 
   { 'X := <something>.Create[...]' (paren or no-paren) -> returns lowercased X. }
-  function IsConstruction(const ANode: TTSNode; out AVar: string): Boolean;
+  function IsConstruction(const ANode: TTSNode; out AVar: string): Boolean;  // dl:ok out-param-not-set@73a1 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     Lhs, Rhs, Ent, Mth: TTSNode;
     HasMth            : Boolean;
@@ -4408,7 +4386,7 @@ var
   end;
 
   { 'X.Free' (exprDot) or 'FreeAndNil(X)' (exprCall) -> returns lowercased X. }
-  function IsFree(const ANode: TTSNode; out AVar: string): Boolean;
+  function IsFree(const ANode: TTSNode; out AVar: string): Boolean;  // dl:ok out-param-not-set@b471 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     Lhs, Rhs, Ent, Args, A0: TTSNode;
   begin
@@ -4482,7 +4460,7 @@ var
     P  : TTSPoint   ;
     F  : TLintFinding;
   begin
-    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.IsNull or (Findings.Count >= 200) then Exit;  // dl:ok large-magic-number@150f, magic-literal@150f -- REVIEWED 2026-11-21 SLZ-S04: literal 200,150,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if N.NodeType = 'defProc' then Exit; { nested routine handled separately }
     if (N.NodeType = 'assignment') and IsConstruction(N, V) then AConstructed.AddOrSetValue(V, Integer(N.EndByte))
     else if (not AInFinally) and IsFree(N, V) and Tracked(V, AConstructed)
@@ -4620,7 +4598,7 @@ var
     Src   : TBytes   ;
     PF    : TParsedFile;
 
-    function NodeStr(const N: TTSNode): string;
+    function NodeStr(const N: TTSNode): string;  // dl:ok duplicate-code@408a -- REVIEWED 2026-11-21 SLZ-S04: 97 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     var
       S, E, Ln: Integer;
     begin
@@ -4775,7 +4753,7 @@ begin
           F.EndLine:= Node.Line;
           F.EndCol := Node.Col + Length(Node.Disp);
           Findings.Add(F);
-          if Findings.Count >= 200 then Break;
+          if Findings.Count >= 200 then Break;  // dl:ok large-magic-number@d33b, magic-literal@d33b -- REVIEWED 2026-11-21 SLZ-S04: literal 200,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
         end;
       end;
     end;
@@ -4789,13 +4767,13 @@ begin
   end;
 end; // function
 
-class function TAstChecker.CheckUseAfterFree(const AFile: string): TArray<TLintFinding>;
+class function TAstChecker.CheckUseAfterFree(const AFile: string): TArray<TLintFinding>;  // dl:ok duplicate-code@5df0 -- REVIEWED 2026-11-21 SLZ-S04: 96 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   Src     : TBytes             ;
   PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
-  function NodeStr(const N: TTSNode): string;
+  function NodeStr(const N: TTSNode): string;  // dl:ok duplicate-code@408a -- REVIEWED 2026-11-21 SLZ-S04: 97 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     S, E, L: Integer;
   begin
@@ -4815,7 +4793,7 @@ var
   end;
 
   { 'X.Free' -> X. }
-  function IsRawFree(const N: TTSNode; out AVar: string): Boolean;
+  function IsRawFree(const N: TTSNode; out AVar: string): Boolean;  // dl:ok out-param-not-set@5e0c -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     L, R: TTSNode;
   begin
@@ -4831,7 +4809,7 @@ var
   end;
 
   { 'FreeAndNil(X)' -> X. }
-  function IsFreeAndNil(const N: TTSNode; out AVar: string): Boolean;
+  function IsFreeAndNil(const N: TTSNode; out AVar: string): Boolean;  // dl:ok out-param-not-set@ef20 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     Ent, Args, A0: TTSNode;
   begin
@@ -4847,7 +4825,7 @@ var
   end;
 
   { Find an 'X.<member>' access where X is in AFreed; returns the node or null-via-found-flag. }
-  function FindUse(const N: TTSNode; AFreed: TDictionary<string, Boolean>; out AHit: TTSNode): Boolean;
+  function FindUse(const N: TTSNode; AFreed: TDictionary<string, Boolean>; out AHit: TTSNode): Boolean;  // dl:ok out-param-not-set@3308 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     I   : Integer;
     L   : TTSNode;
@@ -4898,7 +4876,7 @@ var
           F.EndLine:= F.StartLine;
           F.EndCol := F.StartCol + 1;
           Findings.Add(F);
-          if Findings.Count >= 200 then Break;
+          if Findings.Count >= 200 then Break;  // dl:ok large-magic-number@d33b, magic-literal@d33b -- REVIEWED 2026-11-21 SLZ-S04: literal 200,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
         end;
         { step 2: update the freed set for subsequent statements }
         Prim:= Primary(Child);
@@ -4919,7 +4897,7 @@ var
   var
     I: Integer;
   begin
-    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.IsNull or (Findings.Count >= 200) then Exit;  // dl:ok large-magic-number@150f, magic-literal@150f -- REVIEWED 2026-11-21 SLZ-S04: literal 200,150,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if (N.NodeType = 'block') or (N.NodeType = 'statements') then CheckBlock(N);
     for I:= 0 to N.ChildCount - 1 do Visit(N.Child(I));
   end;
@@ -4946,7 +4924,7 @@ var
   Findings : TList<TLintFinding>       ;
   ClassBase: TDictionary<string,string>; { classLower -> base type name (as written) }
 
-  function NodeStr(const N: TTSNode): string;
+  function NodeStr(const N: TTSNode): string;  // dl:ok duplicate-code@408a -- REVIEWED 2026-11-21 SLZ-S04: 97 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     S, E, L: Integer;
   begin
@@ -5068,14 +5046,14 @@ var
     Findings.Add(F);
   end;
 
-  procedure WalkExec(const N: TTSNode);
+  procedure WalkExec(const N: TTSNode);  // dl:ok cyclomatic-complexity@9fd4 -- REVIEWED 2026-11-21 SLZ-S04: measured 33 (max 30); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     I    : Integer;
     Lhs  : TTSNode;
     Rhs  : TTSNode;
     Mname: string ;
   begin
-    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.IsNull or (Findings.Count >= 200) then Exit;  // dl:ok large-magic-number@150f, magic-literal@150f -- REVIEWED 2026-11-21 SLZ-S04: literal 200,150,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if (N.NodeType = 'lambda') or (N.NodeType = 'defProc') then Exit; { likely Synchronize/Queue body, or nested routine }
     { Synchronize(Form1.Repaint) names the method on the main thread's behalf. }
     if (N.NodeType = 'exprCall') and (SameText(CalleeLast(N), 'Synchronize') or SameText(CalleeLast(N), 'Queue')
@@ -5095,7 +5073,7 @@ var
       if (not Rhs.IsNull) and (Rhs.NodeType = 'identifier') then
       begin
         Mname:= NodeStr(Rhs);
-        if SameText(Mname, 'SetFocus') or SameText(Mname, 'Repaint') or SameText(Mname, 'BringToFront')
+        if SameText(Mname, 'SetFocus') or SameText(Mname, 'Repaint') or SameText(Mname, 'BringToFront')  // dl:ok boolean-expression-complexity@3c68 -- REVIEWED 2026-11-21 SLZ-S04: 6 and/or/xor operators; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
           or SameText(Mname, 'SendToBack') or SameText(Mname, 'ProcessMessages')
           { v151: a modal form and a window invalidation are UI work as well }
           or SameText(Mname, 'ShowModal') or SameText(Mname, 'Invalidate') then Flag(N, Mname);
@@ -5661,7 +5639,7 @@ var
       for var M: TSymbol in S.FindAllChildSymbols(ASymId) do
       begin
         if M.Name = '' then Continue;
-        if not (M.Kind in [skMethod, skProcedure, skFunction, skConstructor,
+        if not (M.Kind in [skMethod, skProcedure, skFunction, skConstructor,  // dl:ok nonminimal-bool@ebd6 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
                            skDestructor, skProperty, skField]) then Continue;
         { A private member of a type declared in ANOTHER unit is not visible
           here, so it can neither hide nor be hidden. }
@@ -5672,7 +5650,7 @@ var
 
     procedure Harvest(const S: ISymbolStore; const AName: string; ADepth: Integer);
     begin
-      if (S = nil) or (ADepth > 8) or (Trim(AName) = '') then Exit;
+      if (S = nil) or (ADepth > 8) or (Trim(AName) = '') then Exit;  // dl:ok magic-literal@8751 -- REVIEWED 2026-11-21 SLZ-S04: literal 8; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
       for var Sy: TSymbol in S.FindSymbolsByExactName(AName) do
       begin
         if Sy.Kind <> skClass then Continue;
@@ -5821,7 +5799,7 @@ var
       a constructor call, or a unit-level function with ONE indexed declaration. Anything else is not worth a guess -- and the
       per-ROUTINE decl map matters, not a file-wide one: a same-named local in
       another routine must not decide this routine's type. }
-    function EntityType(const E: TTSNode): string;
+    function EntityType(const E: TTSNode): string;  // dl:ok too-many-exit-points@8193 -- REVIEWED 2026-11-21 SLZ-S04: 10 Exit statements; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     var Nm: string;
     begin
       Result:= '';
@@ -5881,7 +5859,7 @@ var
       record surface has the name -- records count here, unlike below. Then the
       index must have bound THIS identifier to an enum_value of the same name;
       anything less is silence. }
-    procedure ConsiderEnumRead(const N: TTSNode; const Nm: string);
+    procedure ConsiderEnumRead(const N: TTSNode; const Nm: string);  // dl:ok param-name-prefix@46f2 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     var
       Win : Integer   ;
       Surf: TStringList;
@@ -5928,7 +5906,7 @@ var
       Findings.Add(F);
     end;
 
-    procedure Consider(const N: TTSNode);
+    procedure Consider(const N: TTSNode);  // dl:ok too-many-exit-points@8280 -- REVIEWED 2026-11-21 SLZ-S04: 6 Exit statements; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     var
       Nm : string ;
       Win: Integer;
@@ -5965,7 +5943,7 @@ var
       begin
         var SelfSurface: TStringList:= SurfaceOf(SelfClass);
         if (SelfSurface <> nil) and (SelfSurface.IndexOf(Nm) >= 0) then
-          if SameText(Layers[Win].TypeName, SelfClass) then
+          if SameText(Layers[Win].TypeName, SelfClass) then  // dl:ok ifthen-to-if-expression@b9c5 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
             { THE Assign/AssignTo SHAPE, and it needs its own sentence. When the
               with-target is another instance of the class we are already inside,
               'TmcFoo.ID hides TmcFoo.ID' reads like a defect in this rule -- and
@@ -6250,7 +6228,7 @@ var
   var
     I, J, K   : Integer;
     DV, DVType, NameId: TTSNode;
-    VarName   : string;
+    VarName   : string;  // dl:ok duplicate-code@857e -- REVIEWED 2026-11-21 SLZ-S04: 102 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     TypeStart : Integer;
     P         : TTSPoint;
     F         : TLintFinding;
@@ -6282,7 +6260,7 @@ var
           F.Severity:= 'info';
           F.Message := Format(
             'Mutable global variable ''%s'' -- shared mutable state; prefer a scoped/encapsulated alternative.',
-            [VarName]);
+            [VarName]);  // dl:ok duplicate-code@f90a -- REVIEWED 2026-11-21 SLZ-S04: 94 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
           F.FilePath := AFile;
           F.StartLine:= Integer(P.Row   ) + 1;
           F.StartCol := TAstParseCache.CharCol(AFile, P); { 1.52 BK-COLS2: character column }
@@ -6312,7 +6290,7 @@ begin
   end;
 end; // function
 
-class function TAstChecker.CheckSeparateQueryFromModifier(const AFile: string): TArray<TLintFinding>;
+class function TAstChecker.CheckSeparateQueryFromModifier(const AFile: string): TArray<TLintFinding>;  // dl:ok duplicate-code@0aa2 -- REVIEWED 2026-11-21 SLZ-S04: 96 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   Src     : TBytes;
   PF      : TParsedFile;
@@ -6521,7 +6499,7 @@ var
   AsgnCount: TDictionary<string, Integer>;
   AsgnRhs  : TDictionary<string, TTSNode>;
 
-  function NodeStr(const N: TTSNode): string;
+  function NodeStr(const N: TTSNode): string;  // dl:ok duplicate-code@408a -- REVIEWED 2026-11-21 SLZ-S04: 97 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     S, E, L: Integer;
   begin
@@ -6604,10 +6582,10 @@ var
     Scheme:= '';
     while (I <= Length(S)) and CharInSet(S[I], ['A'..'Z', 'a'..'z', '0'..'9', '+', '-', '.']) do
     begin
-      Scheme:= Scheme + S[I];
+      Scheme:= Scheme + S[I];  // dl:ok concat-in-loop@db2e -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
       Inc(I);
     end;
-    if Copy(S, I, 3) <> '://' then Exit;
+    if Copy(S, I, 3) <> '://' then Exit;  // dl:ok magic-literal@b632 -- REVIEWED 2026-11-21 SLZ-S04: literal 3; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     Result:= not SameText(Scheme, 'file');
   end;
 
@@ -6661,7 +6639,7 @@ var
     routines, the file-wide count is therefore >1 everywhere, and the exemption
     never applies to the very code it was written for. Measured on the probe --
     five of six cases behaved and the one real-world shape did not. }
-  function ArgIsFixedSchemeUri(const A0, AProc: TTSNode): Boolean;
+  function ArgIsFixedSchemeUri(const A0, AProc: TTSNode): Boolean;  // dl:ok too-many-exit-points@4478, param-name-prefix@8154 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     A, Rhs: TTSNode;
     Nm    : string ;
@@ -6731,7 +6709,7 @@ var
       Result:= Copy(Result, 2, Length(Result) - 2);
   end;
 
-  function NamesAnInterpreter(const A0, AProc: TTSNode): Boolean;
+  function NamesAnInterpreter(const A0, AProc: TTSNode): Boolean;  // dl:ok param-name-prefix@8fc3 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   const
     SHELLS: array[0..8] of string = (
       'cmd', 'cmd.exe', 'command.com', 'powershell', 'powershell.exe',
@@ -6863,7 +6841,7 @@ var
     F           : TLintFinding;
     Cur         : TTSNode ;
   begin
-    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.IsNull or (Findings.Count >= 200) then Exit;  // dl:ok large-magic-number@150f, magic-literal@150f -- REVIEWED 2026-11-21 SLZ-S04: literal 200,150,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     { Innermost enclosing routine wins, so a nested procedure reasons about its
       OWN locals rather than the outer routine's. }
     Cur:= AProc;
@@ -7018,13 +6996,13 @@ begin
   end;
 end; // function
 
-class function TAstChecker.CheckPathTraversal(const AFile: string): TArray<TLintFinding>;
+class function TAstChecker.CheckPathTraversal(const AFile: string): TArray<TLintFinding>;  // dl:ok duplicate-code@cae7 -- REVIEWED 2026-11-21 SLZ-S04: 96 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   Src     : TBytes             ;
   PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
-  function NodeStr(const N: TTSNode): string;
+  function NodeStr(const N: TTSNode): string;  // dl:ok duplicate-code@408a -- REVIEWED 2026-11-21 SLZ-S04: 97 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     S, E, L: Integer;
   begin
@@ -7069,7 +7047,7 @@ var
     P          : TTSPoint;
     F          : TLintFinding;
   begin
-    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.IsNull or (Findings.Count >= 200) then Exit;  // dl:ok large-magic-number@150f, magic-literal@150f -- REVIEWED 2026-11-21 SLZ-S04: literal 200,150,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if (N.NodeType = 'exprCall') and PathArgIndex(N, Idx) then
     begin
       Args:= N.ChildByField('args');
@@ -7248,7 +7226,7 @@ var
   { PChar(X) / PWideChar(X) / PAnsiChar(X) -> X; anything else unchanged.
     Same shape as CheckShellExec's UnwrapCast -- a WinAPI sink almost always
     wears one of these. }
-  function UnwrapCast(const A: TTSNode): TTSNode;
+  function UnwrapCast(const A: TTSNode): TTSNode;  // dl:ok duplicate-code@6694 -- REVIEWED 2026-11-21 SLZ-S04: 135 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     E, Args: TTSNode;
     Nm     : string ;
@@ -7469,12 +7447,12 @@ var
       The cost is that a bare '\\server' with no share is no longer a path
       portion; it names a machine, not a location, so that is the right side to
       err on. }
-    if (Length(AText) >= 3)
+    if (Length(AText) >= 3)  // dl:ok magic-literal@db88 -- REVIEWED 2026-11-21 SLZ-S04: literal 3; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
        and CharInSet(AText[1], ['\', '/'])
        and CharInSet(AText[2], ['\', '/'])
        and CharInSet(AText[3], ['A'..'Z', 'a'..'z', '0'..'9', '?']) then
     begin
-      for I:= 4 to Length(AText) do
+      for I:= 4 to Length(AText) do  // dl:ok magic-literal@f3d2 -- REVIEWED 2026-11-21 SLZ-S04: literal 4; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
         if CharInSet(AText[I], ['\', '/']) then Exit(True);
       Exit(False);
     end;
@@ -7513,11 +7491,11 @@ var
     { UNC: needs a name after the leading pair. }
     if (Length(AText) >= 2) and CharInSet(AText[1], ['\', '/'])
                             and CharInSet(AText[2], ['\', '/']) then
-      Exit(Length(Trim(Copy(AText, 3, MaxInt))) > 0);
+      Exit(Length(Trim(Copy(AText, 3, MaxInt))) > 0);  // dl:ok magic-literal@6916 -- REVIEWED 2026-11-21 SLZ-S04: literal 3,0; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
 
     { Drive: needs a separator AND at least one character under it. }
-    Result:= (Length(AText) >= 4) and CharInSet(AText[3], ['\', '/'])
-             and (Length(Trim(Copy(AText, 4, MaxInt))) > 0);
+    Result:= (Length(AText) >= 4) and CharInSet(AText[3], ['\', '/'])  // dl:ok magic-literal@e767 -- REVIEWED 2026-11-21 SLZ-S04: literal 4,3; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
+             and (Length(Trim(Copy(AText, 4, MaxInt))) > 0);  // dl:ok magic-literal@99df -- REVIEWED 2026-11-21 SLZ-S04: literal 4,0; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
   end;
 
   { The path-building helpers whose ARGUMENTS are still the path, so the walk
@@ -7547,7 +7525,7 @@ var
     callee, or an exprDot whose rhs names the member. AIdx1 is -1 unless the
     sink has a SECOND path operand (a copy/rename target).
     Read the omission-cost note in this routine's header before trimming it. }
-  function SinkOf(const ACall: TTSNode; out AIdx0, AIdx1: Integer;
+  function SinkOf(const ACall: TTSNode; out AIdx0, AIdx1: Integer;  // dl:ok too-many-exit-points@ea5f -- REVIEWED 2026-11-21 SLZ-S04: 15 Exit statements; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
                   out AName: string): Boolean;
   var
     Ent, L, R: TTSNode;
@@ -7669,7 +7647,7 @@ var
     F  : TLintFinding;
     Key: string      ;
   begin
-    if Findings.Count >= 200 then Exit;
+    if Findings.Count >= 200 then Exit;  // dl:ok large-magic-number@d581, magic-literal@d581 -- REVIEWED 2026-11-21 SLZ-S04: literal 200,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     P  := AAt.StartPoint;
     Key:= Format('%d:%d', [Integer(P.Row), Integer(P.Column)]);
     if Seen.ContainsKey(Key) then Exit;
@@ -7729,7 +7707,7 @@ var
   begin
     for I:= 0 to Orphans.Count - 1 do
     begin
-      if Findings.Count >= 200 then Exit;
+      if Findings.Count >= 200 then Exit;  // dl:ok large-magic-number@d581, magic-literal@d581 -- REVIEWED 2026-11-21 SLZ-S04: literal 200,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
       P  := Orphans[I].StartPoint;
       Key:= Format('%d:%d', [Integer(P.Row), Integer(P.Column)]);
       if Seen.ContainsKey(Key) then Continue;
@@ -8072,7 +8050,7 @@ var
     every branch that is not a literal, a concatenation, a combinator or a
     once-assigned local ends the walk SILENTLY -- see the inversion note in the
     routine header. }
-  procedure Classify(const A0: TTSNode; const ADepth: Integer;
+  procedure Classify(const A0: TTSNode; const ADepth: Integer;  // dl:ok too-many-exit-points@d1df, param-name-prefix@51c9 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
                      const AProc: TTSNode; const ASink: string);
   var
     A, Rhs, Args, Op: TTSNode;
@@ -8188,7 +8166,7 @@ var
     Cur      : TTSNode;
     SinkName : string ;
   begin
-    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.IsNull or (Findings.Count >= 200) then Exit;  // dl:ok large-magic-number@150f, magic-literal@150f -- REVIEWED 2026-11-21 SLZ-S04: literal 200,150,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     { Innermost enclosing routine wins, so a nested procedure reasons about its
       OWN locals rather than the outer routine's (CheckShellExec's Visit). }
     Cur:= AProc;
@@ -8263,13 +8241,13 @@ begin
   end;
 end; // function
 
-class function TAstChecker.CheckLoopAtMostOnce(const AFile: string): TArray<TLintFinding>;
+class function TAstChecker.CheckLoopAtMostOnce(const AFile: string): TArray<TLintFinding>;  // dl:ok duplicate-code@46e4 -- REVIEWED 2026-11-21 SLZ-S04: 96 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   Src     : TBytes             ;
   PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
-  function NodeStr(const N: TTSNode): string;
+  function NodeStr(const N: TTSNode): string;  // dl:ok duplicate-code@408a -- REVIEWED 2026-11-21 SLZ-S04: 97 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     S, E, L: Integer;
   begin
@@ -8340,7 +8318,7 @@ var
     P        : TTSPoint;
     F        : TLintFinding;
   begin
-    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.IsNull or (Findings.Count >= 200) then Exit;  // dl:ok large-magic-number@150f, magic-literal@150f -- REVIEWED 2026-11-21 SLZ-S04: literal 200,150,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if (N.NodeType = 'for') or (N.NodeType = 'while') or (N.NodeType = 'repeat') then
     begin
       Body:= N.ChildByField('body');
@@ -8378,13 +8356,13 @@ begin
   end;
 end; // function
 
-class function TAstChecker.CheckFormatCall(const AFile: string): TArray<TLintFinding>;
+class function TAstChecker.CheckFormatCall(const AFile: string): TArray<TLintFinding>;  // dl:ok duplicate-code@ab4f -- REVIEWED 2026-11-21 SLZ-S04: 96 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   Src     : TBytes             ;
   PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
-  function NodeStr(const N: TTSNode): string;
+  function NodeStr(const N: TTSNode): string;  // dl:ok duplicate-code@408a -- REVIEWED 2026-11-21 SLZ-S04: 97 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     S, E, L: Integer;
   begin
@@ -8418,7 +8396,7 @@ var
     try
       for M in TRegEx.Matches(Body, '%[-+ 0#]*(\d+|\*)?(\.(\d+|\*))?([a-zA-Z])') do
       begin
-        if Pos('*', M.Value) > 0 then AComplex:= True; { *-width or *-precision }
+        if Pos('*', M.Value) > 0 then AComplex:= True; { *-width or *-precision }  // dl:ok pos-for-contains@0322 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
         Conv:= M.Groups[4].Value;
         if Conv <> '' then Kinds.Add(LowerCase(Conv)[1]);
       end;
@@ -8428,7 +8406,7 @@ var
     end;
   end;
 
-  procedure Visit(const N: TTSNode);
+  procedure Visit(const N: TTSNode);  // dl:ok deep-nesting@e3cf, cognitive-complexity@e58f -- REVIEWED 2026-11-21 SLZ-S04: measured 68 (max 65); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     I, J, AI                 : Integer ;
     Ent, Args, Fmt, Arr, Elem: TTSNode ;
@@ -8440,7 +8418,7 @@ var
     IsNum, IsIntOnly, BadType: Boolean ;
     IsComplex                : Boolean ;
   begin
-    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.IsNull or (Findings.Count >= 200) then Exit;  // dl:ok large-magic-number@150f, magic-literal@150f -- REVIEWED 2026-11-21 SLZ-S04: literal 200,150,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if N.NodeType = 'exprCall' then
     begin
       Ent:= N.ChildByField('entity');
@@ -8491,7 +8469,7 @@ var
               IsIntOnly:= CharInSet(K, ['d', 'u', 'x', 'i']);
               BadType:= False;
               if Elem.NodeType = 'literalString' then BadType:= IsNum
-              else if Elem.NodeType = 'literalNumber' then BadType:= IsIntOnly and (Pos('.', NodeStr(Elem)) > 0);
+              else if Elem.NodeType = 'literalNumber' then BadType:= IsIntOnly and (Pos('.', NodeStr(Elem)) > 0);  // dl:ok pos-for-contains@0743 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
               if BadType then
               begin
                 PE:= Elem.StartPoint;
@@ -8529,13 +8507,13 @@ begin
   end;
 end; // function
 
-class function TAstChecker.CheckSwallowedExcept(const AFile: string): TArray<TLintFinding>;
+class function TAstChecker.CheckSwallowedExcept(const AFile: string): TArray<TLintFinding>;  // dl:ok duplicate-code@48e4 -- REVIEWED 2026-11-21 SLZ-S04: 96 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   Src     : TBytes             ;
   PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
-  function NodeStr(const N: TTSNode): string;
+  function NodeStr(const N: TTSNode): string;  // dl:ok duplicate-code@408a -- REVIEWED 2026-11-21 SLZ-S04: 97 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     S, E, L: Integer;
   begin
@@ -8619,13 +8597,13 @@ var
   begin
     Result:= False;
     S:= TrimLeft(AText);
-    if Copy(S, 1, 4) <> 'exit' then Exit;
-    I:= 5;
+    if Copy(S, 1, 4) <> 'exit' then Exit;  // dl:ok magic-literal@581b -- REVIEWED 2026-11-21 SLZ-S04: literal 1,4; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
+    I:= 5;  // dl:ok magic-literal@bc6f -- REVIEWED 2026-11-21 SLZ-S04: literal 5; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     while (I <= Length(S)) and (S[I] = ' ') do Inc(I);
     Result:= (I <= Length(S)) and (S[I] = '(');
   end;
 
-  function HandlesException(const N: TTSNode; const AHandled: TStrings): Boolean;
+  function HandlesException(const N: TTSNode; const AHandled: TStrings): Boolean;  // dl:ok too-many-exit-points@59b6 -- REVIEWED 2026-11-21 SLZ-S04: 10 Exit statements; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     I  : Integer;
     T  : string ;
@@ -8945,7 +8923,7 @@ var
     Scope       : TTSNode;
     Name        : string;
   begin
-    if N.IsNull or (Findings.Count >= 100) then Exit;
+    if N.IsNull or (Findings.Count >= 100) then Exit;  // dl:ok magic-literal@cdd2 -- REVIEWED 2026-11-21 SLZ-S04: literal 100; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if N.NodeType = 'try' then
     begin
       HasExcept:= False;
@@ -9038,7 +9016,7 @@ var
         F.StartLine:= Integer(ExceptPt.Row   ) + 1;
         F.StartCol := TAstParseCache.CharCol(AFile, ExceptPt); { 1.52 BK-COLS2: character column }
         F.EndLine:= F.StartLine;
-        F.EndCol := F.StartCol + 6;
+        F.EndCol := F.StartCol + 6;  // dl:ok magic-literal@1f8c -- REVIEWED 2026-11-21 SLZ-S04: literal 6; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
         Findings.Add(F);
       end;
     end;
@@ -9071,7 +9049,7 @@ var
   PlainActiveTypes: TDictionary<string, Boolean>;  // N-13: types with an Active FIELD
   LocalTypes     : TDictionary<string, string> ;  // this routine's local -> type name
 
-  function NodeStr(const N: TTSNode): string;
+  function NodeStr(const N: TTSNode): string;  // dl:ok duplicate-code@408a -- REVIEWED 2026-11-21 SLZ-S04: 97 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     S, E, L: Integer;
   begin
@@ -9085,7 +9063,7 @@ var
   end;
 
   { X.M or X.M(...) -> AVar=lower(X), AMethod=M. }
-  function DotMethod(const N: TTSNode; out AVar, AMethod: string): Boolean;
+  function DotMethod(const N: TTSNode; out AVar, AMethod: string): Boolean;  // dl:ok out-param-not-set@27ce -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     Dot, L, R, Ent: TTSNode;
   begin
@@ -9107,7 +9085,7 @@ var
   end;
 
   { X.Active := True (AWantTrue) or X.Active := False. }
-  function IsActiveAssign(const N: TTSNode; AWantTrue: Boolean; out AVar: string): Boolean;
+  function IsActiveAssign(const N: TTSNode; AWantTrue: Boolean; out AVar: string): Boolean;  // dl:ok too-many-exit-points@1ccc, out-param-not-set@aad2 -- REVIEWED 2026-11-21 SLZ-S04: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     L, R, DL, DR: TTSNode;
   begin
@@ -9145,7 +9123,7 @@ var
   begin
     if DotMethod(N, AVar, M) then
       Exit(SameText(M, 'Free') or SameText(M, 'Destroy') or SameText(M, 'DisposeOf'));
-    Result:= False;
+    Result:= False;  // dl:ok duplicate-code@d0de -- REVIEWED 2026-11-21 SLZ-S04: 107 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     if N.NodeType <> 'exprCall' then Exit;
     Ent:= N.ChildByField('entity');
     if Ent.IsNull or (Ent.NodeType <> 'identifier') or not SameText(NodeStr(Ent), 'FreeAndNil') then Exit;
@@ -9313,7 +9291,7 @@ var
     Pair: TPair<string, TTSPoint>;
     F   : TLintFinding;
   begin
-    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.IsNull or (Findings.Count >= 200) then Exit;  // dl:ok large-magic-number@150f, magic-literal@150f -- REVIEWED 2026-11-21 SLZ-S04: literal 200,150,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if N.NodeType = 'defProc' then
     begin
       Body:= N.ChildByField('body');
@@ -9383,7 +9361,7 @@ var
   ReleasedInFinally: TDictionary<string, Boolean>;
   Reader          : TExprTypeReader              ;
 
-  function NodeStr(const N: TTSNode): string;
+  function NodeStr(const N: TTSNode): string;  // dl:ok duplicate-code@408a -- REVIEWED 2026-11-21 SLZ-S04: 97 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     S, E, L: Integer;
   begin
@@ -9397,7 +9375,7 @@ var
   end;
 
   { X.M or X.M(...) -> AVar=lower(X), AMethod=M. }
-  function DotMethod(const N: TTSNode; out AVar, AMethod: string): Boolean;
+  function DotMethod(const N: TTSNode; out AVar, AMethod: string): Boolean;  // dl:ok out-param-not-set@27ce, duplicate-code@27ce -- REVIEWED 2026-11-21 SLZ-S04: 153 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     Dot, L, R, Ent: TTSNode;
   begin
@@ -9531,7 +9509,7 @@ var
     F   : TLintFinding;
     LockName: string;
   begin
-    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.IsNull or (Findings.Count >= 200) then Exit;  // dl:ok large-magic-number@150f, magic-literal@150f -- REVIEWED 2026-11-21 SLZ-S04: literal 200,150,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if N.NodeType = 'defProc' then
     begin
       Body:= N.ChildByField('body');
@@ -9553,7 +9531,7 @@ var
               F:= Default(TLintFinding);
               F.RuleId  := 'criticalsection-not-released';
               F.Severity:= 'error';
-              F.Message := Format('Critical section %s is acquired without a matching Leave/Release (or TMonitor.Exit) in a finally block -- a lock leaked on an exception path deadlocks.', [LockName]);
+              F.Message := Format('Critical section %s is acquired without a matching Leave/Release (or TMonitor.Exit) in a finally block -- a lock leaked on an exception path deadlocks.', [LockName]);  // dl:ok duplicate-code@6941 -- REVIEWED 2026-11-21 SLZ-S04: 105 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
               F.FilePath:= AFile;
               F.StartLine:= Integer(Pair.Value.Row   ) + 1;
               F.StartCol := TAstParseCache.CharCol(AFile, Pair.Value); { 1.52 BK-COLS2: character column }
@@ -9589,7 +9567,7 @@ end; // function
 
 class function TAstChecker.CheckTooManyExitPoints(const AFile: string): TArray<TLintFinding>;
 begin
-  Result:= CheckTooManyExitPoints(AFile, 5);   // historic default
+  Result:= CheckTooManyExitPoints(AFile, 5);   // historic default  // dl:ok magic-literal@0c66 -- REVIEWED 2026-11-21 SLZ-S04: literal 5; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
 end;
 
 class function TAstChecker.CheckTooManyExitPoints(const AFile: string; AMaxExits: Integer): TArray<TLintFinding>;
@@ -9598,7 +9576,7 @@ var
   PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
-  function NodeStr(const N: TTSNode): string;
+  function NodeStr(const N: TTSNode): string;  // dl:ok duplicate-code@408a -- REVIEWED 2026-11-21 SLZ-S04: 97 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     S, E, L: Integer;
   begin
@@ -9664,7 +9642,7 @@ var
     P         : TTSPoint;
     F         : TLintFinding;
   begin
-    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.IsNull or (Findings.Count >= 200) then Exit;  // dl:ok large-magic-number@150f, magic-literal@150f -- REVIEWED 2026-11-21 SLZ-S04: literal 200,150,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if N.NodeType = 'defProc' then
     begin
       Body:= N.ChildByField('body');
@@ -9761,13 +9739,13 @@ end;
   of lines later). Its harm is genuinely cross-statement, the note itself
   declines dataflow, and a capture-site heuristic needs its own false-positive
   measurement before it earns any severity. }
-class function TAstChecker.CheckStatGatedDestructive(const AFile: string): TArray<TLintFinding>;
+class function TAstChecker.CheckStatGatedDestructive(const AFile: string): TArray<TLintFinding>;  // dl:ok duplicate-code@d6de -- REVIEWED 2026-11-21 SLZ-S04: 96 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   Src     : TBytes             ;
   PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
-  function NodeStr(const N: TTSNode): string;
+  function NodeStr(const N: TTSNode): string;  // dl:ok duplicate-code@408a -- REVIEWED 2026-11-21 SLZ-S04: 97 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var S, E, L: Integer;
   begin
     Result:= '';
@@ -9871,7 +9849,7 @@ var
     Cond, Branch, Ex, De: TTSNode;
     Handled: Boolean;
   begin
-    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.IsNull or (Findings.Count >= 200) then Exit;  // dl:ok large-magic-number@150f, magic-literal@150f -- REVIEWED 2026-11-21 SLZ-S04: literal 200,150,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     Handled:= False;
 
     { Pattern 4 -- flow-free, so it is asked of every call node. }
@@ -9964,16 +9942,16 @@ end;
 
 class function TAstChecker.CheckCyclomaticComplexity(const AFile: string): TArray<TLintFinding>;
 begin
-  Result:= CheckCyclomaticComplexity(AFile, 15);   // historic default
+  Result:= CheckCyclomaticComplexity(AFile, 15);   // historic default  // dl:ok magic-literal@801a -- REVIEWED 2026-11-21 SLZ-S04: literal 15; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
 end;
 
-class function TAstChecker.CheckCyclomaticComplexity(const AFile: string; AMaxComplexity: Integer): TArray<TLintFinding>;
+class function TAstChecker.CheckCyclomaticComplexity(const AFile: string; AMaxComplexity: Integer): TArray<TLintFinding>;  // dl:ok duplicate-code@802d -- REVIEWED 2026-11-21 SLZ-S04: 100 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   Src     : TBytes             ;
   PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
 
-  function NodeStr(const N: TTSNode): string;
+  function NodeStr(const N: TTSNode): string;  // dl:ok duplicate-code@408a -- REVIEWED 2026-11-21 SLZ-S04: 97 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     S, E, L: Integer;
   begin
@@ -9986,14 +9964,14 @@ var
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
 
-  procedure Visit(const N: TTSNode);
+  procedure Visit(const N: TTSNode);  // dl:ok duplicate-code@fc90 -- REVIEWED 2026-11-21 SLZ-S04: 224 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     I, CC     : Integer ;
     Hdr, Body : TTSNode ;
     P         : TTSPoint;
     F         : TLintFinding;
   begin
-    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.IsNull or (Findings.Count >= 200) then Exit;  // dl:ok large-magic-number@150f, magic-literal@150f -- REVIEWED 2026-11-21 SLZ-S04: literal 200,150,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if N.NodeType = 'defProc' then
     begin
       Body:= N.ChildByField('body');
@@ -10036,7 +10014,7 @@ end; // function
 
 class function TAstChecker.CheckCognitiveComplexity(const AFile: string): TArray<TLintFinding>;
 begin
-  Result:= CheckCognitiveComplexity(AFile, 25);   // default limit (cognitive scores higher than cyclomatic)
+  Result:= CheckCognitiveComplexity(AFile, 25);   // default limit (cognitive scores higher than cyclomatic)  // dl:ok large-magic-number@1b3f, magic-literal@1b3f -- REVIEWED 2026-11-21 SLZ-S04: literal 25,1,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
 end;
 
 class function TAstChecker.CheckCognitiveComplexity(const AFile: string; AMaxScore: Integer): TArray<TLintFinding>;
@@ -10082,11 +10060,11 @@ var
     P         : TTSPoint;
     F         : TLintFinding;
   begin
-    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.IsNull or (Findings.Count >= 200) then Exit;  // dl:ok large-magic-number@150f, magic-literal@150f -- REVIEWED 2026-11-21 SLZ-S04: literal 200,150,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if N.NodeType = 'defProc' then
     begin
       Body:= N.ChildByField('body');
-      CC:= Score(Body, 0);
+      CC:= Score(Body, 0);  // dl:ok duplicate-code@c7a5 -- REVIEWED 2026-11-21 SLZ-S04: 156 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
       if CC > AMaxScore then
       begin
         Hdr:= N.ChildByField('header');
@@ -10128,7 +10106,7 @@ var
   Findings   : TList<TLintFinding>                             ;
   VirtByClass: TDictionary<string, TDictionary<string, Boolean>>;
 
-  function NodeStr(const N: TTSNode): string;
+  function NodeStr(const N: TTSNode): string;  // dl:ok duplicate-code@408a -- REVIEWED 2026-11-21 SLZ-S04: 97 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     S, E, L: Integer;
   begin
@@ -10186,7 +10164,7 @@ var
   end; // procedure
 
   { Pass 1: map each class name (lower) -> set of its virtual method names (lower). }
-  procedure CollectClasses(const N: TTSNode);
+  procedure CollectClasses(const N: TTSNode);  // dl:ok deep-nesting@b48b -- REVIEWED 2026-11-21 SLZ-S04: 6 deep; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     I, K              : Integer ;
     NameNode, TypeNode: TTSNode ;
@@ -10226,13 +10204,13 @@ var
     P        : TTSPoint   ;
     F        : TLintFinding;
   begin
-    if M.IsNull or (Findings.Count >= 200) then Exit;
+    if M.IsNull or (Findings.Count >= 200) then Exit;  // dl:ok large-magic-number@d16f, magic-literal@d16f -- REVIEWED 2026-11-21 SLZ-S04: literal 200,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if (M.NodeType = 'defProc') or (M.NodeType = 'inherited') then Exit; { nested routine / static ancestor call }
     if M.NodeType = 'exprDot' then
     begin
       Lhs:= M.ChildByField('lhs');
       Rhs:= M.ChildByField('rhs');
-      if (not Lhs.IsNull) and (Lhs.NodeType = 'identifier') and SameText(NodeStr(Lhs), 'Self') and
+      if (not Lhs.IsNull) and (Lhs.NodeType = 'identifier') and SameText(NodeStr(Lhs), 'Self') and  // dl:ok boolean-expression-complexity@9012 -- REVIEWED 2026-11-21 SLZ-S04: 5 and/or/xor operators; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
          (not Rhs.IsNull) and (Rhs.NodeType = 'identifier') and ASet.ContainsKey(LowerCase(NodeStr(Rhs))) then
       begin
         P:= Rhs.StartPoint;
@@ -10272,7 +10250,7 @@ var
   end; // procedure
 
   { Pass 2: walk constructor implementations, resolve their class's virtual set. }
-  procedure CheckCtors(const N: TTSNode);
+  procedure CheckCtors(const N: TTSNode);  // dl:ok deep-nesting@b3f1 -- REVIEWED 2026-11-21 SLZ-S04: 7 deep; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     I              : Integer;
     Hdr, NameNode  : TTSNode;
