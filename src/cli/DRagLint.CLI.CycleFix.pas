@@ -1303,7 +1303,7 @@ end;
 function BreakSeam(const pOpts: TCycleFixOptions): Integer;
 begin
   Result:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_CYCLEFIX_BREAK'), 0);
-  if not (Result in [CBreakCast, CBreakPointer, CBreakNoRepair, CBreakRaise]) or not IsUnderTemp(pOpts.Project) then Result:= 0;
+  if (Result not in [CBreakCast, CBreakPointer, CBreakNoRepair, CBreakRaise]) or not IsUnderTemp(pOpts.Project) then Result:= 0;
 end;
 
 function BreakLine(const pView: TCyclePlanView; const pLine: string; pMode: Integer): string;

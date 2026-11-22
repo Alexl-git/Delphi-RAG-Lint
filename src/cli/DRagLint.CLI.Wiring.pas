@@ -594,7 +594,7 @@ begin
     Exit(0);
   end;
 
-  if not (Syms[0].Kind in [skClass, skRecord, skInterface]) then
+  if (Syms[0].Kind not in [skClass, skRecord, skInterface]) then
   begin
     Writeln(System.SysUtils.Format( 'Symbol %s has kind "%s"; surface requires a class, record, or interface (or an enum, for its members).', [Syms[0].QualifiedName, Syms[0].Kind.ToText]));
     Exit(2);
