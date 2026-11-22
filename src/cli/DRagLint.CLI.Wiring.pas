@@ -413,7 +413,8 @@ begin
   end;
   Depth:= AArgs.Depth;
   if Depth <= 0 then begin Writeln(AArgs.QName);
-  Writeln('  (depth 0 returns nothing)'); Exit (1 ); end;
+  Writeln('  (depth 0 returns nothing)');
+  Exit (1 ); end;
   // Use the bare name (last segment) as the target for the by-name CTE ref lookup,
   // since refs store the bare identifier name, not the qualified name.
   TargetName:= LastSegmentAfter(AArgs.QName, '.');
@@ -528,7 +529,8 @@ begin
   end;
   if NoDbResolved(AArgs.DbPath, 'surface') then Exit(2);
   if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath);
-  Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
+  Writeln('Run "drag-lint index <path>" first.');
+  Exit (2 ); end;
 
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);

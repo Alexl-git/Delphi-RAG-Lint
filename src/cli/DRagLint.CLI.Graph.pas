@@ -369,12 +369,15 @@ begin
     begin
       for Pair in SetB do
         if not SetA.ContainsKey(Pair.Key) then begin Tag:= Pair.Value.Split(['|'])[0];
-        Writeln('+ ', Pair.Key, '  [', Tag, ']'); Inc(Added); end
+        Writeln('+ ', Pair.Key, '  [', Tag, ']');
+        Inc(Added); end
       else if SetA[Pair.Key] <> Pair.Value then begin Writeln('~ ', Pair.Key);
-      Writeln('    from: ', SetA[Pair.Key]); Writeln('    to:   ', Pair.Value); Inc(Changed); end;
+      Writeln('    from: ', SetA[Pair.Key]);
+      Writeln('    to:   ', Pair.Value); Inc(Changed); end;
       for Pair in SetA do
         if not SetB.ContainsKey(Pair.Key) then begin Tag:= Pair.Value.Split(['|'])[0];
-        Writeln('- ', Pair.Key, '  [', Tag, ']'); Inc(Removed); end;
+        Writeln('- ', Pair.Key, '  [', Tag, ']');
+        Inc(Removed); end;
       Writeln(Format('Summary: %d added, %d removed, %d changed', [Added, Removed, Changed]));
     end; // else
 

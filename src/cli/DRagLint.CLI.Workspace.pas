@@ -141,7 +141,8 @@ var
     FillChar(PI, SizeOf(PI), 0);
     StrPCopy(CmdLineBuf, ACmd);
     if not CreateProcessW(nil, CmdLineBuf, nil, nil, True, CREATE_NO_WINDOW, nil, nil, SI, PI) then begin Writeln('ERROR: failed to spawn: ', ACmd);
-    Result:= -1; Exit; end;
+    Result:= -1;
+    Exit; end;
     // Drain stdout/stderr while child runs
     CloseHandle(WritePipe);
     WritePipe:= INVALID_HANDLE_VALUE;

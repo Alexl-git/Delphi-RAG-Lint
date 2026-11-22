@@ -364,7 +364,8 @@ begin
         Continue;
       end;
       if Ln[I] = '{' then begin InBrace:= True;
-      Blank(I, I); Inc(I); Continue; end;
+      Blank(I, I);
+      Inc(I); Continue; end;
       if (Ln[I] = '(') and (I < N) and (Ln[I + 1] = '*') then
       begin
         InParenStar:= True;
@@ -400,7 +401,8 @@ begin
         J:= I;
         while (J <= N) and IsIdentCh(Ln[J]) do Inc(J);
         T.Line:= Li;
-        T.Col:= I; T.EndCol:= J - 1;
+        T.Col:= I;
+        T.EndCol:= J - 1;
         T.Text:= LowerCase(Copy(Ln, I, J - I));
         T.IsWord:= True;
         AToks.Add(T);
@@ -414,7 +416,8 @@ begin
       if CharInSet(Ln[I], ['(', ')', ';', ':']) then
       begin
         T.Line:= Li;
-        T.Col:= I; T.EndCol:= I;
+        T.Col:= I;
+        T.EndCol:= I;
         T.Text:= Ln[I];
         T.IsWord:= False;
         AToks.Add(T);
@@ -680,7 +683,8 @@ begin
           Pr.Named:= Nx.IsWord and (Nx.Text <> 'of');
         end;
         Pr.Line:= T.Line;
-        Pr.Col:= T.Col; Pr.Paren:= Paren;
+        Pr.Col:= T.Col;
+        Pr.Paren:= Paren;
         { B3: PUSH, do not overwrite. A nested routine declared inside another
           nested routine's declaration part leaves two headers open at once, and
           the single slot this replaced kept only the inner one -- so the outer
@@ -705,7 +709,8 @@ begin
         begin
           Pr:= Pend.Pop;                { the INNERMOST open header }
           Fr.Line:= Pr.Line;
-          Fr.Col:= Pr.Col; Fr.Depth:= Depth;
+          Fr.Col:= Pr.Col;
+          Fr.Depth:= Depth;
           Stk.Push(Fr);
         end;
         Inc(Depth);

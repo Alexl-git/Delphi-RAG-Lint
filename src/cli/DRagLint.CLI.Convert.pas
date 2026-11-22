@@ -1346,7 +1346,8 @@ begin
     end;
     if (CF.RootType <> '') and (CT.RootType <> '') then
     begin FromTree:= CF;
-    ToTree:= CT; Break; end;
+    ToTree:= CT;
+    Break; end;
     // Keep the first db's partial trees so we can report which type failed.
     if FromTree.RootType = '' then FromTree:= CF;
     if ToTree.RootType   = '' then ToTree  := CT;

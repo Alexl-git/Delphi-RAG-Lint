@@ -119,7 +119,8 @@ var
     if Length(AArgs.DbPaths) > 0 then DbList:= AArgs.DbPaths
     else if AArgs.DbPath <> '' then DbList:= TArray<string>.Create(AArgs.DbPath)
     else begin Writeln(ErrOutput, 'uses-report: need at least one --db');
-    Result:= 2; Exit; end;
+    Result:= 2;
+    Exit; end;
     SetLength(Stores, 0);
     for i:= 0 to High(DbList) do
     begin
@@ -452,7 +453,8 @@ var
     if Length(AArgs.DbPaths) > 0 then DbList:= AArgs.DbPaths
     else if AArgs.DbPath <> '' then DbList:= TArray<string>.Create(AArgs.DbPath)
     else begin Writeln(ErrOutput, 'deps-report: need at least one --db');
-    Result:= 2; Exit; end;
+    Result:= 2;
+    Exit; end;
     SetLength(Stores, 0);
     for i:= 0 to High(DbList) do
     begin

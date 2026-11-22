@@ -611,7 +611,8 @@ begin
         Depths.AddOrSetValue(E.TargetSymbolId, D + 1);
         if ToSet.ContainsKey(E.TargetSymbolId) then
         begin Found:= True;
-        Hit:= E.TargetSymbolId; Break; end;
+        Hit:= E.TargetSymbolId;
+        Break; end;
         Frontier.Enqueue(E.TargetSymbolId);
       end; // for E
       { RB-5 P1: control also flows from an interface method into the methods
@@ -685,9 +686,11 @@ begin
     Result:= 0;
   finally
     ToSet.Free;
-    Visited.Free; Parent.Free; Depths.Free;
+    Visited.Free;
+    Parent.Free; Depths.Free;
     Frontier.Free;
-    PathIds.Free; QNames.Free;
+    PathIds.Free;
+    QNames.Free;
   end; // try
 end; // function
 
