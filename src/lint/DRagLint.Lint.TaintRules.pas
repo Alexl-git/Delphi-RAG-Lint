@@ -1108,13 +1108,82 @@ begin
   Inc(FTagIdsVer);
 end;
 
+{ v1523 TAINT-TRIAGE: ALines[AFrom..ATo] (0-based) with every comment ('//', braces,
+  paren-star) and string literal blanked to spaces, columns kept: a field name in a
+  comment or a literal does not read the field. The scan starts outside any comment. }
+function CodeOnly(const ALines: TArray<string>; AFrom, ATo: Integer): TArray<string>;
+var
+  S      : string;
+  I      : Integer;
+  J      : Integer;
+  InBrace: Boolean;
+  InParen: Boolean;
+  InStr  : Boolean;
+begin
+  SetLength(Result, ATo - AFrom + 1);
+  InBrace:= False;
+  InParen:= False;
+  for I:= AFrom to ATo do
+  begin
+    S:= ALines[I];
+    InStr:= False;
+    J:= 1;
+    while J <= Length(S) do
+    begin
+      if InBrace then
+      begin
+        InBrace:= S[J] <> '}';
+        S[J]:= ' ';
+      end
+      else if InParen then
+      begin
+        if (S[J] = '*') and (J < Length(S)) and (S[J + 1] = ')') then
+        begin
+          InParen:= False;
+          S[J]:= ' ';
+          Inc(J);
+        end;
+        S[J]:= ' ';
+      end
+      else if InStr then
+      begin
+        { a doubled quote inside a literal closes and reopens it: same blanking }
+        InStr:= S[J] <> '''';
+        if InStr then S[J]:= ' ';
+      end
+      else if S[J] = '''' then InStr:= True
+      else if S[J] = '{' then
+      begin
+        InBrace:= True;
+        S[J]:= ' ';
+      end
+      else if (S[J] = '(') and (J < Length(S)) and (S[J + 1] = '*') then
+      begin
+        InParen:= True;
+        S[J]:= ' ';
+        Inc(J);
+        S[J]:= ' ';
+      end
+      else if (S[J] = '/') and (J < Length(S)) and (S[J + 1] = '/') then
+      begin
+        S:= Copy(S, 1, J - 1) + StringOfChar(' ', Length(S) - J + 1);
+        Break;
+      end;
+      Inc(J);
+    end;
+    Result[I - AFrom]:= S;
+  end;
+end;
+
 { SLZ-TAINTFP: True when the implementation of S names one of ANames (comma list) as a
-  whole word anywhere -- code or comment, read or write. Unknown body text answers True:
-  only a proven absence lets a field-tagged hit go. }
+  whole word in its CODE, read or write (v1523 TAINT-TRIAGE: comments and string literals
+  are blanked first -- an English 'error' in a dl:ok reason kept a FieldOut hit alive).
+  Unknown body text answers True: only a proven absence lets a field-tagged hit go. }
 function TTaintWalker.BodyMentions(AStore: Integer; const S: TSymbol; const ANames: string): Boolean;
 var
   K    : string;
   Lines: TArray<string>;
+  Code : TArray<string>;
   Names: TArray<string>;
   Rx   : TRegEx;
   I    : Integer;
@@ -1128,10 +1197,11 @@ begin
     Names:= ANames.Split([',']);
     for I:= 0 to High(Names) do Names[I]:= TRegEx.Escape(Names[I]);
     Rx:= TRegEx.Create('\b(' + string.Join('|', Names) + ')\b', [roIgnoreCase]);
+    Code:= CodeOnly(Lines, S.ImplStartLine - 1, S.ImplEndLine - 1);
     Result:= False;
     for I:= S.ImplStartLine - 1 to S.ImplEndLine - 1 do
     begin
-      for var M in Rx.Matches(Lines[I]) do
+      for var M in Rx.Matches(Code[I - S.ImplStartLine + 1]) do
       begin
         { a mention bound to a field symbol that is NOT one of the tagged ones (another
           record's Error) does not count; unbound or unknown counts }

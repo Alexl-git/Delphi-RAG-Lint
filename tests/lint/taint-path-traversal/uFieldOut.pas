@@ -88,6 +88,17 @@ begin
     DeleteFile(pItems[I].Path);
 end;
 
+procedure DeleteByPathCommented(const pItems: TItems);
+var
+  I: Integer;
+begin
+  { reads only Path; the Note field
+    is left alone }
+  for I := 0 to High(pItems) do
+    DeleteFile(pItems[I].Path); // not the note
+  WriteLn('note: done'); (* note *)
+end;
+
 procedure Run;
 var
   A, B: TItems;
@@ -101,6 +112,7 @@ begin
   DeleteByPathDeep(A);
   DeleteByNote(A);
   DeleteThroughCall(A);
+  DeleteByPathCommented(A);
   SetLength(B, 1);
   AnnotatePath(B, S);
   DeleteWritten(B);
