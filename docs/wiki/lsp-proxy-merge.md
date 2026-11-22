@@ -70,11 +70,31 @@ itself, but DelphiLSP learns the project only from a
 `workspace/didChangeConfiguration` carrying the `settings` of the IDE's
 `<Project>.delphilsp.json` (RAD Studio writes it when the project is opened).
 Without it DelphiLSP publishes no diagnostics and hover answers null. The
-extension sends it after every server start, taking the first
-`*.delphilsp.json` in the workspace or `dragLint.delphiLspConfig`, and shows a
-warning when none is found. The `.delphilsp.json` must carry the unit search
-path (`-U`/`-I` in `dccOptions`); a file without it gives `F1027 Unit not found:
-'System'` from DelphiLSP.
+extension sends it after every server start and when the active Pascal unit
+changes project, and shows a warning when none is found. It picks, in order:
+`dragLint.delphiLspConfig`; the `*.delphilsp.json` nearest the active unit
+(walking up to the workspace root); the config it already sent, when the active
+unit has no usable nearest one; the first one found in the workspace. Files
+under `.claude`, `worktrees`, `node_modules` and `.git` are never picked, so a
+unit opened from a stale agent worktree does not move DelphiLSP to that
+worktree's project or to an unrelated one (1.52.3). The `.delphilsp.json` must
+carry the unit search path (`-U`/`-I` in `dccOptions`); a file without it gives
+`F1027 Unit not found: 'System'` from DelphiLSP.
+
+Exit code (1.52.3): `lsp --proxy` exits with DelphiLSP's exit code, except after
+the client's `shutdown` request: then it exits 0 and writes DelphiLSP's code to
+stderr. DelphiLSP itself (Studio 37.0) exits `0xC0000005` or 1 in about a third
+of sessions after a correct shutdown/exit, with or without a config; that was
+the "access violation at shutdown" seen in the proxy, and it is not drag-lint's.
+
+If DelphiLSP dies BEFORE a `shutdown` (it crashed, or something killed it), the
+proxy still exits with DelphiLSP's code and now also writes one stderr line:
+`drag-lint lsp --proxy: DelphiLSP exited with code 0x... before the client's
+shutdown request (it crashed or was killed)`. Code `0xFFFFFFFF` (VS Code shows
+`4294967295`) means DelphiLSP was terminated from outside: on 2026-11-21 the
+proxy tests killed every DelphiLSP on the machine, including the one under VS
+Code. Those tests now kill only DelphiLSP processes they started themselves
+(`tests\autotest\run_v1523_PROXY_child_killed.ps1`).
 
 ## VS Code switch
 

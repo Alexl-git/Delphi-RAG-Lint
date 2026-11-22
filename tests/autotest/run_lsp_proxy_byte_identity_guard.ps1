@@ -141,8 +141,22 @@ function Play {
 }
 
 function Reap {
-  foreach ($n in @('DelphiLSP','Agent0','Agent1')) {
-    foreach ($q in (Get-Process $n -ErrorAction SilentlyContinue)) { try { $q.Kill() } catch { } }
+  # v1523 LSP-PROXY (owner crash 2026-11-21 20:43): reap only DelphiLSP / Agent0 / Agent1
+  # processes that descend from THIS script's pwsh ($PID) -- the proxies it started and
+  # their children. The old machine-wide Get-Process kill took the DelphiLSP child of the
+  # owner's VS Code proxy; Kill() gives it exit -1, the proxy relays that code, and VS
+  # Code saw the drag-lint LSP die with 4294967295. Guarded by run_v1523_PROXY_child_killed.ps1 (B).
+  $all = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
+  $parentOf = @{}
+  foreach ($w in $all) { $parentOf[[int]$w.ProcessId] = [int]$w.ParentProcessId }
+  foreach ($w in $all) {
+    if (@('DelphiLSP.exe', 'Agent0.exe', 'Agent1.exe') -notcontains $w.Name) { continue }
+    $id = [int]$w.ProcessId; $mine = $false
+    for ($k = 0; $k -lt 6 -and $parentOf.ContainsKey($id); $k++) {
+      $id = $parentOf[$id]
+      if ($id -eq $PID) { $mine = $true; break }
+    }
+    if ($mine) { try { ([System.Diagnostics.Process]::GetProcessById([int]$w.ProcessId)).Kill() } catch { } }
   }
 }
 

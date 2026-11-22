@@ -202,11 +202,17 @@ Check 'the stream ended with the trailer' `
   ($proxyText.EndsWith('STUB-TRAILER-END')) 'nothing was dropped at EOF'
 
 Write-Host ''
-Write-Host 'CASE C: stderr and exit code come from the child' -ForegroundColor Cyan
+Write-Host 'CASE C: stderr comes from the child; after the client''s shutdown the proxy exits 0' -ForegroundColor Cyan
+# 1.52.3 PROXY-AV: this session sends `shutdown`, so the stub's 42 (stand-in for
+# DelphiLSP's own crash at exit) is reported on stderr and the proxy exits 0.
+# Relaying a non-zero child code WITHOUT a shutdown is asserted by
+# run_v1523_PROXY_shutdown.ps1 check (c).
 Check 'the child stderr line reached the client' `
   ($proxy.Err -match 'STUB-STDERR-LINE') "got: $($proxy.Err.Trim())"
-Check 'the child exit code is propagated (42)' `
-  ($proxy.Code -eq 42) "got: $($proxy.Code)"
+Check 'after shutdown the proxy exits 0' `
+  ($proxy.Code -eq 0) "got: $($proxy.Code)"
+Check 'stderr names the child''s exit code 0x0000002A' `
+  ($proxy.Err.Contains("drag-lint lsp --proxy: DelphiLSP exited with code 0x0000002A after the client's shutdown request; the session ended cleanly, so the proxy exits 0.")) "got: $($proxy.Err.Trim())"
 
 Write-Host ''
 Write-Host 'CASE D: criterion 3 -- an unspawnable child FAILS, it does not idle' -ForegroundColor Cyan

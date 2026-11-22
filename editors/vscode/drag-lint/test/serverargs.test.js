@@ -55,3 +55,23 @@ console.log('serverargs.test.js: ok');
   assert.strictEqual(dl.pick('', [], '', R, ls), '');
   console.log('delphilsp config pick tests ok');
 }
+
+// 1.52.3 LSPCFG-WORKTREE: a unit opened from a stale agent worktree (Claude Code opens its diffs
+// there) must not move DelphiLSP off the project it already has -- neither to the worktree's own
+// json (decoy) nor to an unrelated json elsewhere in the workspace.
+{
+  const R = path.join(os.tmpdir(), 'dlroot2');
+  const j = (...p) => path.join(R, ...p);
+  const wt = j('.claude', 'worktrees', 'agent-a094', 'src', 'cli');
+  const fake = { [wt]: ['drag-lint.delphilsp.json', 'X.pas'], [j('src', 'cli')]: ['drag-lint.delphilsp.json', 'X.pas'],
+    [j('docs', 'examples', 'repro')]: ['Repro.delphilsp.json'] };
+  const ls = (d) => { if (!(d in fake)) return []; return fake[d]; };
+  const cur = j('src', 'cli', 'drag-lint.delphilsp.json');
+  const found = [j('docs', 'examples', 'repro', 'Repro.delphilsp.json'), cur];
+  assert.strictEqual(dl.pick('', found, path.join(wt, 'X.pas'), R, ls, cur), cur, 'worktree unit keeps the current config');
+  assert.strictEqual(dl.pick('', found, j('src', 'other', 'Y.pas'), R, ls, cur), cur, 'unit with no nearest json keeps the current config');
+  // positive controls: a real nearest json still switches, and with no current config the fallback stays non-excluded
+  assert.strictEqual(dl.pick('', found, j('docs', 'examples', 'repro', 'R.pas'), R, ls, cur), j('docs', 'examples', 'repro', 'Repro.delphilsp.json'));
+  assert.strictEqual(dl.pick('', [j('.claude', 'worktrees', 'agent-a094', 'src', 'cli', 'drag-lint.delphilsp.json'), cur], path.join(wt, 'X.pas'), R, ls, ''), cur);
+  console.log('delphilsp decoy-worktree pick tests ok');
+}
