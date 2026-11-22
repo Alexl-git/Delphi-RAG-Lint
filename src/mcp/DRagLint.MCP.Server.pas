@@ -1738,7 +1738,7 @@ begin
         a qname that names no symbol is an error answer (HandleToolsCall turns the raise into isError true). }
       var ImpLevels: TArray<TImpactLevel>;
       if not ImpactLevelsForQName(ImpStore, ImpQName, ImpDepth, ImpLevels) then
-        raise Exception.CreateFmt('impact: no symbol %s in this database', [ImpQName]);
+        raise Exception.CreateFmt('impact: no symbol %s in this database', [ImpQName]);  // dl:ok raise-bare-exception@1b81 -- HandleToolsCall's contract: every tool failure raises Exception and is mapped to an isError answer (GitHub #20)
       ResultText:= FormatImpactAsJson(ImpQName, ImpLevels);
     end // if
     else if ToolName = 'get_neighbors' then
