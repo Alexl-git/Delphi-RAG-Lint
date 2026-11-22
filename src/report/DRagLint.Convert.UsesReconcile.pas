@@ -597,8 +597,8 @@ begin
       for var S: TSymbol in FStores[I].FindSymbolsByExactName(AName) do
       begin
         if (S.FileId <= 0) or SameText(S.Section, SECTION_IMPL) then Continue;
-        if AClassesOnly and not (S.Kind in CLASS_KINDS) then Continue;
-        if not (S.Kind in UNIT_LEVEL) or not AtUnitLevel(I, S) then Continue;
+        if AClassesOnly and (S.Kind not in CLASS_KINDS) then Continue;
+        if (S.Kind not in UNIT_LEVEL) or not AtUnitLevel(I, S) then Continue;
         var Stem: string:= StemOf(I, S.FileId);
         if not SameText(ExtractFileExt(FStores[I].GetFilePath(S.FileId)), '.pas') then Continue;
         if (Stem = '') or Seen.Contains(LowerCase(Stem)) then Continue;

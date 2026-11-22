@@ -1,12 +1,11 @@
-unit DRagLint.Doc.Facts;
+unit DRagLint.Doc.Facts;  // dl:ok unit-too-large@aab5 -- REVIEWED 2026-11-22 SLZ-S07: unit-too-large measured 5754 lines (limit 2000), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 
 interface
 
 uses
   System.SysUtils, System.Classes, System.IOUtils, System.Math,
   System.Generics.Collections, System.Generics.Defaults, System.RegularExpressions,
-  DRagLint.Core.Model, DRagLint.Core.Interfaces, DRagLint.Doc.GitSince,
-  DRagLint.Hover.Returns;
+  DRagLint.Core.Model, DRagLint.Core.Interfaces, DRagLint.Doc.GitSince;
 
 const
   // Display cap for the <seealso> related-symbol list (ADF T4). At most this many
@@ -725,7 +724,7 @@ type
   /// <para>Used in units: DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.LSP.Server, DRagLint.Query.HoverModel</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TDocFactsBuilder = class
+  TDocFactsBuilder = class  // dl:ok high-response@3252 -- REVIEWED 2026-11-22 SLZ-S07: high-response measured a response set of 96 (>50), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   public
     /// <summary>Builds the grounded facts for ASym from the index. When
     /// AIncludeSeeAlso is True (the --seealso opt-in), also populates
@@ -1124,6 +1123,7 @@ function SourceFilesRead: TArray<string>;
 implementation
 
 uses
+  DRagLint.Hover.Returns,
   DRagLint.Core.Encoding, // 1.52 EXTGAPS2: Utf8ByteColToCharCol -- handler spans meet refs' CHARACTER columns
   System.Diagnostics, // TStopwatch -- DocFactsBuildProfile's per-section counters
   // StripPasCommentsKeepLayout only, for ReadDeclLine -- see its header. A pure
@@ -1422,7 +1422,7 @@ function DocFactsBuildProfile: string;
   function Per(ATicks, ACalls: Int64): string;
   begin
     if ACalls <= 0 then Exit('-- ms/call');
-    Result:= Format('%.2f ms/call', [ATicks * 1000 / (TStopwatch.Frequency * ACalls)]);
+    Result:= Format('%.2f ms/call', [ATicks * 1000 / (TStopwatch.Frequency * ACalls)]);  // dl:ok magic-literal@2e68 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 1000 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
   end;
 begin
   // 'unattributed' is total minus the nine sections. It is printed rather than
@@ -1492,7 +1492,7 @@ begin
   try
     if GOverloadMemo.TryGetValue(MemoKey, Result) then Exit;
     Sym:= AStore.GetSymbolById(ASymbolId);
-    if (Sym.Id <= 0) or not (Sym.Kind in ROUTINE_KINDS) then Exit;
+    if (Sym.Id <= 0) or (Sym.Kind not in ROUTINE_KINDS) then Exit;
     { Same container, same name -- the sibling test 'Overload k of n' already uses
       (FindAllChildSymbols scopes to a class for methods and to the unit symbol for
       free routines), so the two facts cannot disagree about what an overload is. }
@@ -1517,7 +1517,7 @@ end;
 
 function DocDisplayCount(ATotal: Integer): Integer;
 begin
-  if ATotal > 15 then Result:= 10 else Result:= ATotal;
+  Result:= if ATotal > 15 then 10 else ATotal;  // dl:ok magic-literal@0d9b -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 10/15 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
 end;
 
 function EffectiveDocIndent(const ALines: TArray<string>; ADeclLine, ADocStart, ADocEnd: Integer): string;
@@ -1551,7 +1551,7 @@ function LastSeg(const S: string): string;
 var P: Integer;
 begin
   P:= S.LastDelimiter('.');
-  if P >= 0 then Result:= Copy(S, P + 2, MaxInt) else Result:= S;
+  Result:= if P >= 0 then Copy(S, P + 2, MaxInt) else S;
 end;
 
 { v20: the leaf name of the TYPE that owns AKind/AQualifiedName, or '' when the
@@ -1568,7 +1568,7 @@ function OwnerTypeLeaf(AKind: TSymbolKind; const AQualifiedName: string): string
 var Head: string; P: Integer;
 begin
   Result:= '';
-  if not (AKind in [skMethod, skConstructor, skDestructor]) then Exit;
+  if (AKind not in [skMethod, skConstructor, skDestructor]) then Exit;
   P:= AQualifiedName.LastDelimiter('.');
   if P < 0 then Exit;
   Head:= Copy(AQualifiedName, 1, P); { drop the member leaf }
@@ -1668,7 +1668,7 @@ begin
   begin
     AGenerics:= AGenerics + ',' + Cur.GenericParams;
     Result:= ScopeMember(AStore, Cur, ARcv);  { 151 CF: memoised per (store, scope, name) }
-    if Cur.ParentId > 0 then Cur:= AStore.GetSymbolById(Cur.ParentId) else Cur:= Default(TSymbol);
+    Cur:= if Cur.ParentId > 0 then AStore.GetSymbolById(Cur.ParentId) else Default(TSymbol);
     Inc(Hops);
   end;
 end;
@@ -2112,7 +2112,12 @@ begin
       Inc(I);
       Continue;
     end;
-    if ALine[I] = '{' then begin Inc(AState.InBrace); Inc(I); Continue; end;
+    if ALine[I] = '{' then
+    begin
+      Inc(AState.InBrace);
+      Inc(I);
+      Continue;
+    end;
     if (ALine[I] = '(') and (I < N) and (ALine[I + 1] = '*') then
     begin
       AState.InStarParen:= True;
@@ -2129,7 +2134,11 @@ begin
         if ALine[I] = '''' then
         begin
           if (I < N) and (ALine[I + 1] = '''') then Inc(I, 2) // escaped quote
-          else begin Inc(I); Break; end;
+          else
+          begin
+            Inc(I);
+            Break;
+          end;
         end
         else Inc(I);
       end;
@@ -2299,21 +2308,37 @@ begin
     case AScan.OnStage of
       ON_STAGE_VAR: { awaiting the handler VARIABLE }
         begin
-          if not IsIdentStart(ALine[AIdx]) then begin AScan.OnStage:= ON_STAGE_NONE; Continue; end;
+          if not IsIdentStart(ALine[AIdx]) then
+          begin
+            AScan.OnStage:= ON_STAGE_NONE;
+            Continue;
+          end;
           C:= ReadIdentChain(ALine, AIdx);
-          if Length(C) <> 1 then begin AScan.OnStage:= ON_STAGE_NONE; Continue; end;
+          if Length(C) <> 1 then
+          begin
+            AScan.OnStage:= ON_STAGE_NONE;
+            Continue;
+          end;
           AScan.OnVar  := C[0];
           AScan.OnStage:= ON_STAGE_COLON;
         end;
       ON_STAGE_COLON: { awaiting the ':' -- `on Exception do` binds nothing }
         begin
-          if ALine[AIdx] <> ':' then begin AScan.OnStage:= ON_STAGE_NONE; Continue; end;
+          if ALine[AIdx] <> ':' then
+          begin
+            AScan.OnStage:= ON_STAGE_NONE;
+            Continue;
+          end;
           Inc(AIdx);
           AScan.OnStage:= ON_STAGE_TYPE;
         end;
     else { awaiting the TYPE (last segment of a dotted one) }
       begin
-        if not IsIdentStart(ALine[AIdx]) then begin AScan.OnStage:= ON_STAGE_NONE; Continue; end;
+        if not IsIdentStart(ALine[AIdx]) then
+        begin
+          AScan.OnStage:= ON_STAGE_NONE;
+          Continue;
+        end;
         C:= ReadIdentChain(ALine, AIdx);
         AScan.OnStage:= ON_STAGE_NONE;
         if Length(C) = 0 then Continue;
@@ -2340,7 +2365,11 @@ var
 begin
   if AScan.OnStage = ON_STAGE_NONE then Exit;
   Dec(AScan.OnBudget);
-  if AScan.OnBudget < 0 then begin AScan.OnStage:= ON_STAGE_NONE; Exit; end;
+  if AScan.OnBudget < 0 then
+  begin
+    AScan.OnStage:= ON_STAGE_NONE;
+    Exit;
+  end;
   Idx:= 1;
   AdvanceHandlerBinding(ALine, Idx, AScan);
 end;
@@ -2453,7 +2482,11 @@ begin
         if ALine[I] = '''' then
         begin
           if (I < N) and (ALine[I + 1] = '''') then Inc(I, 2)
-          else begin Inc(I); Break; end;
+          else
+          begin
+            Inc(I);
+            Break;
+          end;
         end
         else Inc(I);
       end;
@@ -2541,10 +2574,21 @@ begin
       if ALine[AIdx] = '''' then
       begin
         if (AIdx < N) and (ALine[AIdx + 1] = '''') then
-        begin Sb.Append(''''); Inc(AIdx, 2); end
-        else begin Inc(AIdx); Break; end;
+        begin
+          Sb.Append('''');
+          Inc(AIdx, 2);
+        end
+        else
+        begin
+          Inc(AIdx);
+          Break;
+        end;
       end
-      else begin Sb.Append(ALine[AIdx]); Inc(AIdx); end;
+      else
+      begin
+        Sb.Append(ALine[AIdx]);
+        Inc(AIdx);
+      end;
     end;
     Result := Sb.ToString;
   finally
@@ -2749,7 +2793,7 @@ type
 function LastDottedSegment(const AName: string): string;
 begin
   var P: Integer:= LastDelimiter('.', AName);
-  if P > 0 then Result:= Copy(AName, P + 1, MaxInt) else Result:= AName;
+  Result:= if P > 0 then Copy(AName, P + 1, MaxInt) else AName;
 end;
 
 function IsStatementStart(const ATok: string): Boolean;
@@ -2775,8 +2819,7 @@ end;
 
 function TopFrame(const AState: THandlersScanState): Integer;
 begin
-  if Length(AState.Frames) = 0 then Result:= -1
-  else Result:= AState.Frames[High(AState.Frames)];
+  Result:= if Length(AState.Frames) = 0 then -1 else AState.Frames[High(AState.Frames)];
 end;
 
 procedure MarkStatement(var AState: THandlersScanState);
@@ -3095,7 +3138,7 @@ begin
     if ALine[I] > ' ' then
     begin
       MarkStatement(AState);
-      if ALine[I] = ':' then AState.PrevTok:= ':' else AState.PrevTok:= '';
+      AState.PrevTok:= if ALine[I] = ':' then ':' else '';
     end;
     Inc(I);
   end;
@@ -3403,8 +3446,7 @@ begin
   for D in ParseParamDecls(ExtractParamList(ASig)) do
   begin
     if Trim(D.TypeText) = '' then Continue;
-    if D.Qualifier <> '' then Txt:= D.Qualifier + ' ' + D.TypeText
-    else Txt:= D.TypeText;
+    Txt:= if D.Qualifier <> '' then D.Qualifier + ' ' + D.TypeText else D.TypeText;
     Ent.Name:= D.Name;
     Ent.Text:= Txt;
     Result:= Result + [Ent];
@@ -3583,7 +3625,11 @@ begin
     begin
       if CharInSet(Grp[i], ['(', '[']) then Inc(Depth)
       else if CharInSet(Grp[i], [')', ']']) then Dec(Depth)
-      else if (Grp[i] = ':') and (Depth <= 0) then begin ColonAt:= i; Break; end;
+      else if (Grp[i] = ':') and (Depth <= 0) then
+      begin
+        ColonAt:= i;
+        Break;
+      end;
     end;
     if ColonAt > 0 then
     begin
@@ -3649,13 +3695,21 @@ var
   HasLower: Boolean;
 begin
   Result:= False;
-  if Length(AWord) < 3 then Exit;
+  if Length(AWord) < 3 then Exit;  // dl:ok magic-literal@a794 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 3 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
   HasUpper:= False;
   HasLower:= False;
   for i:= 2 to Length(AWord) do
-    if CharInSet(AWord[i], ['A'..'Z']) then begin HasUpper:= True; Break; end;
+    if CharInSet(AWord[i], ['A'..'Z']) then
+    begin
+      HasUpper:= True;
+      Break;
+    end;
   for i:= 1 to Length(AWord) do
-    if CharInSet(AWord[i], ['a'..'z']) then begin HasLower:= True; Break; end;
+    if CharInSet(AWord[i], ['a'..'z']) then
+    begin
+      HasLower:= True;
+      Break;
+    end;
   Result:= HasUpper and HasLower;
 end;
 
@@ -3687,7 +3741,11 @@ begin
   N:= Length(Sent);
   while i <= N do
   begin
-    if not IsIdentStart(Sent[i]) then begin Inc(i); Continue; end;
+    if not IsIdentStart(Sent[i]) then
+    begin
+      Inc(i);
+      Continue;
+    end;
     J:= i;
     while (J <= N) and IsIdentPart(Sent[J]) do Inc(J);
     Word:= Copy(Sent, i, J - i);
@@ -3740,10 +3798,7 @@ begin
     // Demote, never discard. The prose keeps its provenance marker via
     // EmitHarvestedRemarks, so a later run re-promotes it automatically once the
     // comment or the declaration changes -- nothing here is a one-way door.
-    if AFacts.HarvestedRemarks = '' then
-      AFacts.HarvestedRemarks:= AFacts.HarvestedSummary
-    else
-      AFacts.HarvestedRemarks:= AFacts.HarvestedSummary + #10#10 + AFacts.HarvestedRemarks;
+    AFacts.HarvestedRemarks:= if AFacts.HarvestedRemarks = '' then AFacts.HarvestedSummary else AFacts.HarvestedSummary + #10#10 + AFacts.HarvestedRemarks;
     AFacts.HarvestedSummary:= '';
     Exit;
   end;
@@ -3823,7 +3878,7 @@ begin
     itself as current. The column is built from the AST and has no such bound.
     The probe is still attempted afterwards even when the column already said
     True, because failing to find a message is not a reason to un-deprecate. }
-  Result:= Pos('deprecated', ASym.Directives) > 0;
+  Result:= ASym.Directives.Contains('deprecated');
   if ASym.StartLine <= 0 then Exit;
   Line:= ReadDeclLine(AStore.GetFilePath(ASym.FileId), ASym.StartLine);
   if Line = '' then Exit;
@@ -3833,9 +3888,7 @@ begin
   M:= TRegEx.Match(Line, '\bdeprecated\b\s*(?:''(.*?)'')?\s*;', [roIgnoreCase]);
   if not M.Success then Exit; { v22: leaves Result as the column decided it }
   Result:= True;
-  if M.Groups.Count > 1 then
-    if M.Groups[1].Success then
-      AMsg:= StringReplace(M.Groups[1].Value, '''''', '''', [rfReplaceAll]);
+  if (M.Groups.Count > 1) and (M.Groups[1].Success) then AMsg:= StringReplace(M.Groups[1].Value, '''''', '''', [rfReplaceAll]);
 end;
 
 // v(ADP1 T3): detects the virtual / abstract / override / dynamic DIRECTIVES on
@@ -4390,7 +4443,7 @@ begin
   end;
 end;
 
-class function TDocFactsBuilder.Build(const AStore: ISymbolStore; const ASym: TSymbol;
+class function TDocFactsBuilder.Build(const AStore: ISymbolStore; const ASym: TSymbol;  // dl:ok cognitive-complexity@e58a, cyclomatic-complexity@ef0a, method-too-long@e16c, too-many-parameters@2a0c -- REVIEWED 2026-11-22 SLZ-S07: cognitive-complexity measured 165 (max 65), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); cyclomatic-complexity measured cyclomatic complexity 96 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); method-too-long measured 1090 lines (max 250), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); too-many-parameters measured 11 parameters (max 7), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   const AHandles: TDocHandlesOptions;
   AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string;
   const AExtraStores: TArray<ISymbolStore>; AMaxReturnCases: Integer; AMaxCallers: Integer;
@@ -4907,7 +4960,7 @@ begin
     Inc(GBUnresolved, BTick - TB0);
     Result.CalledFromTotal:= Distinct.Count;
     Result.SkippedCallers := Skipped;
-    if Distinct.Count > AMaxCallers then Shown:= AMaxCallers else Shown:= Distinct.Count;
+    Shown:= if Distinct.Count > AMaxCallers then AMaxCallers else Distinct.Count;
     // v(Q0, 2026-08-14): NO CAP ON A `dl:shared` UNIT. This is an INBOUND fact --
     // its entries come from OUTSIDE the unit, so each project that compiles the
     // unit computes a DIFFERENT set, and the several projects have to agree on one

@@ -229,7 +229,8 @@ var
   ExistingText, BackupPas, BackupDfm, M, Header: string;
   Parts: TArray<string>;
 begin
-  BackupPas:= ''; BackupDfm:= '';
+  BackupPas:= '';
+  BackupDfm:= '';
   for M in AMappings do
   begin
     Parts:= M.Split([' -> ']);

@@ -120,7 +120,7 @@ begin
     FillChar(PI, SizeOf(PI), 0);
     WideCmd:= ACmd;
     UniqueString(WideCmd);
-    if not CreateProcessW(nil, PWideChar(WideCmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, SI, PI) then  // dl:ok taint-command-injection@0d0c -- REVIEWED 2026-11-19 SLZ-MARK: spawns a fixed tool (git, yadf or dcc) with a caller-built command line; the only environment input is the manifest out-dir expansion
+    if not CreateProcessW(nil, PWideChar(WideCmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, SI, PI) then
     begin
       CloseHandle(WritePipe);
       raise Exception.CreateFmt('CreateProcessW failed: %d', [GetLastError]);
@@ -145,8 +145,7 @@ begin
     WaitRes:= WaitForSingleObject(PI.hProcess, GIT_TIMEOUT_MS);
     if WaitRes = WAIT_OBJECT_0 then
     begin
-      if GetExitCodeProcess(PI.hProcess, ExitCode) then Result:= Integer(ExitCode)
-      else Result:= -1;
+      Result:= if GetExitCodeProcess(PI.hProcess, ExitCode) then Integer(ExitCode) else -1;
     end
     else
     begin
@@ -198,11 +197,11 @@ begin
 
   // Parse the tz as +HHMM / -HHMM; default +0000 on any deviation.
   TzSeconds:= 0;
-  if (Length(TzStr) = 5) and ((TzStr[1] = '+') or (TzStr[1] = '-')) then
+  if (Length(TzStr) = 5) and ((TzStr[1] = '+') or (TzStr[1] = '-')) then  // dl:ok magic-literal@6005 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 5 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
   begin
-    if TzStr[1] = '-' then TzSign := -1 else TzSign := 1;
-    if TryStrToInt(Copy(TzStr, 2, 2), TzHours) and TryStrToInt(Copy(TzStr, 4, 2), TzMins) then
-      TzSeconds := TzSign * (Int64(TzHours) * 3600 + Int64(TzMins) * 60);
+    TzSign := if TzStr[1] = '-' then -1 else 1;
+    if TryStrToInt(Copy(TzStr, 2, 2), TzHours) and TryStrToInt(Copy(TzStr, 4, 2), TzMins) then  // dl:ok magic-literal@5206 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 2/4 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
+      TzSeconds := TzSign * (Int64(TzHours) * 3600 + Int64(TzMins) * 60);  // dl:ok large-magic-number@9181, magic-literal@9181 -- REVIEWED 2026-11-22 SLZ-S07: large-magic-number 3600/60 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up; magic-literal 3600/60 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
   end;
 
   // Author's local wall-clock = epoch + tz offset, rendered as a UTC date so no

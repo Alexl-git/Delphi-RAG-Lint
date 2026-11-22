@@ -608,6 +608,7 @@ function MissingGlyphCountReaders(const ARules: TConversionRuleSet;
 implementation
 
 uses
+  System.Math,
   System.StrUtils,
   System.Generics.Collections,
   DRagLint.Convert.GlyphExpr;
@@ -727,7 +728,7 @@ begin
   ColonAt:= LastDelimiter(':', APath);
   if ColonAt <= 0 then Exit;
   Tail:= Trim(Copy(APath, ColonAt + 1, MaxInt));
-  if (Tail = '') or (Pos(' ', Tail) > 0) or (Pos('.', Tail) > 0) or (Pos('<', Tail) > 0) then Exit;
+  if (Tail = '') or (Tail.Contains(' ')) or (Tail.Contains('.')) or (Tail.Contains('<')) then Exit;
   ACast:= Tail;
   APath:= Trim(Copy(APath, 1, ColonAt - 1));
 end;
@@ -749,7 +750,7 @@ begin
   APath     := Trim(Copy(APath, 1, At - 1));
 end;
 
-function ParseConversionRules(const AText: string): TConversionRuleSet;
+function ParseConversionRules(const AText: string): TConversionRuleSet;  // dl:ok cognitive-complexity@89ec, cyclomatic-complexity@74ac, method-too-long@5de6 -- REVIEWED 2026-11-22 SLZ-S07: cognitive-complexity measured 67 (max 65), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); cyclomatic-complexity measured cyclomatic complexity 39 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); method-too-long measured 251 lines (max 250), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 var
   Lines : TArray<string>       ;
   Rules : TList<TConversionRule>;
@@ -967,7 +968,7 @@ var
     begin
       T  := Trim(S);
       Dot:= T.LastIndexOf('.') + 1;
-      if (Dot <= 1) or (Dot >= Length(T)) or (Pos(' ', T) > 0) then
+      if (Dot <= 1) or (Dot >= Length(T)) or (T.Contains(' ')) then
       begin
         AddError(Format('#check-ref target "%s" is not <Class>.<Prop>', [T]));
         Exit;
@@ -1110,7 +1111,11 @@ begin
           R.UnitName:= Trim(Copy(Arg, 1, ArrPos - 1));
           Rhs       := Trim(Copy(Arg, ArrPos + Length(ARROW_MIGRATE), MaxInt));
         end
-        else begin R.UnitName:= Trim(Arg); Rhs:= ''; end;
+        else
+        begin
+          R.UnitName:= Trim(Arg);
+          Rhs:= '';
+        end;
         // Rhs is a pure comma list of New units; fold Head + rest into UnitsAdd.
         SplitHeadAndUnits(Rhs, Head, Units);
         if Head <> '' then Insert(Head, Units, 0);
@@ -1128,10 +1133,10 @@ begin
       begin
         R.Kind:= rkRemove;
         // '#remove DFM: <prop>' -> DFM-only. Match a leading 'DFM:' (any case).
-        if SameText(Copy(Arg, 1, 4), 'DFM:') then
+        if SameText(Copy(Arg, 1, 4), 'DFM:') then  // dl:ok magic-literal@5809 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 4 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
         begin
           R.DfmOnly := True;
-          R.PropName:= Trim(Copy(Arg, 5, MaxInt));
+          R.PropName:= Trim(Copy(Arg, 5, MaxInt));  // dl:ok magic-literal@7cb8 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 5 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
         end
         else
         begin
@@ -1150,7 +1155,11 @@ begin
           Lhs:= Trim(Copy(Arg, 1, ArrPos - 1));
           Rhs:= Trim(Copy(Arg, ArrPos + Length(ARROW_MIGRATE), MaxInt));
         end
-        else begin Lhs:= Trim(Arg); Rhs:= ''; end;
+        else
+        begin
+          Lhs:= Trim(Arg);
+          Rhs:= '';
+        end;
         SplitMigrateLhs(Lhs, R.Scope, R.Old);
         SplitHeadAndUnits(Rhs, Head, Units);
         R.New     := Head;
@@ -1167,7 +1176,11 @@ begin
           R.FromType:= Trim(Copy(Arg, 1, ArrPos - 1));
           Rhs       := Trim(Copy(Arg, ArrPos + Length(ARROW_MIGRATE), MaxInt));
         end
-        else begin R.FromType:= Trim(Arg); Rhs:= ''; end;
+        else
+        begin
+          R.FromType:= Trim(Arg);
+          Rhs:= '';
+        end;
         SplitHeadAndUnits(Rhs, Head, Units);
         R.ToType  := Head;
         R.UnitsAdd:= Units;
@@ -1288,7 +1301,7 @@ begin
         if ArrPos > 0 then Low:= Copy(Low, 1, ArrPos - 1);
         AddError('unknown directive: ' + Low);
       end
-      else if Pos(ARROW_MIGRATE, Line) > 0 then
+      else if Line.Contains(ARROW_MIGRATE) then
       begin
         // A non-'#' line with ' -> ' -- the raw PCRE find/replace escape hatch.
         R.Kind := rkPcre;
@@ -1404,8 +1417,7 @@ var
 
   function ClassesOf(ABlock: Integer): TBlockClasses;
   begin
-    if (ABlock >= 0) and (ABlock <= High(ABlockClasses)) then Result:= ABlockClasses[ABlock]
-    else Result:= Default(TBlockClasses);
+    Result:= if InRange(ABlock, 0, High(ABlockClasses)) then ABlockClasses[ABlock] else Default(TBlockClasses);
   end;
 
   // ' (#convert line N: From -> To)' naming the block a path was checked in;

@@ -113,7 +113,7 @@ type
   /// <para>Used in units: [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.Doc.Document, [drag-lint]DRagLint.Doc.Drift, [drag-lint]DRagLint.Doc.Facts, [drag-lint]DRagLint.Doc.Regions, [drag-lint]DRagLint.Doc.SharedFacts</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TSharedFacts = class
+  TSharedFacts = class  // dl:ok high-response@e60c -- REVIEWED 2026-11-22 SLZ-S07: high-response measured a response set of 58 (>50), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   public
     /// <summary>True when the stored block differs from a fresh render in a way
     /// that counts as drift.</summary>
@@ -895,7 +895,7 @@ end;
 
 function IsTruncated(const AContent: string): Boolean;
 begin
-  Result:= Pos(MORE_MARK, AContent) > 0;
+  Result:= AContent.Contains(MORE_MARK);
 end;
 
 function IsUncertainEntry(const AEntry: string): Boolean;
@@ -1110,8 +1110,7 @@ function FactContentEnd(const AFlat: string; AFrom: Integer): Integer;
 var
   TagAt: Integer;
 begin
-  if InsidePara(AFlat, AFrom) then Result:= 0
-  else Result:= NextLabelPos(AFlat, AFrom);
+  Result:= if InsidePara(AFlat, AFrom) then 0 else NextLabelPos(AFlat, AFrom);
   if Result = 0 then Result:= Length(AFlat) + 1;
   TagAt:= PosEx('<', AFlat, AFrom);
   if (TagAt > 0) and (TagAt < Result) then Result:= TagAt;
@@ -1305,7 +1304,7 @@ var
   SC  : string;
 begin
   Result:= False;
-  if Pos(TAG_OPEN, ABlock) = 0 then Exit;
+  if not ABlock.Contains(TAG_OPEN) then Exit;
   ParseBlock(ABlock, SIn, SRes);
   try
     for SC in SIn.Values do
@@ -1450,11 +1449,7 @@ begin
       tagged it the line is in the tagged regime, adopting costs no churn that
       has not already happened, and an entry left untagged there could never be
       reaped by the project that rendered it (run_doc_project_tags REAP). }
-    if (not IsTruncated(AStored)) and (not AnyTagged(SE)) and
-       SameEntryMultiset(Lazy.ToArray, SE) then
-      Result:= SortedJoin(Lazy)
-    else
-      Result:= SortedJoin(Eager);
+    Result:= if (not IsTruncated(AStored)) and (not AnyTagged(SE)) and SameEntryMultiset(Lazy.ToArray, SE) then SortedJoin(Lazy) else SortedJoin(Eager);
   finally
     Eager.Free;
     Lazy.Free;
@@ -1470,7 +1465,7 @@ end;
   stored text carries no legacy line. See BlockDrifted for the ruling. }
 procedure WithoutLegacyPure(var AStored, AFresh: string);
 begin
-  if TSharedFacts.MigrateLegacyPure or (Pos(LEGACY_PURE_PARA, AStored) = 0) then Exit;
+  if TSharedFacts.MigrateLegacyPure or (not AStored.Contains(LEGACY_PURE_PARA)) then Exit;
   AStored:= StringReplace(AStored, LEGACY_PURE_PARA, '', [rfReplaceAll]);
   AFresh := StringReplace(AFresh,  EFFECT_FREE_PARA, '', [rfReplaceAll]);
 end;
@@ -1593,7 +1588,7 @@ end;
   TSharedFacts
   --------------------------------------------------------------------------- }
 
-class function TSharedFacts.BlockDrifted(const AStored, AFresh: string;
+class function TSharedFacts.BlockDrifted(const AStored, AFresh: string;  // dl:ok too-many-exit-points@da3e -- REVIEWED 2026-11-22 SLZ-S07: too-many-exit-points measured 9 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   const AStore: ISymbolStore; const AUnitPath: string): Boolean;
 var
   SIn, FIn      : TFactMap;
@@ -2020,7 +2015,7 @@ begin
       { An EMPTY RANGE rather than a guarded loop: wrapping the loop in
         'if BeginAt >= 0' costs a nesting level, and this routine is at the
         deep-nesting limit. No fence -> FirstAt 0, LastAt -1 -> nothing runs. }
-      if BeginAt >= 0 then FirstAt:= BeginAt + 1 else FirstAt:= 0;
+      FirstAt:= if BeginAt >= 0 then BeginAt + 1 else 0;
       if EndAt >= 0 then LastAt:= EndAt - 1
       else if BeginAt >= 0 then LastAt:= Lines.Count - 1
       else LastAt:= -1;
@@ -2072,10 +2067,10 @@ begin
   Result:= ADocText;
   if MigrateLegacyPure then Exit;
   Body:= StoredBlockBody(AStoredRemarks);
-  if Pos(LEGACY_PURE_PARA, Body) = 0 then Exit;
+  if not Body.Contains(LEGACY_PURE_PARA) then Exit;
   { Either purity element already in the regenerated text settles it: the v2
     fact proves the claim, the legacy one is already kept. }
-  if (Pos(LEGACY_PURE_PARA, ADocText) > 0) or (Pos(EFFECT_FREE_PARA, ADocText) > 0) then Exit;
+  if ADocText.Contains(LEGACY_PURE_PARA) or ADocText.Contains(EFFECT_FREE_PARA) then Exit;
   Lines:= TStringList.Create;
   try
     Lines.Text:= ADocText;   { round-trips the trailing EOL state, as MergeInboundFacts }
@@ -2128,7 +2123,7 @@ var
 begin
   Result:= ADocText;
   Body:= StoredBlockBody(AStoredRemarks);
-  if (Body = '') or (Pos(PARA_OPEN + USED_IN_CLASSES, ADocText) > 0) then Exit;
+  if (Body = '') or ADocText.Contains(PARA_OPEN + USED_IN_CLASSES) then Exit;
   Names:= TStringList.Create;
   try
     Names.Sorted       := True;
@@ -2209,8 +2204,7 @@ begin
 
   Names:= ClosureNames(AStore);
   for I:= 1 to Length(S) do
-    if S[I] = '.' then
-      if Names.ContainsKey(Copy(S, 1, I - 1)) then Exit(True);
+    if (S[I] = '.') and (Names.ContainsKey(Copy(S, 1, I - 1))) then Exit(True);
 
   Result:= False;
 end;
@@ -2302,8 +2296,8 @@ begin
   try
     for S in AText.Replace(#13#10, #10).Split([#10]) do
     begin
-      if Pos(AUTO_BEGIN, S) > 0 then InFence:= True
-      else if Pos(AUTO_END, S) > 0 then InFence:= False
+      if S.Contains(AUTO_BEGIN) then InFence:= True
+      else if S.Contains(AUTO_END) then InFence:= False
       else if InFence then
       begin
         C:= Trim(S);

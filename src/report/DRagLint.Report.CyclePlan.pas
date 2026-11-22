@@ -1456,17 +1456,13 @@ const
   CBomBB  = $BB;
   CBomBF  = $BF;
 begin
-  if (Length(pBytes) >= CBomLen) and (pBytes[0] = CBomEF) and (pBytes[1] = CBomBB) and (pBytes[2] = CBomBF) then
-    Result:= TEncoding.UTF8
-  else Result:= TEncoding.ANSI;
+  Result:= if (Length(pBytes) >= CBomLen) and (pBytes[0] = CBomEF) and (pBytes[1] = CBomBB) and (pBytes[2] = CBomBF) then TEncoding.UTF8 else TEncoding.ANSI;
 end;
 
 function DecodeSource(const pBytes: TBytes; out pEncoding: TEncoding): string;
 begin
   pEncoding:= SourceEncodingOf(pBytes);
-  if pEncoding = TEncoding.UTF8 then
-    Result:= TEncoding.UTF8.GetString(pBytes, Length(TEncoding.UTF8.GetPreamble), Length(pBytes) - Length(TEncoding.UTF8.GetPreamble))
-  else Result:= TEncoding.ANSI.GetString(pBytes);
+  Result:= if pEncoding = TEncoding.UTF8 then TEncoding.UTF8.GetString(pBytes, Length(TEncoding.UTF8.GetPreamble), Length(pBytes) - Length(TEncoding.UTF8.GetPreamble)) else TEncoding.ANSI.GetString(pBytes);
 end;
 
 function EncodeSource(const pText: string; pEncoding: TEncoding): TBytes;
@@ -1490,8 +1486,7 @@ end;
 
 function LineAt(const pLines: TArray<string>; pLine: Integer): string;
 begin
-  if (pLine >= 1) and (pLine <= Length(pLines)) then Result:= pLines[pLine - 1]
-  else Result:= '';
+  Result:= if InRange(pLine, 1, Length(pLines)) then pLines[pLine - 1] else '';
 end;
 
 function SliceLines(const pLines: TArray<string>; const pRange: TLineRange): TArray<string>;
@@ -1544,8 +1539,7 @@ begin
     end;
     Dec(L);
   end;
-  if (L >= 1) and IsBlockWord(LineAt(pLines, L)) then Result:= L
-  else Result:= 0;
+  Result:= if (L >= 1) and IsBlockWord(LineAt(pLines, L)) then L else 0;
 end;
 
 /// First line after pHeader that is indented no deeper than pHeader (a column-1 header: the
@@ -1618,7 +1612,7 @@ end;
 function InRanges(pLine: Integer; const pRanges: TArray<TLineRange>): Boolean;
 begin
   for var R in pRanges do
-    if (pLine >= R.First) and (pLine <= R.Last) then Exit(True);
+    if InRange(pLine, R.First, R.Last) then Exit(True);
   Result:= False;
 end;
 
@@ -1649,8 +1643,7 @@ var
   P: Integer;
 begin
   P:= Pos(' in ', LowerCase(pEntry));
-  if P > 0 then Result:= LowerCase(Trim(Copy(pEntry, 1, P - 1)))
-  else Result:= LowerCase(Trim(pEntry));
+  Result:= if P > 0 then LowerCase(Trim(Copy(pEntry, 1, P - 1))) else LowerCase(Trim(pEntry));
 end;
 
 function SectLabel(pSect: TSect): string;
@@ -2037,7 +2030,7 @@ end;
   first, so a removal never empties a clause that gains an entry. First = 0
   when nothing changes; a refusal is an ekManual edit on the line it names,
   its Refusal the kind. }
-function ClauseEdit(const pLines: TArray<string>; pUsesLine: Integer; const pSectLabel: string;
+function ClauseEdit(const pLines: TArray<string>; pUsesLine: Integer; const pSectLabel: string;  // dl:ok cyclomatic-complexity@2343 -- REVIEWED 2026-11-22 SLZ-S07: cyclomatic-complexity measured cyclomatic complexity 38 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   const pAdds, pDels: TArray<string>; const pMoved: TArray<string> = nil; const pRegions: TArray<TPpRegionRow> = nil): TFileEdit;
 var
   Why   : string;           // lane 149 CYB: a named reason that replaces the generic one
@@ -2497,8 +2490,7 @@ var
   Fid: Int64;
 begin
   Fid:= FidOfStem(pStem);
-  if Fid > 0 then Result:= UnitNameOfPath(PathOf(Fid))
-  else Result:= pStem;
+  Result:= if Fid > 0 then UnitNameOfPath(PathOf(Fid)) else pStem;
 end;
 
 function TCyclePlanner.GetFile(pFid: Int64): TPlanFile;
@@ -3091,7 +3083,7 @@ end;
 { The F5 base-class plan of a class: `TX = class` or, since B4-d, `TX = class(TAnc[, I1, ...])`
   with TAnc declared outside the cycle -- the leaf gets `TXBase = class(TAnc)`, the class becomes
   `TX = class(TXBase[, I1, ...])` (the interfaces stay on TX: their methods are implemented there). }
-procedure TCyclePlanner.BuildBase(const pF: TPlanFile; var pItem: TMoveItem);
+procedure TCyclePlanner.BuildBase(const pF: TPlanFile; var pItem: TMoveItem);  // dl:ok too-many-exit-points@2618 -- REVIEWED 2026-11-22 SLZ-S07: too-many-exit-points measured 6 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 const
   CHeritageGroup = 3;  // the header regex's group for the text inside `class(...)`; 1 = indent, 2 = the parentheses
 var
@@ -3817,7 +3809,7 @@ end;
   whose routine body only reads members of it, compares it with nil or stores it
   into a switchable field (`F[..] := p`), or is such a field (FieldSiteRefusal);
   otherwise the first offending site, as "`<file>:<line>` <what>". }
-function TCyclePlanner.BaseSiteRefusal(const pItem: TMoveItem): string;
+function TCyclePlanner.BaseSiteRefusal(const pItem: TMoveItem): string;  // dl:ok too-many-exit-points@15fe -- REVIEWED 2026-11-22 SLZ-S07: too-many-exit-points measured 6 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 var
   Param : string;
   Field : string;
@@ -3938,7 +3930,7 @@ end;
   ref outside its unit; every use of its name in its scope (the unit for a field, the routine
   body for a local) passes IsSlotUse; a member reached through it is read, or is `Free` called;
   otherwise the first offending site, as "`<file>:<line>`: <what>". }
-function TCyclePlanner.ObjSlotRefusal(const pItem: TMoveItem; const pSlot: TObjSlot; const pFields: TArray<string>;
+function TCyclePlanner.ObjSlotRefusal(const pItem: TMoveItem; const pSlot: TObjSlot; const pFields: TArray<string>;  // dl:ok cyclomatic-complexity@155b -- REVIEWED 2026-11-22 SLZ-S07: cyclomatic-complexity measured cyclomatic complexity 35 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   const pSlots: TArray<TObjSlot>): string;
 var
   MA     : TCallEdge;
@@ -4069,7 +4061,7 @@ end;
   of Add / Insert / Remove / IndexOf / Contains / Delete / Clear / Count / Free, a nil test,
   `Assigned(F)` / `FreeAndNil(F)`, or `F := TList<TX>.Create` (TObjectList too) -- the creation is
   switched with the field. Extract, First, Last, ToArray and every other use refuse. }
-function IsListFieldUse(const pCode: string; pIndex, pLen: Integer; const pTypeName: string; const pPulled,
+function IsListFieldUse(const pCode: string; pIndex, pLen: Integer; const pTypeName: string; const pPulled,  // dl:ok too-many-exit-points@7881 -- REVIEWED 2026-11-22 SLZ-S07: too-many-exit-points measured 7 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   pSlots: TArray<string>): Boolean;
 begin
   if IsSwitchableFieldUse(pCode, pIndex, pLen, pPulled, pSlots) then Exit(True);
@@ -5430,8 +5422,7 @@ begin
   { name the include entry the plan would remove when there is one, else the first }
   var IncIdx: Integer:= -1;
   for var I:= 0 to High(Entries) do
-    if Entries[I].FromInclude and ((IncIdx < 0) or Dels.Contains(LowerCase(Entries[I].UnitName))) then
-      if (IncIdx < 0) or not Dels.Contains(LowerCase(Entries[IncIdx].UnitName)) then IncIdx:= I;
+    if (Entries[I].FromInclude and ((IncIdx < 0) or Dels.Contains(LowerCase(Entries[I].UnitName)))) and ((IncIdx < 0) or not Dels.Contains(LowerCase(Entries[IncIdx].UnitName))) then IncIdx:= I;
   if IncIdx >= 0 then
   begin
     E.Kind   := ekManual;
@@ -5846,11 +5837,7 @@ end;
 
 function TCyclePlanner.ReindexCommand: string;
 begin
-  if FProjectFile <> '' then
-    Result:= Format('drag-lint index --project "%s" --db "%s"', [FProjectFile, FDbPath])
-  else
-    Result:= Format('drag-lint index "%s" --db "%s"',
-      [ExcludeTrailingPathDelimiter(ExtractFilePath(PathOf(FidOfStem(FComp[0])))), FDbPath]);
+  Result:= if FProjectFile <> '' then Format('drag-lint index --project "%s" --db "%s"', [FProjectFile, FDbPath]) else Format('drag-lint index "%s" --db "%s"', [ExcludeTrailingPathDelimiter(ExtractFilePath(PathOf(FidOfStem(FComp[0])))), FDbPath]);
 end;
 
 function TCyclePlanner.CyclesCommand(pPlan: Boolean): string;
@@ -6855,12 +6842,7 @@ begin
       Inc(NAll);
       if FGraph.IntfEdges.ContainsKey(A + '->' + B) then Inc(NIntf);
     end;
-  if (NAll > 0) and (NIntf = NAll) then
-    Result:= Format('Status: **interface cycle** -- all %d uses between the units of this cycle are in INTERFACE ' +
-      'uses clauses (the compiler refuses this loop).', [NAll])
-  else
-    Result:= Format('Status: **interface coupling** -- %d of %d uses between the units of this cycle are in ' +
-      'INTERFACE uses clauses.', [NIntf, NAll]);
+  Result:= if (NAll > 0) and (NIntf = NAll) then Format('Status: **interface cycle** -- all %d uses between the units of this cycle are in INTERFACE ' + 'uses clauses (the compiler refuses this loop).', [NAll]) else Format('Status: **interface coupling** -- %d of %d uses between the units of this cycle are in ' + 'INTERFACE uses clauses.', [NIntf, NAll]);
 end;
 procedure TCyclePlanner.RenderIntfCycle(const pPlan: TCycleFixPlan);
 begin
@@ -7138,7 +7120,7 @@ begin
         if SameText(N.Owner.Name, Shown) then Kind:= N.Owner.Kind.ToText;
       if (Kind = 'routine') and (Ev.Surface.RoutineName = '') then
         for var S in GetFile(FidOfStem(Ev.Surface.ToStem)).Syms do
-          if SameText(S.Name, Shown) and not (S.Kind in [skParam, skLocalVar]) and (Kind = 'routine') then Kind:= S.Kind.ToText;
+          if SameText(S.Name, Shown) and (S.Kind not in [skParam, skLocalVar]) and (Kind = 'routine') then Kind:= S.Kind.ToText;
       Ev.Why    := Format('`%s` (%s): refused: %s -- %s', [Shown, Kind, Refusal.Kind, Refusal.Reason]);
       pEvals[I]:= Ev;
       Continue;
@@ -7619,7 +7601,7 @@ begin
   Result.Decision  := udExtend;
   Result.Fid       := F.Fid;
   for var S in F.Syms do
-    if SameText(S.Section, 'interface') and not (S.Kind in [skUnit, skProgram, skPackage]) and
+    if SameText(S.Section, 'interface') and (S.Kind not in [skUnit, skProgram, skPackage]) and
       (S.EndLine > Result.InsertAfterLine) then Result.InsertAfterLine:= S.EndLine;
 end;
 
@@ -8634,7 +8616,7 @@ begin
   end;
 end;
 
-procedure RenderCyclePlaybook(const pStore: ISymbolStore; const pDbPath: string;
+procedure RenderCyclePlaybook(const pStore: ISymbolStore; const pDbPath: string;  // dl:ok too-many-parameters@69ee -- REVIEWED 2026-11-22 SLZ-S07: too-many-parameters measured 9 parameters (max 7), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings;
   const pLibStore: ISymbolStore; const pFixProject: string; const pGroupHook: TCycleGroupHook;
   pFixNoHubSurface: Boolean);
@@ -8884,8 +8866,7 @@ var
           StrongConnect(W);
           if Lowlink[W] < Lowlink[AV] then Lowlink[AV]:= Lowlink[W];
         end
-        else if OnStack.ContainsKey(W) and OnStack[W] then
-          if Index[W] < Lowlink[AV] then Lowlink[AV]:= Index[W];
+        else if (OnStack.ContainsKey(W) and OnStack[W]) and (Index[W] < Lowlink[AV]) then Lowlink[AV]:= Index[W];
       end;
     if Lowlink[AV] = Index[AV] then
     begin

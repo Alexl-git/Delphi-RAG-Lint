@@ -1,4 +1,4 @@
-unit DRagLint.Doc.Regions;
+unit DRagLint.Doc.Regions;  // dl:ok unit-too-large@3502 -- REVIEWED 2026-11-22 SLZ-S07: unit-too-large measured 5172 lines (limit 2000), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 
 // THE PROVENANCE CONTRACT -- this unit's governing invariant (v(ADP3) T1/T15).
 //
@@ -1295,7 +1295,7 @@ begin
     for i:= 0 to High(Lines) do
     begin
       if i > 0 then Sb.Append(#10);
-      if i = 0 then CurBud:= AFirstBudget else CurBud:= ABudget;
+      CurBud:= if i = 0 then AFirstBudget else ABudget;
       if Length(Lines[i]) <= CurBud then
       begin
         Sb.Append(Lines[i]);
@@ -1423,7 +1423,7 @@ begin
       L:= Norm(Line);
       // A blank separator line carries no text to duplicate; it is kept only
       // when something survives around it, which the final Trim takes care of.
-      if (L <> '') and (Pos(L, Present) > 0) then Continue;
+      if (L <> '') and Present.Contains(L) then Continue;
       if Kept.Length > 0 then Kept.Append(#10);
       Kept.Append(Line);
     end;
@@ -1513,10 +1513,7 @@ begin
   while (EolPos <= Length(S)) and (S[EolPos] <> #13) and (S[EolPos] <> #10) do
     Inc(EolPos);
   Tail:= Copy(S, EolPos, MaxInt).TrimLeft([#13, #10]);
-  if (Head <> '') and (Tail <> '') then
-    Result:= Head + sLineBreak + Tail
-  else
-    Result:= Head + Tail;
+  Result:= if (Head <> '') and (Tail <> '') then Head + sLineBreak + Tail else Head + Tail;
 end;
 
 // The ONE spelling of the attribute-tolerant container pattern: non-greedy
@@ -1700,7 +1697,7 @@ end;
 function IsSingularMatchContainer(const ATagName: string): Boolean;
 begin
   Result:=
-    SameText(ATagName, 'summary' ) or SameText(ATagName, 'remarks') or
+    SameText(ATagName, 'summary' ) or SameText(ATagName, 'remarks') or  // dl:ok boolean-expression-complexity@5cf8 -- REVIEWED 2026-11-22 SLZ-S07: boolean-expression-complexity measured 5 and/or/xor operators (limit 4), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
     SameText(ATagName, 'returns' ) or SameText(ATagName, 'example') or
     SameText(ATagName, 'since'   ) or SameText(ATagName, 'deprecated');
 end;
@@ -1739,8 +1736,7 @@ end;
 // visible as whitespace churn on shapes it is supposed to leave alone.
 function NormalizeContainerBody(const ATagName, ABody: string): string;
 begin
-  if SameText(ATagName, 'example') then Result:= Trim(ABody)
-  else Result:= TDocCommentParser.CollapseWhitespace(ABody);
+  Result:= if SameText(ATagName, 'example') then Trim(ABody) else TDocCommentParser.CollapseWhitespace(ABody);
 end;
 
 // v(ADP3 T3h): every match of ARe replaced by an EQUAL-LENGTH run of spaces
@@ -1811,7 +1807,7 @@ begin
   // length -- so the body is the match minus '<tag>' and '</tag>', with no
   // capture group needed.
   OpenLen := Length(ATagName) + 2;
-  CloseLen:= Length(ATagName) + 3;
+  CloseLen:= Length(ATagName) + 3;  // dl:ok magic-literal@9b28 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 3 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
   // v(ADP3 T3k, T3h minor 1): FAIL-CLOSED CHECK ON THE PATTERN, not just on the
   // caller. The refusal above guards the tag NAME; this guards the thing the
   // arithmetic actually depends on -- that the matched opening really is the
@@ -1970,7 +1966,7 @@ begin
   //     spelling continuing to match a generic pattern, so it is asserted
   //     here in its own right.
   S.Spans[High(S.Spans)].NonRetractable:=
-    (AIsRemarks and (S.EmitsOwnRemarks or (Pos(AUTO_BEGIN, Body) > 0)))
+    (AIsRemarks and (S.EmitsOwnRemarks or Body.Contains(AUTO_BEGIN)))
     or RxResEngineMarker.IsMatch(Body);
   S.Spans[High(S.Spans)].Dropped       := False;
 end;
@@ -2119,7 +2115,7 @@ begin
   // behaving exactly as they did before.
   for I:= 0 to High(S.Spans) do
     if S.Spans[I].IsExample
-       and (Pos(#10, Copy(S.Joined, S.Spans[I].Lo, S.Spans[I].Hi - S.Spans[I].Lo + 1)) > 0) then
+       and (Copy(S.Joined, S.Spans[I].Lo, S.Spans[I].Hi - S.Spans[I].Lo + 1).Contains(#10)) then
     begin
       var Nested: Boolean:= False;
       for J:= 0 to High(S.Spans) do
@@ -2488,19 +2484,19 @@ var
 begin
   ALast := AStart;
   Result:= ALines[AStart].TrimRight([#13]);
-  if (Pos(FACT_PARA_OPEN, Result) = 0) or (Pos(FACT_PARA_CLOSE, Result) > 0) then Exit;
+  if (not Result.Contains(FACT_PARA_OPEN)) or Result.Contains(FACT_PARA_CLOSE) then Exit;
   Joined:= Result;
   for K:= AStart + 1 to High(ALines) do
   begin
     S:= ALines[K].TrimRight([#13]);
     { FAIL-SAFE: anything that is not a plain continuation abandons the fold,
       so an unterminated <para> never swallows the fence or the next fact. }
-    if (Pos(AUTO_END, S) > 0) or (Pos(AUTO_BEGIN, S) > 0) or (Pos(FACT_PARA_OPEN, S) > 0) then Exit;
+    if S.Contains(AUTO_END) or S.Contains(AUTO_BEGIN) or S.Contains(FACT_PARA_OPEN) then Exit;
     C:= TrimLeft(S);
     if not C.StartsWith(FACT_SLASHES) then Exit;
     P     := Pos(FACT_SLASHES, S);
     Joined:= Joined + ' ' + TrimLeft(Copy(S, P + Length(FACT_SLASHES), MaxInt));
-    if Pos(FACT_PARA_CLOSE, S) > 0 then
+    if S.Contains(FACT_PARA_CLOSE) then
     begin
       ALast := K;
       Result:= Joined;
@@ -2602,7 +2598,7 @@ begin
   SetLength(CrLines, Length(Lines));
   for I:= 0 to High(Lines) do CrLines[I]:= Lines[I] + #13;
   Folded:= FoldFactLine(CrLines, 0, L);
-  Expect((Pos(#13, Folded) = 0) and (Folded = PFX + Text), 'case 7 fold with CRs kept a CR or differs from the text');
+  Expect((not Folded.Contains(#13)) and (Folded = PFX + Text), 'case 7 fold with CRs kept a CR or differs from the text');
 
   { case 4: one blank-free token over the limit is returned whole }
   Text := FACT_PARA_OPEN + StringOfChar('X', TOKEN_LEN) + FACT_PARA_CLOSE;
@@ -2689,7 +2685,7 @@ end;
 // '(+N more)' spellings in one block would read as two different measurements.
 function MoreSuffixP2(AShown, ATotal: Integer): string;
 begin
-  if ATotal > AShown then Result:= Format(' (+%d more)', [ATotal - AShown]) else Result:= '';
+  Result:= if ATotal > AShown then Format(' (+%d more)', [ATotal - AShown]) else '';
 end;
 function JoinEscP2(const A: TArray<string>): string;
 var i: Integer;
@@ -2759,8 +2755,7 @@ begin
   if AFacts.ReturnsOwner <> '' then
   begin
     var OwnsWord: string;
-    if AFacts.ReturnsOwner = 'new' then OwnsWord:= 'new (caller owns)'
-    else OwnsWord:= AFacts.ReturnsOwner;
+    OwnsWord:= if AFacts.ReturnsOwner = 'new' then 'new (caller owns)' else AFacts.ReturnsOwner;
     ALines.Add('Owns returned: ' + EscXml(OwnsWord));
   end;
 end;
@@ -2864,17 +2859,18 @@ begin
   // display lines here so each can be omitted independently.
   if AFacts.Wiring <> '' then
   begin
-    var DiPart: string:= ''; var DsPart: string:= '';
+    var DiPart: string:= '';
+    var DsPart: string:= '';
     for var WEntry in AFacts.Wiring.Split(['; ']) do
       if StartsStr('di:', WEntry) then
       begin
         if DiPart <> '' then DiPart:= DiPart + ', ';
-        DiPart:= DiPart + Copy(WEntry, 4, MaxInt);
+        DiPart:= DiPart + Copy(WEntry, 4, MaxInt);  // dl:ok magic-literal@5ac6 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 4 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
       end
       else if StartsStr('ds:', WEntry) then
       begin
         if DsPart <> '' then DsPart:= DsPart + ', ';
-        DsPart:= DsPart + Copy(WEntry, 4, MaxInt);
+        DsPart:= DsPart + Copy(WEntry, 4, MaxInt);  // dl:ok magic-literal@1cf7 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 4 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
       end;
     if DiPart <> '' then ALines.Add('Registered as: ' + EscXml(DiPart));
     if DsPart <> '' then ALines.Add('Dataset: ' + EscXml(DsPart));
@@ -3043,7 +3039,7 @@ var
   Sb: TStringBuilder;
   function MoreSuffix(AShown, ATotal: Integer): string;
   begin
-    if ATotal > AShown then Result:= Format(' (+%d more)', [ATotal - AShown]) else Result:= '';
+    Result:= if ATotal > AShown then Format(' (+%d more)', [ATotal - AShown]) else '';
   end;
   // Escapes each element then joins with ', '. Used for every mined name list
   // emitted as element text (Calls / Used in units / Raises / Overridden by).
@@ -3216,8 +3212,7 @@ begin
       // the contents cannot drift apart into disagreeing about what a callable
       // is -- which is the whole reason T3i/T3k collapsed the copies.
       var RefVerb: string;
-      if CanBeCallTarget(AFacts.SymbolKind) then RefVerb:= 'Called from: '
-      else RefVerb:= 'Used by: ';
+      RefVerb:= if CanBeCallTarget(AFacts.SymbolKind) then 'Called from: ' else 'Used by: ';
       // E-USE-EDGES-PHASE2: a property/field with RESOLVED uses says so with
       // modes, and the name-matched list is not rendered beside it (a resolved
       // list must not be diluted with guesses -- spec 2026-09-14 sec 8.1).
@@ -3501,8 +3496,8 @@ begin
     while K <= High(Lines) do
     begin
       var TK: string:= Trim(Lines[K]);
-      if (Pos(AUTO_BEGIN, TK) > 0) or (Pos(AUTO_MARK, TK) > 0)
-         or (Pos(AUTO_SUM, TK) > 0) or EndsText('</remarks>', TK) then Break;
+      if TK.Contains(AUTO_BEGIN) or TK.Contains(AUTO_MARK)
+         or TK.Contains(AUTO_SUM) or EndsText('</remarks>', TK) then Break;
       Cand:= Cand + [Lines[K]];
       Inc(K);
     end;
@@ -3602,15 +3597,14 @@ begin
   // PROSE, which is exactly what this budget exists for. Omitting it here
   // would leave harvested summaries unwrapped the moment they stopped
   // carrying AUTO_MARK, silently reintroducing the 759-column lines B8 fixed.
-  if (Pos(AUTO_MARK, AOpen) > 0) or (Pos(AUTO_SUM, AOpen) > 0) then
+  if AOpen.Contains(AUTO_MARK) or AOpen.Contains(AUTO_SUM) then
     Norm:= WrapEngineProse(Norm,
              DOC_WRAP_COLS - Length(C.APrefix) - Length(AClose),
              DOC_WRAP_COLS - Length(C.APrefix) - Length(AClose) - Length(AOpen));
   Parts:= Norm.Split([#10]);
   Result:= C.APrefix + AOpen;
   for i:= 0 to High(Parts) do
-    if i = 0 then Result:= Result + Parts[i]
-    else Result:= Result + sLineBreak + C.APrefix + Trim(Parts[i]);
+    Result:= if i = 0 then Result + Parts[i] else Result + sLineBreak + C.APrefix + Trim(Parts[i]);
   Result:= Result + AClose;
 end;
 // v(2026-09-15, defect 3): the preserve arms' emitter. The author's own
@@ -3827,11 +3821,7 @@ begin
     human's -- pass 2 preserved it, dropped the marker, and a deleted `raise`
     stopped deleting its tag. The empty case keeps AUTO_MARK exactly as
     before, so nothing about an undescribed exception changes. }
-  if Trim(AMessage) <> '' then
-    Result:= McEmitTagged(C, '<exception cref="' + ATypeName + '">' + AUTO_EXC,
-                        EscXml(Trim(AMessage)), '</exception>')
-  else
-    Result:= McEmitTagged(C, '<exception cref="' + ATypeName + '">' + AUTO_MARK, '', '</exception>');
+  Result:= if Trim(AMessage) <> '' then McEmitTagged(C, '<exception cref="' + ATypeName + '">' + AUTO_EXC, EscXml(Trim(AMessage)), '</exception>') else McEmitTagged(C, '<exception cref="' + ATypeName + '">' + AUTO_MARK, '', '</exception>');
 end;
 { EVERY distinct mined message for ACls, joined, or '' when that class was
   raised only in forms the miner declines to describe. Matched
@@ -3859,7 +3849,7 @@ begin
       if (M = '') or (not SameText(D.ExcClass, ACls)) then Continue;
       if Seen.IndexOf(M) >= 0 then Continue;
       Seen.Add(M);
-      if Result = '' then Result:= M else Result:= Result + '; ' + M;
+      Result:= if Result = '' then M else Result + '; ' + M;
     end;
 
     { TRANSITIVE ATTRIBUTION (gap 2). Everything above is what THIS routine
@@ -3897,7 +3887,7 @@ begin
       if Seen.IndexOf(Attrib) >= 0 then Continue;
       Seen.Add(Attrib);
       Inc(Shown);
-      if Result = '' then Result:= Attrib else Result:= Result + '; ' + Attrib;
+      Result:= if Result = '' then Attrib else Result + '; ' + Attrib;
     end;
     if Extra > 0 then
       Result:= Result + Format(' (+%d more)', [Extra]);
@@ -4068,7 +4058,7 @@ begin
   // no failing state to revert to); it is evidenced instead by the whole
   // idempotency sweep producing byte-identical md5s before and after.
   var HasAnySignal: Boolean:=
-    C.AExistingHasAnyTag and
+    C.AExistingHasAnyTag and  // dl:ok boolean-expression-complexity@243f -- REVIEWED 2026-11-22 SLZ-S07: boolean-expression-complexity measured 6 and/or/xor operators (limit 4), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
     (C.Eff.Format = dfXmlDoc) and
     ((Length(C.Eff.Exceptions) > 0) or C.Eff.HasExampleTag or
      (Length(C.Eff.SeeAlso) > 0) or C.Eff.HasSinceTag or C.Eff.Deprecated);
@@ -4456,7 +4446,11 @@ begin
       begin
         var IsStandaloneParam: Boolean:= False;
         for var SP in C.StandaloneParam.Params do
-          if SameText(SP.Name, P) then begin IsStandaloneParam:= True; Break; end;
+          if SameText(SP.Name, P) then
+          begin
+            IsStandaloneParam:= True;
+            Break;
+          end;
         if IsStandaloneParam then
         begin
           // v(PHASE A3): IS THIS MARKED BODY THE ENGINE'S OWN HARVEST, OR A
@@ -4506,7 +4500,11 @@ begin
                 C.Sb.AppendLine(McEmitTagged(C, '<param name="' + P + '">', TDocMarkers.StripMark(EP.Desc), '</param>'));
                 ParamEmitted:= True;
               end;
-            taPreserveVerbatim: begin C.Sb.AppendLine(McEmitPreserved(C, C.Eff.RawBlock, C.LinePrefix, 'param', '<param name="' + P + '">', EP.Desc, '</param>')); ParamEmitted:= True; end;
+            taPreserveVerbatim:
+            begin
+              C.Sb.AppendLine(McEmitPreserved(C, C.Eff.RawBlock, C.LinePrefix, 'param', '<param name="' + P + '">', EP.Desc, '</param>'));
+              ParamEmitted:= True;
+            end;
             taEngineOwned: ;  // engine-owned and empty: fall through and REGENERATE
           end;
         end;
@@ -4544,7 +4542,11 @@ begin
       end;
     var IsStandaloneParam: Boolean:= False;
     for var SP in C.StandaloneParam.Params do
-      if SameText(SP.Name, EP.Name) then begin IsStandaloneParam:= True; Break; end;
+      if SameText(SP.Name, EP.Name) then
+      begin
+        IsStandaloneParam:= True;
+        Break;
+      end;
     // E-DOC-ORPHAN-PARAM: the orphan keeps its own bytes (blanks inside the
     // tag); only the trailing marker is appended to its last line.
     if (not StillThere) and (not TDocMarkers.IsManagedDesc(EP.Desc)) and IsStandaloneParam then
@@ -4664,7 +4666,11 @@ begin
   begin
     var Covered: Boolean:= False;
     for var PC in PreservedCrefs do
-      if SameText(PC, RaiseCls) then begin Covered:= True; Break; end;
+      if SameText(PC, RaiseCls) then
+      begin
+        Covered:= True;
+        Break;
+      end;
     if not Covered then
       C.Sb.AppendLine(McEmitEngineException(C, RaiseCls, McMinedRaiseMessage(C.AFacts, RaiseCls)));
   end;
@@ -5097,10 +5103,7 @@ begin
     // it. Identical to the pre-v(ADP3 T3f) expression whenever Residual is
     // empty: both conditions then reduce to "Sb is empty", which TrimRight
     // would have returned as '' anyway.
-    if (C.LenBeforeResidual = 0) and (C.Sb.Length = C.LenAfterResidual) then
-      Result:= ''
-    else
-      Result:= C.Sb.ToString.TrimRight([#13, #10]);
+    Result:= if (C.LenBeforeResidual = 0) and (C.Sb.Length = C.LenAfterResidual) then '' else C.Sb.ToString.TrimRight([#13, #10]);
   finally
     C.Sb.Free;
   end;

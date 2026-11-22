@@ -1,4 +1,4 @@
-unit DRagLint.Convert.DfmReemit;
+unit DRagLint.Convert.DfmReemit;  // dl:ok unit-too-large@5756 -- REVIEWED 2026-11-22 SLZ-S07: unit-too-large measured 2873 lines (limit 2000), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 
 {
   Track 3 (component conversion), Batch 2a-i -- the PURE DFM component re-emit
@@ -576,7 +576,7 @@ var
 begin
   T:= NodeText(ANode, ASource);
   P:= Pos(' ', T);
-  if P > 0 then Result:= LowerCase(Copy(T, 1, P - 1)) else Result:= '';
+  Result:= if P > 0 then LowerCase(Copy(T, 1, P - 1)) else '';
 end;
 
 // 1.26.5: the `[n]` child-position marker after an object header's class
@@ -664,8 +664,9 @@ begin
   Result:= False;
   if Trim(ABlockText) = '' then Exit;
   Src:= TEncoding.UTF8.GetBytes(ABlockText);
-  if (Length(Src) > 0) and (Src[0] = $FF) then Exit; // binary DFM unsupported
-  Parser:= nil; Tree:= nil;
+  if (Length(Src) > 0) and (Src[0] = $FF) then Exit; // binary DFM unsupported  // dl:ok magic-literal@0f62 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal $FF is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
+  Parser:= nil;
+  Tree:= nil;
   try
     Parser:= TTSParser.Create;
     Parser.Language:= tree_sitter_dfm;
@@ -674,7 +675,12 @@ begin
       var Remaining: Integer;
       begin
         Remaining:= Length(Src) - Integer(AByteIndex);
-        if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
+        if Remaining <= 0 then
+        begin
+          ABytesRead:= 0;
+          SetLength(Result, 0);
+          Exit;
+        end;
         SetLength(Result, Remaining);
         Move(Src[AByteIndex], Result[0], Remaining);
         ABytesRead:= Remaining;
@@ -686,7 +692,11 @@ begin
     for i:= 0 to Root.NamedChildCount - 1 do
     begin
       ObjNode:= Root.NamedChild(i);
-      if ObjNode.NodeType = 'object' then begin Found:= True; Break; end;
+      if ObjNode.NodeType = 'object' then
+      begin
+        Found:= True;
+        Break;
+      end;
     end;
     if not Found then Exit;
     ARoot:= TReemitDfmNode.Create;
@@ -772,10 +782,7 @@ begin
     // `object` it would DECLARE a second component of that name, which fails
     // when the form loads. A synthesized node has none and is an `object`.
     Kw:= if ANode.Keyword <> '' then ANode.Keyword else KW_OBJECT;
-    if ANode.ClassName_ <> '' then
-      Head:= Format('%s %s: %s', [Kw, ANode.Name, ANode.ClassName_])
-    else
-      Head:= Format('%s %s', [Kw, ANode.Name]);
+    Head:= if ANode.ClassName_ <> '' then Format('%s %s: %s', [Kw, ANode.Name, ANode.ClassName_]) else Format('%s %s', [Kw, ANode.Name]);
     { 1.26.5: the child-position marker as parsed -- see ChildPosOf }
     if ANode.ChildPos <> '' then Head:= Head + ' ' + ANode.ChildPos;
     SB.Append(Ind(AIndent)).Append(Head).Append(#13#10);
@@ -823,12 +830,16 @@ begin
   Prefix:= '';
   for i:= 0 to High(Segs) - 1 do // every segment EXCEPT the last -> sub-objects
   begin
-    if Prefix = '' then Prefix:= Segs[i] else Prefix:= Prefix + '.' + Segs[i];
+    Prefix:= if Prefix = '' then Segs[i] else Prefix + '.' + Segs[i];
     Found:= False;
     for j:= 0 to Cur.Children.Count - 1 do
       if SameText(Cur.Children[j].Name, Segs[i]) and
          (Cur.Children[j].Kind = dnkSubObject) then
-      begin Cur:= Cur.Children[j]; Found:= True; Break; end;
+      begin
+        Cur:= Cur.Children[j];
+        Found:= True;
+        Break;
+      end;
     if not Found then
     begin
       Child:= TReemitDfmNode.Create;
@@ -849,7 +860,11 @@ begin
   Child:= nil;
   for j:= 0 to Cur.Children.Count - 1 do
     if SameText(Cur.Children[j].Name, Segs[High(Segs)]) then
-    begin Child:= Cur.Children[j]; Found:= True; Break; end;
+    begin
+      Child:= Cur.Children[j];
+      Found:= True;
+      Break;
+    end;
   if not Found then
   begin
     Child:= TReemitDfmNode.Create;
@@ -933,8 +948,7 @@ var
   DotAt: Integer;
 begin
   DotAt:= LastDelimiter('.', AQName);
-  if DotAt > 0 then Result:= Copy(AQName, DotAt + 1, MaxInt)
-  else Result:= AQName;
+  Result:= if DotAt > 0 then Copy(AQName, DotAt + 1, MaxInt) else AQName;
 end;
 
 // Look up a #convert rule for a specific From part-type. 2a-i recurses with the
@@ -1055,7 +1069,7 @@ const
 begin
   Result:= Trim(ARaw);
   if (Length(Result) >= 2) and (Result[1] = QUOTE) and (Result[Length(Result)] = QUOTE) and
-     (Pos(QUOTE + '#', Result) = 0) and (Pos(QUOTE + ' +', Result) = 0) then
+     (not Result.Contains(QUOTE + '#')) and (not Result.Contains(QUOTE + ' +')) then
     Result:= StringReplace(Copy(Result, 2, Length(Result) - 2), QUOTE + QUOTE, QUOTE, [rfReplaceAll]);
 end;
 
@@ -1163,7 +1177,7 @@ end;
   rule set THIS block runs -- already through WithoutUnreachableRules;
   AAllRules / AUnreachable are the whole book and its records, handed on
   unchanged when an owned part re-enters ReemitComponent for its own block. }
-function ReemitBlock(const AFromBlock: string; const ARules: TConversionRuleSet;
+function ReemitBlock(const AFromBlock: string; const ARules: TConversionRuleSet;  // dl:ok cognitive-complexity@70b6, cyclomatic-complexity@18d6, method-too-long@01d5 -- REVIEWED 2026-11-22 SLZ-S07: cognitive-complexity measured 76 (max 65), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); cyclomatic-complexity measured cyclomatic complexity 43 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); method-too-long measured 318 lines (max 250), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   const AFrom, ATo: TClassRef; const ACastLib: TCastLib;
   const AAllRules: TConversionRuleSet; const AUnreachable: TArray<TUnreachablePath>): TReemitResult;
 var
@@ -1202,10 +1216,14 @@ var
   function FindLinkFor(const AFromPath: string; out AToPath: string): Boolean;
   var Q: TConversionRule;
   begin
-    Result:= False; AToPath:= '';
+    Result:= False;
+    AToPath:= '';
     for Q in ARules.Rules do
       if (Q.Kind = rkLink) and (Q.GlyphExpr = '') and SameText(Q.FromPath, AFromPath) then
-      begin AToPath:= Q.ToPath; Exit(True); end;
+      begin
+        AToPath:= Q.ToPath;
+        Exit(True);
+      end;
   end;
 
   { TYPE-IDENTITY CARRY (converter team's rule, 2026-09-16, taken verbatim):
@@ -1435,10 +1453,7 @@ var
     end;
     if not CastTargetFraming(ACast, Framing, AWhy) then Exit;
     if not WrapGraphicData(Image, Fmt, Framing, Framed, AWhy) then Exit;
-    if (Length(Framed) = Length(Payload)) and CompareMem(Pointer(Framed), Pointer(Payload), Length(Framed)) then
-      ACarry:= AValueText
-    else
-      ACarry:= EncodeDfmHex(Framed, HexIndentOf(AValueText));
+    ACarry:= if (Length(Framed) = Length(Payload)) and CompareMem(Pointer(Framed), Pointer(Payload), Length(Framed)) then AValueText else EncodeDfmHex(Framed, HexIndentOf(AValueText));
     Result:= True;
   end;
 
@@ -2050,7 +2065,7 @@ var
   var NS, NT: TPropNode;
   begin
     Result:= False;
-    if (Pos('.', AToPath) > 0) or not SameText(AFromPath, AToPath) then Exit;
+    if (AToPath.Contains('.')) or not SameText(AFromPath, AToPath) then Exit;
     if not (AFrom.ResolvePath(AFromPath, psDfm, NS) and ATo.ResolvePath(AToPath, psDfm, NT)) then Exit;
     if not NT.HasDefault or (NS.DeclaredIn = '') or SameText(NS.DeclaredIn, NT.DeclaredIn) then Exit;
     Result:= ATo.DescendsFrom(NS.DeclaredIn);
@@ -2133,7 +2148,7 @@ var
           else if ToPath.StartsWith(ITEMS_PFX, True) and (Pos('.', Copy(ToPath, Length(ITEMS_PFX) + 1, MaxInt)) = 0) then
           begin
             ToName:= Copy(ToPath, Length(ITEMS_PFX) + 1, MaxInt);
-            if Pos(IntToStr(LinkLine), LinkLines) = 0 then
+            if not LinkLines.Contains(IntToStr(LinkLine)) then
               LinkLines:= LinkLines + (if LinkLines = '' then '' else ', ') + IntToStr(LinkLine);
           end
           else
@@ -2235,7 +2250,7 @@ var
         [ItemNo, Carried, Dropped1, if LinkLines <> '' then '; #link Params.Items.* at line(s) ' + LinkLines else ''])];
   end;
 
-  procedure RemapLeaf(const ALeaf: TReemitDfmNode; const AFromPath: string);
+  procedure RemapLeaf(const ALeaf: TReemitDfmNode; const AFromPath: string);  // dl:ok too-many-exit-points@00d2 -- REVIEWED 2026-11-22 SLZ-S07: too-many-exit-points measured 15 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   var
     ToPath : string;
     Carried: Boolean;
@@ -2248,11 +2263,17 @@ var
       if Carried then Exit;
     end;
     if IsIgnored(AFromPath) then
-    begin Ignored:= Ignored + [AFromPath]; Exit; end;
+    begin
+      Ignored:= Ignored + [AFromPath];
+      Exit;
+    end;
     if FindLinkFor(AFromPath, ToPath) then
     begin
       if Trim(ToPath) = '???' then
-      begin Result.Report.Stubs:= Result.Report.Stubs + [Format('unfilled ToPath (???) for %s', [AFromPath])]; Exit; end;
+      begin
+        Result.Report.Stubs:= Result.Report.Stubs + [Format('unfilled ToPath (???) for %s', [AFromPath])];
+        Exit;
+      end;
       if ALeaf.Kind = dnkCollection then
       begin
         // Collection relocate-keep-items: move the whole collection verbatim.
@@ -2513,7 +2534,8 @@ var
   Redeclared  : TArray<string>;
 begin
   Result:= Default(TReemitResult);
-  FRoot := nil; TRoot:= nil;
+  FRoot := nil;
+  TRoot:= nil;
   Redeclared  := nil;
   Created     := nil;
   Dropped     := nil;
@@ -2546,14 +2568,23 @@ begin
     // BareTypeTail) so a qualified #convert header still matches THIS block's
     // root class instead of silently falling through to the "first #convert"
     // fallback below.
-    HaveConvert:= False; ToType:= '';
+    HaveConvert:= False;
+    ToType:= '';
     for R in ARules.Rules do
       if (R.Kind = rkConvert) and SameText(BareTypeTail(R.FromType), FRoot.ClassName_) then
-      begin HaveConvert:= True; ToType:= R.ToType; Break; end;
+      begin
+        HaveConvert:= True;
+        ToType:= R.ToType;
+        Break;
+      end;
     if not HaveConvert then
       for R in ARules.Rules do
         if R.Kind = rkConvert then
-        begin HaveConvert:= True; ToType:= R.ToType; Break; end;
+        begin
+          HaveConvert:= True;
+          ToType:= R.ToType;
+          Break;
+        end;
     if not HaveConvert then
     begin
       Result.Ok:= False;

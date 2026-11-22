@@ -70,7 +70,7 @@ type
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Lint.DocRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TDocumenter = class
+  TDocumenter = class  // dl:ok high-response@c502 -- REVIEWED 2026-11-22 SLZ-S07: high-response measured a response set of 61 (>50), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   public
     /// <summary>Resolves AQName in the index and computes the DocInsight
     /// comment edits for its declaration. Reads the source file (ANSI) and the
@@ -260,6 +260,7 @@ type
 implementation
 
 uses
+  System.Math,
   System.IOUtils, System.Generics.Collections,
   DRagLint.Doc.Facts, DRagLint.Doc.Regions, // dl:unit DRagLint.Doc.Regions accepted -- AUTO_BEGIN/AUTO_END/AUTO_MARK are the managed-block fence TDocRegions writes and parses; every reader and writer of a block must share them (B-33 item 1)
   DRagLint.Parser.DocComments, DRagLint.Refactor.DocStub,
@@ -299,10 +300,7 @@ var
   More: string;
 begin
   if GSkippedCount = 0 then Exit;
-  if GSkippedCount > Length(GSkippedSamples) then
-    More:= Format('; (+%d more)', [GSkippedCount - Length(GSkippedSamples)])
-  else
-    More:= '';
+  More:= if GSkippedCount > Length(GSkippedSamples) then Format('; (+%d more)', [GSkippedCount - Length(GSkippedSamples)]) else '';
   Writeln(ErrOutput, Format('drag-lint: note: skipped %d unverified caller edge(s) whose receiver has an unrelated type: %s%s',
     [GSkippedCount, string.Join('; ', GSkippedSamples), More]));
   GSkippedCount  := 0;
@@ -492,7 +490,7 @@ begin
   Result:= '';
   Lines := ASrc.Replace(#13#10, #10, [rfReplaceAll]).Replace(#13, #10, [rfReplaceAll]).Split([#10]);
   for Ix:= AStartLine to AEndLine do
-    if (Ix >= 1) and (Ix <= Length(Lines)) then
+    if InRange(Ix, 1, Length(Lines)) then
     begin
       if Result <> '' then Result:= Result + #10;
       Result:= Result + Lines[Ix - 1];
@@ -653,7 +651,11 @@ begin
       ACloseIx:= J;
       Exit((not InFence) and SawFence and (not SawOther));
     end;
-    if Trim(Lines[J]) = '' then begin Inc(J); Continue; end;
+    if Trim(Lines[J]) = '' then
+    begin
+      Inc(J);
+      Continue;
+    end;
     if Pos(AUTO_BEGIN, Lines[J]) > 0 then
     begin
       if InFence then SawOther:= True; // nested/duplicate BEGIN -- ambiguous, do not exempt
@@ -662,7 +664,12 @@ begin
       Inc(J);
       Continue;
     end;
-    if Pos(AUTO_END, Lines[J]) > 0 then begin InFence:= False; Inc(J); Continue; end;
+    if Pos(AUTO_END, Lines[J]) > 0 then
+    begin
+      InFence:= False;
+      Inc(J);
+      Continue;
+    end;
     if not InFence then SawOther:= True; // hand-written prose alongside the fence
     Inc(J);
   end;
@@ -730,13 +737,17 @@ begin
   while I <= High(Lines) do
   begin
     L:= Lines[I];
-    if Trim(L) = '' then begin Inc(I); Continue; end;
+    if Trim(L) = '' then
+    begin
+      Inc(I);
+      Continue;
+    end;
     if (Trim(L) = '<remarks>') and IsFenceOnlyRemarksSpan(Lines, I, CloseIx) then
     begin
       I:= CloseIx + 1; // fence-only remarks wrapper, consumed as a unit
       Continue;
     end;
-    if Pos(AUTO_BEGIN, L) > 0 then
+    if L.Contains(AUTO_BEGIN) then
     begin
       J:= I;
       while (J <= High(Lines)) and (Pos(AUTO_END, Lines[J]) = 0) do Inc(J);
@@ -744,7 +755,7 @@ begin
       I:= J + 1; // whole fence, inclusive
       Continue;
     end;
-    if Pos(AUTO_END, L) > 0 then Exit(False); // stray END with no opening BEGIN -- ambiguous, fail closed
+    if L.Contains(AUTO_END) then Exit(False); // stray END with no opening BEGIN -- ambiguous, fail closed
     { AUTO_EXC counts as engine-owned here, and it has to be searched for
       EXPLICITLY: it is deliberately not a superstring of AUTO_MARK, so a line
       carrying only the mined-raise marker scores Pos(AUTO_MARK) = 0 and would
@@ -758,8 +769,8 @@ begin
       above gives for AUTO_EXC: it is deliberately not a superstring of
       AUTO_MARK either, so a comment whose only content is a harvested
       <summary> would otherwise score Pos(AUTO_MARK) = 0 and fail closed. }
-    if (Pos(AUTO_MARK, L) = 0) and (Pos(AUTO_EXC, L) = 0)
-       and (Pos(AUTO_SUM, L) = 0) then Exit(False);
+    if (not L.Contains(AUTO_MARK)) and (not L.Contains(AUTO_EXC))
+       and (not L.Contains(AUTO_SUM)) then Exit(False);
     Inc(I);
   end;
   Result:= True;
@@ -845,7 +856,7 @@ begin
     // after '<', so only an OPENING tag is counted. LowerCase rather than
     // ContainsText so this unit does not take a System.StrUtils dependency for
     // one comparison.
-    if Pos('<summary', LowerCase(Lines[I])) > 0 then
+    if LowerCase(Lines[I]).Contains('<summary') then
     begin
       Inc(Count);
       LastIx:= I;
@@ -855,8 +866,7 @@ begin
 
   Buf:= '';
   for I:= LastIx to High(Lines) do
-    if Buf = '' then Buf:= Lines[I]
-    else Buf:= Buf + sLineBreak + Lines[I];
+    Buf:= if Buf = '' then Lines[I] else Buf + sLineBreak + Lines[I];
 
   Result.RawText  := Buf;
   Result.StartLine:= ARegion.StartLine + LastIx;
@@ -937,7 +947,7 @@ var
   Other: TSymbol;
 begin
   Result:= False;
-  if not (ASym.Kind in DOCUMENTABLE) then Exit;
+  if (ASym.Kind not in DOCUMENTABLE) then Exit;
   for Other in AFileSyms do
     if (Other.Id <> ASym.Id) and (Other.StartLine = ASym.StartLine) and (Other.Kind in DOCUMENTABLE) then
       Exit(True);
@@ -1013,7 +1023,7 @@ begin
   end;
 end;
 
-class function TDocumenter.BuildFor(const AStore: ISymbolStore; const AQName: string;
+class function TDocumenter.BuildFor(const AStore: ISymbolStore; const AQName: string;  // dl:ok too-many-parameters@5916 -- REVIEWED 2026-11-22 SLZ-S07: too-many-parameters measured 10 parameters (max 7), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   const AHandles: TDocHandlesOptions;
   AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string;
   const AExtraStores: TArray<ISymbolStore>; AMaxReturnCases: Integer; AMaxCallers: Integer;
@@ -1057,7 +1067,7 @@ begin
            and CommentLinesEqual(NormalizeCommentLines(PureStored), NormalizeCommentLines(PureFresh))
            and CommentLinesIndentEqual(RawCommentLines(PureStored), RawCommentLines(PureFresh));
 end;
-class function TDocumenter.BuildForSymbol(const AStore: ISymbolStore; const ASym: TSymbol;
+class function TDocumenter.BuildForSymbol(const AStore: ISymbolStore; const ASym: TSymbol;  // dl:ok cyclomatic-complexity@c9ac, method-too-long@1368, too-many-exit-points@4df8, too-many-parameters@4df8 -- REVIEWED 2026-11-22 SLZ-S07: cyclomatic-complexity measured cyclomatic complexity 35 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); method-too-long measured 565 lines (max 250), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); too-many-exit-points measured 10 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); too-many-parameters measured 10 parameters (max 7), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   const AHandles: TDocHandlesOptions;
   AIncludeSeeAlso: Boolean; AIncludeSince: Boolean; const ABaseDir: string;
   const AExtraStores: TArray<ISymbolStore>; AMaxReturnCases: Integer; AMaxCallers: Integer;
@@ -1397,7 +1407,7 @@ begin
     runs before it, without that gate -- daUnchanged touches nothing, so a
     human's text is at no risk either way, and the writer that cannot see
     those facts keeps them. }
-  if Existing.HasContent and (Pos(AUTO_BEGIN, Merged) = 0)
+  if Existing.HasContent and (not Merged.Contains(AUTO_BEGIN))
      and (TSharedFacts.HoldsForeignInboundEntries(TSharedFacts.StoredBlockBody(Existing.Remarks), AStore)
           or TSharedFacts.IsLegacyPureOnlyBody(TSharedFacts.StoredBlockBody(Existing.Remarks))) then
   begin

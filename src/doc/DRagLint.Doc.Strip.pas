@@ -186,6 +186,7 @@ type
 implementation
 
 uses
+  System.Math,
   System.IOUtils, System.StrUtils,
   DRagLint.Doc.Regions, // dl:unit DRagLint.Doc.Regions accepted -- AUTO_BEGIN/AUTO_END/AUTO_MARK are the managed-block fence TDocRegions writes and parses; every reader and writer of a block must share them (B-33 item 1)
   // v(ADP3 T3j review round 1): DOC_ALLOW_GAP + the SHARED attribution
@@ -213,7 +214,7 @@ end;
 // malformed-marker handling already follows.
 function IsBlankSourceLine(ALines: TStrings; ALine1Based: Integer): Boolean;
 begin
-  Result:= (ALine1Based >= 1) and (ALine1Based <= ALines.Count)
+  Result:= InRange(ALine1Based, 1, ALines.Count)
            and (Trim(ALines[ALine1Based - 1]) = '');
 end;
 
@@ -226,7 +227,7 @@ var
   T: string;
 begin
   T:= TrimLeft(S);
-  if StartsStr('///', T) then T:= Copy(T, 4, MaxInt);
+  if StartsStr('///', T) then T:= Copy(T, 4, MaxInt);  // dl:ok magic-literal@4b1b -- REVIEWED 2026-11-22 SLZ-S07: magic-literal  is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
   Result:= Trim(T);
 end;
 
@@ -251,8 +252,8 @@ begin
   Prefix:= Copy(ALine, 1, AMarkPos - 1);
   if EndsText('<summary>', Prefix) then Result:= '</summary>'
   else if EndsText('<returns>', Prefix) then Result:= '</returns>'
-  else if EndsText('>', Prefix) and (Pos('<param', Prefix) > 0) then Result:= '</param>'
-  else if EndsText('>', Prefix) and (Pos('<exception', Prefix) > 0) then Result:= '</exception>'
+  else if EndsText('>', Prefix) and (Prefix.Contains('<param')) then Result:= '</param>'
+  else if EndsText('>', Prefix) and (Prefix.Contains('<exception')) then Result:= '</exception>'
   else Result:= '';
 end;
 
@@ -303,7 +304,7 @@ end;
 // additional blank-line artifact to clean up, because the region by
 // definition contains only /// lines (a blank line breaks the contiguous
 // run that defines a region in the first place).
-procedure StripRegion(ALines: TStrings; ALo, AHi: Integer;
+procedure StripRegion(ALines: TStrings; ALo, AHi: Integer;  // dl:ok cognitive-complexity@5b1a, cyclomatic-complexity@080a -- REVIEWED 2026-11-22 SLZ-S07: cognitive-complexity measured 92 (max 65), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); cyclomatic-complexity measured cyclomatic complexity 41 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   var ADeleted: TArray<Boolean>; var ATagsRemoved, ABlocksRemoved: Integer);
 var
   I, J, K    : Integer;
@@ -324,7 +325,7 @@ begin
     Line:= ALines[I];
 
     // Rule 2: AUTO_BEGIN .. AUTO_END, inclusive.
-    if Pos(AUTO_BEGIN, Line) > 0 then
+    if Line.Contains(AUTO_BEGIN) then
     begin
       J:= I;
       while (J <= AHi) and (Pos(AUTO_END, ALines[J]) = 0) do Inc(J);
@@ -590,7 +591,8 @@ begin
     begin
       if IsDocLine(Lines[I]) then
       begin
-        Lo:= I; Hi:= I;
+        Lo:= I;
+        Hi:= I;
         while (Hi + 1 < Lines.Count) and IsDocLine(Lines[Hi + 1]) do Inc(Hi);
         StripRegion(Lines, Lo, Hi, Deleted, Result.TagsRemoved, Result.BlocksRemoved);
         I:= Hi + 1;
@@ -665,22 +667,22 @@ begin
     // code that deletes lines from a user's source. Both branches are pinned by
     // tests\autodoc\run_doc_p3_strip_wrongsymbol.ps1.
     Found:= False;
-    RegionLo:= 0; RegionHi:= 0;
+    RegionLo:= 0;
+    RegionHi:= 0;
     I:= 0;
     while I < Lines.Count do
     begin
       if IsDocLine(Lines[I]) then
       begin
-        Lo:= I; Hi:= I;
+        Lo:= I;
+        Hi:= I;
         while (Hi + 1 < Lines.Count) and IsDocLine(Lines[Hi + 1]) do Inc(Hi);
-        if Length(ASymStartLines) > 0 then
-          Fits:= DocRegionFitsDecl(Hi + 1, ADeclLine, DOC_ALLOW_GAP, ASymStartLines)
-        else
-          Fits:= DocRegionInGapWindow(Hi + 1, ADeclLine, DOC_ALLOW_GAP)
-                 and ((Hi + 1 = ADeclLine - 1) or IsBlankSourceLine(Lines, ADeclLine - 1));
+        Fits:= if Length(ASymStartLines) > 0 then DocRegionFitsDecl(Hi + 1, ADeclLine, DOC_ALLOW_GAP, ASymStartLines) else DocRegionInGapWindow(Hi + 1, ADeclLine, DOC_ALLOW_GAP) and ((Hi + 1 = ADeclLine - 1) or IsBlankSourceLine(Lines, ADeclLine - 1));
         if Fits then
         begin
-          RegionLo:= Lo; RegionHi:= Hi; Found:= True;
+          RegionLo:= Lo;
+          RegionHi:= Hi;
+          Found:= True;
         end;
         I:= Hi + 1;
       end

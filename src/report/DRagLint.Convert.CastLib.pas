@@ -323,17 +323,17 @@ uses
 { Split 'a, b ,c' -> ['a','b','c'], trimmed, empties dropped. }
 function SplitList(const AValue: string): TArray<string>;
 var
-  parts: TArray<string>;
+  Parts: TArray<string>;
   p    : string        ;
-  list : TList<string> ;
+  List : TList<string> ;
 begin
-  list:= TList<string>.Create;
+  List:= TList<string>.Create;
   try
-    parts:= AValue.Split([',']);
-    for p in parts do if Trim(p) <> '' then list.Add(Trim(p));
-    Result:= list.ToArray;
+    Parts:= AValue.Split([',']);
+    for p in Parts do if Trim(p) <> '' then List.Add(Trim(p));
+    Result:= List.ToArray;
   finally
-    list.Free;
+    List.Free;
   end;
 end;
 
@@ -375,17 +375,17 @@ function ParseCastLibText(const AText: string): TCastLib;
 var
   SL    : TStringList    ;
   i     : Integer        ;
-  sp    : Integer        ;
+  Sp    : Integer        ;
   Line  : string         ;
   Key   : string         ;
   Val   : string         ;
   L     : string         ;
   R     : string         ;
-  cur   : TCastDef       ;
-  curE  : TEnumDef       ;
-  pair  : TEnumPair      ;
-  inCast: Boolean        ;
-  inEnum: Boolean        ;
+  Cur   : TCastDef       ;
+  CurE  : TEnumDef       ;
+  Pair  : TEnumPair      ;
+  InCast: Boolean        ;
+  InEnum: Boolean        ;
   Casts : TList<TCastDef>;
   Enums : TList<TEnumDef>;
   Errors: TList<string>  ;
@@ -397,19 +397,19 @@ begin
   SL:= TStringList.Create;
   try
     SL.Text:= AText;
-    inCast:= False;
-    inEnum:= False;
-    cur := Default(TCastDef);
-    curE:= Default(TEnumDef);
+    InCast:= False;
+    InEnum:= False;
+    Cur := Default(TCastDef);
+    CurE:= Default(TEnumDef);
     for i:= 0 to SL.Count - 1 do
     begin
       Line:= Trim(SL[i]);
       if (Line = '') or Line.StartsWith('#') then Continue; // blank / comment
-      sp:= Pos(' ', Line);
-      if sp > 0 then
+      Sp:= Pos(' ', Line);
+      if Sp > 0 then
       begin
-        Key:= LowerCase(Copy(Line, 1, sp - 1));
-        Val:= Trim(Copy(Line, sp + 1, MaxInt));
+        Key:= LowerCase(Copy(Line, 1, Sp - 1));
+        Val:= Trim(Copy(Line, Sp + 1, MaxInt));
       end
       else
       begin
@@ -420,72 +420,72 @@ begin
       if Key = 'cast' then
       begin
         // a new block; a prior unclosed block (no 'end') is discarded
-        inCast:= True;
-        inEnum:= False;
-        cur:= Default(TCastDef);
-        cur.Name:= Val;
+        InCast:= True;
+        InEnum:= False;
+        Cur:= Default(TCastDef);
+        Cur.Name:= Val;
       end
       else if Key = 'enum' then
       begin
-        inEnum:= True;
-        inCast:= False;
-        curE:= Default(TEnumDef);
-        curE.Name:= Val;
+        InEnum:= True;
+        InCast:= False;
+        CurE:= Default(TEnumDef);
+        CurE.Name:= Val;
       end
       else if Key = 'end' then
       begin
-        if inCast and (cur .Name <> '') then
-          Casts.Add(cur );
-        if inEnum and (curE.Name <> '') then
-          Enums.Add(curE);
-        inCast:= False;
-        inEnum:= False;
-        cur := Default(TCastDef);
-        curE:= Default(TEnumDef);
+        if InCast and (Cur .Name <> '') then
+          Casts.Add(Cur );
+        if InEnum and (CurE.Name <> '') then
+          Enums.Add(CurE);
+        InCast:= False;
+        InEnum:= False;
+        Cur := Default(TCastDef);
+        CurE:= Default(TEnumDef);
       end
-      else if inCast then
+      else if InCast then
       begin
         if Key = 'accepts' then
-          cur.Accepts:= SplitList(Val)
+          Cur.Accepts:= SplitList(Val)
         else if Key = 'yields' then
-          cur.Yields:= SplitList(Val)
+          Cur.Yields:= SplitList(Val)
         else if Key = 'dfm' then
-          cur.Dfm:= Val
+          Cur.Dfm:= Val
         else if Key = 'compat' then
-          cur.Compat:= Val
+          Cur.Compat:= Val
         else if Key = 'dfmdata' then
-          cur.DfmData:= Val
+          Cur.DfmData:= Val
         else if Key = 'pas' then
-          cur.PasTemplate:= Unquote(Val)
+          Cur.PasTemplate:= Unquote(Val)
         else if Key = 'todo' then
-          cur.Todo:= Unquote(Val)
+          Cur.Todo:= Unquote(Val)
         else if Key = 'value' then
         begin
           { 1.27.0: a built-in value transform; an unknown one is a load error,
             never a silent pass-through }
-          if SameText(Val, VALUE_CAST_STRIP_DB) then cur.Value:= VALUE_CAST_STRIP_DB
-          else Errors.Add(Format('line %d: cast %s: unknown value transform "%s" (known: %s)', [i + 1, cur.Name, Val, VALUE_CAST_STRIP_DB]));
+          if SameText(Val, VALUE_CAST_STRIP_DB) then Cur.Value:= VALUE_CAST_STRIP_DB
+          else Errors.Add(Format('line %d: cast %s: unknown value transform "%s" (known: %s)', [i + 1, Cur.Name, Val, VALUE_CAST_STRIP_DB]));
         end;
         // unknown keys tolerated (skipped)
       end // if
-      else if inEnum then
+      else if InEnum then
       begin
         if Key = 'from' then
-          curE.FromType:= Val
+          CurE.FromType:= Val
         else if Key = 'to' then
-          curE.ToType:= Val
+          CurE.ToType:= Val
         else if Key = 'else' then
-          curE.Fallback:= Val
+          CurE.Fallback:= Val
         else if Key = 'todo' then
-          curE.Todo:= Unquote(Val)
+          CurE.Todo:= Unquote(Val)
         else if Key = 'map' then
         begin
           if SplitArrow(Val, L, R) then
           begin
-            pair:= Default(TEnumPair);
-            pair.FromMember:= L;
-            pair.ToMember  := R;
-            curE.Pairs:= curE.Pairs + [pair];
+            Pair:= Default(TEnumPair);
+            Pair.FromMember:= L;
+            Pair.ToMember  := R;
+            CurE.Pairs:= CurE.Pairs + [Pair];
           end;
         end;
         // unknown keys tolerated (skipped)

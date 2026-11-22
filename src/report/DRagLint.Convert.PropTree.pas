@@ -1,4 +1,4 @@
-unit DRagLint.Convert.PropTree;
+unit DRagLint.Convert.PropTree;  // dl:ok unit-too-large@0ee3 -- REVIEWED 2026-11-22 SLZ-S07: unit-too-large measured 2738 lines (limit 2000), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 
 {
   Track 3 (component conversion), Batch 1, Task 1 -- the index-driven RECURSIVE
@@ -1296,7 +1296,7 @@ end;
 //                 A bare `default;` lands here too: that is the default-ARRAY-
 //                 PROPERTY directive and carries no value; array properties
 //                 are not DFM-streamed, so walking up is harmless.
-function ClassifyDefaultClause(const ADeclText: string; out AValue: string): TDefaultClause;
+function ClassifyDefaultClause(const ADeclText: string; out AValue: string): TDefaultClause;  // dl:ok cyclomatic-complexity@e102, too-many-exit-points@70a2 -- REVIEWED 2026-11-22 SLZ-S07: cyclomatic-complexity measured cyclomatic complexity 31 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); too-many-exit-points measured 8 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 const
   KW_PROPERTY = 'property';
 var
@@ -1346,27 +1346,27 @@ begin
   repeat
     P:= PosEx('stored', LowText, P);
     if P = 0 then Break;
-    if IsWholeWordAt(LowText, P, 6) then
+    if IsWholeWordAt(LowText, P, 6) then  // dl:ok magic-literal@95a4 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 6 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
     begin
-      i:= P + 6;
+      i:= P + 6;  // dl:ok magic-literal@37d0 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 6 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
       while (i <= Length(LowText)) and CharInSet(LowText[i], [' ', #9]) do Inc(i);
       j:= i;
       while (j <= Length(LowText)) and (not CharInSet(LowText[j], [' ', #9, ';'])) do Inc(j);
       if not SameText(Copy(ADeclText, i, j - i), 'True') then Exit(dcAbsent);
       Break;
     end;
-    Inc(P, 6);
+    Inc(P, 6);  // dl:ok magic-literal@e97f -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 6 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
   until False;
 
   P:= 1;
   repeat
     P:= PosEx('default', LowText, P);
     if P = 0 then Exit(dcAbsent);
-    if IsWholeWordAt(LowText, P, 7) then Break;
-    Inc(P, 7);
+    if IsWholeWordAt(LowText, P, 7) then Break;  // dl:ok magic-literal@1d4b -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 7 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
+    Inc(P, 7);  // dl:ok magic-literal@0279 -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 7 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
   until False;
 
-  i:= P + 7;
+  i:= P + 7;  // dl:ok magic-literal@ef2b -- REVIEWED 2026-11-22 SLZ-S07: magic-literal 7 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
   while (i <= Length(ADeclText)) and CharInSet(ADeclText[i], [' ', #9]) do Inc(i);
 
   { A SET default is a bracketed list and contains spaces:
@@ -1434,7 +1434,11 @@ begin
   for S in Cands do
     if S.Kind = skClass then
     begin
-      if not HaveAny then begin FirstAny:= S; HaveAny:= True; end;
+      if not HaveAny then
+      begin
+        FirstAny:= S;
+        HaveAny:= True;
+      end;
       if not IsForwardDeclClass(S) then Exit(S); // the real body -- prefer it
     end;
   if HaveAny then Result:= FirstAny; // only forward stubs found -- best effort
@@ -1963,7 +1967,11 @@ var
   Sym : TSymbol;
   procedure AddId(AId: Int64);
   begin
-    if (AId > 0) and not Seen.ContainsKey(AId) then begin Seen.Add(AId, True); Ids.Add(AId); end;
+    if (AId > 0) and not Seen.ContainsKey(AId) then
+    begin
+      Seen.Add(AId, True);
+      Ids.Add(AId);
+    end;
   end;
 begin
   Ids  := TList<Int64>.Create;
@@ -1997,8 +2005,7 @@ begin
   for Cid in AClassIds do
   begin
     Child := FStore.FindChildSymbolByName(Cid, APropName);
-    if (Child.Id > 0) and (Child.Kind = skProperty) and (ParseTypeToken(Child.Signature) = '') then
-      if FStore.MemoizePropertyType(Child.Id, ATypeTok) then Inc(Result);
+    if ((Child.Id > 0) and (Child.Kind = skProperty) and (ParseTypeToken(Child.Signature) = '')) and (FStore.MemoizePropertyType(Child.Id, ATypeTok)) then Inc(Result);
   end;
 end;
 
@@ -2036,7 +2043,7 @@ begin
       Kids:= FStore.FindAllChildSymbols(Cls.Id);
       for Kid in Kids do
       begin
-        if (AFields and not (Kid.Kind in [skField, skConstDecl])) or ((not AFields) and (Kid.Kind <> skProperty)) then Continue;
+        if (AFields and (Kid.Kind not in [skField, skConstDecl])) or ((not AFields) and (Kid.Kind <> skProperty)) then Continue;
         Key:= LowerCase(Kid.Name);
         if Seen.ContainsKey(Key) then Continue; // shadowed by a more-derived decl
         Seen.Add(Key, True);
@@ -2111,7 +2118,7 @@ var
   Hidden     : TList<TPropHiddenMember>; // private members left out (R12)
   Order      : TArray<TSymbol>;
   DeclaredBy : TArray<TSymbol>; // the class declaring Order[i] -- its scope
-  idx        : Integer        ;
+  Idx        : Integer        ;
   Prop       : TSymbol        ;
   Node       : TPropNode      ;
   Tok        : string         ;
@@ -2146,12 +2153,12 @@ begin
   try
   ClosureDone:= False;
   CollectMembers(AClass, False, Hidden, Order, DeclaredBy);
-  for idx:= 0 to High(Order) do
+  for Idx:= 0 to High(Order) do
   begin
-    Prop:= Order[idx];
+    Prop:= Order[Idx];
     Node:= Default(TPropNode);
     Node.Path      := Prop.Name;
-    Node.DeclaredIn:= DeclaredBy[idx].QualifiedName;
+    Node.DeclaredIn:= DeclaredBy[Idx].QualifiedName;
 
     // proptree/2 (Task 2, R2): EFFECTIVE visibility -- the most-derived
     // declaration's own Modifiers (Prop is already the most-derived symbol
@@ -2234,7 +2241,11 @@ begin
     // across the queried class's connected tree onto every bare occurrence.
     if (OwnTok = '') and (Tok <> '') then
     begin
-      if not ClosureDone then begin ClosureIds:= ClosureClassIds(AClass); ClosureDone:= True; end;
+      if not ClosureDone then
+      begin
+        ClosureIds:= ClosureClassIds(AClass);
+        ClosureDone:= True;
+      end;
       PropagateBareType(ClosureIds, Prop.Name, Tok);
       // Ensure the queried row itself is stamped even if the closure walk
       // somehow missed it (e.g. name-lookup ambiguity): direct memoize.
@@ -2253,7 +2264,7 @@ begin
     // scope rule against the DECLARING class's unit and reduces a forward-decl
     // stub to its body, so a nested class still never enumerates 0 properties
     // (the DevExpress forward-decl case the old stub re-resolution existed for).
-    TypeSym:= ResolveTypeInScope(Tok, DeclaredBy[idx].FileId);
+    TypeSym:= ResolveTypeInScope(Tok, DeclaredBy[Idx].FileId);
     // Criterion 5, enforced HERE for the same reason the ancestor climb
     // enforces it rather than delegating: PickCandidate short-circuits on a
     // lone candidate, so the scope rule never runs for a type name with
@@ -2262,7 +2273,7 @@ begin
     // TComponent, ...) is an ordinary RTL reference and must still expand.
     // See CrossesGuiFramework (and note its guarantee is PER HOP: an undotted
     // declaring unit is not a GUI framework and is never refused).
-    if (TypeSym.Id > 0) and CrossesGuiFramework(DeclaredBy[idx], TypeSym) then
+    if (TypeSym.Id > 0) and CrossesGuiFramework(DeclaredBy[Idx], TypeSym) then
       TypeSym:= Default(TSymbol);
     // A DECLINE (Id = 0) leaves the leaf exactly where an unresolvable type
     // leaves it today -- Kind='scalar', not recursed into, TypeName still the

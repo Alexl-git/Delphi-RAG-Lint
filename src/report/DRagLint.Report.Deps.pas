@@ -285,7 +285,7 @@ var
   L: string;
 begin
   L:= LowerCase(APath);
-  Result:= (Pos('\embarcadero\', L) > 0) or (Pos('\program files', L) > 0) or (Pos('\dcc\', L) > 0);
+  Result:= (L.Contains('\embarcadero\')) or (L.Contains('\program files')) or (L.Contains('\dcc\'));
 end;
 
 { Classifies by unit-NAME prefix only (used both as the primary signal for
@@ -295,12 +295,12 @@ var
   N: string;
 begin
   N:= LowerCase(AUnitName);
-  if (Pos('cx', N) = 1) or (Pos('dx', N) = 1) then Result:= dgDevExpress
-  else if Pos('spring.', N) = 1 then Result:= dgSpring4D
-  else if Pos('firedac.', N) = 1 then Result:= dgFireDAC
-  else if (Pos('system.', N) = 1) or (Pos('winapi.', N) = 1) or (Pos('vcl.', N) = 1) or
-          (Pos('fmx.', N) = 1) or (Pos('data.', N) = 1) or (Pos('soap.', N) = 1) or
-          (Pos('xml.', N) = 1) or (Pos('web.', N) = 1) then Result:= dgRTL
+  if (N.StartsWith('cx')) or (N.StartsWith('dx')) then Result:= dgDevExpress
+  else if N.StartsWith('spring.') then Result:= dgSpring4D
+  else if N.StartsWith('firedac.') then Result:= dgFireDAC
+  else if (N.StartsWith('system.')) or (N.StartsWith('winapi.')) or (N.StartsWith('vcl.')) or  // dl:ok boolean-expression-complexity@c0b4 -- REVIEWED 2026-11-22 SLZ-S07: boolean-expression-complexity measured 7 and/or/xor operators (limit 4), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
+          (N.StartsWith('fmx.')) or (N.StartsWith('data.')) or (N.StartsWith('soap.')) or
+          (N.StartsWith('xml.')) or (N.StartsWith('web.')) then Result:= dgRTL
   else Result:= dgUnknown; { caller downgrades to dgOther when AResolved }
 end;
 
@@ -312,9 +312,9 @@ begin
   if AResolved and (AResolvedPath <> '') then
   begin
     L:= LowerCase(AResolvedPath);
-    if (Pos('\embarcadero\', L) > 0) or (Pos('\dcc\', L) > 0) then Result:= dgRTL
-    else if (Pos('devexpress', L) > 0) or (Pos('dev express', L) > 0) or (Pos('\cxlib', L) > 0) then Result:= dgDevExpress
-    else if Pos('spring', L) > 0 then Result:= dgSpring4D;
+    if (L.Contains('\embarcadero\')) or (L.Contains('\dcc\')) then Result:= dgRTL
+    else if (L.Contains('devexpress')) or (L.Contains('dev express')) or (L.Contains('\cxlib')) then Result:= dgDevExpress
+    else if L.Contains('spring') then Result:= dgSpring4D;
   end;
 
   if Result = dgUnknown then Result:= ClassifyByName(AUnitName);
@@ -416,7 +416,7 @@ begin
     try
       for GlobalIdx:= 0 to AAllFiles.Count - 1 do
         FileIdToGlobal.AddOrSetValue(
-          (Int64(AAllFiles[GlobalIdx].StoreIndex) shl 40) or Int64(AAllFiles[GlobalIdx].FileId), GlobalIdx);
+          (Int64(AAllFiles[GlobalIdx].StoreIndex) shl 40) or Int64(AAllFiles[GlobalIdx].FileId), GlobalIdx);  // dl:ok large-magic-number@0991, magic-literal@0991 -- REVIEWED 2026-11-22 SLZ-S07: large-magic-number 40 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up; magic-literal 40 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
 
       for StoreIdx:= 0 to High(AStores) do
       begin
@@ -429,7 +429,7 @@ begin
           while not QUses.Eof do
           begin
             LocalFileId:= QUses.FieldByName('file_id').AsLargeInt;
-            if not FileIdToGlobal.TryGetValue((Int64(StoreIdx) shl 40) or LocalFileId, GlobalIdx) then
+            if not FileIdToGlobal.TryGetValue((Int64(StoreIdx) shl 40) or LocalFileId, GlobalIdx) then  // dl:ok large-magic-number@6e9e, magic-literal@6e9e -- REVIEWED 2026-11-22 SLZ-S07: large-magic-number 40 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up; magic-literal 40 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
             begin
               QUses.Next;
               Continue;
@@ -444,7 +444,7 @@ begin
             if not QUses.FieldByName('target_file_id').IsNull then
             begin
               TargetFid:= QUses.FieldByName('target_file_id').AsLargeInt;
-              if FileIdToGlobal.TryGetValue((Int64(StoreIdx) shl 40) or TargetFid, TargetGlobal) then
+              if FileIdToGlobal.TryGetValue((Int64(StoreIdx) shl 40) or TargetFid, TargetGlobal) then  // dl:ok large-magic-number@3dc4, magic-literal@3dc4 -- REVIEWED 2026-11-22 SLZ-S07: large-magic-number 40 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up; magic-literal 40 is a length/offset/limit tied to the literal, format or loop on this line; kept inline under the SLZ batch default (Q10 a); where it repeats in the unit a shared named constant is a follow-up
                 Edge.TargetFileId:= TargetGlobal;
             end;
             { v(ADP3 T4f, register K39): full stem first, dotted tail second --
@@ -613,8 +613,7 @@ begin
       if not IsProjSrc then Continue;
       if not AEdges.TryGetValue(Integer(Item.FileId), EdgeList) then Continue;
 
-      if Item.Via = '' then NextVia:= SourceMeta.Stem + '>' + Item.UsedUnit
-      else NextVia:= Item.Via + '>' + Item.UsedUnit;
+      NextVia:= if Item.Via = '' then SourceMeta.Stem + '>' + Item.UsedUnit else Item.Via + '>' + Item.UsedUnit;
 
       { D5: these edges belong to the file being expanded, not to the BFS
         root. Crediting the root listed the program as a user of every unit

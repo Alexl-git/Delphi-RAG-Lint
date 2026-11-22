@@ -7,6 +7,7 @@ unit DRagLint.Convert.GlyphStrip;
 interface
 
 uses
+  System.Math,
   System.SysUtils;
 
 type
@@ -379,7 +380,7 @@ end;
 // of the others; folding these into a loop over an array of (sig, format)
 // pairs would need a dynamic-array typed constant per entry for zero
 // behavioural gain on a routine this small.
-function SniffImageFormat(const ABytes: TBytes; AOffset: Integer): string;  // dl:ok too-many-exit-points@0ee8
+function SniffImageFormat(const ABytes: TBytes; AOffset: Integer): string;  // dl:ok too-many-exit-points@657a
 begin
   Result:= '';
   if StartsWith(ABytes, AOffset, PngMagic) then Exit('png');
@@ -527,7 +528,7 @@ var
 begin
   AWrapper:= '';
   N:= if Length(APayload) > 0 then APayload[0] else 0;
-  Result:= (N >= 1) and (N <= MaxClassNameLen) and (Length(APayload) >= 1 + N);
+  Result:= InRange(N, 1, MaxClassNameLen) and (Length(APayload) >= 1 + N);
   for var I: Integer:= 1 to N do
     if Result and ((APayload[I] < MinPrintableAscii) or (APayload[I] > MaxPrintableAscii)) then
       Result:= False;

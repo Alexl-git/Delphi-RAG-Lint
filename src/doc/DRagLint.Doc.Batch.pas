@@ -516,10 +516,7 @@ begin
       // removing decayed engine blocks while --qname kept doing it. Splitting an
       // enum value is only safe when every site that tested the old value is
       // re-decided, and this was the site where "no change needed" was wrong.
-      if AOptions.Stubs then
-        Keep := True
-      else
-        Keep := HasManagedBlock(Res) or (Res.Action in [daExtended, daRemoved]);
+      Keep := if AOptions.Stubs then True else HasManagedBlock(Res) or (Res.Action in [daExtended, daRemoved]);
 
       if not Keep then Continue;
 
@@ -765,7 +762,7 @@ begin
     var Syms: TArray<TSymbol>:= AStore.FindSymbolsByFile(F);
     if Length(Syms) = 0 then Continue; { not indexed, or nothing public: no facts to disagree }
     if not TFile.Exists(F) then Continue; { gone from disk: no source text to compare }
-    var Lines: TArray<string>:= TFile.ReadAllLines(F);  // dl:ok taint-path-traversal@4432 -- REVIEWED 2026-11-14 v151 INT: the path is an indexed source file of the user own index; a local CLI reading its inputs
+    var Lines: TArray<string>:= TFile.ReadAllLines(F);
     for var S: TSymbol in Syms do
     begin
       if not SameText(S.Section, 'interface') then Continue;

@@ -1,4 +1,4 @@
-unit DRagLint.Convert.Apply;
+unit DRagLint.Convert.Apply;  // dl:ok unit-too-large@ac33 -- REVIEWED 2026-11-22 SLZ-S07: unit-too-large measured 8660 lines (limit 2000), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 
 {
   Track 3 (component conversion), sub-project B -- the convert-apply
@@ -910,7 +910,7 @@ type
   /// <para>Used in units: DRagLint.CLI.Convert, DRagLint.CLI.ConvertApply, DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TConvertTreeCache = class
+  TConvertTreeCache = class  // dl:ok high-response@9898 -- REVIEWED 2026-11-22 SLZ-S07: high-response measured a response set of 57 (>50), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   private type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -1996,6 +1996,7 @@ function MigrateRuleRefusal(const ARule: TConversionRule): string;
 implementation
 
 uses
+  System.Math,
   DRagLint.Core.FileTime,
   System.StrUtils,
   System.Generics.Defaults,
@@ -2072,8 +2073,7 @@ var
   DotAt: Integer;
 begin
   DotAt:= LastDelimiter('.', AQName);
-  if DotAt > 0 then Result:= Copy(AQName, DotAt + 1, MaxInt)
-  else Result:= AQName;
+  Result:= if DotAt > 0 then Copy(AQName, DotAt + 1, MaxInt) else AQName;
 end;
 
 // Looks up the #convert rule whose FromType matches AClassName (SameText,
@@ -2091,7 +2091,10 @@ begin
   AToType:= '';
   for R in ARules.Rules do
     if (R.Kind = rkConvert) and SameText(BareTypeTail(R.FromType), AClassName) then
-    begin AToType:= BareTypeTail(R.ToType); Exit(True); end;
+    begin
+      AToType:= BareTypeTail(R.ToType);
+      Exit(True);
+    end;
   Result:= False;
 end;
 
@@ -2107,7 +2110,8 @@ var
   ColonAt: Integer;
   NamePart, ClassPart: string;
 begin
-  AName:= ''; AClassName:= '';
+  AName:= '';
+  AClassName:= '';
   if not StartsText(AKeyword, ATrimmedLine) then Exit(False);
   Rest:= Trim(Copy(ATrimmedLine, Length(AKeyword) + 1, MaxInt));
   ColonAt:= Pos(':', Rest);
@@ -2120,7 +2124,8 @@ begin
   while (i <= Length(ClassPart)) and (CharInSet(ClassPart[i], ['A'..'Z', 'a'..'z', '0'..'9', '_'])) do Inc(i);
   ClassPart:= Copy(ClassPart, 1, i - 1);
   if (NamePart = '') or (ClassPart = '') then Exit(False);
-  AName:= NamePart; AClassName:= ClassPart;
+  AName:= NamePart;
+  AClassName:= ClassPart;
   Result:= True;
 end;
 
@@ -2173,14 +2178,16 @@ end;
 // search rather than a full re-parse: the field symbol already told us WHICH
 // line(s) to look at; this only finds the type token's exact columns for the
 // tekReplaceInLine edit.
-function LocateFieldTypeToken(const APasLines: TStringList; AStartLine, AEndLine: Integer;
+function LocateFieldTypeToken(const APasLines: TStringList; AStartLine, AEndLine: Integer;  // dl:ok too-many-parameters@ceb9 -- REVIEWED 2026-11-22 SLZ-S07: too-many-parameters measured 8 parameters (max 7), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   const AInstanceName, AFromType: string; out ALine, ACol, AEndCol: Integer): Boolean;
 var
   LineNo: Integer;
   S     : string;
   NamePos, ColonPos, TypePos: Integer;
 begin
-  ALine:= 0; ACol:= 0; AEndCol:= 0;
+  ALine:= 0;
+  ACol:= 0;
+  AEndCol:= 0;
   if AStartLine < 1 then AStartLine:= 1;
   if AEndLine > APasLines.Count then AEndLine:= APasLines.Count;
   for LineNo:= AStartLine to AEndLine do
@@ -2407,7 +2414,7 @@ begin
   if FResolved.TryGetValue(Key, Result) then Exit;
   Result.QName:= '';
   Result.Store:= -1;
-  if Pos('.', Name) > 0 then
+  if Name.Contains('.') then
   begin
     for I:= 0 to High(FStores) do
     begin
@@ -2454,7 +2461,7 @@ begin
   for var R: TConversionRule in ARules.Rules do
     if R.Kind = rkConvert then Froms:= Froms + [BareTypeTail(R.FromType)];
   for var R: TConversionRule in ARules.Rules do
-    if (R.Kind = rkConvert) and (R.ToType <> '') and (Pos('.', R.ToType) = 0) and
+    if (R.Kind = rkConvert) and (R.ToType <> '') and (not R.ToType.Contains('.')) and
        not MatchText(R.ToType, Froms) and not MatchText(R.ToType, FToOnly) then
       FToOnly:= FToOnly + [R.ToType];
   if Length(FToOnly) > 0 then
@@ -3573,7 +3580,7 @@ var
   { -1, or the Found index of a new entry when AField is a converted ancestor's
     component field of a #convert To type -- or (1.26.7) an UNCONVERTED one's,
     still of the block's From type: listed 'skipped', never rewritten }
-  function Candidate(const AField: TSymbol; const AAction: string = INH_ACTION_CODE): Integer;
+  function Candidate(const AField: TSymbol; const AAction: string = INH_ACTION_CODE): Integer;  // dl:ok too-many-exit-points@0c13 -- REVIEWED 2026-11-22 SLZ-S07: too-many-exit-points measured 6 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   var
     FromType, DeclClass, DeclPas: string;
     Inst    : TInheritedInstance;
@@ -4214,7 +4221,13 @@ begin
   begin
     Cands:= St.FindSymbolsByExactName(AClassName);
     for var S in Cands do
-      if S.Kind = skClass then begin ClassSym:= S; Found:= True; ResolvedStore:= St; Break; end;
+      if S.Kind = skClass then
+      begin
+        ClassSym:= S;
+        Found:= True;
+        ResolvedStore:= St;
+        Break;
+      end;
     if Found then Break;
   end;
 
@@ -4264,7 +4277,11 @@ begin
 
   IsKnownCtor:= False;
   for var Ctor in AKnownCtorNames do
-    if SameText(Name, Ctor) then begin IsKnownCtor:= True; Break; end;
+    if SameText(Name, Ctor) then
+    begin
+      IsKnownCtor:= True;
+      Break;
+    end;
   if not IsKnownCtor then Exit(False); { e.g. '.ClassName' / '.InheritsFrom' -- not a constructor }
 
   ACtorName:= Name;
@@ -4353,7 +4370,13 @@ begin
   begin
     Cands:= St.FindSymbolsByExactName(AToType);
     for var S in Cands do
-      if S.Kind = skClass then begin ClassSym:= S; Found:= True; ResolvedStore:= St; Break; end;
+      if S.Kind = skClass then
+      begin
+        ClassSym:= S;
+        Found:= True;
+        ResolvedStore:= St;
+        Break;
+      end;
     if Found then Break;
   end;
   if not Found then Exit;
@@ -4361,7 +4384,7 @@ begin
   Kids:= ResolvedStore.FindAllChildSymbols(ClassSym.Id);
   for K in Kids do
     if (K.Kind = skConstructor) and SameText(K.Name, 'Create') and
-       (Pos('TComponent', K.Signature) > 0) then Exit(True);
+       (K.Signature.Contains('TComponent')) then Exit(True);
 end;
 
 // Checks one class name's freshness across every candidate store, in order --
@@ -4410,7 +4433,13 @@ begin
   begin
     Cands:= St.FindSymbolsByExactName(AClassName);
     for S in Cands do
-      if S.Kind = skClass then begin ClassSym:= S; Found:= True; ResolvedStore:= St; Break; end;
+      if S.Kind = skClass then
+      begin
+        ClassSym:= S;
+        Found:= True;
+        ResolvedStore:= St;
+        Break;
+      end;
     if Found then Break;
   end;
 
@@ -5126,7 +5155,11 @@ begin
 
       IsConverted:= False;
       for N in AInstanceNames do
-        if SameText(N, Receiver) then begin IsConverted:= True; Break; end;
+        if SameText(N, Receiver) then
+        begin
+          IsConverted:= True;
+          Break;
+        end;
       if not IsConverted then Continue; { e.g. Other.Caption -- Other is not a converted instance }
 
       Site:= Default(TAccessSite);
@@ -5471,7 +5504,7 @@ begin
   Result:= Default(TScopedClass);
   Result.Resolution:= PAS_RES_CLASS_NOT_FOUND;
   if Trim(AName) = '' then Exit;
-  if Pos('.', AName) > 0 then
+  if AName.Contains('.') then
   begin
     Result.QName:= ATrees.ResolveType(AName);
     if Result.QName <> '' then Result.Resolution:= PAS_RES_RESOLVED;
@@ -5628,7 +5661,7 @@ end;
 //     a value cast's literals are rewritten or checked).
 function LinkPasStatus(const ALink: TConversionRule; const ACastLib: TCastLib): string;
 begin
-  var Dotted  : Boolean:= (Pos('.', ALink.ToPath) > 0) or (Pos('.', ALink.FromPath) > 0);
+  var Dotted  : Boolean:= (ALink.ToPath.Contains('.')) or (ALink.FromPath.Contains('.'));
   var Identity: Boolean:= SameText(ALink.ToPath, ALink.FromPath);
   if ALink.GlyphExpr <> '' then Exit(PAS_USE_CAST_REFUSED);
   if ALink.Cast <> '' then
@@ -5803,7 +5836,7 @@ var
           IntfOnly:= SameText(F.Section, 'interface');
           var Written: string:= Trim(F.Signature);
           if Written.StartsWith(':') then Written:= Trim(Written.Substring(1));
-          if (Pos('.', Written) > 0) and SameText(BareTypeTail(Written), AType) then Name:= Written;
+          if (Written.Contains('.')) and SameText(BareTypeTail(Written), AType) then Name:= Written;
           Break;
         end;
     var HintFrom, HintTo, FromBare: string;
@@ -5812,7 +5845,7 @@ var
     { a bare book spelling hints with the class the BLOCK resolved to (scope,
       book units, inference), so a row agrees with the class converted }
     var Hint: string:= if AToSide then HintTo else HintFrom;
-    if (Hint <> '') and (Pos('.', Hint) = 0) then Hint:= AIn.Trees.ResolveType(Hint);
+    if (Hint <> '') and (not Hint.Contains('.')) then Hint:= AIn.Trees.ResolveType(Hint);
     Result:= ResolveClassInScope(AIn.Trees, AIn.Store, AIn.FileId, Name, IntfOnly, Hint);
     ClassMemo.Add(Key, Result);
   end;
@@ -6122,8 +6155,8 @@ begin
     { a #link that edits or refuses the member's .pas sites owns them }
     for var L: TConversionRule in AIn.Book.Rules.Rules do
     begin
-      var PlainLink: Boolean:= (L.Kind = rkLink) and (L.FromPath <> '') and (L.ToPath <> '') and (Pos('.', L.FromPath) = 0);
-      var Renames  : Boolean:= (Pos('.', L.ToPath) = 0) and not SameText(L.FromPath, L.ToPath);
+      var PlainLink: Boolean:= (L.Kind = rkLink) and (L.FromPath <> '') and (L.ToPath <> '') and (not L.FromPath.Contains('.'));
+      var Renames  : Boolean:= (not L.ToPath.Contains('.')) and not SameText(L.FromPath, L.ToPath);
       if PlainLink and ((L.Cast <> '') or (L.GlyphExpr <> '') or Renames) then
         Taken.AddOrSetValue(UpperCase(IntToStr(LinkRuleBlock(AIn.Book.Rules, L)) + '|' + L.FromPath), L.LineNo);
     end;
@@ -6655,7 +6688,7 @@ begin
     It.Path    := VC.FromPath;
     It.RuleLine:= VC.RuleLine;
     It.Line    := ABlockLine;
-    if (ABlockLine >= 1) and (ABlockLine <= Length(ADfmLines)) then
+    if InRange(ABlockLine, 1, Length(ADfmLines)) then
     begin
       var Indent: string:= LeadingIndent(ADfmLines[ABlockLine - 1]);
       for var I: Integer:= ABlockLine to High(ADfmLines) do
@@ -6868,7 +6901,7 @@ var
 
 begin
   Result:= nil;
-  if (AFileId <= 0) or (ALink.FromPath = '') or (Pos('.', ALink.FromPath) > 0) then Exit;
+  if (AFileId <= 0) or (ALink.FromPath = '') or (ALink.FromPath.Contains('.')) then Exit;
   Seen := TDictionary<Int64, Boolean>.Create;
   Items:= TList<TApplyItem>.Create;
   try
@@ -6972,7 +7005,7 @@ begin
 end;
 
 // REVIEWED 2026-11-18 INT13: cyclomatic re-measured after 1.52 GA-1 counts if-expressions; shape and reason unchanged.
-function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;  // dl:ok too-many-parameters@3d90, method-too-long@37f2, too-many-locals@7c2a, cyclomatic-complexity@efac -- (327 lines, re-reviewed 2026-11-04 int3: +the C18 #migrate hook and its 1.42 identifier form, PlanMigrateSites itself lives outside it; +InstToType and the 1.27.0 pas_uses input record, the surfaces themselves live outside it): parameters -- the eighth is the unit's inherited[] entries (C8 N2), per-unit and updated in place, while the book and the cast library are per-run, so no existing record fits it; length -- 264 lines at 1.25.0, 272 at 1.25.1, 276 with C8 N2 (each addition a one-line hook into a nested routine); every surface is already its own nested routine and the remaining body is the per-instance loop, whose split is a refactor of its own; locals -- one per output surface + per-unit views, shared by the nested routines (same refactor)
+function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;  // dl:ok too-many-parameters@3a17, method-too-long@e4d7, too-many-locals@da07, cyclomatic-complexity@efac -- (332 lines, +5 = SLZ-S07 layout 2026-11-22; 327 re-reviewed 2026-11-04 int3: +the C18 #migrate hook and its 1.42 identifier form, PlanMigrateSites itself lives outside it; +InstToType and the 1.27.0 pas_uses input record, the surfaces themselves live outside it): parameters -- the eighth is the unit's inherited[] entries (C8 N2), per-unit and updated in place, while the book and the cast library are per-run, so no existing record fits it; length -- 264 lines at 1.25.0, 272 at 1.25.1, 276 with C8 N2 (each addition a one-line hook into a nested routine); every surface is already its own nested routine and the remaining body is the per-instance loop, whose split is a refactor of its own; locals -- one per output surface + per-unit views, shared by the nested routines (same refactor)
   const ABook: TApplyBook; const AOnly: TArray<string>;
   const ACastLib: TCastLib; AWarnUnlinked: Boolean;
   var AInherited: TArray<TInheritedInstance>): TApplyResult;
@@ -7836,7 +7869,7 @@ var
         Continue;
       end;
       if SameText(LinkRule.ToPath, LinkRule.FromPath) then Continue; { identity rename -- nothing to rewrite }
-      if (Pos('.', LinkRule.ToPath) > 0) or (Pos('.', LinkRule.FromPath) > 0) then Continue; { nested .dfm path, not a .pas access site }
+      if (LinkRule.ToPath.Contains('.')) or (LinkRule.FromPath.Contains('.')) then Continue; { nested .dfm path, not a .pas access site }
 
       var Sites: TArray<TAccessSite>:= BoundAccessSites(PasStore, PasFileId, ADfmPath, FindMemberAccessSites(PasStore, PasFileId, PasLines,
         LinkRule.FromPath, LinkScopeNames(ABook.Rules, ConvertedInstNames, InstFromType, LinkRule)), Unv);
@@ -7981,7 +8014,7 @@ var
     if (Length(AUnitLevel) = 1) and not ATrees.UnitIndex.SameUnit(AResolved, AUnitLevel[0].UnitName) then
       Result:= AUnitLevel[0].UnitName;
   end;
-  procedure PlanUsesAdditions(out AUses: TUsesPlan; out AAdds, AIntfAdds: TArray<string>);
+  procedure PlanUsesAdditions(out AUses: TUsesPlan; out AAdds, AIntfAdds: TArray<string>);  // dl:ok cyclomatic-complexity@78db -- REVIEWED 2026-11-22 SLZ-S07: cyclomatic-complexity measured cyclomatic complexity 31 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   var
     E : TTextEdit;
     It: TApplyItem;
@@ -8215,16 +8248,25 @@ begin
   ATrees.SetScope(AUnitPas, ABook.Rules);  { bare #convert / .dfm class names resolve in THIS unit }
 
   if not TFile.Exists(AUnitPas) then
-  begin Result.Error:= Format('unit .pas not found: %s', [AUnitPas]); Exit; end;
+  begin
+    Result.Error:= Format('unit .pas not found: %s', [AUnitPas]);
+    Exit;
+  end;
   { 1.42 (MIG-TYPE): no .dfm (ADfmPath '' or missing) is a hard failure only
     when the unit has no identifier #migrate site either -- such a unit runs
     the code surfaces alone, nothing is read from or written to a .dfm }
   var NoDfm: Boolean:= (ADfmPath = '') or not TFile.Exists(ADfmPath);
   var IdSites: Boolean:= NoDfm and UnitHasIdentifierMigrateSites(ATrees, AUnitPas, ABook);
   if NoDfm and not IdSites then
-  begin Result.Error:= Format('.dfm not found: %s', [ADfmPath]); Exit; end;
+  begin
+    Result.Error:= Format('.dfm not found: %s', [ADfmPath]);
+    Exit;
+  end;
   if Length(Stores) = 0 then
-  begin Result.Error:= 'no symbol store available (empty AStores)'; Exit; end;
+  begin
+    Result.Error:= 'no symbol store available (empty AStores)';
+    Exit;
+  end;
 
   DfmText:= if NoDfm then '' else ReadUnitText(ADfmPath);
   Instances:= FindConvertInstances(DfmText, ABook.Rules, AOnly);
@@ -8344,14 +8386,7 @@ begin
           since "indexed but absent" and "indexed but STALE" are both live and
           the reader cannot tell them apart from the old sentence either. }
         var SkipMsg: string;
-        if Length(DfmFileSyms) = 0 then
-          SkipMsg:= Format('%s: %s is not covered by any supplied --db; convert-apply resolves .dfm blocks through the index. ' +
-                           'Index it, or pass a --db that covers it -- instance skipped',
-            [Inst.InstanceName, ExtractFileName(AUnitPas)])
-        else
-          SkipMsg:= Format('%s: could not locate .dfm object block for "%s: %s" in %s ' +
-                           '(the .dfm IS indexed, so the object is absent from it or the index is stale) -- instance skipped',
-            [Inst.InstanceName, Inst.InstanceName, Inst.FromType, ADfmPath]);
+        SkipMsg:= if Length(DfmFileSyms) = 0 then Format('%s: %s is not covered by any supplied --db; convert-apply resolves .dfm blocks through the index. ' + 'Index it, or pass a --db that covers it -- instance skipped', [Inst.InstanceName, ExtractFileName(AUnitPas)]) else Format('%s: could not locate .dfm object block for "%s: %s" in %s ' + '(the .dfm IS indexed, so the object is absent from it or the index is stale) -- instance skipped', [Inst.InstanceName, Inst.InstanceName, Inst.FromType, ADfmPath]);
         It:= InstItem(aikInstanceSkipped, afWarnings, SkipMsg);
         It.FilePath:= ADfmPath;
         SkipInstance(It);
