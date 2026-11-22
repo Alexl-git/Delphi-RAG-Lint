@@ -279,6 +279,9 @@ type
     /// <summary>Queues a full-rules run of APath for the per-URI state AState
     /// (a TDiagState) whose subset lint had generation AGen; replaces a queued
     /// run of the same state.</summary>
+    /// <param name="AState">The per-URI diagnostics state (a TDiagState); not owned.</param>
+    /// <param name="APath">The source file the child lints.</param>
+    /// <param name="AGen">The state's generation when its subset lint ran.</param>
     procedure QueueFullRules(AState: TObject; const APath: string; AGen: Integer);
     /// <summary>Full-rules thread body: runs the queued jobs one at a time until
     /// the thread is terminated.</summary>
@@ -295,6 +298,9 @@ type
     /// as the drag-lint set of AJob's state and publishes the merged set when it
     /// differs from what the client was last sent. No-op when the state's
     /// generation moved on or a newer lint is queued. AFull: AItems is a full set.</summary>
+    /// <param name="AJob">The finished job; names the state and its generation.</param>
+    /// <param name="AItems">The diagnostics, a JSON array.</param>
+    /// <param name="AFull">True when AItems is the full-rules set.</param>
     procedure ApplyFullRules(const AJob: TFullJob; const AItems: string; AFull: Boolean);
     /// <summary>Queues one lint of APath for the per-URI diagnostics state
     /// AState (a TDiagState) on the merge worker. Never dropped: a lint is
