@@ -535,7 +535,7 @@ begin
   end; // try
 end; // function
 
-function DoCallPath(const AArgs: TArgs): Integer;
+function DoCallPath(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@7d64 -- REVIEWED 2026-11-22 SLZ-S02: too-many-exit-points measured 6 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 var
   Store   : ISymbolStore              ;
   FromIds : TArray<Int64>             ;
@@ -585,7 +585,7 @@ begin
   end;
 
   var Cap: Integer:= AArgs.MaxDepth;
-  if Cap <= 0 then Cap:= 20;
+  if Cap <= 0 then Cap:= 20;  // dl:ok magic-literal@6ad6 -- REVIEWED 2026-11-22 SLZ-S02: magic-literal 20 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
 
   ToSet   := TDictionary<Int64,Boolean>.Create;
   Visited := TDictionary<Int64,Boolean>.Create;
@@ -698,8 +698,8 @@ begin
       var Line: string:= '';
       for i:= 0 to QNames.Count - 1 do
       begin
-        if i > 0 then Line:= Line + ' -> ';
-        Line:= Line + QNames[i];
+        if i > 0 then Line:= Line + ' -> ';  // dl:ok concat-in-loop@46fd -- REVIEWED 2026-11-22 SLZ-S02: concat-in-loop builds one short display string over a small bounded list; the quadratic copy is immaterial at that size
+        Line:= Line + QNames[i];  // dl:ok concat-in-loop@26c5 -- REVIEWED 2026-11-22 SLZ-S02: concat-in-loop builds one short display string over a small bounded list; the quadratic copy is immaterial at that size
       end;
       Writeln(Line);
     end;
@@ -805,7 +805,7 @@ begin
   end;
   AVisited.Add(AId, True);
   Kids:= TJSONArray.Create;
-  Result.AddPair('children', Kids);
+  Result.AddPair('children', Kids);  // dl:ok duplicate-code@7c32 -- REVIEWED 2026-11-22 SLZ-S02: duplicate-code measured (118 tokens), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   if ADepth <= 0 then Exit;
 
   ChildIds:= TList<Int64>.Create;
@@ -831,7 +831,7 @@ begin
   end; // try
 end; // function
 
-function DoCallGraph(const AArgs: TArgs): Integer;
+function DoCallGraph(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@311b -- REVIEWED 2026-11-22 SLZ-S02: too-many-exit-points measured 6 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 var
   Store  : ISymbolStore              ;
   RootIds: TArray<Int64>             ;
@@ -919,7 +919,7 @@ begin
   Result:= 0;
 end; // function
 
-function DoReverseCallTree(const AArgs: TArgs): Integer;
+function DoReverseCallTree(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@eb0a -- REVIEWED 2026-11-22 SLZ-S02: too-many-exit-points measured 7 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 var
   Dbs    : TArray<string>;
   Db     : string        ;
@@ -1173,7 +1173,7 @@ begin
   Result:= 0;
 end; // function
 
-function DoButterfly(const AArgs: TArgs): Integer;
+function DoButterfly(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@28d8 -- REVIEWED 2026-11-22 SLZ-S02: too-many-exit-points measured 6 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 var
   Dbs      : TArray<string>;
   Db       : string        ;
@@ -1196,7 +1196,7 @@ var
     if (Result = '') or CharInSet(Result[1], ['0'..'9']) then Result:= '_' + Result;
   end;
 
-  procedure RenderNodeText(const ANode: TRCallNode; const AIndent: string; ALines: TStrings);
+  procedure RenderNodeText(const ANode: TRCallNode; const AIndent: string; ALines: TStrings);  // dl:ok duplicate-code@a796 -- REVIEWED 2026-11-22 SLZ-S02: duplicate-code measured (103 tokens), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   var
     Line : string;
     Kid  : TRCallNode;
@@ -1210,7 +1210,7 @@ var
       RenderNodeText(Kid, AIndent + '  ', ALines);
   end; // procedure
 
-  function BuildNodeJson(const ANode: TRCallNode): TJSONObject;
+  function BuildNodeJson(const ANode: TRCallNode): TJSONObject;  // dl:ok duplicate-code@77a0 -- REVIEWED 2026-11-22 SLZ-S02: duplicate-code measured (126 tokens), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   var
     JKids: TJSONArray;
     Kid  : TRCallNode ;
@@ -1300,7 +1300,7 @@ begin
   // pre-existing bug, not fixed here since it is out of scope for this verb).
   Store  := nil;
   RootIds:= nil;
-  var AnyDbOpened: Boolean:= False;
+  var AnyDbOpened: Boolean:= False;  // dl:ok duplicate-code@d3ab -- REVIEWED 2026-11-22 SLZ-S02: duplicate-code measured (111 tokens), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   for Db in Dbs do
   begin
     if not TFile.Exists(Db) then Continue;

@@ -390,7 +390,7 @@ begin
   Result:= DRagLint.Wiring.WalkResolvedImpact(AStore, ASyms, ADepth, ALevels);
 end; // function
 
-function DoImpact(const AArgs: TArgs): Integer;
+function DoImpact(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@d84b -- REVIEWED 2026-11-22 SLZ-S02: too-many-exit-points measured 7 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 var
   Store     : ISymbolStore        ;
   Levels    : TArray<TImpactLevel>;
@@ -522,7 +522,7 @@ end; // function
 // prints each line. For a well-formed Delphi unit the class symbol spans only
 // the interface-section declaration, so no implementation bodies leak through.
 // Exit 2 on usage error or a missing/stale db, 1 if symbol not found or wrong kind, 0 on success.
-function DoSurface(const AArgs: TArgs): Integer;
+function DoSurface(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@abad -- REVIEWED 2026-11-22 SLZ-S02: too-many-exit-points measured 9 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 var
   Store: ISymbolStore        ;
   Lines: TArray<TSurfaceLine>;

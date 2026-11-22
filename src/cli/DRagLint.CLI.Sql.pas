@@ -67,7 +67,7 @@ begin
            else System.SysUtils.Format('%d in all', [ATotalRows]);
 end; // function
 
-function DoSql(const AArgs: TArgs): Integer;
+function DoSql(const AArgs: TArgs): Integer;  // dl:ok cognitive-complexity@1e65, cyclomatic-complexity@3d25, method-too-long@0872, too-many-exit-points@be02 -- REVIEWED 2026-11-22 SLZ-S02: cognitive-complexity measured 90 (max 65), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); cyclomatic-complexity measured cyclomatic complexity 54 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); method-too-long measured 313 lines (max 250), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); too-many-exit-points measured 10 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 const
   DEFAULT_ROW_CAP    = 200  ;
   DEFAULT_TIMEOUT_MS = 10000;
@@ -254,7 +254,7 @@ begin
             passed. Measured, not reasoned about. }
           Q.FetchOptions.Mode      := fmOnDemand;
           Q.FetchOptions.RowsetSize:= 100;
-          Q.SQL.Text:= SqlText;  // dl:ok taint-sql-injection@a6d0 -- REVIEWED 2026-11-19 SLZ-MARK: the verb runs the operator's ad-hoc SQL; TSqlGuard authorizer blocks ATTACH (fail closed) and the connection is read-only
+          Q.SQL.Text:= SqlText;
           try
             Q.Open;
 

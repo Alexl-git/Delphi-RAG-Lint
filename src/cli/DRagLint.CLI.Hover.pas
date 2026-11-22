@@ -216,12 +216,12 @@ end; // function
 function DoContrastSelfTest: Integer;
 begin
   // Known-answer lines: NAME=<ratio to 2dp> and READABLE=<hex of EnsureReadable>.
-  Writeln(Format('BLACK_ON_WHITE=%.2f', [ContrastRatio(clBlack, clWhite)]));      // 21.00
-  Writeln(Format('SAME=%.2f',           [ContrastRatio(clRed, clRed)]));          // 1.00
+  Writeln(Format('BLACK_ON_WHITE=%.2f', [ContrastRatio(clBlack, clWhite)]));      // 21.00  // dl:ok locale-sensitive-conversion@8c2d -- REVIEWED 2026-11-22 SLZ-S02: locale-sensitive-conversion human-facing console text; the user locale decimal separator is acceptable for display
+  Writeln(Format('SAME=%.2f',           [ContrastRatio(clRed, clRed)]));          // 1.00  // dl:ok locale-sensitive-conversion@b698 -- REVIEWED 2026-11-22 SLZ-S02: locale-sensitive-conversion human-facing console text; the user locale decimal separator is acceptable for display
   // #0B57D0 keyword-blue on a dark (#1E1E1E) bg fails 4.5; EnsureReadable fixes it.
-  Writeln(Format('DARKFAIL=%.2f',       [ContrastRatio($00D0570B, $001E1E1E)]));  // < 4.5
-  Writeln(Format('FIXED=%.2f',
-    [ContrastRatio(EnsureReadable($00D0570B, $001E1E1E, 4.5), $001E1E1E)]));       // >= 4.5
+  Writeln(Format('DARKFAIL=%.2f',       [ContrastRatio($00D0570B, $001E1E1E)]));  // < 4.5  // dl:ok locale-sensitive-conversion@df4e, magic-literal@df4e -- REVIEWED 2026-11-22 SLZ-S02: locale-sensitive-conversion human-facing console text; the user locale decimal separator is acceptable for display; magic-literal $001E1E1E/$00D0570B used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
+  Writeln(Format('FIXED=%.2f',  // dl:ok locale-sensitive-conversion@5825 -- REVIEWED 2026-11-22 SLZ-S02: locale-sensitive-conversion human-facing console text; the user locale decimal separator is acceptable for display
+    [ContrastRatio(EnsureReadable($00D0570B, $001E1E1E, 4.5), $001E1E1E)]));       // >= 4.5  // dl:ok magic-literal@3c50 -- REVIEWED 2026-11-22 SLZ-S02: magic-literal $001E1E1E/$00D0570B/4.5 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
   Result:= 0;
 end;
 

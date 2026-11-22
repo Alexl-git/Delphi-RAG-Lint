@@ -834,7 +834,7 @@ begin
     if Refs.Count = 0 then
       for Item in Staged do
       begin
-        ForceDirectories(ExtractFilePath(Item.Path));
+        ForceDirectories(ExtractFilePath(Item.Path));  // dl:ok ignored-must-use-result@439f -- REVIEWED 2026-11-22 SLZ-S02: ignored-must-use-result best-effort: a failed ForceDirectories surfaces as the next file write raising with the path; a failed temp DeleteFile is harmless
         TFile.WriteAllBytes(Item.Path, Item.Bytes);
       end;
     Result:= Refs.ToArray;
@@ -1998,7 +1998,7 @@ end;
 // make a stale file look like this run's result). Test seam CEnvAllPlant first plants a stale file there.
 procedure PrepareChildOutput(const pOpts: TCycleFixOptions; const pOutFile: string);
 begin
-  ForceDirectories(ExtractFilePath(pOutFile));
+  ForceDirectories(ExtractFilePath(pOutFile));  // dl:ok ignored-must-use-result@93bb -- REVIEWED 2026-11-22 SLZ-S02: ignored-must-use-result best-effort: a failed ForceDirectories surfaces as the next file write raising with the path; a failed temp DeleteFile is harmless
   if IsUnderTemp(pOpts.Project) and (GetEnvironmentVariable(CEnvAllPlant) <> '') then
     TFile.Copy(GetEnvironmentVariable(CEnvAllPlant), pOutFile, True);
   if not Winapi.Windows.DeleteFile(PChar(pOutFile)) and (GetLastError <> ERROR_FILE_NOT_FOUND) then RaiseLastOSError;
@@ -2587,7 +2587,7 @@ begin
       end
       else
       begin
-        if not pOpts.Json then Writeln(Format('re-indexed before planning (%d files, %.1f s)', [Stale, Secs]));
+        if not pOpts.Json then Writeln(Format('re-indexed before planning (%d files, %.1f s)', [Stale, Secs]));  // dl:ok locale-sensitive-conversion@bec6 -- REVIEWED 2026-11-22 SLZ-S02: locale-sensitive-conversion human-facing console text; the user locale decimal separator is acceptable for display
         Write(Text);
       end;
     finally
@@ -2696,8 +2696,8 @@ begin
   for var I:= 0 to High(pRw.Paths) do
   begin
     var S:= ShadowPathOf(pShadowDir, pProjectDir, pRw.Paths[I]);
-    TDirectory.CreateDirectory(ExtractFilePath(S));  // dl:ok taint-path-traversal@4eb0 -- REVIEWED 2026-11-16: the path is the cycles --fix shadow tree (TEMP or --shadow-out) the user's own run created; the tool writes there with the user's rights by design, no trust boundary is crossed
-    TFile.WriteAllBytes(S, pRw.Contents[I]);  // dl:ok taint-path-traversal@1dbf -- REVIEWED 2026-11-16: the path is the cycles --fix shadow tree (TEMP or --shadow-out) the user's own run created; the tool writes there with the user's rights by design, no trust boundary is crossed
+    TDirectory.CreateDirectory(ExtractFilePath(S));
+    TFile.WriteAllBytes(S, pRw.Contents[I]);
   end;
   var Bytes:= pRw.NewContent;
   if pBreak = CBreakNoRepair then
@@ -2708,8 +2708,8 @@ begin
     Bytes:= TEncoding.ANSI.GetBytes(Text);
   end;
   var NewShadow:= ShadowPathOf(pShadowDir, pProjectDir, pRw.NewPath);
-  TDirectory.CreateDirectory(ExtractFilePath(NewShadow));  // dl:ok taint-path-traversal@1431 -- REVIEWED 2026-11-16: the path is the cycles --fix shadow tree (TEMP or --shadow-out) the user's own run created; the tool writes there with the user's rights by design, no trust boundary is crossed
-  TFile.WriteAllBytes(NewShadow, Bytes);  // dl:ok taint-path-traversal@b544 -- REVIEWED 2026-11-16: the path is the cycles --fix shadow tree (TEMP or --shadow-out) the user's own run created; the tool writes there with the user's rights by design, no trust boundary is crossed
+  TDirectory.CreateDirectory(ExtractFilePath(NewShadow));
+  TFile.WriteAllBytes(NewShadow, Bytes);
 end;
 
 // `cycles --fix --hub-surface`: RunCycleFixGroups with recipe R3 in place of the planner. Same flags, same baseline gate,

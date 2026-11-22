@@ -566,7 +566,7 @@ begin
   end;
 end;
 
-function DoConvertApply(const AArgs: TArgs): Integer;
+function DoConvertApply(const AArgs: TArgs): Integer;  // dl:ok cyclomatic-complexity@37db, too-many-exit-points@2ae6 -- REVIEWED 2026-11-22 SLZ-S02: cyclomatic-complexity measured cyclomatic complexity 40 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); too-many-exit-points measured 13 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 var
   UnitPas   : string            ;
   DfmPath   : string            ;

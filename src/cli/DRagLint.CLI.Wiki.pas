@@ -222,7 +222,7 @@ begin
   Result.AddPair('body', ATopic.Body);
 end; // function
 
-function DoWiki(const AArgs: TArgs): Integer;
+function DoWiki(const AArgs: TArgs): Integer;  // dl:ok cyclomatic-complexity@cdd1 -- REVIEWED 2026-11-22 SLZ-S02: cyclomatic-complexity measured cyclomatic complexity 35 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 var
   Topics   : TArray<TWikiTopic>;
   Rc       : Integer           ;

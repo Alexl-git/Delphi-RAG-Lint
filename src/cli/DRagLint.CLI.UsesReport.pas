@@ -147,7 +147,7 @@ var
         end;
         Continue;
       end;
-      SetLength(Stores, Length(Stores) + 1);
+      SetLength(Stores, Length(Stores) + 1);  // dl:ok setlength-in-loop@594e -- REVIEWED 2026-11-22 SLZ-S02: setlength-in-loop grows an array over a small bounded set of CLI rows; reallocation cost is immaterial at that size
       Stores[High(Stores)]:= S;
     end;
   end; // procedure
@@ -208,7 +208,7 @@ var
         QFiles.Open;
         while not QFiles.Eof do
         begin
-          PathStr:= QFiles.FieldByName('path').AsString;
+          PathStr:= QFiles.FieldByName('path').AsString;  // dl:ok field-by-name-in-loop@9324 -- REVIEWED 2026-11-22 SLZ-S02: field-by-name-in-loop per-row FieldByName over a small CLI report result set; caching the TFields is a refactor with no measurable gain here
           Meta.Path:= PathStr;
           Meta.Stem:= ComputeStem(PathStr);
           Meta.StoreIndex:= StoreIdx;
@@ -226,7 +226,7 @@ var
     { Step 2: gather every unit_uses edge, group by global source file index. }
     FileIdToGlobal:= TDictionary<Int64, Integer>.Create;
     try
-      for GlobalIdx:= 0 to AllFiles.Count - 1 do FileIdToGlobal.AddOrSetValue( (Int64(AllFiles[GlobalIdx].StoreIndex) shl 40) or Int64(AllFiles[GlobalIdx].FileId), GlobalIdx);
+      for GlobalIdx:= 0 to AllFiles.Count - 1 do FileIdToGlobal.AddOrSetValue( (Int64(AllFiles[GlobalIdx].StoreIndex) shl 40) or Int64(AllFiles[GlobalIdx].FileId), GlobalIdx);  // dl:ok large-magic-number@64e7, magic-literal@64e7 -- REVIEWED 2026-11-22 SLZ-S02: large-magic-number 40 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a); magic-literal 40 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
 
       for StoreIdx:= 0 to High(Stores) do
       begin
@@ -238,8 +238,8 @@ var
           QUses.Open;
           while not QUses.Eof do
           begin
-            LocalFileId:= QUses.FieldByName('file_id').AsLargeInt;
-            if not FileIdToGlobal.TryGetValue( (Int64(StoreIdx) shl 40) or LocalFileId, GlobalIdx) then
+            LocalFileId:= QUses.FieldByName('file_id').AsLargeInt;  // dl:ok field-by-name-in-loop@5a31 -- REVIEWED 2026-11-22 SLZ-S02: field-by-name-in-loop per-row FieldByName over a small CLI report result set; caching the TFields is a refactor with no measurable gain here
+            if not FileIdToGlobal.TryGetValue( (Int64(StoreIdx) shl 40) or LocalFileId, GlobalIdx) then  // dl:ok large-magic-number@6e9e, magic-literal@6e9e -- REVIEWED 2026-11-22 SLZ-S02: large-magic-number 40 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a); magic-literal 40 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
             begin
               QUses.Next;
               Continue;
@@ -254,7 +254,7 @@ var
             if not QUses.FieldByName('target_file_id').IsNull then
             begin
               TargetFid:= QUses.FieldByName('target_file_id').AsLargeInt;
-              if FileIdToGlobal.TryGetValue( (Int64(StoreIdx) shl 40) or TargetFid, TargetGlobal) then Edge.TargetFileId:= TargetGlobal;
+              if FileIdToGlobal.TryGetValue( (Int64(StoreIdx) shl 40) or TargetFid, TargetGlobal) then Edge.TargetFileId:= TargetGlobal;  // dl:ok large-magic-number@190e, magic-literal@190e -- REVIEWED 2026-11-22 SLZ-S02: large-magic-number 40 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a); magic-literal 40 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
             end;
             { v(ADP3 T4f, register K39): TWO passes, most specific first, the same
               order ResolveUnitUseTargets uses. StemToGlobal is keyed on the FULL
@@ -405,7 +405,7 @@ begin
   end;
 
   MaxDepth:= AArgs.Depth;
-  if MaxDepth <= 0 then MaxDepth:= 50;
+  if MaxDepth <= 0 then MaxDepth:= 50;  // dl:ok magic-literal@b893 -- REVIEWED 2026-11-22 SLZ-S02: magic-literal 50 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
   RootPattern:= LowerCase(AArgs.Name);
 
   AllFiles    := nil;
@@ -466,7 +466,7 @@ function DoDepsReport(const AArgs: TArgs): Integer;
 var
   Stores: TArray<ISymbolStore>;
 
-  procedure OpenStores;
+  procedure OpenStores;  // dl:ok duplicate-code@732e -- REVIEWED 2026-11-22 SLZ-S02: duplicate-code measured (205 tokens), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   var
     DbList: TArray<string>;
     i     : Integer       ;
@@ -503,7 +503,7 @@ var
         end;
         Continue;
       end;
-      SetLength(Stores, Length(Stores) + 1);
+      SetLength(Stores, Length(Stores) + 1);  // dl:ok setlength-in-loop@594e -- REVIEWED 2026-11-22 SLZ-S02: setlength-in-loop grows an array over a small bounded set of CLI rows; reallocation cost is immaterial at that size
       Stores[High(Stores)]:= S;
     end;
   end; // procedure

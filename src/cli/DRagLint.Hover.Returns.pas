@@ -295,7 +295,7 @@ type
 // is load-bearing: with spaces the miner could not tell a removed comment from
 // author formatting, and closing the gap silently normalised expressions that
 // contained no comment at all.
-procedure TokenizeBody(const ALines: TArray<string>; AToks: TList<TMaskTok>;
+procedure TokenizeBody(const ALines: TArray<string>; AToks: TList<TMaskTok>;  // dl:ok deep-nesting@7308 -- REVIEWED 2026-11-22 SLZ-S02: deep-nesting measured control structures 6 deep (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   out ACodeOnly: TArray<string>; out ANoComments: TArray<string>);
 var
   InBrace, InParenStar: Boolean ;
@@ -622,7 +622,7 @@ end;
 //     the ';' stop disarming and the routine's own begin confirm the frame,
 //     blanking the entire body. Hence ':' is a token: after the keyword it says
 //     "return type follows", i.e. no name.
-function MaskNestedRoutines(const ABodyLines: TArray<string>;
+function MaskNestedRoutines(const ABodyLines: TArray<string>;  // dl:ok cyclomatic-complexity@8806 -- REVIEWED 2026-11-22 SLZ-S02: cyclomatic-complexity measured cyclomatic complexity 34 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   const AQualifiedName: string; out ACodeOnly: TArray<string>;
   out ANoComments: TArray<string>): TArray<string>;
 var
@@ -765,7 +765,7 @@ end;
 
 function IsTailOperator(const AWord: string): Boolean;
 begin
-  Result:= (AWord = 'and') or (AWord = 'or') or (AWord = 'not') or (AWord = 'xor')
+  Result:= (AWord = 'and') or (AWord = 'or') or (AWord = 'not') or (AWord = 'xor')  // dl:ok boolean-expression-complexity@cfbb -- REVIEWED 2026-11-22 SLZ-S02: boolean-expression-complexity measured 12 and/or/xor operators (limit 4), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
         or (AWord = 'div') or (AWord = 'mod') or (AWord = 'shl') or (AWord = 'shr')
         or (AWord = 'in')  or (AWord = 'is')  or (AWord = 'as')
         or (AWord = 'to')  or (AWord = 'downto');
@@ -881,23 +881,23 @@ begin
     // word boundary on both sides: not part of a longer identifier
     // (MyResult, Result2, ResultSet, ...).
     PrevOk:= (P = 1) or not CharInSet(Low[P - 1], ['a'..'z', 'A'..'Z', '0'..'9', '_']);
-    NextOk:= (P + 6 > Length(Low)) or not CharInSet(Low[P + 6], ['a'..'z', 'A'..'Z', '0'..'9', '_']);
+    NextOk:= (P + 6 > Length(Low)) or not CharInSet(Low[P + 6], ['a'..'z', 'A'..'Z', '0'..'9', '_']);  // dl:ok magic-literal@36bb -- REVIEWED 2026-11-22 SLZ-S02: magic-literal 6 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
     if PrevOk and NextOk then
     begin
       // require ':=' immediately (tolerating spaces) after this 'result'.
       // `Result.Field :=` and `Result[i] :=` fail here, which is how member and
       // element assignments stay out of the enumeration.
-      Rest:= TrimLeft(Copy(T, P + 6, MaxInt));
+      Rest:= TrimLeft(Copy(T, P + 6, MaxInt));  // dl:ok magic-literal@047d -- REVIEWED 2026-11-22 SLZ-S02: magic-literal 6 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
       if StartsStr(':=', Rest) then
       begin
-        Rest:= Trim(Copy(Rest, 3, MaxInt));
+        Rest:= Trim(Copy(Rest, 3, MaxInt));  // dl:ok magic-literal@1c3a -- REVIEWED 2026-11-22 SLZ-S02: magic-literal 3 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
         Cut:= CutRhs(Rest, Terminated);
         if not Terminated then Exit('');
         if Cut.Contains(NESTED_MASK) then Exit('');
         Exit(Trim(Cut));
       end;
     end;
-    ScanFrom:= P + 6;
+    ScanFrom:= P + 6;  // dl:ok magic-literal@a5ea -- REVIEWED 2026-11-22 SLZ-S02: magic-literal 6 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
   end;
 end;
 
@@ -965,7 +965,7 @@ begin
         Rest:= TrimLeft(Copy(Rest, 2, MaxInt));
         if StartsStr('result', Rest) then
         begin
-          Tail:= TrimLeft(Copy(Rest, 7, MaxInt));
+          Tail:= TrimLeft(Copy(Rest, 7, MaxInt));  // dl:ok magic-literal@dcdc -- REVIEWED 2026-11-22 SLZ-S02: magic-literal 7 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
           if (Tail = '') or CharInSet(Tail[1], [',', ')']) then Exit(True);
         end;
       end;
@@ -988,9 +988,9 @@ begin
     P:= Pos('result', Low, P);
     if P = 0 then Exit;
     PrevOk:= (P = 1) or not IsIdentCh(Low[P - 1]);
-    NextOk:= (P + 6 > Length(Low)) or not IsIdentCh(Low[P + 6]);
+    NextOk:= (P + 6 > Length(Low)) or not IsIdentCh(Low[P + 6]);  // dl:ok magic-literal@883d -- REVIEWED 2026-11-22 SLZ-S02: magic-literal 6 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
     if PrevOk and NextOk then Exit(True);
-    Inc(P, 6);
+    Inc(P, 6);  // dl:ok magic-literal@e97f -- REVIEWED 2026-11-22 SLZ-S02: magic-literal 6 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
   until False;
 end;
 

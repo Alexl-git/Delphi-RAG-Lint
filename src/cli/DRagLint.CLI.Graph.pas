@@ -210,7 +210,7 @@ begin
 
     while not Q.Eof do
     begin
-      FromPath:= Q.FieldByName('from_path').AsString;
+      FromPath:= Q.FieldByName('from_path').AsString;  // dl:ok field-by-name-in-loop@0f1b -- REVIEWED 2026-11-22 SLZ-S02: field-by-name-in-loop per-row FieldByName over a small CLI report result set; caching the TFields is a refactor with no measurable gain here
       ToPath  := Q.FieldByName('to_path'  ).AsString;
       Weight  := Q.FieldByName('weight'   ).AsInteger;
       FromUnit:= UnitName(FromPath);
@@ -331,13 +331,13 @@ begin
     QA.Open;
     while not QA.Eof do
     begin
-      SetA.AddOrSetValue( QA.FieldByName('qualified_name').AsString, QA.FieldByName('kind').AsString + '|' + QA.FieldByName('sig').AsString);
+      SetA.AddOrSetValue( QA.FieldByName('qualified_name').AsString, QA.FieldByName('kind').AsString + '|' + QA.FieldByName('sig').AsString);  // dl:ok field-by-name-in-loop@ecea -- REVIEWED 2026-11-22 SLZ-S02: field-by-name-in-loop per-row FieldByName over a small CLI report result set; caching the TFields is a refactor with no measurable gain here
       QA.Next;
     end;
     QB.Open;
     while not QB.Eof do
     begin
-      SetB.AddOrSetValue( QB.FieldByName('qualified_name').AsString, QB.FieldByName('kind').AsString + '|' + QB.FieldByName('sig').AsString);
+      SetB.AddOrSetValue( QB.FieldByName('qualified_name').AsString, QB.FieldByName('kind').AsString + '|' + QB.FieldByName('sig').AsString);  // dl:ok field-by-name-in-loop@6ea6 -- REVIEWED 2026-11-22 SLZ-S02: field-by-name-in-loop per-row FieldByName over a small CLI report result set; caching the TFields is a refactor with no measurable gain here
       QB.Next;
     end;
 

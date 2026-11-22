@@ -73,7 +73,7 @@ end;
 procedure CompareWriteFile(const APath, AText: string);
 begin
   var Dir:= ExtractFilePath(ExpandFileName(APath));
-  if Dir <> '' then ForceDirectories(Dir);
+  if Dir <> '' then ForceDirectories(Dir);  // dl:ok ignored-must-use-result@f55c -- REVIEWED 2026-11-22 SLZ-S02: ignored-must-use-result best-effort: a failed ForceDirectories surfaces as the next file write raising with the path; a failed temp DeleteFile is harmless
   TFile.WriteAllText(APath, AText, TUTF8Encoding.Create(False));
 end;
 
@@ -155,7 +155,7 @@ begin
   var Svg:= ASvg;
   if (Svg <> '') and StartsText(COMPARE_TEMP_SVG_PREFIX, ExtractFileName(Svg)) and
      SameText(ExcludeTrailingPathDelimiter(ExtractFilePath(Svg)), ExcludeTrailingPathDelimiter(TPath.GetTempPath)) then
-    DeleteFile(Svg); // a temp file that cannot be deleted is the OS's to reap
+    DeleteFile(Svg); // a temp file that cannot be deleted is the OS's to reap  // dl:ok ignored-must-use-result@7255 -- REVIEWED 2026-11-22 SLZ-S02: ignored-must-use-result best-effort: a failed ForceDirectories surfaces as the next file write raising with the path; a failed temp DeleteFile is harmless
 end;
 
 function CompareHtmlPath(const AArgs: TArgs; const AReq: TCompareRequest; const AResult: TCompareResult): string;

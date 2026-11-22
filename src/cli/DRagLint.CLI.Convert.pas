@@ -408,7 +408,7 @@ begin
   end;
 end;
 
-function DoPropTree(const AArgs: TArgs): Integer;
+function DoPropTree(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@a4f2 -- REVIEWED 2026-11-22 SLZ-S02: too-many-exit-points measured 9 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 var
   Dbs   : TArray<string>  ;
   Db    : string          ;
@@ -699,7 +699,7 @@ begin
   end;
 end;
 
-function DoConvertValidate(const AArgs: TArgs): Integer;
+function DoConvertValidate(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@263a -- REVIEWED 2026-11-22 SLZ-S02: too-many-exit-points measured 7 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 var
   RulesText: string             ;
   RuleSet  : TConversionRuleSet ;
@@ -950,7 +950,7 @@ begin
   end;
 end;
 
-function DoConvertReemit(const AArgs: TArgs): Integer;
+function DoConvertReemit(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@6cd0 -- REVIEWED 2026-11-22 SLZ-S02: too-many-exit-points measured 10 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 var
   FromCls  : TClassRef          ;
   ToCls    : TClassRef          ;
@@ -1012,7 +1012,7 @@ begin
   if Length(Unrealised) > 0 then
   begin
     for var U in Unrealised do Writeln(Format('ERROR: line %d: %s', [U.LineNo, U.Message]));
-    Exit(1);
+    Exit(1);  // dl:ok duplicate-code@2384 -- REVIEWED 2026-11-22 SLZ-S02: duplicate-code measured (95 tokens), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   end;
 
   // Resolve the F/T classes in the first DB that resolves each qname (the same
@@ -1103,7 +1103,7 @@ begin
       JDR.AddPair('fromPath', DR.FromPath);
       JDR.AddPair('toPath'  , DR.ToPath);
       JDR.AddPair('value'   , DR.Value);
-      JDR.AddPair('ruleLine', TJSONNumber.Create(DR.RuleLine));
+      JDR.AddPair('ruleLine', TJSONNumber.Create(DR.RuleLine));  // dl:ok duplicate-code@0925 -- REVIEWED 2026-11-22 SLZ-S02: duplicate-code measured (91 tokens), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
       JResolved.AddElement(JDR);
     end;
     JReport.AddPair('defaultsResolved', JResolved);
@@ -1136,7 +1136,7 @@ begin
   if Res.Ok then Exit(0) else Exit(1);
 end; // function
 
-function DoConvertScaffold(const AArgs: TArgs): Integer;
+function DoConvertScaffold(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@84d3 -- REVIEWED 2026-11-22 SLZ-S02: too-many-exit-points measured 10 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 var
   Dbs      : TArray<string>  ;
   LDb      : string          ;

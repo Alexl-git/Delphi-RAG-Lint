@@ -251,7 +251,7 @@ begin
       Q.Open;
       while not Q.Eof do
       begin
-        TableNames:= TableNames + [Q.FieldByName('name').AsString];
+        TableNames:= TableNames + [Q.FieldByName('name').AsString];  // dl:ok field-by-name-in-loop@a1c5 -- REVIEWED 2026-11-22 SLZ-S02: field-by-name-in-loop per-row FieldByName over a small CLI report result set; caching the TFields is a refactor with no measurable gain here
         Q.Next;
       end;
     finally
@@ -296,7 +296,7 @@ begin
             while not QCols.Eof do
             begin
               JCol:= TJSONObject.Create;
-              JCol.AddPair('name', QCols.FieldByName('name').AsString);
+              JCol.AddPair('name', QCols.FieldByName('name').AsString);  // dl:ok field-by-name-in-loop@fe92 -- REVIEWED 2026-11-22 SLZ-S02: field-by-name-in-loop per-row FieldByName over a small CLI report result set; caching the TFields is a refactor with no measurable gain here
               JCol.AddPair('type', QCols.FieldByName('type').AsString);
               var CDesc, CVals: string;
               if ColumnSemantics(T, QCols.FieldByName('name').AsString, CDesc, CVals) then
@@ -354,7 +354,7 @@ begin
             QCols.Open;
             while not QCols.Eof do
             begin
-              SB.AppendLine(Format('  %s %s', [QCols.FieldByName('name').AsString, QCols.FieldByName('type').AsString]));
+              SB.AppendLine(Format('  %s %s', [QCols.FieldByName('name').AsString, QCols.FieldByName('type').AsString]));  // dl:ok field-by-name-in-loop@8b47 -- REVIEWED 2026-11-22 SLZ-S02: field-by-name-in-loop per-row FieldByName over a small CLI report result set; caching the TFields is a refactor with no measurable gain here
               QCols.Next;
             end;
           finally

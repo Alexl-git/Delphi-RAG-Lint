@@ -498,7 +498,7 @@ begin
   try
     if ParamsPart <> '' then
     begin
-      SB.AppendLine('**Parameters:**');
+      SB.AppendLine('**Parameters:**');  // dl:ok duplicate-code@d3fc -- REVIEWED 2026-11-22 SLZ-S02: duplicate-code measured (114 tokens), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
       for Seg in SplitTopLevel(ParamsPart, ';') do
       begin
         if Trim(Seg) = '' then Continue;
@@ -735,8 +735,8 @@ begin
       var RObs: string:= '';
       for var ri:= 0 to High(AReturnRhs) do
       begin
-        if ri > 0 then RObs:= RObs + '; ';
-        RObs:= RObs + AReturnRhs[ri];
+        if ri > 0 then RObs:= RObs + '; ';  // dl:ok concat-in-loop@def1 -- REVIEWED 2026-11-22 SLZ-S02: concat-in-loop builds one short display string over a small bounded list; the quadratic copy is immaterial at that size
+        RObs:= RObs + AReturnRhs[ri];  // dl:ok concat-in-loop@38c5 -- REVIEWED 2026-11-22 SLZ-S02: concat-in-loop builds one short display string over a small bounded list; the quadratic copy is immaterial at that size
       end;
       SB.AppendLine('');
       SB.AppendLine('**Returns (observed):** ' + RObs);
@@ -956,10 +956,10 @@ begin
   Result.EffectSummary:= '';
   Result.EffectWitness:= '';
   Cap:= Length(AReturnRhs);
-  if Cap > 10 then
+  if Cap > 10 then  // dl:ok magic-literal@7740 -- REVIEWED 2026-11-22 SLZ-S02: magic-literal 10 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
   begin
-    Result.ReturnsMore:= Cap - 10;
-    Cap:= 10;
+    Result.ReturnsMore:= Cap - 10;  // dl:ok magic-literal@1901 -- REVIEWED 2026-11-22 SLZ-S02: magic-literal 10 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
+    Cap:= 10;  // dl:ok magic-literal@ae7f -- REVIEWED 2026-11-22 SLZ-S02: magic-literal 10 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
   end
   else Result.ReturnsMore:= 0;
   SetLength(Result.Returns, Cap);

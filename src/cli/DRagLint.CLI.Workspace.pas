@@ -112,7 +112,7 @@ uses
 // index: loads workspace config, indexes each project into the shared DB.
 // status: lists projects and file counts in the shared DB.
 // add <projfile>: appends a project entry and saves.
-function DoWorkspace(const AArgs: TArgs): Integer;
+function DoWorkspace(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@1557 -- REVIEWED 2026-11-22 SLZ-S02: too-many-exit-points measured 7 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 var
   CfgPath     : string                    ;
   Cfg         : TWorkspaceConfig          ;
@@ -139,7 +139,7 @@ var
     SI.hStdError := WritePipe;
     SI.hStdInput := INVALID_HANDLE_VALUE;
     FillChar(PI, SizeOf(PI), 0);
-    StrPCopy(CmdLineBuf, ACmd);
+    StrPLCopy(CmdLineBuf, ACmd, High(CmdLineBuf));  // bounded: never writes past the 2048-char buffer
     if not CreateProcessW(nil, CmdLineBuf, nil, nil, True, CREATE_NO_WINDOW, nil, nil, SI, PI) then
     begin
       Writeln('ERROR: failed to spawn: ', ACmd);
@@ -471,7 +471,7 @@ begin
         Walker.Free;
       end;
       { an app-menu surface is a .dfm menu: compare the .dfm tree too }
-      if AArgs.WithDfm or Reg.HasAppMenus then AddDfmRoots(Tree, AArgs.DbPaths[0], AArgs.ProjectPath);
+      if AArgs.WithDfm or Reg.HasAppMenus then AddDfmRoots(Tree, AArgs.DbPaths[0], AArgs.ProjectPath);  // dl:ok duplicate-code@9ef1 -- REVIEWED 2026-11-22 SLZ-S02: duplicate-code measured (92 tokens), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
     except
       on E: EMenuTreeStale do
       begin
