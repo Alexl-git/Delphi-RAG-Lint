@@ -2111,7 +2111,7 @@ var
   Hidden     : TList<TPropHiddenMember>; // private members left out (R12)
   Order      : TArray<TSymbol>;
   DeclaredBy : TArray<TSymbol>; // the class declaring Order[i] -- its scope
-  idx        : Integer        ;
+  Idx        : Integer        ;
   Prop       : TSymbol        ;
   Node       : TPropNode      ;
   Tok        : string         ;
@@ -2146,12 +2146,12 @@ begin
   try
   ClosureDone:= False;
   CollectMembers(AClass, False, Hidden, Order, DeclaredBy);
-  for idx:= 0 to High(Order) do
+  for Idx:= 0 to High(Order) do
   begin
-    Prop:= Order[idx];
+    Prop:= Order[Idx];
     Node:= Default(TPropNode);
     Node.Path      := Prop.Name;
-    Node.DeclaredIn:= DeclaredBy[idx].QualifiedName;
+    Node.DeclaredIn:= DeclaredBy[Idx].QualifiedName;
 
     // proptree/2 (Task 2, R2): EFFECTIVE visibility -- the most-derived
     // declaration's own Modifiers (Prop is already the most-derived symbol
@@ -2253,7 +2253,7 @@ begin
     // scope rule against the DECLARING class's unit and reduces a forward-decl
     // stub to its body, so a nested class still never enumerates 0 properties
     // (the DevExpress forward-decl case the old stub re-resolution existed for).
-    TypeSym:= ResolveTypeInScope(Tok, DeclaredBy[idx].FileId);
+    TypeSym:= ResolveTypeInScope(Tok, DeclaredBy[Idx].FileId);
     // Criterion 5, enforced HERE for the same reason the ancestor climb
     // enforces it rather than delegating: PickCandidate short-circuits on a
     // lone candidate, so the scope rule never runs for a type name with
@@ -2262,7 +2262,7 @@ begin
     // TComponent, ...) is an ordinary RTL reference and must still expand.
     // See CrossesGuiFramework (and note its guarantee is PER HOP: an undotted
     // declaring unit is not a GUI framework and is never refused).
-    if (TypeSym.Id > 0) and CrossesGuiFramework(DeclaredBy[idx], TypeSym) then
+    if (TypeSym.Id > 0) and CrossesGuiFramework(DeclaredBy[Idx], TypeSym) then
       TypeSym:= Default(TSymbol);
     // A DECLINE (Id = 0) leaves the leaf exactly where an unresolvable type
     // leaves it today -- Kind='scalar', not recursed into, TypeName still the
