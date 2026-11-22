@@ -40,8 +40,8 @@
     "version": "1.38.0-alpha"
   },
   "features/autofix-wave.md": {
-    "hash": "3359cc97ef8643071bfd123265cceaaa23153dd0008e2d8703b550784b5115ca",
-    "version": "1.51.1-alpha"
+    "hash": "ceeb23026840efe4952efea8019e570be2bedcd546645724ae88579cd3eb6244",
+    "version": "1.52.2-alpha"
   },
   "features/bench-context.md": {
     "hash": "40753857e02ca31b5cba13964e0852b48e63f39e75e8aaae79ad9869e80a73fb",
@@ -884,8 +884,8 @@
     "version": "1.51.1-alpha"
   },
   "features/taint-analysis.md": {
-    "hash": "98d611fab04bba42116c37d82cd03c5f7d43038cc4be3fe7ef9dfdacaebd9ac0",
-    "version": "1.52.1-alpha"
+    "hash": "85c3764084a6eba09e97cceade4bed502820bfa59feaa65ec5dfa9aa9e09d2ed",
+    "version": "1.52.2-alpha"
   },
   "features/target-bds-library-path.md": {
     "hash": "eb174ea5dee975b29d8f22bb0603f439a9751e88e5b3d82f45a96d1ee8e2d6d3",
