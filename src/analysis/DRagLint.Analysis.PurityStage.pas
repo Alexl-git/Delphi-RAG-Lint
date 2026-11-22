@@ -25,9 +25,7 @@ uses
   System.SysUtils,
   System.Classes,
   System.Generics.Collections,
-  DRagLint.Core.Model,
-  DRagLint.Core.Interfaces,
-  DRagLint.Analysis.Purity;
+  DRagLint.Core.Interfaces;
 
 type
   /// <summary>What one run counted -- printed on the `resolve: purity` line and
@@ -125,6 +123,8 @@ type
 implementation
 
 uses
+  DRagLint.Core.Model,
+  DRagLint.Analysis.Purity,
   System.Diagnostics,
   System.Generics.Defaults,
   System.IOUtils,

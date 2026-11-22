@@ -12,9 +12,7 @@ interface
 uses
   System.SysUtils,
   System.Generics.Collections,
-  TreeSitter,
   DRagLint.Analysis.Cfg,
-  DRagLint.Analysis.DataFlow,
   DRagLint.Analysis.Flow.Lattices;
 
 /// <summary>Live var-table indices immediately AFTER item AItemIdx of block
@@ -78,6 +76,10 @@ function LiveBeforeItem(const ACfg: TCfg; AVars: TRoutineVarTable; const ASrc: T
   ABlockIdx, AItemIdx: Integer): TArray<Boolean>;
 
 implementation
+
+uses
+  TreeSitter,
+  DRagLint.Analysis.DataFlow;
 
 { Apply TLiveness's per-item backward transfer for a single item to ALive (in
   place): kill the whole-var def first, then add reads/call-defs as uses.

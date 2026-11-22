@@ -27,7 +27,6 @@ interface
 uses
   DRagLint.Core  .Model     ,
   DRagLint.Core  .Interfaces,
-  DRagLint.Symbol.Describe  ,
   DRagLint.Hover .Renderer  ;
 
 type
@@ -182,6 +181,7 @@ procedure AttachHoverSetBy(const AStore: ISymbolStore; const ASym: TSymbol; var 
 implementation
 
 uses
+  DRagLint.Symbol.Describe,
   System.SysUtils              ,
   System.RegularExpressions    ,
   System.Math                  ,

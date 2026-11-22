@@ -22,7 +22,6 @@ uses
   System.SysUtils
   , System.Classes
   , System.IOUtils
-  , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   , DRagLint.Refactor.TextEdit
   ;
@@ -328,6 +327,7 @@ type
 implementation
 
 uses
+  DRagLint.Core.Model,
   DRagLint.Core.Encoding;
 
 { Reads the 1-based AStartLine..AEndLine (inclusive) span of AFilePath, joined

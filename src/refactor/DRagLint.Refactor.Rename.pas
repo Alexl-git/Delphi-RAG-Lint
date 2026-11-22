@@ -8,10 +8,8 @@ uses
   , System.IOUtils
   , System  .Generics.Collections
   , System  .Generics.Defaults
-  , TreeSitter
   , DRagLint.Core    .Model
   , DRagLint.Core    .Interfaces
-  , DRagLint.Diagnostics.ParseCache
   ;
 
 type
@@ -475,6 +473,8 @@ implementation
 uses
   DRagLint.Core.Encoding, System.StrUtils
   , DRagLint.Refactor.TextEdit
+  , TreeSitter
+  , DRagLint.Diagnostics.ParseCache
   ;
 
 // ---------------------------------------------------------------------------

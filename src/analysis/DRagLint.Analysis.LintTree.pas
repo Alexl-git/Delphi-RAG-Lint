@@ -40,7 +40,6 @@ uses
   System.Generics.Collections,
   DRagLint.Core.Model,
   DRagLint.Core.Interfaces,
-  DRagLint.Analysis.SurfaceFingerprint,
   DRagLint.Analysis.SurfaceAdapters;
 
 const
@@ -170,6 +169,7 @@ function RunLintTree(const pOptions   : TLintTreeOptions;
 implementation
 
 uses
+  DRagLint.Analysis.SurfaceFingerprint,
   Winapi.Windows,
   System.Diagnostics,
   DRagLint.Core.Encoding,

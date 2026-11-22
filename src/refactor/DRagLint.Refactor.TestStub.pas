@@ -32,7 +32,6 @@ uses
   System.SysUtils
   , System.Classes
   , System.StrUtils
-  , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   ;
 
@@ -76,6 +75,9 @@ type
   end;
 
 implementation
+
+uses
+  DRagLint.Core.Model;
 
 type
   { One parameter as the stub needs it: a name to declare and a type to

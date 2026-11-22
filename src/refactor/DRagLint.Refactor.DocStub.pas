@@ -7,7 +7,6 @@ uses
   , System.Classes
   , System.Generics.Collections { ParseParamDecls' accumulator }
   , System.RegularExpressions
-  , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   ;
 
@@ -246,6 +245,7 @@ uses
   DRagLint.Core.Encoding, System.IOUtils
   , System.Math                 { Min -- SignatureWithoutComments' line window }
   , DRagLint.Analysis.Purity    { StripCommentsAndStrings -- the one comment masker }
+  , DRagLint.Core.Model
   ;
 
 // ---------------------------------------------------------------------------

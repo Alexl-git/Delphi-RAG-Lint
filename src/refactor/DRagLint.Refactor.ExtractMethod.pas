@@ -24,10 +24,7 @@ uses
   , TreeSitter
   , DRagLint.Analysis.Cfg
   , DRagLint.Analysis.Flow.Lattices
-  , DRagLint.Analysis.Liveness
-  , DRagLint.Diagnostics.ParseCache
   , DRagLint.Refactor.TextEdit
-  , DRagLint.Refactor.Rename
   ;
 
 type
@@ -292,6 +289,9 @@ type
 implementation
 
 uses
+  DRagLint.Analysis.Liveness,
+  DRagLint.Diagnostics.ParseCache,
+  DRagLint.Refactor.Rename,
   System.IOUtils
   ;
 
