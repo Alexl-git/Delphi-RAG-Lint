@@ -611,7 +611,8 @@ begin
       Q:= 1;
       while (Q <= Length(Rest)) and CharInSet(Rest[Q], ['A'..'Z','a'..'z','0'..'9','_']) do Inc(Q);
       ARoutine:= Copy(Rest, 1, Q - 1);
-      if ARoutine <> '' then begin AOwnerClass:= ''; Exit(True); end;
+      if ARoutine <> '' then begin AOwnerClass:= '';
+      Exit(True); end;
       Continue;
     end;
     // Extract class name (chars before the dot)
@@ -1317,7 +1318,8 @@ var
       end;
 
     begin
-      Result:= False; AField:= ''; ARhs:= '';
+      Result:= False;
+      AField:= ''; ARhs:= '';
       S:= Trim(ALine);
       P:= Pos(':=', S);
       if P = 0 then Exit;
@@ -1378,9 +1380,11 @@ var
         begin
           Launches:= False;
           for N in ANodes do
-            if IsLaunchLine(Lines[LIdx], N.FormClass) then begin Launches:= True; Break; end;
+            if IsLaunchLine(Lines[LIdx], N.FormClass) then begin Launches:= True;
+            Break; end;
           if not Launches then Continue;
-          OC:= ''; Rout:= '';
+          OC:= '';
+          Rout:= '';
           if FindEnclosingImpl(Lines, LIdx + 1, OC, Rout) and (Rout <> '') then
             Launchers.AddOrSetValue(LowerCase(Rout), True);
         end;

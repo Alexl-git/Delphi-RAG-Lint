@@ -200,7 +200,8 @@ begin
       ClearPriorSnapshot(SQLite);
 
       { ---- RDB$RELATIONS -> fb_relations ---- }
-      QSrc:= TFDQuery.Create(nil); QIns:= TFDQuery.Create(nil);
+      QSrc:= TFDQuery.Create(nil);
+      QIns:= TFDQuery.Create(nil);
       try
         QSrc.Connection:= FbConn;
         QSrc.Sql.Text:= 'SELECT TRIM(RDB$RELATION_NAME) AS NAME, ' + '       TRIM(RDB$OWNER_NAME) AS OWNER_NAME, ' + '       COALESCE(RDB$SYSTEM_FLAG, 0) AS SYSTEM_FLAG, ' +
@@ -231,11 +232,13 @@ begin
           QSrc.Next;
         end;
       finally
-        QSrc.Free; QIns.Free;
+        QSrc.Free;
+        QIns.Free;
       end; // try
 
       { ---- RDB$RELATION_FIELDS -> fb_columns ---- }
-      QSrc:= TFDQuery.Create(nil); QIns:= TFDQuery.Create(nil);
+      QSrc:= TFDQuery.Create(nil);
+      QIns:= TFDQuery.Create(nil);
       try
         QSrc.Connection:= FbConn;
         QSrc.Sql.Text:= 'SELECT TRIM(RF.RDB$RELATION_NAME) AS REL, ' + '       TRIM(RF.RDB$FIELD_NAME)    AS NM, ' + '       RF.RDB$FIELD_POSITION       AS POS, ' +
@@ -287,7 +290,8 @@ begin
           QSrc.Next;
         end; // while
       finally
-        QSrc.Free; QIns.Free;
+        QSrc.Free;
+        QIns.Free;
       end; // try
 
       { ---- FIB$FIELDS_INFO -> fb_field_info (optional) ----
@@ -295,7 +299,8 @@ begin
         partial snapshot still commits. }
       if TableExists(FbConn, 'FIB$FIELDS_INFO') then
       try
-        QSrc:= TFDQuery.Create(nil); QIns:= TFDQuery.Create(nil);
+        QSrc:= TFDQuery.Create(nil);
+        QIns:= TFDQuery.Create(nil);
         try
           QSrc.Connection:= FbConn;
           { Project-specific schema -- the actual FIB$FIELDS_INFO in Micronite
@@ -337,7 +342,8 @@ begin
             QSrc.Next;
           end; // while
         finally
-          QSrc.Free; QIns.Free;
+          QSrc.Free;
+          QIns.Free;
         end; // try
       except
         on E: Exception do Writeln(ErrOutput, 'fb-snapshot: FIB$FIELDS_INFO skipped: ', E.Message);
@@ -346,7 +352,8 @@ begin
       { ---- FIB$DATASETS_INFO -> fb_datasets (optional) ---- }
       if TableExists(FbConn, 'FIB$DATASETS_INFO') then
       try
-        QSrc:= TFDQuery.Create(nil); QIns:= TFDQuery.Create(nil);
+        QSrc:= TFDQuery.Create(nil);
+        QIns:= TFDQuery.Create(nil);
         try
           QSrc.Connection:= FbConn;
           QSrc.Sql.Text:= 'SELECT DS_ID, DESCRIPTION, SELECT_SQL, UPDATE_SQL, INSERT_SQL, ' + '       DELETE_SQL, REFRESH_SQL, NAME_GENERATOR, KEY_FIELD, ' +
@@ -392,7 +399,8 @@ begin
             QSrc.Next;
           end; // while
         finally
-          QSrc.Free; QIns.Free;
+          QSrc.Free;
+          QIns.Free;
         end; // try
       except
         on E: Exception do Writeln(ErrOutput, 'fb-snapshot: FIB$DATASETS_INFO skipped: ', E.Message);
@@ -409,7 +417,8 @@ begin
         We map: enum_name <- ENUMTYPE, value_code <- EVALUE, value_label <- ESTRING. }
       if TableExists(FbConn, 'FIB$ENUMVALUES') then
       try
-        QSrc:= TFDQuery.Create(nil); QIns:= TFDQuery.Create(nil);
+        QSrc:= TFDQuery.Create(nil);
+        QIns:= TFDQuery.Create(nil);
         try
           QSrc.Connection:= FbConn;
           QSrc.Sql.Text:= 'SELECT ENUMTYPE, EVALUE, ESTRING FROM FIB$ENUMVALUES';
@@ -432,7 +441,8 @@ begin
             QSrc.Next;
           end;
         finally
-          QSrc.Free; QIns.Free;
+          QSrc.Free;
+          QIns.Free;
         end; // try
       except
         on E: Exception do Writeln(ErrOutput, 'fb-snapshot: FIB$ENUMVALUES skipped: ', E.Message);
