@@ -608,6 +608,7 @@ function MissingGlyphCountReaders(const ARules: TConversionRuleSet;
 implementation
 
 uses
+  System.Math,
   System.StrUtils,
   System.Generics.Collections,
   DRagLint.Convert.GlyphExpr;
@@ -1404,7 +1405,7 @@ var
 
   function ClassesOf(ABlock: Integer): TBlockClasses;
   begin
-    if (ABlock >= 0) and (ABlock <= High(ABlockClasses)) then Result:= ABlockClasses[ABlock]
+    if InRange(ABlock, 0, High(ABlockClasses)) then Result:= ABlockClasses[ABlock]
     else Result:= Default(TBlockClasses);
   end;
 

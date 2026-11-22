@@ -7,6 +7,7 @@ unit DRagLint.Convert.GlyphStrip;
 interface
 
 uses
+  System.Math,
   System.SysUtils;
 
 type
@@ -527,7 +528,7 @@ var
 begin
   AWrapper:= '';
   N:= if Length(APayload) > 0 then APayload[0] else 0;
-  Result:= (N >= 1) and (N <= MaxClassNameLen) and (Length(APayload) >= 1 + N);
+  Result:= InRange(N, 1, MaxClassNameLen) and (Length(APayload) >= 1 + N);
   for var I: Integer:= 1 to N do
     if Result and ((APayload[I] < MinPrintableAscii) or (APayload[I] > MaxPrintableAscii)) then
       Result:= False;

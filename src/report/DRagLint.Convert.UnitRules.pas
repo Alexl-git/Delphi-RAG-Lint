@@ -1447,7 +1447,7 @@ begin
       LS:= FLineStarts[L - 1];
       LE:= LineStop(L);
       { drop a line emptied by the deletions, unless it merges into a neighbour }
-      AllGone:= not IsBlank(Copy(FText, LS, LE - LS)) and not ((AInsAt >= LS) and (AInsAt <= LE));
+      AllGone:= not IsBlank(Copy(FText, LS, LE - LS)) and not InRange(AInsAt, LS, LE);
       for P:= LS to LE - 1 do
         if (FText[P] > ' ') and not Mask[P - RegStart] then AllGone:= False;
       Dropped:= AllGone and ((L = FirstLine) or not Mask[LS - 1 - RegStart]) and

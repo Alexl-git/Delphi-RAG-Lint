@@ -186,6 +186,7 @@ type
 implementation
 
 uses
+  System.Math,
   System.IOUtils, System.StrUtils,
   DRagLint.Doc.Regions, // dl:unit DRagLint.Doc.Regions accepted -- AUTO_BEGIN/AUTO_END/AUTO_MARK are the managed-block fence TDocRegions writes and parses; every reader and writer of a block must share them (B-33 item 1)
   // v(ADP3 T3j review round 1): DOC_ALLOW_GAP + the SHARED attribution
@@ -213,7 +214,7 @@ end;
 // malformed-marker handling already follows.
 function IsBlankSourceLine(ALines: TStrings; ALine1Based: Integer): Boolean;
 begin
-  Result:= (ALine1Based >= 1) and (ALine1Based <= ALines.Count)
+  Result:= InRange(ALine1Based, 1, ALines.Count)
            and (Trim(ALines[ALine1Based - 1]) = '');
 end;
 

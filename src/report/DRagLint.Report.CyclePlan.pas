@@ -1490,7 +1490,7 @@ end;
 
 function LineAt(const pLines: TArray<string>; pLine: Integer): string;
 begin
-  if (pLine >= 1) and (pLine <= Length(pLines)) then Result:= pLines[pLine - 1]
+  if InRange(pLine, 1, Length(pLines)) then Result:= pLines[pLine - 1]
   else Result:= '';
 end;
 
@@ -1618,7 +1618,7 @@ end;
 function InRanges(pLine: Integer; const pRanges: TArray<TLineRange>): Boolean;
 begin
   for var R in pRanges do
-    if (pLine >= R.First) and (pLine <= R.Last) then Exit(True);
+    if InRange(pLine, R.First, R.Last) then Exit(True);
   Result:= False;
 end;
 

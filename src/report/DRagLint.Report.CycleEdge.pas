@@ -1425,7 +1425,7 @@ end;
 
 function TSurfaceBuilder.LineText(pLine: Integer): string;
 begin
-  if (pLine >= 1) and (pLine <= Length(FLines)) then Result:= Trim(FLines[pLine - 1])
+  if InRange(pLine, 1, Length(FLines)) then Result:= Trim(FLines[pLine - 1])
   else Result:= '';
 end;
 
@@ -1845,7 +1845,7 @@ end;
 
 function LineOf(const pLines: TArray<string>; pLine: Integer): string;
 begin
-  if (pLine >= 1) and (pLine <= Length(pLines)) then Result:= pLines[pLine - 1]
+  if InRange(pLine, 1, Length(pLines)) then Result:= pLines[pLine - 1]
   else Result:= '';
 end;
 

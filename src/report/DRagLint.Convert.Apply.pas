@@ -1996,6 +1996,7 @@ function MigrateRuleRefusal(const ARule: TConversionRule): string;
 implementation
 
 uses
+  System.Math,
   DRagLint.Core.FileTime,
   System.StrUtils,
   System.Generics.Defaults,
@@ -6655,7 +6656,7 @@ begin
     It.Path    := VC.FromPath;
     It.RuleLine:= VC.RuleLine;
     It.Line    := ABlockLine;
-    if (ABlockLine >= 1) and (ABlockLine <= Length(ADfmLines)) then
+    if InRange(ABlockLine, 1, Length(ADfmLines)) then
     begin
       var Indent: string:= LeadingIndent(ADfmLines[ABlockLine - 1]);
       for var I: Integer:= ABlockLine to High(ADfmLines) do
