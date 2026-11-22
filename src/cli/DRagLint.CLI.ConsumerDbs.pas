@@ -134,9 +134,6 @@ var
   IncNorm   : string               ;
   DprojFile : string               ;
   DprojFiles: TArray<string>       ;
-  Xml       : string               ;
-  P1        : Integer              ;
-  P2        : Integer              ;
 begin
   Result:= '';
   CwdNorm:= IncludeTrailingPathDelimiter( TPath.GetFullPath(ACwd)).ToLower;

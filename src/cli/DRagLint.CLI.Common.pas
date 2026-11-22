@@ -1329,7 +1329,7 @@ var
 begin
   ScanType:= '';
   if AStore <> nil then ScanType:= AStore.GetMetaValue(SCAN_TYPE_KEY);
-  Suffix:= IfThen(AResolveOnly, ' --resolve-only', '');
+  Suffix:= if AResolveOnly then ' --resolve-only' else '';
   Result:= if SameText(ScanType, SCAN_TYPE_PROJECT) then Format('index --project <file.dproj> --db "%s"%s', [ADbPath, Suffix]) else Format('index <dir> --db "%s"%s', [ADbPath, Suffix]);
 end;
 

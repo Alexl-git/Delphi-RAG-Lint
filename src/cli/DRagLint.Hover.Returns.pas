@@ -1031,7 +1031,6 @@ end;
 function MineReturnExpressionsEx(const ABodyLines: TArray<string>;
   const AQualifiedName: string): TArray<TReturnMined>;
 var
-  Masked : TArray<string>               ;
   Code   : TArray<string>               ;
   NoCom  : TArray<string>               ;
   Seen   : TDictionary<string, Boolean> ;
@@ -1041,7 +1040,7 @@ var
   i      : Integer                      ;
 begin
   Result:= nil;
-  Masked:= MaskNestedRoutines(ABodyLines, AQualifiedName, Code, NoCom);
+  MaskNestedRoutines(ABodyLines, AQualifiedName, Code, NoCom);  // its result (the raw masked body) is not needed here: mining reads Code / NoCom
   // Absence over wrong: a mutated Result makes every whole-Result assignment
   // below a seed, and naming a seed claims a value the routine may never return.
   // Asked of the CODE-ONLY view -- suppression is destructive, so a mutation

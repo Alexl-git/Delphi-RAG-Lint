@@ -136,6 +136,7 @@ var
   S   : TSymbol        ;
 begin
   Result:= False;
+  AHit:= Default(TSymbol);
   if (AStore = nil) or (Trim(AEntry) = '') then Exit;
 
   Hits:= AStore.FindSymbolsByQualifiedName(AEntry);

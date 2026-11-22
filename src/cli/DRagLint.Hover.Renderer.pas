@@ -966,8 +966,7 @@ begin
   for i:= 0 to Cap - 1 do
   begin
     Result.Returns[i].Expr:= AReturnRhs[i];
-    if i <= High(AReturnLines) then Result.Returns[i].Line:= AReturnLines[i]
-    else Result.Returns[i].Line:= 0;
+    Result.Returns[i].Line:= if i <= High(AReturnLines) then AReturnLines[i] else 0;
   end;
 end;
 

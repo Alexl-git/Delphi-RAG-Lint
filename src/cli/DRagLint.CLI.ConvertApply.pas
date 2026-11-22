@@ -140,7 +140,7 @@ var
   begin
     if AType = '' then Exit;
     var Scoped: TScopedClass:= ATrees.ScopedClass(AType);
-    var Text  : string:= if (AConv.LineNo >= 1) and (AConv.LineNo <= Length(ARuleLines)) then ARuleLines[AConv.LineNo - 1]
+    var Text  : string:= if InRange(AConv.LineNo, 1, Length(ARuleLines)) then ARuleLines[AConv.LineNo - 1]
                          else Format('#convert %s -> %s', [AConv.FromType, AConv.ToType]);
     if (Scoped.Resolution = PAS_RES_AMBIGUOUS) or (Scoped.Inferred <> '') then
       AFixes.Add(MakeQualifyFix(Text, AConv.LineNo, AType, ASide, Scoped));

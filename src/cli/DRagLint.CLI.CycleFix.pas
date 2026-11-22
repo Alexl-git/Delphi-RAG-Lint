@@ -1935,12 +1935,9 @@ end;
 // Stages the plan in the shadow tree (StageShadow).
 function StageFor(const pOpts: TCycleFixOptions; const pStaged: TCyclePlanView; const pProjectDir, pShadowDir: string): TArray<TRefusal>;
 begin
-  if pOpts.Apply then
-    { WRITE PATH: --apply writes exactly this shadow into the project (WriteAll), so it is staged with
-      pTamperAllowed = False -- the T9 tamper seam is dry-run only and must never reach a write }
-    Result:= StageShadow(pStaged, pProjectDir, pShadowDir, False)
-  else
-    Result:= StageShadow(pStaged, pProjectDir, pShadowDir, TamperAllowed(pOpts));
+  { WRITE PATH: --apply writes exactly this shadow into the project (WriteAll), so it is staged with
+    pTamperAllowed = False -- the T9 tamper seam is dry-run only and must never reach a write }
+  Result:= StageShadow(pStaged, pProjectDir, pShadowDir, if pOpts.Apply then False else TamperAllowed(pOpts));
 end;
 
 // The text lines of one visited group: applied / mechanical / refused.

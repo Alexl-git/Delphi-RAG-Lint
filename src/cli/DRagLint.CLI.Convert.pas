@@ -750,10 +750,7 @@ var
   begin
     Parts:= nil;
     for P in ASets do
-      if P.Value = '' then
-        Parts:= Parts + [P.ToPath]
-      else
-        Parts:= Parts + [P.ToPath + ' = ' + P.Value];
+      Parts:= Parts + [if P.Value = '' then P.ToPath else P.ToPath + ' = ' + P.Value];
     Result:= String.Join(', ', Parts);
   end;
 

@@ -385,7 +385,7 @@ end; // procedure
     Both the pre-count and the emit loop go through it, so they cannot drift. }
   function IsSourceCandidate(const AMeta: TFileMeta): Boolean;
   begin
-    Result:= (AArgs.AllSources or (AMeta.StoreIndex = 0)) and ((RootPattern = '') or (Pos(RootPattern, AMeta.Stem) > 0));
+    Result:= (AArgs.AllSources or (AMeta.StoreIndex = 0)) and ((RootPattern = '') or AMeta.Stem.Contains(RootPattern));
   end;
 
 var
