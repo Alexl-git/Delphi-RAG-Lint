@@ -856,7 +856,7 @@ begin
     // after '<', so only an OPENING tag is counted. LowerCase rather than
     // ContainsText so this unit does not take a System.StrUtils dependency for
     // one comparison.
-    if Pos('<summary', LowerCase(Lines[I])) > 0 then
+    if LowerCase(Lines[I]).Contains('<summary') then
     begin
       Inc(Count);
       LastIx:= I;

@@ -2461,7 +2461,7 @@ begin
   for var R: TConversionRule in ARules.Rules do
     if R.Kind = rkConvert then Froms:= Froms + [BareTypeTail(R.FromType)];
   for var R: TConversionRule in ARules.Rules do
-    if (R.Kind = rkConvert) and (R.ToType <> '') and (Pos('.', R.ToType) = 0) and
+    if (R.Kind = rkConvert) and (R.ToType <> '') and (not R.ToType.Contains('.')) and
        not MatchText(R.ToType, Froms) and not MatchText(R.ToType, FToOnly) then
       FToOnly:= FToOnly + [R.ToType];
   if Length(FToOnly) > 0 then
@@ -4384,7 +4384,7 @@ begin
   Kids:= ResolvedStore.FindAllChildSymbols(ClassSym.Id);
   for K in Kids do
     if (K.Kind = skConstructor) and SameText(K.Name, 'Create') and
-       (Pos('TComponent', K.Signature) > 0) then Exit(True);
+       (K.Signature.Contains('TComponent')) then Exit(True);
 end;
 
 // Checks one class name's freshness across every candidate store, in order --
@@ -5661,7 +5661,7 @@ end;
 //     a value cast's literals are rewritten or checked).
 function LinkPasStatus(const ALink: TConversionRule; const ACastLib: TCastLib): string;
 begin
-  var Dotted  : Boolean:= (Pos('.', ALink.ToPath) > 0) or (Pos('.', ALink.FromPath) > 0);
+  var Dotted  : Boolean:= (ALink.ToPath.Contains('.')) or (ALink.FromPath.Contains('.'));
   var Identity: Boolean:= SameText(ALink.ToPath, ALink.FromPath);
   if ALink.GlyphExpr <> '' then Exit(PAS_USE_CAST_REFUSED);
   if ALink.Cast <> '' then
@@ -6155,8 +6155,8 @@ begin
     { a #link that edits or refuses the member's .pas sites owns them }
     for var L: TConversionRule in AIn.Book.Rules.Rules do
     begin
-      var PlainLink: Boolean:= (L.Kind = rkLink) and (L.FromPath <> '') and (L.ToPath <> '') and (Pos('.', L.FromPath) = 0);
-      var Renames  : Boolean:= (Pos('.', L.ToPath) = 0) and not SameText(L.FromPath, L.ToPath);
+      var PlainLink: Boolean:= (L.Kind = rkLink) and (L.FromPath <> '') and (L.ToPath <> '') and (not L.FromPath.Contains('.'));
+      var Renames  : Boolean:= (not L.ToPath.Contains('.')) and not SameText(L.FromPath, L.ToPath);
       if PlainLink and ((L.Cast <> '') or (L.GlyphExpr <> '') or Renames) then
         Taken.AddOrSetValue(UpperCase(IntToStr(LinkRuleBlock(AIn.Book.Rules, L)) + '|' + L.FromPath), L.LineNo);
     end;
@@ -6901,7 +6901,7 @@ var
 
 begin
   Result:= nil;
-  if (AFileId <= 0) or (ALink.FromPath = '') or (Pos('.', ALink.FromPath) > 0) then Exit;
+  if (AFileId <= 0) or (ALink.FromPath = '') or (ALink.FromPath.Contains('.')) then Exit;
   Seen := TDictionary<Int64, Boolean>.Create;
   Items:= TList<TApplyItem>.Create;
   try
@@ -7869,7 +7869,7 @@ var
         Continue;
       end;
       if SameText(LinkRule.ToPath, LinkRule.FromPath) then Continue; { identity rename -- nothing to rewrite }
-      if (Pos('.', LinkRule.ToPath) > 0) or (Pos('.', LinkRule.FromPath) > 0) then Continue; { nested .dfm path, not a .pas access site }
+      if (LinkRule.ToPath.Contains('.')) or (LinkRule.FromPath.Contains('.')) then Continue; { nested .dfm path, not a .pas access site }
 
       var Sites: TArray<TAccessSite>:= BoundAccessSites(PasStore, PasFileId, ADfmPath, FindMemberAccessSites(PasStore, PasFileId, PasLines,
         LinkRule.FromPath, LinkScopeNames(ABook.Rules, ConvertedInstNames, InstFromType, LinkRule)), Unv);

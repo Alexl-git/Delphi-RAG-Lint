@@ -295,12 +295,12 @@ var
   N: string;
 begin
   N:= LowerCase(AUnitName);
-  if (Pos('cx', N) = 1) or (Pos('dx', N) = 1) then Result:= dgDevExpress
-  else if Pos('spring.', N) = 1 then Result:= dgSpring4D
-  else if Pos('firedac.', N) = 1 then Result:= dgFireDAC
-  else if (Pos('system.', N) = 1) or (Pos('winapi.', N) = 1) or (Pos('vcl.', N) = 1) or
-          (Pos('fmx.', N) = 1) or (Pos('data.', N) = 1) or (Pos('soap.', N) = 1) or
-          (Pos('xml.', N) = 1) or (Pos('web.', N) = 1) then Result:= dgRTL
+  if (N.StartsWith('cx')) or (N.StartsWith('dx')) then Result:= dgDevExpress
+  else if N.StartsWith('spring.') then Result:= dgSpring4D
+  else if N.StartsWith('firedac.') then Result:= dgFireDAC
+  else if (N.StartsWith('system.')) or (N.StartsWith('winapi.')) or (N.StartsWith('vcl.')) or
+          (N.StartsWith('fmx.')) or (N.StartsWith('data.')) or (N.StartsWith('soap.')) or
+          (N.StartsWith('xml.')) or (N.StartsWith('web.')) then Result:= dgRTL
   else Result:= dgUnknown; { caller downgrades to dgOther when AResolved }
 end;
 

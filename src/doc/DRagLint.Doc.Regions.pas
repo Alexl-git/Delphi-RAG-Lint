@@ -2115,7 +2115,7 @@ begin
   // behaving exactly as they did before.
   for I:= 0 to High(S.Spans) do
     if S.Spans[I].IsExample
-       and (Pos(#10, Copy(S.Joined, S.Spans[I].Lo, S.Spans[I].Hi - S.Spans[I].Lo + 1)) > 0) then
+       and (Copy(S.Joined, S.Spans[I].Lo, S.Spans[I].Hi - S.Spans[I].Lo + 1).Contains(#10)) then
     begin
       var Nested: Boolean:= False;
       for J:= 0 to High(S.Spans) do

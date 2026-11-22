@@ -3878,7 +3878,7 @@ begin
     itself as current. The column is built from the AST and has no such bound.
     The probe is still attempted afterwards even when the column already said
     True, because failing to find a message is not a reason to un-deprecate. }
-  Result:= Pos('deprecated', ASym.Directives) > 0;
+  Result:= ASym.Directives.Contains('deprecated');
   if ASym.StartLine <= 0 then Exit;
   Line:= ReadDeclLine(AStore.GetFilePath(ASym.FileId), ASym.StartLine);
   if Line = '' then Exit;
