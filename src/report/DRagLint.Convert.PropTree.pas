@@ -1997,8 +1997,7 @@ begin
   for Cid in AClassIds do
   begin
     Child := FStore.FindChildSymbolByName(Cid, APropName);
-    if (Child.Id > 0) and (Child.Kind = skProperty) and (ParseTypeToken(Child.Signature) = '') then
-      if FStore.MemoizePropertyType(Child.Id, ATypeTok) then Inc(Result);
+    if ((Child.Id > 0) and (Child.Kind = skProperty) and (ParseTypeToken(Child.Signature) = '')) and (FStore.MemoizePropertyType(Child.Id, ATypeTok)) then Inc(Result);
   end;
 end;
 

@@ -886,8 +886,7 @@ procedure WalkFieldRW(const N: TTSNode; const ASrc: TBytes; AFields: TDictionary
     Key:= LowerCase(Raw);
     if (AVars <> nil) and (AVars.IndexOf(Key) >= 0) then Exit; // shadowed by a local/param/Result
     Result:= AFields.TryGetValue(Key, ADisplay);
-    if (not Result) and (AUnres <> nil) and (Raw <> '') then
-      if not ContainsTextCI(AUnres, Raw) then AUnres.Add(Raw);
+    if ((not Result) and (AUnres <> nil) and (Raw <> '')) and (not ContainsTextCI(AUnres, Raw)) then AUnres.Add(Raw);
   end;
 
   procedure MarkRead(const AIdent: TTSNode);
@@ -1608,8 +1607,7 @@ begin
     Args:= N.ChildByField('args');
     // The bare intrinsics, and ONLY with an argument list -- see the const
     // block for why the argument requirement is what keeps `Reset;` out.
-    if (not Args.IsNull) and (Args.NamedChildCount > 0) then
-      if MatchText(IdentText(Ent), TOUCH_BARE_FILE) then AFlags.FileSys:= True;
+    if ((not Args.IsNull) and (Args.NamedChildCount > 0)) and (MatchText(IdentText(Ent), TOUCH_BARE_FILE)) then AFlags.FileSys:= True;
     WalkTouches(Ent, ASrc, AFlags);
     if not Args.IsNull then
       for I:= 0 to Args.NamedChildCount - 1 do
@@ -3334,10 +3332,7 @@ begin
     // additionally require the FUNCTION'S OWN return type to be a reference
     // type -- else a value-returning function (e.g. Count: Integer above)
     // would wrongly render 'borrowed'/'self' for a plain value type.
-    if (Verdict = 'borrowed') or (Verdict = 'self') then
-      // 152b O7: only a CERTAIN value type is dropped here; the rest is gated at
-      // read time (Doc.Facts) against the complete store -- see IsDefiniteValueTypeName.
-      if IsDefiniteValueTypeName(AStore, RetTypeName, ASym.FileId) then Exit;
+    if ((Verdict = 'borrowed') or (Verdict = 'self')) and (IsDefiniteValueTypeName(AStore, RetTypeName, ASym.FileId)) then Exit;
 
     Result:= Verdict;
   finally

@@ -3833,9 +3833,7 @@ begin
   M:= TRegEx.Match(Line, '\bdeprecated\b\s*(?:''(.*?)'')?\s*;', [roIgnoreCase]);
   if not M.Success then Exit; { v22: leaves Result as the column decided it }
   Result:= True;
-  if M.Groups.Count > 1 then
-    if M.Groups[1].Success then
-      AMsg:= StringReplace(M.Groups[1].Value, '''''', '''', [rfReplaceAll]);
+  if (M.Groups.Count > 1) and (M.Groups[1].Success) then AMsg:= StringReplace(M.Groups[1].Value, '''''', '''', [rfReplaceAll]);
 end;
 
 // v(ADP1 T3): detects the virtual / abstract / override / dynamic DIRECTIVES on

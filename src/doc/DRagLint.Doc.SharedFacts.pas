@@ -2209,8 +2209,7 @@ begin
 
   Names:= ClosureNames(AStore);
   for I:= 1 to Length(S) do
-    if S[I] = '.' then
-      if Names.ContainsKey(Copy(S, 1, I - 1)) then Exit(True);
+    if (S[I] = '.') and (Names.ContainsKey(Copy(S, 1, I - 1))) then Exit(True);
 
   Result:= False;
 end;

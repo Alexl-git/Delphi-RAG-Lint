@@ -5430,8 +5430,7 @@ begin
   { name the include entry the plan would remove when there is one, else the first }
   var IncIdx: Integer:= -1;
   for var I:= 0 to High(Entries) do
-    if Entries[I].FromInclude and ((IncIdx < 0) or Dels.Contains(LowerCase(Entries[I].UnitName))) then
-      if (IncIdx < 0) or not Dels.Contains(LowerCase(Entries[IncIdx].UnitName)) then IncIdx:= I;
+    if (Entries[I].FromInclude and ((IncIdx < 0) or Dels.Contains(LowerCase(Entries[I].UnitName)))) and ((IncIdx < 0) or not Dels.Contains(LowerCase(Entries[IncIdx].UnitName))) then IncIdx:= I;
   if IncIdx >= 0 then
   begin
     E.Kind   := ekManual;
@@ -8884,8 +8883,7 @@ var
           StrongConnect(W);
           if Lowlink[W] < Lowlink[AV] then Lowlink[AV]:= Lowlink[W];
         end
-        else if OnStack.ContainsKey(W) and OnStack[W] then
-          if Index[W] < Lowlink[AV] then Lowlink[AV]:= Index[W];
+        else if (OnStack.ContainsKey(W) and OnStack[W]) and (Index[W] < Lowlink[AV]) then Lowlink[AV]:= Index[W];
       end;
     if Lowlink[AV] = Index[AV] then
     begin
