@@ -710,6 +710,8 @@ $RunOneText = @'
     try { $proc.Kill($true) } catch { }
   }
   $rsw.Stop()
+  # 1.52.3 TESTS-ENV (c): drop the runner's drag-lint-*-<pid> work dir (3.4 GB library copy) even after a timeout kill.
+  . (Join-Path $RepoRoot 'tests\autotest\lib\WorkDirCleanup.ps1'); $null = Remove-RunnerTempDirs $proc.Id
   [pscustomobject]@{
     Runner = $Rel; State = $state; ExitCode = $code
     Seconds = [math]::Round($rsw.Elapsed.TotalSeconds, 1); Log = $logFile; Budget = $TimeoutSec
@@ -871,6 +873,8 @@ foreach ($r in $kept) {
     try { $proc.Kill($true) } catch { }
   }
   $rsw.Stop()
+  # 1.52.3 TESTS-ENV (c): same sweep as RunOne.
+  . (Join-Path $repoRoot 'tests\autotest\lib\WorkDirCleanup.ps1'); $null = Remove-RunnerTempDirs $proc.Id
 
   $colour = @{ PASS = 'Green'; SKIP = 'Yellow'; FAIL = 'Red'; TIMEOUT = 'Magenta' }[$state]
   Write-Host ("{0} ({1:N1}s)" -f $state, $rsw.Elapsed.TotalSeconds) -ForegroundColor $colour

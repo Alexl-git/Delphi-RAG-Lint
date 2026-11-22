@@ -20,7 +20,29 @@ function Get-HermeticEngine {
   $root = Join-Path ([IO.Path]::GetTempPath()) 'drag-lint-hermetic'
   $dest = Join-Path $root $key
   $out  = Join-Path $dest 'drag-lint.exe'
-  if (Test-Path -LiteralPath $out) { return $out }
+  # 1.52.3 TESTS-ENV: an entry can be INCOMPLETE (a parallel H01 eviction that hit locked files
+  # leaves a half-deleted dir whose exe survives): the cached exe then dies 0xC0000135 and the
+  # runners only print "index failed". Heal: copy back every companion the source dir has and the
+  # entry lacks (exe/dll/castlib by name, every rules\ file by relative path); a copy that fails is skipped, never thrown.
+  if (Test-Path -LiteralPath $out) {
+    $want = @(Get-ChildItem -LiteralPath $dir -File | Where-Object { $_.Name -match '\.(exe|dll|castlib)$' -and $_.Name -notmatch '\.bak' })
+    foreach ($w in $want) {
+      if (-not (Test-Path -LiteralPath (Join-Path $dest $w.Name))) {
+        try { Copy-Item -LiteralPath $w.FullName -Destination $dest -ErrorAction Stop } catch { $null = $_ }
+      }
+    }
+    $rsrc = Join-Path $dir 'rules'
+    if (Test-Path -LiteralPath $rsrc) {
+      foreach ($rf2 in @(Get-ChildItem -LiteralPath $rsrc -File -Recurse)) {
+        $rel = $rf2.FullName.Substring($rsrc.Length).TrimStart('\')
+        $dst = Join-Path (Join-Path $dest 'rules') $rel
+        if (-not (Test-Path -LiteralPath $dst)) {
+          try { [IO.Directory]::CreateDirectory((Split-Path -Parent $dst)) | Out-Null; Copy-Item -LiteralPath $rf2.FullName -Destination $dst -ErrorAction Stop } catch { $null = $_ }
+        }
+      }
+    }
+    return $out
+  }
   [IO.Directory]::CreateDirectory($root) | Out-Null
   $tmp = Join-Path $root ('tmp-' + [guid]::NewGuid().ToString('N'))
   [IO.Directory]::CreateDirectory($tmp) | Out-Null
