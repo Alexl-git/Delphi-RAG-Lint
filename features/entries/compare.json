@@ -2,7 +2,7 @@
   "id": "compare",
   "title": "Compare a report with current code",
   "group": "diagrams-charts",
-  "owner": "CHARTS",
+  "owner": "ENGINE",
   "status": "shipped",
   "since": "1.28.0-alpha",
   "summary": "Reruns a saved or pasted report and shows before / delta / after",

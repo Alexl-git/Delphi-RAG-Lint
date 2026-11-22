@@ -2,7 +2,7 @@
   "id": "setup-installer",
   "title": "Setup installer",
   "group": "editor-integration",
-  "owner": "CHARTS",
+  "owner": "ENGINE",
   "status": "experimental",
   "since": "1.28.3-alpha",
   "summary": "One Inno Setup installer for the engine, Graphviz dot, the IDE plugin, ConvRulesEditor, drag-lint-graph and YADF",

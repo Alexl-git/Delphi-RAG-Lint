@@ -2,7 +2,7 @@
   "id": "ask",
   "title": "ask",
   "group": "diagrams-charts",
-  "owner": "CHARTS",
+  "owner": "ENGINE",
   "status": "shipped",
   "since": "1.30.0-alpha",
   "summary": "Ask one report question and print the answer as text",

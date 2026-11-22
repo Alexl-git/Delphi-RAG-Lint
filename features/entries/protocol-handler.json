@@ -2,7 +2,7 @@
   "id": "protocol-handler",
   "title": "Click-to-source: the draglint:// handler",
   "group": "diagrams-charts",
-  "owner": "CHARTS",
+  "owner": "ENGINE",
   "status": "shipped",
   "since": "1.31.0-alpha",
   "summary": "Registers draglint:// so a chart row opens its line in RAD Studio; a GUI helper exe, no PowerShell",

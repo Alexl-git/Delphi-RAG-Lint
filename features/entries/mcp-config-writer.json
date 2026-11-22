@@ -2,7 +2,7 @@
   "id": "mcp-config-writer",
   "title": "Register the MCP server (Claude Code, VS Code, Cursor)",
   "group": "editor-integration",
-  "owner": "CHARTS",
+  "owner": "ENGINE",
   "status": "shipped",
   "since": "1.26.1-alpha",
   "summary": "Adds drag-lint serve to Claude Code, VS Code and Cursor MCP config: merged, backed up, idempotent, removable",

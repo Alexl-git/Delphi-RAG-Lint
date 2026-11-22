@@ -2,7 +2,7 @@
   "id": "charts-and-the-ide",
   "title": "Charts and the IDE",
   "group": "diagrams-charts",
-  "owner": "CHARTS",
+  "owner": "ENGINE",
   "status": "shipped",
   "since": "1.20.1-alpha",
   "summary": "Ask a chart question, open the answer, read a round-trip trace, jump to RAD Studio",

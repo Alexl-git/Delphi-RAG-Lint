@@ -19,7 +19,7 @@ function WriteVerbHelp(const pVerb: string): Boolean;
 
 implementation
 
-procedure WriteVerbReference;  // dl:ok method-too-long@e38a -- REVIEWED 2026-11-22 SLZ-S02: method-too-long measured 605 lines (max 250), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
+procedure WriteVerbReference;
 begin
   Writeln('  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...] [--wait-library <min>] [--require-library] [--stall-exit-min <min>] [--target-compiler <ver|auto>]');
   Writeln('                               --library-db (v21, repeatable): consult another index for calls THIS one cannot resolve.');
@@ -640,7 +640,7 @@ begin
   Writeln('');
 end;
 
-function WriteVerbHelp(const pVerb: string): Boolean;  // dl:ok cognitive-complexity@517a, cyclomatic-complexity@f53a, method-too-long@6839, too-many-exit-points@b829 -- REVIEWED 2026-11-22 SLZ-S02: cognitive-complexity measured 103 (max 65), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); cyclomatic-complexity measured cyclomatic complexity 104 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); method-too-long measured 908 lines (max 250), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); too-many-exit-points measured 103 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
+function WriteVerbHelp(const pVerb: string): Boolean;
 begin
   Result := True;
   if pVerb = 'index' then
