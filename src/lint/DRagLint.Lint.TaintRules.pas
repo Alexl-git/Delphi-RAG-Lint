@@ -415,13 +415,24 @@ type
     Weak   : Boolean;
     Fields : Integer;
     Path   : TArray<TLintLocation>;
+    { SLZ-TAINTFP 1.52.3: the value sits only in these fields (comma list) of a var / out
+      parameter its callee wrote field by field; '' = the whole value. TagAt = index in Path
+      of the 'out param' hop where that was learned, TagFields = Fields at that hop. }
+    Tag      : string ;
+    TagAt    : Integer;
+    TagFields: Integer;
   end;
 
   { What a value expression inside one routine derives from: source hits, plus the
-    routine's own parameters (mapped to call-site arguments by the caller). }
+    routine's own parameters (mapped to call-site arguments by the caller). PTags is
+    aligned with Params: the fields of an out parameter that parameter reaches ('' = whole). }
   TSummary = record
     Hits  : TArray<THit>;
     Params: TArray<Integer>;
+    PTags : TArray<string>;
+    { aligned with Params: True when the parameter reaches the value through a call's result
+      or out parameter -- a body no path hop shows, so a field tag cannot be pruned past it }
+    PVia  : TArray<Boolean>;
   end;
 
   { One sink site and rule (file, line, col, rule): the hits of every argument row at that
@@ -487,7 +498,18 @@ type
     FRound       : Integer;
     FChanged     : Boolean;
     FCapHit      : Boolean;
+    FLocSyms     : TDictionary<string, TArray<TSymbol>>; { SLZ-TAINTFP: project routines named by path hops }
+    FMentions    : TDictionary<string, Boolean>;         { SLZ-TAINTFP: routine body names a field, by routine + tag }
+    FTagIds      : TDictionary<string, TArray<Int64>>;   { SLZ-TAINTFP: tagged field name (lower) -> its field symbols; -1 = unknown }
+    FTagIdsVer   : Integer;
+    procedure NoteTagId(const AName: string; AId: Int64);
     function  Sym(AStore: Integer; AId: Int64): TSymbol;
+    function  LinesOf(AStore: Integer; AFileId: Int64): TArray<string>;
+    function  BodyMentions(AStore: Integer; const S: TSymbol; const ANames: string): Boolean;
+    function  FieldTagOf(AStore: Integer; const T: TSymbol; const ARow: TDataFlowRow): string;
+    function  FieldPruned(const H: THit; const ASink: TSymbol): Boolean;
+    procedure AddParamTag(var AAcc: TSummary; AIdx: Integer; const ATag: string; AVia: Boolean = False);
+    function  Tagged(const ASum: TSummary; const ATag: string): TSummary;
     function  PathOf(AStore: Integer; AFileId: Int64): string;
     function  CallArgText(AStore: Integer; AFileId: Int64; ALine, ACol: Integer): string;
     function  ShortName(AStore: Integer; const ASym: TSymbol): string;
@@ -934,6 +956,9 @@ begin
   FF1Types     := TDictionary<Int64, string>.Create;
   FLibCands    := TDictionary<string, TArray<TSymbol>>.Create;
   FLibParents  := TDictionary<string, TArray<string>>.Create;
+  FLocSyms     := TDictionary<string, TArray<TSymbol>>.Create;
+  FMentions    := TDictionary<string, Boolean>.Create;
+  FTagIds      := TDictionary<string, TArray<Int64>>.Create;
   if FCfg.WeakReceiverRegex <> '' then FWeakRegex:= TRegEx.Create(FCfg.WeakReceiverRegex, [roIgnoreCase]);
 end;
 
@@ -956,6 +981,9 @@ begin
   FF1Types.Free;
   FLibCands.Free;
   FLibParents.Free;
+  FLocSyms.Free;
+  FMentions.Free;
+  FTagIds.Free;
   FF1Query.Free;
   FTypeReader.Free;
   inherited Destroy;
@@ -982,13 +1010,238 @@ begin
   FPaths.Add(K, Result);
 end;
 
+{ The source lines of a file (read once per run); nil when the file is unreadable. }
+function TTaintWalker.LinesOf(AStore: Integer; AFileId: Int64): TArray<string>;
+var
+  K   : string;
+  Path: string;
+begin
+  K:= Format('%d|%d', [AStore, AFileId]);
+  if FLines.TryGetValue(K, Result) then Exit;
+  Result:= nil;
+  Path  := PathOf(AStore, AFileId);
+  if (Path <> '') and TFile.Exists(Path) then Result:= TFile.ReadAllLines(Path);
+  FLines.Add(K, Result);
+end;
+
+{ SLZ-TAINTFP: the receiver of a field write split into its base variable and the field
+  names after it, element indexes dropped: 'pUnits[I]' -> 'pUnits' + '', 'pR.Sub[0]' ->
+  'pR' + 'Sub'. }
+function SplitReceiver(const ARecv: string; out ABase: string): string;
+var
+  S    : string;
+  Prev : string;
+  Parts: TArray<string>;
+  I    : Integer;
+begin
+  { innermost index first, until none is left: 'a[b[0]].c' -> 'a[b].c' -> 'a.c' }
+  S:= ARecv;
+  repeat
+    Prev:= S;
+    S:= TRegEx.Replace(S, '\[[^\[\]]*\]', '');
+  until S = Prev;
+  Parts:= S.Split(['.']);
+  ABase:= if Length(Parts) > 0 then Trim(Parts[0]) else '';
+  Result:= '';
+  for I:= 1 to High(Parts) do
+    if Trim(Parts[I]) <> '' then Result:= Result + IfThen(Result <> '', ',') + Trim(Parts[I]);
+end;
+
+{ SLZ-TAINTFP: the union of two comma lists of field names ('' = none), case-insensitive. }
+function TagUnion(const A, B: string): string;
+var
+  N: string;
+begin
+  Result:= A;
+  for N in B.Split([',']) do
+    if (N <> '') and not InStrs(N, Result.Split([','])) then Result:= Result + IfThen(Result <> '', ',') + N;
+end;
+
+{ SLZ-TAINTFP: True when AId is in A. }
+function InInt64s(AId: Int64; const A: TArray<Int64>): Boolean;
+var
+  V: Int64;
+begin
+  Result:= False;
+  for V in A do
+    if V = AId then Exit(True);
+end;
+
+{ SLZ-TAINTFP: S with every parameter marked as reaching the value through a call (a
+  catalogued propagator bound to a PROJECT routine: its body is no path hop either; a
+  library propagator cannot name a project record's field). }
+function ViaCall(const S: TSummary): TSummary;
+var
+  I: Integer;
+begin
+  Result:= S;
+  Result.PVia:= nil;
+  SetLength(Result.PVia, Length(S.Params));
+  for I:= 0 to High(Result.PVia) do Result.PVia[I]:= True;
+end;
+
+{ SLZ-TAINTFP: how many hits and parameters of S are field-tagged (a memo key whose tags
+  change between rounds has changed). }
+function TagCount(const S: TSummary): Integer;
+var
+  H: THit;
+  T: string;
+  V: Boolean;
+begin
+  Result:= 0;
+  for H in S.Hits do
+    if H.Tag <> '' then Inc(Result);
+  for T in S.PTags do
+    if T <> '' then Inc(Result);
+  for V in S.PVia do
+    if V then Inc(Result);
+end;
+
+{ SLZ-TAINTFP: records that a tagged field named AName is symbol AId (-1 = not bound). }
+procedure TTaintWalker.NoteTagId(const AName: string; AId: Int64);
+var
+  Ids: TArray<Int64>;
+begin
+  if not FTagIds.TryGetValue(LowerCase(AName), Ids) then Ids:= nil;
+  if InInt64s(AId, Ids) then Exit;
+  FTagIds.AddOrSetValue(LowerCase(AName), Ids + [AId]);
+  Inc(FTagIdsVer);
+end;
+
+{ SLZ-TAINTFP: True when the implementation of S names one of ANames (comma list) as a
+  whole word anywhere -- code or comment, read or write. Unknown body text answers True:
+  only a proven absence lets a field-tagged hit go. }
+function TTaintWalker.BodyMentions(AStore: Integer; const S: TSymbol; const ANames: string): Boolean;
+var
+  K    : string;
+  Lines: TArray<string>;
+  Names: TArray<string>;
+  Rx   : TRegEx;
+  I    : Integer;
+begin
+  K:= Format('%d|%d|%s|%d', [AStore, S.Id, ANames, FTagIdsVer]);
+  if FMentions.TryGetValue(K, Result) then Exit;
+  Lines:= LinesOf(AStore, S.FileId);
+  Result:= True;
+  if (S.ImplStartLine > 0) and (S.ImplEndLine >= S.ImplStartLine) and (S.ImplEndLine <= Length(Lines)) then
+  begin
+    Names:= ANames.Split([',']);
+    for I:= 0 to High(Names) do Names[I]:= TRegEx.Escape(Names[I]);
+    Rx:= TRegEx.Create('\b(' + string.Join('|', Names) + ')\b', [roIgnoreCase]);
+    Result:= False;
+    for I:= S.ImplStartLine - 1 to S.ImplEndLine - 1 do
+    begin
+      for var M in Rx.Matches(Lines[I]) do
+      begin
+        { a mention bound to a field symbol that is NOT one of the tagged ones (another
+          record's Error) does not count; unbound or unknown counts }
+        var Ids: TArray<Int64>;
+        if (not FTagIds.TryGetValue(LowerCase(M.Value), Ids)) or (Ids = nil) or InInt64s(-1, Ids) then Result:= True
+        else
+        begin
+          var R:= Resolve(AStore, S, S.FileId, I + 1, M.Index, M.Value);
+          Result:= (not R.Found) or (R.Sym.Id <= 0) or InInt64s(R.Sym.Id, Ids);
+        end;
+        if Result then Break;
+      end;
+      if Result then Break;
+    end;
+  end;
+  FMentions.AddOrSetValue(K, Result);
+end;
+
+{ SLZ-TAINTFP: the fields of out parameter ARow.DstName that the sources of the 'outparam'
+  row ARow are written into inside T, when T writes that parameter ONLY field by field
+  ('pUnits[I].Error := Line'); '' (the whole value) otherwise: a library routine, a source
+  not matched by a field write, or a body that assigns the parameter or one of its elements
+  whole ('pUnits := ...', 'pUnits[I] := ...'). }
+function TTaintWalker.FieldTagOf(AStore: Integer; const T: TSymbol; const ARow: TDataFlowRow): string;
+var
+  Lines: TArray<string>;
+  Rx   : TRegEx;
+  W    : TDataFlowRow;
+  Base : string;
+  Flds : string;
+  I    : Integer;
+begin
+  Result:= '';
+  if (AStore <> STORE_PROJECT) or (ARow.DstName = '') or (T.ImplStartLine <= 0) then Exit;
+  Lines:= LinesOf(AStore, T.FileId);
+  if (T.ImplEndLine < T.ImplStartLine) or (T.ImplEndLine > Length(Lines)) then Exit;
+  Rx:= TRegEx.Create('\b' + TRegEx.Escape(ARow.DstName) + '\s*(\[[^\]]*\]\s*)*:=', [roIgnoreCase]);
+  for I:= T.ImplStartLine - 1 to T.ImplEndLine - 1 do
+    if Rx.IsMatch(Lines[I]) then Exit;
+  for W in RowsOf(AStore, T.Id, DF_DST_WRITE) do
+    if (W.SrcKind = ARow.SrcKind) and (W.SrcIndex = ARow.SrcIndex) and (W.SrcLine = ARow.SrcLine)
+       and (W.SrcCol = ARow.SrcCol) and SameText(W.SrcName, ARow.SrcName) then
+    begin
+      Flds:= SplitReceiver(W.DstReceiver, Base);
+      if SameText(Base, ARow.DstName) then
+      begin
+        Result:= TagUnion(Result, TagUnion(Flds, W.DstName));
+        for var N in Flds.Split([',']) do
+          if N <> '' then NoteTagId(N, -1);
+        var R:= Resolve(AStore, T, W.FileId, W.DstLine, W.DstCol, W.DstName);
+        NoteTagId(W.DstName, if R.Found and (R.Sym.Id > 0) then R.Sym.Id else -1);
+      end;
+    end;
+end;
+
+{ SLZ-TAINTFP: ASum with every hit and parameter narrowed to fields ATag of an out
+  parameter ('' leaves it as it is). A hit already narrowed deeper keeps its first TagAt
+  and gains the names: either set may be what a later reader has to name. }
+function TTaintWalker.Tagged(const ASum: TSummary; const ATag: string): TSummary;
+var
+  I: Integer;
+begin
+  Result:= ASum;
+  if ATag = '' then Exit;
+  Result.Hits:= Copy(ASum.Hits);
+  for I:= 0 to High(Result.Hits) do
+  begin
+    if Result.Hits[I].Tag = '' then
+    begin
+      Result.Hits[I].TagAt    := Length(Result.Hits[I].Path);
+      Result.Hits[I].TagFields:= Result.Hits[I].Fields;
+    end;
+    Result.Hits[I].Tag:= TagUnion(Result.Hits[I].Tag, ATag);
+  end;
+  Result.PTags:= Copy(ASum.PTags);
+  SetLength(Result.PTags, Length(Result.Params));
+  for I:= 0 to High(Result.PTags) do Result.PTags[I]:= TagUnion(Result.PTags[I], ATag);
+  Result.PVia:= Copy(ASum.PVia);
+  SetLength(Result.PVia, Length(Result.Params));
+end;
+
+{ SLZ-TAINTFP: a hit that reached the sink only inside fields Tag of a record its callee
+  wrote field by field, when nothing after that point can have taken those fields out:
+  every later hop passes an argument (no 'through' / 'out param' hop, no field or global
+  hop), and neither the routine of any hop from the tag on nor the sink routine names one
+  of the fields. Not provable = not pruned. }
+function TTaintWalker.FieldPruned(const H: THit; const ASink: TSymbol): Boolean;
+var
+  K   : Integer;
+  Syms: TArray<TSymbol>;
+  S   : TSymbol;
+begin
+  Result:= False;
+  if (H.Tag = '') or (H.Fields <> H.TagFields) or (H.TagAt < 0) or (H.TagAt > High(H.Path)) then Exit;
+  for K:= H.TagAt + 1 to High(H.Path) do
+    if StartsText('through ', H.Path[K].Note) or StartsText('out param ', H.Path[K].Note) then Exit;
+  for K:= H.TagAt to High(H.Path) do
+  begin
+    if not FLocSyms.TryGetValue(H.Path[K].Routine + '|' + H.Path[K].FilePath, Syms) then Exit;
+    for S in Syms do
+      if BodyMentions(STORE_PROJECT, S, H.Tag) then Exit;
+  end;
+  Result:= not BodyMentions(STORE_PROJECT, ASink, H.Tag);
+end;
+
 { The argument list of the call whose name starts at (ALine, ACol), as written and
   trimmed; '' when the file is unreadable or the list does not close on that line. }
 function TTaintWalker.CallArgText(AStore: Integer; AFileId: Int64; ALine, ACol: Integer): string;
 var
-  K    : string;
   Lines: TArray<string>;
-  Path : string;
   S    : string;
   P    : Integer;
   Start: Integer;
@@ -996,14 +1249,7 @@ var
   InStr: Boolean;
 begin
   Result:= '';
-  K:= Format('%d|%d', [AStore, AFileId]);
-  if not FLines.TryGetValue(K, Lines) then
-  begin
-    Lines:= nil;
-    Path := PathOf(AStore, AFileId);
-    if (Path <> '') and TFile.Exists(Path) then Lines:= TFile.ReadAllLines(Path);
-    FLines.Add(K, Lines);
-  end;
+  Lines:= LinesOf(AStore, AFileId);
   if (ALine < 1) or (ALine > Length(Lines)) or (ACol < 1) then Exit;
   S:= Lines[ALine - 1];
   P:= ACol;
@@ -1383,6 +1629,15 @@ begin
   Result.Col     := ACol;
   Result.Routine := X.QualifiedName;
   Result.Note    := ANote;
+  if (AStore = STORE_PROJECT) and (X.Id > 0) then
+  begin
+    var Key:= X.QualifiedName + '|' + Result.FilePath;
+    var Syms: TArray<TSymbol>;
+    if not FLocSyms.TryGetValue(Key, Syms) then Syms:= nil;
+    var Known:= False;
+    for var S in Syms do Known:= Known or (S.Id = X.Id);
+    if not Known then FLocSyms.AddOrSetValue(Key, Syms + [X]);
+  end;
 end;
 
 function TTaintWalker.SourceHit(AStore: Integer; const X: TSymbol; const ARow: TDataFlowRow;
@@ -1403,10 +1658,24 @@ begin
   for I:= 0 to High(AAcc.Hits) do
     if AAcc.Hits[I].Key = AHit.Key then
     begin
+      { SLZ-TAINTFP: a whole-value witness always beats a field-tagged one (the tagged one
+        may be pruned at the sink; the whole one never is) }
+      if (AAcc.Hits[I].Tag = '') <> (AHit.Tag = '') then
+      begin
+        if AAcc.Hits[I].Tag <> '' then AAcc.Hits[I]:= AHit;
+        Exit;
+      end;
+      var Old:= AAcc.Hits[I];
       { keep the better witness: certain over weak, then the shorter path }
       if (AAcc.Hits[I].Weak and not AHit.Weak)
          or ((AAcc.Hits[I].Weak = AHit.Weak) and (Length(AHit.Path) < Length(AAcc.Hits[I].Path))) then
         AAcc.Hits[I]:= AHit;
+      { two different tagged witnesses: the dropped one could survive the prune where the
+        kept one does not, so the kept one is no longer prunable }
+      var SameShape:= (Old.Tag = AHit.Tag) and (Old.TagAt = AHit.TagAt) and (Length(Old.Path) = Length(AHit.Path));
+      var SameEnd  := SameShape and ((Length(Old.Path) = 0) or (Old.Path[High(Old.Path)].Routine = AHit.Path[High(AHit.Path)].Routine));
+      if (Old.Tag <> '') and not SameEnd then
+        AAcc.Hits[I].Tag:= '';
       Exit;
     end;
   if Length(AAcc.Hits) >= HIT_CAP then
@@ -1419,17 +1688,40 @@ end;
 
 procedure TTaintWalker.AddParam(var AAcc: TSummary; AIdx: Integer);
 begin
-  if (AIdx >= 0) and not InInts(AIdx, AAcc.Params) then AAcc.Params:= AAcc.Params + [AIdx];
+  AddParamTag(AAcc, AIdx, '');
+end;
+
+{ SLZ-TAINTFP: a parameter reaching only fields ATag ('' = the whole value); the whole
+  value wins over any tag, two tags unite. }
+procedure TTaintWalker.AddParamTag(var AAcc: TSummary; AIdx: Integer; const ATag: string; AVia: Boolean);
+var
+  I: Integer;
+begin
+  if AIdx < 0 then Exit;
+  SetLength(AAcc.PTags, Length(AAcc.Params));
+  SetLength(AAcc.PVia, Length(AAcc.Params));
+  for I:= 0 to High(AAcc.Params) do
+    if AAcc.Params[I] = AIdx then
+    begin
+      AAcc.PVia[I]:= AAcc.PVia[I] or AVia;
+      if (AAcc.PTags[I] <> '') then AAcc.PTags[I]:= if ATag = '' then '' else TagUnion(AAcc.PTags[I], ATag);
+      Exit;
+    end;
+  AAcc.Params:= AAcc.Params + [AIdx];
+  AAcc.PTags := AAcc.PTags + [ATag];
+  AAcc.PVia  := AAcc.PVia + [AVia];
 end;
 
 procedure TTaintWalker.Merge(var AAcc: TSummary; const AAdd: TSummary; AWithParams: Boolean);
 var
   H: THit;
-  P: Integer;
+  I: Integer;
 begin
   for H in AAdd.Hits do AddHit(AAcc, H);
   if AWithParams then
-    for P in AAdd.Params do AddParam(AAcc, P);
+    for I:= 0 to High(AAdd.Params) do
+      AddParamTag(AAcc, AAdd.Params[I], if I <= High(AAdd.PTags) then AAdd.PTags[I] else '',
+        (I <= High(AAdd.PVia)) and AAdd.PVia[I]);
 end;
 
 procedure TTaintWalker.MergeHop(var AAcc: TSummary; const AAdd: TSummary; const AHop: TLintLocation;
@@ -1508,7 +1800,8 @@ begin
   E.Round  := FRound;
   if FMemo.TryGetValue(AKey, Old) then
   begin
-    if (Length(Old.Sum.Hits) <> Length(ASum.Hits)) or (Length(Old.Sum.Params) <> Length(ASum.Params)) then
+    if (Length(Old.Sum.Hits) <> Length(ASum.Hits)) or (Length(Old.Sum.Params) <> Length(ASum.Params))
+       or (TagCount(Old.Sum) <> TagCount(ASum)) then
       FChanged:= True;
   end
   else if E.Partial then
@@ -1611,6 +1904,7 @@ begin
     if SameText(Prp.ToSlot, SLOT_RESULT) and NameMatches(Prp.Name, R, ARow.FileId, Weak) then
     begin
       Result:= EvalRows(AStore, X, ArgRowsAt(AStore, X, ARow.FileId, ARow.SrcLine, ARow.SrcCol, Prp.Args));
+      if R.Found and (R.Store = STORE_PROJECT) then Result:= ViaCall(Result);
       if Weak then
         for I:= 0 to High(Result.Hits) do Result.Hits[I].Weak:= True;
       Exit;
@@ -1631,6 +1925,7 @@ var
   T      : TSymbol;
   Sub    : TSummary;
   Arg    : TSummary;
+  I      : Integer;
   P      : Integer;
   Q      : Integer;
   Weak   : Boolean;
@@ -1672,11 +1967,14 @@ begin
       (if ASlot = SLOT_RESULT then 'through ' else Format('out param %d of ', [AOutIdx])) + ShortName(TStore, T));
     MergeHop(Result, Sub, Hop, Weak, 0);
     { a parameter that flows to the slot: the caller's argument, through this callee (a hop) }
-    for P in Sub.Params do
+    for I:= 0 to High(Sub.Params) do
     begin
+      P:= Sub.Params[I];
       Arg:= EvalRows(AStore, X, ArgRowsAt(AStore, X, ARow.FileId, ARow.SrcLine, ARow.SrcCol, [P]));
+      { SLZ-TAINTFP: the argument lands only in fields PTags[I] of the out parameter }
+      if I <= High(Sub.PTags) then Arg:= Tagged(Arg, Sub.PTags[I]);
       MergeHop(Result, Arg, Hop, Weak, 0);
-      for Q in Arg.Params do AddParam(Result, Q);
+      for Q in Arg.Params do AddParamTag(Result, Q, '', True);
     end;
   end;
 end;
@@ -1694,7 +1992,10 @@ begin
     Rows:= nil;
     for Row in RowsOf(AStore, T.Id, ASlot) do
       if (ASlot = SLOT_RESULT) or (Row.DstIndex = AOutIdx) then Rows:= Rows + [Row];
-    Merge(Result, EvalRows(AStore, T, Rows), True);
+    if ASlot = SLOT_RESULT then Merge(Result, EvalRows(AStore, T, Rows), True)
+    else
+      { SLZ-TAINTFP: row by row, each narrowed to the fields its source is written into }
+      for Row in Rows do Merge(Result, Tagged(EvalRows(AStore, T, [Row]), FieldTagOf(AStore, T, Row)), True);
   finally
     Leave(Key, Result, Cyc);
   end;
@@ -1722,7 +2023,11 @@ begin
     end;
   for Prp in FCfg.Propagators do
     if SameText(Prp.ToSlot, SLOT_OUTPARAM) and (Prp.OutIndex = ARow.SrcIndex) and NameMatches(Prp.Name, R, ARow.FileId, Weak) then
-      Exit(EvalRows(AStore, X, ArgRowsAt(AStore, X, ARow.FileId, ARow.SrcLine, ARow.SrcCol, Prp.Args)));
+    begin
+      Result:= EvalRows(AStore, X, ArgRowsAt(AStore, X, ARow.FileId, ARow.SrcLine, ARow.SrcCol, Prp.Args));
+      if R.Found and (R.Store = STORE_PROJECT) then Result:= ViaCall(Result);
+      Exit;
+    end;
   Result:= CallSummary(AStore, X, ARow, R, SLOT_OUTPARAM, ARow.SrcIndex);
 end;
 
@@ -1810,12 +2115,24 @@ end;
 
 function TTaintWalker.Top(AStore: Integer; const X: TSymbol; const ASum: TSummary): TSummary;
 var
-  P: Integer;
+  I  : Integer;
+  K  : Integer;
+  Sub: TSummary;
 begin
   Result:= Default(TSummary);
   Merge(Result, ASum, False);
   if AStore = STORE_PROJECT then
-    for P in ASum.Params do Merge(Result, CallersParam(X, P), False);
+    for I:= 0 to High(ASum.Params) do
+    begin
+      Sub:= CallersParam(X, ASum.Params[I]);
+      { SLZ-TAINTFP: a parameter that reached the value through a call: its field tags end here }
+      if (I <= High(ASum.PVia)) and ASum.PVia[I] then
+      begin
+        Sub.Hits:= Copy(Sub.Hits);
+        for K:= 0 to High(Sub.Hits) do Sub.Hits[K].Tag:= '';
+      end;
+      Merge(Result, Sub, False);
+    end;
 end;
 
 { A src 'field' row: every writer of that field in the owner, its ancestors and
@@ -1991,8 +2308,11 @@ var
   Hops   : Integer;
 begin
   Result:= nil;
-  if AHits = nil then Exit;
-  Hits:= Copy(AHits);
+  { SLZ-TAINTFP: drop the hits that only sit in record fields nothing downstream reads }
+  Hits:= nil;
+  for H in AHits do
+    if not FieldPruned(H, X) then Hits:= Hits + [H];
+  if Hits = nil then Exit;
   TArray.Sort<THit>(Hits, TComparer<THit>.Construct(
     function(const A, B: THit): Integer
     begin
