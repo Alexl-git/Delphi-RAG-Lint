@@ -85,7 +85,6 @@ type
       /// </remarks>
       class function ParsePasDoc(const ARaw: string)                         : TParsedDoc; static;
       /// <param name="ARaw"><!-- drag-lint:auto type -->const string</param>
-      /// <param name="AKind"><!-- drag-lint:auto type -->TDocCommentKind</param>
       /// <returns><!-- drag-lint:auto type -->TParsedDoc</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->

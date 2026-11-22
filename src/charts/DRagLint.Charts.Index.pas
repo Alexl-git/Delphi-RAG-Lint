@@ -529,7 +529,7 @@ begin
     try
       Q.Connection:= FStore.GetConnection;
       Q.FetchOptions.Mode:= fmAll;
-      Q.SQL.Text:= pSql;
+      Q.SQL.Text:= pSql;  // dl:ok taint-sql-injection@9bc1 -- REVIEWED 2026-11-22 INT-FINAL: the generic query helper; every caller builds pSql from literals, integer ids and TChartsIndex.SqlText/SqlInList-quoted strings
       Q.Open;
       var Names: TArray<string>;
       SetLength(Names, Q.FieldCount);

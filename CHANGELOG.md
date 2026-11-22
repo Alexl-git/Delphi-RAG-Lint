@@ -25,8 +25,9 @@ Merged lanes (git log c53540a95..HEAD):
 - FIXER-2: multiple-statements-per-line lays out a packed line in ONE pass.
 - FIXER-2b: local-field-prefix declines reserved words and class-member / ancestor / outer-local collisions.
 - SLZ-TAINTFP: taint-path-traversal follows a var/out parameter written field by field as those fields only.
+- TAINT-TRIAGE: taint-path-traversal field narrowing ignores comments and string literals; a dl:ok reason saying "error" no longer revives the TGpaUnit.Error false positive (3 self-lint findings). No re-parse needed.
 - allow --apply --reason keeps a neighbour rule's reviewed reason; only a marker recording the rule alone is re-stamped (docs\INBOX-allow-apply-overwrites-reason.md).
-- Self-LoopZero lanes (SLZ-S02/S04/S05/S07/S10/S11, INT-UPS): lint cleanups on the engine's own source, 33 unused public routines moved to implementation; the 47 taint-path-traversal dl:ok markers those lanes stripped on per-file evidence are restored (per-file lint has no project-wide taint stage), and the comment the collapsible-if autofix dropped in Doc.SymbolFacts is back.
+- Self-LoopZero lanes (SLZ-S02/S04/S05/S07/S10/S11, INT-UPS): lint cleanups on the engine's own source, 33 unused public routines moved to implementation; the comment the collapsible-if autofix dropped in Doc.SymbolFacts is back. 68 taint dl:ok markers that suppress nothing under the repo's real lint config (drag-lint-lint.json disables the GetEnvironmentVariable source) are removed; an earlier "245 taint-path-traversal" count came from a lint-all on a DB copy that did not find that config (docs\INBOX-lint-all-db-copy-misses-project-config.md, 1.53).
 - Tests: hermetic engine cache self-heals companions, CLI-RETEST runner, owner fixture builders tests\autotest\setup_owner_converter_sandbox.ps1 and setup_owner_circular_fx.ps1; UTF-16 column fence test (COLS-TAILS).
 - Docs / specs: TableTools parent spec + phase-1 plan, symbol-id reuse spec (GH18), verify-index spec (LSP1), per-project settings store spec; Charts registry entries now owned by team ENGINE.
 

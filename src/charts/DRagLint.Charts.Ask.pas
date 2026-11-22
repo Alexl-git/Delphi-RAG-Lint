@@ -937,7 +937,7 @@ begin
     .Replace('@@GENERATED@@', pGenerated)
     .Replace('@@FOOTFILES@@', FootFiles)
     .Replace('@@NOTE@@', NOTE_TEXT.Replace('@@QUESTION@@', pArgs.Question))
-    .Replace('@@SVG@@', Body);  // dl:ok unit-missing-from-uses@ac5b -- REVIEWED SLZ-S11 2026-11-22: Replace here is the string helper on a string expression, not IBX.IBServices.Replace (rule FP, SLZ\RULE-FP.tsv)
+    .Replace('@@SVG@@', Body);
   Result:= ToCrlf(Result);
 end;
 

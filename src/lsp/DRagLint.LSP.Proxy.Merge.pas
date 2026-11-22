@@ -2041,7 +2041,7 @@ end;
   textDocument/hover (MergeHover) request by id and queues drag-lint's answer
   for it on the worker at once, so it is usually ready before DelphiLSP
   answers. Never delays the frame beyond one JSON parse. }
-procedure TProxyMergeEngine.RecordRequest(const AFrame: TBytes; ALen: Integer);  // dl:ok too-many-exit-points@3bc9, cyclomatic-complexity@6112 -- each Exit is a decline (nothing recorded, relay unchanged); one flat guard sequence reads better than nesting (re-reviewed A5: 8 exits; the four request kinds share one parse, so the kind selection adds branches, not state)
+procedure TProxyMergeEngine.RecordRequest(const AFrame: TBytes; ALen: Integer);  // dl:ok too-many-exit-points@4474, cyclomatic-complexity@c075 -- each Exit is a decline (nothing recorded, relay unchanged); one flat guard sequence reads better than nesting (re-reviewed A5: 8 exits; INT-FINAL 1.52.3 re-stamp: 9 exits, cyclomatic 41 after LSP-MERGE; the four request kinds share one parse, so the kind selection adds branches, not state)
 var
   Json  : TJSONValue;
   Method: string;
@@ -2304,7 +2304,7 @@ begin
   Result:= True;
 end;
 
-function TProxyMergeEngine.Answer(const AFrame: TBytes; ALen: Integer; const AOnTake: TProc): Boolean;  // dl:ok too-many-exit-points@7911 -- each Exit before the commit point is a decline (the frame is forwarded); one flat guard sequence reads better than nesting
+function TProxyMergeEngine.Answer(const AFrame: TBytes; ALen: Integer; const AOnTake: TProc): Boolean;  // dl:ok too-many-exit-points@3518 -- each Exit before the commit point is a decline (the frame is forwarded); one flat guard sequence reads better than nesting (INT-FINAL 1.52.3 re-stamp: 12 exits after LSP-MERGE)
 var
   Json  : TJSONValue;
   Method: string;
@@ -2594,7 +2594,7 @@ end;
   unioned in; a reply to a recorded hover request gets drag-lint's markdown
   merged in (see Intercept). Waits for drag-lint's answer at most the part of
   the budget left since the request. Runs on the S>C pump thread. }
-function TProxyMergeEngine.MergeReply(const AFrame: TBytes; ALen: Integer;  // dl:ok too-many-exit-points@368d -- each Exit is a fail-open decline (forward the original frame); one flat guard sequence reads better than nesting (re-reviewed A5: 13, the initialize and definition branches decline early so a reply never waits needlessly)
+function TProxyMergeEngine.MergeReply(const AFrame: TBytes; ALen: Integer;  // dl:ok too-many-exit-points@d2c1 -- each Exit is a fail-open decline (forward the original frame); one flat guard sequence reads better than nesting (re-reviewed A5: 13, INT-FINAL 1.52.3 re-stamp: 14; the initialize and definition branches decline early so a reply never waits needlessly)
   out AReplacement: TBytes): Boolean;
 var
   Json  : TJSONValue;

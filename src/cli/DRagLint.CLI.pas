@@ -22059,7 +22059,7 @@ end;
 // v0.24: drag-lint rename --qname Foo.TBar.Baz --to NewName
 //   [--db PATH] [--dry-run] [--no-backup]
 // Resolves the symbol, proves every occurrence (RenameProof), then reports, or applies through the compile gate.
-function DoRename(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@65a5, cyclomatic-complexity@d2f6, cognitive-complexity@1e69 -- the rename verb, one Exit per refusal, read top to bottom; splitting it is not for a release branch
+function DoRename(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@65a5, cyclomatic-complexity@d74f, cognitive-complexity@1e69 -- the rename verb, one Exit per refusal, read top to bottom; splitting it is not for a release branch
 var
   Store: ISymbolStore;
   Proof: TRenameProof;

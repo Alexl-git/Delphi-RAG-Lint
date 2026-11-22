@@ -774,7 +774,9 @@
 #   2026-11-21 v1523 INT-W1 1.30.0 -> 1.31.0-alpha (ONE bump for 1.52.3; later v1523 lanes that report a resolver change re-pin hash-only at 1.31.0): EXT-RES-TAILS 655073dd1 -- var X := L[K] types X through a default indexer declared on an ANCESTOR of L's type (CallResolver), new call edges / external targets bind. Re-resolve only (index --resolve-only), no extractor bump.
 #   Superseded: 1.31.0-alpha|b6ebb546e29f1355560302d7fcaf54e53f805082f20e47a18d50e76f16892959
 #   2026-11-22 v1523 INT-W2a re-pin at 1.31.0 (no second bump): SLZ-S10 / SLZ-S07 lint cleanups in Analysis.Purity (Pos(':=', Before) > 0 -> Before.Contains(':=')), Analysis.PurityStage (uses Core.Model + Analysis.Purity moved to implementation; not (K in S) -> K not in S; nested if collapsed, no else follows) and Query.Callers (dl:ok comments only) -- no edge changes.
-1.31.0-alpha|45d0260d1f9af2575586a1e1573d67cf7ec4b6b944b7420db9451a08ab3a4272
+# superseded (hash-only): 1.31.0-alpha|45d0260d1f9af2575586a1e1573d67cf7ec4b6b944b7420db9451a08ab3a4272
+#   2026-11-22 v1523 INT-FINAL lint sweep: comment-only -- Storage.SQLite 20792/20818/20842 gain trailing dl:ok taint-sql-injection comments (each line = its old text + the // comment), Parser.DocComments drops a stale /// <param name="AKind"> doc line on ParseOneline (doc-param-not-in-signature); other sweep edits (re-stamps, unused markers) are trailing comments too. No parse, symbol, ref, use, call edge or resolution can change.
+1.31.0-alpha|dd036380cb7394f053ff190fa8cccf3bfc32f6fe4397524c7646134f7c8ea8c8
 #   2026-11-06 int2: hash moved WITHOUT a bump from 631322c4: the dl:ok comment on ResolveCallTargets re-stamped by the lint sweep, no code change.
 # superseded: 1.19.0-alpha|e4c14c16d87b21940e6ce6017456b8446a5cc516e342b72b816e3e161612ecba
 #   2026-11-06 1.19.0 -> 1.20.0-alpha (lanes facts + rename): ref_types (static type of a reference), ref_receivers (receiver link of a ref), references in initialization / finalization attributed to the section symbol. Additive, no SCHEMA_VERSION move. Remedy: index --all --resolve-only.

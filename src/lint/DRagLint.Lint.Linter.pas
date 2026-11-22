@@ -1122,7 +1122,7 @@ begin
       var ColSource: TBytes:= Source; { 1.52 BK-TAILS-ENG: columns are counted before blanking }
       Source:= TAstParseCache.ApplyPreprocess(Source, AFilePath);
       Parser:= TTSParser.Create;
-      Parser.Language:= FLanguage;  // dl:ok duplicate-code@99b4 -- REVIEWED 2026-11-21 SLZ-S05: 97 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+      Parser.Language:= FLanguage;
       Tree:= Parser.Parse(
         function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
         var Remaining: Integer;

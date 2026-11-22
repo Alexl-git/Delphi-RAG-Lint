@@ -20789,7 +20789,7 @@ begin
       '(' + CallSiteRefKindSql('refs') + ' OR refs.kind IN (''member-access'', ''' + REF_KIND_PROP_SPEC + ''', ''' + REF_KIND_REC_FIELD + ''', ''' + REF_KIND_INDEX_ACCESS + ''', ''' + REF_KIND_EXPORT + '''))';
     { The scoped pass narrows the SAME universe rather than defining its own:
       widen the kind test above and the scoped path follows automatically. }
-    if Scoped then Q.SQL.Text:= Q.SQL.Text + ' AND (' + ScopeWhere + ')';
+    if Scoped then Q.SQL.Text:= Q.SQL.Text + ' AND (' + ScopeWhere + ')';  // dl:ok taint-sql-injection@847b -- REVIEWED 2026-11-22 INT-FINAL: ScopeWhere is MaterializeResolveScope's constant subquery on temp.dl_scope_refs; no text reaches it
 
     { ---- STALE-FILE PRESCAN (INBOX-whole-db-resolve-degrades-a-stale-index) ----
 
@@ -20815,7 +20815,7 @@ begin
       QStale.Connection:= FConn;
       QStale.SQL.Text  := 'SELECT DISTINCT file_id FROM refs WHERE ' +
         '(' + CallSiteRefKindSql('refs') + ' OR refs.kind IN (''member-access'', ''' + REF_KIND_PROP_SPEC + ''', ''' + REF_KIND_REC_FIELD + ''', ''' + REF_KIND_INDEX_ACCESS + ''', ''' + REF_KIND_EXPORT + '''))';
-      if Scoped then QStale.SQL.Text:= QStale.SQL.Text + ' AND (' + ScopeWhere + ')';
+      if Scoped then QStale.SQL.Text:= QStale.SQL.Text + ' AND (' + ScopeWhere + ')';  // dl:ok taint-sql-injection@9e79 -- REVIEWED 2026-11-22 INT-FINAL: ScopeWhere is MaterializeResolveScope's constant subquery on temp.dl_scope_refs; no text reaches it
       QStale.Open;
       while not QStale.Eof do
       begin
@@ -20839,7 +20839,7 @@ begin
         finally
           SB.Free;
         end;
-        Q.SQL.Text:= Q.SQL.Text + ' AND (' + StaleWhere + ')';
+        Q.SQL.Text:= Q.SQL.Text + ' AND (' + StaleWhere + ')';  // dl:ok taint-sql-injection@6163 -- REVIEWED 2026-11-22 INT-FINAL: StaleWhere is built here from Int64 file ids only (SB.Append(StaleIds[I])); no text reaches it
       end;
       StaleFileCount:= StaleIds.Count;
     finally

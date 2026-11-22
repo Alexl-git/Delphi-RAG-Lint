@@ -1055,7 +1055,7 @@ begin
       end
       { redundant-cast has no text fix: DRagLint.Refactor.RedundantCast proves it from ref_types and writes through
         the compile gate (lint --fix --fix-rule redundant-cast --project). }
-      else if SameText(F.RuleId, 'redundant-not-not') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then  // dl:ok duplicate-code@4616 -- REVIEWED 2026-11-21 SLZ-S05: 94 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+      else if SameText(F.RuleId, 'redundant-not-not') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
       begin
         { span covers 'not not X' (the outer exprUnary). Strip the two leading
           'not' keywords + their trailing whitespace; the remainder is X. }
@@ -1172,7 +1172,7 @@ begin
           end; // if
         end; // if
       end // if
-      else if SameText(F.RuleId, 'reserved-word-casing') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then  // dl:ok duplicate-code@4d9f -- REVIEWED 2026-11-21 SLZ-S05: 94 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+      else if SameText(F.RuleId, 'reserved-word-casing') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
       begin
         { span covers the keyword token; keywords are case-insensitive and have no
           reference sites, so lowercasing the span is a safe local edit. }
