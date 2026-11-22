@@ -136,11 +136,16 @@ var
   S   : TSymbol        ;
 begin
   Result:= False;
+  AHit:= Default(TSymbol);
   if (AStore = nil) or (Trim(AEntry) = '') then Exit;
 
   Hits:= AStore.FindSymbolsByQualifiedName(AEntry);
   if Length(Hits) = 0 then Hits:= AStore.FindSymbolsByExactName(AEntry);
-  if Length(Hits) > 0 then begin AHit:= Hits[0]; Exit(True); end;
+  if Length(Hits) > 0 then
+  begin
+    AHit:= Hits[0];
+    Exit(True);
+  end;
 
   { Dotted but not fully qualified: look the leaf up and keep only the symbols
     whose qualified name actually ENDS with what was written, so
@@ -180,10 +185,7 @@ begin
     Line:= '   see: ' + Entry;
     if AStore <> nil then
     begin
-      if ResolveSeeCode(AStore, Entry, Hit) then
-        Line:= Line + '  -> ' + AStore.GetFilePath(Hit.FileId) + ':' + IntToStr(Hit.StartLine)
-      else
-        Line:= Line + '  -> MISSING';
+      Line:= if ResolveSeeCode(AStore, Entry, Hit) then Line + '  -> ' + AStore.GetFilePath(Hit.FileId) + ':' + IntToStr(Hit.StartLine) else Line + '  -> MISSING';
     end;
     Writeln(Line);
   end;
@@ -220,7 +222,7 @@ begin
   Result.AddPair('body', ATopic.Body);
 end; // function
 
-function DoWiki(const AArgs: TArgs): Integer;
+function DoWiki(const AArgs: TArgs): Integer;  // dl:ok cyclomatic-complexity@cdd1 -- REVIEWED 2026-11-22 SLZ-S02: cyclomatic-complexity measured cyclomatic complexity 35 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 var
   Topics   : TArray<TWikiTopic>;
   Rc       : Integer           ;
@@ -431,7 +433,7 @@ begin
 
   { A word that is not in the wiki is an ANSWER, and a caller must be able to
     branch on it without parsing prose. }
-  if Matched = 0 then Result:= 1 else Result:= 0;
+  Result:= if Matched = 0 then 1 else 0;
 end; // function
 
 end.

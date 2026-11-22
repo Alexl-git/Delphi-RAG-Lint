@@ -140,7 +140,7 @@ var
   begin
     if AType = '' then Exit;
     var Scoped: TScopedClass:= ATrees.ScopedClass(AType);
-    var Text  : string:= if (AConv.LineNo >= 1) and (AConv.LineNo <= Length(ARuleLines)) then ARuleLines[AConv.LineNo - 1]
+    var Text  : string:= if InRange(AConv.LineNo, 1, Length(ARuleLines)) then ARuleLines[AConv.LineNo - 1]
                          else Format('#convert %s -> %s', [AConv.FromType, AConv.ToType]);
     if (Scoped.Resolution = PAS_RES_AMBIGUOUS) or (Scoped.Inferred <> '') then
       AFixes.Add(MakeQualifyFix(Text, AConv.LineNo, AType, ASide, Scoped));
@@ -566,7 +566,7 @@ begin
   end;
 end;
 
-function DoConvertApply(const AArgs: TArgs): Integer;
+function DoConvertApply(const AArgs: TArgs): Integer;  // dl:ok cyclomatic-complexity@37db, too-many-exit-points@2ae6 -- REVIEWED 2026-11-22 SLZ-S02: cyclomatic-complexity measured cyclomatic complexity 40 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a); too-many-exit-points measured 13 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 var
   UnitPas   : string            ;
   DfmPath   : string            ;
@@ -621,7 +621,10 @@ var
     try
       for Ed in PlanRes.Edits do
         if not TouchedSet.ContainsKey(Ed.FilePath) then
-        begin TouchedSet.Add(Ed.FilePath, True); TouchedFiles.Add(Ed.FilePath); end;
+        begin
+          TouchedSet.Add(Ed.FilePath, True);
+          TouchedFiles.Add(Ed.FilePath);
+        end;
 
       { 1.34.1 (CONV-ENC E2): a file named by --raise-encoding joins the set even when no
         edit touches it, so it is pre-checked, backed up and rolled back with the rest }

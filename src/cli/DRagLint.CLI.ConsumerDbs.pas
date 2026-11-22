@@ -134,9 +134,6 @@ var
   IncNorm   : string               ;
   DprojFile : string               ;
   DprojFiles: TArray<string>       ;
-  Xml       : string               ;
-  P1        : Integer              ;
-  P2        : Integer              ;
 begin
   Result:= '';
   CwdNorm:= IncludeTrailingPathDelimiter( TPath.GetFullPath(ACwd)).ToLower;
@@ -151,7 +148,11 @@ begin
     for IncPath in Sec.Include do
     begin
       IncNorm:= IncludeTrailingPathDelimiter( TPath.GetFullPath(IncPath)).ToLower;
-      if CwdNorm.StartsWith(IncNorm) and (Length(IncNorm) > BestLen) then begin BestLen:= Length(IncNorm); BestInc:= IncPath; end;
+      if CwdNorm.StartsWith(IncNorm) and (Length(IncNorm) > BestLen) then
+      begin
+        BestLen:= Length(IncNorm);
+        BestInc:= IncPath;
+      end;
     end;
   end;
 
@@ -228,9 +229,7 @@ var
   NoDb       : string        ;
 begin
   Result:= TManifestIO.Load(AEngineDir, ManifestStartDir(AProjectPath));
-  if (AProjectPath <> '') and (ManifestStartDir(AProjectPath) <> GetCurrentDir) then
-    if ResolveOwnProjectDb(Result, AProjectPath, NoDb, NoClaimants) = pdmNone then
-      Result:= TManifestIO.Load(AEngineDir, GetCurrentDir);
+  if ((AProjectPath <> '') and (ManifestStartDir(AProjectPath) <> GetCurrentDir)) and (ResolveOwnProjectDb(Result, AProjectPath, NoDb, NoClaimants) = pdmNone) then Result:= TManifestIO.Load(AEngineDir, GetCurrentDir);
 end;
 
 var
@@ -329,7 +328,11 @@ var
   D        : string                                    ;
 begin
   // User supplied explicit --db: honour without modification.
-  if Length(AArgs.DbPaths) > 0 then begin Result:= AArgs.DbPaths; Exit; end;
+  if Length(AArgs.DbPaths) > 0 then
+  begin
+    Result:= AArgs.DbPaths;
+    Exit;
+  end;
 
   ProjDb   := '';
   Claimants:= nil;

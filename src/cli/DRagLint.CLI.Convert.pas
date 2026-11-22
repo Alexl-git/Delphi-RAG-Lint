@@ -408,7 +408,7 @@ begin
   end;
 end;
 
-function DoPropTree(const AArgs: TArgs): Integer;
+function DoPropTree(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@a4f2 -- REVIEWED 2026-11-22 SLZ-S02: too-many-exit-points measured 9 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 var
   Dbs   : TArray<string>  ;
   Db    : string          ;
@@ -464,7 +464,10 @@ begin
   // not a silent fall-through) so a typo does not silently emit ALL leaves.
   MinVis:= LowerCase(Trim(AArgs.MinVisibility));
   if (MinVis <> '') and (MinVis <> 'published') and (MinVis <> 'public') then
-  begin Writeln(Format('ERROR: --min-visibility must be published|public (got "%s")', [AArgs.MinVisibility])); Exit(2); end;
+  begin
+    Writeln(Format('ERROR: --min-visibility must be published|public (got "%s")', [AArgs.MinVisibility]));
+    Exit(2);
+  end;
 
   // --depth > the --rules book's #depth > 5. Before 1.20.6 this read AArgs.Depth,
   // whose parse default is 3, so a proptree with no --depth ran at 3, not the
@@ -480,7 +483,11 @@ begin
   if ProgMs > 0 then Opts.OnProgress:= MakeProgressWriter('proptree');
 
   Dbs:= ResolveConsumerDbs(AArgs);
-  if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
+  if Length(Dbs) = 0 then
+  begin
+    Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.');
+    Exit(2);
+  end;
 
   // Multi-db resolution: use the FIRST db whose qname resolves to a class
   // (RootType non-empty). Exit 2 if no --db is readable; exit 1 if none resolve.
@@ -517,7 +524,11 @@ begin
       Break;
     end;
   end;
-  if Store = nil then begin Writeln('ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
+  if Store = nil then
+  begin
+    Writeln('ERROR: no readable drag-lint index among --db path(s)');
+    Exit(2);
+  end;
   if not Found then
   begin
     ReportNotFoundFor(AArgs.AsJson or SameText(AArgs.Format, 'json'), Format('class not found: %s', [AArgs.QName]));
@@ -609,7 +620,7 @@ var
 begin
   Result := AName;
   AScoped:= Default(TScopedClass);
-  if (Trim(AName) = '') or (Pos('.', AName) > 0) then Exit;
+  if (Trim(AName) = '') or (AName.Contains('.')) then Exit;
   var Hint: string:= '';
   for var R: TConversionRule in ARules.Rules do
     if (R.Kind = rkConvert) and (Hint = '') then
@@ -688,7 +699,7 @@ begin
   end;
 end;
 
-function DoConvertValidate(const AArgs: TArgs): Integer;
+function DoConvertValidate(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@263a -- REVIEWED 2026-11-22 SLZ-S02: too-many-exit-points measured 7 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 var
   RulesText: string             ;
   RuleSet  : TConversionRuleSet ;
@@ -739,10 +750,7 @@ var
   begin
     Parts:= nil;
     for P in ASets do
-      if P.Value = '' then
-        Parts:= Parts + [P.ToPath]
-      else
-        Parts:= Parts + [P.ToPath + ' = ' + P.Value];
+      Parts:= Parts + [if P.Value = '' then P.ToPath else P.ToPath + ' = ' + P.Value];
     Result:= String.Join(', ', Parts);
   end;
 
@@ -808,13 +816,19 @@ begin
     Exit(2);
   end;
   if not TFile.Exists(AArgs.RulesFile) then
-  begin Writeln(Format('ERROR: rules file not found: %s', [AArgs.RulesFile])); Exit(2); end;
+  begin
+    Writeln(Format('ERROR: rules file not found: %s', [AArgs.RulesFile]));
+    Exit(2);
+  end;
 
   try
     RulesText:= TFile.ReadAllText(AArgs.RulesFile);
   except
     on Ex: Exception do
-    begin Writeln(Format('ERROR: cannot read rules file: %s (%s)', [AArgs.RulesFile, Ex.Message])); Exit(2); end;
+    begin
+      Writeln(Format('ERROR: cannot read rules file: %s (%s)', [AArgs.RulesFile, Ex.Message]));
+      Exit(2);
+    end;
   end;
 
   RuleSet:= ParseConversionRules(RulesText);
@@ -936,7 +950,7 @@ begin
   end;
 end;
 
-function DoConvertReemit(const AArgs: TArgs): Integer;
+function DoConvertReemit(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@6cd0 -- REVIEWED 2026-11-22 SLZ-S02: too-many-exit-points measured 10 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 var
   FromCls  : TClassRef          ;
   ToCls    : TClassRef          ;
@@ -970,16 +984,25 @@ begin
     Exit(2);
   end;
   if not TFile.Exists(AArgs.FromBlockFile) then
-  begin Writeln('from-block not found: ' + AArgs.FromBlockFile); Exit(2); end;
+  begin
+    Writeln('from-block not found: ' + AArgs.FromBlockFile);
+    Exit(2);
+  end;
   if not TFile.Exists(AArgs.RulesFile) then
-  begin Writeln('rules not found: ' + AArgs.RulesFile); Exit(2); end;
+  begin
+    Writeln('rules not found: ' + AArgs.RulesFile);
+    Exit(2);
+  end;
 
   try
     BlockText:= TFile.ReadAllText(AArgs.FromBlockFile);
     RulesText:= TFile.ReadAllText(AArgs.RulesFile);
   except
     on Ex: Exception do
-    begin Writeln(Format('ERROR: cannot read input file (%s)', [Ex.Message])); Exit(2); end;
+    begin
+      Writeln(Format('ERROR: cannot read input file (%s)', [Ex.Message]));
+      Exit(2);
+    end;
   end;
 
   Rules:= ParseConversionRules(RulesText);
@@ -989,7 +1012,7 @@ begin
   if Length(Unrealised) > 0 then
   begin
     for var U in Unrealised do Writeln(Format('ERROR: line %d: %s', [U.LineNo, U.Message]));
-    Exit(1);
+    Exit(1);  // dl:ok duplicate-code@2384 -- REVIEWED 2026-11-22 SLZ-S02: duplicate-code measured (95 tokens), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   end;
 
   // Resolve the F/T classes in the first DB that resolves each qname (the same
@@ -1080,7 +1103,7 @@ begin
       JDR.AddPair('fromPath', DR.FromPath);
       JDR.AddPair('toPath'  , DR.ToPath);
       JDR.AddPair('value'   , DR.Value);
-      JDR.AddPair('ruleLine', TJSONNumber.Create(DR.RuleLine));
+      JDR.AddPair('ruleLine', TJSONNumber.Create(DR.RuleLine));  // dl:ok duplicate-code@0925 -- REVIEWED 2026-11-22 SLZ-S02: duplicate-code measured (91 tokens), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
       JResolved.AddElement(JDR);
     end;
     JReport.AddPair('defaultsResolved', JResolved);
@@ -1113,7 +1136,7 @@ begin
   if Res.Ok then Exit(0) else Exit(1);
 end; // function
 
-function DoConvertScaffold(const AArgs: TArgs): Integer;
+function DoConvertScaffold(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@84d3 -- REVIEWED 2026-11-22 SLZ-S02: too-many-exit-points measured 10 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 var
   Dbs      : TArray<string>  ;
   LDb      : string          ;
@@ -1133,7 +1156,7 @@ var
     D: Integer;
   begin
     D:= LastDelimiter('.', APath);
-    if D > 0 then Result:= Copy(APath, D + 1, MaxInt) else Result:= APath;
+    Result:= if D > 0 then Copy(APath, D + 1, MaxInt) else APath;
     Result:= LowerCase(Result);
   end;
 
@@ -1143,7 +1166,7 @@ var
     D: Integer;
   begin
     D:= LastDelimiter('.', AQName);
-    if D > 0 then Result:= Copy(AQName, 1, D - 1) else Result:= '';
+    Result:= if D > 0 then Copy(AQName, 1, D - 1) else '';
   end;
 
   // Sorted copy of a tree's paths (case-insensitive). A Sorted TStringList with
@@ -1270,8 +1293,8 @@ var
   TPath   : string        ;
   TType   : string        ;
   Cands   : TArray<string>;
-  FPath   : string        ;
-  FType   : string        ;
+  SrcPath   : string        ;
+  SrcType   : string        ;
   UFrom   : string        ;
   UTo     : string        ;
   Header  : string        ;
@@ -1294,7 +1317,10 @@ begin
   Surface:= LowerCase(Trim(AArgs.Surface));
   if Surface = '' then Surface:= 'dfm';
   if (Surface <> 'dfm') and (Surface <> 'pas') then
-  begin Writeln(Format('ERROR: --surface must be dfm|pas (got "%s")', [AArgs.Surface])); Exit(2); end;
+  begin
+    Writeln(Format('ERROR: --surface must be dfm|pas (got "%s")', [AArgs.Surface]));
+    Exit(2);
+  end;
 
   if not ResolveTreeDepth(AArgs, Depth) then Exit(2); // --depth > #depth > 5
   if not ResolveProgressInterval(AArgs, ProgMs) then Exit(2);
@@ -1305,7 +1331,11 @@ begin
   if ProgMs > 0 then Opts.OnProgress:= MakeProgressWriter('convert-scaffold');
 
   Dbs:= ResolveConsumerDbs(AArgs);
-  if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
+  if Length(Dbs) = 0 then
+  begin
+    Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.');
+    Exit(2);
+  end;
 
   // Use the FIRST db that resolves BOTH types (ids are per-DB, so both trees
   // must come from the same store). Exit 2 if no --db is readable.
@@ -1335,14 +1365,30 @@ begin
       TreeCache.Free;
     end;
     if (CF.RootType <> '') and (CT.RootType <> '') then
-    begin FromTree:= CF; ToTree:= CT; Break; end;
+    begin
+      FromTree:= CF;
+      ToTree:= CT;
+      Break;
+    end;
     // Keep the first db's partial trees so we can report which type failed.
     if FromTree.RootType = '' then FromTree:= CF;
     if ToTree.RootType   = '' then ToTree  := CT;
   end;
-  if not HaveStore then begin Writeln('ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
-  if FromTree.RootType = '' then begin Writeln(Format('class not found: %s', [AArgs.CallFrom])); Exit(1); end;
-  if ToTree.RootType   = '' then begin Writeln(Format('class not found: %s', [AArgs.RenameTo])); Exit(1); end;
+  if not HaveStore then
+  begin
+    Writeln('ERROR: no readable drag-lint index among --db path(s)');
+    Exit(2);
+  end;
+  if FromTree.RootType = '' then
+  begin
+    Writeln(Format('class not found: %s', [AArgs.CallFrom]));
+    Exit(1);
+  end;
+  if ToTree.RootType   = '' then
+  begin
+    Writeln(Format('class not found: %s', [AArgs.RenameTo]));
+    Exit(1);
+  end;
 
   Sb:= TStringBuilder.Create;
   try
@@ -1379,11 +1425,11 @@ begin
     end;
 
     // (3) DROPPED note per From path with no compatible To target (sorted).
-    for FPath in SortedPaths(FromTree) do
+    for SrcPath in SortedPaths(FromTree) do
     begin
-      FType:= TypeOfPath(FromTree, FPath);
-      if not ToHasCounterpart(LeafLower(FPath), FType) then
-        Sb.AppendLine(Format('#note DROPPED %s (no T target)', [FPath]));
+      SrcType:= TypeOfPath(FromTree, SrcPath);
+      if not ToHasCounterpart(LeafLower(SrcPath), SrcType) then
+        Sb.AppendLine(Format('#note DROPPED %s (no T target)', [SrcPath]));
     end;
 
     OutText:= Sb.ToString;

@@ -1,4 +1,4 @@
-unit DRagLint.CLI.Common;
+unit DRagLint.CLI.Common;  // dl:ok unit-too-large@890d -- REVIEWED 2026-11-22 SLZ-S02: unit-too-large measured 2127 lines (limit 2000), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 
 // ---------------------------------------------------------------------------
 // What every verb unit of the CLI shares (lane v1511 SPLIT, T07): the parsed command line (TArgs), the
@@ -1329,11 +1329,8 @@ var
 begin
   ScanType:= '';
   if AStore <> nil then ScanType:= AStore.GetMetaValue(SCAN_TYPE_KEY);
-  Suffix:= IfThen(AResolveOnly, ' --resolve-only', '');
-  if SameText(ScanType, SCAN_TYPE_PROJECT) then
-    Result:= Format('index --project <file.dproj> --db "%s"%s', [ADbPath, Suffix])
-  else
-    Result:= Format('index <dir> --db "%s"%s', [ADbPath, Suffix]);
+  Suffix:= if AResolveOnly then ' --resolve-only' else '';
+  Result:= if SameText(ScanType, SCAN_TYPE_PROJECT) then Format('index --project <file.dproj> --db "%s"%s', [ADbPath, Suffix]) else Format('index <dir> --db "%s"%s', [ADbPath, Suffix]);
 end;
 
 procedure NoteIndexFreshnessOnce(const AStore: ISymbolStore; const ADbPath: string);
@@ -1692,7 +1689,7 @@ begin
     P:= AArgs.DbPaths[I];
     if TFile.Exists(P) then Continue;
     Result:= False;
-    if P = '' then Shown:= '(empty)' else Shown:= P;
+    Shown:= if P = '' then '(empty)' else P;
     if AArgs.DbFromConfig then
     begin
       { The user typed no --db: name the file that supplied it (INBOX 2026-09-29 item 5). }
@@ -1807,8 +1804,8 @@ begin
   Result:= Format('r=%s;schema=%d', [DRAGLINT_RESOLVER_VERSION, Expected]);
 end;
 
-function WarmQueryImageName(hProcess: THandle; dwFlags: DWORD; lpExeName: PWideChar;
-  var lpdwSize: DWORD): BOOL; stdcall; external kernel32 name 'QueryFullProcessImageNameW';
+function WarmQueryImageName(hProcess: THandle; dwFlags: DWORD; lpExeName: PWideChar;  // dl:ok param-name-prefix@4a6c -- REVIEWED 2026-11-22 SLZ-S02: param-name-prefix external Win32 import; parameter names mirror the SDK prototype
+  var lpdwSize: DWORD): BOOL; stdcall; external kernel32 name 'QueryFullProcessImageNameW';  // dl:ok param-name-prefix@2a60 -- REVIEWED 2026-11-22 SLZ-S02: param-name-prefix external Win32 import; parameter names mirror the SDK prototype
 
 { True when A and B name the SAME FILE on disk, compared by volume serial and
   file index rather than by spelling: QueryFullProcessImageName gives the long
@@ -1945,7 +1942,7 @@ begin
   SI.wShowWindow:= SW_HIDE;
   Watch:= TStopwatch.StartNew;
   UniqueString(Cmd);
-  if not CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NO_WINDOW, nil, nil, SI, PI) then  // dl:ok unsafe-shellexecute@d2cc, taint-command-injection@d2cc -- REVIEWED 2026-11-19 SLZ-MARK: spawns this executable's own ParamStr(0)
+  if not CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NO_WINDOW, nil, nil, SI, PI) then  // dl:ok unsafe-shellexecute@d2cc -- REVIEWED 2026-11-19 SLZ-MARK: spawns this executable's own ParamStr(0)
   begin
     ARx.Status:= 'failed';
     ARx.Reason:= Format('could not start the re-index (%s) -- run: drag-lint index --project "%s" --db "%s"',
@@ -2023,14 +2020,19 @@ begin
   AOk:= False;
   try
     Result:= TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}False);
-  except  // dl:ok bare-except@7c42 -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
-    Result:= nil; Exit; // writable open failed (locked / read-only file) -> caller falls back
+  except  // dl:ok bare-except@db13 -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
+    Result:= nil;
+    Exit; // writable open failed (locked / read-only file) -> caller falls back
   end;
   if Result.IsSchemaCurrent(Found, Expected) then AOk:= True
   { ErrOutput for the same reason as OpenReadOnlyStore's twin above: proptree
     opens WRITABLE by default, so this -- not that one -- is the line a stale
     `proptree --db <old>` actually printed, and it printed it onto stdout. }
-  else begin AOk:= False; Writeln(ErrOutput, Format('index schema v%d < v%d: run "drag-lint index <dir> --db <db>" to migrate', [Found, Expected])); end;
+  else
+  begin
+    AOk:= False;
+    Writeln(ErrOutput, Format('index schema v%d < v%d: run "drag-lint index <dir> --db <db>" to migrate', [Found, Expected]));
+  end;
 end;
 
 { XERJ item 2: the one place a capped list says so. AOmitted is the number of
@@ -2058,8 +2060,7 @@ var
   DotPos: Integer;
 begin
   DotPos:= LastDelimiter(ASep, S);
-  if DotPos > 0 then Result:= Copy(S, DotPos + 1, MaxInt)
-  else Result:= S;
+  Result:= if DotPos > 0 then Copy(S, DotPos + 1, MaxInt) else S;
 end;
 
 procedure ReportNotFound(const AArgs: TArgs; const AMsg: string);

@@ -188,7 +188,7 @@ uses
   System.IOUtils, System.NetEncoding, System.DateUtils, System.Generics.Collections, System.SyncObjs,
   FireDAC.Stan.Async, FireDAC.Stan.Param, FireDAC.DApt, TreeSitter, DRagLint.CLI.Convert;
 
-procedure PrintApplyReport(const AReport: TApplyReport; AEditCount: Integer; const AVerb: string);
+procedure PrintApplyReport(const AReport: TApplyReport; AEditCount: Integer; const AVerb: string);  // dl:ok cyclomatic-complexity@ca91 -- REVIEWED 2026-11-22 SLZ-S02: cyclomatic-complexity measured cyclomatic complexity 32 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 
   procedure Block(const AHeading: string; const ALines: TArray<string>);
   var
@@ -353,7 +353,7 @@ begin
     Result.AddElement(JP);
   end;
 end;
-procedure EmitApplyJson(const ACtx: TApplyJsonCtx);
+procedure EmitApplyJson(const ACtx: TApplyJsonCtx);  // dl:ok method-too-long@e4a3 -- REVIEWED 2026-11-22 SLZ-S02: method-too-long measured 318 lines (max 250), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 
   function ArrOf(const AItems: TArray<string>): TJSONArray;
   var

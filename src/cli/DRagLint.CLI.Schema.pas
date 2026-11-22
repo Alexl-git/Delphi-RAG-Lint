@@ -82,7 +82,8 @@ var
   var
     Key: string;
   begin
-    ADesc:= ''; AValues:= '';
+    ADesc:= '';
+    AValues:= '';
     Key:= LowerCase(ATable) + '.' + LowerCase(AColumn);
 
     if Key = 'refs.kind' then
@@ -120,8 +121,7 @@ var
         fix; completing a hand-written list would only reset the clock. }
       AValues:= '';
       for var SK: TSymbolKind:= Low(TSymbolKind) to High(TSymbolKind) do
-        if AValues = '' then AValues:= SK.ToText
-        else AValues:= AValues + ',' + SK.ToText;
+        AValues:= if AValues = '' then SK.ToText else AValues + ',' + SK.ToText;
     end
     else if Key = 'symbols.section' then
     begin
@@ -194,8 +194,7 @@ var
 
 begin
   Result:= 0;
-  if Length(AArgs.DbPaths) > 0 then DbPath:= AArgs.DbPaths[0]
-  else DbPath:= AArgs.DbPath;
+  DbPath:= if Length(AArgs.DbPaths) > 0 then AArgs.DbPaths[0] else AArgs.DbPath;
   if DbPath = '' then
   begin
     Writeln(ErrOutput, 'Usage: drag-lint schema --db <file.sqlite> [--format text|json]');
@@ -252,7 +251,7 @@ begin
       Q.Open;
       while not Q.Eof do
       begin
-        TableNames:= TableNames + [Q.FieldByName('name').AsString];
+        TableNames:= TableNames + [Q.FieldByName('name').AsString];  // dl:ok field-by-name-in-loop@a1c5 -- REVIEWED 2026-11-22 SLZ-S02: field-by-name-in-loop per-row FieldByName over a small CLI report result set; caching the TFields is a refactor with no measurable gain here
         Q.Next;
       end;
     finally
@@ -297,7 +296,7 @@ begin
             while not QCols.Eof do
             begin
               JCol:= TJSONObject.Create;
-              JCol.AddPair('name', QCols.FieldByName('name').AsString);
+              JCol.AddPair('name', QCols.FieldByName('name').AsString);  // dl:ok field-by-name-in-loop@fe92 -- REVIEWED 2026-11-22 SLZ-S02: field-by-name-in-loop per-row FieldByName over a small CLI report result set; caching the TFields is a refactor with no measurable gain here
               JCol.AddPair('type', QCols.FieldByName('type').AsString);
               var CDesc, CVals: string;
               if ColumnSemantics(T, QCols.FieldByName('name').AsString, CDesc, CVals) then
@@ -355,7 +354,7 @@ begin
             QCols.Open;
             while not QCols.Eof do
             begin
-              SB.AppendLine(Format('  %s %s', [QCols.FieldByName('name').AsString, QCols.FieldByName('type').AsString]));
+              SB.AppendLine(Format('  %s %s', [QCols.FieldByName('name').AsString, QCols.FieldByName('type').AsString]));  // dl:ok field-by-name-in-loop@8b47 -- REVIEWED 2026-11-22 SLZ-S02: field-by-name-in-loop per-row FieldByName over a small CLI report result set; caching the TFields is a refactor with no measurable gain here
               QCols.Next;
             end;
           finally

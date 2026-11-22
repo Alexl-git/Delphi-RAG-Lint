@@ -89,7 +89,8 @@ begin
   { Read-WRITE open (purge MUTATES) -- same path as index/rename/safe-delete, NOT
     the query_only OpenReadOnlyStore used by read verbs. Migrate ensures the
     schema (incl. the symbols.kind values) is current before we touch it. }
-  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath); Store.Migrate;
+  Store:= TSQLiteSymbolStore.Create(AArgs.DbPath);
+  Store.Migrate;
   Removed:= Store.PurgeLocals;
   Store:= nil; { close the connection so the VACUUM's file resize is flushed before we stat }
   SizeAfter:= TFile.GetSize(AArgs.DbPath);
@@ -133,7 +134,7 @@ end; // function
   routine ignored it, so a user who typed it specifically to avoid touching the
   file had the file rewritten anyway. Measured 2026-09-16 and pinned by
   tests\autotest\run_format_verb_guard.ps1 (A3b). }
-function DoFormat(const AArgs: TArgs): Integer;
+function DoFormat(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@2de0 -- REVIEWED 2026-11-22 SLZ-S02: too-many-exit-points measured 7 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 var
   Res   : TFormatResult;
   Target: string       ;
@@ -141,8 +142,16 @@ var
 begin
   Target:= AArgs.Target;
   if Target = '' then Target:= AArgs.QName; // fallback: reuse qname slot
-  if Target = '' then begin Writeln('Usage: drag-lint format <file> [--yadf-path PATH] [--dry-run|--diff]'); Exit (2 ); end;
-  if not FileExists(Target) then begin Writeln(Format('File not found: %s', [Target])); Exit(2); end;
+  if Target = '' then
+  begin
+    Writeln('Usage: drag-lint format <file> [--yadf-path PATH] [--dry-run|--diff]');
+    Exit (2 );
+  end;
+  if not FileExists(Target) then
+  begin
+    Writeln(Format('File not found: %s', [Target]));
+    Exit(2);
+  end;
 
   if AArgs.ShowDiff then Mode:= fmDiff
   else if AArgs.DryRun then Mode:= fmDryRun
@@ -154,9 +163,9 @@ begin
   begin
     Writeln(Format('YADF format failed (exit %d):'#13#10'%s', [Res.ExitCode, Res.StdoutText]));
     case Res.ExitCode of
-      -3: Exit(3);
-      -4: Exit(4);
-      -5: Exit(5);
+      -3: Exit(3);  // dl:ok case-magic-numbers@e16d, magic-literal@e16d -- REVIEWED 2026-11-22 SLZ-S02: case-magic-numbers 3 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a); magic-literal 3 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
+      -4: Exit(4);  // dl:ok case-magic-numbers@525d, magic-literal@525d -- REVIEWED 2026-11-22 SLZ-S02: case-magic-numbers 4 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a); magic-literal 4 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
+      -5: Exit(5);  // dl:ok case-magic-numbers@6f5f, magic-literal@6f5f -- REVIEWED 2026-11-22 SLZ-S02: case-magic-numbers 5 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a); magic-literal 5 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
     else
       Exit(1);
     end;

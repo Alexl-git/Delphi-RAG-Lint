@@ -76,13 +76,13 @@ uses
   actually break the move. }
 function DbIsLocked(const APath: string): Boolean;
 var
-  FS: TFileStream;
+  LStream: TFileStream;
 begin
   Result:= False;
   if not TFile.Exists(APath) then Exit;
   try
-    FS:= TFileStream.Create(APath, fmOpenReadWrite or fmShareExclusive);
-    FS.Free;
+    LStream:= TFileStream.Create(APath, fmOpenReadWrite or fmShareExclusive);
+    LStream.Free;
   except
     on E: EFOpenError do Result:= True;
   end;
@@ -130,7 +130,8 @@ begin
       Result:= False;   { not a database, or too corrupt to answer either query }
     end;
   finally
-    Conn.Close; Conn.Free;
+    Conn.Close;
+    Conn.Free;
   end;
 end;
 
@@ -264,7 +265,8 @@ begin
     end;
 
   HgRoots:= TStringList.Create;
-  HgRoots.Sorted:= True; HgRoots.Duplicates:= dupIgnore;
+  HgRoots.Sorted:= True;
+  HgRoots.Duplicates:= dupIgnore;
   try
     for I:= 0 to High(Manifest.Sections) do
     begin
@@ -323,7 +325,8 @@ begin
           Conn.ExecSQL('PRAGMA wal_checkpoint(TRUNCATE)');
           RowsBefore:= Conn.ExecSQLScalar('SELECT COUNT(*) FROM files');
         finally
-          Conn.Close; Conn.Free;
+          Conn.Close;
+          Conn.Free;
         end;
 
         TDirectory.CreateDirectory(ExtractFileDir(Dst));
@@ -353,7 +356,8 @@ begin
           ConnectReadOnly(Conn, Dst); { a reader: never FireDAC's Exclusive/Delete defaults }
           RowsAfter:= Conn.ExecSQLScalar('SELECT COUNT(*) FROM files');
         finally
-          Conn.Close; Conn.Free;
+          Conn.Close;
+          Conn.Free;
         end;
         if RowsAfter <> RowsBefore then
         begin

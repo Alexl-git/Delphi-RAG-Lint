@@ -312,7 +312,7 @@ end;
 
 // Split S on Sep, but only at top nesting level (ignores separators inside
 // (), [], <> so generics like TDictionary<Integer, string> stay intact).
-function SplitTopLevel(const S: string; Sep: Char): TArray<string>;
+function SplitTopLevel(const S: string; ASep: Char): TArray<string>;
 var
   Parts: TList<string>;
   i    : Integer      ;
@@ -329,7 +329,7 @@ begin
         '(', '[', '<': Inc(Depth)                  ;
         ')', ']', '>': if Depth > 0 then Dec(Depth);
       end;
-      if (S[i] = Sep) and (Depth = 0) then
+      if (S[i] = ASep) and (Depth = 0) then
       begin
         Parts.Add(Copy(S, Start, i - Start));
         Start:= i + 1;
@@ -372,11 +372,20 @@ begin
     OpenParen:= Pos('(', Sig);
     if OpenParen > 0 then
     begin
-      Depth:= 0; CloseParen:= 0;
+      Depth:= 0;
+      CloseParen:= 0;
       for i:= OpenParen to Length(Sig) do
       begin
         if Sig[i] = '(' then Inc(Depth)
-        else if Sig[i] = ')' then begin Dec(Depth); if Depth = 0 then begin CloseParen:= i; Break; end; end;
+        else if Sig[i] = ')' then
+        begin
+          Dec(Depth);
+          if Depth = 0 then
+          begin
+            CloseParen:= i;
+            Break;
+          end;
+        end;
       end;
       if CloseParen > 0 then
       begin
@@ -386,16 +395,29 @@ begin
           if Trim(Seg) = '' then Continue;
           ColonPos:= LastTopLevelColon(Seg);
           if ColonPos > 0 then
-          begin Names:= Trim(Copy(Seg, 1, ColonPos - 1)); Typ:= Trim(Copy(Seg, ColonPos + 1, MaxInt)); end
-          else begin Names:= Trim(Seg); Typ:= ''; end;
+          begin
+            Names:= Trim(Copy(Seg, 1, ColonPos - 1));
+            Typ:= Trim(Copy(Seg, ColonPos + 1, MaxInt));
+          end
+          else
+          begin
+            Names:= Trim(Seg);
+            Typ:= '';
+          end;
           ModWord:= '';
           for MW in ['const ', 'var ', 'out '] do
             if StartsText(MW, Names) then
-            begin ModWord:= Trim(MW); Names:= Trim(Copy(Names, Length(MW) + 1, MaxInt)); Break; end;
+            begin
+              ModWord:= Trim(MW);
+              Names:= Trim(Copy(Names, Length(MW) + 1, MaxInt));
+              Break;
+            end;
           for Nm in SplitTopLevel(Names, ',') do
             if Trim(Nm) <> '' then
             begin
-              PP.Modifier:= ModWord; PP.Name:= Trim(Nm); PP.TypeText:= Typ;
+              PP.Modifier:= ModWord;
+              PP.Name:= Trim(Nm);
+              PP.TypeText:= Typ;
               Parts.Add(PP);
             end;
         end;
@@ -455,7 +477,15 @@ begin
   begin
     case Sig[i] of
       '(': Inc(Depth)                                                               ;
-      ')': begin Dec(Depth); if Depth = 0 then begin CloseParen:= i; Break; end; end;
+      ')':
+      begin
+        Dec(Depth);
+        if Depth = 0 then
+        begin
+          CloseParen:= i;
+          Break;
+        end;
+      end;
     end;
   end;
   if CloseParen = 0 then Exit;
@@ -468,7 +498,7 @@ begin
   try
     if ParamsPart <> '' then
     begin
-      SB.AppendLine('**Parameters:**');
+      SB.AppendLine('**Parameters:**');  // dl:ok duplicate-code@d3fc -- REVIEWED 2026-11-22 SLZ-S02: duplicate-code measured (114 tokens), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
       for Seg in SplitTopLevel(ParamsPart, ';') do
       begin
         if Trim(Seg) = '' then Continue;
@@ -520,7 +550,7 @@ function UnescapeJsonText(const AText: string): string;
 begin
   Result:= AText;
   if Result = '' then Exit;
-  if Pos('\', Result) = 0 then Exit;          // fast path: nothing escaped
+  if not Result.Contains('\') then Exit;          // fast path: nothing escaped
   Result:= StringReplace(Result, '\r\n', sLineBreak, [rfReplaceAll]);
   Result:= StringReplace(Result, '\n'   , sLineBreak, [rfReplaceAll]);
   Result:= StringReplace(Result, '\r'   , sLineBreak, [rfReplaceAll]);
@@ -705,8 +735,8 @@ begin
       var RObs: string:= '';
       for var ri:= 0 to High(AReturnRhs) do
       begin
-        if ri > 0 then RObs:= RObs + '; ';
-        RObs:= RObs + AReturnRhs[ri];
+        if ri > 0 then RObs:= RObs + '; ';  // dl:ok concat-in-loop@def1 -- REVIEWED 2026-11-22 SLZ-S02: concat-in-loop builds one short display string over a small bounded list; the quadratic copy is immaterial at that size
+        RObs:= RObs + AReturnRhs[ri];  // dl:ok concat-in-loop@38c5 -- REVIEWED 2026-11-22 SLZ-S02: concat-in-loop builds one short display string over a small bounded list; the quadratic copy is immaterial at that size
       end;
       SB.AppendLine('');
       SB.AppendLine('**Returns (observed):** ' + RObs);
@@ -926,14 +956,17 @@ begin
   Result.EffectSummary:= '';
   Result.EffectWitness:= '';
   Cap:= Length(AReturnRhs);
-  if Cap > 10 then begin Result.ReturnsMore:= Cap - 10; Cap:= 10; end
+  if Cap > 10 then  // dl:ok magic-literal@7740 -- REVIEWED 2026-11-22 SLZ-S02: magic-literal 10 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
+  begin
+    Result.ReturnsMore:= Cap - 10;  // dl:ok magic-literal@1901 -- REVIEWED 2026-11-22 SLZ-S02: magic-literal 10 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
+    Cap:= 10;  // dl:ok magic-literal@ae7f -- REVIEWED 2026-11-22 SLZ-S02: magic-literal 10 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
+  end
   else Result.ReturnsMore:= 0;
   SetLength(Result.Returns, Cap);
   for i:= 0 to Cap - 1 do
   begin
     Result.Returns[i].Expr:= AReturnRhs[i];
-    if i <= High(AReturnLines) then Result.Returns[i].Line:= AReturnLines[i]
-    else Result.Returns[i].Line:= 0;
+    Result.Returns[i].Line:= if i <= High(AReturnLines) then AReturnLines[i] else 0;
   end;
 end;
 

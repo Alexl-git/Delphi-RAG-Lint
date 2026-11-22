@@ -390,7 +390,7 @@ begin
   Result:= DRagLint.Wiring.WalkResolvedImpact(AStore, ASyms, ADepth, ALevels);
 end; // function
 
-function DoImpact(const AArgs: TArgs): Integer;
+function DoImpact(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@d84b -- REVIEWED 2026-11-22 SLZ-S02: too-many-exit-points measured 7 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 var
   Store     : ISymbolStore        ;
   Levels    : TArray<TImpactLevel>;
@@ -402,7 +402,11 @@ var
   JLevel    : TJSONObject         ;
   JArr      : TJSONArray          ;
 begin
-  if AArgs.QName = '' then begin ReportNotFoundFor(SameText(AArgs.Format, 'json'), 'Usage: drag-lint impact --qname <Qualified.Name> ' + '[--depth N] [--db <path>] [--format text|json]'); Exit(2); end;
+  if AArgs.QName = '' then
+  begin
+    ReportNotFoundFor(SameText(AArgs.Format, 'json'), 'Usage: drag-lint impact --qname <Qualified.Name> ' + '[--depth N] [--db <path>] [--format text|json]');
+    Exit(2);
+  end;
   if NoDbResolved(AArgs.DbPath, 'impact') then Exit(2);
   if not TFile.Exists(AArgs.DbPath) then
   begin
@@ -411,7 +415,12 @@ begin
     Exit(2);
   end;
   Depth:= AArgs.Depth;
-  if Depth <= 0 then begin Writeln(AArgs.QName); Writeln('  (depth 0 returns nothing)'); Exit (1 ); end;
+  if Depth <= 0 then
+  begin
+    Writeln(AArgs.QName);
+    Writeln('  (depth 0 returns nothing)');
+    Exit (1 );
+  end;
   // Use the bare name (last segment) as the target for the by-name CTE ref lookup,
   // since refs store the bare identifier name, not the qualified name.
   TargetName:= LastSegmentAfter(AArgs.QName, '.');
@@ -498,7 +507,11 @@ begin
       if VR.ViaCount > 0 then
         Writeln(Format('  via %s dispatch (%s): %d site(s)%s',
           [VR.ViaKind, VR.Via, VR.ViaCount, (if VR.ViaEdge = 'ambiguous' then ' [ambiguous edge]' else '')]));
-    if Length(Levels) = 0 then begin Writeln('  (no callers)'); Exit (1 ); end;
+    if Length(Levels) = 0 then
+    begin
+      Writeln('  (no callers)');
+      Exit (1 );
+    end;
   end; // else
   Result:= 0;
 end; // function
@@ -509,7 +522,7 @@ end; // function
 // prints each line. For a well-formed Delphi unit the class symbol spans only
 // the interface-section declaration, so no implementation bodies leak through.
 // Exit 2 on usage error or a missing/stale db, 1 if symbol not found or wrong kind, 0 on success.
-function DoSurface(const AArgs: TArgs): Integer;
+function DoSurface(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@abad -- REVIEWED 2026-11-22 SLZ-S02: too-many-exit-points measured 9 Exit statements (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 var
   Store: ISymbolStore        ;
   Lines: TArray<TSurfaceLine>;
@@ -524,7 +537,12 @@ begin
     Exit(2);
   end;
   if NoDbResolved(AArgs.DbPath, 'surface') then Exit(2);
-  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
+  if not TFile.Exists(AArgs.DbPath) then
+  begin
+    Writeln('ERROR: database not found: ', AArgs.DbPath);
+    Writeln('Run "drag-lint index <path>" first.');
+    Exit (2 );
+  end;
 
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
@@ -588,14 +606,18 @@ begin
     Exit(0);
   end;
 
-  if not (Syms[0].Kind in [skClass, skRecord, skInterface]) then
+  if (Syms[0].Kind not in [skClass, skRecord, skInterface]) then
   begin
     Writeln(System.SysUtils.Format( 'Symbol %s has kind "%s"; surface requires a class, record, or interface (or an enum, for its members).', [Syms[0].QualifiedName, Syms[0].Kind.ToText]));
     Exit(2);
   end;
 
   Lines:= Store.GetClassSurface(AArgs.QName, AArgs.IncludeImpl, AArgs.AllVisibility);
-  if Length(Lines) = 0 then begin Writeln('(no surface lines returned)'); Exit (1 ); end;
+  if Length(Lines) = 0 then
+  begin
+    Writeln('(no surface lines returned)');
+    Exit (1 );
+  end;
 
   if SameText(AArgs.Format, 'json') then
   begin

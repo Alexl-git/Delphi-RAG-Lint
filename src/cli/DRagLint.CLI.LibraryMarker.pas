@@ -135,7 +135,7 @@ begin
     on E: Exception do V:= nil;
   end;
   try
-    if not (V is TJSONObject) then Exit;
+    if (V is not TJSONObject) then Exit;
     var J: TJSONObject:= TJSONObject(V);
     Result.State        := J.GetValue<string>('state', '');
     Result.Platform     := J.GetValue<string>('platform', '');

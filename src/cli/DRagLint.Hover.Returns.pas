@@ -159,7 +159,7 @@ var
   P: Integer;
 begin
   P:= Pos('//', S);
-  if P > 0 then Result:= Copy(S, 1, P - 1) else Result:= S;
+  Result:= if P > 0 then Copy(S, 1, P - 1) else S;
 end;
 
 /// <summary>v(ADP3 T4f, register K23): close the gap a REMOVED COMMENT left in a
@@ -189,7 +189,7 @@ var
   Sb  : TStringBuilder;
 begin
   N:= Length(S);
-  if (N = 0) or (Pos(COMMENT_MASK, S) = 0) then Exit(Trim(S));
+  if (N = 0) or (not S.Contains(COMMENT_MASK)) then Exit(Trim(S));
   Sb:= TStringBuilder.Create;
   try
     I:= 1;
@@ -295,7 +295,7 @@ type
 // is load-bearing: with spaces the miner could not tell a removed comment from
 // author formatting, and closing the gap silently normalised expressions that
 // contained no comment at all.
-procedure TokenizeBody(const ALines: TArray<string>; AToks: TList<TMaskTok>;
+procedure TokenizeBody(const ALines: TArray<string>; AToks: TList<TMaskTok>;  // dl:ok deep-nesting@7308 -- REVIEWED 2026-11-22 SLZ-S02: deep-nesting measured control structures 6 deep (max 5), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   out ACodeOnly: TArray<string>; out ANoComments: TArray<string>);
 var
   InBrace, InParenStar: Boolean ;
@@ -314,7 +314,11 @@ var
   begin
     if AFrom < 1 then AFrom:= 1;
     if ATo > N then ATo:= N;
-    for K:= AFrom to ATo do begin Code[K]:= ' '; NoCom[K]:= COMMENT_MASK; end;
+    for K:= AFrom to ATo do
+    begin
+      Code[K]:= ' ';
+      NoCom[K]:= COMMENT_MASK;
+    end;
   end;
 
   // A STRING LITERAL: gone from the code-only view (a mutation "found" inside
@@ -362,7 +366,13 @@ begin
         Inc(I);
         Continue;
       end;
-      if Ln[I] = '{' then begin InBrace:= True; Blank(I, I); Inc(I); Continue; end;
+      if Ln[I] = '{' then
+      begin
+        InBrace:= True;
+        Blank(I, I);
+        Inc(I);
+        Continue;
+      end;
       if (Ln[I] = '(') and (I < N) and (Ln[I + 1] = '*') then
       begin
         InParenStar:= True;
@@ -383,7 +393,11 @@ begin
         begin
           if Ln[I] = '''' then
           begin
-            if (I < N) and (Ln[I + 1] = '''') then begin Inc(I, 2); Continue; end;
+            if (I < N) and (Ln[I + 1] = '''') then
+            begin
+              Inc(I, 2);
+              Continue;
+            end;
             Inc(I);
             Break;
           end;
@@ -396,7 +410,9 @@ begin
       begin
         J:= I;
         while (J <= N) and IsIdentCh(Ln[J]) do Inc(J);
-        T.Line:= Li; T.Col:= I; T.EndCol:= J - 1;
+        T.Line:= Li;
+        T.Col:= I;
+        T.EndCol:= J - 1;
         T.Text:= LowerCase(Copy(Ln, I, J - I));
         T.IsWord:= True;
         AToks.Add(T);
@@ -409,7 +425,9 @@ begin
       // named nested routine). Nothing else consumes it.
       if CharInSet(Ln[I], ['(', ')', ';', ':']) then
       begin
-        T.Line:= Li; T.Col:= I; T.EndCol:= I;
+        T.Line:= Li;
+        T.Col:= I;
+        T.EndCol:= I;
         T.Text:= Ln[I];
         T.IsWord:= False;
         AToks.Add(T);
@@ -604,7 +622,7 @@ end;
 //     the ';' stop disarming and the routine's own begin confirm the frame,
 //     blanking the entire body. Hence ':' is a token: after the keyword it says
 //     "return type follows", i.e. no name.
-function MaskNestedRoutines(const ABodyLines: TArray<string>;
+function MaskNestedRoutines(const ABodyLines: TArray<string>;  // dl:ok cyclomatic-complexity@8806 -- REVIEWED 2026-11-22 SLZ-S02: cyclomatic-complexity measured cyclomatic complexity 34 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   const AQualifiedName: string; out ACodeOnly: TArray<string>;
   out ANoComments: TArray<string>): TArray<string>;
 var
@@ -631,7 +649,8 @@ begin
   Pend:= TStack<TPendRoutine>.Create;
   try
     TokenizeBody(ABodyLines, Toks, ACodeOnly, ANoComments);
-    Depth:= 0; Paren:= 0;
+    Depth:= 0;
+    Paren:= 0;
     HeaderSeen:= False;
     for Ti:= 0 to Toks.Count - 1 do
     begin
@@ -646,10 +665,7 @@ begin
             that is the one the token can belong to. }
           if (Pend.Count > 0) and (not Pend.Peek.Named) and (Paren < Pend.Peek.Paren) then Pend.Pop;
         end
-        else if T.Text = ';' then
-        begin
-          if (Pend.Count > 0) and (not Pend.Peek.Named) and (Paren = Pend.Peek.Paren) then Pend.Pop;
-        end;
+        else if (T.Text = ';') and ((Pend.Count > 0) and (not Pend.Peek.Named) and (Paren = Pend.Peek.Paren)) then Pend.Pop;
         Continue;
       end;
       if IsRoutineKeyword(T.Text) then
@@ -676,7 +692,9 @@ begin
           Nx:= Toks[Ti + 1];
           Pr.Named:= Nx.IsWord and (Nx.Text <> 'of');
         end;
-        Pr.Line:= T.Line; Pr.Col:= T.Col; Pr.Paren:= Paren;
+        Pr.Line:= T.Line;
+        Pr.Col:= T.Col;
+        Pr.Paren:= Paren;
         { B3: PUSH, do not overwrite. A nested routine declared inside another
           nested routine's declaration part leaves two headers open at once, and
           the single slot this replaced kept only the inner one -- so the outer
@@ -700,7 +718,9 @@ begin
         if Pend.Count > 0 then
         begin
           Pr:= Pend.Pop;                { the INNERMOST open header }
-          Fr.Line:= Pr.Line; Fr.Col:= Pr.Col; Fr.Depth:= Depth;
+          Fr.Line:= Pr.Line;
+          Fr.Col:= Pr.Col;
+          Fr.Depth:= Depth;
           Stk.Push(Fr);
         end;
         Inc(Depth);
@@ -714,8 +734,8 @@ begin
           Fr:= Stk.Pop;
           for X:= Fr.Line to T.Line do
           begin
-            if X = Fr.Line then A:= Fr.Col else A:= 1;
-            if X = T.Line then B:= T.EndCol else B:= MaxInt;
+            A:= if X = Fr.Line then Fr.Col else 1;
+            B:= if X = T.Line then T.EndCol else MaxInt;
             BlankRange(Result, X, A, B);
             BlankRange(ACodeOnly, X, A, B);
             BlankRange(ANoComments, X, A, B);
@@ -745,7 +765,7 @@ end;
 
 function IsTailOperator(const AWord: string): Boolean;
 begin
-  Result:= (AWord = 'and') or (AWord = 'or') or (AWord = 'not') or (AWord = 'xor')
+  Result:= (AWord = 'and') or (AWord = 'or') or (AWord = 'not') or (AWord = 'xor')  // dl:ok boolean-expression-complexity@cfbb -- REVIEWED 2026-11-22 SLZ-S02: boolean-expression-complexity measured 12 and/or/xor operators (limit 4), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
         or (AWord = 'div') or (AWord = 'mod') or (AWord = 'shl') or (AWord = 'shr')
         or (AWord = 'in')  or (AWord = 'is')  or (AWord = 'as')
         or (AWord = 'to')  or (AWord = 'downto');
@@ -792,7 +812,11 @@ begin
       begin
         if ARest[I] = '''' then
         begin
-          if (I < N) and (ARest[I + 1] = '''') then begin Inc(I, 2); Continue; end;
+          if (I < N) and (ARest[I + 1] = '''') then
+          begin
+            Inc(I, 2);
+            Continue;
+          end;
           Inc(I);
           Closed:= True;
           Break;
@@ -857,23 +881,23 @@ begin
     // word boundary on both sides: not part of a longer identifier
     // (MyResult, Result2, ResultSet, ...).
     PrevOk:= (P = 1) or not CharInSet(Low[P - 1], ['a'..'z', 'A'..'Z', '0'..'9', '_']);
-    NextOk:= (P + 6 > Length(Low)) or not CharInSet(Low[P + 6], ['a'..'z', 'A'..'Z', '0'..'9', '_']);
+    NextOk:= (P + 6 > Length(Low)) or not CharInSet(Low[P + 6], ['a'..'z', 'A'..'Z', '0'..'9', '_']);  // dl:ok magic-literal@36bb -- REVIEWED 2026-11-22 SLZ-S02: magic-literal 6 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
     if PrevOk and NextOk then
     begin
       // require ':=' immediately (tolerating spaces) after this 'result'.
       // `Result.Field :=` and `Result[i] :=` fail here, which is how member and
       // element assignments stay out of the enumeration.
-      Rest:= TrimLeft(Copy(T, P + 6, MaxInt));
+      Rest:= TrimLeft(Copy(T, P + 6, MaxInt));  // dl:ok magic-literal@047d -- REVIEWED 2026-11-22 SLZ-S02: magic-literal 6 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
       if StartsStr(':=', Rest) then
       begin
-        Rest:= Trim(Copy(Rest, 3, MaxInt));
+        Rest:= Trim(Copy(Rest, 3, MaxInt));  // dl:ok magic-literal@1c3a -- REVIEWED 2026-11-22 SLZ-S02: magic-literal 3 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
         Cut:= CutRhs(Rest, Terminated);
         if not Terminated then Exit('');
-        if Pos(NESTED_MASK, Cut) > 0 then Exit('');
+        if Cut.Contains(NESTED_MASK) then Exit('');
         Exit(Trim(Cut));
       end;
     end;
-    ScanFrom:= P + 6;
+    ScanFrom:= P + 6;  // dl:ok magic-literal@a5ea -- REVIEWED 2026-11-22 SLZ-S02: magic-literal 6 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
   end;
 end;
 
@@ -897,7 +921,8 @@ begin
   P:= Pos('(', T);
   if P = 0 then Exit; // bare Exit; -- no value
   // capture balanced parens content
-  Depth:= 0; StartI:= P + 1;
+  Depth:= 0;
+  StartI:= P + 1;
   for i:= P to Length(T) do
   begin
     if T[i] = '(' then Inc(Depth)
@@ -907,7 +932,7 @@ begin
       if Depth = 0 then
       begin
         Result:= Trim(Copy(T, StartI, i - StartI));
-        if Pos(NESTED_MASK, Result) > 0 then Result:= '';
+        if Result.Contains(NESTED_MASK) then Result:= '';
         Exit;
       end;
     end;
@@ -940,7 +965,7 @@ begin
         Rest:= TrimLeft(Copy(Rest, 2, MaxInt));
         if StartsStr('result', Rest) then
         begin
-          Tail:= TrimLeft(Copy(Rest, 7, MaxInt));
+          Tail:= TrimLeft(Copy(Rest, 7, MaxInt));  // dl:ok magic-literal@dcdc -- REVIEWED 2026-11-22 SLZ-S02: magic-literal 7 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
           if (Tail = '') or CharInSet(Tail[1], [',', ')']) then Exit(True);
         end;
       end;
@@ -963,9 +988,9 @@ begin
     P:= Pos('result', Low, P);
     if P = 0 then Exit;
     PrevOk:= (P = 1) or not IsIdentCh(Low[P - 1]);
-    NextOk:= (P + 6 > Length(Low)) or not IsIdentCh(Low[P + 6]);
+    NextOk:= (P + 6 > Length(Low)) or not IsIdentCh(Low[P + 6]);  // dl:ok magic-literal@883d -- REVIEWED 2026-11-22 SLZ-S02: magic-literal 6 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
     if PrevOk and NextOk then Exit(True);
-    Inc(P, 6);
+    Inc(P, 6);  // dl:ok magic-literal@e97f -- REVIEWED 2026-11-22 SLZ-S02: magic-literal 6 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
   until False;
 end;
 
@@ -1006,7 +1031,6 @@ end;
 function MineReturnExpressionsEx(const ABodyLines: TArray<string>;
   const AQualifiedName: string): TArray<TReturnMined>;
 var
-  Masked : TArray<string>               ;
   Code   : TArray<string>               ;
   NoCom  : TArray<string>               ;
   Seen   : TDictionary<string, Boolean> ;
@@ -1016,7 +1040,7 @@ var
   i      : Integer                      ;
 begin
   Result:= nil;
-  Masked:= MaskNestedRoutines(ABodyLines, AQualifiedName, Code, NoCom);
+  MaskNestedRoutines(ABodyLines, AQualifiedName, Code, NoCom);  // its result (the raw masked body) is not needed here: mining reads Code / NoCom
   // Absence over wrong: a mutated Result makes every whole-Result assignment
   // below a seed, and naming a seed claims a value the routine may never return.
   // Asked of the CODE-ONLY view -- suppression is destructive, so a mutation

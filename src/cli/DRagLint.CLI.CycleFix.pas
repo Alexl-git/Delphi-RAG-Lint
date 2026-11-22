@@ -642,8 +642,7 @@ function ShadowPathOf(const pShadowDir, pProjectDir, pPath: string): string;
 begin
   var Full:= ExpandFileName(pPath);
   var Root:= IncludeTrailingPathDelimiter(ExpandFileName(pProjectDir));
-  if StartsText(Root, Full) then Result:= Copy(Full, Length(Root) + 1, MaxInt)
-  else Result:= '_outside\' + StringReplace(Full, ':', '', [rfReplaceAll]);
+  Result:= if StartsText(Root, Full) then Copy(Full, Length(Root) + 1, MaxInt) else '_outside\' + StringReplace(Full, ':', '', [rfReplaceAll]);
   Result:= IncludeTrailingPathDelimiter(pShadowDir) + TrimLeft(Result);
 end;
 
@@ -835,7 +834,7 @@ begin
     if Refs.Count = 0 then
       for Item in Staged do
       begin
-        ForceDirectories(ExtractFilePath(Item.Path));
+        ForceDirectories(ExtractFilePath(Item.Path));  // dl:ok ignored-must-use-result@439f -- REVIEWED 2026-11-22 SLZ-S02: ignored-must-use-result best-effort: a failed ForceDirectories surfaces as the next file write raising with the path; a failed temp DeleteFile is harmless
         TFile.WriteAllBytes(Item.Path, Item.Bytes);
       end;
     Result:= Refs.ToArray;
@@ -942,9 +941,7 @@ end;
 // Where pPath of the plan is in pTreeDir: itself when the tree IS the project folder, else its shadow path.
 function TreePathOf(const pTreeDir, pProjectDir, pPath: string): string;
 begin
-  if SameText(IncludeTrailingPathDelimiter(ExpandFileName(pTreeDir)), IncludeTrailingPathDelimiter(ExpandFileName(pProjectDir))) then
-    Result:= ExpandFileName(pPath)
-  else Result:= ShadowPathOf(pTreeDir, pProjectDir, pPath);
+  Result:= if SameText(IncludeTrailingPathDelimiter(ExpandFileName(pTreeDir)), IncludeTrailingPathDelimiter(ExpandFileName(pProjectDir))) then ExpandFileName(pPath) else ShadowPathOf(pTreeDir, pProjectDir, pPath);
 end;
 
 // Every file the plan edits or creates.
@@ -1306,7 +1303,7 @@ end;
 function BreakSeam(const pOpts: TCycleFixOptions): Integer;
 begin
   Result:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_CYCLEFIX_BREAK'), 0);
-  if not (Result in [CBreakCast, CBreakPointer, CBreakNoRepair, CBreakRaise]) or not IsUnderTemp(pOpts.Project) then Result:= 0;
+  if (Result not in [CBreakCast, CBreakPointer, CBreakNoRepair, CBreakRaise]) or not IsUnderTemp(pOpts.Project) then Result:= 0;
 end;
 
 function BreakLine(const pView: TCyclePlanView; const pLine: string; pMode: Integer): string;
@@ -1938,12 +1935,9 @@ end;
 // Stages the plan in the shadow tree (StageShadow).
 function StageFor(const pOpts: TCycleFixOptions; const pStaged: TCyclePlanView; const pProjectDir, pShadowDir: string): TArray<TRefusal>;
 begin
-  if pOpts.Apply then
-    { WRITE PATH: --apply writes exactly this shadow into the project (WriteAll), so it is staged with
-      pTamperAllowed = False -- the T9 tamper seam is dry-run only and must never reach a write }
-    Result:= StageShadow(pStaged, pProjectDir, pShadowDir, False)
-  else
-    Result:= StageShadow(pStaged, pProjectDir, pShadowDir, TamperAllowed(pOpts));
+  { WRITE PATH: --apply writes exactly this shadow into the project (WriteAll), so it is staged with
+    pTamperAllowed = False -- the T9 tamper seam is dry-run only and must never reach a write }
+  Result:= StageShadow(pStaged, pProjectDir, pShadowDir, if pOpts.Apply then False else TamperAllowed(pOpts));
 end;
 
 // The text lines of one visited group: applied / mechanical / refused.
@@ -2004,7 +1998,7 @@ end;
 // make a stale file look like this run's result). Test seam CEnvAllPlant first plants a stale file there.
 procedure PrepareChildOutput(const pOpts: TCycleFixOptions; const pOutFile: string);
 begin
-  ForceDirectories(ExtractFilePath(pOutFile));
+  ForceDirectories(ExtractFilePath(pOutFile));  // dl:ok ignored-must-use-result@93bb -- REVIEWED 2026-11-22 SLZ-S02: ignored-must-use-result best-effort: a failed ForceDirectories surfaces as the next file write raising with the path; a failed temp DeleteFile is harmless
   if IsUnderTemp(pOpts.Project) and (GetEnvironmentVariable(CEnvAllPlant) <> '') then
     TFile.Copy(GetEnvironmentVariable(CEnvAllPlant), pOutFile, True);
   if not Winapi.Windows.DeleteFile(PChar(pOutFile)) and (GetLastError <> ERROR_FILE_NOT_FOUND) then RaiseLastOSError;
@@ -2153,7 +2147,7 @@ begin
   S.Code:= RunBounded(Format('--part all iteration %d (%s)', [S.Iterations, pStem]), AllIterationCmd(pOpts, pStem), OutFile, ChildApplyLimitMs, TimedOut, {pEngineChild=}True);
   var Doc:= ParseJsonFrom(OutFile, CDocMarker);
   try
-    if TimedOut or not (Doc is TJSONObject) then
+    if TimedOut or (Doc is not TJSONObject) then
     begin
       S.Code   := CExitError;
       S.Error  := Format('iteration %d: the child run printed no cycle-fix/1 document', [S.Iterations]) + CiteScratch(OutFile, ' (see %s)');
@@ -2593,7 +2587,7 @@ begin
       end
       else
       begin
-        if not pOpts.Json then Writeln(Format('re-indexed before planning (%d files, %.1f s)', [Stale, Secs]));
+        if not pOpts.Json then Writeln(Format('re-indexed before planning (%d files, %.1f s)', [Stale, Secs]));  // dl:ok locale-sensitive-conversion@bec6 -- REVIEWED 2026-11-22 SLZ-S02: locale-sensitive-conversion human-facing console text; the user locale decimal separator is acceptable for display
         Write(Text);
       end;
     finally
@@ -2702,8 +2696,8 @@ begin
   for var I:= 0 to High(pRw.Paths) do
   begin
     var S:= ShadowPathOf(pShadowDir, pProjectDir, pRw.Paths[I]);
-    TDirectory.CreateDirectory(ExtractFilePath(S));  // dl:ok taint-path-traversal@4eb0 -- REVIEWED 2026-11-16: the path is the cycles --fix shadow tree (TEMP or --shadow-out) the user's own run created; the tool writes there with the user's rights by design, no trust boundary is crossed
-    TFile.WriteAllBytes(S, pRw.Contents[I]);  // dl:ok taint-path-traversal@1dbf -- REVIEWED 2026-11-16: the path is the cycles --fix shadow tree (TEMP or --shadow-out) the user's own run created; the tool writes there with the user's rights by design, no trust boundary is crossed
+    TDirectory.CreateDirectory(ExtractFilePath(S));
+    TFile.WriteAllBytes(S, pRw.Contents[I]);
   end;
   var Bytes:= pRw.NewContent;
   if pBreak = CBreakNoRepair then
@@ -2714,8 +2708,8 @@ begin
     Bytes:= TEncoding.ANSI.GetBytes(Text);
   end;
   var NewShadow:= ShadowPathOf(pShadowDir, pProjectDir, pRw.NewPath);
-  TDirectory.CreateDirectory(ExtractFilePath(NewShadow));  // dl:ok taint-path-traversal@1431 -- REVIEWED 2026-11-16: the path is the cycles --fix shadow tree (TEMP or --shadow-out) the user's own run created; the tool writes there with the user's rights by design, no trust boundary is crossed
-  TFile.WriteAllBytes(NewShadow, Bytes);  // dl:ok taint-path-traversal@b544 -- REVIEWED 2026-11-16: the path is the cycles --fix shadow tree (TEMP or --shadow-out) the user's own run created; the tool writes there with the user's rights by design, no trust boundary is crossed
+  TDirectory.CreateDirectory(ExtractFilePath(NewShadow));
+  TFile.WriteAllBytes(NewShadow, Bytes);
 end;
 
 // `cycles --fix --hub-surface`: RunCycleFixGroups with recipe R3 in place of the planner. Same flags, same baseline gate,

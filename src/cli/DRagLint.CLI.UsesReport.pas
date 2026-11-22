@@ -118,12 +118,21 @@ var
   begin
     if Length(AArgs.DbPaths) > 0 then DbList:= AArgs.DbPaths
     else if AArgs.DbPath <> '' then DbList:= TArray<string>.Create(AArgs.DbPath)
-    else begin Writeln(ErrOutput, 'uses-report: need at least one --db'); Result:= 2; Exit; end;
+    else
+    begin
+      Writeln(ErrOutput, 'uses-report: need at least one --db');
+      Result:= 2;
+      Exit;
+    end;
     SetLength(Stores, 0);
     for i:= 0 to High(DbList) do
     begin
       Path:= DbList[i];
-      if not TFile.Exists(Path) then begin Writeln(ErrOutput, 'uses-report: db not found, skipping: ', Path); Continue; end;
+      if not TFile.Exists(Path) then
+      begin
+        Writeln(ErrOutput, 'uses-report: db not found, skipping: ', Path);
+        Continue;
+      end;
       { Read-only, never Migrate: this is a report. The deps-report twin, fixed
         the same day for the same reason (INBOX-read-verbs-migrate-the-db);
         Result:= 2 + Exit is this nested procedure's existing refusal shape. }
@@ -131,10 +140,14 @@ var
       var S: ISymbolStore:= OpenReadOnlyStore(Path, RoOk);
       if (not RoOk) or (S = nil) then
       begin
-        if (not RoOk) and StaleDbRefusesRun(AArgs, 'uses-report', Path) then begin Result:= 2; Exit; end;
+        if (not RoOk) and StaleDbRefusesRun(AArgs, 'uses-report', Path) then
+        begin
+          Result:= 2;
+          Exit;
+        end;
         Continue;
       end;
-      SetLength(Stores, Length(Stores) + 1);
+      SetLength(Stores, Length(Stores) + 1);  // dl:ok setlength-in-loop@594e -- REVIEWED 2026-11-22 SLZ-S02: setlength-in-loop grows an array over a small bounded set of CLI rows; reallocation cost is immaterial at that size
       Stores[High(Stores)]:= S;
     end;
   end; // procedure
@@ -147,7 +160,11 @@ var
     Base:= APath;
     while Base <> '' do
     begin
-      if CharInSet(Base[Length(Base)], ['\','/']) then begin Delete(Base, Length(Base), 1); Break; end;
+      if CharInSet(Base[Length(Base)], ['\','/']) then
+      begin
+        Delete(Base, Length(Base), 1);
+        Break;
+      end;
       Break;
     end;
     Result:= LowerCase(ExtractFileName(Base));
@@ -191,7 +208,7 @@ var
         QFiles.Open;
         while not QFiles.Eof do
         begin
-          PathStr:= QFiles.FieldByName('path').AsString;
+          PathStr:= QFiles.FieldByName('path').AsString;  // dl:ok field-by-name-in-loop@9324 -- REVIEWED 2026-11-22 SLZ-S02: field-by-name-in-loop per-row FieldByName over a small CLI report result set; caching the TFields is a refactor with no measurable gain here
           Meta.Path:= PathStr;
           Meta.Stem:= ComputeStem(PathStr);
           Meta.StoreIndex:= StoreIdx;
@@ -209,7 +226,7 @@ var
     { Step 2: gather every unit_uses edge, group by global source file index. }
     FileIdToGlobal:= TDictionary<Int64, Integer>.Create;
     try
-      for GlobalIdx:= 0 to AllFiles.Count - 1 do FileIdToGlobal.AddOrSetValue( (Int64(AllFiles[GlobalIdx].StoreIndex) shl 40) or Int64(AllFiles[GlobalIdx].FileId), GlobalIdx);
+      for GlobalIdx:= 0 to AllFiles.Count - 1 do FileIdToGlobal.AddOrSetValue( (Int64(AllFiles[GlobalIdx].StoreIndex) shl 40) or Int64(AllFiles[GlobalIdx].FileId), GlobalIdx);  // dl:ok large-magic-number@64e7, magic-literal@64e7 -- REVIEWED 2026-11-22 SLZ-S02: large-magic-number 40 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a); magic-literal 40 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
 
       for StoreIdx:= 0 to High(Stores) do
       begin
@@ -221,8 +238,12 @@ var
           QUses.Open;
           while not QUses.Eof do
           begin
-            LocalFileId:= QUses.FieldByName('file_id').AsLargeInt;
-            if not FileIdToGlobal.TryGetValue( (Int64(StoreIdx) shl 40) or LocalFileId, GlobalIdx) then begin QUses.Next; Continue; end;
+            LocalFileId:= QUses.FieldByName('file_id').AsLargeInt;  // dl:ok field-by-name-in-loop@5a31 -- REVIEWED 2026-11-22 SLZ-S02: field-by-name-in-loop per-row FieldByName over a small CLI report result set; caching the TFields is a refactor with no measurable gain here
+            if not FileIdToGlobal.TryGetValue( (Int64(StoreIdx) shl 40) or LocalFileId, GlobalIdx) then  // dl:ok large-magic-number@6e9e, magic-literal@6e9e -- REVIEWED 2026-11-22 SLZ-S02: large-magic-number 40 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a); magic-literal 40 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
+            begin
+              QUses.Next;
+              Continue;
+            end;
 
             Edge.UnitName    := QUses.FieldByName('unit_name'     ).AsString;
             Edge.UnitNameNorm:= QUses.FieldByName('unit_name_norm').AsString;
@@ -233,7 +254,7 @@ var
             if not QUses.FieldByName('target_file_id').IsNull then
             begin
               TargetFid:= QUses.FieldByName('target_file_id').AsLargeInt;
-              if FileIdToGlobal.TryGetValue( (Int64(StoreIdx) shl 40) or TargetFid, TargetGlobal) then Edge.TargetFileId:= TargetGlobal;
+              if FileIdToGlobal.TryGetValue( (Int64(StoreIdx) shl 40) or TargetFid, TargetGlobal) then Edge.TargetFileId:= TargetGlobal;  // dl:ok large-magic-number@190e, magic-literal@190e -- REVIEWED 2026-11-22 SLZ-S02: large-magic-number 40 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a); magic-literal 40 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
             end;
             { v(ADP3 T4f, register K39): TWO passes, most specific first, the same
               order ResolveUnitUseTargets uses. StemToGlobal is keyed on the FULL
@@ -278,8 +299,7 @@ var
 
   function CsvEscape(const S: string): string;
   begin
-    if (Pos(',', S) > 0) or (Pos('"', S) > 0) or (Pos(#10, S) > 0) then Result:= '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"'
-    else Result:= S;
+    Result:= if (S.Contains(',')) or (S.Contains('"')) or S.Contains(#10) then '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"' else S;
   end;
 
   procedure EmitCsvRow(const ASource, AUsed: string; ADepth: Integer; const ASection, AVia: string; AExternal: Boolean);
@@ -329,14 +349,17 @@ var
         { Skip external rows when not requested, but DO still mark visited
             so we don't repeat them later via a different chain. }
       end
-      else begin EmitCsvRow(SourceMeta.Stem, Item.UsedUnit, Item.Depth, Item.Section, Item.Via, Item.External); Inc(ARowCount); end;
+      else
+      begin
+        EmitCsvRow(SourceMeta.Stem, Item.UsedUnit, Item.Depth, Item.Section, Item.Via, Item.External);
+        Inc(ARowCount);
+      end;
 
       if Item.External then Continue;
       if Item.Depth >= MaxDepth then Continue;
       if not Edges.TryGetValue(Integer(Item.FileId), EdgeList) then Continue;
 
-      if Item.Via = '' then NextVia:= Item.UsedUnit
-      else NextVia:= Item.Via + '>' + Item.UsedUnit;
+      NextVia:= if Item.Via = '' then Item.UsedUnit else Item.Via + '>' + Item.UsedUnit;
 
       for Edge in EdgeList do
       begin
@@ -362,7 +385,7 @@ end; // procedure
     Both the pre-count and the emit loop go through it, so they cannot drift. }
   function IsSourceCandidate(const AMeta: TFileMeta): Boolean;
   begin
-    Result:= (AArgs.AllSources or (AMeta.StoreIndex = 0)) and ((RootPattern = '') or (Pos(RootPattern, AMeta.Stem) > 0));
+    Result:= (AArgs.AllSources or (AMeta.StoreIndex = 0)) and ((RootPattern = '') or AMeta.Stem.Contains(RootPattern));
   end;
 
 var
@@ -375,10 +398,14 @@ begin
   if not ExplicitDbsExist(AArgs, 'uses-report') then Exit(2);
   Result:= 0;
 
-  if AArgs.Output = '' then begin Writeln(ErrOutput, 'uses-report: --output <path.csv> is required'); Exit(2); end;
+  if AArgs.Output = '' then
+  begin
+    Writeln(ErrOutput, 'uses-report: --output <path.csv> is required');
+    Exit(2);
+  end;
 
   MaxDepth:= AArgs.Depth;
-  if MaxDepth <= 0 then MaxDepth:= 50;
+  if MaxDepth <= 0 then MaxDepth:= 50;  // dl:ok magic-literal@b893 -- REVIEWED 2026-11-22 SLZ-S02: magic-literal 50 used once here, its meaning is stated by the expression it sits in; a named constant is kept for repeated literals only (Q10 a)
   RootPattern:= LowerCase(AArgs.Name);
 
   AllFiles    := nil;
@@ -388,7 +415,11 @@ begin
   try
     OpenStores;
     if Result <> 0 then Exit;
-    if Length(Stores) = 0 then begin Writeln(ErrOutput, 'uses-report: no usable DB'); Exit(2); end;
+    if Length(Stores) = 0 then
+    begin
+      Writeln(ErrOutput, 'uses-report: no usable DB');
+      Exit(2);
+    end;
 
     LoadFilesAndEdges;
 
@@ -435,7 +466,7 @@ function DoDepsReport(const AArgs: TArgs): Integer;
 var
   Stores: TArray<ISymbolStore>;
 
-  procedure OpenStores;
+  procedure OpenStores;  // dl:ok duplicate-code@732e -- REVIEWED 2026-11-22 SLZ-S02: duplicate-code measured (205 tokens), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
   var
     DbList: TArray<string>;
     i     : Integer       ;
@@ -443,12 +474,21 @@ var
   begin
     if Length(AArgs.DbPaths) > 0 then DbList:= AArgs.DbPaths
     else if AArgs.DbPath <> '' then DbList:= TArray<string>.Create(AArgs.DbPath)
-    else begin Writeln(ErrOutput, 'deps-report: need at least one --db'); Result:= 2; Exit; end;
+    else
+    begin
+      Writeln(ErrOutput, 'deps-report: need at least one --db');
+      Result:= 2;
+      Exit;
+    end;
     SetLength(Stores, 0);
     for i:= 0 to High(DbList) do
     begin
       Path:= DbList[i];
-      if not TFile.Exists(Path) then begin Writeln(ErrOutput, 'deps-report: db not found, skipping: ', Path); Continue; end;
+      if not TFile.Exists(Path) then
+      begin
+        Writeln(ErrOutput, 'deps-report: db not found, skipping: ', Path);
+        Continue;
+      end;
       { Read-only, never Migrate: this is a report. Same repair and same reason
         as DoUsages (INBOX-read-verbs-migrate-the-db). Result:= 2 + Exit is this
         nested procedure's existing way of refusing; the body checks it. }
@@ -456,23 +496,26 @@ var
       var S: ISymbolStore:= OpenReadOnlyStore(Path, RoOk);
       if (not RoOk) or (S = nil) then
       begin
-        if (not RoOk) and StaleDbRefusesRun(AArgs, 'deps-report', Path) then begin Result:= 2; Exit; end;
+        if (not RoOk) and StaleDbRefusesRun(AArgs, 'deps-report', Path) then
+        begin
+          Result:= 2;
+          Exit;
+        end;
         Continue;
       end;
-      SetLength(Stores, Length(Stores) + 1);
+      SetLength(Stores, Length(Stores) + 1);  // dl:ok setlength-in-loop@594e -- REVIEWED 2026-11-22 SLZ-S02: setlength-in-loop grows an array over a small bounded set of CLI rows; reallocation cost is immaterial at that size
       Stores[High(Stores)]:= S;
     end;
   end; // procedure
 
   function CsvEscape(const S: string): string;
   begin
-    if (Pos(',', S) > 0) or (Pos('"', S) > 0) or (Pos(#10, S) > 0) then Result:= '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"'
-    else Result:= S;
+    Result:= if (S.Contains(',')) or (S.Contains('"')) or S.Contains(#10) then '"' + StringReplace(S, '"', '""', [rfReplaceAll]) + '"' else S;
   end;
 
   function ResolvedStr(AResolved: Boolean): string;
   begin
-    if AResolved then Result:= 'resolved' else Result:= 'not-indexed';
+    Result:= if AResolved then 'resolved' else 'not-indexed';
   end;
 
   function RenderText(const ARep: TDepsReport): string;
@@ -497,7 +540,11 @@ var
         for G:= Low(TDepsGroup) to High(TDepsGroup) do
         begin
           var AnyInGroup: Boolean:= False;
-          for Ext in ARep.Externals do if Ext.Group = G then begin AnyInGroup:= True; Break; end;
+          for Ext in ARep.Externals do if Ext.Group = G then
+          begin
+            AnyInGroup:= True;
+            Break;
+          end;
           if not AnyInGroup then Continue;
 
           SB.AppendLine(Format('== %s ==', [DepsGroupStr(G)]));
@@ -650,7 +697,11 @@ begin
   try
     OpenStores;
     if Result <> 0 then Exit;
-    if Length(Stores) = 0 then begin Writeln(ErrOutput, 'deps-report: no usable DB'); Exit(2); end;
+    if Length(Stores) = 0 then
+    begin
+      Writeln(ErrOutput, 'deps-report: no usable DB');
+      Exit(2);
+    end;
 
     Opts.Depth      := AArgs.Depth;
     Opts.AllSources := AArgs.AllSources;

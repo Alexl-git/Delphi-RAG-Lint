@@ -200,7 +200,7 @@ begin
   Result:= 0;
 end; // function
 
-function DoShutdown(const AArgs: TArgs): Integer;
+function DoShutdown(const AArgs: TArgs): Integer;  // dl:ok cyclomatic-complexity@da65 -- REVIEWED 2026-11-22 SLZ-S02: cyclomatic-complexity measured cyclomatic complexity 32 (max 30), pre-existing shape; splitting it is a refactor of its own, out of scope for a lint pass (Q10 a)
 const
   CONNECT_TIMEOUT_MS = 2000; { WaitNamedPipe: the engine serves one connection at a time }
   KILL_WAIT_MS       = 5000; { after TerminateProcess, how long to wait for the handle to signal }
@@ -299,7 +299,7 @@ begin
             end;
       if not Holds then Continue;
     end;
-    SetLength(Rows, Length(Rows) + 1);
+    SetLength(Rows, Length(Rows) + 1);  // dl:ok setlength-in-loop@c117 -- REVIEWED 2026-11-22 SLZ-S02: setlength-in-loop grows an array over a small bounded set of CLI rows; reallocation cost is immaterial at that size
     Rows[High(Rows)]:= Row;
   end;
 
@@ -341,7 +341,7 @@ begin
       begin
         Gone:= WaitGone(Row.Pid, WaitMs);
         if Gone then
-          Writeln(Format('  pid %d: exiting (stores closed); exited after %.2f s', [Row.Pid, (GetTickCount64 - T0) / MS_PER_SECOND]))
+          Writeln(Format('  pid %d: exiting (stores closed); exited after %.2f s', [Row.Pid, (GetTickCount64 - T0) / MS_PER_SECOND]))  // dl:ok locale-sensitive-conversion@eeea -- REVIEWED 2026-11-22 SLZ-S02: locale-sensitive-conversion human-facing console text; the user locale decimal separator is acceptable for display
         else
         begin
           Writeln(Format('  pid %d: said exiting but is STILL RUNNING after %d ms', [Row.Pid, WaitMs]));
@@ -349,7 +349,7 @@ begin
         end;
         Continue;
       end;
-      if (Length(Fields) > 0) and SameText(Fields[0], CONTROL_REPLY_BUSY) then
+      if (Length(Fields) > 0) and SameText(Fields[0], CONTROL_REPLY_BUSY) then  // dl:ok ifthen-to-if-expression@a49b -- REVIEWED 2026-11-22 SLZ-S02: ifthen-to-if-expression the else-branch already holds an if-expression; folding both into one nested if-expression assignment reads worse
         Err:= 'BUSY -- ' + (if Length(Fields) > 2 then Fields[2] else 'not idle')
       else
         Err:= 'unexpected reply: ' + Reply;
