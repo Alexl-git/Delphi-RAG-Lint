@@ -1,4 +1,4 @@
-unit DRagLint.Lint.ProjectRules;
+unit DRagLint.Lint.ProjectRules;  // dl:ok unit-too-large@b772 -- REVIEWED 2026-11-21 SLZ-S05: 5748 lines; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
 { Index-wide ("project") lint rules that need the whole symbol/refs graph rather
   than a single file's AST -- the cross-file complement to the per-file `lint`
@@ -13,18 +13,14 @@ uses
   System.SysUtils
   , System.Classes
   , System.StrUtils { StartsText / PosEx -- the .dfm text scan in global-only-uses-edge }
-  , DRagLint.Lint.ReviewMarker { MarkerBearingLines -- which // is reached in code state }
   , System.DateUtils { DateTimeToUnix / UnixToDateTime -- R2 dates against the CURRENT disk mtime, not the stored one }
   , System.IOUtils
   , System.JSON
   , System.Diagnostics { TStopwatch -- DRAGLINT_PROFILE per-rule attribution in Run }
   , System.Generics.Collections
   , System.Generics.Defaults
-  , TreeSitter
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
-  , DRagLint.Index.Glob
-  , DRagLint.Diagnostics.ParseCache
   , DRagLint.Lint.SharedUnit { ProjectsOf -- unused-public-symbol must not call a
                                shared unit's API dead on one project's index }
   , DRagLint.Lint.SharedScope { TSharedScope -- a shared unit is judged by every project that lists it }
@@ -49,7 +45,7 @@ type
   /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TProjectLintRules = class
+  TProjectLintRules = class  // dl:ok high-response@09ab -- REVIEWED 2026-11-21 SLZ-S05: RFC 99; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   public
     /// <summary>Runs the project rules over AStore and returns all findings.</summary>
     /// <param name="AStore">An open, migrated symbol store; nil yields no findings.</param>
@@ -217,7 +213,7 @@ function CollectCircularUsesDetailed(const AStore: ISymbolStore): TArray<TCycleC
 /// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function CycleFixPointer(const pProject, pStem: string): string;
+function CycleFixPointer(const pProject, pStem: string): string;  // dl:ok unused-public-symbol@9543 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
 /// <summary>pMessage with its cycle-fix pointer (see CycleFixPointer), if it has one, replaced by
 /// the pointer for pProject / pStem; a message without one gets it appended.</summary>
@@ -239,6 +235,11 @@ function WithCycleFixPointer(const pMessage, pProject, pStem: string): string;
 implementation
 
 uses
+  System.Math,
+  DRagLint.Lint.ReviewMarker,
+  TreeSitter,
+  DRagLint.Index.Glob,
+  DRagLint.Diagnostics.ParseCache,
   DRagLint.Core.Encoding, DRagLint.Core.FileTime,
   DRagLint.Core.Versions, { CompareDottedVersions -- the resolver-version gate of InitSectionInfo (145 lane lf) }
   DRagLint.Report.CycleEdge, { BareUsesBinding / ProjectUnitScopes -- circular-uses binds a bare
@@ -304,7 +305,7 @@ const
 
 function CycleFixPointer(const pProject, pStem: string): string;
 begin
-  var Proj:= if pProject = '' then '<X.dproj>' else if Pos(' ', pProject) > 0 then '"' + pProject + '"' else pProject;
+  var Proj:= if pProject = '' then '<X.dproj>' else if pProject.Contains(' ') then '"' + pProject + '"' else pProject;
   Result:= CCycleFixPointerHead + Proj + ' --unit ' + pStem;
 end;
 
@@ -374,7 +375,9 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -519,7 +522,7 @@ var
       end
       else if (AnyIntf = 0) or (HL < AnyIntf) then AnyIntf:= HL;
       Tgt:= 0;
-      if (not FileOfUnit.TryGetValue(LowerCase(U.UnitName), Tgt)) and (Pos('.', U.UnitName) = 0) then
+      if (not FileOfUnit.TryGetValue(LowerCase(U.UnitName), Tgt)) and (not U.UnitName.Contains('.')) then
         FileOfStem.TryGetValue(LowerCase(U.UnitName), Tgt);
       if (Tgt <= 0) or (Tgt = AFid) or not AComp.Contains(Tgt) then Continue;
       if U.Section = uusImplementation then
@@ -580,7 +583,8 @@ var
       for Bi:= 0 to AComp.Count - 1 do
       begin
         if Ai = Bi then Continue;
-        A:= AComp[Ai]; B:= AComp[Bi];
+        A:= AComp[Ai];
+        B:= AComp[Bi];
         if not Adj.TryGetValue(A, Lst) then Continue;
         if Lst.IndexOf(B) < 0 then Continue; { not an edge of this cycle }
 
@@ -599,8 +603,8 @@ var
           Names:= '';
           for var Ni: Integer:= 0 to Shown - 1 do
           begin
-            if Names <> '' then Names:= Names + ', ';
-            Names:= Names + Seen[Ni];
+            if Names <> '' then Names:= Names + ', ';  // dl:ok concat-in-loop@f891 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+            Names:= Names + Seen[Ni];  // dl:ok concat-in-loop@b730 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
           end;
           if Seen.Count > Shown then
             Names:= Names + Format(', ... and %d more', [Seen.Count - Shown]);
@@ -627,7 +631,7 @@ var
       implementation-section, so there was no interface edge to remove and the
       reader was being sent to look for one that does not exist. }
     if Length(Result) = 0 then Exit;
-    if AnyIntf then
+    if AnyIntf then  // dl:ok ifthen-to-if-expression@9d7c -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
       Result:= Result + ['      => break it at an edge marked BREAK HERE: move those declarations into a',
                          '         new unit that both sides use. That is the only edge forcing the cycle.']
     else
@@ -636,7 +640,7 @@ var
                          '         unit; there is no interface edge here that must go.'];
   end;
 
-  procedure StrongConnect(V: Int64);
+  procedure StrongConnect(V: Int64);  // dl:ok deep-nesting@64d6, cognitive-complexity@3c96 -- REVIEWED 2026-11-21 SLZ-S05: measured 79 (max 65); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     W  : Int64;
     Lst: TList<Int64>;
@@ -655,10 +659,7 @@ var
           StrongConnect(W);
           if LowLink[W] < LowLink[V] then LowLink[V]:= LowLink[W];
         end
-        else if OnStack.ContainsKey(W) and OnStack[W] then
-        begin
-          if Index[W] < LowLink[V] then LowLink[V]:= Index[W];
-        end;
+        else if (OnStack.ContainsKey(W) and OnStack[W]) and (Index[W] < LowLink[V]) then LowLink[V]:= Index[W];
       end;
     { Root of an SCC -> pop it off the stack. }
     if LowLink[V] = Index[V] then
@@ -688,8 +689,8 @@ var
             var Names: string:= '';
             for Idx:= 0 to Sorted.Count - 1 do
             begin
-              if Names <> '' then Names:= Names + ' -> ';
-              Names:= Names + Sorted[Idx];
+              if Names <> '' then Names:= Names + ' -> ';  // dl:ok concat-in-loop@89cd -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+              Names:= Names + Sorted[Idx];  // dl:ok concat-in-loop@8a2a -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
             end;
           { Anchor at the alphabetically-first unit's fid. }
           var Anchor: Int64:= Comp[Comp.Count - 1];
@@ -722,7 +723,7 @@ var
                 var K: string:= IntToStr(Comp[Ai]) + '|' + IntToStr(Comp[Bi]);
                 if EdgeHasImpl.ContainsKey(K) then HasImplEdge:= True;
               end;
-          if HasImplEdge then
+          if HasImplEdge then  // dl:ok ifthen-to-if-expression@b0d1 -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
             F.Message := Format('Circular unit dependency among %d units: %s -- it already routes through an implementation-section uses, so it compiles; this is a coupling smell, not a build error. Extract the shared code into a new unit (moving another use to the implementation section will NOT break this cycle)', [Comp.Count, Names])
               + CycleFixPointer('', LowerCase(ChangeFileExt(ExtractFileName(AStore.GetFilePath(Anchor)), '')))
           else
@@ -738,7 +739,10 @@ var
             Ln:= 1;
             UnitLine.TryGetValue(Anchor, Ln);
           end;
-          F.StartLine:= Ln; F.StartCol:= 1; F.EndLine:= Ln; F.EndCol:= 1;
+          F.StartLine:= Ln;
+          F.StartCol:= 1;
+          F.EndLine:= Ln;
+          F.EndCol:= 1;
           var CC: TCycleCoupling;
           CC.Finding:= F;
           CC.Detail := CouplingLines(Comp);
@@ -850,7 +854,7 @@ begin
             became an edge to `DRagLint.Storage.SQLite`, reporting a phantom
             2-unit cycle on every unit that opens a FireDAC connection.
             run_circular_uses_message.ps1 pins both halves. }
-          if Pos('.', U.UnitName) = 0 then
+          if not U.UnitName.Contains('.') then
             FileOfStem.TryGetValue(LowerCase(U.UnitName), Tgt);
         end;
         if (Tgt > 0) and (Tgt <> Fid) and (not Lst.Contains(Tgt)) then Lst.Add(Tgt);
@@ -885,8 +889,14 @@ begin
     Adj.Free;
     EdgeHasImpl.Free;
     EdgeHasIntf.Free;
-    Stack.Free; OnStack.Free; LowLink.Free; Index.Free;
-    UnitLine.Free; FileOfStem.Free; FileOfUnit.Free; UnitName.Free;
+    Stack.Free;
+    OnStack.Free;
+    LowLink.Free;
+    Index.Free;
+    UnitLine.Free;
+    FileOfStem.Free;
+    FileOfUnit.Free;
+    UnitName.Free;
     for var SD in SymCache.Values do SD.Free;
     SymCache.Free;
     Findings.Free;
@@ -1068,7 +1078,8 @@ var
   U   : TUnitUse;
   Stem: string  ;
 begin
-  ALine:= 1; ACol:= 1;
+  ALine:= 1;
+  ACol:= 1;
   Stem:= LowerCase(ADeclUnit);
   if LastDelimiter('.', Stem) > 0 then
     Stem:= Copy(Stem, LastDelimiter('.', Stem) + 1, MaxInt);
@@ -1115,8 +1126,8 @@ begin
     for var I: Integer:= 0 to SL.Count - 1 do
     begin
       if Trim(SL[I]) = '' then Continue;
-      if Result <> '' then Result:= Result + ', ';
-      Result:= Result + Trim(SL[I]);
+      if Result <> '' then Result:= Result + ', ';  // dl:ok concat-in-loop@788e -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+      Result:= Result + Trim(SL[I]);  // dl:ok concat-in-loop@76fc -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     end;
   finally
     SL.Free;
@@ -1210,7 +1221,7 @@ type
 /// 144 MB index), so it is gated on OptedIn as well as WantRule.
 /// Never raises. See ISymbolStore.FindUsesGlobalCensus.
 /// </remarks>
-function CollectUsesGlobalCensus(const AStore: ISymbolStore): TArray<TLintFinding>;
+function CollectUsesGlobalCensus(const AStore: ISymbolStore): TArray<TLintFinding>;  // dl:ok cyclomatic-complexity@c27b -- REVIEWED 2026-11-21 SLZ-S05: measured 35 (max 30); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 const
   CTag      = 'dl:census-ok';
   { The owner's spelling, 2026-08-31: `// dl:unit <unit> accepted`, which reads
@@ -1270,11 +1281,13 @@ var
     SL: TStringList;
     I : Integer;
   begin
-    Result:= ''; ACount:= 0;
+    Result:= '';
+    ACount:= 0;
     SL:= TStringList.Create;
     try
       SL.CaseSensitive:= False;
-      SL.Delimiter:= ','; SL.StrictDelimiter:= True;
+      SL.Delimiter:= ',';
+      SL.StrictDelimiter:= True;
       SL.DelimitedText:= ACsv;
       SL.Sort;
       for I:= 0 to SL.Count - 1 do
@@ -1284,8 +1297,8 @@ var
       begin
         if Trim(SL[I]) = '' then Continue;
         if Shown >= CNameCap then Break;
-        if Result <> '' then Result:= Result + ', ';
-        Result:= Result + Trim(SL[I]);
+        if Result <> '' then Result:= Result + ', ';  // dl:ok concat-in-loop@788e -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+        Result:= Result + Trim(SL[I]);  // dl:ok concat-in-loop@76fc -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
         Inc(Shown);
       end;
       if ACount > Shown then
@@ -1314,7 +1327,7 @@ var
   function IsDataModuleClass(const AName: string; ADepth: Integer): Boolean;
   begin
     Result:= False;
-    if (ADepth > 8) or (Trim(AName) = '') then Exit;
+    if (ADepth > 8) or (Trim(AName) = '') then Exit;  // dl:ok magic-literal@90d1 -- REVIEWED 2026-11-21 SLZ-S05: literal 8; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if SameText(Trim(AName), 'TDataModule') then Exit(True);
     for var Sy: TSymbol in AStore.FindSymbolsByExactName(Trim(AName)) do
     begin
@@ -1394,7 +1407,8 @@ begin
 
           var Toks: TStringList:= TStringList.Create;
           try
-            Toks.Delimiter:= ','; Toks.StrictDelimiter:= True;
+            Toks.Delimiter:= ',';
+            Toks.StrictDelimiter:= True;
             Toks.DelimitedText:= Rest;
             for var T: Integer:= 0 to Toks.Count - 1 do
             begin
@@ -1431,10 +1445,12 @@ begin
                 F.RuleId   := 'uses-global-census';
                 F.Severity := 'info';
                 F.FilePath := RPath;
-                F.StartLine:= L; F.StartCol:= P;
-                F.EndLine  := L; F.EndCol  := P + Length(CTag);
+                F.StartLine:= L;
+                F.StartCol:= P;
+                F.EndLine  := L;
+                F.EndCol  := P + Length(CTag);
                 var Why: string;
-                if not InUses then
+                if not InUses then  // dl:ok ifthen-to-if-expression@3063 -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
                   Why:= 'it is not in this unit''s uses clause'
                 else
                   Why:= 'this unit draws no globals or consts from it';
@@ -1485,8 +1501,8 @@ begin
       var VNames: string:= Rendered(E.VarNames  , NV);
       var CNames: string:= Rendered(E.ConstNames, NC);
       var All   : string:= VNames;
-      if (All <> '') and (CNames <> '') then All:= All + ', ';
-      All:= All + CNames;
+      if (All <> '') and (CNames <> '') then All:= All + ', ';  // dl:ok concat-in-loop@cb7b -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+      All:= All + CNames;  // dl:ok concat-in-loop@99e1 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
       var Ln, Cl: Integer;
       ProjAnchorAtUsesIn(UsesCached(E.ReaderFileId), DeclUnit, Ln, Cl);
@@ -1495,8 +1511,10 @@ begin
       F.RuleId   := 'uses-global-census';
       F.Severity := 'info';
       F.FilePath := ReaderPath;
-      F.StartLine:= Ln; F.StartCol:= Cl;
-      F.EndLine  := Ln; F.EndCol  := Cl + Length(DeclUnit);
+      F.StartLine:= Ln;
+      F.StartCol:= Cl;
+      F.EndLine  := Ln;
+      F.EndCol  := Cl + Length(DeclUnit);
       { WHAT IS DRAWN, AGAINST WHAT IS THERE. The counts above say how much of
         the used unit this reader touches; the two after "that %s declares" say
         how much there is. Neither alone answers the owner's question -- 7 of 9
@@ -1633,9 +1651,9 @@ var
         if Gap and (Result <> '')
            and CharInSet(Result[Length(Result)], CWord)
            and CharInSet(Ch, CWord) then
-          Result:= Result + ' ';
+          Result:= Result + ' ';  // dl:ok concat-in-loop@9c4f -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
         Gap   := False;
-        Result:= Result + Ch;
+        Result:= Result + Ch;  // dl:ok concat-in-loop@60cd -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
       end;
     end;
     Result:= LowerCase(Result);
@@ -1704,13 +1722,13 @@ var
       Result:= nil;
       for Sy in ALibStore.FindSymbolsByExactName(AName) do
       begin
-        if not (Sy.Kind in CGlobalKinds) then Continue;
+        if (Sy.Kind not in CGlobalKinds) then Continue;
         if not SameText(Sy.Section, 'interface') then Continue;
         LibUnit:= '';
         if Sy.ParentId <> 0 then
         begin
           Par:= ALibStore.GetSymbolById(Sy.ParentId);
-          if not (Par.Kind in [skUnit, skProgram]) then Continue;
+          if (Par.Kind not in [skUnit, skProgram]) then Continue;
           LibUnit:= Par.Name;
         end;
         if LibUnit = '' then
@@ -1782,7 +1800,7 @@ var
       if F.StartCol <= 0 then F.StartCol:= 1;
       F.EndLine  := Masking[0].StartLine;
       F.EndCol   := F.StartCol + Length(Masking[0].Name);
-      if NProject >= 2 then
+      if NProject >= 2 then  // dl:ok ifthen-to-if-expression@ddc6 -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
         F.Message:= Format(
           '%s is declared at interface level in %d project units AND in library unit %s (%s) -- ' +
           'three or more declarations of one name; an unqualified %s resolves through the uses ' +
@@ -1875,18 +1893,18 @@ begin
         end;
         if Shown < CMaxDupSitesShown then
         begin
-          if Sites <> '' then Sites:= Sites + ', ';
-          Sites:= Sites + Format('%s:%d', [SitePath, Rows[K].StartLine]);
-          if Sigs <> '' then Sigs:= Sigs + ' vs ';
-          Sigs:= Sigs + Trim(Rows[K].Signature);
+          if Sites <> '' then Sites:= Sites + ', ';  // dl:ok concat-in-loop@2080 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+          Sites:= Sites + Format('%s:%d', [SitePath, Rows[K].StartLine]);  // dl:ok concat-in-loop@b6fc -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+          if Sigs <> '' then Sigs:= Sigs + ' vs ';  // dl:ok concat-in-loop@3326 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+          Sigs:= Sigs + Trim(Rows[K].Signature);  // dl:ok concat-in-loop@8b8c -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
           Inc(Shown);
         end
         else
           Inc(Elided);
         if not ContainsText(Kinds, Rows[K].Kind) then
         begin
-          if Kinds <> '' then Kinds:= Kinds + '/';
-          Kinds:= Kinds + Rows[K].Kind;
+          if Kinds <> '' then Kinds:= Kinds + '/';  // dl:ok concat-in-loop@277f -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+          Kinds:= Kinds + Rows[K].Kind;  // dl:ok concat-in-loop@ca17 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
         end;
         if NormSig(Rows[K].Signature) <> NormSig(Rows[I].Signature) then Differ:= True;
       end;
@@ -1915,7 +1933,7 @@ begin
           damage it has already done, which is a message concern. Escalating the
           SEVERITY on `Differ` would also make the rule's severity depend on
           NormSig being perfect, and NormSig has now been wrong once. }
-        if Differ then
+        if Differ then  // dl:ok ifthen-to-if-expression@1e05 -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
           F.Message:= Format(
             '%s is declared at interface level in %d units as %s (%s) -- and THE DECLARATIONS ' +
             'DIFFER (%s), so you are compiling one of two different things and which one ' +
@@ -2138,14 +2156,14 @@ var
       LitCache.Add(Key, Lits);
     end;
     for Lit in Lits do
-      if (Lit.StartLine >= AOwner.ImplStartLine) and (Lit.StartLine <= AOwner.ImplEndLine)
+      if InRange(Lit.StartLine, AOwner.ImplStartLine, AOwner.ImplEndLine)
          and (Trim(Lit.Text) <> '') then
         AList.Add(Trim(Lit.Text));
   end;
 
   { Every member name the class chain declares, or nil to mean "stay silent
     about this class". }
-  function MembersOf(const AClassName: string): TStringList;
+  function MembersOf(const AClassName: string): TStringList;  // dl:ok too-many-exit-points@8aec -- REVIEWED 2026-11-21 SLZ-S05: 6 Exit statements; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     Sym    : TSymbol        ;
     Used   : ISymbolStore   ;
@@ -2226,7 +2244,7 @@ var
     P: Integer;
   begin
     P:= Pos('.', AProp);
-    if P > 0 then Result:= Copy(AProp, 1, P - 1) else Result:= AProp;
+    if P > 0 then Result:= Copy(AProp, 1, P - 1) else Result:= AProp;  // dl:ok ifthen-to-if-expression@dac2 -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
   end;
 
 var
@@ -2460,7 +2478,7 @@ begin
         Cls:= RootClassOf(Lit.SymbolId);
         if Cls = '' then Continue;
         Members:= MembersOf(Cls);
-        if Members = nil then Continue;                 { unknown chain: silent }
+        if Members = nil then Continue;                 { unknown chain: silent }  // dl:ok duplicate-code@2964 -- REVIEWED 2026-11-21 SLZ-S05: 93 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
         if Members.IndexOf(Handler) >= 0 then Continue;
 
         var F: TLintFinding:= Default(TLintFinding);
@@ -2889,7 +2907,7 @@ var
     A  : TTypeAncestor;
   begin
     Result:= False;
-    if (ADepth > 8) or (Trim(AName) = '') then Exit;
+    if (ADepth > 8) or (Trim(AName) = '') then Exit;  // dl:ok magic-literal@90d1 -- REVIEWED 2026-11-21 SLZ-S05: literal 8; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if IsBehaviouralRoot(AName) then
     begin
       ABehav:= True;
@@ -2897,7 +2915,7 @@ var
     end;
     for Idx:= 0 to 1 do
     begin
-      if Idx = 0 then S:= AStore else S:= ALibStore;
+      if Idx = 0 then S:= AStore else S:= ALibStore;  // dl:ok ifthen-to-if-expression@11b5 -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
       if S = nil then Continue;
       for Sy in S.FindSymbolsByExactName(AName) do
       begin
@@ -2913,9 +2931,7 @@ var
             ABehav:= True;
             Exit(True);
           end;
-          if (not A.Resolved) and (ALibStore <> nil) and (Idx = 0) then
-            if Climb(A.Name, ADepth + 1, ABehav) then
-            begin
+          if ((not A.Resolved) and (ALibStore <> nil) and (Idx = 0)) and (Climb(A.Name, ADepth + 1, ABehav)) then begin
               Result:= True;
               if ABehav then Exit(True);
             end;
@@ -2937,7 +2953,7 @@ var
     if TypeMemo.TryGetValue(Key, Result) then Exit;
     Behav := False;
     if Climb(Trim(ATypeName), 0, Behav) then
-      if Behav then Result:= mcBehavioural else Result:= mcResource
+      if Behav then Result:= mcBehavioural else Result:= mcResource  // dl:ok ifthen-to-if-expression@c0ba -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
     else
       Result:= mcUnresolved;
     TypeMemo.AddOrSetValue(Key, Result);
@@ -2956,7 +2972,8 @@ var
     SL       : TStringList;
     I, C     : Integer;
   begin
-    ARoot:= ''; ARootClass:= '';
+    ARoot:= '';
+    ARootClass:= '';
     Dfm:= ChangeFileExt(AUnitPath, '.dfm');
     if not TFile.Exists(Dfm) then Exit;
     SL:= TStringList.Create;
@@ -2972,7 +2989,7 @@ var
       begin
         Line:= Trim(SL[I]);
         if not StartsText('object ', Line) then Continue;
-        Line:= Trim(Copy(Line, 8, MaxInt));
+        Line:= Trim(Copy(Line, 8, MaxInt));  // dl:ok magic-literal@ccc0 -- REVIEWED 2026-11-21 SLZ-S05: literal 8; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
         C:= Pos(':', Line);
         if C > 1 then
         begin
@@ -3120,7 +3137,7 @@ var
           if Cls = mcResource then Continue;
           Result.ModuleOK:= False;
           Inc(NBad);
-          if NBad <= 5 then
+          if NBad <= 5 then  // dl:ok magic-literal@c90e -- REVIEWED 2026-11-21 SLZ-S05: literal 5; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
           begin
             TypeTx:= Trim(S.Signature);
             if TypeTx = '' then TypeTx:= 'unknown type';
@@ -3128,7 +3145,7 @@ var
             Result.BadFields:= Result.BadFields + Format('%s (%s)', [S.Name, TypeTx]);
           end;
         end;
-        if NBad > 5 then Result.BadFields:= Result.BadFields + Format(', +%d more', [NBad - 5]);
+        if NBad > 5 then Result.BadFields:= Result.BadFields + Format(', +%d more', [NBad - 5]);  // dl:ok magic-literal@0e5a -- REVIEWED 2026-11-21 SLZ-S05: literal 5; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
       end;
     end;
     RootCache.Add(ADeclPath, Result);
@@ -3210,12 +3227,14 @@ begin
       F.RuleId  := 'global-only-uses-edge';
       F.Severity:= 'info';
       F.FilePath:= ReaderPath;
-      F.StartLine:= Ln; F.StartCol:= Cl;
-      F.EndLine  := Ln; F.EndCol  := Cl + Length(DeclUnit);
+      F.StartLine:= Ln;
+      F.StartCol:= Cl;
+      F.EndLine  := Ln;
+      F.EndCol  := Cl + Length(DeclUnit);
       { THE CURE CLAUSE IS CHOSEN BY THE CARRYING GLOBAL'S TYPE, and only an
         interface earns the word "inject" -- see the remarks above. }
       if E.GlobalCount = 1 then
-        if E.AllInterfaceTyped then
+        if E.AllInterfaceTyped then  // dl:ok ifthen-to-if-expression@ddc6 -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
           F.Message:= Format(
             '%s depends on %s for nothing but the global variable %s -- it is ' +
             'interface-typed, so injecting or relocating it deletes this uses edge',
@@ -3255,13 +3274,13 @@ begin
           if MemCls = mcResource then Continue;
           AllResource:= False;
           Inc(NBad);
-          if NBad <= 5 then
+          if NBad <= 5 then  // dl:ok magic-literal@c90e -- REVIEWED 2026-11-21 SLZ-S05: literal 5; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
           begin
-            if Bad <> '' then Bad:= Bad + ', ';
-            Bad:= Bad + Format('%s (%s)', [M, MemTx]);
+            if Bad <> '' then Bad:= Bad + ', ';  // dl:ok concat-in-loop@54e7 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+            Bad:= Bad + Format('%s (%s)', [M, MemTx]);  // dl:ok concat-in-loop@7292 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
           end;
         end;
-        if NBad > 5 then Bad:= Bad + Format(', +%d more', [NBad - 5]);
+        if NBad > 5 then Bad:= Bad + Format(', +%d more', [NBad - 5]);  // dl:ok magic-literal@9bb4 -- REVIEWED 2026-11-21 SLZ-S05: literal 5; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
 
         if AllResource and Info.ModuleOK then
           { GATE 1 and GATE 2 both pass: every bound member is a resource and the
@@ -3414,13 +3433,15 @@ var
   Src      : TBytes                           ;
 
   { Extract raw source bytes spanned by a node as a string. }
-  function NodeStr(const N: TTSNode): string;
+  function NodeStr(const N: TTSNode): string;  // dl:ok duplicate-code@408a -- REVIEWED 2026-11-21 SLZ-S05: 97 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   var
     S, E, L: Integer;
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -3507,8 +3528,9 @@ var
           if Sc.IsNull then Continue;
           var Sct: string:= Sc.NodeType;
           if (Sct <> 'caseCase') and (Sct <> 'statement') and (Sct <> 'statements')
-             and ((Length(Sct) = 0) or (Sct[1] <> 'k')) then
-          begin Selector:= Sc; Break; end;
+             and ((Sct = '') or (Sct[1] <> 'k')) then
+          begin Selector:= Sc;
+          Break; end;
         end;
       if (not Selector.IsNull) and (Cur <> '') then
       begin
@@ -3591,7 +3613,7 @@ begin
           F.StartLine:= S.Line;
           F.StartCol := S.Col;
           F.EndLine  := S.Line;
-          F.EndCol   := S.Col + 4; { length of 'case' keyword }
+          F.EndCol   := S.Col + 4; { length of 'case' keyword }  // dl:ok magic-literal@656e -- REVIEWED 2026-11-21 SLZ-S05: literal 4; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
           Findings.Add(F);
         end;
       finally
@@ -4198,7 +4220,7 @@ begin
   end;
 end; // function
 
-class function TProjectLintRules.Run(const AStore: ISymbolStore; const ARuleId: string;
+class function TProjectLintRules.Run(const AStore: ISymbolStore; const ARuleId: string;  // dl:ok too-many-parameters@0c17, too-many-locals@4bb7, method-too-long@0e2c, cyclomatic-complexity@d985, cognitive-complexity@a935 -- REVIEWED 2026-11-21 SLZ-S05: 661 lines; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   const ASiblingStore: TSiblingStoreResolver; const ALibraryStore: ISymbolStore;
   const AOptInRules: TArray<string>; const AOnlyFileId: Int64;
   const AWholeGraph: TFunc<string, TArray<TLintFinding>>; const ASiblingNames: TSiblingProjectLister): TArray<TLintFinding>;
@@ -4220,7 +4242,7 @@ var
   Ref           : TReference                  ;
   UsesList      : TArray<TUnitUse>            ;
   U             : TUnitUse                    ;
-  UnitStem      : string                      ;
+  UnitStem      : string                      ;  // dl:ok unused-local@3f6d -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   UF            : TLintFinding                ;
   PrivModifiers : string                      ;
   IsPrivate     : Boolean                     ;
@@ -4304,12 +4326,12 @@ var
     the SQL queries being measured. }
   function Tick: Int64;
   begin
-    if Prof then Result:= TStopwatch.GetTimeStamp else Result:= 0;
+    if Prof then Result:= TStopwatch.GetTimeStamp else Result:= 0;  // dl:ok ifthen-to-if-expression@f71e -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
   end;
 
   procedure ProfLine(const AName: string; ATicks: Int64);
   begin
-    Writeln(ErrOutput, Format('    %-28s %10.2f s', [AName, ATicks / TStopwatch.Frequency]));
+    Writeln(ErrOutput, Format('    %-28s %10.2f s', [AName, ATicks / TStopwatch.Frequency]));  // dl:ok locale-sensitive-conversion@3bc6 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   end;
 
   { Charges the time since the previous lap to AName and starts the next lap. }
@@ -4394,7 +4416,7 @@ var
     Cached: TArray<string>              ;
     Seen  : TDictionary<string, Boolean>;
     S     : TSymbol                     ;
-    FPath : string                      ;
+    FPath : string                      ;  // dl:ok local-field-prefix@ce6b -- REVIEWED 2026-11-21 SLZ-S05: TLCOM is a metrics local named after the LCOM acronym, not a field; a rename would hide the acronym (fixer renames F-prefixed names unsafely, see RULE-FP.tsv)
     Stem  : string                      ;
   begin
     if StemsOfName.TryGetValue(AName, Cached) then Exit(Cached);
@@ -4431,7 +4453,8 @@ var
     if UnitIndexed.TryGetValue(AUnitName, Result) then Exit;
     Result:= False;
     for S in AStore.FindSymbolsByExactName(AUnitName) do
-      if S.Kind = skUnit then begin Result:= True; Break; end;
+      if S.Kind = skUnit then begin Result:= True;
+      Break; end;
     UnitIndexed.Add(AUnitName, Result);
   end;
 
@@ -4889,7 +4912,7 @@ var
     `lint <file>` rule cache); otherwise they compute here, exactly as before. }
   function WholeGraph(const AId: string): TArray<TLintFinding>;
   begin
-    if Assigned(AWholeGraph) then Result:= AWholeGraph(AId)
+    if Assigned(AWholeGraph) then Result:= AWholeGraph(AId)  // dl:ok ifthen-to-if-expression@d7e4 -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
     else Result:= CollectWholeGraphRule(AId, AStore, ALibraryStore);
   end;
 
@@ -4929,8 +4952,18 @@ begin
   OwnRefFile := nil;
   Shared     := TSharedScope.Create(AStore, ASiblingStore, ASiblingNames);
   Prof:= GetEnvironmentVariable('DRAGLINT_PROFILE') <> '';
-  TCirc:= 0; TEnum:= 0; TRts:= 0; TUuiu:= 0; TGod:= 0; TUpub:= 0; TUpriv:= 0; TAccess:= 0; TOuter:= 0;
-  TGlob:= 0; TDupD:= 0; TCens:= 0;
+  TCirc:= 0;
+  TEnum:= 0;
+  TRts:= 0;
+  TUuiu:= 0;
+  TGod:= 0;
+  TUpub:= 0;
+  TUpriv:= 0;
+  TAccess:= 0;
+  TOuter:= 0;
+  TGlob:= 0;
+  TDupD:= 0;
+  TCens:= 0;
   TPurity:= 0;
   LapNames:= nil;
   LapTicks:= nil;
@@ -4955,14 +4988,16 @@ begin
       until its corpus count is audited -- see CollectCycleParticipants. }
     if WantRule('cycle-participant-unit') and OptedIn('cycle-participant-unit') then
       for var Cp in CollectCycleParticipants(AStore) do Findings.Add(Cp);
-    Inc(TCirc, Tick - T0); T0:= Tick;
+    Inc(TCirc, Tick - T0);
+    T0:= Tick;
 
     { global-only-uses-edge: whole-refs-graph pass (not per-file), and the ONE
       rule here that is gated on OptedIn as well as WantRule -- see the gate's
       own comment for why both are needed. }
     if WantRule('global-only-uses-edge') and OptedIn('global-only-uses-edge') then
       for var Gf in CollectGlobalOnlyUsesEdges(AStore, ALibraryStore) do Findings.Add(Gf);
-    Inc(TGlob, Tick - T0); T0:= Tick;
+    Inc(TGlob, Tick - T0);
+    T0:= Tick;
     TLap:= T0;
 
     { duplicate-unit-on-search-path: one pass over the file list, grouped by unit stem. }
@@ -4993,7 +5028,8 @@ begin
     if WantRule('duplicate-global-decl') then
       for var Df in WholeGraph('duplicate-global-decl') do
         Findings.Add(Df);
-    Inc(TDupD, Tick - T0); T0:= Tick;
+    Inc(TDupD, Tick - T0);
+    T0:= Tick;
 
     { uses-global-census: whole-refs-graph pass, OFF by default and gated on
       OptedIn for the same reason as global-only-uses-edge -- 1.26 s on the
@@ -5001,7 +5037,8 @@ begin
       perfectly while still charging for it. }
     if WantRule('uses-global-census') and OptedIn('uses-global-census') then
       for var Cf in CollectUsesGlobalCensus(AStore) do Findings.Add(Cf);
-    Inc(TCens, Tick - T0); T0:= Tick;
+    Inc(TCens, Tick - T0);
+    T0:= Tick;
 
     { purity v2 rules (spec section 14): OFF by default and OptedIn-gated for
       the same reason as uses-global-census -- a full symbol_facts scan, plus a
@@ -5035,7 +5072,8 @@ begin
     if WantRule('enum-helper-separate-units') then
       for var Ef in WholeGraph('enum-helper-separate-units') do
         Findings.Add(Ef);
-    Inc(TEnum, Tick - T0); T0:= Tick;
+    Inc(TEnum, Tick - T0);
+    T0:= Tick;
 
     { repeated-type-switch (v0.80 #14): cross-file case-selector grouping pass. }
     if WantRule('repeated-type-switch') then
@@ -5139,7 +5177,7 @@ begin
       -- it only skips computing everyone else's. The relational half (RefdIds /
       RefdNames above) is still built from the whole store.
       tests\autotest\run_lint_file_scoped_loop_parity.ps1 pins it. }
-    if AOnlyFileId > 0 then
+    if AOnlyFileId > 0 then  // dl:ok ifthen-to-if-expression@85e8 -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
       FileIds:= [AOnlyFileId]
     else
       FileIds:= AStore.GetAllFileIds;
@@ -5386,17 +5424,18 @@ begin
                 skMethod, skFunction, skProcedure, skConstructor, skDestructor: Inc(NMethods);
                 skField: Inc(NFields);
               end;
-            if (NMethods > 20) and (NFields > 15) then
+            if (NMethods > 20) and (NFields > 15) then  // dl:ok magic-literal@ddfd -- REVIEWED 2026-11-21 SLZ-S05: literal 20,15; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
               Add('god-class', 'info', Format('God class: %s has %d methods and %d fields -- consider splitting responsibilities', [Sym.Name, NMethods, NFields]), Sym);
           end;
-          Inc(TGod, Tick - TS); TS:= Tick;
+          Inc(TGod, Tick - TS);
+          TS:= Tick;
 
           { unused-public-symbol: an exported (interface-section) free routine that
             nothing in the index references or calls -- likely dead public API.
             Restricted to unit-level routines (not class methods) so DFM-wired
             event handlers and virtual/override methods are not false positives. }
-          if WantRule('unused-public-symbol') and (Sym.Section = 'interface') and (Sym.Kind in [skFunction, skProcedure]) and (Sym.ParentId > 0) and
-            (Pos('override', LowerCase(Sym.Modifiers)) = 0) and not SameText(Sym.Name, 'Register') then
+          if WantRule('unused-public-symbol') and (Sym.Section = 'interface') and (Sym.Kind in [skFunction, skProcedure]) and (Sym.ParentId > 0) and  // dl:ok boolean-expression-complexity@f6ae -- REVIEWED 2026-11-21 SLZ-S05: 5 and/or/xor operators; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+            (not LowerCase(Sym.Modifiers).Contains('override')) and not SameText(Sym.Name, 'Register') then
           begin
             Parent:= AStore.GetSymbolById(Sym.ParentId);
             if (Parent.Id = Sym.ParentId) and (Parent.Kind = skUnit) then
@@ -5456,7 +5495,8 @@ begin
                     Format('Exported routine %s is only referenced within its own unit -- its visibility could be reduced (move it to the implementation section)', [Sym.Name]), Sym);
               end;
           end;
-          Inc(TUpub, Tick - TS); TS:= Tick;
+          Inc(TUpub, Tick - TS);
+          TS:= Tick;
 
           { unused-private-member: a private or strict private member (method,
             field, const, nested type) that has zero references in the index.
@@ -5474,17 +5514,17 @@ begin
           if WantRule('unused-private-member') then
           begin
             PrivModifiers:= LowerCase(Sym.Modifiers);
-            IsPrivate:= (Pos('private', PrivModifiers) > 0);
+            IsPrivate:= (PrivModifiers.Contains('private'));
             if IsPrivate and
               (Sym.Kind in [skMethod, skFunction, skProcedure, skConstructor, skDestructor,
                             skField, skConstDecl, skTypeAlias, skClass, skInterface, skRecord, skEnum]) and
-              (Pos('override', PrivModifiers) = 0) and
+              (not PrivModifiers.Contains('override')) and
               { A message handler -- `procedure WMSize(var M: TWMSize); message WM_SIZE;`
                 -- is dispatched by the VCL through the message table and is NEVER
                 called by name, so "no references" is its normal, correct state,
                 not dead code. Same dispatch argument as the virtual/override
                 guard beside it. }
-              (Pos('message', PrivModifiers) = 0) and
+              (not PrivModifiers.Contains('message')) and
               (not Sym.IsVirtual) then
             begin
               { Skip members whose name appears as a property accessor or backing
@@ -5503,7 +5543,7 @@ begin
 
       finally
         PropAccessors.Free;
-        PropAccessors:= nil;
+        PropAccessors:= nil;  // dl:ok overwrite-before-read@5eed -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
       end;
 
     end; // for Fid
@@ -5614,7 +5654,8 @@ begin
       Exit;
     end;
   end;
-  if not (Root is TJSONObject) then begin Root.Free; Exit; end;
+  if (Root is not TJSONObject) then begin Root.Free;
+  Exit; end;
   Obj:= TJSONObject(Root);
 
   Findings  := TList<TLintFinding>.Create;
@@ -5627,9 +5668,9 @@ begin
       for var I:= 0 to TJSONArray(LayersArr).Count - 1 do
       begin
         var Le:= TJSONArray(LayersArr).Items[I];
-        if not (Le is TJSONObject) then Continue;
+        if (Le is not TJSONObject) then Continue;
         var Nm:= TJSONObject(Le).GetValue('name');
-        if not (Nm is TJSONString) then Continue;
+        if (Nm is not TJSONString) then Continue;
         var LName:= TJSONString(Nm).Value;
         var Pats:= TStringList.Create;
         var Mt:= TJSONObject(Le).GetValue('match');
@@ -5645,12 +5686,13 @@ begin
       for var I:= 0 to TJSONArray(AllowArr).Count - 1 do
       begin
         var Ae:= TJSONArray(AllowArr).Items[I];
-        if not (Ae is TJSONObject) then Continue;
+        if (Ae is not TJSONObject) then Continue;
         var Fr:= TJSONObject(Ae).GetValue('from');
-        if not (Fr is TJSONString) then Continue;
+        if (Fr is not TJSONString) then Continue;
         var FrLow:= LowerCase(TJSONString(Fr).Value);
         var Lst: TStringList;
-        if not Allow.TryGetValue(FrLow, Lst) then begin Lst:= TStringList.Create; Allow.Add(FrLow, Lst); end;
+        if not Allow.TryGetValue(FrLow, Lst) then begin Lst:= TStringList.Create;
+        Allow.Add(FrLow, Lst); end;
         var ToV:= TJSONObject(Ae).GetValue('to');
         if ToV is TJSONArray then
           for var J:= 0 to TJSONArray(ToV).Count - 1 do
@@ -5692,7 +5734,7 @@ begin
           F.EndLine:= U.HostLine;
           F.EndCol := U.HostCol + Length(U.UnitName);
           Findings.Add(F);
-          if Findings.Count >= 500 then Break;
+          if Findings.Count >= 500 then Break;  // dl:ok large-magic-number@80f2, magic-literal@80f2 -- REVIEWED 2026-11-21 SLZ-S05: literal 500,80,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
         end;
       end;
     end;

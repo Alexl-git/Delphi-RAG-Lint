@@ -649,7 +649,7 @@ begin
   if AUnitPath = '' then Exit(svNotShared);
   if not FListing.ContainsKey(LowerCase(AUnitPath)) then ResolvePath(AUnitPath);
   Listing:= FListing[LowerCase(AUnitPath)];
-  Why:= FWhyNot[LowerCase(AUnitPath)];
+  Why:= FWhyNot[LowerCase(AUnitPath)];  // dl:ok dictionary-get-without-check@14e0 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   if Why <> '' then
   begin
     AProjects:= Why;

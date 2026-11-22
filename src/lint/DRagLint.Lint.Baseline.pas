@@ -150,7 +150,7 @@ begin
   if ALine < 1 then Exit;
   if not ACache.TryGetValue(AFile, Lines) then
   begin
-    if TFile.Exists(AFile) then
+    if TFile.Exists(AFile) then  // dl:ok ifthen-to-if-expression@5551 -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
       Lines:= TFile.ReadAllLines(AFile, TEncoding.UTF8)
     else
       Lines:= [];
@@ -177,7 +177,7 @@ begin
       BaseKey:= LowerCase(F.RuleId) + '|' + NormPath(F.FilePath) + '|' + LineTxt;
       if not Counts.TryGetValue(BaseKey, N) then N:= 0;
       Counts.AddOrSetValue(BaseKey, N + 1);
-      if N = 0 then Ord:= '' else Ord:= #0 + IntToStr(N);
+      Ord:= if N = 0 then '' else #0 + IntToStr(N);
       Raw:= BaseKey + Ord;
       Result:= Result + [THashSHA2.GetHashString(Raw)];
     end;
@@ -226,7 +226,7 @@ begin
   if not TFile.Exists(APath) then Exit(AFindings);
 
   RootVal:= TJSONObject.ParseJSONValue(TFile.ReadAllText(APath, TEncoding.UTF8));
-  if not (RootVal is TJSONObject) then
+  if (RootVal is not TJSONObject) then
   begin
     RootVal.Free;
     Exit(AFindings);

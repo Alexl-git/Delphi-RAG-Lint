@@ -481,7 +481,7 @@ begin
   end;
 end;
 
-procedure TThrbRun.CheckTask(const ACall: TTSNode);  // dl:ok too-many-exit-points@2eeb -- a ladder of guard clauses, one per shape that is not this rule's case
+procedure TThrbRun.CheckTask(const ACall: TTSNode);  // dl:ok too-many-exit-points@0fb3 -- a ladder of guard clauses, one per shape that is not this rule's case
 var
   Callee: string;
   Args  : TTSNode;

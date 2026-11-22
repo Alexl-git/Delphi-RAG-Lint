@@ -48,7 +48,7 @@ uses
 /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function IsSideEffectFree(const ANode: TTSNode): Boolean;
+function IsSideEffectFree(const ANode: TTSNode): Boolean;  // dl:ok unused-public-symbol@28a4 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
 /// <summary>The identical-then-else fix for the SINGLE-STATEMENT shape the
 /// DeadCodeChecks finding reports (`if C then X := 1 else X := 1`): the if
@@ -673,7 +673,7 @@ end;
 { one try / finally around the statements strictly after AOpen up to ABodyLast;
   a non-null AClose (a release statement after ABodyLast) is consumed -- its
   line becomes the finally, whose body is AFinally }
-function WrapBetween(const AFx: TFx; const AOpen, ABodyFirst, ABodyLast, AClose: TTSNode;  // dl:ok too-many-exit-points@51ba -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not rewrite
+function WrapBetween(const AFx: TFx; const AOpen, ABodyFirst, ABodyLast, AClose: TTSNode;  // dl:ok too-many-exit-points@a6b4 -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not rewrite
   const AFinally: string; out AEdit: TTextEdit): Boolean;
 var
   LastRow: Integer;
@@ -739,7 +739,7 @@ end;
 { code-after-exit: delete everything after the terminator to the end of the
   list. Only the FIRST finding of a list acts (it covers the later ones); a
   list whose dead part holds a goto label is reachable and left alone. }
-function FixCodeAfterExit(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@356b -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not rewrite
+function FixCodeAfterExit(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@fd59 -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not rewrite
 var
   Fx  : TFx            ;
   N   : TTSNode        ;
@@ -793,7 +793,7 @@ end;
   of the else (a begin..end is unwrapped). The if must be a member of a
   statement list -- inside another if's branch the split would change which
   statements the outer if guards. }
-function FixElseAfterExit(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@fbe8 -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not rewrite
+function FixElseAfterExit(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@32a7 -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not rewrite
 var
   Fx           : TFx            ;
   K, N         : TTSNode        ;
@@ -834,7 +834,7 @@ end;
 
 { identical-then-else: `if C then S else S` -> `S` when C has no call (the
   condition is dropped). A block branch is unwrapped. }
-function FixIdenticalAssignmentBranches(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@d6c9 -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not rewrite
+function FixIdenticalAssignmentBranches(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@33cd -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not rewrite
 var
   Fx          : TFx           ;
   N           : TTSNode       ;
@@ -871,7 +871,7 @@ end;
 { case-with-too-few-branches: one arm with ONE plain label -> an if. Ranges,
   label lists, comments inside the case, and an arm that holds an if while
   the case has an else part (dangling else) stay. }
-function FixCaseFewBranches(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@57c1, cyclomatic-complexity@9649 -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not rewrite
+function FixCaseFewBranches(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@6867, cyclomatic-complexity@1dbe -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not rewrite
 var
   Fx          : TFx            ;
   N, C, Sel   : TTSNode        ;
@@ -979,7 +979,7 @@ end;
 { write-only-local, one finding: the deletions of every store to the local;
   False (nothing) unless EVERY mention of the name in the routine is the lhs
   of a call-free `:=` that can be deleted }
-function WriteOnlyEdits(const AFx: TFx; const AFinding: TLintFinding; out AEdits: TArray<TTextEdit>): Boolean;  // dl:ok too-many-exit-points@f78a -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not rewrite
+function WriteOnlyEdits(const AFx: TFx; const AFinding: TLintFinding; out AEdits: TArray<TTextEdit>): Boolean;  // dl:ok too-many-exit-points@cd3b -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not rewrite
 var
   NameN, DefProc: TTSNode        ;
   Occ           : TArray<TTSNode>;
@@ -1049,7 +1049,7 @@ begin
 end;
 
 { swap-without-temp: `A := B; B := A;` -> `var LSwap := A; A := B; B := LSwap;` }
-function FixSwapWithoutTemp(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@91d5 -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not rewrite
+function FixSwapWithoutTemp(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@f7fa -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not rewrite
 var
   Fx            : TFx            ;
   A1, A2, S1, S2: TTSNode        ;
@@ -1114,7 +1114,7 @@ end;
   Risky: a raised non-Exception object is no longer caught. Declines when the
   body already names an E (the handler variable would shadow it) or the unit
   does not use SysUtils (Exception would not resolve). }
-function FixBareExcept(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@ff31 -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not rewrite
+function FixBareExcept(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@84bd -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not rewrite
 var
   Fx           : TFx           ;
   K, T, Body   : TTSNode       ;
@@ -1183,7 +1183,7 @@ end;
 { criticalsection-not-released: `Enter; S; Leave` in one list ->
   `Enter; try S finally Leave end`. A release inside S (an early Leave) or
   one in another routine stays. }
-function FixCriticalSection(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@8e09 -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not rewrite
+function FixCriticalSection(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@9b4d -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not rewrite
 var
   Fx       : TFx            ;
   S        : TTSNode        ;
@@ -1243,7 +1243,7 @@ end;
   for a LOCAL Q only (a shared field dataset is someone else's). The wrap ends
   before a statement that frees Q; an explicit Q.Close later in the list moves
   into the finally. }
-function FixDatasetOpen(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@58b0 -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not rewrite
+function FixDatasetOpen(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@b7a2 -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not rewrite
 var
   Fx      : TFx            ;
   S, CloseN: TTSNode       ;
@@ -1333,7 +1333,7 @@ end;
 { create-inside-try: move `X := T.Create(..)`, the first statement of a try
   whose finally ONLY frees X, above the try. A finally that frees more stays:
   a failed Create would then leak what the finally also releases. }
-function FixCreateInsideTry(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@ca3f -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not rewrite
+function FixCreateInsideTry(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@6242 -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not rewrite
 var
   Fx              : TFx            ;
   A, S, Sts, T    : TTSNode        ;
@@ -1407,7 +1407,7 @@ end;
   above it. All or nothing: the rule reports the loop once, so a partial
   hoist would leave the finding. Declines when a dataset is reopened, closed,
   freed or reassigned in the loop (its TField objects may be recreated). }
-function FixFieldByNameInLoop(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@3609 -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not rewrite
+function FixFieldByNameInLoop(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@ef62 -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not rewrite
 var
   Fx         : TFx            ;
   N, Loop, P : TTSNode        ;
@@ -1603,7 +1603,7 @@ end;
   const array parameter only), as do a string (1-based) or unknown-typed
   array, nested loops and a routine that already has an LItem. A
   routine-local I used nowhere else is removed through the unused-local fixer. }
-function FixIndexLoopToForIn(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@e687 -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not rewrite
+function FixIndexLoopToForIn(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@6ebc -- REVIEWED 2026-10-27: a guard-clause ladder; every Exit declines a shape the fix must not rewrite
 var
   Fx              : TFx            ;
   N, Body, V      : TTSNode        ;
@@ -1751,7 +1751,7 @@ end;
   the chain stays the else) or ` else if C then S` (the chain's end) therefore
   changes nothing. Declines on a comment, a directive or non-ASCII text in the
   cut, or any other shape. }
-function FixRepeatedElseIf(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@f5cb -- REVIEWED 2026-11-14: a fixer declines (Exit) on every source shape it was not written for; guard clauses by design
+function FixRepeatedElseIf(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@62c9 -- REVIEWED 2026-11-14: a fixer declines (Exit) on every source shape it was not written for; guard clauses by design
 var
   Fx                                : TFx    ;
   C, IfN, G, Top, Cur, DefProc, Els : TTSNode;
@@ -1865,7 +1865,7 @@ end;
   name from a `A, B: T` list, or the section it leaves empty) changes nothing.
   Declines on interface-section names (other units may name them), types,
   managed or unknown var types, and shared lines. }
-function FixUnusedGlobal(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@a355 -- REVIEWED 2026-11-14: a fixer declines (Exit) on every source shape it was not written for; guard clauses by design
+function FixUnusedGlobal(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;  // dl:ok too-many-exit-points@77b2 -- REVIEWED 2026-11-14: a fixer declines (Exit) on every source shape it was not written for; guard clauses by design
 var
   Fx              : TFx            ;
   N, D, Sec, Ty, T: TTSNode        ;

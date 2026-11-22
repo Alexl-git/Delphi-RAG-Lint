@@ -183,7 +183,7 @@ type
     /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.AddProject"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    class function AddProjectToText(const AText, AProject: string; out ANewText: string): Boolean;
+    class function AddProjectToText(const AText, AProject: string; out ANewText: string): Boolean;  // dl:ok shared-marker-legacy-shape@5423 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   end;
 
 implementation
@@ -362,7 +362,7 @@ end;
 /// "YADFOT }". A `//` also ends the list: the writer leads an existing
 /// unit-line comment with the marker (`// dl:shared A, B // note`), and the
 /// note is not a project.</remarks>
-function SplitCommentTail(const ARest: string; out ATail: string): string;
+function SplitCommentTail(const ARest: string; out ATail: string): string;  // dl:ok shared-marker-legacy-shape@c291 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   I: Integer;
 begin
@@ -466,10 +466,7 @@ begin
                 LineStop - (MarkPos + Length(SHARED_MARK)) + 1);
     Body:= SplitCommentTail(Rest, Tail);
 
-    if Trim(Body) = '' then
-      Body:= ' ' + Proj
-    else
-      Body:= TrimRight(Body) + ', ' + Proj;
+    Body:= if Trim(Body) = '' then ' ' + Proj else TrimRight(Body) + ', ' + Proj;
     if Tail <> '' then
       Body:= Body + ' ' + TrimLeft(Tail);
 

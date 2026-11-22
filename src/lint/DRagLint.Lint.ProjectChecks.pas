@@ -20,8 +20,6 @@ uses
   , System  .Generics.Collections
   , DRagLint.Core    .Model
   , DRagLint.Core    .Interfaces
-  , DRagLint.Lint    .ProjectChecks.Parse
-  , DRagLint.Project .Resolver
   ;
 
 type
@@ -31,7 +29,7 @@ type
   /// <para>Used in units: DRagLint.CLI, DRagLint.V152.PROJ2.Support</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TProjectChecks = class
+  TProjectChecks = class  // dl:ok high-response@3638 -- REVIEWED 2026-11-21 SLZ-S05: RFC 60; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     public
       // Compare .dproj <DCCReference Include="..."/> entries vs the matching
       // .dpr/.dpk's `uses` clause. Returns findings for every unit that is
@@ -148,6 +146,8 @@ uses
   , DRagLint.Project.TargetStudio { ResolveTargetStudio: the project's Delphi, for the .dcu search (GH #13) }
   , DRagLint.Storage.FileMembership { ConnectReadOnly: the shared reader open }
   , System.RegularExpressions { v151 EXCL: CheckNonUsesLinks text scan }
+  , DRagLint.Lint.ProjectChecks.Parse
+  , DRagLint.Project.Resolver
   ;
 
 { The scoped closure list arrives LOWERCASED, so a unit reported from it read as
@@ -191,7 +191,7 @@ begin
   end;
 end;
 
-class function TProjectChecks.CheckUnitsInDpr( const ADprojPath: string;
+class function TProjectChecks.CheckUnitsInDpr( const ADprojPath: string;  // dl:ok cyclomatic-complexity@0328 -- REVIEWED 2026-11-21 SLZ-S05: measured 37 (max 30); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
                                                const AClosureFiles: TArray<string>;
                                                const AWithLinks: Boolean;
                                                const AExcludeRoots: TArray<string>): TArray<TLintFinding>;
@@ -251,7 +251,7 @@ begin
       var
         Orig: string;
       begin
-        Result := ASet.TryGetValue(AStem, Orig) and (Pos('.', NormUnitQualified(Orig)) = 0);
+        Result := ASet.TryGetValue(AStem, Orig) and (not NormUnitQualified(Orig).Contains('.'));
       end);
 
     { Normalize BOTH sides identically so dotted unit names like 'Foo.ViewModel'
@@ -308,7 +308,7 @@ begin
       begin
         // Skip RTL/VCL/FMX/standard-library names - they live in BDS Lib paths
         // and are never expected in DCCReference.
-        if StartsText('System.', Pair.Value) or StartsText('Vcl.', Pair.Value) or StartsText('Fmx.', Pair.Value) or StartsText('Data.', Pair.Value) or
+        if StartsText('System.', Pair.Value) or StartsText('Vcl.', Pair.Value) or StartsText('Fmx.', Pair.Value) or StartsText('Data.', Pair.Value) or  // dl:ok boolean-expression-complexity@b2bc -- REVIEWED 2026-11-21 SLZ-S05: 18 and/or/xor operators; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
         StartsText('Winapi.', Pair.Value) or StartsText('FireDAC.', Pair.Value) or StartsText('IdContext', Pair.Value) or StartsText('REST.', Pair.Value) or
         SameText(Pair.Value, 'Forms') or SameText(Pair.Value, 'SysUtils') or SameText(Pair.Value, 'Classes') or SameText(Pair.Value, 'Windows') or
         SameText(Pair.Value, 'Messages') or SameText(Pair.Value, 'Variants') or SameText(Pair.Value, 'Graphics') or SameText(Pair.Value, 'Controls') or
@@ -688,7 +688,7 @@ var
     DcuLoaded := True;
     { Platform comes from the library DB name: ...\library-Win32.sqlite -> Win32. }
     Plat := ChangeFileExt(ExtractFileName(ALibDbPath), '');
-    if StartsText('library-', Plat) then Plat := Copy(Plat, Length('library-') + 1, MaxInt) else Plat := '';
+    Plat := if StartsText('library-', Plat) then Copy(Plat, Length('library-') + 1, MaxInt) else '';
     if Plat = '' then Exit;
     Resolver := ResolveTargetStudio(AProjectFile).OpenResolver;
     try

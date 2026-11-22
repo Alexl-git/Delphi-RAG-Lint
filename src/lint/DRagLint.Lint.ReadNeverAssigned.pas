@@ -652,7 +652,7 @@ begin
   Result:= if ArgIsVar(Callee, Index) then wvWrite else wvRead;
 end;
 
-function TCollector.Classify(const ARef: TReference): TWriteVerdict;  // dl:ok too-many-exit-points@61a1 -- REVIEWED 2026-11-01 one guard clause per write shape; each Exit is a verdict
+function TCollector.Classify(const ARef: TReference): TWriteVerdict;  // dl:ok too-many-exit-points@732a -- REVIEWED 2026-11-01 one guard clause per write shape; each Exit is a verdict
 var
   Src : TSrcText;
   S   : string;

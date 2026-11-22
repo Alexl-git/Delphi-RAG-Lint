@@ -752,7 +752,7 @@ begin
   Result:= (Idx >= 0) and (AUnit.Classes[Idx].FieldIndex(AName) >= 0);
 end;
 
-function CheckAutocreateAndManual(const ACtx: TV151FileCtx; const AUnit: TPasUnit; const ADpr: TDprInfo): TArray<TLintFinding>;  // dl:ok too-many-exit-points@4614 -- REVIEWED 2026-11-14 v151 DFM-A: one guard clause per rule precondition; splitting scatters them
+function CheckAutocreateAndManual(const ACtx: TV151FileCtx; const AUnit: TPasUnit; const ADpr: TDprInfo): TArray<TLintFinding>;  // dl:ok too-many-exit-points@230c -- REVIEWED 2026-11-14 v151 DFM-A: one guard clause per rule precondition; splitting scatters them
 var
   Hits: TList<TLintFinding>;
 begin
@@ -790,7 +790,7 @@ begin
   end;
 end;
 
-function CheckAccessBeforeCreate(const ACtx: TV151FileCtx; const AUnit: TPasUnit; const ADpr: TDprInfo): TArray<TLintFinding>;  // dl:ok too-many-exit-points@aa11 -- REVIEWED 2026-11-14 v151 DFM-A: one guard clause per rule precondition; splitting scatters them
+function CheckAccessBeforeCreate(const ACtx: TV151FileCtx; const AUnit: TPasUnit; const ADpr: TDprInfo): TArray<TLintFinding>;  // dl:ok too-many-exit-points@aefb -- REVIEWED 2026-11-14 v151 DFM-A: one guard clause per rule precondition; splitting scatters them
 var
   Hits: TList<TLintFinding>;
 begin
@@ -935,7 +935,7 @@ begin
   end;
 end;
 
-function CheckForeignFormAccess(const ACtx: TV151FileCtx; const AUnit: TPasUnit): TArray<TLintFinding>;  // dl:ok too-many-exit-points@4acc -- REVIEWED 2026-11-14 v151 DFM-A: one guard clause per rule precondition; splitting scatters them
+function CheckForeignFormAccess(const ACtx: TV151FileCtx; const AUnit: TPasUnit): TArray<TLintFinding>;  // dl:ok too-many-exit-points@a517 -- REVIEWED 2026-11-14 v151 DFM-A: one guard clause per rule precondition; splitting scatters them
 var
   Hits: TList<TLintFinding>;
 begin

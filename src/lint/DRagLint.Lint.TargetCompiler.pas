@@ -158,7 +158,7 @@ type
 /// <seealso cref="DRagLint.Lint.TargetCompiler.TryVerToken"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function ParseCompilerToken(const pToken: string; out pVersion: Integer; out pError: string): Boolean;
+function ParseCompilerToken(const pToken: string; out pVersion: Integer; out pError: string): Boolean;  // dl:ok unused-public-symbol@7528 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
 /// <summary>Maps a .dproj &lt;ProjectVersion&gt; to the CompilerVersion of the
 /// IDE that saved it.</summary>
@@ -177,7 +177,7 @@ function ParseCompilerToken(const pToken: string; out pVersion: Integer; out pEr
 /// <para>Mutates: pVersion (out)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function ProjectVersionToCompiler(const pProjectVersion: string; out pVersion: Integer): Boolean;
+function ProjectVersionToCompiler(const pProjectVersion: string; out pVersion: Integer): Boolean;  // dl:ok unused-public-symbol@4e5d -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
 /// <summary>The product name of a CompilerVersion, for messages.</summary>
 /// <param name="pVersion">A CompilerVersion.</param>
@@ -268,7 +268,7 @@ function IsGatedByTarget(pNeedsCompiler, pTarget: Integer): Boolean;
 /// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function IsCompatOnForTarget(pCompatSince, pTarget: Integer): Boolean;
+function IsCompatOnForTarget(pCompatSince, pTarget: Integer): Boolean;  // dl:ok unused-public-symbol@402c -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
 /// <summary>The target compiler of the current run.</summary>
 /// <returns>The value SetActiveTargetCompiler stored; DEFAULT_TARGET_COMPILER

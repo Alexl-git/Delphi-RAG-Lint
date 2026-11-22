@@ -243,12 +243,14 @@ uses
 { A declaration line inside the block. Deliberately permissive about spacing and
   about the ancestor -- a human may have reformatted or re-parented it, and
   neither changes the BINDING, which is what this recovers. }
-function ParseDeclLine(const ALine: string; out AName, AMsg: string): Boolean;
+function ParseDeclLine(const ALine: string; out AName, AMsg: string): Boolean;  // dl:ok too-many-exit-points@52f0 -- REVIEWED 2026-11-21 SLZ-S05: 7 Exit statements; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   P, Q, R: Integer;
   S      : string ;
 begin
-  Result:= False; AName:= ''; AMsg:= '';
+  Result:= False;
+  AName:= '';
+  AMsg:= '';
   S:= ALine;
   P:= Pos('=', S);
   if P <= 0 then Exit;
@@ -288,8 +290,10 @@ begin
   Inside:= False;
   for I:= 0 to High(Lines) do
   begin
-    if ContainsText(Lines[I], 'drag-lint:auto BEGIN exceptions') then begin Inside:= True ; Continue; end;
-    if ContainsText(Lines[I], 'drag-lint:auto END exceptions'  ) then begin Inside:= False; Continue; end;
+    if ContainsText(Lines[I], 'drag-lint:auto BEGIN exceptions') then begin Inside:= True ;
+    Continue; end;
+    if ContainsText(Lines[I], 'drag-lint:auto END exceptions'  ) then begin Inside:= False;
+    Continue; end;
     if not Inside then Continue;
     if ParseDeclLine(Lines[I], N, M) then
     begin
@@ -313,7 +317,8 @@ begin
   SB:= TStringBuilder.Create;
   try
     SB.Append(#13#10);
-    SB.Append('type'); SB.Append(#13#10);
+    SB.Append('type');
+    SB.Append(#13#10);
     { Trim again at the RENDER, not because PlanExceptionEntries forgets, but
       because AEntries also carries entries PARSED back out of an existing
       block -- including one a human hand-edited. Rendering those verbatim
@@ -370,7 +375,8 @@ begin
 
     for I:= 0 to High(ASites) do
     begin
-      if ASites[I].Msg = '' then begin Inc(APlan.Skipped); Continue; end;
+      if ASites[I].Msg = '' then begin Inc(APlan.Skipped);
+      Continue; end;
       if Keys.IndexOf(ASites[I].Msg) >= 0 then
       begin
         { bound already -- but by WHOM decides which number the user sees }
@@ -379,7 +385,8 @@ begin
         Continue;
       end;
       Base:= DeriveExceptionClassName(ASites[I].Raw);
-      if Base = '' then begin Inc(APlan.Skipped); Continue; end;
+      if Base = '' then begin Inc(APlan.Skipped);
+      Continue; end;
       { Ask the index one name at a time. UniqueExceptionClassName only
         knows the names we handed it, so a hit outside the block is fed
         BACK into Taken and the ladder is climbed again -- which is also
@@ -426,7 +433,8 @@ var
   Ins   : Integer       ;
 begin
   Lines:= SplitLines(AUnitText);
-  B:= -1; E:= -1;
+  B:= -1;
+  E:= -1;
   for I:= 0 to High(Lines) do
   begin
     if (B < 0) and ContainsText(Lines[I], 'drag-lint:auto BEGIN exceptions') then B:= I;
@@ -436,10 +444,11 @@ begin
   try
     if (B >= 0) and (E > B) then
     begin
-      for I:= 0 to B do begin SB.Append(Lines[I]); SB.Append(#13#10); end;
+      for I:= 0 to B do begin SB.Append(Lines[I]);
+      SB.Append(#13#10); end;
       { ABody opens with its own CRLF, so the marker line above is already
         terminated; trim the leading one to avoid doubling it }
-      if StartsStr(#13#10, ABody) then SB.Append(Copy(ABody, 3, MaxInt))
+      if StartsStr(#13#10, ABody) then SB.Append(Copy(ABody, 3, MaxInt))  // dl:ok magic-literal@df65 -- REVIEWED 2026-11-21 SLZ-S05: literal 13,10,3; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
       else SB.Append(ABody);
       for I:= E to High(Lines) do
       begin
@@ -453,12 +462,16 @@ begin
       user wrote is displaced by putting it there. }
     Ins:= -1;
     for I:= 0 to High(Lines) do
-      if SameText(Trim(Lines[I]), 'implementation') then begin Ins:= I; Break; end;
+      if SameText(Trim(Lines[I]), 'implementation') then begin Ins:= I;
+      Break; end;
     if Ins < 0 then Ins:= High(Lines);
-    for I:= 0 to Ins - 1 do begin SB.Append(Lines[I]); SB.Append(#13#10); end;
-    SB.Append(EXC_BEGIN_MARK); SB.Append(#13#10);
-    if StartsStr(#13#10, ABody) then SB.Append(Copy(ABody, 3, MaxInt)) else SB.Append(ABody);
-    SB.Append(EXC_END_MARK); SB.Append(#13#10);
+    for I:= 0 to Ins - 1 do begin SB.Append(Lines[I]);
+    SB.Append(#13#10); end;
+    SB.Append(EXC_BEGIN_MARK);
+    SB.Append(#13#10);
+    if StartsStr(#13#10, ABody) then SB.Append(Copy(ABody, 3, MaxInt)) else SB.Append(ABody);  // dl:ok magic-literal@6a1e -- REVIEWED 2026-11-21 SLZ-S05: literal 13,10,3; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
+    SB.Append(EXC_END_MARK);
+    SB.Append(#13#10);
     SB.Append(#13#10);
     for I:= Ins to High(Lines) do
     begin
@@ -508,19 +521,21 @@ begin
     an implementation-section uses entry would not bring the root into scope. }
   ImplAt:= High(Lines) + 1;
   for I:= 0 to High(Lines) do
-    if SameText(Trim(Lines[I]), 'implementation') then begin ImplAt:= I; Break; end;
+    if SameText(Trim(Lines[I]), 'implementation') then begin ImplAt:= I;
+    Break; end;
   UsesAt:= -1;
   for I:= 0 to ImplAt - 1 do
   begin
     T:= LowerCase(Trim(Lines[I]));
-    if (T = 'uses') or T.StartsWith('uses ') then begin UsesAt:= I; Break; end;
+    if (T = 'uses') or T.StartsWith('uses ') then begin UsesAt:= I;
+    Break; end;
   end;
   if UsesAt < 0 then Exit;
   { already there? scan from the uses keyword to its terminating semicolon }
   for I:= UsesAt to ImplAt - 1 do
   begin
     if MentionsUnit(Lines[I], AUnitName) then Exit;
-    if Pos(';', Lines[I]) > 0 then Break;
+    if Lines[I].Contains(';') then Break;
   end;
   SB:= TStringBuilder.Create;
   try
@@ -530,13 +545,16 @@ begin
       begin
         if SameText(Trim(Lines[I]), 'uses') then
         begin
-          SB.Append(Lines[I]); SB.Append(#13#10);
-          SB.Append('  '); SB.Append(AUnitName); SB.Append(',');
+          SB.Append(Lines[I]);
+          SB.Append(#13#10);
+          SB.Append('  ');
+          SB.Append(AUnitName);
+          SB.Append(',');
         end
         else
         begin
           var S: string:= Lines[I];
-          System.Insert(' ' + AUnitName + ',', S, Pos('uses', LowerCase(S)) + 4);
+          System.Insert(' ' + AUnitName + ',', S, Pos('uses', LowerCase(S)) + 4);  // dl:ok magic-literal@98b0 -- REVIEWED 2026-11-21 SLZ-S05: literal 4; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
           SB.Append(S);
         end;
       end
@@ -576,9 +594,11 @@ begin
     SB.Append('uses'#13#10);
     SB.Append('  ').Append(UsesLine).Append(';').Append(#13#10);
     SB.Append(#13#10);
-    SB.Append(EXC_BEGIN_MARK); SB.Append(#13#10);
-    if StartsStr(#13#10, ABody) then SB.Append(Copy(ABody, 3, MaxInt)) else SB.Append(ABody);
-    SB.Append(EXC_END_MARK); SB.Append(#13#10);
+    SB.Append(EXC_BEGIN_MARK);
+    SB.Append(#13#10);
+    if StartsStr(#13#10, ABody) then SB.Append(Copy(ABody, 3, MaxInt)) else SB.Append(ABody);  // dl:ok magic-literal@6a1e -- REVIEWED 2026-11-21 SLZ-S05: literal 13,10,3; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
+    SB.Append(EXC_END_MARK);
+    SB.Append(#13#10);
     SB.Append(#13#10);
     SB.Append('implementation'#13#10);
     SB.Append(#13#10);

@@ -110,7 +110,7 @@ function StripPasCommentsKeepLayout(const ASrc: string): string;
 /// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.StripPasCommentsKeepLayout"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function ParseUsesFromContent(const AContent: string; out AUsesStartLine: Integer): TArray<string>;
+function ParseUsesFromContent(const AContent: string; out AUsesStartLine: Integer): TArray<string>;  // dl:ok unused-public-symbol@5bdd -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
 /// <summary>Read a .dpr/.dpk file and extract its uses-clause unit names.</summary>
 /// <param name="AProgramPath"><!-- drag-lint:auto type -->const string</param>
@@ -164,7 +164,7 @@ function FindSiblingProgramFile(const ADprojPath: string): string;
 /// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function IsStandardUnitAlias(const AUnitName: string): Boolean;
+function IsStandardUnitAlias(const AUnitName: string): Boolean;  // dl:ok unused-public-symbol@bc94 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
 /// <summary>True if AUnitName is an RTL/framework unit by namespace (System.*,
 /// Vcl.*, Fmx.*, Winapi.*, Data.*, Datasnap.*, Soap.*, Web.*, FireDAC.*) or a
@@ -181,7 +181,7 @@ function IsStandardUnitAlias(const AUnitName: string): Boolean;
 /// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.IsUnscopedRtlUnit"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function IsRtlNamespaceUnit(const AUnitName: string): Boolean;
+function IsRtlNamespaceUnit(const AUnitName: string): Boolean;  // dl:ok unused-public-symbol@a5f9 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 
 /// <summary>Decide whether a used unit resolves to something known. Order:
 /// project member -> platform library -> standard alias -> RTL namespace.
@@ -279,22 +279,31 @@ begin
         end;
       '{':
         begin
-          while (I <= N) and (ASrc[I] <> '}') do begin Blank(I); Inc(I); end;
-          if I <= N then begin Blank(I); Inc(I); end;
+          while (I <= N) and (ASrc[I] <> '}') do begin Blank(I);
+          Inc(I); end;
+          if I <= N then begin Blank(I);
+          Inc(I); end;
         end;
       '(':
         if (I < N) and (ASrc[I + 1] = '*') then
         begin
-          Blank(I); Blank(I + 1); Inc(I, 2);
-          while (I < N) and not ((ASrc[I] = '*') and (ASrc[I + 1] = ')')) do begin Blank(I); Inc(I); end;
-          if I < N then begin Blank(I); Blank(I + 1); Inc(I, 2); end
-          else if I = N then begin Blank(I); Inc(I); end;
+          Blank(I);
+          Blank(I + 1);
+          Inc(I, 2);
+          while (I < N) and not ((ASrc[I] = '*') and (ASrc[I + 1] = ')')) do begin Blank(I);
+          Inc(I); end;
+          if I < N then begin Blank(I);
+          Blank(I + 1);
+          Inc(I, 2); end
+          else if I = N then begin Blank(I);
+          Inc(I); end;
         end
         else
           Inc(I);
       '/':
         if (I < N) and (ASrc[I + 1] = '/') then
-          while (I <= N) and (ASrc[I] <> #10) and (ASrc[I] <> #13) do begin Blank(I); Inc(I); end
+          while (I <= N) and (ASrc[I] <> #10) and (ASrc[I] <> #13) do begin Blank(I);
+          Inc(I); end
         else
           Inc(I);
     else
@@ -537,13 +546,21 @@ begin
   Norm:= NormUnit(AUnitName);
   if Norm = '' then Exit;
   if Assigned(AIsProjectMember) and AIsProjectMember(Norm) then
-    begin Result.Resolvable:= True; Result.Via:= urvProjectMember; Exit; end;
+    begin Result.Resolvable:= True;
+    Result.Via:= urvProjectMember;
+    Exit; end;
   if Assigned(AIsInLibrary) and AIsInLibrary(Norm) then
-    begin Result.Resolvable:= True; Result.Via:= urvLibrary; Exit; end;
+    begin Result.Resolvable:= True;
+    Result.Via:= urvLibrary;
+    Exit; end;
   if IsStandardUnitAlias(AUnitName) then
-    begin Result.Resolvable:= True; Result.Via:= urvAlias; Exit; end;
+    begin Result.Resolvable:= True;
+    Result.Via:= urvAlias;
+    Exit; end;
   if IsRtlNamespaceUnit(AUnitName) then
-    begin Result.Resolvable:= True; Result.Via:= urvRtlNamespace; Exit; end;
+    begin Result.Resolvable:= True;
+    Result.Via:= urvRtlNamespace;
+    Exit; end;
 end;
 
 initialization

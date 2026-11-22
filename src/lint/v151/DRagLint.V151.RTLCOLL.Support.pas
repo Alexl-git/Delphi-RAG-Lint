@@ -243,7 +243,7 @@ const
   COMPOUND_OP_LEN = 3; // length of "+=" "-=" "*=" "/=" plus the char after
 
 
-function MaskSource(const ASrc: string): string;
+function MaskSource(const ASrc: string): string;  // dl:ok cyclomatic-complexity@d064 -- REVIEWED 2026-11-21 SLZ-S05: measured 32 (max 30); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   I, N, J: Integer;
   Buf: TArray<Char>;

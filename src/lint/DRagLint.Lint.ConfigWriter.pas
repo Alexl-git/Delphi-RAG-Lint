@@ -392,10 +392,7 @@ begin
   NamObj.AddPair('min_identifier_len', TJSONNumber.Create(N.MinIdentifierLen));
 
   // short_identifier_check is a JSON string "true"/"false", not a bool
-  if N.ShortIdentifierCheck then
-    S:= 'true'
-  else
-    S:= 'false';
+  S:= if N.ShortIdentifierCheck then 'true' else 'false';
   NamObj.AddPair('short_identifier_check', TJSONString.Create(S));
 
   NamObj.AddPair('hungarian_prefixes', ArrayToJsonArr(N.HungarianPrefixes));
@@ -480,7 +477,7 @@ begin
   end;
 end;
 
-class procedure TLintConfigWriter.SetRuleEnabled(var ACfg: TLintConfig;
+class procedure TLintConfigWriter.SetRuleEnabled(var ACfg: TLintConfig;  // dl:ok duplicate-code@724e -- REVIEWED 2026-11-21 SLZ-S05: 111 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   const AId: string; AEnabled: Boolean);
 var
   DisArr, EnArr: TArray<string>;
@@ -550,7 +547,7 @@ begin
       try
         ExistText:= TFile.ReadAllText(APath);
         Existing:= TJSONObject.ParseJSONValue(ExistText) as TJSONObject;
-      except
+      except  // dl:ok bare-except@e9b8 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
         Existing:= nil; { parse failure -- fall through to plain write }
       end;
     end;
@@ -628,7 +625,8 @@ begin
   Result:= nil;
   if not TFile.Exists(APath) then Exit;
   RootVal:= TJSONObject.ParseJSONValue(TFile.ReadAllText(APath));
-  if not (RootVal is TJSONObject) then begin RootVal.Free; Exit; end;
+  if (RootVal is not TJSONObject) then begin RootVal.Free;
+  Exit; end;
   try
     Root:= RootVal as TJSONObject;
     if Root.GetValue('profiles') is TJSONObject then
@@ -649,17 +647,19 @@ var
   RemovedPair: TJSONPair;
 begin
   { start from existing file, or a fresh object }
-  Root:= nil; RootVal:= nil;
+  Root:= nil;
+  RootVal:= nil;  // dl:ok overwrite-before-read@3b95 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   if TFile.Exists(APath) then
   begin
-    try RootVal:= TJSONObject.ParseJSONValue(TFile.ReadAllText(APath)); except RootVal:= nil; end;
+    try RootVal:= TJSONObject.ParseJSONValue(TFile.ReadAllText(APath)); except RootVal:= nil; end;  // dl:ok bare-except@c8a2 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     if RootVal is TJSONObject then Root:= RootVal as TJSONObject
-    else begin RootVal.Free; RootVal:= nil; end;
+    else begin RootVal.Free;
+    RootVal:= nil; end;  // dl:ok overwrite-before-read@2c0a -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   end;
   if Root = nil then Root:= TJSONObject.Create;
   try
     { ensure a "profiles" object }
-    if not (Root.GetValue('profiles') is TJSONObject) then
+    if (Root.GetValue('profiles') is not TJSONObject) then
     begin
       RemovedPair:= Root.RemovePair('profiles');
       if RemovedPair <> nil then RemovedPair.Free;

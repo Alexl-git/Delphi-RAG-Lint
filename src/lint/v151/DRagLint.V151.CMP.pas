@@ -505,7 +505,7 @@ begin
 end;
 
 { A comparable key for a literal: n:<int>, b:true, i:<name>, s:<sorted members>, c:<text>; '' otherwise. }
-function TCmpRun.LitKey(const N: TTSNode): string;  // dl:ok too-many-exit-points@0986 -- REVIEWED 2026-11-14 v151 CMP: LitKey dispatches on the node type, one Exit per literal kind
+function TCmpRun.LitKey(const N: TTSNode): string;  // dl:ok too-many-exit-points@21e3 -- REVIEWED 2026-11-14 v151 CMP: LitKey dispatches on the node type, one Exit per literal kind
 var
   V: Int64;
 begin
@@ -1355,7 +1355,7 @@ begin
   Result:= False;
 end;
 
-procedure TCmpRun.CheckFreeWhileHeld(const ADef: TTSNode);  // dl:ok cyclomatic-complexity@0a66 -- REVIEWED 2026-11-14 v151 CMP: one walk over a routine body that shares its local state; splitting it would pass that state through every helper
+procedure TCmpRun.CheckFreeWhileHeld(const ADef: TTSNode);  // dl:ok cyclomatic-complexity@00f7 -- REVIEWED 2026-11-14 v151 CMP: one walk over a routine body that shares its local state; splitting it would pass that state through every helper
 var
   C, M, T: string;
 begin

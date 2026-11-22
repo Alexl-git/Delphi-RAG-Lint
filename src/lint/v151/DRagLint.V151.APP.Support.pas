@@ -1056,7 +1056,7 @@ begin
       H:= TRegEx.Match(Header, HEADER_RE, [roIgnoreCase]);
       if not H.Success or not TRegEx.IsMatch(H.Groups[1].Value, CERT_WORDS_RE, [roIgnoreCase]) then Continue;
       OwnName:= R.Name;
-      if Pos('.', OwnName) > 0 then OwnName:= Copy(OwnName, LastDelimiter('.', OwnName) + 1, MaxInt);
+      if OwnName.Contains('.') then OwnName:= Copy(OwnName, LastDelimiter('.', OwnName) + 1, MaxInt);
       Stmt:= '(?:(?:' + ACCEPT_LHS + '|' + TRegEx.Escape(OwnName) + ')\s*:=\s*True|Exit\s*\(\s*True\s*\))';
       Body:= ASrc.BodyOf(R);
       if TRegEx.IsMatch(Body, '\Abegin\s*(?:' + Stmt + '\s*;\s*)*' + Stmt + '\s*;?\s*end\z', [roIgnoreCase]) then

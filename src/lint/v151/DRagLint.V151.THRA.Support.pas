@@ -655,7 +655,7 @@ end;
 
 { Tokenizer ------------------------------------------------------------- }
 
-function Tokenize(const S: string): TArray<TThrTok>;  // dl:ok cyclomatic-complexity@a967, cognitive-complexity@0e50 -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
+function Tokenize(const S: string): TArray<TThrTok>;  // dl:ok cyclomatic-complexity@62a4, cognitive-complexity@9b34 -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
 var
   Lst: TList<TThrTok>;
   I, N, Line, Col, StartI, StartLine, StartCol: Integer;
@@ -921,7 +921,7 @@ begin
     if (K >= 0) and (K < Length(FToks)) and (FToks[K].Kind = ttkIdent) and InArr(FToks[K].Low, AWords) then Exit(True);
 end;
 
-function TThrScan.UsesNames: TArray<string>;  // dl:ok deep-nesting@ddf6 -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
+function TThrScan.UsesNames: TArray<string>;  // dl:ok deep-nesting@dae4 -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
 var
   Res: TList<string>;
   K: Integer;
@@ -989,7 +989,7 @@ begin
   Result:= (P < 0) or (L(P) = ';') or (L(P) = 'implementation') or (L(P) = ']');
 end;
 
-function TThrScan.ParseClassDecl(AOpener: Integer): Integer;  // dl:ok cyclomatic-complexity@3862, cognitive-complexity@a35b -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
+function TThrScan.ParseClassDecl(AOpener: Integer): Integer;  // dl:ok cyclomatic-complexity@6b09, cognitive-complexity@13e9 -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
 var
   N, J, K, Depth, E, GenD: Integer;
   C: TThrClass;
@@ -1103,7 +1103,7 @@ begin
   end;
 end;
 
-function TThrScan.ParseRoutine(AKw: Integer): Integer;  // dl:ok cyclomatic-complexity@b56d -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
+function TThrScan.ParseRoutine(AKw: Integer): Integer;  // dl:ok cyclomatic-complexity@6e4e -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
 var
   N, J, D: Integer;
   R: TThrRoutine;
@@ -1360,7 +1360,7 @@ begin
   Result:= TypeManaged(S, RunEnd(S), ADepth + 1);
 end;
 
-function TThrScan.TypeManaged(AFrom, ATo, ADepth: Integer): Boolean;  // dl:ok too-many-exit-points@f576 -- REVIEWED 2026-11-13 v151 THR-A: type classification returns at the first decisive token
+function TThrScan.TypeManaged(AFrom, ATo, ADepth: Integer): Boolean;  // dl:ok too-many-exit-points@9340 -- REVIEWED 2026-11-13 v151 THR-A: type classification returns at the first decisive token
 var
   W: string;
   Q, D: Integer;
@@ -1413,7 +1413,7 @@ end;
 
 { Rule: anonymous-thread-not-started --------------------------------------- }
 
-procedure ThrCheckAnonymousNotStarted(const AScan: TThrScan; const APath: string; const AOut: TList<TLintFinding>);  // dl:ok cyclomatic-complexity@40a0, cognitive-complexity@eb47 -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
+procedure ThrCheckAnonymousNotStarted(const AScan: TThrScan; const APath: string; const AOut: TList<TLintFinding>);  // dl:ok cyclomatic-complexity@f8c7, cognitive-complexity@2027 -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
 var
   I, S, Close, R, T, K: Integer;
   Nxt, Prv, Name: string;
@@ -1541,7 +1541,7 @@ end;
 
 { Rule: thread-loop-without-terminated ------------------------------------- }
 
-procedure ThrCheckLoopWithoutTerminated(const AScan: TThrScan; const APath: string; const AOut: TList<TLintFinding>);  // dl:ok deep-nesting@5172, cognitive-complexity@eb8b -- v151 THR-A: single-pass token scanner; the branches are the grammar of the construct (REVIEWED 2026-11-18 INT13: nesting re-measured 6, same scanner shape)
+procedure ThrCheckLoopWithoutTerminated(const AScan: TThrScan; const APath: string; const AOut: TList<TLintFinding>);  // dl:ok deep-nesting@5172, cognitive-complexity@8152 -- v151 THR-A: single-pass token scanner; the branches are the grammar of the construct (REVIEWED 2026-11-18 INT13: nesting re-measured 6, same scanner shape)
 
   function StmtEnd(AFrom, ALimit: Integer): Integer;
   var
@@ -1717,7 +1717,7 @@ end;
 
 { Rule: thread-use-after-free-on-terminate --------------------------------- }
 
-procedure ThrCheckUseAfterFreeOnTerminate(const AScan: TThrScan; const APath: string; const AOut: TList<TLintFinding>);  // dl:ok deep-nesting@94d9 -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
+procedure ThrCheckUseAfterFreeOnTerminate(const AScan: TThrScan; const APath: string; const AOut: TList<TLintFinding>);  // dl:ok deep-nesting@b70a -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
 var
   Idx, K, M, Q: Integer;
   R: TThrRoutine;
@@ -1889,7 +1889,7 @@ end;
 
 { Expansion of freeonterminate-then-wait: FreeAndNil / DisposeOf ----------- }
 
-procedure ThrCheckFreeAndNilOnFreeOnTerminate(const AScan: TThrScan; const APath, AHostRuleId: string; const AOut: TList<TLintFinding>);  // dl:ok cyclomatic-complexity@ec8f, cognitive-complexity@e75f -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
+procedure ThrCheckFreeAndNilOnFreeOnTerminate(const AScan: TThrScan; const APath, AHostRuleId: string; const AOut: TList<TLintFinding>);  // dl:ok cyclomatic-complexity@5cff, cognitive-complexity@880f -- REVIEWED 2026-11-13 v151 THR-A: single-pass token scanner; the branches are the grammar of the construct
 var
   Idx, K, M, Q, LastTok, VarTok: Integer;
   R: TThrRoutine;

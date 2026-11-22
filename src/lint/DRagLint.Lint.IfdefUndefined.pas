@@ -441,7 +441,7 @@ begin
     for Part in M.Groups[2].Value.Split([';']) do
     begin
       Dir:= Trim(Part);
-      if (Dir = '') or (Pos('$(', Dir) > 0) then Continue;
+      if (Dir = '') or (Dir.Contains('$(')) then Continue;
       if TPath.IsRelativePath(Dir) then Dir:= TPath.Combine(ProjDir, Dir);
       Result:= Result + [ExpandFileName(Dir)];
     end;

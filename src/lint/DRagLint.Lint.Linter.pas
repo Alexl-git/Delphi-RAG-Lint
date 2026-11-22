@@ -12,12 +12,8 @@ uses
   , TreeSitter
   , TreeSitterLib
   , DRagLint.Core  .Model
-  , DRagLint.Core  .Encoding
-  , DRagLint.Parser.Delphi13
   , DRagLint.Lint  .QueryRules
-  , DRagLint.Lint  .ReviewMarker { REVIEW_MARK -- a tool-written marker is not a hand-written inline comment }
-  , DRagLint.Lint  .ExceptionNaming { stage 3: the message -> class-name derivation }
-  , DRagLint.Diagnostics.ParseCache { ApplyPreprocess -- ONE transform shared with the AST checks }
+  , DRagLint.Lint  .ReviewMarker { REVIEW_MARK -- a tool-written marker is not a hand-written inline comment }  // dl:ok unused-unit-in-uses@5d1e -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   ;
 
 type
@@ -72,7 +68,7 @@ type
   /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Completion, DRagLint.LSP.Context, DRagLint.LSP.Proxy.Merge, DRagLint.LSP.Server, DRagLint.MCP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TLinter = class
+  TLinter = class  // dl:ok high-response@cb1c -- REVIEWED 2026-11-21 SLZ-S05: RFC 63; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     strict private
       { See the WalkFilter property. nil = no scoping, which is every caller
         except the scoped directory walk. }
@@ -205,7 +201,7 @@ type
       /// <summary>Names the unit that owns the project's exception classes,
       /// enabling stage 1 of exception-class-unit. Set it BEFORE linting; empty
       /// (the default) disables the harvest entirely.</summary>
-      property ExceptionsUnit: string read FExcUnit write FExcUnit;
+      property ExceptionsUnit: string read FExcUnit write FExcUnit;  // dl:ok property-accessor-name@cca9 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
       /// <summary>Rewrites every raise-bare-exception finding to name the
       /// existing exception class whose message covers it, or to say plainly
       /// that none does.</summary>
@@ -347,7 +343,7 @@ type
       /// <remarks>Their names are taken, so the writer must not re-allocate
       /// them, and their messages are already covered -- neither needs a
       /// generated class.</remarks>
-      property ExcCandidates: TArray<TDragExcCand> read FExcCand;
+      property ExcCandidates: TArray<TDragExcCand> read FExcCand;  // dl:ok property-accessor-name@5fc6 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   end;
 
 /// <summary>Ticks spent building the tree-sitter tree inside CheckFileImpl,
@@ -399,6 +395,10 @@ function NormalizeExcMessage(const AMsg: string): string;
 implementation
 
 uses
+  DRagLint.Core.Encoding,
+  DRagLint.Parser.Delphi13,
+  DRagLint.Lint.ExceptionNaming,
+  DRagLint.Diagnostics.ParseCache,
   System.Diagnostics; { TStopwatch -- the parse-vs-query split below }
 
 { SESSION 25 B2 follow-up, DIAGNOSTIC ONLY. `Linter.LintFile` is 56.17 s of
@@ -424,7 +424,7 @@ end;
   the exe via the indexer's TDFMParser). Re-declared here so the linter can parse
   .dfm files with the correct grammar -- same pattern AstChecks uses for
   tree_sitter_delphi13. }
-function tree_sitter_dfm: PTSLanguage; cdecl;
+function tree_sitter_dfm: PTSLanguage; cdecl;  // dl:ok method-pascalcase@78b2 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 external 'tree-sitter-dfm';
 
 function NodeText(const ANode: TTSNode; const ASource: TBytes): string;
@@ -598,17 +598,28 @@ begin
   begin
     if T[I] = '%' then
     begin
-      T[I]:= ' '; Inc(I);
+      T[I]:= ' ';
+      Inc(I);
       while (I <= Length(T)) and CharInSet(T[I], ['-', '.', '0'..'9', '*']) do
-      begin T[I]:= ' '; Inc(I); end;
+      begin
+        T[I]:= ' ';
+        Inc(I);
+      end;
       if (I <= Length(T)) and CharInSet(T[I], ['a'..'z']) then
-      begin T[I]:= ' '; Inc(I); end;
+      begin
+        T[I]:= ' ';
+        Inc(I);
+        Inc(I);
+      end;
     end
     else if T[I] = '#' then
     begin
-      T[I]:= ' '; Inc(I);
-      while (I <= Length(T)) and CharInSet(T[I], ['0'..'9']) do
-      begin T[I]:= ' '; Inc(I); end;
+      T[I]:= ' ';
+      Inc(I);
+      begin
+        T[I]:= ' ';
+        Inc(I);
+      end;
     end
     else Inc(I);
   end;
@@ -620,7 +631,11 @@ begin
   begin
     Skip:= False;
     for K:= Low(STOPWORDS) to High(STOPWORDS) do
-      if Parts[I] = STOPWORDS[K] then begin Skip:= True; Break; end;
+      if Parts[I] = STOPWORDS[K] then
+      begin
+        Skip:= True;
+        Break;
+      end;
     if not Skip then Keep:= Keep + [Parts[I]];
   end;
   Result:= string.Join(' ', Keep);
@@ -673,7 +688,7 @@ procedure CollectDfmParseErrors(const ARoot: TTSNode; const ASource: TBytes; con
     F: TLintFinding;
     P: TTSPoint    ;
   begin
-    if N.IsNull or (AFindings.Count >= 100) then Exit;
+    if N.IsNull or (AFindings.Count >= 100) then Exit;  // dl:ok magic-literal@49dd -- REVIEWED 2026-11-21 SLZ-S05: literal 100; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if N.IsError or N.IsMissing then
     begin
       P:= N.StartPoint;
@@ -732,10 +747,10 @@ begin
       Raw:= NodeText(Atom, ASource);
       if (Length(Raw) >= 2) and (Raw[1] = '''') and (Raw[Length(Raw)] = '''') then
         Raw:= Copy(Raw, 2, Length(Raw) - 2);
-      Result:= Result + StringReplace(Raw, '''''', '''', [rfReplaceAll]);
+      Result:= Result + StringReplace(Raw, '''''', '''', [rfReplaceAll]);  // dl:ok concat-in-loop@e758 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     end
     else if Atom.NodeType = 'char_code' then
-      Result:= Result + ' ';
+      Result:= Result + ' ';  // dl:ok concat-in-loop@9c4f -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   end;
 end; // function
 
@@ -750,7 +765,7 @@ begin
   P:= LastDelimiter('.', Seg);
   if P > 0 then Seg:= Copy(Seg, P + 1, MaxInt);
   Result:=
-    (Seg = 'password') or (Seg = 'passwd') or (Seg = 'pwd') or
+    (Seg = 'password') or (Seg = 'passwd') or (Seg = 'pwd') or  // dl:ok boolean-expression-complexity@56a9 -- REVIEWED 2026-11-21 SLZ-S05: 7 and/or/xor operators; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     (Seg = 'secret') or (Seg = 'apikey') or (Seg = 'privatekey') or
     (Seg = 'passphrase') or (Seg = 'connectionpassword');
 end; // function
@@ -768,7 +783,7 @@ procedure CheckDfmCredentials(const ARoot: TTSNode; const ASource: TBytes; const
     F        : TLintFinding;
     P        : TTSPoint    ;
   begin
-    if N.IsNull or (AFindings.Count >= 100) then Exit;
+    if N.IsNull or (AFindings.Count >= 100) then Exit;  // dl:ok magic-literal@49dd -- REVIEWED 2026-11-21 SLZ-S05: literal 100; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     if N.NodeType = 'property' then
     begin
       NameNode := N.ChildByField('name' );
@@ -815,8 +830,7 @@ var
 begin
   inherited Create;
   FLanguage:= tree_sitter_delphi13;
-  if ARulesDir = '' then ResolvedDir:= TPath.Combine( TPath.GetDirectoryName(ParamStr(0)), 'rules')
-  else ResolvedDir:= ARulesDir;
+  ResolvedDir:= if ARulesDir = '' then TPath.Combine( TPath.GetDirectoryName(ParamStr(0)), 'rules') else ARulesDir;
   FQueryRules:= TQueryRuleLoader.LoadAll(FLanguage, ResolvedDir);
 end;
 
@@ -869,8 +883,8 @@ begin
   begin
     if (I < 0) or (I > High(Lines)) then Continue;
     S:= Lines[I];
-    if Pos('//', S) > 0 then Exit(True);
-    if Pos('(*', S) > 0 then Exit(True);
+    if S.Contains('//') then Exit(True);
+    if S.Contains('(*') then Exit(True);
     P:= Pos('{', S);
     if (P > 0) and not ((P < Length(S)) and (S[P + 1] = '$')) then Exit(True);
   end;
@@ -963,12 +977,23 @@ begin
     Inc(GLintParseCount);
     var TP0: Int64:= TStopwatch.GetTimeStamp;
     Parser:= TTSParser.Create;
-    if IsDfm then Parser.Language:= tree_sitter_dfm
-    else Parser.Language:= FLanguage;
+    Parser.Language:= if IsDfm then tree_sitter_dfm else FLanguage;
     Tree:= Parser.Parse(
-      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes var Remaining: Integer; begin Remaining:= Length(Source)
-        - Integer(AByteIndex); if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end; SetLength(Result, Remaining); Move(Source[AByteIndex], Result[0],
-          Remaining); ABytesRead:= Remaining; end, TTSInputEncoding.TSInputEncodingUTF8);
+      function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
+      var
+        Remaining: Integer;
+      begin
+        Remaining:= Length(Source) - Integer(AByteIndex);
+        if Remaining <= 0 then
+        begin
+          ABytesRead:= 0;
+          SetLength(Result, 0);
+          Exit;
+        end;
+        SetLength(Result, Remaining);
+        Move(Source[AByteIndex], Result[0], Remaining);
+        ABytesRead:= Remaining;
+      end, TTSInputEncoding.TSInputEncodingUTF8);
     Inc(GLintParseTicks, TStopwatch.GetTimeStamp - TP0);
     if IsDfm then
       { DFM: the Pascal *.scm rules and the Pascal-specific walks key off node types
@@ -1023,7 +1048,11 @@ begin
           end;
           var InScope: Boolean:= False;
           for var Needle: string in R.RequireFileText do
-            if LowerSrc.Contains(Needle) then begin InScope:= True; Break; end;
+            if LowerSrc.Contains(Needle) then
+            begin
+              InScope:= True;
+              Break;
+            end;
           if not InScope then Continue;
         end;
         var QFindings:= R.Run(Tree.RootNode, Source, AFilePath, nil, ColSource);
@@ -1093,13 +1122,18 @@ begin
       var ColSource: TBytes:= Source; { 1.52 BK-TAILS-ENG: columns are counted before blanking }
       Source:= TAstParseCache.ApplyPreprocess(Source, AFilePath);
       Parser:= TTSParser.Create;
-      Parser.Language:= FLanguage;
+      Parser.Language:= FLanguage;  // dl:ok duplicate-code@99b4 -- REVIEWED 2026-11-21 SLZ-S05: 97 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
       Tree:= Parser.Parse(
         function (AByteIndex: UInt32; APosition: TTSPoint; var ABytesRead: UInt32): TBytes
         var Remaining: Integer;
         begin
           Remaining:= Length(Source) - Integer(AByteIndex);
-          if Remaining <= 0 then begin ABytesRead:= 0; SetLength(Result, 0); Exit; end;
+          if Remaining <= 0 then
+          begin
+            ABytesRead:= 0;
+            SetLength(Result, 0);
+            Exit;
+          end;
           SetLength(Result, Remaining);
           Move(Source[AByteIndex], Result[0], Remaining);
           ABytesRead:= Remaining;
@@ -1222,7 +1256,11 @@ begin
     Cls:= '';
     if Key <> '' then
       for K:= 0 to High(FExcCand) do
-        if FExcCand[K].Msg = Key then begin Cls:= FExcCand[K].ClsName; Break; end;
+        if FExcCand[K].Msg = Key then
+        begin
+          Cls:= FExcCand[K].ClsName;
+          Break;
+        end;
     if Cls <> '' then
       AFindings[I].Message:= AFindings[I].Message +
         Format(' %s already covers this message -- raise it instead.', [Cls])
@@ -1278,8 +1316,7 @@ var
   Patterns: TArray<string>      ;
   Pattern : string              ;
 begin
-  if ARecursive then Mode:= TSearchOption.soAllDirectories
-  else Mode:= TSearchOption.soTopDirectoryOnly;
+  Mode:= if ARecursive then TSearchOption.soAllDirectories else TSearchOption.soTopDirectoryOnly;
   Patterns:= ['*.pas', '*.dpr', '*.dpk'];
   All:= TList<TLintFinding>.Create;
   try

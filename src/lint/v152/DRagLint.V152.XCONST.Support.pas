@@ -285,7 +285,7 @@ begin
   Result:= CharInSet(C, ['0'..'9', 'a'..'f', 'A'..'F', '_']);
 end;
 
-function XcTokenize(ALines: TStrings): TArray<TXcToken>;  // dl:ok cyclomatic-complexity@577f -- REVIEWED 2026-11-17 XCONST: single-pass lexer, one branch per Delphi token form; splitting it scatters the comment/string state  // dl:ok cognitive-complexity@dc2f -- same lexer state machine  // dl:ok deep-nesting@239c -- same lexer state machine
+function XcTokenize(ALines: TStrings): TArray<TXcToken>;  // dl:ok cyclomatic-complexity@bf3c -- REVIEWED 2026-11-17 XCONST: single-pass lexer, one branch per Delphi token form; splitting it scatters the comment/string state  // dl:ok cognitive-complexity@37cc -- same lexer state machine  // dl:ok deep-nesting@239c -- same lexer state machine  // dl:ok cognitive-complexity@dc2f -- same lexer state machine  // dl:ok deep-nesting@239c -- same lexer state machine  // dl:ok deep-nesting@239c -- same lexer state machine  // dl:ok cognitive-complexity@dc2f -- same lexer state machine  // dl:ok deep-nesting@239c -- same lexer state machine
 var
   Toks    : TList<TXcToken>;
   InBrace : Boolean;
@@ -533,7 +533,7 @@ end;
 
 { One pass over the tokens: which ones sit where a name may not replace a literal,
   which are case labels (and of what selector type), which are in the interface. }
-function Classify(const T: TArray<TXcToken>; const AMap: TDictionary<string, string>): TArray<TXcTokInfo>;  // dl:ok cyclomatic-complexity@7267 -- REVIEWED 2026-11-17 XCONST: one pass tracking paren/attr/case/section state together; each branch is one Delphi construct  // dl:ok cognitive-complexity@ab17 -- same single-pass classifier
+function Classify(const T: TArray<TXcToken>; const AMap: TDictionary<string, string>): TArray<TXcTokInfo>;  // dl:ok cyclomatic-complexity@9144 -- REVIEWED 2026-11-17 XCONST: one pass tracking paren/attr/case/section state together; each branch is one Delphi construct  // dl:ok cognitive-complexity@c544 -- same single-pass classifier  // dl:ok cognitive-complexity@ab17 -- same single-pass classifier  // dl:ok cognitive-complexity@ab17 -- same single-pass classifier
 var
   Frames    : TList<TXcCaseFrame>;
   Paren     : Integer;

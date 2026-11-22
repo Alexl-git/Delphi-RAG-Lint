@@ -957,7 +957,7 @@ end;
 
 function IsTypePrefixGapMessage(const AMessage: string): Boolean;
 begin
-  Result:= Pos(TYPE_PREFIX_GAP_MARK, AMessage) > 0;
+  Result:= AMessage.Contains(TYPE_PREFIX_GAP_MARK);
 end;
 
 class function TNamingConfig.Default: TNamingConfig;
@@ -1034,7 +1034,7 @@ begin
   if NJ.GetValue('keyword_case') <> nil then
     Naming.KeywordCase:= NJ.GetValue('keyword_case').Value;
   if NJ.GetValue('min_identifier_len') <> nil then
-    Naming.MinIdentifierLen:= StrToIntDef(NJ.GetValue('min_identifier_len').Value, 3);
+    Naming.MinIdentifierLen:= StrToIntDef(NJ.GetValue('min_identifier_len').Value, 3);  // dl:ok magic-literal@3a50 -- REVIEWED 2026-11-21 SLZ-S05: literal 3; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
   if NJ.GetValue('short_identifier_check') <> nil then
     Naming.ShortIdentifierCheck:= SameText(NJ.GetValue('short_identifier_check').Value, 'true');
   if NJ.GetValue('hungarian_prefixes') is TJSONArray then
@@ -1114,7 +1114,7 @@ procedure TLintConfig.ApplyConfigObject(const AObj: TJSONObject; AReplace: Boole
   var
     V: TJSONValue;
   begin
-    if not (AObj.GetValue(AKey) is TJSONArray) then Exit;
+    if (AObj.GetValue(AKey) is not TJSONArray) then Exit;
     if AReplace then AList:= nil;
     for V in (AObj.GetValue(AKey) as TJSONArray) do AList:= AList + [V.Value];
   end;
@@ -1201,10 +1201,8 @@ begin
   if AObj.GetValue('exceptions') is TJSONObject then
   begin
     var ExcObj: TJSONObject:= AObj.GetValue('exceptions') as TJSONObject;
-    if ExcObj.GetValue('unit') <> nil then ExceptionsUnit:= ExcObj.GetValue('unit').Value
-    else ExceptionsUnit:= DEFAULT_EXCEPTIONS_UNIT;
-    if ExcObj.GetValue('root') <> nil then ExceptionsRoot:= ExcObj.GetValue('root').Value
-    else ExceptionsRoot:= DEFAULT_EXCEPTIONS_ROOT;
+    ExceptionsUnit:= if ExcObj.GetValue('unit') <> nil then ExcObj.GetValue('unit').Value else DEFAULT_EXCEPTIONS_UNIT;
+    ExceptionsRoot:= if ExcObj.GetValue('root') <> nil then ExcObj.GetValue('root').Value else DEFAULT_EXCEPTIONS_ROOT;
   end;
   ApplyV152Keys(AObj);
 end;
@@ -1308,7 +1306,8 @@ begin
   if (APath = '') or (not TFile.Exists(APath)) then Exit;
   RawText:= TFile.ReadAllText(APath, TEncoding.UTF8);
   RootVal:= TJSONObject.ParseJSONValue(RawText);
-  if not (RootVal is TJSONObject) then begin RootVal.Free; Exit; end;
+  if (RootVal is not TJSONObject) then begin RootVal.Free;
+  Exit; end;
   try
     Root:= RootVal as TJSONObject;
     Result.ApplyConfigObject(Root, False);

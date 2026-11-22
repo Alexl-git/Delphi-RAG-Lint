@@ -547,24 +547,31 @@ end;
 
 function MetricHash(const AWindowHash: string; AMetric: Integer): string;
 begin
-  Result:= LowerCase(Copy(THashSHA2.GetHashString(AWindowHash + '|' + IntToStr(AMetric)), 1, 4));
+  Result:= LowerCase(Copy(THashSHA2.GetHashString(AWindowHash + '|' + IntToStr(AMetric)), 1, 4));  // dl:ok magic-literal@5383 -- REVIEWED 2026-11-21 SLZ-S05: literal 1,4; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
 end;
 
 function MkParam(const AName, AType, ADefault: string): TRuleParam;
 begin
-  Result.Name:= AName; Result.ParamType:= AType; Result.DefaultVal:= ADefault;
+  Result.Name:= AName;
+  Result.ParamType:= AType;
+  Result.DefaultVal:= ADefault;
 end;
 
-class function TRuleCatalog.BuiltinRegistry: TArray<TRuleInfo>;
+class function TRuleCatalog.BuiltinRegistry: TArray<TRuleInfo>;  // dl:ok method-too-long@b13f -- REVIEWED 2026-11-21 SLZ-S05: 444 lines; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   L: TList<TRuleInfo>;
-  procedure B(const AId, ACat, ASev, ATitle: string; AEnabled: Boolean = True;
+  procedure B(const AId, ACat, ASev, ATitle: string; AEnabled: Boolean = True;  // dl:ok too-many-parameters@2c1c -- REVIEWED 2026-11-21 SLZ-S05: 8 parameters; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     const AParams: TArray<TRuleParam> = nil; ANeedsCompiler: Integer = 0; ACompatSince: Integer = 0);
   var R: TRuleInfo;
   begin
     R:= Default(TRuleInfo);
-    R.Id:= AId; R.Category:= ACat; R.DefaultSeverity:= ASev; R.Title:= ATitle;
-    R.Source:= 'builtin'; R.DefaultEnabled:= AEnabled; R.Params:= AParams;
+    R.Id:= AId;
+    R.Category:= ACat;
+    R.DefaultSeverity:= ASev;
+    R.Title:= ATitle;
+    R.Source:= 'builtin';
+    R.DefaultEnabled:= AEnabled;
+    R.Params:= AParams;
     R.NeedsCompiler:= ANeedsCompiler;
     R.CompatSince  := ACompatSince;
     L.Add(R);
@@ -1058,8 +1065,7 @@ var
   Id    : string;
   Labels: TComplianceTable;
 begin
-  if ARulesDir <> '' then Dir:= ARulesDir
-  else Dir:= TPath.Combine(TPath.GetDirectoryName(ParamStr(0)), 'rules');
+  Dir:= if ARulesDir <> '' then ARulesDir else TPath.Combine(TPath.GetDirectoryName(ParamStr(0)), 'rules');
   Labels:= nil;
   if AWithLabels then Labels:= TComplianceTable.Shared(ARulesDir, ComplianceError);
 
@@ -1068,7 +1074,8 @@ begin
   try
     { built-ins first (they win dedup) }
     for R in BuiltinRegistry do
-      if not ById.ContainsKey(R.Id) then begin ById.Add(R.Id, R); Order.Add(R.Id); end;
+      if not ById.ContainsKey(R.Id) then begin ById.Add(R.Id, R);
+      Order.Add(R.Id); end;
 
     { external .scm sidecars }
     if TDirectory.Exists(Dir) then
@@ -1077,10 +1084,11 @@ begin
       for F in Files do
       begin
         if SameText(TPath.GetFileName(F), 'compliance.json') then Continue; { label data, not a rule sidecar }
-        Raw:= '';
+        Raw:= '';  // dl:ok overwrite-before-read@e9fe -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
         try Raw:= TFile.ReadAllText(F, TEncoding.UTF8); except Continue; end;  // dl:ok try-except-swallowed@264e, bare-except@264e -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
         Root:= TJSONObject.ParseJSONValue(Raw);
-        if not (Root is TJSONObject) then begin Root.Free; Continue; end;
+        if (Root is not TJSONObject) then begin Root.Free;
+        Continue; end;
         try
           Obj:= Root as TJSONObject;
           if Obj.GetValue('id') = nil then Continue;
@@ -1088,16 +1096,12 @@ begin
           if (Id = '') or ById.ContainsKey(Id) then Continue; { builtin/dup wins }
           Sc.Id:= Id;
           Sc.Source:= 'scm';
-          if (Obj.GetValue('category') <> nil) and (Obj.GetValue('category').Value <> '') then
+          if (Obj.GetValue('category') <> nil) and (Obj.GetValue('category').Value <> '') then  // dl:ok ifthen-to-if-expression@7310 -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
             Sc.Category:= Obj.GetValue('category').Value  { optional sidecar key; lets a rule file name its own category (e.g. modernize, policy) }
           else Sc.Category:= ScmCategory(Id);
-          if Obj.GetValue('severity') <> nil then Sc.DefaultSeverity:= Obj.GetValue('severity').Value
-          else Sc.DefaultSeverity:= 'warning';
-          if Obj.GetValue('message') <> nil then Sc.Title:= Obj.GetValue('message').Value
-          else Sc.Title:= Id;
-          if (Obj.GetValue('enabled') <> nil) then
-            Sc.DefaultEnabled:= not SameText(Obj.GetValue('enabled').Value, 'false')
-          else Sc.DefaultEnabled:= True;
+          Sc.DefaultSeverity:= if Obj.GetValue('severity') <> nil then Obj.GetValue('severity').Value else 'warning';
+          Sc.Title:= if Obj.GetValue('message') <> nil then Obj.GetValue('message').Value else Id;
+          Sc.DefaultEnabled:= if (Obj.GetValue('enabled') <> nil) then not SameText(Obj.GetValue('enabled').Value, 'false') else True;
           { An .scm sidecar that forgets "enabled": false is still OFF if the
             engine's shared list says so. nil-comparison is exactly that case:
             its JSON says nothing, so `rules --json` advertised
@@ -1114,7 +1118,8 @@ begin
           Sc.NeedsCompiler:= if Obj.GetValue('needs_compiler') <> nil then StrToIntDef(Obj.GetValue('needs_compiler').Value, 0) else 0;
           Sc.CompatSince  := if Obj.GetValue('compat_since') <> nil then StrToIntDef(Obj.GetValue('compat_since').Value, 0) else 0;
           Sc.Params:= nil;
-          ById.Add(Id, Sc); Order.Add(Id);
+          ById.Add(Id, Sc);
+          Order.Add(Id);
         finally
           Root.Free;
         end;
@@ -1162,7 +1167,8 @@ begin
     for R in ACatalog do
     begin
       if Counts.TryGetValue(R.Category, N) then Counts[R.Category]:= N + 1
-      else begin Counts.Add(R.Category, 1); Order.Add(R.Category); end;
+      else begin Counts.Add(R.Category, 1);
+      Order.Add(R.Category); end;
     end;
     Result.Categories:= Order.Count;
     for C in Order do

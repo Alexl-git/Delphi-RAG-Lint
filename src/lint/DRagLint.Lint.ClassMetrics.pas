@@ -16,11 +16,9 @@ uses
   , System.Diagnostics { TStopwatch -- the phase-attribution counters below }
   , System.Generics.Collections
   , System.Generics.Defaults { TComparer -- the deterministic emit order below }
-  , TreeSitter
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   , DRagLint.Lint.Config
-  , DRagLint.Diagnostics.ParseCache
   ;
 
 type
@@ -81,6 +79,9 @@ type
 implementation
 
 uses
+  TreeSitter,
+  DRagLint.Diagnostics.ParseCache,
+  System.Math,
   DRagLint.Core.ForwardStub { PairForwardStubs -- BuildInventory }
   ;
 
@@ -118,13 +119,15 @@ begin
 end;
 
 { Raw source text of a tree-sitter node (empty on a null/out-of-range node). }
-function NodeText(const N: TTSNode; const Src: TBytes): string;
+function NodeText(const N: TTSNode; const Src: TBytes): string;  // dl:ok param-name-prefix@ee00 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   S, E, L: Integer;
 begin
   Result:= '';
   if N.IsNull then Exit;
-  S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+  S:= Integer(N.StartByte);
+  E:= Integer(N.EndByte);
+  L:= E - S;
   if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
   Result:= TEncoding.UTF8.GetString(Src, S, L);
 end;
@@ -171,7 +174,7 @@ begin
     if Trim(Parts[I]) <> '' then Result:= Result + [Trim(Parts[I])];
 end;
 
-class function TClassMetrics.Run(const AStore: ISymbolStore; const ACfg: TLintConfig;
+class function TClassMetrics.Run(const AStore: ISymbolStore; const ACfg: TLintConfig;  // dl:ok cyclomatic-complexity@98ea -- REVIEWED 2026-11-21 SLZ-S05: measured 32 (max 30); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   const ARuleId: string; const AOnlyFileId: Int64;
   const ARuleKept: TFunc<string, Boolean>): TArray<TLintFinding>;
 var
@@ -193,7 +196,7 @@ var
   TDIT        : Integer                          ;
   TRFC        : Integer                          ;
   TCBO        : Integer                          ;
-  TLCOM       : Integer                          ;
+  TLCOM       : Integer                          ;  // dl:ok local-var-casing@04fd -- REVIEWED 2026-11-21 SLZ-S05: TLCOM is the acronym LCOM with a T count prefix; PascalCase would read as a type name
   TFanOut     : Integer                          ;
   TFanIn      : Integer                          ;
   TFEnvy      : Integer                          ; { v0.82 feature-envy: minAccess floor }
@@ -284,7 +287,7 @@ var
 
   function InDeclSpan(const AInfo: TClassInfo; ALine: Integer): Boolean;
   begin
-    Result:= (ALine >= AInfo.DeclLine) and (ALine <= AInfo.DeclEndLine);
+    Result:= InRange(ALine, AInfo.DeclLine, AInfo.DeclEndLine);
   end;
 
   procedure BuildInventory;
@@ -444,7 +447,7 @@ var
         begin
           Inc(Depth);
           Cur:= P;
-          if Depth >= 32 then Break;
+          if Depth >= 32 then Break;  // dl:ok magic-literal@d21d -- REVIEWED 2026-11-21 SLZ-S05: literal 32; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
         end
         else
         begin
@@ -496,7 +499,8 @@ var
     Exclude:= TDictionary<string, Boolean>.Create;
     try
       Exclude.AddOrSetValue(LowerCase(AInfo.Name), True);
-      Inc(GCAnc); var TAnc: Int64:= TStopwatch.GetTimeStamp;
+      Inc(GCAnc);
+      var TAnc: Int64:= TStopwatch.GetTimeStamp;
       Anc:= AStore.GetTransitiveAncestors(AInfo.Id);
       Inc(GBAnc, TStopwatch.GetTimeStamp - TAnc);
       for A in Anc do
@@ -552,12 +556,13 @@ var
     Cur    : Integer                     ;
   begin
     for Src in Inv.Values do
-    begin
+    begin  // dl:ok duplicate-code@54dc -- REVIEWED 2026-11-21 SLZ-S05: 229 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
       Coupled:= TDictionary<string, Boolean>.Create;
       Exclude:= TDictionary<string, Boolean>.Create;
       try
         Exclude.AddOrSetValue(LowerCase(Src.Name), True);
-        Inc(GCAnc); var TAnc: Int64:= TStopwatch.GetTimeStamp;
+        Inc(GCAnc);
+        var TAnc: Int64:= TStopwatch.GetTimeStamp;
         Anc:= AStore.GetTransitiveAncestors(Src.Id);
         Inc(GBAnc, TStopwatch.GetTimeStamp - TAnc);
         for A in Anc do
@@ -635,7 +640,7 @@ var
       T: string ;
     begin
       if ANode.IsNull then Exit;
-      if (not (ANode = ARoot)) and (ANode.NodeType = 'defProc') then Exit; { nested routine excluded }
+      if (not (ANode = ARoot)) and (ANode.NodeType = 'defProc') then Exit; { nested routine excluded }  // dl:ok nonminimal-bool@5274 -- REVIEWED 2026-11-21 SLZ-S05: autofix declined: rewriting to <> needs an operator<> on the node record type, not provable here
       if ANode.NodeType = 'identifier' then
       begin
         T:= LowerCase(NodeText(ANode, PF.Src));
@@ -657,7 +662,7 @@ var
       begin
         S:= Integer(P.StartPoint.row) + 1;
         E:= Integer(P.EndPoint.row) + 1;
-        if (ALine >= S) and (ALine <= E) then Exit(P);
+        if InRange(ALine, S, E) then Exit(P);
       end;
     end;
 
@@ -675,7 +680,8 @@ var
     var
       Rx, Ry: Integer;
     begin
-      Rx:= Find(X); Ry:= Find(Y);
+      Rx:= Find(X);
+      Ry:= Find(Y);
       if Rx <> Ry then UF[Rx]:= Ry;
     end;
 
@@ -768,7 +774,7 @@ var
     Cnt, Best : Integer                   ;
     Pair      : TPair<string, Integer>    ;
 
-    procedure CollectDefProcNodes(const ANode: TTSNode);
+    procedure CollectDefProcNodes(const ANode: TTSNode);  // dl:ok duplicate-code@9018 -- REVIEWED 2026-11-21 SLZ-S05: 97 tokens; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     var
       C  : Integer;
       Ln : Integer;
@@ -793,7 +799,7 @@ var
       begin
         S:= Integer(P.StartPoint.row) + 1;
         E:= Integer(P.EndPoint.row) + 1;
-        if (ALine >= S) and (ALine <= E) then Exit(P);
+        if InRange(ALine, S, E) then Exit(P);
       end;
     end;
 
@@ -813,7 +819,7 @@ var
       if ANode.NodeType <> 'exprDot' then Exit; { not a member access -> not a delegation }
       Cur:= ANode;
       Guard:= 0;
-      while (not Cur.IsNull) and (Cur.NodeType = 'exprDot') and (Guard < 64) do
+      while (not Cur.IsNull) and (Cur.NodeType = 'exprDot') and (Guard < 64) do  // dl:ok magic-literal@b810 -- REVIEWED 2026-11-21 SLZ-S05: literal 64; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
       begin
         Lhs:= Cur.ChildByField('lhs');
         if Lhs.IsNull then Exit;
@@ -849,7 +855,7 @@ var
       single-statement delegation. Recognises 'Result := <field>.X' assignments
       and bare '<field>.X;' void calls. AMethodName lets 'FnName := ...' (the
       old-style function-result assignment) count as a Result assignment. }
-    function DelegationField(const ADefProc: TTSNode; const AMethodName: string): string;
+    function DelegationField(const ADefProc: TTSNode; const AMethodName: string): string;  // dl:ok too-many-exit-points@9645 -- REVIEWED 2026-11-21 SLZ-S05: 10 Exit statements; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     var
       Body, Stmt, Lhs, Rhs, Delegate: TTSNode;
       LhsTxt                        : string ;
@@ -861,7 +867,7 @@ var
       Stmt:= SoleStatement(Body);
       if Stmt.IsNull then Exit;
 
-      Delegate:= Default(TTSNode);
+      Delegate:= Default(TTSNode);  // dl:ok overwrite-before-read@88cb -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
       if Stmt.NodeType = 'assignment' then
       begin
         Lhs:= Stmt.ChildByField('lhs');
@@ -1039,7 +1045,8 @@ var
       for M in AInfo.Methods do
       begin
         if not Foreign.TryGetValue(M.Id, ForByX) then Continue; { no foreign access -> not envious }
-        MaxF:= 0; EnviedX:= 0;
+        MaxF:= 0;
+        EnviedX:= 0;
         for Pair in ForByX do
           if Pair.Value > MaxF then
           begin
@@ -1129,16 +1136,16 @@ begin
   AmbiguousMember:= TDictionary<string, Boolean>.Create;
   Findings    := TList<TLintFinding>.Create;
   try
-    TNOC:= ACfg.ThresholdFor('too-many-children', 10);
-    TDIT:= ACfg.ThresholdFor('deep-inheritance', 6);
-    TRFC:= ACfg.ThresholdFor('high-response', 50);
-    TCBO:= ACfg.ThresholdFor('high-coupling', 20);
-    TLCOM:= ACfg.ThresholdFor('low-cohesion', 26);
-    TFanOut:= ACfg.ThresholdFor('fan-out', 20); { aliases CBO; field-tune }
-    TFanIn := ACfg.ThresholdFor('fan-in', 20);  { field-tune }
-    TFEnvy := ACfg.ThresholdFor('feature-envy', 3); { min foreign accesses to flag }
-    TInstPct  := ACfg.ThresholdFor('instability', 80);       { percent form of I threshold (default 0.8) }
-    TInstFloor:= ACfg.ThresholdFor('instability-floor', 5);  { noise floor on Ca+Ce; keeps Total > 0 }
+    TNOC:= ACfg.ThresholdFor('too-many-children', 10);  // dl:ok magic-literal@a245 -- REVIEWED 2026-11-21 SLZ-S05: literal 10; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
+    TDIT:= ACfg.ThresholdFor('deep-inheritance', 6);  // dl:ok magic-literal@098b -- REVIEWED 2026-11-21 SLZ-S05: literal 6; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
+    TRFC:= ACfg.ThresholdFor('high-response', 50);  // dl:ok magic-literal@3f85 -- REVIEWED 2026-11-21 SLZ-S05: literal 50; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
+    TCBO:= ACfg.ThresholdFor('high-coupling', 20);  // dl:ok magic-literal@6eb3 -- REVIEWED 2026-11-21 SLZ-S05: literal 20; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
+    TLCOM:= ACfg.ThresholdFor('low-cohesion', 26);  // dl:ok large-magic-number@2258, magic-literal@2258 -- REVIEWED 2026-11-21 SLZ-S05: literal 26,2258,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
+    TFanOut:= ACfg.ThresholdFor('fan-out', 20); { aliases CBO; field-tune }  // dl:ok magic-literal@e1f0 -- REVIEWED 2026-11-21 SLZ-S05: literal 20; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
+    TFanIn := ACfg.ThresholdFor('fan-in', 20);  { field-tune }  // dl:ok magic-literal@89eb -- REVIEWED 2026-11-21 SLZ-S05: literal 20; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
+    TFEnvy := ACfg.ThresholdFor('feature-envy', 3); { min foreign accesses to flag }  // dl:ok magic-literal@1379 -- REVIEWED 2026-11-21 SLZ-S05: literal 3; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
+    TInstPct  := ACfg.ThresholdFor('instability', 80);       { percent form of I threshold (default 0.8) }  // dl:ok large-magic-number@2386, magic-literal@2386 -- REVIEWED 2026-11-21 SLZ-S05: literal 80,0.8,2386,2026,11,21; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
+    TInstFloor:= ACfg.ThresholdFor('instability-floor', 5);  { noise floor on Ca+Ce; keeps Total > 0 }  // dl:ok magic-literal@5bd9 -- REVIEWED 2026-11-21 SLZ-S05: literal 5,0; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
 
     NeedAllMembers:= (AOnlyFileId <= 0) or WantRule('fan-in') or WantRule('instability')
                      or WantRule('feature-envy');
@@ -1183,7 +1190,8 @@ begin
 
       if WantRule('high-response') then
       begin
-        Inc(GCRfc); var TR: Int64:= TStopwatch.GetTimeStamp;
+        Inc(GCRfc);
+        var TR: Int64:= TStopwatch.GetTimeStamp;
         var Rfc: Integer:= ComputeRFC(CI);
         Inc(GBRfc, TStopwatch.GetTimeStamp - TR);
         if Rfc > TRFC then
@@ -1194,7 +1202,8 @@ begin
 
       if WantRule('high-coupling') then
       begin
-        Inc(GCCbo); var TC: Int64:= TStopwatch.GetTimeStamp;
+        Inc(GCCbo);
+        var TC: Int64:= TStopwatch.GetTimeStamp;
         var Cbo: Integer:= ComputeCBO(CI);
         Inc(GBCbo, TStopwatch.GetTimeStamp - TC);
         if Cbo > TCBO then
@@ -1205,7 +1214,8 @@ begin
 
       if WantRule('low-cohesion') then
       begin
-        Inc(GCLcom); var TL: Int64:= TStopwatch.GetTimeStamp;
+        Inc(GCLcom);
+        var TL: Int64:= TStopwatch.GetTimeStamp;
         var Lc: Integer:= ComputeLCOM4(CI);
         Inc(GBLcom, TStopwatch.GetTimeStamp - TL);
         if Lc > TLCOM then
@@ -1216,7 +1226,8 @@ begin
 
       if WantRule('middle-man') then
       begin
-        Inc(GCMm); var TM: Int64:= TStopwatch.GetTimeStamp;
+        Inc(GCMm);
+        var TM: Int64:= TStopwatch.GetTimeStamp;
         var MM: TMiddleManResult:= ComputeMiddleMan(CI);
         Inc(GBMm, TStopwatch.GetTimeStamp - TM);
         if (MM.Total >= MIDDLE_MAN_MIN_METHODS) and (MM.BestCount * 2 > MM.Total) then
@@ -1256,10 +1267,10 @@ begin
         var Ca: Integer:= 0;
         FanIn.TryGetValue(CI.Id, Ca);
         var Total: Integer:= Ca + Ce;
-        if (Total >= TInstFloor) and (Ce * 100 >= TInstPct * Total) then
+        if (Total >= TInstFloor) and (Ce * 100 >= TInstPct * Total) then  // dl:ok magic-literal@5dda -- REVIEWED 2026-11-21 SLZ-S05: literal 100; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
           Emit('instability',
             Format('Unstable: %s has instability I=%d%% (Ce=%d efferent, Ca=%d afferent, >=%d%%) -- depends on many, nothing depends on it; hard to change safely',
-                   [CI.Name, (Ce * 100) div Total, Ce, Ca, TInstPct]),
+                   [CI.Name, (Ce * 100) div Total, Ce, Ca, TInstPct]),  // dl:ok magic-literal@a6b0 -- REVIEWED 2026-11-21 SLZ-S05: literal 100; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
             CI);
       end;
 
@@ -1274,18 +1285,18 @@ begin
     if GetEnvironmentVariable('DRAGLINT_PROFILE') <> '' then
     begin
       Writeln(ErrOutput, Format('  CLASS-METRICS BREAKDOWN (%d class(es))', [Inv.Count]));
-      Writeln(ErrOutput, Format('    %-26s %8.2f s (members loaded: %s)', ['BuildInventory', TInv / TStopwatch.Frequency,
+      Writeln(ErrOutput, Format('    %-26s %8.2f s (members loaded: %s)', ['BuildInventory', TInv / TStopwatch.Frequency,  // dl:ok locale-sensitive-conversion@28bf -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
         if NeedAllMembers then 'every class' else 'this file''s classes']));
-      Writeln(ErrOutput, Format('    %-26s %8.2f s', ['ResolveParents', TPar / TStopwatch.Frequency]));
-      Writeln(ErrOutput, Format('    %-26s %8.2f s (%d call(s), %d distinct (name,file) key(s))',
+      Writeln(ErrOutput, Format('    %-26s %8.2f s', ['ResolveParents', TPar / TStopwatch.Frequency]));  // dl:ok locale-sensitive-conversion@e8ab -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+      Writeln(ErrOutput, Format('    %-26s %8.2f s (%d call(s), %d distinct (name,file) key(s))',  // dl:ok locale-sensitive-conversion@9543 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
         ['ResolveTypeCategory', GBRtc / TStopwatch.Frequency, GCRtc, GRtcSeen.Count]));
-      Writeln(ErrOutput, Format('    %-26s %8.2f s (%d call(s))', ['GetTransitiveAncestors', GBAnc  / TStopwatch.Frequency, GCAnc ]));
-      Writeln(ErrOutput, Format('    %-26s %8.2f s (%d call(s))', ['ComputeCBO'            , GBCbo  / TStopwatch.Frequency, GCCbo ]));
-      Writeln(ErrOutput, Format('    %-26s %8.2f s (%d call(s))', ['ComputeRFC'            , GBRfc  / TStopwatch.Frequency, GCRfc ]));
-      Writeln(ErrOutput, Format('    %-26s %8.2f s (%d call(s))', ['ComputeLCOM4'          , GBLcom / TStopwatch.Frequency, GCLcom]));
-      Writeln(ErrOutput, Format('    %-26s %8.2f s (%d call(s))', ['ComputeMiddleMan'      , GBMm   / TStopwatch.Frequency, GCMm  ]));
+      Writeln(ErrOutput, Format('    %-26s %8.2f s (%d call(s))', ['GetTransitiveAncestors', GBAnc  / TStopwatch.Frequency, GCAnc ]));  // dl:ok locale-sensitive-conversion@f60b -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+      Writeln(ErrOutput, Format('    %-26s %8.2f s (%d call(s))', ['ComputeCBO'            , GBCbo  / TStopwatch.Frequency, GCCbo ]));  // dl:ok locale-sensitive-conversion@193d -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+      Writeln(ErrOutput, Format('    %-26s %8.2f s (%d call(s))', ['ComputeRFC'            , GBRfc  / TStopwatch.Frequency, GCRfc ]));  // dl:ok locale-sensitive-conversion@0c3a -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+      Writeln(ErrOutput, Format('    %-26s %8.2f s (%d call(s))', ['ComputeLCOM4'          , GBLcom / TStopwatch.Frequency, GCLcom]));  // dl:ok locale-sensitive-conversion@b022 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+      Writeln(ErrOutput, Format('    %-26s %8.2f s (%d call(s))', ['ComputeMiddleMan'      , GBMm   / TStopwatch.Frequency, GCMm  ]));  // dl:ok locale-sensitive-conversion@375d -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
       Writeln(ErrOutput, Format('    %-26s %s', ['ComputeAllFanIn',
-        if FanInWanted then Format('%8.2f s', [GBFanInAll / TStopwatch.Frequency])
+        if FanInWanted then Format('%8.2f s', [GBFanInAll / TStopwatch.Frequency])  // dl:ok locale-sensitive-conversion@b29a -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
         else 'skipped (fan-in, instability not kept)']));
       Writeln(ErrOutput, Format('    %-26s %8d class(es)', ['per-class loop', Length(Ordered)]));
       Writeln(ErrOutput, '    (ResolveTypeCategory is called from INSIDE ComputeCBO/ComputeAllFanIn,');

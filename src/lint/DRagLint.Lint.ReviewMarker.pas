@@ -70,7 +70,7 @@ type
   /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.RuleScope, DRagLint.Fix.Hygiene, DRagLint.Lint.MarkerHash, DRagLint.Lint.ProjectRules, DRagLint.Lint.ReviewMarker, DRagLint.LSP.Completion</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TReviewMarkers = class
+  TReviewMarkers = class  // dl:ok high-response@140c -- REVIEWED 2026-11-21 SLZ-S05: RFC 56; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   strict private
     /// <summary>1-based index just past the `//` that opens the line comment,
     /// skipping any `//` that occurs inside a string literal or a block
@@ -638,7 +638,7 @@ uses
   Normalisation
   --------------------------------------------------------------------------- }
 
-class function TReviewMarkers.NormalizeLine(const ALineText: string): string;
+class function TReviewMarkers.NormalizeLine(const ALineText: string): string;  // dl:ok cyclomatic-complexity@8d7b, cognitive-complexity@261b -- REVIEWED 2026-11-21 SLZ-S05: measured 82 (max 65); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   SB  : TStringBuilder;
   I   : Integer       ;
@@ -757,7 +757,7 @@ end;
 
 class function TReviewMarkers.HashLine(const ALineText: string): string;
 begin
-  Result:= LowerCase(Copy(THashSHA2.GetHashString(NormalizeLine(ALineText)), 1, 4));
+  Result:= LowerCase(Copy(THashSHA2.GetHashString(NormalizeLine(ALineText)), 1, 4));  // dl:ok magic-literal@501b -- REVIEWED 2026-11-21 SLZ-S05: literal 1,4; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
 end;
 
 { True when the normalized line is a single Delphi keyword (optionally with a
@@ -836,7 +836,7 @@ begin
       end;
       Inc(I);
     end;
-    Result:= LowerCase(Copy(THashSHA2.GetHashString(SB.ToString), 1, 4));
+    Result:= LowerCase(Copy(THashSHA2.GetHashString(SB.ToString), 1, 4));  // dl:ok magic-literal@7ceb -- REVIEWED 2026-11-21 SLZ-S05: literal 1,4; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
   finally
     SB.Free;
   end;
@@ -913,12 +913,15 @@ begin
         Inc(I);
         while I <= Len do
         begin
-          if Line[I] = '''' then begin Inc(I); Break; end;
+          if Line[I] = '''' then begin Inc(I);
+          Break; end;
           Inc(I);
         end;
         Continue;
       end;
-      if Line[I] = '{' then begin InBrace:= True; Inc(I); Continue; end;
+      if Line[I] = '{' then begin InBrace:= True;
+      Inc(I);
+      Continue; end;
       if (Line[I] = '(') and (I < Len) and (Line[I + 1] = '*') then
       begin
         InParen:= True;
@@ -960,7 +963,8 @@ begin
       begin
         if ALineText[I] = '''' then
         begin
-          if (I < Len) and (ALineText[I + 1] = '''') then begin Inc(I, 2); Continue; end;
+          if (I < Len) and (ALineText[I + 1] = '''') then begin Inc(I, 2);
+          Continue; end;
           Inc(I);
           Break;
         end;
@@ -981,7 +985,8 @@ begin
       Inc(I, 2);
       while I <= Len do
       begin
-        if (ALineText[I] = '*') and (I < Len) and (ALineText[I + 1] = ')') then begin Inc(I, 2); Break; end;
+        if (ALineText[I] = '*') and (I < Len) and (ALineText[I + 1] = ')') then begin Inc(I, 2);
+        Break; end;
         Inc(I);
       end;
       Continue;
@@ -1243,7 +1248,7 @@ end;
 
 class function TReviewMarkers.RuleToken(const ARuleId, AHash: string): string;
 begin
-  if AHash = '' then Result:= ARuleId else Result:= ARuleId + '@' + AHash;
+  Result:= if AHash = '' then ARuleId else ARuleId + '@' + AHash;
 end;
 
 class function TReviewMarkers.FormatMarker(const ARuleId, ALineText, AReason: string): string;
@@ -1373,8 +1378,7 @@ begin
     born stale. The checker hashes a window (see HashWindow); it passes that
     value here rather than letting this function re-derive a single-line hash it
     has no way to reproduce -- InsertInto only ever receives one line. }
-  if AHashOverride <> '' then Hash:= AHashOverride
-  else Hash:= HashLine(ALineText);
+  Hash:= if AHashOverride <> '' then AHashOverride else HashLine(ALineText);
   Existing:= Parse(ALineText);
 
   { Idempotent: a rule this line already records AND whose hash still matches the
@@ -1397,7 +1401,7 @@ begin
     Body:= REVIEW_MARK + ' ' + RuleToken(ARuleId, Hash);
     if Trim(AReason) <> '' then Body:= Body + ' ' + REVIEW_REASON_SEP + ' ' + Trim(AReason);
     Head:= TrimRight(ALineText);
-    if Head = '' then Result:= '// ' + Body else Result:= Head + '  // ' + Body;
+    if Head = '' then Result:= '// ' + Body else Result:= Head + '  // ' + Body;  // dl:ok ifthen-to-if-expression@956d -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
     Exit(TrimRight(Result));
   end;
 
@@ -1417,7 +1421,7 @@ begin
   Body     := REVIEW_MARK + ' ';
   for var K: Integer:= 0 to High(Existing) do
   begin
-    if K > 0 then Body:= Body + ', ';
+    if K > 0 then Body:= Body + ', ';  // dl:ok concat-in-loop@e4f5 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
     if SameText(Existing[K].RuleId, ARuleId) then
     begin
       { Re-accepting a review whose code moved on: THIS entry is re-hashed to the
@@ -1425,11 +1429,11 @@ begin
         including a stale one. Refreshing the whole line would silently
         re-validate a review of code nobody re-examined, which is the single
         failure this design exists to prevent. Second finding, second click. }
-      Body     := Body + RuleToken(ARuleId, Hash);
+      Body     := Body + RuleToken(ARuleId, Hash);  // dl:ok concat-in-loop@be10 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
       Refreshed:= True;
     end
     else
-      Body:= Body + RuleToken(Existing[K].RuleId, Existing[K].Hash);
+      Body:= Body + RuleToken(Existing[K].RuleId, Existing[K].Hash);  // dl:ok concat-in-loop@4b59 -- REVIEWED 2026-11-21 SLZ-S05: design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   end;
   if not Refreshed then Body:= Body + ', ' + RuleToken(ARuleId, Hash);
   { A RE-HASH IS NOT A RE-REVIEW (L3, 2026-09-23). Refreshed means this entry's
@@ -1504,8 +1508,8 @@ begin
   begin
     { Was there any other comment text before the tag? Prefix still carries the
       `//`, so measure what sits BETWEEN the opener and the tag. }
-    if Trim(Copy(ALineText, CStart, TagPos - 1)) = '' then
-      Result:= TrimRight(Copy(ALineText, 1, CStart - 3))  { drop the `//` too }
+    if Trim(Copy(ALineText, CStart, TagPos - 1)) = '' then  // dl:ok ifthen-to-if-expression@9fd9 -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
+      Result:= TrimRight(Copy(ALineText, 1, CStart - 3))  { drop the `//` too }  // dl:ok magic-literal@9872 -- REVIEWED 2026-11-21 SLZ-S05: literal 1,3; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     else
       Result:= TrimRight(Prefix);
     Exit;

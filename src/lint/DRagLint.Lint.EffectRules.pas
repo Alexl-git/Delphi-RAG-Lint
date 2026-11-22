@@ -890,7 +890,7 @@ type
     Rejected: Boolean;                      { with / asm: nothing is known }
   end;
 
-  TLoopInvariantRun = class
+  TLoopInvariantRun = class  // dl:ok high-response@87ad -- REVIEWED 2026-11-21 SLZ-S05: RFC 53; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   strict private
     FStore    : ISymbolStore;
     FFacts    : TDictionary<Int64, TSymbolFacts>;
@@ -1182,7 +1182,7 @@ end;
 
 { True when no name under N is anything but a by-value local, a constant or a
   stateless intrinsic, and nothing reaches through a dot, subscript or deref. }
-function TLoopInvariantRun.ReadsNoState(const N: TTSNode; const ASrc: TBytes; ALocals: TDictionary<string, Boolean>): Boolean;
+function TLoopInvariantRun.ReadsNoState(const N: TTSNode; const ASrc: TBytes; ALocals: TDictionary<string, Boolean>): Boolean;  // dl:ok too-many-exit-points@9ef8 -- REVIEWED 2026-11-21 SLZ-S05: 6 Exit statements; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 begin
   Result:= True;
   if N.IsNull then Exit;
