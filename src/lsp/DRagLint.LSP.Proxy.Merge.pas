@@ -297,10 +297,11 @@ type
     /// generation moved on or a newer lint is queued. AFull: AItems is a full set.</summary>
     procedure ApplyFullRules(const AJob: TFullJob; const AItems: string; AFull: Boolean);
     /// <summary>Queues one lint of APath for the per-URI diagnostics state
-    /// AState (a TDiagState) on the merge worker.</summary>
-    /// <returns>False when the worker queue is full; AState is then marked idle
-    /// again.</returns>
-    function  StartLint(AState: TObject; const APath: string): Boolean;
+    /// AState (a TDiagState) on the merge worker. Never dropped: a lint is
+    /// queued past QUEUE_MAX (at most one per URI is queued or running, the
+    /// FRunning / FRerun pair), so hover / completion / definition jobs filling
+    /// the queue cannot leave a URI without drag-lint findings (1.52.3).</summary>
+    procedure StartLint(AState: TObject; const APath: string);
     /// <summary>Worker thread: lints APath, stores the findings in AState and,
     /// when nobody waits for them inline any more, publishes the merged set for
     /// the URI through ClientWriter (only when it differs from what the client
@@ -458,9 +459,11 @@ type
     procedure WarmUp;
     /// <summary><!-- drag-lint:auto sum -->Queues AWork on the merge worker and returns
     /// at once; nobody waits on it, so it must publish its result through its own
-    /// captured state. False (AWork is dropped, never run) when QUEUE_MAX jobs are
-    /// already waiting.</summary>
+    /// captured state. False (AWork is dropped, never run) when ABounded and
+    /// QUEUE_MAX jobs are already waiting.</summary>
     /// <param name="AWork"><!-- drag-lint:auto type -->const TProc</param>
+    /// <param name="ABounded">False queues AWork whatever the queue holds (always
+    /// True then); only for jobs bounded elsewhere -- one lint per URI.</param>
     /// <returns><!-- drag-lint:auto -->Boolean -- Observed: FQueue.Count &lt; QUEUE_MAX.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -473,7 +476,7 @@ type
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeDefinition"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    function  Enqueue(const AWork: TProc): Boolean;
+    function  Enqueue(const AWork: TProc; ABounded: Boolean = True): Boolean;
     /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
     /// <returns><!-- drag-lint:auto -->Boolean -- Observed:
     /// FDirty.ContainsKey(DocKey(APath)).</returns>
@@ -1133,14 +1136,6 @@ begin
   end;
 end;
 
-{ True when the proxy's own command line carries --full-rules (1.52.3
-  MERGE-FULLRULES stopgap: TLspProxyOptions has no field for it yet). }
-function CommandLineHasFullRules: Boolean;
-begin
-  Result:= False;
-  for var I:= 1 to ParamCount do
-    if SameText(ParamStr(I), '--full-rules') then Exit(True);
-end;
 
 const
   { The blank line that ends an LSP header block. }
@@ -1704,7 +1699,7 @@ begin
   FDocUpdates := TDictionary<string, TDocUpdate>.Create;
   FDocLock    := TCriticalSection.Create;
   FAnswersIdle:= TEvent.Create(nil, True, True, '');
-  FFullRules  := AOptions.MergeDiagnostics and CommandLineHasFullRules;
+  FFullRules  := AOptions.MergeDiagnostics and AOptions.FullRules;
   if FFullRules then FFullThread:= TFullRulesWorker.Create(Self);
 end;
 
@@ -1787,12 +1782,12 @@ end;
 
 { Queues AWork on the merge worker and returns at once; nobody waits on it, so
   it must publish its result through its own captured state. False (AWork is
-  dropped, never run) when QUEUE_MAX jobs are already waiting. }
-function TProxyMergeEngine.Enqueue(const AWork: TProc): Boolean;
+  dropped, never run) when ABounded and QUEUE_MAX jobs are already waiting. }
+function TProxyMergeEngine.Enqueue(const AWork: TProc; ABounded: Boolean): Boolean;
 begin
   FStateLock.Enter;
   try
-    Result:= FQueue.Count < QUEUE_MAX;
+    Result:= (not ABounded) or (FQueue.Count < QUEUE_MAX);
     if Result then FQueue.Enqueue(AWork);
   finally
     FStateLock.Leave;
@@ -2734,7 +2729,7 @@ end;
 { S>C: rewrites a publishDiagnostics frame with drag-lint's findings appended.
   Runs on the S>C pump thread; the lint itself runs on the merge worker, inside
   the budget. }
-function TProxyMergeEngine.MergeDiagnostics(const AFrame: TBytes; ALen: Integer;  // dl:ok too-many-exit-points@3a8f -- each Exit is a fail-open decline (forward the original frame); one flat guard sequence reads better than nesting
+function TProxyMergeEngine.MergeDiagnostics(const AFrame: TBytes; ALen: Integer;  // dl:ok too-many-exit-points@5649 -- each Exit is a fail-open decline (forward the original frame); one flat guard sequence reads better than nesting
   out AReplacement: TBytes): Boolean;
 var
   Json  : TJSONValue;
@@ -2809,8 +2804,11 @@ begin
       finally
         FDiagLock.Leave;
       end;
-      if Start and StartLint(St, Path) then
+      if Start then
+      begin
+        StartLint(St, Path);
         St.FDone.WaitFor(Cardinal(if FOptions.MergeBudgetMs < 0 then 0 else FOptions.MergeBudgetMs));
+      end;
       { Inside the budget the fresh set goes in this frame; past it the worker
         publishes the merged set the moment the lint ends (owner 2026-11-20),
         and this frame carries the last known one. }
@@ -2890,25 +2888,19 @@ begin
   end;
 end;
 
-function TProxyMergeEngine.StartLint(AState: TObject; const APath: string): Boolean;
+procedure TProxyMergeEngine.StartLint(AState: TObject; const APath: string);
 var
   St: TDiagState;
 begin
   St:= TDiagState(AState);
-  Result:= Enqueue(
+  { Unbounded (1.52.3 LSP-MERGE): with the queue full of hover jobs the lint
+    used to be dropped, silently, and nothing re-linted the URI until
+    DelphiLSP's next publish -- VS Code showed 0 drag-lint findings. }
+  Enqueue(
     procedure
     begin
       LintOnWorker(St, APath);
-    end);
-  if Result then Exit;
-  FDiagLock.Enter;   { queue full: nothing will lint, so the state is idle again }
-  try
-    St.FRunning:= False;
-    St.FWaiting:= False;
-    St.FDone.SetEvent;
-  finally
-    FDiagLock.Leave;
-  end;
+    end, False);
 end;
 
 procedure TProxyMergeEngine.LintOnWorker(AState: TObject; const APath: string);

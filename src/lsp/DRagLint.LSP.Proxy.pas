@@ -146,6 +146,10 @@ type
     /// <remarks>Lazy, like ResolveDbs, so the relay's startup path still resolves
     /// and opens no database. It must write only to stderr.</remarks>
     PrepareLint: TLspLintSetup;
+    /// <summary>--full-rules with --merge-diagnostics: after each subset lint the
+    /// FULL rule set runs out of process and its finding set replaces the subset in
+    /// the merged publish, as plain lsp --full-rules does. Off by default.</summary>
+    FullRules: Boolean;
   end;
 
 const
