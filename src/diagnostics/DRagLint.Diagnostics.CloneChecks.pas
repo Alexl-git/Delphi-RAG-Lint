@@ -509,7 +509,8 @@ begin
   finally
     Seen.Free;
     Findings.Free;
-    Interner.Free; Toks.Free;
+    Interner.Free;
+    Toks.Free;
   end;
 end;
 

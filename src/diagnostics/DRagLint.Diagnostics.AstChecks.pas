@@ -1336,10 +1336,12 @@ begin
     { code }
     if Result[I] = '''' then begin InStr := True;
     Blank(1);
-    Inc(I); Continue; end;
+    Inc(I);
+    Continue; end;
     if Result[I] = '{'  then begin Inc(InBrace);
     Blank(1);
-    Inc(I); Continue; end;
+    Inc(I);
+    Continue; end;
     if (Result[I] = '(') and (I < N) and (Result[I + 1] = '*') then
     begin
       InStarParen := True;

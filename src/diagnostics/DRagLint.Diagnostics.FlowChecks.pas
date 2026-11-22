@@ -685,7 +685,8 @@ var T0: Int64; Miss, Cached, Verifying: Boolean; K: string;
 begin
   T0 := TStopwatch.GetTimeStamp;
   Miss := False;
-  Verifying := False; Cached := False;
+  Verifying := False;
+  Cached := False;
   try
     Result := False;
     if AStore = nil then Exit;
@@ -3925,7 +3926,8 @@ var
     F := Default(TLintFinding);
     F.RuleId := ARule;
     F.Severity := ASev;
-    F.Message := AMsg; F.FilePath := AFile;
+    F.Message := AMsg;
+    F.FilePath := AFile;
     { 1.52 BK-COLS2: every caller passes a tree-sitter BYTE column (node StartPoint / Lattices DeclCol);
       the finding reports the CHARACTER column. }
     var Pt: TTSPoint;
@@ -5104,7 +5106,8 @@ begin
       begin
         T0 := TStopwatch.GetTimeStamp;
         Miss := False;
-        Verifying := False; Cached := False;
+        Verifying := False;
+        Cached := False;
         try
         Result := True; { conservative default: owns/unknown -> escape }
         { C1b: the STORE's memo, so a callee resolved once is resolved for every
@@ -5123,7 +5126,8 @@ begin
           file (fine); only routines spanning DIFFERENT files are truly ambiguous. }
         Have := False;
         Ambig := False;
-        FId := -1; RSym := Default(TSymbol);
+        FId := -1;
+        RSym := Default(TSymbol);
         for I := 0 to High(Syms) do
           if Syms[I].Kind in [skProcedure, skFunction, skMethod] then
           begin
@@ -5184,7 +5188,8 @@ begin
       begin
         T0 := TStopwatch.GetTimeStamp;
         Miss := False;
-        Verifying := False; Cached := False;
+        Verifying := False;
+        Cached := False;
         E0 := GOracleT[ORACLE_RECTYPE]; { subtracted below -- see the finally }
         { C1b: THE FILE ID IS NOW LOAD-BEARING. At C1a's per-file lifetime the
           key could omit it, because AFileId could not vary within one Check.
@@ -5302,7 +5307,8 @@ begin
       begin
         T0 := TStopwatch.GetTimeStamp;
         Miss := False;
-        Verifying := False; Cached := pmUnknown;
+        Verifying := False;
+        Cached := pmUnknown;
         try
         Result := pmUnknown;
         if ACalleeName = '' then Exit;
