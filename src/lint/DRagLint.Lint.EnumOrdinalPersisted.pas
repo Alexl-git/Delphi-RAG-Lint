@@ -236,7 +236,7 @@ var
     if Trim(Item) <> '' then
     begin
       Inc(pTotal);
-      if Pos('=', Item) = 0 then Inc(Result);
+      if not Item.Contains('=') then Inc(Result);
     end;
     ItemAt:= AEnd + 1;
   end;

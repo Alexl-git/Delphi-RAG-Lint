@@ -869,8 +869,8 @@ begin
   begin
     if (I < 0) or (I > High(Lines)) then Continue;
     S:= Lines[I];
-    if Pos('//', S) > 0 then Exit(True);
-    if Pos('(*', S) > 0 then Exit(True);
+    if S.Contains('//') then Exit(True);
+    if S.Contains('(*') then Exit(True);
     P:= Pos('{', S);
     if (P > 0) and not ((P < Length(S)) and (S[P + 1] = '$')) then Exit(True);
   end;

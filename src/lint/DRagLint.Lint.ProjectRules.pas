@@ -304,7 +304,7 @@ const
 
 function CycleFixPointer(const pProject, pStem: string): string;
 begin
-  var Proj:= if pProject = '' then '<X.dproj>' else if Pos(' ', pProject) > 0 then '"' + pProject + '"' else pProject;
+  var Proj:= if pProject = '' then '<X.dproj>' else if pProject.Contains(' ') then '"' + pProject + '"' else pProject;
   Result:= CCycleFixPointerHead + Proj + ' --unit ' + pStem;
 end;
 
@@ -5474,17 +5474,17 @@ begin
           if WantRule('unused-private-member') then
           begin
             PrivModifiers:= LowerCase(Sym.Modifiers);
-            IsPrivate:= (Pos('private', PrivModifiers) > 0);
+            IsPrivate:= (PrivModifiers.Contains('private'));
             if IsPrivate and
               (Sym.Kind in [skMethod, skFunction, skProcedure, skConstructor, skDestructor,
                             skField, skConstDecl, skTypeAlias, skClass, skInterface, skRecord, skEnum]) and
-              (Pos('override', PrivModifiers) = 0) and
+              (not PrivModifiers.Contains('override')) and
               { A message handler -- `procedure WMSize(var M: TWMSize); message WM_SIZE;`
                 -- is dispatched by the VCL through the message table and is NEVER
                 called by name, so "no references" is its normal, correct state,
                 not dead code. Same dispatch argument as the virtual/override
                 guard beside it. }
-              (Pos('message', PrivModifiers) = 0) and
+              (not PrivModifiers.Contains('message')) and
               (not Sym.IsVirtual) then
             begin
               { Skip members whose name appears as a property accessor or backing

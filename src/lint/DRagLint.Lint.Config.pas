@@ -957,7 +957,7 @@ end;
 
 function IsTypePrefixGapMessage(const AMessage: string): Boolean;
 begin
-  Result:= Pos(TYPE_PREFIX_GAP_MARK, AMessage) > 0;
+  Result:= AMessage.Contains(TYPE_PREFIX_GAP_MARK);
 end;
 
 class function TNamingConfig.Default: TNamingConfig;

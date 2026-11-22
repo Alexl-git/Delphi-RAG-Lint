@@ -166,7 +166,7 @@ function LooksLikeIdentifier(const AToken: string): Boolean;
 var
   I: Integer;
 begin
-  Result:= Pos('.', AToken) > 0;
+  Result:= AToken.Contains('.');
   if Result then Exit;
   for I:= 2 to Length(AToken) do
     if CharInSet(AToken[I], ['A'..'Z']) and CharInSet(AToken[I - 1], ['a'..'z']) then
