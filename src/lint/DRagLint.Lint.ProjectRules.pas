@@ -375,7 +375,8 @@ var
     Result:= '';
     if N.IsNull then Exit;
     S:= Integer(N.StartByte);
-    E:= Integer(N.EndByte); L:= E - S;
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -738,7 +739,8 @@ var
             UnitLine.TryGetValue(Anchor, Ln);
           end;
           F.StartLine:= Ln;
-          F.StartCol:= 1; F.EndLine:= Ln; F.EndCol:= 1;
+          F.StartCol:= 1;
+          F.EndLine:= Ln; F.EndCol:= 1;
           var CC: TCycleCoupling;
           CC.Finding:= F;
           CC.Detail := CouplingLines(Comp);
@@ -886,9 +888,11 @@ begin
     EdgeHasImpl.Free;
     EdgeHasIntf.Free;
     Stack.Free;
-    OnStack.Free; LowLink.Free; Index.Free;
+    OnStack.Free;
+    LowLink.Free; Index.Free;
     UnitLine.Free;
-    FileOfStem.Free; FileOfUnit.Free; UnitName.Free;
+    FileOfStem.Free;
+    FileOfUnit.Free; UnitName.Free;
     for var SD in SymCache.Values do SD.Free;
     SymCache.Free;
     Findings.Free;
@@ -3432,7 +3436,8 @@ var
     Result:= '';
     if N.IsNull then Exit;
     S:= Integer(N.StartByte);
-    E:= Integer(N.EndByte); L:= E - S;
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -4944,9 +4949,11 @@ begin
   Shared     := TSharedScope.Create(AStore, ASiblingStore, ASiblingNames);
   Prof:= GetEnvironmentVariable('DRAGLINT_PROFILE') <> '';
   TCirc:= 0;
-  TEnum:= 0; TRts:= 0; TUuiu:= 0; TGod:= 0; TUpub:= 0; TUpriv:= 0; TAccess:= 0; TOuter:= 0;
+  TEnum:= 0;
+  TRts:= 0; TUuiu:= 0; TGod:= 0; TUpub:= 0; TUpriv:= 0; TAccess:= 0; TOuter:= 0;
   TGlob:= 0;
-  TDupD:= 0; TCens:= 0;
+  TDupD:= 0;
+  TCens:= 0;
   TPurity:= 0;
   LapNames:= nil;
   LapTicks:= nil;

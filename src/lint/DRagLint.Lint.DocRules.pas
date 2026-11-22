@@ -640,7 +640,8 @@ begin
   if AStore = nil then Exit;
   Prof:= GetEnvironmentVariable('DRAGLINT_PROFILE') <> '';
   TDecls:= 0;
-  TExisting:= 0; TAnalyze:= 0; NDecl:= 0; NDiff:= 0;
+  TExisting:= 0;
+  TAnalyze:= 0; NDecl:= 0; NDiff:= 0;
   Changed     := nil;
   ChangedKnown:= False;
   StaleFiles  := nil;

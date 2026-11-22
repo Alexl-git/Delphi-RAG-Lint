@@ -920,7 +920,8 @@ begin
         Continue;
       end;
       if Line[I] = '{' then begin InBrace:= True;
-      Inc(I); Continue; end;
+      Inc(I);
+      Continue; end;
       if (Line[I] = '(') and (I < Len) and (Line[I + 1] = '*') then
       begin
         InParen:= True;

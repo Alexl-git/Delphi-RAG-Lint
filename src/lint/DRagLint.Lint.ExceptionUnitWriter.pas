@@ -249,7 +249,8 @@ var
   S      : string ;
 begin
   Result:= False;
-  AName:= ''; AMsg:= '';
+  AName:= '';
+  AMsg:= '';
   S:= ALine;
   P:= Pos('=', S);
   if P <= 0 then Exit;
@@ -547,7 +548,8 @@ begin
           SB.Append(Lines[I]);
           SB.Append(#13#10);
           SB.Append('  ');
-          SB.Append(AUnitName); SB.Append(',');
+          SB.Append(AUnitName);
+          SB.Append(',');
         end
         else
         begin

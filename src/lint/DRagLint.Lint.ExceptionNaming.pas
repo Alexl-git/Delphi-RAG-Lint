@@ -210,7 +210,8 @@ begin
               or InArray(LowerCase(Head), ['error', 'warning', 'internal'])) then
       begin
         S:= Rest;
-        Changed:= True; Continue;
+        Changed:= True;
+        Continue;
       end;
     end;
 
@@ -223,7 +224,8 @@ begin
          and LooksLikeIdentifier(Head) then
       begin
         S:= Rest;
-        Changed:= True; Continue;
+        Changed:= True;
+        Continue;
       end;
     end;
   end;

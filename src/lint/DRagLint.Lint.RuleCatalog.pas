@@ -553,7 +553,8 @@ end;
 function MkParam(const AName, AType, ADefault: string): TRuleParam;
 begin
   Result.Name:= AName;
-  Result.ParamType:= AType; Result.DefaultVal:= ADefault;
+  Result.ParamType:= AType;
+  Result.DefaultVal:= ADefault;
 end;
 
 class function TRuleCatalog.BuiltinRegistry: TArray<TRuleInfo>;
@@ -565,9 +566,11 @@ var
   begin
     R:= Default(TRuleInfo);
     R.Id:= AId;
-    R.Category:= ACat; R.DefaultSeverity:= ASev; R.Title:= ATitle;
+    R.Category:= ACat;
+    R.DefaultSeverity:= ASev; R.Title:= ATitle;
     R.Source:= 'builtin';
-    R.DefaultEnabled:= AEnabled; R.Params:= AParams;
+    R.DefaultEnabled:= AEnabled;
+    R.Params:= AParams;
     R.NeedsCompiler:= ANeedsCompiler;
     R.CompatSince  := ACompatSince;
     L.Add(R);
