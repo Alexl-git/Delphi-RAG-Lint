@@ -16,7 +16,11 @@ unit DRagLint.Fix.Expr;
     deprecated-rtl-function             everything but StrPas(X) -> string(X); OemToAnsi / AnsiToOem
                                         have no one-to-one replacement and stay
     gettickcount-wraparound             unless the call is assigned to an Int64 / UInt64 variable
-    ifthen-to-if-expression             comments in the statement, nested if / begin / case
+    ifthen-to-if-expression             comments in the statement, nested if / begin / case, an array arm,
+                                        a bare `[..]` constructor arm (E2010 / F2084), and in a generic
+                                        routine any non-plain arm unless the target is a built-in type
+    nonminimal-bool (veto only)         a record operand, or no operand proven to have built-in equality;
+                                        the accepted shapes go through DRagLint.Fix.Templates
     useless-format                      unless the element is a string literal or a string-typed local
     locale-sensitive-conversion (risky) unless the call sits in a persistence sink (WriteString, AddPair,
                                         SetValue, .Values[..], .AsString :=) and is a Float / Currency call
@@ -46,8 +50,10 @@ uses
   , System.Math
   , System.RegularExpressions
   , DRagLint.Core.Model
+  , DRagLint.Core.Interfaces
   , DRagLint.Refactor.TextEdit
   , DRagLint.Lint.Autofix
+  , DRagLint.Fix.Templates
   ;
 
 const
@@ -67,6 +73,14 @@ const
   SEARCH_LINE_GROUP = 3;
   LEGACY_TAIL_GROUP = 3;   // shared-marker-legacy-shape: the optional trailing `// note` group
   PAST_CR_COL       = 2;   // EndCol of a comment node that carries the CR: Length(line) + 2
+  MAX_ALIAS_HOPS    = 3;   // TypeSafety follows `T = U;` aliases this deep
+  LITERAL_RE        = '^(nil|true|false|-?\d[\w.]*|\$[0-9a-f]+|''([^'']|'''')*''|#\d+)$';
+  ROUTINE_HEAD_RE   = '^(?<ind>\s*)(class\s+)?(function|procedure|constructor|destructor|operator)\s+(?<n>[\w.<>, ]+)';
+  BUILTIN_TYPES     = '|integer|cardinal|shortint|smallint|longint|int8|int16|int32|int64|byte|word|longword|' +
+    'uint8|uint16|uint32|uint64|nativeint|nativeuint|fixedint|fixeduint|boolean|bytebool|wordbool|longbool|' +
+    'char|ansichar|widechar|string|unicodestring|ansistring|widestring|shortstring|rawbytestring|utf8string|' +
+    'single|double|extended|real|currency|comp|tdatetime|tdate|ttime|pointer|pchar|pansichar|pwidechar|' +
+    'variant|olevariant|tobject|tclass|iinterface|iunknown|';
 
 { ---- shared helpers ---- }
 
@@ -199,13 +213,175 @@ begin
   Result:= [ReplaceEdit(AFinding.FilePath, AFinding.StartLine, AFinding.StartCol, Name, Name + '64')];
 end;
 
+{ ---- operand typing shared by ifthen-to-if-expression and nonminimal-bool ---- }
+
+type
+  { What a fixer can prove about one operand of the expression it rewrites. }
+  TOperandSafety = (osUnknown, osSafe, osUnsafe);
+
+{ True when AOperand is a literal: a number, a quoted string, a #char, nil, True or False. }
+function IsLiteralOperand(const AOperand: string): Boolean;
+begin
+  Result:= TRegEx.IsMatch(Trim(AOperand), LITERAL_RE, [roIgnoreCase]);
+end;
+
+{ True when AOperand is one bare identifier. }
+function IsBareIdent(const AOperand: string): Boolean;
+begin
+  Result:= TRegEx.IsMatch(Trim(AOperand), '^' + IDENT_RE + '$');
+end;
+
+{ The last segment of a dotted name, without a generic argument list. }
+function TypeBaseName(const AType: string): string;
+var
+  P: Integer;
+begin
+  Result:= Trim(AType);
+  P:= Pos('<', Result);
+  if P > 0 then Result:= Copy(Result, 1, P - 1);
+  P:= LastDelimiter('.', Result);
+  if P > 0 then Result:= Copy(Result, P + 1, MaxInt);
+end;
+
+{ osUnsafe when AType is (an alias of) a record -- its = / <> exist only as declared operators, and
+  a record helper may declare Equal without NotEqual (TTSNode); osSafe for a built-in scalar or string
+  type, a pointer, a class, an interface, an enum or a set; osUnknown otherwise. Reads the fix run's
+  store when one is open, else the file's own type declarations. }
+function TypeSafety(const AType: string; ALines: TStringList; ADepth: Integer): TOperandSafety;  // dl:ok too-many-exit-points@a212 -- REVIEWED 2026-11-21 FIXER-COMPILE: one guard clause per type shape (built-in, record, class, alias, file fallback); declining early is the fixer contract
+var
+  T    : string     ;
+  S    : TSymbol    ;
+  Store: ISymbolStore;
+  Sub  : TOperandSafety;
+  Match: TMatch     ;
+begin
+  Result:= osUnknown;
+  T:= Trim(AType);
+  if (T = '') or (ADepth > MAX_ALIAS_HOPS) then Exit;
+  if TypeIn(T, BUILTIN_TYPES) or T.StartsWith('^') then Exit(osSafe);
+  T:= TypeBaseName(T);
+  if not TRegEx.IsMatch(T, '^' + IDENT_RE + '$') then Exit;
+  Store:= AutofixStore;
+  if Store <> nil then
+    for S in Store.FindSymbolsByExactName(T) do
+      case S.Kind of
+        skRecord:
+          Exit(osUnsafe);   { a record helper is skRecord too: both mean "operators decide" }
+        skClass, skInterface, skEnum, skClassRef, skForm:
+          Result:= osSafe;
+        skTypeAlias:
+          begin
+            Sub:= TypeSafety(S.Signature, ALines, ADepth + 1);
+            if Sub = osUnsafe then Exit(osUnsafe);
+            if Sub = osSafe then Result:= osSafe;
+          end;
+      end;
+  if Result <> osUnknown then Exit;
+  { no store, or the store does not know the name: the file's own declaration }
+  if TRegEx.IsMatch(ALines.Text, '(?im)^\s*' + T + '\s*=\s*(packed\s+)?record\b') then Exit(osUnsafe);
+  if TRegEx.IsMatch(ALines.Text, '(?im)^\s*' + T + '\s*=\s*(class|interface|dispinterface|set\s+of)\b|^\s*' + T + '\s*=\s*\(') then
+    Exit(osSafe);
+  Match:= TRegEx.Match(ALines.Text, '(?im)^\s*' + T + '\s*=\s*(type\s+)?(?<a>[\w.]+)\s*;');
+  if Match.Success then Result:= TypeSafety(Match.Groups['a'].Value, ALines, ADepth + 1);
+end;
+
+{ What can be proven about AOperand at AFinding's line: a literal is safe, a bare identifier is as safe
+  as its declared type (an enum value found in the store is safe), anything else is unknown. }
+function OperandSafety(const AFinding: TLintFinding; ALines: TStringList; const AOperand: string): TOperandSafety;
+var
+  O    : string     ;
+  S    : TSymbol    ;
+  Store: ISymbolStore;
+begin
+  Result:= osUnknown;
+  O:= Trim(AOperand);
+  if IsLiteralOperand(O) then Exit(osSafe);
+  if not IsBareIdent(O) then Exit;
+  Result:= TypeSafety(DeclTypeOf(AFinding.FilePath, AFinding.StartLine, O), ALines, 0);
+  if Result <> osUnknown then Exit;
+  Store:= AutofixStore;
+  if Store <> nil then
+    for S in Store.FindSymbolsByExactName(O) do
+      if S.Kind = skEnumValue then Exit(osSafe);
+end;
+
 { ---- ifthen-to-if-expression ---- }
 
 { True when AOperand is a bare identifier whose declared type is an array (so it cannot join an if-expression). }
 function IsArrayOperand(const AFinding: TLintFinding; const AOperand: string): Boolean;
 begin
-  Result:= TRegEx.IsMatch(Trim(AOperand), '^' + IDENT_RE + '$') and
+  Result:= IsBareIdent(AOperand) and
     TRegEx.IsMatch(Trim(DeclTypeOf(AFinding.FilePath, AFinding.StartLine, Trim(AOperand))), '^array\b', [roIgnoreCase]);
+end;
+
+{ True when AOperand holds an array or set constructor `[..]` outside any parentheses (an indexer
+  `A[I]` and an open-array argument `F(X, [Y])` do not count). dcc 37 rejects `A + [X]` as an
+  if-expression arm with E2010, and a longer one stops it with internal error F2084. }
+function HasBareConstructor(const AOperand: string): Boolean;
+var
+  I    : Integer;
+  P    : Integer;
+  Depth: Integer;
+  InStr: Boolean;
+begin
+  Result:= False;
+  Depth:= 0;
+  InStr:= False;
+  for I:= 1 to Length(AOperand) do
+  begin
+    if AOperand[I] = '''' then InStr:= not InStr;
+    if InStr then Continue;
+    case AOperand[I] of
+      '(': Inc(Depth);
+      ')': Dec(Depth);
+      '[':
+        if Depth = 0 then
+        begin
+          P:= I - 1;
+          while (P >= 1) and (AOperand[P] = ' ') do Dec(P);
+          if (P < 1) or not CharInSet(AOperand[P], ['A'..'Z', 'a'..'z', '0'..'9', '_', ')', ']', '^']) then Exit(True);
+        end;
+    end;
+  end;
+end;
+
+{ True when the routine around line ALine (or a routine it is nested in) is generic: a header
+  `TFoo<T>.Bar` or `function Bar<T>`. Scans up to the nearest routine header in column 1. }
+function InGenericRoutine(ALines: TStringList; ALine: Integer): Boolean;
+var
+  I    : Integer;
+  Match: TMatch ;
+begin
+  Result:= False;
+  for I:= Min(ALine, ALines.Count) - 1 downto 0 do
+  begin
+    Match:= TRegEx.Match(ALines[I], ROUTINE_HEAD_RE, [roIgnoreCase]);
+    if not Match.Success then Continue;
+    if Match.Groups['n'].Value.Contains('<') then Exit(True);
+    if Match.Groups['ind'].Value = '' then Exit;
+  end;
+end;
+
+{ True when an if-expression with arms AA / AB assigned to ATarget is proven to compile. Declines
+  (False) on a bare array/set constructor arm (E2010 / F2084), and, inside a generic routine, on any
+  arm that is not a literal or a declared local unless the target has a built-in type: dcc 37 types a
+  method call of a generic-typed result there as a procedure value (E2010 'procedure, untyped
+  pointer or untyped parameter'). }
+function IfExprArmsCompile(const AFinding: TLintFinding; ALines: TStringList; const ATarget, AA, AB: string): Boolean;
+
+  function PlainArm(const AArm: string): Boolean;
+  begin
+    Result:= IsLiteralOperand(AArm) or
+      (IsBareIdent(AArm) and (DeclTypeOf(AFinding.FilePath, AFinding.StartLine, Trim(AArm)) <> ''));
+  end;
+
+begin
+  Result:= False;
+  if HasBareConstructor(AA) or HasBareConstructor(AB) then Exit;
+  if InGenericRoutine(ALines, AFinding.StartLine) and
+     not (IsBareIdent(ATarget) and TypeIn(DeclTypeOf(AFinding.FilePath, AFinding.StartLine, Trim(ATarget)), BUILTIN_TYPES)) and
+     not (PlainArm(AA) and PlainArm(AB)) then Exit;
+  Result:= True;
 end;
 
 { ifthen-to-if-expression: `if C then X := A else X := B;` -> `X := if C then A else B;`,
@@ -242,6 +418,7 @@ begin
     NESTED, [roIgnoreCase]) then Exit;
   { a bare array-typed operand (array of Char beside a string) is not an if-expression operand: E2010 }
   if IsArrayOperand(AFinding, Match.Groups['a'].Value) or IsArrayOperand(AFinding, Match.Groups['b'].Value) then Exit;
+  if not IfExprArmsCompile(AFinding, ALines, Match.Groups['l'].Value, Match.Groups['a'].Value, Match.Groups['b'].Value) then Exit;
   NewTxt:= Match.Groups['l'].Value + Match.Groups['op'].Value + 'if ' + Match.Groups['c'].Value + ' then ' +
     Match.Groups['a'].Value + ' else ' + Match.Groups['b'].Value + Match.Groups['semi'].Value;
   E:= Default(TTextEdit);
@@ -768,7 +945,79 @@ begin
     '// ' + Match.Groups[2].Value + ' // ' + Note + (if Tail <> '' then ' ' + Tail else ''))];
 end;
 
+{ ---- nonminimal-bool ---- }
+
+{ The pieces of AText split at every `=` / `<>` outside parentheses and string literals. }
+function SplitAtEquality(const AText: string): TArray<string>;
+var
+  I    : Integer;
+  From : Integer;
+  Depth: Integer;
+  InStr: Boolean;
+begin
+  Result:= nil;
+  Depth:= 0;
+  InStr:= False;
+  From:= 1;
+  I:= 1;
+  while I <= Length(AText) do
+  begin
+    if AText[I] = '''' then InStr:= not InStr;
+    if not InStr then
+      case AText[I] of
+        '(', '[': Inc(Depth);
+        ')', ']': Dec(Depth);
+        '=', '<':
+          if (Depth = 0) and ((AText[I] = '=') or (Copy(AText, I, NEQ_TOKEN.Length) = NEQ_TOKEN)) and
+             ((I = 1) or not CharInSet(AText[I - 1], [':', '<', '>'])) then
+          begin
+            Result:= Result + [Copy(AText, From, I - From)];
+            if AText[I] = '<' then Inc(I);
+            From:= I + 1;
+          end;
+      end;
+    Inc(I);
+  end;
+  Result:= Result + [Copy(AText, From, MaxInt)];
+end;
+
+{ nonminimal-bool: the rule's sidecar template rewrites `not (A = B)` to `(A <> B)` and `not (A <> B)`
+  to `(A = B)`. That compiles only when the type HAS the other operator: a record declares = / <> as
+  operators, and TTSNode's helper declares Equal without NotEqual (E2015). The fix is offered only
+  when no operand is (an alias of) a record and at least one operand is proven to have built-in
+  equality (a literal, a declared local of a scalar / string / class / interface / enum type, an
+  enum value); otherwise the finding stays, unfixed. `not (A in S)` has no such hazard. }
+function FixNonminimalBool(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
+var
+  Inner: string        ;
+  Parts: TArray<string>;
+  Part : string        ;
+  Safe : Boolean       ;
+  Sf   : TOperandSafety;
+begin
+  Result:= nil;
+  if AFinding.FixKind <> lfkReplace then Exit;
+  Inner:= Trim(AFinding.FixText);
+  if (Length(Inner) < 2) or (Inner[1] <> '(') or (Inner[Length(Inner)] <> ')') then Exit;
+  Inner:= Copy(Inner, 2, Length(Inner) - 2);
+  if not TRegEx.IsMatch(Inner, '\snot\s+in\s', [roIgnoreCase]) then
+  begin
+    Parts:= SplitAtEquality(Inner);
+    if Length(Parts) <> 2 then Exit;
+    Safe:= False;
+    for Part in Parts do
+    begin
+      Sf:= OperandSafety(AFinding, ALines, Part);
+      if Sf = osUnsafe then Exit;
+      if Sf = osSafe then Safe:= True;
+    end;
+    if not Safe then Exit;
+  end;
+  Result:= BuildSidecarFixEdits(AFinding, ALines);
+end;
+
 initialization
+  RegisterFixer('nonminimal-bool', FixNonminimalBool);
   RegisterFixer('mixed-case-hex', FixMixedCaseHex);
   RegisterFixer('unreadable-literal', FixUnreadableLiteral);
   RegisterFixer('deprecated-rtl-function', FixDeprecatedRtl);

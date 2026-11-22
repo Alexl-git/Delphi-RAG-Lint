@@ -9,13 +9,33 @@ unit DRagLint.Fix.Templates;
 
 interface
 
+uses
+  System.Classes
+  , DRagLint.Core.Model
+  , DRagLint.Refactor.TextEdit
+  ;
+
+/// <summary>The guarded text edits for one finding that carries a sidecar fix
+/// (TLintFinding.FixKind / FixText).</summary>
+/// <param name="AFinding">The finding; its FixKind / FixText come from the rule's
+/// rules\&lt;id&gt;.json "fix" key.</param>
+/// <param name="ALines">The finding's file, one string per line; read only.</param>
+/// <returns>One edit, or none when the span is not in the file or the fix cannot be
+/// placed safely.</returns>
+/// <remarks>
+/// The generic sidecar fixer, registered from this unit's initialization. A
+/// registered per-rule fixer that only VETOES some shapes (nonminimal-bool in
+/// DRagLint.Fix.Expr) calls it for the shapes it accepts. When the span already
+/// sits in a grouping pair of its own and the replacement is one call, or is
+/// itself wrapped in one parenthesis pair, the doubled pair is collapsed
+/// (`(not (A = B))` becomes `(A &lt;&gt; B)`, never `((A &lt;&gt; B))`). Pure.
+/// </remarks>
+function BuildSidecarFixEdits(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
+
 implementation
 
 uses
   System.SysUtils
-  , System.Classes
-  , DRagLint.Core.Model
-  , DRagLint.Refactor.TextEdit
   , DRagLint.Lint.Autofix
   ;
 
@@ -50,6 +70,31 @@ begin
     end;
   end;
   Result:= Depth = 0;
+end;
+
+{ True when AText is `( ... )` whose first '(' closes at the very last character. }
+function IsWrappedInParens(const AText: string): Boolean;
+var
+  I    : Integer;
+  Depth: Integer;
+  InStr: Boolean;
+begin
+  Result:= False;
+  if (Length(AText) < 2) or (AText[1] <> '(') or (AText[Length(AText)] <> ')') then Exit;
+  Depth:= 0;
+  InStr:= False;
+  for I:= 1 to Length(AText) do
+  begin
+    if AText[I] = '''' then InStr:= not InStr;
+    if InStr then Continue;
+    if AText[I] = '(' then Inc(Depth)
+    else if AText[I] = ')' then
+    begin
+      Dec(Depth);
+      if (Depth = 0) and (I < Length(AText)) then Exit;
+    end;
+  end;
+  Result:= (Depth = 0) and not InStr;
 end;
 
 { True when the '(' at ALine[AOpen] groups an expression (so it may go) rather than opening a call's
@@ -123,7 +168,11 @@ begin
       E.Col       := AFinding.StartCol - 1;
       E.EndCol    := AFinding.EndCol + 1;
       E.ExpectText:= Copy(First, E.Col, E.EndCol - E.Col);
-    end;
+    end
+    { the template brings its own grouping pair and the span already sat in one: keep one pair }
+    else if (AFinding.FixKind = lfkReplace) and IsGroupedSpan(First, AFinding.StartCol, AFinding.EndCol) and
+      IsWrappedInParens(NewText) then
+      E.Text:= Copy(NewText, 2, Length(NewText) - 2);
   end
   else
   begin
