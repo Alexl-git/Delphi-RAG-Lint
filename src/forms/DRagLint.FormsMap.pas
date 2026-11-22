@@ -1398,9 +1398,7 @@ var
         begin
           T:= Lines[LIdx];
           if Pos(':=', T) = 0 then Continue;
-          if ParseHookAssign(T, OC, Rout) then // OC=field, Rout=rhs routine
-            if Launchers.ContainsKey(LowerCase(Rout)) then
-              HandlerToHook.AddOrSetValue(LowerCase(Rout), OC);
+          if (ParseHookAssign(T, OC, Rout)) and (Launchers.ContainsKey(LowerCase(Rout))) then HandlerToHook.AddOrSetValue(LowerCase(Rout), OC);
         end;
       end;
     finally

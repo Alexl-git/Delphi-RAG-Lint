@@ -3404,10 +3404,8 @@ begin
     SplitAnchor(Fs.Anchor, FsFile, FsLine);
     var Found:= False;
     for var N in pNaming do
-      if ((pName = '') or SameText(N.Ref.S('nm'), pName)) and SameText(FileNameOf(N.F.Path), FsFile) and (FsLine >= N.F.ImplStart) and
-        (FsLine <= N.F.ImplEnd) then
-        if not Found or (pSorted and (N.Ref.I('line') < pHit.Ref.I('line'))) then
-        begin
+      if (((pName = '') or SameText(N.Ref.S('nm'), pName)) and SameText(FileNameOf(N.F.Path), FsFile) and (FsLine >= N.F.ImplStart) and
+        (FsLine <= N.F.ImplEnd)) and (not Found or (pSorted and (N.Ref.I('line') < pHit.Ref.I('line')))) then begin
           pHit:= N;
           Found:= True;
           if not pSorted then

@@ -532,9 +532,7 @@ begin
   Result:= False;
   pRoutine:= Default(TFileRoutine);
   for var R in FileRoutines(pFid) do
-    if (R.A <= pLine) and (R.B >= pLine) then
-      if not Result or (R.B - R.A < pRoutine.B - pRoutine.A) then
-      begin
+    if ((R.A <= pLine) and (R.B >= pLine)) and (not Result or (R.B - R.A < pRoutine.B - pRoutine.A)) then begin
         pRoutine:= R;
         Result:= True;
       end;

@@ -140,9 +140,7 @@ var
           if Lowlink[W] < Lowlink[pV] then
             Lowlink[pV]:= Lowlink[W];
         end
-        else if OnStack.ContainsKey(W) and OnStack[W] then
-          if TIndex[W] < Lowlink[pV] then
-            Lowlink[pV]:= TIndex[W];
+        else if (OnStack.ContainsKey(W) and OnStack[W]) and (TIndex[W] < Lowlink[pV]) then Lowlink[pV]:= TIndex[W];
       end;
     if Lowlink[pV] = TIndex[pV] then
     begin
