@@ -2023,7 +2023,7 @@ begin
   AOk:= False;
   try
     Result:= TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}False);
-  except  // dl:ok bare-except@7c42 -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
+  except  // dl:ok bare-except@db13 -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
     Result:= nil;
     Exit; // writable open failed (locked / read-only file) -> caller falls back
   end;
