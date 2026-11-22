@@ -506,7 +506,7 @@ function TraceUnclickable(const pText: string): TArray<string>;
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Charts.Trace.Chart.FormatTraceChartTip (DRagLint.Charts.Trace.Chart.pas), DRagLint.Charts.Trace.Chart.TChartBuilder.BuildCondCell (DRagLint.Charts.Trace.Chart.pas), DRagLint.Charts.Trace.FormA.WriteFormA (DRagLint.Charts.Trace.FormA.pas)</para>
 /// <para>Calls: DRagLint.Charts.Trace.FormA.Refuse, DRagLint.Charts.Trace.FormA.Rx</para>
-/// <para>Complexity: 12 (cyclomatic, outer body), 31 lines (full implementation)</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 25 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Charts.Trace.FormA.Refuse"/>
 /// <seealso cref="DRagLint.Charts.Trace.FormA.Rx"/>
 /// <!-- drag-lint:auto END -->

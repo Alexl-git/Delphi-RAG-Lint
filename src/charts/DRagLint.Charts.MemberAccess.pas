@@ -214,7 +214,7 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Charts.MemberAccess.CrossCheckSites (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.Q.MemberAccess.RoutineRow (DRagLint.Charts.Q.MemberAccess.pas)</para>
-    /// <para>Returns: List.ToArray; nil</para>
+    /// <para>Returns: if FSites.TryGetValue(pRoutine + '|' + pMode, List) then List.ToArray</para>
     /// <para>Reads: FSites</para>
     /// <seealso cref="DRagLint.Charts.MemberAccess.TMemberAccessData.CountLabel"/>
     /// <seealso cref="DRagLint.Charts.MemberAccess.TMemberAccessData.Create"/>

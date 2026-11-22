@@ -400,7 +400,7 @@ function TraceAnchorText(const pPath: string; pLine: Integer): string;
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.PropertyReadField (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Calc.CalcFieldByNameRow (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Calc.CalcSourceRow (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Calc.NewCalcInfo (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Calc.ResolveCalcField (DRagLint.Charts.Trace.Calc.pas)</para>
 /// <para>Calls: DRagLint.Charts.Trace.Shim.LeafOf, DRagLint.Charts.Trace.Shim.TraceAnchorText, IntToStr, SameText</para>
-/// <para>Returns: ':' + IntToStr(pRefLine); TraceAnchorText(pRefFile, pRefLine)</para>
+/// <para>Returns: if SameText(LeafOf(pAnchorFile), LeafOf(pRefFile)) then ':' + IntToStr(pRefLine)</para>
 /// <seealso cref="DRagLint.Charts.Trace.Shim.LeafOf"/>
 /// <seealso cref="DRagLint.Charts.Trace.Shim.TraceAnchorText"/>
 /// <!-- drag-lint:auto END -->
@@ -416,7 +416,7 @@ function TraceNoteLocator(const pAnchorFile, pRefFile: string; pRefLine: Integer
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.FollowDirectChain (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.Classify (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.ClassifyCalls (DRagLint.Charts.Trace.Walk.pas)</para>
 /// <para>Calls: Copy, DRagLint.Charts.Source.PsTrim</para>
-/// <para>Returns: Copy(T, 1, pMax - Length(ELLIPSIS)) + ELLIPSIS; T</para>
+/// <para>Returns: if Length(T) &gt; pMax then Copy(T, 1, pMax - Length(ELLIPSIS)) + ELLIPSIS</para>
 /// <seealso cref="DRagLint.Charts.Source.PsTrim"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

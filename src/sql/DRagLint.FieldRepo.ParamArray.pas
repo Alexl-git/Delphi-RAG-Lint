@@ -160,7 +160,7 @@ function PATypeName(pType: TPAFieldType): string;
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.FieldRepo.ParamArray.AddPairLine (DRagLint.FieldRepo.ParamArray.pas), DRagLint.FieldRepo.ParamArray.MissingValue (DRagLint.FieldRepo.ParamArray.pas), DRagLint.FieldRepo.ParamArray.Prepare.TPrepareRun.ParamDataLines (DRagLint.FieldRepo.ParamArray.Prepare.pas)</para>
-/// <para>Returns: pftString; pftInteger; pftByte; pftBlob; pftFloat; pftTimeStamp; pType; pftVariant</para>
+/// <para>Returns: pftString; pftInteger; pftByte; pftBlob; pftFloat; pftTimeStamp</para>
 /// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -172,7 +172,7 @@ function PAGeneralType(pType: TPAFieldType): TPAFieldType;
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.FieldRepo.ParamArray.AddPairLine (DRagLint.FieldRepo.ParamArray.pas)</para>
-/// <para>Returns: 'AsString'; 'AsInteger'; 'AsLargeInt'; 'AsFloat'; 'AsCurrency'; 'AsBcd'; 'AsFMTBcd'; 'AsBoolean'; 'AsDate'; 'AsTime'; 'AsDateTime'; 'AsDateTimeOffset'; 'AsByte'; 'AsBlob'; 'AsStream'; 'AsGUID'; 'AsVariant'</para>
+/// <para>Returns: 'AsString'; 'AsInteger'; 'AsLargeInt'; 'AsFloat'; 'AsCurrency'; 'AsBcd'</para>
 /// <para>Complexity: 17 (cyclomatic, outer body), 39 lines (full implementation)</para>
 /// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->
@@ -185,7 +185,7 @@ function PASourceAccessor(pType: TPAFieldType): string;
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.FieldRepo.ParamArray.AddPairLine (DRagLint.FieldRepo.ParamArray.pas), DRagLint.FieldRepo.ParamArray.PABuildBlock (DRagLint.FieldRepo.ParamArray.pas)</para>
-/// <para>Returns: 'AsWideStrings'; 'AsIntegers'; 'AsBytes'; 'AsLargeInts'; 'AsFloats'; 'AsCurrencys'; 'AsBcds'; 'AsFMTBcds'; 'AsBooleans'; 'AsDates'; 'AsSQLTimeIntervals'; 'AsSQLTimeStamps'; 'AsSQLTimeStampOffsets'; 'AsBlobs'; 'AsStreams'; 'AsGUIDs'; 'AsVariants'</para>
+/// <para>Returns: 'AsWideStrings'; 'AsIntegers'; 'AsBytes'; 'AsLargeInts'; 'AsFloats'; 'AsCurrencys'</para>
 /// <para>Complexity: 17 (cyclomatic, outer body), 39 lines (full implementation)</para>
 /// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->

@@ -169,7 +169,7 @@ function SplitAnswerLines(const pText: string): TArray<string>;
 /// <para>Called from: DRagLint.Charts.Adapter.Text.MapPlainLine (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.DocInsight.FormatAnswerAsDocInsight (DRagLint.Charts.DocInsight.pas)</para>
 /// <para>Calls: Copy, DRagLint.Charts.DocInsight.LeadingSpaces, DRagLint.Charts.DocInsight.RenderAnchors, Pos, StartsStr, StartsText, Trim</para>
 /// <para>Returns: False; True; pText &lt;&gt; ''</para>
-/// <para>Complexity: 10 (cyclomatic, outer body), 27 lines (full implementation)</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 24 lines (full implementation)</para>
 /// <para>Mutates: pIndent (out), pText (out)</para>
 /// <seealso cref="DRagLint.Charts.DocInsight.LeadingSpaces"/>
 /// <seealso cref="DRagLint.Charts.DocInsight.RenderAnchors"/>

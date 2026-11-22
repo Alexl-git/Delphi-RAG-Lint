@@ -91,7 +91,7 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.FormsMap.Dfm.TFormDfmTree.BarPrefixes (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.BuildIndexes (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.CaptionOf (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.FindBarLinkOwner (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.LinksOf (DRagLint.FormsMap.Dfm.pas) (+3 more)</para>
-    /// <para>Returns: FProps.ValueFromIndex[I]; ''</para>
+    /// <para>Returns: if I &gt;= 0 then FProps.ValueFromIndex[I]</para>
     /// <para>Reads: FProps</para>
     /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmNode.Create"/>
     /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmNode.Destroy"/>

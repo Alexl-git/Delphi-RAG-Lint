@@ -481,7 +481,7 @@ type
     /// ', Length(Result)).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Calls: CharInSet, Pos, StringOfChar</para>
+    /// <para>Calls: CharInSet, StringOfChar</para>
     /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.Create"/>
     /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.Destroy"/>
     /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.FreshLines"/>

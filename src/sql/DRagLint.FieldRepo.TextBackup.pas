@@ -57,7 +57,7 @@ type
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.FieldRepo.TextBackup.AddTextLines (DRagLint.FieldRepo.TextBackup.pas), DRagLint.FieldRepo.TextBackup.KeyPart (DRagLint.FieldRepo.TextBackup.pas), DRagLint.FieldRepo.TextBackup.ScalarText (DRagLint.FieldRepo.TextBackup.pas)</para>
 /// <para>Calls: DRagLint.FieldRepo.TextBackup.NeedsUnicodeEscape, IntToHex</para>
-/// <para>Returns: vSb.ToString</para>
+/// <para>Returns: VSb.ToString</para>
 /// <seealso cref="DRagLint.FieldRepo.TextBackup.NeedsUnicodeEscape"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
