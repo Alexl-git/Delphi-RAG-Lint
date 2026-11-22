@@ -197,9 +197,10 @@ function BuildNamingTargets(const AStore: ISymbolStore; const AFindings: TArray<
 /// or none is free.</returns>
 /// <remarks>
 /// nsGlobal: a candidate is free when TRenameRefactoring.ConflictReason
-/// reports no conflict for ATarget.QName. nsLocal: param-name-prefix and
-/// local-field-prefix drop a candidate LocalNameCollides finds in the enclosing
-/// routine; local-var-casing keeps its candidate (a pure re-casing cannot collide).
+/// reports no conflict for ATarget.QName. nsLocal: param-name-prefix drops a
+/// candidate LocalNameCollides finds in the enclosing routine; local-var-casing
+/// keeps its candidate (a pure re-casing cannot collide); local-field-prefix keeps
+/// it too, so BuildTargetEdits declines a clash WITH a reason (v1523 FIXER-2b).
 /// Pinned by run_const_casing_word_fix.ps1 (Station_Name -> STATION_NAME because
 /// StationName already exists).
 /// <!-- drag-lint:auto BEGIN -->
@@ -703,6 +704,163 @@ begin
   Result:= ScanScope(OwnerProc);
 end;
 
+{ local-field-prefix (v1523 FIXER-2b, SLZ-S02 / SLZ-S07): why stripping the
+  field prefix off the local at (ALine, ACol) to ANewName is declined; '' when
+  it may go ahead. Declined when ANewName
+    - is a reserved word (FIn -> In: E2029, the unit no longer compiles);
+    - names a parameter or another local of the same routine;
+    - names a parameter or local of an ENCLOSING routine, or a member of the
+      method's class or of an ancestor class the store or a library knows:
+      the renamed local would HIDE it, and a later bare use rebinds silently.
+  The capture proof (ProveLocalRename) refuses only a name the body already
+  uses; this refuses the hiding itself, used or not. An unparsable file or an
+  identifier not found answers '' past the reserved-word test (the proof
+  downstream still guards the edit). }
+function LocalFieldPrefixReason(const AStore: ISymbolStore; const ALibraries: TArray<ISymbolStore>;
+  const AFile: string; ALine, ACol: Integer; const ANewName: string): string;
+const
+  MAX_ANCESTOR_DEPTH = 32; { a heritage cycle in a broken index must not loop }
+var
+  PF : TParsedFile;
+  Src: TBytes;
+
+  function NStr(const N: TTSNode): string;
+  begin
+    Result:= '';
+    if N.IsNull or (Integer(N.EndByte) > Length(Src)) or (N.EndByte <= N.StartByte) then Exit;
+    Result:= Trim(TEncoding.UTF8.GetString(Src, Integer(N.StartByte), Integer(N.EndByte - N.StartByte)));
+  end;
+
+  { The identifier starting at (ALine, ACol); rows outside a node's span are pruned. }
+  function FindIdent(const N: TTSNode): TTSNode;
+  begin
+    Result:= Default(TTSNode);
+    if N.IsNull or (Integer(N.StartPoint.Row) + 1 > ALine) or (Integer(N.EndPoint.Row) + 1 < ALine) then Exit;
+    if (N.NodeType = 'identifier') and (Integer(N.StartPoint.Column) + 1 = ACol) then Exit(N);
+    for var I:= 0 to N.NamedChildCount - 1 do
+    begin
+      Result:= FindIdent(N.NamedChild(I));
+      if not Result.IsNull then Exit;
+    end;
+  end;
+
+  { True when AOwner (a defProc) itself declares ANewName as a parameter or a
+    local; nested routines are not entered. }
+  function DeclaresName(const N, AOwner: TTSNode): Boolean;
+  begin
+    Result:= False;
+    if N.IsNull then Exit;
+    { a nested routine (TTSNode has = but no <>, so compare start bytes) }
+    if (N.NodeType = 'defProc') and (N.StartByte <> AOwner.StartByte) then Exit;
+    if (N.NodeType = 'declArg') or (N.NodeType = 'declVar') then
+    begin
+      var TN: TTSNode:= N.ChildByField('type');
+      for var J:= 0 to N.NamedChildCount - 1 do
+      begin
+        var Id: TTSNode:= N.NamedChild(J);
+        if (Id.NodeType = 'identifier') and (TN.IsNull or (Id.StartByte < TN.StartByte))
+          and SameText(NStr(Id), ANewName) then Exit(True);
+      end;
+    end;
+    for var I:= 0 to N.NamedChildCount - 1 do
+      if DeclaresName(N.NamedChild(I), AOwner) then Exit(True);
+  end;
+
+  { 'TBase.Size' when AClassName or an ancestor the index knows has a member
+    named ANewName; ''. A class without a heritage list descends from TObject. }
+  function HiddenMember(const AClassName: string): string;
+  var
+    Cls     : string;
+    Heritage: string;
+    Found   : Boolean;
+    Stores  : TArray<ISymbolStore>;
+  begin
+    Result:= '';
+    Stores:= [AStore] + ALibraries;
+    Cls:= AClassName;
+    for var Depth:= 1 to MAX_ANCESTOR_DEPTH do
+    begin
+      Found:= False;
+      for var S: ISymbolStore in Stores do
+      begin
+        if S = nil then Continue;
+        var Members: TArray<TSymbol>:= S.FindSymbolsByExactName(ANewName);
+        for var C: TSymbol in S.FindSymbolsByExactName(Cls) do
+          if C.Kind in [skClass, skRecord, skInterface] then
+          begin
+            if not Found then
+              Heritage:= if (C.Heritage = '') and (C.Kind = skClass) and not SameText(Cls, 'TObject') then 'TObject' else C.Heritage;
+            Found:= True;
+            for var M: TSymbol in Members do
+              if M.ParentId = C.Id then Exit(C.Name + '.' + M.Name);
+          end;
+        if Found then Break;
+      end;
+      if not Found then Exit;
+      { First heritage entry, without generic arguments or a unit qualifier. }
+      Cls:= Trim(Heritage.Split([','])[0]);
+      if Cls.Contains('<') then Cls:= Trim(Copy(Cls, 1, Pos('<', Cls) - 1));
+      Cls:= Copy(Cls, LastDelimiter('.', Cls) + 1, MaxInt);
+      if Cls = '' then Exit;
+    end;
+  end;
+
+  { The hiding reason for the identifier node AId; '' when it hides nothing. }
+  function TreeReason(const AId: TTSNode): string;
+  var
+    P        : TTSNode;
+    Outer    : TTSNode;
+    Innermost: Boolean;
+  begin
+    Result:= '';
+    if AId.IsNull then Exit;
+    { Enclosing routines, innermost first: the innermost is LocalNameCollides' scope. }
+    Outer:= Default(TTSNode);
+    Innermost:= True;
+    P:= AId.Parent;
+    while not P.IsNull do
+    begin
+      if P.NodeType = 'defProc' then
+      begin
+        if (not Innermost) and DeclaresName(P, P) then
+          Exit(Format('it would hide the parameter or local "%s" of the enclosing routine %s',
+            [ANewName, NStr(P.ChildByField('header').ChildByField('name'))]));
+        Innermost:= False;
+        Outer:= P;
+      end;
+      P:= P.Parent;
+    end;
+    if Outer.IsNull then Exit;
+    { The outermost routine's header names the class: TOuter.TInner.Meth -> TInner. }
+    var QName: string:= NStr(Outer.ChildByField('header').ChildByField('name'));
+    var Dot: Integer:= LastDelimiter('.', QName);
+    if Dot = 0 then Exit;
+    var Owner: string:= Copy(QName, 1, Dot - 1);
+    Owner:= Copy(Owner, LastDelimiter('.', Owner) + 1, MaxInt);
+    var Member: string:= HiddenMember(Owner);
+    if Member <> '' then
+      Result:= if SameText(Copy(Member, 1, Pos('.', Member) - 1), Owner)
+               then Format('it would hide the member %s of the enclosing class', [Member])
+               else Format('it would hide the member %s inherited by %s', [Member, Owner]);
+  end;
+
+begin
+  Result:= '';
+  if TRenameRefactoring.IsReservedWord(ANewName) then
+    Result:= Format('"%s" is a reserved word', [ANewName])
+  else if LocalNameCollides(AFile, ALine, ACol, ANewName) then
+    Result:= Format('a parameter or local of the same routine is already named "%s"', [ANewName])
+  else
+  begin
+    PF:= TAstParseCache.Get(AFile);
+    if PF.Tree <> nil then
+    begin
+      Src:= PF.Src;
+      Result:= TreeReason(FindIdent(PF.Tree.RootNode));
+    end;
+  end;
+end;
+
 { True when the store holds a symbol named AName (case-insensitively) declared
   in AFilePath -- at ANY position. Separates "the index is stale for this
   file" from "the index does not know this name here at all". }
@@ -909,11 +1067,11 @@ begin
   if ATarget.Status <> tsReady then Exit;
   if (ATarget.Scope = nsGlobal) and (AStore = nil) then Exit;
   F:= ATarget.Finding;
-  { Routine-local prefix rules: UNLIKE local-var-casing (collision-free
-    re-casing), prefix-adding/stripping genuinely changes the identifier, so
-    BuildLocal -- which has no collision check of its own -- needs
-    LocalNameCollides. }
-  LocalGuard:= SameText(F.RuleId, 'param-name-prefix') or SameText(F.RuleId, 'local-field-prefix');
+  { param-name-prefix: UNLIKE local-var-casing (collision-free re-casing),
+    prefix-adding genuinely changes the identifier, so BuildLocal -- which has
+    no collision check of its own -- needs LocalNameCollides. local-field-prefix
+    is checked in BuildTargetEdits (LocalFieldPrefixReason), which says WHY. }
+  LocalGuard:= SameText(F.RuleId, 'param-name-prefix');
   for Cand in ATarget.Candidates do
     if ATarget.Scope = nsLocal then
     begin
@@ -1221,6 +1379,16 @@ begin
     if Why <> '' then
     begin
       ARefusal:= Format('param-name-prefix: declined %s:%d "%s" -> "%s" -- %s',
+        [ExtractFileName(F.FilePath), F.StartLine, ATarget.OldName, ANewName, Why]);
+      Exit;
+    end;
+  end
+  else if SameText(F.RuleId, 'local-field-prefix') then
+  begin
+    var Why: string:= LocalFieldPrefixReason(AStore, ALibraries, F.FilePath, F.StartLine, F.StartCol, ANewName);
+    if Why <> '' then
+    begin
+      ARefusal:= Format('local-field-prefix: declined %s:%d "%s" -> "%s" -- %s',
         [ExtractFileName(F.FilePath), F.StartLine, ATarget.OldName, ANewName, Why]);
       Exit;
     end;
