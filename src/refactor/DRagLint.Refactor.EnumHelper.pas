@@ -419,7 +419,8 @@ begin
       not a stored qualified_name -- e.g. a bare 'TColor' where the index
       stores 'Simple.TColor'. Only skEnum candidates are considered. }
     for EnumSym in AStore.FindSymbolsByExactName(AEnumQName) do
-      if EnumSym.Kind = skEnum then begin Syms:= [EnumSym]; Break; end;
+      if EnumSym.Kind = skEnum then begin Syms:= [EnumSym];
+      Break; end;
     if Length(Syms) = 0 then Exit;
   end;
   EnumSym:= Syms[0];
@@ -863,7 +864,8 @@ begin
       if (U.Section = uusImplementation) and not U.FromInclude then
         if (not HaveLastImplUse) or (U.StartLine > LastImplUse.StartLine)
            or ((U.StartLine = LastImplUse.StartLine) and (U.StartCol > LastImplUse.StartCol)) then
-        begin LastImplUse:= U; HaveLastImplUse:= True; end;
+        begin LastImplUse:= U;
+        HaveLastImplUse:= True; end;
 
     BodiesLine:= ImplLine;
     if HaveLastImplUse and (LastImplUse.EndLine > BodiesLine) then

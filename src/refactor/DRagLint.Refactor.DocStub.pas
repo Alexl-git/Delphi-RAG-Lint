@@ -489,7 +489,8 @@ begin
       else if S[i] = ')' then
       begin
         Dec(Depth);
-        if Depth = 0 then begin Inc(i); Break; end;
+        if Depth = 0 then begin Inc(i);
+        Break; end;
       end;
       Inc(i);
     end;
@@ -523,7 +524,8 @@ begin
       begin
         Inner:= '';
         Inc(i);
-        while (i <= N) and (AText[i] <> '}') do begin Inner:= Inner + AText[i]; Inc(i); end;
+        while (i <= N) and (AText[i] <> '}') do begin Inner:= Inner + AText[i];
+        Inc(i); end;
         if i <= N then Inc(i); // the closing brace
         if Note.Length > 0 then Note.Append(' ');
         Note.Append(Trim(Inner));
@@ -532,7 +534,8 @@ begin
       begin
         Inner:= '';
         Inc(i, 2);
-        while (i < N) and not ((AText[i] = '*') and (AText[i + 1] = ')')) do begin Inner:= Inner + AText[i]; Inc(i); end;
+        while (i < N) and not ((AText[i] = '*') and (AText[i + 1] = ')')) do begin Inner:= Inner + AText[i];
+        Inc(i); end;
         if i < N then Inc(i, 2);
         if Note.Length > 0 then Note.Append(' ');
         Note.Append(Trim(Inner));
@@ -546,7 +549,8 @@ begin
         Note.Append(Trim(Copy(AText, i + 2, MaxInt)));
         i:= N + 1;
       end
-      else begin Rest.Append(AText[i]); Inc(i); end;
+      else begin Rest.Append(AText[i]);
+      Inc(i); end;
     end;
     ARest := Trim(Rest.ToString);
     Result:= Trim(Note.ToString);

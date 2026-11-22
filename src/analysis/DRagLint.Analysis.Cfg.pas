@@ -357,7 +357,8 @@ var S, E, L: Integer;
 begin
   Result := '';
   if N.IsNull then Exit;
-  S := Integer(N.StartByte); E := Integer(N.EndByte); L := E - S;
+  S := Integer(N.StartByte);
+  E := Integer(N.EndByte); L := E - S;
   if (L <= 0) or (S < 0) or (E > Length(ASrc)) then Exit;
   Result := TEncoding.UTF8.GetString(ASrc, S, L);
 end;
@@ -610,7 +611,8 @@ end;
 
 destructor TCfgBlock.Destroy;
 begin
-  Items.Free; Succ.Free; Pred.Free;
+  Items.Free;
+  Succ.Free; Pred.Free;
   inherited;
 end;
 
@@ -917,8 +919,10 @@ end;
 
 constructor TBuilderState.Create(ACfg: TCfg);
 begin
-  inherited Create; Cfg := ACfg; Loops := TStack<TLoopCtx>.Create; WithDepth := 0;
-  Finallys := TList<TTSNode>.Create; CopyDepth := 0;
+  inherited Create;
+  Cfg := ACfg; Loops := TStack<TLoopCtx>.Create; WithDepth := 0;
+  Finallys := TList<TTSNode>.Create;
+  CopyDepth := 0;
   DivertBlocks := TDictionary<Integer, Boolean>.Create;
 end;
 
@@ -952,7 +956,8 @@ var
 begin
   Result := ATarget;
   if (Finallys.Count <= AFromDepth) or (CopyDepth > 0) then Exit;
-  First := -1; Cur := -1;
+  First := -1;
+  Cur := -1;
   Inc(CopyDepth);
   var CopyFrom: Integer := Cfg.Blocks.Count;
   try
@@ -1127,7 +1132,8 @@ begin
       block and join it. }
     ElseIdx := -1;
     for I := 0 to ANode.NamedChildCount - 1 do
-      if ANode.NamedChild(I).NodeType = 'kElse' then begin ElseIdx := I; Break; end;
+      if ANode.NamedChild(I).NodeType = 'kElse' then begin ElseIdx := I;
+      Break; end;
 
     if ElseIdx >= 0 then
     begin
@@ -1165,7 +1171,8 @@ begin
       path (INBOX-function-result-while-true-exit). }
     if not (Cfg.PruneConstLoops and IsBoolLiteral(Cond, Cfg.Src, 'true')) then
       Cfg.Blocks[HdrIdx].AddSucc(FollowIdx);
-    Ctx.ContinueIdx := HdrIdx; Ctx.BreakIdx := FollowIdx; Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
+    Ctx.ContinueIdx := HdrIdx;
+    Ctx.BreakIdx := FollowIdx; Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
     TestIdx := EmitStmt(BodyIdx, ANode.ChildByField('body'));
     if TestIdx >= 0 then Cfg.Blocks[TestIdx].AddSucc(HdrIdx); { back-edge }
     Loops.Pop;
@@ -1212,7 +1219,8 @@ begin
       Cfg.Blocks[ACur].AddSucc(BodyIdx)
     else
       Cfg.Blocks[ACur].AddSucc(HdrIdx);
-    Ctx.ContinueIdx := HdrIdx; Ctx.BreakIdx := FollowIdx; Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
+    Ctx.ContinueIdx := HdrIdx;
+    Ctx.BreakIdx := FollowIdx; Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
     TestIdx := EmitStmt(BodyIdx, ANode.ChildByField('body'));
     if TestIdx >= 0 then Cfg.Blocks[TestIdx].AddSucc(HdrIdx);
     Loops.Pop;
@@ -1239,11 +1247,13 @@ begin
     if (not IterN.IsNull) and (IterN.NodeType = 'varAssignDef') then
       for I := 0 to IterN.NamedChildCount - 1 do
         if IterN.NamedChild(I).NodeType = 'identifier' then
-        begin IterN := IterN.NamedChild(I); Break; end;
+        begin IterN := IterN.NamedChild(I);
+        Break; end;
     if not IterN.IsNull then Cfg.Blocks[BodyIdx].EntryDefs := [LowerText(IterN, Cfg.Src)];
     Cfg.Blocks[HdrIdx].AddSucc(BodyIdx);
     Cfg.Blocks[HdrIdx].AddSucc(FollowIdx);
-    Ctx.ContinueIdx := HdrIdx; Ctx.BreakIdx := FollowIdx; Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
+    Ctx.ContinueIdx := HdrIdx;
+    Ctx.BreakIdx := FollowIdx; Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
     TestIdx := EmitStmt(BodyIdx, ANode.ChildByField('body'));
     if TestIdx >= 0 then Cfg.Blocks[TestIdx].AddSucc(HdrIdx);
     Loops.Pop;
@@ -1262,7 +1272,8 @@ begin
     { `until False` never exits by its test; only a Break reaches the follow block. }
     if not (Cfg.PruneConstLoops and IsBoolLiteral(Cond, Cfg.Src, 'false')) then
       Cfg.Blocks[TestIdx].AddSucc(FollowIdx); { loop exits }
-    Ctx.ContinueIdx := TestIdx; Ctx.BreakIdx := FollowIdx; Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
+    Ctx.ContinueIdx := TestIdx;
+    Ctx.BreakIdx := FollowIdx; Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
     BodyAfter := EmitStmt(BodyIdx, ANode.ChildByField('body'));
     if BodyAfter >= 0 then Cfg.Blocks[BodyAfter].AddSucc(TestIdx);
     Loops.Pop;
@@ -1310,7 +1321,8 @@ begin
     for I := 0 to ANode.NamedChildCount - 1 do
       if ANode.NamedChild(I).NodeType = 'kFinally' then SeenFinally := True
       else if SeenFinally and (ANode.NamedChild(I).NodeType = 'statements') then
-      begin FinNode := ANode.NamedChild(I); Break; end;
+      begin FinNode := ANode.NamedChild(I);
+      Break; end;
     BodyIdx := Cfg.NewBlock.Index; { try region entry }
     Cfg.Blocks[ACur].AddSucc(BodyIdx);
     FollowIdx := Cfg.NewBlock.Index;
@@ -1517,7 +1529,8 @@ begin
       leaves. exit replays them all (depth 0); break/continue replay only those
       opened INSIDE their loop. }
     if EntTxt = 'exit' then
-    begin Cfg.Blocks[ACur].AddSucc(DivertVia(Cfg.ExitIdx, 0)); Exit(-1); end;
+    begin Cfg.Blocks[ACur].AddSucc(DivertVia(Cfg.ExitIdx, 0));
+    Exit(-1); end;
     { C14. The RTL `Halt` / `Halt(n)` ends the process and the RTL `Abort`
       raises EAbort: neither falls through. Modelled like `raise` -- an edge to
       Exit marked NoReturn (Halt also EndsProcess). A BARE name is the RTL one
@@ -1539,9 +1552,11 @@ begin
       Exit(-1);
     end;
     if (EntTxt = 'break') and (Loops.Count > 0) then
-    begin Cfg.Blocks[ACur].AddSucc(DivertVia(Loops.Peek.BreakIdx, Loops.Peek.FinallyDepth)); Exit(-1); end;
+    begin Cfg.Blocks[ACur].AddSucc(DivertVia(Loops.Peek.BreakIdx, Loops.Peek.FinallyDepth));
+    Exit(-1); end;
     if (EntTxt = 'continue') and (Loops.Count > 0) then
-    begin Cfg.Blocks[ACur].AddSucc(DivertVia(Loops.Peek.ContinueIdx, Loops.Peek.FinallyDepth)); Exit(-1); end;
+    begin Cfg.Blocks[ACur].AddSucc(DivertVia(Loops.Peek.ContinueIdx, Loops.Peek.FinallyDepth));
+    Exit(-1); end;
     Exit(ACur);
   end;
 
@@ -1569,7 +1584,8 @@ begin
   else if AProc.NodeType <> 'defProc' then Exit
   else Body := AProc.ChildByField('body');
   if Body.IsNull then Exit;
-  if RoutineHasGotoOrAsm(AProc) then begin Result.Skipped := True; Exit; end;
+  if RoutineHasGotoOrAsm(AProc) then begin Result.Skipped := True;
+  Exit; end;
 
   Result.EntryIdx := Result.NewBlock.Index; { 0 = Entry }
   Result.ExitIdx  := Result.NewBlock.Index; { 1 = Exit }

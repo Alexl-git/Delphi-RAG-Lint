@@ -329,7 +329,8 @@ begin
   for I:= 1 to AProcs.Count - 1 do
   begin
     Len:= Int64(AProcs[I].EndByte) - Int64(AProcs[I].StartByte);
-    if Len < BestLen then begin BestLen:= Len; Result:= AProcs[I]; end;
+    if Len < BestLen then begin BestLen:= Len;
+    Result:= AProcs[I]; end;
   end;
 end;
 
@@ -356,7 +357,8 @@ var S, E, L: Integer;
 begin
   Result:= '';
   if N.IsNull then Exit;
-  S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+  S:= Integer(N.StartByte);
+  E:= Integer(N.EndByte); L:= E - S;
   if (L <= 0) or (S < 0) or (E > Length(ASrc)) then Exit;
   Result:= TEncoding.UTF8.GetString(ASrc, S, L);
 end;
@@ -464,7 +466,8 @@ var Cur, Line, I: Integer;
 begin
   Result:= -1;
   if ALine < 1 then Exit;
-  Cur:= 0; Line:= 1;
+  Cur:= 0;
+  Line:= 1;
   if Line = ALine then Exit(0);
   for I:= 0 to Length(ASrc) - 1 do
   begin
@@ -730,7 +733,8 @@ begin
     lives at a different nesting level; a simple statement = the selection
     cuts it) or when the two endpoints resolve to DIFFERENT lists (the
     selection starts and ends at different nesting levels). }
-  FirstIdx:= -1; LastIdx:= -1;
+  FirstIdx:= -1;
+  LastIdx:= -1;
   CutCompound:= False;
   TargetList  := LocateStatementList(StmtList, FromLine, CutCompound);
   TargetListTo:= LocateStatementList(StmtList, ToLine, CutCompound);
@@ -775,7 +779,8 @@ begin
     run, violating the prime directive (refuse rather than guess). Refuse
     whenever more than one statement in the run's list touches the start
     line or the end line. }
-  CountFrom:= 0; CountTo:= 0;
+  CountFrom:= 0;
+  CountTo:= 0;
   for I:= 0 to TargetList.NamedChildCount - 1 do
   begin
     Ch:= TargetList.NamedChild(I);
@@ -851,8 +856,10 @@ function ItemInRunSpan(const N: TTSNode; const ASel: TExtractSelection): Boolean
 var SLine, SCol, ELine, ECol: Integer;
 begin
   if N.IsNull then Exit(False);
-  SLine:= NLine(N); SCol:= NCol(N);
-  ELine:= NEndLine(N); ECol:= NEndCol(N);
+  SLine:= NLine(N);
+  SCol:= NCol(N);
+  ELine:= NEndLine(N);
+  ECol:= NEndCol(N);
   if (SLine < ASel.StartLine) or ((SLine = ASel.StartLine) and (SCol < ASel.StartCol)) then Exit(False);
   if (ELine > ASel.EndLine) or ((ELine = ASel.EndLine) and (ECol > ASel.EndCol)) then Exit(False);
   Result:= True;
@@ -1017,7 +1024,8 @@ begin
           CollectReadsAndCallDefs(ANode, ASrc, AVars, Reads, CallDefs);
         if (Reads.IndexOf(AIdx) >= 0) or (CallDefs.IndexOf(AIdx) >= 0) then Exit(True);
       finally
-        Reads.Free; CallDefs.Free;
+        Reads.Free;
+        CallDefs.Free;
       end;
       { fall through to recurse into children below for compound statements,
         whose own condition/entity was just checked above but whose nested
@@ -1053,7 +1061,8 @@ var
   var R, C: TList<Integer>; J, Ix: Integer;
   begin
     if AExpr.IsNull then Exit;
-    R:= TList<Integer>.Create; C:= TList<Integer>.Create;
+    R:= TList<Integer>.Create;
+    C:= TList<Integer>.Create;
     try
       CollectReadsAndCallDefs(AExpr, ASrc, AVars, R, C);
       for J:= 0 to R.Count - 1 do
@@ -1069,7 +1078,8 @@ var
         AMust[Ix]:= True;
       end;
     finally
-      R.Free; C.Free;
+      R.Free;
+      C.Free;
     end;
   end;
 
@@ -1362,7 +1372,8 @@ begin
     Result.Internals:= Internals.ToArray;
     Result.Refuse:= '';
   finally
-    Defs.Free; Inputs.Free; Internals.Free; Outputs.Free;
+    Defs.Free;
+    Inputs.Free; Internals.Free; Outputs.Free;
   end;
 end;
 
@@ -1669,7 +1680,8 @@ begin
       for J:= 0 to DV.NamedChildCount - 1 do
       begin
         Member:= DV.NamedChild(J);
-        if Member.NodeType = 'kVar' then begin KwVar:= Member; Continue; end;
+        if Member.NodeType = 'kVar' then begin KwVar:= Member;
+        Continue; end;
         if Member.NodeType <> 'declVar' then Continue;
         MemberName:= SoleDeclVarName(Member, ASrc);
         { is this declVar one of the internals we must move? }
@@ -1695,8 +1707,10 @@ begin
         if K >= 0 then
         begin
           E:= Default(TTextEdit);
-          E.FilePath:= AFile; E.Kind:= tekDeleteLines;
-          E.Line:= NLine(Member); E.EndLine:= NEndLine(Member);
+          E.FilePath:= AFile;
+          E.Kind:= tekDeleteLines;
+          E.Line:= NLine(Member);
+          E.EndLine:= NEndLine(Member);
           AEdits.Add(E);
           AnyDeleted:= True;
         end
@@ -1716,13 +1730,16 @@ begin
         begin
           Child:= DV.NamedChild(J);
           if (Child.NodeType = 'declVar') and (NLine(Child) = KwLine) then
-          begin Covered:= True; Break; end;
+          begin Covered:= True;
+          Break; end;
         end;
         if not Covered then
         begin
           E:= Default(TTextEdit);
-          E.FilePath:= AFile; E.Kind:= tekDeleteLines;
-          E.Line:= KwLine; E.EndLine:= KwLine;
+          E.FilePath:= AFile;
+          E.Kind:= tekDeleteLines;
+          E.Line:= KwLine;
+          E.EndLine:= KwLine;
           AEdits.Add(E);
         end;
       end;
@@ -1789,7 +1806,8 @@ begin
   end;
 
   PF:= TAstParseCache.Get(AFile);
-  if PF.Tree = nil then begin ARefuse:= 'could not parse file'; Exit; end;
+  if PF.Tree = nil then begin ARefuse:= 'could not parse file';
+  Exit; end;
   Src:= PF.Src;
 
   Vars:= TRoutineVarTable.Build(Sel.Proc, Src);
@@ -1800,7 +1818,8 @@ begin
     Cfg.ComputePreds;
 
     CV:= ClassifyVars(Sel, Cfg, Vars, Src);
-    if CV.Refuse <> '' then begin ARefuse:= CV.Refuse; Result:= nil; Exit; end;
+    if CV.Refuse <> '' then begin ARefuse:= CV.Refuse;
+    Result:= nil; Exit; end;
 
     { ----- collision check in the target scope ----- }
     if Sel.IsMethod then
@@ -1898,13 +1917,17 @@ begin
     { (1) replace the run with the call: delete the run's lines, insert the
       call line where the run began (after the line before it). }
     E:= Default(TTextEdit);
-    E.FilePath:= AFile; E.Kind:= tekInsertLines;
-    E.Line:= Sel.StartLine - 1; E.Text:= CallText;
+    E.FilePath:= AFile;
+    E.Kind:= tekInsertLines;
+    E.Line:= Sel.StartLine - 1;
+    E.Text:= CallText;
     Edits.Add(E);
 
     E:= Default(TTextEdit);
-    E.FilePath:= AFile; E.Kind:= tekDeleteLines;
-    E.Line:= Sel.StartLine; E.EndLine:= Sel.EndLine;
+    E.FilePath:= AFile;
+    E.Kind:= tekDeleteLines;
+    E.Line:= Sel.StartLine;
+    E.EndLine:= Sel.EndLine;
     Edits.Add(E);
 
     { (2) insert the new method implementation. Method: after the enclosing
@@ -1913,7 +1936,8 @@ begin
       separates it), so the new proc is genuinely declared BEFORE its
       caller. }
     E:= Default(TTextEdit);
-    E.FilePath:= AFile; E.Kind:= tekInsertLines;
+    E.FilePath:= AFile;
+    E.Kind:= tekInsertLines;
     if Sel.IsMethod then
     begin
       ImplInsertLine:= NEndLine(Sel.Proc);
@@ -1933,7 +1957,8 @@ begin
     if Sel.IsMethod then
     begin
       E:= Default(TTextEdit);
-      E.FilePath:= AFile; E.Kind:= tekInsertLines;
+      E.FilePath:= AFile;
+      E.Kind:= tekInsertLines;
       E.Line:= PrivEndLine;
       E.Text:= '    ' + SigBody;
       Edits.Add(E);

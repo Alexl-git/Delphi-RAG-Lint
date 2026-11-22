@@ -903,7 +903,8 @@ begin
       begin
         var PosKey:= UpperCase(List[Idx].FilePath) + '|' + IntToStr(List[Idx].Line) + '|' + IntToStr(List[Idx].Col);
         if SeenPos.ContainsKey(PosKey) then List.Delete(Idx)
-        else begin SeenPos.Add(PosKey, True); Inc(Idx); end;
+        else begin SeenPos.Add(PosKey, True);
+        Inc(Idx); end;
       end;
     finally
       SeenPos.Free;
@@ -1058,7 +1059,8 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte); L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -1265,7 +1267,8 @@ var
       begin
         NmN:= AN.NamedChild(K);
         if NmN.NodeType <> 'declArg' then Continue;
-        TN:= NmN.ChildByField('type'); TypeStart:= MaxInt;
+        TN:= NmN.ChildByField('type');
+        TypeStart:= MaxInt;
         if not TN.IsNull then TypeStart:= Integer(TN.StartByte);
         for J:= 0 to NmN.NamedChildCount - 1 do
         begin
@@ -1395,7 +1398,8 @@ begin
       for Ed in Edits do
       begin
         Key:= IntToStr(Ed.Line) + ':' + IntToStr(Ed.Col);
-        if not Dedup.ContainsKey(Key) then begin Dedup.Add(Key, True); Final.Add(Ed); end;
+        if not Dedup.ContainsKey(Key) then begin Dedup.Add(Key, True);
+        Final.Add(Ed); end;
       end;
       Comparer:= TComparer<TRenameEdit>.Construct(
         function(const A, B: TRenameEdit): Integer
@@ -1434,7 +1438,8 @@ const
 var L, H, M, C: Integer; Low: string;
 begin
   Low:= LowerCase(AName);
-  L:= 0; H:= High(KReserved);
+  L:= 0;
+  H:= High(KReserved);
   while L <= H do
   begin
     M:= (L + H) div 2;

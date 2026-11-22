@@ -979,7 +979,8 @@ var
   C, EC: Integer;
 begin
   Result:= False;
-  C:= E.Col; if C < 1 then C:= 1;
+  C:= E.Col;
+  if C < 1 then C:= 1;
   if C > Length(ALine) + 1 then Exit;      { past end-of-line: reject, never append }
   if E.ExpectText = '' then Exit(True);    { unguarded (legacy) caller }
   EC:= E.EndCol;
@@ -1511,7 +1512,8 @@ begin
     for E in AEdits do
     begin
       if not FileMap.TryGetValue(E.FilePath, Group) then
-      begin Group:= TList<TTextEdit>.Create; FileMap.Add(E.FilePath, Group); end;
+      begin Group:= TList<TTextEdit>.Create;
+      FileMap.Add(E.FilePath, Group); end;
       Group.Add(E);
     end;
 
@@ -1552,7 +1554,8 @@ begin
     Last:= '';
     for E in AEdits do
     begin
-      if E.FilePath <> Last then begin SB.AppendLine('File: ' + E.FilePath); Last:= E.FilePath; end;
+      if E.FilePath <> Last then begin SB.AppendLine('File: ' + E.FilePath);
+      Last:= E.FilePath; end;
       case E.Kind of
         tekDeleteLines : SB.AppendLine(Format('  delete lines %d..%d', [E.Line, E.EndLine]));
         tekInsertLines : SB.AppendLine(Format('  insert after line %d: %s', [E.Line, E.Text]));
@@ -1625,7 +1628,8 @@ var
   Edit: TTextEdit;
   Pair: TPair<string, Integer>;
 begin
-  Result:= nil; AResolvedUnit:= ''; AAlreadyUsed:= False;
+  Result:= nil;
+  AResolvedUnit:= ''; AAlreadyUsed:= False;
   AReason:= '';
 
   { 1. resolve the best declaring unit -- against ANameStore, which may be a
@@ -1645,9 +1649,11 @@ begin
       if not Cands.TryGetValue(UnitName, Cur) then Cur:= 0;
       Cands.AddOrSetValue(UnitName, Cur + Sc);
     end;
-    Best:= ''; BestScore:= -1;
+    Best:= '';
+    BestScore:= -1;
     for Pair in Cands do
-      if Pair.Value > BestScore then begin BestScore:= Pair.Value; Best:= Pair.Key; end;
+      if Pair.Value > BestScore then begin BestScore:= Pair.Value;
+      Best:= Pair.Key; end;
   finally
     Cands.Free;
   end;
@@ -1668,7 +1674,8 @@ begin
   UsedSet:= TDictionary<string, Boolean>.Create;
   try
     for U in Uses_ do UsedSet.AddOrSetValue(LowerCase(U.UnitName), True);
-    if UsedSet.ContainsKey(LowerCase(Best)) then begin AAlreadyUsed:= True; Exit; end;
+    if UsedSet.ContainsKey(LowerCase(Best)) then begin AAlreadyUsed:= True;
+    Exit; end;
 
     { 3. choose target section: implementation uses if present, else interface }
     HaveLast:= False;
@@ -1692,9 +1699,12 @@ begin
     if HaveLast then
     begin
       { insert ', Best' at the end of the last unit entry (before the ';') }
-      Edit.FilePath:= AInFile; Edit.Kind:= tekInsertInLine;
-      Edit.Line:= LastInSection.EndLine; Edit.Col:= LastInSection.EndCol;
-      Edit.EndLine:= 0; Edit.Text:= ', ' + Best;
+      Edit.FilePath:= AInFile;
+      Edit.Kind:= tekInsertInLine;
+      Edit.Line:= LastInSection.EndLine;
+      Edit.Col:= LastInSection.EndCol;
+      Edit.EndLine:= 0;
+      Edit.Text:= ', ' + Best;
       Result:= [Edit];
     end
     else if IncRow.FromInclude then
@@ -1737,16 +1747,20 @@ begin
           for var I: Integer:= 0 to SL.Count - 1 do
           begin
             var T: string:= LowerCase(Trim(SL[I]));
-            if WantImpl and (T = 'implementation') then begin KeywordLine:= I + 1; Break; end;
-            if (not WantImpl) and (T = 'interface') then begin KeywordLine:= I + 1; Break; end;
+            if WantImpl and (T = 'implementation') then begin KeywordLine:= I + 1;
+            Break; end;
+            if (not WantImpl) and (T = 'interface') then begin KeywordLine:= I + 1;
+            Break; end;
           end;
         finally
           SL.Free;
         end;
       end;
       if KeywordLine = 0 then Exit; { cannot place safely }
-      Edit.FilePath:= AInFile; Edit.Kind:= tekInsertLines;
-      Edit.Line:= KeywordLine; Edit.Col:= 0; Edit.EndLine:= 0;
+      Edit.FilePath:= AInFile;
+      Edit.Kind:= tekInsertLines;
+      Edit.Line:= KeywordLine;
+      Edit.Col:= 0; Edit.EndLine:= 0;
       Edit.Text:= ''#13#10'uses ' + Best + ';';
       Result:= [Edit];
     end;
@@ -1775,9 +1789,11 @@ var
   R           : TReference       ;
   ExternalRefs: Integer          ;
 begin
-  Result:= nil; ARefuseReason:= '';
+  Result:= nil;
+  ARefuseReason:= '';
   Syms:= AStore.FindSymbolsByQualifiedName(AQName);
-  if Length(Syms) = 0 then begin ARefuseReason:= Format('symbol "%s" not found', [AQName]); Exit; end;
+  if Length(Syms) = 0 then begin ARefuseReason:= Format('symbol "%s" not found', [AQName]);
+  Exit; end;
   Sym:= Syms[0];
   Short:= LastSeg(AQName);
 
@@ -1796,7 +1812,8 @@ begin
   end;
 
   Path:= AStore.GetFilePath(Sym.FileId);
-  if Path = '' then begin ARefuseReason:= 'declaration file path unknown'; Exit; end;
+  if Path = '' then begin ARefuseReason:= 'declaration file path unknown';
+  Exit; end;
 
   Edits:= TList<TTextEdit>.Create;
   try
@@ -1804,14 +1821,18 @@ begin
       The applier sorts back-to-front anyway, but emit in logical order. }
     if (Sym.ImplStartLine > 0) and (Sym.ImplEndLine >= Sym.ImplStartLine) then
     begin
-      E.FilePath:= Path; E.Kind:= tekDeleteLines;
-      E.Line:= Sym.ImplStartLine; E.EndLine:= Sym.ImplEndLine; E.Col:= 0; E.Text:= '';
+      E.FilePath:= Path;
+      E.Kind:= tekDeleteLines;
+      E.Line:= Sym.ImplStartLine;
+      E.EndLine:= Sym.ImplEndLine; E.Col:= 0; E.Text:= '';
       Edits.Add(E);
     end;
     if (Sym.StartLine > 0) and (Sym.EndLine >= Sym.StartLine) then
     begin
-      E.FilePath:= Path; E.Kind:= tekDeleteLines;
-      E.Line:= Sym.StartLine; E.EndLine:= Sym.EndLine; E.Col:= 0; E.Text:= '';
+      E.FilePath:= Path;
+      E.Kind:= tekDeleteLines;
+      E.Line:= Sym.StartLine;
+      E.EndLine:= Sym.EndLine; E.Col:= 0; E.Text:= '';
       Edits.Add(E);
     end;
     Result:= Edits.ToArray;

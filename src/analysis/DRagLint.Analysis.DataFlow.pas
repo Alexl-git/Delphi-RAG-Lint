@@ -325,9 +325,11 @@ begin
     simplest correct thing beats reaching for a comparer. }
   for I := 1 to High(Result) do
   begin
-    T := Result[I]; J := I - 1;
+    T := Result[I];
+    J := I - 1;
     while (J >= 0) and (Result[J].SolveSeconds < T.SolveSeconds) do
-    begin Result[J + 1] := Result[J]; Dec(J); end;
+    begin Result[J + 1] := Result[J];
+    Dec(J); end;
     Result[J + 1] := T;
   end;
 end;
@@ -338,24 +340,31 @@ var I, K: Integer;
 begin
   K := -1;
   for I := 0 to High(GBuckets) do
-    if GBuckets[I].Name = AName then begin K := I; Break; end;
+    if GBuckets[I].Name = AName then begin K := I;
+    Break; end;
   if K < 0 then
   begin
-    K := Length(GBuckets); SetLength(GBuckets, K + 1);
+    K := Length(GBuckets);
+    SetLength(GBuckets, K + 1);
     GBuckets[K].Name := AName;
   end;
-  Inc(GBuckets[K].Solves); Inc(GBuckets[K].Blocks, ABlocks);
+  Inc(GBuckets[K].Solves);
+  Inc(GBuckets[K].Blocks, ABlocks);
   Inc(GBuckets[K].Visits, AVisits);
   Inc(GBuckets[K].SolveTicks, ASolveTicks);
   Inc(GBuckets[K].TransferTicks, ATransferTicks);
-  Inc(GSolves); Inc(GBlocks, ABlocks); Inc(GVisits, AVisits); Inc(GReenq, AReenqueues);
-  Inc(GJoins, AJoins); Inc(GTransfers, ATransfers); Inc(GComparisons, AComparisons);
-  Inc(GSolveTicks, ASolveTicks); Inc(GTransferTicks, ATransferTicks);
+  Inc(GSolves);
+  Inc(GBlocks, ABlocks); Inc(GVisits, AVisits); Inc(GReenq, AReenqueues);
+  Inc(GJoins, AJoins);
+  Inc(GTransfers, ATransfers); Inc(GComparisons, AComparisons);
+  Inc(GSolveTicks, ASolveTicks);
+  Inc(GTransferTicks, ATransferTicks);
   { WorstRatio is tracked per SOLVE, not derived from the totals: an aggregate
     near 1.00 can still hide a handful of pathological routines, and if it does
     then THOSE are the target rather than the iteration order. }
   if (ABlocks > 0) and (AVisits / ABlocks > GWorstRatio) then
-  begin GWorstRatio := AVisits / ABlocks; GWorstBlocks := ABlocks; end;
+  begin GWorstRatio := AVisits / ABlocks;
+  GWorstBlocks := ABlocks; end;
 end;
 
 class function TDataFlowSolver<TValue>.Solve(const ACfg: TCfg;
@@ -372,27 +381,34 @@ var
   LocalTransfers, LocalEquals: Int64;
   LatticeName: string;
 begin
-  AIn := nil; AOut := nil;
+  AIn := nil;
+  AOut := nil;
   if ACfg.Skipped then Exit(False);
   T0 := TStopwatch.GetTimeStamp;
-  LocalVisits := 0; LocalJoins := 0; LocalReenq := 0; LocalTransferTicks := 0;
-  LocalTransfers := 0; LocalEquals := 0;
+  LocalVisits := 0;
+  LocalJoins := 0; LocalReenq := 0; LocalTransferTicks := 0;
+  LocalTransfers := 0;
+  LocalEquals := 0;
   { Interface-to-object cast: the lattices are all TInterfacedObject descendants,
     and this is the only way to tell them apart without threading a tag through
     every call site. Once per solve, never per visit. }
   LatticeName := (AAnalysis as TObject).ClassName;
   N := ACfg.BlockCount;
-  SetLength(AIn, N); SetLength(AOut, N); SetLength(InQueue, N);
+  SetLength(AIn, N);
+  SetLength(AOut, N); SetLength(InQueue, N);
   Fwd := AAnalysis.Direction = fdForward;
   if Fwd then Boundary := ACfg.EntryIdx else Boundary := ACfg.ExitIdx;
-  for B := 0 to N - 1 do begin AIn[B] := AAnalysis.Bottom; AOut[B] := AAnalysis.Bottom; end;
+  for B := 0 to N - 1 do begin AIn[B] := AAnalysis.Bottom;
+  AOut[B] := AAnalysis.Bottom; end;
 
   Work := TQueue<Integer>.Create;
   try
-    for B := 0 to N - 1 do begin Work.Enqueue(B); InQueue[B] := True; end;
+    for B := 0 to N - 1 do begin Work.Enqueue(B);
+    InQueue[B] := True; end;
     while Work.Count > 0 do
     begin
-      B := Work.Dequeue; InQueue[B] := False; Inc(LocalVisits);
+      B := Work.Dequeue;
+      InQueue[B] := False; Inc(LocalVisits);
       { gather predecessors (forward) or successors (backward) }
       if Fwd then Adj := ACfg.Blocks[B].Pred else Adj := ACfg.Blocks[B].Succ;
       if B = Boundary then Acc := AAnalysis.Boundary
@@ -409,14 +425,16 @@ begin
         AIn[B] := Acc;
         TX := TStopwatch.GetTimeStamp;
         NewVal := AAnalysis.Transfer(ACfg.Blocks[B], AIn[B]);
-        Inc(LocalTransferTicks, TStopwatch.GetTimeStamp - TX); Inc(LocalTransfers);
+        Inc(LocalTransferTicks, TStopwatch.GetTimeStamp - TX);
+        Inc(LocalTransfers);
         Inc(LocalEquals);
         if not AAnalysis.Equals(NewVal, AOut[B]) then
         begin
           AOut[B] := NewVal;
           for I := 0 to ACfg.Blocks[B].Succ.Count - 1 do
             if not InQueue[ACfg.Blocks[B].Succ[I]] then
-            begin Work.Enqueue(ACfg.Blocks[B].Succ[I]); InQueue[ACfg.Blocks[B].Succ[I]] := True; Inc(LocalReenq); end;
+            begin Work.Enqueue(ACfg.Blocks[B].Succ[I]);
+            InQueue[ACfg.Blocks[B].Succ[I]] := True; Inc(LocalReenq); end;
         end;
       end
       else
@@ -424,14 +442,16 @@ begin
         AOut[B] := Acc;
         TX := TStopwatch.GetTimeStamp;
         NewVal := AAnalysis.Transfer(ACfg.Blocks[B], AOut[B]);
-        Inc(LocalTransferTicks, TStopwatch.GetTimeStamp - TX); Inc(LocalTransfers);
+        Inc(LocalTransferTicks, TStopwatch.GetTimeStamp - TX);
+        Inc(LocalTransfers);
         Inc(LocalEquals);
         if not AAnalysis.Equals(NewVal, AIn[B]) then
         begin
           AIn[B] := NewVal;
           for I := 0 to ACfg.Blocks[B].Pred.Count - 1 do
             if not InQueue[ACfg.Blocks[B].Pred[I]] then
-            begin Work.Enqueue(ACfg.Blocks[B].Pred[I]); InQueue[ACfg.Blocks[B].Pred[I]] := True; Inc(LocalReenq); end;
+            begin Work.Enqueue(ACfg.Blocks[B].Pred[I]);
+            InQueue[ACfg.Blocks[B].Pred[I]] := True; Inc(LocalReenq); end;
         end;
       end;
     end;

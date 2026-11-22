@@ -109,7 +109,8 @@ begin
       { a partial write (a[i] := / x.f :=) reads its base + index -> live }
       if Tgt < 0 then
       begin
-        Reads.Clear; CallDefs.Clear;
+        Reads.Clear;
+        CallDefs.Clear;
         CollectReadsAndCallDefs(AItem.Node.ChildByField('lhs'), ASrc, AVars, Reads, CallDefs);
         for J := 0 to Reads.Count - 1 do ALive[Reads[J]] := True;
         for J := 0 to CallDefs.Count - 1 do ALive[CallDefs[J]] := True;
