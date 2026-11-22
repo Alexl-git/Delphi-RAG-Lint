@@ -1213,7 +1213,7 @@ var
       begin
         Kid:= N.NamedChild(I);
         KT := Kid.NodeType;
-        if (Length(KT) > 0) and (KT[1] = 'k') then Continue;
+        if (KT <> '') and (KT[1] = 'k') then Continue;
         if (KT = 'caseCase') or (KT = 'statement') or (KT = 'statements') then Continue;
         Sel:= Kid;
         Break;
@@ -2271,7 +2271,7 @@ var
           var Pc: TTSNode:= N.NamedChild(Pi);
           var Pt: string := Pc.NodeType;
           if Pt = 'kFinally' then Break;
-          if (Length(Pt) > 0) and (Pt[1] = 'k') then Continue; { skip kTry etc. }
+          if (Pt <> '') and (Pt[1] = 'k') then Continue; { skip kTry etc. }
           { first real protected statement }
           var Stmt: TTSNode:= UnwrapStmt(Pc);
           if IsConstructorAssignment(Stmt) then

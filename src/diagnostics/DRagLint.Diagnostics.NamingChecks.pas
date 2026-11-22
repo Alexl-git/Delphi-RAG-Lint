@@ -317,7 +317,7 @@ var
   HasLet : Boolean;
 begin
   Result:= False;
-  if (Length(S) = 0) or (Length(S) > 4) then Exit;
+  if (S = '') or (Length(S) > 4) then Exit;
   HasLet:= False;
   for I:= 1 to Length(S) do
   begin
@@ -779,7 +779,7 @@ var
     Result:= False;
     if ATypeNode.IsNull then Exit;
     Raw:= Trim(NodeStr(ATypeNode));
-    Result:= (Length(Raw) > 0) and (Raw[1] = '^');
+    Result:= (Raw <> '') and (Raw[1] = '^');
   end;
 
   { True when ASection (a declSection) carries an explicit visibility keyword.

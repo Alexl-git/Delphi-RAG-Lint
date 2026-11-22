@@ -3335,7 +3335,7 @@ var
             var Sc: TTSNode:= N.NamedChild(Si);
             var St: string:= Sc.NodeType;
             if (St <> 'caseCase') and (St <> 'statement') and (St <> 'statements')
-               and ((Length(St) = 0) or (St[1] <> 'k')) then
+               and ((St = '') or (St[1] <> 'k')) then
             begin Selector:= Sc; Break; end;
           end;
         if (not Selector.IsNull) and OperandType(Selector, T) then
