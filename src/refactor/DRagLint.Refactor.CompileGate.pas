@@ -855,8 +855,8 @@ begin
     SA.nLength:= SizeOf(SA);
     SA.lpSecurityDescriptor:= nil;
     SA.bInheritHandle:= True;
-    ForceDirectories(ExtractFilePath(pOutFile));  // dl:ok ignored-must-use-result@93bb, taint-path-traversal@93bb -- moved verbatim from CLI.CycleFix; a failed call surfaces at the next file operation
-    Output:= CreateFile(PChar(pOutFile), GENERIC_WRITE, FILE_SHARE_READ, @SA, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);  // dl:ok taint-path-traversal@214e -- the path is the operator's own --project, the run's fixed scratch or the Studio root: local input, no privilege crossed
+    ForceDirectories(ExtractFilePath(pOutFile));  // dl:ok ignored-must-use-result@93bb -- moved verbatim from CLI.CycleFix; a failed call surfaces at the next file operation
+    Output:= CreateFile(PChar(pOutFile), GENERIC_WRITE, FILE_SHARE_READ, @SA, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
     if Output = INVALID_HANDLE_VALUE then RaiseLastOSError;
     SI.dwFlags   := SI.dwFlags or STARTF_USESTDHANDLES;
     SI.hStdOutput:= Output;
@@ -1375,7 +1375,7 @@ begin
   Result.Messages:= B.Messages;
 end;
 
-function ApplyGated(const pReq: TGateRequest): TGateOutcome;  // dl:ok too-many-exit-points@277f -- one guard per named refusal, in the documented order: the exits are the contract
+function ApplyGated(const pReq: TGateRequest): TGateOutcome;  // dl:ok too-many-exit-points@6b0f -- one guard per named refusal, in the documented order: the exits are the contract
 const
   CTestBreakVar  = 'DRAGLINT_GATE_TEST_BREAK';
   CTestBreakLine = #13#10'this line does not compile (DRAGLINT_GATE_TEST_BREAK)'#13#10;

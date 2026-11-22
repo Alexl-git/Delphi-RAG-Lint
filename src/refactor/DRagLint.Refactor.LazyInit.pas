@@ -255,7 +255,7 @@ end;
 
 // --defer: every routine of the file that touches a global the section writes, outside the section and finalization lines
 // [pSkipFrom, pSkipTo]. False with pKind / pReason set on a use the call cannot be put in front of.
-function FindEntryPoints(pConn: TFDConnection; pSource: TMaskedSource; const pPath: string; const pGlobals: TArray<TSectionGlobal>;  // dl:ok too-many-parameters@0563 -- the section's read-only context plus three outs; the nesting is one query loop per global, kept in one routine so each refusal exits with its reason
+function FindEntryPoints(pConn: TFDConnection; pSource: TMaskedSource; const pPath: string; const pGlobals: TArray<TSectionGlobal>;  // dl:ok too-many-parameters@c95b -- the section's read-only context plus three outs; the nesting is one query loop per global, kept in one routine so each refusal exits with its reason
   pSkipFrom, pSkipTo: Integer; out pPoints: TArray<TEntryPoint>; out pKind, pReason: string): Boolean;
 const
   CLineFeed = 10;   // the byte that ends a line in PF.Src
@@ -345,7 +345,7 @@ begin
   Result:= True;
 end;
 
-function PlanSection(const pStore: ISymbolStore; const pConn: TFDConnection; const pOwn: TOwnRoots; const pOpts: TLazyInitOptions;  // dl:ok too-many-exit-points@004d -- one guard per named refusal, in the documented order: the exits are the contract
+function PlanSection(const pStore: ISymbolStore; const pConn: TFDConnection; const pOwn: TOwnRoots; const pOpts: TLazyInitOptions;  // dl:ok too-many-exit-points@ab21 -- one guard per named refusal, in the documented order: the exits are the contract
   const pPath, pUnit: string; const pHeavy: TArray<TLintFinding>): TSectionPlan;
 
   procedure Refuse(var pPlan: TSectionPlan; const pKind, pReason: string);
@@ -580,7 +580,7 @@ begin
   end;
 end;
 
-function RunLazyInit(const pStore: ISymbolStore; const pOpts: TLazyInitOptions): Integer;  // dl:ok too-many-exit-points@ea4e -- one guard per named refusal, in the documented order: the exits are the contract
+function RunLazyInit(const pStore: ISymbolStore; const pOpts: TLazyInitOptions): Integer;  // dl:ok too-many-exit-points@d84c -- one guard per named refusal, in the documented order: the exits are the contract
 
   function Fail(const pMessage: string): Integer;
   begin

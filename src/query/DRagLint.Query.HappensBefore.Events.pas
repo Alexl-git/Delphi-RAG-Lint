@@ -373,7 +373,7 @@ begin
   begin
     Lines:= [];
     try
-      if TFile.Exists(pPath) then Lines:= TFile.ReadAllLines(pPath);  // dl:ok taint-path-traversal@26ed -- REVIEWED 2026-11-17 v152 HBEVENTS: paths come from the index files table; read-only ReadAllLines of indexed sources, nothing is written
+      if TFile.Exists(pPath) then Lines:= TFile.ReadAllLines(pPath);
     except
       on EStreamError do Lines:= [];
       on EEncodingError do Lines:= [];

@@ -925,7 +925,7 @@ begin
   end;
 end;
 
-function TProver.DecideChain(pType, pFromFile: Int64; out pKind, pWhy: string): TChainVerdict; // dl:ok too-many-exit-points@9753 -- a ladder of final verdicts: each Exit is one reason the walk stops
+function TProver.DecideChain(pType, pFromFile: Int64; out pKind, pWhy: string): TChainVerdict; // dl:ok too-many-exit-points@25c8 -- a ladder of final verdicts: each Exit is one reason the walk stops
 var
   FirstVerdict: TChainVerdict;
 begin
@@ -2755,7 +2755,7 @@ begin
   Req.LogDir  := FreshScratchName('_build');
   Result:= ApplyGated(Req);
   try
-    if not GScratchCited and TDirectory.Exists(Req.LogDir) then TDirectory.Delete(Req.LogDir, True); // dl:ok taint-path-traversal@c08a -- LogDir is FreshScratchName's: a folder this run made under C:\TEMP
+    if not GScratchCited and TDirectory.Exists(Req.LogDir) then TDirectory.Delete(Req.LogDir, True);
   except
     on EInOutError do Writeln(ErrOutput, 'drag-lint: note: scratch not deleted: ', Req.LogDir); // best effort: a locked log must not change the result
   end;

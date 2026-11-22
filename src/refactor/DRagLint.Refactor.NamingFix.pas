@@ -470,7 +470,7 @@ begin
   AText:= '';
   ACharCol:= ACol;
   if (ALine < 1) or (ACol < 1) or not TFile.Exists(AFile) then Exit(False);
-  var Src: TBytes:= EnsureUtf8Bytes(TFile.ReadAllBytes(AFile));  // dl:ok taint-path-traversal@7233 -- reads the source file a lint finding names (an indexed unit the caller already linted); the env var only locates the user's own manifest
+  var Src: TBytes:= EnsureUtf8Bytes(TFile.ReadAllBytes(AFile));
   var Start: Integer:= 0;
   var Ln: Integer:= 1;
   while (Ln < ALine) and (Start < Length(Src)) do
@@ -1296,7 +1296,7 @@ begin
   end;
 end;
 
-function BuildNamingFixEdits(const AStore: ISymbolStore; const ALibraries: TArray<ISymbolStore>; // dl:ok too-many-parameters@d5aa -- one caller; four inputs and the four separately reported outcomes, a record would only rename them
+function BuildNamingFixEdits(const AStore: ISymbolStore; const ALibraries: TArray<ISymbolStore>; // dl:ok too-many-parameters@48d6 -- one caller; four inputs and the four separately reported outcomes, a record would only rename them
   const AFindings: TArray<TLintFinding>; const ANaming: TNamingConfig;
   out AFixCount: Integer; out ASkippedCount: Integer; out AStaleCount: Integer; out ARefusals: TArray<string>): TArray<TTextEdit>;
 var

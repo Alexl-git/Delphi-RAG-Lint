@@ -412,7 +412,7 @@ constructor TMaskedSource.Create(const pPath: string);
 begin
   inherited Create;
   Path:= pPath;
-  Text:= DecodeSource(TFile.ReadAllBytes(pPath), Enc);  // dl:ok taint-path-traversal@f6f6 -- REVIEWED 2026-11-16: pPath is a unit of the user's own index (its files table), read with the user's rights; same verdict as the live markers at :1186 / :1265
+  Text:= DecodeSource(TFile.ReadAllBytes(pPath), Enc);
   Scan;
 end;
 
@@ -662,7 +662,7 @@ end;
 
 function IsFileCurrent(const pStore: ISymbolStore; const pPath: string): Boolean;
 begin
-  Result:= pStore.FileIsUpToDate(pPath, FileMTimeUnix(pPath), THashSHA2.GetHashString(TEncoding.ANSI.GetString(TFile.ReadAllBytes(pPath))));  // dl:ok taint-path-traversal@a85d -- REVIEWED 2026-11-16: pPath is a unit of the user's own index (its files table), read with the user's rights; same verdict as the live markers at :1186 / :1265
+  Result:= pStore.FileIsUpToDate(pPath, FileMTimeUnix(pPath), THashSHA2.GetHashString(TEncoding.ANSI.GetString(TFile.ReadAllBytes(pPath))));
 end;
 
 function TCastPlanner.StampOk(const pPath: string): Boolean;
@@ -960,7 +960,7 @@ begin
   Result:= One <> '';
 end;
 
-procedure TCastPlanner.Decide(pFileId: Int64; const pPath: string; pLine, pCol: Integer; const pName: string;  // dl:ok cyclomatic-complexity@50cc, too-many-exit-points@6420 -- one branch per named refusal, documented on the public function (REVIEWED 2026-11-18 INT13: re-measured after 1.52 GA-1 counts if-expressions; shape and reason unchanged)
+procedure TCastPlanner.Decide(pFileId: Int64; const pPath: string; pLine, pCol: Integer; const pName: string;  // dl:ok cyclomatic-complexity@50cc, too-many-exit-points@53b3 -- one branch per named refusal, documented on the public function (REVIEWED 2026-11-18 INT13: re-measured after 1.52 GA-1 counts if-expressions; shape and reason unchanged)
   pTypeId, pEnclosing: Int64);
 const
   CTypeKinds: array[0..4] of string = ('class', 'record', 'interface', 'enum', 'type');
@@ -1467,7 +1467,7 @@ begin
     Ran := True;
     if not GScratchCited and TDirectory.Exists(Req.LogDir) then
     try
-      TDirectory.Delete(Req.LogDir, True);  // dl:ok taint-path-traversal@ff48 -- the path is the operator's own --project, the run's fixed scratch or the Studio root: local input, no privilege crossed
+      TDirectory.Delete(Req.LogDir, True);
     except
       on EInOutError do Writeln(ErrOutput, 'drag-lint: note: scratch not deleted: ', Req.LogDir); // best effort: a locked log must not change the result
     end;

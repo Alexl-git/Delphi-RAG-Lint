@@ -1608,7 +1608,7 @@ begin
   Result:= Build(ANameStore, AUnitStore, AName, AInFile, AResolvedUnit, AAlreadyUsed, Reason, APreferInterface);
 end;
 
-class function TFindUnitRefactoring.Build(const ANameStore, AUnitStore: ISymbolStore;  // dl:ok too-many-parameters@896d, too-many-exit-points@8fee -- REVIEWED 2026-10-23: params = the 7-parameter overload plus the one N-06 out-reason (a record would only rename them); exits = six guard-clause exits (nothing found, self, already used, file not indexed, no keyword line) that predate N-06, whose own exit was folded into the else-if chain
+class function TFindUnitRefactoring.Build(const ANameStore, AUnitStore: ISymbolStore;  // dl:ok too-many-parameters@65fc, too-many-exit-points@932c -- REVIEWED 2026-10-23: params = the 7-parameter overload plus the one N-06 out-reason (a record would only rename them); exits = six guard-clause exits (nothing found, self, already used, file not indexed, no keyword line) that predate N-06, whose own exit was folded into the else-if chain
   const AName, AInFile: string; out AResolvedUnit: string; out AAlreadyUsed: Boolean;
   out AReason: string; APreferInterface: Boolean): TArray<TTextEdit>;
 var

@@ -1437,7 +1437,7 @@ begin
   end;
 end;
 
-function RunLintTree(const pOptions   : TLintTreeOptions;  // dl:ok too-many-exit-points@49da
+function RunLintTree(const pOptions   : TLintTreeOptions;  // dl:ok too-many-exit-points@4e0c
                      const pOpenStore : TStoreOpener;
                      const pParserFor : TParserFactory;
                      const pPreprocess: TPreprocessor;
