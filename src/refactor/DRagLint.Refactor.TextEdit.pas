@@ -679,7 +679,7 @@ const
 begin
   ALen:= 1;
   Result:= Ord(S[I]);
-  if (Result >= HighSurrogateLo) and (Result <= HighSurrogateHi) and (I < Length(S))
+  if InRange(Result, HighSurrogateLo, HighSurrogateHi) and (I < Length(S))
     and (Ord(S[I + 1]) >= LowSurrogateLo) and (Ord(S[I + 1]) <= LowSurrogateHi) then
   begin
     Result:= SurrogateBase + (Result - HighSurrogateLo) * SurrogateBits + (Ord(S[I + 1]) - LowSurrogateLo);

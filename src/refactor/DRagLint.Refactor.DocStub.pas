@@ -674,7 +674,7 @@ begin
   if (AFilePath = '') or (not TFile.Exists(AFilePath)) then Exit;
   try
     Lines:= ReadSourceFileLines(AFilePath);
-    if (ALine >= 1) and (ALine <= Length(Lines)) then Result:= Trim(Lines[ALine - 1]);
+    if InRange(ALine, 1, Length(Lines)) then Result:= Trim(Lines[ALine - 1]);
   except  // dl:ok bare-except@86a2 -- REVIEWED 2026-11-19 SLZ-MARK: best-effort probe or file read with a documented fallback; the handler assigns that fallback or exits, so no result is lost silently
     Result:= '';
   end;

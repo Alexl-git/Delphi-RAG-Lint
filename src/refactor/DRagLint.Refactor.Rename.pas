@@ -475,6 +475,7 @@ uses
   , DRagLint.Refactor.TextEdit
   , TreeSitter
   , DRagLint.Diagnostics.ParseCache
+  , System.Math
   ;
 
 // ---------------------------------------------------------------------------
@@ -558,7 +559,7 @@ begin
   Result  := 0;
   Keywords:= 0;
   P       := ACol;
-  while (P >= 1) and (P <= Length(ALine)) do
+  while InRange(P, 1, Length(ALine)) do
   begin
     Q:= P;
     while (Q <= Length(ALine)) and IsIdentChar(ALine[Q]) do Inc(Q);

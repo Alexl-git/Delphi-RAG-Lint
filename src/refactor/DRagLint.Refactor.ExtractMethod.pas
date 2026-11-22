@@ -289,6 +289,7 @@ type
 implementation
 
 uses
+  System.Math,
   DRagLint.Analysis.Liveness,
   DRagLint.Diagnostics.ParseCache,
   DRagLint.Refactor.Rename,
@@ -1897,7 +1898,7 @@ begin
     end;
     ProcText:= ProcText + 'begin' + CRLF;
     for BodyLine:= Sel.StartLine to Sel.EndLine do
-      if (BodyLine >= 1) and (BodyLine <= Length(Lines)) then
+      if InRange(BodyLine, 1, Length(Lines)) then
         ProcText:= ProcText + Lines[BodyLine - 1] + CRLF;
     if IsFunc then ProcText:= ProcText + '  Result := ' + OutName + ';' + CRLF;
     ProcText:= ProcText + 'end;';
