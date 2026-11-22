@@ -1318,7 +1318,8 @@ var
 
     begin
       Result:= False;
-      AField:= ''; ARhs:= '';
+      AField:= '';
+      ARhs:= '';
       S:= Trim(ALine);
       P:= Pos(':=', S);
       if P = 0 then Exit;
