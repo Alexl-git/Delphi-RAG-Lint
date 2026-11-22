@@ -1492,7 +1492,7 @@ begin
   try
     if GOverloadMemo.TryGetValue(MemoKey, Result) then Exit;
     Sym:= AStore.GetSymbolById(ASymbolId);
-    if (Sym.Id <= 0) or not (Sym.Kind in ROUTINE_KINDS) then Exit;
+    if (Sym.Id <= 0) or (Sym.Kind not in ROUTINE_KINDS) then Exit;
     { Same container, same name -- the sibling test 'Overload k of n' already uses
       (FindAllChildSymbols scopes to a class for methods and to the unit symbol for
       free routines), so the two facts cannot disagree about what an overload is. }
@@ -1568,7 +1568,7 @@ function OwnerTypeLeaf(AKind: TSymbolKind; const AQualifiedName: string): string
 var Head: string; P: Integer;
 begin
   Result:= '';
-  if not (AKind in [skMethod, skConstructor, skDestructor]) then Exit;
+  if (AKind not in [skMethod, skConstructor, skDestructor]) then Exit;
   P:= AQualifiedName.LastDelimiter('.');
   if P < 0 then Exit;
   Head:= Copy(AQualifiedName, 1, P); { drop the member leaf }

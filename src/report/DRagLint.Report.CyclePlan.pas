@@ -7138,7 +7138,7 @@ begin
         if SameText(N.Owner.Name, Shown) then Kind:= N.Owner.Kind.ToText;
       if (Kind = 'routine') and (Ev.Surface.RoutineName = '') then
         for var S in GetFile(FidOfStem(Ev.Surface.ToStem)).Syms do
-          if SameText(S.Name, Shown) and not (S.Kind in [skParam, skLocalVar]) and (Kind = 'routine') then Kind:= S.Kind.ToText;
+          if SameText(S.Name, Shown) and (S.Kind not in [skParam, skLocalVar]) and (Kind = 'routine') then Kind:= S.Kind.ToText;
       Ev.Why    := Format('`%s` (%s): refused: %s -- %s', [Shown, Kind, Refusal.Kind, Refusal.Reason]);
       pEvals[I]:= Ev;
       Continue;
@@ -7619,7 +7619,7 @@ begin
   Result.Decision  := udExtend;
   Result.Fid       := F.Fid;
   for var S in F.Syms do
-    if SameText(S.Section, 'interface') and not (S.Kind in [skUnit, skProgram, skPackage]) and
+    if SameText(S.Section, 'interface') and (S.Kind not in [skUnit, skProgram, skPackage]) and
       (S.EndLine > Result.InsertAfterLine) then Result.InsertAfterLine:= S.EndLine;
 end;
 

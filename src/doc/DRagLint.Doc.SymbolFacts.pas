@@ -1220,7 +1220,7 @@ procedure WalkMutatedParams(const N: TTSNode; const ASrc: TBytes;
     Idx:= AVars.IndexOf(LowerCase(Trim(FieldNodeStr(AIdent, ASrc))));
     if Idx < 0 then Exit;
     RV:= AVars.Get(Idx);
-    if not (RV.Kind in [vkParamVar, vkParamOut]) then Exit;
+    if (RV.Kind not in [vkParamVar, vkParamOut]) then Exit;
     if RV.Kind = vkParamVar then Disp:= RV.Display + ' (var)'
     else Disp:= RV.Display + ' (out)';
     if AOut.IndexOf(Disp) < 0 then AOut.Add(Disp);
@@ -1356,7 +1356,7 @@ function IsUiTypeName(const AStore: ISymbolStore; const ATypeName: string;
     Cands:= AStore.FindSymbolsByExactName(AName);
     for Cand in Cands do
     begin
-      if not (Cand.Kind in [skClass, skInterface]) then Continue;
+      if (Cand.Kind not in [skClass, skInterface]) then Continue;
       if Trim(Cand.Heritage) = '' then Continue;
       // Heritage is a raw 'TBar, IBaz' list: an ancestor class plus any
       // implemented interfaces. Every entry is followed -- a control type can
@@ -3290,7 +3290,7 @@ begin
   // OWN Result.ReturnType). '' here means a procedure (incl. a procedure
   // declared as a method) or a constructor/destructor -- none of them ever
   // carry a ': Type' suffix in their signature.
-  if not (ASym.Kind in [skFunction, skMethod]) then Exit;
+  if (ASym.Kind not in [skFunction, skMethod]) then Exit;
   RetTypeName:= ParseReturnType(ASym.Signature);
   if RetTypeName = '' then Exit;
 

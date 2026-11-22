@@ -937,7 +937,7 @@ var
   Other: TSymbol;
 begin
   Result:= False;
-  if not (ASym.Kind in DOCUMENTABLE) then Exit;
+  if (ASym.Kind not in DOCUMENTABLE) then Exit;
   for Other in AFileSyms do
     if (Other.Id <> ASym.Id) and (Other.StartLine = ASym.StartLine) and (Other.Kind in DOCUMENTABLE) then
       Exit(True);

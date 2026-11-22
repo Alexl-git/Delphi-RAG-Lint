@@ -1620,7 +1620,7 @@ begin
   Owner:= Default(TSymbol);
   if FOwners.Count <> 1 then Exit;
   for var O in FOwners.Values do Owner:= O;
-  if not (Owner.Kind in [skProcedure, skFunction]) then Exit;
+  if (Owner.Kind not in [skProcedure, skFunction]) then Exit;
   FSurface.RoutineName:= Owner.Name;
   FSurface.RoutineSig := Owner.Signature;
   FSurface.SigTypes   := SignatureTypes(FSource, FToFid, Owner.StartLine, Owner.Signature);
@@ -3209,7 +3209,7 @@ begin
   for var Hop:= 1 to CMaxAncestorHops do
   begin
     for var S in Cur.Store.FindAllChildSymbols(Cur.Sym.Id) do
-      if not (S.Kind in [skParam, skLocalVar]) then pNames.Add(S.Name);
+      if (S.Kind not in [skParam, skLocalVar]) then pNames.Add(S.Name);
     var P:= pIdx.ParentOf(Cur);
     if P = '' then Exit(True);
     pStop:= BareTypeName(P);
@@ -3263,7 +3263,7 @@ begin
   Result:= False;
   if (pProject = nil) or (pEnclosingId <= 0) or (pName = '') then Exit;
   var S:= EnclosingTypeOf(pProject, pEnclosingId);
-  if (S.Id <= 0) or not (S.Kind in [skClass, skRecord]) then Exit;
+  if (S.Id <= 0) or (S.Kind not in [skClass, skRecord]) then Exit;
   Idx.Project:= pProject;
   Idx.Lib    := pLibrary;
   Cur.Sym    := S;
@@ -3271,7 +3271,7 @@ begin
   for var Hop:= 1 to CMaxAncestorHops do
   begin
     var M:= Cur.Store.FindChildSymbolByName(Cur.Sym.Id, pName);
-    if (M.Id > 0) and not (M.Kind in [skParam, skLocalVar]) then Exit(True);
+    if (M.Id > 0) and (M.Kind not in [skParam, skLocalVar]) then Exit(True);
     if not Idx.Find(Idx.ParentOf(Cur), Idx.IsLib(Cur), Next) then Exit;
     Cur:= Next;
   end;
@@ -3679,7 +3679,7 @@ end;
   or a method the property does not read through) keeps the refusal: its value is not M's. }
 function TMemberPlan.GetterReusable(const pM, pDup: TSymbol): Boolean;
 begin
-  if (pM.Kind <> skProperty) or not (pDup.Kind in [skMethod, skFunction]) then Exit(False);
+  if (pM.Kind <> skProperty) or (pDup.Kind not in [skMethod, skFunction]) then Exit(False);
   var Decl:= '';
   for var L:= pDup.StartLine to Max(pDup.StartLine, pDup.EndLine) do Decl:= Decl + ' ' + BareCode(LineOf(FClsLines, L));
   if not TRegEx.IsMatch(Trim(Decl), '^function\s+' + TRegEx.Escape(pDup.Name) + '\s*:\s*' +
@@ -3787,7 +3787,7 @@ begin
   for var M in TRegEx.Matches(Code, '(?<![\w.])' + C + '\s*\(\s*[A-Za-z_]\w*\s*\)\s*\.\s*([A-Za-z_]\w*)', [roIgnoreCase]) do
   begin
     var Child:= FStore.FindChildSymbolByName(pCls.Id, M.Groups[1].Value);
-    if (Child.Id <= 0) or not (Child.Kind in [skField, skProperty]) then
+    if (Child.Id <= 0) or (Child.Kind not in [skField, skProperty]) then
       Exit(Format('casts to `%s` and reads `%s` through the cast, which is not a field or property `%s` ' +
         'declares itself', [pCls.Name, M.Groups[1].Value, pCls.Name]));
     Inc(Shaped);
@@ -4041,7 +4041,7 @@ begin
         var Indexed:= (M.Kind = skProperty) and TRegEx.IsMatch(BareCode(LineOf(FClsLines, M.StartLine)),
           '\bproperty\s+' + TRegEx.Escape(M.Name) + '\s*\[', [roIgnoreCase]);
         if Indexed and not IndexedPropertyOk(M, R) then Exit(False);
-        if not (M.Kind in [skField, skProperty]) or (Sig = '') or
+        if (M.Kind not in [skField, skProperty]) or (Sig = '') or
           (Sig.IndexOfAny(['[', ']', ':', '(', ')', ';']) >= 0) then
           Exit(Refuse('member-unsupported', M.Name, FFromFid, R.Line, Format('`%s.%s` is not a field or a ' +
             'property with a stored type', [FCls.Name, M.Name])));
@@ -4188,7 +4188,7 @@ end;
 function TMemberPlan.CarriedMethodOf(const pR: TEdgeRef; const pS: TSymbol): TSymbol;
 begin
   Result:= Default(TSymbol);
-  if not (pR.Kind in [erCall, erOther]) or (FCls.Id = 0) or (pS.Id <> FCls.Id) or SameText(pR.Name, pS.Name) then
+  if (pR.Kind not in [erCall, erOther]) or (FCls.Id = 0) or (pS.Id <> FCls.Id) or SameText(pR.Name, pS.Name) then
     Exit;
   var M:= FStore.FindChildSymbolByName(pS.Id, pR.Name);
   if M.Kind in [skMethod, skFunction, skProcedure] then Result:= M;
@@ -4371,7 +4371,7 @@ begin
   pType:= '';
   var Cur:= if pEnclosing > 0 then FStore.GetSymbolById(pEnclosing) else Default(TSymbol);
   var IsSelf:= SameText(pX, 'Self');
-  while (Cur.Id > 0) and not (Cur.Kind in [skClass, skRecord, skUnit, skProgram, skPackage]) do
+  while (Cur.Id > 0) and (Cur.Kind not in [skClass, skRecord, skUnit, skProgram, skPackage]) do
   begin
     var L:= FStore.FindChildSymbolByName(Cur.Id, pX);
     if not IsSelf and (L.Id > 0) and (L.Kind in [skParam, skLocalVar]) then
@@ -4476,7 +4476,7 @@ begin
   try
     for var R in FSurface.Refs do
     begin
-      if not (R.Kind in [erTypeIs, erTypeAs, erTypeCast]) or Done.Contains(R.Line) then Continue;
+      if (R.Kind not in [erTypeIs, erTypeAs, erTypeCast]) or Done.Contains(R.Line) then Continue;
       Done.Add(R.Line);
       if not RewriteLine(R.Line, R.EnclosingId, Text) then Exit(False);
       AddEdit(FFromFid, R.Line, True, [Text]);

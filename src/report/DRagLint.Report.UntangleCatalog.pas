@@ -145,7 +145,7 @@ function LastInterfaceLine(const pStore: ISymbolStore; const pPath: string): Int
 begin
   Result:= 0;
   for var S in pStore.FindSymbolsByFile(pPath) do
-    if SameText(S.Section, 'interface') and not (S.Kind in [skUnit, skProgram, skPackage]) and (S.EndLine > Result) then
+    if SameText(S.Section, 'interface') and (S.Kind not in [skUnit, skProgram, skPackage]) and (S.EndLine > Result) then
       Result:= S.EndLine;
 end;
 

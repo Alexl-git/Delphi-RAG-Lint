@@ -449,7 +449,7 @@ begin
     // against the N pass 1 fixed for the alternative (none -> any N, unchecked).
     for Term in Alt.Terms do
     begin
-      if not (Term.Kind in [gtkSlotOfCount, gtkSlot]) then Continue;
+      if (Term.Kind not in [gtkSlotOfCount, gtkSlot]) then Continue;
       Limit:= if Term.Kind = gtkSlotOfCount then Term.Count else AltN;
       if (Term.Slot >= 1) and (Limit >= 1) and (Term.Slot > Limit) then
         Result:= Result + [MakeError(Term.Column,

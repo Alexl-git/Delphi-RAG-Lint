@@ -2036,7 +2036,7 @@ begin
       Kids:= FStore.FindAllChildSymbols(Cls.Id);
       for Kid in Kids do
       begin
-        if (AFields and not (Kid.Kind in [skField, skConstDecl])) or ((not AFields) and (Kid.Kind <> skProperty)) then Continue;
+        if (AFields and (Kid.Kind not in [skField, skConstDecl])) or ((not AFields) and (Kid.Kind <> skProperty)) then Continue;
         Key:= LowerCase(Kid.Name);
         if Seen.ContainsKey(Key) then Continue; // shadowed by a more-derived decl
         Seen.Add(Key, True);
