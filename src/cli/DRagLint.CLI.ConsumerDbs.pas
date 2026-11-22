@@ -229,9 +229,7 @@ var
   NoDb       : string        ;
 begin
   Result:= TManifestIO.Load(AEngineDir, ManifestStartDir(AProjectPath));
-  if (AProjectPath <> '') and (ManifestStartDir(AProjectPath) <> GetCurrentDir) then
-    if ResolveOwnProjectDb(Result, AProjectPath, NoDb, NoClaimants) = pdmNone then
-      Result:= TManifestIO.Load(AEngineDir, GetCurrentDir);
+  if ((AProjectPath <> '') and (ManifestStartDir(AProjectPath) <> GetCurrentDir)) and (ResolveOwnProjectDb(Result, AProjectPath, NoDb, NoClaimants) = pdmNone) then Result:= TManifestIO.Load(AEngineDir, GetCurrentDir);
 end;
 
 var

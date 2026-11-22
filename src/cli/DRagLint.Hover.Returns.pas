@@ -652,10 +652,7 @@ begin
             that is the one the token can belong to. }
           if (Pend.Count > 0) and (not Pend.Peek.Named) and (Paren < Pend.Peek.Paren) then Pend.Pop;
         end
-        else if T.Text = ';' then
-        begin
-          if (Pend.Count > 0) and (not Pend.Peek.Named) and (Paren = Pend.Peek.Paren) then Pend.Pop;
-        end;
+        else if (T.Text = ';') and ((Pend.Count > 0) and (not Pend.Peek.Named) and (Paren = Pend.Peek.Paren)) then Pend.Pop;
         Continue;
       end;
       if IsRoutineKeyword(T.Text) then
