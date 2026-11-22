@@ -153,10 +153,16 @@ var
 
 begin
   JsonEdges:= nil;
-  if AArgs.DbPath = '' then begin Writeln('ERROR: graph requires --db');
-  Exit (2 ); end;
-  if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath);
-  Exit(2); end;
+  if AArgs.DbPath = '' then
+  begin
+    Writeln('ERROR: graph requires --db');
+    Exit (2 );
+  end;
+  if not TFile.Exists(AArgs.DbPath) then
+  begin
+    Writeln('ERROR: database not found: ', AArgs.DbPath);
+    Exit(2);
+  end;
   Format:= if AArgs.Format <> '' then LowerCase(AArgs.Format) else 'dot';
   if not MatchText(Format, ['dot', 'mermaid', 'json', 'html']) then
   begin
@@ -291,14 +297,23 @@ var
   JObj   : TJSONObject                ;
   Tag    : string                     ;
 begin
-  if Length(AArgs.DbPaths) < 2 then begin Writeln('ERROR: diff requires two --db arguments ' + '(--db <old.sqlite> --db <new.sqlite>)');
-  Exit(2); end;
+  if Length(AArgs.DbPaths) < 2 then
+  begin
+    Writeln('ERROR: diff requires two --db arguments ' + '(--db <old.sqlite> --db <new.sqlite>)');
+    Exit(2);
+  end;
   DbA:= AArgs.DbPaths[0];
   DbB:= AArgs.DbPaths[1];
-  if not TFile.Exists(DbA) then begin Writeln('ERROR: --db ', DbA, ' not found');
-  Exit(2); end;
-  if not TFile.Exists(DbB) then begin Writeln('ERROR: --db ', DbB, ' not found');
-  Exit(2); end;
+  if not TFile.Exists(DbA) then
+  begin
+    Writeln('ERROR: --db ', DbA, ' not found');
+    Exit(2);
+  end;
+  if not TFile.Exists(DbB) then
+  begin
+    Writeln('ERROR: --db ', DbB, ' not found');
+    Exit(2);
+  end;
 
   ConnA:= TFDConnection.Create(nil);
   ConnB:= TFDConnection.Create(nil);
@@ -314,11 +329,17 @@ begin
     QA.Sql.Text:= 'SELECT qualified_name, kind, COALESCE(signature, '''') AS sig ' + 'FROM symbols WHERE qualified_name <> '''' ';
     QB.Sql.Text:= QA.Sql.Text;
     QA.Open;
-    while not QA.Eof do begin SetA.AddOrSetValue( QA.FieldByName('qualified_name').AsString, QA.FieldByName('kind').AsString + '|' + QA.FieldByName('sig').AsString);
-    QA.Next; end;
+    while not QA.Eof do
+    begin
+      SetA.AddOrSetValue( QA.FieldByName('qualified_name').AsString, QA.FieldByName('kind').AsString + '|' + QA.FieldByName('sig').AsString);
+      QA.Next;
+    end;
     QB.Open;
-    while not QB.Eof do begin SetB.AddOrSetValue( QB.FieldByName('qualified_name').AsString, QB.FieldByName('kind').AsString + '|' + QB.FieldByName('sig').AsString);
-    QB.Next; end;
+    while not QB.Eof do
+    begin
+      SetB.AddOrSetValue( QB.FieldByName('qualified_name').AsString, QB.FieldByName('kind').AsString + '|' + QB.FieldByName('sig').AsString);
+      QB.Next;
+    end;
 
     Added  := 0;
     Removed:= 0;
@@ -366,17 +387,26 @@ begin
     else
     begin
       for Pair in SetB do
-        if not SetA.ContainsKey(Pair.Key) then begin Tag:= Pair.Value.Split(['|'])[0];
-        Writeln('+ ', Pair.Key, '  [', Tag, ']');
-        Inc(Added); end
-      else if SetA[Pair.Key] <> Pair.Value then begin Writeln('~ ', Pair.Key);
-      Writeln('    from: ', SetA[Pair.Key]);
-      Writeln('    to:   ', Pair.Value);
-      Inc(Changed); end;
+        if not SetA.ContainsKey(Pair.Key) then
+        begin
+          Tag:= Pair.Value.Split(['|'])[0];
+          Writeln('+ ', Pair.Key, '  [', Tag, ']');
+          Inc(Added);
+        end
+      else if SetA[Pair.Key] <> Pair.Value then
+      begin
+        Writeln('~ ', Pair.Key);
+        Writeln('    from: ', SetA[Pair.Key]);
+        Writeln('    to:   ', Pair.Value);
+        Inc(Changed);
+      end;
       for Pair in SetA do
-        if not SetB.ContainsKey(Pair.Key) then begin Tag:= Pair.Value.Split(['|'])[0];
-        Writeln('- ', Pair.Key, '  [', Tag, ']');
-        Inc(Removed); end;
+        if not SetB.ContainsKey(Pair.Key) then
+        begin
+          Tag:= Pair.Value.Split(['|'])[0];
+          Writeln('- ', Pair.Key, '  [', Tag, ']');
+          Inc(Removed);
+        end;
       Writeln(Format('Summary: %d added, %d removed, %d changed', [Added, Removed, Changed]));
     end; // else
 
@@ -425,8 +455,11 @@ var
   JObj    : TJSONObject   ;
 begin
   Path:= if AArgs.Path = '' then GetCurrentDir else AArgs.Path;
-  if not (TDirectory.Exists(Path) or TFile.Exists(Path)) then begin Writeln('ERROR: path does not exist: ', Path);
-  Exit(2); end;
+  if not (TDirectory.Exists(Path) or TFile.Exists(Path)) then
+  begin
+    Writeln('ERROR: path does not exist: ', Path);
+    Exit(2);
+  end;
   // Keyword set is intentionally narrow and word-boundaried so noise like
   // "fixmessage" doesn't false-trip. Author tag accepts @alex or "Alex:"
   // forms, matching common Delphi codebase conventions.

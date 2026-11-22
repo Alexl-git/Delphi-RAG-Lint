@@ -621,8 +621,10 @@ var
     try
       for Ed in PlanRes.Edits do
         if not TouchedSet.ContainsKey(Ed.FilePath) then
-        begin TouchedSet.Add(Ed.FilePath, True);
-        TouchedFiles.Add(Ed.FilePath); end;
+        begin
+          TouchedSet.Add(Ed.FilePath, True);
+          TouchedFiles.Add(Ed.FilePath);
+        end;
 
       { 1.34.1 (CONV-ENC E2): a file named by --raise-encoding joins the set even when no
         edit touches it, so it is pre-checked, backed up and rolled back with the rest }

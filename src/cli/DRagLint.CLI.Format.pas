@@ -142,10 +142,16 @@ var
 begin
   Target:= AArgs.Target;
   if Target = '' then Target:= AArgs.QName; // fallback: reuse qname slot
-  if Target = '' then begin Writeln('Usage: drag-lint format <file> [--yadf-path PATH] [--dry-run|--diff]');
-  Exit (2 ); end;
-  if not FileExists(Target) then begin Writeln(Format('File not found: %s', [Target]));
-  Exit(2); end;
+  if Target = '' then
+  begin
+    Writeln('Usage: drag-lint format <file> [--yadf-path PATH] [--dry-run|--diff]');
+    Exit (2 );
+  end;
+  if not FileExists(Target) then
+  begin
+    Writeln(Format('File not found: %s', [Target]));
+    Exit(2);
+  end;
 
   if AArgs.ShowDiff then Mode:= fmDiff
   else if AArgs.DryRun then Mode:= fmDryRun

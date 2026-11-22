@@ -2028,8 +2028,11 @@ begin
   { ErrOutput for the same reason as OpenReadOnlyStore's twin above: proptree
     opens WRITABLE by default, so this -- not that one -- is the line a stale
     `proptree --db <old>` actually printed, and it printed it onto stdout. }
-  else begin AOk:= False;
-  Writeln(ErrOutput, Format('index schema v%d < v%d: run "drag-lint index <dir> --db <db>" to migrate', [Found, Expected])); end;
+  else
+  begin
+    AOk:= False;
+    Writeln(ErrOutput, Format('index schema v%d < v%d: run "drag-lint index <dir> --db <db>" to migrate', [Found, Expected]));
+  end;
 end;
 
 { XERJ item 2: the one place a capped list says so. AOmitted is the number of

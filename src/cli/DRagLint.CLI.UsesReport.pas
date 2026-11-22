@@ -118,15 +118,21 @@ var
   begin
     if Length(AArgs.DbPaths) > 0 then DbList:= AArgs.DbPaths
     else if AArgs.DbPath <> '' then DbList:= TArray<string>.Create(AArgs.DbPath)
-    else begin Writeln(ErrOutput, 'uses-report: need at least one --db');
-    Result:= 2;
-    Exit; end;
+    else
+    begin
+      Writeln(ErrOutput, 'uses-report: need at least one --db');
+      Result:= 2;
+      Exit;
+    end;
     SetLength(Stores, 0);
     for i:= 0 to High(DbList) do
     begin
       Path:= DbList[i];
-      if not TFile.Exists(Path) then begin Writeln(ErrOutput, 'uses-report: db not found, skipping: ', Path);
-      Continue; end;
+      if not TFile.Exists(Path) then
+      begin
+        Writeln(ErrOutput, 'uses-report: db not found, skipping: ', Path);
+        Continue;
+      end;
       { Read-only, never Migrate: this is a report. The deps-report twin, fixed
         the same day for the same reason (INBOX-read-verbs-migrate-the-db);
         Result:= 2 + Exit is this nested procedure's existing refusal shape. }
@@ -134,8 +140,11 @@ var
       var S: ISymbolStore:= OpenReadOnlyStore(Path, RoOk);
       if (not RoOk) or (S = nil) then
       begin
-        if (not RoOk) and StaleDbRefusesRun(AArgs, 'uses-report', Path) then begin Result:= 2;
-        Exit; end;
+        if (not RoOk) and StaleDbRefusesRun(AArgs, 'uses-report', Path) then
+        begin
+          Result:= 2;
+          Exit;
+        end;
         Continue;
       end;
       SetLength(Stores, Length(Stores) + 1);
@@ -151,8 +160,11 @@ var
     Base:= APath;
     while Base <> '' do
     begin
-      if CharInSet(Base[Length(Base)], ['\','/']) then begin Delete(Base, Length(Base), 1);
-      Break; end;
+      if CharInSet(Base[Length(Base)], ['\','/']) then
+      begin
+        Delete(Base, Length(Base), 1);
+        Break;
+      end;
       Break;
     end;
     Result:= LowerCase(ExtractFileName(Base));
@@ -227,8 +239,11 @@ var
           while not QUses.Eof do
           begin
             LocalFileId:= QUses.FieldByName('file_id').AsLargeInt;
-            if not FileIdToGlobal.TryGetValue( (Int64(StoreIdx) shl 40) or LocalFileId, GlobalIdx) then begin QUses.Next;
-            Continue; end;
+            if not FileIdToGlobal.TryGetValue( (Int64(StoreIdx) shl 40) or LocalFileId, GlobalIdx) then
+            begin
+              QUses.Next;
+              Continue;
+            end;
 
             Edge.UnitName    := QUses.FieldByName('unit_name'     ).AsString;
             Edge.UnitNameNorm:= QUses.FieldByName('unit_name_norm').AsString;
@@ -334,8 +349,11 @@ var
         { Skip external rows when not requested, but DO still mark visited
             so we don't repeat them later via a different chain. }
       end
-      else begin EmitCsvRow(SourceMeta.Stem, Item.UsedUnit, Item.Depth, Item.Section, Item.Via, Item.External);
-      Inc(ARowCount); end;
+      else
+      begin
+        EmitCsvRow(SourceMeta.Stem, Item.UsedUnit, Item.Depth, Item.Section, Item.Via, Item.External);
+        Inc(ARowCount);
+      end;
 
       if Item.External then Continue;
       if Item.Depth >= MaxDepth then Continue;
@@ -380,8 +398,11 @@ begin
   if not ExplicitDbsExist(AArgs, 'uses-report') then Exit(2);
   Result:= 0;
 
-  if AArgs.Output = '' then begin Writeln(ErrOutput, 'uses-report: --output <path.csv> is required');
-  Exit(2); end;
+  if AArgs.Output = '' then
+  begin
+    Writeln(ErrOutput, 'uses-report: --output <path.csv> is required');
+    Exit(2);
+  end;
 
   MaxDepth:= AArgs.Depth;
   if MaxDepth <= 0 then MaxDepth:= 50;
@@ -394,8 +415,11 @@ begin
   try
     OpenStores;
     if Result <> 0 then Exit;
-    if Length(Stores) = 0 then begin Writeln(ErrOutput, 'uses-report: no usable DB');
-    Exit(2); end;
+    if Length(Stores) = 0 then
+    begin
+      Writeln(ErrOutput, 'uses-report: no usable DB');
+      Exit(2);
+    end;
 
     LoadFilesAndEdges;
 
@@ -450,15 +474,21 @@ var
   begin
     if Length(AArgs.DbPaths) > 0 then DbList:= AArgs.DbPaths
     else if AArgs.DbPath <> '' then DbList:= TArray<string>.Create(AArgs.DbPath)
-    else begin Writeln(ErrOutput, 'deps-report: need at least one --db');
-    Result:= 2;
-    Exit; end;
+    else
+    begin
+      Writeln(ErrOutput, 'deps-report: need at least one --db');
+      Result:= 2;
+      Exit;
+    end;
     SetLength(Stores, 0);
     for i:= 0 to High(DbList) do
     begin
       Path:= DbList[i];
-      if not TFile.Exists(Path) then begin Writeln(ErrOutput, 'deps-report: db not found, skipping: ', Path);
-      Continue; end;
+      if not TFile.Exists(Path) then
+      begin
+        Writeln(ErrOutput, 'deps-report: db not found, skipping: ', Path);
+        Continue;
+      end;
       { Read-only, never Migrate: this is a report. Same repair and same reason
         as DoUsages (INBOX-read-verbs-migrate-the-db). Result:= 2 + Exit is this
         nested procedure's existing way of refusing; the body checks it. }
@@ -466,8 +496,11 @@ var
       var S: ISymbolStore:= OpenReadOnlyStore(Path, RoOk);
       if (not RoOk) or (S = nil) then
       begin
-        if (not RoOk) and StaleDbRefusesRun(AArgs, 'deps-report', Path) then begin Result:= 2;
-        Exit; end;
+        if (not RoOk) and StaleDbRefusesRun(AArgs, 'deps-report', Path) then
+        begin
+          Result:= 2;
+          Exit;
+        end;
         Continue;
       end;
       SetLength(Stores, Length(Stores) + 1);
@@ -507,8 +540,11 @@ var
         for G:= Low(TDepsGroup) to High(TDepsGroup) do
         begin
           var AnyInGroup: Boolean:= False;
-          for Ext in ARep.Externals do if Ext.Group = G then begin AnyInGroup:= True;
-          Break; end;
+          for Ext in ARep.Externals do if Ext.Group = G then
+          begin
+            AnyInGroup:= True;
+            Break;
+          end;
           if not AnyInGroup then Continue;
 
           SB.AppendLine(Format('== %s ==', [DepsGroupStr(G)]));
@@ -661,8 +697,11 @@ begin
   try
     OpenStores;
     if Result <> 0 then Exit;
-    if Length(Stores) = 0 then begin Writeln(ErrOutput, 'deps-report: no usable DB');
-    Exit(2); end;
+    if Length(Stores) = 0 then
+    begin
+      Writeln(ErrOutput, 'deps-report: no usable DB');
+      Exit(2);
+    end;
 
     Opts.Depth      := AArgs.Depth;
     Opts.AllSources := AArgs.AllSources;

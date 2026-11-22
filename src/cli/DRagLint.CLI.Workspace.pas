@@ -140,15 +140,21 @@ var
     SI.hStdInput := INVALID_HANDLE_VALUE;
     FillChar(PI, SizeOf(PI), 0);
     StrPCopy(CmdLineBuf, ACmd);
-    if not CreateProcessW(nil, CmdLineBuf, nil, nil, True, CREATE_NO_WINDOW, nil, nil, SI, PI) then begin Writeln('ERROR: failed to spawn: ', ACmd);
-    Result:= -1;
-    Exit; end;
+    if not CreateProcessW(nil, CmdLineBuf, nil, nil, True, CREATE_NO_WINDOW, nil, nil, SI, PI) then
+    begin
+      Writeln('ERROR: failed to spawn: ', ACmd);
+      Result:= -1;
+      Exit;
+    end;
     // Drain stdout/stderr while child runs
     CloseHandle(WritePipe);
     WritePipe:= INVALID_HANDLE_VALUE;
     repeat
-      if ReadFile(ReadPipe, Buffer, SizeOf(Buffer) - 1, BytesRead, nil) then begin Buffer[BytesRead]:= #0;
-      Write(AnsiString(Buffer)); end
+      if ReadFile(ReadPipe, Buffer, SizeOf(Buffer) - 1, BytesRead, nil) then
+      begin
+        Buffer[BytesRead]:= #0;
+        Write(AnsiString(Buffer));
+      end
       else Break;
     until BytesRead = 0;
     WaitForSingleObject(PI.hProcess, INFINITE);
@@ -189,17 +195,26 @@ begin
     // Try current dir and parents
     CfgPath:= TWorkspaceConfigIO.FindWorkspaceRoot(GetCurrentDir);
     if CfgPath <> '' then CfgPath:= TPath.Combine(CfgPath, WORKSPACE_FILENAME)
-    else begin Writeln('ERROR: .drag-lint-workspace.json not found. ' + 'Use --config <path> or run from a workspace root.');
-    Exit(2); end;
+    else
+    begin
+      Writeln('ERROR: .drag-lint-workspace.json not found. ' + 'Use --config <path> or run from a workspace root.');
+      Exit(2);
+    end;
   end;
-  if not TFile.Exists(CfgPath) then begin Writeln('ERROR: workspace config not found: ', CfgPath);
-  Exit(2); end;
+  if not TFile.Exists(CfgPath) then
+  begin
+    Writeln('ERROR: workspace config not found: ', CfgPath);
+    Exit(2);
+  end;
 
   // --- workspace add ---
   if AArgs.SubCommand = 'add' then
   begin
-    if AArgs.Target = '' then begin Writeln('Usage: drag-lint workspace add <projfile> [--config PATH]');
-    Exit (2 ); end;
+    if AArgs.Target = '' then
+    begin
+      Writeln('Usage: drag-lint workspace add <projfile> [--config PATH]');
+      Exit (2 );
+    end;
     Cfg:= TWorkspaceConfigIO.LoadFromFile(CfgPath);
     NewProj:= Default(TWorkspaceProject);
     NewProj.Path:= AArgs.Target;
@@ -284,10 +299,16 @@ begin
     Writeln(CmdLine);
     CreatePipes;
     var EC:= SpawnSync(CmdLine);
-    if ReadPipe <> INVALID_HANDLE_VALUE then begin CloseHandle(ReadPipe);
-    ReadPipe:= INVALID_HANDLE_VALUE; end;
-    if WritePipe <> INVALID_HANDLE_VALUE then begin CloseHandle(WritePipe);
-    WritePipe:= INVALID_HANDLE_VALUE; end;
+    if ReadPipe <> INVALID_HANDLE_VALUE then
+    begin
+      CloseHandle(ReadPipe);
+      ReadPipe:= INVALID_HANDLE_VALUE;
+    end;
+    if WritePipe <> INVALID_HANDLE_VALUE then
+    begin
+      CloseHandle(WritePipe);
+      WritePipe:= INVALID_HANDLE_VALUE;
+    end;
     if EC = 0 then Inc(SuccessCount)
     else Writeln(Format('WARNING: index returned exit code %d for: %s', [EC, P.Path]));
   end; // for
@@ -306,16 +327,25 @@ var
 begin
   if not ExplicitDbsExist(AArgs, 'forms-csv') then Exit(2);
   DbPaths:= ResolveConsumerDbs(AArgs);
-  if Length(DbPaths) = 0 then begin Writeln(ErrOutput, 'forms-csv: need --db <index.sqlite>');
-  Exit(2); end;
+  if Length(DbPaths) = 0 then
+  begin
+    Writeln(ErrOutput, 'forms-csv: need --db <index.sqlite>');
+    Exit(2);
+  end;
   for P in DbPaths do
-    if not TFile.Exists(P) then begin Writeln(ErrOutput, 'forms-csv: db not found: ', P);
-    Exit(2); end;
+    if not TFile.Exists(P) then
+    begin
+      Writeln(ErrOutput, 'forms-csv: db not found: ', P);
+      Exit(2);
+    end;
   try
     Csv:= DRagLint.FormsMap.GenerateFormsCsv(DbPaths, AArgs.ProjectPath, AArgs.RootForm);
   except
-    on E: Exception do begin Writeln(ErrOutput, 'forms-csv: ', E.Message);
-    Exit(1); end;
+    on E: Exception do
+    begin
+      Writeln(ErrOutput, 'forms-csv: ', E.Message);
+      Exit(1);
+    end;
   end;
   if AArgs.Output <> '' then
   begin

@@ -104,8 +104,11 @@ begin
   // Walking every db is still the right answer: the qname may live in any of
   // them, and "not in the primary" is not "nowhere".)
   Dbs:= ResolveConsumerDbs(AArgs);
-  if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.');
-  Exit(2); end;
+  if Length(Dbs) = 0 then
+  begin
+    Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.');
+    Exit(2);
+  end;
 
   Store := nil;
   UsedDb:= '';
@@ -123,8 +126,11 @@ begin
       Continue; { manifest-resolved: stale DB reported, scan the rest }
     end;
     Syms:= Store.FindSymbolsByQualifiedName(AArgs.QName);
-    if Length(Syms) > 0 then begin UsedDb:= Db;
-    Break; end;
+    if Length(Syms) > 0 then
+    begin
+      UsedDb:= Db;
+      Break;
+    end;
     Store:= nil; { release before trying the next db }
   end;
   if (Length(Syms) = 0) or (Store = nil) then

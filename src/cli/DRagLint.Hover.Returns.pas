@@ -314,8 +314,11 @@ var
   begin
     if AFrom < 1 then AFrom:= 1;
     if ATo > N then ATo:= N;
-    for K:= AFrom to ATo do begin Code[K]:= ' ';
-    NoCom[K]:= COMMENT_MASK; end;
+    for K:= AFrom to ATo do
+    begin
+      Code[K]:= ' ';
+      NoCom[K]:= COMMENT_MASK;
+    end;
   end;
 
   // A STRING LITERAL: gone from the code-only view (a mutation "found" inside
@@ -363,10 +366,13 @@ begin
         Inc(I);
         Continue;
       end;
-      if Ln[I] = '{' then begin InBrace:= True;
-      Blank(I, I);
-      Inc(I);
-      Continue; end;
+      if Ln[I] = '{' then
+      begin
+        InBrace:= True;
+        Blank(I, I);
+        Inc(I);
+        Continue;
+      end;
       if (Ln[I] = '(') and (I < N) and (Ln[I + 1] = '*') then
       begin
         InParenStar:= True;
@@ -387,8 +393,11 @@ begin
         begin
           if Ln[I] = '''' then
           begin
-            if (I < N) and (Ln[I + 1] = '''') then begin Inc(I, 2);
-            Continue; end;
+            if (I < N) and (Ln[I + 1] = '''') then
+            begin
+              Inc(I, 2);
+              Continue;
+            end;
             Inc(I);
             Break;
           end;
@@ -803,8 +812,11 @@ begin
       begin
         if ARest[I] = '''' then
         begin
-          if (I < N) and (ARest[I + 1] = '''') then begin Inc(I, 2);
-          Continue; end;
+          if (I < N) and (ARest[I + 1] = '''') then
+          begin
+            Inc(I, 2);
+            Continue;
+          end;
           Inc(I);
           Closed:= True;
           Break;
