@@ -81,6 +81,7 @@ type
 implementation
 
 uses
+  System.Math,
   DRagLint.Core.ForwardStub { PairForwardStubs -- BuildInventory }
   ;
 
@@ -284,7 +285,7 @@ var
 
   function InDeclSpan(const AInfo: TClassInfo; ALine: Integer): Boolean;
   begin
-    Result:= (ALine >= AInfo.DeclLine) and (ALine <= AInfo.DeclEndLine);
+    Result:= InRange(ALine, AInfo.DeclLine, AInfo.DeclEndLine);
   end;
 
   procedure BuildInventory;
@@ -657,7 +658,7 @@ var
       begin
         S:= Integer(P.StartPoint.row) + 1;
         E:= Integer(P.EndPoint.row) + 1;
-        if (ALine >= S) and (ALine <= E) then Exit(P);
+        if InRange(ALine, S, E) then Exit(P);
       end;
     end;
 
@@ -793,7 +794,7 @@ var
       begin
         S:= Integer(P.StartPoint.row) + 1;
         E:= Integer(P.EndPoint.row) + 1;
-        if (ALine >= S) and (ALine <= E) then Exit(P);
+        if InRange(ALine, S, E) then Exit(P);
       end;
     end;
 
