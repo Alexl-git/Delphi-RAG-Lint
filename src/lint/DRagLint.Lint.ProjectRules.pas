@@ -631,7 +631,7 @@ var
       implementation-section, so there was no interface edge to remove and the
       reader was being sent to look for one that does not exist. }
     if Length(Result) = 0 then Exit;
-    if AnyIntf then
+    if AnyIntf then  // dl:ok ifthen-to-if-expression@9d7c -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
       Result:= Result + ['      => break it at an edge marked BREAK HERE: move those declarations into a',
                          '         new unit that both sides use. That is the only edge forcing the cycle.']
     else
@@ -723,7 +723,7 @@ var
                 var K: string:= IntToStr(Comp[Ai]) + '|' + IntToStr(Comp[Bi]);
                 if EdgeHasImpl.ContainsKey(K) then HasImplEdge:= True;
               end;
-          if HasImplEdge then
+          if HasImplEdge then  // dl:ok ifthen-to-if-expression@b0d1 -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
             F.Message := Format('Circular unit dependency among %d units: %s -- it already routes through an implementation-section uses, so it compiles; this is a coupling smell, not a build error. Extract the shared code into a new unit (moving another use to the implementation section will NOT break this cycle)', [Comp.Count, Names])
               + CycleFixPointer('', LowerCase(ChangeFileExt(ExtractFileName(AStore.GetFilePath(Anchor)), '')))
           else
@@ -1450,7 +1450,7 @@ begin
                 F.EndLine  := L;
                 F.EndCol  := P + Length(CTag);
                 var Why: string;
-                if not InUses then
+                if not InUses then  // dl:ok ifthen-to-if-expression@3063 -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
                   Why:= 'it is not in this unit''s uses clause'
                 else
                   Why:= 'this unit draws no globals or consts from it';
@@ -1800,7 +1800,7 @@ var
       if F.StartCol <= 0 then F.StartCol:= 1;
       F.EndLine  := Masking[0].StartLine;
       F.EndCol   := F.StartCol + Length(Masking[0].Name);
-      if NProject >= 2 then
+      if NProject >= 2 then  // dl:ok ifthen-to-if-expression@ddc6 -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
         F.Message:= Format(
           '%s is declared at interface level in %d project units AND in library unit %s (%s) -- ' +
           'three or more declarations of one name; an unqualified %s resolves through the uses ' +
@@ -1933,7 +1933,7 @@ begin
           damage it has already done, which is a message concern. Escalating the
           SEVERITY on `Differ` would also make the rule's severity depend on
           NormSig being perfect, and NormSig has now been wrong once. }
-        if Differ then
+        if Differ then  // dl:ok ifthen-to-if-expression@1e05 -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
           F.Message:= Format(
             '%s is declared at interface level in %d units as %s (%s) -- and THE DECLARATIONS ' +
             'DIFFER (%s), so you are compiling one of two different things and which one ' +
@@ -2244,7 +2244,7 @@ var
     P: Integer;
   begin
     P:= Pos('.', AProp);
-    if P > 0 then Result:= Copy(AProp, 1, P - 1) else Result:= AProp;
+    if P > 0 then Result:= Copy(AProp, 1, P - 1) else Result:= AProp;  // dl:ok ifthen-to-if-expression@dac2 -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
   end;
 
 var
@@ -2915,7 +2915,7 @@ var
     end;
     for Idx:= 0 to 1 do
     begin
-      if Idx = 0 then S:= AStore else S:= ALibStore;
+      if Idx = 0 then S:= AStore else S:= ALibStore;  // dl:ok ifthen-to-if-expression@11b5 -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
       if S = nil then Continue;
       for Sy in S.FindSymbolsByExactName(AName) do
       begin
@@ -2953,7 +2953,7 @@ var
     if TypeMemo.TryGetValue(Key, Result) then Exit;
     Behav := False;
     if Climb(Trim(ATypeName), 0, Behav) then
-      if Behav then Result:= mcBehavioural else Result:= mcResource
+      if Behav then Result:= mcBehavioural else Result:= mcResource  // dl:ok ifthen-to-if-expression@c0ba -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
     else
       Result:= mcUnresolved;
     TypeMemo.AddOrSetValue(Key, Result);
@@ -3234,7 +3234,7 @@ begin
       { THE CURE CLAUSE IS CHOSEN BY THE CARRYING GLOBAL'S TYPE, and only an
         interface earns the word "inject" -- see the remarks above. }
       if E.GlobalCount = 1 then
-        if E.AllInterfaceTyped then
+        if E.AllInterfaceTyped then  // dl:ok ifthen-to-if-expression@ddc6 -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
           F.Message:= Format(
             '%s depends on %s for nothing but the global variable %s -- it is ' +
             'interface-typed, so injecting or relocating it deletes this uses edge',
@@ -4220,7 +4220,7 @@ begin
   end;
 end; // function
 
-class function TProjectLintRules.Run(const AStore: ISymbolStore; const ARuleId: string;  // dl:ok too-many-parameters@0c17, too-many-locals@4bb7, method-too-long@4707, cyclomatic-complexity@d985, cognitive-complexity@a935 -- REVIEWED 2026-11-21 SLZ-S05: measured 224 (max 65); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+class function TProjectLintRules.Run(const AStore: ISymbolStore; const ARuleId: string;  // dl:ok too-many-parameters@0c17, too-many-locals@4bb7, method-too-long@0e2c, cyclomatic-complexity@d985, cognitive-complexity@a935 -- REVIEWED 2026-11-21 SLZ-S05: 661 lines; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
   const ASiblingStore: TSiblingStoreResolver; const ALibraryStore: ISymbolStore;
   const AOptInRules: TArray<string>; const AOnlyFileId: Int64;
   const AWholeGraph: TFunc<string, TArray<TLintFinding>>; const ASiblingNames: TSiblingProjectLister): TArray<TLintFinding>;
@@ -4326,7 +4326,7 @@ var
     the SQL queries being measured. }
   function Tick: Int64;
   begin
-    if Prof then Result:= TStopwatch.GetTimeStamp else Result:= 0;
+    if Prof then Result:= TStopwatch.GetTimeStamp else Result:= 0;  // dl:ok ifthen-to-if-expression@f71e -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
   end;
 
   procedure ProfLine(const AName: string; ATicks: Int64);
@@ -4416,7 +4416,7 @@ var
     Cached: TArray<string>              ;
     Seen  : TDictionary<string, Boolean>;
     S     : TSymbol                     ;
-    FPath : string                      ;
+    FPath : string                      ;  // dl:ok local-field-prefix@ce6b -- REVIEWED 2026-11-21 SLZ-S05: TLCOM is a metrics local named after the LCOM acronym, not a field; a rename would hide the acronym (fixer renames F-prefixed names unsafely, see RULE-FP.tsv)
     Stem  : string                      ;
   begin
     if StemsOfName.TryGetValue(AName, Cached) then Exit(Cached);
@@ -4912,7 +4912,7 @@ var
     `lint <file>` rule cache); otherwise they compute here, exactly as before. }
   function WholeGraph(const AId: string): TArray<TLintFinding>;
   begin
-    if Assigned(AWholeGraph) then Result:= AWholeGraph(AId)
+    if Assigned(AWholeGraph) then Result:= AWholeGraph(AId)  // dl:ok ifthen-to-if-expression@d7e4 -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
     else Result:= CollectWholeGraphRule(AId, AStore, ALibraryStore);
   end;
 
@@ -5177,7 +5177,7 @@ begin
       -- it only skips computing everyone else's. The relational half (RefdIds /
       RefdNames above) is still built from the whole store.
       tests\autotest\run_lint_file_scoped_loop_parity.ps1 pins it. }
-    if AOnlyFileId > 0 then
+    if AOnlyFileId > 0 then  // dl:ok ifthen-to-if-expression@85e8 -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
       FileIds:= [AOnlyFileId]
     else
       FileIds:= AStore.GetAllFileIds;
@@ -5435,7 +5435,7 @@ begin
             Restricted to unit-level routines (not class methods) so DFM-wired
             event handlers and virtual/override methods are not false positives. }
           if WantRule('unused-public-symbol') and (Sym.Section = 'interface') and (Sym.Kind in [skFunction, skProcedure]) and (Sym.ParentId > 0) and  // dl:ok boolean-expression-complexity@f6ae -- REVIEWED 2026-11-21 SLZ-S05: 5 and/or/xor operators; design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
-            (Pos('override', LowerCase(Sym.Modifiers)) = 0) and not SameText(Sym.Name, 'Register') then
+            (not LowerCase(Sym.Modifiers).Contains('override')) and not SameText(Sym.Name, 'Register') then
           begin
             Parent:= AStore.GetSymbolById(Sym.ParentId);
             if (Parent.Id = Sym.ParentId) and (Parent.Kind = skUnit) then

@@ -1096,7 +1096,7 @@ begin
           if (Id = '') or ById.ContainsKey(Id) then Continue; { builtin/dup wins }
           Sc.Id:= Id;
           Sc.Source:= 'scm';
-          if (Obj.GetValue('category') <> nil) and (Obj.GetValue('category').Value <> '') then
+          if (Obj.GetValue('category') <> nil) and (Obj.GetValue('category').Value <> '') then  // dl:ok ifthen-to-if-expression@7310 -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
             Sc.Category:= Obj.GetValue('category').Value  { optional sidecar key; lets a rule file name its own category (e.g. modernize, policy) }
           else Sc.Category:= ScmCategory(Id);
           Sc.DefaultSeverity:= if Obj.GetValue('severity') <> nil then Obj.GetValue('severity').Value else 'warning';

@@ -839,7 +839,7 @@ end; // begin
 /// emptied-'var'-block collapse depends on the whole section. Per-finding edits
 /// here would delete still-used variables and stack overlapping deletes on one
 /// line, so that grouping is load-bearing, not a tidiness choice.</remarks>
-function BuildAutofixEdits(const AFindings: TArray<TLintFinding>; out AFixableCount: Integer): TArray<TTextEdit>;  // dl:ok method-too-long@8cc3, deep-nesting@8c38, cyclomatic-complexity@a4e8, cognitive-complexity@b858 -- REVIEWED 2026-11-21 SLZ-S05: measured 306 (max 65); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
+function BuildAutofixEdits(const AFindings: TArray<TLintFinding>; out AFixableCount: Integer): TArray<TTextEdit>;  // dl:ok method-too-long@8cc3, deep-nesting@8c38, cyclomatic-complexity@37f2, cognitive-complexity@c732 -- REVIEWED 2026-11-21 SLZ-S05: measured 296 (max 65); design-level finding, not a local equivalent edit; restructuring deferred (risk to the checker behaviour outweighs the gain)
 var
   F    : TLintFinding                    ;
   E    : TTextEdit                       ;

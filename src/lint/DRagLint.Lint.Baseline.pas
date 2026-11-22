@@ -150,7 +150,7 @@ begin
   if ALine < 1 then Exit;
   if not ACache.TryGetValue(AFile, Lines) then
   begin
-    if TFile.Exists(AFile) then
+    if TFile.Exists(AFile) then  // dl:ok ifthen-to-if-expression@5551 -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
       Lines:= TFile.ReadAllLines(AFile, TEncoding.UTF8)
     else
       Lines:= [];

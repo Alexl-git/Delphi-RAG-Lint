@@ -1401,7 +1401,7 @@ begin
     Body:= REVIEW_MARK + ' ' + RuleToken(ARuleId, Hash);
     if Trim(AReason) <> '' then Body:= Body + ' ' + REVIEW_REASON_SEP + ' ' + Trim(AReason);
     Head:= TrimRight(ALineText);
-    if Head = '' then Result:= '// ' + Body else Result:= Head + '  // ' + Body;
+    if Head = '' then Result:= '// ' + Body else Result:= Head + '  // ' + Body;  // dl:ok ifthen-to-if-expression@956d -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
     Exit(TrimRight(Result));
   end;
 
@@ -1508,7 +1508,7 @@ begin
   begin
     { Was there any other comment text before the tag? Prefix still carries the
       `//`, so measure what sits BETWEEN the opener and the tag. }
-    if Trim(Copy(ALineText, CStart, TagPos - 1)) = '' then
+    if Trim(Copy(ALineText, CStart, TagPos - 1)) = '' then  // dl:ok ifthen-to-if-expression@9fd9 -- REVIEWED 2026-11-21 SLZ-S05: the autofix declined this shape (or its result would exceed dcc 1023-char line limit); branches are kept as statements, behaviour identical
       Result:= TrimRight(Copy(ALineText, 1, CStart - 3))  { drop the `//` too }  // dl:ok magic-literal@9872 -- REVIEWED 2026-11-21 SLZ-S05: literal 1,3; each literal is self-describing at its single use site (size/count/index in a table-driven check); a named constant adds no meaning
     else
       Result:= TrimRight(Prefix);

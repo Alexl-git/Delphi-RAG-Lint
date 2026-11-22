@@ -196,7 +196,7 @@ var
   TDIT        : Integer                          ;
   TRFC        : Integer                          ;
   TCBO        : Integer                          ;
-  TLCOM       : Integer                          ;
+  TLCOM       : Integer                          ;  // dl:ok local-var-casing@04fd -- REVIEWED 2026-11-21 SLZ-S05: TLCOM is the acronym LCOM with a T count prefix; PascalCase would read as a type name
   TFanOut     : Integer                          ;
   TFanIn      : Integer                          ;
   TFEnvy      : Integer                          ; { v0.82 feature-envy: minAccess floor }
@@ -640,7 +640,7 @@ var
       T: string ;
     begin
       if ANode.IsNull then Exit;
-      if (not (ANode = ARoot)) and (ANode.NodeType = 'defProc') then Exit; { nested routine excluded }
+      if (not (ANode = ARoot)) and (ANode.NodeType = 'defProc') then Exit; { nested routine excluded }  // dl:ok nonminimal-bool@5274 -- REVIEWED 2026-11-21 SLZ-S05: autofix declined: rewriting to <> needs an operator<> on the node record type, not provable here
       if ANode.NodeType = 'identifier' then
       begin
         T:= LowerCase(NodeText(ANode, PF.Src));

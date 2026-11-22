@@ -614,8 +614,8 @@ begin
     end
     else if T[I] = '#' then
     begin
-      T[I]:= ' '; Inc(I);
-      while (I <= Length(T)) and CharInSet(T[I], ['0'..'9']) do
+      T[I]:= ' ';
+      Inc(I);
       begin
         T[I]:= ' ';
         Inc(I);
