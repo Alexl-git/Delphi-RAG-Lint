@@ -473,8 +473,7 @@ begin
       ParamMod:= ModifierOf(Owner.Signature, ASym.Name);
       if ASym.Signature <> '' then
       begin
-        if ParamMod <> '' then Doc2Sig:= ParamMod + ' ' + ASym.Name + ': ' + ASym.Signature
-        else Doc2Sig:= ASym.Name + ': ' + ASym.Signature;
+        Doc2Sig:= if ParamMod <> '' then ParamMod + ' ' + ASym.Name + ': ' + ASym.Signature else ASym.Name + ': ' + ASym.Signature;
       end
       else if ParamMod <> '' then Doc2Sig:= ParamMod + ' ' + ASym.Name   { untyped var/out }
       else Doc2Sig:= '';

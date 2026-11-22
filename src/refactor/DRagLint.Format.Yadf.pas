@@ -593,8 +593,7 @@ begin
 
   if not TFile.Exists(AFile) then raise EYadfFormatError.CreateFmt('File not found: %s', [AFile]);
 
-  if AYadfPath <> '' then ResolvedYadf:= AYadfPath
-  else ResolvedYadf:= FindYadfPath;
+  ResolvedYadf:= if AYadfPath <> '' then AYadfPath else FindYadfPath;
 
   { ONE not-found message for both routes. The old code had two, and the one
     that fired for an explicit --yadf-path named neither the registry nor the
@@ -602,12 +601,7 @@ begin
     and nothing about how resolution actually works. }
   if (ResolvedYadf = '') or (not TFile.Exists(ResolvedYadf)) then
   begin
-    if ResolvedYadf = '' then
-      Result.StdoutText:= 'YADF.exe not found. Pass --yadf-path <path>, or set HKCU\Software\YADF\ExePath in the registry.'
-    else
-      Result.StdoutText:= System.SysUtils.Format(
-        'YADF.exe not found at: %s. Pass a --yadf-path that exists, or set HKCU\Software\YADF\ExePath in the registry.',
-        [ResolvedYadf]);
+    Result.StdoutText:= if ResolvedYadf = '' then 'YADF.exe not found. Pass --yadf-path <path>, or set HKCU\Software\YADF\ExePath in the registry.' else System.SysUtils.Format( 'YADF.exe not found at: %s. Pass a --yadf-path that exists, or set HKCU\Software\YADF\ExePath in the registry.', [ResolvedYadf]);
     Result.ExitCode    := FMT_NO_YADF;
     Result.ResolvedPath:= ResolvedYadf;
     Exit;

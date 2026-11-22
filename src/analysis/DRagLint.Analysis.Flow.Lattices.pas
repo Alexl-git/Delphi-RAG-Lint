@@ -1818,9 +1818,7 @@ procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
         a method call (exprDot entity) yields '' and every argument then keeps
         the pmUnknown/conservative path. }
       Ent := N.ChildByField('entity');
-      if (not Ent.IsNull) and (Ent.NodeType = 'identifier') then
-        CalleeNm := Trim(NodeStr(Ent, ASrc))
-      else CalleeNm := '';
+      CalleeNm := if (not Ent.IsNull) and (Ent.NodeType = 'identifier') then Trim(NodeStr(Ent, ASrc)) else '';
       if not ArgsN.IsNull then
         for I := 0 to ArgsN.NamedChildCount - 1 do
         begin

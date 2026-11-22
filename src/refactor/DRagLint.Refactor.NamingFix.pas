@@ -403,10 +403,7 @@ end;
 function PascalWord(const AWord: string): string;
 begin
   if AWord = '' then Exit('');
-  if (Length(AWord) > 1) and (AWord = UpperCase(AWord)) then
-    Result:= UpperCase(AWord[1]) + LowerCase(Copy(AWord, 2, MaxInt))
-  else
-    Result:= UpperCase(AWord[1]) + Copy(AWord, 2, MaxInt);
+  Result:= if (Length(AWord) > 1) and (AWord = UpperCase(AWord)) then UpperCase(AWord[1]) + LowerCase(Copy(AWord, 2, MaxInt)) else UpperCase(AWord[1]) + Copy(AWord, 2, MaxInt);
 end;
 
 function ConstCaseCandidates(const AOldName: string; const AConstCase: TArray<string>): TArray<string>;

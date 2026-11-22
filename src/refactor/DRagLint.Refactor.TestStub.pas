@@ -102,8 +102,7 @@ var
   DotPos: Integer;
 begin
   DotPos:= LastDelimiter(ASep, S);
-  if DotPos > 0 then Result:= Copy(S, DotPos + 1, MaxInt)
-  else Result:= S;
+  Result:= if DotPos > 0 then Copy(S, DotPos + 1, MaxInt) else S;
 end;
 
 { True for the symbol kinds that can be the subject of a test. }
@@ -348,14 +347,11 @@ begin
   for I:= 0 to High(T.Params) do ArgNames[I]:= T.Params[I].Name;
   ArgList:= string.Join(', ', ArgNames);
 
-  if T.HostClass <> '' then CallText:= 'Subject.' + T.RoutineName
-  else CallText:= T.UnitName + '.' + T.RoutineName;
+  CallText:= if T.HostClass <> '' then 'Subject.' + T.RoutineName else T.UnitName + '.' + T.RoutineName;
   if ArgList <> '' then CallText:= CallText + '(' + ArgList + ')';
-  if T.IsFunction then CallText:= 'Actual := ' + CallText + ';'
-  else CallText:= CallText + ';';
+  CallText:= if T.IsFunction then 'Actual := ' + CallText + ';' else CallText + ';';
 
-  if AFramework = tfDUnitX then FailCall:= 'Assert.Fail('
-  else FailCall:= 'Fail(';
+  FailCall:= if AFramework = tfDUnitX then 'Assert.Fail(' else 'Fail(';
 
   Sb:= TStringBuilder.Create;
   try

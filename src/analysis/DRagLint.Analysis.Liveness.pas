@@ -150,8 +150,7 @@ begin
     Exit;
 
   Result := Copy(AOut[ABlockIdx]); { start from the block's live-OUT; never alias it }
-  if AIncludeTarget then FirstReplayIdx := AItemIdx
-  else FirstReplayIdx := AItemIdx + 1;
+  FirstReplayIdx := if AIncludeTarget then AItemIdx else AItemIdx + 1;
   for I := Block.Items.Count - 1 downto FirstReplayIdx do
     ApplyItemBackward(Block.Items[I], AVars, ASrc, Result);
 end;

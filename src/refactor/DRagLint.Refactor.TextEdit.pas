@@ -1773,7 +1773,7 @@ function LastSeg(const S: string): string;
 var P: Integer;
 begin
   P:= LastDelimiter('.', S);
-  if P > 0 then Result:= Copy(S, P + 1, MaxInt) else Result:= S;
+  Result:= if P > 0 then Copy(S, P + 1, MaxInt) else S;
 end;
 
 class function TSafeDeleteRefactoring.Build(const AStore: ISymbolStore;

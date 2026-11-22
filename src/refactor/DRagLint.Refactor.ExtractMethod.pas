@@ -576,8 +576,7 @@ begin
 
   if (K = 'statement') or (K = 'exprCall') or (K = 'exprDot') or (K = 'identifier') then
   begin
-    if K = 'exprCall' then Txt:= LowerNodeText(ANode.ChildByField('entity'), ASrc)
-    else Txt:= LowerNodeText(ANode, ASrc);
+    Txt:= if K = 'exprCall' then LowerNodeText(ANode.ChildByField('entity'), ASrc) else LowerNodeText(ANode, ASrc);
     if Txt = 'exit' then Exit('selection contains Exit');
     if (Txt = 'break') or (Txt = 'continue') then
     begin
@@ -740,8 +739,7 @@ begin
   TargetListTo:= LocateStatementList(StmtList, ToLine, CutCompound);
   if TargetList.IsNull or TargetListTo.IsNull then
   begin
-    if CutCompound then ARefuse:= 'selection crosses nesting levels'
-    else ARefuse:= 'selection must be whole statements';
+    ARefuse:= if CutCompound then 'selection crosses nesting levels' else 'selection must be whole statements';
     Exit;
   end;
   if not (TargetList = TargetListTo) then
@@ -1522,7 +1520,7 @@ var
     if N.IsNull or Hit then Exit;
     if (N.NodeType = 'defProc') or (N.NodeType = 'declProc') then
     begin
-      if N.NodeType = 'defProc' then Hdr:= N.ChildByField('header') else Hdr:= N;
+      Hdr:= if N.NodeType = 'defProc' then N.ChildByField('header') else N;
       if not Hdr.IsNull then
       begin
         NameN:= Hdr.ChildByField('name');
@@ -1611,7 +1609,7 @@ begin
   Result:= '';
   if ADeclVar.IsNull then Exit;
   TypeN:= ADeclVar.ChildByField('type');
-  if TypeN.IsNull then TypeStart:= MaxInt else TypeStart:= Integer(TypeN.StartByte);
+  TypeStart:= if TypeN.IsNull then MaxInt else Integer(TypeN.StartByte);
   IdCount:= 0;
   LastId:= Default(TTSNode);
   for I:= 0 to ADeclVar.NamedChildCount - 1 do
@@ -1880,11 +1878,11 @@ begin
     if IsFunc then SigBody:= SigBody + ': ' + OutType;
     SigBody:= SigBody + ';';
 
-    if IsFunc then SigHead:= 'function ' else SigHead:= 'procedure ';
+    SigHead:= if IsFunc then 'function ' else 'procedure ';
     if Sel.IsMethod then SigHead:= SigHead + Sel.OwnerClass + '.';
     SigHead:= SigHead + SigBody;
 
-    if IsFunc then SigBody:= 'function ' + SigBody else SigBody:= 'procedure ' + SigBody;
+    SigBody:= if IsFunc then 'function ' + SigBody else 'procedure ' + SigBody;
 
     { ----- body lines (verbatim source of the run) ----- }
     SrcText:= TEncoding.ANSI.GetString(Src);

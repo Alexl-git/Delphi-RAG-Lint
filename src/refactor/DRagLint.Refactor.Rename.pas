@@ -486,8 +486,7 @@ var
   DotPos: Integer;
 begin
   DotPos:= LastDelimiter('.', S);
-  if DotPos > 0 then Result:= Copy(S, DotPos + 1, MaxInt)
-  else Result:= S;
+  Result:= if DotPos > 0 then Copy(S, DotPos + 1, MaxInt) else S;
 end;
 
 // Compare two TRenameEdit values: FilePath ASC, Line DESC, Col DESC.

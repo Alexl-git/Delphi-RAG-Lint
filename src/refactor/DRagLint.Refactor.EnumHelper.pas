@@ -514,7 +514,7 @@ begin
   Result:= Default(TEnumHelperGen);
   EnumName  := AResolve.EnumName;
   HelperName:= EnumName + 'Helper';
-  if Length(AResolve.Members) > 0 then FirstMember:= AResolve.Members[0] else FirstMember:= '';
+  FirstMember:= if Length(AResolve.Members) > 0 then AResolve.Members[0] else '';
   WantsDesc := AResolve.DescArrayName <> '';
 
   DeclSb:= TStringBuilder.Create;
@@ -763,12 +763,7 @@ begin
   if Res.HasHelper then
   begin
     Result.Action:= ehaExists;
-    if Res.HelperSameUnit then
-      Result.Message:= Format('helper for "%s" already exists in the same unit (%s)',
-        [Res.EnumName, Res.EnumFilePath])
-    else
-      Result.Message:= Format('helper for "%s" already exists in unit "%s"',
-        [Res.EnumName, Res.HelperUnitPath]);
+    Result.Message:= if Res.HelperSameUnit then Format('helper for "%s" already exists in the same unit (%s)', [Res.EnumName, Res.EnumFilePath]) else Format('helper for "%s" already exists in unit "%s"', [Res.EnumName, Res.HelperUnitPath]);
     Exit;
   end;
 

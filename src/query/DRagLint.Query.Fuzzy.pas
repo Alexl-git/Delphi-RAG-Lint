@@ -89,8 +89,7 @@ begin
     RowCurr[0]:= i;
     for j:= 1 to Lb do
     begin
-      if LowA[i] = LowB[j] then Cost:= 0
-      else Cost:= 1;
+      Cost:= if LowA[i] = LowB[j] then 0 else 1;
       Above:= RowPrev[j] + 1;
       Left:= RowCurr[j - 1] + 1;
       Diag:= RowPrev[j - 1] + Cost;

@@ -581,13 +581,7 @@ const
   compile-time case the sentence describes. }
 function StaleRefMessage(const pVerb, pQName, pKind: string): string;
 begin
-  if SameText(pVerb, VERB_CHANGED) and SameText(pKind, 'enum_value') then
-    Result:= Format('the edited unit %s %s; this reference still compiles, but ' +
-      'the member ordinal has moved -- any ordinal already persisted or ' +
-      'transmitted now means a different member', [pVerb, pQName])
-  else
-    Result:= Format('the edited unit %s %s; this reference will not compile ' +
-      'until it is updated', [pVerb, pQName]);
+  Result:= if SameText(pVerb, VERB_CHANGED) and SameText(pKind, 'enum_value') then Format('the edited unit %s %s; this reference still compiles, but ' + 'the member ordinal has moved -- any ordinal already persisted or ' + 'transmitted now means a different member', [pVerb, pQName]) else Format('the edited unit %s %s; this reference will not compile ' + 'until it is updated', [pVerb, pQName]);
 end;
 
 { One pass over one list. Called twice so the VERB is decided by which list the
@@ -666,10 +660,7 @@ var
   P: Integer;
 begin
   P:= LastDelimiter('.', pQName);
-  if P > 0 then
-    Result:= Copy(pQName, P + 1, MaxInt)
-  else
-    Result:= pQName;
+  Result:= if P > 0 then Copy(pQName, P + 1, MaxInt) else pQName;
 end;
 
 { Would a bare-name join for S be AMBIGUOUS?
@@ -763,10 +754,7 @@ begin
           var is `read`, and a var may also be written. Anything else -- a
           member-access on a removed TYPE, say -- is left alone rather than
           guessed at. }
-        if IsTypeKind(O.Kind) then
-          Want:= SameText(Ref.Kind, 'type_use') or SameText(Ref.Kind, 'read')
-        else
-          Want:= SameText(Ref.Kind, 'read') or SameText(Ref.Kind, 'write');
+        Want:= if IsTypeKind(O.Kind) then SameText(Ref.Kind, 'type_use') or SameText(Ref.Kind, 'read') else SameText(Ref.Kind, 'read') or SameText(Ref.Kind, 'write');
         if not Want then
           Continue;
 
@@ -942,10 +930,7 @@ begin
   { Said out loud rather than left to a JSON field the text reader never sees:
     this dependent changed on disk after the index was built, so the LINE is
     not to be trusted even though the finding is. }
-  if pUnchecked then
-    Result:= '   (UNCHECKED: this file changed since it was indexed)'
-  else
-    Result:= '';
+  Result:= if pUnchecked then '   (UNCHECKED: this file changed since it was indexed)' else '';
 end;
 
 function QNameArray(const pSymbols: TArray<TBaselineSymbol>): TJSONArray;
@@ -1640,10 +1625,7 @@ begin
           compiling a dependent for a DIFFERENT platform than the index was
           built for would compare two different define profiles. So the index's
           platform is the default, and an explicit --platform overrides it. }
-        if pOptions.Platform <> '' then
-          EffPlatform:= pOptions.Platform
-        else
-          EffPlatform:= IndexSide.Profile.Platform;
+        EffPlatform:= if pOptions.Platform <> '' then pOptions.Platform else IndexSide.Profile.Platform;
         Report.Findings := Report.Findings +
           CompileDependents(pOptions, EffPlatform, pCompile, Closure, RawBytes,
             Unchecked, ShadowUsed);

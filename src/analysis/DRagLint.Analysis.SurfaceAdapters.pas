@@ -234,10 +234,7 @@ function TIndexerProfile.Describe: string;
 var
   VersionText: string;
 begin
-  if ExtractorVersion = '' then
-    VersionText:= '<unknown>'
-  else
-    VersionText:= ExtractorVersion;
+  VersionText:= if ExtractorVersion = '' then '<unknown>' else ExtractorVersion;
   Result:= Format('v=%s schema=%d', [VersionText, SchemaVersion]);
 end;
 

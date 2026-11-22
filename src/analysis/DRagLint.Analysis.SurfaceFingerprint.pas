@@ -139,10 +139,7 @@ const
 
 function BoolBit(const pValue: Boolean): string;
 begin
-  if pValue then
-    Result:= '1'
-  else
-    Result:= '0';
+  Result:= if pValue then '1' else '0';
 end;
 
 function IsSurfaceKind(const pKind: TSymbolKind): Boolean;

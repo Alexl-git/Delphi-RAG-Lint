@@ -556,8 +556,7 @@ begin
   { 1. Both bounds are integer literals -- the original rule, unchanged. }
   if TryStrToInt(LowTxt, LowVal) and TryStrToInt(HighTxt, HighVal) then
   begin
-    if IsDownto then Result := LowVal >= HighVal
-    else Result := LowVal <= HighVal;
+    Result := if IsDownto then LowVal >= HighVal else LowVal <= HighVal;
     Exit;
   end;
 
@@ -777,7 +776,7 @@ var
   Parts: TArray<string>;
 begin
   Parts := DottedSegments(AText);
-  if Length(Parts) = 0 then Result := '' else Result := Parts[High(Parts)];
+  Result := if Length(Parts) = 0 then '' else Parts[High(Parts)];
 end;
 
 { C14. True when a routine declared in the tree under ARoot is named AName
@@ -884,7 +883,7 @@ var
   Parts         : TArray<string>;
   Kind          : Integer;
 begin
-  if AName = 'abort' then Kind := BareAbortKind else Kind := BareHaltKind;
+  Kind := if AName = 'abort' then BareAbortKind else BareHaltKind;
   if Kind = 0 then
   begin
     { The unit root, and the OUTERMOST routine: a nested routine inherits the
@@ -907,8 +906,7 @@ begin
     else
     begin
       P := Outer.ChildByField('header');
-      if P.IsNull then Parts := nil
-      else Parts := DottedSegments(NodeStr(P.ChildByField('name'), Cfg.Src));
+      Parts := if P.IsNull then nil else DottedSegments(NodeStr(P.ChildByField('name'), Cfg.Src));
       if (Length(Parts) >= 2) and not ClassChainLacks(Root, Cfg.Src, Parts[High(Parts) - 1], AName) then
         Kind := 2;
     end;
@@ -1467,10 +1465,7 @@ begin
           for var BIdx := BodyFirst to BodyLast do
             if not DivertBlocks.ContainsKey(BIdx) then
               Cfg.Blocks[BIdx].AddSucc(HdrIdx);
-          if ANode.NamedChild(I).NodeType = 'exceptionHandler' then
-            ExcAfter := EmitStmt(HdrIdx, ANode.NamedChild(I).ChildByField('body'))
-          else
-            ExcAfter := EmitStmt(HdrIdx, ANode.NamedChild(I));
+          ExcAfter := if ANode.NamedChild(I).NodeType = 'exceptionHandler' then EmitStmt(HdrIdx, ANode.NamedChild(I).ChildByField('body')) else EmitStmt(HdrIdx, ANode.NamedChild(I));
           { A handler that DIVERTS (exit / raise / break / continue -> EmitStmt
             returns -1) has no fallthrough, and wiring its ENTRY to the follow
             block anyway re-created the very path that cannot happen: the
