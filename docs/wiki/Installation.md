@@ -55,6 +55,10 @@ Win32 parser DLLs on `PATH` dies at process start with `0xC000007B`
 
 ---
 
+## First library index (heavy CPU, one-time)
+
+After the first install, DL builds the platform library index in the background: it parses every RTL, VCL, FireDAC and component unit on your library and browsing paths. This is heavy, CPU-bound work. On our development machine it took about 2.5 hours for Win32 and about 2.6 hours for Win64; yours may be faster or slower. Windows stays usable meanwhile, just busy. It is a one-time cost. Afterwards DL indexes incrementally and only re-reads the units that changed. An update that changes how DL reads source code rebuilds the library index once more; the release notes say when that applies.
+
 ## 2. Build your first index
 
 The linter works on a bare `.pas` file, but navigation, callers, impact analysis
