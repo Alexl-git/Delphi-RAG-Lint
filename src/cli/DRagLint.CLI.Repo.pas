@@ -79,6 +79,7 @@ const
   LOCAL_INFO    = 1;
   LOCAL_BACKUP  = 2;
   LOCAL_RESTORE = 3;
+  LOCAL_ALTER   = 4;
   FB_IMPORT     = 0;
   { positions in the --save-form value list of RepoOrmVerb }
   SAVE_FORM_LEGACY  = 0;
@@ -403,12 +404,12 @@ begin
   if MatchText(pSub, ['gen-const', 'check-const']) then // 1.53 FR-CONSTGEN / FR-PRELOAD
     Exit(if SameText(pSub, 'gen-const') then RunRepoGenConst(Path, pOutFile) else RunRepoCheckConst(Path));
   if IsRepoSchemaSub(pSub) then Exit(RunRepoSchemaVerb(pSub, Path, pConnection, pJson)); // 1.53 FR-SCHEMA: seed-fb, refresh-schema
-  if SameText(pSub, SUB_ALTER_TABLE) then Exit(RunRepoAlterTable(Path, pConnection, pJson)); // 1.54 TT-ALTER
-  case IndexText(pSub, ['init', 'info', 'backup', 'restore']) of
+  case IndexText(pSub, ['init', 'info', 'backup', 'restore', SUB_ALTER_TABLE]) of
     LOCAL_INIT: Result:= RepoInit(Path);
     LOCAL_INFO: Result:= RepoInfo(Path, pJson);
     LOCAL_BACKUP: Result:= RepoBackup(Path, pOutFile);
     LOCAL_RESTORE: Result:= RepoRestore(Path, pInFile, pReplace);
+    LOCAL_ALTER: Result:= RunRepoAlterTable(Path, pConnection, pJson); // 1.54 TT-ALTER
   else
     Result:= RepoFbVerb(pSub, Path, pConnection, pReplace);
   end;
