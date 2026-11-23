@@ -26,7 +26,8 @@ try {
   # The engine units live in many (nested) folders and the list is too long for one command line:
   # a .cfg beside a COPY of the dpr carries the search path.
   $SrcRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\src')).Path
-  $dirs = @(Get-ChildItem $SrcRoot -Directory -Recurse | ForEach-Object { $_.FullName })
+  # Source folders only: a main tree also holds build output (Win32\Debug\*.dcu), and a Win32 dcu found first is F2048.
+  $dirs = @(Get-ChildItem $SrcRoot -Directory -Recurse | Where-Object { Get-ChildItem $_.FullName -Filter *.pas -File | Select-Object -First 1 } | ForEach-Object { $_.FullName })
   $dirs += (Resolve-Path (Join-Path $PSScriptRoot '..\..\third_party\delphi-tree-sitter')).Path
   Copy-Item $Dpr (Join-Path $WorkDir $DprName)
   $cfg = @('-NSSystem;Winapi;System.Win;Data;Data.Win', ('-U"{0}"' -f ($dirs -join ';')), ('-E"{0}"' -f $WorkDir), ('-N0"{0}"' -f $DcuDir))
