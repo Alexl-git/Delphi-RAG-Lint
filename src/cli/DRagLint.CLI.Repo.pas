@@ -481,8 +481,8 @@ begin
   if not ResolveRepoPath(pRepo, pProject, Path) then Exit(if SameText(pSub, 'check-const') then EXIT_FORMAT else EXIT_FAIL);
   if MatchText(pSub, ['gen-orm', 'update-orm', 'gen-dataservice']) then Exit(RepoOrmVerb(pSub, Path));
   if IsRepoModelSub(pSub) then Exit(RunRepoModelVerb(pSub, Path, pJson)); // 1.53 FR-MODEL: migrate, check
-  if SameText(pSub, 'gen-const') then Exit(RunRepoGenConst(Path, pOutFile)); // 1.53 FR-CONSTGEN
-  if SameText(pSub, 'check-const') then Exit(RunRepoCheckConst(Path)); // 1.53 FR-PRELOAD: 0 current, 1 stale, 2 error
+  if MatchText(pSub, ['gen-const', 'check-const']) then // 1.53 FR-CONSTGEN / FR-PRELOAD
+    Exit(if SameText(pSub, 'gen-const') then RunRepoGenConst(Path, pOutFile) else RunRepoCheckConst(Path));
   case IndexText(pSub, ['init', 'info', 'backup', 'restore']) of
     LOCAL_INIT: Result:= RepoInit(Path);
     LOCAL_INFO: Result:= RepoInfo(Path, pJson);

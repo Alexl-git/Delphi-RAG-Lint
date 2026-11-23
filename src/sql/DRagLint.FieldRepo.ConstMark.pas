@@ -81,7 +81,7 @@ function FormTextHash(const pText: string): string;
 /// <param name="pSource">The .pas text.</param>
 /// <returns>The mark; Overall is '' when the source carries none.</returns>
 /// <remarks>Pure; thread-safe. Reads up to the mark constant only, never the data below it.</remarks>
-function ParseConstMark(const pSource: string): TConstUnitMark;
+function ParseConstMark(const pSource: string): TConstUnitMark;  // dl:ok unused-public-symbol -- REVIEWED 2026-11-23 FR-PRELOAD: the inverse of ConstMarkHeader, asserted directly by tests/fieldrepo/ConstGenTests.dpr
 
 /// <summary>Compares a generated unit file with the repository.</summary>
 /// <param name="pConn">Open repository connection (read only).</param>
@@ -151,12 +151,17 @@ end;
 { The column layout: a column added, removed, resized or retyped changes the generated code too. }
 function LayoutText(const pTable: TRepoTable): string;
 var
+  VSb: TStringBuilder;
   VCol: TRepoColumn;
 begin
-  Result := pTable.Name;
-  for VCol in pTable.Columns do
-    Result := Result + Format(' %s:%d:%d:%d', [VCol.Name, Ord(VCol.Kind), VCol.MaxLen, VCol.PkOrder]);
-  Result := Result + #10;
+  VSb := TStringBuilder.Create(pTable.Name);
+  try
+    for VCol in pTable.Columns do
+      VSb.AppendFormat(' %s:%d:%d:%d', [VCol.Name, Ord(VCol.Kind), VCol.MaxLen, VCol.PkOrder]);
+    Result := VSb.Append(#10).ToString;
+  finally
+    VSb.Free;
+  end;
 end;
 
 function ConstTableMarks(pConn: TFDConnection; const pTables: TArray<TRepoTable>): TArray<TConstTableMark>;
@@ -267,6 +272,7 @@ var
   VTab: TRepoTable;
 begin
   Result := False;
+  pTable := Default(TRepoTable);
   for VTab in pAll do
     if SameText(VTab.Name, pName) then
     begin
