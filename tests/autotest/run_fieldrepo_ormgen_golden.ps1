@@ -9,14 +9,18 @@
   PART 2 (golden, needs a repository imported from the dev database): copies ORM3
   COMMON\OBJECTS\*.PAS, SERVER\*_SERVER.PAS and CLIENT\*_CLIENT.PAS into a work folder (ORM3 is
   only READ), runs update-orm over the COPY and lists per unit:
-    BYTE-IDENTICAL | SAME-IGNORING-BLANKS | SAME-IGNORING-BLANKS-AND-CASE | DIFFERENT regions=<ids>
+    BYTE-IDENTICAL | SAME-IGNORING-BLANKS | SAME-IGNORING-BLANKS-AND-CASE |
+    DELIBERATE-DRIFT deliberate=<ids> | DIFFERENT regions=<ids>
+  DELIBERATE-DRIFT = the region is what TableTools wrote plus the named 1.54 change of that region id
+  and nothing else (LegacyForm in OrmGenTests.dpr turns it back and compares).
   plus OUTSIDE-CHANGED when a byte outside the DB-RAD regions moved (always a FAIL).
   The repository comes from -RepoFile, or is imported with -Connection / $env:DL_TEST_FB_CONNECTION
   (Firebird is only READ). Without either, part 2 prints SKIP.
   Byte parity below 100 percent is reported; -RequireParity makes it a FAIL. Byte parity is not
   reachable on ORM3: its units were re-formatted (aligned, re-cased) after TableTools wrote them.
   -RequireForm (B33, 1.52) is the release gate instead: every unit must be the same ignoring
-  blanks and case, except the units listed in tests\fieldrepo\ormgen-golden-known-drift.txt
+  blanks and case (or DELIBERATE-DRIFT in a region id that file lists with @region, each of which
+  must occur), except the units listed in tests\fieldrepo\ormgen-golden-known-drift.txt
   (repository rows that differ from the unit, or a hand-edited region); a listed unit that is no
   longer DIFFERENT is reported as STALE and also fails, so the list cannot rot.
 
@@ -111,16 +115,24 @@ if ($RepoFile -eq '' -and [string]::IsNullOrWhiteSpace($Connection)) {
     if ($RequireParity -and $same -ne $units) { Write-Host 'ORMGEN GOLDEN: FAIL -- -RequireParity' -ForegroundColor Red; $failed = $true }
     if ($RequireForm) {
       $known = @(Get-Content -LiteralPath (Join-Path $Repo 'tests\fieldrepo\ormgen-golden-known-drift.txt') |
-        Where-Object { $_ -match '^\S' -and $_ -notmatch '^#' } | ForEach-Object { ($_ -split '\s+')[0].ToUpper() })
+        Where-Object { $_ -match '^\S' -and $_ -notmatch '^[#@]' } | ForEach-Object { ($_ -split '\s+')[0].ToUpper() })
+      # 1.54 TT-GENFIX: region ids that may differ ONLY by the named change (OrmGenTests LegacyForm)
+      $okIds = @(Get-Content -LiteralPath (Join-Path $Repo 'tests\fieldrepo\ormgen-golden-known-drift.txt') |
+        Where-Object { $_ -match '^@region\s+\S+' } | ForEach-Object { ($_ -split '\s+')[1] })
+      $seenIds = @($lines | Where-Object { $_ -match '^UNIT ' } | ForEach-Object { [regex]::Match($_, 'deliberate=(.*)$').Groups[1].Value -split ' ' } | Where-Object { $_ } | Sort-Object -Unique)
+      $badIds = @($seenIds | Where-Object { $okIds -notcontains $_ })
+      $staleIds = @($okIds | Where-Object { $seenIds -notcontains $_ })
+      $badIds | ForEach-Object { Write-Host "  UNLISTED deliberate region $_" -ForegroundColor Red }
+      $staleIds | ForEach-Object { Write-Host "  STALE @region entry $_" -ForegroundColor Red }
       $diff = @($lines | Where-Object { $_ -match '^UNIT (\S+) DIFFERENT' } | ForEach-Object { ([regex]::Match($_, '^UNIT (\S+)')).Groups[1].Value.ToUpper() })
       $new = @($diff | Where-Object { $known -notcontains $_ })
       $stale = @($known | Where-Object { $diff -notcontains $_ })
       $new | ForEach-Object { Write-Host "  NEW-DIFFERENT $_" -ForegroundColor Red }
       $stale | ForEach-Object { Write-Host "  STALE known-drift entry $_" -ForegroundColor Red }
-      if ($new.Count -gt 0 -or $stale.Count -gt 0) {
-        Write-Host "ORMGEN GOLDEN FORM: FAIL -- $($new.Count) unlisted DIFFERENT, $($stale.Count) stale" -ForegroundColor Red; $failed = $true
+      if ($new.Count -gt 0 -or $stale.Count -gt 0 -or $badIds.Count -gt 0 -or $staleIds.Count -gt 0) {
+        Write-Host "ORMGEN GOLDEN FORM: FAIL -- $($new.Count) unlisted DIFFERENT, $($stale.Count) stale, $($badIds.Count) unlisted / $($staleIds.Count) stale region ids" -ForegroundColor Red; $failed = $true
       } else {
-        Write-Host "ORMGEN GOLDEN FORM: PASS -- $($units - $diff.Count) / $units same ignoring blanks and case; $($diff.Count) known drift"
+        Write-Host "ORMGEN GOLDEN FORM: PASS -- $($units - $diff.Count) / $units same ignoring blanks and case (deliberate regions: $($seenIds -join ' ')); $($diff.Count) known drift"
       }
     }
   }

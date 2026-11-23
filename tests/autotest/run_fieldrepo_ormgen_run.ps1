@@ -1,0 +1,106 @@
+#Requires -Version 7.3
+<#
+  run_fieldrepo_ormgen_run.ps1 -- lane TT-GENFIX (1.54): COMPILES AND RUNS code the ORM generator
+  (DRagLint.FieldRepo.OrmGen) writes, against the stub units of tests\fieldrepo\ormgen.
+    1. --emit-fixture: i/u units of three tables and the _SERVER / _CLIENT units of two.
+    2. new\ : the units as generated. Assign and AssignTo must really copy.
+    3. old\ : the same units with the 'with Source as T do' / 'with Dest as T do' headers TableTools
+       wrote around DB-RAD 4 / 6 (regenerated regions land inside those in existing units).
+       The same program must pass.
+    4. lint of the units in new\ : 0 for the rules of the 2026-11-23 owner rulings. Positive
+       control: old\ and ormgen\LintBad.pas must make every one of those rules fire.
+  Run: pwsh -File tests\autotest\run_fieldrepo_ormgen_run.ps1 [-Exe <drag-lint.exe>] [-SkipBuild] [-SkipLint] [-Work <dir>]
+#>
+[CmdletBinding()]
+param([string]$Repo = '', [string]$Exe = '', [switch]$SkipBuild, [switch]$SkipLint, [string]$Work = '')
+. (Join-Path $PSScriptRoot 'lib\WorkDirCleanup.ps1')
+try {
+if (-not $Repo) { $Repo = (Resolve-Path "$PSScriptRoot\..\..").Path }
+if (-not $Exe) { $Exe = Join-Path $Repo 'third_party\dll-win64\drag-lint.exe' }
+$ErrorActionPreference = 'Stop'
+if ($Work -eq '') { $Work = Join-Path $env:TEMP "drag-lint-ormgen-run-$PID" }
+[IO.Directory]::CreateDirectory($Work) | Out-Null
+$stubs = Join-Path $Repo 'tests\fieldrepo\ormgen'
+$script:fail = 0; $script:pass = 0
+function Check([string]$name, [bool]$ok, [string]$detail = '') {
+  if ($ok) { $script:pass++; Write-Host "PASS $name" } else { $script:fail++; Write-Host "FAIL $name $detail" -ForegroundColor Red }
+}
+
+if (-not $SkipBuild) {
+  $bat = Join-Path $Repo 'build\_build_fieldrepo_ormgen_tests_local.bat'
+  $blog = Join-Path $Work 'build.log'
+  Start-Process -FilePath cmd.exe -ArgumentList ('/c ""' + $bat + '" > "' + $blog + '" 2>&1"') -Wait -NoNewWindow
+  if ((Get-Content -LiteralPath $blog -Raw) -notmatch 'BUILD_EXITCODE=0') { Write-Host "ORMGEN RUN: FAIL -- OrmGenTests did not build (log: $blog)" -ForegroundColor Red; exit 1 }
+}
+$gen = Join-Path $Repo 'tests\fieldrepo\OrmGenTests.exe'
+$fx = Join-Path $Work 'fx'
+& { $ErrorActionPreference = 'Continue'; & $gen --emit-fixture $fx *> (Join-Path $Work 'emit.log') }
+Check 'fixture emitted' ($LASTEXITCODE -eq 0) (Get-Content (Join-Path $Work 'emit.log') -Raw)
+
+foreach ($form in 'new', 'old') {
+  $src = Join-Path $fx $form
+  $u = [IO.File]::ReadAllText((Join-Path $src 'uORMFIX.PAS'))
+  if ($form -eq 'old') { Check 'old: the with headers are there' (([regex]::Matches($u, '(?m)^\s*with (Source|Dest) as TmcORMFIX do')).Count -eq 2) }
+  else { Check 'new: no with statement in the full unit' ($u -notmatch '(?mi)^\s*with\s') }
+  $out = Join-Path $Work "bin-$form"
+  [IO.Directory]::CreateDirectory($out) | Out-Null
+  $cbat = Join-Path $Work "compile-$form.bat"
+  $clog = Join-Path $Work "compile-$form.log"
+  [IO.File]::WriteAllText($cbat, ("@echo off`r`ncall `"C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat`"`r`n" +
+    "dcc64 -B -Q -NU`"$out`" -E`"$out`" -U`"$stubs;$src`" -NSSystem;Winapi;System.Win;Data;Vcl `"$stubs\OrmGenAssignRun.dpr`"`r`necho BUILD_EXITCODE=%errorlevel%`r`n"), [Text.Encoding]::ASCII)
+  Start-Process -FilePath cmd.exe -ArgumentList ('/c ""' + $cbat + '" > "' + $clog + '" 2>&1"') -Wait -NoNewWindow
+  $cl = Get-Content -LiteralPath $clog -Raw
+  Check "${form}: generated units compile" ($cl -match 'BUILD_EXITCODE=0') (($cl -split "`n" | Select-String 'Error|Fatal' | Select-Object -First 6) -join ' | ')
+  $gmsg = @($cl -split "`n" | Where-Object { $_ -match '(?i)[iu](ORMFIX|PLAINFIX|EMPTYFIX)(_SERVER|_CLIENT)?\.pas\(\d+\).*(Hint|Warning)' })
+  if ($form -eq 'new') { Check 'new: no compiler hint or warning in a generated unit' ($gmsg.Count -eq 0) ($gmsg -join ' | ') }
+  $bin = Join-Path $out 'OrmGenAssignRun.exe'
+  if (Test-Path -LiteralPath $bin) {
+    $rl = @(& { $ErrorActionPreference = 'Continue'; & $bin 2>&1 | ForEach-Object { "$_" } })
+    $rl | Where-Object { $_ -match '^FAIL' } | ForEach-Object { Write-Host "  ${form}: $_" -ForegroundColor Red }
+    $sum = $rl | Where-Object { $_ -match '^SUMMARY ' } | Select-Object -Last 1
+    Check "${form}: Assign / AssignTo really copy ($sum)" ($sum -match 'pass=27 fail=0$')
+  } else { Check "${form}: program built" $false }
+}
+# ---- lint of the generated units (project DB of its own, dll-win64 engine read-only) ----
+if (-not $SkipLint) {
+  $rules = 'with-hides-outer-symbol', 'with-statement', 'unused-unit-in-uses', 'doc-placeholder', 'is-not-operator', 'unused-local', 'property-accessor-name', 'raise-bare-exception'
+  function Get-LintCounts([string]$dir) {
+    $db = Join-Path $dir 'lint.sqlite'
+    $js = Join-Path $dir 'lint.json'
+    & { $ErrorActionPreference = 'Continue'; & $Exe index --project (Join-Path $dir 'OrmGenAssignRun.dpr') --db $db *> (Join-Path $dir 'index.log') }
+    & { $ErrorActionPreference = 'Continue'; & $Exe lint-all --db $db --enable ($rules -join ',') --json 2> (Join-Path $dir 'lint.err') | Out-File -LiteralPath $js -Encoding ascii }
+    $all = Get-Content -LiteralPath $js -Raw | ConvertFrom-Json
+    $c = @{}
+    $rules | ForEach-Object { $c[$_] = 0 }
+    $c['lines'] = @()
+    foreach ($x in $all) {
+      if ($x.file_path -match '(?i)\\([iu](ORMFIX|PLAINFIX|EMPTYFIX)(_SERVER|_CLIENT)?|LintBad)\.pas$' -and $c.ContainsKey($x.rule)) {
+        $c[$x.rule]++
+        $c['lines'] += "$([IO.Path]::GetFileName($x.file_path)):$($x.start_line) $($x.rule)"
+      }
+    }
+    $c['total'] = @($all).Count
+    return $c
+  }
+  $ld = Join-Path $Work 'lint-new'
+  [IO.Directory]::CreateDirectory($ld) | Out-Null
+  Get-ChildItem -LiteralPath $stubs -File | Where-Object { $_.Name -ne 'LintBad.pas' } | ForEach-Object { [IO.File]::Copy($_.FullName, (Join-Path $ld $_.Name), $true) }
+  Get-ChildItem -LiteralPath (Join-Path $fx 'new') -Filter *.pas -File | ForEach-Object { [IO.File]::Copy($_.FullName, (Join-Path $ld $_.Name), $true) }
+  $c = Get-LintCounts $ld
+  Check "lint ran on the generated units ($($c['total']) findings over the project)" ($c['total'] -gt 0)
+  foreach ($r in $rules) { Check "lint new: $r = 0" ($c[$r] -eq 0) (@($c['lines'] | Where-Object { $_ -match " $r`$" } | Select-Object -First 5) -join ' | ') }
+  # positive control: the same run must be able to report every one of the rules
+  $lb = Join-Path $Work 'lint-bad'
+  [IO.Directory]::CreateDirectory($lb) | Out-Null
+  Get-ChildItem -LiteralPath $ld -File | Where-Object { $_.Extension -match '(?i)\.(pas|dpr)' } | ForEach-Object { [IO.File]::Copy($_.FullName, (Join-Path $lb $_.Name), $true) }
+  [IO.File]::Copy((Join-Path $stubs 'LintBad.pas'), (Join-Path $lb 'LintBad.pas'), $true)
+  $dpr = Join-Path $lb 'OrmGenAssignRun.dpr'
+  [IO.File]::WriteAllText($dpr, [IO.File]::ReadAllText($dpr).Replace('  uPLAINFIX_CLIENT;', "  uPLAINFIX_CLIENT,`r`n  LintBad;"), [Text.Encoding]::ASCII)
+  $c = Get-LintCounts $lb
+  foreach ($r in $rules) { Check "lint control: $r fires on LintBad.pas" ($c[$r] -gt 0) }
+}
+Write-Host "SUMMARY pass=$($script:pass) fail=$($script:fail)"
+if ($script:fail -gt 0) { Write-Host 'ORMGEN RUN: FAIL' -ForegroundColor Red; exit 1 }
+Write-Host 'ORMGEN RUN: PASS' -ForegroundColor Green
+exit 0
+} finally { Remove-WorkDir $Work -Keep:($env:DL_KEEP_WORKDIR -eq '1') }

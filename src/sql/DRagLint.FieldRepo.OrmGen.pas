@@ -13,7 +13,19 @@ unit DRagLint.FieldRepo.OrmGen;  // dl:ok unit-too-large@1be3 -- REVIEWED 2026-1
     'GEN_' + table + '_' + field, as TableTools built it;
   * tables = the distinct TABLE_NAME values of DL_FIELDS_INFO.
   Region update (repo update-orm) rewrites ONLY the lines between a DB-RAD region start and
-  its end; every other byte of the file, line ends included, is kept as it was. }
+  its end; every other byte of the file, line ends included, is kept as it was.
+
+  1.54 TT-GENFIX, deliberate differences from TableTools (owner rulings 2026-11-23):
+  * regions 4 / 6 (Assign / AssignTo) copy from / to the other object. TableTools wrote
+    'fX:= X' inside 'with Source as T do' (and 'X:= fX' inside 'with Dest as T do'), which copies
+    the OTHER object onto itself: nothing reached Self / Dest. The region text names both objects,
+    so it is right inside the old 'with' header of an existing unit too;
+  * region 11 declares the local it needs itself, so the unit header carries none;
+  * region 2: a placeholder DOC_SUMMARY / DOC_REMARKS ('Summary here') becomes a summary built
+    from the row (ColumnSummary);
+  * the accessors of a column NAME are GetNAME / SetNAME; 'reintroduce' takes the place of the
+    old Z prefix (W1010 against TComponent.SetName);
+  * the uses lists of a new unit hold exactly the units its text needs. }
 
 interface
 
@@ -214,6 +226,13 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function IsVarTypeCreatable(const AType: string): Boolean;
+    /// <summary>Region 4 / 6 text for a column the generator creates and frees itself (regions 14 / 15, IsVarTypeCreatable): the object keeps its own list or stream and takes the other one's content.</summary>
+    /// <param name="pCode">Receives the lines.</param>
+    /// <param name="pField">The column; a stream (STPicture) is copied with CopyFrom, a list with Assign / Clear.</param>
+    /// <param name="pDest">Full expression of the object that takes the content (nil: nothing is copied).</param>
+    /// <param name="pSource">Full expression of the object copied from (nil: the destination is emptied).</param>
+    /// <param name="pOther">The typed local; the copy is skipped when it is Self (self-assignment).</param>
+    procedure EmitOwnedCopy(pCode: TStringList; const pField: TOrmField; const pDest, pSource, pOther: string);
     /// <param name="InterfaceObject"><!-- drag-lint:auto type -->TStringList</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -742,6 +761,10 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function FieldCount: Integer;
+    /// <summary>True when the loaded table has a generated column of that name.</summary>
+    /// <param name="pIdent">Identifier form of the column name; letter case does not matter.</param>
+    /// <returns>True for a column of the current field list.</returns>
+    function HasColumn(const pIdent: string): Boolean;
   end;
 
   /// <summary>Kind of a planned file write.</summary>
@@ -802,7 +825,9 @@ function IsOrmRegionEnd(const pLine: string): Boolean;  // dl:ok unused-public-s
 /// <summary>Plans repo update-orm: regenerates the DB-RAD regions of i&lt;T&gt;.PAS and
 /// u&lt;T&gt;.PAS in pCodeDir, u&lt;T&gt;_SERVER.PAS in pServerDir and u&lt;T&gt;_CLIENT.PAS in
 /// pClientDir for each table. A missing file is skipped and named in pSkipped; so is a table
-/// without a FIELD_KIND = 1 row (TableTools would have emptied its regions).</summary>
+/// without a FIELD_KIND = 1 row (TableTools would have emptied its regions), and a u&lt;T&gt; unit
+/// whose old 'with Source' / 'with Dest' header would hide the parameter behind a column named
+/// SOURCE / DEST (repo upgrade-orm-headers first).</summary>
 /// <param name="pRepo">Open repository.</param>
 /// <param name="pCodeDir">Folder of the i/u units (COMMON\OBJECTS).</param>
 /// <param name="pServerDir">Folder of the _SERVER units; '' = skip them.</param>
@@ -827,6 +852,19 @@ function IsOrmRegionEnd(const pLine: string): Boolean;  // dl:ok unused-public-s
 /// </remarks>
 function PlanUpdateOrm(pRepo: TFDConnection; const pCodeDir, pServerDir, pClientDir: string;
   const pTables: TArray<string>; pSkipped: TStrings; pSaveForm: TOrmSaveForm = osfLegacy): TArray<TOrmFileChange>;
+
+/// <summary>Plans repo upgrade-orm-headers: the u&lt;T&gt;.PAS units of pCodeDir with the generated
+/// Assign / AssignTo / Reader headers of TableTools replaced by their 1.54 form
+/// (UpgradeOrmHeaderText). Regions and everything else stay byte for byte.</summary>
+/// <param name="pRepo">Open repository (the table list).</param>
+/// <param name="pCodeDir">Folder of the u units (COMMON\OBJECTS).</param>
+/// <param name="pTables">Tables; empty = every repository table.</param>
+/// <param name="pSkipped">Receives one line per missing unit and per header left alone because it
+/// is not in the generated form; not cleared.</param>
+/// <returns>One entry per existing unit, in table order.</returns>
+/// <exception cref="EOrmGenError">A named table is not in the repository.</exception>
+function PlanUpgradeOrmHeaders(pRepo: TFDConnection; const pCodeDir: string; const pTables: TArray<string>;
+  pSkipped: TStrings): TArray<TOrmFileChange>;
 
 /// <summary>Plans writing one generated unit: compares the lines (joined with CRLF) with the
 /// current file.</summary>
@@ -930,7 +968,11 @@ function OrmJoinLines(const pLines: TStrings): string;  // dl:ok unused-public-s
 implementation
 
 uses
-  DRagLint.Core.Encoding, System.IOUtils,
+  DRagLint.Core.Encoding,
+  DRagLint.FieldRepo.OrmHeaders,
+  System.IOUtils,
+  System.StrUtils,
+  System.RegularExpressions,
   Data.DB,
   FireDAC.Stan.Param;
 
@@ -943,15 +985,17 @@ const
   PAD_NAME = 25;
   PAD_TYPE = 10;
   DB_RAD = 'DB-RAD';
+  { unit that declares the registry enumerations (TableTools named it in its _SERVER template) }
+  ENUM_UNIT = 'MSCTYPES';
   { opening of the VALUES list of section 9A (TableTools tested Length > 9; after the first
     ':FIELD' the length is at least 10, so '> Length(VALUES_OPEN)' decides the same) }
   VALUES_OPEN = 'VALUES (';
 
-{ TableTools AccessorName: fields named NAME clash with TComponent.GetName/SetName
-  (W1010), so they get a 'Z' prefix: GetZNAME / SetZNAME. }
-function AccessorName(const AFieldName: string): string;
+{ SetNAME hides the virtual TComponent.SetName (W1010): the class declaration says so.
+  TableTools renamed both accessors to GetZNAME / SetZNAME instead. }
+function SetterDirective(const pFieldName: string): string;
 begin
-  Result:= if SameText(AFieldName, 'NAME') then 'Z' + AFieldName.ToUpper else AFieldName;
+  Result:= if SameText(pFieldName, 'NAME') then ' reintroduce;' else '';
 end;
 
 { TableTools ToolsAPIHelper.ToLiteral: a Pascal string literal, split into '+'-joined
@@ -1009,6 +1053,123 @@ begin
   finally
     SB.Free;
   end;
+end;
+
+{ DOC_SUMMARY / DOC_REMARKS the author never filled: blank, or the column default of the registry
+  ('Summary here' / 'Remarks here'; the doc-placeholder rule tests the same words). }
+function IsDocPlaceholder(const pText: string): Boolean;
+begin
+  Result:= TRegEx.IsMatch(pText, '^\s*((summary|remarks)\s+here\b|$)', [roIgnoreCase]);
+end;
+
+function XmlText(const pText: string): string;
+begin
+  Result:= pText.Replace('&', '&amp;').Replace('<', '&lt;').Replace('>', '&gt;');
+  Result:= TRegEx.Replace(Result, '[\r\n]+', ' ').Trim;
+end;
+
+{ The summary of a column whose DOC_SUMMARY is a placeholder: its DOCUMENTATION text, or what the
+  row says about it, e.g.  Column CAUSLIST.NAME ("Cause"), part of the primary key. }
+function ColumnSummary(const pTable, pField, pLabel, pDocumentation: string; pIsKey: Boolean): string;
+begin
+  if pDocumentation.Trim <> '' then
+    Exit(XmlText(pDocumentation));
+  Result:= 'Column ' + pTable + '.' + pField;
+  if (pLabel.Trim <> '') and not SameText(pLabel.Trim, pField) then
+    Result:= Result + ' ("' + XmlText(pLabel) + '")';
+  Result:= Result + (if pIsKey then ', part of the primary key.' else '.');
+end;
+
+procedure AddUnit(pUnits: TStrings; const pUnit: string);
+begin
+  if pUnits.IndexOf(pUnit) < 0 then
+    pUnits.Add(pUnit);
+end;
+
+{ the units that declare the column types the generated i / u unit names }
+procedure AddTypeUnits(pUnits: TStrings; pFields: TObjectList<TOrmField>);
+const
+  TYPE_UNITS: array [0 .. 6] of array [0 .. 1] of string = (
+    ('TStringList', 'System.Classes'),
+    ('TBytes', 'System.SysUtils'),
+    ('TPicture', 'Vcl.Graphics'),
+    ('TSQLTimeStamp', 'Data.SqlTimSt'),
+    ('TSQLTimeStampOffset', 'Data.SqlTimSt'),
+    ('TBcd', 'Data.FmtBcd'),
+    (STPicture, 'MStreams'));
+var
+  T: Integer;
+  F: TOrmField;
+begin
+  for T:= Low(TYPE_UNITS) to High(TYPE_UNITS) do
+    for F in pFields do
+      if SameText(F.VAR_TYPE, TYPE_UNITS[T][0]) then
+        AddUnit(pUnits, TYPE_UNITS[T][1]);
+  for F in pFields do
+    if F.ISENUM then
+      AddUnit(pUnits, ENUM_UNIT);
+end;
+
+function HasVarType(pFields: TObjectList<TOrmField>; const pType: string): Boolean;
+var
+  F: TOrmField;
+begin
+  Result:= False;
+  for F in pFields do
+    if SameText(F.VAR_TYPE, pType) then
+      Exit(True);
+end;
+
+function HasEnum(pFields: TObjectList<TOrmField>): Boolean;
+var
+  F: TOrmField;
+begin
+  Result:= False;
+  for F in pFields do
+    if F.ISENUM then
+      Exit(True);
+end;
+
+{ True when the line region 3 writes for the default calls System.SysUtils: StrToTime / StrToDate /
+  StrToDateTime, or an expression such as Now (a word outside quotes). The default of an enumeration,
+  a Boolean or a timestamp is a constant, not a call of that unit. }
+function DefaultNeedsSysUtils(pField: TOrmField): Boolean;
+begin
+  if MatchText(pField.VAR_TYPE, ['TTime', 'TDate', 'TDateTime']) then
+    Exit(pField.DEFAULTVAL.Trim <> '');
+  if pField.ISENUM or MatchText(pField.VAR_TYPE, ['TSQLTimeStamp', 'Boolean']) then
+    Exit(False);
+  Result:= TRegEx.IsMatch(TRegEx.Replace(pField.DEFAULTVAL, '''[^'']*''', ''), '[A-Za-z_]');
+end;
+
+function DefaultsNeedSysUtils(pFields: TObjectList<TOrmField>): Boolean;
+var
+  F: TOrmField;
+begin
+  Result:= False;
+  for F in pFields do
+    if DefaultNeedsSysUtils(F) then
+      Exit(True);
+end;
+
+{ A unit the text uses only through inline functions: the compiler wants it (H2443) while the
+  unused-unit-in-uses rule sees no reference, so the generated line carries a review marker. }
+procedure AddInlineUnit(pUnits: TStrings; const pUnit, pMarkerHash, pInlined: string);
+begin
+  pUnits.Add(pUnit + ',' + Format('  // dl:ok unused-unit-in-uses@%s -- inline %s (H2443)', [pMarkerHash, pInlined]));
+end;
+
+{ 'uses' and one unit per line; nothing for an empty list }
+procedure AddUsesClause(pOut: TStringList; pUnits: TStrings);
+var
+  I: Integer;
+begin
+  if pUnits.Count = 0 then
+    Exit;
+  pOut.Add('uses');
+  for I:= 0 to pUnits.Count - 1 do
+    pOut.Add('  ' + pUnits[I] + (if I = pUnits.Count - 1 then ';' else if pUnits[I].Contains(',') then '' else ','));
+  pOut.Add('');
 end;
 
 (* The region name of a {$REGION ...} / {$ENDREGION ...} line, upper case, quotes and
@@ -1110,6 +1271,16 @@ begin
   Result:= FFieldList.Count;
 end;
 
+function TOrmGenerator.HasColumn(const pIdent: string): Boolean;
+var
+  F: TOrmField;
+begin
+  Result:= False;
+  for F in FFieldList do
+    if SameText(F.GetCurrentFieldName, pIdent) then
+      Exit(True);
+end;
+
 function TOrmGenerator.GetFieldName(const AName: string): string;
 begin
   Result:= AName.Replace('$', '_');
@@ -1176,16 +1347,34 @@ const
   FC_LOOKUP = 10;
   FC_PK = 11;
   FC_SEQ = 12;
+  FC_LABEL = 13;
+  FC_DOCUMENTATION = 14;
 
   SQL_FIELDS =
     'SELECT FIELD_NAME, VAR_TYPE, FIELD_AS_TYPE, ENUMTYPE, DEFAULTVAL, ISENUM, FIELD_SIZE, ' +
-    'DOC_SUMMARY, DOC_REMARKS, ISCALCULATED, ISLOOKUP, PRIMARY_KEY, SEQUENCE_NAME ' +
+    'DOC_SUMMARY, DOC_REMARKS, ISCALCULATED, ISLOOKUP, PRIMARY_KEY, SEQUENCE_NAME, DISPLAY_LABEL, DOCUMENTATION ' +
     'FROM DL_FIELDS_INFO WHERE TABLE_NAME = :T AND FIELD_KIND = 1 ORDER BY FIELD_NAME';
 var
   Q: TFDQuery;
   Field: TOrmField;
   S: string;
   Rows: Integer;
+
+  function SummaryOfRow: string;
+  begin
+    Result:= Q.Fields[FC_SUMMARY].AsString;
+    if IsDocPlaceholder(Result) then
+      Result:= ColumnSummary(pTableName, Q.Fields[FC_NAME].AsString.TrimRight, Q.Fields[FC_LABEL].AsString,
+        Q.Fields[FC_DOCUMENTATION].AsString, Q.Fields[FC_PK].AsBoolean);
+  end;
+
+  function RemarksOfRow: string;
+  begin
+    Result:= Q.Fields[FC_REMARKS].AsString;
+    if IsDocPlaceholder(Result) then
+      Result:= '';
+  end;
+
 begin
   FFieldList.Clear;
   FKeyFields.Clear;
@@ -1212,8 +1401,8 @@ begin
           Q.Fields[FC_DEFAULT].AsString.TrimRight,
           Q.Fields[FC_ISENUM].AsBoolean,
           Q.Fields[FC_SIZE].AsInteger,
-          Q.Fields[FC_SUMMARY].AsString,
-          Q.Fields[FC_REMARKS].AsString);
+          SummaryOfRow,
+          RemarksOfRow);
         FFieldList.Add(Field);
         if Q.Fields[FC_PK].AsBoolean then
         begin
@@ -1248,50 +1437,30 @@ begin
   InterfaceObject.Add('end.'          );
 end;
 
-procedure TOrmGenerator.GenerateNewServerObject(const TableName0: string; PasObject: TStringList);  // dl:ok method-too-long@51af, param-name-prefix@81ae -- REVIEWED 2026-11-17 v152 TTGEN: verbatim TableTools generator (one Add per emitted line); splitting it risks the byte-identical output; param names: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane (REVIEWED SLZ-S11 2026-11-22)
+procedure TOrmGenerator.GenerateNewServerObject(const TableName0: string; PasObject: TStringList);  // dl:ok method-too-long@5309, param-name-prefix@81ae -- REVIEWED 2026-11-17 v152 TTGEN: verbatim TableTools generator (one Add per emitted line); splitting it risks the byte-identical output; param names: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane (REVIEWED SLZ-S11 2026-11-22)
 var
   SectionCode : TStringList;
   TableId   : string;
   GenName     : string;
-  HasTimestamp: Boolean;
-  HasEnum     : Boolean;
-  TSField     : TOrmField;
+  Units       : TStringList;
 begin
   TableId:= TableName0.Replace('$', '_');
   LoadTable(TableName0);
   GenName:= FGenName;
 
-  HasTimestamp:= False;
-  for TSField in FFieldList do if SameText(TSField.VAR_TYPE, 'TSQLTimeStamp') then
-  begin
-    HasTimestamp:= True;
-    Break;
-  end;
-
-  HasEnum:= False;
-  for TSField in FFieldList do if TSField.ISENUM then
-  begin
-    HasEnum:= True;
-    Break;
-  end;
-
   SectionCode:= TStringList.Create;
+  Units:= TStringList.Create;
   try
     PasObject.Add(Format('unit u%s_SERVER; // 1', [TableId]));
     PasObject.Add('                           ');
     PasObject.Add('interface                  ');
     PasObject.Add('                           ');
-    PasObject.Add('uses                       ');
-    PasObject.Add('  System.Classes,          ');
-    PasObject.Add('  System.SysUtils,         ');
-    PasObject.Add('  Spring.Container.Common, ');
-    PasObject.Add('  FIREDAC.Comp.Client,     ');
-    PasObject.Add('  iLoggingServiceP,        ');
-    PasObject.Add('  IuMicObject,             ');
-    PasObject.Add(Format('  i%s, // 1          ', [TableId]));
-    PasObject.Add('  MStreams                 ');
-    PasObject.Add('                           ');
-    PasObject.Add('	 ;                       ' );
+    Units.Add('Spring.Container.Common');
+    Units.Add('FireDAC.Comp.Client');
+    Units.Add('iLoggingServiceP');
+    Units.Add('IuMicObject');
+    Units.Add(ORM_INTF_PREFIX + TableId);
+    AddUsesClause(PasObject, Units);
     PasObject.Add('{$M+}                      ');
     PasObject.Add('                           ');
     PasObject.Add('type                       ');
@@ -1312,7 +1481,7 @@ begin
     PasObject.Add('    procedure EnsureQueriesPrepared; '                                                 );
     PasObject.Add('	 public                            '                                                  );
     PasObject.Add('		destructor Destroy; override;    '                                                   );
-    PasObject.Add('		[Spring.Container.Common.Inject]                                  '                  );
+    PasObject.Add('		[InjectAttribute]                                  '                  );
     PasObject.Add('		constructor Create(const ThreadStorage: IThreadStorage; const ALog: IABZLoggingSys);');
     PasObject.Add('    // IDataService (Base / Threading)                                '                );
     PasObject.Add('		function GetThreadStorage: IThreadStorage;                        '                  );
@@ -1329,22 +1498,27 @@ begin
     PasObject.Add('                         '                                                             );
     PasObject.Add('implementation           '                                                             );
     PasObject.Add('                         '                                                             );
-    PasObject.Add('uses                     '                                                             );
-    PasObject.Add('  CommonExceptions,                '                                                   );
-    PasObject.Add('  ExceptionLog7, // EurekaLog unit '                                                   );
-    PasObject.Add('  CodeSiteLogging,                 '                                                   );
-    PasObject.Add('  ECallStack,                      '                                                   );
-    PasObject.Add('  FIREDAC.Stan.Error,              '                                                   );
-    PasObject.Add('  FIREDAC.Stan.Param,              '                                                   );
-    PasObject.Add('  FIREDAC.Dats              '                                                          );
-    if HasTimestamp then
-      PasObject.Add('  ,Data.SqlTimSt             ');
-    if HasEnum then
-      PasObject.Add('  , MSCTYPES               ' )
+    Units.Clear;
+    if HasVarType(FFieldList, 'TStringList') then { TStrings.Text }
+      Units.Add('System.Classes')
     else
-      PasObject.Add('  // MSCTYPES               ' );
-    PasObject  .Add('                         '    );
-    PasObject  .Add('	 ;                     '     );
+      AddInlineUnit(Units, 'System.Classes', '2465', 'TFDParams.GetItem');
+    Units.Add('System.SysUtils');
+    if HasVarType(FFieldList, STPicture) then { TBlobField }
+      Units.Add('Data.DB');
+    if HasVarType(FFieldList, 'TSQLTimeStamp') then
+      AddInlineUnit(Units, 'Data.SqlTimSt', '2bcd', 'TFDParam.SetAsSQLTimeStamp');
+    if HasVarType(FFieldList, 'TBcd') then
+      AddInlineUnit(Units, 'Data.FmtBcd', '3265', 'TFDParam.SetAsFMTBCD');
+    Units.Add('FireDAC.DatS');
+    Units.Add('FireDAC.Stan.Error');
+    Units.Add('FireDAC.Stan.Param');
+    if FKeyFields.Count > 0 then { EUndefinedKeyValue }
+      Units.Add('CommonExceptions');
+    if HasEnum(FFieldList) then
+      Units.Add(ENUM_UNIT);
+    Units.Add('MStreams');
+    AddUsesClause(PasObject, Units);
     PasObject  .Add('                         '    );
     PasObject.Add(Format('constructor TDataService_%s_SERVER.Create(const ThreadStorage: IThreadStorage; const ALog: IABZLoggingSys); // 1', [TableId]));
     PasObject.Add('begin                             ');
@@ -1444,7 +1618,6 @@ begin
     GenerateSection8(SectionCode, TableName0);
     PasObject.AddStrings(SectionCode);
     PasObject.Add('	 {$ENDREGION ''DB-RAD 8''}                                           ');
-    PasObject.Add('   // CodeSite.Send(''  >> AFTER LOAD-ASSIGN QRYLoad.RecordCount=%d; Obj.VAR_TYPE=%s; Obj.ENUMTYPE=<%s>'', [QRYLoad.RecordCount, Obj.VAR_TYPE, Obj.ENUMTYPE]);');
     PasObject.Add('                                          ');
     PasObject.Add('	 if Result then                         ');
     PasObject.Add('	 begin                                  ');
@@ -1625,40 +1798,35 @@ begin
     PasObject.Add('                                                                                                                 ');
     PasObject.Add('end.                                                                                                             ');
   finally
+    Units.Free;
     SectionCode.Free;
   end; // try
 end; // procedure
 
-procedure TOrmGenerator.GenerateNewTableObject(const TableName0: string; InterfaceObject, PasObject: TStringList);  // dl:ok method-too-long@4e9f, param-name-prefix@f0af -- REVIEWED 2026-11-17 v152 TTGEN: verbatim TableTools generator (one Add per emitted line); splitting it risks the byte-identical output; param names: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane (REVIEWED SLZ-S11 2026-11-22)
+procedure TOrmGenerator.GenerateNewTableObject(const TableName0: string; InterfaceObject, PasObject: TStringList);  // dl:ok method-too-long@44fb, param-name-prefix@f0af -- REVIEWED 2026-11-17 v152 TTGEN: verbatim TableTools generator (one Add per emitted line); splitting it risks the byte-identical output; param names: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane (REVIEWED SLZ-S11 2026-11-22)
 var
   IntfGUID    : TGUID;
   TableId   : string;
   SectionCode : TStringList;
+  Units       : TStringList;
 begin
   TableId:= TableName0.Replace('$', '_');
   LoadTable(TableName0);
 
   SectionCode:= TStringList.Create;
+  Units:= TStringList.Create;
   try
     InterfaceObject.Add(Format('unit %s%s;', [ORM_INTF_PREFIX, TableId]));
     InterfaceObject.Add('                     '    );
     InterfaceObject.Add('interface            '    );
     InterfaceObject.Add('                     '    );
-    InterfaceObject.Add('uses                 '    );
-    InterfaceObject.Add('  System.Classes,     '   );
-    InterfaceObject.Add('  System.SysUtils, '      );
-    InterfaceObject.Add('  VCL.Graphics,       '   );
-    InterfaceObject.Add('  Data.SqlTimSt,   '      );
-    InterfaceObject.Add('  Data.FmtBcd,     '      );
-    InterfaceObject.Add('  //MSCTYPES,            ');
-    InterfaceObject.Add('  IUMicObject'            );
-    InterfaceObject.Add('                     '    );
-    InterfaceObject.Add('		;                 '     );
-    InterfaceObject.Add('                     '    );
-    InterfaceObject.Add('                     '    );
+    AddTypeUnits(Units, FFieldList);
+    AddUnit(Units, 'IUMicObject');
+    AddUsesClause(InterfaceObject, Units);
     InterfaceObject.Add('type                 '    );
     InterfaceObject.Add('                     '    );
 
+    InterfaceObject.Add(Format('  /// <summary>One row of table %s.</summary>', [TableName0]));
     InterfaceObject.Add(Format('  Imc%s = interface(IMicObject)', [TableId]));
     IntfGUID:= NewGuid;
     InterfaceObject.Add(Format('    [''%s'']', [GUIDToString(IntfGUID)]));
@@ -1673,31 +1841,18 @@ begin
     PasObject.Add('                     	'    );
     PasObject.Add('interface            	'    );
     PasObject.Add('                     	'    );
-    PasObject.Add('uses                 	'    );
-    PasObject.Add('  System.Classes,     '    );
-    PasObject.Add('  System.SysUtils,    '    );
-    PasObject.Add('  VCL.Graphics,       '    );
-    PasObject.Add('  Data.DB,            '    );
-    PasObject.Add('  Data.SqlTimSt,      '    );
-    PasObject.Add('  Data.FmtBcd,        '    );
-    PasObject.Add('  Spring,             '    );
-    PasObject.Add('  Spring.Collections, '    );
-    PasObject.Add('  Spring.Container.Common,');
-    PasObject.Add('  Spring.Services,        ');
-    PasObject.Add('  Spring.Container,       ');
-    PasObject.Add('  FireDAC.Comp.DataSet,   ');
-    PasObject.Add('  FireDAC.Comp.Client,    ');
-    PasObject.Add('  FireDAC.Stan.Param,     ');
-    PasObject.Add('  IUMicObject,            ');
-    PasObject.Add('  MStreams,               ');
-    PasObject.Add('  //MscTypes,             ');
-    PasObject.Add(Format('  %s%s,', [ORM_INTF_PREFIX, TableId]));
-    PasObject.Add('  uMicObjectBase'                                     );
-    PasObject.Add('               	'                                     );
-    PasObject.Add('	 ; '                                                 );
+    { System.Classes: TComponent / TPersistent; MStreams: TABZMemoryStream of Reader / Writer }
+    Units.Clear;
+    Units.Add('System.Classes');
+    AddTypeUnits(Units, FFieldList);
+    AddUnit(Units, 'MStreams');
+    Units.Add(ORM_INTF_PREFIX + TableId);
+    Units.Add('uMicObjectBase');
+    AddUsesClause(PasObject, Units);
     PasObject.Add('{$M+}'                                                );
     PasObject.Add('                     	'                               );
     PasObject.Add('type                  '                               );
+    PasObject.Add(Format('  /// <summary>One row of table %s: the stored columns and their stream form.</summary>', [TableName0]));
     PasObject.Add('	[ComponentPlatformsAttribute(pidWin32 or pidWin64)] ');
     PasObject.Add(Format('  Tmc%s = class(TMicObjectBase<Imc%s>, Imc%s) ', [TableId, TableId, TableId]));
     PasObject.Add('  private                     	');
@@ -1755,14 +1910,11 @@ begin
     PasObject.Add('									       '        );
     PasObject.Add('implementation		       ' );
     PasObject.Add('									       '        );
-    PasObject.Add('uses							       '      );
-    PasObject.Add('									       '        );
-    PasObject.Add('  System.IOutils,        ');
-    PasObject.Add('  System.Strutils,       ');
-    PasObject.Add('  Winapi.Messages,       ');
-    PasObject.Add('  Winapi.Windows         ');
-    PasObject.Add('                         ');
-    PasObject.Add('    ;                    ');
+    Units.Clear;
+    if DefaultsNeedSysUtils(FFieldList) or (TableId = 'FIB_FIELDS_INFO') then
+      Units.Add('System.SysUtils');
+    if not HasVarType(FFieldList, 'TBytes') then { TBytes put it into the interface list }
+      AddUsesClause(PasObject, Units);
     PasObject.Add('                         ');
     PasObject.Add('procedure Register;     ' );
     PasObject.Add('begin						       '       );
@@ -1824,9 +1976,6 @@ begin
     PasObject.Add       (' '                         );
 
     PasObject.Add(Format('function Tmc%s.Reader(AStream:TABZMemoryStream): boolean;', [TableId]));
-    PasObject.Add('var'                    );
-    PasObject.Add('  StreamSize: integer;' );
-    PasObject.Add('  ByteTemp: Byte;'      );
     PasObject.Add('begin'                  );
     PasObject.Add('  Result:= True;'       );
     PasObject.Add('{$REGION ''DB-RAD 11''}');
@@ -1852,11 +2001,10 @@ begin
 
     PasObject.Add(Format('procedure Tmc%s.Assign(Source: TPersistent);', [TableId]));
     PasObject.Add('begin');
-    PasObject.Add(Format('  if not (Source is Tmc%s) then', [TableId]));
+    PasObject.Add(Format('  if Source is not Tmc%s then', [TableId]));
     PasObject.Add('    inherited');
     PasObject.Add('  else'       );
-    PasObject.Add(Format('    with Source as Tmc%s do', [TableId]));
-    PasObject.Add('    begin');
+    PasObject.Add('  begin'      );
 
     PasObject.Add('{$REGION ''DB-RAD 4''}');
     SectionCode.Clear;
@@ -1885,11 +2033,10 @@ begin
 
     PasObject.Add(Format('procedure Tmc%s.AssignTo(Dest: TPersistent);', [TableId]));
     PasObject.Add('begin');
-    PasObject.Add(Format('  if not (Dest is Tmc%s) then', [TableId]));
+    PasObject.Add(Format('  if Dest is not Tmc%s then', [TableId]));
     PasObject.Add('    inherited');
     PasObject.Add('  else'       );
-    PasObject.Add(Format('    with Dest as Tmc%s do', [TableId]));
-    PasObject.Add('    begin');
+    PasObject.Add('  begin'      );
 
     PasObject.Add('{$REGION ''DB-RAD 6''}');
     SectionCode.Clear;
@@ -1923,6 +2070,7 @@ begin
     end;
     PasObject.Add('end.                     ');
   finally
+    Units.Free;
     SectionCode.Free;
   end; // try
 end; // procedure
@@ -2033,17 +2181,22 @@ var
   CurField: TOrmField;
   S       : string;
 begin
+  { locals of this region only; names an existing unit's old 'StreamSize' / 'ByteTemp' block does not use }
+  if HasVarType(FFieldList, STPicture) then
+    SectionCode.Add('  var StreamLen: Integer;');
+  if HasEnum(FFieldList) then
+    SectionCode.Add('  var EnumByte: Byte;');
   for CurField in FFieldList do
   begin
     S:= CurField.VAR_TYPE.ToLower;
     if CurField.VAR_TYPE = STPicture then
     begin
-      SectionCode.Add(Format('  Result:= Result and AStream.ReadStream(''%s'', f%s, StreamSize);', [CurField.GetCurrentFieldName, CurField.GetCurrentFieldName]));
+      SectionCode.Add(Format('  Result:= Result and AStream.ReadStream(''%s'', f%s, StreamLen);', [CurField.GetCurrentFieldName, CurField.GetCurrentFieldName]));
     end
     else if CurField.ISENUM then
     begin
-      SectionCode.Add('  Result:= Result and AStream.Read(ByteTemp);');
-      SectionCode.Add(Format('  %s:= %s.FromByte(ByteTemp);', [CurField.GetCurrentFieldName, CurField.ENUMTYPE]));
+      SectionCode.Add('  Result:= Result and AStream.Read(EnumByte);');
+      SectionCode.Add(Format('  %s:= %s.FromByte(EnumByte);', [CurField.GetCurrentFieldName, CurField.ENUMTYPE]));
     end
     else if S = 'boolean' then
     begin
@@ -2314,7 +2467,7 @@ begin
   end;
 end; // procedure
 
-procedure TOrmGenerator.GenerateNewClientObject(const TableName0: string; PasObject: TStringList);  // dl:ok method-too-long@a378, param-name-prefix@6622 -- REVIEWED 2026-11-17 v152 TTGEN: verbatim TableTools generator (one Add per emitted line); splitting it risks the byte-identical output; param names: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane (REVIEWED SLZ-S11 2026-11-22)
+procedure TOrmGenerator.GenerateNewClientObject(const TableName0: string; PasObject: TStringList);  // dl:ok method-too-long@cc78, param-name-prefix@6622 -- REVIEWED 2026-11-17 v152 TTGEN: verbatim TableTools generator (one Add per emitted line); splitting it risks the byte-identical output; param names: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane (REVIEWED SLZ-S11 2026-11-22)
 var
   SectionCode  : TStringList;
   TableId    : string;
@@ -2331,20 +2484,13 @@ var
   ParamType    : string;
   FmtSpec      : string;
   FieldN       : string;
-  HasTimestamp : Boolean;
-  TSField      : TOrmField;
+  KeyTimestamp : Boolean;
+  Units        : TStringList;
 begin
   TableId:= TableName0.Replace('$', '_');
   LoadTable(TableName0);
   HasGenerator:= FHasGenerator;
   GenName:= FGenName;
-
-  HasTimestamp:= False;
-  for TSField in FFieldList do if SameText(TSField.VAR_TYPE, 'TSQLTimeStamp') then
-  begin
-    HasTimestamp:= True;
-    Break;
-  end;
 
   KeyParamSig  := '';
   KeyArgFromObj:= '';
@@ -2352,6 +2498,7 @@ begin
   KeyLogFmt    := '';
   KeyLogArgObj := '';
   KeyLogArgDir := '';
+  KeyTimestamp := False;
   for I:= 0 to FKeyFields.Count - 1 do
   begin
     CurField:= LocateField (FKeyFields[I]);
@@ -2388,6 +2535,7 @@ begin
     KeyParamSig:= KeyParamSig + 'const A' + FieldN + ': ' + ParamType;
     if SameText(CurField.VAR_TYPE, 'TSQLTimeStamp') then
     begin
+      KeyTimestamp:= True;
       KeyArgFromObj:= KeyArgFromObj + 'SQLTimeStampToStr(''YYYY-MM-DD HH:NN:SS'', Obj.' + FieldN + ')';
       KeyLogArgObj := KeyLogArgObj  + 'SQLTimeStampToStr(''YYYY-MM-DD HH:NN:SS'', Obj.' + FieldN + ')';
     end
@@ -2407,6 +2555,7 @@ begin
   end; // for
 
   SectionCode:= TStringList.Create;
+  Units:= TStringList.Create;
   try
     PasObject.Add(Format('unit u%s_CLIENT;', [TableId]));
     PasObject.Add('');
@@ -2428,19 +2577,13 @@ begin
     PasObject.Add(''                                                                    );
     PasObject.Add('interface'                                                           );
     PasObject.Add(''                                                                    );
-    PasObject.Add('uses'                                                                );
-    PasObject.Add('  System.SysUtils,'                                                  );
-    PasObject.Add('  System.Classes,'                                                   );
-    PasObject.Add('  Winapi.Windows,'                                                   );
-    PasObject.Add(Format('  i%s,', [TableId]));
-    PasObject.Add('  IuMicObject,'          );
-    PasObject.Add('  uPipeClientConnection,');
-    PasObject.Add('  iLoggingServiceP,'     );
-    PasObject.Add('  MStreams,'             );
-    if HasTimestamp then
-      PasObject.Add('  Data.SqlTimSt,' );
-    PasObject  .Add('  Pipes.Protocol;');
-    PasObject  .Add(''                 );
+    Units.Add('System.SysUtils');
+    Units.Add(ORM_INTF_PREFIX + TableId);
+    Units.Add('IuMicObject');
+    Units.Add('uPipeClientConnection');
+    Units.Add('iLoggingServiceP');
+    Units.Add('Pipes.Protocol');
+    AddUsesClause(PasObject, Units);
     PasObject  .Add('type'             );
     PasObject.Add(Format('  TDataService_%s_CLIENT = class(TInterfacedObject,', [TableId]));
     PasObject.Add('    IDataService,');
@@ -2475,6 +2618,12 @@ begin
     PasObject.Add(''              );
     PasObject.Add('implementation');
     PasObject.Add(''              );
+    Units.Clear;
+    Units.Add('Winapi.Windows');
+    if KeyTimestamp then { SQLTimeStampToStr }
+      Units.Add('Data.SqlTimSt');
+    Units.Add('MStreams');
+    AddUsesClause(PasObject, Units);
     PasObject.Add('const'         );
     PasObject.Add(Format('  TABLE_PREFIX = ''TABLE=%s'';', [TableId]));
     PasObject.Add('');
@@ -2735,6 +2884,7 @@ begin
     PasObject.Add(''    );
     PasObject.Add('end.');
   finally
+    Units.Free;
     SectionCode.Free;
   end; // try
 end; // procedure
@@ -2748,8 +2898,8 @@ begin
   for CurField in FFieldList do
   begin
     RealType:= if CurField.ISENUM then CurField.ENUMTYPE else CurField.VAR_TYPE;
-    SectionCode.Add(Format('    function Get%s: %s;', [AccessorName(CurField.GetCurrentFieldName).PadRight(PAD_NAME), RealType]));
-    SectionCode.Add(Format('    procedure Set%s(const Value: %s);', [AccessorName(CurField.GetCurrentFieldName), RealType]));
+    SectionCode.Add(Format('    function Get%s: %s;', [CurField.GetCurrentFieldName.PadRight(PAD_NAME), RealType]));
+    SectionCode.Add(Format('    procedure Set%s(const Value: %s);', [CurField.GetCurrentFieldName, RealType]));
     SectionCode.Add('{$REGION ''Documentation''}');
 
     if CurField.DOC_SUMMARY.Count > 0 then
@@ -2766,7 +2916,7 @@ begin
     end;
     SectionCode.Add('{$ENDREGION}               ');
     SectionCode.Add(Format('    property %s: %s read Get%s write Set%s; ', [CurField.GetCurrentFieldName.PadRight(PAD_NAME), RealType.PadRight(PAD_NAME),
-          AccessorName(CurField.GetCurrentFieldName).PadRight(PAD_NAME), AccessorName(CurField.GetCurrentFieldName).PadRight(PAD_NAME)]));
+          CurField.GetCurrentFieldName.PadRight(PAD_NAME), CurField.GetCurrentFieldName.PadRight(PAD_NAME)]));
   end; // for
 end; // procedure
 
@@ -2795,7 +2945,7 @@ begin
     end;
     SectionCode.Add('{$ENDREGION}                 ');
     SectionCode.Add(Format('    property %s: %s read Get%s write Set%s; ',
-        [CurField.GetCurrentFieldName.PadRight(PAD_NAME), RealType, AccessorName(CurField.GetCurrentFieldName), AccessorName(CurField.GetCurrentFieldName)]));
+        [CurField.GetCurrentFieldName.PadRight(PAD_NAME), RealType, CurField.GetCurrentFieldName, CurField.GetCurrentFieldName]));
   end; // for
 end; // procedure
 
@@ -2807,8 +2957,9 @@ begin
   for CurField in FFieldList do
   begin
     RealType:= if CurField.ISENUM then CurField.ENUMTYPE else CurField.VAR_TYPE;
-    SectionCode.Add(Format('    function Get%s: %s;', [AccessorName(CurField.GetCurrentFieldName).PadRight(PAD_NAME), RealType]));
-    SectionCode.Add(Format('    procedure Set%s(const Value: %s);', [AccessorName(CurField.GetCurrentFieldName), RealType]));
+    SectionCode.Add(Format('    function Get%s: %s;', [CurField.GetCurrentFieldName.PadRight(PAD_NAME), RealType]));
+    SectionCode.Add(Format('    procedure Set%s(const Value: %s);%s',
+      [CurField.GetCurrentFieldName, RealType, SetterDirective(CurField.GetCurrentFieldName)]));
   end;
 end;
 
@@ -2853,7 +3004,34 @@ procedure TOrmGenerator.GenerateSection4(SectionCode: TStringList);  // dl:ok pa
 var
   CurField: TOrmField;
 begin
-  for CurField in FFieldList do SectionCode.Add(Format('      f%s:= %s;', [CurField.GetCurrentFieldName.PadRight(PAD_NAME), CurField.GetCurrentFieldName.PadRight(PAD_NAME)]));
+  { 'Self.' and the typed local name both objects: right with and without a 'with' around the region }
+  if FFieldList.Count > 0 then
+    SectionCode.Add(Format('      var LSource:= Tmc%s(Source);', [GetFieldName(FLoadedTable)]));
+  for CurField in FFieldList do
+    if IsVarTypeCreatable(CurField.VAR_TYPE) then
+      EmitOwnedCopy(SectionCode, CurField, 'Self.f' + CurField.GetCurrentFieldName, 'LSource.' + CurField.GetCurrentFieldName, 'LSource')
+    else
+      SectionCode.Add(Format('      Self.f%s:= LSource.%s;', [CurField.GetCurrentFieldName.PadRight(PAD_NAME), CurField.GetCurrentFieldName.PadRight(PAD_NAME)]));
+end;
+
+procedure TOrmGenerator.EmitOwnedCopy(pCode: TStringList; const pField: TOrmField; const pDest, pSource, pOther: string);
+begin
+  pCode.Add(Format('      if (%s <> nil) and (%s <> Self) then', [pDest, pOther]));
+  if SameText(pField.VAR_TYPE, STPicture) then
+  begin
+    pCode.Add('      begin');
+    pCode.Add(Format('        %s.Size:= 0;', [pDest]));
+    pCode.Add(Format('        if %s <> nil then', [pSource]));
+    pCode.Add(Format('          %s.CopyFrom(%s, 0);', [pDest, pSource]));
+    pCode.Add('      end;');
+  end
+  else
+  begin
+    pCode.Add(Format('        if %s <> nil then', [pSource]));
+    pCode.Add(Format('          %s.Assign(%s)', [pDest, pSource]));
+    pCode.Add('        else');
+    pCode.Add(Format('          %s.Clear;', [pDest]));
+  end;
 end;
 
 procedure TOrmGenerator.GenerateSection5(SectionCode: TStringList);  // dl:ok param-name-prefix@60ac -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
@@ -2866,8 +3044,23 @@ end;
 procedure TOrmGenerator.GenerateSection6(SectionCode: TStringList);  // dl:ok param-name-prefix@76a5 -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
 var
   CurField: TOrmField;
+  HasOwned: Boolean;
 begin
-  for CurField in FFieldList do SectionCode.Add(Format('      %s:= f%s;', [CurField.GetCurrentFieldName.PadRight(PAD_NAME), CurField.GetCurrentFieldName.PadRight(PAD_NAME)]));
+  { see GenerateSection4 }
+  HasOwned:= False;
+  if FFieldList.Count > 0 then
+    SectionCode.Add(Format('      var LDest:= Tmc%s(Dest);', [GetFieldName(FLoadedTable)]));
+  for CurField in FFieldList do
+    if IsVarTypeCreatable(CurField.VAR_TYPE) then
+    begin
+      HasOwned:= True;
+      EmitOwnedCopy(SectionCode, CurField, 'LDest.' + CurField.GetCurrentFieldName, 'Self.f' + CurField.GetCurrentFieldName, 'LDest');
+    end
+    else
+      SectionCode.Add(Format('      LDest.%s:= Self.f%s;', [CurField.GetCurrentFieldName.PadRight(PAD_NAME), CurField.GetCurrentFieldName.PadRight(PAD_NAME)]));
+  { the property setters of the other columns set Modified; an owned column has none }
+  if HasOwned then
+    SectionCode.Add('      LDest.Modified:= True;');
 end;
 
 procedure TOrmGenerator.GenerateSection7(SectionCode: TStringList; const TableId: string);  // dl:ok param-name-prefix@17bc -- REVIEWED SLZ-S11 2026-11-22: generator-unit naming predates the pName rule (85 in OrmGen, 9 in DataServiceGen); rename -kind param computes no edits at these class-method declarations, a hand rename is a dedicated lane
@@ -2878,12 +3071,12 @@ begin
   for CurField in FFieldList do
   begin
     RealType:= if CurField.ISENUM then CurField.ENUMTYPE else CurField.VAR_TYPE;
-    SectionCode.Add(Format('function Tmc%s.Get%s: %s;', [TableId, AccessorName(CurField.GetCurrentFieldName), RealType]));
+    SectionCode.Add(Format('function Tmc%s.Get%s: %s;', [TableId, CurField.GetCurrentFieldName, RealType]));
     SectionCode.Add('begin');
     SectionCode.Add(Format('  result:= f%s;', [CurField.GetCurrentFieldName]));
     SectionCode.Add('end;');
     SectionCode.Add(' '   );
-    SectionCode.Add(Format('procedure Tmc%s.Set%s(const Value: %s);', [TableId, AccessorName(CurField.GetCurrentFieldName), RealType]));
+    SectionCode.Add(Format('procedure Tmc%s.Set%s(const Value: %s);', [TableId, CurField.GetCurrentFieldName, RealType]));
     SectionCode.Add('begin');
     SectionCode.Add(Format('  f%s:= Value;', [CurField.GetCurrentFieldName]));
     SectionCode.Add('  fModified:= True;');
@@ -3360,6 +3553,13 @@ var
       Exit;
     end;
     OldL:= ReadUnitText(pFile);
+    if (Gen.HasColumn('SOURCE') and HasOrmWithHeader(OldL, Ident, 'Source')) or
+      (Gen.HasColumn('DEST') and HasOrmWithHeader(OldL, Ident, 'Dest')) then
+    begin
+      pSkipped.Add(pFile + ': a column named SOURCE / DEST hides the parameter inside the old ''with'' header; ' +
+        'run repo upgrade-orm-headers first');
+      Exit;
+    end;
     L.Add(ChangeOf(pFile, OldL, Gen.UpdateRegions(OldL, T, pIsInterface, N), True));
   end;
 
@@ -3387,6 +3587,41 @@ begin
     end;
     Result:= L.ToArray;
   finally
+    Gen.Free;
+    L.Free;
+  end;
+end;
+
+function PlanUpgradeOrmHeaders(pRepo: TFDConnection; const pCodeDir: string; const pTables: TArray<string>;
+  pSkipped: TStrings): TArray<TOrmFileChange>;
+var
+  Gen: TOrmGenerator;
+  L: TList<TOrmFileChange>;
+  Notes: TStringList;
+  T, Ident, FileName, Note, OldL: string;
+begin
+  L:= TList<TOrmFileChange>.Create;
+  Gen:= TOrmGenerator.Create(pRepo);
+  Notes:= TStringList.Create;
+  try
+    for T in CheckedTables(Gen, pTables) do
+    begin
+      Ident:= T.Replace('$', '_');
+      FileName:= TPath.Combine(pCodeDir, ORM_PAS_PREFIX + Ident + ORM_FILE_EXT);
+      if not TFile.Exists(FileName) then
+      begin
+        pSkipped.Add(FileName + ': file does not exist');
+        Continue;
+      end;
+      Notes.Clear;
+      OldL:= ReadUnitText(FileName);
+      L.Add(ChangeOf(FileName, OldL, UpgradeOrmHeaderText(OldL, Ident, Notes), True));
+      for Note in Notes do
+        pSkipped.Add(FileName + ': ' + Note);
+    end;
+    Result:= L.ToArray;
+  finally
+    Notes.Free;
     Gen.Free;
     L.Free;
   end;
