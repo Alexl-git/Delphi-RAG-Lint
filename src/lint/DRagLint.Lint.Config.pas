@@ -613,6 +613,9 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure AddDisabled(const AIds: TArray<string>);
+    /// <summary>Applies the per-project settings the lint path reads (spec 2026-11-20-settings-store-design section 7).</summary>
+    /// <param name="pTaintEnvSource">taint.envSource; False appends a taint "disable" of getenvironmentvariable (union with the config's own taint lists).</param>
+    procedure ApplyProjectSettings(pTaintEnvSource: Boolean);
     /// <summary>Appends ids to the effective auto-fix set.</summary>
     /// <param name="AIds"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
     /// <remarks>
@@ -1387,6 +1390,11 @@ var
 begin
   for S in AIds do
     if Trim(S) <> '' then FEnabled:= FEnabled + [Trim(S)];
+end;
+
+procedure TLintConfig.ApplyProjectSettings(pTaintEnvSource: Boolean);
+begin
+  if not pTaintEnvSource then TaintJson:= TaintJson + ['{"disable":["getenvironmentvariable"]}'];
 end;
 
 procedure TLintConfig.AddDisabled(const AIds: TArray<string>);
