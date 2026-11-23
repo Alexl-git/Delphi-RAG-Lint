@@ -281,6 +281,7 @@ uses
   , DRagLint.CLI.ConvertApply { convert-apply verb (v1511 SPLIT) }
   , DRagLint.CLI.CheckInit { check-init verb (1.52 FRAME; lane HBSKEL) }
   , DRagLint.CLI.Repo { repo verb family (1.52 FRAME; lane TTE) }
+  , DRagLint.FieldRepo.Locate { LocateFieldRepository: the repo line of resolve-dbs --project (1.53 FR-SCHEMA) }
   , DRagLint.CLI.Explain { explain verb (1.52 FRAME; lane EXPLAIN) }
   , DRagLint.CLI.RuleScope { rules disable / enable (1.52 FRAME; lane DISRULE) }
   , DRagLint.CLI.Compare { compare verb (v1511 SPLIT) }
@@ -1689,6 +1690,8 @@ begin
     { repo gen-param-array: DRagLint.CLI.RepoParamArray reads these values from ParamStr. One branch per flag: they are
       four different options, and an OR-group reads as an alias group to run_flag_verb_map.ps1 (features\flag-aliases.json). }
     else if (A = '--dfm') and (i < ParamCount) then Inc(i)
+    else if (A = '--ddl') and (i < ParamCount) then Inc(i) // repo seed-fb / refresh-schema: DRagLint.CLI.RepoSchema reads it from ParamStr
+    else if (A = '--select') and (i < ParamCount) then Inc(i) // repo seed-fb / refresh-schema: the change-set id file, read from ParamStr
     else if (A = '--table') and (i < ParamCount) then Inc(i)
     else if (A = '--step-size') and (i < ParamCount) then Inc(i)
     else if (A = '--progress-form') and (i < ParamCount) then Inc(i)
@@ -27026,6 +27029,8 @@ begin
 
     var PDb       : string        := '';
     var PClaimants: TArray<string>:= nil;
+    var RepoLine: string:= LocateFieldRepository(AArgs.ProjectPath, AArgs.RepoPath, ConfigPath); // 1.53 FR-SCHEMA: spec 1.2 order
+    if RepoLine = '' then RepoLine:= 'none';
     case ResolveProjectDb(Manifest, AArgs.ProjectPath, PDb, PClaimants) of
       pdmUnique:
         begin
@@ -27038,12 +27043,17 @@ begin
               JO.AddPair('project', AArgs.ProjectPath);
               JO.AddPair('section', PClaimants[0]     );
               JO.AddPair('db'     , PDb               );
+              JO.AddPair('repo'   , RepoLine          ); // 1.53 FR-SCHEMA: the resolved field repository, 'none' when there is none
               Writeln(JO.ToString);
             finally
               JO.Free;
             end;
           end
-          else Writeln(PDb);
+          else
+          begin
+            Writeln(PDb);
+            Writeln(ErrOutput, 'repo: ' + RepoLine); // stdout stays the bare DB path (scripts capture it)
+          end;
           Exit(0);
         end;
       pdmAmbiguous:
