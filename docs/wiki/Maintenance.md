@@ -145,6 +145,11 @@ The call-target resolve has two shapes: a **scoped** pass that re-resolves only
 what changed, and a **whole-database** pass. The scoped one is several times
 faster; the message names the reason the scoped one was declined.
 
+Since 1.53.0 a re-parsed file keeps the ids of its unchanged symbols, so a body
+edit of a widely used unit no longer pulls every reference to its names into the
+scoped pass. The `symbol-id reuse:` line says how many ids were kept and how many
+names entered the scope; see [Stable symbol ids](symbol-id-reuse).
+
 ---
 
 ## Troubleshooting
