@@ -123,6 +123,8 @@ of the repository; the binary `.dlrepo` is not committed.
 `CharacterSet=UTF8` are added when missing. The password is never printed or stored; the
 repository keeps only the `Database` value (`source_database`).
 
+(1.53) A connection string that names `OpenMode`, `CreateDatabase`, `DropDatabase`, `ConnectionDef` or `ConnectionDefName` is refused (import-fb, seed-fb, refresh-schema, fb-snapshot): `DropDatabase=Yes` used to delete the database. `refresh-schema --json` writes exactly one JSON document to stdout; a `--select` id that is not in the change set exits 2.
+
 ## Field kinds, schema 2 and `repo migrate` / `repo check` (1.53)
 
 A repository created by 1.53 is **schema 2**; a 1.52 file (schema 1) still opens and is handled as

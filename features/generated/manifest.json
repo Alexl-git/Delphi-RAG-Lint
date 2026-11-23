@@ -3367,7 +3367,7 @@
       "status": "shipped",
       "since": "1.52.0-alpha",
       "summary": "Warns on the write of an array index that no dominating guard bounds on both sides before the access; the InRange guard autofix is manual-only",
-      "intro": "Read this to see when index-possibly-out-of-range warns, how it treats another collection's bound, index parameters and (with --db) a constant array of another unit, and how its manual-only autofix inserts an InRange check.",
+      "intro": "Read this to see when index-possibly-out-of-range warns, how it treats another collection's bound, parallel arrays, index lists, index parameters and (with --db) a constant array of another unit, and how its manual-only autofix inserts an InRange check.",
       "wikiPage": "index-possibly-out-of-range",
       "surfaces": [
         {
@@ -3394,9 +3394,9 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-21",
+        "date": "2026-11-23",
         "by": "ENGINE",
-        "build": "1.52.2-alpha",
+        "build": "1.52.3-alpha",
         "surfaceHash": "f3d9fc9fe5ed09d8fbce71d2ba38a284de00a9f5e0e543ce31ff1626797258cb"
       }
     },
@@ -13358,9 +13358,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-11-18",
+        "date": "2026-11-23",
         "by": "ENGINE",
-        "build": "1.52.0-alpha",
+        "build": "1.53.0-alpha",
         "surfaceHash": "6a00e72aeca666ab9c2031528f6606e8ad8fa6aaf6a9f5ce18175d21d2292e14"
       }
     },
@@ -15885,7 +15885,7 @@
         "date": "2026-11-23",
         "by": "ENGINE",
         "build": "1.53.0-alpha",
-        "surfaceHash": "1ccd71c33da088671b0b1421781f350df06190693487a43739e6810f5e5d0488"
+        "surfaceHash": "c1bf3a004cc975812c13b5a5ba839c8fa3b7cf9b0fd766c5e342c03ee3a260c6"
       }
     },
     {
