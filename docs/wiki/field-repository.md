@@ -17,7 +17,12 @@ Path resolution, first match wins:
 2. The `fieldRepository` key of `<project folder>\_D-RAG\drag-lint-project.json`
    (relative to the project folder), when `--project <project file>` is given:
    `{ "fieldRepository": "..\\SERVER\\_DL-REPO\\Micronite.dlrepo" }`.
-3. The default for `--project`: `<project folder>\_DL-REPO\<project base name>.dlrepo`.
+3. `"fieldRepository"` on the project's section of the manifest `drag-lint.json` (next to its database path).
+4. The default for `--project`: `<project folder>\_DL-REPO\<project base name>.dlrepo`.
+
+`drag-lint resolve-dbs --project <x.dproj>` names the result: `repo: <path>` (or `repo: none`) on stderr, and
+a `"repo"` key in its `--json` object; stdout stays the bare database path. The resolver is one unit,
+`DRagLint.FieldRepo.Locate`.
 
 Neither `--repo` nor `--project`: usage error, exit 1.
 
@@ -27,8 +32,8 @@ Neither `--repo` nor `--project`: usage error, exit 1.
 drag-lint repo init           (--repo <file> | --project <project file>)
 drag-lint repo info           (--repo <file> | --project <project file>) [--json]
 drag-lint repo import-fb      --connection "<Firebird connection string>" (--repo | --project) [--replace]
-drag-lint repo seed-fb        --connection "<Firebird connection string>" (--repo | --project) [--dry-run]
-drag-lint repo refresh-schema --connection "<Firebird connection string>" (--repo | --project) [--dry-run]
+drag-lint repo seed-fb        (--connection "<Firebird connection string>" | --ddl <file.sql>[;...]) (--repo | --project) [--apply | --select <id file>] [--json]
+drag-lint repo refresh-schema (--connection "<Firebird connection string>" | --ddl <file.sql>[;...]) (--repo | --project) [--apply | --select <id file>] [--json]
 drag-lint repo backup         (--repo | --project) [--output <file>]
 drag-lint repo restore        --in <backup file> (--repo | --project) [--replace]
 drag-lint repo gen-memtable   --in <csv file> [--name <Name>] [--output <file>]
@@ -39,8 +44,8 @@ drag-lint repo gen-memtable   --in <csv file> [--name <Name>] [--output <file>]
 | `init` | Creates an empty repository (all five tables) and prints its path. | 0; 1 when the file exists |
 | `info` | Path, schema version, rows per table and the `DL_META` keys; `--json` prints one object (`path`, `schema_version`, `tables`, `meta`). | 0; 1 when the file is missing or not a repository |
 | `import-fb` | The Micronite path: copies the four `FIB$` tables as they are (the `FIB$VERSION` column is not carried). Creates the repository when missing. A non-empty repository needs `--replace`, which first writes `<repo>.before-import-<yyyymmdd-hhnnss>.txt` (a text backup) and prints its path. Prints `<table>: <n> rows (source <m>)` per table; exit 0 only when every n equals m. | 0; 1 failure; 2 when a source table does not match the repository columns (nothing written) |
-| `seed-fb` | The non-Micronite start: fills an EMPTY repository from the Firebird schema: one `DL_FIELDS_INFO` row per user table column with the schema-derived columns set and the hand-maintained ones at their defaults, and `DL_DATASETS_INFO` for every table with a primary key. Sets the `source_database` meta key. | 0; 1 |
-| `refresh-schema` | The old "Update Fields Info": overwrites ONLY the schema-derived columns, keeps every hand-maintained column, marks vanished columns `ISCALCULATED` (never deletes), regenerates `DL_DATASETS_INFO`. Prints added / changed / orphaned counts; `--dry-run` also prints the diff and writes nothing. | 0; 1 |
+| `seed-fb` | The non-Micronite start: fills an EMPTY repository from the Firebird schema (`--connection`) or a DDL script (`--ddl`). It prints the change set (all inserts, checked) and writes NOTHING unless `--apply` or `--select <id file>` is given. | 0; 1 (not empty, no or two sources, read error) |
+| `refresh-schema` | The old "Update Fields Info", as a change set (db-to-repo): new tables, fields, domains, constraints and generators are checked inserts, changed schema-derived values are checked updates, rows whose source vanished are UNCHECKED deletes. Hand-kept columns never appear. No flag = dry run; `--apply` writes the checked changes and keeps the vanished rows; `--select <id file>` writes exactly the listed ids (one per line or `all`), which is how a vanished row is deleted. | 0; 1 |
 | `backup` | Writes the diffable text backup (default `<repo>.txt`). Deterministic: the same rows give the same bytes. | 0; 1 |
 | `restore` | Reads a text backup into the repository, creating it when missing. A non-empty repository needs `--replace`. The whole file is validated first; a malformed file prints `line <n>: ...` and changes nothing (a missing repository is not left behind). | 0; 1; 2 malformed backup |
 | `gen-memtable` | Prints (or writes with `--output`) the Pascal source of `Create<Name>Fields`, a procedure that builds the fields of a `TFDMemTable` from a CSV (`FieldName,FieldType,Size,FieldKind,...`). `--name` defaults to `FDMemTable`. | 0; 1; 2 bad CSV |
@@ -154,8 +159,8 @@ stays in the field row; for any other layout type the code lives in `DL_LAYOUT_E
 drag-lint repo migrate (--repo <file> | --project <project file>) [--apply]
 ```
 
-Without `--apply` it prints `v1 -> v2: add DL_FIELDS_INFO.CALC_BODY, create DL_LAYOUT_EVENTS, create
-DL_EXCEPTIONS, FIELD_KIND 2 for <n> ISCALCULATED rows, user_version 2` and changes no byte. With
+Without `--apply` it prints `v1 -> v2: add DL_FIELDS_INFO.CALC_BODY, DOMAIN_NAME, CHAR_LENGTH, create
+DL_LAYOUT_EVENTS, DL_EXCEPTIONS, DL_DOMAINS, DL_CONSTRAINTS, DL_CONSTRAINT_COLUMNS, DL_GENERATORS, FIELD_KIND 2 for <n> ISCALCULATED rows, user_version 2` and changes no byte. With
 `--apply` it first writes `<repo>.before-migrate-<yyyymmdd-hhnnss>.txt` (the schema-1 text backup), then
 runs one transaction; `FIELD_KIND` becomes 2 for the `ISCALCULATED` rows whose kind is NULL or 1. A
 schema-2 file prints `already at schema 2` (exit 0).
@@ -182,6 +187,36 @@ restoring into a missing file creates the file at the backup's own version.
 
 `DL_EXCEPTIONS` (rule id or `*`, dataset, table, field, property, reason) lets the schema lint accept a
 known deviation; a finding is silenced when every non-empty key column of some row matches it.
+
+## Schema facts in the repository (1.53)
+
+The repository, not the project index, holds what the database says about itself: `DL_DOMAINS`,
+`DL_CONSTRAINTS` (PK / UNIQUE / FK with rules), `DL_CONSTRAINT_COLUMNS` (ordered key columns) and
+`DL_GENERATORS`, plus `DL_FIELDS_INFO.DOMAIN_NAME` and `CHAR_LENGTH`. The index tables `fb_*` of
+`fb-snapshot` are unchanged. `DL_META` records `schema_read_at_utc`, `schema_source` (`live` or `ddl`) and
+`schema_database` (the Database value only, never a password). Read them through
+`DRagLint.FieldRepo.SchemaFacts` (`HasSchema`, `SchemaInfo`, `ColumnCharLength`, `PrimaryKey`).
+
+`--ddl` reads one or more SQL files offline: CREATE DOMAIN / TABLE / GENERATOR / SEQUENCE and ALTER TABLE ADD
+[CONSTRAINT]; CREATE INDEX is ignored, SET TERM blocks are skipped, unknown statements are listed with file and
+line as warnings and never stop the run. A malformed CREATE TABLE is an error naming file and line and nothing is
+written. With a DDL source only what the DDL declares can be proposed for deletion.
+
+Every change set line reads `[id] op target prop: old -> new`; an unchecked change is followed by `  (unchecked)`
+and the header ends `, U unchecked`. Dry runs change no byte of the repository.
+
+### Three databases
+
+The Firebird database is READ; the repository file (`.dlrepo`) is WRITTEN by `repo`; the project index
+(`_D-RAG\<project>.sqlite`) holds only code facts and lint findings. Schema-aware features read the repository.
+
+### Banded views are the table family
+
+`TcxGridDBBandedTableView` derives from `TcxGridBandedTableView`, which derives from `TcxGridTableView`. The
+banded view adds only four view events (plus the band-header events, which live on the band, not the view), so the
+repository treats it as
+the same family as the plain table view: one set of column properties, the extra events live in
+`DL_LAYOUT_EVENTS`.
 
 ## Known limits
 
