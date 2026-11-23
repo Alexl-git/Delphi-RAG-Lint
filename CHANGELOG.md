@@ -9,6 +9,7 @@ In integration (lane/v154-int). No re-parse: extractor and resolver versions unc
 
 Merged lanes:
 
+- ORM-RULES: `param-name-prefix` no longer reports parameters named `Value`, `Source` or `Owner` (whole name, case-insensitive; owner ruling 2026-11-23, ORM3 server lint). The list is the new `naming.param_exempt` stringlist rule parameter (default those three; a list you give replaces the default, `[]` exempts nothing). No extractor change.
 - TT-DFMREAD: `repo read-dfm --dfm <file>[;...] [--dataset <Name>] --direction dfm-to-repo` reads the persistent fields of a form (text or binary DFM; data, calc, internal-calc, lookup, aggregate), its lookup wiring and the code of OnCalcFields / OnGetText into the field repository as a change set: dry run by default, `--apply` or `--select <id file>` in one transaction. Code and facts it cannot express are BLOCKED or reported, never guessed. `ExpandSelection` (spec 4.4) is the rule for the later field-selection dialog. No extraction, resolver or lint change.
 - SEARCHFAST: the `search` index stage no longer slows down with the size of the index. The one ANALYZE runs on an empty database and recorded every FTS5 data table as two rows, so SQLite scanned the whole table for each segment FTS5 dropped; the writer now corrects that statistic (existing indexes heal on their next write), and a run that has to fill a large share of the table rebuilds `symbol_search_fts` in one pass inside the stage's transaction. library-Win64 in place: 7,135 s -> 49 s for 1.45 M rows. No re-parse.
 

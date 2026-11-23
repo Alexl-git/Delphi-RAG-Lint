@@ -67,9 +67,9 @@ function Get-Flagged($C) {
 $CheckBody = @'
 unit UNITNAME;
 interface
-procedure Go(Value: Integer; AValue: Integer; pName: string; FName: string; strName: string; Sender: TObject; N: Integer);
+procedure Go(Count: Integer; AValue: Integer; pName: string; FName: string; strName: string; Sender: TObject; N: Integer);
 implementation
-procedure Go(Value: Integer; AValue: Integer; pName: string; FName: string; strName: string; Sender: TObject; N: Integer);
+procedure Go(Count: Integer; AValue: Integer; pName: string; FName: string; strName: string; Sender: TObject; N: Integer);
 begin
 end;
 end.
@@ -78,14 +78,14 @@ end.
 Write-Host 'CHECK 1: default config (no naming block)' -ForegroundColor Cyan
 $k1 = New-Case 'chk1' $CheckBody '{}'
 $f1 = Get-Flagged $k1
-Check 'CHECK1: Value reported (no allowed prefix)'      ($f1 -contains 'Value')   ($f1 -join ',')
+Check 'CHECK1: Count reported (no allowed prefix)'      ($f1 -contains 'Count')   ($f1 -join ',')
 Check 'CHECK1: FName reported (field prefix F)'         ($f1 -contains 'FName')   ($f1 -join ',')
 Check 'CHECK1: AValue accepted (A in default list)'     (-not ($f1 -contains 'AValue')) ($f1 -join ',')
 Check 'CHECK1: pName accepted (p in default list)'      (-not ($f1 -contains 'pName'))  ($f1 -join ',')
 Check 'CHECK1: strName accepted (Hungarian allowed)'    (-not ($f1 -contains 'strName')) ($f1 -join ',')
 Check 'CHECK1: Sender exempt (event signature)'          (-not ($f1 -contains 'Sender')) ($f1 -join ',')
 Check 'CHECK1: single-letter N exempt (owner card C)'    (-not ($f1 -contains 'N')) ($f1 -join ',')
-Check 'CHECK1: both header sites reported for Value'    (@($f1 | Where-Object { $_ -eq 'Value' }).Count -eq 2) ($f1 -join ',')
+Check 'CHECK1: both header sites reported for Count'    (@($f1 | Where-Object { $_ -eq 'Count' }).Count -eq 2) ($f1 -join ',')
 
 Write-Host 'CHECK 2: param_hungarian = off' -ForegroundColor Cyan
 $k2 = New-Case 'chk2' $CheckBody '{ "naming": { "param_hungarian": "off" } }'

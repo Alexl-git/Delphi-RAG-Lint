@@ -124,6 +124,7 @@ type
     HungarianPrefixes       : TArray<string>;// type-prefix denylist for the hungarian rule
     ShortIdentifierCheck    : Boolean;       // master on/off for hungarian-or-short-identifier (default False)
     ParamPrefixes           : TArray<string>;// param-name-prefix: ACCEPTED prefixes (default p, A); empty disables the rule
+    ParamExempt             : TArray<string>;// param-name-prefix: parameter names never reported (whole name, case-insensitive; default Value, Source, Owner)
     ParamHungarian          : string;        // 'allowed' (default): a hungarian_prefixes typed prefix also satisfies param-name-prefix; 'off': it does not
     /// <returns><!-- drag-lint:auto type -->TNamingConfig</returns>
     /// <remarks>
@@ -982,6 +983,7 @@ begin
   Result.HungarianPrefixes   := ['lpsz', 'psz', 'sz', 'lp', 'int', 'str', 'dw', 'b', 'p', 'n'];
   Result.ShortIdentifierCheck:= False;        { hungarian-or-short-identifier OFF by default }
   Result.ParamPrefixes       := ['p', 'A'];   { param-name-prefix ON by default (owner Q7, 1.52.2) }
+  Result.ParamExempt         := ['Value', 'Source', 'Owner'];  { owner ruling 2026-11-23 }
   Result.ParamHungarian      := 'allowed';    { a typed (Hungarian) prefix is accepted, not required }
 end;
 
@@ -1026,6 +1028,12 @@ begin
       if Trim(PV.Value) <> '' then Naming.ParamPrefixes:= Naming.ParamPrefixes + [Trim(PV.Value)];
     if NJ.GetValue('param_prefix') = nil then
       Naming.ParamPrefix:= if Length(Naming.ParamPrefixes) > 0 then Naming.ParamPrefixes[0] else '';
+  end;
+  if NJ.GetValue('param_exempt') is TJSONArray then
+  begin
+    Naming.ParamExempt:= nil;
+    for var EV in (NJ.GetValue('param_exempt') as TJSONArray) do
+      if Trim(EV.Value) <> '' then Naming.ParamExempt:= Naming.ParamExempt + [Trim(EV.Value)];
   end;
   if NJ.GetValue('param_hungarian') <> nil then
     Naming.ParamHungarian:= LowerCase(Trim(NJ.GetValue('param_hungarian').Value));

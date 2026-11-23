@@ -739,6 +739,14 @@ var
         Format('Identifier "%s" uses a Hungarian type prefix', [AName]));
   end;
 
+  { True when AName is on the configured exempt list (whole name, case-insensitive). }
+  function IsParamExempt(const AName: string): Boolean;
+  begin
+    Result:= False;
+    for var Ex: string in ANaming.ParamExempt do
+      if SameText(AName, Ex) then Exit(True);
+  end;
+
   { param-name-prefix (owner ruling Q7, 1.52.2). A parameter passes when it
     carries ONE of the accepted prefixes (ANaming.ParamPrefixes, default p and
     A; HasPrefix, so the next character must be uppercase), or -- while
@@ -750,11 +758,14 @@ var
     signature (TNotifyEvent and kin) names it, every IDE-generated handler
     carries it, and pSender would be noise on every form. A single-letter
     name (N, S, B, ...) is exempt too (owner ruling card C, 2026-11-20): it is
-    a deliberate throwaway, and pN reads worse than N. }
+    a deliberate throwaway, and pN reads worse than N. The names in
+    ANaming.ParamExempt (default Value, Source, Owner; owner ruling
+    2026-11-23, whole name, case-insensitive) are exempt as well; an empty list
+    exempts nothing. }
   procedure ParamPrefixCheck(const ANameNode: TTSNode; const AName: string);
   begin
     if Length(ANaming.ParamPrefixes) = 0 then Exit;
-    if SameText(AName, 'Sender') or (Length(AName) = 1) then Exit;
+    if SameText(AName, 'Sender') or (Length(AName) = 1) or IsParamExempt(AName) then Exit;
     if (ANaming.FieldPrefix <> '') and HasPrefix(AName, ANaming.FieldPrefix) then
     begin
       EmitAt(ANameNode, 'param-name-prefix',

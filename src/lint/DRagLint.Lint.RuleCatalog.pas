@@ -719,9 +719,10 @@ begin
       [MkParam('field_prefix','string','F')]);
     { ON since 1.52.2 (owner ruling Q7): accepted-prefix LIST, F always reported,
       typed Hungarian prefixes accepted unless param_hungarian = off. }
-    B('param-name-prefix',   'naming', 'info', 'Parameter name must carry one of the accepted prefixes (default p, A); a field-prefixed (F) parameter is always reported', True,
+    B('param-name-prefix',   'naming', 'info', 'Parameter name must carry one of the accepted prefixes (default p, A); a field-prefixed (F) parameter is always reported; Value, Source and Owner are exempt (param_exempt)', True,
       [MkParam('param_prefix','string','p'),
        MkParam('param_prefixes','stringlist','p,A'),
+       MkParam('param_exempt','stringlist','Value,Source,Owner'),
        MkParam('param_hungarian','string','allowed')]);
     B('method-pascalcase',   'naming', 'info', 'Method/routine name casing', True,
       [MkParam('method_case','string','PascalCase')]);
