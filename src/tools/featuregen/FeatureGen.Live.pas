@@ -221,7 +221,8 @@ function SortUniqueText(const pItems: TArray<string>): TArray<string>;
 /// <exception cref="EFeatureGenLive">The Run dispatcher implementation is not found.</exception>
 /// <remarks>Comments, string literals (for the span scan) and inactive Win64 conditional branches are
 /// blanked first; a subcommand belongs to every verb whose dispatch closure reaches its routine.
-/// A subcommand is a literal compared with Args.SubCommand (`=`, `<>`, SameText / MatchText / IndexText),
+/// A subcommand is a literal, or a string constant declared above in the same unit (1.53), compared
+/// with Args.SubCommand (`=`, `<>`, SameText / MatchText / IndexText),
 /// or with the FIRST parameter of a routine handed Args.SubCommand as its first argument (repo ->
 /// RunRepoVerb(pSub, ...)), followed into callees that receive that parameter first in turn (1.52 B25).
 /// A sub passed in any other argument position is not followed.</remarks>
@@ -821,18 +822,94 @@ begin
     Result := Result + [lM.Groups[1].Value];
 end;
 
-{ B25: the literals pSpan compares the operand pOperandRe with: `= 'x'`, `<> 'x'`, and the first
-  argument of SameText / MatchText / IndexText (Ansi- forms too). }
-function ComparedLiterals(const pSpan, pOperandRe: string): TArray<string>;
+type
+  { A string constant whose value is a sub-verb word, and where it is declared. }
+  TSubConst = record
+    Name: string;
+    Value: string;
+    Pos: Integer;
+  end;
+
+  { The sub-verb constants of the concatenated CLI units (1.53 BUGS: `repo migrate` / `repo check` are
+    compared as MatchText(pSub, [SUB_MIGRATE, SUB_CHECK]) and were reported as not dispatched). }
+  TSubConsts = record
+  private
+    FItems: TArray<TSubConst>;
+    FUnits: TArray<Integer>;
+    function UnitOf(pPos: Integer): Integer;
+  public
+    class function Read(const pNoComments: string): TSubConsts; static;
+    function TryValue(const pName: string; pSpanFrom, pSpanTo: Integer; out pValue: string): Boolean;
+  end;
+
+class function TSubConsts.Read(const pNoComments: string): TSubConsts;
 var
   lM: TMatch;
+  lItem: TSubConst;
+begin
+  Result := Default(TSubConsts);
+  for lM in TRegEx.Matches(pNoComments, '^unit\s+[A-Za-z_][A-Za-z0-9_.]*\s*;', [roIgnoreCase, roMultiLine]) do
+    Result.FUnits := Result.FUnits + [lM.Index];
+  for lM in TRegEx.Matches(pNoComments, '^[ \t]*([A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*string\s*)?=\s*''([a-z0-9][a-z0-9-]*)''\s*;', [roIgnoreCase, roMultiLine]) do
+  begin
+    lItem.Name := lM.Groups[1].Value;
+    lItem.Value := lM.Groups[2].Value;
+    lItem.Pos := lM.Index;
+    Result.FItems := Result.FItems + [lItem];
+  end;
+end;
+
+{ The ordinal of the unit holding pPos: how many unit headers start at or before it. }
+function TSubConsts.UnitOf(pPos: Integer): Integer;
+begin
+  Result := 0;
+  while (Result < Length(FUnits)) and (FUnits[Result] <= pPos) do
+    Inc(Result);
+end;
+
+{ The value of pName seen from the routine span pSpanFrom..pSpanTo: the last declaration before the
+  span ends, in the same unit (two units may give one name two values). }
+function TSubConsts.TryValue(const pName: string; pSpanFrom, pSpanTo: Integer; out pValue: string): Boolean;
+var
+  i: Integer;
+begin
+  pValue := '';
+  for i := High(FItems) downto 0 do
+    if (FItems[i].Pos < pSpanTo) and SameText(FItems[i].Name, pName) and (UnitOf(FItems[i].Pos) = UnitOf(pSpanFrom)) then
+    begin
+      pValue := FItems[i].Value;
+      Exit(True);
+    end;
+  Result := False;
+end;
+
+{ B25: the literals the span pFrom..pTo of pText compares the operand pOperandRe with: `= 'x'`,
+  `<> 'x'`, and the second argument of SameText / MatchText / IndexText (Ansi- forms too); a name there
+  is looked up in pConsts. }
+function ComparedLiterals(const pText: string; pFrom, pTo: Integer; const pOperandRe: string; const pConsts: TSubConsts): TArray<string>;
+var
+  lM: TMatch;
+  lSpan: string;
+
+  function Words(const pList: string): TArray<string>;
+  var
+    lId: TMatch;
+    lValue: string;
+  begin
+    Result := SubLiterals(pList);
+    for lId in TRegEx.Matches(TRegEx.Replace(pList, '''[^'']*''', ''), '[A-Za-z_][A-Za-z0-9_]*') do
+      if pConsts.TryValue(lId.Value, pFrom, pTo, lValue) then
+        Result := Result + [lValue]; // dl:ok concat-in-loop@7f8a -- REVIEWED 2026-11-23 v153 BUGS: TArray<string> concat, not a string; a handful of sub-verb names per CLI routine
+  end;
+
 begin
   Result := nil;
-  for lM in TRegEx.Matches(pSpan, '(?:Ansi)?(?:Same|Match|Index)Text\s*\(\s*' + CASE_WRAP_RE + pOperandRe
-    + '\s*\)?\s*,\s*(\[[^\]]*\]|''[^'']*'')', [roIgnoreCase]) do
-    Result := Result + SubLiterals(lM.Groups[1].Value); // dl:ok concat-in-loop@7f8a -- REVIEWED 2026-11-18 v152 BK-TOOLING2: TArray<string> concat, not a string; a handful of sub-verb literals per CLI routine
-  for lM in TRegEx.Matches(pSpan, pOperandRe + '\s*(?:=|<>)\s*(''[^'']*'')', [roIgnoreCase]) do
-    Result := Result + SubLiterals(lM.Groups[1].Value); // dl:ok concat-in-loop@7f8a -- REVIEWED 2026-11-18 v152 BK-TOOLING2: TArray<string> concat, not a string; a handful of sub-verb literals per CLI routine
+  lSpan := Copy(pText, pFrom, pTo - pFrom);
+  for lM in TRegEx.Matches(lSpan, '(?:Ansi)?(?:Same|Match|Index)Text\s*\(\s*' + CASE_WRAP_RE + pOperandRe
+    + '\s*\)?\s*,\s*(\[[^\]]*\]|''[^'']*''|[A-Za-z_][A-Za-z0-9_]*)', [roIgnoreCase]) do
+    Result := Result + Words(lM.Groups[1].Value); // dl:ok concat-in-loop@7f8a -- REVIEWED 2026-11-18 v152 BK-TOOLING2: TArray<string> concat, not a string; a handful of sub-verb literals per CLI routine
+  for lM in TRegEx.Matches(lSpan, pOperandRe + '\s*(?:=|<>)\s*(''[^'']*''|[A-Za-z_][A-Za-z0-9_]*)', [roIgnoreCase]) do
+    Result := Result + Words(lM.Groups[1].Value); // dl:ok concat-in-loop@7f8a -- REVIEWED 2026-11-18 v152 BK-TOOLING2: TArray<string> concat, not a string; a handful of sub-verb literals per CLI routine
 end;
 
 { B25: the routines pSpan hands the operand pOperandRe to as their FIRST argument (case fold allowed). }
@@ -850,6 +927,7 @@ const
   HEADER_RE = '^(?:procedure|function)\s+([A-Za-z_][A-Za-z0-9_]*)';
 var
   lRes: TPascalProjections;
+  lConsts: TSubConsts;
   lHeaders, lArms: TMatchCollection;
   lPer: TObjectDictionary<string, TStrSet>;
   lRoutines: TObjectDictionary<string, TStrSet>;
@@ -893,6 +971,7 @@ var
 
 begin
   lRes := ResolveConditionals(PascalProjections(pCliText));
+  lConsts := TSubConsts.Read(lRes.NoComments);
   lPer := TObjectDictionary<string, TStrSet>.Create([doOwnsValues], TIStringComparer.Ordinal);
   lRoutines := TObjectDictionary<string, TStrSet>.Create([doOwnsValues], TIStringComparer.Ordinal);
   lDispatch := TObjectDictionary<string, TStrSet>.Create([doOwnsValues], TIStringComparer.Ordinal);
@@ -914,7 +993,7 @@ begin
       lSpan := Copy(lRes.Code, lFrom, lTo - lFrom);
       if not HasBody(lSpan) then
         Continue;
-      for lLit in ComparedLiterals(Copy(lRes.NoComments, lFrom, lTo - lFrom), ARGS_SUB_RE) do
+      for lLit in ComparedLiterals(lRes.NoComments, lFrom, lTo, ARGS_SUB_RE, lConsts) do
         AddSub(lName, lLit);
       for lC in FirstArgCallees(lSpan, ARGS_SUB_RE) do
         lSeeds.Add(lName + #9 + lC);
@@ -972,7 +1051,7 @@ begin
         lVerbOrder.Add(lVerb);
       end;
       ArgsCallees(lSpan, 'Run', lSet);
-      for lLit in ComparedLiterals(Copy(lRes.NoComments, lFrom, lTo - lFrom), ARGS_SUB_RE) do
+      for lLit in ComparedLiterals(lRes.NoComments, lFrom, lTo, ARGS_SUB_RE, lConsts) do
         AddSub('Run:' + lVerb, lLit);
       for lC in FirstArgCallees(lSpan, ARGS_SUB_RE) do
         if lFirst.ContainsKey(lC) then
@@ -999,7 +1078,7 @@ begin
       lFrom := lSpanFrom[lR];
       lTo := lSpanTo[lR];
       lOp := '(?<![A-Za-z0-9_.])' + lFirst[lR] + '\b(?!\s*\.)';
-      for lLit in ComparedLiterals(Copy(lRes.NoComments, lFrom, lTo - lFrom), lOp) do
+      for lLit in ComparedLiterals(lRes.NoComments, lFrom, lTo, lOp, lConsts) do
         AddSub(lR, lLit);
       for lC in FirstArgCallees(Copy(lRes.Code, lFrom, lTo - lFrom), lOp) do
         if lFirst.ContainsKey(lC) and not SameText(lC, lR) then
