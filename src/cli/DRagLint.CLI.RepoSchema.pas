@@ -219,7 +219,7 @@ begin
   end;
   try
     VModel := ReadModel(pConnection, VDdl, VWarnings);
-    Result := SyncOnRepo(pSub, pPath, VModel, CommandLineFlag('--apply') or (VSelect <> ''), pJson, VSelect, VWarnings);
+    Result := SyncOnRepo(pSub, pPath, VModel, (CommandLineFlag('--apply') or (VSelect <> '')) and not CommandLineFlag('--dry-run'), pJson, VSelect, VWarnings);
   except
     on E: Exception do
     begin

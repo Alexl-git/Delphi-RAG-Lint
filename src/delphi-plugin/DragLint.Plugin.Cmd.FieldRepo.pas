@@ -106,6 +106,8 @@ const
   INFO_TIMEOUT_MS = 20000;
   REPO_STALL_MS = 300000;
   SUMMARY_LINES = 40;
+  WRITE_FILES_ASK = 'Write these files now?';
+  REFRESH_ASK = 'Write the checked changes to the repository now? Deletes of vanished columns are not checked and stay out.';
   NO_PROJECT_MSG = 'drag-lint: open a project first; the field repository belongs to the active project.';
 
 function MaskedPrompt(const pText: string): string;
@@ -242,6 +244,27 @@ begin
   LaunchEditor(EditorExe, RepoPath);
 end;
 
+{ pBaseCmd + pDryArgs (dry run), summary, the question pAsk, then pBaseCmd + pApplyArgs. }
+procedure RunDryThenApply(const pTitle, pBaseCmd, pDryArgs, pApplyArgs: string; const pAsk: string = WRITE_FILES_ASK);
+begin
+  RunCliAsync(Trim(pBaseCmd + ' ' + pDryArgs),
+    procedure(pExitCode: Integer; const pOutput: string)
+    begin
+      if pExitCode <> 0 then
+      begin
+        ShowRunResult(pTitle + ' (dry run)', pExitCode, FieldRepoRunSummary(pOutput, SUMMARY_LINES));
+        Exit;
+      end;
+      if MessageDlg(pTitle + ' -- dry run' + sLineBreak + sLineBreak + FieldRepoRunSummary(pOutput, SUMMARY_LINES) +
+        sLineBreak + sLineBreak + pAsk, mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
+      RunCliAsync(pBaseCmd + ' ' + pApplyArgs,
+        procedure(pApplyExit: Integer; const pApplyOutput: string)
+        begin
+          ShowRunResult(pTitle, pApplyExit, FieldRepoRunSummary(pApplyOutput, SUMMARY_LINES));
+        end, REPO_STALL_MS);
+    end, REPO_STALL_MS);
+end;
+
 procedure InvokeRefreshSchema(Sender: TObject);
 var
   Exe, Project, Connection: string;
@@ -255,11 +278,9 @@ begin
     ShowMessage('drag-lint: give the connection string without double quotes');
     Exit;
   end;
-  RunCliAsync(FieldRepoCommandLine(Exe, 'refresh-schema', Project, '--connection "' + Connection + '"'),
-    procedure(pExitCode: Integer; const pOutput: string)
-    begin
-      ShowRunResult('repo refresh-schema', pExitCode, pOutput);
-    end, REPO_STALL_MS);
+  // 1.53: refresh-schema is a change set (dry run unless --apply); '--dry-run' keeps an older engine from writing here too.
+  RunDryThenApply('repo refresh-schema',
+    FieldRepoCommandLine(Exe, 'refresh-schema', Project, '--connection "' + Connection + '"'), '--dry-run', '--apply', REFRESH_ASK);
 end;
 
 procedure InvokeMemTableFromCsv(Sender: TObject);
@@ -300,27 +321,6 @@ begin
   Dir:= if pDir <> '' then pDir else ExtractFileDir(pProject);
   Result:= SelectDirectory(pCaption, '', Dir, [sdNewUI], nil);
   if Result then pDir:= Dir;
-end;
-
-{ pBaseCmd + pDryArgs (dry run), summary, confirm, then pBaseCmd + pApplyArgs. }
-procedure RunDryThenApply(const pTitle, pBaseCmd, pDryArgs, pApplyArgs: string);
-begin
-  RunCliAsync(Trim(pBaseCmd + ' ' + pDryArgs),
-    procedure(pExitCode: Integer; const pOutput: string)
-    begin
-      if pExitCode <> 0 then
-      begin
-        ShowRunResult(pTitle + ' (dry run)', pExitCode, FieldRepoRunSummary(pOutput, SUMMARY_LINES));
-        Exit;
-      end;
-      if MessageDlg(pTitle + ' -- dry run' + sLineBreak + sLineBreak + FieldRepoRunSummary(pOutput, SUMMARY_LINES) +
-        sLineBreak + sLineBreak + 'Write these files now?', mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
-      RunCliAsync(pBaseCmd + ' ' + pApplyArgs,
-        procedure(pApplyExit: Integer; const pApplyOutput: string)
-        begin
-          ShowRunResult(pTitle, pApplyExit, FieldRepoRunSummary(pApplyOutput, SUMMARY_LINES));
-        end, REPO_STALL_MS);
-    end, REPO_STALL_MS);
 end;
 
 { repo gen-orm (tables given) or update-orm (no tables: every existing unit). }
