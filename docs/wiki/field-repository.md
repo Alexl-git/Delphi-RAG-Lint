@@ -183,6 +183,43 @@ restoring into a missing file creates the file at the backup's own version.
 `DL_EXCEPTIONS` (rule id or `*`, dataset, table, field, property, reason) lets the schema lint accept a
 known deviation; a finding is silenced when every non-empty key column of some row matches it.
 
+## Generated registry unit (`repo gen-const`, 1.53)
+
+`repo gen-const` is the read-only replacement for the `FIB$` tables at run time: it turns the repository
+into ONE Pascal unit that the SERVER and the CLIENT both use, so neither needs the registry tables in
+Firebird.
+
+```
+drag-lint repo gen-const (--repo <file> | --project <project file>) --unit uFieldRegistry --output <file.pas>
+                         [--table DL_X,...] [--memtable] [--dry-run]
+```
+
+* **Where it writes.** Only to `--output`; there is no default path. The shared folder (for example
+  `ORM3\COMMON`) is your choice at the first generation; the output folder must already exist.
+* **Tables.** By default `DL_FIELDS_INFO`, `DL_DATASETS_INFO`, `DL_ENUMVALUES`, `DL_ERROR_MESSAGES`. `--table`
+  takes a comma list of these (case-insensitive). `DL_META`, `DL_EXCEPTIONS`, `DL_LAYOUT_EVENTS` and the schema
+  tables (`DL_DOMAINS`, `DL_CONSTRAINTS`, `DL_CONSTRAINT_COLUMNS`, `DL_GENERATORS`) are never generated; an
+  unknown or refused name exits 2, as does a `--unit` that is not an identifier or a missing `--output`.
+  It works on schema 1 and schema 2 repositories (`CALC_BODY` appears in the schema 2 record).
+* **Constant arrays (always).** Per table a record `T<TABLE>Row`, `<TABLE>_ROW_COUNT` and
+  `<TABLE>_ROWS: array[0..N-1] of T<TABLE>Row` in primary-key order (an empty table gets only the count
+  `= 0`: Delphi has no empty constant array). A column that holds a NULL somewhere gets a companion field
+  `<Col>IsNull`, set to `True` on those rows. `<TABLE>_FIB_NAME` names the Firebird table it replaces.
+  Text is written as 7-bit ASCII literals (`''` for an apostrophe, `#nnn` for control and non-ASCII
+  characters, `#13#10` for a line break) in pieces of at most 200 characters joined by `+`, so no line passes
+  250 characters.
+* **TFDMemTable fill (`--memtable`).** Adds `Fill<Table>(pTable: TFDMemTable)` (for example
+  `FillDlFieldsInfo`): it creates the field definitions with the `FIB$` names, types and sizes
+  (`VARCHAR(n)` as `ftWideString` n, `BOOLEAN` as `ftBoolean`, text as `ftWideMemo`) and appends every row,
+  leaving NULL columns NULL, so a reader written against `FIB$FIELDS_INFO` can be fed unchanged.
+  The procedure name is the table name in PascalCase so the generated unit stays lint-clean.
+* **Deterministic.** The same repository gives the same bytes (7-bit ASCII, CRLF); the header comment lists the
+  source repository name and the per-table row counts.
+* `--dry-run` prints the row count per table and writes nothing.
+
+Proof: `tests\autotest\run_fieldrepo_constgen.ps1` restores the golden fixtures into temp repositories,
+generates the unit, compiles a probe program against it with `dcc32`, fills the mem tables and requires the
+dump to equal `repo backup` of the four tables.
 ## Known limits
 
 * Firebird is read only; writing the repository back to Firebird (`repo publish-fb`) is not in

@@ -1688,6 +1688,7 @@ begin
     end
     else if A = '--replace' then Result.Replace:= True
     else if A = '--prepare-queries' then // repo gen-param-array: DRagLint.CLI.RepoParamArray reads it from ParamStr
+    else if A = '--memtable' then // repo gen-const: DRagLint.CLI.RepoConstGen reads it from ParamStr
     { repo gen-param-array: DRagLint.CLI.RepoParamArray reads these values from ParamStr. One branch per flag: they are
       four different options, and an OR-group reads as an alias group to run_flag_verb_map.ps1 (features\flag-aliases.json). }
     else if (A = '--dfm') and (i < ParamCount) then Inc(i)
