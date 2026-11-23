@@ -1,6 +1,8 @@
 # Plan FR-CONSTGEN -- repository -> constant arrays / TFDMemTable fill (read-only FIB$ replacement)
 
-Spec: `docs\superpowers\specs\2026-11-22-field-repository-v2-design.md` section 7 (normative), 10.
+Spec: `docs\superpowers\specs\2026-11-22-field-repository-v2-design.md` section 7 (normative), 10. Rev 2 (2026-11-22):
+ONE unit shared by SERVER and CLIENT in a shared folder (e.g. `ORM3\COMMON`), exact path chosen at first generation (FR-1);
+the lane uses `--output` only and writes nothing into ORM3.
 Lane rules: `C:\TEMP\claude\lanes\v153\BRIEF.md`. Release 1.53.0.
 Model: **sonnet** -- output shape, escaping and tests are specified.
 Worktree `C:\TEMP\claude\lanes\v153\FR-CONSTGEN\wt`, branch `lane/v153-fr-constgen`.
@@ -42,8 +44,8 @@ re-runs task 5 on a v2 fixture.
    `#DLREPO`-style dump; the dump must equal `repo backup` of the same repository for the generated tables (DL_META
    excluded). RED: probe source exists before the generator -> compile fails. dcc not found = FAIL, not SKIP.
 6. **CLI**: `repo gen-const --repo X --unit uFieldRegistry --output o.pas [--table ...] [--memtable] [--dry-run]`;
-   `--dry-run` prints counts and writes nothing; unknown `--table` exit 2; DL_META / DL_DATASET_FIELD_USE /
-   DL_EXCEPTIONS refused in `--table` (exit 2); `--unit` not an identifier exit 2; output path's folder must exist.
+   `--dry-run` prints counts and writes nothing; unknown `--table` exit 2; DL_META / DL_EXCEPTIONS /
+   DL_LAYOUT_EVENTS / DL_DOMAINS / DL_CONSTRAINTS / DL_CONSTRAINT_COLUMNS / DL_GENERATORS refused in `--table` (exit 2); `--unit` not an identifier exit 2; output path's folder must exist.
 7. Lint the GENERATED unit of task 5 with `lint <file>` (must be clean or the generator is fixed); lint changed
    units + lint-all with `--enable magic-literal,multiple-statements-per-line,commented-out-code`; encoding guard;
    featuregen entry + wiki.
@@ -52,4 +54,4 @@ re-runs task 5 on a v2 fixture.
 
 * Round-trip proof green on the v1 golden; determinism test green; generated unit lint-clean.
 * Live check (hand-back note, optional): `repo gen-const` on a copy of the owner's repository -> row counts equal
-  `repo info`. No ORM3 file is written by the lane (spec 12 Q1 decides the target).
+  `repo info`. No ORM3 file is written by the lane (FR-1: the shared-folder path is chosen by the owner at first generation).
