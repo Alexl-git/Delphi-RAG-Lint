@@ -337,11 +337,13 @@ begin
     Exit(if CharsOf(pNew) > CharsOf(pOld) then tvWiden else tvShrink);
   if (ExactRank(pOld) > 0) and (ExactRank(pNew) > 0) then
     Exit(ExactVerdict(pOld, pNew));
+  Result := tvConvert;
   if (pOld.FieldType = FB_FLOAT) and (pNew.FieldType = FB_DOUBLE) then
-    Exit(tvWiden);
-  if (pOld.FieldType = FB_DOUBLE) and (pNew.FieldType = FB_FLOAT) then
-    Exit(tvShrink);
-  Result := if (pOld.FieldType = FB_TIMESTAMP) and (pNew.FieldType = FB_DATE) then tvLossy else tvConvert;
+    Result := tvWiden
+  else if (pOld.FieldType = FB_DOUBLE) and (pNew.FieldType = FB_FLOAT) then
+    Result := tvShrink
+  else if (pOld.FieldType = FB_TIMESTAMP) and (pNew.FieldType = FB_DATE) then
+    Result := tvLossy;
 end;
 
 { A default the repository may put into DDL: one literal or one context value, nothing else. }

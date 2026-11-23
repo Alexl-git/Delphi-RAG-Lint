@@ -175,10 +175,7 @@ begin
     VReason := pHook.BlockReason(pPlan.Changes[i]);
     if VReason = '' then
       Continue;
-    if pPlan.Changes[i].Change.Blocked <> '' then
-      VReason := pPlan.Changes[i].Change.Blocked + '; ' + BLOCK_HOOK + ': ' + VReason
-    else
-      VReason := BLOCK_HOOK + ': ' + VReason;
+    VReason := (if pPlan.Changes[i].Change.Blocked = '' then '' else pPlan.Changes[i].Change.Blocked + '; ') + BLOCK_HOOK + ': ' + VReason;
     pPlan.Changes[i].Change.Blocked := VReason;
     pPlan.Changes[i].Change.Checked := False;
   end;

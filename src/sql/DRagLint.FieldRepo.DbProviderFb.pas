@@ -91,7 +91,7 @@ type
     function CountMismatches(const pTable, pFrom, pCopy: string; const pOld, pNew: TFrTypeFacts): string;
   end;
 
-  TFrFirebirdProvider = class(TInterfacedObject, IFrDbProvider)
+  TFrFirebirdProvider = class(TInterfacedObject, IFrDbProvider)  // dl:ok high-response@b1d3 -- REVIEWED 2026-11-23 TT-ALTER: one provider = one attachment; its RDB$ readers share it
   private
     FConn: TFDConnection;
     FRead: TFDTransaction;
@@ -405,7 +405,7 @@ begin
   try
     Result.Connection := FConn;
     Result.Transaction := FRead;
-    Result.Open(pSql, pParams);
+    Result.Open(pSql, pParams);  // dl:ok dataset-open-without-close@1d69 -- REVIEWED 2026-11-23 TT-ALTER: the open dataset IS the result; every caller frees it in a finally, the exception path frees it here
   except
     Result.Free;
     raise;
