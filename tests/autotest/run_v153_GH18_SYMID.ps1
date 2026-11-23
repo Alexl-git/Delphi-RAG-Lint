@@ -391,6 +391,25 @@ end.
 "@
 }
 
+# Indexed LAST, so no edited file owns the highest ids: SQLite re-issues a deleted max rowid, and a
+# hub indexed last kept its ids even on the 1.52 delete + insert (an id check that cannot fail).
+Write-Ascii (Join-Path $src 'uZLast.pas') @"
+unit uZLast;
+
+interface
+
+function ZLast: Integer;
+
+implementation
+
+function ZLast: Integer;
+begin
+  Result := 0;
+end;
+
+end.
+"@
+
 # Id, File, Edits (@(find, replace) pairs), KeepAll (assert 100 % ids kept + nothing in scope),
 # Hatch (assert 0 % kept), Control (seam must show diff rows).
 $scenarios = @(
@@ -413,6 +432,7 @@ $scenarios = @(
   @{ Id = 'S15'; Name = 'class ancestor changed under K.Method';          File = 'uKid.pas';  Edits = @(,@('TKid = class(TBase)', 'TKid = class(TOther)')); Control = $true },
   @{ Id = 'HATCH'; Name = 'blank line, DRAGLINT_NO_SYMBOL_ID_REUSE=1';    File = 'uLeaf.pas'; Edits = @(,@('unit uLeaf;', "`r`nunit uLeaf;")); Hatch = $true }
 )
+$allScenarios = $scenarios
 if ($Only.Count -gt 0) { $scenarios = @($scenarios | Where-Object { $Only -contains $_.Id }) }
 
 $controlsShowingDiff = 0; $controlsRun = 0; $known152 = @()
@@ -486,6 +506,28 @@ try {
       if ($dc.Code -ne 0 -and $dc.Code -ne 1) { Check "${tag}: POSITIVE CONTROL compared" $false $dc.Text }
     }
     [System.IO.File]::Copy($keep, $file, $true)
+  }
+
+  # CHAIN: several incremental runs on ONE reused database -- each claims against ids the previous
+  # run reused, so an ordering or snapshot error compounds here and nowhere above.
+  if ($Only.Count -eq 0 -or $Only -contains 'CHAIN') {
+    $dbK = Join-Path $scratch 'k.sqlite'; $dbF = Join-Path $scratch 'f.sqlite'
+    Copy-Db $dbBase $dbK
+    $orig = @{}
+    foreach ($id in 'S3', 'S6', 'S9', 'S12', 'S13', 'S14', 'REVERT') {
+      if ($id -eq 'REVERT') { foreach ($k in $orig.Keys) { [System.IO.File]::WriteAllText($k, $orig[$k]) } }
+      else {
+        $sc = $allScenarios | Where-Object { $_.Id -eq $id }
+        $file = Join-Path $src $sc.File; $text = [System.IO.File]::ReadAllText($file)
+        if (-not $orig.ContainsKey($file)) { $orig[$file] = $text }
+        foreach ($e in $sc.Edits) { if (-not $text.Contains($e[0])) { Check "CHAIN ${id}: the edit applies" $false $e[0] }; $text = $text.Replace($e[0], $e[1]) }
+        Write-Ascii $file $text
+      }
+      $outK = Invoke-Engine @('index', $src, '--db', $dbK) $null
+      Remove-Db $dbF; Invoke-Engine @('index', $src, '--db', $dbF) $null | Out-Null
+      $d = Compare-Db $dbK $dbF
+      Check "CHAIN after ${id}: cumulative reuse = full reindex (0 diff rows)" $d.Same $d.Text
+    }
   }
 } finally { Pop-Location }
 

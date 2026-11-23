@@ -61,9 +61,9 @@ database it writes is the same apart from the ids.
 
 ## How it is tested
 
-`tests\autotest\run_v153_GH18_SYMID.ps1` runs 18 edits of a 16-unit fixture and,
+`tests\autotest\run_v153_GH18_SYMID.ps1` runs 18 edits of a small fixture and a chain of edits on one database, and,
 for each one, compares three databases with `tools\measure\index_db_diff.py`: reuse,
-the hatch and a fresh full index. A test seam that treats every changed symbol as
+the hatch and a fresh full index (for a withdrawn type and a changed ancestor, where the 1.52 path itself differs from a fresh index, it requires reuse to be no worse). A test seam that treats every changed symbol as
 unchanged must make the comparison fail, so the comparison can see a stale
 binding. `tests\autotest\run_v153_symid_fk_classes.ps1` fails if a new table column
 holds a symbol id without saying how a kept id treats it.
