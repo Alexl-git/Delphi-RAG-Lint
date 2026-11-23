@@ -71,7 +71,8 @@ copied by content into the receiver's own object (nil source empties it, nil des
 class column it does not own (`TPicture`) is copied by reference. `Assign(const Value: Imc<T>)` (formerly `AssignI`) follows the same rule (an aliased list is
 skipped, a nil `Value` raises as before); a stream source keeps its Position and the copy ends at Position 0. Only the
 property setters still share an object. Order for existing
-units: `update-orm`, build, then `upgrade-orm-headers`; commit both. `update-orm` on a unit that has not been upgraded yet\nstill compiles: it only rewrites the regions, and the regions are valid under the old headers and under `AssignI`. A table with a column named `SOURCE` / `DEST`
+units: `update-orm`, build, then `upgrade-orm-headers`; commit both. `update-orm` on a unit that has not been upgraded yet
+still compiles: it only rewrites the regions, and the regions are valid under the old headers and under `AssignI`. A table with a column named `SOURCE` / `DEST`
 needs `upgrade-orm-headers` first (`update-orm` skips such a unit and says so).
 
 **AssignI is now an overload of Assign (1.54).** `i<T>.PAS` declares `procedure Assign(const IValue: Imc<T>);` and

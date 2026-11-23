@@ -8,8 +8,8 @@ unit DRagLint.FieldRepo.OrmHeaders;
     (region 11 declares its own locals since 1.54).
   * AssignI -> Assign (1.54, owner ruling 2026-11-23): the i unit declares 'procedure Assign(const IValue: Imc<T>);',
     the u unit 'procedure Assign(Source: TPersistent); overload; override;' (published) and 'procedure Assign(const
-    Value: Imc<T>); reintroduce; overload;' in a public section (only one overload can be published). The i and u unit are converted as a PAIR or not at all (half of it does not
-    compile). Calls of AssignI in hand code are only listed (FindAssignICalls), never edited.
+    Value: Imc<T>); reintroduce; overload;' in a public section (only one overload can be published). The i and u
+    unit are converted as a PAIR or not at all (half of it does not compile). Calls of AssignI in hand code are only listed (FindAssignICalls), never edited.
   Only the exact generated token sequence is recognised, in any layout and letter case; a comment or
   any other token in it marks the header as hand-edited and it stays as it is. }
 
@@ -48,7 +48,7 @@ procedure UpgradeOrmAssignPair(const pIntfText, pUnitText, pIdent: string; pHasI
 /// comment line are not calls.</returns>
 function FindAssignICalls(const pText: string): TArray<Integer>;
 
-/// 'with pParam as Tmc...'.</summary>
+/// <summary>True when the Assign (or AssignTo) of a unit still runs inside 'with pParam as Tmc...'.</summary>
 /// <param name="pText">Text of the unit.</param>
 /// <param name="pIdent">Table identifier; the class is Tmc&lt;pIdent&gt;.</param>
 /// <param name="pParam">'Source' (Assign) or 'Dest' (AssignTo).</param>
@@ -100,7 +100,6 @@ begin
   Result:= TRegEx.Create(pPattern, [roIgnoreCase, roMultiLine]);
 end;
 
-{ the rest of the method after the header: the region, then 'end; end;' and nothing else }
 function Splice(const pText: string; const pM: TMatch; const pNew: string): string;
 begin
   Result:= Copy(pText, 1, pM.Index - 1) + pNew + Copy(pText, pM.Index + pM.Length, MaxInt);
@@ -154,6 +153,7 @@ begin
   Result:= aiOther;
 end;
 
+{ the rest of the method after the header: the region, then 'end; end;' and nothing else }
 function TailIsGenerated(const pText, pTailPattern: string; pFrom: Integer): Boolean;
 var
   M: TMatch;
@@ -258,6 +258,13 @@ begin
     Work:= Splice(Work, M, M.Groups[1].Value + 'Assign' + M.Groups[2].Value);
     M:= Rx(Format(PAT_SRC_OLD, [pIdent])).Match(Work);
     pNewUnit:= if M.Success then Splice(Work, M, M.Groups[1].Value + 'overload; ' + M.Groups[2].Value) else Work;
+  end;
+  { the states ignore // comments, the edits do not: a commented-out copy above the real declaration takes the edit }
+  if (IntfState(pNewIntf, pIdent) <> aiNew) or (UnitState(pNewUnit, pIdent, Cls) <> aiNew) then
+  begin
+    pNewIntf:= pIntfText;
+    pNewUnit:= pUnitText;
+    pNotes.Add('AssignI: a commented-out copy of a generated declaration is in the way: i and u left unchanged');
   end;
 end;
 

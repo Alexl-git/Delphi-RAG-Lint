@@ -545,7 +545,8 @@ begin
     Check('AI4 hand-edited u body header: i stays too, one note', (vI = I_OLD) and (vU = U_HEAD + U_DECL_OLD + U_IMPL_OLD.Replace('begin'#13#10'{$REGION', 'begin'#13#10'  Foo;'#13#10'{$REGION')) and (vNotes.Count = 1), vNotes.Text);
     vNotes.Clear;
     UpgradeOrmAssignPair(I_OLD, U_HEAD + U_DECL_OLD + U_IMPL_OLD.Replace('end;'#13#10'end.', '  // AssignI is gone'#13#10'end;'#13#10'end.'), 'ORDERS', True, vNotes, vI, vU);
-    Check('AI4b a comment naming AssignI makes the pair hand-edited', (vI = I_OLD) and (vNotes.Count = 1), vNotes.Text);
+    Check('AI4b a comment naming AssignI in the body is not code: converted, the comment kept', (vI = I_NEW) and (vNotes.Count = 0) and vU.Contains('// AssignI is gone') and
+      vU.Contains('procedure TmcORDERS.Assign(const Value'), vNotes.Text + vI + vU);
     vNotes.Clear;
     UpgradeOrmAssignPair(I_OLD.Replace('    procedure', '    /// <seealso cref="iORDERS.AssignI"/>'#13#10'    procedure'), U_HEAD + U_DECL_OLD.Replace('     procedure AssignI', '     /// AssignI of the autodoc block'#13#10'     procedure AssignI') + U_IMPL_OLD, 'ORDERS', True, vNotes, vI, vU);
     Check('AI4c doc comments naming AssignI (autodoc) are not code: converted, the comments kept', (vNotes.Count = 0) and vI.Contains('cref="iORDERS.AssignI"') and vI.Contains('procedure Assign(const IValue') and
@@ -554,6 +555,15 @@ begin
     UpgradeOrmAssignPair(I_OLD, U_HEAD + U_DECL_OLD + U_IMPL_OLD + '  Typed.AssignI(Base);'#13#10, 'ORDERS', True, vNotes, vI, vU);
     Check('AI4d a call of AssignI in the u unit itself is hand code: the pair is converted, the call stays', (vNotes.Count = 0) and (vI = I_NEW) and
       (vU = U_HEAD + U_DECL_NEW + U_IMPL_NEW + '  Typed.AssignI(Base);'#13#10), vNotes.Text + vU);
+    vNotes.Clear;
+    { a commented-out declaration above the real one: editing the comment would leave a pair that does not compile }
+    UpgradeOrmAssignPair(I_OLD.Replace('    procedure', '    // procedure AssignI(const IValue: ImcORDERS);'#13#10'    procedure'), U_HEAD + U_DECL_OLD + U_IMPL_OLD, 'ORDERS', True, vNotes, vI, vU);
+    Check('AI4e commented-out declaration in i: both left unchanged, one note', (vNotes.Count = 1) and (vU = U_HEAD + U_DECL_OLD + U_IMPL_OLD) and
+      (vI = I_OLD.Replace('    procedure', '    // procedure AssignI(const IValue: ImcORDERS);'#13#10'    procedure')), vNotes.Text + vI + vU);
+    vNotes.Clear;
+    UpgradeOrmAssignPair(I_OLD, U_HEAD + '     // procedure Assign(Source: TPersistent); override;'#13#10 + U_DECL_OLD + U_IMPL_OLD, 'ORDERS', True, vNotes, vI, vU);
+    Check('AI4f commented-out Assign(Source) in u: both left unchanged, one note', (vNotes.Count = 1) and (vI = I_OLD) and
+      (vU = U_HEAD + '     // procedure Assign(Source: TPersistent); override;'#13#10 + U_DECL_OLD + U_IMPL_OLD), vNotes.Text + vI + vU);
     vNotes.Clear;
     UpgradeOrmAssignPair('', U_HEAD + U_DECL_OLD + U_IMPL_OLD, 'ORDERS', False, vNotes, vI, vU);
     Check('AI5 i unit missing: u stays, one note', (vU = U_HEAD + U_DECL_OLD + U_IMPL_OLD) and (vNotes.Count = 1), vNotes.Text);
