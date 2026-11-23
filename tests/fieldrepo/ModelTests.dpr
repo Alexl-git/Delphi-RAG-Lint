@@ -216,7 +216,7 @@ begin
   end;
   { TStringList.Text ends with a line break; the split left one empty last element, so the join is exact }
   Result := Result.Substring(0, Length(Result) - Length(sLineBreak))
-    + '#end DL_LAYOUT_EVENTS 0' + #13#10 + '#end DL_EXCEPTIONS 0' + #13#10;
+    + '#end DL_LAYOUT_EVENTS 0' + #13#10 + '#end DL_EXCEPTIONS 0' + #13#10 + '#end DL_DOMAINS 0' + #13#10 + '#end DL_CONSTRAINTS 0' + #13#10 + '#end DL_CONSTRAINT_COLUMNS 0' + #13#10 + '#end DL_GENERATORS 0' + #13#10;
 end;
 
 procedure TestMigrate;
@@ -246,8 +246,8 @@ begin
   vAfter := TFile.ReadAllBytes(vPath);
   Check('M1a dry run reports 2 calc rows and the plan line (NULL and 1 count, 10 does not)',
     (not vRes.AlreadyCurrent) and (not vRes.Applied) and (vRes.CalcRows = 2)
-    and (vRes.Plan = 'v1 -> v2: add DL_FIELDS_INFO.CALC_BODY, create DL_LAYOUT_EVENTS, create DL_EXCEPTIONS, '
-      + 'FIELD_KIND 2 for 2 ISCALCULATED rows, user_version 2'), vRes.Plan);
+    and (vRes.Plan = 'v1 -> v2: add DL_FIELDS_INFO.CALC_BODY, DOMAIN_NAME, CHAR_LENGTH, create DL_LAYOUT_EVENTS, '
+      + 'DL_EXCEPTIONS, DL_DOMAINS, DL_CONSTRAINTS, DL_CONSTRAINT_COLUMNS, DL_GENERATORS, FIELD_KIND 2 for 2 ISCALCULATED rows, user_version 2'), vRes.Plan);
   Check('M1b dry run leaves the file byte-identical', (Length(vBefore) = Length(vAfter))
     and CompareMem(@vBefore[0], @vAfter[0], Length(vBefore)));
   Check('M1c dry run wrote no backup file', Length(TDirectory.GetFiles(GDir, ExtractFileName(vPath) + '.before-migrate-*')) = 0);
@@ -274,7 +274,7 @@ begin
   end;
   vText := FileBytesText(TPath.Combine(GDir, 'v2-after.txt'));
   Check('M2g backup(migrated) starts with #DLREPO 2 and ends with the two empty trailers',
-    vText.StartsWith('#DLREPO 2' + #13#10) and vText.EndsWith('#end DL_LAYOUT_EVENTS 0' + #13#10 + '#end DL_EXCEPTIONS 0' + #13#10));
+    vText.StartsWith('#DLREPO 2' + #13#10) and vText.EndsWith('#end DL_LAYOUT_EVENTS 0' + #13#10 + '#end DL_EXCEPTIONS 0' + #13#10 + '#end DL_DOMAINS 0' + #13#10 + '#end DL_CONSTRAINTS 0' + #13#10 + '#end DL_CONSTRAINT_COLUMNS 0' + #13#10 + '#end DL_GENERATORS 0' + #13#10));
   vExpect := ExpectedMigrated(vV1Text);
   Check('M2h the migrated backup differs from the v1 backup ONLY by magic, schema_version, FIELD_KIND 2 and the trailers',
     vText = vExpect, 'lengths ' + IntToStr(Length(vText)) + ' vs ' + IntToStr(Length(vExpect)));  vRes2 := MigrateRepository(vPath, True);
@@ -464,7 +464,7 @@ begin
     MakeChange(3, fcoDelete, 'DL_FIELDS_INFO MSCLIST|OLD', '', 'gone', '', ''),
     MakeChange(4, fcoUpdate, 'MSCLIST.DIMABBR', 'FIELD_SIZE', '20', 'caf' + WideChar($E9), 'Firebird refuses: data in the column')];
   vText := RenderChangeSetText(vSet);
-  Check('S1a header line', vText[0] = 'direction db-to-repo, 4 changes, 1 blocked', vText[0]);
+  Check('S1a header line', vText[0] = 'direction db-to-repo, 4 changes, 1 blocked, 0 unchecked', vText[0]);
   Check('S1b update line', vText[2] = '[2] update DL_FIELDS_INFO MSCLIST|DIMABBR DISPLAY_WIDTH: 10 -> 12', vText[2]);
   Check('S1c insert and delete lines without a property', (vText[1] = '[1] insert DL_FIELDS_INFO MSCLIST|DIMNAME:  -> new row')
     and (vText[3] = '[3] delete DL_FIELDS_INFO MSCLIST|OLD: gone -> '), vText[1]);

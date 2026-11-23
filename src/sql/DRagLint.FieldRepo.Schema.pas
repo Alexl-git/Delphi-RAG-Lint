@@ -24,6 +24,11 @@ const
   REPO_TABLE_LAYOUT_EVENTS = 'DL_LAYOUT_EVENTS';
   /// <summary>Name of the lint exception table (schema 2).</summary>
   REPO_TABLE_EXCEPTIONS = 'DL_EXCEPTIONS';
+  /// <summary>Schema-fact tables (schema 2, FR-SCHEMA): written only by the DB-to-repository change set.</summary>
+  REPO_TABLE_DOMAINS = 'DL_DOMAINS';
+  REPO_TABLE_CONSTRAINTS = 'DL_CONSTRAINTS';
+  REPO_TABLE_CONSTRAINT_COLUMNS = 'DL_CONSTRAINT_COLUMNS';
+  REPO_TABLE_GENERATORS = 'DL_GENERATORS';
   /// <summary>SQLite application_id of a field repository ('DLFR').</summary>
   REPO_APPLICATION_ID = $444C4652;
   /// <summary>File extension of a repository file.</summary>
@@ -141,7 +146,7 @@ type
 /// <seealso cref="DRagLint.FieldRepo.Schema.MetaTable"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function RepoTables: TArray<TRepoTable>;
+function RepoTables: TArray<TRepoTable>;  // dl:ok unused-public-symbol@15fa -- REVIEWED 2026-11-22 FR-SCHEMA: public API of the schema-in-repository feature: used by the CLI / tests / lane FR-LINT, outside this project index
 
 /// <summary>The table set of one schema version: v1 = the five 1.52 tables; v2 = the same order with
 /// DL_FIELDS_INFO.CALC_BODY appended as its last column, then DL_LAYOUT_EVENTS and DL_EXCEPTIONS.
@@ -198,7 +203,13 @@ function QuoteRepoIdent(const pName: string): string;
 /// <seealso cref="DRagLint.FieldRepo.Schema.TRepoTable.PkColumns"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function RepoTableDdl(const pTable: TRepoTable): string;  // dl:ok unused-public-symbol@5822
+function RepoTableDdl(const pTable: TRepoTable): string;
+
+/// <summary>The column definition of one column, as used inside CREATE TABLE and ALTER TABLE ADD COLUMN.</summary>
+/// <param name="pCol">The column.</param>
+/// <param name="pInlinePk">True to append an inline PRIMARY KEY (single-column keys only).</param>
+/// <returns>E.g. "DOMAIN_NAME" VARCHAR(68) CHECK (length("DOMAIN_NAME") &lt;= 68).</returns>
+function ColumnDdl(const pCol: TRepoColumn; pInlinePk: Boolean): string;
 
 /// <summary>Default repository path of a project: the project folder, then
 /// REPO_FOLDER_NAME, then the project base name with REPO_FILE_EXT.</summary>
@@ -327,7 +338,7 @@ procedure SetRepoMeta(pConnection: TFDConnection; const pKey, pValue: string);
 /// <seealso cref="DRagLint.FieldRepo.Schema.QuoteRepoIdent"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function GetRepoMeta(pConnection: TFDConnection; const pKey: string): string;  // dl:ok unused-public-symbol@3149
+function GetRepoMeta(pConnection: TFDConnection; const pKey: string): string;
 
 implementation
 
@@ -436,28 +447,64 @@ begin
     Small('FIELD_SCALE'),
     Small('UI_TAG', '0')]);
   if pVersion >= 2 then
-    Result.Columns := Result.Columns + [Txt('CALC_BODY')];
+    Result.Columns := Result.Columns + [Txt('CALC_BODY'), Str('DOMAIN_NAME', 68),  // dl:ok large-magic-number@660f, magic-literal@660f
+      Col('CHAR_LENGTH', rckInteger, 0, False, '', 0)];
+end;
+
+function DomainsTable: TRepoTable;
+begin
+  Result := MakeTable(REPO_TABLE_DOMAINS, '', [
+    Str('DOMAIN_NAME', 68, True, 1),  // dl:ok large-magic-number@2380, magic-literal@2380
+    Small('FIELD_TYPE'), Small('FIELD_SUBTYPE'), Small('FIELD_LENGTH'),
+    Col('CHAR_LENGTH', rckInteger, 0, False, '', 0),
+    Small('FIELD_SCALE'), Small('FIELD_PRECISION'), Small('NULL_FLAG'),
+    Txt('DEFAULT_SOURCE'), Txt('CHECK_SOURCE'), Str('CHARSET', 63)]);  // dl:ok large-magic-number@6836, magic-literal@6836
+end;
+
+function ConstraintsTable: TRepoTable;
+begin
+  Result := MakeTable(REPO_TABLE_CONSTRAINTS, '', [
+    Str('CONSTRAINT_NAME', 68, True, 1),  // dl:ok large-magic-number@3079, magic-literal@3079
+    Str('TABLE_NAME', 68, True),  // dl:ok large-magic-number@8300, magic-literal@8300
+    Str('KIND', 10, True),  // dl:ok magic-literal@d647
+    Str('REF_TABLE', 68),  // dl:ok large-magic-number@0f40, magic-literal@0f40
+    Str('REF_CONSTRAINT', 68),  // dl:ok large-magic-number@9139, magic-literal@9139
+    Str('UPDATE_RULE', 11),  // dl:ok magic-literal@941e
+    Str('DELETE_RULE', 11)]);  // dl:ok magic-literal@cbf5
+end;
+
+function ConstraintColumnsTable: TRepoTable;
+begin
+  Result := MakeTable(REPO_TABLE_CONSTRAINT_COLUMNS, '', [
+    Str('CONSTRAINT_NAME', 68, True, 1),  // dl:ok large-magic-number@3079, magic-literal@3079
+    Col('POSITION', rckInteger, 0, True, '', 2),
+    Str('COLUMN_NAME', 68, True)]);  // dl:ok large-magic-number@bb5d, magic-literal@bb5d
+end;
+
+function GeneratorsTable: TRepoTable;
+begin
+  Result := MakeTable(REPO_TABLE_GENERATORS, '', [Str('GENERATOR_NAME', 68, True, 1)]);  // dl:ok large-magic-number@5823, magic-literal@5823
 end;
 
 function LayoutEventsTable: TRepoTable;
 begin
   Result := MakeTable(REPO_TABLE_LAYOUT_EVENTS, '', [
-    Str('TABLE_NAME', 68, True, 1),
-    Str('FIELD_NAME', 68, True, 2),
-    Str('LAYOUT_TYPE', 40, True, 3),
-    Str('EVENT_NAME', 63, True, 4),
+    Str('TABLE_NAME', 68, True, 1),  // dl:ok large-magic-number@fcb2, magic-literal@fcb2 -- REVIEWED 2026-11-22 FR-SCHEMA: column width of a schema table definition, named by the column beside it
+    Str('FIELD_NAME', 68, True, 2),  // dl:ok large-magic-number@b55c, magic-literal@b55c -- REVIEWED 2026-11-22 FR-SCHEMA: column width of a schema table definition, named by the column beside it
+    Str('LAYOUT_TYPE', 40, True, 3),  // dl:ok large-magic-number@146b, magic-literal@146b -- REVIEWED 2026-11-22 FR-SCHEMA: column width of a schema table definition, named by the column beside it
+    Str('EVENT_NAME', 63, True, 4),  // dl:ok large-magic-number@9b9c, magic-literal@9b9c -- REVIEWED 2026-11-22 FR-SCHEMA: column width of a schema table definition, named by the column beside it
     Txt('EVENT_CODE')]);
 end;
 
 function ExceptionsTable: TRepoTable;
 begin
   Result := MakeTable(REPO_TABLE_EXCEPTIONS, '', [
-    Col('RULE_ID', rckString, 63, True, '', 1),
-    Col('DATASET_KEY', rckString, 255, True, '''''', 2),
-    Col('TABLE_NAME', rckString, 68, True, '''''', 3),
-    Col('FIELD_NAME', rckString, 68, True, '''''', 4),
-    Col('PROP', rckString, 63, True, '''''', 5),
-    Str('REASON', 220, True)]);
+    Col('RULE_ID', rckString, 63, True, '', 1),  // dl:ok large-magic-number@a7be, magic-literal@a7be -- REVIEWED 2026-11-22 FR-SCHEMA: column width of a schema table definition, named by the column beside it
+    Col('DATASET_KEY', rckString, 255, True, '''''', 2),  // dl:ok magic-literal@d044 -- REVIEWED 2026-11-22 FR-SCHEMA: column width / type code of a schema table definition, named by the column beside it
+    Col('TABLE_NAME', rckString, 68, True, '''''', 3),  // dl:ok large-magic-number@c1a7, magic-literal@c1a7 -- REVIEWED 2026-11-22 FR-SCHEMA: column width of a schema table definition, named by the column beside it
+    Col('FIELD_NAME', rckString, 68, True, '''''', 4),  // dl:ok large-magic-number@c92f, magic-literal@c92f -- REVIEWED 2026-11-22 FR-SCHEMA: column width of a schema table definition, named by the column beside it
+    Col('PROP', rckString, 63, True, '''''', 5),  // dl:ok large-magic-number@6727, magic-literal@6727 -- REVIEWED 2026-11-22 FR-SCHEMA: column width of a schema table definition, named by the column beside it
+    Str('REASON', 220, True)]);  // dl:ok large-magic-number@4ec3, magic-literal@4ec3 -- REVIEWED 2026-11-22 FR-SCHEMA: column width of a schema table definition, named by the column beside it
 end;
 
 function DatasetsInfoTable: TRepoTable;
@@ -502,7 +549,8 @@ begin
     raise ERepoError.CreateFmt('Unknown repository schema version %d', [pVersion]);
   Result := [MetaTable, FieldsInfoTable(pVersion), DatasetsInfoTable, EnumValuesTable, ErrorMessagesTable];
   if pVersion >= 2 then
-    Result := Result + [LayoutEventsTable, ExceptionsTable];
+    Result := Result + [LayoutEventsTable, ExceptionsTable, DomainsTable, ConstraintsTable,
+      ConstraintColumnsTable, GeneratorsTable];
 end;
 
 function RepoTables: TArray<TRepoTable>;
@@ -758,8 +806,10 @@ var
 begin
   Result := True;
   for Tab in RepoTablesFor(RepoSchemaVersion(pConnection)) do
-    if (not SameText(Tab.Name, REPO_META_TABLE)) and (not SameText(Tab.Name, REPO_TABLE_LAYOUT_EVENTS))
-      and (not SameText(Tab.Name, REPO_TABLE_EXCEPTIONS)) and (RepoRowCount(pConnection, Tab.Name) > 0) then
+    if (not SameText(Tab.Name, REPO_META_TABLE)) and (not SameText(Tab.Name, REPO_TABLE_LAYOUT_EVENTS))  // dl:ok boolean-expression-complexity@dcf7 -- REVIEWED 2026-11-22 FR-SCHEMA: one token-class test of the DDL grammar, kept whole so the accepted forms read in one place
+      and (not SameText(Tab.Name, REPO_TABLE_EXCEPTIONS)) and (not SameText(Tab.Name, REPO_TABLE_DOMAINS))
+      and (not SameText(Tab.Name, REPO_TABLE_CONSTRAINTS)) and (not SameText(Tab.Name, REPO_TABLE_CONSTRAINT_COLUMNS))
+      and (not SameText(Tab.Name, REPO_TABLE_GENERATORS)) and (RepoRowCount(pConnection, Tab.Name) > 0) then
       Exit(False);
 end;
 

@@ -30,7 +30,7 @@ interface
 /// DATABASE, several projects may point at the same file (ruling A2); else
 /// DefaultRepoPath(project). Neither --repo nor --project: usage error, 1. The flags
 /// --dry-run and --name are read from the command line here (the dispatch signature is the
-/// FRAME contract). Never prints a connection string or password. Not thread-safe.
+/// FRAME contract). seed-fb and refresh-schema are DRY RUNS unless --apply or --select is given (DRagLint.CLI.RepoSchema). Never prints a connection string or password. Not thread-safe.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.RunCommand (DRagLint.CLI.pas)</para>
 /// <para>Calls: DRagLint.CLI.Repo.DispatchRepo, DRagLint.CLI.Repo.IsImplementedSub, DRagLint.CLI.Repo.PrintError, DRagLint.CLI.RepoParamArray.RunGenParamArray, SameText, Writeln</para>
@@ -53,36 +53,31 @@ uses
   System.IOUtils,
   System.StrUtils,
   System.DateUtils,
-  System.TimeSpan,
   System.JSON,
   FireDAC.Comp.Client,
-  DRagLint.Core.Model,
   DRagLint.FieldRepo.Schema,
   DRagLint.FieldRepo.TextBackup,
   DRagLint.FieldRepo.FbImport,
-  DRagLint.FieldRepo.SchemaSeed,
+  DRagLint.FieldRepo.Locate,
   DRagLint.FieldRepo.CsvMemTable,
   DRagLint.FieldRepo.OrmGen,
   DRagLint.FieldRepo.DataServiceGen,
   DRagLint.CLI.RepoParamArray,
   DRagLint.CLI.RepoModel,
-  DRagLint.CLI.RepoConstGen
+  DRagLint.CLI.RepoConstGen,
+  DRagLint.CLI.RepoSchema
   ;
 
 const
   EXIT_OK     = 0;
   EXIT_FAIL   = 1;
   EXIT_FORMAT = 2;
-  CFG_KEY     = 'fieldRepository';
-  CFG_FILE    = 'drag-lint-project.json';
   { positions in the two sub-verb lists of DispatchRepo / RepoFbVerb }
   LOCAL_INIT    = 0;
   LOCAL_INFO    = 1;
   LOCAL_BACKUP  = 2;
   LOCAL_RESTORE = 3;
   FB_IMPORT     = 0;
-  FB_SEED       = 1;
-  FB_REFRESH    = 2;
   { positions in the --save-form value list of RepoOrmVerb }
   SAVE_FORM_LEGACY  = 0;
   SAVE_FORM_CURRENT = 1;
@@ -106,34 +101,13 @@ begin
     if SameText(ParamStr(I), pFlag) then Exit(ParamStr(I + 1));
 end;
 
-function ProjectConfigRepo(const pProject: string): string;
-var
-  Cfg, Dir: string;
-  Root: TJSONValue;
-  Node: TJSONValue;
-begin
-  Result:= '';
-  Dir:= ExtractFilePath(ExpandFileName(pProject));
-  Cfg:= TPath.Combine(TPath.Combine(Dir, DRAG_HOME_DIR), CFG_FILE);
-  if not TFile.Exists(Cfg) then Exit;
-  Root:= TJSONObject.ParseJSONValue(TFile.ReadAllText(Cfg));
-  if Root = nil then Exit;
-  try
-    Node:= Root.FindValue(CFG_KEY);
-    if (Node is TJSONString) and (TJSONString(Node).Value <> '') then
-      Result:= TPath.GetFullPath(TPath.Combine(Dir, TJSONString(Node).Value));
-  finally
-    Root.Free;
-  end;
-end;
-
 function ResolveRepoPath(const pRepo, pProject: string; out pPath: string): Boolean;
 begin
   pPath:= '';
   if pRepo <> '' then pPath:= ExpandFileName(pRepo)
   else if pProject <> '' then
   begin
-    pPath:= ProjectConfigRepo(pProject);
+    pPath:= LocateFieldRepository(ExpandFileName(pProject), '');
     if pPath = '' then pPath:= DefaultRepoPath(ExpandFileName(pProject));
   end;
   Result:= pPath <> '';
@@ -282,59 +256,6 @@ begin
   end;
 end;
 
-procedure PrintSeedResult(const pR: TSchemaSeedResult; pDryRun: Boolean);
-var
-  Line: string;
-begin
-  if pDryRun then Writeln('dry run: nothing written');
-  Writeln('fields added: ', pR.Added, ', changed: ', pR.Changed, ', orphaned: ', pR.Orphaned);
-  Writeln('datasets inserted: ', pR.DatasetsInserted, ', updated: ', pR.DatasetsUpdated,
-    ', skipped: ', pR.DatasetsSkipped);
-  if pDryRun then
-    for Line in pR.Diff do Writeln(Line);
-  for Line in pR.Warnings do Writeln('warning: ', Line);
-end;
-
-function RepoSeed(const pPath, pConnection: string; pMode: TSchemaSeedMode): Integer;
-var
-  Conn, Fb: TFDConnection;
-  Sources: TSchemaSources;
-  SeedResult: TSchemaSeedResult;
-  Database: string;
-  DryRun: Boolean;
-begin
-  DryRun:= CommandLineFlag('--dry-run');
-  if (pMode = ssmRefresh) and (not TFile.Exists(pPath)) then
-  begin
-    Writeln(ErrOutput, 'repo refresh-schema: the repository does not exist: ', pPath);
-    Exit(EXIT_FAIL);
-  end;
-  if DryRun and (not TFile.Exists(pPath)) then
-  begin
-    Writeln(ErrOutput, 'repo seed-fb --dry-run: the repository does not exist (run repo init first): ', pPath);
-    Exit(EXIT_FAIL);
-  end;
-  Conn:= OpenOrCreateRepo(pPath);
-  try
-    Fb:= OpenSourceConnection(pConnection, Database);
-    try
-      Sources:= OpenSchemaSources(Fb);
-      try
-        SeedResult:= RunSchemaSeed(Conn, Sources, pMode, DryRun, TTimeZone.Local.ToUniversalTime(Now));
-      finally
-        FreeSchemaSources(Sources);
-      end;
-      if (pMode = ssmSeed) and (not DryRun) then SetRepoMeta(Conn, 'source_database', Database);
-    finally
-      Fb.Free;
-    end;
-    PrintSeedResult(SeedResult, DryRun);
-  finally
-    Conn.Free;
-  end;
-  Result:= EXIT_OK;
-end;
-
 function RepoBackup(const pPath, pOutFile: string): Integer;
 var
   Conn: TFDConnection;
@@ -457,18 +378,14 @@ begin
   end;
 end;
 
-{ The three verbs that read Firebird; they need --connection. }
+{ import-fb reads Firebird and needs --connection (seed-fb / refresh-schema: DRagLint.CLI.RepoSchema). }
 function RepoFbVerb(const pSub, pPath, pConnection: string; pReplace: Boolean): Integer;
 begin
   Result:= EXIT_FAIL;
   if pConnection = '' then
     Writeln(ErrOutput, 'repo ', pSub, ': give --connection "Database=...;User=...;Password=..."')
   else
-    case IndexText(pSub, ['import-fb', 'seed-fb', 'refresh-schema']) of
-      FB_IMPORT: Result:= RepoImportFb(pPath, pConnection, pReplace);
-      FB_SEED: Result:= RepoSeed(pPath, pConnection, ssmSeed);
-      FB_REFRESH: Result:= RepoSeed(pPath, pConnection, ssmRefresh);
-    end;
+    Result:= RepoImportFb(pPath, pConnection, pReplace);
 end;
 
 function DispatchRepo(const pSub, pRepo, pProject, pConnection, pInFile, pOutFile: string;  // dl:ok too-many-parameters@fd6f -- REVIEWED 2026-11-17 v152 TTE: same flag list as RunRepoVerb, split out only to keep the exception handler apart
@@ -482,6 +399,7 @@ begin
   if MatchText(pSub, ['gen-orm', 'update-orm', 'gen-dataservice']) then Exit(RepoOrmVerb(pSub, Path));
   if IsRepoModelSub(pSub) then Exit(RunRepoModelVerb(pSub, Path, pJson)); // 1.53 FR-MODEL: migrate, check
   if SameText(pSub, 'gen-const') then Exit(RunRepoGenConst(Path, pOutFile)); // 1.53 FR-CONSTGEN
+  if IsRepoSchemaSub(pSub) then Exit(RunRepoSchemaVerb(pSub, Path, pConnection, pJson)); // 1.53 FR-SCHEMA: seed-fb, refresh-schema
   case IndexText(pSub, ['init', 'info', 'backup', 'restore']) of
     LOCAL_INIT: Result:= RepoInit(Path);
     LOCAL_INFO: Result:= RepoInfo(Path, pJson);

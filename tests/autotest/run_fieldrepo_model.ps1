@@ -65,7 +65,7 @@ try {
   Check 'B5 restore of a #DLREPO 1 backup into a missing file creates a schema-1 file' (($r.Code -eq 0) -and ((Run @('repo','info','--repo',$v1)).Out -match 'schema_version: 1')) $r.Out
   $h1 = (Get-FileHash -LiteralPath $v1).Hash
   $r = Run @('repo', 'migrate', '--repo', $v1)
-  Check 'B6 migrate dry run prints the plan and changes no byte' (($r.Code -eq 0) -and ($r.Out -match 'v1 -> v2: add DL_FIELDS_INFO.CALC_BODY, create DL_LAYOUT_EVENTS, create DL_EXCEPTIONS, FIELD_KIND 2 for 0 ISCALCULATED rows, user_version 2') -and ($h1 -eq (Get-FileHash -LiteralPath $v1).Hash)) $r.Out
+  Check 'B6 migrate dry run prints the plan and changes no byte' (($r.Code -eq 0) -and ($r.Out -match 'v1 -> v2: add DL_FIELDS_INFO.CALC_BODY, DOMAIN_NAME, CHAR_LENGTH, create DL_LAYOUT_EVENTS, DL_EXCEPTIONS, DL_DOMAINS, DL_CONSTRAINTS, DL_CONSTRAINT_COLUMNS, DL_GENERATORS, FIELD_KIND 2 for 0 ISCALCULATED rows, user_version 2') -and ($h1 -eq (Get-FileHash -LiteralPath $v1).Hash)) $r.Out
   $r = Run @('repo', 'restore', '--repo', $v1, '--in', (Join-Path $fix 'golden_v2.txt'), '--replace')
   Check 'B7 a #DLREPO 2 backup into a schema-1 file is refused (exit 2, migrate first)' (($r.Code -eq 2) -and ($r.Out -match 'migrate first')) "exit=$($r.Code) $($r.Out)"
   $r = Run @('repo', 'migrate', '--repo', $v1, '--apply')

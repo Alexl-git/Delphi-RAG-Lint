@@ -1,6 +1,10 @@
 unit DRagLint.FieldRepo.SchemaSeed;
 
-{ drag-lint 1.52 -- lane TTS: seed / refresh a field repository from the Firebird schema.
+{ drag-lint 1.53 -- lane FR-SCHEMA: seed / refresh is now a CHANGE SET producer (PlanSchemaChanges) with a separate
+  applier (ApplySchemaChanges), fed by a schema model (live reader or DDL reader). RunSchemaSeed (below) is the 1.52
+  direct writer, kept for its regression tests; the repo verbs use the change-set pair.
+
+  drag-lint 1.52 -- lane TTS: seed / refresh a field repository from the Firebird schema.
 
   Port of TableTools FieldsInfo.Model.pas UpdateFieldsInfo, CleanOrphanFields and
   UpdateDatasetsInfo (design 2026-11-16-tabletools-into-dl-design.md sections 2.1 and 9a).
@@ -13,7 +17,9 @@ interface
 uses
   System.SysUtils,
   Data.DB,
-  FireDAC.Comp.Client;
+  FireDAC.Comp.Client,
+  DRagLint.FieldRepo.ChangeSet,
+  DRagLint.FieldRepo.FbSchemaRead;
 
 type
   /// <summary>Seed = first fill of an EMPTY repository (repo seed-fb); refresh = the old
@@ -106,7 +112,7 @@ type
 /// <seealso cref="DRagLint.FieldRepo.SchemaSeed.TSeedRun.Execute"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function RunSchemaSeed(pTarget: TFDConnection; const pSources: TSchemaSources;
+function RunSchemaSeed(pTarget: TFDConnection; const pSources: TSchemaSources;  // dl:ok unused-public-symbol@d7b0 -- REVIEWED 2026-11-22 FR-SCHEMA: public API of the schema-in-repository feature: used by the CLI / tests / lane FR-LINT, outside this project index
   pMode: TSchemaSeedMode; pDryRun: Boolean; pStampUtc: TDateTime): TSchemaSeedResult;
 
 /// <summary>Opens the four schema queries on a live Firebird connection.</summary>
@@ -124,7 +130,7 @@ function RunSchemaSeed(pTarget: TFDConnection; const pSources: TSchemaSources;
 /// <seealso cref="DRagLint.FieldRepo.SchemaSeed.OpenSchemaSources.OpenQuery"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function OpenSchemaSources(pFb: TFDConnection): TSchemaSources;
+function OpenSchemaSources(pFb: TFDConnection): TSchemaSources;  // dl:ok unused-public-symbol@0b64 -- REVIEWED 2026-11-22 FR-SCHEMA: public API of the schema-in-repository feature: used by the CLI / tests / lane FR-LINT, outside this project index
 
 /// <summary>Frees the datasets of pSources and sets them to nil.</summary>
 /// <param name="pSources">Sources from OpenSchemaSources; nil members are skipped.</param>
@@ -134,11 +140,52 @@ function OpenSchemaSources(pFb: TFDConnection): TSchemaSources;
 /// <para>Calls: FreeAndNil</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-procedure FreeSchemaSources(var pSources: TSchemaSources);
+procedure FreeSchemaSources(var pSources: TSchemaSources);  // dl:ok unused-public-symbol@9833 -- REVIEWED 2026-11-22 FR-SCHEMA: public API of the schema-in-repository feature: used by the CLI / tests / lane FR-LINT, outside this project index
+
+/// <summary>Computes the change set that brings the repository's schema-derived values in line with a schema model.</summary>
+/// <param name="pRepo">An open repository connection, schema 2; only SELECTs run (a dry run changes no byte).</param>
+/// <param name="pModel">The schema (live reader or DDL reader); Source 'ddl' limits deletes to what the DDL declares.</param>
+/// <param name="pMode">ssmSeed needs an EMPTY repository; ssmRefresh works on any.</param>
+/// <param name="pWarnings">Values that did not fit their column, types without a dictionary entry, ...</param>
+/// <returns>Direction db-to-repo. New tables / fields / domains / constraints / generators are checked inserts;
+/// changed schema-derived values are checked updates, one per column; rows whose source vanished are deletes,
+/// UNCHECKED. Hand-kept columns (captions, formats, widths, kinds, calc code, ...) never appear.</returns>
+/// <exception cref="ERepoError">The repository is schema 1 ("run repo migrate first") or, for seed, not empty.</exception>
+/// <remarks>Ids are 1-based in plan order, so the same repository and model always give the same ids.</remarks>
+function PlanSchemaChanges(pRepo: TFDConnection; const pModel: TFbSchemaModel; pMode: TSchemaSeedMode;
+  out pWarnings: TArray<string>): TFrChangeSet;
+
+/// <summary>What ApplySchemaChanges did.</summary>
+type
+  TSchemaApplyResult = record
+    /// <summary>Changes applied.</summary>
+    Applied: Integer;
+    DatasetsInserted: Integer;
+    DatasetsUpdated: Integer;
+    DatasetsSkipped: Integer;
+    /// <summary>One 'replacing <old> with <new>' line per applied change.</summary>
+    Log: TArray<string>;
+    Warnings: TArray<string>;
+  end;
+
+/// <summary>Applies the chosen changes of a change set, in one transaction.</summary>
+/// <param name="pRepo">An open read-write repository connection, schema 2.</param>
+/// <param name="pModel">The same model the set was planned from.</param>
+/// <param name="pMode">The mode the set was planned with.</param>
+/// <param name="pChosen">The changes to apply (the checked ones, or those a --select file named); blocked ones are refused.</param>
+/// <param name="pStampUtc">Time stamped into DL_META schema_read_at_utc.</param>
+/// <returns>Counts and the log lines. DL_DATASETS_INFO is regenerated from the repository when anything was applied.</returns>
+/// <exception cref="ERepoError">A chosen change is not in the plan the repository and model give now (re-run the dry run);
+/// nothing is written.</exception>
+/// <remarks>Writes DL_META schema_read_at_utc, schema_source and schema_database (the Database value only, never a
+/// password) and schema_refreshed_at_utc even when nothing was chosen, so the read itself is on record.</remarks>
+function ApplySchemaChanges(pRepo: TFDConnection; const pModel: TFbSchemaModel; pMode: TSchemaSeedMode;
+  const pChosen: TArray<TFrChange>; pStampUtc: TDateTime): TSchemaApplyResult;
 
 implementation
 
 uses
+  System.Classes,
   System.Variants,
   System.StrUtils,
   System.DateUtils,
@@ -219,6 +266,31 @@ const
   SQL_NOT_SYSTEM_OR_FIB = 'substr("TABLE_NAME", 1, 4) NOT IN (''RDB$'', ''MON$'', ''SEC$'', ''FIB$'')';
 
 type
+  { The per-column inputs of ComputeValues: what one source column says (dataset row or model column). }
+  TColumnIn = record
+    Table, Field, DefaultSource: string;
+    FbType, FbSub, FbLen, CharLen, NullFlag, Scale: Integer;
+  end;
+
+  { One change of the plan together with what applying it needs. }
+  TPlanned = record
+    Change: TFrChange;
+    RepoTable: string;
+    KeyCols: TArray<string>;
+    KeyVals: TArray<Variant>;
+    { insert: the value columns; update: the one column; delete: unused }
+    Cols: TArray<string>;
+    Vals: TArray<Variant>;
+    { DL_FIELDS_INFO insert: the 14 computed schema values (WriteField), the extras go through Cols / Vals }
+    FieldValues: TArray<Variant>;
+  end;
+
+  { A row the model says should exist in a schema table. }
+  TDesiredRow = record
+    KeyVals: TArray<Variant>;
+    Vals: TArray<Variant>;
+  end;
+
   { One seed / refresh run: the source maps plus the result being built. }
   TSeedRun = class  // dl:ok high-response@a9ca -- one object per run: the three passes share one transaction's maps and result
   strict private
@@ -231,7 +303,30 @@ type
     FDiff: TList<string>;
     FWarnings: TList<string>;
     FStringMax: array[0..13] of Integer;
+    FModel: TFbSchemaModel;
+    FPlanned: TList<TPlanned>;
+    FFromDdl: Boolean;
+    FScope: TDictionary<string, Boolean>;
     procedure LoadMaps;
+    procedure LoadModelMaps;
+    function ComputeValues(const pIn: TColumnIn; const pOld: TArray<Variant>; pEnumVar: Boolean;
+      const pEnumType: string): TArray<Variant>;
+    function ReadExtras(const pTable, pField: string): TArray<Variant>;
+    function KeyText(const pKeyVals: TArray<Variant>): string;
+    function IsInScope(const pTable: string): Boolean;
+    function AddPlanned(pOp: TFrChangeOp; const pTable: string; const pKeyCols: TArray<string>;
+      const pKeyVals: TArray<Variant>; const pProp: string; const pOld, pNew: string; pChecked: Boolean;
+      const pCols: TArray<string>; const pVals: TArray<Variant>): Integer;
+    procedure PlanFields;
+    procedure PlanVanishedFields;
+    procedure PlanTable(const pTable: string; const pKeyCols, pValCols: TArray<string>;
+      const pDesired: TArray<TDesiredRow>; pAllowDelete: TFunc<TArray<Variant>, Boolean>);
+    procedure PlanSchemaTables;
+    procedure ExecUpdateColumn(const pTable: string; const pKeyCols: TArray<string>; const pKeyVals: TArray<Variant>;
+      const pCol: string; const pValue: Variant);
+    procedure ExecDelete(const pItem: TPlanned);
+    procedure ExecInsert(const pItem: TPlanned);
+    procedure ExecPlanned(const pItem: TPlanned);
     procedure LoadColumnLimits;
     function PkOf(const pTable: string): TArray<string>;
     function ReadOld(const pTable, pField: string; out pOld: TArray<Variant>;
@@ -243,8 +338,12 @@ type
     procedure UpdateDatasets(var pRes: TSchemaSeedResult);
   public
     constructor Create(pConn: TFDConnection; const pSources: TSchemaSources; pStampUtc: TDateTime);
+    constructor CreateForModel(pConn: TFDConnection; const pModel: TFbSchemaModel; pStampUtc: TDateTime);
     destructor Destroy; override;
     function Execute: TSchemaSeedResult;
+    function Plan: TFrChangeSet;
+    function Apply(const pChosen: TArray<TFrChange>; pStampUtc: TDateTime): TSchemaApplyResult;
+    property Warnings: TList<string> read FWarnings;
   end;
 
 function ValText(const pValue: Variant): string;
@@ -326,6 +425,8 @@ end;
 
 destructor TSeedRun.Destroy;
 begin
+  FScope.Free;
+  FPlanned.Free;
   FWarnings.Free;
   FDiff.Free;
   FRelFields.Free;
@@ -459,7 +560,7 @@ end;
 function TSeedRun.Fit(const pValue, pTable, pField: string; pCol: Integer): string;
 begin
   Result := pValue;
-  if (FStringMax[pCol] > 0) and (Length(Result) > FStringMax[pCol]) then
+  if (FStringMax[pCol] > 0) and (Length(Result) > FStringMax[pCol]) then  // dl:ok index-possibly-out-of-range@c6a6 -- REVIEWED 2026-11-22 FR-SCHEMA: index comes from the statement span the tokenizer produced (or a fixed column list sized with it), inside the array
   begin
     FWarnings.Add(Format('%s.%s %s cut to %d chars: %s', [pTable, pField, SCHEMA_COLS[pCol],
       FStringMax[pCol], pValue]));
@@ -476,7 +577,7 @@ var
 begin
   SetLength(Params, Length(SCHEMA_COLS) + 2);
   SetLength(Types, Length(SCHEMA_COLS) + 2);
-  for i := 0 to High(SCHEMA_COLS) do
+  for i := 0 to High(SCHEMA_COLS) do  // dl:ok index-possibly-out-of-range@584d -- REVIEWED 2026-11-22 FR-SCHEMA: index comes from the statement span the tokenizer produced (or a fixed column list sized with it), inside the array
   begin
     Params[i] := pValues[i];
     Types[i] := if FStringMax[i] > 0 then ftWideString else ftInteger;
@@ -516,12 +617,11 @@ procedure TSeedRun.UpdateFields(var pRes: TSchemaSeedResult);
 var
   Src: TDataSet;
   DefaultField: TField;
-  Table, Field, Accessor, VarType, Seq, EnumType: string;
+  ColIn: TColumnIn;
+  Table, Field, EnumType: string;
   FbType, FbSub, FbLen: Integer;
   OldVals, NewVals: TArray<Variant>;
-  Exists, EnumVar, InPk, Differs: Boolean;
-  Pk: TArray<string>;
-  Key: string;
+  Exists, EnumVar, Differs: Boolean;
   i: Integer;
 begin
   Src := FSrc.Fields;
@@ -535,48 +635,17 @@ begin
     FbSub := IntOf(Src, 'FIELD_SUB_TYPE');
     FbLen := IntOf(Src, 'FIELD_LENGTH');
     Exists := ReadOld(Table, Field, OldVals, EnumVar, EnumType);
-    NewVals := Copy(OldVals);
-
-    if TryFbFieldAccessor(FbType, FbSub, Accessor) then
-      NewVals[COL_AS_TYPE] := Accessor
-    else
-      FWarnings.Add(Format('%s.%s type=%d sub_type=%d: no entry in the type dictionary, ' +
-        'FIELD_AS_TYPE / VAR_TYPE left as they were', [Table, Field, FbType, FbSub]));
-    if EnumVar then
-      NewVals[COL_VAR_TYPE] := EnumType
-    else if TryFbFieldVarType(FbType, FbSub, FbLen, VarType) then
-      NewVals[COL_VAR_TYPE] := VarType;
-    if VarIsNull(NewVals[COL_DEFAULTVAL]) then
-      NewVals[COL_DEFAULTVAL] := Fit(DefaultValOf(DefaultField.AsString),
-        Table, Field, COL_DEFAULTVAL);
-    NewVals[COL_FIELD_SIZE] := FbLen;
-    NewVals[COL_STRING_SIZE] := IntOf(Src, 'CHARACTER_LEN');
-    NewVals[COL_NULL_FLAG] := IntOf(Src, 'NULL_FLAG');
-    NewVals[COL_FIELD_KIND] := FIELD_KIND_COLUMN;
-    NewVals[COL_FIELD_TYPE] := FbType;
-    NewVals[COL_FIELD_SUBTYPE] := FbSub;
-    NewVals[COL_FIELD_LENGTH] := FbLen;
-    NewVals[COL_FIELD_SCALE] := IntOf(Src, 'FIELD_SCALE');
-
-    Pk := PkOf(Table);
-    InPk := False;
-    for Key in Pk do
-      if Key = Field then
-        InPk := True;
-    NewVals[COL_PRIMARY_KEY] := Ord(InPk);
-    { SEQUENCE_NAME only for a single-segment BIGINT key whose generator exists }
-    if InPk and (Length(Pk) = 1) and (FbType = FB_TYPE_INT64) then
-    begin
-      Seq := 'GEN_' + Table + '_' + Field;
-      if FGenerators.ContainsKey(Seq) then
-        if Length(Seq) > FStringMax[COL_SEQUENCE] then
-          FWarnings.Add(Format('%s.%s generator %s longer than SEQUENCE_NAME: not set', [Table, Field, Seq]))
-        else
-        begin
-          NewVals[COL_SEQUENCE] := Seq;
-          NewVals[COL_TRIGGERED] := 1;
-        end;
-    end;
+    ColIn := Default(TColumnIn);
+    ColIn.Table := Table;
+    ColIn.Field := Field;
+    ColIn.FbType := FbType;
+    ColIn.FbSub := FbSub;
+    ColIn.FbLen := FbLen;
+    ColIn.CharLen := IntOf(Src, 'CHARACTER_LEN');
+    ColIn.NullFlag := IntOf(Src, 'NULL_FLAG');
+    ColIn.Scale := IntOf(Src, 'FIELD_SCALE');
+    ColIn.DefaultSource := DefaultField.AsString;
+    NewVals := ComputeValues(ColIn, OldVals, EnumVar, EnumType);
 
     if not Exists then
     begin
@@ -587,7 +656,7 @@ begin
     else
     begin
       Differs := False;
-      for i := 0 to High(SCHEMA_COLS) do
+      for i := 0 to High(SCHEMA_COLS) do  // dl:ok index-possibly-out-of-range@584d -- REVIEWED 2026-11-22 FR-SCHEMA: index comes from the statement span the tokenizer produced (or a fixed column list sized with it), inside the array
         if not SameVal(OldVals[i], NewVals[i]) then
         begin
           Differs := True;
@@ -752,7 +821,7 @@ begin
       end;
       DsId := Q.Fields[0].AsInteger;
       Differs := False;
-      for i := 0 to High(DS_COLS) do
+      for i := 0 to High(DS_COLS) do  // dl:ok index-possibly-out-of-range@0112 -- REVIEWED 2026-11-22 FR-SCHEMA: index comes from the statement span the tokenizer produced (or a fixed column list sized with it), inside the array
         if Q.Fields[i + 1].AsString <> Gen[i] then
           Differs := True;
       Q.Close;
@@ -771,6 +840,629 @@ begin
   finally
     Q.Free;
     Tables.Free;
+  end;
+end;
+
+{ ---- the change-set producer / applier (FR-SCHEMA) ------------------------------------------------------ }
+
+const
+  DOMAINS_TABLE = 'DL_DOMAINS';
+  CONSTRAINTS_TABLE = 'DL_CONSTRAINTS';
+  CONSTRAINT_COLUMNS_TABLE = 'DL_CONSTRAINT_COLUMNS';
+  GENERATORS_TABLE = 'DL_GENERATORS';
+  META_SCHEMA_READ = 'schema_read_at_utc';
+  META_SCHEMA_SOURCE = 'schema_source';
+  META_SCHEMA_DATABASE = 'schema_database';
+  KEY_SEP = '|';
+  FIELD_KEY_COLS: TArray<string> = ['TABLE_NAME', 'FIELD_NAME'];
+  FIELD_EXTRA_COLS: TArray<string> = ['DOMAIN_NAME', 'CHAR_LENGTH'];
+  EXTRA_DOMAIN = 0;
+  EXTRA_CHARLEN = 1;
+  DOMAIN_COLS: TArray<string> = ['FIELD_TYPE', 'FIELD_SUBTYPE', 'FIELD_LENGTH', 'CHAR_LENGTH', 'FIELD_SCALE',
+    'FIELD_PRECISION', 'NULL_FLAG', 'DEFAULT_SOURCE', 'CHECK_SOURCE', 'CHARSET'];
+  CONSTRAINT_COLS: TArray<string> = ['TABLE_NAME', 'KIND', 'REF_TABLE', 'REF_CONSTRAINT', 'UPDATE_RULE',
+    'DELETE_RULE'];
+  SUMMARY_MAX = 60;
+
+function NullIfEmpty(const pValue: string): Variant;
+begin
+  Result := Null;
+  if pValue <> '' then
+    Result := pValue;
+end;
+
+function NullIfZero(pValue: Integer): Variant;
+begin
+  Result := Null;
+  if pValue <> 0 then
+    Result := pValue;
+end;
+
+function SummaryOf(const pCols: TArray<string>; const pVals: TArray<Variant>): string;
+var
+  i: Integer;
+begin
+  Result := '';
+  for i := 0 to High(pCols) do  // dl:ok index-possibly-out-of-range@d748 -- REVIEWED 2026-11-22 FR-SCHEMA: index comes from the statement span the tokenizer produced (or a fixed column list sized with it), inside the array
+    if not (VarIsNull(pVals[i]) or VarIsEmpty(pVals[i])) then
+      Result := Result + (if Result = '' then '' else ', ') + pCols[i] + '=' + VarToStr(pVals[i]);
+  if Length(Result) > SUMMARY_MAX then
+    Result := Copy(Result, 1, SUMMARY_MAX) + '...';
+end;
+
+function ParamTypeOf(const pTable, pColumn: string): TFieldType;
+var
+  Tab: TRepoTable;
+  Col: TRepoColumn;
+begin
+  Result := ftInteger;
+  if FindRepoTable(pTable, Tab) and Tab.FindColumn(pColumn, Col) then
+    case Col.Kind of
+      rckString: Result := ftWideString;
+      rckText: Result := ftWideMemo;
+      rckBoolean: Result := ftBoolean;
+    end;
+end;
+
+procedure TSeedRun.LoadModelMaps;
+var
+  Con: TFbConstraint;
+  Col: TFbColumn;
+  Keys: TList<string>;
+  Name: string;
+begin
+  FScope := TDictionary<string, Boolean>.Create;
+  for Con in FModel.Constraints do
+  begin
+    FScope.AddOrSetValue(Con.TableName.ToUpper, True);
+    if Con.Kind = 'PK' then
+    begin
+      Keys := TList<string>.Create;
+      for Name in Con.Columns do
+        Keys.Add(Name.ToUpper);
+      FPk.AddOrSetValue(Con.TableName.ToUpper, Keys);
+    end;
+  end;
+  for Col in FModel.Columns do
+    FScope.AddOrSetValue(Col.TableName.ToUpper, True);
+  for Name in FModel.Generators do
+    FGenerators.AddOrSetValue(Name.ToUpper, True);
+end;
+
+constructor TSeedRun.CreateForModel(pConn: TFDConnection; const pModel: TFbSchemaModel; pStampUtc: TDateTime);
+begin
+  Create(pConn, Default(TSchemaSources), pStampUtc);
+  FModel := pModel;
+  FFromDdl := SameText(pModel.Source, 'ddl');
+  FPlanned := TList<TPlanned>.Create;
+  LoadColumnLimits;
+  LoadModelMaps;
+end;
+
+{ The 14 schema-derived DL_FIELDS_INFO values of one column, from what the source says plus what the row holds now
+  (a stored DEFAULTVAL and an enum VAR_TYPE are hand-kept and survive). }
+function TSeedRun.ComputeValues(const pIn: TColumnIn; const pOld: TArray<Variant>; pEnumVar: Boolean;
+  const pEnumType: string): TArray<Variant>;
+var
+  Accessor, VarType, Seq, Key: string;
+  Pk: TArray<string>;
+  InPk: Boolean;
+begin
+  Result := Copy(pOld);
+  if TryFbFieldAccessor(pIn.FbType, pIn.FbSub, Accessor) then
+    Result[COL_AS_TYPE] := Accessor
+  else
+    FWarnings.Add(Format('%s.%s type=%d sub_type=%d: no entry in the type dictionary, ' +
+      'FIELD_AS_TYPE / VAR_TYPE left as they were', [pIn.Table, pIn.Field, pIn.FbType, pIn.FbSub]));
+  if pEnumVar then
+    Result[COL_VAR_TYPE] := pEnumType
+  else if TryFbFieldVarType(pIn.FbType, pIn.FbSub, pIn.FbLen, VarType) then
+    Result[COL_VAR_TYPE] := VarType;
+  if VarIsNull(Result[COL_DEFAULTVAL]) then
+    Result[COL_DEFAULTVAL] := Fit(DefaultValOf(pIn.DefaultSource), pIn.Table, pIn.Field, COL_DEFAULTVAL);
+  Result[COL_FIELD_SIZE] := pIn.FbLen;
+  Result[COL_STRING_SIZE] := pIn.CharLen;
+  Result[COL_NULL_FLAG] := pIn.NullFlag;
+  Result[COL_FIELD_KIND] := FIELD_KIND_COLUMN;
+  Result[COL_FIELD_TYPE] := pIn.FbType;
+  Result[COL_FIELD_SUBTYPE] := pIn.FbSub;
+  Result[COL_FIELD_LENGTH] := pIn.FbLen;
+  Result[COL_FIELD_SCALE] := pIn.Scale;
+
+  Pk := PkOf(pIn.Table);
+  InPk := False;
+  for Key in Pk do
+    if Key = pIn.Field then
+      InPk := True;
+  Result[COL_PRIMARY_KEY] := Ord(InPk);
+  { SEQUENCE_NAME only for a single-segment BIGINT key whose generator exists }
+  if InPk and (Length(Pk) = 1) and (pIn.FbType = FB_TYPE_INT64) then
+  begin
+    Seq := 'GEN_' + pIn.Table + '_' + pIn.Field;
+    if FGenerators.ContainsKey(Seq) then
+      if Length(Seq) > FStringMax[COL_SEQUENCE] then
+        FWarnings.Add(Format('%s.%s generator %s longer than SEQUENCE_NAME: not set', [pIn.Table, pIn.Field, Seq]))
+      else
+      begin
+        Result[COL_SEQUENCE] := Seq;
+        Result[COL_TRIGGERED] := 1;
+      end;
+  end;
+end;
+
+function TSeedRun.ReadExtras(const pTable, pField: string): TArray<Variant>;
+var
+  Q: TFDQuery;
+begin
+  Result := [Null, Null];
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := FConn;
+    Q.Open('SELECT "DOMAIN_NAME", "CHAR_LENGTH" FROM ' + QuoteRepoIdent(FIELDS_TABLE) +  // dl:ok path-traversal@6c57 -- SQL text, not a path: the identifier goes through QuoteRepoIdent
+      ' WHERE "TABLE_NAME" = :T AND "FIELD_NAME" = :F', [pTable, pField]);
+    if not Q.Eof then
+    begin
+      Result[EXTRA_DOMAIN] := Q.Fields[EXTRA_DOMAIN].Value;
+      Result[EXTRA_CHARLEN] := Q.Fields[EXTRA_CHARLEN].Value;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+
+function TSeedRun.KeyText(const pKeyVals: TArray<Variant>): string;
+var
+  i: Integer;
+begin
+  Result := '';
+  for i := 0 to High(pKeyVals) do
+    Result := Result + (if i = 0 then '' else KEY_SEP) + VarToStr(pKeyVals[i]);
+end;
+
+{ A DDL source is partial: only the tables it declares are candidates for "vanished". }
+function TSeedRun.IsInScope(const pTable: string): Boolean;
+begin
+  Result := (not FFromDdl) or FScope.ContainsKey(pTable.ToUpper);
+end;
+
+function TSeedRun.AddPlanned(pOp: TFrChangeOp; const pTable: string; const pKeyCols: TArray<string>;  // dl:ok too-many-parameters@0851 -- REVIEWED 2026-11-22 FR-SCHEMA: one planned change per call; a record would only rename the same ten values
+  const pKeyVals: TArray<Variant>; const pProp: string; const pOld, pNew: string; pChecked: Boolean;
+  const pCols: TArray<string>; const pVals: TArray<Variant>): Integer;
+var
+  Item: TPlanned;
+begin
+  Item := Default(TPlanned);
+  Item.RepoTable := pTable;
+  Item.KeyCols := pKeyCols;
+  Item.KeyVals := pKeyVals;
+  Item.Cols := pCols;
+  Item.Vals := pVals;
+  Item.Change.Op := pOp;
+  Item.Change.Target := pTable + ' ' + KeyText(pKeyVals);
+  Item.Change.Prop := pProp;
+  Item.Change.OldValue := pOld;
+  Item.Change.NewValue := pNew;
+  Item.Change.Checked := pChecked;
+  Result := FPlanned.Add(Item);
+end;
+
+procedure TSeedRun.PlanFields;
+var
+  Col: TFbColumn;
+  ColIn: TColumnIn;
+  Table, Field, EnumType: string;
+  OldVals, NewVals, OldExtra, NewExtra, Keys: TArray<Variant>;
+  Exists, EnumVar: Boolean;
+  i, Idx: Integer;
+  Item: TPlanned;
+begin
+  for Col in FModel.Columns do
+  begin
+    Table := Col.TableName.ToUpper;
+    Field := Col.ColumnName.ToUpper;
+    ColIn := Default(TColumnIn);
+    ColIn.Table := Table;
+    ColIn.Field := Field;
+    ColIn.FbType := Col.FieldType;
+    ColIn.FbSub := Col.SubType;
+    ColIn.FbLen := Col.FieldLength;
+    ColIn.CharLen := Col.CharLength;
+    ColIn.NullFlag := Col.NullFlag;
+    ColIn.Scale := Col.Scale;
+    ColIn.DefaultSource := Col.DefaultSource;
+    Exists := ReadOld(Table, Field, OldVals, EnumVar, EnumType);
+    NewVals := ComputeValues(ColIn, OldVals, EnumVar, EnumType);
+    NewExtra := [NullIfEmpty(Col.DomainName), NullIfZero(Col.CharLength)];
+    OldExtra := ReadExtras(Table, Field);
+    Keys := [Table, Field];
+    if not Exists then
+    begin
+      Idx := AddPlanned(fcoInsert, FIELDS_TABLE, FIELD_KEY_COLS, Keys, '', '',
+        Format('type=%d sub=%d len=%d', [Col.FieldType, Col.SubType, Col.FieldLength]), True, FIELD_EXTRA_COLS, NewExtra);
+      Item := FPlanned[Idx];
+      Item.FieldValues := NewVals;
+      FPlanned[Idx] := Item;
+      Continue;
+    end;
+    for i := 0 to High(SCHEMA_COLS) do  // dl:ok index-possibly-out-of-range@584d -- REVIEWED 2026-11-22 FR-SCHEMA: index comes from the statement span the tokenizer produced (or a fixed column list sized with it), inside the array
+      if not SameVal(OldVals[i], NewVals[i]) then
+        AddPlanned(fcoUpdate, FIELDS_TABLE, FIELD_KEY_COLS, Keys, SCHEMA_COLS[i], ValText(OldVals[i]),
+          ValText(NewVals[i]), True, [SCHEMA_COLS[i]], [NewVals[i]]);
+    for i := 0 to High(FIELD_EXTRA_COLS) do  // dl:ok index-possibly-out-of-range@a553 -- REVIEWED 2026-11-22 FR-SCHEMA: index comes from the statement span the tokenizer produced (or a fixed column list sized with it), inside the array
+      if not SameVal(OldExtra[i], NewExtra[i]) then
+        AddPlanned(fcoUpdate, FIELDS_TABLE, FIELD_KEY_COLS, Keys, FIELD_EXTRA_COLS[i], ValText(OldExtra[i]),
+          ValText(NewExtra[i]), True, [FIELD_EXTRA_COLS[i]], [NewExtra[i]]);
+  end;
+end;
+
+procedure TSeedRun.PlanVanishedFields;
+var
+  Seen: TDictionary<string, Boolean>;
+  Col: TFbColumn;
+  Q: TFDQuery;
+  Table, Field: string;
+begin
+  Seen := TDictionary<string, Boolean>.Create;
+  Q := TFDQuery.Create(nil);
+  try
+    for Col in FModel.Columns do
+      Seen.AddOrSetValue(Col.TableName.ToUpper + KEY_SEP + Col.ColumnName.ToUpper, True);
+    Q.Connection := FConn;
+    Q.Open('SELECT "TABLE_NAME", "FIELD_NAME", "FIELD_TYPE", "FIELD_LENGTH" FROM ' + QuoteRepoIdent(FIELDS_TABLE) +  // dl:ok path-traversal@b689 -- SQL text, not a path: the identifier goes through QuoteRepoIdent
+      ' WHERE "ISCALCULATED" = 0 AND "ISLOOKUP" = 0 AND ("FIELD_KIND" IS NULL OR "FIELD_KIND" = 1) AND ' +
+      SQL_NOT_SYSTEM + ' ORDER BY 1, 2');
+    while not Q.Eof do
+    begin
+      Table := Q.Fields[0].AsString;
+      Field := Q.Fields[1].AsString;
+      if IsInScope(Trim(Table)) and not Seen.ContainsKey(Trim(Table) + KEY_SEP + Trim(Field)) then
+        AddPlanned(fcoDelete, FIELDS_TABLE, FIELD_KEY_COLS, [Table, Field], '',
+          Format('type=%s len=%s (column vanished)', [Q.Fields[2].AsString, Q.Fields[3].AsString]), '', False, nil, nil);
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+    Seen.Free;
+  end;
+end;
+
+procedure TSeedRun.PlanTable(const pTable: string; const pKeyCols, pValCols: TArray<string>;
+  const pDesired: TArray<TDesiredRow>; pAllowDelete: TFunc<TArray<Variant>, Boolean>);
+var
+  Q: TFDQuery;
+  Existing: TDictionary<string, TArray<Variant>>;
+  ExistKeys: TDictionary<string, TArray<Variant>>;
+  Order, Wanted: TStringList;
+  KeyV, OldV: TArray<Variant>;
+  Row: TDesiredRow;
+  Key, ColList, OrderBy: string;
+  i, NKey: Integer;
+begin
+  NKey := Length(pKeyCols);
+  ColList := '';
+  for i := 0 to NKey - 1 do
+    ColList := ColList + (if i = 0 then '' else ', ') + QuoteRepoIdent(pKeyCols[i]);
+  OrderBy := ColList;
+  for i := 0 to High(pValCols) do
+    ColList := ColList + ', ' + QuoteRepoIdent(pValCols[i]);
+  Existing := TDictionary<string, TArray<Variant>>.Create;
+  ExistKeys := TDictionary<string, TArray<Variant>>.Create;
+  Order := TStringList.Create;
+  Wanted := TStringList.Create;
+  Q := TFDQuery.Create(nil);
+  try
+    Wanted.Sorted := True;
+    Q.Connection := FConn;
+    Q.Open('SELECT ' + ColList + ' FROM ' + QuoteRepoIdent(pTable) + ' ORDER BY ' + OrderBy);  // dl:ok path-traversal@5d57 -- SQL text, not a path: identifiers go through QuoteRepoIdent
+    while not Q.Eof do
+    begin
+      SetLength(KeyV, NKey);
+      SetLength(OldV, Length(pValCols));
+      for i := 0 to NKey - 1 do
+        KeyV[i] := Q.Fields[i].Value;
+      for i := 0 to High(pValCols) do
+        OldV[i] := Q.Fields[NKey + i].Value;
+      Key := KeyText(KeyV);
+      Existing.AddOrSetValue(Key, Copy(OldV));
+      ExistKeys.AddOrSetValue(Key, Copy(KeyV));
+      Order.Add(Key);
+      Q.Next;
+    end;
+    for Row in pDesired do
+    begin
+      Key := KeyText(Row.KeyVals);
+      Wanted.Add(Key);
+      if not Existing.TryGetValue(Key, OldV) then
+        AddPlanned(fcoInsert, pTable, pKeyCols, Row.KeyVals, '', '', SummaryOf(pValCols, Row.Vals), True, pValCols,
+          Row.Vals)
+      else
+        for i := 0 to High(pValCols) do
+          if not SameVal(OldV[i], Row.Vals[i]) then
+            AddPlanned(fcoUpdate, pTable, pKeyCols, Row.KeyVals, pValCols[i], ValText(OldV[i]), ValText(Row.Vals[i]),
+              True, [pValCols[i]], [Row.Vals[i]]);
+    end;
+    for Key in Order do
+      if (Wanted.IndexOf(Key) < 0) and ((not Assigned(pAllowDelete)) or pAllowDelete(ExistKeys[Key])) then
+        AddPlanned(fcoDelete, pTable, pKeyCols, ExistKeys[Key], '', SummaryOf(pValCols, Existing[Key]), '', False,
+          nil, nil);
+  finally
+    Q.Free;
+    Wanted.Free;
+    Order.Free;
+    ExistKeys.Free;
+    Existing.Free;
+  end;
+end;
+
+procedure TSeedRun.PlanSchemaTables;
+var
+  Dom: TFbDomain;
+  Con: TFbConstraint;
+  Gen: string;
+  Rows: TArray<TDesiredRow>;
+  Row: TDesiredRow;
+  i: Integer;
+  ModelCons: TDictionary<string, Boolean>;
+  NotDdl: TFunc<TArray<Variant>, Boolean>;
+begin
+  NotDdl := function(pKey: TArray<Variant>): Boolean
+    begin
+      Result := not FFromDdl;
+    end;
+  Rows := nil;
+  for Dom in FModel.Domains do
+  begin
+    Row.KeyVals := [Dom.Name];
+    Row.Vals := [Dom.FieldType, Dom.SubType, Dom.FieldLength, NullIfZero(Dom.CharLength), Dom.Scale, Dom.Precision,
+      Dom.NullFlag, NullIfEmpty(Dom.DefaultSource), NullIfEmpty(Dom.CheckSource), NullIfEmpty(Dom.Charset)];
+    Rows := Rows + [Row];
+  end;
+  PlanTable(DOMAINS_TABLE, ['DOMAIN_NAME'], DOMAIN_COLS, Rows, NotDdl);
+
+  Rows := nil;
+  ModelCons := TDictionary<string, Boolean>.Create;
+  try
+    for Con in FModel.Constraints do
+    begin
+      ModelCons.AddOrSetValue(Con.Name, True);
+      Row.KeyVals := [Con.Name];
+      Row.Vals := [Con.TableName, Con.Kind, NullIfEmpty(Con.RefTable), NullIfEmpty(Con.RefConstraint),
+        NullIfEmpty(Con.UpdateRule), NullIfEmpty(Con.DeleteRule)];
+      Rows := Rows + [Row];
+    end;
+    PlanTable(CONSTRAINTS_TABLE, ['CONSTRAINT_NAME'], CONSTRAINT_COLS, Rows, NotDdl);
+
+    Rows := nil;
+    for Con in FModel.Constraints do
+      for i := 0 to High(Con.Columns) do
+      begin
+        Row.KeyVals := [Con.Name, i + 1];
+        Row.Vals := [Con.Columns[i]];
+        Rows := Rows + [Row];
+      end;
+    PlanTable(CONSTRAINT_COLUMNS_TABLE, ['CONSTRAINT_NAME', 'POSITION'], ['COLUMN_NAME'], Rows,
+      function(pKey: TArray<Variant>): Boolean
+      begin
+        Result := (not FFromDdl) or ModelCons.ContainsKey(VarToStr(pKey[0]));
+      end);
+  finally
+    ModelCons.Free;
+  end;
+
+  Rows := nil;
+  for Gen in FModel.Generators do
+  begin
+    Row.KeyVals := [Gen];
+    Row.Vals := nil;
+    Rows := Rows + [Row];
+  end;
+  PlanTable(GENERATORS_TABLE, ['GENERATOR_NAME'], nil, Rows, NotDdl);
+end;
+
+function TSeedRun.Plan: TFrChangeSet;
+var
+  i: Integer;
+  Item: TPlanned;
+begin
+  FPlanned.Clear;
+  PlanSchemaTables;
+  PlanFields;
+  PlanVanishedFields;
+  Result := Default(TFrChangeSet);
+  Result.Direction := fdDbToRepo;
+  SetLength(Result.Changes, FPlanned.Count);
+  for i := 0 to FPlanned.Count - 1 do
+  begin
+    Item := FPlanned[i];
+    Item.Change.Id := i + 1;
+    FPlanned[i] := Item;
+    Result.Changes[i] := Item.Change;
+  end;
+end;
+
+procedure TSeedRun.ExecUpdateColumn(const pTable: string; const pKeyCols: TArray<string>;
+  const pKeyVals: TArray<Variant>; const pCol: string; const pValue: Variant);
+var
+  Where: string;
+  Params: TArray<Variant>;
+  Types: TArray<TFieldType>;
+  i: Integer;
+begin
+  Where := '';
+  Params := [pValue];
+  Types := [ParamTypeOf(pTable, pCol)];
+  for i := 0 to High(pKeyCols) do  // dl:ok index-possibly-out-of-range@a57e -- REVIEWED 2026-11-22 FR-SCHEMA: index comes from the statement span the tokenizer produced (or a fixed column list sized with it), inside the array
+  begin
+    Where := Where + (if i = 0 then '' else ' AND ') + QuoteRepoIdent(pKeyCols[i]) + ' = :K' + IntToStr(i);
+    Params := Params + [pKeyVals[i]];
+    Types := Types + [ParamTypeOf(pTable, pKeyCols[i])];
+  end;
+  FConn.ExecSQL('UPDATE ' + QuoteRepoIdent(pTable) + ' SET ' + QuoteRepoIdent(pCol) + ' = :V WHERE ' + Where,
+    Params, Types);
+end;
+
+procedure TSeedRun.ExecDelete(const pItem: TPlanned);
+var
+  Where: string;
+  Types: TArray<TFieldType>;
+  i: Integer;
+begin
+  Where := '';
+  for i := 0 to High(pItem.KeyCols) do
+  begin
+    Where := Where + (if i = 0 then '' else ' AND ') + QuoteRepoIdent(pItem.KeyCols[i]) + ' = :K' + IntToStr(i);
+    Types := Types + [ParamTypeOf(pItem.RepoTable, pItem.KeyCols[i])];
+  end;
+  FConn.ExecSQL('DELETE FROM ' + QuoteRepoIdent(pItem.RepoTable) + ' WHERE ' + Where, pItem.KeyVals, Types);
+end;
+
+procedure TSeedRun.ExecInsert(const pItem: TPlanned);
+var
+  Names, Marks: string;
+  Params: TArray<Variant>;
+  Types: TArray<TFieldType>;
+  i, N: Integer;
+begin
+  Names := '';
+  Marks := '';
+  Params := Copy(pItem.KeyVals);
+  N := Length(pItem.KeyCols);
+  for i := 0 to N - 1 do
+  begin
+    Names := Names + (if i = 0 then '' else ', ') + QuoteRepoIdent(pItem.KeyCols[i]);
+    Marks := Marks + (if i = 0 then '' else ', ') + ':P' + IntToStr(i);
+    Types := Types + [ParamTypeOf(pItem.RepoTable, pItem.KeyCols[i])];
+  end;
+  for i := 0 to High(pItem.Cols) do
+  begin
+    Names := Names + ', ' + QuoteRepoIdent(pItem.Cols[i]);
+    Marks := Marks + ', :P' + IntToStr(N + i);
+    Params := Params + [pItem.Vals[i]];
+    Types := Types + [ParamTypeOf(pItem.RepoTable, pItem.Cols[i])];
+  end;
+  FConn.ExecSQL('INSERT INTO ' + QuoteRepoIdent(pItem.RepoTable) + ' (' + Names + ') VALUES (' + Marks + ')',
+    Params, Types);
+end;
+
+procedure TSeedRun.ExecPlanned(const pItem: TPlanned);
+var
+  i: Integer;
+begin
+  case pItem.Change.Op of
+    fcoDelete:
+      ExecDelete(pItem);
+    fcoUpdate:
+      ExecUpdateColumn(pItem.RepoTable, pItem.KeyCols, pItem.KeyVals, pItem.Cols[0], pItem.Vals[0]);
+  else
+    if SameText(pItem.RepoTable, FIELDS_TABLE) then
+    begin
+      { a new field row: the TableTools new-row values + the 14 computed columns, then the two extras }
+      WriteField(True, VarToStr(pItem.KeyVals[0]), VarToStr(pItem.KeyVals[1]), pItem.FieldValues);
+      for i := 0 to High(pItem.Cols) do
+        if not VarIsNull(pItem.Vals[i]) then
+          ExecUpdateColumn(pItem.RepoTable, pItem.KeyCols, pItem.KeyVals, pItem.Cols[i], pItem.Vals[i]);
+    end
+    else
+      ExecInsert(pItem);
+  end;
+end;
+function TSeedRun.Apply(const pChosen: TArray<TFrChange>; pStampUtc: TDateTime): TSchemaApplyResult;
+var
+  Ch: TFrChange;
+  Item: TPlanned;
+  Ids: TList<Integer>;
+  Id: Integer;
+  Ds: TSchemaSeedResult;
+  Stamp: string;
+begin
+  Result := Default(TSchemaApplyResult);
+  Plan;
+  Ids := TList<Integer>.Create;
+  try
+    for Ch in pChosen do
+    begin
+      if (Ch.Id < 1) or (Ch.Id > FPlanned.Count) then
+        raise ERepoError.CreateFmt('Change %d is not in the plan the repository and schema give now; re-run the dry run',
+          [Ch.Id]);
+      Item := FPlanned[Ch.Id - 1];
+      if (Item.Change.Op <> Ch.Op) or (Item.Change.Target <> Ch.Target) or (Item.Change.Prop <> Ch.Prop) then
+        raise ERepoError.CreateFmt('Change %d no longer matches the plan (%s); re-run the dry run',
+          [Ch.Id, Item.Change.Target]);
+      if Item.Change.Blocked <> '' then
+        raise ERepoError.CreateFmt('Change %d is blocked: %s', [Ch.Id, Item.Change.Blocked]);
+      if Ids.IndexOf(Ch.Id) < 0 then
+        Ids.Add(Ch.Id);
+    end;
+    Ids.Sort;
+    Stamp := DateToISO8601(pStampUtc, True);
+    FConn.StartTransaction;
+    try
+      for Id in Ids do
+      begin
+        Item := FPlanned[Id - 1];
+        ExecPlanned(Item);
+        Inc(Result.Applied);
+        Result.Log := Result.Log + [ApplyLogLine(Item.Change)];
+      end;
+      if Result.Applied > 0 then
+      begin
+        Ds := Default(TSchemaSeedResult);
+        UpdateDatasets(Ds);
+        Result.DatasetsInserted := Ds.DatasetsInserted;
+        Result.DatasetsUpdated := Ds.DatasetsUpdated;
+        Result.DatasetsSkipped := Ds.DatasetsSkipped;
+      end;
+      SetRepoMeta(FConn, META_SCHEMA_READ, Stamp);
+      SetRepoMeta(FConn, META_SCHEMA_SOURCE, FModel.Source);
+      SetRepoMeta(FConn, META_SCHEMA_DATABASE, FModel.Database);
+      SetRepoMeta(FConn, META_REFRESHED, Stamp);
+      FConn.Commit;
+    except
+      FConn.Rollback;
+      raise;
+    end;
+  finally
+    Ids.Free;
+  end;
+  Result.Warnings := FWarnings.ToArray;
+end;
+
+procedure RequireV2(pRepo: TFDConnection);
+begin
+  if RepoSchemaVersion(pRepo) < 2 then
+    raise ERepoError.Create('The repository is schema 1: run `repo migrate --apply` before reading schema facts');
+end;
+
+function PlanSchemaChanges(pRepo: TFDConnection; const pModel: TFbSchemaModel; pMode: TSchemaSeedMode;
+  out pWarnings: TArray<string>): TFrChangeSet;
+var
+  Run: TSeedRun;
+begin
+  RequireV2(pRepo);
+  if (pMode = ssmSeed) and not RepoIsEmpty(pRepo) then
+    raise ERepoError.Create('seed needs an EMPTY repository; use refresh on a filled one');
+  Run := TSeedRun.CreateForModel(pRepo, pModel, 0);
+  try
+    Result := Run.Plan;
+    pWarnings := Run.Warnings.ToArray;
+  finally
+    Run.Free;
+  end;
+end;
+
+function ApplySchemaChanges(pRepo: TFDConnection; const pModel: TFbSchemaModel; pMode: TSchemaSeedMode;
+  const pChosen: TArray<TFrChange>; pStampUtc: TDateTime): TSchemaApplyResult;
+var
+  Run: TSeedRun;
+begin
+  RequireV2(pRepo);
+  if (pMode = ssmSeed) and not RepoIsEmpty(pRepo) then
+    raise ERepoError.Create('seed needs an EMPTY repository; use refresh on a filled one');
+  Run := TSeedRun.CreateForModel(pRepo, pModel, pStampUtc);
+  try
+    Result := Run.Apply(pChosen, pStampUtc);
+  finally
+    Run.Free;
   end;
 end;
 

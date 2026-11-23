@@ -504,14 +504,14 @@ begin
       ScalarStr(vV2, 'SELECT COUNT(*) FROM "DL_FIELDS_INFO"', vNull) = '6');
     Check('21b the v2 backup of it is the v1 backup with #DLREPO 2, CALC_BODY absent and two empty trailers',
       TEncoding.ASCII.GetString(vGot) = '#DLREPO 2' + Copy(TEncoding.ASCII.GetString(vWant), Length('#DLREPO 1') + 1, MaxInt)
-        + '#end DL_LAYOUT_EVENTS 0' + #13#10 + '#end DL_EXCEPTIONS 0' + #13#10);
+        + '#end DL_LAYOUT_EVENTS 0' + #13#10 + '#end DL_EXCEPTIONS 0' + #13#10 + '#end DL_DOMAINS 0' + #13#10 + '#end DL_CONSTRAINTS 0' + #13#10 + '#end DL_CONSTRAINT_COLUMNS 0' + #13#10 + '#end DL_GENERATORS 0' + #13#10);
     Check('21c CALC_BODY is NULL after a v1 restore',
       ScalarStr(vV2, 'SELECT COUNT(*) FROM "DL_FIELDS_INFO" WHERE "CALC_BODY" IS NOT NULL', vNull) = '0');
     Check('21d schema-2 tables are empty after a v1 restore',
       (ScalarStr(vV2, 'SELECT COUNT(*) FROM "DL_EXCEPTIONS"', vNull) = '0')
       and (ScalarStr(vV2, 'SELECT COUNT(*) FROM "DL_LAYOUT_EVENTS"', vNull) = '0'));
     Check('21e trailers of the two new tables are present and empty',
-      (Pos('#end DL_LAYOUT_EVENTS 0' + #13#10 + '#end DL_EXCEPTIONS 0' + #13#10, TEncoding.ASCII.GetString(vGot)) > 0));
+      (Pos('#end DL_LAYOUT_EVENTS 0' + #13#10 + '#end DL_EXCEPTIONS 0' + #13#10 + '#end DL_DOMAINS 0' + #13#10 + '#end DL_CONSTRAINTS 0' + #13#10 + '#end DL_CONSTRAINT_COLUMNS 0' + #13#10 + '#end DL_GENERATORS 0' + #13#10, TEncoding.ASCII.GetString(vGot)) > 0));
   finally
     vV2.Free;
   end;

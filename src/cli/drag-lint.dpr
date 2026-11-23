@@ -235,6 +235,10 @@ uses
   DRagLint.FieldRepo.Check in '..\sql\DRagLint.FieldRepo.Check.pas',
   DRagLint.FieldRepo.Migrate in '..\sql\DRagLint.FieldRepo.Migrate.pas',
   DRagLint.FieldRepo.ChangeSet in '..\sql\DRagLint.FieldRepo.ChangeSet.pas',
+  DRagLint.FieldRepo.SchemaFacts in '..\sql\DRagLint.FieldRepo.SchemaFacts.pas',
+  DRagLint.FieldRepo.Locate in '..\sql\DRagLint.FieldRepo.Locate.pas',
+  DRagLint.FieldRepo.FbSchemaRead in '..\sql\DRagLint.FieldRepo.FbSchemaRead.pas',
+  DRagLint.FieldRepo.FbDdl in '..\sql\DRagLint.FieldRepo.FbDdl.pas',
   DRagLint.Lint.ClassMetrics in '..\lint\DRagLint.Lint.ClassMetrics.pas',
   DRagLint.Project.Resolver in '..\project\DRagLint.Project.Resolver.pas',
   DRagLint.Project.TargetStudio in '..\project\DRagLint.Project.TargetStudio.pas',
@@ -492,6 +496,7 @@ uses
   DRagLint.CLI.RepoParamArray in 'DRagLint.CLI.RepoParamArray.pas',
   DRagLint.CLI.RepoModel in 'DRagLint.CLI.RepoModel.pas',
   DRagLint.CLI.RepoConstGen in 'DRagLint.CLI.RepoConstGen.pas',
+  DRagLint.CLI.RepoSchema in 'DRagLint.CLI.RepoSchema.pas',
   DRagLint.CLI.Explain in 'DRagLint.CLI.Explain.pas',
   DRagLint.CLI.RuleScope in 'DRagLint.CLI.RuleScope.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';

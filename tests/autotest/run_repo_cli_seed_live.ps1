@@ -4,10 +4,10 @@
   set. Firebird is only READ.
 
   CASES
-    S1  init, then seed-fb --dry-run  -> exit 0, "dry run", repository still 0 rows
-    S2  seed-fb                       -> exit 0, DL_FIELDS_INFO > 0, DL_DATASETS_INFO > 0, meta source_database set
-    S3  seed-fb again (not empty)     -> exit 1, counts unchanged
-    S4  refresh-schema --dry-run      -> exit 0, counts unchanged; refresh-schema -> exit 0,
+    S1  init, then seed-fb (no --apply = DRY RUN, 1.53) -> exit 0, "dry run", repository still 0 rows
+    S2  seed-fb --apply                     -> exit 0, DL_FIELDS_INFO > 0, DL_DATASETS_INFO > 0, meta source_database set
+    S3  seed-fb --apply again (not empty)     -> exit 1, counts unchanged
+    S4  refresh-schema (dry run) -> exit 0, counts unchanged; refresh-schema --apply -> exit 0,
         the field count does not change (nothing new in the schema)
     S5  the stdout / stderr of every call never contains the Password value
 
@@ -48,18 +48,18 @@ $pw = [regex]::Match($cn, '(?i)Password=([^;]*)').Groups[1].Value
 $all = New-Object System.Text.StringBuilder
 function Rec($r) { [void]$all.AppendLine($r.Out); [void]$all.AppendLine($r.Err); $r }
 $r = Rec (Run @('repo', 'init', '--repo', $repo))
-$r = Rec (Run @('repo', 'seed-fb', '--connection', $cn, '--repo', $repo, '--dry-run'))
+$r = Rec (Run @('repo', 'seed-fb', '--connection', $cn, '--repo', $repo))
 Write-Host "  raw dry-run output:`n$($r.Out)"
 Check 'S1 seed-fb --dry-run -> exit 0, nothing written' (($r.Code -eq 0) -and ($r.Out -match 'dry run') -and ((Tables $repo).DL_FIELDS_INFO -eq 0)) "exit=$($r.Code) err=$($r.Err.Trim())"
-$r = Rec (Run @('repo', 'seed-fb', '--connection', $cn, '--repo', $repo))
+$r = Rec (Run @('repo', 'seed-fb', '--connection', $cn, '--repo', $repo, '--apply'))
 $t = Tables $repo
 $meta = (Run @('repo', 'info', '--json', '--repo', $repo)).Out | ConvertFrom-Json | ForEach-Object { $_ }
 Check 'S2 seed-fb -> exit 0, fields + datasets filled, source_database set' (($r.Code -eq 0) -and ($t.DL_FIELDS_INFO -gt 0) -and ($t.DL_DATASETS_INFO -gt 0) -and ($meta.meta.source_database)) "exit=$($r.Code) err=$($r.Err.Trim())"
-$r = Rec (Run @('repo', 'seed-fb', '--connection', $cn, '--repo', $repo))
+$r = Rec (Run @('repo', 'seed-fb', '--connection', $cn, '--repo', $repo, '--apply'))
 Check 'S3 seed-fb on a filled repo -> exit 1, counts unchanged' (($r.Code -eq 1) -and ((Tables $repo).DL_FIELDS_INFO -eq $t.DL_FIELDS_INFO)) "exit=$($r.Code)"
-$r = Rec (Run @('repo', 'refresh-schema', '--connection', $cn, '--repo', $repo, '--dry-run'))
-Check 'S4 refresh-schema --dry-run -> exit 0, counts unchanged' (($r.Code -eq 0) -and ((Tables $repo).DL_FIELDS_INFO -eq $t.DL_FIELDS_INFO)) "exit=$($r.Code)"
 $r = Rec (Run @('repo', 'refresh-schema', '--connection', $cn, '--repo', $repo))
+Check 'S4 refresh-schema --dry-run -> exit 0, counts unchanged' (($r.Code -eq 0) -and ((Tables $repo).DL_FIELDS_INFO -eq $t.DL_FIELDS_INFO)) "exit=$($r.Code)"
+$r = Rec (Run @('repo', 'refresh-schema', '--connection', $cn, '--repo', $repo, '--apply'))
 Check 'S4b refresh-schema -> exit 0, field count unchanged' (($r.Code -eq 0) -and ((Tables $repo).DL_FIELDS_INFO -eq $t.DL_FIELDS_INFO)) "exit=$($r.Code)"
 if ($pw) { Check 'S5 the password never appears in any output' (-not $all.ToString().Contains($pw)) } else { Write-Host 'S5 skipped: the connection string has no Password=' }
 if ($script:Failed) { Write-Host 'REPO CLI SEED LIVE: FAIL' -ForegroundColor Red; exit 1 }
