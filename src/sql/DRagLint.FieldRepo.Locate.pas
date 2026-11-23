@@ -88,7 +88,7 @@ var
   VItem: TJSONValue;
 begin
   Result := False;
-  if not (pIncludes is TJSONArray) then
+  if pIncludes is not TJSONArray then
     Exit;
   for VItem in TJSONArray(pIncludes) do
     if (VItem is TJSONString) and
@@ -113,12 +113,12 @@ begin
   try
     VRootDir := ExtractFilePath(ExpandFileName(VFile));
     VProject := TPath.GetFullPath(pProjectFile);
-    if not (VRoot is TJSONObject) then
+    if VRoot is not TJSONObject then
       Exit;
     VSections := TJSONObject(VRoot).GetValue('indexes');
     if VSections is TJSONObject then
       VSections := TJSONObject(VSections).GetValue('sections');
-    if not (VSections is TJSONArray) then
+    if VSections is not TJSONArray then
       Exit;
     for VSection in TJSONArray(VSections) do
       if (VSection is TJSONObject) and IncludeMatches(TJSONObject(VSection).GetValue('include'), VRootDir, VProject)

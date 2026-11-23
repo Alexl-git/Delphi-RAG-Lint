@@ -191,40 +191,62 @@ begin
     raise EFbSchemaReadError.CreateFmt('Schema source %s lacks column(s): %s', [pRole, VMissing]);
 end;
 
-function Txt(pData: TDataSet; const pName: string): string;
+function Txt(pField: TField): string;
 begin
-  Result := Trim(pData.FieldByName(pName).AsString);
+  Result := Trim(pField.AsString);
 end;
 
-function Num(pData: TDataSet; const pName: string): Integer;
+function Num(pField: TField): Integer;
 begin
-  Result := pData.FieldByName(pName).AsInteger;
+  Result := pField.AsInteger;
 end;
 
 function ReadDomains(pData: TDataSet): TArray<TFbDomain>;
 var
+  VColDomainName: TField;
+  VColFieldType: TField;
+  VColFieldSubType: TField;
+  VColFieldLength: TField;
+  VColCharLength: TField;
+  VColFieldScale: TField;
+  VColFieldPrecision: TField;
+  VColNullFlag: TField;
+  VColDefaultSource: TField;
+  VColCheckSource: TField;
+  VColCharset: TField;
   VItem: TFbDomain;
   VList: TList<TFbDomain>;
 begin
   RequireColumns(pData, 'Domains', ['DOMAIN_NAME', 'FIELD_TYPE', 'FIELD_SUB_TYPE', 'FIELD_LENGTH', 'CHAR_LENGTH',
     'FIELD_SCALE', 'FIELD_PRECISION', 'NULL_FLAG', 'DEFAULT_SOURCE', 'CHECK_SOURCE', 'CHARSET']);
+  VColDomainName := pData.FieldByName('DOMAIN_NAME');
+  VColFieldType := pData.FieldByName('FIELD_TYPE');
+  VColFieldSubType := pData.FieldByName('FIELD_SUB_TYPE');
+  VColFieldLength := pData.FieldByName('FIELD_LENGTH');
+  VColCharLength := pData.FieldByName('CHAR_LENGTH');
+  VColFieldScale := pData.FieldByName('FIELD_SCALE');
+  VColFieldPrecision := pData.FieldByName('FIELD_PRECISION');
+  VColNullFlag := pData.FieldByName('NULL_FLAG');
+  VColDefaultSource := pData.FieldByName('DEFAULT_SOURCE');
+  VColCheckSource := pData.FieldByName('CHECK_SOURCE');
+  VColCharset := pData.FieldByName('CHARSET');
   VList := TList<TFbDomain>.Create;
   try
     pData.First;
     while not pData.Eof do
     begin
       VItem := Default(TFbDomain);
-      VItem.Name := Txt(pData, 'DOMAIN_NAME');
-      VItem.FieldType := Num(pData, 'FIELD_TYPE');
-      VItem.SubType := Num(pData, 'FIELD_SUB_TYPE');
-      VItem.FieldLength := Num(pData, 'FIELD_LENGTH');
-      VItem.CharLength := Num(pData, 'CHAR_LENGTH');
-      VItem.Scale := Num(pData, 'FIELD_SCALE');
-      VItem.Precision := Num(pData, 'FIELD_PRECISION');
-      VItem.NullFlag := Num(pData, 'NULL_FLAG');
-      VItem.DefaultSource := Trim(pData.FieldByName('DEFAULT_SOURCE').AsString);
-      VItem.CheckSource := Trim(pData.FieldByName('CHECK_SOURCE').AsString);
-      VItem.Charset := Txt(pData, 'CHARSET');
+      VItem.Name := Txt(VColDomainName);
+      VItem.FieldType := Num(VColFieldType);
+      VItem.SubType := Num(VColFieldSubType);
+      VItem.FieldLength := Num(VColFieldLength);
+      VItem.CharLength := Num(VColCharLength);
+      VItem.Scale := Num(VColFieldScale);
+      VItem.Precision := Num(VColFieldPrecision);
+      VItem.NullFlag := Num(VColNullFlag);
+      VItem.DefaultSource := Trim(VColDefaultSource.AsString);
+      VItem.CheckSource := Trim(VColCheckSource.AsString);
+      VItem.Charset := Txt(VColCharset);
       VList.Add(VItem);
       pData.Next;
     end;
@@ -236,27 +258,47 @@ end;
 
 function ReadColumns(pData: TDataSet): TArray<TFbColumn>;
 var
+  VColTableName: TField;
+  VColFieldName: TField;
+  VColDomainName: TField;
+  VColFieldType: TField;
+  VColFieldSubType: TField;
+  VColFieldLength: TField;
+  VColCharacterLen: TField;
+  VColFieldScale: TField;
+  VColNullFlag: TField;
+  VColDefaultSource: TField;
   VItem: TFbColumn;
   VList: TList<TFbColumn>;
 begin
   RequireColumns(pData, 'Columns', ['TABLE_NAME', 'FIELD_NAME', 'DOMAIN_NAME', 'FIELD_TYPE', 'FIELD_SUB_TYPE',
     'FIELD_LENGTH', 'CHARACTER_LEN', 'FIELD_SCALE', 'NULL_FLAG', 'DEFAULT_SOURCE']);
+  VColTableName := pData.FieldByName('TABLE_NAME');
+  VColFieldName := pData.FieldByName('FIELD_NAME');
+  VColDomainName := pData.FieldByName('DOMAIN_NAME');
+  VColFieldType := pData.FieldByName('FIELD_TYPE');
+  VColFieldSubType := pData.FieldByName('FIELD_SUB_TYPE');
+  VColFieldLength := pData.FieldByName('FIELD_LENGTH');
+  VColCharacterLen := pData.FieldByName('CHARACTER_LEN');
+  VColFieldScale := pData.FieldByName('FIELD_SCALE');
+  VColNullFlag := pData.FieldByName('NULL_FLAG');
+  VColDefaultSource := pData.FieldByName('DEFAULT_SOURCE');
   VList := TList<TFbColumn>.Create;
   try
     pData.First;
     while not pData.Eof do
     begin
       VItem := Default(TFbColumn);
-      VItem.TableName := Txt(pData, 'TABLE_NAME');
-      VItem.ColumnName := Txt(pData, 'FIELD_NAME');
-      VItem.DomainName := Txt(pData, 'DOMAIN_NAME');
-      VItem.FieldType := Num(pData, 'FIELD_TYPE');
-      VItem.SubType := Num(pData, 'FIELD_SUB_TYPE');
-      VItem.FieldLength := Num(pData, 'FIELD_LENGTH');
-      VItem.CharLength := Num(pData, 'CHARACTER_LEN');
-      VItem.Scale := Num(pData, 'FIELD_SCALE');
-      VItem.NullFlag := Num(pData, 'NULL_FLAG');
-      VItem.DefaultSource := pData.FieldByName('DEFAULT_SOURCE').AsString;
+      VItem.TableName := Txt(VColTableName);
+      VItem.ColumnName := Txt(VColFieldName);
+      VItem.DomainName := Txt(VColDomainName);
+      VItem.FieldType := Num(VColFieldType);
+      VItem.SubType := Num(VColFieldSubType);
+      VItem.FieldLength := Num(VColFieldLength);
+      VItem.CharLength := Num(VColCharacterLen);
+      VItem.Scale := Num(VColFieldScale);
+      VItem.NullFlag := Num(VColNullFlag);
+      VItem.DefaultSource := VColDefaultSource.AsString;
       VList.Add(VItem);
       pData.Next;
     end;
@@ -269,19 +311,25 @@ end;
 { key columns per constraint name, ordered by POSITION }
 function ReadKeyColumns(pData: TDataSet): TObjectDictionary<string, TList<TKeyColumn>>;
 var
+  VColConstraintName: TField;
+  VColPosition: TField;
+  VColColumnName: TField;
   VKey: TKeyColumn;
   VName: string;
   VList: TList<TKeyColumn>;
 begin
   RequireColumns(pData, 'ConstraintColumns', ['CONSTRAINT_NAME', 'POSITION', 'COLUMN_NAME']);
+  VColConstraintName := pData.FieldByName('CONSTRAINT_NAME');
+  VColPosition := pData.FieldByName('POSITION');
+  VColColumnName := pData.FieldByName('COLUMN_NAME');
   Result := TObjectDictionary<string, TList<TKeyColumn>>.Create([doOwnsValues]);
   try
     pData.First;
     while not pData.Eof do
     begin
-      VName := Txt(pData, 'CONSTRAINT_NAME');
-      VKey.Position := Num(pData, 'POSITION');
-      VKey.Name := Txt(pData, 'COLUMN_NAME');
+      VName := Txt(VColConstraintName);
+      VKey.Position := Num(VColPosition);
+      VKey.Name := Txt(VColColumnName);
       if not Result.TryGetValue(VName, VList) then
       begin
         VList := TList<TKeyColumn>.Create;
@@ -298,6 +346,13 @@ end;
 
 function ReadConstraints(pData, pKeyData: TDataSet): TArray<TFbConstraint>;
 var
+  VColConstraintName: TField;
+  VColTableName: TField;
+  VColKind: TField;
+  VColRefTable: TField;
+  VColRefConstraint: TField;
+  VColUpdateRule: TField;
+  VColDeleteRule: TField;
   VItem: TFbConstraint;
   VList: TList<TFbConstraint>;
   VKeys: TObjectDictionary<string, TList<TKeyColumn>>;
@@ -306,6 +361,13 @@ var
 begin
   RequireColumns(pData, 'Constraints', ['CONSTRAINT_NAME', 'TABLE_NAME', 'KIND', 'REF_TABLE', 'REF_CONSTRAINT',
     'UPDATE_RULE', 'DELETE_RULE']);
+  VColConstraintName := pData.FieldByName('CONSTRAINT_NAME');
+  VColTableName := pData.FieldByName('TABLE_NAME');
+  VColKind := pData.FieldByName('KIND');
+  VColRefTable := pData.FieldByName('REF_TABLE');
+  VColRefConstraint := pData.FieldByName('REF_CONSTRAINT');
+  VColUpdateRule := pData.FieldByName('UPDATE_RULE');
+  VColDeleteRule := pData.FieldByName('DELETE_RULE');
   VKeys := ReadKeyColumns(pKeyData);
   VList := TList<TFbConstraint>.Create;
   try
@@ -313,13 +375,13 @@ begin
     while not pData.Eof do
     begin
       VItem := Default(TFbConstraint);
-      VItem.Name := Txt(pData, 'CONSTRAINT_NAME');
-      VItem.TableName := Txt(pData, 'TABLE_NAME');
-      VItem.Kind := Txt(pData, 'KIND');
-      VItem.RefTable := Txt(pData, 'REF_TABLE');
-      VItem.RefConstraint := Txt(pData, 'REF_CONSTRAINT');
-      VItem.UpdateRule := Txt(pData, 'UPDATE_RULE');
-      VItem.DeleteRule := Txt(pData, 'DELETE_RULE');
+      VItem.Name := Txt(VColConstraintName);
+      VItem.TableName := Txt(VColTableName);
+      VItem.Kind := Txt(VColKind);
+      VItem.RefTable := Txt(VColRefTable);
+      VItem.RefConstraint := Txt(VColRefConstraint);
+      VItem.UpdateRule := Txt(VColUpdateRule);
+      VItem.DeleteRule := Txt(VColDeleteRule);
       if VKeys.TryGetValue(VItem.Name, VCols) then
       begin
         VCols.Sort(TComparer<TKeyColumn>.Construct(
@@ -342,15 +404,17 @@ end;
 
 function ReadGenerators(pData: TDataSet): TArray<string>;
 var
+  VColGeneratorName: TField;
   VList: TList<string>;
 begin
   RequireColumns(pData, 'Generators', ['GENERATOR_NAME']);
+  VColGeneratorName := pData.FieldByName('GENERATOR_NAME');
   VList := TList<string>.Create;
   try
     pData.First;
     while not pData.Eof do
     begin
-      VList.Add(Txt(pData, 'GENERATOR_NAME'));
+      VList.Add(Txt(VColGeneratorName));
       pData.Next;
     end;
     Result := VList.ToArray;
@@ -415,7 +479,7 @@ function OpenFbSchemaSources(pFb: TFDConnection): TFbSchemaSources;
     try
       Result.Connection := pFb;
       Result.FetchOptions.Unidirectional := False;
-      Result.Open(pSql);  // dl:ok dataset-open-without-close -- the open dataset IS the result; FreeFbSchemaSources releases it
+      Result.Open(pSql);  // dl:ok dataset-open-without-close@9c7f -- the open dataset IS the result; FreeFbSchemaSources releases it
       Result.FetchAll;
     except
       Result.Free;

@@ -51,7 +51,7 @@ function ReadDdlFiles(const pFiles: TArray<string>): TFbDdlResult;
 /// <param name="pFileName">Label of the text, e.g. the file path.</param>
 /// <returns>As ReadDdlFiles.</returns>
 /// <exception cref="EFbDdlError">As ReadDdlFiles.</exception>
-function ReadDdlText(const pText, pFileName: string): TFbDdlResult;
+function ReadDdlText(const pText, pFileName: string): TFbDdlResult;  // dl:ok unused-public-symbol@60b1 -- REVIEWED 2026-11-22 FR-SCHEMA: public API of the schema-in-repository feature: used by the CLI / tests / lane FR-LINT, outside this project index
 
 implementation
 
@@ -112,7 +112,7 @@ type
     NotNull: Boolean;
   end;
 
-  TDdlParser = class
+  TDdlParser = class  // dl:ok high-response@d1aa -- REVIEWED 2026-11-22 FR-SCHEMA: one parser object holds the token list and the model being built; the clause routines share both
   strict private
     FFile: string;
     FChunk: string;
@@ -334,7 +334,7 @@ function TDdlParser.SpanText(pFrom, pTo: Integer): string;
 begin
   if pTo <= pFrom then
     Exit('');
-  Result := Trim(Copy(FChunk, FToks[pFrom].Start, FToks[pTo - 1].Stop - FToks[pFrom].Start));
+  Result := Trim(Copy(FChunk, FToks[pFrom].Start, FToks[pTo - 1].Stop - FToks[pFrom].Start));  // dl:ok index-possibly-out-of-range@00e3 -- REVIEWED 2026-11-22 FR-SCHEMA: index comes from the statement span the tokenizer produced (or a fixed column list sized with it), inside the array
 end;
 
 function CharBytes(const pCharset: string): Integer;
@@ -342,7 +342,7 @@ begin
   Result := if SameText(pCharset, 'UTF8') then UTF8_BYTES else 1;
 end;
 
-procedure TDdlParser.ParseType(var pIdx: Integer; var pSpec: TColSpec; pLine: Integer);
+procedure TDdlParser.ParseType(var pIdx: Integer; var pSpec: TColSpec; pLine: Integer);  // dl:ok cyclomatic-complexity@ee32, cognitive-complexity@c0a2 -- REVIEWED 2026-11-22 FR-SCHEMA: grammar-driven parser routine: one branch per DDL clause, splitting would hide the clause order
 var
   VWord: string;
   VClose, VPrec, VScale: Integer;
@@ -433,7 +433,7 @@ begin
         Fail(pLine, 'unbalanced parenthesis in a numeric type');
       if FToks[pIdx + 1].Kind = tkNumber then
         VPrec := StrToIntDef(FToks[pIdx + 1].Value, PREC_DEFAULT);
-      if (pIdx + 3 < VClose) and IsSym(pIdx + 2, ',') and (FToks[pIdx + 3].Kind = tkNumber) then
+      if (pIdx + 3 < VClose) and IsSym(pIdx + 2, ',') and (FToks[pIdx + 3].Kind = tkNumber) then  // dl:ok magic-literal@1155 -- REVIEWED 2026-11-22 FR-SCHEMA: column width / type code of a schema table definition, named by the column beside it
         VScale := StrToIntDef(FToks[pIdx + 3].Value, 0);
       pIdx := VClose + 1;
     end;
@@ -476,7 +476,7 @@ begin
     Exit;
   end;
   if IsWord(pIdx, 'WITH') or IsWord(pIdx, 'WITHOUT') then
-    Inc(pIdx, 3);
+    Inc(pIdx, 3);  // dl:ok magic-literal@98ac -- REVIEWED 2026-11-22 FR-SCHEMA: column width / type code of a schema table definition, named by the column beside it
   case pSpec.FieldType of
     FB_SHORT: pSpec.FieldLength := SIZE_SHORT;
     FB_LONG, FB_FLOAT, FB_DATE, FB_TIME: pSpec.FieldLength := SIZE_LONG;
@@ -557,14 +557,14 @@ begin
   begin
     if IsWord(VIdx, 'ON') and (IsWord(VIdx + 1, 'DELETE') or IsWord(VIdx + 1, 'UPDATE')) then
     begin
-      VClose := VIdx + 2;
+      VClose := VIdx + 2;  // dl:ok index-possibly-out-of-range@c706 -- REVIEWED 2026-11-22 FR-SCHEMA: index comes from the statement span the tokenizer produced (or a fixed column list sized with it), inside the array
       if IsWord(VClose, 'SET') or IsWord(VClose, 'NO') then
       begin
         if IsWord(VIdx + 1, 'DELETE') then
           VItem.DeleteRule := FToks[VClose].Value + ' ' + FToks[VClose + 1].Value
         else
           VItem.UpdateRule := FToks[VClose].Value + ' ' + FToks[VClose + 1].Value;
-        Inc(VIdx, 4);
+        Inc(VIdx, 4);  // dl:ok magic-literal@3374 -- REVIEWED 2026-11-22 FR-SCHEMA: column width / type code of a schema table definition, named by the column beside it
       end
       else
       begin
@@ -572,7 +572,7 @@ begin
           VItem.DeleteRule := FToks[VClose].Value
         else
           VItem.UpdateRule := FToks[VClose].Value;
-        Inc(VIdx, 3);
+        Inc(VIdx, 3);  // dl:ok magic-literal@e1ad -- REVIEWED 2026-11-22 FR-SCHEMA: column width / type code of a schema table definition, named by the column beside it
       end;
     end
     else
@@ -581,7 +581,7 @@ begin
   FConstraints.Add(VItem);
 end;
 
-procedure TDdlParser.ParseAttrs(var pIdx: Integer; pEnd: Integer; var pSpec: TColSpec; const pTable, pColumn: string;
+procedure TDdlParser.ParseAttrs(var pIdx: Integer; pEnd: Integer; var pSpec: TColSpec; const pTable, pColumn: string;  // dl:ok cyclomatic-complexity@38e3 -- REVIEWED 2026-11-22 FR-SCHEMA: grammar-driven parser routine: one branch per DDL clause, splitting would hide the clause order
   pLine: Integer);
 var
   VStart, VClose: Integer;
@@ -593,13 +593,13 @@ begin
     if IsWord(pIdx, 'CHARACTER') and IsWord(pIdx + 1, 'SET') then
     begin
       pSpec.Charset := UpperCase(NameAt(pIdx + 2));
-      Inc(pIdx, 3);
+      Inc(pIdx, 3);  // dl:ok magic-literal@98ac -- REVIEWED 2026-11-22 FR-SCHEMA: column width / type code of a schema table definition, named by the column beside it
     end
     else if IsWord(pIdx, 'DEFAULT') then
     begin
       VStart := pIdx + 1;
       Inc(pIdx);
-      while (pIdx < pEnd) and not (IsWord(pIdx, 'NOT') or IsWord(pIdx, 'CONSTRAINT') or IsWord(pIdx, 'PRIMARY')
+      while (pIdx < pEnd) and not (IsWord(pIdx, 'NOT') or IsWord(pIdx, 'CONSTRAINT') or IsWord(pIdx, 'PRIMARY')  // dl:ok boolean-expression-complexity@61b3 -- REVIEWED 2026-11-22 FR-SCHEMA: one token-class test of the DDL grammar, kept whole so the accepted forms read in one place
         or IsWord(pIdx, 'UNIQUE') or IsWord(pIdx, 'REFERENCES') or IsWord(pIdx, 'CHECK') or IsWord(pIdx, 'COLLATE')
         or IsWord(pIdx, 'CHARACTER')) do
         if IsSym(pIdx, '(') then
@@ -636,7 +636,7 @@ begin
       VStart := pIdx + 2;
       if IsSym(VStart, '(') then
         VStart := AfterClose(VStart, pLine);
-      while (VStart < pEnd) and not (IsWord(VStart, 'CONSTRAINT') or IsWord(VStart, 'NOT') or IsWord(VStart, 'CHECK')
+      while (VStart < pEnd) and not (IsWord(VStart, 'CONSTRAINT') or IsWord(VStart, 'NOT') or IsWord(VStart, 'CHECK')  // dl:ok boolean-expression-complexity@5439 -- REVIEWED 2026-11-22 FR-SCHEMA: one token-class test of the DDL grammar, kept whole so the accepted forms read in one place
         or IsWord(VStart, 'DEFAULT') or IsWord(VStart, 'COLLATE')) do
         Inc(VStart);
       AddForeignKey(pTable, ConstraintName(pTable, 'FK', VExplicit), [pColumn], VClose, VStart, pLine);
@@ -662,7 +662,7 @@ begin
   end;
 end;
 
-procedure TDdlParser.ParseColumn(const pTable: string; pFrom, pTo, pLine: Integer);
+procedure TDdlParser.ParseColumn(const pTable: string; pFrom, pTo, pLine: Integer);  // dl:ok unused-parameter@1aa1 -- REVIEWED 2026-11-22 FR-SCHEMA: kept so the three column / constraint routines share one signature
 var
   VSpec: TColSpec;
   VIdx: Integer;
@@ -671,7 +671,7 @@ var
 begin
   VName := NameAt(pFrom);
   if VName = '' then
-    Fail(FToks[pFrom].Line, 'a column name is expected');
+    Fail(FToks[pFrom].Line, 'a column name is expected');  // dl:ok index-possibly-out-of-range@4923 -- REVIEWED 2026-11-22 FR-SCHEMA: index comes from the statement span the tokenizer produced (or a fixed column list sized with it), inside the array
   VIdx := pFrom + 1;
   if VIdx >= pTo then
     Fail(FToks[pFrom].Line, 'column ' + VName + ' has no data type');
@@ -707,7 +707,7 @@ begin
   if IsWord(VIdx, 'CONSTRAINT') then
   begin
     VName := NameAt(VIdx + 1);
-    Inc(VIdx, 2);
+    Inc(VIdx, 2);  // dl:ok index-possibly-out-of-range@17bb -- REVIEWED 2026-11-22 FR-SCHEMA: index comes from the statement span the tokenizer produced (or a fixed column list sized with it), inside the array
   end;
   if IsWord(VIdx, 'PRIMARY') then
   begin
@@ -734,7 +734,7 @@ begin
     AddKey(pTable, ConstraintName(pTable, VKind, VName), VKind, nil);
   end
   else
-    Fail(FToks[pFrom].Line, 'unknown table constraint');
+    Fail(FToks[pFrom].Line, 'unknown table constraint');  // dl:ok index-possibly-out-of-range@5aaf -- REVIEWED 2026-11-22 FR-SCHEMA: index comes from the statement span the tokenizer produced (or a fixed column list sized with it), inside the array
 end;
 
 procedure TDdlParser.ParseTableBody(const pTable: string; pOpen, pClose, pLine: Integer);
@@ -780,7 +780,7 @@ begin
     Fail(pLine, 'CREATE TABLE needs a table name');
   VOpen := pStart + 1;
   if IsWord(VOpen, 'EXTERNAL') then
-    VOpen := pStart + 4;
+    VOpen := pStart + 4;  // dl:ok magic-literal@cc3c -- REVIEWED 2026-11-22 FR-SCHEMA: column width / type code of a schema table definition, named by the column beside it
   if not IsSym(VOpen, '(') then
     Fail(pLine, 'CREATE TABLE ' + VTable + ' needs a ( column list )');
   VClose := MatchClose(VOpen);
@@ -799,7 +799,7 @@ begin
   VName := NameAt(2);
   if VName = '' then
     Fail(pLine, 'CREATE DOMAIN needs a name');
-  VIdx := 3;
+  VIdx := 3;  // dl:ok magic-literal@4848 -- REVIEWED 2026-11-22 FR-SCHEMA: column width / type code of a schema table definition, named by the column beside it
   if IsWord(VIdx, 'AS') then
     Inc(VIdx);
   VSpec := Default(TColSpec);
@@ -828,7 +828,7 @@ var
   VIdx: Integer;
 begin
   VTable := NameAt(2);
-  VIdx := 3;
+  VIdx := 3;  // dl:ok magic-literal@4848 -- REVIEWED 2026-11-22 FR-SCHEMA: column width / type code of a schema table definition, named by the column beside it
   if (VTable = '') or not IsWord(VIdx, 'ADD') then
   begin
     VUnknown := Default(TFbDdlUnknown);
@@ -848,7 +848,7 @@ begin
     ParseColumn(VTable, VIdx, Length(FToks), pLine);
 end;
 
-procedure TDdlParser.Statement(const pChunk: string; pFirstLine: Integer; pInBlock: Boolean);
+procedure TDdlParser.Statement(const pChunk: string; pFirstLine: Integer; pInBlock: Boolean);  // dl:ok too-many-exit-points@1c46 -- REVIEWED 2026-11-22 FR-SCHEMA: statement dispatcher: one guard Exit per statement kind
 var
   VUnknown: TFbDdlUnknown;
   VIdx: Integer;
@@ -926,7 +926,7 @@ var
     if Trim(VText) = '' then
       Exit;
     VSetTermTokens := Trim(VText).Split([' ', #9, #13, #10], TStringSplitOptions.ExcludeEmpty);
-    if (Length(VSetTermTokens) >= 3) and SameText(VSetTermTokens[0], 'SET') and SameText(VSetTermTokens[1], 'TERM') then
+    if (Length(VSetTermTokens) >= 3) and SameText(VSetTermTokens[0], 'SET') and SameText(VSetTermTokens[1], 'TERM') then  // dl:ok magic-literal@d325 -- REVIEWED 2026-11-22 FR-SCHEMA: column width / type code of a schema table definition, named by the column beside it
     begin
       VNewTerm := VSetTermTokens[2];
       Statement(VText, VChunkLine, False);

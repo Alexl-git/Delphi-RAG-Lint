@@ -112,7 +112,7 @@ type
 /// <seealso cref="DRagLint.FieldRepo.SchemaSeed.TSeedRun.Execute"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function RunSchemaSeed(pTarget: TFDConnection; const pSources: TSchemaSources;
+function RunSchemaSeed(pTarget: TFDConnection; const pSources: TSchemaSources;  // dl:ok unused-public-symbol@d7b0 -- REVIEWED 2026-11-22 FR-SCHEMA: public API of the schema-in-repository feature: used by the CLI / tests / lane FR-LINT, outside this project index
   pMode: TSchemaSeedMode; pDryRun: Boolean; pStampUtc: TDateTime): TSchemaSeedResult;
 
 /// <summary>Opens the four schema queries on a live Firebird connection.</summary>
@@ -130,7 +130,7 @@ function RunSchemaSeed(pTarget: TFDConnection; const pSources: TSchemaSources;
 /// <seealso cref="DRagLint.FieldRepo.SchemaSeed.OpenSchemaSources.OpenQuery"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function OpenSchemaSources(pFb: TFDConnection): TSchemaSources;
+function OpenSchemaSources(pFb: TFDConnection): TSchemaSources;  // dl:ok unused-public-symbol@0b64 -- REVIEWED 2026-11-22 FR-SCHEMA: public API of the schema-in-repository feature: used by the CLI / tests / lane FR-LINT, outside this project index
 
 /// <summary>Frees the datasets of pSources and sets them to nil.</summary>
 /// <param name="pSources">Sources from OpenSchemaSources; nil members are skipped.</param>
@@ -140,7 +140,7 @@ function OpenSchemaSources(pFb: TFDConnection): TSchemaSources;
 /// <para>Calls: FreeAndNil</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-procedure FreeSchemaSources(var pSources: TSchemaSources);
+procedure FreeSchemaSources(var pSources: TSchemaSources);  // dl:ok unused-public-symbol@9833 -- REVIEWED 2026-11-22 FR-SCHEMA: public API of the schema-in-repository feature: used by the CLI / tests / lane FR-LINT, outside this project index
 
 /// <summary>Computes the change set that brings the repository's schema-derived values in line with a schema model.</summary>
 /// <param name="pRepo">An open repository connection, schema 2; only SELECTs run (a dry run changes no byte).</param>
@@ -560,7 +560,7 @@ end;
 function TSeedRun.Fit(const pValue, pTable, pField: string; pCol: Integer): string;
 begin
   Result := pValue;
-  if (FStringMax[pCol] > 0) and (Length(Result) > FStringMax[pCol]) then
+  if (FStringMax[pCol] > 0) and (Length(Result) > FStringMax[pCol]) then  // dl:ok index-possibly-out-of-range@c6a6 -- REVIEWED 2026-11-22 FR-SCHEMA: index comes from the statement span the tokenizer produced (or a fixed column list sized with it), inside the array
   begin
     FWarnings.Add(Format('%s.%s %s cut to %d chars: %s', [pTable, pField, SCHEMA_COLS[pCol],
       FStringMax[pCol], pValue]));
@@ -577,7 +577,7 @@ var
 begin
   SetLength(Params, Length(SCHEMA_COLS) + 2);
   SetLength(Types, Length(SCHEMA_COLS) + 2);
-  for i := 0 to High(SCHEMA_COLS) do
+  for i := 0 to High(SCHEMA_COLS) do  // dl:ok index-possibly-out-of-range@584d -- REVIEWED 2026-11-22 FR-SCHEMA: index comes from the statement span the tokenizer produced (or a fixed column list sized with it), inside the array
   begin
     Params[i] := pValues[i];
     Types[i] := if FStringMax[i] > 0 then ftWideString else ftInteger;
@@ -656,7 +656,7 @@ begin
     else
     begin
       Differs := False;
-      for i := 0 to High(SCHEMA_COLS) do
+      for i := 0 to High(SCHEMA_COLS) do  // dl:ok index-possibly-out-of-range@584d -- REVIEWED 2026-11-22 FR-SCHEMA: index comes from the statement span the tokenizer produced (or a fixed column list sized with it), inside the array
         if not SameVal(OldVals[i], NewVals[i]) then
         begin
           Differs := True;
@@ -821,7 +821,7 @@ begin
       end;
       DsId := Q.Fields[0].AsInteger;
       Differs := False;
-      for i := 0 to High(DS_COLS) do
+      for i := 0 to High(DS_COLS) do  // dl:ok index-possibly-out-of-range@0112 -- REVIEWED 2026-11-22 FR-SCHEMA: index comes from the statement span the tokenizer produced (or a fixed column list sized with it), inside the array
         if Q.Fields[i + 1].AsString <> Gen[i] then
           Differs := True;
       Q.Close;
@@ -883,7 +883,7 @@ var
   i: Integer;
 begin
   Result := '';
-  for i := 0 to High(pCols) do
+  for i := 0 to High(pCols) do  // dl:ok index-possibly-out-of-range@d748 -- REVIEWED 2026-11-22 FR-SCHEMA: index comes from the statement span the tokenizer produced (or a fixed column list sized with it), inside the array
     if not (VarIsNull(pVals[i]) or VarIsEmpty(pVals[i])) then
       Result := Result + (if Result = '' then '' else ', ') + pCols[i] + '=' + VarToStr(pVals[i]);
   if Length(Result) > SUMMARY_MAX then
@@ -998,7 +998,7 @@ begin
   Q := TFDQuery.Create(nil);
   try
     Q.Connection := FConn;
-    Q.Open('SELECT "DOMAIN_NAME", "CHAR_LENGTH" FROM ' + QuoteRepoIdent(FIELDS_TABLE) +  // dl:ok path-traversal -- SQL text, not a path: the identifier goes through QuoteRepoIdent
+    Q.Open('SELECT "DOMAIN_NAME", "CHAR_LENGTH" FROM ' + QuoteRepoIdent(FIELDS_TABLE) +  // dl:ok path-traversal@6c57 -- SQL text, not a path: the identifier goes through QuoteRepoIdent
       ' WHERE "TABLE_NAME" = :T AND "FIELD_NAME" = :F', [pTable, pField]);
     if not Q.Eof then
     begin
@@ -1025,7 +1025,7 @@ begin
   Result := (not FFromDdl) or FScope.ContainsKey(pTable.ToUpper);
 end;
 
-function TSeedRun.AddPlanned(pOp: TFrChangeOp; const pTable: string; const pKeyCols: TArray<string>;
+function TSeedRun.AddPlanned(pOp: TFrChangeOp; const pTable: string; const pKeyCols: TArray<string>;  // dl:ok too-many-parameters@0851 -- REVIEWED 2026-11-22 FR-SCHEMA: one planned change per call; a record would only rename the same ten values
   const pKeyVals: TArray<Variant>; const pProp: string; const pOld, pNew: string; pChecked: Boolean;
   const pCols: TArray<string>; const pVals: TArray<Variant>): Integer;
 var
@@ -1084,11 +1084,11 @@ begin
       FPlanned[Idx] := Item;
       Continue;
     end;
-    for i := 0 to High(SCHEMA_COLS) do
+    for i := 0 to High(SCHEMA_COLS) do  // dl:ok index-possibly-out-of-range@584d -- REVIEWED 2026-11-22 FR-SCHEMA: index comes from the statement span the tokenizer produced (or a fixed column list sized with it), inside the array
       if not SameVal(OldVals[i], NewVals[i]) then
         AddPlanned(fcoUpdate, FIELDS_TABLE, FIELD_KEY_COLS, Keys, SCHEMA_COLS[i], ValText(OldVals[i]),
           ValText(NewVals[i]), True, [SCHEMA_COLS[i]], [NewVals[i]]);
-    for i := 0 to High(FIELD_EXTRA_COLS) do
+    for i := 0 to High(FIELD_EXTRA_COLS) do  // dl:ok index-possibly-out-of-range@a553 -- REVIEWED 2026-11-22 FR-SCHEMA: index comes from the statement span the tokenizer produced (or a fixed column list sized with it), inside the array
       if not SameVal(OldExtra[i], NewExtra[i]) then
         AddPlanned(fcoUpdate, FIELDS_TABLE, FIELD_KEY_COLS, Keys, FIELD_EXTRA_COLS[i], ValText(OldExtra[i]),
           ValText(NewExtra[i]), True, [FIELD_EXTRA_COLS[i]], [NewExtra[i]]);
@@ -1108,7 +1108,7 @@ begin
     for Col in FModel.Columns do
       Seen.AddOrSetValue(Col.TableName.ToUpper + KEY_SEP + Col.ColumnName.ToUpper, True);
     Q.Connection := FConn;
-    Q.Open('SELECT "TABLE_NAME", "FIELD_NAME", "FIELD_TYPE", "FIELD_LENGTH" FROM ' + QuoteRepoIdent(FIELDS_TABLE) +  // dl:ok path-traversal -- SQL text, not a path: the identifier goes through QuoteRepoIdent
+    Q.Open('SELECT "TABLE_NAME", "FIELD_NAME", "FIELD_TYPE", "FIELD_LENGTH" FROM ' + QuoteRepoIdent(FIELDS_TABLE) +  // dl:ok path-traversal@b689 -- SQL text, not a path: the identifier goes through QuoteRepoIdent
       ' WHERE "ISCALCULATED" = 0 AND "ISLOOKUP" = 0 AND ("FIELD_KIND" IS NULL OR "FIELD_KIND" = 1) AND ' +
       SQL_NOT_SYSTEM + ' ORDER BY 1, 2');
     while not Q.Eof do
@@ -1153,7 +1153,7 @@ begin
   try
     Wanted.Sorted := True;
     Q.Connection := FConn;
-    Q.Open('SELECT ' + ColList + ' FROM ' + QuoteRepoIdent(pTable) + ' ORDER BY ' + OrderBy);  // dl:ok path-traversal -- SQL text, not a path: identifiers go through QuoteRepoIdent
+    Q.Open('SELECT ' + ColList + ' FROM ' + QuoteRepoIdent(pTable) + ' ORDER BY ' + OrderBy);  // dl:ok path-traversal@5d57 -- SQL text, not a path: identifiers go through QuoteRepoIdent
     while not Q.Eof do
     begin
       SetLength(KeyV, NKey);
@@ -1291,13 +1291,13 @@ begin
   Where := '';
   Params := [pValue];
   Types := [ParamTypeOf(pTable, pCol)];
-  for i := 0 to High(pKeyCols) do
+  for i := 0 to High(pKeyCols) do  // dl:ok index-possibly-out-of-range@a57e -- REVIEWED 2026-11-22 FR-SCHEMA: index comes from the statement span the tokenizer produced (or a fixed column list sized with it), inside the array
   begin
     Where := Where + (if i = 0 then '' else ' AND ') + QuoteRepoIdent(pKeyCols[i]) + ' = :K' + IntToStr(i);
     Params := Params + [pKeyVals[i]];
     Types := Types + [ParamTypeOf(pTable, pKeyCols[i])];
   end;
-  FConn.ExecSQL('UPDATE ' + QuoteRepoIdent(pTable) + ' SET ' + QuoteRepoIdent(pCol) + ' = :V WHERE ' + Where,  // dl:ok sql-injection-concat -- the table and column names are the repository's own constants, quoted
+  FConn.ExecSQL('UPDATE ' + QuoteRepoIdent(pTable) + ' SET ' + QuoteRepoIdent(pCol) + ' = :V WHERE ' + Where,
     Params, Types);
 end;
 
@@ -1313,7 +1313,7 @@ begin
     Where := Where + (if i = 0 then '' else ' AND ') + QuoteRepoIdent(pItem.KeyCols[i]) + ' = :K' + IntToStr(i);
     Types := Types + [ParamTypeOf(pItem.RepoTable, pItem.KeyCols[i])];
   end;
-  FConn.ExecSQL('DELETE FROM ' + QuoteRepoIdent(pItem.RepoTable) + ' WHERE ' + Where, pItem.KeyVals, Types);  // dl:ok sql-injection-concat -- the table name is one of the repository's own constants, quoted
+  FConn.ExecSQL('DELETE FROM ' + QuoteRepoIdent(pItem.RepoTable) + ' WHERE ' + Where, pItem.KeyVals, Types);
 end;
 
 procedure TSeedRun.ExecInsert(const pItem: TPlanned);
@@ -1340,7 +1340,7 @@ begin
     Params := Params + [pItem.Vals[i]];
     Types := Types + [ParamTypeOf(pItem.RepoTable, pItem.Cols[i])];
   end;
-  FConn.ExecSQL('INSERT INTO ' + QuoteRepoIdent(pItem.RepoTable) + ' (' + Names + ') VALUES (' + Marks + ')',  // dl:ok sql-injection-concat -- the table name is one of the repository's own constants, quoted
+  FConn.ExecSQL('INSERT INTO ' + QuoteRepoIdent(pItem.RepoTable) + ' (' + Names + ') VALUES (' + Marks + ')',
     Params, Types);
 end;
 

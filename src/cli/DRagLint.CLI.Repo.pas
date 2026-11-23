@@ -55,7 +55,6 @@ uses
   System.DateUtils,
   System.JSON,
   FireDAC.Comp.Client,
-  DRagLint.Core.Model,
   DRagLint.FieldRepo.Schema,
   DRagLint.FieldRepo.TextBackup,
   DRagLint.FieldRepo.FbImport,

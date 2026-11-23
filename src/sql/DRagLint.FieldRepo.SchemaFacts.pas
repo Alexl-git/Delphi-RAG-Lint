@@ -26,12 +26,12 @@ type
 /// <returns>False on a schema-1 repository and on a v2 repository that never had a schema read applied.</returns>
 /// <remarks>Read-only; the test is DL_META schema_read_at_utc, so a repository whose schema read legitimately
 /// found zero tables still reports True.</remarks>
-function HasSchema(pRepo: TFDConnection): Boolean;
+function HasSchema(pRepo: TFDConnection): Boolean;  // dl:ok unused-public-symbol@4245 -- REVIEWED 2026-11-22 FR-SCHEMA: public API of the schema-in-repository feature: used by the CLI / tests / lane FR-LINT, outside this project index
 
 /// <summary>The provenance of the schema facts.</summary>
 /// <param name="pRepo">An open repository connection.</param>
 /// <returns>A record with empty strings when no schema was applied.</returns>
-function SchemaInfo(pRepo: TFDConnection): TSchemaInfo;
+function SchemaInfo(pRepo: TFDConnection): TSchemaInfo;  // dl:ok unused-public-symbol@f0c0 -- REVIEWED 2026-11-22 FR-SCHEMA: public API of the schema-in-repository feature: used by the CLI / tests / lane FR-LINT, outside this project index
 
 /// <summary>Declared character length of a column.</summary>
 /// <param name="pRepo">An open repository connection.</param>
@@ -39,13 +39,13 @@ function SchemaInfo(pRepo: TFDConnection): TSchemaInfo;
 /// <param name="pColumn">Column name (case-insensitive).</param>
 /// <returns>The field's own CHAR_LENGTH, else its domain's CHAR_LENGTH, else -1 (unknown, or not a
 /// character column, or no schema facts).</returns>
-function ColumnCharLength(pRepo: TFDConnection; const pTable, pColumn: string): Integer;
+function ColumnCharLength(pRepo: TFDConnection; const pTable, pColumn: string): Integer;  // dl:ok unused-public-symbol@fab9 -- REVIEWED 2026-11-22 FR-SCHEMA: public API of the schema-in-repository feature: used by the CLI / tests / lane FR-LINT, outside this project index
 
 /// <summary>Primary key columns of a table, in key order.</summary>
 /// <param name="pRepo">An open repository connection.</param>
 /// <param name="pTable">Table name (case-insensitive).</param>
 /// <returns>The column names; an empty array when the table has no primary key or no schema facts.</returns>
-function PrimaryKey(pRepo: TFDConnection; const pTable: string): TArray<string>;
+function PrimaryKey(pRepo: TFDConnection; const pTable: string): TArray<string>;  // dl:ok unused-public-symbol@db9b -- REVIEWED 2026-11-22 FR-SCHEMA: public API of the schema-in-repository feature: used by the CLI / tests / lane FR-LINT, outside this project index
 
 implementation
 
