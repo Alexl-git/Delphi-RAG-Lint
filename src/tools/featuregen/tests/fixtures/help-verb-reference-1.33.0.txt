@@ -313,7 +313,7 @@
   drag-lint forms-csv --project <X.dproj> --db <file.sqlite> [--output <f.csv>] [--root <TfrmMAIN>]   (tester CSV, one row per form: menu/ribbon/tab path, control, handler, modal, confidence)
   drag-lint register-project <file.dproj> [--name <Section>] [--apply] [--json]   (add a NEW project to the manifest so index --all and the IDE can see it; dry-run without --apply)
   drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json]   (print the consumer DB list query/lsp/serve would use)
-  drag-lint resolve-dbs --project <file.dproj> [--config <path>] [--json]     (print the ONE db that owns this project -- the WRITE target)
+  drag-lint resolve-dbs --project <file.dproj> [--repo <file>] [--config <path>] [--json]   (print the ONE db that owns this project -- the WRITE target; names the field repository it finds, or --repo <file> when given)
                                exits 2 and names the sections when none or SEVERAL claim the project,
                                rather than guessing: `index --rebuild` against a wrongly-picked db
                                clears an index that was never meant to be touched.
