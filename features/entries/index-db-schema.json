@@ -1,0 +1,33 @@
+{
+  "id": "index-db-schema",
+  "title": "Index DB schema reference",
+  "group": "indexing",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.52.3-alpha",
+  "summary": "Table-by-table reference of the SQLite index file: every table, column, key, writer pass and schema version 23 to 27",
+  "intro": "Read this when you query an index with drag-lint sql or need to know which table holds a fact, which pass writes it and since which schema version. The page is checked against drag-lint schema on a live DB.",
+  "wikiPage": "Index-DB-Schema",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "schema"
+    },
+    {
+      "type": "cli",
+      "verb": "sql"
+    }
+  ],
+  "audience": "both",
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-11-22",
+    "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-11-22",
+    "by": "ENGINE",
+    "build": "1.52.3-alpha",
+    "surfaceHash": "cab6d90e590158aacf44a70c64d70873a60b8f35d27e17238918625528c516c7"
+  }
+}
