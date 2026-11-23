@@ -624,8 +624,8 @@
     "version": "1.51.1-alpha"
   },
   "features/maintenance.md": {
-    "hash": "ec6bc4b181bd5bbdf63da00db17b2898b584079095ae347073cd4835b71e1aa0",
-    "version": "1.52.2-alpha"
+    "hash": "92a764b1951ebac9e5071384e53a95ba3d9011cf8f1a82334c5d329704aa32e4",
+    "version": "1.53.0-alpha"
   },
   "features/mcp-config-writer.md": {
     "hash": "b1d301647916d401f68f9de6d66dfde734b1ad828e642a7b5b393fb47f48d653",
@@ -1113,6 +1113,10 @@
   },
   "features/v1523-one-file-lint-perf.md": {
     "hash": "10c71843eb58af287eae007aef51c5c7619ed5a724ac4d0d7e1ea9ed30c0368e",
+    "version": "1.53.0-alpha"
+  },
+  "features/v153-symbol-id-reuse.md": {
+    "hash": "cb17f5dd7927a4cea8130184ed024eb8c07b1c84cf5b713ee34c0ca1a9e57d79",
     "version": "1.53.0-alpha"
   },
   "features/vscode-extension.md": {

@@ -1117,6 +1117,7 @@ Described in:
 * [Library bindings for bare reads, paren-less calls and function-result receivers](../../docs/wiki/library-first-resolve.md)
 * [Resolver fixes in 1.52](../../docs/wiki/library-first-resolve.md)
 * [Per-rule time budget in the rule frame (rule-skipped-budget)](../../docs/wiki/rule-time-budget.md)
+* [Stable symbol ids on an incremental index](../../docs/wiki/symbol-id-reuse.md)
 
 ### info
 

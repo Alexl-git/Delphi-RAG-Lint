@@ -91,6 +91,7 @@ Build and maintain the per-project and library indexes.
 | [Resolver fixes in 1.52](library-first-resolve) | `index` |  |
 | [schema](schema) | `schema` |  |
 | [Show Resolved DBs (debug)](Show-Resolved-DBs-debug) | drag-lint > Index & Maintenance > Show Resolved DBs (debug)...; `resolve-dbs` |  |
+| [Stable symbol ids on an incremental index](symbol-id-reuse) | `index` |  |
 | [verify-index](verify-index) | `verify-index` | internal |
 
 ## Search and navigation
