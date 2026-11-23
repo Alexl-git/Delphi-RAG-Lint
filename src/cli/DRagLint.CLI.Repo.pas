@@ -4,13 +4,14 @@ unit DRagLint.CLI.Repo;
   docs\superpowers\plans\2026-11-16-tabletools-phase1.md section 6).
   DRagLint.CLI.pas parses the flags and calls RunRepoVerb in ONE dispatch line;
   everything else lives here (lane TTE). Implemented: init, info, import-fb, seed-fb,
-  refresh-schema, backup, restore, gen-memtable. Firebird is only READ. }
+  refresh-schema, backup, restore, gen-memtable. Firebird is only READ, except by
+  "repo alter-table --apply" (1.54, DRagLint.CLI.RepoAlter). }
 
 interface
 
 /// <summary>Runs `drag-lint repo &lt;sub-verb&gt; ...`: init, info, import-fb, seed-fb,
 /// refresh-schema, backup, restore, gen-memtable, gen-param-array, gen-orm, update-orm, gen-dataservice,
-/// migrate, check (the last two: DRagLint.CLI.RepoModel, 1.53), gen-const, check-const (DRagLint.CLI.RepoConstGen) (PLAN D11;
+/// migrate, check (the last two: DRagLint.CLI.RepoModel, 1.53), gen-const, check-const (DRagLint.CLI.RepoConstGen), alter-table (DRagLint.CLI.RepoAlter, 1.54) (PLAN D11;
 /// gen-param-array is DRagLint.CLI.RepoParamArray and needs no repository; the generator verbs take
 /// --code-dir / --server-dir / --client-dir / --table, print a dry-run diff and write only with --apply,
 /// --no-backup skips the .BCKn copy).</summary>
@@ -65,7 +66,8 @@ uses
   DRagLint.CLI.RepoParamArray,
   DRagLint.CLI.RepoModel,
   DRagLint.CLI.RepoConstGen,
-  DRagLint.CLI.RepoSchema
+  DRagLint.CLI.RepoSchema,
+  DRagLint.CLI.RepoAlter
   ;
 
 const
@@ -81,7 +83,7 @@ const
   { positions in the --save-form value list of RepoOrmVerb }
   SAVE_FORM_LEGACY  = 0;
   SAVE_FORM_CURRENT = 1;
-  SUB_VERBS   = 'init, info, import-fb, seed-fb, refresh-schema, backup, restore, gen-memtable, gen-param-array, gen-orm, update-orm, gen-dataservice, migrate, check, gen-const, check-const';
+  SUB_VERBS   = 'init, info, import-fb, seed-fb, refresh-schema, backup, restore, gen-memtable, gen-param-array, gen-orm, update-orm, gen-dataservice, migrate, check, gen-const, check-const, alter-table';
 
 function CommandLineFlag(const pFlag: string): Boolean;
 var
@@ -401,6 +403,7 @@ begin
   if MatchText(pSub, ['gen-const', 'check-const']) then // 1.53 FR-CONSTGEN / FR-PRELOAD
     Exit(if SameText(pSub, 'gen-const') then RunRepoGenConst(Path, pOutFile) else RunRepoCheckConst(Path));
   if IsRepoSchemaSub(pSub) then Exit(RunRepoSchemaVerb(pSub, Path, pConnection, pJson)); // 1.53 FR-SCHEMA: seed-fb, refresh-schema
+  if SameText(pSub, SUB_ALTER_TABLE) then Exit(RunRepoAlterTable(Path, pConnection, pJson)); // 1.54 TT-ALTER
   case IndexText(pSub, ['init', 'info', 'backup', 'restore']) of
     LOCAL_INIT: Result:= RepoInit(Path);
     LOCAL_INFO: Result:= RepoInfo(Path, pJson);
@@ -414,7 +417,7 @@ end;
 function IsImplementedSub(const pSub: string): Boolean;
 begin
   Result:= MatchText(pSub, ['init', 'info', 'import-fb', 'seed-fb', 'refresh-schema', 'backup',
-    'restore', 'gen-memtable', 'gen-orm', 'update-orm', 'gen-dataservice', 'gen-const', 'check-const']) or IsRepoModelSub(pSub);
+    'restore', 'gen-memtable', 'gen-orm', 'update-orm', 'gen-dataservice', 'gen-const', 'check-const', SUB_ALTER_TABLE]) or IsRepoModelSub(pSub);
 end;
 
 function RunRepoVerb(const pSub, pRepo, pProject, pConnection, pInFile, pOutFile: string;  // dl:ok too-many-parameters@96de -- REVIEWED 2026-11-17 v152 TTE: one positional per CLI flag keeps the CLI.pas dispatch a single line with no options builder there (FRAME contract, TT plan section 6 E1 shape)
