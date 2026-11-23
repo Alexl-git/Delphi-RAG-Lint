@@ -280,6 +280,7 @@ uses
   , DRagLint.CLI.Convert { proptree / convert-validate / -reemit / -scaffold / glyph-vacuum verbs (v1511 SPLIT) }
   , DRagLint.CLI.ConvertApply { convert-apply verb (v1511 SPLIT) }
   , DRagLint.CLI.CheckInit { check-init verb (1.52 FRAME; lane HBSKEL) }
+, DRagLint.CLI.VerifyIndex { verify-index verb (1.53.0 LSP1-VERB) }
   , DRagLint.CLI.Repo { repo verb family (1.52 FRAME; lane TTE) }
   , DRagLint.CLI.Settings { settings verb (1.53 SETTINGS-CORE) }
   , DRagLint.Project.Settings
@@ -1695,6 +1696,11 @@ begin
     { repo gen-param-array: DRagLint.CLI.RepoParamArray reads these values from ParamStr. One branch per flag: they are
       four different options, and an OR-group reads as an alias group to run_flag_verb_map.ps1 (features\flag-aliases.json). }
     else if (A = '--dfm') and (i < ParamCount) then Inc(i)
+    { 1.53.0 LSP1-VERB: verify-index's own flags; DRagLint.CLI.VerifyIndex reads their values from ParamStr }
+    else if (A = '--sample') and (i < ParamCount) then Inc(i)
+    else if (A = '--seed') and (i < ParamCount) then Inc(i)
+    else if (A = '--warmup-ms') and (i < ParamCount) then Inc(i)
+    else if (A = '--delphi-lsp-config') and (i < ParamCount) then Inc(i)
     else if (A = '--ddl') and (i < ParamCount) then Inc(i) // repo seed-fb / refresh-schema: DRagLint.CLI.RepoSchema reads it from ParamStr
     else if (A = '--select') and (i < ParamCount) then Inc(i) // repo seed-fb / refresh-schema: the change-set id file, read from ParamStr
     else if (A = '--table') and (i < ParamCount) then Inc(i)
@@ -29637,6 +29643,7 @@ begin
     else if Args.Command = 'query'             then Result:= DoQuery           (Args)
     else if (Args.Command = 'rules') and MatchText(Args.SubCommand, ['disable', 'enable']) then Result:= RunRuleScope(LowerCase(Args.SubCommand), Args.Rule, Args.RuleScope, Args.InFile, Args.RefLine, Args.Reason, Args.ProjectPath, Args.ConfigPath, Args.AsJson or SameText(Args.Format, 'json')) { 1.52 FRAME: DRagLint.CLI.RuleScope }
     else if Args.Command = 'rules'             then Result:= DoRules           (Args)
+    else if Args.Command = 'verify-index'      then Result:= if NoDbResolved(Args.DbPath, 'verify-index') then 2 else RunVerifyIndexVerb(Args) { 1.53.0 LSP1-VERB: DRagLint.CLI.VerifyIndex }
     else if Args.Command = 'check-init'        then Result:= RunCheckInit(if Args.SubCommand <> '' then Args.SubCommand else Args.QName, Args.At, Args.DbPath, Args.ProjectPath, Args.AsJson or SameText(Args.Format, 'json'), Args.HbExplain, Args.MaxRoutines, Args.MaxSeconds) { 1.52 FRAME: DRagLint.CLI.CheckInit; v152 HBFIX --max-seconds }
     else if Args.Command = 'repo'              then Result:= RunRepoVerb(Args.SubCommand, Args.RepoPath, Args.ProjectPath, Args.FbConnection, Args.InFile, Args.Output, Args.Replace, Args.AsJson or SameText(Args.Format, 'json')) { 1.52 FRAME: DRagLint.CLI.Repo }
     else if Args.Command = 'settings'          then Result:= RunSettingsVerb(Args.SubCommand, IfThen(Args.ProjectFromConfig, '', Args.ProjectPath), IfThen(Args.DbFromConfig, '', Args.DbPath), Args.InFile, Args.AsJson or SameText(Args.Format, 'json')) { 1.53 SETTINGS-CORE: DRagLint.CLI.Settings }

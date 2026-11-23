@@ -412,6 +412,8 @@
         <DCCReference Include="..\sql\DRagLint.FieldRepo.FbSchemaRead.pas"/>
         <DCCReference Include="..\sql\DRagLint.FieldRepo.FbDdl.pas"/>
         <DCCReference Include="DRagLint.CLI.CheckInit.pas"/>
+        <DCCReference Include="DRagLint.CLI.VerifyIndex.pas"/>
+        <DCCReference Include="..\lsp\DRagLint.LSP.VerifyClient.pas"/>
         <DCCReference Include="DRagLint.CLI.Repo.pas"/>
         <DCCReference Include="DRagLint.CLI.Settings.pas"/>
         <DCCReference Include="DRagLint.CLI.RepoParamArray.pas"/>
