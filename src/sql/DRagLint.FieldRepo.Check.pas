@@ -414,10 +414,8 @@ begin
     else
       Inc(VWarns);
   end;
-  if Length(pFindings) = 0 then
-    Result := Result + ['check: clean']
-  else
-    Result := Result + [Format('check: %d findings (%d errors, %d warnings)', [Length(pFindings), VErrors, VWarns])];
+  Result := Result + [if Length(pFindings) = 0 then 'check: clean'
+    else Format('check: %d findings (%d errors, %d warnings)', [Length(pFindings), VErrors, VWarns])];
 end;
 
 function RenderCheckJson(const pFindings: TArray<TFrCheckFinding>): string;
